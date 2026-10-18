@@ -8,7 +8,9 @@
 
 #include "rin_terminal_xcmds5.h"
 
+#include <cstdint>
 #include <stdexcept>
+#include <string>
 
 namespace rin {
 namespace terminal {
@@ -25,6 +27,81 @@ inline long long asInt(double d, const char* what = "value") {
     return static_cast<long long>(d);
 }
 using NumFn = std::function<std::string(const std::vector<double>&)>;
+
+// ----------------------------------------------------------------------------
+// Portable unsigned 128-bit arithmetic.
+// `unsigned __int128` does not exist on 32-bit targets (Android armeabi-v7a,
+// x86), where clang stops with "__int128 is not supported on this target".
+// Everything below is plain uint64_t code, so it builds on every ABI.
+// Define RIN_NO_INT128 to force the portable path on 64-bit hosts (used by tests).
+// ----------------------------------------------------------------------------
+struct U128 {
+    uint64_t hi = 0, lo = 0;
+    U128() = default;
+    U128(uint64_t v) : hi(0), lo(v) {}
+    static U128 pow2(unsigned bit) { U128 r; if (bit >= 64) r.hi = uint64_t(1) << (bit - 64); else r.lo = uint64_t(1) << bit; return r; }
+    bool isZero() const { return hi == 0 && lo == 0; }
+    friend bool operator>(const U128& a, const U128& b) { return a.hi != b.hi ? a.hi > b.hi : a.lo > b.lo; }
+};
+
+// full 64x64 -> 128 product
+inline void mul64x64(uint64_t a, uint64_t b, uint64_t& hi, uint64_t& lo) {
+    const uint64_t M = 0xffffffffULL;
+    uint64_t a0 = a & M, a1 = a >> 32, b0 = b & M, b1 = b >> 32;
+    uint64_t p00 = a0 * b0, p01 = a0 * b1, p10 = a1 * b0, p11 = a1 * b1;
+    uint64_t mid = (p00 >> 32) + (p01 & M) + (p10 & M);
+    lo = (p00 & M) | (mid << 32);
+    hi = p11 + (p01 >> 32) + (p10 >> 32) + (mid >> 32);
+}
+// a * b; `overflow` is set when the result does not fit in 128 bits
+inline U128 mul64(const U128& a, uint64_t b, bool& overflow) {
+    uint64_t h1, l1, h2, l2;
+    mul64x64(a.lo, b, h1, l1);
+    mul64x64(a.hi, b, h2, l2);
+    U128 r; r.lo = l1; r.hi = h1 + l2;
+    if (h2 != 0 || r.hi < l2) overflow = true;
+    return r;
+}
+// a + b; `overflow` is set when the result does not fit in 128 bits
+inline U128 add64(const U128& a, uint64_t b, bool& overflow) {
+    U128 r; r.lo = a.lo + b; r.hi = a.hi + (r.lo < b ? 1 : 0);
+    if (r.hi < a.hi) overflow = true;
+    return r;
+}
+// quotient of a / d (d != 0); the remainder goes to `rem`
+inline U128 divmod64(const U128& a, uint64_t d, uint64_t& rem) {
+    if (a.hi == 0) { rem = a.lo % d; return U128(a.lo / d); }
+    U128 q; uint64_t r = 0;
+    for (int i = 127; i >= 0; --i) {
+        uint64_t bit = i >= 64 ? (a.hi >> (i - 64)) & 1 : (a.lo >> i) & 1;
+        uint64_t carry = r >> 63;
+        r = (r << 1) | bit;
+        if (carry || r >= d) {
+            r -= d;
+            if (i >= 64) q.hi |= uint64_t(1) << (i - 64); else q.lo |= uint64_t(1) << i;
+        }
+    }
+    rem = r;
+    return q;
+}
+inline std::string u128ToDec(U128 v) {
+    if (v.isZero()) return "0";
+    std::string s;
+    while (!v.isZero()) { uint64_t r = 0; v = divmod64(v, 10, r); s.insert(s.begin(), static_cast<char>('0' + static_cast<int>(r))); }
+    return s;
+}
+// (a * b) % n for any 64-bit a, b, n (n != 0)
+inline unsigned long long mulmod64(unsigned long long a, unsigned long long b, unsigned long long n) {
+#if defined(__SIZEOF_INT128__) && !defined(RIN_NO_INT128)
+    __extension__ typedef unsigned __int128 native_u128;
+    return static_cast<unsigned long long>((static_cast<native_u128>(a) * b) % n);
+#else
+    uint64_t hi, lo; mul64x64(a, b, hi, lo);
+    U128 p; p.hi = hi; p.lo = lo;
+    uint64_t rem = 0; divmod64(p, n, rem);
+    return rem;
+#endif
+}
 
 // numbers in -> text out; exactly `n` numbers (n == 0: any count >= minCount)
 inline void addMath(Reg& r, const std::string& name, const std::string& hint, const std::string& desc, size_t n, size_t minCount, NumFn f) {
@@ -63,7 +140,7 @@ inline bool isPrimeLL(unsigned long long n) {
     for (unsigned long long p : {2ULL, 3ULL, 5ULL, 7ULL, 11ULL, 13ULL, 17ULL, 19ULL, 23ULL, 29ULL, 31ULL, 37ULL}) { if (n == p) return true; if (n % p == 0) return false; }
     unsigned long long d = n - 1; int s = 0;
     while ((d & 1) == 0) { d >>= 1; ++s; }
-    auto mulmod = [&](unsigned long long a, unsigned long long b) { return static_cast<unsigned long long>((static_cast<unsigned __int128>(a) * b) % n); };
+    auto mulmod = [&](unsigned long long a, unsigned long long b) { return mulmod64(a, b, n); };
     auto powmod = [&](unsigned long long b, unsigned long long e) { unsigned long long r2 = 1; b %= n; while (e) { if (e & 1) r2 = mulmod(r2, b); b = mulmod(b, b); e >>= 1; } return r2; };
     for (unsigned long long a : {2ULL, 3ULL, 5ULL, 7ULL, 11ULL, 13ULL, 17ULL, 19ULL, 23ULL, 29ULL, 31ULL, 37ULL}) {   // deterministic below 3.3e24
         unsigned long long x = powmod(a, d);
@@ -367,24 +444,28 @@ inline void addMathCmds(Reg& r) {
         long long n = asInt(v[0], "n"), k = asInt(v[1], "k");
         if (n < 0 || k < 0 || k > n) mfail("need 0 <= k <= n");
         k = std::min(k, n - k);
-        unsigned __int128 c = 1;
+        U128 c(1);
         for (long long i = 1; i <= k; ++i) {
-            c = c * static_cast<unsigned __int128>(n - k + i) / static_cast<unsigned __int128>(i);
-            if (c > (static_cast<unsigned __int128>(1) << 100)) mfail("result too large");
+            bool ov = false; uint64_t rem = 0;
+            c = mul64(c, static_cast<uint64_t>(n - k + i), ov);
+            if (ov) mfail("result too large");
+            c = divmod64(c, static_cast<uint64_t>(i), rem);
+            if (c > U128::pow2(100)) mfail("result too large");
         }
-        std::string s; if (!c) s = "0";
-        while (c) { s.insert(s.begin(), static_cast<char>('0' + static_cast<int>(c % 10))); c /= 10; }
-        return s;
+        return u128ToDec(c);
     });
     addMath(r, "lcm", "<numbers…>", "least common multiple", 0, 2, [](const std::vector<double>& v) {
-        unsigned __int128 l = 1;
+        U128 l(1);   // always <= 9e18 between iterations, so l.lo holds the whole value
         for (double x : v) {
             long long n = std::llabs(asInt(x, "value"));
             if (n == 0) return std::string("0");
-            l = l / static_cast<unsigned __int128>(gcdLL(static_cast<long long>(l > 0x7fffffffffffffffULL ? 1 : l), n)) * static_cast<unsigned __int128>(n);
-            if (l > static_cast<unsigned __int128>(9000000000000000000ULL)) mfail("result too large");
+            uint64_t g = static_cast<uint64_t>(gcdLL(static_cast<long long>(l.lo), n)), rem = 0;
+            bool ov = false;
+            l = divmod64(l, g, rem);
+            l = mul64(l, static_cast<uint64_t>(n), ov);
+            if (ov || l > U128(9000000000000000000ULL)) mfail("result too large");
         }
-        return std::to_string(static_cast<unsigned long long>(l));
+        return std::to_string(static_cast<unsigned long long>(l.lo));
     });
     addMath(r, "clamp", "<x> <lo> <hi>", "limit x to lo..hi", 3, 3, [](const std::vector<double>& v) {
         if (v[1] > v[2]) mfail("lo must be <= hi");
@@ -411,9 +492,10 @@ inline void addMathCmds(Reg& r) {
     addMath(r, "modpow", "<base> <exp> <mod>", "modular exponentiation base^exp mod m", 3, 3, [](const std::vector<double>& v) {
         long long b = asInt(v[0], "base"), e = asInt(v[1], "exp"), m = asInt(v[2], "mod");
         if (e < 0 || m < 1) mfail("need exp >= 0 and mod >= 1");
-        unsigned __int128 res = 1 % m, x = static_cast<unsigned __int128>(((b % m) + m) % m);
-        while (e) { if (e & 1) res = res * x % static_cast<unsigned __int128>(m); x = x * x % static_cast<unsigned __int128>(m); e >>= 1; }
-        return std::to_string(static_cast<unsigned long long>(res));
+        const unsigned long long mm = static_cast<unsigned long long>(m);
+        unsigned long long res = 1ULL % mm, x = static_cast<unsigned long long>(((b % m) + m) % m);
+        while (e) { if (e & 1) res = mulmod64(res, x, mm); x = mulmod64(x, x, mm); e >>= 1; }
+        return std::to_string(res);
     });
     addMath(r, "egcd", "<a> <b>", "extended Euclid: g and x,y with a*x + b*y = g", 2, 2, [](const std::vector<double>& v) {
         long long a = asInt(v[0], "a"), b = asInt(v[1], "b");
@@ -635,15 +717,16 @@ inline void addMathCmds(Reg& r) {
         if (!e || *e || b < 2 || b > 36) return c.fail("base must be 2..36");
         std::string s = c.toks[0].s; bool neg = !s.empty() && s[0] == '-'; if (neg) s.erase(0, 1);
         if (s.empty()) return c.fail("no digits");
-        unsigned __int128 v = 0;
+        U128 v;
         for (char ch : s) {
             int dv = std::isdigit(static_cast<unsigned char>(ch)) ? ch - '0' : (std::isalpha(static_cast<unsigned char>(ch)) ? std::tolower(ch) - 'a' + 10 : 99);
             if (dv >= b) return c.fail(std::string("invalid digit '") + ch + "' for base " + std::to_string(b));
-            v = v * static_cast<unsigned __int128>(b) + static_cast<unsigned __int128>(dv);
-            if (v > (static_cast<unsigned __int128>(1) << 100)) return c.fail("number too large");
+            bool ov = false;
+            v = mul64(v, static_cast<uint64_t>(b), ov);
+            v = add64(v, static_cast<uint64_t>(dv), ov);
+            if (ov || v > U128::pow2(100)) return c.fail("number too large");
         }
-        std::string o; if (!v) o = "0";
-        while (v) { o.insert(o.begin(), static_cast<char>('0' + static_cast<int>(v % 10))); v /= 10; }
+        std::string o = u128ToDec(v);
         c.say((neg && o != "0" ? "-" : "") + o);
         return 0;
     });
