@@ -1984,6 +1984,10 @@ private:
     bool lastOk_ = true;
     bool atLineStart_ = true;
     bool quiet_ = false;        // يبتلع مخرجات البرنامج (:time N)
+    // ---- مؤشرات التحميل/التشغيل حسب نوع الأمر (rin::loaderui) ----
+    rin::loaderui::RunIndicator* ind_ = nullptr;   // المؤشر الحيّ الحالي (إن وُجد) — يستخدمه print()
+    rin::loaderui::Task runTask_ = rin::loaderui::Task::Eval;   // نوع/وصف التشغيل القادم في runParsed
+    std::string runTarget_;
     int counter_ = 1;
     int failures_ = 0;
     int entryCounter_ = 0;
@@ -2027,14 +2031,38 @@ private:
         return "";
     }
 
-    void print(const std::string& s) {
+    void rawPrint(const std::string& s) {
         if (s.empty()) return;
         if (outSink_) outSink_(s);   // مضمَّن (أندرويد): المخرجات تذهب للتطبيق لا إلى stdout
         else { std::fwrite(s.data(), 1, s.size(), stdout); std::fflush(stdout); }
         atLineStart_ = s.back() == '\n';
     }
+    // كل المخرجات تمرّ من هنا: أثناء تشغيل مؤشر حيّ (ind_) يُمسح سطره أولاً ثم يُكتب الناتج، فلا يتشابكان.
+    void print(const std::string& s) {
+        if (s.empty()) return;
+        if (ind_) ind_->emit(s, [this](const std::string& t) { rawPrint(t); });
+        else rawPrint(s);
+    }
     void println(const std::string& s) { print(s + "\n"); }
     void ensureLineStart() { if (!atLineStart_) print("\n"); }
+
+    // مؤشر حيّ بهويّة نوع الأمر. لا يظهر قبل ~0.35s ولا في الوضع المضمَّن/الدفعي/خارج tty، ولا يتداخل (واحد فقط).
+    std::unique_ptr<rin::loaderui::RunIndicator> beginIndicator(rin::loaderui::Task t, const std::string& target) {
+        rin::loaderui::RunIndicator::Options o;
+        o.hint = tr("Ctrl-C للإيقاف", "Ctrl-C to stop");
+        o.forceInactive = embedded_ || quiet_ || ind_ != nullptr || !::isatty(STDIN_FILENO);
+        auto p = std::make_unique<rin::loaderui::RunIndicator>(std::cout, rin::loaderui::profileFor(t), target, 1, o);
+        if (p->active()) ind_ = p.get();
+        return p;
+    }
+    void endIndicator(std::unique_ptr<rin::loaderui::RunIndicator>& p) {
+        if (!p) return;
+        if (ind_ == p.get()) ind_ = nullptr;
+        p->stop();
+        p.reset();
+    }
+    // هل نرسم أشرطة تقدّم حيّة (لـ :test و:time -n)؟ فقط في طرفية حقيقية؛ غير ذلك يبقى الإخراج القديم حرفياً.
+    bool liveBars() const { return !embedded_ && ind_ == nullptr && rin::loaderui::detectTermCaps(std::cout).animate; }
     void info(const std::string& s)  { println(style_.dim() + s + style_.reset()); }
     void ok(const std::string& s)    { println(style_.green() + s + style_.reset()); }
     void err(const std::string& s)   { println(style_.red() + s + style_.reset()); }
@@ -2464,9 +2492,21 @@ private:
         g_interrupted = 0; g_sigintCount = 0;
         g_runningInterp = interp_.get();
         interp_->setSourceFile(name);
+        // مؤشر مرتبط بتشغيل كود Rin الفعلي: نوع الأمر ووصفه من runTask_/runTarget_ (يضبطهما المستدعي ثم يُصفَّران).
+        auto runInd = beginIndicator(runTask_, runTarget_.empty() ? name : runTarget_);
+        runTask_ = rin::loaderui::Task::Eval; runTarget_.clear();
+        if (ind_) {
+            interp_->setImportUISink(runInd->importSink());        // الاستيراد الجاري فعلاً: importing rin.ui · Parsing
+            interp_->setInputProvider(runInd->inputProvider());    // input() يوقف المؤشر أثناء السؤال
+        }
         auto t0 = Clock::now();
         std::string ignored = interp_->run(stmts);   // المخرجات تصل عبر stream sink
         auto t1 = Clock::now();
+        if (runInd && runInd->active()) {
+            interp_->setImportUISink(nullptr);
+            interp_->setInputProvider(nullptr);
+        }
+        endIndicator(runInd);
         g_runningInterp = nullptr;
         interp_->setExecutionBudget(0);
         if (elapsedMs) *elapsedMs = std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -2507,6 +2547,7 @@ private:
         }
 
         double ms = 0;
+        runTask_ = rin::loaderui::Task::Eval; runTarget_ = oneLine(trimmedEntry, 60);
         bool okRun = runParsed(toRun, name, &ms);
         if (wantValue && okRun) {
             rin::Value v;
@@ -2551,13 +2592,14 @@ private:
         }
     }
 
-    bool loadFile(const std::string& pathIn) {
+    bool loadFile(const std::string& pathIn, rin::loaderui::Task task = rin::loaderui::Task::Load) {
         std::string path = expandTilde(pathIn);
         std::string content;
         if (!readFileAll(path, content)) { err(std::string(tr("تعذّر فتح الملف: ", "cannot open file: ")) + path); return false; }
         ParseOut po = parseSource(content, path);
         if (!po.ok) { ensureLineStart(); print(style_.red() + po.errText + style_.reset() + "\n"); return false; }
         double ms = 0;
+        runTask_ = task; runTarget_ = path;
         bool okRun = runParsed(po.stmts, path, &ms);
         lastLoaded_ = path;
         if (okRun) { accepted_.push_back(content); ok(std::string(sym("✓ ", "")) + tr("حُمِّل ", "loaded ") + path); }
@@ -2627,7 +2669,23 @@ private:
         return s;
     }
 
+    // مؤشر لكل نوع أمر: الأوامر التي قد تطول (مشاريع، صور، فحص، ملفات...) تُغلَّف بمؤشر حيّ بهويّتها
+    // (taskForCommand). الأوامر التي ترسم مؤشرها بنفسها (:load/:run → runParsed، :test، :time، :pkg) أو تمتلك
+    // الطرفية (:sh، :edit، :indsin) أو لحظية لا تُغلَّف. المؤشر لا يظهر أصلاً قبل ~0.35s.
     void handleCommand(const std::string& raw) {
+        std::string line = xcmds::expandAlias(trim(raw));
+        size_t sp = line.find_first_of(" \t");
+        std::string cmd = sp == std::string::npos ? line : line.substr(0, sp);
+        std::string arg = sp == std::string::npos ? "" : trim(line.substr(sp + 1));
+        static const std::set<std::string> slow = {"new", "init", "tree", "img", "ocr", "check", "ls"};
+        bool wrap = !embedded_ && (slow.count(cmd) || xcmds::isCommand(cmd));
+        if (!wrap) { handleCommandInner(raw); return; }
+        auto ind = beginIndicator(rin::loaderui::taskForCommand(cmd), arg.empty() ? cmd : cmd + " " + arg);
+        handleCommandInner(raw);
+        endIndicator(ind);
+    }
+
+    void handleCommandInner(const std::string& raw) {
         std::string line = xcmds::expandAlias(trim(raw));
         size_t sp = line.find_first_of(" \t");
         std::string cmd = sp == std::string::npos ? line : line.substr(0, sp);
@@ -2647,7 +2705,7 @@ private:
         if (cmd == "img") return cmdImg(arg);
         if (cmd == "load" || cmd == "run" || cmd == "source") {
             if (arg.empty()) { err(tr("الاستخدام: :load <ملف.rin>", "usage: :load <file.rin>")); return; }
-            bool r = loadFile(arg); lastOk_ = r; if (!r) failures_++; return;
+            bool r = loadFile(arg, cmd == "run" ? rin::loaderui::Task::Run : rin::loaderui::Task::Load); lastOk_ = r; if (!r) failures_++; return;
         }
         if (cmd == "reload") {
             if (lastLoaded_.empty()) { err(tr("لا يوجد ملف محمَّل", "no file loaded yet")); return; }
@@ -2798,7 +2856,7 @@ private:
         if (readFileAll(path, content) && !trim(content).empty()) {
             ParseOut po = parseSource(content, path);
             if (!po.ok) { print(style_.red() + po.errText + style_.reset() + "\n"); lastOk_ = false; }
-            else { bool r = runParsed(po.stmts, path, nullptr); lastOk_ = r; if (r) accepted_.push_back(content); else failures_++; }
+            else { runTask_ = rin::loaderui::Task::Run; runTarget_ = path; bool r = runParsed(po.stmts, path, nullptr); lastOk_ = r; if (r) accepted_.push_back(content); else failures_++; }
         }
         if (temp) ::unlink(path.c_str());
     }
@@ -2878,6 +2936,9 @@ private:
         if (!po.ok) { print(style_.red() + po.errText + style_.reset() + "\n"); lastOk_ = false; return; }
         std::vector<double> times;
         bool allOk = true;
+        // Task::Bench: شريط حيّ لتكرارات -n N (العدّاد = تكرارات أُنجزت فعلاً، مع ETA وسرعة runs/s).
+        std::unique_ptr<rin::loaderui::ProgressBar> bar;
+        if (n > 1 && liveBars()) bar = std::make_unique<rin::loaderui::ProgressBar>(std::cout, rin::loaderui::profileFor(rin::loaderui::Task::Bench), static_cast<size_t>(n), /*fd=*/1);
         for (int i = 0; i < n; ++i) {
             bool q = quiet_; quiet_ = (n > 1);
             double ms = 0;
@@ -2885,6 +2946,12 @@ private:
             quiet_ = q;
             times.push_back(ms);
             if (!r) { allOk = false; break; }
+            if (bar) bar->advance();
+        }
+        if (bar) {
+            bar->finish(allOk, std::to_string(times.size()) + (allOk ? tr(" تكرار", " runs") : tr(" تكرار (توقف عند فشل)", " runs (stopped on failure)")));
+            bar.reset();
+            atLineStart_ = true;
         }
         lastOk_ = allOk;
         if (times.empty() || !allOk) return;
@@ -3134,7 +3201,7 @@ private:
         std::string mainPath = root + "/src/main.rin", content;
         if (!readFileAll(mainPath, content)) { err(tr("لا يوجد src/main.rin", "no src/main.rin")); lastOk_ = false; return; }
         if (content.find("@view") != std::string::npos) { info(tr("مشروع واجهة → تشغيل indsin", "UI project → running indsin")); cmdIndsin(mainPath); return; }
-        bool r = loadFile(mainPath); lastOk_ = r; if (!r) failures_++;
+        bool r = loadFile(mainPath, rin::loaderui::Task::Run); lastOk_ = r; if (!r) failures_++;
     }
 
     void cmdTest(const std::string& arg) {
@@ -3148,12 +3215,30 @@ private:
         std::sort(files.begin(), files.end());
         if (files.empty()) { info(std::string(tr("لا توجد ملفات *.rin في ", "no *.rin files in ")) + dir); return; }
         int pass = 0, fail = 0;
+        // Task::Test: في طرفية حقيقية شريط حيّ (عدّاد tests + ETA + سرعة) تُطبع فوقه نتيجة كل ملف؛ ناتج الاختبارات
+        // الفاشلة يُؤجَّل إلى ما بعد الشريط كي لا يتشابك مع سطره الحي. وإلا: الإخراج القديم بلا أي تغيير.
+        std::unique_ptr<rin::loaderui::ProgressBar> bar;
+        if (liveBars()) bar = std::make_unique<rin::loaderui::ProgressBar>(std::cout, rin::loaderui::profileFor(rin::loaderui::Task::Test), files.size(), /*fd=*/1);
+        using Glyph = rin::loaderui::ProgressBar::Glyph;
+        std::vector<std::pair<std::string, std::string>> deferred;   // (اسم، ناتج) للفاشلة
+        auto report = [&](bool good, const std::string& shortName, const std::string& detail, const std::string& captured) {
+            if (good) ++pass; else ++fail;
+            if (bar) {
+                bar->note(good ? Glyph::Ok : Glyph::Fail, shortName + (detail.empty() ? "" : "  " + detail));
+                if (!good && !captured.empty()) deferred.emplace_back(shortName, captured);
+                bar->advance();
+                return;
+            }
+            if (good) println(style_.green() + sym("✓ ", "ok   ") + style_.reset() + shortName + "  " + style_.dim() + detail + style_.reset());
+            else { println(style_.red() + sym("✗ ", "FAIL ") + style_.reset() + shortName + (detail.empty() ? "" : "  " + detail)); if (!captured.empty()) { print(captured); ensureLineStart(); } }
+        };
         for (const auto& f : files) {
             std::string content;
             std::string shortName = f.substr(f.find_last_of('/') + 1);
-            if (!readFileAll(f, content)) { ++fail; err(std::string(sym("✗ ", "FAIL ")) + shortName + "  (read)"); continue; }
+            if (bar) bar->setStatus(shortName);
+            if (!readFileAll(f, content)) { report(false, shortName, "(read)", ""); continue; }
             ParseOut po = parseSource(content, f);
-            if (!po.ok) { ++fail; err(std::string(sym("✗ ", "FAIL ")) + shortName); print(po.errText + "\n"); continue; }
+            if (!po.ok) { report(false, shortName, "", po.errText + "\n"); continue; }
             rin::Interpreter fresh;   // مفسّر نظيف لكل ملف: لا تتسرّب حالة بين الاختبارات
             std::string captured;
             fresh.setStreamSink([&](const std::string& c) { captured += c; });
@@ -3163,11 +3248,17 @@ private:
             double ms = std::chrono::duration<double, std::milli>(Clock::now() - t0).count();
             bool bad = fresh.hadError() || captured.find("FAIL") != std::string::npos;
             char b[32]; std::snprintf(b, sizeof(b), "%.0f ms", ms);
-            if (!bad) { ++pass; println(style_.green() + sym("✓ ", "ok   ") + style_.reset() + shortName + "  " + style_.dim() + b + style_.reset()); }
-            else { ++fail; println(style_.red() + sym("✗ ", "FAIL ") + style_.reset() + shortName); print(captured); ensureLineStart(); }
+            report(!bad, shortName, bad ? "" : b, bad ? captured : "");
         }
         std::string summary = std::to_string(pass) + " " + tr("نجح", "passed") + ", " + std::to_string(fail) + " " + tr("فشل", "failed");
-        if (fail == 0) ok(summary); else err(summary);
+        if (bar) {
+            bar->finish(fail == 0, summary);
+            bar.reset();
+            atLineStart_ = true;
+            for (const auto& d : deferred) { println(style_.red() + d.first + style_.reset()); print(d.second); ensureLineStart(); }
+        } else {
+            if (fail == 0) ok(summary); else err(summary);
+        }
         lastOk_ = fail == 0;
         if (fail) failures_++;
     }
