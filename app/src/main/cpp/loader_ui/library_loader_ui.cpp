@@ -23,6 +23,8 @@
 #  include <io.h>
 #  include <windows.h>
 #elif defined(__unix__) || defined(__APPLE__)
+#  include <pthread.h>
+#  include <signal.h>
 #  include <sys/ioctl.h>
 #  include <unistd.h>
 #endif
@@ -1000,12 +1002,39 @@ TaskProfile profileFor(Task t) {
         case Task::Clean:   p = {"Cleaning",    "items",  {BarStyle::Segments, SpinnerStyle::Bounce},  111, 34, false, false}; break;
         case Task::Doctor:  p = {"Diagnosing",  "checks", {BarStyle::Dots,     SpinnerStyle::Pulse},   120, 32, false, false}; break;
         case Task::Run:     p = {"Running",     "",       {BarStyle::Line,     SpinnerStyle::Slide},   141, 35, false, false}; break;
+        case Task::Load:    p = {"Loading",     "files",  {BarStyle::Line,     SpinnerStyle::Dots},    117, 36, false, false}; break;
+        case Task::Eval:    p = {"Evaluating",  "",       {BarStyle::Line,     SpinnerStyle::Arrow},   183, 35, false, false}; break;
+        case Task::Project: p = {"Scaffolding", "files",  {BarStyle::Segments, SpinnerStyle::Bounce},  150, 32, false, false}; break;
+        case Task::Image:   p = {"Rendering",   "",       {BarStyle::Block,    SpinnerStyle::Dots},    213, 35, false, false}; break;
+        case Task::Files:   p = {"Processing",  "files",  {BarStyle::Shade,    SpinnerStyle::Line},    180, 33, true,  true};  break;
+        case Task::Hash:    p = {"Hashing",     "files",  {BarStyle::Block,    SpinnerStyle::Bounce},  222, 33, true,  false}; break;
+        case Task::Bench:   p = {"Benchmarking","runs",   {BarStyle::Dots,     SpinnerStyle::Pulse},   209, 31, true,  true};  break;
         case Task::Generic: p = {"Working",     "",       {BarStyle::Line,     SpinnerStyle::Braille}, 141, 35, false, false}; break;
     }
     // متغيّرات البيئة (إن وُجدت وصحّت) تتغلّب على نمط النوع.
     parseBarStyle(envOr("RIN_PROGRESS_BAR"), p.style.bar);
     parseSpinnerStyle(envOr("RIN_PROGRESS_SPINNER"), p.style.spinner);
     return p;
+}
+
+Task taskForCommand(const std::string& n) {
+    static const std::vector<std::pair<Task, std::vector<std::string>>> table = {
+        {Task::Load,    {"load", "source", "reload"}},
+        {Task::Run,     {"run"}},
+        {Task::Test,    {"test"}},
+        {Task::Check,   {"check", "verify"}},
+        {Task::Project, {"new", "init"}},
+        {Task::Image,   {"img", "ocr", "indsin"}},
+        {Task::Bench,   {"time"}},
+        {Task::Install, {"pkg"}},
+        {Task::Hash,    {"sha1", "sha256", "md5", "crc32", "base64", "hex", "hexdump", "cmp"}},
+        {Task::Files,   {"cat", "head", "tail", "wc", "grep", "find", "cp", "mv", "rm", "rename", "du", "df",
+                         "diff", "comm", "dupes", "bigfiles", "recent", "backup", "trash", "split", "sort", "uniq",
+                         "tree", "ls", "ll", "loc", "stats", "wordfreq", "replace", "sync", "csv", "json", "count"}},
+    };
+    for (const auto& row : table)
+        for (const auto& name : row.second) if (name == n) return row.first;
+    return Task::Generic;
 }
 
 std::string formatBytes(unsigned long long b) {
@@ -1032,6 +1061,193 @@ void report(std::ostream& out, const TaskProfile& p, bool ok, const std::string&
     L.add(text, ok ? St::Bold : St::Err, true);
     L.add(std::string("  ") + g.dot + " " + formatDuration(seconds), St::Dim);
     out << L.render(c, static_cast<std::size_t>(c.cols) - 1, g.ell) << "\n" << std::flush;
+}
+
+// ============================================================================
+// RunIndicator — مؤشر حيّ لتشغيل كود Rin (انظر الترويسة)
+// ============================================================================
+struct RunIndicator::Impl {
+    Impl(std::ostream& o, const TaskProfile& p, std::string t, int fd, const RunIndicator::Options& op)
+        : out(o), opts(op), target(std::move(t)), verb(p.verb), live(o) {
+        caps = detectTermCapsFd(o, fd);
+        caps.accent256 = p.accent256;
+        caps.accentBasic = p.accentBasic;
+        g = Glyphs::make(caps.unicode, p.style.spinner);
+        // الرسم الحي يحتاج tty + ANSI، وإلا فلا شيء (لا ضجيج في السجلات).
+        enabled = caps.animate && !op.forceInactive;
+#if defined(__EMSCRIPTEN__)
+        enabled = false;
+#endif
+    }
+    std::ostream& out;
+    RunIndicator::Options opts;
+    TermCaps caps;
+    Glyphs g;
+    std::string target, verb, detail;
+    std::vector<std::string> imports;   // مكدّس المكتبات الجارية (الأعمق أخيراً)
+    LiveRegion live;
+
+    std::mutex mu;
+    bool enabled = false;
+    bool drawn = false;       // سطر المؤشر مرسوم الآن
+    bool everShown = false;
+    bool paused = false;
+    bool midLine = false;     // آخر مخرجات لم تنتهِ بسطر جديد: لا نرسم فوقها
+    bool stopped = false;
+    std::size_t frame = 0;
+    std::size_t lines = 0;
+    Clock::time_point t0 = Clock::now();
+    Clock::time_point lastOut = Clock::now() - std::chrono::hours(1);
+#if !defined(__EMSCRIPTEN__)
+    std::thread ticker;
+    std::condition_variable cv;
+#endif
+
+    std::string importDetail() const {
+        if (imports.empty()) return detail;
+        std::string d = "importing " + imports.back();
+        if (!detail.empty()) d += " " + std::string(g.dot) + " " + detail;
+        return d;
+    }
+    std::string render() const {
+        double el = secondsSince(t0);
+        Line L;
+        L.add(g.spinner(frame), St::Accent);
+        L.add(" ");
+        L.add(verb, St::Bold);
+        L.add("  ");
+        std::string what = target;
+        std::string d = importDetail();
+        if (!d.empty()) what += std::string(" ") + g.dot + " " + d;
+        if (lines > 0) what += std::string(" ") + g.dot + " " + std::to_string(lines) + (lines == 1 ? " line" : " lines");
+        L.add(what, St::None, true);
+        L.add("  " + formatDuration(el), St::Dim);
+        if (!opts.hint.empty() && el >= 2.0) L.add("   " + opts.hint, St::Dim, true);
+        return L.render(caps, static_cast<std::size_t>(caps.cols) - 1, g.ell);
+    }
+    // الاستدعاء بقفل mu.
+    void eraseLocked() { if (drawn) { live.commit({}); drawn = false; } }
+    void drawLocked() {
+        if (!enabled || stopped || paused || midLine) return;
+        if (secondsSince(t0) < opts.delaySec) return;
+        if (secondsSince(lastOut) < 0.15) return;   // البرنامج يطبع الآن: لا نزاحمه
+        live.draw({render()});
+        drawn = true;
+        everShown = true;
+    }
+};
+
+RunIndicator::RunIndicator(std::ostream& out, const TaskProfile& profile, std::string target, int fd, const Options& opts)
+    : impl_(std::make_shared<Impl>(out, profile, std::move(target), fd, opts)) {
+#if !defined(__EMSCRIPTEN__)
+    Impl* m = impl_.get();
+    if (m->enabled) {
+#if defined(__unix__) || defined(__APPLE__)
+        // خيط الرسم لا يستقبل إشارات أبداً: Ctrl-C (SIGINT) يجب أن يصل لخيط التنفيذ الرئيسي كي تُقاطع
+        // read()/sleep() الجارية فيه (الطرفية تعتمد ذلك). الخيط الجديد يرث القناع من الخيط المنشئ.
+        sigset_t all, prev;
+        sigfillset(&all);
+        pthread_sigmask(SIG_BLOCK, &all, &prev);
+#endif
+        m->ticker = std::thread([m] {
+            std::unique_lock<std::mutex> lk(m->mu);
+            while (!m->stopped) {
+                m->cv.wait_for(lk, std::chrono::milliseconds(80));
+                if (m->stopped) break;
+                ++m->frame;
+                m->drawLocked();
+            }
+        });
+#if defined(__unix__) || defined(__APPLE__)
+        pthread_sigmask(SIG_SETMASK, &prev, nullptr);
+#endif
+    }
+#endif
+}
+RunIndicator::RunIndicator(std::ostream& out, const TaskProfile& profile, std::string target, int fd)
+    : RunIndicator(out, profile, std::move(target), fd, Options{}) {}
+RunIndicator::~RunIndicator() { stop(); }
+
+bool RunIndicator::active() const { return impl_->enabled && !impl_->stopped; }
+bool RunIndicator::wasShown() const { std::lock_guard<std::mutex> lk(impl_->mu); return impl_->everShown; }
+double RunIndicator::elapsed() const { return secondsSince(impl_->t0); }
+void RunIndicator::setTarget(const std::string& t) { std::lock_guard<std::mutex> lk(impl_->mu); impl_->target = t; }
+void RunIndicator::setDetail(const std::string& d) { std::lock_guard<std::mutex> lk(impl_->mu); impl_->detail = d; }
+
+void RunIndicator::emit(const std::string& chunk, const std::function<void(const std::string&)>& writer) {
+    if (!impl_->enabled) { writer(chunk); return; }
+    std::lock_guard<std::mutex> lk(impl_->mu);
+    impl_->eraseLocked();
+    writer(chunk);
+    if (chunk.empty()) return;
+    impl_->lastOut = Clock::now();
+    impl_->midLine = chunk.back() != '\n';
+    for (char c : chunk) if (c == '\n') ++impl_->lines;
+}
+void RunIndicator::pause() {
+    std::lock_guard<std::mutex> lk(impl_->mu);
+    impl_->eraseLocked();
+    impl_->paused = true;
+}
+void RunIndicator::resume() {
+    std::lock_guard<std::mutex> lk(impl_->mu);
+    impl_->paused = false;
+    impl_->lastOut = Clock::now();
+}
+void RunIndicator::stop() {
+    {
+        std::lock_guard<std::mutex> lk(impl_->mu);
+        if (impl_->stopped) return;
+        impl_->eraseLocked();
+        impl_->stopped = true;
+    }
+#if !defined(__EMSCRIPTEN__)
+    impl_->cv.notify_all();
+    if (impl_->ticker.joinable()) impl_->ticker.join();
+#endif
+}
+
+namespace {
+class RunImportSink final : public ILoadSink {
+public:
+    explicit RunImportSink(std::shared_ptr<RunIndicator::Impl> m) : m_(std::move(m)) {}
+    void onBegin(const std::string& lib, std::size_t) override {
+        std::lock_guard<std::mutex> lk(m_->mu);
+        m_->imports.push_back(lib);
+        m_->detail.clear();
+    }
+    void onStage(const std::string&, LoadStage st, const std::string&, std::size_t) override {
+        std::lock_guard<std::mutex> lk(m_->mu);
+        m_->detail = stageLabel(st);
+    }
+    void onEnd(const std::string&, const LoadOutcome&, std::size_t) override {
+        std::lock_guard<std::mutex> lk(m_->mu);
+        if (!m_->imports.empty()) m_->imports.pop_back();
+        m_->detail.clear();
+    }
+private:
+    std::shared_ptr<RunIndicator::Impl> m_;
+};
+}  // namespace
+
+std::shared_ptr<ILoadSink> RunIndicator::importSink() { return std::make_shared<RunImportSink>(impl_); }
+
+std::function<bool(const std::string&, std::string&)> RunIndicator::inputProvider() {
+    std::shared_ptr<Impl> m = impl_;
+    return [this, m](const std::string& prompt, std::string& answer) {
+        pause();
+        if (!prompt.empty()) { std::cout << prompt; std::cout.flush(); }
+        bool got = static_cast<bool>(std::getline(std::cin, answer));
+        if (!got) answer.clear();
+        if (!answer.empty() && answer.back() == '\r') answer.pop_back();
+        {
+            // السؤال والإجابة تركا المؤشر عند بداية سطر جديد (Enter) — يمكن الرسم من جديد.
+            std::lock_guard<std::mutex> lk(m->mu);
+            m->midLine = false;
+        }
+        resume();
+        return got;   // EOF (Ctrl-D) = إلغاء الإدخال
+    };
 }
 
 // ============================================================================
