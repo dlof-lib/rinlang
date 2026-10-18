@@ -707,6 +707,15 @@ void Interpreter::registerNativesOop() {
                 out += "}";
                 break;
             }
+            case Value::Type::SET: {
+                std::vector<std::string> parts;
+                if (v.set) for (auto& it : v.set->items) { std::string p; canonRec(it, p, depth + 1); parts.push_back(std::move(p)); }
+                std::sort(parts.begin(), parts.end());
+                out += "S{";
+                for (auto& p : parts) out += p;
+                out += "}";
+                break;
+            }
             case Value::Type::INSTANCE: {
                 out += "<" + v.instance->className + ":";
                 std::vector<std::string> keys;
