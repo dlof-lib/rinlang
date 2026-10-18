@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Rin Shell icon (same drawing as assets/branding/shell/rin-shell.svg) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <path android:fillColor="#15132A" android:strokeColor="#3A3470" android:strokeWidth="6"
+        android:pathData="M136,32 L376,32 A104,104 0 0 1 480,136 L480,376 A104,104 0 0 1 376,480 L136,480 A104,104 0 0 1 32,376 L32,136 A104,104 0 0 1 136,32 Z" />
+    <path android:strokeColor="#2B2656" android:strokeWidth="4" android:pathData="M32,138 L480,138" />
+    <path android:fillColor="#FF5F57" android:pathData="M82,86 a14,14 0 1 0 28,0 a14,14 0 1 0 -28,0 Z" />
+    <path android:fillColor="#FEBC2E" android:pathData="M126,86 a14,14 0 1 0 28,0 a14,14 0 1 0 -28,0 Z" />
+    <path android:fillColor="#28C840" android:pathData="M170,86 a14,14 0 1 0 28,0 a14,14 0 1 0 -28,0 Z" />
+    <path android:strokeColor="#9B7BFF" android:strokeWidth="46" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M134,214 L228,288 L134,362" />
+    <path android:fillColor="#2FBF71"
+        android:pathData="M282,338 L370,338 A20,20 0 0 1 370,378 L282,378 A20,20 0 0 1 282,338 Z" />
+    <path android:fillColor="#3A3566"
+        android:pathData="M275,236 L407,236 A9,9 0 0 1 407,254 L275,254 A9,9 0 0 1 275,236 Z" />
+    <path android:fillColor="#2C2850"
+        android:pathData="M275,270 L353,270 A9,9 0 0 1 353,288 L275,288 A9,9 0 0 1 275,270 Z" />
+</vector>
