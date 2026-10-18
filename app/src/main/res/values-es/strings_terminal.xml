@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Terminal dentro del editor (RinTerminalView) -->
-    <string name="terminal_tab_terminal">Terminal</string>
+    <string name="terminal_tab_terminal">Rin Shell</string>
     <string name="terminal_tab_runs">Ejecuciones</string>
     <string name="terminal_clear">Limpiar</string>
     <string name="terminal_copy">Copiar</string>
@@ -9,7 +9,7 @@
     <string name="terminal_hint_shell">Comando o código Rin…</string>
     <string name="terminal_hint_input">Escribe tu respuesta y pulsa Enter</string>
     <string name="terminal_hint_continue">Continúa el comando… (^C cancela)</string>
-    <string name="terminal_welcome">Terminal de Rin — escribe help para ver los comandos</string>
+    <string name="terminal_welcome">Rin Shell — escribe help para ver los comandos (Rin Toolbox: 615 comandos)</string>
     <string name="terminal_nothing_waiting">Ningún programa espera una entrada.</string>
     <string name="terminal_stopped">Detenido.</string>
     <string name="terminal_empty">(vacío)</string>
