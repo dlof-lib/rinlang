@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Terminal داخل المحرر (RinTerminalView) -->
-    <string name="terminal_tab_terminal">الطرفية</string>
+    <string name="terminal_tab_terminal">Rin Shell</string>
     <string name="terminal_tab_runs">التشغيلات</string>
     <string name="terminal_clear">مسح</string>
     <string name="terminal_copy">نسخ</string>
@@ -9,7 +9,7 @@
     <string name="terminal_hint_shell">أمر أو شيفرة Rin…</string>
     <string name="terminal_hint_input">اكتب إجابتك ثم Enter</string>
     <string name="terminal_hint_continue">أكمل الأمر… (^C للإلغاء)</string>
-    <string name="terminal_welcome">طرفية Rin — اكتب help لعرض الأوامر</string>
+    <string name="terminal_welcome">Rin Shell — اكتب help لعرض الأوامر (Rin Toolbox: ٦١٥ أمراً)</string>
     <string name="terminal_nothing_waiting">لا يوجد برنامج ينتظر إدخالاً.</string>
     <string name="terminal_stopped">تم الإيقاف.</string>
     <string name="terminal_empty">(فارغ)</string>
