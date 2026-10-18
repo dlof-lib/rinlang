@@ -129,6 +129,18 @@ static void emitJson(const Value& v, std::string& o, int indent, int depth, bool
             o += ']';
             break;
         }
+        case Value::Type::SET: {
+            if (!v.set || v.set->items.empty()) { o += "[]"; break; }
+            o += '[';
+            for (size_t i = 0; i < v.set->items.size(); ++i) {
+                if (i) o += ',';
+                nl(depth + 1);
+                emitJson(v.set->items[i], o, indent, depth + 1, sortKeys);
+            }
+            nl(depth);
+            o += ']';
+            break;
+        }
         case Value::Type::MAP: case Value::Type::INSTANCE: {
             MapData tmp;
             const MapData* md = nullptr;
