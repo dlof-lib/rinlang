@@ -1110,6 +1110,18 @@ static std::string serializeValueLiteral(const Value& v) {
         case Value::Type::FUNCTION: return "nil";
         // Instances are runtime objects, not Rin literals. Keep literal serialization safe.
         case Value::Type::INSTANCE: return "nil";
+        case Value::Type::SET: {
+            // Set has no brace literal; Set([...]) re-creates it (order preserved) when the text is parsed back.
+            std::string out = "Set([";
+            if (v.set) {
+                for (size_t i = 0; i < v.set->items.size(); i++) {
+                    if (i) out += ", ";
+                    out += serializeValueLiteral(v.set->items[i]);
+                }
+            }
+            out += "])";
+            return out;
+        }
         case Value::Type::ARRAY: {
             std::string out = "[";
             if (v.array) {
