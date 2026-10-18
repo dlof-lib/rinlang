@@ -113,7 +113,9 @@ static int tasks() {
         {Task::Install, "http 1.2.0",  8,  330}, {Task::Test,   "math_test.rin", 12, 240},
         {Task::Build,   "linking",     6,  420}, {Task::Check,  "app/main.rin", 14, 200},
         {Task::Format,  "src/ui.rin",  5,  500}, {Task::Clean,  "build/obj",    9, 280},
-        {Task::Doctor,  "rinc",        5,  520},
+        {Task::Doctor,  "rinc",        5,  520}, {Task::Load,   "lib/math.og.rin", 4, 260},
+        {Task::Project, "src/main.rin", 5, 240}, {Task::Files,  "assets/",      8, 180},
+        {Task::Hash,    "release.rcl",  4,  300}, {Task::Bench,  "run",         10, 140},
     };
     for (const auto& x : list) {
         ProgressBar bar(std::cout, profileFor(x.t), x.total);
@@ -126,7 +128,27 @@ static int tasks() {
     return 0;
 }
 
+// مؤشر تشغيل كود Rin: ./loader_ui_demo --run
+// يحاكي برنامجاً: عمل صامت (يظهر المؤشر) ← استيراد مكتبة (يظهر اسمها ومرحلتها) ← مخرجات (يختفي المؤشر ثم يعود).
+static int runDemo() {
+    RunIndicator ind(std::cout, profileFor(Task::Run), "main.rin", /*fd=*/1);
+    auto out = [&](const std::string& s) { ind.emit(s, [](const std::string& t) { std::cout << t << std::flush; }); };
+    auto imp = ind.importSink();
+    sleepMs(700);
+    imp->onBegin("rin.ui", 0);
+    for (LoadStage st : {LoadStage::Reading, LoadStage::Parsing, LoadStage::Initializing}) { imp->onStage("rin.ui", st, "", 0); sleepMs(450); }
+    imp->onEnd("rin.ui", LoadOutcome{}, 0);
+    out("hello from rin\n");
+    sleepMs(900);
+    out("step 2 done\n");
+    sleepMs(1500);
+    out("finished\n");
+    ind.stop();
+    return 0;
+}
+
 int main(int argc, char** argv) {
+    if (argc > 1 && std::string(argv[1]) == "--run") return runDemo();
     if (argc > 1 && std::string(argv[1]) == "--tasks") return tasks();
     if (argc > 1 && std::string(argv[1]) == "--gallery") return gallery();
     std::cout << "=== Verbose mode (ConsoleBarSink) ===\n\n";
