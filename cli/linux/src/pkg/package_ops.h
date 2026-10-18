@@ -5,6 +5,7 @@
 // تفتيت غير ضروري لعدد الملفات).
 // ============================================================================
 #pragma once
+#include <functional>
 #include <string>
 #include <vector>
 #include "manifest.h"
@@ -27,7 +28,13 @@ namespace installer {
 // يُنزِّل من registry، يتحقق من checksum، يفك الأرشيف في الكاش العام.
 // offline=true يمنع أي محاولة تنزيل: يفشل إن لم تكن الحزمة في الكاش مسبقاً.
 // يرمي RinChecksumError عند عدم تطابق البصمة، RinPackageNotFound عند فشل التنزيل.
-void installResolvedPackage(const ResolvedPackage& pkg, Registry& reg, const Cache& cache, bool offline);
+//
+// onPhase (اختياري): يُستدعى عند بدء كل مرحلة *فعلية* بالترتيب الحقيقي لحدوثها —
+// "cached" (موجودة وصالحة، لا عمل)، "downloading"، "verifying"، "unpacking" — لتغذية
+// مؤشر تقدّم صادق في الطرفية. بدونه السلوك مطابق تماماً لما كان.
+using PhaseCallback = std::function<void(const char* phase)>;
+void installResolvedPackage(const ResolvedPackage& pkg, Registry& reg, const Cache& cache, bool offline,
+                            const PhaseCallback& onPhase = nullptr);
 }
 
 // Builder ----------------------------------------------------------------
