@@ -147,6 +147,6 @@ add_executable(rinvm
     ${RIN_CORE_DIR}/clc/sha256.cpp
 )
 target_include_directories(rinvm PRIVATE ${RIN_CORE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/../rin_vm/include)
-target_link_libraries(rinvm PRIVATE ZLIB::ZLIB ${CMAKE_DL_LIBS})
+target_link_libraries(rinvm PRIVATE Threads::Threads ZLIB::ZLIB ${CMAKE_DL_LIBS})  # loader_ui يستعمل std::thread
 
 install(TARGETS rin rin_ava rinc rin_vm rinvm RUNTIME DESTINATION bin)
