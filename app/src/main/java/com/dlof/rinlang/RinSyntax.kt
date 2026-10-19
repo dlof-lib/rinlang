@@ -285,6 +285,7 @@ private object RinLexer {
         "sqlUpdate", "sqlValidate", "sqrt", "stddev", "str", "streamReply", "subscribe", "substr",
         "sum", "tan", "toBool", "toHex", "toNumber", "toString", "tokenType", "tokenizeWords",
         "tokens",
+        "number", "numberApprox", "numberChange", "numberCheck", "numberDigits", "numberDivisors", "numberFactors", "numberFormat", "numberFromBase", "numberGcd", "numberIsPrime", "numberKind", "numberLcm", "numberMap", "numberParts", "numberPercent", "numberRound", "numberStats", "numberSum", "numberToBase", "numberWrap",
         "tokenAt", "tokenCategory", "tokenCheck", "tokenCount", "tokenDump", "tokenIsKeyword", "tokenKeywords", "tokenKinds", "tokenLines", "tokenList", "tokenStats",
         "trim", "trimEnd", "trimStart", "trunc", "type", "typeIs", "unsubscribe", "unwatch",
         "updateDoc", "upper", "utf8CharAt", "utf8Len", "utf8Reverse", "utf8Substr", "utf8ToArray",
