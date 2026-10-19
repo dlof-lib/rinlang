@@ -337,4 +337,22 @@ print \"Hello, \" + name + \"!\";
     <string name="rin_input_title">Entrada</string>
     <string name="rin_input_hint">Escribe tu respuesta</string>
     <string name="rin_input_default_prompt">El programa espera una entrada</string>
+
+    <!-- نسخ/قص/لصق المحرر -->
+    <string name="clip_empty">El portapapeles está vacío</string>
+    <string name="clip_large_title">Pegado grande</string>
+    <string name="clip_large_message_fmt">¿Pegar %1$d líneas (unos %2$d KB)? Puede tardar un momento.</string>
+    <string name="clip_large_confirm">Pegar</string>
+    <string name="clip_history_title">Historial del portapapeles</string>
+    <string name="clip_history_empty">El historial está vacío</string>
+    <string name="clip_history_clear">Borrar todo</string>
+    <string name="clip_history_meta_fmt">%1$d líneas · %2$d caracteres</string>
+    <string name="clip_history_whole_lines">líneas completas</string>
+    <string name="action_copy_line">Copiar línea</string>
+    <string name="action_cut_line">Cortar línea</string>
+    <string name="action_paste_plain">Pegar tal cual</string>
+    <string name="action_clip_history">Historial del portapapeles…</string>
+    <string name="action_duplicate">Duplicar</string>
+    <string name="action_select_line">Seleccionar línea</string>
+    <string name="action_copy_markdown">Copiar como Markdown</string>
 </resources>
