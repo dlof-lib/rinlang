@@ -999,7 +999,7 @@ static const intel::Env& intelEnv() {
         // كلمات اللغة السياقية: كائنية + تحكّم + حلقات (ليست كلها محجوزة في rin::Lexer)
         for (const char* k : {"class", "struct", "interface", "trait", "enum", "extends", "implements", "uses", "instanceof",
                               "abstract", "final", "override", "static", "public", "private", "protected", "get", "set",
-                              "self", "super", "try", "catch", "throw", "match", "case", "when", "otherwise", "unless",
+                              "self", "super", "try", "catch", "finally", "defer", "rethrow", "throw", "match", "case", "when", "otherwise", "unless",
                               "elif", "elseif", "ifnot", "until", "goal", "achieve"})
             if (seen.insert(k).second) e.contextual.push_back(k);
         for (const std::string& k : tools::contextualCompletionWords()) if (seen.insert(k).second) e.contextual.push_back(k);
