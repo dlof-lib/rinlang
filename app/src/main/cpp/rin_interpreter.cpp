@@ -62,6 +62,11 @@
 #endif
 
 namespace rin {
+namespace imgdraw { // rin_image_draw.cpp (يُضمَّن في نهاية هذا الملف)
+bool isImagePath(const std::string& path);
+std::string logAsImageBytes(const std::vector<LogEntry>& entries, const std::string& path);
+bool getRgba(int id, int& w, int& h, std::vector<uint8_t>& px);
+}
 
 // ---- Diagnostics: نظام موحّد (src/diagnostics) ----
 // اسم الملف الحالي المستخدَم في كل Diagnostic صادر عن دوال حرة (utilities) أو lambdas لا تصل إلى
@@ -6509,6 +6514,10 @@ void Interpreter::registerNatives() {
     natives["logSave"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("logSave", a, 1, line);
         std::string relPath = asString(a[0], "logSave", line);
+        if (imgdraw::isImagePath(relPath)) { // logSave("log.png"|".bmp"|".ppm"): السجلّ كصورة (يستبدل الملف، لا يُلحَق)
+            writeRealFile(relPath, imgdraw::logAsImageBytes(logHistory_, relPath), line, "logSave");
+            return Value::num(static_cast<double>(logHistory_.size()));
+        }
         std::string fullPath = resolvePath(relPath, line);
         ensureParentDir(fullPath);
         std::ofstream out(fullPath, std::ios::binary | std::ios::app);
@@ -6791,6 +6800,7 @@ void Interpreter::registerNatives() {
     registerNativesOop(); // Rin 1.0: oop.* — استبطان الأصناف والكائنات + أدوات OOP (rin_oop_natives.cpp)
     registerNativesInput(); // Rin 1.0: نماذج الإدخال (معاملة/تداخل/مُدقِّق النموذج) فوق input() — بعد oop.* لأنها تستدعيها (rin_input.cpp)
     registerNativesConditions(); // متغيّرات الشروط الموسّعة (rin_conditions.cpp)
+    registerNativesImageDraw(); // imgNew/imgLine/imgText/imgSave/imgFromLog… (rin_image_draw.cpp)
     registerNativesImage(); // printImage/imageAnsi/imageInfo (rin_image_ansi.cpp)
     registerNativesEnv();   // ربط .env: Env.* (rin_env.cpp)
     registerNativesSet();   // نوع Set الأساسي: Set(...) و Set.* وتوسعة len/contains/has/remove/sum... (rin_set.cpp) — أخيراً كي تلفّ ما سبقها
@@ -12623,6 +12633,7 @@ bool Interpreter::livePropertyGet(const EnvPtr& env, const std::string& name, co
 #include "rin_table.cpp" // توسعة الجدول: دوال اللغة الموجودة تفهم الجدول (انظر رأس الملف)
 #include "rin_conditions.cpp" // متغيّرات الشروط الموسّعة (docs/key_terms_and_builtins.md)
 #include "rin_image_ansi.cpp" // صور داخل الـ terminal كنص (docs/image-terminal.md)
+#include "rin_image_draw.cpp" // إنشاء الصور والرسم والحفظ PNG وlog كصورة (docs/image-draw.md)
 #include "rin_env.cpp"   // ربط ملف .env (docs/env.md)
 #include "rin_set.cpp"   // نوع Set الأساسي (docs/set.md)
 #include "rin_expr_host.cpp" // واجهة التقييم المعزول لـ indsin (docs/indsin_rin.md)
