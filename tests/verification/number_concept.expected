@@ -1,0 +1,78 @@
+1 plain 42 -3.5 1 7
+1 arabic 123 12.5 45
+1 groups 1234567 1000 1500 0.5
+1 prefix 255 10 15 -16
+1 percent 0.5 0.125
+1 euro 1234.5
+1 default 0 -1 9
+1 opts 7 100 255
+1 caught 12abc
+1 caught 1,5
+1 caught empty
+1 caught int
+1 caught max
+1 caught array
+1 caught exact
+1 special true false
+2 ok true 1234.5 float true
+2 bad false true
+2 inexact false
+3 kind integer float integer nil nil
+4 parts -1 123 456 123456 3 2 float
+4 small 0 00123 -3
+5 half-up 1.01 3 -3 1.5
+5 even 2 4 1.2
+5 modes 1.3 -1.2 -1.3 1.3
+5 neg places 1200 1200 0
+5 carry 10 1
+5 caught mode
+6 group 1,234,567.89
+6 default 1,234,567 0.5 -1,234.5
+6 minmax 3.14 3.00 2.5
+6 sign +5 -5 0
+6 percent 7.5% 12.3%
+6 affix $99.50 12 kg
+6 pad [    42] [000042] [-00042] [42    ]
+6 custom 1.234.567,5 1234567 1,23,45,67
+6 arabic ١٬٢٣٤٫٥٠
+6 compact 1,234 1.2K 1.5M 1M 2.50B 950
+6 compact ar 3.2 مليون
+6 nonfinite Infinity
+6 zero 0.0
+7 percent 33.33 75 7
+7 change 25 -20 50 33.3
+7 caught zero whole
+7 caught zero from
+8 approx true false false true true
+9 map 50 150 100 100
+9 wrap 10 350 2 0
+9 caught degenerate
+10 sum 1 6.5 0
+10 skip 3
+10 caught bad item
+10 stats 8 40 2 9 7 5 4.5 4 4 2
+10 sample 2.5 nil 1.6667
+10 empty 0 nil nil
+10 single 0 nil
+11 gcd 6 12 5 6
+11 lcm 12 60 0
+11 prime true true false false false false true
+11 factors [2, 2, 2, 3, 3, 5] [97] [{"prime": 2, "power": 3}, {"prime": 3, "power": 2}, {"prime": 5, "power": 1}]
+11 divisors [1, 2, 3, 4, 6, 9, 12, 18, 36] [1] [1, 97]
+11 digits [9, 0, 2, 1, 0] [0] [4, 5] [15, 15]
+11 caught non-int
+11 caught factors
+11 caught divisors
+11 caught lcm overflow
+12 to ff 11111111 -1010 0
+12 opts 0xFF 00000101 1011_1110_1110_1111 0b1010
+12 from 255 255 10 1295 -5 240
+12 caught digit
+12 caught big
+12 caught base
+12 caught frac
+13 caught type
+13 caught opts
+13 caught list
+14 old 12 3 3
+14 var 6
