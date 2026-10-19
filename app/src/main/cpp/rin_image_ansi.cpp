@@ -159,8 +159,8 @@ void Interpreter::registerNativesImage() {
     auto build = [this](const char* fn, std::vector<Value>& a, int line) -> std::string {
         if (a.empty() || a.size() > 3)
             throw diagErr(diag::Code::E0007_InvalidArguments, line, std::string("'") + fn + "' expects 1 to 3 arguments (path, width?, mode?) but got " + std::to_string(a.size()));
-        if (a[0].type != Value::Type::STRING)
-            throw diagErr(diag::Code::E0004_InvalidType, line, std::string("'") + fn + "': the path must be a string, but got " + a[0].typeName());
+        if (a[0].type != Value::Type::STRING && a[0].type != Value::Type::NUMBER)
+            throw diagErr(diag::Code::E0004_InvalidType, line, std::string("'") + fn + "': the path must be a string (or an image id from imgNew/imgLoad), but got " + a[0].typeName());
         int cols = 0;
         if (a.size() >= 2 && a[1].type != Value::Type::NIL) {
             if (a[1].type != Value::Type::NUMBER)
@@ -176,6 +176,14 @@ void Interpreter::registerNativesImage() {
             mode = a[2].str;
             if (mode != "auto" && mode != "color" && mode != "blocks" && mode != "ascii")
                 throw diagErr(diag::Code::E0007_InvalidArguments, line, std::string("'") + fn + "': unknown mode \"" + mode + "\" — use auto, color, blocks or ascii");
+        }
+        if (a[0].type == Value::Type::NUMBER) { // لوحة من imgNew/imgLoad (rin_image_draw.cpp)
+            Image im;
+            if (!imgdraw::getRgba((int)a[0].number, im.w, im.h, im.px))
+                throw diagErr(diag::Code::E0007_InvalidArguments, line, std::string("'") + fn + "': unknown or freed image id " + std::to_string((int)a[0].number));
+            if (cols == 0) cols = std::min(im.w, terminalColumns());
+            if (mode == "auto") mode = colorOutputOn() ? "color" : "ascii";
+            return render(im, cols, mode);
         }
         const std::string path = a[0].str;
         std::vector<unsigned char> bytes;
