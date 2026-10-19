@@ -70,6 +70,17 @@ class RinCodeEditorController(
     fun undo() { editorView.undo() }
     fun redo() { editorView.redo() }
 
+    // --- نسخ/قص/لصق ---
+    fun copy() = editorView.copy()
+    fun cut() = editorView.cut()
+    fun paste() = editorView.paste()
+    fun pasteAsIs() = editorView.pasteAsIs()
+    fun copyLines() = editorView.copyLines()
+    fun cutLines() = editorView.cutLines()
+    fun copyAsMarkdown() = editorView.copyAsMarkdown()
+    fun selectLine() = editorView.selectLine()
+    fun showClipboardHistory() = editorView.showClipboardHistory()
+
     // --- أوامر مستوى-السطر ---
     fun duplicateCurrentLine() = editorView.duplicateCurrentLine()
     fun deleteCurrentLine() = editorView.deleteCurrentLine()
