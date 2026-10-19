@@ -2077,10 +2077,11 @@ StmtPtr Parser::forStatement() {
     if (!check(TokenType::LPAREN) && atEachForm(current - 1, true)) { // for x in xs { }  — صياغة بلا أقواس = each
         EachHdr h = parseEachHdr();
         ExprPtr lim = limitClause();
+        const size_t bodyFrom = current;
         enterLoop();
         auto body = statement();
         exitLoop();
-        return buildEach(h, body, forTok.line, lim);
+        return buildEachImplicit(h, body, forTok.line, lim, bodyFrom, current);
     }
     // Rin For+: for let i = 0; i < n; i++ { ... }  — C-style بلا أقواس (الجسم كتلة { })
     const size_t scanFrom = current;
@@ -4437,6 +4438,11 @@ StmtPtr Parser::loopsV2Statement() {
         std::string idx = "#ri" + std::to_string(loopSeq++);
         if (check(TokenType::IDENT) && peek().lexeme == "as") { advance(); idx = consume(TokenType::IDENT, "Expected index name after 'as'").lexeme; }
         ExprPtr lim = limitClause();
+        if (idx.rfind("#ri", 0) == 0 && check(TokenType::LBRACE)) {
+            size_t to = current; int d = 0;
+            for (; to < tokens.size(); ++to) { if (tokens[to].type == TokenType::LBRACE) d++; else if (tokens[to].type == TokenType::RBRACE && --d == 0) break; }
+            if (implicitWanted("i", current, to) && !nameDeclaredBefore("i", current)) idx = "i";
+        } // repeat N { print i; }  — i = 0..N-1
         const std::string n = "#rn" + std::to_string(loopSeq++);
         enterLoop();
         auto body = statement();
@@ -4502,10 +4508,11 @@ StmtPtr Parser::loopsV2Statement() {
         advance(); // each
         EachHdr h = parseEachHdr();
         ExprPtr lim = limitClause();
+        const size_t bodyFrom = current;
         enterLoop();
         auto body = statement();
         exitLoop();
-        return buildEach(h, body, line, lim);
+        return buildEachImplicit(h, body, line, lim, bodyFrom, current);
     }
     return nullptr;
 }
@@ -4868,6 +4875,91 @@ StmtPtr Parser::buildEach(EachHdr& h, StmtPtr body, int line, ExprPtr lim) {
     return lBlock(std::move(pre), line);
 }
 
+// ---- i / y الضمنيان ----
+// هل `nm` معرَّف قبل التوكن at في نطاق مرئي (let/var/const/as/each-for var/معامل دالة)؟ مسح عكسي يتخطّى الكتل المغلقة.
+bool Parser::nameDeclaredBefore(const std::string& nm, size_t at) const {
+    int skip = 0;
+    for (size_t j = std::min(at, tokens.size()); j-- > 0;) {
+        auto t = tokens[j].type;
+        if (t == TokenType::RBRACE) { skip++; continue; }
+        if (t == TokenType::LBRACE) { if (skip > 0) skip--; continue; }
+        if (skip > 0 || t != TokenType::IDENT || tokens[j].lexeme != nm) continue;
+        if (j > 0) {
+            auto pt = tokens[j - 1].type;
+            if (pt == TokenType::LET) return true;
+            if (pt == TokenType::IDENT && (tokens[j - 1].lexeme == "as" || tokens[j - 1].lexeme == "var" || tokens[j - 1].lexeme == "const" ||
+                                           tokens[j - 1].lexeme == "each")) return true;
+        }
+        if (j + 1 < tokens.size()) {
+            auto nt = tokens[j + 1];
+            if (nt.type == TokenType::IDENT && nt.lexeme == "in") return true;
+            if ((nt.type == TokenType::COMMA || nt.type == TokenType::RPAREN) && j > 0 &&
+                (tokens[j - 1].type == TokenType::LPAREN || tokens[j - 1].type == TokenType::COMMA)) { // معامل دالة؟ name(..nm..) {
+                int d = 0; size_t lp = j, rp = j;
+                for (size_t q = j; q-- > 0;) { if (tokens[q].type == TokenType::RPAREN) d++; else if (tokens[q].type == TokenType::LPAREN) { if (d == 0) { lp = q; break; } d--; } }
+                d = 0;
+                for (size_t q = j; q < tokens.size(); ++q) { if (tokens[q].type == TokenType::LPAREN) d++; else if (tokens[q].type == TokenType::RPAREN) { if (d == 0) { rp = q; break; } d--; } }
+                if (lp < j && rp > j && lp > 0 && rp + 1 < tokens.size() && tokens[lp - 1].type == TokenType::IDENT && tokens[rp + 1].type == TokenType::LBRACE) return true;
+            }
+        }
+    }
+    return false;
+}
+
+// هل يذكر المدى [from,to) الاسم nm قراءةً فقط؟ (من يعرّفه أو يسنده بنفسه يبقى له: let/var/const/as/=/++/--/op=)
+bool Parser::implicitWanted(const std::string& nm, size_t from, size_t to) const {
+    bool used = false;
+    for (size_t j = from; j < to && j < tokens.size(); ++j) {
+        if (tokens[j].type != TokenType::IDENT || tokens[j].lexeme != nm) continue;
+        if (j > 0) {
+            auto pt = tokens[j - 1].type;
+            if (pt == TokenType::LET) return false;
+            if (pt == TokenType::DOT) continue; // obj.nm: خاصية لا متغيّر
+            if (pt == TokenType::IDENT && (tokens[j - 1].lexeme == "as" || tokens[j - 1].lexeme == "var" || tokens[j - 1].lexeme == "const")) return false;
+        }
+        if (j + 1 < tokens.size()) {
+            auto n = tokens[j + 1].type;
+            if (n == TokenType::EQUAL) return false;
+            if (j + 2 < tokens.size() && (n == TokenType::PLUS || n == TokenType::MINUS || n == TokenType::STAR || n == TokenType::PERCENT || n == TokenType::SLASH)) {
+                auto n2 = tokens[j + 2].type;
+                if (n2 == TokenType::EQUAL || (n2 == n && (n == TokenType::PLUS || n == TokenType::MINUS))) return false;
+            }
+        }
+        used = true;
+    }
+    return used;
+}
+
+// i = رقم الدورة المنفَّذة من 0 ، y = قيمة متغيّر الحلقة في الدورة السابقة (nil في الأولى). يُفعَّلان فقط إن ذكرهما الجسم/التعبير
+// ولم يكونا معرَّفين قبل الحلقة أو في ترويستها. بدونهما يطابق buildEach حرفياً.
+StmtPtr Parser::buildEachImplicit(EachHdr& h, StmtPtr body, int line, ExprPtr lim, size_t from, size_t to) {
+    auto freeName = [&](const std::string& nm) {
+        if (h.v1 == nm || h.v2 == nm || h.pat) return false;
+        for (auto& ex : h.extra) if (ex.first == nm) return false;
+        return true;
+    };
+    const size_t hdrAt = from; // التصريحات تُفحَص قبل بداية الجسم (تشمل الترويسة نفسها)
+    const bool wantI = freeName("i") && implicitWanted("i", from, to) && !nameDeclaredBefore("i", hdrAt);
+    const bool wantY = !h.v1.empty() && freeName("y") && implicitWanted("y", from, to) && !nameDeclaredBefore("y", hdrAt);
+    if (!wantI && !wantY) return buildEach(h, body, line, lim);
+    const std::string cnt = "#ci" + std::to_string(loopSeq++), prv = "#cy" + std::to_string(loopSeq++);
+    std::vector<StmtPtr> pre, out;
+    if (wantI) {
+        pre.push_back(lExpr(lAssign(cnt, lBin(lVar(cnt, line), TokenType::PLUS, lNum(1, line), line), line), line));
+        pre.push_back(lLet("i", lVar(cnt, line), line));
+        out.push_back(lLet(cnt, lNum(-1, line), line));
+    }
+    if (wantY) {
+        pre.push_back(lLet("y", lVar(prv, line), line));
+        pre.push_back(lExpr(lAssign(prv, lVar(h.v1, line), line), line));
+        auto nil = std::make_shared<LiteralExpr>(); nil->kind = LiteralExpr::Kind::NIL; nil->line = line;
+        out.push_back(lLet(prv, nil, line));
+    }
+    pre.push_back(body);
+    out.push_back(buildEach(h, lBlock(std::move(pre), line), line, lim));
+    return lBlock(std::move(out), line);
+}
+
 // [each x in xs where c yield expr]  ->  goal { let acc = []; each ... { push(acc, expr); } achieve acc; }
 ExprPtr Parser::eachComprehension() {
     Token kwTok = advance(); // each
@@ -4878,12 +4970,13 @@ ExprPtr Parser::eachComprehension() {
                       "an array comprehension is written `[each x in xs where cond yield expr]`",
                       "add `yield <expression>` before the closing `]`", "'yield'");
     advance();
+    const size_t exprFrom = current;
     enterLoop();
     ExprPtr val = expression();
     exitLoop();
     const std::string acc = "#ac" + std::to_string(loopSeq++);
     auto push = lExpr(lCall("push", {lVar(acc, line), val}, line), line);
-    StmtPtr loop = buildEach(h, push, line, nullptr);
+    StmtPtr loop = buildEachImplicit(h, push, line, nullptr, exprFrom, current);
     auto ach = std::make_shared<AchieveStmt>(); ach->value = lVar(acc, line); ach->line = line;
     auto g = std::make_shared<GoalExpr>(); g->line = line;
     g->body = lBlock({lLet(acc, std::make_shared<ArrayExpr>(), line), loop, ach}, line);
@@ -4908,9 +5001,11 @@ ExprPtr Parser::reduceComprehension() {
     EachHdr h = parseEachHdr();
     ExprPtr val;
     const bool hasYield = check(TokenType::IDENT) && peek().lexeme == "yield";
+    const size_t exprFrom = current;
     enterLoop();
     if (hasYield) { advance(); val = expression(); }
     exitLoop();
+    const size_t exprTo = current;
     const bool needsVal = kind != "count" && kind != "any";
     if (!val) {
         if (kind == "all")
@@ -4966,7 +5061,7 @@ ExprPtr Parser::reduceComprehension() {
         head.push_back(lLet(acc, nilLit(), line));
         bodyS = setAcc(val);
     }
-    StmtPtr loop = buildEach(h, bodyS, line, nullptr);
+    StmtPtr loop = buildEachImplicit(h, bodyS, line, nullptr, exprFrom, exprTo);
     auto ach = std::make_shared<AchieveStmt>(); ach->value = result; ach->line = line;
     auto g = std::make_shared<GoalExpr>(); g->line = line;
     head.push_back(loop); head.push_back(ach);
@@ -4983,6 +5078,7 @@ ExprPtr Parser::mapComprehension() {
                       "a map comprehension is written `{each x in xs where cond yield key: value}`",
                       "add `yield <key>: <value>` before the closing `}`", "'yield'");
     advance();
+    const size_t exprFrom = current;
     enterLoop();
     ExprPtr key = expression();
     consume(TokenType::COLON, "Expected ':' between key and value in a map comprehension");
@@ -4991,7 +5087,7 @@ ExprPtr Parser::mapComprehension() {
     const std::string acc = "#mc" + std::to_string(loopSeq++);
     auto set = std::make_shared<IndexSetExpr>();
     set->object = lVar(acc, line); set->index = key; set->value = value; set->line = line;
-    StmtPtr loop = buildEach(h, lExpr(set, line), line, nullptr);
+    StmtPtr loop = buildEachImplicit(h, lExpr(set, line), line, nullptr, exprFrom, current);
     auto ach = std::make_shared<AchieveStmt>(); ach->value = lVar(acc, line); ach->line = line;
     auto g = std::make_shared<GoalExpr>(); g->line = line;
     g->body = lBlock({lLet(acc, std::make_shared<MapExpr>(), line), loop, ach}, line);
