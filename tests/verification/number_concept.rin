@@ -1,0 +1,119 @@
+// مفهوم number (docs/NUMBER.md): number / numberCheck / numberKind / numberParts / numberRound /
+// numberFormat / numberPercent / numberChange / numberApprox / numberMap / numberWrap / numberSum /
+// numberStats / numberGcd / numberLcm / numberIsPrime / numberFactors / numberDivisors /
+// numberDigits / numberToBase / numberFromBase
+
+// 1) number: تحويل صارم
+print "1 plain", number("42"), number(" -3.5 "), number(true), number(7);
+print "1 arabic", number("١٢٣"), number("١٢٫٥"), number("۴۵");
+print "1 groups", number("1,234,567"), number("1_000"), number("1.5e3"), number(".5");
+print "1 prefix", number("0xff"), number("0b1010"), number("0o17"), number("-0x10");
+print "1 percent", number("50%"), number("12.5 %");
+print "1 euro", number("1.234,5", {decimal: ",", group: "."});
+print "1 default", number("abc", 0), number("12abc", -1), number(nil, 9);
+print "1 opts", number("7", {int: true}), number("150", {max: 100, clamp: true}), number("ff", {base: 16});
+try { number("12abc"); } catch (e) { print "1 caught 12abc"; }
+try { number("1,5"); } catch (e) { print "1 caught 1,5"; }
+try { number(""); } catch (e) { print "1 caught empty"; }
+try { number("3.5", {int: true}); } catch (e) { print "1 caught int"; }
+try { number("200", {max: 100}); } catch (e) { print "1 caught max"; }
+try { number([1]); } catch (e) { print "1 caught array"; }
+try { number("9007199254740993", {exact: true}); } catch (e) { print "1 caught exact"; }
+print "1 special", number("inf", {special: true}) > 1e308, number("NaN", {special: true}) == number("NaN", {special: true});
+
+// 2) numberCheck: بلا استثناء
+let c1 = numberCheck("1,234.5");
+print "2 ok", c1.ok, c1.value, c1.kind, c1.exact;
+let c2 = numberCheck("x1");
+print "2 bad", c2.ok, len(c2.error) > 0;
+print "2 inexact", numberCheck("9007199254740993").exact;
+
+// 3) numberKind
+print "3 kind", numberKind(5), numberKind(5.5), numberKind("12"), numberKind("zz"), numberKind(nil);
+
+// 4) numberParts
+let p = numberParts(-123.456);
+print "4 parts", p.sign, p.int, p.frac, p.digits, p.scale, p.exponent, p.kind;
+let p0 = numberParts(0.00123);
+print "4 small", p0.int, p0.frac, p0.exponent;
+
+// 5) numberRound: تقريب عشري صحيح
+print "5 half-up", numberRound(1.005, 2), numberRound(2.5), numberRound(-2.5), numberRound(1.45, 1);
+print "5 even", numberRound(2.5, 0, "half-even"), numberRound(3.5, 0, "half-even"), numberRound(1.25, 1, "half-even");
+print "5 modes", numberRound(1.21, 1, "up"), numberRound(-1.29, 1, "down"), numberRound(-1.21, 1, "floor"), numberRound(1.21, 1, "ceil");
+print "5 neg places", numberRound(1234, -2), numberRound(1250, -2, "half-even"), numberRound(0.0004, -1);
+print "5 carry", numberRound(9.995, 2), numberRound(0.9999, 2);
+try { numberRound(1, 0, "nope"); } catch (e) { print "5 caught mode"; }
+
+// 6) numberFormat
+print "6 group", numberFormat(1234567.891, {decimals: 2});
+print "6 default", numberFormat(1234567), numberFormat(0.5), numberFormat(-1234.5);
+print "6 minmax", numberFormat(3.14159, {maxDecimals: 2}), numberFormat(3, {minDecimals: 2}), numberFormat(2.5, {maxDecimals: 3, minDecimals: 1});
+print "6 sign", numberFormat(5, {sign: true}), numberFormat(-5, {sign: true}), numberFormat(0, {sign: true});
+print "6 percent", numberFormat(0.075, {percent: true}), numberFormat(0.1234, {percent: true, decimals: 1});
+print "6 affix", numberFormat(99.5, {decimals: 2, prefix: "$"}), numberFormat(12, {suffix: " kg"});
+print "6 pad", "[" + numberFormat(42, {pad: 6}) + "]", "[" + numberFormat(42, {pad: 6, padChar: "0"}) + "]", "[" + numberFormat(-42, {pad: 6, padChar: "0"}) + "]", "[" + numberFormat(42, {pad: 6, align: "left"}) + "]";
+print "6 custom", numberFormat(1234567.5, {decimals: 1, group: ".", decimal: ","}), numberFormat(1234567, {group: ""}), numberFormat(1234567, {groupSize: 2});
+print "6 arabic", numberFormat(1234.5, {decimals: 2, digits: "arabic"});
+print "6 compact", numberFormat(1234), numberFormat(1234, {compact: true}), numberFormat(1500000, {compact: true}), numberFormat(999950, {compact: true}), numberFormat(2500000000, {compact: true, decimals: 2}), numberFormat(950, {compact: true});
+print "6 compact ar", numberFormat(3200000, {compact: "ar"});
+print "6 nonfinite", numberFormat(number("inf", {special: true}));
+print "6 zero", numberFormat(-0.001, {decimals: 1});
+
+// 7) numberPercent / numberChange
+print "7 percent", numberPercent(1, 3), numberPercent(45, 60, 0), numberPercent(0.07, 1, 1);
+print "7 change", numberChange(80, 100), numberChange(100, 80), numberChange(-50, -25), numberChange(3, 4, 1);
+try { numberPercent(1, 0); } catch (e) { print "7 caught zero whole"; }
+try { numberChange(0, 1); } catch (e) { print "7 caught zero from"; }
+
+// 8) numberApprox
+print "8 approx", numberApprox(0.1 + 0.2, 0.3), 0.1 + 0.2 == 0.3, numberApprox(1, 1.1), numberApprox(100, 101, 0.02), numberApprox(0, 1e-13);
+
+// 9) numberMap / numberWrap
+print "9 map", numberMap(5, 0, 10, 0, 100), numberMap(15, 0, 10, 0, 100), numberMap(15, 0, 10, 0, 100, true), numberMap(0, 0, 1, 100, 0);
+print "9 wrap", numberWrap(370, 0, 360), numberWrap(-10, 0, 360), numberWrap(5, 1, 4), numberWrap(360, 0, 360);
+try { numberMap(1, 2, 2, 0, 1); } catch (e) { print "9 caught degenerate"; }
+
+// 10) numberSum / numberStats
+let tenth = [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1];
+print "10 sum", numberSum(tenth), numberSum([1, "2", "3.5"]), numberSum([]);
+print "10 skip", numberSum([1, "x", 2], {skip: true});
+try { numberSum([1, "x"]); } catch (e) { print "10 caught bad item"; }
+let st = numberStats([2, 4, 4, 4, 5, 5, 7, 9]);
+print "10 stats", st.count, st.sum, st.min, st.max, st.range, st.mean, st.median, st.mode, st.variance, st.stdev;
+let st2 = numberStats([1, 2, 3, 4], {sample: true});
+print "10 sample", st2.median, st2.mode, numberRound(st2.variance, 4);
+let st0 = numberStats([]);
+print "10 empty", st0.count, st0.mean, st0.stdev;
+print "10 single", numberStats([5]).stdev, numberStats([5], {sample: true}).stdev;
+
+// 11) الأعداد الصحيحة
+print "11 gcd", numberGcd(12, 18), numberGcd([48, 36, 60]), numberGcd(0, 5), numberGcd(-12, 18);
+print "11 lcm", numberLcm(4, 6), numberLcm([2, 3, 4, 5]), numberLcm(0, 3);
+print "11 prime", numberIsPrime(2), numberIsPrime(97), numberIsPrime(100), numberIsPrime(1), numberIsPrime(-7), numberIsPrime(2.5), numberIsPrime(1000003);
+print "11 factors", numberFactors(360), numberFactors(97), numberFactors(360, true);
+print "11 divisors", numberDivisors(36), numberDivisors(1), numberDivisors(97);
+print "11 digits", numberDigits(90210), numberDigits(0), numberDigits(-45), numberDigits(255, 16);
+try { numberGcd(1.5, 2); } catch (e) { print "11 caught non-int"; }
+try { numberFactors(1); } catch (e) { print "11 caught factors"; }
+try { numberDivisors(0); } catch (e) { print "11 caught divisors"; }
+try { numberLcm(9007199254740991, 9007199254740990); } catch (e) { print "11 caught lcm overflow"; }
+
+// 12) القواعد
+print "12 to", numberToBase(255, 16), numberToBase(255, 2), numberToBase(-10, 2), numberToBase(0, 8);
+print "12 opts", numberToBase(255, 16, {prefix: true, upper: true}), numberToBase(5, 2, {pad: 8}), numberToBase(48879, 2, {group: 4}), numberToBase(10, 2, {prefix: true});
+print "12 from", numberFromBase("ff", 16), numberFromBase("0xFF", 16), numberFromBase("1010", 2), numberFromBase("zz", 36), numberFromBase("-101", 2), numberFromBase("1111_0000", 2);
+try { numberFromBase("12", 2); } catch (e) { print "12 caught digit"; }
+try { numberFromBase("ffffffffffffffffff", 16); } catch (e) { print "12 caught big"; }
+try { numberToBase(5, 1); } catch (e) { print "12 caught base"; }
+try { numberToBase(1.5, 2); } catch (e) { print "12 caught frac"; }
+
+// 13) أخطاء النوع
+try { numberRound("x"); } catch (e) { print "13 caught type"; }
+try { numberFormat(1, 5); } catch (e) { print "13 caught opts"; }
+try { numberStats(5); } catch (e) { print "13 caught list"; }
+
+// 14) الدوال القديمة لم تتغيّر + اسم المتغيّر number ما زال صالحاً
+print "14 old", toNumber("12"), round(2.5), sum([1, 2]);
+let number2 = 5;
+print "14 var", number2 + 1;
