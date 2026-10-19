@@ -1,0 +1,72 @@
+// إنشاء الصور ورسمها وحفظها — docs/image-draw.md (حتمي: لا يعتمد على طرفية ولا ساعة)
+let img = imgNew(8, 6, "#102030");
+print imgSize(img);
+print imgPixel(img, 0, 0);
+imgPixel(img, 1, 1, "#ff0000");
+print imgPixel(img, 1, 1);
+print imgPixel(img, 99, 99);
+
+// أشكال: الحواف الصحيحة تُملأ بالضبط (بلا تنعيم على الإحداثيات الصحيحة)
+imgRect(img, 2, 2, 3, 2, "#00ff00");
+print imgPixel(img, 2, 2), imgPixel(img, 4, 3), imgPixel(img, 5, 3);
+imgLine(img, 0, 5, 7, 5, "#ffffff");
+print imgPixel(img, 3, 5);
+imgCircle(img, 6, 1, 1, "#0000ff");
+print imgPixel(img, 6, 1);
+
+// شفافية: مزج source-over
+let t = imgNew(2, 1, "#000000");
+imgRect(t, 0, 0, 1, 1, "rgba(255,255,255,0.5)");
+print imgPixel(t, 0, 0);
+let clear = imgNew(1, 1);
+print imgPixel(clear, 0, 0);
+
+// حفظ ثم إعادة تحميل: PNG وBMP يعيدان نفس البكسلات
+let sizePng = imgSave(img, "_tmp_draw.png");
+imgSave(img, "_tmp_draw.bmp");
+let a = imgLoad("_tmp_draw.png");
+let b = imgLoad("_tmp_draw.bmp");
+print sizePng > 50, imgSize(a), imgSize(b);
+print imgPixel(a, 1, 1), imgPixel(a, 3, 5), imgPixel(b, 4, 3);
+print imgEncode(img, "png") == readFile("_tmp_draw.png");
+print imageInfo("_tmp_draw.png").format;
+
+// PNG مع ألفا يحفظ الشفافية
+imgSave(clear, "_tmp_alpha.png");
+print imgPixel(imgLoad("_tmp_alpha.png"), 0, 0);
+
+// تحويلات
+let big = imgResize(img, 16, 12);
+print imgSize(big), imgPixel(big, 2, 2);
+let cr = imgCrop(img, 2, 2, 3, 2);
+print imgSize(cr), imgPixel(cr, 0, 0);
+imgFlip(cr, "h");
+imgFilter(cr, "invert");
+print imgPixel(cr, 0, 0);
+print imgFloodFill(img, 7, 0, "#abcdef") > 0;
+
+// نص
+print imgTextSize("AB", 1), imgTextSize("a\nbb", 2);
+let ti = imgNew(30, 10, "#000000");
+let r = imgText(ti, 1, 1, "Hi", "#ffffff", {size: 1});
+print r;
+print imgAnsi(ti, 30, "ascii");
+
+// صورة من نص ومن log
+let fi = imgFromText("x\nyy", {size: 1, padding: 2});
+print imgSize(fi);
+print.log.error("e1");
+let li = imgFromLog({size: 1, padding: 1, title: ""});
+print imgSize(li).width > 20;
+print logSave("_tmp_log.png") ;
+print imageInfo("_tmp_log.png").format;
+
+// تنظيف
+imgFree(a);
+imgFree(b);
+imgFree(big);
+imgFree(cr);
+imgFree(fi);
+imgFree(li);
+print imgFree(clear);
+for f in ["_tmp_draw.png", "_tmp_draw.bmp", "_tmp_alpha.png", "_tmp_log.png"] { deleteFile(f); }
