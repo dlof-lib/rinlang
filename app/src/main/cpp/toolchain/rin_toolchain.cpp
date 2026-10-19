@@ -83,7 +83,7 @@ void SemanticAnalyzer::stmt(const StmtPtr& s){
     else if(auto x=std::dynamic_pointer_cast<PlusConditionStmt>(s)){expr(x->condition);stmt(x->trueBranch);stmt(x->falseBranch);}
     else if(auto x=std::dynamic_pointer_cast<MatchStmt>(s)){expr(x->subject);for(auto&c:x->cases){for(auto&e:c.values)expr(e);stmt(c.body);}stmt(x->elseBranch);}
     else if(auto x=std::dynamic_pointer_cast<ThrowStmt>(s))expr(x->value);
-    else if(auto x=std::dynamic_pointer_cast<TryCatchStmt>(s)){stmt(x->tryBranch);push();declare(x->catchName,s->line);stmt(x->catchBranch);pop();}
+    else if(auto x=std::dynamic_pointer_cast<TryCatchStmt>(s)){stmt(x->tryBranch);push();declare(x->catchName,s->line);expr(x->catchGuard);stmt(x->catchBranch);pop();for(auto&c:x->moreCatches){push();declare(c.name,s->line);expr(c.guard);stmt(c.body);pop();}if(x->finallyBranch)stmt(x->finallyBranch);}
     else if(auto x=std::dynamic_pointer_cast<ClassStmt>(s)){declare(x->name,s->line);for(auto&m:x->methods){push();for(auto&p:m->params)declare(p,m->line);stmt(m->body);pop();}}
     else if(auto x=std::dynamic_pointer_cast<EnumStmt>(s)){declare(x->name,s->line);for(auto&c:x->cases)expr(c.value);}
 }
