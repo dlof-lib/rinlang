@@ -378,4 +378,22 @@ print \"Hello, \" + name + \"!\";
     <string name="rin_input_title">إدخال</string>
     <string name="rin_input_hint">اكتب إجابتك</string>
     <string name="rin_input_default_prompt">البرنامج ينتظر إدخالاً</string>
+
+    <!-- نسخ/قص/لصق المحرر -->
+    <string name="clip_empty">الحافظة فارغة</string>
+    <string name="clip_large_title">لصق كبير</string>
+    <string name="clip_large_message_fmt">لصق %1$d سطر (حوالي %2$d ك.ب)؟ قد يستغرق لحظات.</string>
+    <string name="clip_large_confirm">لصق</string>
+    <string name="clip_history_title">سجل الحافظة</string>
+    <string name="clip_history_empty">سجل الحافظة فارغ</string>
+    <string name="clip_history_clear">مسح الكل</string>
+    <string name="clip_history_meta_fmt">%1$d سطر · %2$d حرف</string>
+    <string name="clip_history_whole_lines">أسطر كاملة</string>
+    <string name="action_copy_line">نسخ السطر</string>
+    <string name="action_cut_line">قص السطر</string>
+    <string name="action_paste_plain">لصق كما هو</string>
+    <string name="action_clip_history">سجل الحافظة…</string>
+    <string name="action_duplicate">تكرار</string>
+    <string name="action_select_line">تحديد السطر</string>
+    <string name="action_copy_markdown">نسخ كـ Markdown</string>
 </resources>
