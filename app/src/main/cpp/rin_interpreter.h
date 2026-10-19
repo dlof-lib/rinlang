@@ -1194,6 +1194,9 @@ private:
     // مسار التنفيذ السريع: return/break/continue تُنقَل كقيمة Flow بدل استثناءات C++ (الاستثناء يكلّف
     // عشرات الميكروثواني لكل return، وهو ما كان يجعل fib(25) تأخذ 7 ثوانٍ). execute()/executeBlock()
     // أعلاه تبقى كما هي لكل المستدعين القدامى وتُحوّل Flow إلى نفس الاستثناءات القديمة.
+    // Scope Guarantees: الخطأ الذي يعالجه كل catch نشط حالياً (لـ `rethrow;`). انظر TryCatchStmt في rin_ast.h.
+    struct ActiveCatch { bool isRin = false; Value thrown; int line = 0; std::string message; std::optional<diag::Diagnostic> diag; };
+    std::vector<ActiveCatch> activeCatches_;
     enum class Flow { None, Return, Break, Continue };
     Flow exec(const StmtPtr& stmt, const EnvPtr& env, Value& ret);
     Flow execBlockFlow(const std::vector<StmtPtr>& statements, const EnvPtr& env, Value& ret);
