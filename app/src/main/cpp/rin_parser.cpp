@@ -113,6 +113,27 @@ void Parser::synchronize() {
     }
 }
 
+// ---- defer: اختزال وقت التحليل ----
+// `defer S; rest...`  =>  `try { rest... } finally { S }`  (التنفيذ المتأخر LIFO ينتج طبيعياً من التعشيش).
+// عبارة defer تُنتَج من statement() كعلامة: TryCatchStmt{fromDefer=true, tryBranch=null, finallyBranch={S}}.
+// هذه الدالة تلفّ ما بعد كل علامة داخل tryBranch. تُستدعى من block() ومن المستوى الأعلى (parse()).
+static bool isDeferMarker(const StmtPtr& st) {
+    auto t = std::dynamic_pointer_cast<TryCatchStmt>(st);
+    return t && t->fromDefer && !t->tryBranch;
+}
+static void applyDefers(std::vector<StmtPtr>& stmts) {
+    for (size_t i = stmts.size(); i-- > 0;) {
+        if (!isDeferMarker(stmts[i])) continue;
+        auto marker = std::static_pointer_cast<TryCatchStmt>(stmts[i]);
+        auto body = std::make_shared<BlockStmt>();
+        body->line = marker->line;
+        body->statements.assign(stmts.begin() + i + 1, stmts.end());
+        marker->tryBranch = body;
+        marker->needsInterp = true;
+        stmts.erase(stmts.begin() + i + 1, stmts.end());
+    }
+}
+
 std::vector<StmtPtr> Parser::parseCollectingDiagnostics(diag::DiagnosticEngine& engine) {
     std::vector<StmtPtr> statements;
     try {
@@ -133,6 +154,7 @@ std::vector<StmtPtr> Parser::parseCollectingDiagnostics(diag::DiagnosticEngine& 
             synchronize();
         }
     }
+    applyDefers(statements);
     return statements;
 }
 
@@ -140,8 +162,12 @@ std::vector<StmtPtr> Parser::parse() {
     std::vector<StmtPtr> statements;
     expandLoopTemplates();
     while (!isAtEnd()) statements.push_back(declaration());
+    applyDefers(statements);
     return statements;
 }
+
+// مكدّس بنود catch الجاري تحليلها (لـ `rethrow;` وتعليم needsInterp) -- محلي للخيط، بلا تغيير في rin_parser.h.
+static thread_local std::vector<TryCatchStmt*> g_catchStack;
 
 StmtPtr Parser::declaration() {
     if (auto lv2 = loopsV2Statement()) return lv2; // each / repeat / loop / retry / name: loop
@@ -1493,18 +1519,81 @@ StmtPtr Parser::statement() {
         auto st = std::make_shared<TryCatchStmt>();
         consume(TokenType::LBRACE, "Expected '{' after 'try'");
         st->tryBranch = block();
-        if (!(check(TokenType::IDENT) && peek().lexeme == "catch"))
-            throw errRich(diag::Code::E0012_MissingToken, peek(), "expected 'catch' after 'try' block",
-                          "a try block must be followed by a catch block",
-                          "write `try { ... } catch (error) { ... }`");
-        advance();
-        if (match({TokenType::LPAREN})) {
-            st->catchName = consume(TokenType::IDENT, "Expected catch variable name").lexeme;
-            consume(TokenType::RPAREN, "Expected ')' after catch variable");
+        const bool hasCatch = check(TokenType::IDENT) && peek().lexeme == "catch";
+        const bool hasFinally0 = check(TokenType::IDENT) && peek().lexeme == "finally";
+        if (!hasCatch && !hasFinally0)
+            throw errRich(diag::Code::E0012_MissingToken, peek(), "expected 'catch' or 'finally' after 'try' block",
+                          "a try block must be followed by a catch block, a finally block, or both",
+                          "write `try { ... } catch (error) { ... }` or `try { ... } finally { ... }`");
+        // ---- بنود catch (واحد أو أكثر): catch [(name)] [when (cond)] { ... } ----
+        bool first = true;
+        while (check(TokenType::IDENT) && peek().lexeme == "catch") {
+            advance();
+            CatchClause cc;
+            if (match({TokenType::LPAREN})) {
+                cc.name = consume(TokenType::IDENT, "Expected catch variable name").lexeme;
+                consume(TokenType::RPAREN, "Expected ')' after catch variable");
+            }
+            if (check(TokenType::IDENT) && peek().lexeme == "when") {
+                advance();
+                if (cc.name.empty())
+                    throw errRich(diag::Code::E0010_ParserError, previous(), "`catch when` needs a catch variable",
+                                  "the `when (...)` guard reads the error through the catch variable",
+                                  "write `catch (e) when (e.code == \"E0021\") { ... }`");
+                consume(TokenType::LPAREN, "Expected '(' after 'when'");
+                cc.guard = expression();
+                consume(TokenType::RPAREN, "Expected ')' after catch guard");
+            }
+            consume(TokenType::LBRACE, "Expected '{' before catch body");
+            g_catchStack.push_back(st.get());
+            cc.body = block();
+            g_catchStack.pop_back();
+            if (first) { st->catchName = cc.name; st->catchGuard = cc.guard; st->catchBranch = cc.body; first = false; }
+            else st->moreCatches.push_back(std::move(cc));
         }
-        consume(TokenType::LBRACE, "Expected '{' before catch body");
-        st->catchBranch = block();
+        if (check(TokenType::IDENT) && peek().lexeme == "finally") {
+            advance();
+            consume(TokenType::LBRACE, "Expected '{' after 'finally'");
+            st->finallyBranch = block();
+        }
+        if (st->catchGuard || !st->moreCatches.empty() || st->finallyBranch || !st->catchBranch)
+            st->needsInterp = true;
         st->line = previous().line;
+        return st;
+    }
+    // defer <stmt>;  /  defer { ... }  -- تنظيف مضمون عند مغادرة النطاق (انظر applyDefers).
+    // 'defer' كلمة سياقية: لا تُعدّ عبارة defer إذا تبعها = أو ( أو . أو [ ... (أي اسم متغيّر/دالة عادي).
+    if (check(TokenType::IDENT) && peek().lexeme == "defer" && current + 1 < tokens.size()) {
+        const TokenType nt = tokens[current + 1].type;
+        const bool plainName = nt == TokenType::EQUAL || nt == TokenType::LPAREN || nt == TokenType::DOT ||
+                               nt == TokenType::LBRACKET || nt == TokenType::SEMICOLON || nt == TokenType::COMMA ||
+                               nt == TokenType::RPAREN || nt == TokenType::RBRACE;
+        if (!plainName) {
+            Token t = advance();
+            auto marker = std::make_shared<TryCatchStmt>();
+            marker->fromDefer = true;
+            marker->needsInterp = true;
+            marker->line = t.line;
+            auto fin = std::make_shared<BlockStmt>();
+            fin->line = t.line;
+            if (check(TokenType::LBRACE)) { advance(); fin = block(); }
+            else fin->statements.push_back(statement());
+            marker->finallyBranch = fin;
+            return marker;
+        }
+    }
+    // rethrow;  -- يعيد رمي الخطأ الذي يعالجه أقرب catch (يحفظ code/message/line الأصلية)
+    if (check(TokenType::IDENT) && peek().lexeme == "rethrow" && checkNext(TokenType::SEMICOLON)) {
+        Token t = advance();
+        advance(); // ';'
+        if (g_catchStack.empty())
+            throw errRich(diag::Code::E0010_ParserError, t, "`rethrow` outside a catch block",
+                          "`rethrow;` re-raises the error handled by the nearest enclosing catch",
+                          "use it inside `catch (e) { ... }`, or use `throw value;` elsewhere");
+        for (auto* c : g_catchStack) c->needsInterp = true;
+        auto st = std::make_shared<ThrowStmt>();
+        st->rethrow = true;
+        st->line = t.line;
         return st;
     }
     if (check(TokenType::IDENT) && peek().lexeme == "throw") {
@@ -2460,6 +2549,7 @@ std::shared_ptr<BlockStmt> Parser::block() {
         blk->statements.push_back(declaration());
     }
     consume(TokenType::RBRACE, "Expected '}' after block");
+    applyDefers(blk->statements);
     return blk;
 }
 
