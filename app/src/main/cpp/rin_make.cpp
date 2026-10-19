@@ -72,7 +72,9 @@ static void collectStmtExprs(const StmtPtr& stmt, std::set<std::string>& out) {
     else if (auto s = std::dynamic_pointer_cast<ForStmt>(stmt)) { collectExpr(s->condition, out); collectExpr(s->increment, out); collect(s->doneBlock, out); }
     else if (auto s = std::dynamic_pointer_cast<ForInStmt>(stmt)) { collectExpr(s->iterable, out); collect(s->body, out); collect(s->doneBlock, out); }
     else if (auto s = std::dynamic_pointer_cast<PlusConditionStmt>(stmt)) collectExpr(s->condition, out);
-    else if (auto s = std::dynamic_pointer_cast<TryCatchStmt>(stmt)) { collectBlock(s->tryBranch, out); collectBlock(s->catchBranch, out); }
+    else if (auto s = std::dynamic_pointer_cast<TryCatchStmt>(stmt)) { collectBlock(s->tryBranch, out); collectBlock(s->catchBranch, out);
+        for (auto& c : s->moreCatches) collectBlock(c.body, out);
+        collectBlock(s->finallyBranch, out); }
     else if (auto s = std::dynamic_pointer_cast<MatchStmt>(stmt)) {
         collectExpr(s->subject, out);
         for (const auto& c : s->cases) { for (const auto& v : c.values) collectExpr(v, out); collectBlock(c.body, out); }
