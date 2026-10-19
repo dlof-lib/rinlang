@@ -1,5 +1,8 @@
 package com.dlof.rinlang
 
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
+import android.animation.ValueAnimator
 import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -7,6 +10,7 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Rect
 import android.graphics.drawable.GradientDrawable
 import android.os.Handler
 import android.os.Looper
@@ -29,10 +33,12 @@ import android.view.View
 import android.view.inputmethod.BaseInputConnection
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
+import android.widget.ArrayAdapter
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.PopupWindow
 import android.widget.TextView
+import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
 import kotlin.math.max
@@ -957,6 +963,7 @@ class RinCodeEditorView @JvmOverloads constructor(
     /** يبدّل لغة التلوين النحوي الحالية (يُستدعى عند فتح ملف جديد بامتداد مختلف، مثال: "kt"، "cpp"). */
     fun setLanguage(extension: String) {
         // .indsin محتواه صياغة Rin نفسها (يمرّ بنفس Lexer) فيُعامَل كـ Rin في الإكمال.
+        fenceLang = extension.lowercase().removePrefix(".").ifEmpty { "rin" }
         suggestionLanguage = if (extension.lowercase().removePrefix(".") == "indsin") SyntaxLanguage.RIN
         else SyntaxLanguage.forExtension(extension)
         engine.setLanguage(extension)
@@ -1048,6 +1055,16 @@ class RinCodeEditorView @JvmOverloads constructor(
                 val x1 = paddingLeft + textPaint.measureText(lineText, 0, fromCol.coerceIn(0, lineText.length))
                 val x2 = paddingLeft + (if (line == sel.end.line) textPaint.measureText(lineText, 0, toCol.coerceIn(0, lineText.length)) else textPaint.measureText(lineText) + charWidth)
                 canvas.drawRect(x1, y, max(x1, x2), y + lineHeight, selectionPaint)
+            }
+
+            // وميض لحظي للنص الملصوق (يتلاشى خلال ~0.5 ث) ليُرى بوضوح ما الذي أُدرج
+            val ff = flashFrom; val ft = flashTo
+            if (ff != null && ft != null && line in ff.line..ft.line) {
+                val fFrom = if (line == ff.line) ff.col else 0
+                val fTo = if (line == ft.line) ft.col else lineText.length
+                val fx1 = paddingLeft + textPaint.measureText(lineText, 0, fFrom.coerceIn(0, lineText.length))
+                val fx2 = paddingLeft + (if (line == ft.line) textPaint.measureText(lineText, 0, fTo.coerceIn(0, lineText.length)) else textPaint.measureText(lineText) + charWidth)
+                if (fx2 > fx1) canvas.drawRect(fx1, y, fx2, y + lineHeight, flashPaint)
             }
 
             // تظليل القوس المطابق/الخاطئ
@@ -1385,8 +1402,14 @@ class RinCodeEditorView @JvmOverloads constructor(
         invalidate()
     }
 
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        attachClipboardWatcher()
+    }
+
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
+        detachClipboardWatcher()
         blinkHandler.removeCallbacks(blinkRunnable)
         dismissSuggestionPopup()
         dismissDiagnosticPopup()
@@ -1427,14 +1450,20 @@ class RinCodeEditorView @JvmOverloads constructor(
             // الاحترافية، لكن بلمسة عادية بدل زر/اختصار مخصَّص غير عملي على لوحة مفاتيح افتراضية.
             val cur = engine.getCursor()
             val info = cachedBracketInfo
-            if (!engine.getSelection().hasSelection && info != null && info.matched &&
+            val hadSelection = engine.getSelection().hasSelection
+            val sameCaret = !hadSelection && p.line == cur.line && p.col == cur.col
+            if (!hadSelection && info != null && info.matched &&
                 p.line == cur.line && p.col == cur.col && info.a == cur.line
             ) {
                 engine.setCursor(info.c, info.d, false)
+                actionMode?.finish()
             } else {
                 engine.setCursor(p.line, p.col, false)
+                if (!sameCaret) actionMode?.finish()
             }
             afterEngineMutation()
+            // نقرة ثانية على المؤشر نفسه (بلا قوس مطابق) = شريط «لصق/تحديد الكل/سجل الحافظة» كما في Android.
+            if (sameCaret && !(info != null && info.matched && info.a == cur.line)) showTextActionMode()
             return true
         }
 
@@ -1544,6 +1573,7 @@ class RinCodeEditorView @JvmOverloads constructor(
             MotionEvent.ACTION_MOVE -> {
                 if (event.pointerCount == 1) {
                     if (isSelectingDrag) {
+                        if (!dragging) actionMode?.hide(ActionMode.DEFAULT_HIDE_DURATION.toLong())
                         dragging = true
                         val p = offsetForTouch(event.x, event.y)
                         engine.setCursor(p.line, p.col, true)
@@ -1598,33 +1628,326 @@ class RinCodeEditorView @JvmOverloads constructor(
     private fun clipboardManager(): ClipboardManager =
         context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
 
-    private fun copySelectionToClipboard(): Boolean {
+    /** لغة سياج Markdown عند «نسخ كـ Markdown» (تتبع امتداد الملف الحالي). */
+    private var fenceLang: String = "rin"
+
+    // --- مراقبة حافظة النظام: كل ما يُنسخ (من هنا أو من تطبيق آخر) يدخل سجلّ الحافظة الداخلي -----
+
+    private val systemClipListener = ClipboardManager.OnPrimaryClipChangedListener { captureSystemClip() }
+    private var clipWatcherAttached = false
+
+    private fun attachClipboardWatcher() {
+        if (clipWatcherAttached) return
+        try { clipboardManager().addPrimaryClipChangedListener(systemClipListener); clipWatcherAttached = true } catch (_: Throwable) {}
+    }
+
+    private fun detachClipboardWatcher() {
+        if (!clipWatcherAttached) return
+        try { clipboardManager().removePrimaryClipChangedListener(systemClipListener) } catch (_: Throwable) {}
+        clipWatcherAttached = false
+    }
+
+    /** يقرأ نص حافظة النظام الحالي بأمان (قد تمنع المنصة القراءة بلا تركيز أو تُرمى SecurityException). */
+    private fun readSystemClip(): Pair<String, Boolean>? = try {
+        val clip = clipboardManager().primaryClip
+        if (clip == null || clip.itemCount == 0) null
+        else {
+            val text = clip.getItemAt(0).coerceToText(context)?.toString()
+            if (text.isNullOrEmpty()) null else text to (clip.description?.label?.toString() == CLIP_LABEL_LINES)
+        }
+    } catch (_: Throwable) { null }
+
+    private fun captureSystemClip() {
+        val (text, whole) = readSystemClip() ?: return
+        ClipboardHistory.add(text, whole)
+    }
+
+    private fun putClip(text: String, wholeLines: Boolean) {
+        clipboardManager().setPrimaryClip(ClipData.newPlainText(if (wholeLines) CLIP_LABEL_LINES else CLIP_LABEL_TEXT, text))
+        ClipboardHistory.add(text, wholeLines)
+    }
+
+    private fun tap() {
+        if (AppSettings.isHapticFeedback(context)) performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
+    }
+
+    private fun toast(resId: Int) = Toast.makeText(context, resId, Toast.LENGTH_SHORT).show()
+
+    // --- نطاق الأسطر المعنيّ بعمليات «السطر» ---------------------------------------------------
+
+    /** (أول سطر، آخر سطر) تغطيهما عملية سطرية: السطر الحالي، أو الأسطر التي يلمسها التحديد
+     *  (تحديد ينتهي عند العمود 0 من سطر لاحق لا يشمل ذلك السطر، كما في VS Code). */
+    private fun affectedLineRange(): Pair<Int, Int> {
         val sel = engine.getSelection()
-        if (!sel.hasSelection) return false
-        val selected = textOfSelection(sel)
-        clipboardManager().setPrimaryClip(ClipData.newPlainText("rin_code", selected))
+        if (!sel.hasSelection) { val l = engine.getCursor().line; return l to l }
+        val e = if (sel.end.col == 0 && sel.end.line > sel.start.line) sel.end.line - 1 else sel.end.line
+        return sel.start.line to e
+    }
+
+    private fun linesText(from: Int, to: Int): String {
+        val sb = StringBuilder()
+        for (l in from..to) sb.append(engine.getLine(l)).append('\n')
+        return sb.toString()
+    }
+
+    private fun deleteLines(from: Int, to: Int) {
+        val last = engine.lineCount() - 1
+        val oldCol = engine.getCursor().col
+        when {
+            to < last -> {
+                engine.replaceRange(from, 0, to + 1, 0, "")
+                engine.setCursor(from, min(oldCol, engine.getLine(from).length), false)
+            }
+            from > 0 -> engine.replaceRange(from - 1, engine.getLine(from - 1).length, to, engine.getLine(to).length, "")
+            else -> engine.replaceRange(0, 0, to, engine.getLine(to).length, "")
+        }
+    }
+
+    private fun isEffectivelyEmptyDocument() = engine.lineCount() == 1 && engine.getLine(0).isEmpty()
+
+    // --- نسخ / قص -------------------------------------------------------------------------------
+
+    /** نسخ التحديد؛ بلا تحديد ينسخ السطر الحالي كاملًا (وسم «أسطر كاملة» يجعل لصقه فوق السطر الحالي). */
+    fun copy(): Boolean {
+        val sel = engine.getSelection()
+        if (sel.hasSelection) { putClip(textOfSelection(sel), false); tap(); return true }
+        return copyLines()
+    }
+
+    /** قص التحديد؛ بلا تحديد يقصّ السطر الحالي كاملًا. */
+    fun cut(): Boolean {
+        val sel = engine.getSelection()
+        if (!sel.hasSelection) return cutLines()
+        putClip(textOfSelection(sel), false)
+        engine.replaceRange(sel.start.line, sel.start.col, sel.end.line, sel.end.col, "")
+        tap(); afterEngineMutation()
         return true
     }
 
-    private fun cutSelectionToClipboard() {
+    /** ينسخ الأسطر الكاملة (السطر الحالي أو الأسطر التي يلمسها التحديد) مهما كان التحديد جزئيًا. */
+    fun copyLines(): Boolean {
+        if (isEffectivelyEmptyDocument()) return false
+        val (from, to) = affectedLineRange()
+        putClip(linesText(from, to), true)
+        tap()
+        return true
+    }
+
+    fun cutLines(): Boolean {
+        if (isEffectivelyEmptyDocument()) return false
+        val (from, to) = affectedLineRange()
+        putClip(linesText(from, to), true)
+        deleteLines(from, to)
+        tap(); afterEngineMutation()
+        return true
+    }
+
+    /** ينسخ التحديد (أو السطر الحالي) داخل سياج Markdown بلغة الملف — جاهز للصق في مسألة/محادثة. */
+    fun copyAsMarkdown(): Boolean {
         val sel = engine.getSelection()
-        if (!copySelectionToClipboard()) return
-        engine.replaceRange(sel.start.line, sel.start.col, sel.end.line, sel.end.col, "")
+        val text = if (sel.hasSelection) textOfSelection(sel) else {
+            if (isEffectivelyEmptyDocument()) return false
+            val (f, t) = affectedLineRange(); linesText(f, t)
+        }
+        // حتى لو كان التحديد جزئيًا نُزيل الإزاحة المشتركة ليبدو المقتطف مرتّبًا.
+        putClip(ClipboardText.toMarkdown(ClipboardText.reindentLines(text, "").removeSuffix("\n").ifEmpty { text }, fenceLang), false)
+        tap()
+        return true
+    }
+
+    // --- لصق -----------------------------------------------------------------------------------
+
+    /** لصق ذكي: يوحّد نهايات الأسطر/التبويبات/الأحرف الخفية ويُعيد إزاحة النص متعدد الأسطر ليلتحم بموضع المؤشر. */
+    fun paste(): Boolean = pasteFromSystem(asIs = false)
+
+    /** لصق «كما هو» بلا إعادة إزاحة ولا تحويل تبويبات (فقط توحيد نهايات الأسطر). */
+    fun pasteAsIs(): Boolean = pasteFromSystem(asIs = true)
+
+    private fun pasteFromSystem(asIs: Boolean): Boolean {
+        val (raw, whole) = readSystemClip() ?: run { toast(R.string.clip_empty); return false }
+        return pasteText(raw, whole, asIs)
+    }
+
+    private fun pasteText(raw: String, wholeLines: Boolean, asIs: Boolean, confirmed: Boolean = false): Boolean {
+        if (raw.isEmpty()) return false
+        if (!confirmed && raw.length > LARGE_PASTE_CHARS) {
+            confirmLargePaste(raw, wholeLines, asIs)
+            return false
+        }
+        val tab = AppSettings.getTabSize(context)
+        var text = if (asIs) raw.replace("\r\n", "\n").replace('\r', '\n') else ClipboardText.normalize(raw, tab)
+        val sel = engine.getSelection()
+        val cur = engine.getCursor()
+        val flashFromPos: RinNativeEditor.Pos
+        val flashToPos: RinNativeEditor.Pos
+
+        if (wholeLines && !sel.hasSelection) {
+            // أسطر كاملة بلا تحديد: تُدرج فوق السطر الحالي ويبقى المؤشر في مكانه المنطقي (ينزل مع سطره).
+            if (!text.endsWith("\n")) text += "\n"
+            if (!asIs) text = ClipboardText.reindentLines(text, ClipboardText.leadingWhitespace(engine.getLine(cur.line)))
+            val n = ClipboardText.lineCount(text)
+            engine.replaceRange(cur.line, 0, cur.line, 0, text)
+            engine.setCursor(cur.line + n, cur.col, false)
+            flashFromPos = RinNativeEditor.Pos(cur.line, 0)
+            flashToPos = RinNativeEditor.Pos(cur.line + n, 0)
+        } else {
+            val start = if (sel.hasSelection) sel.start else cur
+            val lineText = engine.getLine(start.line)
+            val before = lineText.substring(0, start.col.coerceIn(0, lineText.length))
+            if (!asIs) text = ClipboardText.reindentForPaste(text, before, ClipboardText.leadingWhitespace(lineText))
+            val end = if (sel.hasSelection)
+                engine.replaceRange(sel.start.line, sel.start.col, sel.end.line, sel.end.col, text)
+            else
+                engine.replaceRange(cur.line, cur.col, cur.line, cur.col, text)
+            engine.setCursor(end.line, end.col, false)
+            flashFromPos = start
+            flashToPos = end
+        }
+        tap()
+        afterEngineMutation()
+        dismissSuggestionPopup()
+        flashRange(flashFromPos, flashToPos)
+        return true
+    }
+
+    private fun confirmLargePaste(raw: String, wholeLines: Boolean, asIs: Boolean) {
+        val lines = ClipboardText.lineCount(raw)
+        val kb = raw.length / 1024
+        AlertDialog.Builder(context)
+            .setTitle(R.string.clip_large_title)
+            .setMessage(context.getString(R.string.clip_large_message_fmt, lines, kb))
+            .setPositiveButton(R.string.clip_large_confirm) { _, _ -> pasteText(raw, wholeLines, asIs, confirmed = true) }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    // --- وميض النص الملصوق ----------------------------------------------------------------------
+
+    private var flashFrom: RinNativeEditor.Pos? = null
+    private var flashTo: RinNativeEditor.Pos? = null
+    private val flashPaint = Paint().apply { color = 0xFF3D7EFF.toInt(); alpha = 0 }
+    private var flashAnimator: ValueAnimator? = null
+
+    private fun flashRange(from: RinNativeEditor.Pos, to: RinNativeEditor.Pos) {
+        if (from.line == to.line && from.col == to.col) return
+        flashAnimator?.cancel()
+        flashFrom = from
+        flashTo = to
+        flashAnimator = ValueAnimator.ofInt(95, 0).apply {
+            duration = 520L
+            addUpdateListener { flashPaint.alpha = it.animatedValue as Int; invalidate() }
+            addListener(object : AnimatorListenerAdapter() {
+                private var cancelled = false
+                override fun onAnimationCancel(animation: Animator) { cancelled = true }
+                override fun onAnimationEnd(animation: Animator) {
+                    if (!cancelled) { flashFrom = null; flashTo = null; invalidate() }
+                }
+            })
+            start()
+        }
+    }
+
+    // --- تحديد/تكرار -----------------------------------------------------------------------------
+
+    /** يحدّد السطر الحالي كاملًا (مع فاصله)؛ تكرار الأمر يوسّع التحديد سطرًا لأسفل. */
+    fun selectLine() {
+        val sel = engine.getSelection()
+        val last = engine.lineCount() - 1
+        val (from, rawTo) = affectedLineRange()
+        var to = rawTo
+        val alreadyWholeLines = sel.hasSelection && sel.start.col == 0 &&
+            ((sel.end.col == 0 && sel.end.line == to + 1) || (to == last && sel.end.line == to && sel.end.col == engine.getLine(to).length))
+        if (alreadyWholeLines && to < last) to += 1
+        if (to < last) engine.setSelection(from, 0, to + 1, 0) else engine.setSelection(from, 0, to, engine.getLine(to).length)
         afterEngineMutation()
     }
 
-    private fun pasteFromClipboard() {
-        val clip = clipboardManager()
-        if (!clip.hasPrimaryClip()) return
-        val item = clip.primaryClip?.let { if (it.itemCount > 0) it.getItemAt(0) else null } ?: return
-        val pasted = item.coerceToText(context)?.toString() ?: return
+    /** يكرّر التحديد مباشرة بعده ويحدّد النسخة الجديدة؛ بلا تحديد يكرّر السطر الحالي. */
+    fun duplicateSelectionOrLine() {
         val sel = engine.getSelection()
-        if (sel.hasSelection) {
-            engine.replaceRange(sel.start.line, sel.start.col, sel.end.line, sel.end.col, pasted)
-        } else {
-            engine.insertText(pasted, smart = false)
-        }
+        if (!sel.hasSelection) { engine.duplicateCurrentLine(); afterEngineMutation(); return }
+        val text = textOfSelection(sel)
+        val end = sel.end
+        val after = engine.replaceRange(end.line, end.col, end.line, end.col, text)
+        engine.setSelection(end.line, end.col, after.line, after.col)
         afterEngineMutation()
+    }
+
+    // --- سجلّ الحافظة -----------------------------------------------------------------------------
+
+    /** نافذة بآخر النصوص المنسوخة (الأحدث أولًا): نقرة = لصق، ضغطة مطوّلة = حذف العنصر. */
+    fun showClipboardHistory() {
+        captureSystemClip()
+        val items = ClipboardHistory.snapshot().toMutableList()
+        if (items.isEmpty()) { toast(R.string.clip_history_empty); return }
+        val themed = android.view.ContextThemeWrapper(context, com.google.android.material.R.style.ThemeOverlay_MaterialComponents_Dark)
+        val dm = resources.displayMetrics
+        fun dp(v: Int) = (v * dm.density).toInt()
+        val adapter = object : ArrayAdapter<ClipboardHistory.Entry>(themed, 0, items) {
+            override fun getView(position: Int, convertView: View?, parent: android.view.ViewGroup): View {
+                val e = getItem(position)!!
+                val row = (convertView as? LinearLayout) ?: LinearLayout(themed).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(dp(20), dp(10), dp(20), dp(10))
+                    addView(TextView(themed).apply {
+                        typeface = android.graphics.Typeface.MONOSPACE
+                        textSize = 13.5f
+                        setTextColor(Color.parseColor("#E8EAED"))
+                        maxLines = 1
+                        ellipsize = android.text.TextUtils.TruncateAt.END
+                        textDirection = View.TEXT_DIRECTION_LTR
+                    })
+                    addView(TextView(themed).apply {
+                        textSize = 11f
+                        setTextColor(Color.parseColor("#9AA0A6"))
+                    })
+                }
+                (row.getChildAt(0) as TextView).text = ClipboardText.preview(e.text)
+                val lines = ClipboardText.lineCount(e.text).coerceAtLeast(1)
+                val meta = context.getString(R.string.clip_history_meta_fmt, lines, e.text.length)
+                (row.getChildAt(1) as TextView).text = if (e.wholeLines) meta + " · " + context.getString(R.string.clip_history_whole_lines) else meta
+                return row
+            }
+        }
+        val dialog = AlertDialog.Builder(themed)
+            .setTitle(R.string.clip_history_title)
+            .setAdapter(adapter) { _, which -> items.getOrNull(which)?.let { pasteText(it.text, it.wholeLines, asIs = false) } }
+            .setNeutralButton(R.string.clip_history_clear) { _, _ -> ClipboardHistory.clear() }
+            .setNegativeButton(android.R.string.cancel, null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.listView?.setOnItemLongClickListener { _, _, position, _ ->
+                val entry = items.getOrNull(position) ?: return@setOnItemLongClickListener true
+                ClipboardHistory.remove(entry)
+                adapter.remove(entry)
+                if (items.isEmpty()) dialog.dismiss()
+                true
+            }
+        }
+        dialog.show()
+    }
+
+    // --- اختصارات لوحة المفاتيح الفعلية ------------------------------------------------------------
+
+    private fun handleClipboardShortcut(keyCode: Int, event: KeyEvent): Boolean {
+        val ctrl = event.isCtrlPressed
+        val shift = event.isShiftPressed
+        val alt = event.isAltPressed
+        when {
+            ctrl && keyCode == KeyEvent.KEYCODE_C -> copy()
+            ctrl && keyCode == KeyEvent.KEYCODE_INSERT -> copy()
+            ctrl && keyCode == KeyEvent.KEYCODE_X -> cut()
+            shift && !ctrl && keyCode == KeyEvent.KEYCODE_FORWARD_DEL -> cut()
+            ctrl && alt && keyCode == KeyEvent.KEYCODE_V -> showClipboardHistory()
+            ctrl && shift && keyCode == KeyEvent.KEYCODE_V -> pasteAsIs()
+            ctrl && keyCode == KeyEvent.KEYCODE_V -> paste()
+            shift && !ctrl && keyCode == KeyEvent.KEYCODE_INSERT -> paste()
+            ctrl && keyCode == KeyEvent.KEYCODE_A -> selectAll()
+            ctrl && keyCode == KeyEvent.KEYCODE_D -> duplicateSelectionOrLine()
+            ctrl && keyCode == KeyEvent.KEYCODE_L -> selectLine()
+            else -> return false
+        }
+        return true
     }
 
     // --- إعادة تسمية رمز (Rename symbol) --------------------------------------------------
@@ -1691,31 +2014,52 @@ class RinCodeEditorView @JvmOverloads constructor(
         afterEngineMutation()
     }
 
-    private val actionModeCallback = object : ActionMode.Callback {
+    private val actionModeCallback = object : ActionMode.Callback2() {
         override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
-            menu.add(0, ACTION_SELECT_ALL, 0, android.R.string.selectAll)
-            menu.add(0, ACTION_CUT, 1, android.R.string.cut)
-            menu.add(0, ACTION_COPY, 2, android.R.string.copy)
-            menu.add(0, ACTION_PASTE, 3, android.R.string.paste)
-            menu.add(0, ACTION_RENAME, 4, R.string.action_rename_symbol)
+            // الثلاثة الأولى تظهر مباشرة في الشريط العائم، والبقية تحت «⋮».
+            menu.add(0, ACTION_CUT, 0, android.R.string.cut)
+            menu.add(0, ACTION_COPY, 1, android.R.string.copy)
+            menu.add(0, ACTION_PASTE, 2, android.R.string.paste)
+            menu.add(0, ACTION_SELECT_ALL, 3, android.R.string.selectAll)
+            menu.add(0, ACTION_COPY_LINE, 4, R.string.action_copy_line)
+            menu.add(0, ACTION_CUT_LINE, 5, R.string.action_cut_line)
+            menu.add(0, ACTION_PASTE_PLAIN, 6, R.string.action_paste_plain)
+            menu.add(0, ACTION_HISTORY, 7, R.string.action_clip_history)
+            menu.add(0, ACTION_DUPLICATE, 8, R.string.action_duplicate)
+            menu.add(0, ACTION_SELECT_LINE, 9, R.string.action_select_line)
+            menu.add(0, ACTION_COPY_MD, 10, R.string.action_copy_markdown)
+            menu.add(0, ACTION_RENAME, 11, R.string.action_rename_symbol)
             return true
         }
 
         override fun onPrepareActionMode(mode: ActionMode, menu: Menu): Boolean {
             val hasSelection = engine.getSelection().hasSelection
+            val hasClip = try { clipboardManager().hasPrimaryClip() } catch (_: Throwable) { false }
             menu.findItem(ACTION_CUT)?.isVisible = hasSelection
             menu.findItem(ACTION_COPY)?.isVisible = hasSelection
-            menu.findItem(ACTION_PASTE)?.isVisible = clipboardManager().hasPrimaryClip()
+            menu.findItem(ACTION_PASTE)?.isVisible = hasClip
+            menu.findItem(ACTION_COPY_LINE)?.isVisible = !hasSelection || engine.getSelection().let { it.start.line == it.end.line }
+            menu.findItem(ACTION_CUT_LINE)?.isVisible = !hasSelection || engine.getSelection().let { it.start.line == it.end.line }
+            menu.findItem(ACTION_PASTE_PLAIN)?.isVisible = hasClip
+            menu.findItem(ACTION_HISTORY)?.isVisible = ClipboardHistory.snapshot().isNotEmpty() || hasClip
+            menu.findItem(ACTION_COPY_MD)?.isVisible = hasSelection
             menu.findItem(ACTION_RENAME)?.isVisible = selectedIdentifierName() != null
             return true
         }
 
         override fun onActionItemClicked(mode: ActionMode, item: MenuItem): Boolean {
             when (item.itemId) {
-                ACTION_SELECT_ALL -> { selectAll(); mode.invalidate(); return true }
-                ACTION_CUT -> { cutSelectionToClipboard(); mode.finish() }
-                ACTION_COPY -> { copySelectionToClipboard(); mode.finish() }
-                ACTION_PASTE -> { pasteFromClipboard(); mode.finish() }
+                ACTION_SELECT_ALL -> { selectAll(); mode.invalidate(); mode.invalidateContentRect(); return true }
+                ACTION_SELECT_LINE -> { selectLine(); mode.invalidate(); mode.invalidateContentRect(); return true }
+                ACTION_CUT -> { cut(); mode.finish() }
+                ACTION_COPY -> { copy(); mode.finish() }
+                ACTION_COPY_LINE -> { copyLines(); mode.finish() }
+                ACTION_CUT_LINE -> { cutLines(); mode.finish() }
+                ACTION_PASTE -> { mode.finish(); paste() }
+                ACTION_PASTE_PLAIN -> { mode.finish(); pasteAsIs() }
+                ACTION_HISTORY -> { mode.finish(); showClipboardHistory() }
+                ACTION_DUPLICATE -> { duplicateSelectionOrLine(); mode.finish() }
+                ACTION_COPY_MD -> { copyAsMarkdown(); mode.finish() }
                 ACTION_RENAME -> {
                     val name = selectedIdentifierName()
                     mode.finish()
@@ -1728,6 +2072,29 @@ class RinCodeEditorView @JvmOverloads constructor(
         override fun onDestroyActionMode(mode: ActionMode) {
             actionMode = null
         }
+
+        /** يثبّت الشريط العائم عند موضع التحديد/المؤشر بدل موضعه الافتراضي (إحداثيات هذا الـView). */
+        override fun onGetContentRect(mode: ActionMode, view: View, outRect: Rect) {
+            val sel = engine.getSelection()
+            val cur = engine.getCursor()
+            val sLine = if (sel.hasSelection) sel.start.line else cur.line
+            val eLine = if (sel.hasSelection) sel.end.line else cur.line
+            val top = yOfLine(sLine)
+            val bottom = yOfLine(eLine) + lineHeight.roundToInt()
+            val x1: Int
+            val x2: Int
+            if (sel.hasSelection && sLine != eLine) {
+                x1 = paddingLeft
+                x2 = max(paddingLeft + 1, view.width - paddingRight)
+            } else {
+                val t = engine.getLine(sLine)
+                val c1 = if (sel.hasSelection) sel.start.col else cur.col
+                val c2 = if (sel.hasSelection) sel.end.col else cur.col
+                x1 = paddingLeft + textPaint.measureText(t, 0, c1.coerceIn(0, t.length)).roundToInt()
+                x2 = paddingLeft + textPaint.measureText(t, 0, c2.coerceIn(0, t.length)).roundToInt()
+            }
+            outRect.set(x1, top, max(x1 + 1, x2), max(top + 1, bottom))
+        }
     }
 
     private fun showTextActionMode() {
@@ -1736,6 +2103,7 @@ class RinCodeEditorView @JvmOverloads constructor(
             actionMode = startActionMode(actionModeCallback, ActionMode.TYPE_FLOATING)
         } else {
             existing.invalidate()
+            existing.invalidateContentRect()
         }
     }
 
@@ -1745,6 +2113,18 @@ class RinCodeEditorView @JvmOverloads constructor(
         private const val ACTION_COPY = 3
         private const val ACTION_PASTE = 4
         private const val ACTION_RENAME = 5
+        private const val ACTION_COPY_LINE = 6
+        private const val ACTION_CUT_LINE = 7
+        private const val ACTION_PASTE_PLAIN = 8
+        private const val ACTION_HISTORY = 9
+        private const val ACTION_DUPLICATE = 10
+        private const val ACTION_SELECT_LINE = 11
+        private const val ACTION_COPY_MD = 12
+        private const val CLIP_LABEL_TEXT = "rin_code"
+        /** وسم ClipData يدلّ على أن النسخ كان لأسطر كاملة (بلا تحديد) فيُلصق فوق السطر الحالي. */
+        private const val CLIP_LABEL_LINES = "rin_lines"
+        /** فوق هذا الحجم نطلب تأكيدًا قبل اللصق (لصق ملف ضخم قد يجمّد المحرر ثوانيَ). */
+        private const val LARGE_PASTE_CHARS = 300_000
         private val IDENTIFIER_REGEX = Regex("^[A-Za-z_][A-Za-z0-9_]*$")
     }
 
@@ -1766,6 +2146,7 @@ class RinCodeEditorView @JvmOverloads constructor(
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
         if (handleIntelliKey(keyCode, event)) return true
+        if (handleClipboardShortcut(keyCode, event)) return true
         val cur = engine.getCursor()
         when (keyCode) {
             KeyEvent.KEYCODE_DPAD_LEFT -> {
