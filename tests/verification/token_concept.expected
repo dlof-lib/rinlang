@@ -1,0 +1,37 @@
+1 count 10
+1 first 0 LET keyword let 1 1 4
+1 number NUMBER 42 42
+2 idents 2
+2 keywords 2
+2 skip punct 8
+2 mixed 4
+2 eof EOF
+3 total 10
+3 operators 2
+3 empty 0
+4 total 10 lines 2 identifiers 1
+4 byType {"NUMBER": 2, "IDENT": 2, "LET": 1, "PRINT": 1, "PLUS": 1, "EQUAL": 1, "SEMICOLON": 2}
+4 byCategory {"keyword": 2, "literal": 2, "identifier": 2, "operator": 2, "punctuation": 2}
+5 at 1:5 IDENT x
+5 at 2:7 IDENT x
+5 none nil
+6 lines 2 1 5 2 5
+7 ok true 10
+7 bad false 1
+7 has error true
+   1:1    LET           keyword      let
+   1:5    IDENT         identifier   a
+   1:7    EQUAL         operator     =
+   1:9    NUMBER        literal      1
+   1:10   SEMICOLON     punctuation  ;
+9 cat keyword operator identifier punctuation literal nil
+9 kinds operator ["PLUS", "MINUS", "STAR", "SLASH", "PERCENT", "EQUAL", "EQUAL_EQUAL", "BANG", "BANG_EQUAL", "NOT_SAME", "COPY_OF", "LESS", "LESS_EQUAL", "GREATER", "GREATER_EQUAL", "PIPE", "QUESTION"]
+9 kinds all true
+10 let true foo false
+10 list true true
+11 type error caught
+11 bad filter caught
+11 bad category caught
+11 lex error caught
+12 tokenType LET IDENT EQUAL_EQUAL
+12 tokens 3 IDENT
