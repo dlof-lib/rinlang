@@ -194,6 +194,10 @@ private:
     bool atReducer(size_t at) const;
     EachHdr parseEachHdr();
     StmtPtr buildEach(EachHdr& h, StmtPtr body, int line, ExprPtr lim);
+    // i / y الضمنيان (docs/loops.md): from/to = مدى التوكنات الذي حلّله الجسم/التعبير بعد ترويسة الحلقة
+    StmtPtr buildEachImplicit(EachHdr& h, StmtPtr body, int line, ExprPtr lim, size_t from, size_t to);
+    bool nameDeclaredBefore(const std::string& nm, size_t at) const;
+    bool implicitWanted(const std::string& nm, size_t from, size_t to) const;
     std::unordered_set<std::string> labelFlagUsed;
     int loopDepth = 0; // >0 داخل جسم حلقة while؛ يُستخدم للتحقق من صحة break/continue وقت التحليل
     int goalDepth = 0; // >0 داخل جسم 'goal { .. }'؛ يُستخدم للتحقق من صحة 'achieve' وقت التحليل
