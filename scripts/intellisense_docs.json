@@ -1264,6 +1264,183 @@
       ],
       "ret": "boolean",
       "doc": "true إن كانت الكلمة محجوزة في Lexer."
+    },
+    "number": {
+      "params": [
+        "x",
+        "[opts|default]"
+      ],
+      "ret": "number",
+      "doc": "تحويل صارم إلى رقم: يرفض \"12abc\" ويفهم ١٢٣ و1,234 و1_000 و1.5e3 و0xff و50%. opts: {default,int,min,max,clamp,base,exact,special,decimal,group,percent}؛ وسيط ثانٍ غير قاموس = قيمة افتراضية عند الفشل."
+    },
+    "numberCheck": {
+      "params": [
+        "x",
+        "[opts]"
+      ],
+      "ret": "map",
+      "doc": "نفس فحص number بلا استثناء: {ok:true,value,kind,exact} أو {ok:false,error}."
+    },
+    "numberKind": {
+      "params": [
+        "x"
+      ],
+      "ret": "string",
+      "doc": "نوع الرقم: integer | float | nan | infinity، أو nil إن لم تكن القيمة رقماً صالحاً."
+    },
+    "numberParts": {
+      "params": [
+        "n"
+      ],
+      "ret": "map",
+      "doc": "أجزاء الرقم من تمثيله العشري الأقصر: {sign,int,frac,digits,scale,exponent,kind}."
+    },
+    "numberRound": {
+      "params": [
+        "n",
+        "[places]",
+        "[mode]"
+      ],
+      "ret": "number",
+      "doc": "تقريب عشري يطابق ما تراه (1.005 → 1.01). mode: half-up | half-even | half-down | up | down | floor | ceil؛ places سالب للعشرات والمئات."
+    },
+    "numberFormat": {
+      "params": [
+        "n",
+        "[opts]"
+      ],
+      "ret": "string",
+      "doc": "تنسيق للعرض: {decimals,maxDecimals,minDecimals,group,decimal,groupSize,digits:\"arabic\",sign,percent,compact,prefix,suffix,pad,padChar,align,mode}."
+    },
+    "numberPercent": {
+      "params": [
+        "part",
+        "whole",
+        "[places]"
+      ],
+      "ret": "number",
+      "doc": "النسبة المئوية part/whole×100 (افتراضياً خانتان عشريتان)."
+    },
+    "numberChange": {
+      "params": [
+        "from",
+        "to",
+        "[places]"
+      ],
+      "ret": "number",
+      "doc": "نسبة التغيّر المئوية من from إلى to (from لا يكون صفراً)."
+    },
+    "numberApprox": {
+      "params": [
+        "a",
+        "b",
+        "[rel]",
+        "[abs]"
+      ],
+      "ret": "bool",
+      "doc": "تساوٍ تقريبي آمن للكسور: numberApprox(0.1+0.2, 0.3) == true."
+    },
+    "numberMap": {
+      "params": [
+        "n",
+        "inMin",
+        "inMax",
+        "outMin",
+        "outMax",
+        "[clamp]"
+      ],
+      "ret": "number",
+      "doc": "إعادة تحويل الرقم من نطاق إلى آخر (خطّياً)، مع قصّ اختياري على النطاق."
+    },
+    "numberWrap": {
+      "params": [
+        "n",
+        "lo",
+        "hi"
+      ],
+      "ret": "number",
+      "doc": "لفّ دوري داخل [lo, hi): numberWrap(370, 0, 360) == 10."
+    },
+    "numberSum": {
+      "params": [
+        "list",
+        "[opts]"
+      ],
+      "ret": "number",
+      "doc": "جمع مُعوَّض الدقة (Neumaier): جمع عشر 0.1 يعطي 1 تماماً. يقبل النصوص الرقمية؛ opts: {skip:true} لتجاهل غير الصالح."
+    },
+    "numberStats": {
+      "params": [
+        "list",
+        "[opts]"
+      ],
+      "ret": "map",
+      "doc": "إحصاء: {count,sum,min,max,range,mean,median,mode,variance,stdev}. opts: {sample:true,skip:true}."
+    },
+    "numberGcd": {
+      "params": [
+        "a",
+        "b",
+        "..."
+      ],
+      "ret": "number",
+      "doc": "القاسم المشترك الأكبر لأعداد صحيحة (متفرقة أو مصفوفة)."
+    },
+    "numberLcm": {
+      "params": [
+        "a",
+        "b",
+        "..."
+      ],
+      "ret": "number",
+      "doc": "المضاعف المشترك الأصغر (يرمي خطأً إن تجاوز 2^53)."
+    },
+    "numberIsPrime": {
+      "params": [
+        "n"
+      ],
+      "ret": "bool",
+      "doc": "هل العدد أوّلي؟ (حتى 2^53)."
+    },
+    "numberFactors": {
+      "params": [
+        "n",
+        "[grouped]"
+      ],
+      "ret": "array",
+      "doc": "التحليل إلى عوامل أولية: [2,2,3] أو مع grouped=true: [{prime,power}]."
+    },
+    "numberDivisors": {
+      "params": [
+        "n"
+      ],
+      "ret": "array",
+      "doc": "كل القواسم الموجبة لعدد صحيح مرتّبة تصاعدياً."
+    },
+    "numberDigits": {
+      "params": [
+        "n",
+        "[base]"
+      ],
+      "ret": "array",
+      "doc": "أرقام العدد الصحيح كمصفوفة أعداد (افتراضياً بالأساس 10)."
+    },
+    "numberToBase": {
+      "params": [
+        "n",
+        "base",
+        "[opts]"
+      ],
+      "ret": "string",
+      "doc": "تحويل عدد صحيح إلى نص بأساس 2..36. opts: {prefix,upper,pad,group}."
+    },
+    "numberFromBase": {
+      "params": [
+        "text",
+        "base"
+      ],
+      "ret": "number",
+      "doc": "تحويل نص بأساس 2..36 إلى رقم (يقبل 0x/0b/0o و_ ويرفض الأرقام غير الصالحة والتجاوز)."
     }
   },
   "namespaces": {
