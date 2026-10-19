@@ -613,14 +613,34 @@ struct BreakStmt : Stmt { BreakStmt() { stmtKind = StmtKind::BreakStmt; }};
 // continue; -> يقفز مباشرة إلى فحص شرط أقرب حلقة while محيطة (يتجاوز باقي جسم الحلقة)
 struct ContinueStmt : Stmt { ContinueStmt() { stmtKind = StmtKind::ContinueStmt; }};
 
+// ---- Scope Guarantees (ضمانات النطاق) -- إضافة بحتة فوق try/catch الأصلية ----
+// try { } catch (e) { }                          -> كما كان تماماً (catchName/catchBranch)
+// try { } catch (e) when (cond) { } catch (f) { } -> عدّة بنود catch بحارس اختياري `when`؛ البند الأول
+//                                                    يُخزَّن في catchName/catchBranch/catchGuard والبقية في moreCatches.
+//                                                    لو لم يطابق أي بند يُعاد رمي الخطأ الأصلي كما هو.
+// try { } finally { }  /  try { } catch { } finally { } -> finallyBranch يُنفَّذ دائماً (طبيعي/return/break/continue/throw).
+// defer <stmt>;                                   -> يُختزَل وقت التحليل إلى try { rest } finally { stmt } (LIFO طبيعي).
+// rethrow;                                        -> ThrowStmt::rethrow: يعيد رمي الخطأ الذي يعالجه أقرب catch.
+// needsInterp: الـVM يُفوِّض هذه العبارة للمفسِّر بدل ترجمتها لبايتكود (انظر rin_bcvm_compiler.cpp).
+struct CatchClause {
+    std::string name;
+    ExprPtr guard;                       // `when (cond)` اختياري، يُقيَّم والمتغيّر مُعرَّف
+    std::shared_ptr<BlockStmt> body;
+};
 struct TryCatchStmt : Stmt { TryCatchStmt() { stmtKind = StmtKind::TryCatchStmt; }
     std::shared_ptr<BlockStmt> tryBranch;
     std::string catchName;
-    std::shared_ptr<BlockStmt> catchBranch;
+    std::shared_ptr<BlockStmt> catchBranch;     // null = لا يوجد catch (try/finally فقط)
+    ExprPtr catchGuard;                          // حارس البند الأول
+    std::vector<CatchClause> moreCatches;        // البنود بعد الأول
+    std::shared_ptr<BlockStmt> finallyBranch;    // null = بلا finally
+    bool needsInterp = false;
+    bool fromDefer = false;                      // ناتج اختزال `defer` (للتشخيص فقط)
 };
 
 struct ThrowStmt : Stmt { ThrowStmt() { stmtKind = StmtKind::ThrowStmt; }
     ExprPtr value;
+    bool rethrow = false;                        // `rethrow;` بلا قيمة
 };
 
 // ---- Data-container language statements (container / Containers.Group / Volume / Section ...) ----
