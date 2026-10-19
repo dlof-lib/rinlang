@@ -808,6 +808,24 @@ static std::vector<double> asNumberArray(const Value& v, const std::string& fn, 
     return out;
 }
 
+// max/min المعمَّمة: أرقام كلها أو نصوص كلها (مقارنة بايتات UTF-8 أي بترتيب code point)؛ فارغ => nil؛ أول عنصر يفوز عند التساوي.
+static Value extremumOf(const char* fn, const std::vector<Value>& items, bool wantMax, int line) {
+    if (items.empty()) return Value::nil();
+    const Value::Type t0 = items[0].type;
+    if (t0 != Value::Type::NUMBER && t0 != Value::Type::STRING)
+        throw diagErr(diag::Code::E0004_InvalidType, line, std::string("'") + fn + "' expects numbers or strings but got " + items[0].typeName());
+    size_t best = 0;
+    for (size_t i = 1; i < items.size(); ++i) {
+        if (items[i].type != t0)
+            throw diagErr(diag::Code::E0004_InvalidType, line, std::string("'") + fn + "' cannot compare a " + items[0].typeName() + " with a " + items[i].typeName());
+        bool better = t0 == Value::Type::NUMBER
+            ? (wantMax ? items[i].number > items[best].number : items[i].number < items[best].number)
+            : (wantMax ? items[i].str > items[best].str : items[i].str < items[best].str);
+        if (better) best = i;
+    }
+    return items[best];
+}
+
 // ============================================================================
 //  معالجة نصوص متقدّمة (UTF-8 / عربي / Regex) — أدوات حرة يستخدمها natives القسم
 //  "معالجة نصوص متقدمة" أدناه في registerNatives(). كل دوال upper/lower/substr/reverseStr
@@ -1744,14 +1762,20 @@ void Interpreter::registerNatives() {
         expectArgs("round", a, 1, line);
         return Value::num(std::round(asNumber(a[0], "round", line)));
     };
-    natives["min"] = [](std::vector<Value>& a, int line) {
-        expectArgs("min", a, 2, line);
-        return Value::num(std::min(asNumber(a[0], "min", line), asNumber(a[1], "min", line)));
+    // min/max(a, b, ...) أو min/max([..]): أرقام أو نصوص؛ مصفوفة فارغة => nil. الاستدعاء القديم min(a, b) بلا تغيير.
+    auto extremumNative = [](const char* fn, bool wantMax) {
+        return [fn, wantMax](std::vector<Value>& a, int line) -> Value {
+            if (a.empty()) throw diagErr(diag::Code::E0007_InvalidArguments, line, std::string("'") + fn + "' expects at least 1 argument");
+            if (a.size() == 1) {
+                if (a[0].type != Value::Type::ARRAY || !a[0].array)
+                    throw diagErr(diag::Code::E0004_InvalidType, line, std::string("'") + fn + "' with one argument expects an array but got " + a[0].typeName());
+                return extremumOf(fn, *a[0].array, wantMax, line);
+            }
+            return extremumOf(fn, a, wantMax, line);
+        };
     };
-    natives["max"] = [](std::vector<Value>& a, int line) {
-        expectArgs("max", a, 2, line);
-        return Value::num(std::max(asNumber(a[0], "max", line), asNumber(a[1], "max", line)));
-    };
+    natives["min"] = extremumNative("min", false);
+    natives["max"] = extremumNative("max", true);
     natives["random"] = [](std::vector<Value>& a, int line) {
         expectArgs("random", a, 0, line);
         return Value::num(static_cast<double>(std::rand()) / (static_cast<double>(RAND_MAX) + 1.0));
