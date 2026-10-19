@@ -1185,6 +1185,85 @@
       ],
       "ret": "number",
       "doc": "يحوّل سجلّ print.log (أو مصفوفة logHistory()) إلى لوحة ملوّنة بحسب المستوى."
+    },
+    "tokenList": {
+      "params": [
+        "src",
+        "[opts]"
+      ],
+      "ret": "array",
+      "doc": "رموز المصدر كاملة التفاصيل: {index,type,category,lexeme,line,col,endCol[,value]}. opts: {eof, only, skip} (نوع أو فئة أو مصفوفة منها)."
+    },
+    "tokenCount": {
+      "params": [
+        "src",
+        "[only]"
+      ],
+      "ret": "number",
+      "doc": "عدد رموز المصدر (بلا EOF)، اختيارياً لنوع/فئة معيّنة."
+    },
+    "tokenStats": {
+      "params": [
+        "src"
+      ],
+      "ret": "map",
+      "doc": "إحصاءات الرموز: {total, lines, identifiers, byType, byCategory}."
+    },
+    "tokenAt": {
+      "params": [
+        "src",
+        "line",
+        "col"
+      ],
+      "ret": "map",
+      "doc": "الرمز الذي يغطّي الموضع (سطر/عمود من 1) أو nil."
+    },
+    "tokenLines": {
+      "params": [
+        "src"
+      ],
+      "ret": "array",
+      "doc": "الرموز مجمّعة بالسطر: [{line, count, tokens}]."
+    },
+    "tokenCheck": {
+      "params": [
+        "src"
+      ],
+      "ret": "map",
+      "doc": "فحص لغوي بلا استثناء: {ok:true,count} أو {ok:false,error,line,col}."
+    },
+    "tokenDump": {
+      "params": [
+        "src"
+      ],
+      "ret": "string",
+      "doc": "جدول نصي للرموز (سطر:عمود، النوع، الفئة، النص) للتعلّم والتصحيح."
+    },
+    "tokenCategory": {
+      "params": [
+        "type"
+      ],
+      "ret": "string",
+      "doc": "فئة نوع الرمز: keyword|literal|identifier|operator|punctuation|special أو nil."
+    },
+    "tokenKinds": {
+      "params": [
+        "[category]"
+      ],
+      "ret": "array",
+      "doc": "كل أسماء أنواع الرموز، اختيارياً ضمن فئة واحدة."
+    },
+    "tokenKeywords": {
+      "params": [],
+      "ret": "array",
+      "doc": "كل الكلمات المحجوزة الفعلية في Lexer (مرتّبة)."
+    },
+    "tokenIsKeyword": {
+      "params": [
+        "word"
+      ],
+      "ret": "boolean",
+      "doc": "true إن كانت الكلمة محجوزة في Lexer."
     }
   },
   "namespaces": {
