@@ -377,4 +377,22 @@ print \"Hello, \" + name + \"!\";
     <string name="rin_input_title">Input</string>
     <string name="rin_input_hint">Type your answer</string>
     <string name="rin_input_default_prompt">The program is waiting for input</string>
+
+    <!-- نسخ/قص/لصق المحرر -->
+    <string name="clip_empty">Clipboard is empty</string>
+    <string name="clip_large_title">Large paste</string>
+    <string name="clip_large_message_fmt">Paste %1$d lines (about %2$d KB)? This may take a moment.</string>
+    <string name="clip_large_confirm">Paste</string>
+    <string name="clip_history_title">Clipboard history</string>
+    <string name="clip_history_empty">Clipboard history is empty</string>
+    <string name="clip_history_clear">Clear all</string>
+    <string name="clip_history_meta_fmt">%1$d lines · %2$d chars</string>
+    <string name="clip_history_whole_lines">whole lines</string>
+    <string name="action_copy_line">Copy line</string>
+    <string name="action_cut_line">Cut line</string>
+    <string name="action_paste_plain">Paste as is</string>
+    <string name="action_clip_history">Clipboard history…</string>
+    <string name="action_duplicate">Duplicate</string>
+    <string name="action_select_line">Select line</string>
+    <string name="action_copy_markdown">Copy as Markdown</string>
 </resources>
