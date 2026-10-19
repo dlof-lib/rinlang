@@ -815,6 +815,15 @@ class MainActivity : RinBaseActivity() {
         popup.menu.add(0, 15, 14, R.string.menu_edit_join_line)
         popup.menu.add(0, 16, 15, R.string.menu_edit_trim_now)
         popup.menu.add(0, 17, 16, R.string.menu_edit_convert_tabs_now)
+        popup.menu.add(0, 18, 17, android.R.string.cut)
+        popup.menu.add(0, 19, 18, android.R.string.copy)
+        popup.menu.add(0, 20, 19, android.R.string.paste)
+        popup.menu.add(0, 21, 20, R.string.action_paste_plain)
+        popup.menu.add(0, 22, 21, R.string.action_clip_history)
+        popup.menu.add(0, 23, 22, R.string.action_copy_line)
+        popup.menu.add(0, 24, 23, R.string.action_cut_line)
+        popup.menu.add(0, 25, 24, R.string.action_select_line)
+        popup.menu.add(0, 26, 25, R.string.action_copy_markdown)
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 1 -> editorController.undo()
@@ -837,6 +846,15 @@ class MainActivity : RinBaseActivity() {
                 15 -> toastChanged(editorController.joinCurrentLine(), R.string.lines_joined_toast)
                 16 -> toastChanged(editorController.trimTrailingWhitespaceNow(), R.string.trailing_trimmed_toast)
                 17 -> toastChanged(editorController.convertTabsToSpacesNow(AppSettings.getTabSize(this)), R.string.tabs_converted_toast)
+                18 -> editorController.cut()
+                19 -> editorController.copy()
+                20 -> editorController.paste()
+                21 -> editorController.pasteAsIs()
+                22 -> editorController.showClipboardHistory()
+                23 -> editorController.copyLines()
+                24 -> editorController.cutLines()
+                25 -> editorController.selectLine()
+                26 -> editorController.copyAsMarkdown()
             }
             true
         }
