@@ -930,6 +930,261 @@
       ],
       "ret": "string",
       "doc": "يحوّل صورة (PNG/PPM/BMP، وJPEG/GIF/WebP عبر ImageMagick) إلى نص للطرفية. mode: blocks|ansi256|shade|ascii|braille. للطباعة المباشرة استخدم print.image(...)."
+    },
+    "imgNew": {
+      "params": [
+        "w",
+        "h",
+        "[bg]"
+      ],
+      "ret": "number",
+      "doc": "ينشئ لوحة RGBA بالأبعاد w×h (خلفية bg أو شفافة) ويعيد معرّفها (id)."
+    },
+    "imgLoad": {
+      "params": [
+        "path"
+      ],
+      "ret": "number",
+      "doc": "يحمّل صورة PNG/JPEG/BMP/GIF للتعديل ويعيد معرّفها."
+    },
+    "imgCopy": {
+      "params": [
+        "id"
+      ],
+      "ret": "number",
+      "doc": "ينسخ لوحة ويعيد معرّف النسخة."
+    },
+    "imgFree": {
+      "params": [
+        "id"
+      ],
+      "ret": "bool",
+      "doc": "يحرّر لوحة من الذاكرة (الحدّ 64 لوحة حيّة)."
+    },
+    "imgSize": {
+      "params": [
+        "id"
+      ],
+      "ret": "map",
+      "doc": "{width, height} للوحة."
+    },
+    "imgPixel": {
+      "params": [
+        "id",
+        "x",
+        "y",
+        "[color]"
+      ],
+      "ret": "string",
+      "doc": "بلا color: يقرأ لون البكسل (#rrggbb[aa]) أو nil خارج الحدود؛ مع color: يكتبه."
+    },
+    "imgClear": {
+      "params": [
+        "id",
+        "[color]"
+      ],
+      "ret": "nil",
+      "doc": "يملأ اللوحة كلها بلون (أو شفاف)."
+    },
+    "imgLine": {
+      "params": [
+        "id",
+        "x0",
+        "y0",
+        "x1",
+        "y1",
+        "color",
+        "[width]"
+      ],
+      "ret": "nil",
+      "doc": "خط مستقيم منعَّم بسماكة width (الافتراضي 1). الإحداثيات = مراكز البكسلات."
+    },
+    "imgRect": {
+      "params": [
+        "id",
+        "x",
+        "y",
+        "w",
+        "h",
+        "color",
+        "[fill|{fill,width,radius}]"
+      ],
+      "ret": "nil",
+      "doc": "مستطيل (ممتلئ افتراضياً) بزوايا مدوّرة اختيارية radius."
+    },
+    "imgCircle": {
+      "params": [
+        "id",
+        "cx",
+        "cy",
+        "r",
+        "color",
+        "[fill|{fill,width}]"
+      ],
+      "ret": "nil",
+      "doc": "دائرة منعَّمة (ممتلئة افتراضياً)."
+    },
+    "imgEllipse": {
+      "params": [
+        "id",
+        "cx",
+        "cy",
+        "rx",
+        "ry",
+        "color",
+        "[fill|{fill,width}]"
+      ],
+      "ret": "nil",
+      "doc": "قطع ناقص منعَّم."
+    },
+    "imgPolygon": {
+      "params": [
+        "id",
+        "points",
+        "color",
+        "[fill|{fill,width}]"
+      ],
+      "ret": "nil",
+      "doc": "مضلّع من [[x,y],...]؛ ممتلئ افتراضياً."
+    },
+    "imgText": {
+      "params": [
+        "id",
+        "x",
+        "y",
+        "text",
+        "color",
+        "[{size,align,bg,padding,radius}]"
+      ],
+      "ret": "map",
+      "doc": "يرسم نصاً (أسطر متعدّدة \\n). خط 5×7 لـ ASCII وخط متجهي تقريبي للعربية. يعيد {width,height}."
+    },
+    "imgTextSize": {
+      "params": [
+        "text",
+        "[size]"
+      ],
+      "ret": "map",
+      "doc": "أبعاد النص بالبكسل {width,height} دون رسمه."
+    },
+    "imgGradient": {
+      "params": [
+        "id",
+        "c1",
+        "c2",
+        "[v|h|d]"
+      ],
+      "ret": "nil",
+      "doc": "تدرّج لوني يملأ اللوحة (رأسي/أفقي/قطري)."
+    },
+    "imgFloodFill": {
+      "params": [
+        "id",
+        "x",
+        "y",
+        "color"
+      ],
+      "ret": "number",
+      "doc": "تعبئة بالفيضان من نقطة؛ يعيد عدد البكسلات المعبّأة."
+    },
+    "imgResize": {
+      "params": [
+        "id",
+        "w",
+        "h"
+      ],
+      "ret": "number",
+      "doc": "لوحة جديدة بحجم مختلف (استيفاء ثنائي الخطّ)."
+    },
+    "imgCrop": {
+      "params": [
+        "id",
+        "x",
+        "y",
+        "w",
+        "h"
+      ],
+      "ret": "number",
+      "doc": "لوحة جديدة من جزء من لوحة."
+    },
+    "imgPaste": {
+      "params": [
+        "dst",
+        "src",
+        "x",
+        "y",
+        "[opacity]"
+      ],
+      "ret": "nil",
+      "doc": "يلصق لوحة فوق أخرى بمزج الشفافية (opacity من 0 إلى 1)."
+    },
+    "imgFlip": {
+      "params": [
+        "id",
+        "dir"
+      ],
+      "ret": "nil",
+      "doc": "قلب أفقي \"h\" أو رأسي \"v\" في المكان."
+    },
+    "imgFilter": {
+      "params": [
+        "id",
+        "name",
+        "[value]"
+      ],
+      "ret": "nil",
+      "doc": "مرشّح في المكان: grayscale | invert | brightness(n) | opacity(0..1)."
+    },
+    "imgSave": {
+      "params": [
+        "id",
+        "path",
+        "[format]"
+      ],
+      "ret": "number",
+      "doc": "يحفظ اللوحة PNG/BMP/PPM (الصيغة من الامتداد) ويعيد عدد البايتات."
+    },
+    "imgEncode": {
+      "params": [
+        "id",
+        "[format]"
+      ],
+      "ret": "string",
+      "doc": "بايتات الصورة كنص ثنائي (png افتراضياً) — مثلاً لـ sec.base64 أو HTTP."
+    },
+    "imgPrint": {
+      "params": [
+        "id",
+        "[width]",
+        "[mode]"
+      ],
+      "ret": "nil",
+      "doc": "يطبع لوحة في الـ terminal (auto|color|blocks|ascii)."
+    },
+    "imgAnsi": {
+      "params": [
+        "id",
+        "[width]",
+        "[mode]"
+      ],
+      "ret": "string",
+      "doc": "نفس imgPrint لكن يعيد النص."
+    },
+    "imgFromText": {
+      "params": [
+        "text",
+        "[{size,padding,fg,bg,title,lineNumbers,wrap,minWidth}]"
+      ],
+      "ret": "number",
+      "doc": "يحوّل نصاً متعدد الأسطر إلى لوحة (طرفية سوداء) جاهزة للحفظ."
+    },
+    "imgFromLog": {
+      "params": [
+        "[entries]",
+        "[{size,padding,fg,bg,title,source,level,last}]"
+      ],
+      "ret": "number",
+      "doc": "يحوّل سجلّ print.log (أو مصفوفة logHistory()) إلى لوحة ملوّنة بحسب المستوى."
     }
   },
   "namespaces": {
