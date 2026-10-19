@@ -221,7 +221,7 @@ private object RinLexer {
         "listitem", "direction", "background", "state", "theme", "slot", "emit", "event", "class",
         "struct", "interface", "trait", "enum", "extends", "implements", "uses", "instanceof",
         "abstract", "final", "override", "static", "protected", "get", "set", "self", "super", "when",
-        "otherwise", "unless", "elif", "elseif", "ifnot", "until", "match", "case", "goal", "achieve", "item",
+        "otherwise", "unless", "elif", "elseif", "ifnot", "until", "match", "case", "goal", "achieve", "item", "finally", "defer", "rethrow",
         // حلقات Rin v2 (docs/loops.md)
         "each", "loop", "retry", "reversed", "yield", "distinct",
         // أنواع/مساحات أسماء أساسية: Set (docs/set.md) و Env (docs/env.md)
