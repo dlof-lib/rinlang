@@ -115,7 +115,7 @@ class RinReplSession {
         private val STATEMENT_WORDS = setOf(
             "print", "let", "const", "var", "fun", "class", "enum", "struct", "interface", "trait",
             "abstract", "final", "if", "else", "while", "for", "return", "break", "continue", "import",
-            "use", "when", "match", "try", "catch", "throw", "static", "public", "private", "protected",
+            "use", "when", "match", "try", "catch", "finally", "defer", "rethrow", "throw", "static", "public", "private", "protected",
             "save", "installation", "show", "set", "on", "state", "container"
         )
 
