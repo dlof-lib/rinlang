@@ -1,0 +1,26 @@
+// max/min الموسَّعة
+assertEq(max(3, 9), 9); assertEq(min(3, 9), 3);              // القديم
+assertEq(max(1, 8, 3, 5), 8); assertEq(min(4, 2, 7), 2);      // عدد غير محدود
+assertEq(max([2, 9, 4]), 9); assertEq(min([2, 9, 4]), 2);     // مصفوفة
+assertEq(max([]), nil); assertEq(min([]), nil);
+assertEq(max("pear", "apple", "zoo"), "zoo"); assertEq(min(["pear", "apple"]), "apple");
+assertEq(max(-1, -5), -1); assertEq(min(1.5, 1.25), 1.25);
+let bad = false;
+try { max(1, "a"); } catch (e) { bad = true; }
+assertEq(bad, true);
+let bad2 = false;
+try { max(); } catch (e) { bad2 = true; }
+assertEq(bad2, true);
+
+// maxBy / minBy
+let people = [{name: "Ali", age: 30}, {name: "Sara", age: 25}, {name: "Omar", age: 30}];
+assertEq(maxBy(people, fun(p) { return p["age"]; })["name"], "Ali");   // الأول عند التساوي
+assertEq(minBy(people, fun(p) { return p["age"]; })["name"], "Sara");
+assertEq(maxBy(["aa", "b", "cccc"], fun(s) { return len(s); }), "cccc");
+assertEq(maxBy([], fun(x) { return x; }), nil);
+
+// argmax / argmin / minmax
+assertEq(argmax([3, 9, 9, 1]), 1); assertEq(argmin([3, 1, 1, 9]), 1);
+assertEq(argmax([]), nil);
+assertEq(minmax([4, 1, 7]), [1, 7]); assertEq(minmax([]), nil);
+print "max/min family OK";
