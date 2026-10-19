@@ -1,0 +1,70 @@
+// مفهوم token (docs/TOKEN.md): tokenList / tokenCount / tokenStats / tokenAt / tokenLines /
+// tokenCheck / tokenDump / tokenCategory / tokenKinds / tokenKeywords / tokenIsKeyword
+
+let src = "let x = 42;\nprint x + 1;";
+
+// 1) tokenList: التفاصيل الكاملة (index/type/category/lexeme/line/col/endCol/value)
+let all = tokenList(src);
+print "1 count", len(all);
+let t0 = all[0];
+print "1 first", t0.index, t0.type, t0.category, t0.lexeme, t0.line, t0.col, t0.endCol;
+let t3 = all[3];
+print "1 number", t3.type, t3.lexeme, t3.value;
+
+// 2) only / skip / eof
+print "2 idents", len(tokenList(src, {only: "IDENT"}));
+print "2 keywords", len(tokenList(src, {only: "keyword"}));
+print "2 skip punct", len(tokenList(src, {skip: "punctuation"}));
+print "2 mixed", len(tokenList(src, {only: ["identifier", "literal"]}));
+print "2 eof", tokenList(src, {eof: true})[len(all)].type;
+
+// 3) tokenCount
+print "3 total", tokenCount(src);
+print "3 operators", tokenCount(src, "operator");
+print "3 empty", tokenCount("");
+
+// 4) tokenStats
+let st = tokenStats(src);
+print "4 total", st.total, "lines", st.lines, "identifiers", st.identifiers;
+print "4 byType", st.byType;
+print "4 byCategory", st.byCategory;
+
+// 5) tokenAt (1-based)
+let at = tokenAt(src, 1, 5);
+print "5 at 1:5", at.type, at.lexeme;
+let at2 = tokenAt(src, 2, 7);
+print "5 at 2:7", at2.type, at2.lexeme;
+print "5 none", tokenAt(src, 1, 99);
+
+// 6) tokenLines
+let ls = tokenLines(src);
+print "6 lines", len(ls), ls[0].line, ls[0].count, ls[1].line, ls[1].count;
+
+// 7) tokenCheck: بلا استثناء
+let ok = tokenCheck(src);
+print "7 ok", ok.ok, ok.count;
+let bad = tokenCheck("let s = \"abc");
+print "7 bad", bad.ok, bad.line;
+print "7 has error", len(bad.error) > 0;
+
+// 8) tokenDump
+print tokenDump("let a = 1;");
+
+// 9) tokenCategory / tokenKinds
+print "9 cat", tokenCategory("LET"), tokenCategory("plus"), tokenCategory("IDENT"), tokenCategory("LPAREN"), tokenCategory("TRUE"), tokenCategory("nope");
+print "9 kinds operator", tokenKinds("operator");
+print "9 kinds all", len(tokenKinds()) > 50;
+
+// 10) tokenKeywords / tokenIsKeyword
+print "10 let", tokenIsKeyword("let"), "foo", tokenIsKeyword("foo");
+print "10 list", contains(tokenKeywords(), "let"), len(tokenKeywords()) > 20;
+
+// 11) أخطاء الاستعمال تُلتقط كأي خطأ عادي
+try { tokenList(5); } catch (e) { print "11 type error caught"; }
+try { tokenList(src, {only: "BOGUS"}); } catch (e) { print "11 bad filter caught"; }
+try { tokenKinds("weird"); } catch (e) { print "11 bad category caught"; }
+try { tokenList("let s = \"abc"); } catch (e) { print "11 lex error caught"; }
+
+// 12) الدوال القديمة لم تتغيّر
+print "12 tokenType", tokenType("let"), tokenType("foo"), tokenType("==");
+print "12 tokens", len(tokens("a b")), tokens("a")[0].type;
