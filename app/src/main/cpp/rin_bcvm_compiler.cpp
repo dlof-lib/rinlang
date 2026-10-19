@@ -445,6 +445,11 @@ private:
         }
         case StmtKind::TryCatchStmt: {
             auto s = std::static_pointer_cast<TryCatchStmt>(sp);
+            // Scope Guarantees (finally / defer / catch-when / rethrow / try بلا catch): تُنفَّذ بالمفسِّر مباشرة.
+            if (s->needsInterp || s->finallyBranch || s->catchGuard || !s->moreCatches.empty() || !s->catchBranch) {
+                delegate(sp);
+                break;
+            }
             tick(sp);
             int tb = emit(Op::TryBegin, -1);
             stmt(s->tryBranch);
@@ -460,6 +465,7 @@ private:
         }
         case StmtKind::ThrowStmt: {
             auto s = std::static_pointer_cast<ThrowStmt>(sp);
+            if (s->rethrow) { delegate(sp); break; }
             tick(sp);
             if (s->value) expr(s->value); else emit(Op::Nil);
             line_ = s->line;
