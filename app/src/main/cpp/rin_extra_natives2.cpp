@@ -1027,6 +1027,124 @@ void Interpreter::registerNativesExtra2() {
         for (const auto& kv : snap) it->second->values[kv.first.toDisplayString()] = deepCopyValue(kv.second);
         return Value::boolean_(true);
     };
+    // ---- عائلة max/min الموسَّعة ----
+    // maxBy(arr, fn) / minBy(arr, fn): العنصر ذو أكبر/أصغر مفتاح fn(item) (الأول عند التساوي)؛ فارغ => nil
+    // argmax(arr) / argmin(arr): فهرس أكبر/أصغر عنصر؛ فارغ => nil     minmax(arr): [min, max] أو nil
+    auto byNative = [this](const char* fn, bool wantMax) {
+        return [this, fn, wantMax](Args& a, int line) -> Value {
+            need(fn, a, 2, 2, line);
+            if (a[0].type != Value::Type::ARRAY || !a[0].array)
+                throw diagErr(diag::Code::E0004_InvalidType, line, std::string("'") + fn + "' expects an array as its first argument");
+            if (a[1].type != Value::Type::FUNCTION || !a[1].function)
+                throw diagErr(diag::Code::E0004_InvalidType, line, std::string("'") + fn + "' expects a function as its second argument");
+            const auto items = *a[0].array; // نسخة: الدالة قد تعدّل المصفوفة
+            if (items.empty()) return Value::nil();
+            std::vector<Value> keys;
+            for (const auto& it : items) { Args ca{it}; keys.push_back(callFunction(a[1].function, ca, line)); }
+            Value best = extremumOf(fn, keys, wantMax, line);
+            for (size_t i = 0; i < keys.size(); ++i)
+                if (keys[i].type == best.type && (best.type == Value::Type::NUMBER ? keys[i].number == best.number : keys[i].str == best.str)) return items[i];
+            return Value::nil();
+        };
+    };
+    natives["maxBy"] = byNative("maxBy", true);
+    natives["minBy"] = byNative("minBy", false);
+    auto argNative = [](const char* fn, bool wantMax) {
+        return [fn, wantMax](Args& a, int line) -> Value {
+            need(fn, a, 1, 1, line);
+            if (a[0].type != Value::Type::ARRAY || !a[0].array)
+                throw diagErr(diag::Code::E0004_InvalidType, line, std::string("'") + fn + "' expects an array");
+            const auto& items = *a[0].array;
+            if (items.empty()) return Value::nil();
+            Value best = extremumOf(fn, items, wantMax, line);
+            for (size_t i = 0; i < items.size(); ++i)
+                if (best.type == Value::Type::NUMBER ? items[i].number == best.number : items[i].str == best.str) return Value::num(static_cast<double>(i));
+            return Value::nil();
+        };
+    };
+    natives["argmax"] = argNative("argmax", true);
+    natives["argmin"] = argNative("argmin", false);
+    natives["minmax"] = [](Args& a, int line) -> Value {
+        need("minmax", a, 1, 1, line);
+        if (a[0].type != Value::Type::ARRAY || !a[0].array)
+            throw diagErr(diag::Code::E0004_InvalidType, line, "'minmax' expects an array");
+        const auto& items = *a[0].array;
+        if (items.empty()) return Value::nil();
+        std::vector<Value> out{extremumOf("minmax", items, false, line), extremumOf("minmax", items, true, line)};
+        return newArray(std::move(out));
+    };
+
+    // container.transaction(name | [names], fn) — تعديل ذرّي: يأخذ لقطة عميقة لحقول الحاوية/الحاويات (غير الدوال)،
+    // ينفّذ fn()، فإن رمت خطأً يُستعاد كل شيء حرفياً (بما فيه حذف الحقول التي أُضيفت داخل fn وإعادة المحذوفة) ثم يُعاد رمي الخطأ نفسه.
+    // النجاح: يعيد قيمة fn. حاوية غائبة => خطأ واضح قبل أي تنفيذ (لا تعديل جزئي).
+    natives["container.transaction"] = [this](Args& a, int line) -> Value {
+        need("container.transaction", a, 2, 2, line);
+        if (a[1].type != Value::Type::FUNCTION || !a[1].function)
+            throw diagErr(diag::Code::E0004_InvalidType, line, "'container.transaction' expects a function as its second argument");
+        std::vector<std::string> names;
+        if (a[0].type == Value::Type::ARRAY && a[0].array) { for (const auto& v : *a[0].array) names.push_back(str(v, "container.transaction", line)); }
+        else names.push_back(str(a[0], "container.transaction", line));
+        std::vector<std::pair<std::string, MapData>> snaps;
+        for (const auto& n : names) {
+            auto it = containers.find(n);
+            if (it == containers.end())
+                throw diagErr(diag::Code::E0013_InvalidExpression, line, "'container.transaction': no such container: " + n);
+            MapData snap;
+            for (const auto& kv : it->second->values) {
+                if (kv.second.type == Value::Type::FUNCTION) continue;
+                snap.push_back({Value::string(kv.first), deepCopyValue(kv.second)});
+            }
+            snaps.push_back({n, std::move(snap)});
+        }
+        auto rollback = [&]() {
+            for (auto& sn : snaps) {
+                auto it = containers.find(sn.first);
+                if (it == containers.end()) continue;
+                auto& vals = it->second->values;
+                for (auto vi = vals.begin(); vi != vals.end();) { // احذف كل غير-الدوال ثم أعد اللقطة
+                    if (vi->second.type == Value::Type::FUNCTION) ++vi; else vi = vals.erase(vi);
+                }
+                for (const auto& kv : sn.second) vals[kv.first.toDisplayString()] = deepCopyValue(kv.second);
+            }
+        };
+        Args callArgs;
+        try {
+            return callFunction(a[1].function, callArgs, line);
+        } catch (...) {
+            rollback();
+            throw;
+        }
+    };
+    // container.attempt(name | [names], fn) -> {ok, value, error} — transaction بلا try/catch: لا يرمي أبداً؛
+    // ok=true => value نتيجة fn؛ ok=false => التراجع تمّ وerror = {message, line[, value][, code]}.
+    natives["container.attempt"] = [this](Args& a, int line) -> Value {
+        need("container.attempt", a, 2, 2, line);
+        auto tx = natives["container.transaction"];
+        MapData out;
+        try {
+            Value v = tx(a, line);
+            out.push_back({Value::string("ok"), Value::boolean_(true)});
+            out.push_back({Value::string("value"), v});
+            out.push_back({Value::string("error"), Value::nil()});
+        } catch (ThrowSignal& ex) {
+            MapData err;
+            err.push_back({Value::string("message"), Value::string(ex.value.toDisplayString())});
+            err.push_back({Value::string("line"), Value::num(ex.line)});
+            err.push_back({Value::string("value"), ex.value});
+            out.push_back({Value::string("ok"), Value::boolean_(false)});
+            out.push_back({Value::string("value"), Value::nil()});
+            out.push_back({Value::string("error"), newMap(std::move(err))});
+        } catch (RinError& ex) {
+            MapData err;
+            err.push_back({Value::string("message"), Value::string(ex.message)});
+            err.push_back({Value::string("line"), Value::num(ex.line)});
+            if (ex.diagnostic) err.push_back({Value::string("code"), Value::string(diag::codeString(ex.diagnostic->code))});
+            out.push_back({Value::string("ok"), Value::boolean_(false)});
+            out.push_back({Value::string("value"), Value::nil()});
+            out.push_back({Value::string("error"), newMap(std::move(err))});
+        }
+        return newMap(std::move(out));
+    };
     natives["container.lock"] = [this](Args& a, int line) -> Value {
         need("container.lock", a, 1, 1, line);
         auto it = containers.find(str(a[0], "container.lock", line));
