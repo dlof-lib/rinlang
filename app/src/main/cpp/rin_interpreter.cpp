@@ -6797,6 +6797,7 @@ void Interpreter::registerNatives() {
     registerNativesExtra5(); // عائلة #: #sed #sum #diff #add #to #swap (rin_extra_natives5.cpp)
     registerNativesExtra6(); // make.video/audio/api/image.removeBg/ocr (rin_extra_natives6.cpp)
     registerNativesExtra7(); // مفهوم time: time() و time.* (rin_extra_natives7.cpp، docs/TIME.md)
+    registerNativesExtra8(); // مفهوم token: tokenList/tokenStats/tokenAt/... (rin_extra_natives8.cpp، docs/TOKEN.md)
     registerNativesOop(); // Rin 1.0: oop.* — استبطان الأصناف والكائنات + أدوات OOP (rin_oop_natives.cpp)
     registerNativesInput(); // Rin 1.0: نماذج الإدخال (معاملة/تداخل/مُدقِّق النموذج) فوق input() — بعد oop.* لأنها تستدعيها (rin_input.cpp)
     registerNativesConditions(); // متغيّرات الشروط الموسّعة (rin_conditions.cpp)
@@ -12666,6 +12667,7 @@ bool Interpreter::livePropertyGet(const EnvPtr& env, const std::string& name, co
 #include "rin_extra_natives5.cpp"
 #include "rin_extra_natives6.cpp" // make.video/audio/api/image/ocr (docs/MAKE_MEDIA.md)
 #include "rin_extra_natives7.cpp" // مفهوم time (docs/TIME.md)
+#include "rin_extra_natives8.cpp" // مفهوم token (docs/TOKEN.md)
 #include "rin_table.cpp" // توسعة الجدول: دوال اللغة الموجودة تفهم الجدول (انظر رأس الملف)
 #include "rin_conditions.cpp" // متغيّرات الشروط الموسّعة (docs/key_terms_and_builtins.md)
 #include "rin_image_ansi.cpp" // صور داخل الـ terminal كنص (docs/image-terminal.md)
