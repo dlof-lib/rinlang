@@ -131,6 +131,7 @@ static const std::unordered_set<std::string> kInterpreterOnlyNatives = {
     "offChat","onChat","openChat","pendingMigrations","publish","queryDocs","queryOneDoc",
     "relatedDocs","rollbackMigration","rollbackTransaction","runMigration","sectionNames",
     "sectionVars","sendMessage","setChatTyping","streamReply","subscribe","tokenType","tokens",
+    "number","numberApprox","numberChange","numberCheck","numberDigits","numberDivisors","numberFactors","numberFormat","numberFromBase","numberGcd","numberIsPrime","numberKind","numberLcm","numberMap","numberParts","numberPercent","numberRound","numberStats","numberSum","numberToBase","numberWrap",
     "tokenAt","tokenCategory","tokenCheck","tokenCount","tokenDump","tokenIsKeyword","tokenKeywords","tokenKinds","tokenLines","tokenList","tokenStats",
     "unsubscribe","unwatch","updateDoc","validateDoc","watch","zlibDeflateRaw","zlibInflate","zlibInflateRaw"
 };
