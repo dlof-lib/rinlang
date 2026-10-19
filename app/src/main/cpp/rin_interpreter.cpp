@@ -8557,32 +8557,68 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
         return execBlockFlow(s->statements, blockEnv, ret);
     }
     case StmtKind::TryCatchStmt: { auto s = std::static_pointer_cast<TryCatchStmt>(stmt);
-        try {
-            return exec(s->tryBranch, env, ret);
-        } catch (ThrowSignal& ex) {
-            auto catchEnv = std::make_shared<Environment>(env);
-            if (!s->catchName.empty()) {
+        // ---- Scope Guarantees: try / catch [when] ... / finally ----
+        // كل مسار خروج من try أو من أي catch (إكمال طبيعي، return، break، continue، أو أي استثناء) يمرّ على finally
+        // مرة واحدة بالضبط. لو أنهى finally نفسه بـ return/break/continue فهو يحسم النتيجة (يبتلع الاستثناء المعلَّق) كبقية اللغات.
+        auto runClauses = [&](Flow& result) {
+            auto tryClauses = [&](const Value& errVal, bool isRin, int line, const std::string& message,
+                                  const std::optional<diag::Diagnostic>& dg, const ThrowSignal* ts) -> bool {
+                if (!s->catchBranch) return false; // try/finally بلا catch: لا شيء يعالج الخطأ
+                auto tryOne = [&](const std::string& name, const ExprPtr& guard, const std::shared_ptr<BlockStmt>& body) -> bool {
+                    auto catchEnv = std::make_shared<Environment>(env);
+                    if (!name.empty()) catchEnv->define(name, errVal);
+                    if (guard && !evaluate(guard, catchEnv).isTruthy()) return false;
+                    ActiveCatch ac; ac.isRin = isRin; ac.line = line; ac.message = message; ac.diag = dg;
+                    if (ts) ac.thrown = ts->value;
+                    activeCatches_.push_back(std::move(ac));
+                    struct Pop { std::vector<ActiveCatch>& v; ~Pop() { v.pop_back(); } } pop{activeCatches_};
+                    result = exec(body, catchEnv, ret);
+                    return true;
+                };
+                if (tryOne(s->catchName, s->catchGuard, s->catchBranch)) return true;
+                for (auto& c : s->moreCatches) if (tryOne(c.name, c.guard, c.body)) return true;
+                return false;
+            };
+            try {
+                result = exec(s->tryBranch, env, ret);
+            } catch (ThrowSignal& ex) {
                 auto err = std::make_shared<MapData>();
                 err->push_back({Value::string("value"), ex.value});
                 err->push_back({Value::string("message"), Value::string(ex.value.toDisplayString())});
                 err->push_back({Value::string("line"), Value::num(ex.line)});
-                catchEnv->define(s->catchName, Value::makeMap(err));
-            }
-            return exec(s->catchBranch, catchEnv, ret);
-        } catch (RinError& ex) {
-            auto catchEnv = std::make_shared<Environment>(env);
-            if (!s->catchName.empty()) {
+                // توحيد الشكل: لو رُمي قاموس فيه code فـ e.code يعمل كما يعمل مع أخطاء النظام.
+                if (ex.value.type == Value::Type::MAP && ex.value.map)
+                    if (Value* c = ex.value.map->findValue(Value::string("code"))) err->push_back({Value::string("code"), *c});
+                if (!tryClauses(Value::makeMap(err), false, ex.line, ex.value.toDisplayString(), std::nullopt, &ex)) throw;
+            } catch (RinError& ex) {
                 auto err = std::make_shared<MapData>();
                 err->push_back({Value::string("message"), Value::string(ex.message)});
                 err->push_back({Value::string("line"), Value::num(ex.line)});
                 if (ex.diagnostic) err->push_back({Value::string("code"), Value::string(diag::codeString(ex.diagnostic->code))});
-                catchEnv->define(s->catchName, Value::makeMap(err));
+                if (!tryClauses(Value::makeMap(err), true, ex.line, ex.message, ex.diagnostic, nullptr)) throw;
             }
-            return exec(s->catchBranch, catchEnv, ret);
+        };
+        if (!s->finallyBranch) {
+            Flow result = Flow::None;
+            runClauses(result);
+            return result;
         }
-        return Flow::None;
+        Flow result = Flow::None;
+        std::exception_ptr pending;
+        try { runClauses(result); } catch (...) { pending = std::current_exception(); }
+        Value finRet;
+        Flow ff = exec(s->finallyBranch, env, finRet);
+        if (ff != Flow::None) { if (ff == Flow::Return) ret = finRet; return ff; } // finally يحسم النتيجة
+        if (pending) std::rethrow_exception(pending);
+        return result;
     }
     case StmtKind::ThrowStmt: { auto s = std::static_pointer_cast<ThrowStmt>(stmt);
+        if (s->rethrow) {
+            if (activeCatches_.empty()) throw RinError("[E0010] `rethrow` outside a catch block", s->line);
+            const ActiveCatch& ac = activeCatches_.back();
+            if (ac.isRin) { RinError e(ac.message, ac.line); e.diagnostic = ac.diag; throw e; }
+            throw ThrowSignal{ac.thrown, ac.line};
+        }
         Value v = s->value ? evaluate(s->value, env) : Value::nil();
         throw ThrowSignal{v, s->line};
     }
