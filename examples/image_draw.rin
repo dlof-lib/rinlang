@@ -1,0 +1,41 @@
+// إنشاء صورة ورسمها وحفظها PNG + طباعتها في الطرفية + حفظ الـ log كصورة — docs/image-draw.md
+// التشغيل: rin examples/image_draw.rin   (يكتب الصور في examples/out/)
+let W = 320;
+let H = 200;
+let img = imgNew(W, H, "#0b1220");
+imgGradient(img, "#1d4ed8", "#0b1220", "v");
+
+// بطاقة بزوايا مدوّرة وظلّ بسيط
+imgRect(img, 24, 28, 272, 120, "rgba(0,0,0,0.35)", {radius: 14});
+imgRect(img, 20, 24, 272, 120, "#f8fafc", {radius: 14});
+imgText(img, 40, 40, "RIN IMAGE", "#0f172a", {size: 4});
+imgText(img, 40, 80, "draw + save png", "#475569", {size: 2});
+
+// أشكال
+imgCircle(img, 60, 120, 14, "#22c55e");
+imgCircle(img, 100, 120, 14, "#f59e0b", {fill: false, width: 3});
+imgEllipse(img, 150, 120, 20, 12, "#ef4444");
+imgPolygon(img, [[190, 134], [210, 106], [230, 134]], "#8b5cf6");
+imgLine(img, 24, 170, 296, 170, "#38bdf8", 3);
+imgText(img, W - 12, H - 16, "v1.0", "#94a3b8", {size: 1, align: "right"});
+
+print imgSave(img, "out/card.png"), "bytes";
+imgSave(img, "out/card.bmp");
+imgPrint(img, 48);
+
+// تصغير + ترشيح
+let thumb = imgResize(img, 160, 100);
+imgFilter(thumb, "grayscale");
+imgSave(thumb, "out/thumb.png");
+
+// الـ log كصورة: print.log يتراكم تلقائياً ثم يُرسم ملوّناً بحسب المستوى
+print.log.info("server started", "port=8080");
+print.log.warn("disk almost full");
+print.log.error("connection lost");
+logSave("out/log.png");                              // الطريقة المباشرة
+let logImg = imgFromLog({title: "Rin session", size: 2, level: ""});
+imgSave(logImg, "out/log_styled.png");               // مع خيارات
+
+// أي نص متعدد الأسطر → صورة
+let report = imgFromText("total: 42\nok: 40\nfailed: 2", {title: "report", lineNumbers: true});
+imgSave(report, "out/report.png");
