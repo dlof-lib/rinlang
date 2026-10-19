@@ -1,0 +1,26 @@
+1a body
+1a finally
+1b caught boom
+1b finally
+2 cleanup
+value
+3 inner finally
+3 outer caught inner
+finally wins
+5 body
+5 second-deferred (runs first)
+5 first-deferred (runs last)
+done
+6 work 0
+6 end of iteration 0
+6 end of iteration 1
+6 end of iteration 2
+7 cleanup
+7 caught bad
+8 not-found: E_NOT_FOUND
+8 denied: E_DENIED
+8 other: E0021
+9 outer got E_DENIED
+10 inner saw E0021
+10 outer saw E0021
+11 6
