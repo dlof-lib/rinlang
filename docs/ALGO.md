@@ -16,6 +16,7 @@
 | `algoBracket(f, x0[,{step,grow}])` | يوسّع حول `x0` حتى تتغيّر الإشارة ← `{a,b,fa,fb}` |
 | `algoMinimize(f, a, b)` | متغيّر واحد (Brent) |
 | `algoMinimize(f, [x0...][,{tol,maxIter,step}])` | عدة متغيّرات (Nelder–Mead)؛ `f` تستقبل مصفوفة |
+| `algoMinimize(f, [x0...],{method:"bfgs", grad, gtol})` | شبه نيوتن BFGS مع بحث خطي؛ `grad` اختيارية (وإلا تدرّج عددي)، وتقلّل التقييمات كثيراً |
 | `algoNewton(F, x0[,{jacobian,tol,maxIter}])` | جملة `F(x)=0`: جاكوبيان عددي + LU + بحث خطي (backtracking) |
 
 ## التفاضل والتكامل
@@ -24,7 +25,7 @@
 اللانهاية في Rin: `number("inf", {special:true})`.
 
 ## المعادلات التفاضلية
-`algoOde(f, y0, t0, t1[,{method:"rk45"\|"rk4", rtol, atol, h, steps, maxSteps}])` حيث `f(t, y)`؛ `y` رقم أو متجه، والناتج `{t, y, steps, rejected, evaluations}`. الافتراضي Dormand–Prince 5(4) تكيّفي؛ `rk4` بخطوات ثابتة. يدعم التكامل للخلف (`t1 < t0`).
+`algoOde(f, y0, t0, t1[,{method:"rk45"\|"rk4"\|"stiff", rtol, atol, h, steps, maxSteps}])` حيث `f(t, y)`؛ `y` رقم أو متجه، والناتج `{t, y, steps, rejected, evaluations}`. الافتراضي Dormand–Prince 5(4) تكيّفي؛ `rk4` بخطوات ثابتة. `stiff` للمسائل الصلبة (Euler ضمني تكيّفي بمضاعفة الخطوة + استكمال محلي، جاكوبيان عددي + LU): على `y'=-1000y+3000-2000e^{-t}` يحتاج عشرات الخطوات بينما RK45 يحتاج مئات. يدعم التكامل للخلف (`t1 < t0`).
 
 ## الاستيفاء والتوفيق والإشارات
 `algoInterp(xs, ys, x[,{method:"linear"\|"spline"\|"nearest", extrapolate}])` · `algoPolyFit(xs, ys, deg)` ← `{coeffs (صعوداً), r2, rmse, rank}` · `algoPolyEval(c, x)` · `algoPolyRoots(c)` ← `[{re,im}]` · `algoFFT(signal[,{inverse}])` ← `{re, im}` لأي طول (Radix-2 + Bluestein) · `algoRandom(n,{seed,min,max,int,sorted,unique})` (حتمية).
