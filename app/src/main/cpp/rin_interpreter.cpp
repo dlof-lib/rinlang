@@ -1,4 +1,5 @@
 #include <utility>
+#include <exception> // std::exception_ptr / current_exception (libc++ على NDK يتطلبه صراحةً)
 #include "rin_interpreter.h"
 #include "rin_version.h"
 #include "rin_make.h"
