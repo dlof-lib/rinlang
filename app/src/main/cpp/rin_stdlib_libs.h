@@ -18393,6 +18393,5415 @@ fun iwInfo() {
     };
 }
 )INDSINWEBOGRIN";
+static const char* kLib_rindf_og_rin = R"RINDFOGRIN(
+// ============================================================================
+//  lib/rindf.og.rin — RinDF: إطار بيانات (DataFrame) لتحليل البيانات
+//
+//  @version 1.0.0
+//  @category data
+//  @prefix df_
+//
+//  التمثيل (قاموس عادي قابل للتحويل إلى JSON):
+//      {"names": ["a","b"], "cols": {"a": [1,2,3], "b": ["x","y","z"]}}
+//  تخزين عمودي: الإحصاءات والتحويلات على الأعمدة سريعة وبسيطة.
+//  القيمة المفقودة = nil.  كل الدوال "غير مدمِّرة": تعيد إطاراً جديداً.
+//
+//  الإنشاء:     df_from_records · df_from_rows · df_from_map · df_parse_csv · df_read_csv
+//  الإخراج:     df_to_records · df_to_rows · df_to_csv · df_write_csv · df_format · df_print
+//  الاستكشاف:   df_shape · df_names · df_col · df_head · df_tail · df_describe · df_value_counts
+//  التحويل:     df_select · df_drop · df_rename · df_filter · df_where · df_with_col · df_map_col · df_sort
+//  التجميع:     df_groupby · df_groupby_multi · df_join
+//  القيم المفقودة: df_isna · df_dropna · df_fillna · df_fill_mean
+//  تحضير ML:    df_to_matrix · df_standardize · df_minmax · df_one_hot · df_encode_labels · df_corr
+//
+//  استيراد:  @import "lib/rindf.og.rin";
+//
+//  ملاحظة: كلمات مثل row / text / state / style كلمات سياقية في Rin — لا تبدأ عبارة بها
+//  كاسم متغيّر (استعملنا rec / rw / txt بدلاً منها).
+// ============================================================================
+
+// ---------------------------------------------------------------------------
+//  أدوات داخلية
+// ---------------------------------------------------------------------------
+fun df_is_missing_token(s) {
+    if (s == "" or s == "NA" or s == "N/A" or s == "null" or s == "NULL" or s == "NaN" or s == "nan" or s == "None") { return true; }
+    return false;
+}
+
+fun df_is_numeric_text(s) {
+    return regexTest(trim(s), "^-?[0-9]+([.][0-9]+)?$");
+}
+
+fun df_infer(s) {
+    if (df_is_missing_token(trim(s))) { return nil; }
+    if (df_is_numeric_text(s)) { return toNumber(trim(s)); }
+    return s;
+}
+
+fun df_rnd(x, d) {
+    let p = pow(10, d);
+    return round(x * p) / p;
+}
+
+fun df_rows_count(df) {
+    if (len(df["names"]) == 0) { return 0; }
+    return len(df["cols"][df["names"][0]]);
+}
+
+fun df_isnum(v) { return type(v) == "number"; }
+
+fun df_numeric_values(arr) {
+    let o = [];
+    let i = 0;
+    while (i < len(arr)) { if (df_isnum(arr[i])) { push(o, arr[i]); } i = i + 1; }
+    return o;
+}
+
+// ---------------------------------------------------------------------------
+//  الإنشاء
+// ---------------------------------------------------------------------------
+fun df_new(names) {
+    let cols = {};
+    let i = 0;
+    while (i < len(names)) { cols[names[i]] = []; i = i + 1; }
+    return {"names": deepCopy(names), "cols": cols};
+}
+
+// {name: array, ...} — الترتيب = ترتيب المفاتيح
+fun df_from_map(m) {
+    let names = keys(m);
+    let cols = {};
+    let i = 0;
+    while (i < len(names)) { cols[names[i]] = deepCopy(m[names[i]]); i = i + 1; }
+    return {"names": names, "cols": cols};
+}
+
+// header = أسماء الأعمدة ؛ rows = مصفوفة صفوف
+fun df_from_rows(header, rows) {
+    let df = df_new(header);
+    let r = 0;
+    while (r < len(rows)) {
+        let j = 0;
+        while (j < len(header)) {
+            let v = nil;
+            if (j < len(rows[r])) { v = rows[r][j]; }
+            push(df["cols"][header[j]], v);
+            j = j + 1;
+        }
+        r = r + 1;
+    }
+    return df;
+}
+
+// مصفوفة قواميس — الأعمدة = اتحاد المفاتيح بترتيب الظهور
+fun df_from_records(recs) {
+    let names = [];
+    let seen = {};
+    let i = 0;
+    while (i < len(recs)) {
+        let ks = keys(recs[i]);
+        let k = 0;
+        while (k < len(ks)) {
+            if (!has(seen, ks[k])) { seen[ks[k]] = true; push(names, ks[k]); }
+            k = k + 1;
+        }
+        i = i + 1;
+    }
+    let df = df_new(names);
+    i = 0;
+    while (i < len(recs)) {
+        let j = 0;
+        while (j < len(names)) {
+            let v = nil;
+            if (has(recs[i], names[j])) { v = recs[i][names[j]]; }
+            push(df["cols"][names[j]], v);
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return df;
+}
+
+// محلّل CSV حقيقي: يدعم الاقتباس "..." والفواصل/الأسطر داخل الحقول و "" للهروب.
+// يعيد مصفوفة صفوف من النصوص الخام.
+fun df_csv_rows(txt, delim) {
+    let chars = utf8ToArray(txt);
+    let rows = [];
+    let cur = [];
+    let field = "";
+    let inq = false;
+    let i = 0;
+    let n = len(chars);
+    while (i < n) {
+        let ch = chars[i];
+        if (inq) {
+            if (ch == "\"") {
+                if (i + 1 < n and chars[i + 1] == "\"") { field = field + "\""; i = i + 1; }
+                else { inq = false; }
+            } else { field = field + ch; }
+        } else {
+            if (ch == "\"") { inq = true; }
+            else {
+                if (ch == delim) { push(cur, field); field = ""; }
+                else {
+                    if (ch == "\n") {
+                        push(cur, field); field = "";
+                        push(rows, cur); cur = [];
+                    } else {
+                        if (ch != "\r") { field = field + ch; }
+                    }
+                }
+            }
+        }
+        i = i + 1;
+    }
+    if (field != "" or len(cur) > 0) { push(cur, field); push(rows, cur); }
+    return rows;
+}
+
+// أول صف = الرأس. الأنواع تُستنتَج (رقم / نص / nil للمفقود).
+fun df_parse_csv(txt, delim) {
+    let rows = df_csv_rows(txt, delim);
+    if (len(rows) == 0) { return df_new([]); }
+    let header = [];
+    let j = 0;
+    while (j < len(rows[0])) { push(header, trim(rows[0][j])); j = j + 1; }
+    let df = df_new(header);
+    let r = 1;
+    while (r < len(rows)) {
+        if (!(len(rows[r]) == 1 and trim(rows[r][0]) == "")) {
+            j = 0;
+            while (j < len(header)) {
+                let v = nil;
+                if (j < len(rows[r])) { v = df_infer(rows[r][j]); }
+                push(df["cols"][header[j]], v);
+                j = j + 1;
+            }
+        }
+        r = r + 1;
+    }
+    return df;
+}
+
+fun df_read_csv(path) { return df_parse_csv(readFile(path), ","); }
+
+// ---------------------------------------------------------------------------
+//  الإخراج
+// ---------------------------------------------------------------------------
+fun df_record(df, i) {
+    let rec = {};
+    let j = 0;
+    while (j < len(df["names"])) { rec[df["names"][j]] = df["cols"][df["names"][j]][i]; j = j + 1; }
+    return rec;
+}
+
+fun df_to_records(df) {
+    let o = [];
+    let n = df_rows_count(df);
+    let i = 0;
+    while (i < n) { push(o, df_record(df, i)); i = i + 1; }
+    return o;
+}
+
+// صفوف القيم فقط (بلا رأس)
+fun df_to_rows(df) {
+    let o = [];
+    let n = df_rows_count(df);
+    let i = 0;
+    while (i < n) {
+        let rw = [];
+        let j = 0;
+        while (j < len(df["names"])) { push(rw, df["cols"][df["names"][j]][i]); j = j + 1; }
+        push(o, rw);
+        i = i + 1;
+    }
+    return o;
+}
+
+fun df_csv_escape(v) {
+    if (v == nil) { return ""; }
+    let s = str(v);
+    if (contains(s, ",") or contains(s, "\"") or contains(s, "\n")) {
+        return "\"" + replace(s, "\"", "\"\"") + "\"";
+    }
+    return s;
+}
+
+fun df_to_csv(df) {
+    let lines = [];
+    let hd = [];
+    let j = 0;
+    while (j < len(df["names"])) { push(hd, df_csv_escape(df["names"][j])); j = j + 1; }
+    push(lines, join(hd, ","));
+    let rows = df_to_rows(df);
+    let i = 0;
+    while (i < len(rows)) {
+        let cells = [];
+        j = 0;
+        while (j < len(rows[i])) { push(cells, df_csv_escape(rows[i][j])); j = j + 1; }
+        push(lines, join(cells, ","));
+        i = i + 1;
+    }
+    return join(lines, "\n") + "\n";
+}
+
+fun df_write_csv(df, path) {
+    writeFile(path, df_to_csv(df));
+    return path;
+}
+
+// جدول نصّي منسَّق (أول maxRows صفّ)
+fun df_format(df, maxRows) {
+    let names = df["names"];
+    let n = df_rows_count(df);
+    let shown = n;
+    if (shown > maxRows) { shown = maxRows; }
+    let cells = [];
+    let hd = [];
+    let j = 0;
+    while (j < len(names)) { push(hd, names[j]); j = j + 1; }
+    push(cells, hd);
+    let i = 0;
+    while (i < shown) {
+        let rw = [];
+        j = 0;
+        while (j < len(names)) {
+            let v = df["cols"][names[j]][i];
+            if (v == nil) { push(rw, "nil"); }
+            else { if (df_isnum(v)) { push(rw, str(df_rnd(v, 4))); } else { push(rw, str(v)); } }
+            j = j + 1;
+        }
+        push(cells, rw);
+        i = i + 1;
+    }
+    let widths = [];
+    j = 0;
+    while (j < len(names)) {
+        let w = 0;
+        i = 0;
+        while (i < len(cells)) { let l = utf8Len(cells[i][j]); if (l > w) { w = l; } i = i + 1; }
+        push(widths, w);
+        j = j + 1;
+    }
+    let lines = [];
+    i = 0;
+    while (i < len(cells)) {
+        let parts = [];
+        j = 0;
+        while (j < len(names)) {
+            let c = cells[i][j];
+            let pad = widths[j] - utf8Len(c);
+            push(parts, c + repeat(" ", pad));
+            j = j + 1;
+        }
+        push(lines, join(parts, " | "));
+        if (i == 0) {
+            let seps = [];
+            j = 0;
+            while (j < len(names)) { push(seps, repeat("-", widths[j])); j = j + 1; }
+            push(lines, join(seps, "-+-"));
+        }
+        i = i + 1;
+    }
+    if (n > shown) { push(lines, "... (" + str(n - shown) + " more rows)"); }
+    push(lines, "[" + str(n) + " rows x " + str(len(names)) + " columns]");
+    return join(lines, "\n");
+}
+
+fun df_print(df) { print df_format(df, 20); return df; }
+
+// ---------------------------------------------------------------------------
+//  الاستكشاف
+// ---------------------------------------------------------------------------
+fun df_shape(df) { return [df_rows_count(df), len(df["names"])]; }
+fun df_names(df) { return deepCopy(df["names"]); }
+fun df_has(df, name) { return has(df["cols"], name); }
+
+fun df_col(df, name) {
+    if (!has(df["cols"], name)) { fail("df_col: العمود غير موجود: " + str(name)); }
+    return df["cols"][name];
+}
+
+fun df_take(df, idx) {
+    let out = df_new(df["names"]);
+    let j = 0;
+    while (j < len(df["names"])) {
+        let nm = df["names"][j];
+        let i = 0;
+        while (i < len(idx)) { push(out["cols"][nm], df["cols"][nm][idx[i]]); i = i + 1; }
+        j = j + 1;
+    }
+    return out;
+}
+
+fun df_slice(df, a, b) {
+    let n = df_rows_count(df);
+    if (b > n) { b = n; }
+    let idx = [];
+    let i = a;
+    while (i < b) { push(idx, i); i = i + 1; }
+    return df_take(df, idx);
+}
+
+fun df_head(df, n) { return df_slice(df, 0, n); }
+fun df_tail(df, n) {
+    let total = df_rows_count(df);
+    let a = total - n;
+    if (a < 0) { a = 0; }
+    return df_slice(df, a, total);
+}
+
+// ---------------------------------------------------------------------------
+//  إحصاءات
+// ---------------------------------------------------------------------------
+fun df_sorted_nums(arr) { return sort(df_numeric_values(arr)); }
+
+// تقسيم خطي (مثل numpy.percentile) — q بين 0 و 1
+fun df_quantile(arr, q) {
+    let s = df_sorted_nums(arr);
+    let n = len(s);
+    if (n == 0) { return nil; }
+    if (n == 1) { return s[0]; }
+    let pos = q * (n - 1);
+    let lo = floor(pos);
+    let hi = ceil(pos);
+    return s[lo] + (s[hi] - s[lo]) * (pos - lo);
+}
+
+fun df_agg(arr, how) {
+    let nums = df_numeric_values(arr);
+    if (how == "count") { let c = 0; let i = 0; while (i < len(arr)) { if (arr[i] != nil) { c = c + 1; } i = i + 1; } return c; }
+    if (how == "first") { if (len(arr) == 0) { return nil; } return arr[0]; }
+    if (how == "last") { if (len(arr) == 0) { return nil; } return arr[len(arr) - 1]; }
+    if (len(nums) == 0) { return nil; }
+    let s = 0;
+    let i2 = 0;
+    while (i2 < len(nums)) { s = s + nums[i2]; i2 = i2 + 1; }
+    if (how == "sum") { return s; }
+    let mean = s / len(nums);
+    if (how == "mean") { return mean; }
+    if (how == "median") { return df_quantile(nums, 0.5); }
+    if (how == "min") { return df_quantile(nums, 0); }
+    if (how == "max") { return df_quantile(nums, 1); }
+    if (how == "var" or how == "std") {
+        let v = 0;
+        i2 = 0;
+        while (i2 < len(nums)) { let d = nums[i2] - mean; v = v + d * d; i2 = i2 + 1; }
+        v = v / len(nums);
+        if (how == "var") { return v; }
+        return sqrt(v);
+    }
+    fail("df_agg: دالة تجميع غير معروفة: " + str(how));
+}
+
+fun df_is_numeric_col(arr) {
+    let seenNum = false;
+    let i = 0;
+    while (i < len(arr)) {
+        if (arr[i] != nil) {
+            if (!df_isnum(arr[i])) { return false; }
+            seenNum = true;
+        }
+        i = i + 1;
+    }
+    return seenNum;
+}
+
+// ملخّص الأعمدة الرقمية: إطار بيانات صفوفه = الأعمدة
+fun df_describe(df) {
+    let out = df_new(["column", "count", "mean", "std", "min", "q25", "median", "q75", "max"]);
+    let j = 0;
+    while (j < len(df["names"])) {
+        let nm = df["names"][j];
+        let c = df["cols"][nm];
+        if (df_is_numeric_col(c)) {
+            push(out["cols"]["column"], nm);
+            push(out["cols"]["count"], df_agg(c, "count"));
+            push(out["cols"]["mean"], df_agg(c, "mean"));
+            push(out["cols"]["std"], df_agg(c, "std"));
+            push(out["cols"]["min"], df_agg(c, "min"));
+            push(out["cols"]["q25"], df_quantile(c, 0.25));
+            push(out["cols"]["median"], df_agg(c, "median"));
+            push(out["cols"]["q75"], df_quantile(c, 0.75));
+            push(out["cols"]["max"], df_agg(c, "max"));
+        }
+        j = j + 1;
+    }
+    return out;
+}
+
+// ---------------------------------------------------------------------------
+//  الفرز (ترتيب مستقر بدمج الفهارس — يدعم الأرقام والنصوص، و nil في النهاية)
+// ---------------------------------------------------------------------------
+fun df_merge_idx(a, b, ks, desc) {
+    let o = [];
+    let i = 0;
+    let j = 0;
+    while (i < len(a) and j < len(b)) {
+        let ka = ks[a[i]];
+        let kb = ks[b[j]];
+        let takeA = true;
+        if (desc) { if (kb > ka) { takeA = false; } }
+        else { if (kb < ka) { takeA = false; } }
+        if (takeA) { push(o, a[i]); i = i + 1; } else { push(o, b[j]); j = j + 1; }
+    }
+    while (i < len(a)) { push(o, a[i]); i = i + 1; }
+    while (j < len(b)) { push(o, b[j]); j = j + 1; }
+    return o;
+}
+
+fun df_msort_idx(idx, ks, desc) {
+    if (len(idx) <= 1) { return idx; }
+    let mid = floor(len(idx) / 2);
+    return df_merge_idx(df_msort_idx(slice(idx, 0, mid), ks, desc), df_msort_idx(slice(idx, mid, len(idx)), ks, desc), ks, desc);
+}
+
+// يحوّل قيم العمود إلى مفاتيح رقمية قابلة للمقارنة (النصوص → رتبة أبجدية، nil → أكبر/أصغر قيمة)
+fun df_sort_keys(arr, desc) {
+    let allNum = true;
+    let i = 0;
+    while (i < len(arr)) { if (arr[i] != nil and !df_isnum(arr[i])) { allNum = false; } i = i + 1; }
+    let ks = [];
+    let big = 1000000000000000;
+    let tail = big;
+    if (desc) { tail = 0 - big; }
+    if (allNum) {
+        i = 0;
+        while (i < len(arr)) { if (arr[i] == nil) { push(ks, tail); } else { push(ks, arr[i]); } i = i + 1; }
+        return ks;
+    }
+    let strs = [];
+    i = 0;
+    while (i < len(arr)) { if (arr[i] != nil) { push(strs, str(arr[i])); } i = i + 1; }
+    let uniq = {};
+    let ul = [];
+    i = 0;
+    while (i < len(strs)) { if (!has(uniq, strs[i])) { uniq[strs[i]] = true; push(ul, strs[i]); } i = i + 1; }
+    let sorted = sort(ul);
+    let rank = {};
+    i = 0;
+    while (i < len(sorted)) { rank[sorted[i]] = i; i = i + 1; }
+    i = 0;
+    while (i < len(arr)) { if (arr[i] == nil) { push(ks, tail); } else { push(ks, rank[str(arr[i])]); } i = i + 1; }
+    return ks;
+}
+
+fun df_sort(df, name, desc) {
+    let c = df_col(df, name);
+    let ks = df_sort_keys(c, desc);
+    let idx = [];
+    let i = 0;
+    while (i < len(c)) { push(idx, i); i = i + 1; }
+    return df_take(df, df_msort_idx(idx, ks, desc));
+}
+
+// ---------------------------------------------------------------------------
+//  التحويل
+// ---------------------------------------------------------------------------
+fun df_select(df, names) {
+    let out = df_new(names);
+    let j = 0;
+    while (j < len(names)) { out["cols"][names[j]] = deepCopy(df_col(df, names[j])); j = j + 1; }
+    return out;
+}
+
+fun df_drop(df, names) {
+    let keep = [];
+    let j = 0;
+    while (j < len(df["names"])) {
+        let drop = false;
+        let k = 0;
+        while (k < len(names)) { if (names[k] == df["names"][j]) { drop = true; } k = k + 1; }
+        if (!drop) { push(keep, df["names"][j]); }
+        j = j + 1;
+    }
+    return df_select(df, keep);
+}
+
+fun df_rename(df, oldName, newName) {
+    let out = {"names": [], "cols": {}};
+    let j = 0;
+    while (j < len(df["names"])) {
+        let nm = df["names"][j];
+        let tgt = nm;
+        if (nm == oldName) { tgt = newName; }
+        push(out["names"], tgt);
+        out["cols"][tgt] = deepCopy(df["cols"][nm]);
+        j = j + 1;
+    }
+    return out;
+}
+
+// fn(record) -> bool
+fun df_filter(df, fn) {
+    let idx = [];
+    let n = df_rows_count(df);
+    let i = 0;
+    while (i < n) { if (fn(df_record(df, i))) { push(idx, i); } i = i + 1; }
+    return df_take(df, idx);
+}
+
+// df_where(df, "age", ">=", 18) — العوامل: == != > >= < <=   (المقارنة غير الرقمية: == و != فقط)
+fun df_where(df, name, op, value) {
+    let c = df_col(df, name);
+    let idx = [];
+    let i = 0;
+    while (i < len(c)) {
+        let v = c[i];
+        let ok = false;
+        if (op == "==") { ok = (v == value); }
+        else { if (op == "!=") { ok = (v != value); }
+        else { if (v != nil and df_isnum(v) and df_isnum(value)) {
+            if (op == ">") { ok = (v > value); }
+            if (op == ">=") { ok = (v >= value); }
+            if (op == "<") { ok = (v < value); }
+            if (op == "<=") { ok = (v <= value); }
+        } } }
+        if (ok) { push(idx, i); }
+        i = i + 1;
+    }
+    return df_take(df, idx);
+}
+
+// يضيف/يستبدل عموداً: values مصفوفة بطول الصفوف، أو دالة fn(record)
+fun df_with_col(df, name, values) {
+    let out = {"names": deepCopy(df["names"]), "cols": deepCopy(df["cols"])};
+    let n = df_rows_count(df);
+    let vals = [];
+    if (isFunction(values)) {
+        let i = 0;
+        while (i < n) { push(vals, values(df_record(df, i))); i = i + 1; }
+    } else { vals = deepCopy(values); }
+    if (!has(out["cols"], name)) { push(out["names"], name); }
+    out["cols"][name] = vals;
+    return out;
+}
+
+fun df_map_col(df, name, fn) {
+    let c = df_col(df, name);
+    let vals = [];
+    let i = 0;
+    while (i < len(c)) { push(vals, fn(c[i])); i = i + 1; }
+    return df_with_col(df, name, vals);
+}
+
+fun df_unique(df, name) {
+    let c = df_col(df, name);
+    let seen = {};
+    let o = [];
+    let i = 0;
+    while (i < len(c)) {
+        let k = str(c[i]);
+        if (!has(seen, k)) { seen[k] = true; push(o, c[i]); }
+        i = i + 1;
+    }
+    return o;
+}
+
+// إطار [value, count] مرتَّب تنازلياً
+fun df_value_counts(df, name) {
+    let c = df_col(df, name);
+    let counts = {};
+    let order = [];
+    let i = 0;
+    while (i < len(c)) {
+        let k = str(c[i]);
+        if (!has(counts, k)) { counts[k] = 0; push(order, c[i]); }
+        counts[k] = counts[k] + 1;
+        i = i + 1;
+    }
+    let out = df_new(["value", "count"]);
+    i = 0;
+    while (i < len(order)) { push(out["cols"]["value"], order[i]); push(out["cols"]["count"], counts[str(order[i])]); i = i + 1; }
+    return df_sort(out, "count", true);
+}
+
+// ---------------------------------------------------------------------------
+//  التجميع والربط
+// ---------------------------------------------------------------------------
+fun df_group_index(df, keyCol) {
+    let kc = df_col(df, keyCol);
+    let groups = {};
+    let order = [];
+    let i = 0;
+    while (i < len(kc)) {
+        let k = str(kc[i]);
+        if (!has(groups, k)) { groups[k] = {"key": kc[i], "idx": []}; push(order, k); }
+        push(groups[k]["idx"], i);
+        i = i + 1;
+    }
+    return {"groups": groups, "order": order};
+}
+
+// df_groupby(df, "city", "price", "mean") → [city, price_mean]
+fun df_groupby(df, keyCol, valueCol, how) {
+    let g = df_group_index(df, keyCol);
+    let vc = df_col(df, valueCol);
+    let out = df_new([keyCol, valueCol + "_" + how]);
+    let i = 0;
+    while (i < len(g["order"])) {
+        let grp = g["groups"][g["order"][i]];
+        let vals = df_pick(vc, grp["idx"]);
+        push(out["cols"][keyCol], grp["key"]);
+        push(out["cols"][valueCol + "_" + how], df_agg(vals, how));
+        i = i + 1;
+    }
+    return out;
+}
+
+fun df_pick(a, idx) {
+    let o = [];
+    let i = 0;
+    while (i < len(idx)) { push(o, a[idx[i]]); i = i + 1; }
+    return o;
+}
+
+// df_groupby_multi(df, "city", {"price": "mean", "qty": "sum"})
+fun df_groupby_multi(df, keyCol, spec) {
+    let g = df_group_index(df, keyCol);
+    let cols = keys(spec);
+    let names = [keyCol];
+    let j = 0;
+    while (j < len(cols)) { push(names, cols[j] + "_" + spec[cols[j]]); j = j + 1; }
+    let out = df_new(names);
+    let i = 0;
+    while (i < len(g["order"])) {
+        let grp = g["groups"][g["order"][i]];
+        push(out["cols"][keyCol], grp["key"]);
+        j = 0;
+        while (j < len(cols)) {
+            let vals = df_pick(df_col(df, cols[j]), grp["idx"]);
+            push(out["cols"][cols[j] + "_" + spec[cols[j]]], df_agg(vals, spec[cols[j]]));
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+// ربط على عمود مفتاح مشترك: how = "inner" | "left"
+fun df_join(a, b, key, how) {
+    let bIndex = {};
+    let bk = df_col(b, key);
+    let i = 0;
+    while (i < len(bk)) {
+        let k = str(bk[i]);
+        if (!has(bIndex, k)) { bIndex[k] = []; }
+        push(bIndex[k], i);
+        i = i + 1;
+    }
+    let bExtra = [];
+    let j = 0;
+    while (j < len(b["names"])) { if (b["names"][j] != key) { push(bExtra, b["names"][j]); } j = j + 1; }
+    let names = deepCopy(a["names"]);
+    j = 0;
+    while (j < len(bExtra)) {
+        let nm = bExtra[j];
+        if (has(a["cols"], nm)) { nm = nm + "_right"; }
+        push(names, nm);
+        j = j + 1;
+    }
+    let out = df_new(names);
+    let ak = df_col(a, key);
+    i = 0;
+    while (i < len(ak)) {
+        let matches = [];
+        if (has(bIndex, str(ak[i]))) { matches = bIndex[str(ak[i])]; }
+        let reps = len(matches);
+        if (reps == 0 and how == "left") { reps = 1; }
+        let m = 0;
+        while (m < reps) {
+            j = 0;
+            while (j < len(a["names"])) { push(out["cols"][a["names"][j]], a["cols"][a["names"][j]][i]); j = j + 1; }
+            j = 0;
+            while (j < len(bExtra)) {
+                let oname = names[len(a["names"]) + j];
+                if (len(matches) > 0) { push(out["cols"][oname], b["cols"][bExtra[j]][matches[m]]); }
+                else { push(out["cols"][oname], nil); }
+                j = j + 1;
+            }
+            m = m + 1;
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+// ---------------------------------------------------------------------------
+//  القيم المفقودة
+// ---------------------------------------------------------------------------
+fun df_isna(df) {
+    let o = {};
+    let j = 0;
+    while (j < len(df["names"])) {
+        let c = df["cols"][df["names"][j]];
+        let k = 0;
+        let i = 0;
+        while (i < len(c)) { if (c[i] == nil) { k = k + 1; } i = i + 1; }
+        o[df["names"][j]] = k;
+        j = j + 1;
+    }
+    return o;
+}
+
+fun df_dropna(df) {
+    let idx = [];
+    let n = df_rows_count(df);
+    let i = 0;
+    while (i < n) {
+        let ok = true;
+        let j = 0;
+        while (j < len(df["names"])) { if (df["cols"][df["names"][j]][i] == nil) { ok = false; } j = j + 1; }
+        if (ok) { push(idx, i); }
+        i = i + 1;
+    }
+    return df_take(df, idx);
+}
+
+fun df_fillna(df, name, value) {
+    let c = df_col(df, name);
+    let vals = [];
+    let i = 0;
+    while (i < len(c)) { if (c[i] == nil) { push(vals, value); } else { push(vals, c[i]); } i = i + 1; }
+    return df_with_col(df, name, vals);
+}
+
+fun df_fill_mean(df, name) { return df_fillna(df, name, df_agg(df_col(df, name), "mean")); }
+
+// ---------------------------------------------------------------------------
+//  تحضير للتعلّم الآلي
+// ---------------------------------------------------------------------------
+// مصفوفة صفوف من الأعمدة المختارة (جاهزة لـ rinml). تفشل إن وُجدت قيمة غير رقمية.
+fun df_to_matrix(df, names) {
+    let n = df_rows_count(df);
+    let M = [];
+    let i = 0;
+    while (i < n) {
+        let rw = [];
+        let j = 0;
+        while (j < len(names)) {
+            let v = df_col(df, names[j])[i];
+            if (!df_isnum(v)) { fail("df_to_matrix: قيمة غير رقمية/مفقودة في العمود '" + names[j] + "' عند الصف " + str(i)); }
+            push(rw, v);
+            j = j + 1;
+        }
+        push(M, rw);
+        i = i + 1;
+    }
+    return M;
+}
+
+fun df_standardize(df, names) {
+    let out = df;
+    let j = 0;
+    while (j < len(names)) {
+        let c = df_numeric_values(df_col(df, names[j]));
+        let m = df_agg(c, "mean");
+        let s = df_agg(c, "std");
+        if (s == nil or s == 0) { s = 1; }
+        let src = df_col(df, names[j]);
+        let vals = [];
+        let i = 0;
+        while (i < len(src)) { if (src[i] == nil) { push(vals, nil); } else { push(vals, (src[i] - m) / s); } i = i + 1; }
+        out = df_with_col(out, names[j], vals);
+        j = j + 1;
+    }
+    return out;
+}
+
+fun df_minmax(df, names) {
+    let out = df;
+    let j = 0;
+    while (j < len(names)) {
+        let src = df_col(df, names[j]);
+        let lo = df_agg(src, "min");
+        let hi = df_agg(src, "max");
+        let span = hi - lo;
+        if (span == 0) { span = 1; }
+        let vals = [];
+        let i = 0;
+        while (i < len(src)) { if (src[i] == nil) { push(vals, nil); } else { push(vals, (src[i] - lo) / span); } i = i + 1; }
+        out = df_with_col(out, names[j], vals);
+        j = j + 1;
+    }
+    return out;
+}
+
+// يستبدل عمود فئات بأعمدة 0/1 باسم  col_value
+fun df_one_hot(df, name) {
+    let cats = df_unique(df, name);
+    let src = df_col(df, name);
+    let out = df_drop(df, [name]);
+    let k = 0;
+    while (k < len(cats)) {
+        let vals = [];
+        let i = 0;
+        while (i < len(src)) { if (src[i] == cats[k]) { push(vals, 1); } else { push(vals, 0); } i = i + 1; }
+        out = df_with_col(out, name + "_" + str(cats[k]), vals);
+        k = k + 1;
+    }
+    return out;
+}
+
+// يحوّل فئات العمود إلى أرقام 0..k-1 — يعيد {"df": ..., "classes": [...]}
+fun df_encode_labels(df, name) {
+    let cats = df_unique(df, name);
+    let src = df_col(df, name);
+    let vals = [];
+    let i = 0;
+    while (i < len(src)) {
+        let k = 0;
+        while (k < len(cats)) { if (cats[k] == src[i]) { push(vals, k); } k = k + 1; }
+        i = i + 1;
+    }
+    return {"df": df_with_col(df, name, vals), "classes": cats};
+}
+
+// ارتباط بيرسون بين عمودين رقميين
+fun df_corr(df, a, b) {
+    let x = df_col(df, a);
+    let y = df_col(df, b);
+    let n = 0;
+    let sx = 0; let sy = 0;
+    let i = 0;
+    while (i < len(x)) {
+        if (df_isnum(x[i]) and df_isnum(y[i])) { sx = sx + x[i]; sy = sy + y[i]; n = n + 1; }
+        i = i + 1;
+    }
+    if (n == 0) { return nil; }
+    let mx = sx / n; let my = sy / n;
+    let sxy = 0; let sxx = 0; let syy = 0;
+    i = 0;
+    while (i < len(x)) {
+        if (df_isnum(x[i]) and df_isnum(y[i])) {
+            let dx = x[i] - mx; let dy = y[i] - my;
+            sxy = sxy + dx * dy; sxx = sxx + dx * dx; syy = syy + dy * dy;
+        }
+        i = i + 1;
+    }
+    if (sxx == 0 or syy == 0) { return 0; }
+    return sxy / sqrt(sxx * syy);
+}
+
+// مصفوفة ارتباط كإطار بيانات (عمود "column" + عمود لكل اسم)
+fun df_corr_matrix(df, names) {
+    let hd = concat(["column"], names);
+    let out = df_new(hd);
+    let i = 0;
+    while (i < len(names)) {
+        push(out["cols"]["column"], names[i]);
+        let j = 0;
+        while (j < len(names)) { push(out["cols"][names[j]], df_corr(df, names[i], names[j])); j = j + 1; }
+        i = i + 1;
+    }
+    return out;
+}
+)RINDFOGRIN";
+static const char* kLib_rinml_og_rin = R"RINMLOGRIN(
+// ============================================================================
+//  lib/rinml.og.rin — RinML: تعلّم آلة وذكاء اصطناعي خالص بلغة Rin
+//
+//  @version 1.0.0
+//  @category ai
+//  @prefix nd_ / ml_
+//
+//  المحتوى:
+//    nd_*  جبر خطي ودوال عددية آمنة (dot, solve, softmax, ...)
+//    ml_*  تحضير بيانات (split / scalers / one-hot / k-fold)
+//          نماذج: انحدار خطي/ريدج، لوجستي، kNN، k-means، Naive Bayes، شجرة قرار،
+//                 شبكة عصبية متعددة الطبقات (MLP) بالانتشار العكسي، مصنّف نصوص (Naive Bayes)
+//          مقاييس: accuracy / confusion / precision / recall / f1 / mse / rmse / mae / r2
+//          حفظ/تحميل: ml_save / ml_load (JSON)
+//
+//  كل النماذج قواميس بحقل "type" (قابلة للتحويل إلى JSON وللتخزين داخل @container).
+//  استيراد:  @import "lib/rinml.og.rin";
+//
+//  قيود المفسِّر التي صُمِّمت حولها: لا وسائط اختيارية (عدد الوسائط ثابت)، و`<` للأرقام فقط،
+//  و`round` بوسيط واحد، و`ln(0)` يرمي خطأ — لذلك نستعمل nd_round / nd_ln الآمنتين.
+// ============================================================================
+
+// ---------------------------------------------------------------------------
+//  nd_: دوال عددية ومتجهات ومصفوفات
+// ---------------------------------------------------------------------------
+fun nd_pi() { return 3.141592653589793; }
+
+fun nd_clip(x, lo, hi) {
+    if (x < lo) { return lo; }
+    if (x > hi) { return hi; }
+    return x;
+}
+
+fun nd_round(x, d) {
+    let p = pow(10, d);
+    return round(x * p) / p;
+}
+
+// exp/ln آمنتان: لا inf ولا خطأ عند الصفر.
+fun nd_exp(x) { return exp(nd_clip(x, -60, 60)); }
+fun nd_ln(x) {
+    if (x < 0.000000000001) { return ln(0.000000000001); }
+    return ln(x);
+}
+
+fun nd_sigmoid(x) { return 1 / (1 + nd_exp(0 - x)); }
+fun nd_tanh(x) {
+    let e = nd_exp(2 * x);
+    return (e - 1) / (e + 1);
+}
+fun nd_relu(x) {
+    if (x > 0) { return x; }
+    return 0;
+}
+
+fun nd_zeros(n) {
+    let o = [];
+    let i = 0;
+    while (i < n) { push(o, 0); i = i + 1; }
+    return o;
+}
+
+fun nd_fill(n, v) {
+    let o = [];
+    let i = 0;
+    while (i < n) { push(o, v); i = i + 1; }
+    return o;
+}
+
+fun nd_seq(n) {
+    let o = [];
+    let i = 0;
+    while (i < n) { push(o, i); i = i + 1; }
+    return o;
+}
+
+fun nd_dot(a, b) {
+    let s = 0;
+    let i = 0;
+    let n = len(a);
+    while (i < n) { s = s + a[i] * b[i]; i = i + 1; }
+    return s;
+}
+
+fun nd_vadd(a, b) {
+    let o = [];
+    let i = 0;
+    while (i < len(a)) { push(o, a[i] + b[i]); i = i + 1; }
+    return o;
+}
+
+fun nd_vsub(a, b) {
+    let o = [];
+    let i = 0;
+    while (i < len(a)) { push(o, a[i] - b[i]); i = i + 1; }
+    return o;
+}
+
+fun nd_vscale(a, k) {
+    let o = [];
+    let i = 0;
+    while (i < len(a)) { push(o, a[i] * k); i = i + 1; }
+    return o;
+}
+
+fun nd_norm(a) { return sqrt(nd_dot(a, a)); }
+
+fun nd_dist(a, b) {
+    let s = 0;
+    let i = 0;
+    while (i < len(a)) { let d = a[i] - b[i]; s = s + d * d; i = i + 1; }
+    return sqrt(s);
+}
+
+fun nd_sum(a) {
+    let s = 0;
+    let i = 0;
+    while (i < len(a)) { s = s + a[i]; i = i + 1; }
+    return s;
+}
+
+fun nd_mean(a) {
+    if (len(a) == 0) { return 0; }
+    return nd_sum(a) / len(a);
+}
+
+fun nd_var(a) {
+    if (len(a) == 0) { return 0; }
+    let m = nd_mean(a);
+    let s = 0;
+    let i = 0;
+    while (i < len(a)) { let d = a[i] - m; s = s + d * d; i = i + 1; }
+    return s / len(a);
+}
+
+fun nd_std(a) { return sqrt(nd_var(a)); }
+
+fun nd_minv(a) {
+    let m = a[0];
+    let i = 1;
+    while (i < len(a)) { if (a[i] < m) { m = a[i]; } i = i + 1; }
+    return m;
+}
+
+fun nd_maxv(a) {
+    let m = a[0];
+    let i = 1;
+    while (i < len(a)) { if (a[i] > m) { m = a[i]; } i = i + 1; }
+    return m;
+}
+
+fun nd_argmax(a) {
+    let bi = 0;
+    let i = 1;
+    while (i < len(a)) { if (a[i] > a[bi]) { bi = i; } i = i + 1; }
+    return bi;
+}
+
+fun nd_argmin(a) {
+    let bi = 0;
+    let i = 1;
+    while (i < len(a)) { if (a[i] < a[bi]) { bi = i; } i = i + 1; }
+    return bi;
+}
+
+fun nd_softmax(a) {
+    let m = nd_maxv(a);
+    let e = [];
+    let i = 0;
+    let s = 0;
+    while (i < len(a)) { let v = nd_exp(a[i] - m); push(e, v); s = s + v; i = i + 1; }
+    let o = [];
+    i = 0;
+    while (i < len(e)) { push(o, e[i] / s); i = i + 1; }
+    return o;
+}
+
+// أعمدة/صفوف
+fun nd_col(M, j) {
+    let o = [];
+    let i = 0;
+    while (i < len(M)) { push(o, M[i][j]); i = i + 1; }
+    return o;
+}
+
+fun nd_transpose(M) {
+    if (len(M) == 0) { return []; }
+    let o = [];
+    let j = 0;
+    while (j < len(M[0])) { push(o, nd_col(M, j)); j = j + 1; }
+    return o;
+}
+
+fun nd_matvec(M, v) {
+    let o = [];
+    let i = 0;
+    while (i < len(M)) { push(o, nd_dot(M[i], v)); i = i + 1; }
+    return o;
+}
+
+fun nd_matmul(A, B) {
+    let Bt = nd_transpose(B);
+    let o = [];
+    let i = 0;
+    while (i < len(A)) {
+        let rw = [];
+        let j = 0;
+        while (j < len(Bt)) { push(rw, nd_dot(A[i], Bt[j])); j = j + 1; }
+        push(o, rw);
+        i = i + 1;
+    }
+    return o;
+}
+
+// يحلّ A·x = b بطريقة غاوس-جوردان مع محورية جزئية. يعيد nil إن كانت المصفوفة شاذّة.
+fun nd_solve(A, b) {
+    let n = len(A);
+    let M = [];
+    let i = 0;
+    while (i < n) {
+        let rw = [];
+        let j = 0;
+        while (j < n) { push(rw, A[i][j]); j = j + 1; }
+        push(rw, b[i]);
+        push(M, rw);
+        i = i + 1;
+    }
+    let c = 0;
+    while (c < n) {
+        let p = c;
+        let r = c + 1;
+        while (r < n) { if (abs(M[r][c]) > abs(M[p][c])) { p = r; } r = r + 1; }
+        if (abs(M[p][c]) < 0.000000000001) { return nil; }
+        let tmp = M[c]; M[c] = M[p]; M[p] = tmp;
+        let pv = M[c][c];
+        let k = c;
+        while (k <= n) { M[c][k] = M[c][k] / pv; k = k + 1; }
+        r = 0;
+        while (r < n) {
+            if (r != c) {
+                let f = M[r][c];
+                if (f != 0) {
+                    k = c;
+                    while (k <= n) { M[r][k] = M[r][k] - f * M[c][k]; k = k + 1; }
+                }
+            }
+            r = r + 1;
+        }
+        c = c + 1;
+    }
+    let x = [];
+    i = 0;
+    while (i < n) { push(x, M[i][n]); i = i + 1; }
+    return x;
+}
+
+// قيم فريدة بترتيب الظهور (تعمل مع الأرقام والنصوص).
+fun nd_unique(a) {
+    let seen = {};
+    let o = [];
+    let i = 0;
+    while (i < len(a)) {
+        let k = str(a[i]);
+        if (!has(seen, k)) { seen[k] = true; push(o, a[i]); }
+        i = i + 1;
+    }
+    return o;
+}
+
+fun nd_index_of(a, v) {
+    let i = 0;
+    while (i < len(a)) { if (a[i] == v) { return i; } i = i + 1; }
+    return -1;
+}
+
+// خلط Fisher–Yates (يستخدم seed(n) العام للتكرارية).
+fun nd_shuffle(a) {
+    let o = [];
+    let i = 0;
+    while (i < len(a)) { push(o, a[i]); i = i + 1; }
+    i = len(o) - 1;
+    while (i > 0) {
+        let j = floor(random() * (i + 1));
+        let t = o[i]; o[i] = o[j]; o[j] = t;
+        i = i - 1;
+    }
+    return o;
+}
+
+fun nd_take(a, idx) {
+    let o = [];
+    let i = 0;
+    while (i < len(idx)) { push(o, a[idx[i]]); i = i + 1; }
+    return o;
+}
+
+// ---------------------------------------------------------------------------
+//  تحضير البيانات
+// ---------------------------------------------------------------------------
+// يعيد {Xtr, ytr, Xte, yte}. testRatio مثل 0.2 ؛ sd بذرة التكرارية.
+fun ml_train_test_split(X, y, testRatio, sd) {
+    seed(sd);
+    let idx = nd_shuffle(nd_seq(len(X)));
+    let nTest = floor(len(X) * testRatio);
+    if (nTest < 1) { nTest = 1; }
+    let teIdx = slice(idx, 0, nTest);
+    let trIdx = slice(idx, nTest, len(X));
+    return {
+        "Xtr": nd_take(X, trIdx), "ytr": nd_take(y, trIdx),
+        "Xte": nd_take(X, teIdx), "yte": nd_take(y, teIdx)
+    };
+}
+
+// معايرة قياسية (z-score): يعيد {type, mu, sd}
+fun ml_scaler_fit(X) {
+    let d = len(X[0]);
+    let mu = [];
+    let sd = [];
+    let j = 0;
+    while (j < d) {
+        let c = nd_col(X, j);
+        let s = nd_std(c);
+        if (s < 0.000000000001) { s = 1; }
+        push(mu, nd_mean(c));
+        push(sd, s);
+        j = j + 1;
+    }
+    return {"type": "scaler", "mu": mu, "sd": sd};
+}
+
+fun ml_scaler_row(sc, x) {
+    let o = [];
+    let j = 0;
+    while (j < len(x)) { push(o, (x[j] - sc["mu"][j]) / sc["sd"][j]); j = j + 1; }
+    return o;
+}
+
+fun ml_scaler_transform(sc, X) {
+    let o = [];
+    let i = 0;
+    while (i < len(X)) { push(o, ml_scaler_row(sc, X[i])); i = i + 1; }
+    return o;
+}
+
+// معايرة min-max إلى [0,1]
+fun ml_minmax_fit(X) {
+    let d = len(X[0]);
+    let lo = [];
+    let hi = [];
+    let j = 0;
+    while (j < d) {
+        let c = nd_col(X, j);
+        push(lo, nd_minv(c));
+        let h = nd_maxv(c);
+        if (h - lo[j] < 0.000000000001) { h = lo[j] + 1; }
+        push(hi, h);
+        j = j + 1;
+    }
+    return {"type": "minmax", "lo": lo, "hi": hi};
+}
+
+fun ml_minmax_transform(sc, X) {
+    let o = [];
+    let i = 0;
+    while (i < len(X)) {
+        let rw = [];
+        let j = 0;
+        while (j < len(X[i])) { push(rw, (X[i][j] - sc["lo"][j]) / (sc["hi"][j] - sc["lo"][j])); j = j + 1; }
+        push(o, rw);
+        i = i + 1;
+    }
+    return o;
+}
+
+// ترميز فئات إلى one-hot: يعيد {classes, matrix}
+fun ml_onehot(labels) {
+    let classes = nd_unique(labels);
+    let m = [];
+    let i = 0;
+    while (i < len(labels)) {
+        let rw = nd_zeros(len(classes));
+        rw[nd_index_of(classes, labels[i])] = 1;
+        push(m, rw);
+        i = i + 1;
+    }
+    return {"classes": classes, "matrix": m};
+}
+
+// ---------------------------------------------------------------------------
+//  الانحدار الخطي (حل مغلق + ريدج) و SGD
+// ---------------------------------------------------------------------------
+// lambda = 0 → OLS ؛ lambda > 0 → Ridge (لا يُعاقَب الحدّ الثابت)
+fun ml_linreg_fit(X, y, lambda) {
+    let n = len(X);
+    let d = len(X[0]);
+    let A = [];
+    let r = 0;
+    while (r <= d) { push(A, nd_zeros(d + 1)); r = r + 1; }
+    let b = nd_zeros(d + 1);
+    let i = 0;
+    while (i < n) {
+        let xa = concat([1], X[i]);
+        let p = 0;
+        while (p <= d) {
+            b[p] = b[p] + xa[p] * y[i];
+            let q = 0;
+            while (q <= d) { A[p][q] = A[p][q] + xa[p] * xa[q]; q = q + 1; }
+            p = p + 1;
+        }
+        i = i + 1;
+    }
+    let k = 1;
+    while (k <= d) { A[k][k] = A[k][k] + lambda; k = k + 1; }
+    let w = nd_solve(A, b);
+    if (w == nil) { return nil; }
+    return {"type": "linreg", "b": w[0], "w": slice(w, 1, d + 1)};
+}
+
+// انحدار بالتدرّج (batch GD) — يُنصَح بمعايرة X أولاً.
+fun ml_linreg_sgd(X, y, lr, epochs) {
+    let n = len(X);
+    let d = len(X[0]);
+    let w = nd_zeros(d);
+    let b = 0;
+    let e = 0;
+    while (e < epochs) {
+        let gw = nd_zeros(d);
+        let gb = 0;
+        let i = 0;
+        while (i < n) {
+            let err = nd_dot(w, X[i]) + b - y[i];
+            let j = 0;
+            while (j < d) { gw[j] = gw[j] + err * X[i][j]; j = j + 1; }
+            gb = gb + err;
+            i = i + 1;
+        }
+        let j2 = 0;
+        while (j2 < d) { w[j2] = w[j2] - lr * gw[j2] / n; j2 = j2 + 1; }
+        b = b - lr * gb / n;
+        e = e + 1;
+    }
+    return {"type": "linreg", "b": b, "w": w};
+}
+
+// ---------------------------------------------------------------------------
+//  الانحدار اللوجستي الثنائي (y ∈ {0,1})
+// ---------------------------------------------------------------------------
+fun ml_logreg_fit(X, y, lr, epochs, lambda) {
+    let n = len(X);
+    let d = len(X[0]);
+    let w = nd_zeros(d);
+    let b = 0;
+    let e = 0;
+    while (e < epochs) {
+        let gw = nd_zeros(d);
+        let gb = 0;
+        let i = 0;
+        while (i < n) {
+            let err = nd_sigmoid(nd_dot(w, X[i]) + b) - y[i];
+            let j = 0;
+            while (j < d) { gw[j] = gw[j] + err * X[i][j]; j = j + 1; }
+            gb = gb + err;
+            i = i + 1;
+        }
+        let j2 = 0;
+        while (j2 < d) { w[j2] = w[j2] - lr * (gw[j2] / n + lambda * w[j2]); j2 = j2 + 1; }
+        b = b - lr * gb / n;
+        e = e + 1;
+    }
+    return {"type": "logreg", "b": b, "w": w};
+}
+
+fun ml_logreg_proba(m, x) { return nd_sigmoid(nd_dot(m["w"], x) + m["b"]); }
+
+// ---------------------------------------------------------------------------
+//  k أقرب جيران (تصنيف "class" أو انحدار "reg")
+// ---------------------------------------------------------------------------
+fun ml_knn_fit(X, y, k, mode) {
+    return {"type": "knn", "X": X, "y": y, "k": k, "mode": mode};
+}
+
+fun ml_knn_predict(m, x) {
+    let n = len(m["X"]);
+    let dists = [];
+    let i = 0;
+    while (i < n) { push(dists, nd_dist(m["X"][i], x)); i = i + 1; }
+    let k = m["k"];
+    if (k > n) { k = n; }
+    let used = nd_fill(n, false);
+    let picked = [];
+    let t = 0;
+    while (t < k) {
+        let bi = -1;
+        i = 0;
+        while (i < n) {
+            if (!used[i]) {
+                if (bi == -1) { bi = i; }
+                else { if (dists[i] < dists[bi]) { bi = i; } }
+            }
+            i = i + 1;
+        }
+        used[bi] = true;
+        push(picked, m["y"][bi]);
+        t = t + 1;
+    }
+    if (m["mode"] == "reg") { return nd_mean(picked); }
+    let counts = {};
+    let best = picked[0];
+    let bestC = 0;
+    i = 0;
+    while (i < len(picked)) {
+        let key = str(picked[i]);
+        if (!has(counts, key)) { counts[key] = 0; }
+        counts[key] = counts[key] + 1;
+        if (counts[key] > bestC) { bestC = counts[key]; best = picked[i]; }
+        i = i + 1;
+    }
+    return best;
+}
+
+// ---------------------------------------------------------------------------
+//  k-means (تهيئة k-means++)
+// ---------------------------------------------------------------------------
+fun ml_kmeans_nearest(centroids, x) {
+    let bi = 0;
+    let bd = nd_dist(centroids[0], x);
+    let c = 1;
+    while (c < len(centroids)) {
+        let d = nd_dist(centroids[c], x);
+        if (d < bd) { bd = d; bi = c; }
+        c = c + 1;
+    }
+    return bi;
+}
+
+fun ml_kmeans_fit(X, k, iters, sd) {
+    seed(sd);
+    let n = len(X);
+    let d = len(X[0]);
+    let cent = [];
+    push(cent, deepCopy(X[floor(random() * n)]));
+    while (len(cent) < k) {
+        let w = [];
+        let tot = 0;
+        let i = 0;
+        while (i < n) {
+            let c = ml_kmeans_nearest(cent, X[i]);
+            let dd = nd_dist(cent[c], X[i]);
+            push(w, dd * dd);
+            tot = tot + dd * dd;
+            i = i + 1;
+        }
+        let r = random() * tot;
+        let acc = 0;
+        let pick = n - 1;
+        i = 0;
+        while (i < n) {
+            acc = acc + w[i];
+            if (acc >= r) { pick = i; break; }
+            i = i + 1;
+        }
+        push(cent, deepCopy(X[pick]));
+    }
+    let labels = nd_fill(n, -1);
+    let it = 0;
+    while (it < iters) {
+        let changed = false;
+        let i2 = 0;
+        while (i2 < n) {
+            let c2 = ml_kmeans_nearest(cent, X[i2]);
+            if (c2 != labels[i2]) { labels[i2] = c2; changed = true; }
+            i2 = i2 + 1;
+        }
+        if (!changed) { break; }
+        let sums = [];
+        let cnt = nd_zeros(k);
+        let c3 = 0;
+        while (c3 < k) { push(sums, nd_zeros(d)); c3 = c3 + 1; }
+        i2 = 0;
+        while (i2 < n) {
+            let l = labels[i2];
+            sums[l] = nd_vadd(sums[l], X[i2]);
+            cnt[l] = cnt[l] + 1;
+            i2 = i2 + 1;
+        }
+        c3 = 0;
+        while (c3 < k) {
+            if (cnt[c3] > 0) { cent[c3] = nd_vscale(sums[c3], 1 / cnt[c3]); }
+            c3 = c3 + 1;
+        }
+        it = it + 1;
+    }
+    let inertia = 0;
+    let i3 = 0;
+    while (i3 < n) {
+        let dd2 = nd_dist(cent[labels[i3]], X[i3]);
+        inertia = inertia + dd2 * dd2;
+        i3 = i3 + 1;
+    }
+    return {"type": "kmeans", "k": k, "centroids": cent, "labels": labels, "inertia": inertia};
+}
+
+fun ml_kmeans_predict(m, x) { return ml_kmeans_nearest(m["centroids"], x); }
+
+// ---------------------------------------------------------------------------
+//  Gaussian Naive Bayes
+// ---------------------------------------------------------------------------
+fun ml_nb_fit(X, y) {
+    let classes = nd_unique(y);
+    let d = len(X[0]);
+    let priors = [];
+    let means = [];
+    let vars = [];
+    let c = 0;
+    while (c < len(classes)) {
+        let rows = [];
+        let i = 0;
+        while (i < len(X)) { if (y[i] == classes[c]) { push(rows, X[i]); } i = i + 1; }
+        push(priors, len(rows) / len(X));
+        let mu = [];
+        let vr = [];
+        let j = 0;
+        while (j < d) {
+            let col = nd_col(rows, j);
+            push(mu, nd_mean(col));
+            push(vr, nd_var(col) + 0.000001);
+            j = j + 1;
+        }
+        push(means, mu);
+        push(vars, vr);
+        c = c + 1;
+    }
+    return {"type": "nb", "classes": classes, "priors": priors, "means": means, "vars": vars};
+}
+
+fun ml_nb_scores(m, x) {
+    let out = [];
+    let c = 0;
+    while (c < len(m["classes"])) {
+        let s = nd_ln(m["priors"][c]);
+        let j = 0;
+        while (j < len(x)) {
+            let v = m["vars"][c][j];
+            let dx = x[j] - m["means"][c][j];
+            s = s - 0.5 * nd_ln(2 * nd_pi() * v) - dx * dx / (2 * v);
+            j = j + 1;
+        }
+        push(out, s);
+        c = c + 1;
+    }
+    return out;
+}
+
+fun ml_nb_predict(m, x) { return m["classes"][nd_argmax(ml_nb_scores(m, x))]; }
+
+// ---------------------------------------------------------------------------
+//  شجرة قرار (CART، معيار Gini) للتصنيف
+// ---------------------------------------------------------------------------
+fun ml_gini(labels) {
+    let n = len(labels);
+    if (n == 0) { return 0; }
+    let counts = {};
+    let i = 0;
+    while (i < n) {
+        let k = str(labels[i]);
+        if (!has(counts, k)) { counts[k] = 0; }
+        counts[k] = counts[k] + 1;
+        i = i + 1;
+    }
+    let g = 1;
+    let ks = keys(counts);
+    i = 0;
+    while (i < len(ks)) { let p = counts[ks[i]] / n; g = g - p * p; i = i + 1; }
+    return g;
+}
+
+fun ml_majority(labels) {
+    let counts = {};
+    let best = labels[0];
+    let bestC = 0;
+    let i = 0;
+    while (i < len(labels)) {
+        let k = str(labels[i]);
+        if (!has(counts, k)) { counts[k] = 0; }
+        counts[k] = counts[k] + 1;
+        if (counts[k] > bestC) { bestC = counts[k]; best = labels[i]; }
+        i = i + 1;
+    }
+    return best;
+}
+
+fun ml_tree_build(X, y, depth, maxDepth, minSamples) {
+    let n = len(y);
+    let g = ml_gini(y);
+    if (g == 0 or depth >= maxDepth or n < minSamples) {
+        return {"leaf": true, "label": ml_majority(y), "n": n};
+    }
+    let bestGain = 0;
+    let bestF = -1;
+    let bestT = 0;
+    let d = len(X[0]);
+    let f = 0;
+    while (f < d) {
+        let vals = sort(nd_unique(nd_col(X, f)));
+        let cands = [];
+        let step = 1;
+        if (len(vals) > 33) { step = floor(len(vals) / 32); }
+        let v = 0;
+        while (v + 1 < len(vals)) {
+            push(cands, (vals[v] + vals[v + 1]) / 2);
+            v = v + step;
+        }
+        let c = 0;
+        while (c < len(cands)) {
+            let t = cands[c];
+            let ly = [];
+            let ry = [];
+            let i = 0;
+            while (i < n) {
+                if (X[i][f] <= t) { push(ly, y[i]); } else { push(ry, y[i]); }
+                i = i + 1;
+            }
+            if (len(ly) > 0 and len(ry) > 0) {
+                let gain = g - (len(ly) / n) * ml_gini(ly) - (len(ry) / n) * ml_gini(ry);
+                if (gain > bestGain) { bestGain = gain; bestF = f; bestT = t; }
+            }
+            c = c + 1;
+        }
+        f = f + 1;
+    }
+    if (bestF == -1) { return {"leaf": true, "label": ml_majority(y), "n": n}; }
+    let LX = []; let Ly = []; let RX = []; let Ry = [];
+    let i2 = 0;
+    while (i2 < n) {
+        if (X[i2][bestF] <= bestT) { push(LX, X[i2]); push(Ly, y[i2]); }
+        else { push(RX, X[i2]); push(Ry, y[i2]); }
+        i2 = i2 + 1;
+    }
+    return {
+        "leaf": false, "f": bestF, "t": bestT, "n": n,
+        "l": ml_tree_build(LX, Ly, depth + 1, maxDepth, minSamples),
+        "r": ml_tree_build(RX, Ry, depth + 1, maxDepth, minSamples)
+    };
+}
+
+fun ml_tree_fit(X, y, maxDepth, minSamples) {
+    return {"type": "tree", "root": ml_tree_build(X, y, 0, maxDepth, minSamples)};
+}
+
+fun ml_tree_predict(m, x) {
+    let node = m["root"];
+    while (!node["leaf"]) {
+        if (x[node["f"]] <= node["t"]) { node = node["l"]; } else { node = node["r"]; }
+    }
+    return node["label"];
+}
+
+// ---------------------------------------------------------------------------
+//  الشبكة العصبية متعددة الطبقات (MLP) — انتشار عكسي + SGD
+//    sizes   مثل [2, 4, 1]
+//    act     الطبقات المخفية: "tanh" | "relu" | "sigmoid"
+//    outAct  الخرج: "linear" (انحدار) | "sigmoid" (ثنائي) | "softmax" (متعدد الفئات)
+//  الخسارة تُطابق دالة الخرج (MSE / BCE / CE) فتكون delta = out - target.
+// ---------------------------------------------------------------------------
+fun ml_mlp_init(sizes, act, outAct, sd) {
+    seed(sd);
+    let W = [];
+    let B = [];
+    let l = 0;
+    while (l + 1 < len(sizes)) {
+        let nin = sizes[l];
+        let nout = sizes[l + 1];
+        let lim = sqrt(6 / (nin + nout));
+        let M = [];
+        let i = 0;
+        while (i < nout) {
+            let rw = [];
+            let j = 0;
+            while (j < nin) { push(rw, (random() * 2 - 1) * lim); j = j + 1; }
+            push(M, rw);
+            i = i + 1;
+        }
+        push(W, M);
+        push(B, nd_zeros(nout));
+        l = l + 1;
+    }
+    return {"type": "mlp", "sizes": sizes, "act": act, "out": outAct, "W": W, "B": B, "loss": 0};
+}
+
+fun ml_act(name, z) {
+    if (name == "relu") { return nd_relu(z); }
+    if (name == "sigmoid") { return nd_sigmoid(z); }
+    return nd_tanh(z);
+}
+
+fun ml_act_grad(name, a) {
+    if (name == "relu") { if (a > 0) { return 1; } return 0; }
+    if (name == "sigmoid") { return a * (1 - a); }
+    return 1 - a * a;
+}
+
+// يعيد قائمة تنشيطات كل الطبقات (الأولى = المدخل، الأخيرة = الخرج)
+fun ml_mlp_forward(m, x) {
+    let acts = [x];
+    let a = x;
+    let L = len(m["W"]);
+    let l = 0;
+    while (l < L) {
+        let z = nd_vadd(nd_matvec(m["W"][l], a), m["B"][l]);
+        let nxt = [];
+        let i = 0;
+        if (l == L - 1) {
+            if (m["out"] == "softmax") { nxt = nd_softmax(z); }
+            else {
+                while (i < len(z)) {
+                    if (m["out"] == "sigmoid") { push(nxt, nd_sigmoid(z[i])); } else { push(nxt, z[i]); }
+                    i = i + 1;
+                }
+            }
+        } else {
+            while (i < len(z)) { push(nxt, ml_act(m["act"], z[i])); i = i + 1; }
+        }
+        push(acts, nxt);
+        a = nxt;
+        l = l + 1;
+    }
+    return acts;
+}
+
+// يدرّب النموذج في مكانه ويعيده. Y = مصفوفة متجهات هدف (استعمل ml_onehot للفئات).
+fun ml_mlp_fit(m, X, Y, lr, epochs) {
+    let L = len(m["W"]);
+    let n = len(X);
+    let e = 0;
+    while (e < epochs) {
+        let order = nd_shuffle(nd_seq(n));
+        let loss = 0;
+        let s = 0;
+        while (s < n) {
+            let idx = order[s];
+            let acts = ml_mlp_forward(m, X[idx]);
+            let out = acts[L];
+            let delta = nd_vsub(out, Y[idx]);
+            let q = 0;
+            while (q < len(delta)) { loss = loss + delta[q] * delta[q]; q = q + 1; }
+            let l = L - 1;
+            while (l >= 0) {
+                let prev = acts[l];
+                let nextDelta = nil;
+                if (l > 0) {
+                    nextDelta = nd_zeros(len(prev));
+                    let j = 0;
+                    while (j < len(prev)) {
+                        let sacc = 0;
+                        let i = 0;
+                        while (i < len(delta)) { sacc = sacc + m["W"][l][i][j] * delta[i]; i = i + 1; }
+                        nextDelta[j] = sacc * ml_act_grad(m["act"], prev[j]);
+                        j = j + 1;
+                    }
+                }
+                let i2 = 0;
+                while (i2 < len(delta)) {
+                    let j2 = 0;
+                    while (j2 < len(prev)) {
+                        m["W"][l][i2][j2] = m["W"][l][i2][j2] - lr * delta[i2] * prev[j2];
+                        j2 = j2 + 1;
+                    }
+                    m["B"][l][i2] = m["B"][l][i2] - lr * delta[i2];
+                    i2 = i2 + 1;
+                }
+                if (l > 0) { delta = nextDelta; }
+                l = l - 1;
+            }
+            s = s + 1;
+        }
+        m["loss"] = loss / n;
+        e = e + 1;
+    }
+    return m;
+}
+
+fun ml_mlp_output(m, x) {
+    let acts = ml_mlp_forward(m, x);
+    return acts[len(acts) - 1];
+}
+
+// خرج واحد sigmoid → فئة 0/1 ؛ خرج واحد linear → القيمة ؛ عدة مخارج → فهرس الأكبر
+fun ml_mlp_predict(m, x) {
+    let o = ml_mlp_output(m, x);
+    if (len(o) == 1) {
+        if (m["out"] == "sigmoid") { if (o[0] >= 0.5) { return 1; } return 0; }
+        return o[0];
+    }
+    return nd_argmax(o);
+}
+
+// ---------------------------------------------------------------------------
+//  مصنّف نصوص (Multinomial Naive Bayes) — يدعم العربية عبر tokenizeWords/arabicNormalize
+// ---------------------------------------------------------------------------
+fun ml_tokens(txt) {
+    let t = lower(arabicNormalize(str(txt)));
+    return tokenizeWords(t);
+}
+
+fun ml_textnb_fit(docs, labels) {
+    let classes = nd_unique(labels);
+    let counts = {};
+    let totals = {};
+    let docsPer = {};
+    let vocab = {};
+    let c = 0;
+    while (c < len(classes)) {
+        let k = str(classes[c]);
+        counts[k] = {};
+        totals[k] = 0;
+        docsPer[k] = 0;
+        c = c + 1;
+    }
+    let i = 0;
+    while (i < len(docs)) {
+        let k2 = str(labels[i]);
+        docsPer[k2] = docsPer[k2] + 1;
+        let toks = ml_tokens(docs[i]);
+        let t = 0;
+        while (t < len(toks)) {
+            let w = toks[t];
+            vocab[w] = true;
+            if (!has(counts[k2], w)) { counts[k2][w] = 0; }
+            counts[k2][w] = counts[k2][w] + 1;
+            totals[k2] = totals[k2] + 1;
+            t = t + 1;
+        }
+        i = i + 1;
+    }
+    return {
+        "type": "textnb", "classes": classes, "counts": counts, "totals": totals,
+        "docs": docsPer, "n": len(docs), "vocab": len(keys(vocab))
+    };
+}
+
+fun ml_textnb_scores(m, txt) {
+    let toks = ml_tokens(txt);
+    let out = [];
+    let c = 0;
+    while (c < len(m["classes"])) {
+        let k = str(m["classes"][c]);
+        let s = nd_ln(m["docs"][k] / m["n"]);
+        let t = 0;
+        while (t < len(toks)) {
+            let cnt = 0;
+            if (has(m["counts"][k], toks[t])) { cnt = m["counts"][k][toks[t]]; }
+            s = s + nd_ln((cnt + 1) / (m["totals"][k] + m["vocab"]));
+            t = t + 1;
+        }
+        push(out, s);
+        c = c + 1;
+    }
+    return out;
+}
+
+fun ml_textnb_predict(m, txt) { return m["classes"][nd_argmax(ml_textnb_scores(m, txt))]; }
+
+// ---------------------------------------------------------------------------
+//  واجهة موحّدة: ml_predict / ml_predict_all  (حسب حقل type)
+// ---------------------------------------------------------------------------
+fun ml_predict(m, x) {
+    let t = m["type"];
+    if (t == "linreg") { return nd_dot(m["w"], x) + m["b"]; }
+    if (t == "logreg") { if (ml_logreg_proba(m, x) >= 0.5) { return 1; } return 0; }
+    if (t == "knn") { return ml_knn_predict(m, x); }
+    if (t == "kmeans") { return ml_kmeans_predict(m, x); }
+    if (t == "nb") { return ml_nb_predict(m, x); }
+    if (t == "tree") { return ml_tree_predict(m, x); }
+    if (t == "mlp") { return ml_mlp_predict(m, x); }
+    if (t == "textnb") { return ml_textnb_predict(m, x); }
+    fail("ml_predict: نوع نموذج غير معروف: " + str(t));
+}
+
+fun ml_predict_all(m, X) {
+    let o = [];
+    let i = 0;
+    while (i < len(X)) { push(o, ml_predict(m, X[i])); i = i + 1; }
+    return o;
+}
+
+// ---------------------------------------------------------------------------
+//  المقاييس
+// ---------------------------------------------------------------------------
+fun ml_accuracy(yt, yp) {
+    if (len(yt) == 0) { return 0; }
+    let ok = 0;
+    let i = 0;
+    while (i < len(yt)) { if (yt[i] == yp[i]) { ok = ok + 1; } i = i + 1; }
+    return ok / len(yt);
+}
+
+// يعيد {labels, matrix} — الصفوف = الحقيقي، الأعمدة = المتوقَّع
+fun ml_confusion(yt, yp) {
+    let labels = sort(nd_unique(concat(yt, yp)));
+    let M = [];
+    let i = 0;
+    while (i < len(labels)) { push(M, nd_zeros(len(labels))); i = i + 1; }
+    i = 0;
+    while (i < len(yt)) {
+        let r = nd_index_of(labels, yt[i]);
+        let c = nd_index_of(labels, yp[i]);
+        M[r][c] = M[r][c] + 1;
+        i = i + 1;
+    }
+    return {"labels": labels, "matrix": M};
+}
+
+fun ml_precision(yt, yp, pos) {
+    let tp = 0; let fp = 0;
+    let i = 0;
+    while (i < len(yt)) {
+        if (yp[i] == pos) { if (yt[i] == pos) { tp = tp + 1; } else { fp = fp + 1; } }
+        i = i + 1;
+    }
+    if (tp + fp == 0) { return 0; }
+    return tp / (tp + fp);
+}
+
+fun ml_recall(yt, yp, pos) {
+    let tp = 0; let fneg = 0;
+    let i = 0;
+    while (i < len(yt)) {
+        if (yt[i] == pos) { if (yp[i] == pos) { tp = tp + 1; } else { fneg = fneg + 1; } }
+        i = i + 1;
+    }
+    if (tp + fneg == 0) { return 0; }
+    return tp / (tp + fneg);
+}
+
+fun ml_f1(yt, yp, pos) {
+    let p = ml_precision(yt, yp, pos);
+    let r = ml_recall(yt, yp, pos);
+    if (p + r == 0) { return 0; }
+    return 2 * p * r / (p + r);
+}
+
+fun ml_mse(yt, yp) {
+    let s = 0;
+    let i = 0;
+    while (i < len(yt)) { let d = yt[i] - yp[i]; s = s + d * d; i = i + 1; }
+    return s / len(yt);
+}
+
+fun ml_rmse(yt, yp) { return sqrt(ml_mse(yt, yp)); }
+
+fun ml_mae(yt, yp) {
+    let s = 0;
+    let i = 0;
+    while (i < len(yt)) { s = s + abs(yt[i] - yp[i]); i = i + 1; }
+    return s / len(yt);
+}
+
+fun ml_r2(yt, yp) {
+    let m = nd_mean(yt);
+    let ssr = 0;
+    let sst = 0;
+    let i = 0;
+    while (i < len(yt)) {
+        let a = yt[i] - yp[i];
+        let b = yt[i] - m;
+        ssr = ssr + a * a;
+        sst = sst + b * b;
+        i = i + 1;
+    }
+    if (sst == 0) { return 0; }
+    return 1 - ssr / sst;
+}
+
+// ---------------------------------------------------------------------------
+//  تحقّق متقاطع k-fold
+//    fitFn(Xtr, ytr) -> model ، metricFn(yte, ypred) -> رقم
+//    مثال:  ml_kfold(X, y, 5, 1, fun(a,b){ return ml_nb_fit(a,b); }, ml_accuracy)
+// ---------------------------------------------------------------------------
+fun ml_kfold(X, y, k, sd, fitFn, metricFn) {
+    seed(sd);
+    let idx = nd_shuffle(nd_seq(len(X)));
+    let n = len(X);
+    let scores = [];
+    let f = 0;
+    while (f < k) {
+        let lo = floor(n * f / k);
+        let hi = floor(n * (f + 1) / k);
+        let teIdx = slice(idx, lo, hi);
+        let trIdx = concat(slice(idx, 0, lo), slice(idx, hi, n));
+        let model = fitFn(nd_take(X, trIdx), nd_take(y, trIdx));
+        let preds = ml_predict_all(model, nd_take(X, teIdx));
+        push(scores, metricFn(nd_take(y, teIdx), preds));
+        f = f + 1;
+    }
+    return {"scores": scores, "mean": nd_mean(scores), "std": nd_std(scores)};
+}
+
+// ---------------------------------------------------------------------------
+//  حفظ/تحميل النماذج (JSON)
+// ---------------------------------------------------------------------------
+fun ml_save(m, path) {
+    writeFile(path, jsonEncode(m));
+    return path;
+}
+
+fun ml_load(path) { return jsonDecode(readFile(path)); }
+)RINMLOGRIN";
+static const char* kLib_rinai_og_rin = R"RINAIOGRIN(
+// ============================================================================
+//  lib/rinai.og.rin — RinAI: مساحة عمل ذكاء اصطناعي داخل حاويات Rin (@container)
+//
+//  @version 1.0.0
+//  @category ai
+//  @prefix ai_
+//
+//  تربط rindf (تحليل البيانات) + rinml (التعلّم الآلي) بنظام الحاويات:
+//    • مساحة العمل  = حاوية kind=data  اسمها ws   (تحمل النماذج + سجلّ التجارب + فهرس البيانات)
+//    • كل مجموعة بيانات = حاوية kind=table  اسمها  <ws>__ds_<name>  (حقل records)
+//    • النماذج تُخزَّن كـ "حزمة" bundle قابلة للتحويل إلى JSON (نموذج + معايِر + أسماء الميزات)
+//
+//  مساحة العمل:   ai_workspace · ai_put_dataset · ai_get_dataset · ai_datasets
+//  النماذج:        ai_put_model · ai_get_model · ai_models · ai_predict · ai_bundle_predict
+//  التجارب:        ai_log · ai_experiments
+//  AutoML:         ai_auto_classify · ai_auto_regress
+//  خطوط الأنابيب:  ai_run_pipeline
+//  الحفظ/التحميل:  ai_save_workspace · ai_load_workspace
+//  خدمة بعيدة:     ai_remote_predict   (POST JSON إلى أي نموذج مُستضاف: Docker / FastAPI / ...)
+//
+//  استيراد:  @import "lib/rinai.og.rin";   (يستورد rindf و rinml تلقائياً)
+// ============================================================================
+@import "lib/rindf.og.rin";
+@import "lib/rinml.og.rin";
+
+// ---------------------------------------------------------------------------
+//  مساحة العمل
+// ---------------------------------------------------------------------------
+// ينشئ المساحة إن لم تكن موجودة (وإلا يعيد اسمها). آمن للاستدعاء المتكرر.
+fun ai_workspace(ws) {
+    container.ensure("data", ws);
+    if (!container.has(ws, "datasets")) { container.set(ws, "datasets", []); }
+    if (!container.has(ws, "models")) { container.set(ws, "models", []); }
+    if (!container.has(ws, "log")) { container.set(ws, "log", []); }
+    return ws;
+}
+
+fun ai_ds_name(ws, name) { return ws + "__ds_" + name; }
+
+fun ai_list_add(ws, field, name) {
+    let cur = container.get(ws, field);
+    let i = 0;
+    while (i < len(cur)) { if (cur[i] == name) { return false; } i = i + 1; }
+    push(cur, name);
+    container.set(ws, field, cur);
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+//  مجموعات البيانات (DataFrame <-> حاوية جدول)
+// ---------------------------------------------------------------------------
+fun ai_put_dataset(ws, name, df) {
+    ai_workspace(ws);
+    let tbl = ai_ds_name(ws, name);
+    container.ensure("table", tbl);
+    container.set(tbl, "records", df_to_records(df));
+    ai_list_add(ws, "datasets", name);
+    return tbl;
+}
+
+fun ai_get_dataset(ws, name) {
+    let tbl = ai_ds_name(ws, name);
+    if (!container.exists(tbl)) { fail("ai_get_dataset: لا توجد مجموعة بيانات باسم '" + name + "' في '" + ws + "'"); }
+    return df_from_records(container.get(tbl, "records"));
+}
+
+fun ai_datasets(ws) { return deepCopy(container.get(ws, "datasets")); }
+
+// ---------------------------------------------------------------------------
+//  حزم النماذج (bundle): نموذج + ميزات + معايِر + فئات
+// ---------------------------------------------------------------------------
+// أدنى حزمة: ai_make_bundle(model, features, scaler, classes) — scaler/classes يمكن أن تكون nil
+fun ai_make_bundle(model, features, scaler, classes) {
+    return {"type": "bundle", "model": model, "features": features, "scaler": scaler, "classes": classes};
+}
+
+fun ai_put_model(ws, name, bundle, metrics) {
+    ai_workspace(ws);
+    container.set(ws, "model_" + name, {"bundle": bundle, "metrics": metrics, "t": now()});
+    ai_list_add(ws, "models", name);
+    return name;
+}
+
+fun ai_get_model(ws, name) {
+    if (!container.has(ws, "model_" + name)) { fail("ai_get_model: لا يوجد نموذج باسم '" + name + "' في '" + ws + "'"); }
+    return deepCopy(container.get(ws, "model_" + name)["bundle"]);
+}
+
+fun ai_models(ws) { return deepCopy(container.get(ws, "models")); }
+
+fun ai_model_metrics(ws, name) { return deepCopy(container.get(ws, "model_" + name)["metrics"]); }
+
+// تنبّؤ من سجلّ (قاموس بأسماء الميزات) — يطبّق المعايرة ويحوّل فهرس الفئة إلى تسمية
+fun ai_bundle_predict(b, rec) {
+    let x = [];
+    let j = 0;
+    while (j < len(b["features"])) { push(x, rec[b["features"][j]]); j = j + 1; }
+    if (b["scaler"] != nil) { x = ml_scaler_row(b["scaler"], x); }
+    let p = ml_predict(b["model"], x);
+    if (b["model"]["type"] == "mlp" and b["classes"] != nil and len(b["classes"]) > 0) { return b["classes"][p]; }
+    return p;
+}
+
+fun ai_predict(ws, name, rec) { return ai_bundle_predict(ai_get_model(ws, name), rec); }
+
+// ---------------------------------------------------------------------------
+//  سجلّ التجارب
+// ---------------------------------------------------------------------------
+fun ai_log(ws, event) {
+    ai_workspace(ws);
+    let cur = container.get(ws, "log");
+    event["t"] = now();
+    push(cur, event);
+    container.set(ws, "log", cur);
+    return len(cur);
+}
+
+fun ai_experiments(ws) { return deepCopy(container.get(ws, "log")); }
+
+// ---------------------------------------------------------------------------
+//  AutoML خفيف: يجرّب عدّة نماذج على نفس التقسيم ويعيد لوحة ترتيب + أفضل حزمة
+// ---------------------------------------------------------------------------
+fun ai_auto_classify(df, target, features, sd) {
+    let X = df_to_matrix(df, features);
+    let y = deepCopy(df_col(df, target));
+    let sp = ml_train_test_split(X, y, 0.25, sd);
+    let sc = ml_scaler_fit(sp["Xtr"]);
+    let Xtr = ml_scaler_transform(sc, sp["Xtr"]);
+    let Xte = ml_scaler_transform(sc, sp["Xte"]);
+    let oh = ml_onehot(sp["ytr"]);
+    let classes = ml_onehot(y)["classes"];
+    let board = df_new(["model", "accuracy"]);
+    let bundles = {};
+
+    let knn = ml_knn_fit(Xtr, sp["ytr"], 5, "class");
+    let nb = ml_nb_fit(Xtr, sp["ytr"]);
+    let tr = ml_tree_fit(Xtr, sp["ytr"], 5, 2);
+    let cand = {"knn": knn, "naive_bayes": nb, "tree": tr};
+    let names = ["knn", "naive_bayes", "tree"];
+
+    // شبكة عصبية softmax
+    let nCls = len(classes);
+    let net = ml_mlp_init([len(features), 8, nCls], "tanh", "softmax", sd);
+    let Ytr = [];
+    let i = 0;
+    while (i < len(sp["ytr"])) {
+        let t = nd_zeros(nCls);
+        t[nd_index_of(classes, sp["ytr"][i])] = 1;
+        push(Ytr, t);
+        i = i + 1;
+    }
+    ml_mlp_fit(net, Xtr, Ytr, 0.05, 120);
+    cand["mlp"] = net;
+    push(names, "mlp");
+
+    i = 0;
+    while (i < len(names)) {
+        let m = cand[names[i]];
+        let raw = ml_predict_all(m, Xte);
+        let pred = raw;
+        if (m["type"] == "mlp") {
+            pred = [];
+            let q = 0;
+            while (q < len(raw)) { push(pred, classes[raw[q]]); q = q + 1; }
+        }
+        push(board["cols"]["model"], names[i]);
+        push(board["cols"]["accuracy"], ml_accuracy(sp["yte"], pred));
+        bundles[names[i]] = ai_make_bundle(m, features, sc, classes);
+        i = i + 1;
+    }
+    board = df_sort(board, "accuracy", true);
+    let bestName = board["cols"]["model"][0];
+    return {"leaderboard": board, "best_name": bestName, "best": bundles[bestName], "bundles": bundles, "task": "classification"};
+}
+
+fun ai_auto_regress(df, target, features, sd) {
+    let X = df_to_matrix(df, features);
+    let y = deepCopy(df_col(df, target));
+    let sp = ml_train_test_split(X, y, 0.25, sd);
+    let sc = ml_scaler_fit(sp["Xtr"]);
+    let Xtr = ml_scaler_transform(sc, sp["Xtr"]);
+    let Xte = ml_scaler_transform(sc, sp["Xte"]);
+    let board = df_new(["model", "rmse", "r2"]);
+    let bundles = {};
+    let cand = {};
+    let names = [];
+
+    let ols = ml_linreg_fit(Xtr, sp["ytr"], 0);
+    if (ols != nil) { cand["linear"] = ols; push(names, "linear"); }
+    let rdg = ml_linreg_fit(Xtr, sp["ytr"], 1);
+    if (rdg != nil) { cand["ridge"] = rdg; push(names, "ridge"); }
+    cand["knn"] = ml_knn_fit(Xtr, sp["ytr"], 5, "reg");
+    push(names, "knn");
+
+    let i = 0;
+    while (i < len(names)) {
+        let pred = ml_predict_all(cand[names[i]], Xte);
+        push(board["cols"]["model"], names[i]);
+        push(board["cols"]["rmse"], ml_rmse(sp["yte"], pred));
+        push(board["cols"]["r2"], ml_r2(sp["yte"], pred));
+        bundles[names[i]] = ai_make_bundle(cand[names[i]], features, sc, nil);
+        i = i + 1;
+    }
+    board = df_sort(board, "r2", true);
+    let bestName = board["cols"]["model"][0];
+    return {"leaderboard": board, "best_name": bestName, "best": bundles[bestName], "bundles": bundles, "task": "regression"};
+}
+
+// ---------------------------------------------------------------------------
+//  خطوط الأنابيب: steps = [{"name": "clean", "fn": fun(x){...}}, ...]
+//  كل خطوة تأخذ ناتج السابقة؛ يُسجَّل اسم كل خطوة وعدد الصفوف (إن كانت إطار بيانات) في سجلّ المساحة.
+// ---------------------------------------------------------------------------
+fun ai_run_pipeline(ws, steps, input) {
+    ai_workspace(ws);
+    let cur = input;
+    let trace = [];
+    let i = 0;
+    while (i < len(steps)) {
+        let fn = steps[i]["fn"];
+        cur = fn(cur);
+        let info = {"step": steps[i]["name"]};
+        if (type(cur) == "map" and has(cur, "names") and has(cur, "cols")) {
+            info["rows"] = df_rows_count(cur);
+            info["cols"] = len(cur["names"]);
+        }
+        push(trace, info);
+        i = i + 1;
+    }
+    ai_log(ws, {"event": "pipeline", "trace": trace});
+    return cur;
+}
+
+// ---------------------------------------------------------------------------
+//  الحفظ / التحميل (ملف JSON واحد لمساحة العمل كاملة)
+// ---------------------------------------------------------------------------
+fun ai_save_workspace(ws, path) {
+    let dsNames = container.get(ws, "datasets");
+    let datasets = {};
+    let i = 0;
+    while (i < len(dsNames)) {
+        datasets[dsNames[i]] = container.get(ai_ds_name(ws, dsNames[i]), "records");
+        i = i + 1;
+    }
+    let mNames = container.get(ws, "models");
+    let models = {};
+    i = 0;
+    while (i < len(mNames)) { models[mNames[i]] = container.get(ws, "model_" + mNames[i]); i = i + 1; }
+    writeFile(path, jsonEncode({"rinai": 1, "workspace": ws, "datasets": datasets, "models": models, "log": container.get(ws, "log")}));
+    return path;
+}
+
+fun ai_load_workspace(ws, path) {
+    let data = jsonDecode(readFile(path));
+    ai_workspace(ws);
+    let dk = keys(data["datasets"]);
+    let i = 0;
+    while (i < len(dk)) { ai_put_dataset(ws, dk[i], df_from_records(data["datasets"][dk[i]])); i = i + 1; }
+    let mk = keys(data["models"]);
+    i = 0;
+    while (i < len(mk)) {
+        let entry = data["models"][mk[i]];
+        container.set(ws, "model_" + mk[i], entry);
+        ai_list_add(ws, "models", mk[i]);
+        i = i + 1;
+    }
+    container.set(ws, "log", data["log"]);
+    return ws;
+}
+
+// ---------------------------------------------------------------------------
+//  جسر الخدمات البعيدة (نموذج داخل Docker/خادم): POST JSON ويعيد {ok, status, json, error}
+//  لا يرمي عند فشل الشبكة؛ افحص result["ok"].
+// ---------------------------------------------------------------------------
+fun ai_remote_predict(url, payload) {
+    let r = httpRequest("POST", url, {"Content-Type": "application/json"}, jsonEncode(payload));
+    return {"ok": r["ok"], "status": r["status"], "json": r["json"], "error": r["error"]};
+}
+)RINAIOGRIN";
+static const char* kLib_rinstat_og_rin = R"RINSTATOGRIN(
+// ============================================================================
+//  lib/rinstat.og.rin — RinStat: التحليل الإحصائي المتكامل
+//
+//  @version 1.0.0
+//  @category data
+//  @prefix st_
+//
+//  فلسفة المكتبة: لا نُعيد اختراع ما في اللغة. نُركِّب فوق الموجود:
+//    • الدوال الأصلية  : mean median mode variance stddev percentile iqr zscore
+//                        numberSum numberStats cumulativeSum movingAverage ...
+//    • lib/math        : sampleVariance sampleStdDev covariance correlation
+//    • lib/rindf       : df_col df_unique df_where df_to_matrix df_corr ...
+//    • lib/rinml       : ml_linreg_fit ml_r2 ... (والجبر الخطي من mat*/vec* الأصلية)
+//  وتُضيف فقط ما كان ناقصاً فعلاً: الدوال الخاصة (gamma/beta) ← التوزيعات ←
+//  الاختبارات ← الانحدار بالمعاملات والدلالة ← عيّنات bootstrap.
+//
+//  كل نتيجة اختبار قاموس موحّد: {test, stat, df, p, n, ...} قابل لـ JSON، ويُطبع
+//  بـ st_print(r).  القيم المفقودة (nil) تُهمل تلقائياً (st_clean).
+//
+//  استيراد:  @import "lib/rinstat.og.rin";
+//
+//  ملاحظات لغوية: الدوال بعدد وسائط ثابت (لذا opts قاموس أخير)؛ sort تعدّل في
+//  المكان (نعمل دائماً على نسخة)؛ القسمة على صفر خطأ (نحرسها صراحةً).
+// ============================================================================
+@import "lib/math.og.rin";
+@import "lib/rindf.og.rin";
+@import "lib/rinml.og.rin";
+// الجبر الخطي: دوال mat*/vec* الأصلية (docs/LINALG.md) — لا حاجة لاستيراد شيء
+
+// ---------------------------------------------------------------------------
+//  1) أدوات داخلية
+// ---------------------------------------------------------------------------
+fun st_clean(arr) { return df_numeric_values(arr); }           // يُسقط nil/النصوص (من rindf)
+fun st_sorted(arr) { return sort(slice(st_clean(arr), 0, len(st_clean(arr)))); }
+fun st_sum_sq_dev(arr) {
+    let m = mean(arr);
+    let s = 0;
+    for (let v in arr) { s = s + (v - m) * (v - m); }
+    return s;
+}
+fun st_ok(arr, k) { return len(arr) >= k; }
+fun st_result(name, stat, df, p, n) {
+    return {"test": name, "stat": stat, "df": df, "p": p, "n": n};
+}
+fun st_fmt(x, d) {
+    if (type(x) != "number") { return str(x); }
+    return numberFormat(x, {"decimals": d});
+}
+fun st_fmt_p(p) {
+    if (type(p) != "number") { return str(p); }
+    if (p < 0.0001) { return "<0.0001"; }
+    return numberFormat(p, {"decimals": 4});
+}
+
+// ---------------------------------------------------------------------------
+//  2) الدوال الخاصة (Lanczos / Lentz) — أساس كل التوزيعات
+// ---------------------------------------------------------------------------
+fun st_lgamma(x) {
+    if (x < 0.5) { return st_lgamma(x + 1) - log(x); }
+    let c = [0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313,
+             -176.61502916214059, 12.507343278686905, -0.13857109526572012,
+             0.0000099843695780195716, 0.00000015056327351493116];
+    let xx = x - 1;
+    let a = c[0];
+    let t = xx + 7.5;
+    let i = 1;
+    while (i < 9) { a = a + c[i] / (xx + i); i = i + 1; }
+    return 0.5 * log(2 * PI) + (xx + 0.5) * log(t) - t + log(a);
+}
+
+fun st_betacf(a, b, x) {
+    let tiny = 1e-300;
+    let qab = a + b;
+    let qap = a + 1;
+    let qam = a - 1;
+    let c = 1;
+    let d = 1 - qab * x / qap;
+    if (abs(d) < tiny) { d = tiny; }
+    d = 1 / d;
+    let h = d;
+    let m = 1;
+    while (m <= 300) {
+        let m2 = 2 * m;
+        let aa = m * (b - m) * x / ((qam + m2) * (a + m2));
+        d = 1 + aa * d; if (abs(d) < tiny) { d = tiny; }
+        c = 1 + aa / c; if (abs(c) < tiny) { c = tiny; }
+        d = 1 / d;
+        h = h * d * c;
+        aa = -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2));
+        d = 1 + aa * d; if (abs(d) < tiny) { d = tiny; }
+        c = 1 + aa / c; if (abs(c) < tiny) { c = tiny; }
+        d = 1 / d;
+        let del = d * c;
+        h = h * del;
+        if (abs(del - 1) < 1e-14) { break; }
+        m = m + 1;
+    }
+    return h;
+}
+
+// دالة بيتا الناقصة المنتظمة I_x(a,b)
+fun st_betainc(a, b, x) {
+    if (x <= 0) { return 0; }
+    if (x >= 1) { return 1; }
+    let bt = exp(st_lgamma(a + b) - st_lgamma(a) - st_lgamma(b) + a * log(x) + b * log(1 - x));
+    if (x < (a + 1) / (a + b + 2)) { return bt * st_betacf(a, b, x) / a; }
+    return 1 - bt * st_betacf(b, a, 1 - x) / b;
+}
+
+// دالة غاما الناقصة السفلى المنتظمة P(a,x)
+fun st_gammainc(a, x) {
+    if (x <= 0) { return 0; }
+    let tiny = 1e-300;
+    if (x < a + 1) {
+        let ap = a;
+        let sm = 1 / a;
+        let del = sm;
+        let n = 0;
+        while (n < 500) {
+            ap = ap + 1;
+            del = del * x / ap;
+            sm = sm + del;
+            if (abs(del) < abs(sm) * 1e-15) { break; }
+            n = n + 1;
+        }
+        return sm * exp(-x + a * log(x) - st_lgamma(a));
+    }
+    let b = x + 1 - a;
+    let c = 1 / tiny;
+    let d = 1 / b;
+    let h = d;
+    let i = 1;
+    while (i <= 500) {
+        let an = -i * (i - a);
+        b = b + 2;
+        d = an * d + b; if (abs(d) < tiny) { d = tiny; }
+        c = b + an / c; if (abs(c) < tiny) { c = tiny; }
+        d = 1 / d;
+        let del = d * c;
+        h = h * del;
+        if (abs(del - 1) < 1e-15) { break; }
+        i = i + 1;
+    }
+    return 1 - exp(-x + a * log(x) - st_lgamma(a)) * h;
+}
+
+fun st_erf(x) {
+    if (x == 0) { return 0; }
+    let p = st_gammainc(0.5, x * x);
+    if (x < 0) { return -p; }
+    return p;
+}
+
+// ---------------------------------------------------------------------------
+//  3) التوزيعات: pdf / cdf / ppf
+// ---------------------------------------------------------------------------
+fun st_norm_pdf(x, mu, sd) {
+    let z = (x - mu) / sd;
+    return exp(-0.5 * z * z) / (sd * sqrt(2 * PI));
+}
+fun st_norm_cdf(x, mu, sd) { return 0.5 * (1 + st_erf((x - mu) / (sd * sqrt(2)))); }
+
+// معكوس cdf بالتنصيف الآمن على دالة أحادية الاتجاه (تُستعمل لكل التوزيعات)
+fun st_invert(kind, p, a, b, lo, hi) {
+    let i = 0;
+    while (i < 200) {
+        let mid = (lo + hi) / 2;
+        let v = 0;
+        if (kind == "norm") { v = st_norm_cdf(mid, 0, 1); }
+        else if (kind == "t") { v = st_t_cdf(mid, a); }
+        else if (kind == "chi2") { v = st_chi2_cdf(mid, a); }
+        else { v = st_f_cdf(mid, a, b); }
+        if (v < p) { lo = mid; } else { hi = mid; }
+        if (hi - lo < 1e-13 * (1 + abs(mid))) { break; }
+        i = i + 1;
+    }
+    return (lo + hi) / 2;
+}
+fun st_norm_ppf(p, mu, sd) {
+    if (p <= 0 or p >= 1) { return nil; }
+    return mu + sd * st_invert("norm", p, 0, 0, -40, 40);
+}
+
+fun st_t_cdf(t, df) {
+    let x = df / (df + t * t);
+    let tail = 0.5 * st_betainc(df / 2, 0.5, x);
+    if (t > 0) { return 1 - tail; }
+    return tail;
+}
+fun st_t_ppf(p, df) {
+    if (p <= 0 or p >= 1) { return nil; }
+    return st_invert("t", p, df, 0, -1e4, 1e4);
+}
+fun st_t_p2(t, df) { return st_betainc(df / 2, 0.5, df / (df + t * t)); }   // ثنائي الذيل بدقة الذيول
+
+fun st_chi2_cdf(x, k) { return st_gammainc(k / 2, x / 2); }
+fun st_chi2_sf(x, k) { return 1 - st_gammainc(k / 2, x / 2); }
+fun st_chi2_ppf(p, k) {
+    if (p <= 0 or p >= 1) { return nil; }
+    return st_invert("chi2", p, k, 0, 0, 1e5);
+}
+
+fun st_f_cdf(f, d1, d2) {
+    if (f <= 0) { return 0; }
+    return st_betainc(d1 / 2, d2 / 2, d1 * f / (d1 * f + d2));
+}
+fun st_f_sf(f, d1, d2) {
+    if (f <= 0) { return 1; }
+    return st_betainc(d2 / 2, d1 / 2, d2 / (d1 * f + d2));
+}
+fun st_f_ppf(p, d1, d2) {
+    if (p <= 0 or p >= 1) { return nil; }
+    return st_invert("f", p, d1, d2, 0, 1e6);
+}
+
+// ---------------------------------------------------------------------------
+//  4) وصفي: الشكل، الرتب، المخطط التكراري، KDE، القيم الشاذة
+// ---------------------------------------------------------------------------
+fun st_sem(arr) {
+    let a = st_clean(arr);
+    if (len(a) < 2) { return 0; }
+    return sampleStdDev(a) / sqrt(len(a));
+}
+fun st_skew(arr) {
+    let a = st_clean(arr);
+    let n = len(a);
+    if (n < 3) { return 0; }
+    let m = mean(a);
+    let s = stddev(a);
+    if (s == 0) { return 0; }
+    let t = 0;
+    for (let v in a) { t = t + pow((v - m) / s, 3); }
+    return t / n;
+}
+fun st_kurtosis(arr) {              // التفرطح الزائد (excess): 0 للتوزيع الطبيعي
+    let a = st_clean(arr);
+    let n = len(a);
+    if (n < 4) { return 0; }
+    let m = mean(a);
+    let s = stddev(a);
+    if (s == 0) { return 0; }
+    let t = 0;
+    for (let v in a) { t = t + pow((v - m) / s, 4); }
+    return t / n - 3;
+}
+
+// ملخّص وصفي شامل في قاموس واحد (يُركّب الدوال الأصلية)
+fun st_summary(arr) {
+    let a = st_clean(arr);
+    let n = len(a);
+    if (n == 0) { return {"n": 0}; }
+    let sd = 0;
+    if (n > 1) { sd = sampleStdDev(a); }
+    let q1 = percentile(a, 25);
+    let q3 = percentile(a, 75);
+    return {"n": n, "mean": mean(a), "sd": sd, "sem": st_sem(a), "min": minOf(a),
+            "q1": q1, "median": median(a), "q3": q3, "max": maxOf(a),
+            "iqr": q3 - q1, "skew": st_skew(a), "kurtosis": st_kurtosis(a)};
+}
+
+fun st_ci_mean(arr, level) {
+    let a = st_clean(arr);
+    let n = len(a);
+    if (n < 2) { return nil; }
+    let m = mean(a);
+    let h = st_t_ppf(1 - (1 - level) / 2, n - 1) * st_sem(a);
+    return {"mean": m, "lo": m - h, "hi": m + h, "level": level};
+}
+
+// رتب بمتوسط الروابط (للاختبارات اللامعلمية)
+fun st_rank(arr) {
+    let n = len(arr);
+    let idx = [];
+    let i = 0;
+    while (i < n) { push(idx, i); i = i + 1; }
+    // فرز دمجي للفهارس حسب القيمة (ثابت)
+    let order = st_argsort(arr);
+    let ranks = [];
+    i = 0;
+    while (i < n) { push(ranks, 0); i = i + 1; }
+    i = 0;
+    while (i < n) {
+        let j = i;
+        while (j + 1 < n and arr[order[j + 1]] == arr[order[i]]) { j = j + 1; }
+        let r = (i + j) / 2 + 1;
+        let k = i;
+        while (k <= j) { ranks[order[k]] = r; k = k + 1; }
+        i = j + 1;
+    }
+    return ranks;
+}
+fun st_argsort(arr) {
+    let n = len(arr);
+    let idx = [];
+    let i = 0;
+    while (i < n) { push(idx, i); i = i + 1; }
+    return st_msort(arr, idx);
+}
+fun st_msort(arr, idx) {
+    let n = len(idx);
+    if (n <= 1) { return idx; }
+    let mid = floor(n / 2);
+    let l = st_msort(arr, slice(idx, 0, mid));
+    let r = st_msort(arr, slice(idx, mid, n));
+    let out = [];
+    let i = 0;
+    let j = 0;
+    while (i < len(l) and j < len(r)) {
+        if (arr[l[i]] <= arr[r[j]]) { push(out, l[i]); i = i + 1; }
+        else { push(out, r[j]); j = j + 1; }
+    }
+    while (i < len(l)) { push(out, l[i]); i = i + 1; }
+    while (j < len(r)) { push(out, r[j]); j = j + 1; }
+    return out;
+}
+
+// مخطط تكراري: bins <= 0 ← قاعدة Freedman–Diaconis (تعتمد iqr الأصلية)
+fun st_hist(arr, bins) {
+    let a = st_clean(arr);
+    let n = len(a);
+    if (n == 0) { return {"edges": [], "counts": [], "density": [], "mids": [], "width": 0}; }
+    let lo = minOf(a);
+    let hi = maxOf(a);
+    if (hi == lo) { hi = lo + 1; }
+    if (bins <= 0) {
+        let w = 2 * iqr(a) / pow(n, 1 / 3);
+        if (w > 0) { bins = ceil((hi - lo) / w); } else { bins = ceil(log(n) / log(2) + 1); }
+        if (bins < 3) { bins = 3; }
+        if (bins > 60) { bins = 60; }
+    }
+    let width = (hi - lo) / bins;
+    let edges = [];
+    let counts = [];
+    let mids = [];
+    let k = 0;
+    while (k <= bins) { push(edges, lo + k * width); k = k + 1; }
+    k = 0;
+    while (k < bins) { push(counts, 0); push(mids, lo + (k + 0.5) * width); k = k + 1; }
+    for (let v in a) {
+        let b = floor((v - lo) / width);
+        if (b >= bins) { b = bins - 1; }
+        counts[b] = counts[b] + 1;
+    }
+    let dens = [];
+    for (let c in counts) { push(dens, c / (n * width)); }
+    return {"edges": edges, "counts": counts, "density": dens, "mids": mids, "width": width, "bins": bins};
+}
+
+// تقدير كثافة نواة غاوسي، عرض النطاق بقاعدة Silverman (من sampleStdDev وiqr)
+fun st_bandwidth(arr) {
+    let a = st_clean(arr);
+    let n = len(a);
+    if (n < 2) { return 1; }
+    let s = sampleStdDev(a);
+    let r = iqr(a) / 1.34;
+    let h = s;
+    if (r > 0 and r < s) { h = r; }
+    if (h <= 0) { h = 1; }
+    return 0.9 * h * pow(n, -0.2);
+}
+// يُعيد {x:[], y:[]} على شبكة من m نقطة
+fun st_kde(arr, m) {
+    let a = st_clean(arr);
+    let n = len(a);
+    let h = st_bandwidth(a);
+    let lo = minOf(a) - 3 * h;
+    let hi = maxOf(a) + 3 * h;
+    let xs = [];
+    let ys = [];
+    let i = 0;
+    while (i < m) {
+        let x = lo + (hi - lo) * i / (m - 1);
+        let t = 0;
+        for (let v in a) { t = t + st_norm_pdf(x, v, h); }
+        push(xs, x);
+        push(ys, t / n);
+        i = i + 1;
+    }
+    return {"x": xs, "y": ys, "bw": h};
+}
+
+fun st_ecdf(arr) {
+    let a = st_sorted(arr);
+    let n = len(a);
+    let ys = [];
+    let i = 0;
+    while (i < n) { push(ys, (i + 1) / n); i = i + 1; }
+    return {"x": a, "y": ys};
+}
+
+// قيم شاذة بسياج Tukey (الربيعيات من percentile الأصلية)
+fun st_outliers(arr, k) {
+    let a = st_clean(arr);
+    let q1 = percentile(a, 25);
+    let q3 = percentile(a, 75);
+    let r = q3 - q1;
+    let lo = q1 - k * r;
+    let hi = q3 + k * r;
+    let out = [];
+    for (let v in a) { if (v < lo or v > hi) { push(out, v); } }
+    return {"lo": lo, "hi": hi, "outliers": out};
+}
+
+// مخطط Q-Q مقابل التوزيع الطبيعي: {theoretical, sample}
+fun st_qq(arr) {
+    let a = st_sorted(arr);
+    let n = len(a);
+    let th = [];
+    let i = 0;
+    while (i < n) { push(th, st_norm_ppf((i + 1 - 0.375) / (n + 0.25), 0, 1)); i = i + 1; }
+    return {"theoretical": th, "sample": a};
+}
+
+// ---------------------------------------------------------------------------
+//  5) اختبارات الفرضيات (كلها تُعيد st_result + حقولاً إضافية)
+// ---------------------------------------------------------------------------
+fun st_ttest_1samp(arr, mu) {
+    let a = st_clean(arr);
+    let n = len(a);
+    if (n < 2) { return nil; }
+    let se = st_sem(a);
+    if (se == 0) { return nil; }
+    let t = (mean(a) - mu) / se;
+    let r = st_result("one-sample t", t, n - 1, st_t_p2(t, n - 1), n);
+    r["mean"] = mean(a);
+    r["ci"] = st_ci_mean(a, 0.95);
+    return r;
+}
+
+// ويلش (تباينات غير متساوية) — الافتراضي الموصى به
+fun st_ttest_welch(x, y) {
+    let a = st_clean(x);
+    let b = st_clean(y);
+    if (len(a) < 2 or len(b) < 2) { return nil; }
+    let va = sampleVariance(a) / len(a);
+    let vb = sampleVariance(b) / len(b);
+    if (va + vb == 0) { return nil; }
+    let t = (mean(a) - mean(b)) / sqrt(va + vb);
+    let df = (va + vb) * (va + vb) / (va * va / (len(a) - 1) + vb * vb / (len(b) - 1));
+    let r = st_result("Welch t", t, df, st_t_p2(t, df), len(a) + len(b));
+    r["diff"] = mean(a) - mean(b);
+    let h = st_t_ppf(0.975, df) * sqrt(va + vb);
+    r["ci"] = {"lo": r["diff"] - h, "hi": r["diff"] + h, "level": 0.95};
+    r["d"] = st_cohens_d(a, b);
+    return r;
+}
+
+// تباينات متساوية (Student المجمّع)
+fun st_ttest_pooled(x, y) {
+    let a = st_clean(x);
+    let b = st_clean(y);
+    let na = len(a);
+    let nb = len(b);
+    if (na < 2 or nb < 2) { return nil; }
+    let df = na + nb - 2;
+    let sp2 = (st_sum_sq_dev(a) + st_sum_sq_dev(b)) / df;
+    let se = sqrt(sp2 * (1 / na + 1 / nb));
+    if (se == 0) { return nil; }
+    let t = (mean(a) - mean(b)) / se;
+    let r = st_result("Student t (pooled)", t, df, st_t_p2(t, df), na + nb);
+    r["diff"] = mean(a) - mean(b);
+    r["d"] = st_cohens_d(a, b);
+    return r;
+}
+
+fun st_ttest_paired(x, y) {
+    if (len(x) != len(y)) { return nil; }
+    let d = [];
+    let i = 0;
+    while (i < len(x)) {
+        if (type(x[i]) == "number" and type(y[i]) == "number") { push(d, x[i] - y[i]); }
+        i = i + 1;
+    }
+    let r = st_ttest_1samp(d, 0);
+    if (r == nil) { return nil; }
+    r["test"] = "paired t";
+    return r;
+}
+
+fun st_cohens_d(x, y) {
+    let a = st_clean(x);
+    let b = st_clean(y);
+    let na = len(a);
+    let nb = len(b);
+    if (na < 2 or nb < 2) { return 0; }
+    let sp = sqrt((st_sum_sq_dev(a) + st_sum_sq_dev(b)) / (na + nb - 2));
+    if (sp == 0) { return 0; }
+    return (mean(a) - mean(b)) / sp;
+}
+
+// تحليل التباين أحادي الاتجاه — groups: مصفوفة مصفوفات
+fun st_anova(groups) {
+    let k = len(groups);
+    let all = [];
+    let gs = [];
+    for (let g in groups) {
+        let c = st_clean(g);
+        push(gs, c);
+        for (let v in c) { push(all, v); }
+    }
+    let n = len(all);
+    if (k < 2 or n <= k) { return nil; }
+    let gm = mean(all);
+    let ssb = 0;
+    let ssw = 0;
+    for (let c in gs) {
+        if (len(c) > 0) {
+            let m = mean(c);
+            ssb = ssb + len(c) * (m - gm) * (m - gm);
+            ssw = ssw + st_sum_sq_dev(c);
+        }
+    }
+    let dfb = k - 1;
+    let dfw = n - k;
+    if (ssw == 0) { return nil; }
+    let f = (ssb / dfb) / (ssw / dfw);
+    let r = st_result("one-way ANOVA", f, dfb, st_f_sf(f, dfb, dfw), n);
+    r["df2"] = dfw;
+    r["eta2"] = ssb / (ssb + ssw);
+    r["ssb"] = ssb;
+    r["ssw"] = ssw;
+    return r;
+}
+
+// كاي-تربيع: ملاءمة (observed/expected) واستقلالية (جدول طوارئ)
+fun st_chi2_gof(obs, expd) {
+    let s = 0;
+    let i = 0;
+    while (i < len(obs)) {
+        if (expd[i] > 0) { s = s + (obs[i] - expd[i]) * (obs[i] - expd[i]) / expd[i]; }
+        i = i + 1;
+    }
+    let df = len(obs) - 1;
+    return st_result("chi-square GOF", s, df, st_chi2_sf(s, df), sum(obs));
+}
+fun st_chi2_indep(table) {
+    let nr = len(table);
+    let nc = len(table[0]);
+    let rt = [];
+    let ct = [];
+    let tot = 0;
+    let i = 0;
+    while (i < nr) { push(rt, sum(table[i])); tot = tot + rt[i]; i = i + 1; }
+    let j = 0;
+    while (j < nc) { push(ct, sum(matTranspose(table)[j])); j = j + 1; }
+    let s = 0;
+    i = 0;
+    while (i < nr) {
+        j = 0;
+        while (j < nc) {
+            let e = rt[i] * ct[j] / tot;
+            if (e > 0) { s = s + (table[i][j] - e) * (table[i][j] - e) / e; }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    let df = (nr - 1) * (nc - 1);
+    let r = st_result("chi-square independence", s, df, st_chi2_sf(s, df), tot);
+    let mn = nr; if (nc < mn) { mn = nc; }
+    if (mn > 1 and tot > 0) { r["cramers_v"] = sqrt(s / (tot * (mn - 1))); }
+    return r;
+}
+
+// ارتباط بيرسون مع اختبار الدلالة وفترة ثقة (تحويل فيشر)
+fun st_corr_test(x, y) {
+    let xs = [];
+    let ys = [];
+    let i = 0;
+    while (i < len(x) and i < len(y)) {
+        if (type(x[i]) == "number" and type(y[i]) == "number") { push(xs, x[i]); push(ys, y[i]); }
+        i = i + 1;
+    }
+    let n = len(xs);
+    if (n < 3) { return nil; }
+    let r = correlation(xs, ys);             // من lib/math
+    if (r > 0.9999999999) { r = 0.9999999999; }
+    if (r < -0.9999999999) { r = -0.9999999999; }
+    let t = r * sqrt((n - 2) / (1 - r * r));
+    let res = st_result("Pearson correlation", t, n - 2, st_t_p2(t, n - 2), n);
+    res["r"] = r;
+    let z = 0.5 * log((1 + r) / (1 - r));
+    let h = 1.959964 / sqrt(n - 3);
+    if (n > 3) { res["ci"] = {"lo": (exp(2 * (z - h)) - 1) / (exp(2 * (z - h)) + 1), "hi": (exp(2 * (z + h)) - 1) / (exp(2 * (z + h)) + 1), "level": 0.95}; }
+    return res;
+}
+fun st_spearman(x, y) {
+    let r = st_corr_test(st_rank(x), st_rank(y));
+    if (r == nil) { return nil; }
+    r["test"] = "Spearman correlation";
+    r["rho"] = r["r"];
+    return r;
+}
+
+// Mann–Whitney U بتقريب طبيعي مع تصحيح الروابط
+fun st_mannwhitney(x, y) {
+    let a = st_clean(x);
+    let b = st_clean(y);
+    let n1 = len(a);
+    let n2 = len(b);
+    if (n1 < 1 or n2 < 1) { return nil; }
+    let all = concat(a, b);
+    let rk = st_rank(all);
+    let r1 = 0;
+    let i = 0;
+    while (i < n1) { r1 = r1 + rk[i]; i = i + 1; }
+    let u1 = r1 - n1 * (n1 + 1) / 2;
+    let n = n1 + n2;
+    let mu = n1 * n2 / 2;
+    let ties = 0;
+    let srt = sort(slice(all, 0, n));
+    i = 0;
+    while (i < n) {
+        let j = i;
+        while (j + 1 < n and srt[j + 1] == srt[i]) { j = j + 1; }
+        let t = j - i + 1;
+        ties = ties + (t * t * t - t);
+        i = j + 1;
+    }
+    let sd = sqrt(n1 * n2 / 12 * ((n + 1) - ties / (n * (n - 1))));
+    if (sd == 0) { return nil; }
+    let z = (u1 - mu) / sd;
+    let r = st_result("Mann-Whitney U", u1, nil, 2 * (1 - st_norm_cdf(abs(z), 0, 1)), n);
+    r["z"] = z;
+    return r;
+}
+
+// Jarque–Bera للطبيعية (من st_skew/st_kurtosis)
+fun st_normality(arr) {
+    let a = st_clean(arr);
+    let n = len(a);
+    if (n < 8) { return nil; }
+    let s = st_skew(a);
+    let k = st_kurtosis(a);
+    let jb = n / 6 * (s * s + k * k / 4);
+    let r = st_result("Jarque-Bera normality", jb, 2, st_chi2_sf(jb, 2), n);
+    r["skew"] = s;
+    r["kurtosis"] = k;
+    return r;
+}
+
+// تصحيح التعدد: "bonferroni" | "holm" | "bh" (Benjamini–Hochberg)
+fun st_p_adjust(ps, method) {
+    let m = len(ps);
+    let order = st_argsort(ps);
+    let adj = [];
+    let i = 0;
+    while (i < m) { push(adj, 0); i = i + 1; }
+    if (method == "bonferroni") {
+        i = 0;
+        while (i < m) { adj[i] = min(1, ps[i] * m); i = i + 1; }
+    } else if (method == "holm") {
+        let run = 0;
+        i = 0;
+        while (i < m) {
+            let v = min(1, ps[order[i]] * (m - i));
+            if (v < run) { v = run; }
+            run = v;
+            adj[order[i]] = v;
+            i = i + 1;
+        }
+    } else {
+        let run = 1;
+        i = m - 1;
+        while (i >= 0) {
+            let v = min(1, ps[order[i]] * m / (i + 1));
+            if (v > run) { v = run; }
+            run = v;
+            adj[order[i]] = v;
+            i = i - 1;
+        }
+    }
+    return adj;
+}
+
+// ---------------------------------------------------------------------------
+//  6) الانحدار: OLS بالمعاملات والأخطاء المعيارية والدلالة (فوق matInv/matMul/matTranspose الأصلية)
+// ---------------------------------------------------------------------------
+// المعكوس: matInv الأصلية (lib/LINALG) — منفردة ← nil
+fun st_mat_inverse(A) {
+    if (matIs(A, "singular")) { return nil; }
+    return matInv(A);
+}
+
+// X: مصفوفة n×k بلا عمود ثابت (يُضاف تلقائياً)، y: n، names: أسماء المتغيرات (أو [])
+fun st_ols(X, y, names) {
+    let n = len(y);
+    let k = len(X[0]);
+    let D = [];
+    let i = 0;
+    while (i < n) { push(D, concat([1], X[i])); i = i + 1; }
+    let Dt = matTranspose(D);
+    let XtX = matMul(Dt, D);
+    let inv = st_mat_inverse(XtX);
+    if (inv == nil) { return nil; }
+    let beta = matMul(inv, matMul(Dt, y));
+    let fitted = matMul(D, beta);
+    let res = [];
+    let sse = 0;
+    i = 0;
+    while (i < n) { push(res, y[i] - fitted[i]); sse = sse + res[i] * res[i]; i = i + 1; }
+    let dfe = n - k - 1;
+    if (dfe < 1) { return nil; }
+    let sst = st_sum_sq_dev(y);
+    let s2 = sse / dfe;
+    let r2 = 0;
+    if (sst > 0) { r2 = 1 - sse / sst; }
+    let coefs = [];
+    let j = 0;
+    while (j <= k) {
+        let se = sqrt(s2 * inv[j][j]);
+        let t = 0;
+        if (se > 0) { t = beta[j] / se; }
+        let nm = "b" + str(j);
+        if (j == 0) { nm = "(Intercept)"; }
+        else if (len(names) >= j) { nm = names[j - 1]; }
+        let h = st_t_ppf(0.975, dfe) * se;
+        push(coefs, {"name": nm, "coef": beta[j], "se": se, "t": t, "p": st_t_p2(t, dfe),
+                     "lo": beta[j] - h, "hi": beta[j] + h});
+        j = j + 1;
+    }
+    let fstat = 0;
+    let fp = 1;
+    if (k > 0 and sse > 0) { fstat = ((sst - sse) / k) / s2; fp = st_f_sf(fstat, k, dfe); }
+    return {"coefs": coefs, "beta": beta, "r2": r2, "adj_r2": 1 - (1 - r2) * (n - 1) / dfe,
+            "sigma": sqrt(s2), "df": dfe, "n": n, "f": fstat, "f_p": fp,
+            "fitted": fitted, "residuals": res, "xtx_inv": inv, "s2": s2, "rmse": sqrt(sse / n)};
+}
+
+// انحدار خطي بسيط، مع x و y مصفوفتين (يُسقط nil)
+fun st_linreg(x, y) {
+    let xs = [];
+    let ys = [];
+    let i = 0;
+    while (i < len(x) and i < len(y)) {
+        if (type(x[i]) == "number" and type(y[i]) == "number") { push(xs, x[i]); push(ys, y[i]); }
+        i = i + 1;
+    }
+    let X = [];
+    for (let v in xs) { push(X, [v]); }
+    let fit = st_ols(X, ys, ["x"]);
+    if (fit == nil) { return nil; }
+    fit["slope"] = fit["beta"][1];
+    fit["intercept"] = fit["beta"][0];
+    fit["x"] = xs;
+    fit["y"] = ys;
+    return fit;
+}
+
+// تنبؤ + فترة ثقة للمتوسط أو للتنبؤ (kind: "mean" | "pred") على شبكة xs لنموذج بسيط
+fun st_linreg_band(fit, xs, level, kind) {
+    let t = st_t_ppf(1 - (1 - level) / 2, fit["df"]);
+    let inv = fit["xtx_inv"];
+    let b = fit["beta"];
+    let yh = [];
+    let lo = [];
+    let hi = [];
+    for (let x in xs) {
+        let q = inv[0][0] + 2 * x * inv[0][1] + x * x * inv[1][1];
+        let v = fit["s2"] * q;
+        if (kind == "pred") { v = v + fit["s2"]; }
+        let m = b[0] + b[1] * x;
+        push(yh, m);
+        push(lo, m - t * sqrt(v));
+        push(hi, m + t * sqrt(v));
+    }
+    return {"x": xs, "y": yh, "lo": lo, "hi": hi};
+}
+
+// ---------------------------------------------------------------------------
+//  7) bootstrap: فاصل ثقة لأي إحصاء (stat: "mean"|"median"|"sd"|"var")
+// ---------------------------------------------------------------------------
+fun st_stat_by_name(name, a) {
+    if (name == "mean") { return mean(a); }
+    if (name == "median") { return median(a); }
+    if (name == "sd") { return sampleStdDev(a); }
+    return sampleVariance(a);
+}
+fun st_bootstrap(arr, stat, reps, level, rngSeed) {
+    let a = st_clean(arr);
+    let n = len(a);
+    if (n < 2) { return nil; }
+    seed(rngSeed);
+    let vals = [];
+    let b = 0;
+    while (b < reps) {
+        let s = [];
+        let i = 0;
+        while (i < n) { push(s, a[floor(random() * n)]); i = i + 1; }
+        push(vals, st_stat_by_name(stat, s));
+        b = b + 1;
+    }
+    let al = (1 - level) / 2 * 100;
+    return {"stat": st_stat_by_name(stat, a), "lo": percentile(vals, al), "hi": percentile(vals, 100 - al),
+            "se": sampleStdDev(vals), "reps": reps, "level": level, "samples": vals};
+}
+
+// ---------------------------------------------------------------------------
+//  8) جسر إطار البيانات: مجموعات، مصفوفة ارتباط بالدلالة، مقارنة مجموعات
+// ---------------------------------------------------------------------------
+// يُرجع [{name, values}] لقيم valueCol مقسّمة حسب groupCol (فوق df_unique/df_where/df_col)
+fun st_groups(df, groupCol, valueCol) {
+    let out = [];
+    let keysU = df_unique(df, groupCol);
+    for (let kk in keysU) {
+        let sub = df_where(df, groupCol, "==", kk);
+        push(out, {"name": kk, "values": st_clean(df_col(sub, valueCol))});
+    }
+    return out;
+}
+// يختار الاختبار المناسب تلقائياً: مجموعتان ← Welch ، أكثر ← ANOVA
+fun st_compare(df, groupCol, valueCol) {
+    let g = st_groups(df, groupCol, valueCol);
+    if (len(g) == 2) { return st_ttest_welch(g[0]["values"], g[1]["values"]); }
+    let arrs = [];
+    for (let e in g) { push(arrs, e["values"]); }
+    return st_anova(arrs);
+}
+// مصفوفة ارتباط مع p لكل زوج: {names, r:[[..]], p:[[..]], n}
+fun st_corr_matrix(df, names) {
+    let k = len(names);
+    let R = matZeros(k, k);
+    let P = matZeros(k, k);
+    let i = 0;
+    while (i < k) {
+        let j = 0;
+        while (j < k) {
+            if (i == j) { R[i][j] = 1; P[i][j] = 0; }
+            else {
+                let t = st_corr_test(df_col(df, names[i]), df_col(df, names[j]));
+                if (t == nil) { R[i][j] = 0; P[i][j] = 1; } else { R[i][j] = t["r"]; P[i][j] = t["p"]; }
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return {"names": names, "r": R, "p": P};
+}
+
+// ---------------------------------------------------------------------------
+//  9) عرض النتائج
+// ---------------------------------------------------------------------------
+fun st_report(r) {
+    if (r == nil) { return "(لا يمكن حساب الاختبار: بيانات غير كافية)"; }
+    let s = r["test"] + ":  stat=" + st_fmt(r["stat"], 4);
+    if (type(r["df"]) == "number") { s = s + "  df=" + st_fmt(r["df"], 2); }
+    s = s + "  p=" + st_fmt_p(r["p"]) + "  n=" + str(r["n"]);
+    if (has(r, "d")) { s = s + "  d=" + st_fmt(r["d"], 3); }
+    if (has(r, "r")) { s = s + "  r=" + st_fmt(r["r"], 4); }
+    if (has(r, "eta2")) { s = s + "  eta2=" + st_fmt(r["eta2"], 3); }
+    return s;
+}
+fun st_print(r) { print st_report(r); return r; }
+
+// جدول معاملات الانحدار كإطار بيانات (قابل لـ df_print)
+fun st_ols_table(fit) {
+    let t = df_new(["term", "coef", "se", "t", "p", "ci_lo", "ci_hi"]);
+    for (let c in fit["coefs"]) {
+        push(t["cols"]["term"], c["name"]);
+        push(t["cols"]["coef"], df_rnd(c["coef"], 4));
+        push(t["cols"]["se"], df_rnd(c["se"], 4));
+        push(t["cols"]["t"], df_rnd(c["t"], 3));
+        push(t["cols"]["p"], df_rnd(c["p"], 4));
+        push(t["cols"]["ci_lo"], df_rnd(c["lo"], 4));
+        push(t["cols"]["ci_hi"], df_rnd(c["hi"], 4));
+    }
+    return t;
+}
+
+// ---------------------------------------------------------------------------
+//  10) تحليل المكوّنات الرئيسية PCA فوق matEigSym الأصلية
+//  df + أسماء الأعمدة ← {values, ratio, loadings (أعمدة)، scores، names}
+// ---------------------------------------------------------------------------
+fun st_pca(df, names) {
+    let k = len(names);
+    let cols = [];
+    for (let nm in names) { push(cols, df_col(df, nm)); }
+    let n = len(cols[0]);
+    let Z = [];
+    let i = 0;
+    while (i < n) { push(Z, []); i = i + 1; }
+    for (let c in cols) {
+        let m = mean(c);
+        let sd = sampleStdDev(c);
+        if (sd == 0) { sd = 1; }
+        i = 0;
+        while (i < n) { push(Z[i], (c[i] - m) / sd); i = i + 1; }
+    }
+    let C = matScale(matMul(matTranspose(Z), Z), 1 / (n - 1));       // مصفوفة الارتباط
+    let e = matEigSym(C);
+    let tot = sum(e["values"]);
+    let ratio = [];
+    for (let v in e["values"]) { push(ratio, v / tot); }
+    return {"values": e["values"], "ratio": ratio, "loadings": e["vectors"],
+            "scores": matMul(Z, e["vectors"]), "names": names};
+}
+)RINSTATOGRIN";
+static const char* kLib_rinstat_adv_og_rin = R"RINSTATADVOGRIN(
+// ============================================================================
+//  lib/rinstat_adv.og.rin — RinStat المتقدّم
+//
+//  @version 1.0.0
+//  @category data
+//  @prefix st_
+//
+//  يُكمل lib/rinstat بما يحتاجه التحليل الجاد، ويعيد استعمال الأصلي:
+//    matSolve/matInv/matMul (LINALG) ← انحدار لوجستي IRLS
+//    algoPolyFit ← انحدار كثير الحدود   algoMinimize ← ضبط التمهيد الأسي
+//    st_rank/st_anova/st_chi2_sf/st_norm_cdf (rinstat) ← كل الاختبارات اللامعلمية
+//
+//  المحتوى: logit+ROC/AUC · Kruskal-Wallis · Wilcoxon · KS · Fisher · Levene ·
+//           مقارنات زوجية مع تصحيح · ACF/PACF/Ljung-Box · SES/Holt ·
+//           Kaplan-Meier + log-rank · تحليل القوة · KDE ثنائي · كثير الحدود.
+//  استيراد:  @import "lib/rinstat_adv.og.rin";
+// ============================================================================
+@import "lib/rinstat.og.rin";
+
+// ---------------------------------------------------------------------------
+//  1) الانحدار اللوجستي (IRLS) — X بلا عمود ثابت، y ∈ {0,1}
+// ---------------------------------------------------------------------------
+fun st_sigmoid(z) {
+    if (z >= 0) { return 1 / (1 + exp(-z)); }
+    let e = exp(z);
+    return e / (1 + e);
+}
+fun st_logit(X, y, names) {
+    let n = len(y);
+    let k = len(X[0]);
+    let D = [];
+    let i = 0;
+    while (i < n) { push(D, concat([1], X[i])); i = i + 1; }
+    let Dt = matTranspose(D);
+    let beta = [];
+    let j = 0;
+    while (j <= k) { push(beta, 0); j = j + 1; }
+    let A = nil;
+    let iters = 0;
+    let converged = false;
+    while (iters < 40) {
+        let eta = matMul(D, beta);
+        let g = [];
+        let Dw = [];
+        i = 0;
+        while (i < n) {
+            let p = st_sigmoid(eta[i]);
+            if (p < 1e-10) { p = 1e-10; }
+            if (p > 1 - 1e-10) { p = 1 - 1e-10; }
+            push(g, y[i] - p);
+            let w = p * (1 - p);
+            let row = [];
+            for (let v in D[i]) { push(row, v * w); }
+            push(Dw, row);
+            i = i + 1;
+        }
+        A = matMul(matTranspose(Dw), D);
+        if (matIs(A, "singular")) { return nil; }
+        let step = matSolve(A, matMul(Dt, g));
+        let mx = 0;
+        j = 0;
+        while (j <= k) { beta[j] = beta[j] + step[j]; if (abs(step[j]) > mx) { mx = abs(step[j]); } j = j + 1; }
+        iters = iters + 1;
+        if (mx < 1e-9) { converged = true; break; }
+    }
+    let cov = matInv(A);
+    let eta2 = matMul(D, beta);
+    let probs = [];
+    let ll = 0;
+    let ones = 0;
+    i = 0;
+    while (i < n) {
+        let p2 = st_sigmoid(eta2[i]);
+        push(probs, p2);
+        let pc = p2;
+        if (pc < 1e-12) { pc = 1e-12; }
+        if (pc > 1 - 1e-12) { pc = 1 - 1e-12; }
+        ll = ll + y[i] * log(pc) + (1 - y[i]) * log(1 - pc);
+        ones = ones + y[i];
+        i = i + 1;
+    }
+    let pb = ones / n;
+    let ll0 = 0;
+    if (pb > 0 and pb < 1) { ll0 = ones * log(pb) + (n - ones) * log(1 - pb); }
+    let coefs = [];
+    j = 0;
+    while (j <= k) {
+        let se = sqrt(cov[j][j]);
+        let z = 0;
+        if (se > 0) { z = beta[j] / se; }
+        let nm = "b" + str(j);
+        if (j == 0) { nm = "(Intercept)"; } else if (len(names) >= j) { nm = names[j - 1]; }
+        push(coefs, {"name": nm, "coef": beta[j], "se": se, "z": z, "p": 2 * (1 - st_norm_cdf(abs(z), 0, 1)),
+                     "or": exp(beta[j]), "or_lo": exp(beta[j] - 1.959964 * se), "or_hi": exp(beta[j] + 1.959964 * se)});
+        j = j + 1;
+    }
+    let lr = 2 * (ll - ll0);
+    let correct = 0;
+    i = 0;
+    while (i < n) { let pr = 0; if (probs[i] >= 0.5) { pr = 1; } if (pr == y[i]) { correct = correct + 1; } i = i + 1; }
+    return {"coefs": coefs, "beta": beta, "loglik": ll, "loglik0": ll0, "aic": 2 * (k + 1) - 2 * ll,
+            "mcfadden_r2": 1 - ll / ll0, "lr_stat": lr, "lr_df": k, "lr_p": st_chi2_sf(lr, k),
+            "probs": probs, "accuracy": correct / n, "n": n, "iters": iters, "converged": converged, "cov": cov};
+}
+fun st_logit_predict(fit, X) {
+    let out = [];
+    for (let r in X) { push(out, st_sigmoid(fit["beta"][0] + vecDot(slice(fit["beta"], 1, len(fit["beta"])), r))); }
+    return out;
+}
+
+// ROC: y ∈ {0,1}، scores أكبر = أرجح للفئة 1. AUC من الرتب (دقيق مع الروابط)
+fun st_roc(y, scores) {
+    let n = len(y);
+    let n1 = sum(y);
+    let n0 = n - n1;
+    if (n1 == 0 or n0 == 0) { return nil; }
+    let rk = st_rank(scores);
+    let r1 = 0;
+    let i = 0;
+    while (i < n) { if (y[i] == 1) { r1 = r1 + rk[i]; } i = i + 1; }
+    let auc = (r1 - n1 * (n1 + 1) / 2) / (n1 * n0);
+    let neg = [];
+    for (let s in scores) { push(neg, -s); }
+    let ord = st_argsort(neg);
+    let fpr = [0]; let tpr = [0]; let thr = [maxOf(scores) + 1];
+    let tp = 0; let fp = 0;
+    i = 0;
+    let best = -1; let bestT = 0;
+    while (i < n) {
+        let j = i;
+        while (j < n) {
+            if (scores[ord[j]] != scores[ord[i]]) { break; }
+            if (y[ord[j]] == 1) { tp = tp + 1; } else { fp = fp + 1; }
+            j = j + 1;
+        }
+        push(fpr, fp / n0); push(tpr, tp / n1); push(thr, scores[ord[i]]);
+        if (tp / n1 - fp / n0 > best) { best = tp / n1 - fp / n0; bestT = scores[ord[i]]; }
+        i = j;
+    }
+    return {"fpr": fpr, "tpr": tpr, "thr": thr, "auc": auc, "youden": best, "best_threshold": bestT};
+}
+// مصفوفة الالتباس 2×2 وقياساتها
+fun st_confusion(y, pred) {
+    let tp = 0; let fp = 0; let tn = 0; let fn = 0;
+    let i = 0;
+    while (i < len(y)) {
+        if (y[i] == 1 and pred[i] == 1) { tp = tp + 1; }
+        else if (y[i] == 0 and pred[i] == 1) { fp = fp + 1; }
+        else if (y[i] == 0 and pred[i] == 0) { tn = tn + 1; }
+        else { fn = fn + 1; }
+        i = i + 1;
+    }
+    let prec = 0; if (tp + fp > 0) { prec = tp / (tp + fp); }
+    let rec = 0; if (tp + fn > 0) { rec = tp / (tp + fn); }
+    let f1 = 0; if (prec + rec > 0) { f1 = 2 * prec * rec / (prec + rec); }
+    return {"matrix": [[tn, fp], [fn, tp]], "tp": tp, "fp": fp, "tn": tn, "fn": fn,
+            "accuracy": (tp + tn) / len(y), "precision": prec, "recall": rec, "f1": f1};
+}
+
+// ---------------------------------------------------------------------------
+//  2) اختبارات لامعلمية وغيرها
+// ---------------------------------------------------------------------------
+fun st_tie_term(sorted_arr) {
+    let n = len(sorted_arr);
+    let t = 0;
+    let i = 0;
+    while (i < n) {
+        let j = i;
+        while (j + 1 < n and sorted_arr[j + 1] == sorted_arr[i]) { j = j + 1; }
+        let c = j - i + 1;
+        t = t + (c * c * c - c);
+        i = j + 1;
+    }
+    return t;
+}
+fun st_kruskal(groups) {
+    let all = [];
+    let gs = [];
+    for (let g in groups) { let c = st_clean(g); push(gs, c); for (let v in c) { push(all, v); } }
+    let N = len(all);
+    let k = len(gs);
+    if (k < 2 or N < 3) { return nil; }
+    let rk = st_rank(all);
+    let pos = 0;
+    let h = 0;
+    for (let c in gs) {
+        let s = 0;
+        let i = 0;
+        while (i < len(c)) { s = s + rk[pos + i]; i = i + 1; }
+        if (len(c) > 0) { h = h + s * s / len(c); }
+        pos = pos + len(c);
+    }
+    h = 12 / (N * (N + 1)) * h - 3 * (N + 1);
+    let corr = 1 - st_tie_term(st_sorted(all)) / (N * N * N - N);
+    if (corr <= 0) { return nil; }
+    h = h / corr;
+    let r = st_result("Kruskal-Wallis", h, k - 1, st_chi2_sf(h, k - 1), N);
+    r["epsilon2"] = h / (N - 1);
+    return r;
+}
+// Wilcoxon للإشارات (مقترن أو عيّنة واحدة عند y=nil) — تقريب طبيعي مع تصحيح الروابط
+fun st_wilcoxon(x, y) {
+    let d = [];
+    let i = 0;
+    while (i < len(x)) {
+        let v = x[i];
+        if (y != nil) { v = x[i] - y[i]; }
+        if (v != 0) { push(d, v); }
+        i = i + 1;
+    }
+    let n = len(d);
+    if (n < 5) { return nil; }
+    let ab = [];
+    for (let v in d) { push(ab, abs(v)); }
+    let rk = st_rank(ab);
+    let wp = 0;
+    i = 0;
+    while (i < n) { if (d[i] > 0) { wp = wp + rk[i]; } i = i + 1; }
+    let mu = n * (n + 1) / 4;
+    let sd2 = n * (n + 1) * (2 * n + 1) / 24 - st_tie_term(st_sorted(ab)) / 48;
+    let z = (wp - mu) / sqrt(sd2);
+    let r = st_result("Wilcoxon signed-rank", wp, nil, 2 * (1 - st_norm_cdf(abs(z), 0, 1)), n);
+    r["z"] = z;
+    return r;
+}
+// Kolmogorov–Smirnov لعيّنتين (p تقاربي)
+fun st_ks2(x, y) {
+    let a = st_sorted(x);
+    let b = st_sorted(y);
+    let n = len(a); let m = len(b);
+    if (n < 2 or m < 2) { return nil; }
+    let i = 0; let j = 0; let d = 0;
+    while (i < n and j < m) {
+        let v = a[i];
+        if (b[j] < v) { v = b[j]; }
+        while (i < n and a[i] <= v) { i = i + 1; }
+        while (j < m and b[j] <= v) { j = j + 1; }
+        let diff = abs(i / n - j / m);
+        if (diff > d) { d = diff; }
+    }
+    let en = sqrt(n * m / (n + m));
+    let lam = en * d;
+    let p = 0;
+    let k = 1;
+    while (k <= 100) {
+        let term = 2 * exp(-2 * k * k * lam * lam);
+        if (k % 2 == 0) { p = p - term; } else { p = p + term; }
+        if (term < 1e-12) { break; }
+        k = k + 1;
+    }
+    if (p > 1) { p = 1; }
+    if (p < 0) { p = 0; }
+    if (lam < 0.2) { p = 1; }
+    return st_result("Kolmogorov-Smirnov 2-sample", d, nil, p, n + m);
+}
+fun st_lchoose(n, k) { return st_lgamma(n + 1) - st_lgamma(k + 1) - st_lgamma(n - k + 1); }
+// Fisher الدقيق لجدول 2×2: [[a,b],[c,d]] — p ثنائي الذيل
+fun st_fisher(t) {
+    let a = t[0][0]; let b = t[0][1]; let c = t[1][0]; let d = t[1][1];
+    let r1 = a + b; let r2 = c + d; let c1 = a + c; let n = r1 + r2;
+    let lo = max(0, c1 - r2);
+    let hi = min(r1, c1);
+    let lp = st_lchoose(r1, a) + st_lchoose(r2, c1 - a) - st_lchoose(n, c1);
+    let pobs = exp(lp);
+    let p = 0;
+    let x = lo;
+    while (x <= hi) {
+        let px = exp(st_lchoose(r1, x) + st_lchoose(r2, c1 - x) - st_lchoose(n, c1));
+        if (px <= pobs * (1 + 1e-7)) { p = p + px; }
+        x = x + 1;
+    }
+    if (p > 1) { p = 1; }
+    let orr = nil;
+    if (b * c > 0) { orr = a * d / (b * c); }
+    let r = st_result("Fisher exact", orr, nil, p, n);
+    r["odds_ratio"] = orr;
+    return r;
+}
+// Levene (Brown–Forsythe: التمركز حول الوسيط) = ANOVA على الانحرافات المطلقة
+fun st_levene(groups) {
+    let zs = [];
+    for (let g in groups) {
+        let c = st_clean(g);
+        let m = median(c);
+        let z = [];
+        for (let v in c) { push(z, abs(v - m)); }
+        push(zs, z);
+    }
+    let r = st_anova(zs);
+    if (r != nil) { r["test"] = "Levene (Brown-Forsythe)"; }
+    return r;
+}
+// مقارنات زوجية بين مجموعات [{name,values}] مع تصحيح التعدد
+fun st_pairwise(groups, adjust) {
+    let out = [];
+    let ps = [];
+    let i = 0;
+    while (i < len(groups)) {
+        let j = i + 1;
+        while (j < len(groups)) {
+            let t = st_ttest_welch(groups[i]["values"], groups[j]["values"]);
+            if (t != nil) {
+                push(out, {"a": groups[i]["name"], "b": groups[j]["name"], "diff": t["diff"], "t": t["stat"], "p": t["p"], "d": t["d"]});
+                push(ps, t["p"]);
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    let adj = st_p_adjust(ps, adjust);
+    i = 0;
+    while (i < len(out)) { out[i]["p_adj"] = adj[i]; i = i + 1; }
+    return out;
+}
+// اختيار اختبار المقارنة تلقائياً: طبيعية (JB) + تجانس (Levene) → ANOVA/Welch أو لامعلمي
+fun st_auto_compare(groups) {
+    let arrs = [];
+    let normal = true;
+    for (let g in groups) {
+        push(arrs, g["values"]);
+        if (len(g["values"]) >= 8) {
+            let nt = st_normality(g["values"]);
+            if (nt != nil and nt["p"] < 0.01) { normal = false; }
+        }
+    }
+    let lev = st_levene(arrs);
+    let equalVar = true;
+    if (lev != nil and lev["p"] < 0.05) { equalVar = false; }
+    let r = nil;
+    let why = "";
+    if (len(arrs) == 2) {
+        if (normal) { r = st_ttest_welch(arrs[0], arrs[1]); why = "normal data, two groups -> Welch t"; }
+        else { r = st_mannwhitney(arrs[0], arrs[1]); why = "non-normal data, two groups -> Mann-Whitney"; }
+    } else {
+        if (normal) { r = st_anova(arrs); why = "normal data -> one-way ANOVA"; }
+        else { r = st_kruskal(arrs); why = "non-normal data -> Kruskal-Wallis"; }
+    }
+    if (r != nil) { r["why"] = why; r["levene_p"] = nil; if (lev != nil) { r["levene_p"] = lev["p"]; } }
+    return r;
+}
+
+// ---------------------------------------------------------------------------
+//  3) السلاسل الزمنية
+// ---------------------------------------------------------------------------
+fun st_acf(x, maxlag) {
+    let a = st_clean(x);
+    let n = len(a);
+    let m = mean(a);
+    let c0 = 0;
+    for (let v in a) { c0 = c0 + (v - m) * (v - m); }
+    let out = [1];
+    let k = 1;
+    while (k <= maxlag and k < n) {
+        let s = 0;
+        let t = 0;
+        while (t < n - k) { s = s + (a[t] - m) * (a[t + k] - m); t = t + 1; }
+        push(out, s / c0);
+        k = k + 1;
+    }
+    return out;
+}
+// PACF بخوارزمية Durbin–Levinson
+fun st_pacf(x, maxlag) {
+    let r = st_acf(x, maxlag);
+    let out = [1];
+    let phi = [];
+    let k = 1;
+    while (k < len(r)) {
+        let num = r[k];
+        let den = 1;
+        let j = 0;
+        while (j < k - 1) { num = num - phi[j] * r[k - 1 - j]; den = den - phi[j] * r[j + 1]; j = j + 1; }
+        let pk = num / den;
+        let nphi = [];
+        j = 0;
+        while (j < k - 1) { push(nphi, phi[j] - pk * phi[k - 2 - j]); j = j + 1; }
+        push(nphi, pk);
+        phi = nphi;
+        push(out, pk);
+        k = k + 1;
+    }
+    return out;
+}
+fun st_ljungbox(x, lag) {
+    let a = st_clean(x);
+    let n = len(a);
+    let r = st_acf(a, lag);
+    let q = 0;
+    let k = 1;
+    while (k <= lag and k < len(r)) { q = q + r[k] * r[k] / (n - k); k = k + 1; }
+    q = q * n * (n + 2);
+    return st_result("Ljung-Box", q, lag, st_chi2_sf(q, lag), n);
+}
+fun st_diff(x, d) {
+    let a = x;
+    let i = 0;
+    while (i < d) {
+        let b = [];
+        let t = 1;
+        while (t < len(a)) { push(b, a[t] - a[t - 1]); t = t + 1; }
+        a = b;
+        i = i + 1;
+    }
+    return a;
+}
+// تمهيد أسي بسيط: SSE خطوة-أمام لقيمة alpha
+fun st_ses_sse(a, alpha) {
+    let lvl = a[0];
+    let sse = 0;
+    let t = 1;
+    while (t < len(a)) { let e = a[t] - lvl; sse = sse + e * e; lvl = lvl + alpha * e; t = t + 1; }
+    return sse;
+}
+// يضبط alpha بـ algoMinimize الأصلية (Brent) ويتنبّأ h خطوة
+fun st_ses(x, h) {
+    let a = st_clean(x);
+    let best = algoMinimize(fun(al) { return st_ses_sse(a, al); }, 0.001, 0.999);
+    let alpha = best["x"];
+    let lvl = a[0];
+    let t = 1;
+    while (t < len(a)) { lvl = lvl + alpha * (a[t] - lvl); t = t + 1; }
+    let fc = [];
+    let i = 0;
+    while (i < h) { push(fc, lvl); i = i + 1; }
+    return {"alpha": alpha, "level": lvl, "forecast": fc, "sse": st_ses_sse(a, alpha)};
+}
+// Holt (اتجاه خطي): alpha/beta بـ Nelder–Mead الأصلية
+fun st_holt_sse(a, al, be) {
+    let lvl = a[0]; let tr = a[1] - a[0];
+    let sse = 0;
+    let t = 1;
+    while (t < len(a)) {
+        let f = lvl + tr;
+        let e = a[t] - f;
+        sse = sse + e * e;
+        let nl = al * a[t] + (1 - al) * f;
+        tr = be * (nl - lvl) + (1 - be) * tr;
+        lvl = nl;
+        t = t + 1;
+    }
+    return sse;
+}
+fun st_holt(x, h) {
+    let a = st_clean(x);
+    let clip = fun(v) { if (v < 0.001) { return 0.001; } if (v > 0.999) { return 0.999; } return v; };
+    let best = algoMinimize(fun(p) { return st_holt_sse(a, clip(p[0]), clip(p[1])); }, [0.5, 0.2]);
+    let al = clip(best["x"][0]); let be = clip(best["x"][1]);
+    let lvl = a[0]; let tr = a[1] - a[0];
+    let t = 1;
+    while (t < len(a)) {
+        let f = lvl + tr;
+        let nl = al * a[t] + (1 - al) * f;
+        tr = be * (nl - lvl) + (1 - be) * tr;
+        lvl = nl;
+        t = t + 1;
+    }
+    let fc = [];
+    let i = 1;
+    while (i <= h) { push(fc, lvl + i * tr); i = i + 1; }
+    return {"alpha": al, "beta": be, "level": lvl, "trend": tr, "forecast": fc, "sse": st_holt_sse(a, al, be)};
+}
+
+// ---------------------------------------------------------------------------
+//  4) تحليل البقاء: Kaplan–Meier و log-rank
+//  times: أزمنة، events: 1=حدث 0=رقابة
+// ---------------------------------------------------------------------------
+fun st_km(times, events) {
+    let n = len(times);
+    let ord = st_argsort(times);
+    let ts = [0]; let surv = [1]; let lo = [1]; let hi = [1]; let atrisk = [n];
+    let s = 1; let gv = 0;
+    let i = 0;
+    let med = nil;
+    while (i < n) {
+        let j = i;
+        let d = 0; let c = 0;
+        while (j < n) {
+            if (times[ord[j]] != times[ord[i]]) { break; }
+            if (events[ord[j]] == 1) { d = d + 1; } else { c = c + 1; }
+            j = j + 1;
+        }
+        let nr = n - i;
+        if (d > 0) {
+            s = s * (1 - d / nr);
+            if (nr > d) { gv = gv + d / (nr * (nr - d)); }
+            let se = s * sqrt(gv);
+            push(ts, times[ord[i]]); push(surv, s);
+            push(lo, max(0, s - 1.959964 * se)); push(hi, min(1, s + 1.959964 * se));
+            push(atrisk, nr);
+            if (med == nil and s <= 0.5) { med = times[ord[i]]; }
+        }
+        i = j;
+    }
+    return {"t": ts, "s": surv, "lo": lo, "hi": hi, "n_at_risk": atrisk, "median": med, "n": n, "events": sum(events)};
+}
+// log-rank لمجموعتين
+fun st_logrank(t1, e1, t2, e2) {
+    let T = concat(t1, t2);
+    let E = concat(e1, e2);
+    let G = [];
+    for (let v in t1) { push(G, 1); }
+    for (let v in t2) { push(G, 2); }
+    let ord = st_argsort(T);
+    let n = len(T);
+    let n1 = len(t1); let n2 = len(t2);
+    let oe = 0; let v = 0;
+    let i = 0;
+    while (i < n) {
+        let j = i;
+        let d = 0; let d1 = 0; let rm = 0; let r1 = 0;
+        while (j < n) {
+            if (T[ord[j]] != T[ord[i]]) { break; }
+            if (E[ord[j]] == 1) { d = d + 1; if (G[ord[j]] == 1) { d1 = d1 + 1; } }
+            j = j + 1;
+        }
+        let nt = n1 + n2;
+        if (d > 0 and nt > 0) {
+            let ex = d * n1 / nt;
+            oe = oe + d1 - ex;
+            if (nt > 1) { v = v + d * (n1 / nt) * (1 - n1 / nt) * (nt - d) / (nt - 1); }
+        }
+        let k = i;
+        while (k < j) { if (G[ord[k]] == 1) { n1 = n1 - 1; } else { n2 = n2 - 1; } k = k + 1; }
+        i = j;
+    }
+    if (v <= 0) { return nil; }
+    let chi = oe * oe / v;
+    return st_result("log-rank", chi, 1, st_chi2_sf(chi, 1), n);
+}
+
+// ---------------------------------------------------------------------------
+//  5) تحليل القوة وحجم العيّنة (t لعيّنتين، تقريب مع حرج t)
+// ---------------------------------------------------------------------------
+fun st_power_t2(d, n, alpha) {
+    let df = 2 * n - 2;
+    let tc = st_t_ppf(1 - alpha / 2, df);
+    let ncp = d * sqrt(n / 2);
+    return 1 - st_norm_cdf(tc - ncp, 0, 1) + st_norm_cdf(-tc - ncp, 0, 1);
+}
+fun st_sample_size_t2(d, alpha, power) {
+    let n = 2;
+    while (n < 100000) {
+        if (st_power_t2(d, n, alpha) >= power) { return n; }
+        n = n + 1;
+    }
+    return nil;
+}
+
+// ---------------------------------------------------------------------------
+//  6) كثافة ثنائية وكثير الحدود
+// ---------------------------------------------------------------------------
+// {x:[nx], y:[ny], z:[ny][nx]} بنواة غاوسية وعرض Silverman لكل محور
+fun st_kde2(x, y, nx, ny) {
+    let hx = st_bandwidth(x); let hy = st_bandwidth(y);
+    let x0 = minOf(x) - 2 * hx; let x1 = maxOf(x) + 2 * hx;
+    let y0 = minOf(y) - 2 * hy; let y1 = maxOf(y) + 2 * hy;
+    let gx = []; let gy = [];
+    let i = 0;
+    while (i < nx) { push(gx, x0 + (x1 - x0) * i / (nx - 1)); i = i + 1; }
+    i = 0;
+    while (i < ny) { push(gy, y0 + (y1 - y0) * i / (ny - 1)); i = i + 1; }
+    let n = len(x);
+    let z = [];
+    let r = 0;
+    while (r < ny) {
+        let row = [];
+        let c = 0;
+        while (c < nx) {
+            let s = 0;
+            let k = 0;
+            while (k < n) {
+                let u = (gx[c] - x[k]) / hx; let v = (gy[r] - y[k]) / hy;
+                s = s + exp(-0.5 * (u * u + v * v));
+                k = k + 1;
+            }
+            push(row, s / (n * 2 * PI * hx * hy));
+            c = c + 1;
+        }
+        push(z, row);
+        r = r + 1;
+    }
+    return {"x": gx, "y": gy, "z": z};
+}
+// كثير الحدود بدرجة deg (algoPolyFit الأصلية) + AIC وتقدير عند شبكة
+fun st_polyreg(x, y, deg) {
+    let f = algoPolyFit(x, y, deg);
+    let n = len(x);
+    let sse = f["rmse"] * f["rmse"] * n;
+    let k = deg + 1;
+    let aic = n * log(max(sse / n, 1e-300)) + 2 * k;
+    let adj = 1 - (1 - f["r2"]) * (n - 1) / (n - k);
+    return {"coeffs": f["coeffs"], "r2": f["r2"], "adj_r2": adj, "rmse": f["rmse"], "aic": aic, "deg": deg};
+}
+// يختار الدرجة بأقل AIC من 1..maxdeg
+fun st_poly_select(x, y, maxdeg) {
+    let best = nil;
+    let d = 1;
+    while (d <= maxdeg) {
+        let f = st_polyreg(x, y, d);
+        if (best == nil or f["aic"] < best["aic"]) { best = f; }
+        d = d + 1;
+    }
+    return best;
+}
+)RINSTATADVOGRIN";
+static const char* kLib_rinplot_og_rin = R"RINPLOTOGRIN(
+// ============================================================================
+//  lib/rinplot.og.rin — RinPlot: الرسوم البيانية الإحصائية المعقّدة
+//
+//  @version 1.0.0
+//  @category data
+//  @prefix pl_
+//
+//  لا نُعيد اختراع الرسم: المكتبة "مشهد" مجرّد (مستطيلات/خطوط/مضلّعات/نصوص)
+//  يُرسم بواجهتين من نفس المصدر، فتتطابق النتيجة:
+//    • SVG  ← نص نظيف قابل للتكبير، يدعم العربية بالكامل (يُشكَّل في المتصفح)
+//    • PNG  ← عبر دوال img* الأصلية (imgNew/imgLine/imgPolygon/imgText/imgSave)
+//             ملاحظة: خط البكسل المدمج لا يُشكِّل الحروف العربية — استعمل SVG للعربية.
+//  وتعتمد على الموجود: الألوان (colorMix/colorParse/colorTextOn)، التنسيق
+//  (numberFormat/numberRound/numberMap)، والإحصاء (lib/rinstat) لكل رسم إحصائي
+//  (st_hist/st_kde/st_qq/st_linreg/st_summary/st_outliers/st_corr_matrix...).
+//
+//  الاستعمال المختصر:
+//    @import "lib/rinplot.og.rin";
+//    let fig = pl_figure(960, 640, 1, 1, "عنوان");
+//    let ax  = pl_axes(fig, 0, 0);
+//    pl_scatter(ax, xs, ys, {"label": "قياسات"});
+//    pl_save(fig, "out/chart.svg");        // أو .png
+//
+//  كل دالة رسم: pl_<نوع>(ax, بيانات..., opts) حيث opts قاموس (يمكن {}).
+//  خيارات شائعة: label color width alpha size dash.
+// ============================================================================
+@import "lib/rinstat.og.rin";
+
+// ---------------------------------------------------------------------------
+//  1) السمات والألوان
+// ---------------------------------------------------------------------------
+fun pl_palette() {   // Okabe–Ito: آمنة لعمى الألوان
+    return ["#0072B2", "#E69F00", "#009E73", "#D55E00", "#CC79A7", "#56B4E9", "#B8A400", "#555555"];
+}
+fun pl_theme(name) {
+    if (name == "dark") {
+        return {"bg": "#0f172a", "fg": "#e2e8f0", "grid": "#273449", "axis": "#64748b", "panel": "#111c33"};
+    }
+    return {"bg": "#ffffff", "fg": "#1f2937", "grid": "#e5e7eb", "axis": "#9ca3af", "panel": "#ffffff"};
+}
+
+// خرائط لونية: تتدرّج بـ colorMix الأصلية بين محطات
+fun pl_ramp(stops, t) {
+    if (t < 0) { t = 0; }
+    if (t > 1) { t = 1; }
+    let n = len(stops) - 1;
+    let p = t * n;
+    let i = floor(p);
+    if (i >= n) { return stops[n]; }
+    return colorMix(stops[i], stops[i + 1], p - i);
+}
+fun pl_cmap(name, t) {
+    if (name == "coolwarm") { return pl_ramp(["#3b4cc0", "#8db0fe", "#f1f1f1", "#f49a7b", "#b40426"], t); }
+    if (name == "blues") { return pl_ramp(["#f7fbff", "#9ecae1", "#2171b5", "#08306b"], t); }
+    return pl_ramp(["#440154", "#3b528b", "#21918c", "#5ec962", "#fde725"], t);   // viridis
+}
+
+// ---------------------------------------------------------------------------
+//  2) الأشكال واللوحات
+// ---------------------------------------------------------------------------
+fun pl_figure(w, h, rows, cols, title) {
+    return {"w": w, "h": h, "rows": rows, "cols": cols, "title": title, "axes": [], "fs": 2,
+            "theme": "light", "hgap": 0, "vgap": 0};
+}
+fun pl_axes_span(fig, r, c, rs, cs) {
+    let ax = {"row": r, "col": c, "rs": rs, "cs": cs, "title": "", "xlabel": "", "ylabel": "",
+              "layers": [], "kind": "cartesian", "xcats": nil, "xlim": nil, "ylim": nil,
+              "grid": true, "legend": "upper right", "ci": 0, "xlog": false, "ylog": false,
+              "ytickfmt": nil, "fig": nil, "ycats": nil};
+    push(fig["axes"], ax);
+    return ax;
+}
+fun pl_axes(fig, r, c) { return pl_axes_span(fig, r, c, 1, 1); }
+fun pl_title(ax, s) { ax["title"] = s; return ax; }
+fun pl_xlabel(ax, s) { ax["xlabel"] = s; return ax; }
+fun pl_ylabel(ax, s) { ax["ylabel"] = s; return ax; }
+fun pl_xlim(ax, lo, hi) { ax["xlim"] = [lo, hi]; return ax; }
+fun pl_ylim(ax, lo, hi) { ax["ylim"] = [lo, hi]; return ax; }
+fun pl_xcats(ax, labels) { ax["xcats"] = labels; return ax; }
+fun pl_legend(ax, pos) { ax["legend"] = pos; return ax; }      // "upper right"|"upper left"|"lower right"|"lower left"|"none"
+fun pl_logx(ax) { ax["xlog"] = true; return ax; }
+fun pl_logy(ax) { ax["ylog"] = true; return ax; }
+fun pl_dark(fig) { fig["theme"] = "dark"; return fig; }
+
+fun pl_opt(o, k, d) { if (has(o, k)) { return o[k]; } return d; }
+fun pl_next_color(ax) {
+    let p = pl_palette();
+    let c = p[ax["ci"] % len(p)];
+    ax["ci"] = ax["ci"] + 1;
+    return c;
+}
+fun pl_pick_color(ax, o) {
+    if (has(o, "color")) { return o["color"]; }
+    return pl_next_color(ax);
+}
+
+// ---------------------------------------------------------------------------
+//  3) طبقات الرسم (تُخزَّن بيانات فقط؛ الرسم الفعلي عند الحفظ)
+// ---------------------------------------------------------------------------
+fun pl_line(ax, x, y, o) {
+    push(ax["layers"], {"type": "line", "x": x, "y": y, "color": pl_pick_color(ax, o), "label": pl_opt(o, "label", ""),
+                        "width": pl_opt(o, "width", 2), "dash": pl_opt(o, "dash", false)});
+    return ax;
+}
+fun pl_scatter(ax, x, y, o) {
+    push(ax["layers"], {"type": "scatter", "x": x, "y": y, "color": pl_pick_color(ax, o), "label": pl_opt(o, "label", ""),
+                        "size": pl_opt(o, "size", 3), "alpha": pl_opt(o, "alpha", 0.75)});
+    return ax;
+}
+// أعمدة: x مواضع رقمية (أو نصوص فتتحوّل إلى فئات)، y ارتفاعات
+fun pl_bar(ax, x, y, o) {
+    let xs = x;
+    if (len(x) > 0 and type(x[0]) != "number") {
+        ax["xcats"] = x;
+        xs = [];
+        let i = 0;
+        while (i < len(x)) { push(xs, i + 1); i = i + 1; }
+    }
+    push(ax["layers"], {"type": "bar", "x": xs, "y": y, "color": pl_pick_color(ax, o), "label": pl_opt(o, "label", ""),
+                        "w": pl_opt(o, "w", 0.7), "alpha": pl_opt(o, "alpha", 0.9), "base": pl_opt(o, "base", 0)});
+    return ax;
+}
+fun pl_band(ax, x, lo, hi, o) {
+    push(ax["layers"], {"type": "band", "x": x, "lo": lo, "hi": hi, "color": pl_pick_color(ax, o),
+                        "label": pl_opt(o, "label", ""), "alpha": pl_opt(o, "alpha", 0.25)});
+    return ax;
+}
+fun pl_area(ax, x, y, o) {
+    let z = [];
+    for (let v in y) { push(z, 0); }
+    return pl_band(ax, x, z, y, o);
+}
+fun pl_errorbar(ax, x, y, err, o) {
+    push(ax["layers"], {"type": "errbar", "x": x, "y": y, "err": err, "color": pl_pick_color(ax, o),
+                        "label": pl_opt(o, "label", ""), "size": pl_opt(o, "size", 3)});
+    return ax;
+}
+fun pl_hline(ax, v, o) {
+    push(ax["layers"], {"type": "hline", "v": v, "color": pl_opt(o, "color", "#888888"), "label": pl_opt(o, "label", ""),
+                        "width": pl_opt(o, "width", 1), "dash": pl_opt(o, "dash", true)});
+    return ax;
+}
+fun pl_vline(ax, v, o) {
+    push(ax["layers"], {"type": "vline", "v": v, "color": pl_opt(o, "color", "#888888"), "label": pl_opt(o, "label", ""),
+                        "width": pl_opt(o, "width", 1), "dash": pl_opt(o, "dash", true)});
+    return ax;
+}
+fun pl_text(ax, x, y, s, o) {
+    push(ax["layers"], {"type": "text", "x": x, "y": y, "s": s, "color": pl_opt(o, "color", ""),
+                        "anchor": pl_opt(o, "anchor", "start"), "label": ""});
+    return ax;
+}
+// خريطة حرارية لمصفوفة M (صفوف × أعمدة)
+fun pl_heat(ax, M, rowlab, collab, o) {
+    ax["kind"] = "heat";
+    ax["heat"] = {"m": M, "rows": rowlab, "cols": collab, "cmap": pl_opt(o, "cmap", "viridis"),
+                  "vmin": pl_opt(o, "vmin", nil), "vmax": pl_opt(o, "vmax", nil),
+                  "annotate": pl_opt(o, "annotate", true), "digits": pl_opt(o, "digits", 2),
+                  "stars": pl_opt(o, "stars", nil)};
+    return ax;
+}
+// فطيرة/دونات: قيم + تسميات
+fun pl_pie(ax, vals, labels, o) {
+    ax["kind"] = "pie";
+    ax["pie"] = {"v": vals, "labels": labels, "hole": pl_opt(o, "hole", 0)};
+    return ax;
+}
+
+// ---------------------------------------------------------------------------
+//  4) المقاييس والتدريجات
+// ---------------------------------------------------------------------------
+fun pl_nice_step(rng, target) {
+    if (rng <= 0) { return 1; }
+    let raw = rng / target;
+    let mag = pow(10, floor(log10(raw)));
+    let r = raw / mag;
+    let s = 10;
+    if (r < 1.5) { s = 1; } else if (r < 3) { s = 2; } else if (r < 7) { s = 5; }
+    return s * mag;
+}
+fun pl_ticks(lo, hi, target) {
+    let step = pl_nice_step(hi - lo, target);
+    let out = [];
+    let v = ceil(lo / step - 1e-9) * step;
+    let guard = 0;
+    while (v <= hi + step * 1e-9 and guard < 200) {
+        push(out, numberRound(v, 10));
+        v = v + step;
+        guard = guard + 1;
+    }
+    return {"ticks": out, "step": step};
+}
+fun pl_tick_label(v, step) {
+    let d = 0;
+    if (step < 1) { d = ceil(-log10(step) - 1e-9); }
+    if (d > 8) { d = 8; }
+    if (abs(v) >= 1e7) { return str(v); }
+    return numberFormat(v, {"decimals": d, "group": ""});
+}
+fun pl_tf(v, lg) {
+    if (lg) { if (v <= 0) { return -300; } return log10(v); }
+    return v;
+}
+fun pl_mx(g, v) {
+    let t = pl_tf(v, g["xlog"]);
+    let a = g["xlo"]; let b = g["xhi"];
+    if (b == a) { return (g["px0"] + g["px1"]) / 2; }
+    return g["px0"] + (t - a) / (b - a) * (g["px1"] - g["px0"]);
+}
+fun pl_my(g, v) {
+    let t = pl_tf(v, g["ylog"]);
+    let a = g["ylo"]; let b = g["yhi"];
+    if (b == a) { return (g["py0"] + g["py1"]) / 2; }
+    let y = g["py1"] - (t - a) / (b - a) * (g["py1"] - g["py0"]);
+    if (y < g["py0"] - 2) { y = g["py0"] - 2; }
+    if (y > g["py1"] + 2) { y = g["py1"] + 2; }
+    return y;
+}
+
+// المدى [x0,x1,y0,y1] لطبقة
+fun pl_extent(L) {
+    let t = L["type"];
+    if (t == "line" or t == "scatter") { return [minOf(L["x"]), maxOf(L["x"]), minOf(L["y"]), maxOf(L["y"])]; }
+    if (t == "bar") {
+        let lo = minOf(L["y"]); let hi = maxOf(L["y"]);
+        if (L["base"] < lo) { lo = L["base"]; }
+        if (L["base"] > hi) { hi = L["base"]; }
+        return [minOf(L["x"]) - L["w"] / 2, maxOf(L["x"]) + L["w"] / 2, lo, hi];
+    }
+    if (t == "band") {
+        let lo2 = minOf(L["lo"]); let hi2 = maxOf(L["hi"]);
+        return [minOf(L["x"]), maxOf(L["x"]), lo2, hi2];
+    }
+    if (t == "errbar") {
+        let ys = [];
+        let i = 0;
+        while (i < len(L["y"])) { push(ys, L["y"][i] - L["err"][i]); push(ys, L["y"][i] + L["err"][i]); i = i + 1; }
+        return [minOf(L["x"]), maxOf(L["x"]), minOf(ys), maxOf(ys)];
+    }
+    if (t == "box") {
+        let lo3 = L["lo"]; let hi3 = L["hi"];
+        for (let o in L["out"]) { if (o < lo3) { lo3 = o; } if (o > hi3) { hi3 = o; } }
+        return [L["x"] - L["w"], L["x"] + L["w"], lo3, hi3];
+    }
+    if (t == "violin") { return [L["x"] - L["w"], L["x"] + L["w"], minOf(L["ky"]), maxOf(L["ky"])]; }
+    if (t == "raster") { return [L["gx"][0], L["gx"][len(L["gx"]) - 1], L["gy"][0], L["gy"][len(L["gy"]) - 1]]; }
+    if (t == "hrange") { return [minOf(L["lo"]), maxOf(L["hi"]), minOf(L["y"]) - 0.5, maxOf(L["y"]) + 0.5]; }
+    if (t == "hline") { return [nil, nil, L["v"], L["v"]]; }
+    if (t == "vline") { return [L["v"], L["v"], nil, nil]; }
+    if (t == "text") { return [L["x"], L["x"], L["y"], L["y"]]; }
+    return [nil, nil, nil, nil];
+}
+
+fun pl_range(ax) {
+    let x0 = nil; let x1 = nil; let y0 = nil; let y1 = nil;
+    for (let L in ax["layers"]) {
+        let e = pl_extent(L);
+        if (e[0] != nil and (x0 == nil or e[0] < x0)) { x0 = e[0]; }
+        if (e[1] != nil and (x1 == nil or e[1] > x1)) { x1 = e[1]; }
+        if (e[2] != nil and (y0 == nil or e[2] < y0)) { y0 = e[2]; }
+        if (e[3] != nil and (y1 == nil or e[3] > y1)) { y1 = e[3]; }
+    }
+    if (x0 == nil) { x0 = 0; x1 = 1; }
+    if (y0 == nil) { y0 = 0; y1 = 1; }
+    if (ax["xcats"] != nil) { x0 = 0.5; x1 = len(ax["xcats"]) + 0.5; }
+    if (has(ax, "ycats") and ax["ycats"] != nil) { y0 = 0.5; y1 = len(ax["ycats"]) + 0.5; if (has(ax, "ypad")) { y1 = y1 + ax["ypad"]; } }
+    // هامش 5% (ولا هامش أسفل الأعمدة)
+    let hasBar = false;
+    for (let L in ax["layers"]) { if (L["type"] == "bar") { hasBar = true; } }
+    if (ax["xlog"]) { x0 = log10(max(x0, 1e-12)); x1 = log10(max(x1, 1e-12)); }
+    if (ax["ylog"]) { y0 = log10(max(y0, 1e-12)); y1 = log10(max(y1, 1e-12)); }
+    let dx = x1 - x0; if (dx == 0) { dx = 1; }
+    let dy = y1 - y0; if (dy == 0) { dy = 1; }
+    if (ax["xcats"] == nil) { x0 = x0 - dx * 0.04; x1 = x1 + dx * 0.04; }
+    if (!(hasBar and y0 >= 0 and !ax["ylog"])) { y0 = y0 - dy * 0.05; }
+    y1 = y1 + dy * 0.06;
+    if (ax["xlim"] != nil) { x0 = pl_tf(ax["xlim"][0], ax["xlog"]); x1 = pl_tf(ax["xlim"][1], ax["xlog"]); }
+    if (ax["ylim"] != nil) { y0 = pl_tf(ax["ylim"][0], ax["ylog"]); y1 = pl_tf(ax["ylim"][1], ax["ylog"]); }
+    if (has(ax, "ycats") and ax["ycats"] != nil) { y0 = 0.5; y1 = len(ax["ycats"]) + 0.5; if (has(ax, "ypad")) { y1 = y1 + ax["ypad"]; } }
+    return {"xlo": x0, "xhi": x1, "ylo": y0, "yhi": y1};
+}
+
+// ---------------------------------------------------------------------------
+//  5) المشهد: عناصر بكسلية مجرّدة
+// ---------------------------------------------------------------------------
+fun pl_s_rect(sc, x, y, w, h, fill, stroke, sw) { push(sc, {"t": "rect", "x": x, "y": y, "w": w, "h": h, "fill": fill, "stroke": stroke, "sw": sw}); }
+fun pl_s_line(sc, x1, y1, x2, y2, c, w, dash) { push(sc, {"t": "line", "x1": x1, "y1": y1, "x2": x2, "y2": y2, "c": c, "w": w, "dash": dash}); }
+fun pl_s_poly(sc, pts, fill, stroke, sw, closed) { push(sc, {"t": "poly", "pts": pts, "fill": fill, "stroke": stroke, "sw": sw, "closed": closed, "dash": false}); }
+fun pl_s_circle(sc, x, y, r, fill, stroke) { push(sc, {"t": "circle", "x": x, "y": y, "r": r, "fill": fill, "stroke": stroke}); }
+fun pl_s_text(sc, x, y, s, c, fs, anchor, bold) { push(sc, {"t": "text", "x": x, "y": y, "s": s, "c": c, "fs": fs, "anchor": anchor, "bold": bold}); }
+fun pl_tw(s, fs) { return len(s) * 6 * fs; }                       // عرض النص التقديري
+fun pl_alpha(c, a) {                                                // لون + شفافية
+    let p = colorComponents(c);
+    return colorRgba(p["r"], p["g"], p["b"], a);
+}
+
+// ---------------------------------------------------------------------------
+//  6) رسم الطبقات داخل منطقة المحاور (g = هندسة المحاور)
+// ---------------------------------------------------------------------------
+fun pl_draw_layer(sc, L, g, th, fs) {
+    let t = L["type"];
+    let c = L["color"];
+    if (t == "line") {
+        let pts = [];
+        let i = 0;
+        while (i < len(L["x"])) { push(pts, [pl_mx(g, L["x"][i]), pl_my(g, L["y"][i])]); i = i + 1; }
+        pl_s_poly(sc, pts, nil, c, L["width"], false);
+        if (L["dash"]) { sc[len(sc) - 1]["dash"] = true; }
+    } else if (t == "scatter") {
+        let fillc = pl_alpha(c, L["alpha"]);
+        let i2 = 0;
+        while (i2 < len(L["x"])) {
+            pl_s_circle(sc, pl_mx(g, L["x"][i2]), pl_my(g, L["y"][i2]), L["size"] * fs / 2 + 1, fillc, nil);
+            i2 = i2 + 1;
+        }
+    } else if (t == "bar") {
+        let fillb = pl_alpha(c, L["alpha"]);
+        let yb = pl_my(g, L["base"]);
+        let i3 = 0;
+        while (i3 < len(L["x"])) {
+            let xa = pl_mx(g, L["x"][i3] - L["w"] / 2);
+            let xb = pl_mx(g, L["x"][i3] + L["w"] / 2);
+            let yt = pl_my(g, L["y"][i3]);
+            let top = yt; let hh = yb - yt;
+            if (hh < 0) { top = yb; hh = -hh; }
+            pl_s_rect(sc, xa, top, xb - xa, hh, fillb, nil, 0);
+            i3 = i3 + 1;
+        }
+    } else if (t == "band") {
+        let pts2 = [];
+        let i4 = 0;
+        while (i4 < len(L["x"])) { push(pts2, [pl_mx(g, L["x"][i4]), pl_my(g, L["hi"][i4])]); i4 = i4 + 1; }
+        i4 = len(L["x"]) - 1;
+        while (i4 >= 0) { push(pts2, [pl_mx(g, L["x"][i4]), pl_my(g, L["lo"][i4])]); i4 = i4 - 1; }
+        pl_s_poly(sc, pts2, pl_alpha(c, L["alpha"]), nil, 0, true);
+    } else if (t == "errbar") {
+        let i5 = 0;
+        while (i5 < len(L["x"])) {
+            let ex = pl_mx(g, L["x"][i5]);
+            let ya = pl_my(g, L["y"][i5] - L["err"][i5]);
+            let yc = pl_my(g, L["y"][i5] + L["err"][i5]);
+            pl_s_line(sc, ex, ya, ex, yc, c, 2, false);
+            pl_s_line(sc, ex - 3 * fs, ya, ex + 3 * fs, ya, c, 2, false);
+            pl_s_line(sc, ex - 3 * fs, yc, ex + 3 * fs, yc, c, 2, false);
+            pl_s_circle(sc, ex, pl_my(g, L["y"][i5]), L["size"] * fs / 2 + 1, c, nil);
+            i5 = i5 + 1;
+        }
+    } else if (t == "box") {
+        let bx = L["x"]; let bw = L["w"] * 0.6;
+        let xa2 = pl_mx(g, bx - bw); let xb2 = pl_mx(g, bx + bw); let xm = pl_mx(g, bx);
+        let cap = (xb2 - xa2) * 0.25;
+        pl_s_line(sc, xm, pl_my(g, L["lo"]), xm, pl_my(g, L["q1"]), c, 2, false);
+        pl_s_line(sc, xm, pl_my(g, L["q3"]), xm, pl_my(g, L["hi"]), c, 2, false);
+        pl_s_line(sc, xm - cap, pl_my(g, L["lo"]), xm + cap, pl_my(g, L["lo"]), c, 2, false);
+        pl_s_line(sc, xm - cap, pl_my(g, L["hi"]), xm + cap, pl_my(g, L["hi"]), c, 2, false);
+        let yq3 = pl_my(g, L["q3"]); let yq1 = pl_my(g, L["q1"]);
+        pl_s_rect(sc, xa2, yq3, xb2 - xa2, yq1 - yq3, pl_alpha(c, 0.35), c, 2);
+        pl_s_line(sc, xa2, pl_my(g, L["med"]), xb2, pl_my(g, L["med"]), c, 3, false);
+        for (let o in L["out"]) { pl_s_circle(sc, xm, pl_my(g, o), 2 * fs, nil, c); }
+        if (L["mean"] != nil) { pl_s_circle(sc, xm, pl_my(g, L["mean"]), 2 * fs, th["fg"], nil); }
+    } else if (t == "violin") {
+        let mx = maxOf(L["kd"]);
+        let pts3 = [];
+        let i6 = 0;
+        while (i6 < len(L["ky"])) { push(pts3, [pl_mx(g, L["x"] + L["w"] * L["kd"][i6] / mx), pl_my(g, L["ky"][i6])]); i6 = i6 + 1; }
+        i6 = len(L["ky"]) - 1;
+        while (i6 >= 0) { push(pts3, [pl_mx(g, L["x"] - L["w"] * L["kd"][i6] / mx), pl_my(g, L["ky"][i6])]); i6 = i6 - 1; }
+        pl_s_poly(sc, pts3, pl_alpha(c, 0.45), c, 2, true);
+        pl_s_line(sc, pl_mx(g, L["x"] - L["w"] * 0.25), pl_my(g, L["med"]), pl_mx(g, L["x"] + L["w"] * 0.25), pl_my(g, L["med"]), th["fg"], 3, false);
+    } else if (t == "raster") {
+        let nxr = len(L["gx"]); let nyr = len(L["gy"]);
+        let zmx = L["zmax"];
+        let rr = 0;
+        while (rr < nyr - 1) {
+            let cc = 0;
+            while (cc < nxr - 1) {
+                let tv = L["z"][rr][cc] / zmx;
+                if (tv > 0.02) {
+                    let xa3 = pl_mx(g, L["gx"][cc]); let xb3 = pl_mx(g, L["gx"][cc + 1]);
+                    let ya3 = pl_my(g, L["gy"][rr + 1]); let yb3 = pl_my(g, L["gy"][rr]);
+                    pl_s_rect(sc, xa3, ya3, xb3 - xa3 + 0.7, yb3 - ya3 + 0.7, pl_alpha(pl_cmap(L["cmap"], tv), 0.85), nil, 0);
+                }
+                cc = cc + 1;
+            }
+            rr = rr + 1;
+        }
+    } else if (t == "hrange") {
+        let i7 = 0;
+        while (i7 < len(L["y"])) {
+            let yy7 = pl_my(g, L["y"][i7]);
+            pl_s_line(sc, pl_mx(g, L["lo"][i7]), yy7, pl_mx(g, L["hi"][i7]), yy7, c, 2, false);
+            pl_s_line(sc, pl_mx(g, L["lo"][i7]), yy7 - 3 * fs, pl_mx(g, L["lo"][i7]), yy7 + 3 * fs, c, 2, false);
+            pl_s_line(sc, pl_mx(g, L["hi"][i7]), yy7 - 3 * fs, pl_mx(g, L["hi"][i7]), yy7 + 3 * fs, c, 2, false);
+            let ex7 = pl_mx(g, L["est"][i7]);
+            pl_s_rect(sc, ex7 - 2.5 * fs, yy7 - 2.5 * fs, 5 * fs, 5 * fs, c, nil, 0);
+            i7 = i7 + 1;
+        }
+    } else if (t == "hline") {
+        pl_s_line(sc, g["px0"], pl_my(g, L["v"]), g["px1"], pl_my(g, L["v"]), c, L["width"], L["dash"]);
+    } else if (t == "vline") {
+        pl_s_line(sc, pl_mx(g, L["v"]), g["py0"], pl_mx(g, L["v"]), g["py1"], c, L["width"], L["dash"]);
+    } else if (t == "text") {
+        let tc = L["color"];
+        if (tc == "") { tc = th["fg"]; }
+        pl_s_text(sc, pl_mx(g, L["x"]), pl_my(g, L["y"]), L["s"], tc, fs, L["anchor"], false);
+    }
+}
+
+fun pl_axis_ticks(lo, hi, lg, target) {
+    if (lg) {
+        let out = [];
+        let k = ceil(lo - 1e-9);
+        while (k <= floor(hi + 1e-9)) { push(out, k); k = k + 1; }
+        return {"ticks": out, "step": 1, "log": true};
+    }
+    let r = pl_ticks(lo, hi, target);
+    r["log"] = false;
+    return r;
+}
+
+fun pl_draw_legend(sc, ax, g, th, fs) {
+    if (ax["legend"] == "none") { return 0; }
+    let ents = [];
+    for (let L in ax["layers"]) { if (has(L, "label") and L["label"] != "") { push(ents, L); } }
+    if (len(ents) == 0) { return 0; }
+    let mw = 0;
+    for (let L in ents) { let tw = pl_tw(L["label"], fs); if (tw > mw) { mw = tw; } }
+    let bw = mw + 18 * fs; let rh = 9 * fs; let bh = len(ents) * rh + 4 * fs;
+    let pos = ax["legend"];
+    let bx = g["px1"] - bw - 4; let by = g["py0"] + 4;
+    if (pos == "upper left" or pos == "lower left") { bx = g["px0"] + 4; }
+    if (pos == "lower right" or pos == "lower left") { by = g["py1"] - bh - 4; }
+    pl_s_rect(sc, bx, by, bw, bh, pl_alpha(th["bg"], 0.85), th["axis"], 1);
+    let i = 0;
+    for (let L in ents) {
+        let yy = by + 2 * fs + i * rh;
+        let cy = yy + 3.5 * fs;
+        if (L["type"] == "scatter" or L["type"] == "errbar") { pl_s_circle(sc, bx + 6 * fs, cy, 2 * fs, L["color"], nil); }
+        else if (L["type"] == "bar" or L["type"] == "band") { pl_s_rect(sc, bx + 3 * fs, cy - 2.5 * fs, 6 * fs, 5 * fs, pl_alpha(L["color"], 0.7), nil, 0); }
+        else { pl_s_line(sc, bx + 3 * fs, cy, bx + 9 * fs, cy, L["color"], 2, false); }
+        pl_s_text(sc, bx + 12 * fs, yy, L["label"], th["fg"], fs, "start", false);
+        i = i + 1;
+    }
+    return 0;
+}
+
+fun pl_draw_axes(sc, ax, th, fs, x, y, w, h) {
+    if (ax["kind"] == "heat") { return pl_draw_heat(sc, ax, th, fs, x, y, w, h); }
+    if (ax["kind"] == "pie") { return pl_draw_pie(sc, ax, th, fs, x, y, w, h); }
+    let rg = pl_range(ax);
+    let xt = pl_axis_ticks(rg["xlo"], rg["xhi"], ax["xlog"], 6);
+    let yt = pl_axis_ticks(rg["ylo"], rg["yhi"], ax["ylog"], 6);
+    if (ax["xcats"] != nil) {
+        let ct = [];
+        let i = 1;
+        while (i <= len(ax["xcats"])) { push(ct, i); i = i + 1; }
+        xt = {"ticks": ct, "step": 1, "log": false};
+    }
+    // تسميات المحور الرأسي لقياس الهامش الأيسر
+    let ylabs = [];
+    if (has(ax, "ycats") and ax["ycats"] != nil) {
+        let ct2 = [];
+        let q = 1;
+        while (q <= len(ax["ycats"])) { push(ct2, q); push(ylabs, str(ax["ycats"][q - 1])); q = q + 1; }
+        yt = {"ticks": ct2, "step": 1, "log": false};
+    } else {
+        for (let v in yt["ticks"]) {
+            if (yt["log"]) { push(ylabs, str(pow(10, v))); } else { push(ylabs, pl_tick_label(v, yt["step"])); }
+        }
+    }
+    let mxl = 1;
+    for (let s in ylabs) { if (len(s) > mxl) { mxl = len(s); } }
+    let lm = 6 * fs * mxl + 8 * fs;
+    let tm = 6;
+    if (ax["title"] != "") { tm = tm + 8 * fs + 12; }
+    if (ax["ylabel"] != "") { tm = tm + 8 * fs + 2; }
+    let bm = 7 * fs + 10;
+    if (ax["xlabel"] != "") { bm = bm + 8 * fs + 4; }
+    let g = {"px0": x + lm, "px1": x + w - 8 * fs, "py0": y + tm, "py1": y + h - bm,
+             "xlo": rg["xlo"], "xhi": rg["xhi"], "ylo": rg["ylo"], "yhi": rg["yhi"],
+             "xlog": ax["xlog"], "ylog": ax["ylog"]};
+    pl_s_rect(sc, g["px0"], g["py0"], g["px1"] - g["px0"], g["py1"] - g["py0"], th["panel"], nil, 0);
+    // شبكة وتدريجات
+    let i = 0;
+    for (let v in yt["ticks"]) {
+        let vv = v;
+        if (yt["log"]) { vv = pow(10, v); }
+        let yy = pl_my(g, vv);
+        if (ax["grid"]) { pl_s_line(sc, g["px0"], yy, g["px1"], yy, th["grid"], 1, false); }
+        pl_s_line(sc, g["px0"] - 4, yy, g["px0"], yy, th["axis"], 1, false);
+        pl_s_text(sc, g["px0"] - 6 - pl_tw(ylabs[i], fs), yy - 3.5 * fs, ylabs[i], th["fg"], fs, "start", false);
+        i = i + 1;
+    }
+    i = 0;
+    for (let v in xt["ticks"]) {
+        let vx = v;
+        if (xt["log"]) { vx = pow(10, v); }
+        let xx = pl_mx(g, vx);
+        let lab = "";
+        if (ax["xcats"] != nil) { lab = str(ax["xcats"][i]); }
+        else if (xt["log"]) { lab = str(pow(10, v)); }
+        else { lab = pl_tick_label(v, xt["step"]); }
+        if (ax["grid"] and ax["xcats"] == nil) { pl_s_line(sc, xx, g["py0"], xx, g["py1"], th["grid"], 1, false); }
+        pl_s_line(sc, xx, g["py1"], xx, g["py1"] + 4, th["axis"], 1, false);
+        pl_s_text(sc, xx, g["py1"] + 6, lab, th["fg"], fs, "middle", false);
+        i = i + 1;
+    }
+    for (let L in ax["layers"]) { pl_draw_layer(sc, L, g, th, fs); }
+    pl_s_line(sc, g["px0"], g["py0"], g["px0"], g["py1"], th["axis"], 1, false);
+    pl_s_line(sc, g["px0"], g["py1"], g["px1"], g["py1"], th["axis"], 1, false);
+    pl_draw_legend(sc, ax, g, th, fs);
+    if (ax["title"] != "") { pl_s_text(sc, (g["px0"] + g["px1"]) / 2, y + 4, ax["title"], th["fg"], fs, "middle", true); }
+    if (ax["ylabel"] != "") { pl_s_text(sc, g["px0"], g["py0"] - 8 * fs - 1, ax["ylabel"], th["fg"], fs, "start", false); }
+    if (ax["xlabel"] != "") { pl_s_text(sc, (g["px0"] + g["px1"]) / 2, g["py1"] + 7 * fs + 12, ax["xlabel"], th["fg"], fs, "middle", false); }
+    return 0;
+}
+
+fun pl_stars(p) {
+    if (p == nil) { return ""; }
+    if (p < 0.001) { return "***"; }
+    if (p < 0.01) { return "**"; }
+    if (p < 0.05) { return "*"; }
+    return "";
+}
+
+fun pl_draw_heat(sc, ax, th, fs, x, y, w, h) {
+    let H = ax["heat"];
+    let M = H["m"];
+    let nr = len(M);
+    let nc = len(M[0]);
+    let vmin = H["vmin"]; let vmax = H["vmax"];
+    if (vmin == nil or vmax == nil) {
+        let lo = M[0][0]; let hi = M[0][0];
+        for (let rw in M) { for (let v in rw) { if (v < lo) { lo = v; } if (v > hi) { hi = v; } } }
+        if (H["cmap"] == "coolwarm" and lo < 0) { let a = max(abs(lo), abs(hi)); lo = -a; hi = a; }
+        if (vmin == nil) { vmin = lo; }
+        if (vmax == nil) { vmax = hi; }
+    }
+    if (vmax == vmin) { vmax = vmin + 1; }
+    let mrl = 1;
+    for (let s in H["rows"]) { if (len(str(s)) > mrl) { mrl = len(str(s)); } }
+    let lm = 6 * fs * mrl + 8 * fs;
+    let tm = 6;
+    if (ax["title"] != "") { tm = tm + 8 * fs + 12; }
+    let bm = 7 * fs + 10;
+    let rm = 8 * fs + 14 * fs + 6 * fs * 5;
+    let px0 = x + lm; let px1 = x + w - rm; let py0 = y + tm; let py1 = y + h - bm;
+    let cw = (px1 - px0) / nc; let ch = (py1 - py0) / nr;
+    let r = 0;
+    while (r < nr) {
+        let c = 0;
+        while (c < nc) {
+            let v = M[r][c];
+            let col = pl_cmap(H["cmap"], (v - vmin) / (vmax - vmin));
+            pl_s_rect(sc, px0 + c * cw, py0 + r * ch, cw, ch, col, th["bg"], 1);
+            if (H["annotate"] and cw > 6 * fs * 3 and ch > 8 * fs) {
+                let lab = numberFormat(v, {"decimals": H["digits"], "group": ""});
+                if (H["stars"] != nil and cw > pl_tw(lab + "***", fs) + 2) { lab = lab + pl_stars(H["stars"][r][c]); }
+                if (cw > pl_tw(lab, fs) + 2) {
+                    pl_s_text(sc, px0 + (c + 0.5) * cw, py0 + (r + 0.5) * ch - 3.5 * fs, lab, colorTextOn(col), fs, "middle", false);
+                }
+            }
+            c = c + 1;
+        }
+        let rl = str(H["rows"][r]);
+        pl_s_text(sc, px0 - 6 - pl_tw(rl, fs), py0 + (r + 0.5) * ch - 3.5 * fs, rl, th["fg"], fs, "start", false);
+        r = r + 1;
+    }
+    let c2 = 0;
+    while (c2 < nc) {
+        let cl = str(H["cols"][c2]);
+        let maxch = floor(cw / (6 * fs));
+        if (maxch < 1) { maxch = 1; }
+        if (len(cl) > maxch) { cl = substr(cl, 0, maxch); }
+        pl_s_text(sc, px0 + (c2 + 0.5) * cw, py1 + 6, cl, th["fg"], fs, "middle", false);
+        c2 = c2 + 1;
+    }
+    // شريط الألوان
+    let bx = px1 + 8 * fs; let bw = 10 * fs; let steps = 40;
+    let k = 0;
+    while (k < steps) {
+        let t = 1 - (k + 0.5) / steps;
+        pl_s_rect(sc, bx, py0 + k * (py1 - py0) / steps, bw, (py1 - py0) / steps + 0.6, pl_cmap(H["cmap"], t), nil, 0);
+        k = k + 1;
+    }
+    let tk = pl_ticks(vmin, vmax, 5);
+    for (let v in tk["ticks"]) {
+        let yy = py1 - (v - vmin) / (vmax - vmin) * (py1 - py0);
+        pl_s_line(sc, bx + bw, yy, bx + bw + 3, yy, th["axis"], 1, false);
+        pl_s_text(sc, bx + bw + 5, yy - 3.5 * fs, pl_tick_label(v, tk["step"]), th["fg"], fs, "start", false);
+    }
+    if (ax["title"] != "") { pl_s_text(sc, (px0 + px1) / 2, y + 4, ax["title"], th["fg"], fs, "middle", true); }
+    return 0;
+}
+
+fun pl_draw_pie(sc, ax, th, fs, x, y, w, h) {
+    let P = ax["pie"];
+    let tot = sum(P["v"]);
+    let tm = 6;
+    if (ax["title"] != "") { tm = tm + 8 * fs + 12; }
+    let cx = x + w / 2; let cy = y + tm + (h - tm) / 2;
+    let mlab = 1;
+    for (let lb in P["labels"]) { if (len(str(lb)) > mlab) { mlab = len(str(lb)); } }
+    let rad = min(w / 2 - 6 * fs * (mlab + 8), (h - tm) / 2 - 14 * fs);
+    if (rad < 10) { rad = 10; }
+    let pal = pl_palette();
+    let a0 = -PI / 2;
+    let i = 0;
+    while (i < len(P["v"])) {
+        let frac = P["v"][i] / tot;
+        let a1 = a0 + frac * 2 * PI;
+        let n = ceil((a1 - a0) / 0.05) + 1;
+        let pts = [];
+        let k = 0;
+        while (k <= n) { let a = a0 + (a1 - a0) * k / n; push(pts, [cx + rad * cos(a), cy + rad * sin(a)]); k = k + 1; }
+        if (P["hole"] > 0) {
+            k = n;
+            while (k >= 0) { let a = a0 + (a1 - a0) * k / n; push(pts, [cx + rad * P["hole"] * cos(a), cy + rad * P["hole"] * sin(a)]); k = k - 1; }
+        } else { push(pts, [cx, cy]); }
+        pl_s_poly(sc, pts, pal[i % len(pal)], th["bg"], 2, true);
+        let am = (a0 + a1) / 2;
+        let lab = str(P["labels"][i]) + " " + numberFormat(frac * 100, {"decimals": 1}) + "%";
+        let lx = cx + (rad + 6 * fs) * cos(am); let ly = cy + (rad + 6 * fs) * sin(am);
+        let anc = "start";
+        if (cos(am) < 0) { anc = "end"; }
+        pl_s_text(sc, lx, ly - 3.5 * fs, lab, th["fg"], fs, anc, false);
+        a0 = a1;
+        i = i + 1;
+    }
+    if (ax["title"] != "") { pl_s_text(sc, cx, y + 4, ax["title"], th["fg"], fs, "middle", true); }
+    return 0;
+}
+
+// بناء المشهد الكامل للشكل
+fun pl_build(fig) {
+    let th = pl_theme(fig["theme"]);
+    let fs = fig["fs"];
+    let W = fig["w"]; let H = fig["h"];
+    let sc = [];
+    pl_s_rect(sc, 0, 0, W, H, th["bg"], nil, 0);
+    let m = 8 * fs;
+    let top = m;
+    if (fig["title"] != "") {
+        pl_s_text(sc, W / 2, m, fig["title"], th["fg"], fs + 1, "middle", true);
+        top = m + 8 * (fs + 1) + 6;
+    }
+    let cw = (W - 2 * m) / fig["cols"];
+    let ch = (H - top - m) / fig["rows"];
+    for (let ax in fig["axes"]) {
+        pl_draw_axes(sc, ax, th, fs, m + ax["col"] * cw, top + ax["row"] * ch, ax["cs"] * cw, ax["rs"] * ch);
+    }
+    return {"w": W, "h": H, "items": sc};
+}
+
+// ---------------------------------------------------------------------------
+//  7) واجهة SVG
+// ---------------------------------------------------------------------------
+fun pl_xml(s) {
+    let t = replace(str(s), "&", "&amp;");
+    t = replace(t, "<", "&lt;");
+    return replace(t, ">", "&gt;");
+}
+fun pl_n(v) { return str(numberRound(v, 2)); }
+// سمة لون SVG: fill="#rrggbb" fill-opacity="a"  (SVG 1.1 لا يقبل rgba)
+fun pl_svg_paint(attr, c) {
+    if (c == nil) { return attr + "=\"none\""; }
+    let p = colorParse(c);
+    if (len(p) == 9) {
+        let a = numberFromBase(substr(p, 7, 2), 16) / 255;
+        return attr + "=\"" + substr(p, 0, 7) + "\" " + attr + "-opacity=\"" + str(numberRound(a, 3)) + "\"";
+    }
+    return attr + "=\"" + p + "\"";
+}
+fun pl_svg_item(it) {
+    let t = it["t"];
+    if (t == "rect") {
+        let s = "<rect x=\"" + pl_n(it["x"]) + "\" y=\"" + pl_n(it["y"]) + "\" width=\"" + pl_n(max(0, it["w"])) + "\" height=\"" + pl_n(max(0, it["h"])) + "\" " + pl_svg_paint("fill", it["fill"]);
+        if (it["stroke"] != nil) { s = s + " " + pl_svg_paint("stroke", it["stroke"]) + " stroke-width=\"" + pl_n(it["sw"]) + "\""; }
+        return s + "/>";
+    }
+    if (t == "line") {
+        let s2 = "<line x1=\"" + pl_n(it["x1"]) + "\" y1=\"" + pl_n(it["y1"]) + "\" x2=\"" + pl_n(it["x2"]) + "\" y2=\"" + pl_n(it["y2"]) + "\" " + pl_svg_paint("stroke", it["c"]) + " stroke-width=\"" + pl_n(it["w"]) + "\"";
+        if (it["dash"]) { s2 = s2 + " stroke-dasharray=\"6 4\""; }
+        return s2 + "/>";
+    }
+    if (t == "poly") {
+        let pts = [];
+        for (let p in it["pts"]) { push(pts, pl_n(p[0]) + "," + pl_n(p[1])); }
+        let tag = "polyline";
+        if (it["closed"]) { tag = "polygon"; }
+        let s3 = "<" + tag + " points=\"" + join(pts, " ") + "\" " + pl_svg_paint("fill", it["fill"]);
+        if (it["stroke"] != nil) { s3 = s3 + " " + pl_svg_paint("stroke", it["stroke"]) + " stroke-width=\"" + pl_n(it["sw"]) + "\" stroke-linejoin=\"round\" stroke-linecap=\"round\""; }
+        if (it["dash"]) { s3 = s3 + " stroke-dasharray=\"6 4\""; }
+        return s3 + "/>";
+    }
+    if (t == "circle") {
+        let s4 = "<circle cx=\"" + pl_n(it["x"]) + "\" cy=\"" + pl_n(it["y"]) + "\" r=\"" + pl_n(it["r"]) + "\" " + pl_svg_paint("fill", it["fill"]);
+        if (it["stroke"] != nil) { s4 = s4 + " " + pl_svg_paint("stroke", it["stroke"]) + " stroke-width=\"1.5\""; }
+        return s4 + "/>";
+    }
+    // نص: y = أعلى الصندوق ← خط الأساس = y + 7*fs
+    let anc = "start";
+    if (it["anchor"] == "middle") { anc = "middle"; }
+    let tx = it["x"];
+    let s5 = "<text x=\"" + pl_n(tx) + "\" y=\"" + pl_n(it["y"] + 7 * it["fs"]) + "\" font-size=\"" + pl_n(10 * it["fs"]) + "\" text-anchor=\"" + anc + "\" " + pl_svg_paint("fill", it["c"]);
+    if (it["anchor"] == "end") { s5 = "<text x=\"" + pl_n(tx) + "\" y=\"" + pl_n(it["y"] + 7 * it["fs"]) + "\" font-size=\"" + pl_n(10 * it["fs"]) + "\" text-anchor=\"end\" " + pl_svg_paint("fill", it["c"]); }
+    if (it["bold"]) { s5 = s5 + " font-weight=\"700\""; }
+    return s5 + ">" + pl_xml(it["s"]) + "</text>";
+}
+fun pl_svg(fig) {
+    let sc = pl_build(fig);
+    let out = ["<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"" + str(sc["w"]) + "\" height=\"" + str(sc["h"]) + "\" viewBox=\"0 0 " + str(sc["w"]) + " " + str(sc["h"]) + "\" font-family=\"'DejaVu Sans', 'Noto Sans Arabic', Arial, sans-serif\">"];
+    for (let it in sc["items"]) { push(out, pl_svg_item(it)); }
+    push(out, "</svg>");
+    return join(out, "\n");
+}
+fun pl_html(fig) {
+    return "<!doctype html><html><head><meta charset=\"utf-8\"><title>" + pl_xml(fig["title"]) + "</title><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"></head><body style=\"margin:0;display:flex;justify-content:center;background:#f3f4f6\">" + pl_svg(fig) + "</body></html>";
+}
+
+// ---------------------------------------------------------------------------
+//  8) واجهة PNG (دوال img* الأصلية)
+// ---------------------------------------------------------------------------
+fun pl_png_segments(img, pts, c, w, dash) {
+    let i = 0;
+    while (i + 1 < len(pts)) {
+        if (!dash or i % 2 == 0) { imgLine(img, pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1], c, w); }
+        i = i + 1;
+    }
+}
+fun pl_png_item(img, it) {
+    let t = it["t"];
+    if (t == "rect") {
+        if (it["fill"] != nil) { imgRect(img, it["x"], it["y"], max(0, it["w"]), max(0, it["h"]), it["fill"]); }
+        if (it["stroke"] != nil) { imgRect(img, it["x"], it["y"], max(0, it["w"]), max(0, it["h"]), it["stroke"], {"fill": false, "width": it["sw"]}); }
+    } else if (t == "line") {
+        if (it["dash"]) {
+            let dx = it["x2"] - it["x1"]; let dy = it["y2"] - it["y1"];
+            let len2 = sqrt(dx * dx + dy * dy);
+            let n = floor(len2 / 10);
+            let k = 0;
+            while (k < n) {
+                imgLine(img, it["x1"] + dx * k / n, it["y1"] + dy * k / n, it["x1"] + dx * (k + 0.6) / n, it["y1"] + dy * (k + 0.6) / n, it["c"], it["w"]);
+                k = k + 1;
+            }
+        } else { imgLine(img, it["x1"], it["y1"], it["x2"], it["y2"], it["c"], it["w"]); }
+    } else if (t == "poly") {
+        if (it["fill"] != nil and len(it["pts"]) >= 3) { imgPolygon(img, it["pts"], it["fill"]); }
+        if (it["stroke"] != nil) {
+            pl_png_segments(img, it["pts"], it["stroke"], it["sw"], it["dash"]);
+            if (it["closed"] and len(it["pts"]) > 1) {
+                let n2 = len(it["pts"]);
+                imgLine(img, it["pts"][n2 - 1][0], it["pts"][n2 - 1][1], it["pts"][0][0], it["pts"][0][1], it["stroke"], it["sw"]);
+            }
+        }
+    } else if (t == "circle") {
+        if (it["fill"] != nil) { imgCircle(img, it["x"], it["y"], it["r"], it["fill"]); }
+        if (it["stroke"] != nil) { imgCircle(img, it["x"], it["y"], it["r"], it["stroke"], {"fill": false, "width": 1.5}); }
+    } else {
+        let sx = it["x"];
+        let tw = pl_tw(it["s"], it["fs"]);
+        if (it["anchor"] == "middle") { sx = sx - tw / 2; }
+        if (it["anchor"] == "end") { sx = sx - tw; }
+        sx = round(sx);
+        let sy = round(it["y"]);
+        imgText(img, sx, sy, it["s"], it["c"], {"size": it["fs"]});
+        if (it["bold"]) { imgText(img, sx + 1, sy, it["s"], it["c"], {"size": it["fs"]}); }
+    }
+}
+// يُنشئ لوحة img ويُعيد معرّفها (حرّرها بـ imgFree)
+fun pl_render(fig) {
+    let sc = pl_build(fig);
+    let img = imgNew(sc["w"], sc["h"], "#ffffff");
+    for (let it in sc["items"]) { pl_png_item(img, it); }
+    return img;
+}
+fun pl_png(fig, path) {
+    let img = pl_render(fig);
+    let n = imgSave(img, path);
+    imgFree(img);
+    return n;
+}
+// عرض سريع في الطرفية
+fun pl_print(fig, cols) {
+    let img = pl_render(fig);
+    imgPrint(img, cols);
+    imgFree(img);
+    return fig;
+}
+
+// ---------------------------------------------------------------------------
+//  9) الحفظ حسب الامتداد: .svg | .png | .bmp | .ppm | .html
+// ---------------------------------------------------------------------------
+fun pl_save(fig, path) {
+    let p = lower(path);
+    let n = len(p);
+    if (n > 4 and substr(p, n - 4, 4) == ".svg") { return writeFile(path, pl_svg(fig)); }
+    if (n > 5 and substr(p, n - 5, 5) == ".html") { return writeFile(path, pl_html(fig)); }
+    return pl_png(fig, path);
+}
+
+// ============================================================================
+//  10) الرسوم الإحصائية — كل واحد يُركّب rinstat فوق طبقات النواة
+// ============================================================================
+
+// مخطط تكراري بالكثافة + منحنى KDE + (اختياري) المنحنى الطبيعي الملائم
+// o: {bins, kde:true, normal:false, color, label}
+fun pl_hist(ax, data, o) {
+    let a = st_clean(data);
+    let h = st_hist(a, pl_opt(o, "bins", 0));
+    let col = pl_pick_color(ax, o);
+    let dens = pl_opt(o, "density", true);
+    let ys = h["counts"];
+    if (dens) { ys = h["density"]; }
+    push(ax["layers"], {"type": "bar", "x": h["mids"], "y": ys, "color": col, "label": pl_opt(o, "label", ""),
+                        "w": h["width"] * 0.96, "alpha": 0.7, "base": 0});
+    if (dens and pl_opt(o, "kde", true) and len(a) > 2) {
+        let k = st_kde(a, 80);
+        pl_line(ax, k["x"], k["y"], {"color": colorDarken(col, 0.25), "label": "KDE", "width": 2});
+    }
+    if (dens and pl_opt(o, "normal", false) and len(a) > 2) {
+        let mu = mean(a); let sd = sampleStdDev(a);
+        let xs = []; let ys2 = [];
+        let i = 0;
+        while (i < 80) {
+            let x = minOf(a) - sd + (maxOf(a) - minOf(a) + 2 * sd) * i / 79;
+            push(xs, x); push(ys2, st_norm_pdf(x, mu, sd));
+            i = i + 1;
+        }
+        pl_line(ax, xs, ys2, {"color": "#666666", "label": "Normal", "dash": true, "width": 2});
+    }
+    ax["ylabel"] = ax["ylabel"];
+    return ax;
+}
+
+// صندوقي: طبقة واحدة عند الموضع pos (يستعمل st_summary وst_outliers)
+fun pl_box(ax, pos, data, o) {
+    let a = st_clean(data);
+    if (len(a) < 2) { return ax; }
+    let s = st_summary(a);
+    let fence = st_outliers(a, 1.5);
+    let lo = s["q1"]; let hi = s["q3"];
+    let out = [];
+    for (let v in a) {
+        if (v < fence["lo"] or v > fence["hi"]) { push(out, v); }
+        else { if (v < lo) { lo = v; } if (v > hi) { hi = v; } }
+    }
+    push(ax["layers"], {"type": "box", "x": pos, "w": pl_opt(o, "w", 0.35), "color": pl_pick_color(ax, o), "label": pl_opt(o, "label", ""),
+                        "q1": s["q1"], "med": s["median"], "q3": s["q3"], "lo": lo, "hi": hi, "out": out,
+                        "mean": pl_opt(o, "mean", s["mean"])});
+    return ax;
+}
+// كمان: كثافة KDE متماثلة
+fun pl_violin(ax, pos, data, o) {
+    let a = st_clean(data);
+    if (len(a) < 3) { return ax; }
+    let k = st_kde(a, 60);
+    push(ax["layers"], {"type": "violin", "x": pos, "w": pl_opt(o, "w", 0.4), "color": pl_pick_color(ax, o), "label": pl_opt(o, "label", ""),
+                        "ky": k["x"], "kd": k["y"], "med": median(a)});
+    return ax;
+}
+// groups: [{name, values}] (نفس ناتج st_groups) — kind: "box" | "violin" | "both"
+fun pl_groups(ax, groups, kind) {
+    let names = [];
+    let i = 1;
+    for (let g in groups) {
+        let col = pl_palette()[(i - 1) % len(pl_palette())];
+        if (kind == "violin" or kind == "both") { pl_violin(ax, i, g["values"], {"color": col}); }
+        if (kind == "box" or kind == "both") {
+            let w = 0.35; if (kind == "both") { w = 0.12; }
+            pl_box(ax, i, g["values"], {"color": col, "w": w});
+        }
+        push(names, g["name"]);
+        i = i + 1;
+    }
+    ax["xcats"] = names;
+    ax["legend"] = "none";
+    return ax;
+}
+
+// انحدار: نقاط + خط الملاءمة + نطاق ثقة (kind "mean") ونطاق تنبؤ اختياري، مع المعادلة وR² وp
+fun pl_regplot(ax, x, y, o) {
+    let fit = st_linreg(x, y);
+    if (fit == nil) { return pl_scatter(ax, x, y, o); }
+    let col = pl_pick_color(ax, o);
+    let lvl = pl_opt(o, "level", 0.95);
+    let xs = fit["x"];
+    let lo = minOf(xs); let hi = maxOf(xs);
+    let grid = [];
+    let i = 0;
+    while (i < 50) { push(grid, lo + (hi - lo) * i / 49); i = i + 1; }
+    if (pl_opt(o, "predband", false)) {
+        let pb = st_linreg_band(fit, grid, lvl, "pred");
+        pl_band(ax, pb["x"], pb["lo"], pb["hi"], {"color": "#999999", "alpha": 0.15});
+    }
+    let b = st_linreg_band(fit, grid, lvl, "mean");
+    pl_band(ax, b["x"], b["lo"], b["hi"], {"color": col, "alpha": 0.22});
+    pl_scatter(ax, xs, fit["y"], {"color": col, "label": pl_opt(o, "label", "")});
+    let eq = "y = " + st_fmt(fit["slope"], 3) + "x + " + st_fmt(fit["intercept"], 3);
+    pl_line(ax, b["x"], b["y"], {"color": colorDarken(col, 0.2), "label": eq, "width": 2});
+    ax["legend"] = "upper left";
+    let note = "R2=" + st_fmt(fit["r2"], 3) + "  p=" + st_fmt_p(fit["coefs"][1]["p"]);
+    ax["title"] = ax["title"];
+    if (pl_opt(o, "annotate", true)) {
+        pl_text(ax, hi, minOf(fit["y"]), note, {"anchor": "end"});
+    }
+    return fit;
+}
+
+// Q-Q مقابل الطبيعي + خط مرجعي يمرّ بالربيعين
+fun pl_qq(ax, data, o) {
+    let q = st_qq(data);
+    let col = pl_pick_color(ax, o);
+    pl_scatter(ax, q["theoretical"], q["sample"], {"color": col});
+    let a = q["sample"];
+    let q1 = percentile(a, 25); let q3 = percentile(a, 75);
+    let t1 = st_norm_ppf(0.25, 0, 1); let t3 = st_norm_ppf(0.75, 0, 1);
+    let slope = (q3 - q1) / (t3 - t1);
+    let ic = q1 - slope * t1;
+    let tx = [q["theoretical"][0], q["theoretical"][len(a) - 1]];
+    pl_line(ax, tx, [ic + slope * tx[0], ic + slope * tx[1]], {"color": "#D55E00", "dash": true, "width": 2});
+    ax["xlabel"] = "Theoretical quantiles";
+    ax["ylabel"] = "Sample quantiles";
+    ax["legend"] = "none";
+    return ax;
+}
+fun pl_ecdf(ax, data, o) {
+    let e = st_ecdf(data);
+    // درجات: نكرّر النقاط لرسم خطوات
+    let xs = []; let ys = [];
+    let i = 0;
+    while (i < len(e["x"])) {
+        push(xs, e["x"][i]); push(ys, i / len(e["x"]));
+        push(xs, e["x"][i]); push(ys, e["y"][i]);
+        i = i + 1;
+    }
+    pl_line(ax, xs, ys, {"color": pl_pick_color(ax, o), "label": pl_opt(o, "label", ""), "width": 2});
+    ax["ylabel"] = "ECDF";
+    return ax;
+}
+// سلسلة زمنية + متوسط متحرك (الدالة الأصلية movingAverage)
+fun pl_timeseries(ax, x, y, window, o) {
+    pl_line(ax, x, y, {"color": pl_opt(o, "color", "#9ca3af"), "label": pl_opt(o, "label", "data"), "width": 1});
+    if (window > 1 and len(y) >= window) {
+        let ma = movingAverage(y, window);              // أصلية: طولها n-w+1 (نافذة كاملة فقط)
+        let off = floor((window - 1) / 2);
+        pl_line(ax, slice(x, off, off + len(ma)), ma, {"color": "#0072B2", "label": "MA(" + str(window) + ")", "width": 3});
+    }
+    return ax;
+}
+
+// مصفوفة ارتباط (بيرسون) مع نجوم الدلالة — df + أسماء الأعمدة
+fun pl_corr_heatmap(ax, df, names) {
+    let cm = st_corr_matrix(df, names);
+    pl_heat(ax, cm["r"], names, names, {"cmap": "coolwarm", "vmin": -1, "vmax": 1, "stars": cm["p"], "digits": 2});
+    return cm;
+}
+
+// ---------------------------------------------------------------------------
+//  11) لوحات مركّبة (أشكال كاملة)
+// ---------------------------------------------------------------------------
+// تقرير توزيع: 2×2 (مخطط تكراري+KDE+طبيعي | صندوقي+كمان | Q-Q | ECDF)
+fun pl_dist_report(data, title) {
+    let a = st_clean(data);
+    let fig = pl_figure(1100, 760, 2, 2, title);
+    let s = st_summary(a);
+    let a1 = pl_axes(fig, 0, 0);
+    pl_title(a1, "Histogram + KDE"); pl_hist(a1, a, {"normal": true, "bins": 0});
+    let a2 = pl_axes(fig, 0, 1);
+    pl_title(a2, "Box + Violin");
+    pl_groups(a2, [{"name": "data", "values": a}], "both");
+    let a3 = pl_axes(fig, 1, 0);
+    pl_title(a3, "Normal Q-Q"); pl_qq(a3, a, {});
+    let a4 = pl_axes(fig, 1, 1);
+    pl_title(a4, "ECDF"); pl_ecdf(a4, a, {});
+    pl_vline(a4, s["median"], {"label": "median " + st_fmt(s["median"], 2), "color": "#D55E00"});
+    pl_vline(a4, s["mean"], {"label": "mean " + st_fmt(s["mean"], 2), "color": "#009E73"});
+    a4["legend"] = "lower right";
+    return fig;
+}
+
+// مقارنة مجموعات: صندوقي+كمان، والعنوان يحمل نتيجة الاختبار المناسب تلقائياً
+fun pl_compare_groups(df, groupCol, valueCol) {
+    let g = st_groups(df, groupCol, valueCol);
+    let r = st_compare(df, groupCol, valueCol);
+    let fig = pl_figure(900, 620, 1, 1, "");
+    let ax = pl_axes(fig, 0, 0);
+    pl_groups(ax, g, "both");
+    ax["title"] = st_report(r);
+    ax["ylabel"] = valueCol;
+    ax["xlabel"] = groupCol;
+    return fig;
+}
+
+// pairplot: قطر = KDE، أسفل = نقاط (+ ألوان حسب hue إن وُجد)، أعلى = r مع النجوم
+fun pl_pairplot(df, names, hueCol) {
+    let k = len(names);
+    let side = 230 * k + 60;
+    let fig = pl_figure(side, side, k, k, "Pair plot");
+    fig["fs"] = 1;
+    let cm = st_corr_matrix(df, names);
+    let groups = nil;
+    if (hueCol != "") { groups = st_groups_idx(df, hueCol); }
+    let i = 0;
+    while (i < k) {
+        let j = 0;
+        while (j < k) {
+            let ax = pl_axes(fig, i, j);
+            ax["legend"] = "none";
+            if (i == j) {
+                let col = df_col(df, names[i]);
+                let kd = st_kde(col, 60);
+                pl_area(ax, kd["x"], kd["y"], {"color": "#0072B2"});
+                pl_line(ax, kd["x"], kd["y"], {"color": "#0072B2", "width": 2});
+                ax["title"] = names[i];
+            } else if (i > j) {
+                let xs = df_col(df, names[j]); let ys = df_col(df, names[i]);
+                if (groups == nil) { pl_scatter(ax, xs, ys, {"size": 2, "color": "#0072B2", "alpha": 0.6}); }
+                else {
+                    let gi = 0;
+                    for (let gr in groups) {
+                        let gx = []; let gy = [];
+                        for (let idx in gr["idx"]) { push(gx, xs[idx]); push(gy, ys[idx]); }
+                        pl_scatter(ax, gx, gy, {"size": 2, "color": pl_palette()[gi % len(pl_palette())], "alpha": 0.7});
+                        gi = gi + 1;
+                    }
+                }
+            } else {
+                ax["kind"] = "heat";
+                let rr = cm["r"][i][j];
+                pl_heat(ax, [[rr]], [""], [""], {"cmap": "coolwarm", "vmin": -1, "vmax": 1, "digits": 2, "stars": [[cm["p"][i][j]]]});
+                ax["title"] = names[i] + " ~ " + names[j];
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return fig;
+}
+// فهارس الصفوف لكل قيمة في عمود التجميع (لـ hue)
+fun st_groups_idx(df, groupCol) {
+    let col = df_col(df, groupCol);
+    let order = [];
+    let seen = {};
+    let i = 0;
+    while (i < len(col)) {
+        let key = str(col[i]);
+        if (!has(seen, key)) { seen[key] = {"name": col[i], "idx": []}; push(order, key); }
+        push(seen[key]["idx"], i);
+        i = i + 1;
+    }
+    let out = [];
+    for (let kk in order) { push(out, seen[kk]); }
+    return out;
+}
+
+// تشخيص الانحدار: 2×2 (بواقي~مقدَّر | Q-Q للبواقي | مقياس-موضع | مخطط تكراري للبواقي)
+fun pl_regression_diagnostics(fit, title) {
+    let fig = pl_figure(1100, 760, 2, 2, title);
+    let res = fit["residuals"]; let fv = fit["fitted"];
+    let a1 = pl_axes(fig, 0, 0);
+    pl_title(a1, "Residuals vs Fitted");
+    pl_scatter(a1, fv, res, {});
+    pl_hline(a1, 0, {"color": "#D55E00"});
+    a1["xlabel"] = "Fitted"; a1["ylabel"] = "Residual"; a1["legend"] = "none";
+    let a2 = pl_axes(fig, 0, 1);
+    pl_title(a2, "Normal Q-Q of residuals"); pl_qq(a2, res, {});
+    let a3 = pl_axes(fig, 1, 0);
+    pl_title(a3, "Scale-Location");
+    let sq = [];
+    for (let r in res) { push(sq, sqrt(abs(r / fit["sigma"]))); }
+    pl_scatter(a3, fv, sq, {"color": "#009E73"});
+    a3["xlabel"] = "Fitted"; a3["ylabel"] = "sqrt|std resid|"; a3["legend"] = "none";
+    let a4 = pl_axes(fig, 1, 1);
+    pl_title(a4, "Residual distribution"); pl_hist(a4, res, {"normal": true});
+    return fig;
+}
+
+// تحليل انحدار كامل بدالة واحدة: شكل 1×2 (الانحدار + الجدول النصي للمعاملات)
+fun pl_regression_report(x, y, title) {
+    let fig = pl_figure(1000, 560, 1, 1, title);
+    let ax = pl_axes(fig, 0, 0);
+    let fit = pl_regplot(ax, x, y, {"predband": true, "label": "data"});
+    ax["xlabel"] = "x"; ax["ylabel"] = "y";
+    return fig;
+}
+
+// تقرير PCA: scree + مخطط الدرجات PC1×PC2 + خريطة الأحمال (يستعمل st_pca)
+fun pl_pca_report(df, names, title) {
+    let r = st_pca(df, names);
+    let k = len(names);
+    let fig = pl_figure(1400, 520, 1, 3, title);
+    let a1 = pl_axes(fig, 0, 0);
+    pl_title(a1, "Scree");
+    let idx = []; let cum = []; let run = 0; let i = 0;
+    while (i < k) { push(idx, "PC" + str(i + 1)); run = run + r["ratio"][i]; push(cum, run); i = i + 1; }
+    pl_bar(a1, idx, r["ratio"], {"label": "variance ratio"});
+    let xs = []; i = 1; while (i <= k) { push(xs, i); i = i + 1; }
+    pl_line(a1, xs, cum, {"label": "cumulative", "color": "#D55E00"});
+    a1["legend"] = "lower right";
+    let a2 = pl_axes(fig, 0, 1);
+    pl_title(a2, "Scores PC1 vs PC2");
+    pl_scatter(a2, nd_col(r["scores"], 0), nd_col(r["scores"], 1), {});
+    a2["legend"] = "none";
+    let a3 = pl_axes(fig, 0, 2);
+    pl_title(a3, "Loadings");
+    let pcs = []; i = 0; while (i < k) { push(pcs, "PC" + str(i + 1)); i = i + 1; }
+    pl_heat(a3, r["loadings"], names, pcs, {"cmap": "coolwarm", "vmin": -1, "vmax": 1});
+    return fig;
+}
+)RINPLOTOGRIN";
+static const char* kLib_rinplot_adv_og_rin = R"RINPLOTADVOGRIN(
+// ============================================================================
+//  lib/rinplot_adv.og.rin — الرسوم الإحصائية المتخصصة
+//
+//  @version 1.0.0
+//  @category data
+//  @prefix pl_
+//
+//  فوق rinplot (النواة) وrinstat_adv: ROC · Kaplan-Meier · ACF/PACF · forest ·
+//  كثافة ثنائية · ridgeline · مصفوفة التباس · توقّع · كثير حدود، وتقارير كاملة:
+//  pl_logit_report · pl_ts_report · pl_survival_report.
+//  استيراد:  @import "lib/rinplot_adv.og.rin";
+// ============================================================================
+@import "lib/rinplot.og.rin";
+@import "lib/rinstat_adv.og.rin";
+
+fun pl_roc(ax, roc, label) {
+    pl_line(ax, [0, 1], [0, 1], {"color": "#999999", "dash": true, "width": 1});
+    pl_line(ax, roc["fpr"], roc["tpr"], {"color": "#0072B2", "width": 3, "label": label + " AUC=" + st_fmt(roc["auc"], 3)});
+    ax["xlabel"] = "False positive rate"; ax["ylabel"] = "True positive rate";
+    ax["legend"] = "lower right";
+    pl_xlim(ax, 0, 1); pl_ylim(ax, 0, 1.02);
+    return ax;
+}
+// منحنى بقاء بدرجات + نطاق ثقة (Greenwood)
+fun pl_km(ax, km, label, color) {
+    let xs = []; let ys = []; let lo = []; let hi = [];
+    let i = 0;
+    while (i < len(km["t"])) {
+        if (i > 0) { push(xs, km["t"][i]); push(ys, km["s"][i - 1]); push(lo, km["lo"][i - 1]); push(hi, km["hi"][i - 1]); }
+        push(xs, km["t"][i]); push(ys, km["s"][i]); push(lo, km["lo"][i]); push(hi, km["hi"][i]);
+        i = i + 1;
+    }
+    pl_band(ax, xs, lo, hi, {"color": color, "alpha": 0.15});
+    pl_line(ax, xs, ys, {"color": color, "width": 3, "label": label});
+    ax["xlabel"] = "Time"; ax["ylabel"] = "Survival probability";
+    pl_ylim(ax, 0, 1.03);
+    return ax;
+}
+fun pl_acf(ax, vals, n, title) {
+    let idx = []; let i = 0;
+    while (i < len(vals)) { push(idx, i); i = i + 1; }
+    pl_bar(ax, idx, vals, {"w": 0.25, "color": "#0072B2"});
+    let band = 1.959964 / sqrt(n);
+    pl_hline(ax, band, {"color": "#D55E00"}); pl_hline(ax, -band, {"color": "#D55E00"});
+    ax["title"] = title; ax["xlabel"] = "Lag"; ax["legend"] = "none";
+    return ax;
+}
+// forest: تقديرات + فواصل ثقة أفقية، labels على المحور الرأسي (الأول في الأعلى)
+fun pl_forest(ax, labels, est, lo, hi, ref) {
+    let k = len(labels);
+    let ys = []; let i = 0;
+    while (i < k) { push(ys, k - i); i = i + 1; }
+    let rev = [];
+    i = k - 1;
+    while (i >= 0) { push(rev, labels[i]); i = i - 1; }
+    push(ax["layers"], {"type": "hrange", "y": ys, "est": est, "lo": lo, "hi": hi, "color": "#0072B2", "label": ""});
+    ax["ycats"] = rev;
+    if (ref != nil) { pl_vline(ax, ref, {"color": "#D55E00"}); }
+    ax["legend"] = "none";
+    return ax;
+}
+fun pl_logit_forest(ax, fit) {
+    let labs = []; let est = []; let lo = []; let hi = [];
+    let i = 1;
+    while (i < len(fit["coefs"])) {
+        let c = fit["coefs"][i];
+        push(labs, c["name"]); push(est, c["or"]); push(lo, c["or_lo"]); push(hi, c["or_hi"]);
+        i = i + 1;
+    }
+    pl_forest(ax, labs, est, lo, hi, 1);
+    pl_logx(ax);
+    ax["xlabel"] = "Odds ratio (95% CI, log scale)";
+    return ax;
+}
+// كثافة ثنائية (st_kde2) كخريطة نقطية + نقاط البيانات
+fun pl_density2d(ax, x, y, o) {
+    let k = st_kde2(x, y, 36, 36);
+    let zm = 0;
+    for (let r in k["z"]) { for (let v in r) { if (v > zm) { zm = v; } } }
+    push(ax["layers"], {"type": "raster", "gx": k["x"], "gy": k["y"], "z": k["z"], "zmax": zm,
+                        "cmap": pl_opt(o, "cmap", "viridis"), "color": "#000000", "label": ""});
+    if (pl_opt(o, "points", true)) { pl_scatter(ax, x, y, {"size": 2, "color": "#ffffff", "alpha": 0.5}); }
+    ax["legend"] = "none";
+    return ax;
+}
+// ridgeline: كثافة كل مجموعة مُزاحة رأسياً — groups: [{name,values}]
+fun pl_ridgeline(ax, groups) {
+    let names = [];
+    let k = len(groups);
+    let i = 0;
+    while (i < k) {
+        let g = groups[i];
+        let kd = st_kde(g["values"], 70);
+        let mx = maxOf(kd["y"]);
+        let base = k - i;
+        let top = []; let bs = [];
+        for (let v in kd["y"]) { push(top, base + 0.9 * v / mx); push(bs, base); }
+        let col = pl_palette()[i % len(pl_palette())];
+        pl_band(ax, kd["x"], bs, top, {"color": col, "alpha": 0.6});
+        pl_line(ax, kd["x"], top, {"color": col, "width": 2});
+        push(names, g["name"]);
+        i = i + 1;
+    }
+    let rev = []; i = k - 1;
+    while (i >= 0) { push(rev, names[i]); i = i - 1; }
+    ax["ycats"] = rev;
+    ax["ypad"] = 0.5;
+    ax["legend"] = "none";
+    return ax;
+}
+fun pl_confusion(ax, conf) {
+    pl_heat(ax, conf["matrix"], ["actual 0", "actual 1"], ["pred 0", "pred 1"], {"cmap": "blues", "digits": 0});
+    return ax;
+}
+// سلسلة + توقّع (خط متقطّع يبدأ من آخر نقطة) + نطاق ±1.96*RMSE تقريبي
+fun pl_forecast(ax, y, fc, label) {
+    let n = len(y);
+    let xs = []; let i = 0;
+    while (i < n) { push(xs, i + 1); i = i + 1; }
+    pl_line(ax, xs, y, {"color": "#555555", "width": 2, "label": "observed"});
+    let fx = [n]; let fy = [y[n - 1]];
+    i = 0;
+    while (i < len(fc)) { push(fx, n + i + 1); push(fy, fc[i]); i = i + 1; }
+    pl_line(ax, fx, fy, {"color": "#D55E00", "width": 3, "dash": true, "label": label});
+    ax["legend"] = "upper left";
+    return ax;
+}
+fun pl_polyfit(ax, x, y, deg) {
+    let f = st_polyreg(x, y, deg);
+    pl_scatter(ax, x, y, {});
+    let lo = minOf(x); let hi = maxOf(x);
+    let gx = []; let gy = []; let i = 0;
+    while (i < 60) {
+        let v = lo + (hi - lo) * i / 59;
+        push(gx, v); push(gy, algoPolyEval(f["coeffs"], v));
+        i = i + 1;
+    }
+    pl_line(ax, gx, gy, {"color": "#D55E00", "label": "deg " + str(deg) + "  R2=" + st_fmt(f["r2"], 3), "width": 3});
+    ax["legend"] = "upper left";
+    return f;
+}
+
+// ---------------------------------------------------------------------------
+//  تقارير كاملة
+// ---------------------------------------------------------------------------
+// انحدار لوجستي: OR + ROC + مصفوفة التباس + توزيع الاحتمالات حسب الفئة
+fun pl_logit_report(fit, y, title) {
+    let fig = pl_figure(1150, 780, 2, 2, title);
+    let a1 = pl_axes(fig, 0, 0); pl_title(a1, "Odds ratios"); pl_logit_forest(a1, fit);
+    let roc = st_roc(y, fit["probs"]);
+    let a2 = pl_axes(fig, 0, 1); pl_title(a2, "ROC"); pl_roc(a2, roc, "model");
+    let pred = []; for (let p in fit["probs"]) { if (p >= 0.5) { push(pred, 1); } else { push(pred, 0); } }
+    let conf = st_confusion(y, pred);
+    let a3 = pl_axes(fig, 1, 0); pl_title(a3, "Confusion (acc " + st_fmt(conf["accuracy"], 2) + ")"); pl_confusion(a3, conf);
+    let a4 = pl_axes(fig, 1, 1); pl_title(a4, "Predicted probability");
+    let p0 = []; let p1 = []; let i = 0;
+    while (i < len(y)) { if (y[i] == 1) { push(p1, fit["probs"][i]); } else { push(p0, fit["probs"][i]); } i = i + 1; }
+    pl_hist(a4, p0, {"label": "class 0", "kde": false, "bins": 10});
+    pl_hist(a4, p1, {"label": "class 1", "kde": false, "bins": 10});
+    a4["legend"] = "upper center";
+    return fig;
+}
+// سلاسل زمنية: توقّع Holt + ACF + PACF + بواقي تمهيد
+fun pl_ts_report(y, horizon, title) {
+    let fig = pl_figure(1150, 780, 2, 2, title);
+    let h = st_holt(y, horizon);
+    let a1 = pl_axes(fig, 0, 0); pl_title(a1, "Holt forecast"); pl_forecast(a1, y, h["forecast"], "forecast");
+    let lag = min(20, floor(len(y) / 2));
+    let a2 = pl_axes(fig, 0, 1); pl_acf(a2, st_acf(y, lag), len(y), "ACF");
+    let a3 = pl_axes(fig, 1, 0); pl_acf(a3, st_pacf(y, lag), len(y), "PACF");
+    let d = st_diff(y, 1);
+    let a4 = pl_axes(fig, 1, 1); pl_title(a4, "First difference");
+    let xs = []; let i = 0; while (i < len(d)) { push(xs, i + 2); i = i + 1; }
+    pl_line(a4, xs, d, {"color": "#009E73"}); pl_hline(a4, 0, {});
+    a4["legend"] = "none";
+    return fig;
+}
+// بقاء: groups = [{name,t,e}] — KM لكل مجموعة + log-rank عند اثنتين
+fun pl_survival_report(groups, title) {
+    let fig = pl_figure(1000, 620, 1, 1, "");
+    let ax = pl_axes(fig, 0, 0);
+    let i = 0;
+    for (let g in groups) {
+        pl_km(ax, st_km(g["t"], g["e"]), g["name"], pl_palette()[i % len(pl_palette())]);
+        i = i + 1;
+    }
+    ax["title"] = title;
+    if (len(groups) == 2) {
+        let lr = st_logrank(groups[0]["t"], groups[0]["e"], groups[1]["t"], groups[1]["e"]);
+        if (lr != nil) { ax["title"] = title + "   log-rank p=" + st_fmt_p(lr["p"]); }
+    }
+    ax["legend"] = "lower left";
+    return fig;
+}
+)RINPLOTADVOGRIN";
+static const char* kLib_rinauto_og_rin = R"RINAUTOOGRIN(
+// ============================================================================
+//  lib/rinauto.og.rin — RinAuto: تحليل آلي كامل ببيانات → تقرير واحد
+//
+//  @version 1.0.0
+//  @category data
+//  @prefix st_ / pl_
+//
+//  نداء واحد يقرأ إطار بيانات (rindf أو CSV) ويُنتج:
+//    • تصنيف الأعمدة (رقمي / فئوي) وتنميط الجودة (مفقود، شاذ، طبيعية)
+//    • كل الارتباطات مع تصحيح FDR (Benjamini–Hochberg)
+//    • مقارنة المجموعات: اختيار الاختبار آلياً (Welch/ANOVA/Mann-Whitney/Kruskal
+//      بحسب الطبيعية والتجانس) + تصحيح FDR + حجم الأثر
+//    • اختبارات استقلال الفئويين (كاي-تربيع + Cramér V)
+//    • تقرير HTML واحد بعربي أو إنجليزي (RTL) فيه الرسوم SVG مضمَّنة
+//
+//  استعمال:   @import "lib/rinauto.og.rin";
+//             let r = st_auto(df);                    // التحليل فقط
+//             pl_auto_report(df, "report.html", "عنوان", "ar");
+//             pl_auto_csv("data.csv", "report.html", "عنوان", "ar");
+// ============================================================================
+@import "lib/rinplot_adv.og.rin";
+
+fun st_is_num(v) { return type(v) == "number"; }
+
+// تصنيف عمود: {name, kind: "numeric"|"categorical"|"other", n, missing, unique}
+fun st_profile_col(df, name) {
+    let col = df_col(df, name);
+    let n = len(col);
+    let nums = 0; let miss = 0;
+    for (let v in col) {
+        if (v == nil or v == "") { miss = miss + 1; }
+        else if (st_is_num(v)) { nums = nums + 1; }
+    }
+    let uniq = df_unique(df, name);
+    let kind = "other";
+    let present = n - miss;
+    if (present > 0 and nums >= 0.9 * present) { kind = "numeric"; }
+    else if (len(uniq) >= 2 and len(uniq) <= 12) { kind = "categorical"; }
+    return {"name": name, "kind": kind, "n": n, "missing": miss, "unique": len(uniq)};
+}
+
+// عدّ القيم لعمود فئوي: [{level, count}] مرتبة تنازلياً
+fun st_level_counts(df, name) {
+    let col = df_col(df, name);
+    let order = [];
+    let cnt = {};
+    for (let v in col) {
+        if (v != nil and v != "") {
+            let k = str(v);
+            if (!has(cnt, k)) { cnt[k] = 0; push(order, k); }
+            cnt[k] = cnt[k] + 1;
+        }
+    }
+    let out = [];
+    for (let k in order) { push(out, {"level": k, "count": cnt[k]}); }
+    return out;
+}
+fun st_pos(arr, v) {
+    let i = 0;
+    while (i < len(arr)) { if (arr[i] == v) { return i; } i = i + 1; }
+    return -1;
+}
+// جدول طوارئ بين عمودين فئويين
+fun st_crosstab(df, a, b) {
+    let ca = df_col(df, a); let cb = df_col(df, b);
+    let la = []; let lb = [];
+    for (let e in st_level_counts(df, a)) { push(la, e["level"]); }
+    for (let e in st_level_counts(df, b)) { push(lb, e["level"]); }
+    let T = matZeros(len(la), len(lb));
+    let i = 0;
+    while (i < len(ca)) {
+        if (ca[i] != nil and cb[i] != nil and ca[i] != "" and cb[i] != "") {
+            let ia = st_pos(la, str(ca[i])); let ib = st_pos(lb, str(cb[i]));
+            T[ia][ib] = T[ia][ib] + 1;
+        }
+        i = i + 1;
+    }
+    return {"table": T, "rows": la, "cols": lb};
+}
+
+fun st_auto(df) {
+    let names = df_names(df);
+    let profiles = [];
+    let nums = []; let cats = [];
+    for (let nm in names) {
+        let p = st_profile_col(df, nm);
+        if (p["kind"] == "numeric") {
+            let a = st_clean(df_col(df, nm));
+            p["summary"] = st_summary(a);
+            p["outliers"] = len(st_outliers(a, 1.5)["outliers"]);
+            p["normality"] = st_normality(a);
+            push(nums, nm);
+        } else if (p["kind"] == "categorical") {
+            p["levels"] = st_level_counts(df, nm);
+            push(cats, nm);
+        }
+        push(profiles, p);
+    }
+    // ارتباطات
+    let corrs = [];
+    let i = 0;
+    while (i < len(nums)) {
+        let j = i + 1;
+        while (j < len(nums)) {
+            let t = st_corr_test(df_col(df, nums[i]), df_col(df, nums[j]));
+            if (t != nil) { push(corrs, {"a": nums[i], "b": nums[j], "r": t["r"], "p": t["p"], "n": t["n"]}); }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    if (len(corrs) > 0) {
+        let ps = []; for (let c in corrs) { push(ps, c["p"]); }
+        let adj = st_p_adjust(ps, "bh");
+        i = 0; while (i < len(corrs)) { corrs[i]["p_adj"] = adj[i]; i = i + 1; }
+    }
+    // مقارنات مجموعات
+    let comps = [];
+    for (let c in cats) {
+        for (let nm in nums) {
+            let g = st_groups(df, c, nm);
+            let ok = len(g) >= 2;
+            for (let e in g) { if (len(e["values"]) < 2) { ok = false; } }
+            if (ok) {
+                let r = st_auto_compare(g);
+                if (r != nil) {
+                    let eff = nil;
+                    if (has(r, "eta2")) { eff = r["eta2"]; } else if (has(r, "d")) { eff = abs(r["d"]); } else if (has(r, "epsilon2")) { eff = r["epsilon2"]; }
+                    push(comps, {"group": c, "value": nm, "test": r["test"], "why": r["why"], "stat": r["stat"], "p": r["p"], "effect": eff, "levels": len(g)});
+                }
+            }
+        }
+    }
+    if (len(comps) > 0) {
+        let ps2 = []; for (let c in comps) { push(ps2, c["p"]); }
+        let adj2 = st_p_adjust(ps2, "bh");
+        i = 0; while (i < len(comps)) { comps[i]["p_adj"] = adj2[i]; i = i + 1; }
+    }
+    // استقلال الفئويين
+    let assoc = [];
+    i = 0;
+    while (i < len(cats)) {
+        let j = i + 1;
+        while (j < len(cats)) {
+            let x = st_crosstab(df, cats[i], cats[j]);
+            if (len(x["rows"]) >= 2 and len(x["cols"]) >= 2) {
+                let r = st_chi2_indep(x["table"]);
+                if (r != nil) { push(assoc, {"a": cats[i], "b": cats[j], "chi2": r["stat"], "df": r["df"], "p": r["p"], "v": r["cramers_v"]}); }
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return {"rows": df_shape(df)[0], "profiles": profiles, "numeric": nums, "categorical": cats,
+            "correlations": corrs, "comparisons": comps, "associations": assoc};
+}
+
+// ---------------------------------------------------------------------------
+//  نصوص التقرير ثنائية اللغة
+// ---------------------------------------------------------------------------
+fun st_tr(lang, key) {
+    let ar = {"overview": "نظرة عامة", "rows": "عدد الصفوف", "cols": "الأعمدة", "col": "العمود", "kind": "النوع",
+              "missing": "مفقود", "outliers": "شاذ", "mean": "المتوسط", "sd": "الانحراف", "median": "الوسيط",
+              "normal": "طبيعي؟", "numeric": "رقمي", "categorical": "فئوي", "other": "أخرى", "dist": "التوزيعات",
+              "corr": "الارتباطات", "groups": "مقارنة المجموعات", "assoc": "العلاقات بين الفئويات", "findings": "أهم النتائج",
+              "none": "لا توجد نتائج دالة بعد تصحيح FDR", "yes": "نعم", "no": "لا", "effect": "حجم الأثر",
+              "test": "الاختبار", "padj": "p المصحّح", "why": "سبب الاختيار", "note": "p مصحّحة بطريقة Benjamini–Hochberg عبر كل الاختبارات في كل قسم."};
+    let en = {"overview": "Overview", "rows": "Rows", "cols": "Columns", "col": "Column", "kind": "Type",
+              "missing": "Missing", "outliers": "Outliers", "mean": "Mean", "sd": "SD", "median": "Median",
+              "normal": "Normal?", "numeric": "numeric", "categorical": "categorical", "other": "other", "dist": "Distributions",
+              "corr": "Correlations", "groups": "Group comparisons", "assoc": "Categorical associations", "findings": "Key findings",
+              "none": "No significant results after FDR correction", "yes": "yes", "no": "no", "effect": "Effect size",
+              "test": "Test", "padj": "adj. p", "why": "Why this test", "note": "p-values adjusted with Benjamini-Hochberg across all tests in each section."};
+    if (lang == "ar") { return ar[key]; }
+    return en[key];
+}
+fun st_h(s) { return pl_xml(s); }
+
+fun st_findings(r, lang) {
+    let out = [];
+    for (let c in r["correlations"]) {
+        if (c["p_adj"] < 0.05 and abs(c["r"]) >= 0.3) {
+            let dir = "positive"; if (lang == "ar") { dir = "طردي"; }
+            if (c["r"] < 0) { dir = "negative"; if (lang == "ar") { dir = "عكسي"; } }
+            if (lang == "ar") { push(out, "ارتباط " + dir + " بين " + c["a"] + " و" + c["b"] + " (r=" + st_fmt(c["r"], 2) + "، p=" + st_fmt_p(c["p_adj"]) + ")"); }
+            else { push(out, "Significant " + dir + " correlation between " + c["a"] + " and " + c["b"] + " (r=" + st_fmt(c["r"], 2) + ", adj p=" + st_fmt_p(c["p_adj"]) + ")"); }
+        }
+    }
+    for (let c in r["comparisons"]) {
+        if (c["p_adj"] < 0.05) {
+            if (lang == "ar") { push(out, c["value"] + " يختلف بين مستويات " + c["group"] + " (" + c["test"] + "، p=" + st_fmt_p(c["p_adj"]) + ")"); }
+            else { push(out, c["value"] + " differs across " + c["group"] + " (" + c["test"] + ", adj p=" + st_fmt_p(c["p_adj"]) + ")"); }
+        }
+    }
+    for (let a in r["associations"]) {
+        if (a["p"] < 0.05) {
+            if (lang == "ar") { push(out, "ارتباط بين " + a["a"] + " و" + a["b"] + " (كاي-تربيع، Cramér V=" + st_fmt(a["v"], 2) + "، p=" + st_fmt_p(a["p"]) + ")"); }
+            else { push(out, a["a"] + " and " + a["b"] + " are associated (chi-square, Cramer V=" + st_fmt(a["v"], 2) + ", p=" + st_fmt_p(a["p"]) + ")"); }
+        }
+    }
+    return out;
+}
+
+fun pl_auto_table(headers, rows) {
+    let h = "<table><thead><tr>";
+    for (let x in headers) { h = h + "<th>" + st_h(x) + "</th>"; }
+    h = h + "</tr></thead><tbody>";
+    for (let r in rows) {
+        h = h + "<tr>";
+        for (let c in r) { h = h + "<td>" + st_h(c) + "</td>"; }
+        h = h + "</tr>";
+    }
+    return h + "</tbody></table>";
+}
+
+// يبني HTML كاملاً (نصاً). lang: "ar" | "en"
+fun pl_auto_html(df, title, lang) {
+    let r = st_auto(df);
+    let dir = "ltr"; if (lang == "ar") { dir = "rtl"; }
+    let css = "body{font-family:'Noto Sans Arabic','DejaVu Sans',Arial,sans-serif;max-width:1100px;margin:24px auto;padding:0 16px;color:#1f2937;line-height:1.6}h1{margin-bottom:4px}h2{border-bottom:2px solid #0072B2;padding-bottom:4px;margin-top:36px}table{border-collapse:collapse;width:100%;margin:12px 0;font-size:14px}th,td{border:1px solid #e5e7eb;padding:6px 10px;text-align:start}th{background:#f3f4f6}.fig{overflow-x:auto;margin:16px 0}.find li{margin:6px 0}.muted{color:#6b7280;font-size:13px}svg{max-width:100%;height:auto}";
+    let h = "<!doctype html><html lang=\"" + lang + "\" dir=\"" + dir + "\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>" + st_h(title) + "</title><style>" + css + "</style></head><body>";
+    h = h + "<h1>" + st_h(title) + "</h1><div class=\"muted\">" + st_tr(lang, "rows") + ": " + str(r["rows"]) + " · " + st_tr(lang, "cols") + ": " + str(len(r["profiles"])) + "</div>";
+    // النتائج
+    h = h + "<h2>" + st_tr(lang, "findings") + "</h2>";
+    let fnd = st_findings(r, lang);
+    if (len(fnd) == 0) { h = h + "<p>" + st_tr(lang, "none") + "</p>"; }
+    else { h = h + "<ul class=\"find\">"; for (let f in fnd) { h = h + "<li>" + st_h(f) + "</li>"; } h = h + "</ul>"; }
+    // نظرة عامة
+    h = h + "<h2>" + st_tr(lang, "overview") + "</h2>";
+    let rows = [];
+    for (let p in r["profiles"]) {
+        let m = ""; let sd = ""; let md = ""; let nm = ""; let ou = "";
+        if (p["kind"] == "numeric") {
+            m = st_fmt(p["summary"]["mean"], 3); sd = st_fmt(p["summary"]["sd"], 3); md = st_fmt(p["summary"]["median"], 3);
+            ou = str(p["outliers"]);
+            if (p["normality"] != nil) { if (p["normality"]["p"] >= 0.05) { nm = st_tr(lang, "yes"); } else { nm = st_tr(lang, "no"); } }
+        }
+        push(rows, [p["name"], st_tr(lang, p["kind"]), str(p["missing"]), m, sd, md, ou, nm]);
+    }
+    h = h + pl_auto_table([st_tr(lang, "col"), st_tr(lang, "kind"), st_tr(lang, "missing"), st_tr(lang, "mean"), st_tr(lang, "sd"), st_tr(lang, "median"), st_tr(lang, "outliers"), st_tr(lang, "normal")], rows);
+    // توزيعات
+    if (len(r["numeric"]) > 0) {
+        h = h + "<h2>" + st_tr(lang, "dist") + "</h2>";
+        let nn = min(len(r["numeric"]), 9);
+        let cols = 3; if (nn < 3) { cols = nn; }
+        let rws = ceil(nn / cols);
+        let fig = pl_figure(380 * cols, 280 * rws + 20, rws, cols, "");
+        let i = 0;
+        while (i < nn) {
+            let ax = pl_axes(fig, floor(i / cols), i % cols);
+            pl_title(ax, r["numeric"][i]);
+            pl_hist(ax, df_col(df, r["numeric"][i]), {"label": ""});
+            ax["legend"] = "none";
+            i = i + 1;
+        }
+        h = h + "<div class=\"fig\">" + pl_svg(fig) + "</div>";
+    }
+    // ارتباطات
+    if (len(r["numeric"]) >= 2) {
+        h = h + "<h2>" + st_tr(lang, "corr") + "</h2>";
+        let nm2 = slice(r["numeric"], 0, min(len(r["numeric"]), 12));
+        let fig2 = pl_figure(760, 640, 1, 1, "");
+        let ax2 = pl_axes(fig2, 0, 0);
+        pl_corr_heatmap(ax2, df, nm2);
+        h = h + "<div class=\"fig\">" + pl_svg(fig2) + "</div><p class=\"muted\">* p&lt;0.05 &nbsp; ** p&lt;0.01 &nbsp; *** p&lt;0.001</p>";
+    }
+    // مقارنات
+    if (len(r["comparisons"]) > 0) {
+        h = h + "<h2>" + st_tr(lang, "groups") + "</h2>";
+        let crow = [];
+        for (let c in r["comparisons"]) {
+            let e = ""; if (c["effect"] != nil) { e = st_fmt(c["effect"], 3); }
+            push(crow, [c["value"] + " ~ " + c["group"], c["test"], st_fmt(c["stat"], 3), st_fmt_p(c["p"]), st_fmt_p(c["p_adj"]), e, c["why"]]);
+        }
+        h = h + pl_auto_table([st_tr(lang, "col"), st_tr(lang, "test"), "stat", "p", st_tr(lang, "padj"), st_tr(lang, "effect"), st_tr(lang, "why")], crow);
+        // أرسم أقوى 3 فروق
+        let order = st_argsort(map_p(r["comparisons"]));
+        let k = 0;
+        while (k < min(3, len(order))) {
+            let c = r["comparisons"][order[k]];
+            if (c["p_adj"] < 0.05) { h = h + "<div class=\"fig\">" + pl_svg(pl_compare_groups(df, c["group"], c["value"])) + "</div>"; }
+            k = k + 1;
+        }
+    }
+    if (len(r["associations"]) > 0) {
+        h = h + "<h2>" + st_tr(lang, "assoc") + "</h2>";
+        let arow = [];
+        for (let a in r["associations"]) { push(arow, [a["a"] + " × " + a["b"], st_fmt(a["chi2"], 3), str(a["df"]), st_fmt_p(a["p"]), st_fmt(a["v"], 3)]); }
+        h = h + pl_auto_table([st_tr(lang, "col"), "chi2", "df", "p", "Cramer V"], arow);
+    }
+    h = h + "<p class=\"muted\">" + st_tr(lang, "note") + "</p></body></html>";
+    return {"html": h, "analysis": r, "findings": fnd};
+}
+fun map_p(arr) {
+    let out = [];
+    for (let c in arr) { push(out, c["p_adj"]); }
+    return out;
+}
+fun pl_auto_report(df, path, title, lang) {
+    let res = pl_auto_html(df, title, lang);
+    writeFile(path, res["html"]);
+    return res;
+}
+fun pl_auto_csv(csvPath, outPath, title, lang) {
+    return pl_auto_report(df_read_csv(csvPath), outPath, title, lang);
+}
+)RINAUTOOGRIN";
 
 static const char* kLib_indsinicons_og_rin = R"INDSINICONSOGRIN(
 // ============================================================================
@@ -21371,6 +26780,14 @@ inline const std::unordered_map<std::string, std::string>& embeddedRinLibraries(
         {"lib/packkit.og.rin", kLib_packkit_og_rin},
         {"lib/wesscode.og.rin", kLib_wesscode_og_rin},
         {"lib/indsinweb.og.rin", kLib_indsinweb_og_rin},
+        {"lib/rinauto.og.rin", kLib_rinauto_og_rin},
+        {"lib/rinplot_adv.og.rin", kLib_rinplot_adv_og_rin},
+        {"lib/rinplot.og.rin", kLib_rinplot_og_rin},
+        {"lib/rinstat_adv.og.rin", kLib_rinstat_adv_og_rin},
+        {"lib/rinstat.og.rin", kLib_rinstat_og_rin},
+        {"lib/rinai.og.rin", kLib_rinai_og_rin},
+        {"lib/rinml.og.rin", kLib_rinml_og_rin},
+        {"lib/rindf.og.rin", kLib_rindf_og_rin},
         {"lib/previewkit.og.rin", kLib_previewkit_og_rin},
     };
     return libs;
