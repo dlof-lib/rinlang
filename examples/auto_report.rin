@@ -1,0 +1,11 @@
+// تقرير تحليل آلي كامل من CSV (أو من إطار بيانات) — ينتج report.html
+@import "lib/rinauto.og.rin";
+let df = df_from_records([
+  {"group": "A", "age": 31, "score": 71.2}, {"group": "A", "age": 35, "score": 69.8},
+  {"group": "A", "age": 29, "score": 73.1}, {"group": "A", "age": 41, "score": 70.4},
+  {"group": "B", "age": 33, "score": 80.5}, {"group": "B", "age": 38, "score": 82.1},
+  {"group": "B", "age": 27, "score": 79.3}, {"group": "B", "age": 44, "score": 84.0}
+]);
+let res = pl_auto_report(df, "report.html", "تقرير تجريبي", "ar");
+for (let f in res["findings"]) { print f; }
+// من ملف:  pl_auto_csv("data.csv", "report.html", "Report", "en");
