@@ -21,7 +21,7 @@
 //    algoDiff(f, x[, opts])  algoGrad(f, x)  algoJacobian(F, x)
 //    algoIntegrate(f, a, b[, opts])  algoTrapz(ys[, xs|dx])
 //  المعادلات التفاضلية والاستيفاء والتوفيق:
-//    algoOde(f, y0, t0, t1[, opts])  algoInterp(xs, ys, x[, opts])
+//    algoOde(f, y0, t0, t1[, opts])  (rk45 | rk4 | stiff)  algoInterp(xs, ys, x[, opts])
 //    algoPolyFit(xs, ys, deg)  algoPolyEval(c, x)  algoPolyRoots(c)
 //  الإشارات والبيانات:
 //    algoFFT(signal[, opts])  algoRandom(n[, opts])
@@ -343,6 +343,43 @@ void Interpreter::registerNativesExtra11() {
             const double xtol = optNum10(o, "tol", 1e-9, "algoMinimize", line), ftol = optNum10(o, "ftol", 1e-12, "algoMinimize", line);
             const long maxIter = static_cast<long>(optNum10(o, "maxIter", 400.0 * static_cast<double>(n), "algoMinimize", line));
             auto F = [&](const std::vector<double>& x) { ++evals; double v = f.num({vecVal(x)}, "the objective"); return std::isnan(v) ? INFINITY : v; };
+            if (optStr10(o, "method", "nelder-mead") == "bfgs") {
+                const Value* gv = o ? get10(*o, "grad") : nullptr; const bool hasG = gv && gv->type != Value::Type::NIL;
+                if (hasG) needFn11(*gv, "algoMinimize", "grad", line);
+                CB gf{this, hasG ? *gv : Value(), "algoMinimize", line};
+                auto Fx = [&](const std::vector<double>& x) { ++evals; return f.num({vecVal(x)}, "the objective"); };
+                auto Gx = [&](const std::vector<double>& x) {
+                    if (hasG) { auto g = gf.vec(x, "grad"); if (g.size() != n) failRun10("algoMinimize", "grad must return " + std::to_string(n) + " components", line); return g; }
+                    std::vector<double> g(n);
+                    for (size_t i = 0; i < n; ++i) { const double h = std::cbrt(kEps10) * std::max(1.0, std::fabs(x[i])); auto p = x, q = x; p[i] += h; q[i] -= h; g[i] = (Fx(p) - Fx(q)) / (2.0 * h); }
+                    return g;
+                };
+                const double gtol = optNum10(o, "gtol", 1e-8, "algoMinimize", line);
+                std::vector<double> x = x0, g = Gx(x); double fx = Fx(x); Mat H = identity10(n); bool first = true;
+                for (it = 1; it <= maxIter; ++it) {
+                    double gi = 0; for (double e : g) gi = std::max(gi, std::fabs(e));
+                    if (gi <= gtol * (1.0 + std::fabs(fx))) { conv = true; break; }
+                    std::vector<double> p(n, 0.0); for (size_t i = 0; i < n; ++i) for (size_t j = 0; j < n; ++j) p[i] -= H(i, j) * g[j];
+                    double gp = 0; for (size_t i = 0; i < n; ++i) gp += g[i] * p[i];
+                    if (!(gp < 0)) { H = identity10(n); for (size_t i = 0; i < n; ++i) p[i] = -g[i]; gp = 0; for (size_t i = 0; i < n; ++i) gp += g[i] * p[i]; }
+                    double t = 1.0, fn = fx; std::vector<double> xn(n); bool okLs = false;
+                    for (int ls = 0; ls < 50; ++ls) { for (size_t i = 0; i < n; ++i) xn[i] = x[i] + t * p[i]; fn = Fx(xn); if (std::isfinite(fn) && fn <= fx + 1e-4 * t * gp) { okLs = true; break; } t *= 0.5; }
+                    if (!okLs) break;
+                    auto gn = Gx(xn); std::vector<double> sv(n), yv(n); double sy = 0, yy = 0, ss = 0;
+                    for (size_t i = 0; i < n; ++i) { sv[i] = xn[i] - x[i]; yv[i] = gn[i] - g[i]; sy += sv[i] * yv[i]; yy += yv[i] * yv[i]; ss += sv[i] * sv[i]; }
+                    const double fprev = fx; x = xn; g = gn; fx = fn;
+                    if (sy > 1e-12 * std::sqrt(ss * yy)) {
+                        if (first) { H = identity10(n); for (size_t i = 0; i < n; ++i) H(i, i) = sy / yy; first = false; }
+                        const double rho = 1.0 / sy; Mat Hy(n, 1); for (size_t i = 0; i < n; ++i) for (size_t j = 0; j < n; ++j) Hy(i, 0) += H(i, j) * yv[j];
+                        double yHy = 0; for (size_t i = 0; i < n; ++i) yHy += yv[i] * Hy(i, 0);
+                        for (size_t i = 0; i < n; ++i) for (size_t j = 0; j < n; ++j) H(i, j) += (1.0 + rho * yHy) * rho * sv[i] * sv[j] - rho * (Hy(i, 0) * sv[j] + sv[i] * Hy(j, 0));
+                    }
+                    if (std::fabs(fprev - fx) <= 1e-16 * (1.0 + std::fabs(fx)) && std::sqrt(ss) <= xtol * 1e-3) { conv = true; break; }
+                }
+                put10(m, "x", vecVal(x)); put10(m, "fx", N10(fx));
+                put10(m, "iterations", N10(static_cast<double>(std::min(it, maxIter)))); put10(m, "evaluations", N10(static_cast<double>(evals))); put10(m, "converged", B10(conv)); put10(m, "method", S10("bfgs"));
+                return Value::makeMap(m);
+            }
             std::vector<std::vector<double>> S(n + 1, x0); std::vector<double> fs(n + 1);
             for (size_t i = 0; i < n; ++i) { const double st = optNum10(o, "step", 0.0, "algoMinimize", line); S[i + 1][i] = x0[i] != 0.0 ? x0[i] * 1.05 : 0.00025; if (st > 0) S[i + 1][i] = x0[i] + st; }
             for (size_t i = 0; i <= n; ++i) fs[i] = F(S[i]);
@@ -605,7 +642,43 @@ void Interpreter::registerNativesExtra11() {
                 h *= fac;
                 if (h < 1e-14 * std::max(1.0, std::fabs(t))) failRun10("algoOde", "step size underflow at t=" + fmt11(t), line);
             }
-        } else failArg10("algoOde", "unknown method '" + method + "' (rk45, rk4)", line);
+        } else if (method == "stiff") { // Euler الضمني التكيّفي بمضاعفة الخطوة + استكمال محلي (رتبة 2)؛ للمسائل الصلبة
+            const double rtol = optNum10(o, "rtol", 1e-6, "algoOde", line), atol = optNum10(o, "atol", 1e-9, "algoOde", line);
+            double h = optNum10(o, "h", span * 1e-4, "algoOde", line); if (!(h > 0)) failArg10("algoOde", "'h' must be > 0", line);
+            const double hmax = optNum10(o, "hmax", span, "algoOde", line);
+            auto implicitEuler = [&](double tt, const std::vector<double>& y0, double hh, std::vector<double>& out) -> bool {
+                auto f0 = rhs(tt, y0); std::vector<double> yk(n);
+                for (size_t j = 0; j < n; ++j) yk[j] = y0[j] + hh * f0[j];
+                auto fg = rhs(tt + hh, yk); Mat Mx = identity10(n);
+                for (size_t j = 0; j < n; ++j) {
+                    const double hj = std::sqrt(kEps10) * std::max(1.0, std::fabs(yk[j])); auto sp = yk; sp[j] += hj; auto fp = rhs(tt + hh, sp);
+                    for (size_t i = 0; i < n; ++i) Mx(i, j) -= hh * (fp[i] - fg[i]) / hj;
+                }
+                LU10 lu = luDecompose10(Mx); if (lu.singular) return false;
+                for (int k = 0; k < 25; ++k) {
+                    auto fk = rhs(tt + hh, yk); Mat g(n, 1); for (size_t j = 0; j < n; ++j) g(j, 0) = -(yk[j] - y0[j] - hh * fk[j]);
+                    Mat d = luSolve10(lu, g); double dn = 0, yn = 0;
+                    for (size_t j = 0; j < n; ++j) { yk[j] += d(j, 0); dn = std::max(dn, std::fabs(d(j, 0))); yn = std::max(yn, std::fabs(yk[j])); }
+                    if (!std::isfinite(dn)) return false;
+                    if (dn <= 1e-11 * (1.0 + yn)) { out = yk; return true; }
+                }
+                return false;
+            };
+            double t = t0;
+            while ((t1 - t) * dir > 1e-15 * std::max(1.0, std::fabs(t1))) {
+                if (steps + rejected > maxSteps) failRun10("algoOde", "exceeded maxSteps=" + std::to_string(maxSteps) + " at t=" + fmt11(t), line);
+                h = std::min({h, hmax, std::fabs(t1 - t)}); const double hs = dir * h;
+                std::vector<double> yF, yM, yH;
+                if (!implicitEuler(t, y, hs, yF) || !implicitEuler(t, y, 0.5 * hs, yM) || !implicitEuler(t + 0.5 * hs, yM, 0.5 * hs, yH)) { ++rejected; h *= 0.25; if (h < 1e-14 * std::max(1.0, std::fabs(t))) failRun10("algoOde", "step size underflow at t=" + fmt11(t), line); continue; }
+                double err = 0; for (size_t j = 0; j < n; ++j) err = std::max(err, std::fabs(yH[j] - yF[j]) / (atol + rtol * std::max(std::fabs(y[j]), std::fabs(yH[j]))));
+                if (err <= 1.0) {
+                    for (size_t j = 0; j < n; ++j) y[j] = 2.0 * yH[j] - yF[j];
+                    t = (std::fabs(t1 - (t + hs)) <= 1e-14 * std::max(1.0, std::fabs(t1))) ? t1 : t + hs; ++steps; ts.push_back(t); ys.push_back(y);
+                } else ++rejected;
+                h *= err == 0.0 ? 5.0 : std::min(5.0, std::max(0.2, 0.9 * std::pow(err, -0.5)));
+                if (h < 1e-14 * std::max(1.0, std::fabs(t))) failRun10("algoOde", "step size underflow at t=" + fmt11(t), line);
+            }
+        } else failArg10("algoOde", "unknown method '" + method + "' (rk45, rk4, stiff)", line);
         auto tv = vecVal(ts); auto yv = std::make_shared<ArrayData>();
         for (auto& s : ys) yv->push_back(scalar ? N10(s[0]) : vecVal(s));
         auto m = std::make_shared<MapData>();
@@ -795,7 +868,7 @@ void Interpreter::registerNativesExtra11() {
         return m;
     };
     // algoBench(fn[, {runs=10, warmup=1, args:[...]}]) -> {runs, meanMs, minMs, maxMs, medianMs, stdevMs, totalMs}
-    natives["algoBench"] = [this, benchRuns, summarize](Args& a, int line) -> Value {
+    natives["algoBench"] = [benchRuns, summarize](Args& a, int line) -> Value {
         expectArgsRange("algoBench", a, 1, 2, line);
         needFn11(a[0], "algoBench", "fn", line);
         const Value* o = optMap10(a, 1, "algoBench", line);
@@ -805,7 +878,7 @@ void Interpreter::registerNativesExtra11() {
         return Value::makeMap(summarize(benchRuns(a[0], args, runs, warm, line)));
     };
     // algoCompare({name: fn, ...}[, {runs, warmup, args}]) -> مصفوفة مرتّبة من الأسرع: {name, meanMs, minMs, medianMs, ratio}
-    natives["algoCompare"] = [this, benchRuns, summarize](Args& a, int line) -> Value {
+    natives["algoCompare"] = [benchRuns, summarize](Args& a, int line) -> Value {
         expectArgsRange("algoCompare", a, 1, 2, line);
         if (a[0].type != Value::Type::MAP || !a[0].map || a[0].map->size() < 2) failType10("algoCompare", "expects a map {name: fn, ...} with at least 2 functions", line);
         const Value* o = optMap10(a, 1, "algoCompare", line);
