@@ -1,0 +1,199 @@
+// مفهوما linalg وalgo: الجبر الخطي (mat*/vec*) وتطوير الخوارزميات (algo*) — docs/LINALG.md · docs/ALGO.md
+fun showM(tag, v) { print tag + ": " + matFormat(v, {decimals: 6, brackets: false}); }
+fun rowV(tag, v) { showM(tag, [v]); }
+fun numV(tag, x) { print tag + ": " + numberFormat(x, {decimals: 6}); }
+fun okV(tag, b) { print tag + ": " + b; }
+fun prodOf(v) { let p = 1; for x in v { p = p * x; } return p; }
+
+print "== بناء وفحص ==";
+showM("eye", matEye(2));
+showM("diag", matDiag([1, 2, 3]));
+rowV("diag-of", matDiag([[1, 2], [3, 4]]));
+showM("build", matBuild(2, 3, fun(i, j) { return i * 10 + j; }));
+showM("vander", matVandermonde([1, 2, 3], 3));
+showM("hilbert", matHilbert(3));
+print matShape([[1, 2, 3], [4, 5, 6]]);
+print matCheck([[1, 2], [3]]).ok;
+print matCheck([1, 2]).error;
+okV("rand-determ", matApprox(matRandom(3, 3, {seed: 5}), matRandom(3, 3, {seed: 5})));
+okV("is-sym", matIs([[1, 2], [2, 1]], "symmetric"));
+okV("is-pd", matIs([[2, 1], [1, 2]], "positive-definite"));
+okV("is-sing", matIs([[1, 2], [2, 4]], "singular"));
+
+print "== عمليات ==";
+showM("mul", matMul([[1, 2], [3, 4]], [[5, 6], [7, 8]]));
+rowV("mul-vec", matMul([[1, 2], [3, 4]], [1, 1]));
+rowV("vec-mul", matMul([1, 1], [[1, 2], [3, 4]]));
+showM("pow", matPow([[1, 1], [1, 0]], 10));
+showM("pow-neg", matPow([[2, 0], [0, 4]], -1));
+showM("kron", matKron([[1, 2]], [[1], [1]]));
+numV("trace", matTrace([[1, 2], [3, 4]]));
+numV("norm-fro", matNorm([[3, 0], [0, 4]]));
+numV("norm-1", matNorm([[1, -2], [3, 4]], 1));
+numV("norm-inf", matNorm([[1, -2], [3, 4]], "inf"));
+numV("norm-2", matNorm([[3, 0], [0, 4]], 2));
+showM("map", matMap([[1, 2], [3, 4]], fun(x, i, j) { return x * x; }));
+print matFormat([[1.5, 2], [30, 4.25]], {decimals: 2});
+numV("dot", vecDot([1, 2, 3], [4, 5, 6]));
+numV("dot-exact", vecDot([1e16, 1, -1e16], [1, 1, 1]));
+numV("norm", vecNorm([3, 4]));
+numV("norm-big", vecNorm([3e200, 4e200]) / 1e200);
+numV("norm-1v", vecNorm([1, -2, 3], 1));
+numV("norm-infv", vecNorm([1, -7, 3], "inf"));
+rowV("cross", vecCross([1, 0, 0], [0, 1, 0]));
+numV("angle", vecAngle([1, 0], [1, 1]));
+rowV("project", vecProject([2, 3], [1, 0]));
+rowV("linspace", vecLinspace(0, 1, 5));
+
+print "== تحليل وحل ==";
+showM("inv", matInv([[4, 7], [2, 6]]));
+numV("det", matDet([[1, 2], [3, 4]]));
+rowV("solve", matSolve([[2, 1], [1, 3]], [3, 5]));
+let lu = matLU([[4, 3], [6, 3]]);
+showM("lu-L", lu.L); showM("lu-U", lu.U); print lu.perm; print lu.sign;
+let qr = matQR([[1, 2], [3, 4]]);
+showM("qr-R", qr.R);
+showM("chol", matCholesky([[4, 2], [2, 3]]));
+let es = matEigSym([[2, 1], [1, 2]]);
+rowV("eig-values", es.values);
+let ev = matEigvals([[0, -1], [1, 0]]);
+print ev[0].re + " " + ev[0].im + " | " + ev[1].re + " " + ev[1].im;
+rowV("eigvals-real", matEigvals([[2, 0, 0], [0, 3, 4], [0, 4, 9]], {real: true}));
+let sv = matSVD([[3, 0], [0, 4]]);
+rowV("svd-S", sv.S); print sv.rank;
+print matRank([[1, 2], [2, 4]]);
+numV("cond-hilbert5", matCond(matHilbert(5)));
+showM("pinv", matPinv([[1, 2], [3, 4], [5, 6]]));
+let ls = matLstsq([[1, 1], [1, 2], [1, 3], [1, 4]], [6, 5, 7, 10]);
+rowV("lstsq", ls.x); numV("lstsq-res", ls.residual);
+showM("null", matNull([[1, 1], [1, 1]]));
+let rr = matRref([[1, 2, 3], [4, 5, 6], [7, 8, 10]]);
+showM("rref", rr.rref); print rr.pivots;
+let it = matSolveIter([[4, 1], [1, 3]], [1, 2]);
+rowV("cg", it.x); print it.converged;
+let gs = matSolveIter([[4, 1], [1, 3]], [1, 2], {method: "gauss-seidel"});
+rowV("gauss-seidel", gs.x);
+numV("power", matPowerIter([[2, 0], [0, 1]]).value);
+
+print "== أخطاء ==";
+try { matSolve([[1, 2], [2, 4]], [1, 2]); } catch (e) { print e.message; }
+try { matMul([[1, 2]], [[1, 2]]); } catch (e) { print e.message; }
+try { matCholesky([[1, 2], [2, 1]]); } catch (e) { print e.message; }
+try { matAdd([[1, 2]], [[1], [2]]); } catch (e) { print e.message; }
+try { vecDot([1, 2], [1]); } catch (e) { print e.message; }
+
+print "== خصائص جبرية على مصفوفات عشوائية ==";
+let seed = 1; let allOk = true;
+while (seed <= 6) {
+  let n = 2 + seed;
+  let A = matRandom(n, n, {seed: seed, min: -2, max: 2});
+  let T = matRandom(n + 2, n, {seed: seed + 100, normal: true});
+  let Wd = matRandom(n, n + 3, {seed: seed + 200, normal: true});
+  let I = matEye(n);
+  let L = matLU(A);
+  let b = vecLinspace(1, n, n);
+  let Q = matQR(T);
+  let Qr = matQR(T, {reduced: true});
+  let SPD = matAdd(matMul(matTranspose(A), A), matScale(I, n));
+  let C = matCholesky(SPD);
+  let E = matEigSym(SPD);
+  let sT = matSVD(T); let sW = matSVD(Wd);
+  let P = matPinv(T);
+  let R1 = matMul(matRandom(n, 2, {seed: seed + 7}), matRandom(2, n, {seed: seed + 8}));
+  let N = matNull(R1);
+  let cg = matSolveIter(SPD, b, {method: "cg"});
+  let tr = 0; let pr = 1; let pi = 0;
+  for z in matEigvals(A) { tr = tr + z.re; let nr = pr * z.re - pi * z.im; let ni = pr * z.im + pi * z.re; pr = nr; pi = ni; }
+  let checks = [
+    matApprox(matMul(L.P, A), matMul(L.L, L.U), 1e-9, 1e-10),
+    matApprox(matMul(A, matInv(A)), I, 1e-8, 1e-9),
+    matApprox(matMul(A, matSolve(A, b)), b, 1e-8, 1e-9),
+    matApprox(matMul(Q.Q, Q.R), T, 1e-9, 1e-10) and matIs(Q.Q, "orthogonal", 1e-10),
+    matApprox(matMul(Qr.Q, Qr.R), T, 1e-9, 1e-10),
+    matApprox(matMul(C, matTranspose(C)), SPD, 1e-9, 1e-10),
+    matApprox(matMul(SPD, E.vectors), matMul(E.vectors, matDiag(E.values)), 1e-8, 1e-9),
+    matApprox(matMul(sT.U, matDiag(sT.S), matTranspose(sT.V)), T, 1e-9, 1e-10),
+    matApprox(matMul(sW.U, matDiag(sW.S), matTranspose(sW.V)), Wd, 1e-9, 1e-10),
+    numberApprox(tr, matTrace(A), 1e-8, 1e-9) and numberApprox(pr, matDet(A), 1e-7, 1e-8) and numberApprox(pi, 0, 1e-7, 1e-8),
+    numberApprox(abs(matDet(A)), prodOf(matSVD(A).S), 1e-8, 1e-9),
+    matApprox(matMul(T, P, T), T, 1e-8, 1e-9),
+    matRank(R1) == 2,
+    matApprox(matMul(R1, N), matZeros(n, n - 2), 1e-9, 1e-9),
+    matApprox(matPow(A, 3), matMul(A, A, A), 1e-9, 1e-9),
+    cg.converged and matApprox(matMul(SPD, cg.x), b, 1e-7, 1e-8)
+  ];
+  for c in checks { if (c == false) { allOk = false; print "FAIL seed " + seed; } }
+  seed = seed + 1;
+}
+print "properties: " + allOk;
+
+print "== algo: جذور وتحسين ==";
+fun f2(x) { return x * x - 2; }
+numV("brent", algoRoot(f2, 0, 2).root);
+numV("bisect", algoRoot(f2, 0, 2, {method: "bisect"}).root);
+numV("newton", algoRoot(f2, 1, {method: "newton"}).root);
+numV("newton-df", algoRoot(f2, 1, {method: "newton", df: fun(x) { return 2 * x; }}).root);
+numV("secant", algoRoot(f2, 1, {method: "secant"}).root);
+let br = algoBracket(f2, 5);
+print br.a < 1.4143 and br.b > 1.4142 or br.fa * br.fb < 0;
+fun g1(x) { return (x - 3) * (x - 3) + 1; }
+numV("min1d", algoMinimize(g1, 0, 10).x);
+fun rosen(v) { return 100 * (v[1] - v[0] * v[0]) * (v[1] - v[0] * v[0]) + (1 - v[0]) * (1 - v[0]); }
+rowV("nelder-mead", algoMinimize(rosen, [-1.2, 1], {tol: 1e-10}).x);
+fun F2(v) { return [v[0] * v[0] + v[1] * v[1] - 4, v[0] - v[1]]; }
+rowV("newton-sys", algoNewton(F2, [1, 0.5]).x);
+try { algoRoot(f2, 5, 6); } catch (e) { print e.message; }
+
+print "== algo: تفاضل وتكامل وODE ==";
+fun s1(x) { return sin(x); }
+fun gauss(x) { return exp(-x * x); }
+numV("integrate-sin", algoIntegrate(s1, 0, 3.141592653589793).value);
+numV("integrate-gauss-inf", algoIntegrate(gauss, 0, number("inf", {special: true})).value);
+numV("diff", algoDiff(s1, 1));
+numV("diff2", algoDiff(s1, 1, {order: 2}));
+rowV("grad", algoGrad(rosen, [1, 1]));
+showM("jacobian", algoJacobian(F2, [1, 1]));
+numV("trapz", algoTrapz([0, 1, 4, 9], [0, 1, 2, 3]));
+fun decay(t, y) { return -2 * y; }
+let od = algoOde(decay, 1, 0, 1);
+numV("ode-rk45", od.y[len(od.y) - 1]);
+fun osc(t, y) { return [y[1], -y[0]]; }
+let o4 = algoOde(osc, [1, 0], 0, 3.141592653589793, {method: "rk4", steps: 400});
+rowV("ode-rk4", o4.y[len(o4.y) - 1]);
+
+print "== algo: استيفاء وتوفيق وإشارات ==";
+numV("interp-linear", algoInterp([0, 1, 2, 3], [0, 1, 4, 9], 1.5));
+rowV("interp-spline", algoInterp([0, 1, 2, 3], [0, 1, 4, 9], [0.5, 1.5, 2.5], {method: "spline"}));
+let pf = algoPolyFit([0, 1, 2, 3, 4], [1, 3, 7, 13, 21], 2);
+rowV("polyfit", pf.coeffs); numV("polyfit-r2", pf.r2);
+rowV("polyeval", algoPolyEval([1, 1, 1], [0, 1, 2]));
+let pr3 = algoPolyRoots([-6, 11, -6, 1]);
+print pr3[0].re + " " + pr3[1].re + " " + pr3[2].re;
+let pc = algoPolyRoots([1, 0, 1]);
+print pc[0].re + " " + pc[0].im + " | " + pc[1].re + " " + pc[1].im;
+let ft = algoFFT([1, 2, 3, 4, 5]);
+rowV("fft-re", ft.re); rowV("fft-im", ft.im);
+let back = algoFFT(ft, {inverse: true});
+rowV("fft-roundtrip", back.re);
+rowV("random", algoRandom(5, {seed: 3, int: true, max: 10}));
+print algoRandom(10, {seed: 1, int: true, max: 9, unique: true, sorted: true});
+
+print "== algo: قياس وتحقق ومخططات ==";
+fun total(a) { let s = 0; for x in a { s = s + x; } return s; }
+fun refsum(a) { return numberSum(a); }
+fun wrong(a) { return 0; }
+print algoCheck(total, refsum, [[1, 2, 3], [4, 5], [0.1, 0.2, 0.3]]).ok;
+let bad = algoCheck(total, wrong, [[1, 2, 3]]);
+print bad.ok; print bad.failures[0].got; print bad.failures[0].expected;
+let bn = algoBench(total, {args: [[1, 2, 3]], runs: 5});
+print bn.runs; print bn.minMs <= bn.meanMs and bn.meanMs <= bn.maxMs;
+let cmp = algoCompare({a: total, b: refsum}, {args: [[1, 2, 3]], runs: 3});
+print len(cmp); print cmp[0].ratio;
+fun quad(a) { let s = 0; for x in a { for y in a { s = s + 1; } } return s; }
+let cx = algoComplexity(quad, [100, 200, 400, 800], {runs: 2});
+print cx.best; print cx.exponent > 1.6 and cx.exponent < 2.4;
+let W = algoGraphMatrix([[0, 1, 4], [0, 2, 1], [2, 1, 2], [1, 3, 1]], 4);
+let dj = algoDijkstra(W, 0, 3);
+rowV("dijkstra", dj.dist); print dj.path;
+let fl = algoFloyd(W);
+print fl.negativeCycle; numV("floyd-0-3", fl.dist[0][3]);
