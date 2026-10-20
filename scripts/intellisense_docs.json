@@ -1441,6 +1441,631 @@
       ],
       "ret": "number",
       "doc": "تحويل نص بأساس 2..36 إلى رقم (يقبل 0x/0b/0o و_ ويرفض الأرقام غير الصالحة والتجاوز)."
+    },
+    "matZeros": {
+      "params": [
+        "rows",
+        "[cols]"
+      ],
+      "ret": "array",
+      "doc": "مصفوفة أصفار rows×cols (المربعة إن حُذف cols)."
+    },
+    "matOnes": {
+      "params": [
+        "rows",
+        "[cols]"
+      ],
+      "ret": "array",
+      "doc": "مصفوفة أحاد."
+    },
+    "matEye": {
+      "params": [
+        "n",
+        "[m]"
+      ],
+      "ret": "array",
+      "doc": "مصفوفة الوحدة n×m."
+    },
+    "matDiag": {
+      "params": [
+        "v|M"
+      ],
+      "ret": "array",
+      "doc": "متجه ← مصفوفة قطرية؛ مصفوفة ← متجه القطر."
+    },
+    "matBuild": {
+      "params": [
+        "rows",
+        "cols",
+        "fn(i,j)"
+      ],
+      "ret": "array",
+      "doc": "يبني مصفوفة من دالة (الفهارس من 0)."
+    },
+    "matRandom": {
+      "params": [
+        "rows",
+        "cols",
+        "[opts]"
+      ],
+      "ret": "array",
+      "doc": "مصفوفة عشوائية؛ opts: {seed,min,max,normal,mean,std,int}. seed يجعلها حتمية على كل المنصّات."
+    },
+    "matHilbert": {
+      "params": [
+        "n"
+      ],
+      "ret": "array",
+      "doc": "مصفوفة هيلبرت (سيئة الشرطية، للاختبار)."
+    },
+    "matVandermonde": {
+      "params": [
+        "v",
+        "[cols]"
+      ],
+      "ret": "array",
+      "doc": "مصفوفة فاندرموند (أعمدة x^0, x^1, ...)."
+    },
+    "matShape": {
+      "params": [
+        "M"
+      ],
+      "ret": "map",
+      "doc": "{rows,cols,size,square,kind} لمصفوفة أو متجه."
+    },
+    "matCheck": {
+      "params": [
+        "M"
+      ],
+      "ret": "map",
+      "doc": "فحص بلا استثناء: {ok,rows,cols,finite} أو {ok:false,error}."
+    },
+    "matIs": {
+      "params": [
+        "M",
+        "property",
+        "[tol]"
+      ],
+      "ret": "bool",
+      "doc": "symmetric|orthogonal|diagonal|identity|upper|lower|positive-definite|singular|square|zero."
+    },
+    "matAdd": {
+      "params": [
+        "A",
+        "B"
+      ],
+      "ret": "array",
+      "doc": "جمع مصفوفتين (أو متجهين) بنفس الأبعاد."
+    },
+    "matSub": {
+      "params": [
+        "A",
+        "B"
+      ],
+      "ret": "array",
+      "doc": "طرح مصفوفتين (أو متجهين)."
+    },
+    "matHadamard": {
+      "params": [
+        "A",
+        "B"
+      ],
+      "ret": "array",
+      "doc": "ضرب عنصر بعنصر."
+    },
+    "matScale": {
+      "params": [
+        "M",
+        "k"
+      ],
+      "ret": "array",
+      "doc": "ضرب مصفوفة/متجه بعدد."
+    },
+    "matMul": {
+      "params": [
+        "A",
+        "B",
+        "..."
+      ],
+      "ret": "array",
+      "doc": "جداء مصفوفات متسلسل؛ مصفوفة×متجه ← متجه؛ متجه×مصفوفة ← متجه (vecDot للداخلي)."
+    },
+    "matTranspose": {
+      "params": [
+        "M"
+      ],
+      "ret": "array",
+      "doc": "المنقول."
+    },
+    "matTrace": {
+      "params": [
+        "M"
+      ],
+      "ret": "number",
+      "doc": "الأثر (جمع Neumaier المُعوَّض)."
+    },
+    "matPow": {
+      "params": [
+        "M",
+        "k"
+      ],
+      "ret": "array",
+      "doc": "قوة صحيحة (سالبة عبر المعكوس) بالتربيع المتكرر."
+    },
+    "matKron": {
+      "params": [
+        "A",
+        "B"
+      ],
+      "ret": "array",
+      "doc": "جداء كرونكر."
+    },
+    "matMap": {
+      "params": [
+        "M",
+        "fn(x,i,j)"
+      ],
+      "ret": "array",
+      "doc": "يطبّق دالة على كل عنصر."
+    },
+    "matNorm": {
+      "params": [
+        "M",
+        "[kind]"
+      ],
+      "ret": "number",
+      "doc": "fro (افتراضي)|1|2|inf|max|nuc."
+    },
+    "matApprox": {
+      "params": [
+        "A",
+        "B",
+        "[rel]",
+        "[abs]"
+      ],
+      "ret": "bool",
+      "doc": "تساوٍ تقريبي بدلالة numberApprox لكل عنصر."
+    },
+    "matFormat": {
+      "params": [
+        "M",
+        "[opts]"
+      ],
+      "ret": "string",
+      "doc": "نص محاذى؛ opts تُمرَّر إلى numberFormat (decimals,group,digits,...) و{brackets}."
+    },
+    "matLU": {
+      "params": [
+        "M"
+      ],
+      "ret": "map",
+      "doc": "{L,U,P,perm,sign,singular} حيث P·M = L·U (تدوير جزئي)."
+    },
+    "matQR": {
+      "params": [
+        "M",
+        "[opts]"
+      ],
+      "ret": "map",
+      "doc": "{Q,R} بهاوسهولدر؛ opts:{reduced:true}."
+    },
+    "matCholesky": {
+      "params": [
+        "M"
+      ],
+      "ret": "array",
+      "doc": "L سفلية حيث M = L·Lᵀ؛ خطأ إن لم تكن SPD."
+    },
+    "matEigSym": {
+      "params": [
+        "M"
+      ],
+      "ret": "map",
+      "doc": "{values تنازلياً, vectors أعمدة} للمتناظرة (Jacobi)."
+    },
+    "matEigvals": {
+      "params": [
+        "M",
+        "[opts]"
+      ],
+      "ret": "array",
+      "doc": "القيم الذاتية لمصفوفة حقيقية عامة: [{re,im}] أو أعداد عند {real:true}."
+    },
+    "matSVD": {
+      "params": [
+        "M"
+      ],
+      "ret": "map",
+      "doc": "{U,S,V,rank} حيث M = U·diag(S)·Vᵀ (Jacobi)."
+    },
+    "matSolve": {
+      "params": [
+        "A",
+        "b",
+        "[opts]"
+      ],
+      "ret": "array",
+      "doc": "يحلّ A·x=b: LU للمربعة (خطأ واضح إن كانت منفردة)، أقل المربعات لغيرها؛ {info:true}."
+    },
+    "matInv": {
+      "params": [
+        "M"
+      ],
+      "ret": "array",
+      "doc": "المعكوس (خطأ إن كانت منفردة)."
+    },
+    "matDet": {
+      "params": [
+        "M"
+      ],
+      "ret": "number",
+      "doc": "المحدّد."
+    },
+    "matRank": {
+      "params": [
+        "M",
+        "[tol]"
+      ],
+      "ret": "number",
+      "doc": "الرتبة عبر SVD."
+    },
+    "matCond": {
+      "params": [
+        "M",
+        "[p]"
+      ],
+      "ret": "number",
+      "doc": "رقم الشرطية (2 افتراضياً؛ Infinity للمنفردة)."
+    },
+    "matPinv": {
+      "params": [
+        "M",
+        "[tol]"
+      ],
+      "ret": "array",
+      "doc": "شبه معكوس مور–بنروز."
+    },
+    "matLstsq": {
+      "params": [
+        "A",
+        "b"
+      ],
+      "ret": "map",
+      "doc": "{x,residual,rank} أقل المربعات (أصغر نظيم عند نقص الرتبة)."
+    },
+    "matNull": {
+      "params": [
+        "M",
+        "[tol]"
+      ],
+      "ret": "array",
+      "doc": "أساس فضاء الصفر (أعمدة) أو []."
+    },
+    "matRref": {
+      "params": [
+        "M",
+        "[tol]"
+      ],
+      "ret": "map",
+      "doc": "{rref,pivots,rank}."
+    },
+    "matSolveIter": {
+      "params": [
+        "A",
+        "b",
+        "[opts]"
+      ],
+      "ret": "map",
+      "doc": "حلّ تكراري: method cg|jacobi|gauss-seidel|sor, tol, maxIter, omega, x0."
+    },
+    "matPowerIter": {
+      "params": [
+        "M",
+        "[opts]"
+      ],
+      "ret": "map",
+      "doc": "القيمة الذاتية المهيمنة {value,vector,iterations,converged}."
+    },
+    "vecDot": {
+      "params": [
+        "a",
+        "b"
+      ],
+      "ret": "number",
+      "doc": "جداء داخلي مُعوَّض الدقة (Dot2)."
+    },
+    "vecNorm": {
+      "params": [
+        "v",
+        "[p]"
+      ],
+      "ret": "number",
+      "doc": "نظيم p (2 افتراضياً، \"inf\") بلا فيض."
+    },
+    "vecCross": {
+      "params": [
+        "a",
+        "b"
+      ],
+      "ret": "array",
+      "doc": "الجداء الاتجاهي (3 مركّبات)."
+    },
+    "vecNormalize": {
+      "params": [
+        "v"
+      ],
+      "ret": "array",
+      "doc": "متجه الوحدة."
+    },
+    "vecAngle": {
+      "params": [
+        "a",
+        "b"
+      ],
+      "ret": "number",
+      "doc": "الزاوية بالراديان (مستقرّة عددياً)."
+    },
+    "vecProject": {
+      "params": [
+        "a",
+        "onto"
+      ],
+      "ret": "array",
+      "doc": "مسقط a على onto."
+    },
+    "vecAdd": {
+      "params": [
+        "a",
+        "b"
+      ],
+      "ret": "array",
+      "doc": "جمع متجهين."
+    },
+    "vecSub": {
+      "params": [
+        "a",
+        "b"
+      ],
+      "ret": "array",
+      "doc": "طرح متجهين."
+    },
+    "vecScale": {
+      "params": [
+        "v",
+        "k"
+      ],
+      "ret": "array",
+      "doc": "ضرب متجه بعدد."
+    },
+    "vecDist": {
+      "params": [
+        "a",
+        "b",
+        "[p]"
+      ],
+      "ret": "number",
+      "doc": "المسافة (نظيم الفرق)."
+    },
+    "vecLinspace": {
+      "params": [
+        "start",
+        "stop",
+        "n",
+        "[endpoint]"
+      ],
+      "ret": "array",
+      "doc": "n نقطة متساوية البعد."
+    },
+    "vecSum": {
+      "params": [
+        "v"
+      ],
+      "ret": "number",
+      "doc": "جمع مُعوَّض Neumaier."
+    },
+    "algoRoot": {
+      "params": [
+        "f",
+        "a|x0",
+        "[b]",
+        "[opts]"
+      ],
+      "ret": "map",
+      "doc": "جذر f: brent|bisect على [a,b]، أو newton|secant من x0 (opts.df). {root,fx,iterations,converged}."
+    },
+    "algoBracket": {
+      "params": [
+        "f",
+        "x0",
+        "[opts]"
+      ],
+      "ret": "map",
+      "doc": "يوسّع حول x0 حتى تتغيّر إشارة f: {a,b,fa,fb}."
+    },
+    "algoMinimize": {
+      "params": [
+        "f",
+        "a|x0",
+        "[b]",
+        "[opts]"
+      ],
+      "ret": "map",
+      "doc": "تصغير: Brent على [a,b] أو Nelder–Mead من متجه x0؛ {x,fx,iterations,converged}."
+    },
+    "algoNewton": {
+      "params": [
+        "F",
+        "x0",
+        "[opts]"
+      ],
+      "ret": "map",
+      "doc": "جملة معادلات F(x)=0 (جاكوبيان عددي أو opts.jacobian + LU)."
+    },
+    "algoDiff": {
+      "params": [
+        "f",
+        "x",
+        "[opts]"
+      ],
+      "ret": "number",
+      "doc": "مشتقة بريدرز (order 1|2)؛ {info:true} للخطأ."
+    },
+    "algoGrad": {
+      "params": [
+        "f",
+        "x",
+        "[opts]"
+      ],
+      "ret": "array",
+      "doc": "التدرّج العددي."
+    },
+    "algoJacobian": {
+      "params": [
+        "F",
+        "x",
+        "[opts]"
+      ],
+      "ret": "array",
+      "doc": "مصفوفة جاكوبي العددية m×n."
+    },
+    "algoIntegrate": {
+      "params": [
+        "f",
+        "a",
+        "b",
+        "[opts]"
+      ],
+      "ret": "map",
+      "doc": "تكامل Gauss–Kronrod تكيّفي (يدعم حدوداً لا نهائية): {value,error,evaluations,converged}."
+    },
+    "algoTrapz": {
+      "params": [
+        "ys",
+        "[xs|dx]"
+      ],
+      "ret": "number",
+      "doc": "تكامل بيانات بالمنحرف."
+    },
+    "algoOde": {
+      "params": [
+        "f(t,y)",
+        "y0",
+        "t0",
+        "t1",
+        "[opts]"
+      ],
+      "ret": "map",
+      "doc": "معادلة تفاضلية: rk45 تكيّفي (افتراضي) أو rk4؛ {t,y,steps,rejected}."
+    },
+    "algoInterp": {
+      "params": [
+        "xs",
+        "ys",
+        "x",
+        "[opts]"
+      ],
+      "ret": "number",
+      "doc": "استيفاء linear|spline|nearest (x رقم أو متجه)."
+    },
+    "algoPolyFit": {
+      "params": [
+        "xs",
+        "ys",
+        "deg"
+      ],
+      "ret": "map",
+      "doc": "توفيق كثير حدود {coeffs (صعوداً),r2,rmse,rank}."
+    },
+    "algoPolyEval": {
+      "params": [
+        "coeffs",
+        "x"
+      ],
+      "ret": "number",
+      "doc": "تقييم كثير حدود (Horner)."
+    },
+    "algoPolyRoots": {
+      "params": [
+        "coeffs"
+      ],
+      "ret": "array",
+      "doc": "جذور كثير حدود [{re,im}] عبر المصفوفة المرافقة."
+    },
+    "algoFFT": {
+      "params": [
+        "signal",
+        "[opts]"
+      ],
+      "ret": "map",
+      "doc": "تحويل فورييه {re,im} لأي طول؛ {inverse:true}."
+    },
+    "algoRandom": {
+      "params": [
+        "n",
+        "[opts]"
+      ],
+      "ret": "array",
+      "doc": "مصفوفة عشوائية حتمية: seed,min,max,int,sorted,unique."
+    },
+    "algoBench": {
+      "params": [
+        "fn",
+        "[opts]"
+      ],
+      "ret": "map",
+      "doc": "قياس زمن: {runs,meanMs,minMs,maxMs,medianMs,stdevMs,totalMs}؛ opts: runs,warmup,args."
+    },
+    "algoComplexity": {
+      "params": [
+        "fn",
+        "sizes",
+        "[opts]"
+      ],
+      "ret": "map",
+      "doc": "يقدّر رتبة النمو تجريبياً: {samples,exponent,best,candidates,fits}."
+    },
+    "algoCompare": {
+      "params": [
+        "fns",
+        "[opts]"
+      ],
+      "ret": "array",
+      "doc": "يقارن دوالاً مسمّاة زمنياً ويرتّبها من الأسرع مع ratio."
+    },
+    "algoCheck": {
+      "params": [
+        "fn",
+        "ref",
+        "inputs",
+        "[opts]"
+      ],
+      "ret": "map",
+      "doc": "اختبار تفاضلي fn مقابل ref بتسامح رقمي: {ok,tested,failed,failures}."
+    },
+    "algoGraphMatrix": {
+      "params": [
+        "edges",
+        "n",
+        "[opts]"
+      ],
+      "ret": "array",
+      "doc": "مصفوفة أوزان من حواف [u,v,w] (غياب الحافة Infinity)."
+    },
+    "algoDijkstra": {
+      "params": [
+        "W",
+        "src",
+        "[dst]"
+      ],
+      "ret": "map",
+      "doc": "أقصر المسارات من src: {dist,prev,path}."
+    },
+    "algoFloyd": {
+      "params": [
+        "W"
+      ],
+      "ret": "map",
+      "doc": "كل الأزواج {dist,negativeCycle}."
     }
   },
   "namespaces": {
