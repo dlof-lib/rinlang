@@ -92,6 +92,11 @@ Rin
 | `queue.og.rin` | (انظر أعلاه، بيانات وبِنى). |
 | `loopkit.og.rin` | تحكّم عام بالحلقات فوق `while`/`for`. |
 | `loopstats.og.rin` | تجميع إحصاءات/تقدّم تدريجيًا أثناء حلقة. |
+| `rinstat.og.rin` | تحليل إحصائي: توزيعات، اختبارات، انحدار، PCA، bootstrap ([STATS.md](STATS.md)). |
+| `rinplot.og.rin` | رسوم SVG/PNG إحصائية معقّدة ([PLOT.md](PLOT.md)). |
+| `rinstat_adv.og.rin` | انحدار لوجستي وROC ولامعلمية وسلاسل زمنية وبقاء وقوة ([STATS_ADV.md](STATS_ADV.md)). |
+| `rinplot_adv.og.rin` | ROC وKM وACF وforest وكثافة ثنائية وridgeline وتقارير متخصصة. |
+| `rinauto.og.rin` | تحليل آلي كامل → تقرير HTML (عربي/إنجليزي) مع تصحيح FDR. |
 | `events.og.rin` | نظام أحداث بسيط (اشتراك/إطلاق). |
 | `behaviorkit.og.rin` | مفهوم موحّد لبرمجة سلوك التفاعل. |
 | `movingmask.og.rin` | أقنعة متحركة فوق الحاويات والحلقات. |
