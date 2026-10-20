@@ -1,0 +1,895 @@
+// ============================================================================
+//  lib/rinstat.og.rin — RinStat: التحليل الإحصائي المتكامل
+//
+//  @version 1.0.0
+//  @category data
+//  @prefix st_
+//
+//  فلسفة المكتبة: لا نُعيد اختراع ما في اللغة. نُركِّب فوق الموجود:
+//    • الدوال الأصلية  : mean median mode variance stddev percentile iqr zscore
+//                        numberSum numberStats cumulativeSum movingAverage ...
+//    • lib/math        : sampleVariance sampleStdDev covariance correlation
+//    • lib/rindf       : df_col df_unique df_where df_to_matrix df_corr ...
+//    • lib/rinml       : ml_linreg_fit ml_r2 ... (والجبر الخطي من mat*/vec* الأصلية)
+//  وتُضيف فقط ما كان ناقصاً فعلاً: الدوال الخاصة (gamma/beta) ← التوزيعات ←
+//  الاختبارات ← الانحدار بالمعاملات والدلالة ← عيّنات bootstrap.
+//
+//  كل نتيجة اختبار قاموس موحّد: {test, stat, df, p, n, ...} قابل لـ JSON، ويُطبع
+//  بـ st_print(r).  القيم المفقودة (nil) تُهمل تلقائياً (st_clean).
+//
+//  استيراد:  @import "lib/rinstat.og.rin";
+//
+//  ملاحظات لغوية: الدوال بعدد وسائط ثابت (لذا opts قاموس أخير)؛ sort تعدّل في
+//  المكان (نعمل دائماً على نسخة)؛ القسمة على صفر خطأ (نحرسها صراحةً).
+// ============================================================================
+@import "lib/math.og.rin";
+@import "lib/rindf.og.rin";
+@import "lib/rinml.og.rin";
+// الجبر الخطي: دوال mat*/vec* الأصلية (docs/LINALG.md) — لا حاجة لاستيراد شيء
+
+// ---------------------------------------------------------------------------
+//  1) أدوات داخلية
+// ---------------------------------------------------------------------------
+fun st_clean(arr) { return df_numeric_values(arr); }           // يُسقط nil/النصوص (من rindf)
+fun st_sorted(arr) { return sort(slice(st_clean(arr), 0, len(st_clean(arr)))); }
+fun st_sum_sq_dev(arr) {
+    let m = mean(arr);
+    let s = 0;
+    for (let v in arr) { s = s + (v - m) * (v - m); }
+    return s;
+}
+fun st_ok(arr, k) { return len(arr) >= k; }
+fun st_result(name, stat, df, p, n) {
+    return {"test": name, "stat": stat, "df": df, "p": p, "n": n};
+}
+fun st_fmt(x, d) {
+    if (type(x) != "number") { return str(x); }
+    return numberFormat(x, {"decimals": d});
+}
+fun st_fmt_p(p) {
+    if (type(p) != "number") { return str(p); }
+    if (p < 0.0001) { return "<0.0001"; }
+    return numberFormat(p, {"decimals": 4});
+}
+
+// ---------------------------------------------------------------------------
+//  2) الدوال الخاصة (Lanczos / Lentz) — أساس كل التوزيعات
+// ---------------------------------------------------------------------------
+fun st_lgamma(x) {
+    if (x < 0.5) { return st_lgamma(x + 1) - log(x); }
+    let c = [0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313,
+             -176.61502916214059, 12.507343278686905, -0.13857109526572012,
+             0.0000099843695780195716, 0.00000015056327351493116];
+    let xx = x - 1;
+    let a = c[0];
+    let t = xx + 7.5;
+    let i = 1;
+    while (i < 9) { a = a + c[i] / (xx + i); i = i + 1; }
+    return 0.5 * log(2 * PI) + (xx + 0.5) * log(t) - t + log(a);
+}
+
+fun st_betacf(a, b, x) {
+    let tiny = 1e-300;
+    let qab = a + b;
+    let qap = a + 1;
+    let qam = a - 1;
+    let c = 1;
+    let d = 1 - qab * x / qap;
+    if (abs(d) < tiny) { d = tiny; }
+    d = 1 / d;
+    let h = d;
+    let m = 1;
+    while (m <= 300) {
+        let m2 = 2 * m;
+        let aa = m * (b - m) * x / ((qam + m2) * (a + m2));
+        d = 1 + aa * d; if (abs(d) < tiny) { d = tiny; }
+        c = 1 + aa / c; if (abs(c) < tiny) { c = tiny; }
+        d = 1 / d;
+        h = h * d * c;
+        aa = -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2));
+        d = 1 + aa * d; if (abs(d) < tiny) { d = tiny; }
+        c = 1 + aa / c; if (abs(c) < tiny) { c = tiny; }
+        d = 1 / d;
+        let del = d * c;
+        h = h * del;
+        if (abs(del - 1) < 1e-14) { break; }
+        m = m + 1;
+    }
+    return h;
+}
+
+// دالة بيتا الناقصة المنتظمة I_x(a,b)
+fun st_betainc(a, b, x) {
+    if (x <= 0) { return 0; }
+    if (x >= 1) { return 1; }
+    let bt = exp(st_lgamma(a + b) - st_lgamma(a) - st_lgamma(b) + a * log(x) + b * log(1 - x));
+    if (x < (a + 1) / (a + b + 2)) { return bt * st_betacf(a, b, x) / a; }
+    return 1 - bt * st_betacf(b, a, 1 - x) / b;
+}
+
+// دالة غاما الناقصة السفلى المنتظمة P(a,x)
+fun st_gammainc(a, x) {
+    if (x <= 0) { return 0; }
+    let tiny = 1e-300;
+    if (x < a + 1) {
+        let ap = a;
+        let sm = 1 / a;
+        let del = sm;
+        let n = 0;
+        while (n < 500) {
+            ap = ap + 1;
+            del = del * x / ap;
+            sm = sm + del;
+            if (abs(del) < abs(sm) * 1e-15) { break; }
+            n = n + 1;
+        }
+        return sm * exp(-x + a * log(x) - st_lgamma(a));
+    }
+    let b = x + 1 - a;
+    let c = 1 / tiny;
+    let d = 1 / b;
+    let h = d;
+    let i = 1;
+    while (i <= 500) {
+        let an = -i * (i - a);
+        b = b + 2;
+        d = an * d + b; if (abs(d) < tiny) { d = tiny; }
+        c = b + an / c; if (abs(c) < tiny) { c = tiny; }
+        d = 1 / d;
+        let del = d * c;
+        h = h * del;
+        if (abs(del - 1) < 1e-15) { break; }
+        i = i + 1;
+    }
+    return 1 - exp(-x + a * log(x) - st_lgamma(a)) * h;
+}
+
+fun st_erf(x) {
+    if (x == 0) { return 0; }
+    let p = st_gammainc(0.5, x * x);
+    if (x < 0) { return -p; }
+    return p;
+}
+
+// ---------------------------------------------------------------------------
+//  3) التوزيعات: pdf / cdf / ppf
+// ---------------------------------------------------------------------------
+fun st_norm_pdf(x, mu, sd) {
+    let z = (x - mu) / sd;
+    return exp(-0.5 * z * z) / (sd * sqrt(2 * PI));
+}
+fun st_norm_cdf(x, mu, sd) { return 0.5 * (1 + st_erf((x - mu) / (sd * sqrt(2)))); }
+
+// معكوس cdf بالتنصيف الآمن على دالة أحادية الاتجاه (تُستعمل لكل التوزيعات)
+fun st_invert(kind, p, a, b, lo, hi) {
+    let i = 0;
+    while (i < 200) {
+        let mid = (lo + hi) / 2;
+        let v = 0;
+        if (kind == "norm") { v = st_norm_cdf(mid, 0, 1); }
+        else if (kind == "t") { v = st_t_cdf(mid, a); }
+        else if (kind == "chi2") { v = st_chi2_cdf(mid, a); }
+        else { v = st_f_cdf(mid, a, b); }
+        if (v < p) { lo = mid; } else { hi = mid; }
+        if (hi - lo < 1e-13 * (1 + abs(mid))) { break; }
+        i = i + 1;
+    }
+    return (lo + hi) / 2;
+}
+fun st_norm_ppf(p, mu, sd) {
+    if (p <= 0 or p >= 1) { return nil; }
+    return mu + sd * st_invert("norm", p, 0, 0, -40, 40);
+}
+
+fun st_t_cdf(t, df) {
+    let x = df / (df + t * t);
+    let tail = 0.5 * st_betainc(df / 2, 0.5, x);
+    if (t > 0) { return 1 - tail; }
+    return tail;
+}
+fun st_t_ppf(p, df) {
+    if (p <= 0 or p >= 1) { return nil; }
+    return st_invert("t", p, df, 0, -1e4, 1e4);
+}
+fun st_t_p2(t, df) { return st_betainc(df / 2, 0.5, df / (df + t * t)); }   // ثنائي الذيل بدقة الذيول
+
+fun st_chi2_cdf(x, k) { return st_gammainc(k / 2, x / 2); }
+fun st_chi2_sf(x, k) { return 1 - st_gammainc(k / 2, x / 2); }
+fun st_chi2_ppf(p, k) {
+    if (p <= 0 or p >= 1) { return nil; }
+    return st_invert("chi2", p, k, 0, 0, 1e5);
+}
+
+fun st_f_cdf(f, d1, d2) {
+    if (f <= 0) { return 0; }
+    return st_betainc(d1 / 2, d2 / 2, d1 * f / (d1 * f + d2));
+}
+fun st_f_sf(f, d1, d2) {
+    if (f <= 0) { return 1; }
+    return st_betainc(d2 / 2, d1 / 2, d2 / (d1 * f + d2));
+}
+fun st_f_ppf(p, d1, d2) {
+    if (p <= 0 or p >= 1) { return nil; }
+    return st_invert("f", p, d1, d2, 0, 1e6);
+}
+
+// ---------------------------------------------------------------------------
+//  4) وصفي: الشكل، الرتب، المخطط التكراري، KDE، القيم الشاذة
+// ---------------------------------------------------------------------------
+fun st_sem(arr) {
+    let a = st_clean(arr);
+    if (len(a) < 2) { return 0; }
+    return sampleStdDev(a) / sqrt(len(a));
+}
+fun st_skew(arr) {
+    let a = st_clean(arr);
+    let n = len(a);
+    if (n < 3) { return 0; }
+    let m = mean(a);
+    let s = stddev(a);
+    if (s == 0) { return 0; }
+    let t = 0;
+    for (let v in a) { t = t + pow((v - m) / s, 3); }
+    return t / n;
+}
+fun st_kurtosis(arr) {              // التفرطح الزائد (excess): 0 للتوزيع الطبيعي
+    let a = st_clean(arr);
+    let n = len(a);
+    if (n < 4) { return 0; }
+    let m = mean(a);
+    let s = stddev(a);
+    if (s == 0) { return 0; }
+    let t = 0;
+    for (let v in a) { t = t + pow((v - m) / s, 4); }
+    return t / n - 3;
+}
+
+// ملخّص وصفي شامل في قاموس واحد (يُركّب الدوال الأصلية)
+fun st_summary(arr) {
+    let a = st_clean(arr);
+    let n = len(a);
+    if (n == 0) { return {"n": 0}; }
+    let sd = 0;
+    if (n > 1) { sd = sampleStdDev(a); }
+    let q1 = percentile(a, 25);
+    let q3 = percentile(a, 75);
+    return {"n": n, "mean": mean(a), "sd": sd, "sem": st_sem(a), "min": minOf(a),
+            "q1": q1, "median": median(a), "q3": q3, "max": maxOf(a),
+            "iqr": q3 - q1, "skew": st_skew(a), "kurtosis": st_kurtosis(a)};
+}
+
+fun st_ci_mean(arr, level) {
+    let a = st_clean(arr);
+    let n = len(a);
+    if (n < 2) { return nil; }
+    let m = mean(a);
+    let h = st_t_ppf(1 - (1 - level) / 2, n - 1) * st_sem(a);
+    return {"mean": m, "lo": m - h, "hi": m + h, "level": level};
+}
+
+// رتب بمتوسط الروابط (للاختبارات اللامعلمية)
+fun st_rank(arr) {
+    let n = len(arr);
+    let idx = [];
+    let i = 0;
+    while (i < n) { push(idx, i); i = i + 1; }
+    // فرز دمجي للفهارس حسب القيمة (ثابت)
+    let order = st_argsort(arr);
+    let ranks = [];
+    i = 0;
+    while (i < n) { push(ranks, 0); i = i + 1; }
+    i = 0;
+    while (i < n) {
+        let j = i;
+        while (j + 1 < n and arr[order[j + 1]] == arr[order[i]]) { j = j + 1; }
+        let r = (i + j) / 2 + 1;
+        let k = i;
+        while (k <= j) { ranks[order[k]] = r; k = k + 1; }
+        i = j + 1;
+    }
+    return ranks;
+}
+fun st_argsort(arr) {
+    let n = len(arr);
+    let idx = [];
+    let i = 0;
+    while (i < n) { push(idx, i); i = i + 1; }
+    return st_msort(arr, idx);
+}
+fun st_msort(arr, idx) {
+    let n = len(idx);
+    if (n <= 1) { return idx; }
+    let mid = floor(n / 2);
+    let l = st_msort(arr, slice(idx, 0, mid));
+    let r = st_msort(arr, slice(idx, mid, n));
+    let out = [];
+    let i = 0;
+    let j = 0;
+    while (i < len(l) and j < len(r)) {
+        if (arr[l[i]] <= arr[r[j]]) { push(out, l[i]); i = i + 1; }
+        else { push(out, r[j]); j = j + 1; }
+    }
+    while (i < len(l)) { push(out, l[i]); i = i + 1; }
+    while (j < len(r)) { push(out, r[j]); j = j + 1; }
+    return out;
+}
+
+// مخطط تكراري: bins <= 0 ← قاعدة Freedman–Diaconis (تعتمد iqr الأصلية)
+fun st_hist(arr, bins) {
+    let a = st_clean(arr);
+    let n = len(a);
+    if (n == 0) { return {"edges": [], "counts": [], "density": [], "mids": [], "width": 0}; }
+    let lo = minOf(a);
+    let hi = maxOf(a);
+    if (hi == lo) { hi = lo + 1; }
+    if (bins <= 0) {
+        let w = 2 * iqr(a) / pow(n, 1 / 3);
+        if (w > 0) { bins = ceil((hi - lo) / w); } else { bins = ceil(log(n) / log(2) + 1); }
+        if (bins < 3) { bins = 3; }
+        if (bins > 60) { bins = 60; }
+    }
+    let width = (hi - lo) / bins;
+    let edges = [];
+    let counts = [];
+    let mids = [];
+    let k = 0;
+    while (k <= bins) { push(edges, lo + k * width); k = k + 1; }
+    k = 0;
+    while (k < bins) { push(counts, 0); push(mids, lo + (k + 0.5) * width); k = k + 1; }
+    for (let v in a) {
+        let b = floor((v - lo) / width);
+        if (b >= bins) { b = bins - 1; }
+        counts[b] = counts[b] + 1;
+    }
+    let dens = [];
+    for (let c in counts) { push(dens, c / (n * width)); }
+    return {"edges": edges, "counts": counts, "density": dens, "mids": mids, "width": width, "bins": bins};
+}
+
+// تقدير كثافة نواة غاوسي، عرض النطاق بقاعدة Silverman (من sampleStdDev وiqr)
+fun st_bandwidth(arr) {
+    let a = st_clean(arr);
+    let n = len(a);
+    if (n < 2) { return 1; }
+    let s = sampleStdDev(a);
+    let r = iqr(a) / 1.34;
+    let h = s;
+    if (r > 0 and r < s) { h = r; }
+    if (h <= 0) { h = 1; }
+    return 0.9 * h * pow(n, -0.2);
+}
+// يُعيد {x:[], y:[]} على شبكة من m نقطة
+fun st_kde(arr, m) {
+    let a = st_clean(arr);
+    let n = len(a);
+    let h = st_bandwidth(a);
+    let lo = minOf(a) - 3 * h;
+    let hi = maxOf(a) + 3 * h;
+    let xs = [];
+    let ys = [];
+    let i = 0;
+    while (i < m) {
+        let x = lo + (hi - lo) * i / (m - 1);
+        let t = 0;
+        for (let v in a) { t = t + st_norm_pdf(x, v, h); }
+        push(xs, x);
+        push(ys, t / n);
+        i = i + 1;
+    }
+    return {"x": xs, "y": ys, "bw": h};
+}
+
+fun st_ecdf(arr) {
+    let a = st_sorted(arr);
+    let n = len(a);
+    let ys = [];
+    let i = 0;
+    while (i < n) { push(ys, (i + 1) / n); i = i + 1; }
+    return {"x": a, "y": ys};
+}
+
+// قيم شاذة بسياج Tukey (الربيعيات من percentile الأصلية)
+fun st_outliers(arr, k) {
+    let a = st_clean(arr);
+    let q1 = percentile(a, 25);
+    let q3 = percentile(a, 75);
+    let r = q3 - q1;
+    let lo = q1 - k * r;
+    let hi = q3 + k * r;
+    let out = [];
+    for (let v in a) { if (v < lo or v > hi) { push(out, v); } }
+    return {"lo": lo, "hi": hi, "outliers": out};
+}
+
+// مخطط Q-Q مقابل التوزيع الطبيعي: {theoretical, sample}
+fun st_qq(arr) {
+    let a = st_sorted(arr);
+    let n = len(a);
+    let th = [];
+    let i = 0;
+    while (i < n) { push(th, st_norm_ppf((i + 1 - 0.375) / (n + 0.25), 0, 1)); i = i + 1; }
+    return {"theoretical": th, "sample": a};
+}
+
+// ---------------------------------------------------------------------------
+//  5) اختبارات الفرضيات (كلها تُعيد st_result + حقولاً إضافية)
+// ---------------------------------------------------------------------------
+fun st_ttest_1samp(arr, mu) {
+    let a = st_clean(arr);
+    let n = len(a);
+    if (n < 2) { return nil; }
+    let se = st_sem(a);
+    if (se == 0) { return nil; }
+    let t = (mean(a) - mu) / se;
+    let r = st_result("one-sample t", t, n - 1, st_t_p2(t, n - 1), n);
+    r["mean"] = mean(a);
+    r["ci"] = st_ci_mean(a, 0.95);
+    return r;
+}
+
+// ويلش (تباينات غير متساوية) — الافتراضي الموصى به
+fun st_ttest_welch(x, y) {
+    let a = st_clean(x);
+    let b = st_clean(y);
+    if (len(a) < 2 or len(b) < 2) { return nil; }
+    let va = sampleVariance(a) / len(a);
+    let vb = sampleVariance(b) / len(b);
+    if (va + vb == 0) { return nil; }
+    let t = (mean(a) - mean(b)) / sqrt(va + vb);
+    let df = (va + vb) * (va + vb) / (va * va / (len(a) - 1) + vb * vb / (len(b) - 1));
+    let r = st_result("Welch t", t, df, st_t_p2(t, df), len(a) + len(b));
+    r["diff"] = mean(a) - mean(b);
+    let h = st_t_ppf(0.975, df) * sqrt(va + vb);
+    r["ci"] = {"lo": r["diff"] - h, "hi": r["diff"] + h, "level": 0.95};
+    r["d"] = st_cohens_d(a, b);
+    return r;
+}
+
+// تباينات متساوية (Student المجمّع)
+fun st_ttest_pooled(x, y) {
+    let a = st_clean(x);
+    let b = st_clean(y);
+    let na = len(a);
+    let nb = len(b);
+    if (na < 2 or nb < 2) { return nil; }
+    let df = na + nb - 2;
+    let sp2 = (st_sum_sq_dev(a) + st_sum_sq_dev(b)) / df;
+    let se = sqrt(sp2 * (1 / na + 1 / nb));
+    if (se == 0) { return nil; }
+    let t = (mean(a) - mean(b)) / se;
+    let r = st_result("Student t (pooled)", t, df, st_t_p2(t, df), na + nb);
+    r["diff"] = mean(a) - mean(b);
+    r["d"] = st_cohens_d(a, b);
+    return r;
+}
+
+fun st_ttest_paired(x, y) {
+    if (len(x) != len(y)) { return nil; }
+    let d = [];
+    let i = 0;
+    while (i < len(x)) {
+        if (type(x[i]) == "number" and type(y[i]) == "number") { push(d, x[i] - y[i]); }
+        i = i + 1;
+    }
+    let r = st_ttest_1samp(d, 0);
+    if (r == nil) { return nil; }
+    r["test"] = "paired t";
+    return r;
+}
+
+fun st_cohens_d(x, y) {
+    let a = st_clean(x);
+    let b = st_clean(y);
+    let na = len(a);
+    let nb = len(b);
+    if (na < 2 or nb < 2) { return 0; }
+    let sp = sqrt((st_sum_sq_dev(a) + st_sum_sq_dev(b)) / (na + nb - 2));
+    if (sp == 0) { return 0; }
+    return (mean(a) - mean(b)) / sp;
+}
+
+// تحليل التباين أحادي الاتجاه — groups: مصفوفة مصفوفات
+fun st_anova(groups) {
+    let k = len(groups);
+    let all = [];
+    let gs = [];
+    for (let g in groups) {
+        let c = st_clean(g);
+        push(gs, c);
+        for (let v in c) { push(all, v); }
+    }
+    let n = len(all);
+    if (k < 2 or n <= k) { return nil; }
+    let gm = mean(all);
+    let ssb = 0;
+    let ssw = 0;
+    for (let c in gs) {
+        if (len(c) > 0) {
+            let m = mean(c);
+            ssb = ssb + len(c) * (m - gm) * (m - gm);
+            ssw = ssw + st_sum_sq_dev(c);
+        }
+    }
+    let dfb = k - 1;
+    let dfw = n - k;
+    if (ssw == 0) { return nil; }
+    let f = (ssb / dfb) / (ssw / dfw);
+    let r = st_result("one-way ANOVA", f, dfb, st_f_sf(f, dfb, dfw), n);
+    r["df2"] = dfw;
+    r["eta2"] = ssb / (ssb + ssw);
+    r["ssb"] = ssb;
+    r["ssw"] = ssw;
+    return r;
+}
+
+// كاي-تربيع: ملاءمة (observed/expected) واستقلالية (جدول طوارئ)
+fun st_chi2_gof(obs, expd) {
+    let s = 0;
+    let i = 0;
+    while (i < len(obs)) {
+        if (expd[i] > 0) { s = s + (obs[i] - expd[i]) * (obs[i] - expd[i]) / expd[i]; }
+        i = i + 1;
+    }
+    let df = len(obs) - 1;
+    return st_result("chi-square GOF", s, df, st_chi2_sf(s, df), sum(obs));
+}
+fun st_chi2_indep(table) {
+    let nr = len(table);
+    let nc = len(table[0]);
+    let rt = [];
+    let ct = [];
+    let tot = 0;
+    let i = 0;
+    while (i < nr) { push(rt, sum(table[i])); tot = tot + rt[i]; i = i + 1; }
+    let j = 0;
+    while (j < nc) { push(ct, sum(matTranspose(table)[j])); j = j + 1; }
+    let s = 0;
+    i = 0;
+    while (i < nr) {
+        j = 0;
+        while (j < nc) {
+            let e = rt[i] * ct[j] / tot;
+            if (e > 0) { s = s + (table[i][j] - e) * (table[i][j] - e) / e; }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    let df = (nr - 1) * (nc - 1);
+    let r = st_result("chi-square independence", s, df, st_chi2_sf(s, df), tot);
+    let mn = nr; if (nc < mn) { mn = nc; }
+    if (mn > 1 and tot > 0) { r["cramers_v"] = sqrt(s / (tot * (mn - 1))); }
+    return r;
+}
+
+// ارتباط بيرسون مع اختبار الدلالة وفترة ثقة (تحويل فيشر)
+fun st_corr_test(x, y) {
+    let xs = [];
+    let ys = [];
+    let i = 0;
+    while (i < len(x) and i < len(y)) {
+        if (type(x[i]) == "number" and type(y[i]) == "number") { push(xs, x[i]); push(ys, y[i]); }
+        i = i + 1;
+    }
+    let n = len(xs);
+    if (n < 3) { return nil; }
+    let r = correlation(xs, ys);             // من lib/math
+    if (r > 0.9999999999) { r = 0.9999999999; }
+    if (r < -0.9999999999) { r = -0.9999999999; }
+    let t = r * sqrt((n - 2) / (1 - r * r));
+    let res = st_result("Pearson correlation", t, n - 2, st_t_p2(t, n - 2), n);
+    res["r"] = r;
+    let z = 0.5 * log((1 + r) / (1 - r));
+    let h = 1.959964 / sqrt(n - 3);
+    if (n > 3) { res["ci"] = {"lo": (exp(2 * (z - h)) - 1) / (exp(2 * (z - h)) + 1), "hi": (exp(2 * (z + h)) - 1) / (exp(2 * (z + h)) + 1), "level": 0.95}; }
+    return res;
+}
+fun st_spearman(x, y) {
+    let r = st_corr_test(st_rank(x), st_rank(y));
+    if (r == nil) { return nil; }
+    r["test"] = "Spearman correlation";
+    r["rho"] = r["r"];
+    return r;
+}
+
+// Mann–Whitney U بتقريب طبيعي مع تصحيح الروابط
+fun st_mannwhitney(x, y) {
+    let a = st_clean(x);
+    let b = st_clean(y);
+    let n1 = len(a);
+    let n2 = len(b);
+    if (n1 < 1 or n2 < 1) { return nil; }
+    let all = concat(a, b);
+    let rk = st_rank(all);
+    let r1 = 0;
+    let i = 0;
+    while (i < n1) { r1 = r1 + rk[i]; i = i + 1; }
+    let u1 = r1 - n1 * (n1 + 1) / 2;
+    let n = n1 + n2;
+    let mu = n1 * n2 / 2;
+    let ties = 0;
+    let srt = sort(slice(all, 0, n));
+    i = 0;
+    while (i < n) {
+        let j = i;
+        while (j + 1 < n and srt[j + 1] == srt[i]) { j = j + 1; }
+        let t = j - i + 1;
+        ties = ties + (t * t * t - t);
+        i = j + 1;
+    }
+    let sd = sqrt(n1 * n2 / 12 * ((n + 1) - ties / (n * (n - 1))));
+    if (sd == 0) { return nil; }
+    let z = (u1 - mu) / sd;
+    let r = st_result("Mann-Whitney U", u1, nil, 2 * (1 - st_norm_cdf(abs(z), 0, 1)), n);
+    r["z"] = z;
+    return r;
+}
+
+// Jarque–Bera للطبيعية (من st_skew/st_kurtosis)
+fun st_normality(arr) {
+    let a = st_clean(arr);
+    let n = len(a);
+    if (n < 8) { return nil; }
+    let s = st_skew(a);
+    let k = st_kurtosis(a);
+    let jb = n / 6 * (s * s + k * k / 4);
+    let r = st_result("Jarque-Bera normality", jb, 2, st_chi2_sf(jb, 2), n);
+    r["skew"] = s;
+    r["kurtosis"] = k;
+    return r;
+}
+
+// تصحيح التعدد: "bonferroni" | "holm" | "bh" (Benjamini–Hochberg)
+fun st_p_adjust(ps, method) {
+    let m = len(ps);
+    let order = st_argsort(ps);
+    let adj = [];
+    let i = 0;
+    while (i < m) { push(adj, 0); i = i + 1; }
+    if (method == "bonferroni") {
+        i = 0;
+        while (i < m) { adj[i] = min(1, ps[i] * m); i = i + 1; }
+    } else if (method == "holm") {
+        let run = 0;
+        i = 0;
+        while (i < m) {
+            let v = min(1, ps[order[i]] * (m - i));
+            if (v < run) { v = run; }
+            run = v;
+            adj[order[i]] = v;
+            i = i + 1;
+        }
+    } else {
+        let run = 1;
+        i = m - 1;
+        while (i >= 0) {
+            let v = min(1, ps[order[i]] * m / (i + 1));
+            if (v > run) { v = run; }
+            run = v;
+            adj[order[i]] = v;
+            i = i - 1;
+        }
+    }
+    return adj;
+}
+
+// ---------------------------------------------------------------------------
+//  6) الانحدار: OLS بالمعاملات والأخطاء المعيارية والدلالة (فوق matInv/matMul/matTranspose الأصلية)
+// ---------------------------------------------------------------------------
+// المعكوس: matInv الأصلية (lib/LINALG) — منفردة ← nil
+fun st_mat_inverse(A) {
+    if (matIs(A, "singular")) { return nil; }
+    return matInv(A);
+}
+
+// X: مصفوفة n×k بلا عمود ثابت (يُضاف تلقائياً)، y: n، names: أسماء المتغيرات (أو [])
+fun st_ols(X, y, names) {
+    let n = len(y);
+    let k = len(X[0]);
+    let D = [];
+    let i = 0;
+    while (i < n) { push(D, concat([1], X[i])); i = i + 1; }
+    let Dt = matTranspose(D);
+    let XtX = matMul(Dt, D);
+    let inv = st_mat_inverse(XtX);
+    if (inv == nil) { return nil; }
+    let beta = matMul(inv, matMul(Dt, y));
+    let fitted = matMul(D, beta);
+    let res = [];
+    let sse = 0;
+    i = 0;
+    while (i < n) { push(res, y[i] - fitted[i]); sse = sse + res[i] * res[i]; i = i + 1; }
+    let dfe = n - k - 1;
+    if (dfe < 1) { return nil; }
+    let sst = st_sum_sq_dev(y);
+    let s2 = sse / dfe;
+    let r2 = 0;
+    if (sst > 0) { r2 = 1 - sse / sst; }
+    let coefs = [];
+    let j = 0;
+    while (j <= k) {
+        let se = sqrt(s2 * inv[j][j]);
+        let t = 0;
+        if (se > 0) { t = beta[j] / se; }
+        let nm = "b" + str(j);
+        if (j == 0) { nm = "(Intercept)"; }
+        else if (len(names) >= j) { nm = names[j - 1]; }
+        let h = st_t_ppf(0.975, dfe) * se;
+        push(coefs, {"name": nm, "coef": beta[j], "se": se, "t": t, "p": st_t_p2(t, dfe),
+                     "lo": beta[j] - h, "hi": beta[j] + h});
+        j = j + 1;
+    }
+    let fstat = 0;
+    let fp = 1;
+    if (k > 0 and sse > 0) { fstat = ((sst - sse) / k) / s2; fp = st_f_sf(fstat, k, dfe); }
+    return {"coefs": coefs, "beta": beta, "r2": r2, "adj_r2": 1 - (1 - r2) * (n - 1) / dfe,
+            "sigma": sqrt(s2), "df": dfe, "n": n, "f": fstat, "f_p": fp,
+            "fitted": fitted, "residuals": res, "xtx_inv": inv, "s2": s2, "rmse": sqrt(sse / n)};
+}
+
+// انحدار خطي بسيط، مع x و y مصفوفتين (يُسقط nil)
+fun st_linreg(x, y) {
+    let xs = [];
+    let ys = [];
+    let i = 0;
+    while (i < len(x) and i < len(y)) {
+        if (type(x[i]) == "number" and type(y[i]) == "number") { push(xs, x[i]); push(ys, y[i]); }
+        i = i + 1;
+    }
+    let X = [];
+    for (let v in xs) { push(X, [v]); }
+    let fit = st_ols(X, ys, ["x"]);
+    if (fit == nil) { return nil; }
+    fit["slope"] = fit["beta"][1];
+    fit["intercept"] = fit["beta"][0];
+    fit["x"] = xs;
+    fit["y"] = ys;
+    return fit;
+}
+
+// تنبؤ + فترة ثقة للمتوسط أو للتنبؤ (kind: "mean" | "pred") على شبكة xs لنموذج بسيط
+fun st_linreg_band(fit, xs, level, kind) {
+    let t = st_t_ppf(1 - (1 - level) / 2, fit["df"]);
+    let inv = fit["xtx_inv"];
+    let b = fit["beta"];
+    let yh = [];
+    let lo = [];
+    let hi = [];
+    for (let x in xs) {
+        let q = inv[0][0] + 2 * x * inv[0][1] + x * x * inv[1][1];
+        let v = fit["s2"] * q;
+        if (kind == "pred") { v = v + fit["s2"]; }
+        let m = b[0] + b[1] * x;
+        push(yh, m);
+        push(lo, m - t * sqrt(v));
+        push(hi, m + t * sqrt(v));
+    }
+    return {"x": xs, "y": yh, "lo": lo, "hi": hi};
+}
+
+// ---------------------------------------------------------------------------
+//  7) bootstrap: فاصل ثقة لأي إحصاء (stat: "mean"|"median"|"sd"|"var")
+// ---------------------------------------------------------------------------
+fun st_stat_by_name(name, a) {
+    if (name == "mean") { return mean(a); }
+    if (name == "median") { return median(a); }
+    if (name == "sd") { return sampleStdDev(a); }
+    return sampleVariance(a);
+}
+fun st_bootstrap(arr, stat, reps, level, rngSeed) {
+    let a = st_clean(arr);
+    let n = len(a);
+    if (n < 2) { return nil; }
+    seed(rngSeed);
+    let vals = [];
+    let b = 0;
+    while (b < reps) {
+        let s = [];
+        let i = 0;
+        while (i < n) { push(s, a[floor(random() * n)]); i = i + 1; }
+        push(vals, st_stat_by_name(stat, s));
+        b = b + 1;
+    }
+    let al = (1 - level) / 2 * 100;
+    return {"stat": st_stat_by_name(stat, a), "lo": percentile(vals, al), "hi": percentile(vals, 100 - al),
+            "se": sampleStdDev(vals), "reps": reps, "level": level, "samples": vals};
+}
+
+// ---------------------------------------------------------------------------
+//  8) جسر إطار البيانات: مجموعات، مصفوفة ارتباط بالدلالة، مقارنة مجموعات
+// ---------------------------------------------------------------------------
+// يُرجع [{name, values}] لقيم valueCol مقسّمة حسب groupCol (فوق df_unique/df_where/df_col)
+fun st_groups(df, groupCol, valueCol) {
+    let out = [];
+    let keysU = df_unique(df, groupCol);
+    for (let kk in keysU) {
+        let sub = df_where(df, groupCol, "==", kk);
+        push(out, {"name": kk, "values": st_clean(df_col(sub, valueCol))});
+    }
+    return out;
+}
+// يختار الاختبار المناسب تلقائياً: مجموعتان ← Welch ، أكثر ← ANOVA
+fun st_compare(df, groupCol, valueCol) {
+    let g = st_groups(df, groupCol, valueCol);
+    if (len(g) == 2) { return st_ttest_welch(g[0]["values"], g[1]["values"]); }
+    let arrs = [];
+    for (let e in g) { push(arrs, e["values"]); }
+    return st_anova(arrs);
+}
+// مصفوفة ارتباط مع p لكل زوج: {names, r:[[..]], p:[[..]], n}
+fun st_corr_matrix(df, names) {
+    let k = len(names);
+    let R = matZeros(k, k);
+    let P = matZeros(k, k);
+    let i = 0;
+    while (i < k) {
+        let j = 0;
+        while (j < k) {
+            if (i == j) { R[i][j] = 1; P[i][j] = 0; }
+            else {
+                let t = st_corr_test(df_col(df, names[i]), df_col(df, names[j]));
+                if (t == nil) { R[i][j] = 0; P[i][j] = 1; } else { R[i][j] = t["r"]; P[i][j] = t["p"]; }
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return {"names": names, "r": R, "p": P};
+}
+
+// ---------------------------------------------------------------------------
+//  9) عرض النتائج
+// ---------------------------------------------------------------------------
+fun st_report(r) {
+    if (r == nil) { return "(لا يمكن حساب الاختبار: بيانات غير كافية)"; }
+    let s = r["test"] + ":  stat=" + st_fmt(r["stat"], 4);
+    if (type(r["df"]) == "number") { s = s + "  df=" + st_fmt(r["df"], 2); }
+    s = s + "  p=" + st_fmt_p(r["p"]) + "  n=" + str(r["n"]);
+    if (has(r, "d")) { s = s + "  d=" + st_fmt(r["d"], 3); }
+    if (has(r, "r")) { s = s + "  r=" + st_fmt(r["r"], 4); }
+    if (has(r, "eta2")) { s = s + "  eta2=" + st_fmt(r["eta2"], 3); }
+    return s;
+}
+fun st_print(r) { print st_report(r); return r; }
+
+// جدول معاملات الانحدار كإطار بيانات (قابل لـ df_print)
+fun st_ols_table(fit) {
+    let t = df_new(["term", "coef", "se", "t", "p", "ci_lo", "ci_hi"]);
+    for (let c in fit["coefs"]) {
+        push(t["cols"]["term"], c["name"]);
+        push(t["cols"]["coef"], df_rnd(c["coef"], 4));
+        push(t["cols"]["se"], df_rnd(c["se"], 4));
+        push(t["cols"]["t"], df_rnd(c["t"], 3));
+        push(t["cols"]["p"], df_rnd(c["p"], 4));
+        push(t["cols"]["ci_lo"], df_rnd(c["lo"], 4));
+        push(t["cols"]["ci_hi"], df_rnd(c["hi"], 4));
+    }
+    return t;
+}
+
+// ---------------------------------------------------------------------------
+//  10) تحليل المكوّنات الرئيسية PCA فوق matEigSym الأصلية
+//  df + أسماء الأعمدة ← {values, ratio, loadings (أعمدة)، scores، names}
+// ---------------------------------------------------------------------------
+fun st_pca(df, names) {
+    let k = len(names);
+    let cols = [];
+    for (let nm in names) { push(cols, df_col(df, nm)); }
+    let n = len(cols[0]);
+    let Z = [];
+    let i = 0;
+    while (i < n) { push(Z, []); i = i + 1; }
+    for (let c in cols) {
+        let m = mean(c);
+        let sd = sampleStdDev(c);
+        if (sd == 0) { sd = 1; }
+        i = 0;
+        while (i < n) { push(Z[i], (c[i] - m) / sd); i = i + 1; }
+    }
+    let C = matScale(matMul(matTranspose(Z), Z), 1 / (n - 1));       // مصفوفة الارتباط
+    let e = matEigSym(C);
+    let tot = sum(e["values"]);
+    let ratio = [];
+    for (let v in e["values"]) { push(ratio, v / tot); }
+    return {"values": e["values"], "ratio": ratio, "loadings": e["vectors"],
+            "scores": matMul(Z, e["vectors"]), "names": names};
+}
