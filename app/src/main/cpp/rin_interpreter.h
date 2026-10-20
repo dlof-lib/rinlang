@@ -1172,6 +1172,8 @@ private:
     void registerNativesExtra6(); // rin_extra_natives6.cpp — make.video/audio/api/image.removeBg/ocr (docs/MAKE_MEDIA.md)
     void registerNativesExtra7(); // rin_extra_natives7.cpp — مفهوم time (docs/TIME.md)
     void registerNativesExtra8(); // rin_extra_natives8.cpp — مفهوم token: tokenList/tokenStats/tokenAt/... (docs/TOKEN.md)
+    void registerNativesExtra10(); // rin_extra_natives10.cpp — مفهوم linalg: mat*/vec* للجبر الخطي (docs/LINALG.md)
+    void registerNativesExtra11(); // rin_extra_natives11.cpp — مفهوم algo: algo* لتطوير الخوارزميات والحساب العددي (docs/ALGO.md)
     void registerNativesExtra9(); // rin_extra_natives9.cpp — مفهوم number: number/numberRound/numberFormat/... (docs/NUMBER.md)
     void registerNativesImageDraw(); // rin_image_draw.cpp — imgNew/imgLine/imgText/imgSave/imgFromLog…: إنشاء صور ورسمها وحفظها PNG (docs/image-draw.md)
     void registerNativesImage();  // rin_image_ansi.cpp — printImage/imageAnsi/imageInfo: صور داخل الـ terminal كنص (docs/image-terminal.md)
