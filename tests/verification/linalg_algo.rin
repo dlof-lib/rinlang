@@ -197,3 +197,29 @@ let dj = algoDijkstra(W, 0, 3);
 rowV("dijkstra", dj.dist); print dj.path;
 let fl = algoFloyd(W);
 print fl.negativeCycle; numV("floyd-0-3", fl.dist[0][3]);
+
+print "== إضافات: متجهات ذاتية عامة وBFGS والمسائل الصلبة ==";
+let eg = matEig([[2, 1], [0, 3]]);
+print eg.values[0].re + " " + eg.values[1].re;
+rowV("eig-vec-1", eg.vectors[0]); rowV("eig-vec-2", eg.vectors[1]);
+let A3 = [[4, 1, 0], [2, 3, 1], [0, 1, 2]];
+let e3 = matEig(A3);
+let eigOk = true;
+for k in 0 to 2 {
+  let lam = e3.values[k].re; let v = e3.vectors[k];
+  if (matApprox(matMul(A3, v), vecScale(v, lam), 1e-7, 1e-8) == false) { eigOk = false; }
+}
+print "A·v = λ·v: " + eigOk;
+print matEig([[0, -1], [1, 0]]).vectors[0];
+let bf = algoMinimize(rosen, [-1.2, 1], {method: "bfgs"});
+rowV("bfgs-rosenbrock", bf.x); print bf.converged;
+fun rg(v) { return [-400 * v[0] * (v[1] - v[0] * v[0]) - 2 * (1 - v[0]), 200 * (v[1] - v[0] * v[0])]; }
+let bg = algoMinimize(rosen, [-1.2, 1], {method: "bfgs", grad: rg});
+rowV("bfgs-grad", bg.x); print bg.evaluations < bf.evaluations;
+fun stiffEx(t) { return 3 - 0.998 * exp(-1000 * t) - 2.002 * exp(-t); }
+fun stiffRhs(t, y) { return -1000 * y + 3000 - 2000 * exp(-t); }
+let st = algoOde(stiffRhs, 1, 0, 1, {method: "stiff"});
+print "stiff ≈ exact: " + numberApprox(st.y[len(st.y) - 1], stiffEx(1), 1e-5, 1e-6);
+print "stiff steps < 400: " + (st.steps < 400);
+let rk = algoOde(stiffRhs, 1, 0, 1);
+print "rk45 needs more steps: " + (rk.steps > st.steps);
