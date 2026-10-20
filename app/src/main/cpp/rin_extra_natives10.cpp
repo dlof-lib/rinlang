@@ -568,10 +568,6 @@ static std::string normKindArg10(const Value& v, const char* fn, int line) {
 static void requireSquare10(const Mat& m, const char* fn, const char* what, int line) {
     if (m.r != m.c) failArg10(fn, std::string("'") + what + "' must be square but is " + dims10(m), line);
 }
-static void requireFiniteMat10(const Mat& m, const char* fn, const char* what, int line) {
-    for (size_t i = 0; i < m.r; ++i) for (size_t j = 0; j < m.c; ++j)
-        if (!std::isfinite(m(i, j))) failArg10(fn, std::string("'") + what + "'[" + std::to_string(i) + "][" + std::to_string(j) + "] is not finite", line);
-}
 static bool isSymmetric10(const Mat& m, double tol) {
     if (m.r != m.c) return false;
     const double sc = std::max(maxAbs10(m), std::numeric_limits<double>::min());
@@ -1073,6 +1069,35 @@ void Interpreter::registerNativesExtra10() {
         auto arr = std::make_shared<ArrayData>();
         for (const auto& c : ev) { auto m = std::make_shared<MapData>(); put10(m, "re", N10(c.re)); put10(m, "im", N10(std::fabs(c.im) <= tolIm * std::max(1.0, std::fabs(c.re)) ? 0.0 : c.im)); arr->push_back(Value::makeMap(m)); }
         return Value::makeArray(arr);
+    };
+    // matEig(M) -> {values:[{re,im}], vectors:[متجه | nil]} — قيم ومتجهات ذاتية لمصفوفة حقيقية عامة.
+    // المتجه الذاتي (طوله 1، أكبر مركّبة موجبة) يُحسب للقيمة الحقيقية من فضاء صفر (M-λI) عبر SVD؛ nil للقيم المركّبة.
+    natives["matEig"] = [](Args& a, int line) -> Value {
+        expectArgs("matEig", a, 1, line);
+        Mat M = readMat10(a[0], "matEig", "M", line, true); requireSquare10(M, "matEig", "M", line);
+        std::vector<Cx10> ev;
+        if (!eigvals10(M, ev)) failRun10("matEig", "QR iteration did not converge", line);
+        std::stable_sort(ev.begin(), ev.end(), [](const Cx10& p, const Cx10& q) {
+            const double mp = std::hypot(p.re, p.im), mq = std::hypot(q.re, q.im);
+            if (std::fabs(mp - mq) > 1e-12 * std::max(mp, mq)) return mp > mq;
+            if (std::fabs(p.re - q.re) > 1e-12 * std::max(1.0, std::fabs(p.re))) return p.re > q.re;
+            return p.im > q.im;
+        });
+        const size_t n = M.r;
+        auto vals = std::make_shared<ArrayData>(), vecs = std::make_shared<ArrayData>();
+        for (const auto& c : ev) {
+            const bool real = std::fabs(c.im) <= 1e-12 * std::max(1.0, std::fabs(c.re));
+            auto mv = std::make_shared<MapData>(); put10(mv, "re", N10(c.re)); put10(mv, "im", N10(real ? 0.0 : c.im)); vals->push_back(Value::makeMap(mv));
+            if (!real) { vecs->push_back(Value::nil()); continue; }
+            Mat B = M; for (size_t i = 0; i < n; ++i) B(i, i) -= c.re;
+            SVD10 f = svd10(B);
+            std::vector<double> v(n); size_t big = 0;
+            for (size_t i = 0; i < n; ++i) { v[i] = f.Vfull(i, n - 1); if (std::fabs(v[i]) > std::fabs(v[big]) + 1e-12) big = i; }
+            if (v[big] < 0) for (double& e : v) e = -e;
+            vecs->push_back(vecVal(v));
+        }
+        auto m = std::make_shared<MapData>(); put10(m, "values", Value::makeArray(vals)); put10(m, "vectors", Value::makeArray(vecs));
+        return Value::makeMap(m);
     };
     // matSVD(M) -> {U, S (متجه)، V, rank}  M = U·diag(S)·Vᵀ
     natives["matSVD"] = [](Args& a, int line) -> Value {
