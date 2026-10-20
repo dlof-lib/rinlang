@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Embeds rindf / rinml / rinai into app/src/main/cpp/rin_stdlib_libs.h (idempotent).
+"""Embeds rindf / rinml / rinai / rinstat / rinstat_adv / rinplot / rinplot_adv / rinauto into app/src/main/cpp/rin_stdlib_libs.h (idempotent).
 Run after any change to lib/rindf.og.rin, lib/rinml.og.rin or lib/rinai.og.rin:
     python3 tools/embed_ai_libs.py
 The Kotlin catalog (RinLibrary.kt) and README entries are added by hand."""
@@ -10,6 +10,11 @@ LIBS = [  # (file name, constant name, raw string delimiter)
     ("rindf", "kLib_rindf_og_rin", "RINDFOGRIN"),
     ("rinml", "kLib_rinml_og_rin", "RINMLOGRIN"),
     ("rinai", "kLib_rinai_og_rin", "RINAIOGRIN"),
+    ("rinstat", "kLib_rinstat_og_rin", "RINSTATOGRIN"),
+    ("rinstat_adv", "kLib_rinstat_adv_og_rin", "RINSTATADVOGRIN"),
+    ("rinplot", "kLib_rinplot_og_rin", "RINPLOTOGRIN"),
+    ("rinplot_adv", "kLib_rinplot_adv_og_rin", "RINPLOTADVOGRIN"),
+    ("rinauto", "kLib_rinauto_og_rin", "RINAUTOOGRIN"),
 ]
 s = header.read_text(encoding="utf-8")
 # نُدرج الثوابت مباشرة قبل دالة السجل (آخر ثابت نصي في الملف) ليبقى الترتيب مستقراً
