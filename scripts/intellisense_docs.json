@@ -1890,7 +1890,7 @@
         "[opts]"
       ],
       "ret": "map",
-      "doc": "تصغير: Brent على [a,b] أو Nelder–Mead من متجه x0؛ {x,fx,iterations,converged}."
+      "doc": "تصغير: Brent على [a,b]، أو لمتجه x0: Nelder–Mead (افتراضي) أو {method:\"bfgs\", grad} ؛ {x,fx,iterations,converged}."
     },
     "algoNewton": {
       "params": [
@@ -1955,7 +1955,7 @@
         "[opts]"
       ],
       "ret": "map",
-      "doc": "معادلة تفاضلية: rk45 تكيّفي (افتراضي) أو rk4؛ {t,y,steps,rejected}."
+      "doc": "معادلة تفاضلية: rk45 تكيّفي (افتراضي) | rk4 | stiff (ضمني للمسائل الصلبة)؛ {t,y,steps,rejected}."
     },
     "algoInterp": {
       "params": [
@@ -2066,6 +2066,13 @@
       ],
       "ret": "map",
       "doc": "كل الأزواج {dist,negativeCycle}."
+    },
+    "matEig": {
+      "params": [
+        "M"
+      ],
+      "ret": "map",
+      "doc": "قيم ومتجهات ذاتية لمصفوفة حقيقية عامة: {values:[{re,im}], vectors:[متجه|nil]} (nil للقيم المركّبة)."
     }
   },
   "namespaces": {
