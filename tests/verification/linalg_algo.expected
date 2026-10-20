@@ -144,3 +144,16 @@ dijkstra: 0.000000  3.000000  1.000000  4.000000
 [0, 2, 1, 3]
 false
 floyd-0-3: 4.000000
+== إضافات: متجهات ذاتية عامة وBFGS والمسائل الصلبة ==
+3 2
+eig-vec-1: 0.707107  0.707107
+eig-vec-2: 1.000000  0.000000
+A·v = λ·v: true
+nil
+bfgs-rosenbrock: 1.000000  1.000000
+true
+bfgs-grad: 1.000000  1.000000
+true
+stiff ≈ exact: true
+stiff steps < 400: true
+rk45 needs more steps: true
