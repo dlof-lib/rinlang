@@ -1,0 +1,31 @@
+@import "compose_flow";
+fun add(a, b) { return a + b; }
+fun add3(a, b, c) { return a + b + c; }
+fun inc(x) { return x + 1; }
+fun dbl(x) { return x * 2; }
+print applyArgs(add, [1, 2]); print spread(add)([3, 4]);
+print curry2(add)(1)(2); print curry3(add3)(1)(2)(3); print curryN(add3, 3)(1)(2)(3);
+print partialN(add3, [1])([2, 3]); print rpartial1(add, 10)(5);
+let calls = {"n": 0};
+fun slow(x) { calls["n"] = calls["n"] + 1; return x * x; }
+let m = memoize1(slow); m(4); m(4); print m(4); print calls["n"];
+let o = once(slow); o(3); o(5); print o(9); print calls["n"];
+let lz = lazy(fun() { calls["n"] = calls["n"] + 100; return 7; }); lz(); print lz(); print calls["n"];
+print times(3, dbl); print iterate(dbl, 1, 4); print until(fun(x){ return x > 50; }, dbl)(3);
+let flaky = {"n": 0};
+fun maybe(x) { flaky["n"] = flaky["n"] + 1; if (flaky["n"] < 3) { throw "no"; } return x + 100; }
+print retry(maybe, 5)(1); print flaky["n"];
+print cond([[Set([1]), constant("one")], [constant(true), constant("other")]])(1); print cond([[Set([1]), constant("one")], [constant(true), constant("other")]])(5);
+print matchKind({"array": fun(a){ return len(a); }, "map": fun(m){ return keys(m); }, "default": constant("?")})([1,2,3]);
+print matchKind({"array": fun(a){ return len(a); }, "default": constant("?")})(5);
+print juxtMap({"d": dbl, "i": inc})(5); print converge(add, [inc, dbl])(5);
+print firstNonNil([nil, nil, 3, 4]); print defaultTo(0)(nil); print defaultTo(0)(9);
+print tryResult(fun(x){ throw "bad"; })(1); print tryResult(dbl)(4);
+print mapOk(okResult(2), dbl); print mapOk(failResult("e"), dbl); print thenResult(okResult(2), tryResult(inc));
+print resultOr(failResult("x"), 0); print isOkResult(okResult(1));
+print safeChain([inc, fun(x){ throw "stop"; }, dbl])(1); print safeChain([inc, dbl])(1);
+print collectResults([okResult(1), okResult(2)]); print collectResults([okResult(1), failResult("z")]);
+print traceChain([inc, dbl])(1);
+print traceChain([inc, fun(x){ throw "oops"; }])(1);
+print timed(dbl)(4)["value"]; print guard(fun(x){ return x > 0; }, "neg")(5);
+print safeChain([guard(fun(x){ return x > 0; }, "neg")])(-1);
