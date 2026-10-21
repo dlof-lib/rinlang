@@ -64,6 +64,11 @@ object BuiltinLibraries {
 
     val all: List<BuiltinLibraryInfo> = listOf(
         BuiltinLibraryInfo(
+            "lib/compose.og.rin", "compose",
+            "مكتبة أساسية — تركيب ودمج وتفاعل كل مفاهيم Rin (دوال، map، array، Set، كائنات، حاويات) بجسر واحد",
+            "compose • chain • through • combine • mergeWith • mapOver • filterOver • connect • sync"
+        ),
+        BuiltinLibraryInfo(
             "lib/indsinicons.og.rin", "indsinicons",
             "مكتبة أيقونات متجهية (SVG) لواجهات indsin: 187 أيقونة مرسومة على شبكة 24×24 مع بحث وأسماء بديلة وتوليد SVG جاهز",
             "ic_svg • ic_search • ic_has • ic_snippet • ic_html • ic_dataUri • ic_sprite • ic_register • ic_audit",
