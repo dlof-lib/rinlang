@@ -216,4 +216,4 @@ Program   ─► FormExecutor    ─► النتيجة   (دفتر المعام�
 
 
 ## الإدخال في تطبيق الأندرويد (المحرر)
-في RinStudio يظهر سؤال `input`/`inputNumber`/`confirm`/`choose` داخل **Terminal** المحرر (سطر إدخال أسفل المخرجات، و`^C` للإلغاء) بدل نافذة منبثقة. التفاصيل: `CHANGES_TERMINAL.md`.
+في RinStudio يظهر سؤال `input`/`inputNumber`/`confirm`/`choose` داخل **Terminal** المحرر (سطر إدخال أسفل المخرجات، و`^C` للإلغاء) بدل نافذة منبثقة. التفاصيل: `../.changelog/CHANGELOG.md`.

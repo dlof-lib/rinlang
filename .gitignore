@@ -6,3 +6,23 @@ keystore-credentials.txt
 *.obj
 __pycache__/
 .DS_Store
+
+# >>> cleanup-project (managed)
+build/
+.gradle/
+.idea/
+local.properties
+*.apk
+*.aab
+*.class
+*.so
+*.log
+*.tmp
+*.bak
+*.orig
+*.rej
+*~
+Thumbs.db
+*.pyc
+node_modules/
+# <<< cleanup-project

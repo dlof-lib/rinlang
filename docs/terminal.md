@@ -157,23 +157,23 @@ native off                # العودة للـ REPL المعتاد (أوامر 
 
 ## RinStudio
 طرفية RinStudio تدعم `ocr <صورة> [--lang ara+eng] [--psm N] [--enhance] [--min N]` (نفس `make.image.text`)، وتعرض ألوان ANSI
-(`colorAnsi` وغيرها) فوق Unicode؛ التفاصيل في `CHANGES_TERMINAL_UNICODE.md`.
+(`colorAnsi` وغيرها) فوق Unicode؛ التفاصيل في `../.changelog/CHANGELOG.md`.
 
 ### أوامر `$` المتقدمة (الدفعة 3)
 
 `$ bigfiles` `$ recent` `$ dupes` `$ empty` `$ loc` `$ todo` — استكشاف الملفات · `$ trash` `$ backup` `$ sync` `$ rename` — أمان ونسخ · `$ json` `$ csv` `$ stats` `$ context` `$ verify` — بيانات.
 أمثلة: `$ sync . ~/backup` · `$ trash old.rin ~/tmp` · `$ rename '(.*)\.txt' '$1.rin' *.txt` · `$ json ~/cfg.json server.port` · `$ csv ~/sales.csv -n 20` · `$ stats -e "3 1 4 1 5" -h`.
-تفاصيل في `CHANGES_TERMINAL_XCMDS.md`.
+تفاصيل في `../.changelog/CHANGELOG.md`.
 
 ### الدفعة 4 — 500 أمر إضافي
-`$ convert 5 kg lb` وعشرات الاختصارات (`km2mi`، `c2f`…) · نصوص (`camel`، `slugify`، `levenshtein`، `roman`، `morse`…) · ترميز/هاش (`base58`، `sha512`، `hmac`، `crc16`، `luhn`…) · ألوان (`hex2rgb`، `contrast`…) · شبكة (`cidr`، `urlparse`…) · رياضيات وإحصاء ومالية (`fact`، `stdev`، `percentile`، `loan`، `rpn`…) · تواريخ (`age`، `workdays`، `hijri`، `easter`…) · مولّدات (`dice`، `password`، `ulid`…) · ملفات (`tree`، `eol`، `fixeol`، `magic`، `sums`…) · أدوات Rin (`rinlint`، `rinblocks`، `rinids`…) · بيانات (`csv2json`، `csvsort`، `jsonkeys`، `spark`…). التفاصيل في `CHANGES_TERMINAL_XCMDS.md`.
+`$ convert 5 kg lb` وعشرات الاختصارات (`km2mi`، `c2f`…) · نصوص (`camel`، `slugify`، `levenshtein`، `roman`، `morse`…) · ترميز/هاش (`base58`، `sha512`، `hmac`، `crc16`، `luhn`…) · ألوان (`hex2rgb`، `contrast`…) · شبكة (`cidr`، `urlparse`…) · رياضيات وإحصاء ومالية (`fact`، `stdev`، `percentile`، `loan`، `rpn`…) · تواريخ (`age`، `workdays`، `hijri`، `easter`…) · مولّدات (`dice`، `password`، `ulid`…) · ملفات (`tree`، `eol`، `fixeol`، `magic`، `sums`…) · أدوات Rin (`rinlint`، `rinblocks`، `rinids`…) · بيانات (`csv2json`، `csvsort`، `jsonkeys`، `spark`…). التفاصيل في `../.changelog/CHANGELOG.md`.
 
 ## الهوية: Rin Shell و Rin Toolbox
-الطرفية اسمها الرسمي **Rin Shell**، ومكتبة أوامرها المدمجة **Rin Toolbox** (615 أمراً في 13 عائلة). `:about` يعرض الشعار والإصدار، و`:toolbox` يعرض العائلات (`:toolbox math` يسرد أوامر عائلة). الأيقونات في `assets/branding/shell/`، والتفاصيل في `CHANGES_TERMINAL_BRAND.md`.
+الطرفية اسمها الرسمي **Rin Shell**، ومكتبة أوامرها المدمجة **Rin Toolbox** (615 أمراً في 13 عائلة). `:about` يعرض الشعار والإصدار، و`:toolbox` يعرض العائلات (`:toolbox math` يسرد أوامر عائلة). الأيقونات في `assets/branding/shell/`، والتفاصيل في `../.changelog/CHANGELOG.md`.
 
 
 ## مؤشرات التشغيل والتحميل (حسب نوع الأمر)
 أثناء أي تشغيل يطول (> ~0.35s) على طرفية حقيقية يظهر سطر حيّ بهويّة نوع الأمر:
 `⠋ Loading  slow.rin · importing rin.ui · Parsing · 2 lines  1.1s`. يختفي عند أي مخرجات وعند `input()`، ويعرض المكتبة
 الجارية فعلاً. `:test` و`:time -n N` يرسمان شريط تقدّم (عدّاد + ETA + سرعة). التعطيل: `RIN_PROGRESS=plain`.
-التفاصيل: `CHANGES_RUN_INDICATOR.md`.
+التفاصيل: `../.changelog/CHANGELOG.md`.

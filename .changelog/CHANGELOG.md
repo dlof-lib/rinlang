@@ -162,7 +162,7 @@ INSTANCE/MAP، يُنفَّذ نفس توزيع `MethodCallExpr`. نفس الإ�
 
 ##### 3) إصلاح: كل closures داخل حلقة `for` كانت تتشارك نفس المتغيّر (كل واحدة تُرجع القيمة
 ##### الأخيرة بدل قيمة تكرارتها)
-```rin
+```kotlin
 let fns = [];
 for (let i = 0; i < 3; i = i + 1) { fns[len(fns)] = fun() { return i; }; }
 print fns[0](); print fns[1](); print fns[2]();
@@ -185,7 +185,7 @@ called")، فلا يمكن استدعاء عنصر مصفوفة يحمل دال�
 تُستدعى) — **إضافية بحتة تماماً**: كانت الحالة التي تعالجها خطأ تحليل صريح قبلاً، فلا يمكن
 أن تُغيّر تحليل أي برنامج كان صالحاً سابقاً.
 
-```rin
+```kotlin
 let fns = [fun(){return 1;}, fun(){return 2;}];
 print fns[0]();              // 1
 print (fun(x){return x*10;})(4);   // 40  (IIFE)
@@ -203,7 +203,7 @@ print makeAdder(3)(4);       // 7  (نداء متسلسل)
 `break`/`continue` يعملان بداخلها بنفس الدلالة المعتادة، وكل تكرارة لها بيئة خاصة بها من
 الصفر (نفس إصلاح #3 أعلاه)، فـ closures بداخلها تلتقط القيمة الصحيحة لكل تكرارة أيضاً.
 
-```rin
+```kotlin
 for (let x in [10, 20, 30]) { print x; }             // 10 20 30
 let m = {"a": 1, "b": 2};
 for (let k in m) { print k + "=" + m[k]; }            // a=1  b=2
@@ -643,7 +643,7 @@ for (let c in "abc") { print c; }                     // a b c
 <p rin-show="isHigh">…</p>               <!-- يظهر عندما يكون المتغيّر صحيحاً -->
 ```
 
-```rin
+```kotlin
 let count = 0;
 fun add() { count = count + 1; }
 ```
@@ -1090,7 +1090,7 @@ tests/loops 5/5 على `rin run` و`rin --vm` · rintests 83/83 · wesscode 42/4
 
 كل `main.rin` جديد يبدأ الآن بكود Rin حقيقي (لا تعليق) يعرّف اللغة نفسها من المحرّك الفعلي:
 
-```rin
+```kotlin
 print "◆ Rin " + rinVersion() + " · " + rinEdition();
 print "▸ اسم_المشروع";
 ```
@@ -1099,7 +1099,7 @@ print "▸ اسم_المشروع";
 ينطبق على كل الأنواع (Container / Table / UI / Free / Illust / HTML)؛ ويبقى قالب Free «فارغ» فارغاً تماماً كما اختار المستخدم.
 
 #### قالب Free الافتراضي صار جولة سريعة في ما يميّز Rin
-```rin
+```kotlin
 // 1) warp: متغيّر حيّ، تتحدّث أي واجهة مرتبطة به عند تغيّره
 warp score = 0;
 score = score + 10;
@@ -1660,7 +1660,7 @@ rinlang/
 
 إضافة بحتة (additive): نصوص بين backtick تقبل `${تعبير}` داخلها.
 
-```rin
+```kotlin
 let name = "ريم";
 print `مرحباً ${name}!`;   // مرحباً ريم!
 ```
