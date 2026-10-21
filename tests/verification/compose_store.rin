@@ -1,0 +1,20 @@
+@import "compose_store";
+@container=box
+    let total = 0;
+.end/container
+let s = storeNew({"user": {"name": "a"}, "count": 0, "items": [1, 2]});
+let log = [];
+let id = storeSubscribe(s, "count", fun(n, o, p) { push(log, "count " + str(o) + "->" + str(n)); });
+storeSubscribe(s, "user.name", fun(n, o, p) { push(log, "name " + str(n)); });
+storeSet(s, "count", 1); storeUpdate(s, "count", fun(c) { return c + 1; }); storeSet(s, "user.name", "b");
+storeSet(s, "count", 2);
+print log; print storeGet(s, "count");
+storeComputed(s, "double", fun(st) { return st["count"] * 2; });
+print storeRead(s, "double"); storeSet(s, "count", 10); print storeRead(s, "double");
+print storeUnsubscribe(s, id); storeSet(s, "count", 11); print len(log);
+storeBatch(s, fun(st) { storeSet(st, "user.name", "z"); storeSet(st, "count", 100); storeSet(st, "count", 200); });
+print log; print storeGet(s, "count");
+print storeCanUndo(s); storeUndo(s); print storeGet(s, "count"); storeUndo(s); print storeGet(s, "count"); storeRedo(s); print storeGet(s, "count");
+print storeMerge(s, {"user": {"age": 3}})["state"]["user"];
+storeToContainer(s, "count", "box", "total"); storeSet(s, "count", 55); print container.get("box", "total");
+storeFromContainer(s, "count", "box", "total"); container.set("box", "total", 77); print storeGet(s, "count");
