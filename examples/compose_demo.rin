@@ -1,0 +1,90 @@
+// ============================================================================
+//  examples/compose_demo.rin — برنامج كامل: كل مفاهيم Rin تتركّب وتندمج وتتفاعل
+//  السيناريو: مخزن صغير. enum للحالة، class للمنتج، حاوية للمتجر، Set للفئات،
+//  سجلات جدول للأسعار، وtoken/number لقراءة معادلة خصم من نص.
+//  التشغيل:  rin run examples/compose_demo.rin
+// ============================================================================
+@import "compose";
+
+enum Status { Active, Hidden }
+
+class Item {
+    let name = "";
+    let price = 0;
+    let qty = 0;
+}
+
+class Shelf {          // كائن يعكس حالة الحاوية
+    let total = 0;
+    let note = "";
+}
+
+@container=store
+    let total = 0;
+.end/container
+
+// ── دوال مساعدة ──
+fun addTax(p) { return p * 1.1; }
+fun round2(x) { return round(x * 100) / 100; }
+fun money(x) { return "$" + str(x); }
+fun isPositive(x) { return x > 0; }
+fun isSmall(x) { return x < 1000; }
+fun getPrice(row) { return row["price"]; }
+
+// ── 1) دمج إعدادات متعدّدة المصادر (map + enum + Set) ──
+let defaults = {"currency": "USD", "tags": ["new"], "limits": {"max": 10, "min": 1}, "cats": Set(["food"])};
+let user     = {"tags": ["sale"], "limits": {"max": 50}, "cats": Set(["drinks"]), "status": Status.Active};
+let cfg = combine(defaults, user);
+print "config: " + str(cfg);
+print "keep-policy: " + str(mergeWith(defaults, {"currency": "EUR", "x": 1}, "keep"));
+
+// ── 2) ضمّ سجلات جدول على مفتاح (جدول منتجات + جدول أسعار) ──
+let products = [{"id": 1, "name": "tea"}, {"id": 2, "name": "coffee"}];
+let prices   = [{"id": 2, "price": 40}, {"id": 3, "price": 15, "name": "milk"}];
+let rows = joinRecords(products, prices, "id");
+print "joined: " + str(rows);
+
+// ── 3) تركيب خط معالجة من مراحل مختلطة: دالة → دالة → دالة ──
+let finalPrice = chain([addTax, round2, money]);
+print "price: " + finalPrice(40);
+print "rows -> prices: " + str(mapOver(filterOver(rows, fun(r) { return has(r, "price"); }), getPrice));
+
+// ── 4) مفهوم enum وSet كمراحل قابلة للاستدعاء ──
+let label = asFn({"Status.Active": "نشط", "Status.Hidden": "مخفي"});
+print "status label: " + label(str(Status.Active));
+let isKnownCat = asFn(cfg["cats"]);
+print "food known? " + str(isKnownCat("food")) + " | meat known? " + str(isKnownCat("meat"));
+
+// ── 5) شروط مركّبة (دوال + Set) ──
+let okPrice = allOf([isPositive, isSmall]);
+print "okPrice(40)=" + str(okPrice(40)) + " okPrice(5000)=" + str(okPrice(5000));
+let goodItem = anyOf([cfg["cats"], okPrice]);
+print "goodItem('drinks')=" + str(goodItem("drinks"));
+
+// ── 6) كائن class ← دمج map فيه، ثم تحويله لـ map ──
+let tea = Item();
+mergeInto(tea, {"name": "tea", "price": 12, "qty": 3});
+print "item: " + str(asMap(tea));
+print "item prices x2: " + str(mapOver(tea, fun(v) { if (type(v) == "number") { return v * 2; } return v; }));
+
+// ── 7) تفاعل: كائن ↔ حاوية ↔ كائن عبر connect/sync ──
+let shelf = Shelf();
+connect(tea, "qty", "store", "total");                       // كائن -> حاوية
+connectWith("store", "total", shelf, "note", fun(t) { return "stock=" + str(t); });  // حاوية -> كائن
+tea.qty = 9;
+print "store.total=" + str(getField("store", "total")) + " | shelf.note=" + shelf.note;
+
+let mirror = Shelf();
+sync(shelf, "total", mirror, "total");                       // كائن <-> كائن
+shelf.total = 77; print "mirror.total=" + str(mirror.total);
+mirror.total = 5;  print "shelf.total=" + str(shelf.total);
+
+// ── 8) token ↔ number: استخراج أرقام معادلة خصم وتركيبها ──
+let formula = "discount = 15 + 5.5 + 4;";
+let nums = numbersIn(formula);
+print "numbers: " + str(nums) + " sum=" + str(reduceOver(nums, fun(a, v) { return a + v; }, 0));
+print "identifiers: " + str(identifiersIn(formula));
+
+// ── 9) أمان: attempt يلتقط الخطأ ويعيد بديلًا ──
+let safeDiv = attempt(fun(x) { if (x == 0) { throw "div by zero"; } return 100 / x; }, "n/a");
+print "safeDiv(4)=" + str(safeDiv(4)) + " safeDiv(0)=" + str(safeDiv(0));
