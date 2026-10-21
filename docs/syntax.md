@@ -4,7 +4,7 @@
 > `rin_parser.cpp` + `rin_interpreter.cpp`) قبل كتابته هنا.
 
 ## التعليقات
-```rin
+```kotlin
 // تعليق سطر واحد
 
 /* تعليق
@@ -28,14 +28,14 @@
 ## النصوص القالبية — متغيّرات داخل النص
 بدل دمج النصوص بـ `+`، اكتب النص بين علامتَي backtick (`` ` ``) وضع أي متغيّر أو تعبير
 داخل `${ ... }`:
-```rin
+```kotlin
 let name = "Rin";
 let age = 3;
 print `hello ${name}`;            // hello Rin
 print `بعد سنة: ${age + 1}`;       // بعد سنة: 4
 ```
 الطريقة القديمة بـ `+` ما زالت تعمل كما هي:
-```rin
+```kotlin
 print "hello " + name; // hello Rin
 ```
 التفاصيل الكاملة والأمثلة في [`template-strings.md`](./template-strings.md).
@@ -46,7 +46,7 @@ print "hello " + name; // hello Rin
 **كلمات سياقية غير محجوزة عالميًا** — المحلِّل يتعرّف عليها فقط عندما تظهر في بداية
 عبارة وتتبعها البنية المتوقَّعة (مثلًا معرِّف مباشرة بعد `class`)، وإلا فهي اسم متغيّر
 عادي بلا أي تعارض:
-```rin
+```kotlin
 let class = 5;      // صالح تمامًا: "class" هنا مجرد اسم متغيّر
 print class + 1;    // 6
 ```
@@ -61,7 +61,7 @@ print class + 1;    // 6
 | فهرسة | `arr[i]`, `map["key"]` |
 | وصول حقل | `obj.field` |
 
-```rin
+```kotlin
 print true and false;  // false
 print true or false;   // true
 print !true;           // false
@@ -84,7 +84,7 @@ print 10 % 3;           // 1
 ## `print` و`show`
 `show` مرادف كامل لـ `print` بلا أي فرق في السلوك (جزء من عائلة الكلمات الإنجليزية
 المبسَّطة `make`/`show`/`create`/`run`):
-```rin
+```kotlin
 print "a";
 show "a"; // نفس الأثر تمامًا
 ```

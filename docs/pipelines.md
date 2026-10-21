@@ -3,7 +3,7 @@
 ## الفكرة
 `a |> f` تعني "مرِّر قيمة `a` كأول وسيط لِـ `f`" — يعادل تمامًا `f(a)`. يمكن سلسلة
 عدة مراحل:
-```rin
+```kotlin
 fun myDouble(x) { return x * 2; }
 fun addOne(x) { return x + 1; }
 print 5 |> myDouble |> addOne; // 11  == addOne(myDouble(5))
@@ -14,7 +14,7 @@ print 5 |> myDouble |> addOne; // 11  == addOne(myDouble(5))
 ## تمرير وسائط إضافية
 إن احتاجت المرحلة وسائط إضافية غير القيمة القادمة من قبلها، تُكتب بين قوسين بعد
 اسمها — القيمة القادمة من المرحلة السابقة تُقحَم تلقائيًا كأول وسيط:
-```rin
+```kotlin
 let nums = [10, 20, 30, 5, 40];
 fun filter(arr, pred) { let out = []; let i = 0; while (i < len(arr)) { if (pred(arr[i])) { push(out, arr[i]); } i = i + 1; } return out; }
 fun isAdult(x) { return x > 18; }

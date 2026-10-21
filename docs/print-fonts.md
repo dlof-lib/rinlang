@@ -14,7 +14,7 @@
 | `color="tomato"` | لون النص (اسم CSS أو `#rrggbb` أو `rgb()` — كل ما يقبله محرك الألوان) |
 | `bg="#112233"` | لون الخلفية |
 
-```rin
+```kotlin
 print "Title" bold=true underline=true color="gold";
 print "centered" bold=true upper=true width=20 align="center";   // التنسيق يُطبَّق بعد upper/width فلا يُفسد المحاذاة
 print "flag" bold=isImportant;                                    // أي تعبير (falsy = بلا أثر)

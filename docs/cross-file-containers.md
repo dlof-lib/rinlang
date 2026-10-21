@@ -22,7 +22,7 @@
 لاستيراد وحدات `lib/`، لكنها تعمل بنفس الآلية لأي ملف `.rin` عادي أيضًا).
 
 ## `@import` — الآلية الفعلية الوحيدة
-```rin
+```kotlin
 // examples/use_from_demo/sidebar.rin
 fun sidebarGreeting() {
     return "Hello from sidebar.rin";
@@ -31,7 +31,7 @@ fun sidebarGreeting() {
     let open = true;
 .end/container
 ```
-```rin
+```kotlin
 // examples/use_from_demo/main.rin -- شغّله من جذر المستودع:
 //   ./run_rin examples/use_from_demo/main.rin
 @import "examples/use_from_demo/sidebar.rin";

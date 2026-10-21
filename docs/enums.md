@@ -1,7 +1,7 @@
 # enums.md — `enum`: قوائم اختيار مغلقة
 
 ## التعريف
-```rin
+```kotlin
 enum Status {
     Active,
     Paused,
@@ -13,7 +13,7 @@ enum Status {
 
 ## القيمة والاسم
 كل حالة (case) قيمتها الفعلية وقت التشغيل شكل ثابت `{__enum__, name, value}`:
-```rin
+```kotlin
 print Status.Active.name;   // Active
 print Status.Active.value;  // nil  -- لم تُعطَ قيمة صريحة
 print Status.Done.value;    // 99
@@ -22,7 +22,7 @@ print Status.Done.value;    // 99
 كُتب صراحة بعد `=`، أو `nil` إن غابت — لا علاقة لقيمتها بترتيبها في التعريف.
 
 ## المقارنة
-```rin
+```kotlin
 let s = Status.Paused;
 print s == Status.Paused; // true
 print s == Status.Active; // false
@@ -31,7 +31,7 @@ print s == Status.Active; // false
 ## الاستخدام مع `match`/`case`
 هذا هو الاستخدام الأكثر شيوعًا لـ`enum` — انظر
 [`control-flow.md`](./control-flow.md#match--case) للتفاصيل الكاملة:
-```rin
+```kotlin
 match (s) {
     case Status.Active { print "نشط"; }
     case Status.Paused, Status.Done { print "متوقف"; } // أكثر من قيمة بفاصلة

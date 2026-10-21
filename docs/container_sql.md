@@ -62,7 +62,7 @@ ARG        := IDENT                       -- وسيط واحد فقط (لا فا
 بما أن `&` هي AND ضمنية بين شروط الاستعلام مباشرة، تُستخدَم `or(...)`/`and(...)`/`not(...)`
 لتركيب منطق أعقد (ويمكن تداخلها ببعضها بحرّية):
 
-```rin
+```kotlin
 // OR بسيطة
 sql("#app.users & or(role:eq(admin) & role:eq(owner))")
 
@@ -90,7 +90,7 @@ sql("#app.users & or(and(role:eq(admin) & active:eq(true)) & and(role:eq(owner) 
 **ترتيب التنفيذ الفعلي دوماً**: فلترة (AND/OR/NOT) → `distinct` → `order` → `offset` → `limit` →
 `select`. المستندات المفقود منها حقل الفرز تُدفَع دوماً إلى آخر النتائج.
 
-```rin
+```kotlin
 // أحدث 5 حسابات فعّالة، الاسم فقط
 sql("#app.users & active:eq(true) & order:desc(createdAt) & limit:eq(5) & select:has(name)")
 
@@ -103,7 +103,7 @@ sql("#app.users & distinct:eq(city) & distinct:eq(role)")
 
 ## أمثلة أساسية
 
-```rin
+```kotlin
 @container.doc=users
     mask="app.users";
     document id="u1" fields={ name: "Ali",  role: "admin", age: 25, address: { city: "Cairo" } };
@@ -117,7 +117,7 @@ print sqlCount("#app.users & role:eq(admin)");
 
 ### تعريف استعلام مُسمّى واستدعاؤه بالقناع
 
-```rin
+```kotlin
 @sql=activeAdmins
     mask="q.activeAdmins";
     text query = "#app.users & role:eq(admin) & age:gte(18) & order:desc(age)";
@@ -168,7 +168,7 @@ print sql("q.activeAdmins"); // بلا تكرار نص RCSQL في كل مرة
 | `sqlExplain(query)`  | map تشخيصي كامل: الهدف، اسم الحاوية المحلول، شجرة الشروط (بما فيها or/and/not)، الفرز، limit/offset، select/distinct |
 
 مثال `sqlExplain`:
-```rin
+```kotlin
 print sqlExplain("#app.users & role:eq(admin) & order:desc(age) & limit:eq(5)");
 // {"queryText": "...", "targetMask": "app.users", "container": "users",
 //  "predicates": [{"field": "role", "op": "eq", "arg": "admin"}],

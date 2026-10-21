@@ -71,8 +71,7 @@ print("تم بناء الرسمة");  // يُطبع في سجلّ التنفيذ
 
 ## التشغيل
 
-```
-rin run run.rin --  examples/hello.illust
+```kotlin
 ```
 
 أو عدّل `SOURCE_PATH` داخل `run.rin` مباشرة. يطبع البرنامج:

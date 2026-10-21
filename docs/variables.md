@@ -1,14 +1,14 @@
 # variables.md — `let`، مصفوفات، قواميس، نطاق
 
 ## `let`
-```rin
+```kotlin
 let x = 5;
 print x; // 5
 ```
 `let` هي الطريقة الوحيدة لتعريف متغيّر جديد. لا يوجد `var`/`const` منفصلَين.
 
 ### نوع اختياري (Type System — إضافي بحت)
-```rin
+```kotlin
 let x: Number = 5;
 ```
 كتابة النوع بعد `:` **اختيارية بالكامل** — تركها يعني "بلا نوع معلَن" (نفس السلوك
@@ -21,7 +21,7 @@ error[E0001]: unknown type `Text`
 (الاسم الصحيح للنصوص هو `String`، لا `Text`).
 
 ## المصفوفات (Array)
-```rin
+```kotlin
 let arr = [1, 2, 3];
 print arr[0];     // 1
 arr[0] = 99;       // فهرسة قابلة للإسناد
@@ -30,7 +30,7 @@ print len(arr);    // 3
 ```
 
 ## القواميس (Map)
-```rin
+```kotlin
 let m = {"a": 1, "b": 2};
 print m["a"];      // 1
 m["c"] = 3;         // إضافة مفتاح جديد بنفس صياغة الفهرسة
@@ -42,7 +42,7 @@ for (let key in m) {
 
 ## `type()`
 يُرجع اسم النوع الفعلي وقت التشغيل كنص صغير الحروف:
-```rin
+```kotlin
 print type(5);          // number
 print type("s");        // string
 print type(true);       // bool
@@ -56,7 +56,7 @@ print type(nil);        // nil
 ## النطاق (Scope)
 كل `{ ... }` يفتح نطاقًا جديدًا. `let` بنفس الاسم داخل نطاق داخلي يُظلِّل (shadow) ما
 في الخارج بلا أن يغيّره:
-```rin
+```kotlin
 let y = 10;
 {
     let y = 20;

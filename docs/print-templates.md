@@ -11,7 +11,7 @@
 | نصي | `@tmpl n(p) text تعبير;` | `@n(args)` في أي تعبير | قيمة نصية |
 
 ## 1) قالب سطر
-```rin
+```kotlin
 @tmpl hello(name) print `Hello ${name}!`;
 @hello("rin");                    // Hello rin!
 @hello("rin") upper=true;         // سمات إضافية بعد الاستعمال: HELLO RIN!
@@ -19,7 +19,7 @@
 
 ## 2) قالب خطي (عدة أسطر)
 كل سطر = قيم `print` وسماتها (بما فيها `if=`)، ويُفصل بين الأسطر بـ `;`:
-```rin
+```kotlin
 @tmpl receipt(shop, total) print {
     `=== ${shop} ===` width=24 align="center";
     "Total", total sep=" : ";
@@ -31,7 +31,7 @@
 
 ## 3) قالب تنسيقي `style`
 مجموعة سمات (`width align upper lower label level sep end pretty repeat if`) تُستعمل داخل أي `print`، ومع قوالب السطر:
-```rin
+```kotlin
 @tmpl title(w = 30) style width=w align="center" upper=true;
 print "report" @title();                // معاملات افتراضية
 print "wide" @title(40) label="X";
@@ -42,7 +42,7 @@ print "wide" @title(40) label="X";
 
 ## 4) قالب نصي `text`
 تعبير يُستعمل في أي مكان (داخل `print` أو `let` أو شرط...). المعاملات معزولة وتعمل مع `${p}` داخل النصوص القالبية:
-```rin
+```kotlin
 @tmpl tag(s) text "[" + s + "]";
 print @tag("a") + @tag("b");            // [a][b]
 @tmpl money(x) text `$${x}`;

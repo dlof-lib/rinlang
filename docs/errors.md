@@ -1,7 +1,7 @@
 # errors.md — نظام الأخطاء: أكواد، `try`/`catch`/`throw`
 
 ## التقاط الأخطاء وقت التشغيل: `try` / `catch`
-```rin
+```kotlin
 try {
     let arr = [1, 2, 3];
     print arr[100];
@@ -16,7 +16,7 @@ after
 ```
 خطأ حقيقي (مثل فهرسة خارج المدى) يُلتقَط كقاموس (map) بحقول `code`/`message`/`line`
 — الوصول إليها عبر حقل عادي:
-```rin
+```kotlin
 try {
     let x = [1, 2][10];
 } catch (e) {
@@ -27,7 +27,7 @@ try {
 ```
 
 ## `throw` — رمي قيمة مخصَّصة
-```rin
+```kotlin
 try {
     throw "custom error";
 } catch (err) {

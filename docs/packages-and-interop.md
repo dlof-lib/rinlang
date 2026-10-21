@@ -42,7 +42,7 @@
 **مقفل افتراضياً.** يُفعَّل بـ `rin --allow-native file.rin` أو `RIN_ALLOW_NATIVE=1` (قرار من يشغّل البرنامج، لا يستطيع كود مستورَد تفعيله).
 لينكس/macOS فقط؛ على أندرويد/ويندوز/WASM تُرجع `{ok:false,error}`.
 
-```rin
+```kotlin
 let l = cpp.lib("#include \"rin_abi.h\"\nRIN_FN(sumAll){double t=0;for(auto&v:args.arr)t+=v.num;return rin::Json::number(t);}", nil);
 print cpp.call(l.handle, "sumAll", [1, 2, 3.5]).value;     // 6.5
 print cpp.callNum(l.handle, "hyp", [3, 4], "double").value; // دالة extern "C" رقمية
@@ -52,7 +52,7 @@ print cpp.eval("std::sqrt(2.0)", nil).value;
 — خيارات: `compiler std opt flags includes libs timeout force`. النتائج تُخزَّن مؤقتاً بحسب بصمة المصدر.
 
 ## `rintest` (`@import "rintest";`)
-```rin
+```kotlin
 rt_describe("حساب", fun() {
     rt_test("جمع", fun() { rt_expect(1 + 1).toBe(2); });
     rt_each("جدول", [[1,2,3],[2,2,4]], fun(a, b, c) { rt_expect(a + b).toBe(c); });
@@ -70,7 +70,7 @@ Matchers: `toBe toEqual toBeTrue toBeFalse toBeNil toBeTruthy toBeFalsy toContai
 ## `wesscode` — مساعد إنشاء المكتبات (`@import "wesscode";`)
 يبني مكتبة/حزمة Rin كاملة من الكود، يفحصها بالمحلّل الحقيقي قبل أي كتابة، ثم يكتبها على القرص.
 
-```rin
+```kotlin
 let lib = wc_new("mathx", "0.1.0", "دوال رياضية");
 wc_fn(lib, "twice", ["x"], "return x * 2;", "يضاعف الرقم");
 wc_const(lib, "TAU", "6.283185307179586", "ضعف باي");
@@ -110,7 +110,7 @@ wc_writeOg(lib, ".");                   // ./lib/mathx.og.rin ليعمل @import
 - **أدوات:** `wc_convert(src, name, mode, strategy, opts)` (`parts|sections|single`)، `wc_equivalent(a, b)` (تكافؤ التصريحات)، `wc_suggest(src)` (يقترح التخطيط حسب الحجم وتغطية التوثيق)، `wc_convertFile(path, outDir, mode, strategy, opts)`، `wc_fromFile(name, version, desc, path)`.
 - **تخطيط مكتبة كاملة:** `wc_layout(lib, "parts"|"sections"|"single", strategy, opts)` ثم `wc_write(lib, dir)` يكتب `src/lib.rin` و`src/parts/*.rin` ويعمل `wc_check` على التخطيط.
 
-```rin
+```kotlin
 let lib = wc_template("strings", "textx");
 wc_layout(lib, "parts", "prefix", nil);
 wc_write(lib, "out/textx");                       // src/lib.rin + src/parts/*.rin

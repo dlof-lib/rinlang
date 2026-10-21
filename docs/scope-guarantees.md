@@ -17,7 +17,7 @@
 | `rethrow;` | يعيد رمي الخطأ الذي يعالجه أقرب `catch` **كما هو** (يحفظ `code`/`message`/`line`) |
 
 ## `finally`
-```rin
+```kotlin
 try {
     print "work";
 } finally {
@@ -30,7 +30,7 @@ try {
   (استخدمه عمداً فقط.)
 
 ## `defer`
-```rin
+```kotlin
 fun report(path) {
     defer print "closing", path;      // يُنفَّذ آخراً
     defer print "flushing";           // يُنفَّذ أولاً
@@ -47,7 +47,7 @@ fun report(path) {
 - `defer` بعد `=` أو `(` أو `.` أو `[` تبقى اسماً عادياً: `let defer = 5;` صالح.
 
 ## `catch … when`
-```rin
+```kotlin
 try {
     openAccount(id);
 }
@@ -62,13 +62,13 @@ catch (e)                                { print "unexpected:", e.message; }
 ### توحيد شكل الخطأ: `e.code` للجميع
 - أخطاء النظام: `e.code` = `E0021`… (كما كان).
 - `throw` لقاموس فيه `code`: يظهر `e.code` مباشرة (وتبقى القيمة الأصلية في `e.value`).
-```rin
+```kotlin
 throw {"code": "E_NOT_FOUND", "message": "missing"};
 // في catch:  e.code == "E_NOT_FOUND"   و   e.value.message == "missing"
 ```
 
 ## `rethrow`
-```rin
+```kotlin
 try {
     try { let x = [1, 2][10]; }
     catch (e) { print "logging", e.code; rethrow; }   // يرمي E0021 الأصلي نفسه

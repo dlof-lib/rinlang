@@ -4,7 +4,7 @@
 لتصدير صورة. **لا توجد دوال `table*` جديدة**: الجدول يُقرأ ويُعدَّل بدوال اللغة الموجودة أصلاً
 (دوال الحاويات + دوال المصفوفات + عائلة `#`)، لأنه يُكشَف كحقول افتراضية داخل الحاوية.
 
-```rin
+```kotlin
 @table=scores
     style value="style://dark";
     row cells=["name", "score"];
@@ -30,7 +30,7 @@
 
 ## دوال الحاويات الموجودة أصلاً (أصبحت تفهم الجدول)
 
-```rin
+```kotlin
 let rows = getField("scores", "rows");          // = container.get
 container.has("scores", "rows");                // true
 container.fieldNames("scores");                 // ["rows", "header", "body", "records", "columns", "style"]
@@ -51,13 +51,13 @@ container.empty("scores");                      // true فقط بلا متغيّ
 `push` · `pop` · `#add` · `#swap` (و`sort` تفرز مصفوفة أعمدة/خلايا رقمية أو نصية، لا مصفوفة صفوف).
 والدوال التي ترجع نسخة (`reverse` · `slice` · `concat`) تُكتب للجدول عبر `container.set`:
 
-```rin
+```kotlin
 container.set("scores", "rows", reverse(getField("scores", "rows")));
 ```
 
 ## عائلة `#` على الجدول
 
-```rin
+```kotlin
 let rows = getField("scores", "rows");
 #add(rows, ["omar", 70]);                     // صف جديد في مكانه (يظهر في save/png/zip)
 #swap(rows, 1, 3);                            // تبديل صفّين فعلاً
@@ -74,7 +74,7 @@ for (let i in 0 #to len(rows) - 1) { print rows[i]; }
 
 أول صف نصي بالكامل = رأس الجدول. بعده يمكن كتابة الصف بقاموس فيُرتَّب حسب الرأس (الغائب `nil`):
 
-```rin
+```kotlin
 @table=staff
     row cells=["name", "dept", "score"];
     row cells=["sara", "dev", 95];
@@ -90,7 +90,7 @@ for (let i in 0 #to len(rows) - 1) { print rows[i]; }
 دوال `sql*` الموجودة تقرأ الجدول كمجموعة مستندات: الأعمدة = الرأس، و`_id` = رقم صف الجسم (1-based).
 لا تحتاج `@doc` ولا نسخ البيانات:
 
-```rin
+```kotlin
 sqlCount("staff & dept:eq(dev)");
 sqlOne("staff & order:desc(score) & limit:eq(1)");
 sqlSum("staff & dept:eq(ops)", "score");
@@ -107,7 +107,7 @@ sqlDelete("staff & dept:eq(ops)");                  // يحذف الصفوف ا�
 
 اسم العمود (من الرأس النصي) يعمل كحقل في دوال الحقول الموجودة نفسها:
 
-```rin
+```kotlin
 getField("staff", "score");                     // [95, 88, 99]  (قيم الجسم)
 container.has("staff", "dept");                 // true
 setField("staff", "score", [1, 2, 3]);          // بطول الجسم، وإلا E0007
@@ -120,7 +120,7 @@ container.getOr("staff", "nope", "none");
 
 **إضافة عمود** أو ترتيب الأعمدة: عدّل `columns` (أو `records`):
 
-```rin
+```kotlin
 let cols = container.get("staff", "columns");
 container.set("staff", "columns", concat(cols, [["flag", true, false, true]]));
 ```
@@ -131,7 +131,7 @@ container.set("staff", "columns", concat(cols, [["flag", true, false, true]]));
 
 الجدول مجموعة مستندات: **المعرّف = رقم صف الجسم (1-based)** كما في RCSQL. المعرّفات موضعية: تنزاح بعد الحذف.
 
-```rin
+```kotlin
 allDocs("staff");                       // كل الصفوف كقواميس
 countDocs("staff");   docIds("staff");  // 3 · ["1","2","3"]
 findDoc("staff", "2");                  // قاموس أو nil
@@ -168,7 +168,7 @@ deleteDoc("staff", "2");
 
 `save` يقبل الآن صيغاً نصية للجدول (مثل `png`): `csv` · `json` · `md` · `html` · `txt`:
 
-```rin
+```kotlin
 @table=staff
     row cells=["name", "score"];
     row cells=["sara", 95];
@@ -183,7 +183,7 @@ deleteDoc("staff", "2");
 
 وبدون `save`، بدوال الحاويات الموجودة:
 
-```rin
+```kotlin
 container.toCsv("staff", ["name", "score"]);      container.exportCsv("staff", "out.csv");
 container.toJson("staff");                          container.exportToFile("staff", "out.json");   // الامتداد csv/md/html/txt يغيّر الصيغة
 container.fromJson("t", "[{\"a\":1},{\"a\":2,\"b\":3}]");  // مصفوفة قواميس -> جدول (overwrite=false: يُلحِق)

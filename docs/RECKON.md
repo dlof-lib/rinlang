@@ -5,7 +5,7 @@
 `filter`/`map` يدويًا.
 
 ## الصياغة
-```rin
+```kotlin
 reckon <name>(<collection>)
     [where <condition>] |> <stage1>() [|> <stage2>() ...];
 ```
@@ -17,7 +17,7 @@ reckon <name>(<collection>)
   تلقائيًا كأول وسيط — تمامًا بنفس دلالة `|>` العادية.
 
 ## مثال حقيقي (من `examples/reckon_demo.rin`، تحقّقتُ من تشغيله فعليًا)
-```rin
+```kotlin
 let scores = [-5, 42, 88, 0, 73, 91, -12, 60];
 
 reckon average(scores)
@@ -68,7 +68,7 @@ print smoothedScores; // [41.6667, 43.3333, 53.6667, ...]
 `reckon` تعمل بلا أي فرق داخل جسم [`@make.(name)`](./MAKE_UNIT.md) أيضًا — مفيد
 عندما تريد تقييد القدرات (`use reckon; need reckon; strict;`) على حساب مُحدَّد
 بدل السماح به في أي مكان بالملف:
-```rin
+```kotlin
 @make.(reportCard)
     kind data;
     use reckon;

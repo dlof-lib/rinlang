@@ -15,7 +15,7 @@
 | تبديل/إسناد تفكيكي | `[a, b] = [b, a];` |
 
 ## 1) تفكيك المصفوفة
-```rin
+```kotlin
 let [a, b] = [1, 2];
 let [x, y, z] = [10, 20];          // z = nil (خانة مفقودة)
 let [p, q = 5, r = 7] = [1, nil];  // 1 5 7 — الافتراضي عند الغياب أو nil
@@ -28,7 +28,7 @@ let [d1, d2 = d1 * 2] = [4];       // الافتراضي يرى ما رُبط ق
 `...rest` يجب أن يكون الأخير، ويعطي مصفوفة فارغة إن لم يبقَ شيء. `...` وحدها (بلا اسم) خطأ نحوي.
 
 ## 2) تفكيك القاموس والكائن
-```rin
+```kotlin
 let user = {"name": "Sara", "age": 30, "city": "Riyadh"};
 let {name, age} = user;
 let {city: town, missing = "n/a"} = user;   // key: اسم  لإعادة التسمية
@@ -40,7 +40,7 @@ let {x, y} = Pt();                          // حقول الكائن (بلا ...
 ```
 
 ## 3) عدة تصريحات
-```rin
+```kotlin
 let a = 1, b = a + 1, c = b + 1;            // كل عنصر يرى ما قبله
 let n: Number = 5, s: String = "x";          // النوع الاختياري لكل عنصر
 for (let i = 0, j = 10; i < 3; i = i + 1) { ... }
@@ -48,7 +48,7 @@ for (let i = 0, j = 10; i < 3; i = i + 1) { ... }
 لا يفتح نطاقًا جديدًا. حقل `class` يقبل `let` واحدة بسيطة فقط (خطأ E0013 غير ذلك).
 
 ## 4) `let ... else` — الحارس
-```rin
+```kotlin
 fun f(k) {
     let v = find(k) else { return "missing " + k; };
     return "found " + v;
@@ -62,14 +62,14 @@ for (let item in items) { let v = item else { continue; }; total = total + v; }
 - بدون `else`: النمط على `nil` أو شكل خاطئ يرمي **E0004** برسالة واضحة، والمتغيّر البسيط يقبل `nil` كما كان.
 
 ## 5) التفكيك في `for`
-```rin
+```kotlin
 for (let [k, v] in [["a", 1], ["b", 2]]) { print k + "=" + v; }
 for (let {id, tag = "-"} in rows) { print id + tag; }
 ```
 عنصر لا يطابق النمط يعطي E0004. الصيغة `for (let [a, b] = pair; ...; ...)` تبقى C-style عادية.
 
 ## 6) الإسناد التفكيكي (التبديل)
-```rin
+```kotlin
 [a, b] = [b, a];                    // الطرف الأيمن يُقيَّم كاملاً أولاً
 [x, y, z] = [z, x, y];
 [arr[0], arr[1]] = [arr[1], arr[0]];  // أهداف arr[i]

@@ -2,7 +2,7 @@
 
 `max` and `min` used to take exactly two numbers. They now accept more, and the family has helpers for picking by key or position.
 
-```rin
+```kotlin
 max(3, 9)                 // 9      (old form, unchanged)
 max(1, 8, 3, 5)           // 8      any number of arguments
 min([2, 9, 4])            // 2      a single array
@@ -19,7 +19,7 @@ max(1, "a")               // error: cannot compare a number with a string
 | `argmax(arr)` / `argmin(arr)` | index of the largest/smallest element (first on ties); nil if empty |
 | `minmax(arr)` | `[min, max]` in one call; nil if empty |
 
-```rin
+```kotlin
 let oldest = maxBy(people, fun(p) { return p["age"]; });
 let i = argmin(prices);
 let [lo, hi] = minmax(readings);

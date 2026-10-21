@@ -16,7 +16,7 @@
 
 التوقيعات القديمة (`input(p)` · `inputNumber(p)` · `confirm(p)` · `choose(p, array)`) تعمل كما هي حرفياً.
 
-```rin
+```kotlin
 let name = input("ما اسمك؟ ");
 let age = inputNumber("عمرك؟ ");
 if (confirm("هل تريد المتابعة؟ ")) {
@@ -30,7 +30,7 @@ if (confirm("هل تريد المتابعة؟ ")) {
 يُقبل الجواب إن أعاد قيمة صادقة (`true`)، ويُرفض إن أعاد `false`/`nil`، وإن أعاد **نصاً** فهو سبب الرفض
 ويظهر للمستخدم أمام السؤال المُعاد. 5 محاولات ثم خطأ؛ ونهاية `stdin` مع مُدقِّق = إلغاء.
 
-```rin
+```kotlin
 fun isShort(s) { return len(s) <= 3; }
 let w = input("كلمة قصيرة؟ ", isShort);
 
@@ -53,7 +53,7 @@ let age = inputNumber("العمر؟ ", Range(0, 120));
 
 تُفحَص الحاوية **قبل** سؤال المستخدم؛ والدالة تعيد القيمة نفسها كي تبقى قابلة للاستخدام في تعبير أو `|>`.
 
-```rin
+```kotlin
 let u = User();
 input("البريد؟ ", u, "email");            // يمرّ عبر set email(v) المعرّفة في الصنف
 inputNumber("الصوت؟ ", "Settings", "volume");
@@ -77,7 +77,7 @@ confirm("موافق؟ ", flags, "ok");
 | `fun` أو كائن بـ `__call__` (مثل أصناف inputkit) | `validator`؛ ونوع الحقل من حقل `type` في صنف المُدقِّق |
 | `nil` | يُتخطّى الحقل |
 
-```rin
+```kotlin
 @import "lib/inputkit.og.rin";
 let u = User();                       // age/email/role = nil
 input("User> ", u, {
@@ -94,7 +94,7 @@ input("User> ", u, {
 `Required()` · `Length(min,max)` (بالمحارف عبر `utf8Len` فالعربية صحيحة) · `Range(lo,hi)` · `Integer()` · `OneOf([..])` · `Matches(regex)` · `Email()` · `Every([rules])`.
 لإضافة قاعدتك: `class Even extends Rule { fun init() { self.type = "number"; } fun __call__(v) { if (v % 2 != 0) { return self.fail("يجب أن يكون زوجياً"); } return true; } }`
 
-```rin
+```kotlin
 @container=Profile
     state name = "Ali";
     state age = 30;
@@ -117,7 +117,7 @@ input("الاسم؟ ", "Profile", "name");           // يعرض [Sara]؛ Enter 
 
 يجيب المستخدم برقم الخيار (من 1) أو بتسميته تماماً.
 
-```rin
+```kotlin
 enum Role { Admin, Editor, Viewer }
 choose("الدور:", Role, u, "role");        // u.role == Role.Editor
 match (u.role) { case Role.Admin { print "مدير"; } else { print "غيره"; } }
@@ -136,7 +136,7 @@ let who = choose("من؟", team);            // team مصفوفة User — تُ�
 كل ما يكتبه النموذج في الهدف يُسجَّل؛ إن أُلغي الإدخال أو استنفد حقلٌ محاولاته أو رمى مُدقِّق خطأً، **يُعاد كل شيء كما كان**
 (حاوية · كائن · قاموس، والمتداخل معها). لا يبقى نصف-نموذج.
 
-```rin
+```kotlin
 class Person { let name = "Ali"; let age = 30; }
 let p = Person();
 try { input("P> ", p); } catch (e) { }     // أجاب "Sara" ثم ألغى عند age
@@ -154,7 +154,7 @@ print p.name;                              // Ali  — لا Sara
 | **كائن** (`class`/`struct`) | يُملأ نموذج للكائن بأسئلة `prefix + field + "." + subfield`؛ إن كان هو نفسه قيمة الحقل يُعدَّل في مكانه، وإلا يُسلَّم للحقل بعد الملء |
 | **اسم حاوية** | تُملأ الحاوية (`state` و`on update` تعمل) ثم تُسلَّم **لقطتها** (`container.snapshot`) إلى الحقل |
 
-```rin
+```kotlin
 class Address { let city = "Riyadh"; let zip = 11564; }
 class User { let name = "Ali"; let home = nil; }
 let u = User(); u.home = Address();
@@ -172,7 +172,7 @@ input("C> ", cfg, {"geo": "Geo"});        // يملأ الحاوية Geo ثم cf
 الأسئلة (قيم الجولة السابقة تظهر بين `[ ]` و Enter يُبقيها) حتى **5 جولات** ثم خطأ مع تراجع كامل.
 نهاية `stdin` أثناء إعادة السؤال = إلغاء.
 
-```rin
+```kotlin
 class SamePassword {
     fun __call__(s) {
         if (s.pw != s.pw2) { return "كلمتا المرور مختلفتان"; }

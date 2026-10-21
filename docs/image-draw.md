@@ -5,7 +5,7 @@
 
 اللوحة تُعرَّف بـ **معرّف رقمي (id)** تعيده `imgNew`/`imgLoad`. حدّ اللوحة الواحدة 16384 بكسل للضلع و32 ميغابكسل، وحدّ 64 لوحة حيّة (حرّر بـ `imgFree`).
 
-```rin
+```kotlin
 let img = imgNew(320, 200, "#0b1220");
 imgRect(img, 20, 24, 272, 120, "#f8fafc", {radius: 14});
 imgText(img, 40, 40, "RIN IMAGE", "#0f172a", {size: 4});
@@ -52,7 +52,7 @@ imgPrint(img, 48);                // وطباعتها في الطرفية
 ## الـ log كصورة
 `print.log` / `print.log.info|warn|error|debug` تتراكم تلقائياً. ثلاث طرق لتحويلها:
 
-```rin
+```kotlin
 print.log.error("connection lost");
 logSave("out/log.png");                                    // الأبسط: الامتداد png/bmp/ppm يرسم الصورة (يستبدل الملف)
 let li = imgFromLog({title: "Session", size: 2});          // أو لوحة تتحكم بها

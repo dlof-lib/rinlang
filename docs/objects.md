@@ -7,7 +7,7 @@
 
 ## `class` / `struct`
 
-```rin
+```kotlin
 class Animal {
     let name = "unknown";
     fun speak() {
@@ -27,7 +27,7 @@ d.speak(); // Rex barks
 - `self` (وليس `this`) هو مرجع النسخة الحالية داخل أي طريقة (method).
 - `fun init(...) { ... }` — إن عُرِّفت — هي المُنشئ (constructor)، تُستدعى تلقائيًا
   عند `ClassName(args)`:
-  ```rin
+  ```kotlin
   class Counter {
       let value = 0;
       fun init(start) { self.value = start; }
@@ -42,7 +42,7 @@ d.speak(); // Rex barks
 - `struct` بنفس صياغة `class` حرفيًا، والفرق الوحيد **دلالة وقت التشغيل**: نسخة
   `struct` لها **دلالة قيمة (value semantics)** — تُنسخ عند الإسناد — بينما `class`
   لها **دلالة مرجع (reference semantics)** الافتراضية:
-  ```rin
+  ```kotlin
   struct Point { let x = 0; let y = 0; }
   let p1 = Point();
   p1.x = 5;
@@ -54,7 +54,7 @@ d.speak(); // Rex barks
 
 ## `.object("id") ... .end/object` — كائن سريع بمعرِّف
 
-```rin
+```kotlin
 .object("user01")
     name("ABOO");
     age(19);
@@ -71,7 +71,7 @@ print user01["name"];  // فهرسة عادية كأي قاموس آخر
 `container.();` (اختياري) يسجّل الكائن في سجل عام (objectRegistry) يمكن الوصول
 إليه لاحقًا بنفس المعرِّف من أي مكان — يحتاجه `view.print/object` عند تمرير نص
 (id) بدل الكائن نفسه مباشرة:
-```rin
+```kotlin
 .object("user02")
     name("Sara");
     age(27);
@@ -88,7 +88,7 @@ view.print/object(user01);     // أو معاينة قيمة كائن مباشر
 نقية (بلا دوال ولا حاويات متداخلة) من نوع `ContainerKind::OBJECT` داخل شجرة
 الحاويات. الحقول بداخلها تُكتب بصياغة `let` عادية (لا صياغة `field(value)` كما في
 `.object()`):
-```rin
+```kotlin
 @Object=profile
     let name = "Sara";
     let age = 30;
@@ -102,7 +102,7 @@ view.print/object(user01);     // أو معاينة قيمة كائن مباشر
 ## `document` — سجل داخل حاوية NoSQL
 
 يُستخدَم **داخل** جسم `@container.doc` (أو `@doc`) فقط — لا بعد إغلاقها:
-```rin
+```kotlin
 @container.doc=users
     document id="u1" fields={ name: "Ali", age: 30 };
 .end/container.doc

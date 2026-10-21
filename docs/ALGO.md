@@ -31,7 +31,7 @@
 `algoInterp(xs, ys, x[,{method:"linear"\|"spline"\|"nearest", extrapolate}])` · `algoPolyFit(xs, ys, deg)` ← `{coeffs (صعوداً), r2, rmse, rank}` · `algoPolyEval(c, x)` · `algoPolyRoots(c)` ← `[{re,im}]` · `algoFFT(signal[,{inverse}])` ← `{re, im}` لأي طول (Radix-2 + Bluestein) · `algoRandom(n,{seed,min,max,int,sorted,unique})` (حتمية).
 
 ## القياس والتحقق (لخوارزميتك)
-```rin
+```kotlin
 fun mySort(a) { /* ... */ return a; }
 fun refSort(a) { return sort(a); }   // أي مرجع تثق به
 

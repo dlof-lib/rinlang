@@ -1,7 +1,7 @@
 # http.md — شبكات
 
 ## طلبات HTTP مباشرة
-```rin
+```kotlin
 let r = httpGet("https://example.com");
 print r.ok;      // true/false -- نجح الاتصال فعلياً (بصرف النظر عن status)
 print r.status;  // رمز الحالة (403 مثلًا)
@@ -30,7 +30,7 @@ print r.error;   // نص خطأ إن فشل الاتصال نفسه (فارغ إ
 
 ## طبقة API مسمّاة (لتجميع رابط أساسي + ترويسات ثابتة)
 مفيدة عندما تستدعي نفس الخدمة عدّة مرات (مفتاح API/توكن واحد لا يتكرر كتابته):
-```rin
+```kotlin
 apiRegister("myapi", "https://api.example.com");
 apiHeader("myapi", "Authorization", "Bearer xyz");
 
@@ -47,7 +47,7 @@ print r.ok;
 | `apiCall(name, method, path, body)` | نفس الفكرة بفعل HTTP عام صريح. |
 
 ## JSON
-```rin
+```kotlin
 let s = jsonEncode({"name": "Ali", "tags": [1, 2, 3]});
 print s; // {"name":"Ali","tags":[1,2,3]}
 print jsonDecode(s)["name"]; // Ali

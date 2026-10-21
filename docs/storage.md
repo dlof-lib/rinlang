@@ -5,7 +5,7 @@ Rin تفرّق بوضوح بين **تخزين دائم فعليًا على ال�
 NoSQL، جداول SQL) انظر [`containers.md`](./containers.md) و[`objects.md`](./objects.md#document--سجل-داخل-حاوية-nosql).
 
 ## ملفات (تخزين دائم فعليًا)
-```rin
+```kotlin
 writeFile("data.txt", "hello persistent world");
 print fileExists("data.txt");  // true
 print readFile("data.txt");    // hello persistent world
@@ -25,7 +25,7 @@ print fileExists("data.txt");  // false
 | `deleteFile(path)` | يحذف الملف. |
 
 ## ذاكرة تخزين مؤقت (Cache — **غير دائمة**، داخل العملية فقط)
-```rin
+```kotlin
 cacheSet("k1", "v1");        // بلا مهلة (ttl) => لا تنتهي صلاحيته أبدًا
 print cacheGet("k1");         // v1
 print cacheHas("k1");         // true

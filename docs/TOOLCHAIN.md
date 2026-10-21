@@ -102,7 +102,7 @@ my_app/
 
 Rin تبقى Dynamic-first، لكن النوع الاختياري يصبح مفيداً في المشاريع الكبيرة:
 
-```rin
+```kotlin
 let name: String = "ABOO";
 let age: Int = 19;
 let score: Number = 99.5;

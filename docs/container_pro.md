@@ -4,7 +4,7 @@ The Container Pro API extends the existing `container`, `Containers.Group`, `Vol
 
 ## Introspection
 
-```rin
+```kotlin
 container.info("users");
 container.fields("users");
 container.fieldNames("users");
@@ -17,7 +17,7 @@ container.current();
 
 ## Field management
 
-```rin
+```kotlin
 container.set("users", "name", "Ali");
 container.deleteField("users", "name");
 container.clearFields("users");
@@ -36,7 +36,7 @@ container.mergeFields("users", {age: 21}, false);
 
 ## Transactions
 
-```rin
+```kotlin
 container.transaction("Acc", fun() {
     container.set("Acc", "balance", container.get("Acc", "balance") - 50);
     container.set("Log", "last", "withdraw");
@@ -52,7 +52,7 @@ Unlike `container.restore`, which only overwrites fields, rollback also removes 
 
 ### `container.attempt` — the same, without try/catch
 
-```rin
+```kotlin
 let r = container.attempt(["Alice", "Bob"], fun() { ...; return amount; });
 if (r["ok"]) { print "moved " + r["value"]; } else { print r["error"]["message"]; }
 ```

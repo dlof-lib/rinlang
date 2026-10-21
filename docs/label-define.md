@@ -13,7 +13,7 @@
 
 `as` يكتب الحقل الأساسي لنوعه (label ← التسمية، define ← الوصف). كل القيم المكتوبة نصوص، وإلا `E0004`.
 
-```rin
+```kotlin
 label temp = 21 as "درجة الحرارة" about "قراءة المستشعر الداخلي" unit "°C";
 print temp.label;     // درجة الحرارة
 print temp.id;        // temp

@@ -15,7 +15,7 @@
 يستطيع أي مستخدم تسمية ملف أو حاوية `container` (ولغة Rin فيها أصلاً `@container=Name`)، لذلك الاسم وحده لا يدل على شيء.
 ملف الحاوية الحقيقي هو أي ملف `.rin` **أول سطر غير فارغ فيه توقيع**:
 
-```rin
+```kotlin
 //! rin:container web
 //! rin:container web persist=count,todos     // حفظ هذه المتغيرات بين التشغيلات
 //! rin:container web persist=*               // حفظ كل المتغيرات العامة
@@ -75,7 +75,7 @@
 ## مثال
 
 `container.rin`
-```rin
+```kotlin
 //! rin:container web persist=todos,nextId
 let todos = [];
 let nextId = 1;

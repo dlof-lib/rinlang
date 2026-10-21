@@ -108,7 +108,7 @@ Rin ──passkitRun / passkitRunSource──▶ .passkit        (inputs in, <re
 .passkit ──<import> / <run>──▶ another .passkit        (same scope / isolated call)
 ```
 
-```rin
+```kotlin
 @import "lib/passkitlang.og.rin";
 fun double(x) { return x * 2; }
 passkitRegister("double", double);
@@ -133,8 +133,7 @@ print passkitGet(r, "pw.strength"); // any variable inside the file by dotted pa
 
 ## Running
 
-```
-rin run.rin        # runs examples/hello.passkit (edit SOURCE_PATH)
+```kotlin
 rin test.rin       # language + file-linking tests
 ```
 

@@ -5,7 +5,7 @@
 عُقد موجودة أصلاً (لا تغيير في المفسّر ولا في الآلة الافتراضية).
 
 ## `each` — التكرار على أي شيء
-```rin
+```kotlin
 each x in [10, 20, 30] { print x; }                 // عناصر
 each ch in "hey" { print ch; }                       // حروف
 each x, i in ["a", "b"] { print i + ":" + x; }       // (عنصر، فهرس)
@@ -19,7 +19,7 @@ each n in nums where n > 1 reversed { print n; }     // بأي ترتيب
 كل تكرار له نطاقه الخاص (الإغلاقات تلتقط قيمة تلك الدورة). `break`/`continue`/`#done { }` تعمل كالمعتاد.
 
 ### أنماط التكرار المتقدمة (على `each` و`for` بلا أقواس)
-```rin
+```kotlin
 each c in [1, 2, 3, 4, 5] by 2 { print c; }          // مجموعات: [1,2] [3,4] [5]
 each c, n in "abcdef" by 3 { print n + ":" + c; }     // n = رقم المجموعة
 each w in [1, 2, 3, 4] window 2 { print w; }          // نوافذ متحركة: [1,2] [2,3] [3,4]
@@ -31,13 +31,13 @@ let sums = [each w in xs window 2 yield w[0] + w[1]]; // وفي التجميع �
 تعمل على المصفوفات والنصوص (غيرها = خطأ واضح)، والرقم يجب أن يكون عدداً صحيحاً موجباً.
 
 ### `for` بلا أقواس
-```rin
+```kotlin
 for x in [7, 8] { ... }      for i in 1 to 10 { ... }      for k, v in map { ... }
 ```
 مرادف كامل لـ `each`؛ الشكل القديم `for (let x in xs)` و`for (;;)` باقيان كما هما.
 
 ## `repeat` — عدد ثابت من التنفيذ
-```rin
+```kotlin
 repeat 3 { print "hi"; }
 repeat 5 as i { print i; }          // فهرس من 0
 repeat n times as k { ... }         // 'times' اختيارية
@@ -46,7 +46,7 @@ repeat (a + b) { ... }
 العدد يُقيَّم مرة واحدة ويجب أن يكون عدداً صحيحاً غير سالب (خطأ نحوي للقيمة الحرفية، وخطأ وقت التشغيل للمتغيّر).
 
 ## `i` الضمني — بلا `as i`
-```rin
+```kotlin
 repeat 3 { print i; }                       // 0 1 2
 each x in ["a", "b"] { print i + ":" + x; } // 0:a 1:b   (يعمل مع القواميس وby/window/zip... أيضاً)
 ```
@@ -55,7 +55,7 @@ each x in ["a", "b"] { print i + ":" + x; } // 0:a 1:b   (يعمل مع القو
 ولا إن عرّفه الجسم أو أسنده (`let i` · `i = ..` · `i++` · `+=`). أي سمِّ الفهرس صراحةً (`as k`) متى أردت اسماً آخر. لا يشمل تعابير `[each ... yield ...]` بعد.
 
 ### `y` الضمني — القيمة السابقة
-```rin
+```kotlin
 each x in [1, 4, 9, 16] { if (y != nil) { print x - y; } }          // فروق: 3 5 7
 let d = [each x in xs yield (y == nil ? 0 : x - y)];                // يعمل في التجميع
 print sum each x in xs yield (i > 0 ? x - y : 0);                   // وفي الاختزال
@@ -66,14 +66,14 @@ print sum each x in xs yield (i > 0 ? x - y : 0);                   // وفي ا
 حدّ: يُقرآن في الجسم/تعبير `yield` فقط — لا في شروط الترويسة (`where`/`skip`/`take`...) لأنها تُقيَّم قبل الدورة.
 
 ## `loop` — الحلقة الأبسط
-```rin
+```kotlin
 loop { ...; break when (done); }         // لا نهائية حتى break
 loop (cond) { ... }                      // مثل while
 loop until (cond) { ... }                // حتى يتحقق الشرط
 ```
 
 ## التسميات: `break name` و`continue name`
-```rin
+```kotlin
 outer: for (let i = 0; i < 3; i = i + 1) {
     each j in 1 to 3 {
         if (j == 2) { continue outer; }   // الدورة التالية من الحلقة الخارجية
@@ -85,7 +85,7 @@ outer: for (let i = 0; i < 3; i = i + 1) {
 تسمية غير موجودة = خطأ نحوي واضح.
 
 ## `limit N` — سقف أمان ضد الحلقات الجامحة
-```rin
+```kotlin
 while (cond) limit 1000000 { ... }
 each x in items limit 10000 { ... }
 loop limit 50 { ... }
@@ -94,7 +94,7 @@ loop limit 50 { ... }
 مفيد للشيفرة التي تعتمد على شرط خارجي (شبكة، إدخال مستخدم، حسابات تقاربية).
 
 ## `retry` — حلقة إعادة المحاولة
-```rin
+```kotlin
 retry 5 as attempt {
     callFlakyService();       // أي throw يعيد المحاولة
 }
@@ -102,7 +102,7 @@ retry 5 as attempt {
 يعيد تنفيذ الجسم حتى ينجح (بلا throw). بعد N محاولة يُعاد رمي الخطأ الأخير كما هو. `attempt` رقم المحاولة (يبدأ من 1).
 
 ## تجميع النتائج: `[each ... yield ...]`
-```rin
+```kotlin
 let squares = [each x in nums where x % 2 == 0 yield x * x];
 let table   = [each a in [1, 2] yield [each b in [10, 20] yield a * b]];
 ```
@@ -122,7 +122,7 @@ let table   = [each a in [1, 2] yield [each b in [10, 20] yield a * b]];
 كلها additive وتُفكَّك في المحلل (تعمل على المفسّر الشجري وRinVM وأندرويد والويب). اختبارات: `tests/loops/loops_v3_*.rin`.
 
 ## مرشّحات التيار (بالترتيب المكتوب، وتُجمَع مع `where`)
-```rin
+```kotlin
 each x in xs skip 1 take 3 { ... }          // تخطَّ 1 ثم خذ 3
 each x in xs where x % 2 == 0 take 2 { }    // أول عنصرين زوجيين
 each x in xs until x > 7 { ... }            // توقّف عند أول عنصر يحقق الشرط
@@ -131,7 +131,7 @@ each x in xs while x < 8 { ... }            // استمر ما دام الشرط
 `take`/`until`/`while` توقف الحلقة بـ `break` (فلا يُنفَّذ `nobreak` بعدها). `skip`/`take` يجب أن يكونا عدداً صحيحاً غير سالب.
 
 ## تحويل المصدر
-```rin
+```kotlin
 each x in xs sorted { }                      // تصاعدي (على نسخة؛ الأصل لا يتغير)
 each x in xs sorted desc { }                 // تنازلي
 each p in people sorted by p["age"] desc { } // بمفتاح (متغيّر واحد عادي)
@@ -143,7 +143,7 @@ each i in 10 downto 1 step 3 { }             // عدّ تنازلي (فارغ إ
 `sorted` يتطلب عناصر/مفاتيح كلها أرقام أو كلها نصوص. تعمل على المصفوفات والنصوص والقواميس (مفاتيح) والمجموعات.
 
 ## أنماط جديدة (واحد فقط في الحلقة، مع by/window/every/zip)
-```rin
+```kotlin
 each a, b in xs cross ys { }     // ضرب ديكارتي في حلقة واحدة (break يخرج من الكل)
 each a, b in xs pairs { }        // (xs[0],xs[1]) (xs[1],xs[2]) ...
 each x, i in xs from 1 { }       // الفهرس يبدأ من 1
@@ -151,13 +151,13 @@ each x, i in xs from 1 { }       // الفهرس يبدأ من 1
 
 ## `nobreak { }` — مثل for..else
 اسم مقروء لـ `#done { }`: يُنفَّذ فقط إن انتهت الحلقة دون `break`. يعمل مع كل أنواع الحلقات.
-```rin
+```kotlin
 each n in nums { if (n % 2 == 1) { break; } } nobreak { print "كلها زوجية"; }
 ```
 
 ## تعابير الاختزال
 `sum` `product` `count` `avg` `min` `max` `any` `all` `first` `last` ثم `each ... [where ..] [yield e]`:
-```rin
+```kotlin
 sum each x in xs where x > 1 yield x * x
 count each x in xs where x == 1            // yield اختياري
 max each w in words yield len(w)
@@ -169,7 +169,7 @@ avg each x in [] yield x                   // nil إن كانت فارغة
 `yield` اختياري حيث يكون العنصر نفسه هو القيمة (مع متغيّر واحد). كلمات سياقية: تبقى أسماء عادية.
 
 ## قاموس مفهوم
-```rin
+```kotlin
 let lens = {each w in words yield w : len(w)};
 let odd  = {each i in 1 to 6 where i % 2 == 1 yield i : "odd"};
 ```
@@ -179,7 +179,7 @@ let odd  = {each i in 1 to 6 where i % 2 == 1 yield i : "odd"};
 
 # إضافات من تحديث Loops (distinct وضرب ديكارتي متعدد المصادر)
 
-```rin
+```kotlin
 each n in [3, 1, 3, 2, 1] distinct { print n; }            // أول ظهور لكل قيمة (1 و"1" مختلفان)
 each w in words distinct on (w[0]) { print w; }             // بمفتاح؛ إلزامي مع أنماط التفكيك
 each n in xs where n > 5 distinct take 3 { ... }            // بالترتيب المكتوب مع where/skip/take
@@ -193,7 +193,7 @@ each a in "ab", b in "cd", c in [1, 2] where c > 1 { ... }  // break/continue/wh
 
 ## Rin For+ — حلقة `for` على طراز Rin
 حلقة `for` القياسية بقيت كما هي، وأُضيف إليها:
-```rin
+```kotlin
 for (let i = 0; i < 10; i++) { ... }              // i++  /  i--
 for (let i = 10; i > 0; i -= 3) { ... }           // += -= *= %=  (الكتابة ملتصقة: ‎+= لا ‎+ =)
 for let i = 0; i < n; i++ { ... }                 // بلا أقواس (الجسم كتلة { })

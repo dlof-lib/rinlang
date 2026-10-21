@@ -15,7 +15,7 @@
 | `indsin_object.html` | `@view.Icon` يرسم SVG حقيقياً في معاينة الويب |
 
 ## من Rin
-```rin
+```kotlin
 @import "lib/indsinicons.og.rin";
 print ic_svg("home", nil);
 print ic_svg("heart", {"size": 32, "color": "#e11d48", "filled": true});

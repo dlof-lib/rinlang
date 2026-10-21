@@ -34,7 +34,7 @@ rin_run tests/verification/extra_natives2.rin
 | `sec.rot13(s)` | ROT13 الكلاسيكي |
 | `sec.passwordStrength(s)` | `{score:0..4, length, hasUpper, hasLower, hasDigit, hasSymbol, feedback:[...]}` |
 
-```rin
+```kotlin
 let token = sec.randomToken(16);
 let sig = sec.hmacSha256("shared-secret", "payload");
 assert(sec.constantTimeEqual(sig, expectedSig));
@@ -55,7 +55,7 @@ assert(sec.constantTimeEqual(sig, expectedSig));
 | `fs.extensionStats(path, recursive?)` | `{".ext": عدد, ...}` |
 | `fs.find(path, namePattern, recursive?)` | مسارات الملفات التي يطابق **اسمها** نمط regex |
 
-```rin
+```kotlin
 let bigLogs = fs.find("logs", "\\.log$", true);
 for (let p of bigLogs) {
     let hits = fs.grep(p, "i:error");
@@ -78,7 +78,7 @@ for (let p of bigLogs) {
 | `net.cidrContains(cidr, ip)` | هل عنوان IPv4 ضمن مدى CIDR (مثل `"10.0.0.0/8"`) |
 | `net.isPrivateIp(ip)` | عناوين خاصة/loopback/link-local (RFC 1918 + `127.0.0.0/8` + `169.254.0.0/16`) |
 
-```rin
+```kotlin
 let u = net.parseUrl("https://api.example.com:8443/v1/users?active=true");
 print u.host;                              // api.example.com
 print net.isPrivateIp("192.168.1.5");      // true
@@ -130,7 +130,7 @@ print net.cidrContains("10.0.0.0/8", "10.2.3.4"); // true
 (`{network, broadcast, netmask, first, last, prefix, total, hosts}`)، `net.httpStatusText(code)`،
 `net.portService(443)` → `"https"` / `net.servicePort("ssh")` → `22`، `net.parseHeaders(text)`، `net.basicAuth(user, pass)`.
 
-```rin
+```kotlin
 if (net.isOnline()) {
     let r = net.fetch("https://api.github.com/repos/torvalds/linux",
                       {headers: {"User-Agent": "rin"}, retries: 2});
@@ -160,7 +160,7 @@ if (net.isOnline()) {
 | `log.levelCounts(lines)` | `{FATAL, ERROR, WARN, INFO, DEBUG, TRACE, OTHER}` — عدّ حسب أول كلمة مستوى موجودة (case-insensitive) |
 | `log.detectSpikes(counts, factor?)` | فهارس عناصر مصفوفة أرقام تتجاوز `متوسط × factor` (افتراضي `2.0`) — كشف ارتفاعات بسيط |
 
-```rin
+```kotlin
 let lines = log.parseLines(readFile("access.log"));
 let byStatus = log.countBy(lines, fun(l) {
     let rec = log.parseCommonLog(l);
@@ -180,7 +180,7 @@ print log.topN(byStatus, 5);
 | `automation.sequence([fn1, fn2, ...])` | يشغّل الدوال بالترتيب ويجمع نتائجها في مصفوفة؛ يتوقف عند أول خطأ |
 | `automation.sleepMs(ms)` | إيقاف فعلي محدود السقف (60000 مللي‑ثانية كحد أقصى) |
 
-```rin
+```kotlin
 let data = automation.retry(fun() { return fetchSomething(); }, 3, 500);
 let pipeline = automation.chain(rawInput, [normalize, validate, save]);
 ```
@@ -202,7 +202,7 @@ let pipeline = automation.chain(rawInput, [normalize, validate, save]);
 | `container.exportToFile(name, path)` | يكتب حقول الحاوية JSON فعلياً على القرص (عبر `container.toJson` + الكتابة المعزولة) |
 | `container.importFromFile(name, path, overwrite?)` | يقرأ JSON من القرص ويدمجه داخل حاوية موجودة (عبر `container.fromJson`) |
 
-```rin
+```kotlin
 spawn("host", "srv1");
 setField("srv1", "cpu", 10);
 let before = container.snapshot("srv1");

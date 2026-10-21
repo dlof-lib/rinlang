@@ -20,7 +20,7 @@
 `@element` يعمل الآن **كجذر شاشة مستقل** أيضًا (وليس فقط متداخلاً داخل `@view`/`@loop`)
 — انظر قسم "دمج @element بـ indsin" في [`indsin.md`](../indsin.md).
 
-```rin
+```kotlin
 @element.button=run
   text="Run";
 .end/element
@@ -120,7 +120,7 @@ margin_left, margin_top, margin_right, margin_bottom, screen
 
 ## مثال حقيقي (مُتحقَّق منه: يبني ويُصمَّم فعليًا)
 
-```rin
+```kotlin
 @container=app
     @element.button=run
         text="Run";

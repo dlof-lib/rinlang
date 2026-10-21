@@ -21,7 +21,7 @@
 الأنواع **تتركّب**: `gauge hp = 50 within 0 to 100 keep 5;` مقياس بذاكرة، و`bell` يعمل على أي متغيّر حتى `let`.
 
 ## `stone` — ثابت
-```rin
+```kotlin
 stone PI = 3.14159;
 PI = 3;                    // error[E0043]
 stone cfg = {"mode": "dark"};
@@ -30,7 +30,7 @@ cfg["mode"] = "light";     // error[E0043] — يحمي الربط والكتا�
 > لا يمنع دوال تعدّل في المكان مثل `push()`.
 
 ## `gauge` — مقياس
-```rin
+```kotlin
 gauge hp = 80 within 0 to 100;      // clamp (الافتراضي)
 hp = hp + 50;  print hp;            // 100
 gauge ammo = 5 within 0 to 10 strict;
@@ -41,7 +41,7 @@ angle = angle + 30; print angle;    // 20   (النطاق نصف مفتوح [lo,
 يقبل أرقامًا فقط. خصائص: `x.min x.max x.mode x.fill` (0..1) `x.full x.empty`.
 
 ## `tape` — شريط ذاكرة
-```rin
+```kotlin
 tape score = 0 keep 3;          // الافتراضي keep 10
 score = 10; score = 20; score = 30; score = 40;
 print score.past;               // [10, 20, 30]
@@ -54,7 +54,7 @@ redo score;      print score;   // 20
 - `undo`/`redo` بلا شيء متاح: لا أثر (اسأل `canUndo` قبلها).
 
 ## `lens` — مشتق
-```rin
+```kotlin
 let price = 10; let qty = 3;
 lens total = price * qty;
 qty = 5; print total;           // 50
@@ -64,7 +64,7 @@ lens a = b + 1; lens b = a + 1; print a;  // error[E0045]: يعتمد على ن�
 يُحسب من جديد عند كل قراءة داخل النطاق الذي صُرِّح فيه (بلا تخزين مؤقت).
 
 ## `fuse` — فتيل
-```rin
+```kotlin
 fuse otp = "4821" burns 2;
 print otp; print otp; print otp;   // 4821  4821  nil
 rearm otp;                          // يعود للقيمة المسلَّحة
@@ -73,7 +73,7 @@ otp = "9999";                       // إسناد جديد يعيد التسلي
 خصائص: `x.left x.burnt`. الافتراضي `burns 1`.
 
 ## `bell` — جرس
-```rin
+```kotlin
 let hp = 100;
 bell hp (old, new) { print old + " -> " + new; }
 hp = 90; hp = 90;       // يرنّ مرة واحدة (التغيّر الفعلي فقط)
@@ -83,7 +83,7 @@ unbell hp;              // يزيل كل الأجراس
 جرس يعيد تفعيل نفسه بلا نهاية يوقفه `E0047` عند عمق 16.
 
 ## `trial` — تجربة
-```rin
+```kotlin
 let a = 100; let b = 0;
 trial { a = a - 30; b = b + 30; abort; }   // يتراجع كل شيء
 trial { a = 0; fail(); } else { print "rolled back"; }

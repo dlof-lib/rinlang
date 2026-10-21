@@ -23,7 +23,7 @@
 
 ## `@element`
 
-```rin
+```kotlin
 @element.<kind>=<name>
     attribute = value;
     ...
@@ -44,7 +44,7 @@
 
 ## `@loop`
 
-```rin
+```kotlin
 @loop=<name>              // النوع الافتراضي: Column
 @loop.<kind>=<name>        // أو حدِّد نوع تخطيط الشاشة صراحةً (مثلًا Column/Row/Stack)
     width = 390;
@@ -78,7 +78,7 @@
 
 ## `@container`
 
-```rin
+```kotlin
 @container=<name>              // النوع الافتراضي: PLAIN
 @container.<kind>=<name>        // أو نوع حاوية متخصِّص (جدول أدناه)
     // حالة قابلة للمراقبة: أي إسناد لاحق لها يُطلق تلقائيًا on update(prev) إن وُجدت
@@ -147,7 +147,7 @@
 
 ## مثال كامل مُتحقَّق منه (الفصل الثلاثي كاملاً)
 
-```rin
+```kotlin
 @container=app
     @element.button=saveBtn
         text = "حفظ";

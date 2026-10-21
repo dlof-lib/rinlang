@@ -22,7 +22,7 @@
 <p rin-show="isHigh">…</p>               <!-- يظهر عندما يكون المتغيّر صحيحاً -->
 ```
 
-```rin
+```kotlin
 let count = 0;
 fun add() { count = count + 1; }
 ```

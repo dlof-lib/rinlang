@@ -3,3 +3,11 @@ signing/release.keystore -text
 signing/*.keystore binary
 # Keep credentials as LF only
 signing/keystore-credentials.txt text eol=lf
+
+# >>> rin-highlight (managed)
+*.rin linguist-language=Kotlin linguist-detectable
+*.og.rin linguist-language=Kotlin linguist-detectable
+app/src/main/cpp/third_party/** linguist-vendored
+app/src/main/cpp/rin_stdlib_libs.h linguist-generated
+docs/**/*.html linguist-documentation
+# <<< rin-highlight

@@ -65,7 +65,7 @@ edition = "2026"
 [dependencies]
 ```
 `src/main.rin` الناتج:
-```rin
+```kotlin
 // نقطة الدخول - myproj
 print "Hello from Rin!";
 ```

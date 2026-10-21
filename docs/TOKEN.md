@@ -22,7 +22,7 @@
 | `tokenIsKeyword(word)` | هل الكلمة محجوزة |
 
 ## أمثلة
-```rin
+```kotlin
 let src = "let x = 42;\nprint x + 1;";
 print tokenCount(src);                         // 10
 print tokenList(src, {only: "keyword"});      // let, print

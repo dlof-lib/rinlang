@@ -5,13 +5,13 @@
 `kind` (تُقرَأ عبر `boatKind(x)`) يُحدِّد نوعها.
 
 ## القيم المنطقية الثابتة
-```rin
+```kotlin
 print yes, no, none;              // true false nil
 print isYes(yes), isNo(no), isNone(none); // true true true
 ```
 
 ## `list` / `ls` / `groupTm` — مصفوفة قابلة للتعديل
-```rin
+```kotlin
 let a = list([1, 2, 3]);
 print boatKind(a), listLen(a), listGet(a, 1); // list 3 2
 listPush(a, 4);
@@ -20,7 +20,7 @@ print listToArray(a); // [1, 2, 3, 4]
 `ls(...)` و`groupTm(...)` مرادفان بنفس الشكل (`boatKind` يُرجع `"list"` لكل الثلاثة).
 
 ## `tuple` — ثابتة (immutable) فعليًا
-```rin
+```kotlin
 let t = tuple([10, 20, 30]);
 print boatKind(t), tupleLen(t), tupleGet(t, 2); // tuple 3 30
 tupleSet(t, 0, 99); // لا يُعدِّلها -- يطبع تحذيرًا فقط ويترك القيمة كما هي
@@ -28,7 +28,7 @@ print tupleToArray(t); // [10, 20, 30]  -- لم يتغيّر شيء
 ```
 
 ## `dict`
-```rin
+```kotlin
 let d = dict([["name", "Rin"], ["version", 1]]);
 print boatKind(d), dictGet(d, "name"), dictHas(d, "version"); // dict Rin true
 dictSet(d, "extra", true);
@@ -38,7 +38,7 @@ print dictKeys(d), dictValues(d); // ["name","version","extra"] ["Rin",1,true]
 > ملاحظة: يوجد الآن نوع أصلي `Set` في اللغة نفسها (أسرع، مع معاملات `+ * -`) — انظر [set.md](./set.md). مكتبة boat أدناه تبقى كما هي.
 
 ## `set` — بلا تكرار، مع عمليات مجموعات
-```rin
+```kotlin
 let s1 = set([1, 2, 2, 3]);
 print boatKind(s1), setLen(s1), setHas(s1, 2); // set 3 true  -- التكرار أُزيل تلقائيًا
 setAdd(s1, 5);
@@ -51,7 +51,7 @@ print setIntersect(s1, s2)["value"]; // [3, 5]
 ```
 
 ## `tmap` — قاموس بعنوان (Titled Map)
-```rin
+```kotlin
 let tm = tmap("Users Table", [["u1", "Ali"], ["u2", "Sara"]]);
 print boatKind(tm), tmapTitle(tm), tmapGet(tm, "u1"); // tmap Users Table Ali
 tmapSet(tm, "u3", "Omar");
@@ -59,7 +59,7 @@ print tmapEntries(tm); // {"u1": "Ali", "u2": "Sara", "u3": "Omar"}
 ```
 
 ## `window` / `body` / `windowLink` — نافذة تطبيق منطقية
-```rin
+```kotlin
 let win = window("Home", 1080, 720, "#101018", ["Cairo", "Inter"]);
 print windowName(win), windowWidth(win), windowLength(win), windowBg(win), windowFonts(win);
 body(win, ["Header", "Content"]);
@@ -72,7 +72,7 @@ print windowContainer(win); // usersContainer
 [`indsin.md`](../indsin.md)) رغم تشابه المفردات (نافذة/جسم/خط).
 
 ## نمط الاستدعاء غير المباشر `group["type"]`
-```rin
+```kotlin
 let makeList = group["tm"];      // group قاموس جاهز يربط اسم النوع بدالة الإنشاء
 let viaGroup = makeList([7, 7, 8]);
 print boatKind(viaGroup), listToArray(viaGroup); // list [7, 7, 8]

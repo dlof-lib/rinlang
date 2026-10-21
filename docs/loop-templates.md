@@ -9,7 +9,7 @@
 
 ## 1) قالب ترويسة
 القالب = ترويسة حلقة تنتهي بـ `;`، وجسم الحلقة تكتبه عند الاستعمال:
-```rin
+```kotlin
 @tmpl evens(xs) each x in xs where x % 2 == 0;
 
 @evens([1, 2, 3, 4, 5, 6]) { print x; }      // 2 4 6
@@ -18,7 +18,7 @@
 ```
 
 ## 2) معاملات وقيم افتراضية
-```rin
+```kotlin
 @tmpl top(xs, k = 2) each v in xs sorted desc take k;
 @top(scores) { print v; }           // k = 2
 @top(scores, 5) as s { print s; }
@@ -27,7 +27,7 @@
 وغيره يُغلَّف بأقواس تلقائياً إن كان أكثر من توكن (فلا يتغيّر ترتيب العمليات).
 
 ## 3) جسم افتراضي
-```rin
+```kotlin
 @tmpl show(xs) each item in xs { print "item " + item; }
 @show(["a", "b"]);                  // بلا جسم → يُستعمل الافتراضي
 @show(["a"]) { print "mine"; }      // جسمك يحلّ محلّه
@@ -36,14 +36,14 @@
 ## 4) `as` — تسمية متغيّرات الحلقة
 تُستنتج المتغيّرات القابلة للتسمية تلقائياً من الترويسة: `each x, i in` ← `x, i` · `each x in a, y in b` ← `x, y` ·
 `repeat n as i` ← `i` · `retry n as a` ← `a`.
-```rin
+```kotlin
 @tmpl numbered(xs) each x, i in xs from 1;
 @numbered(names) as name, no { print no + ". " + name; }
 ```
 يمكن تسمية عدد أقل من المتغيّرات، لا أكثر (خطأ واضح يعرض الأسماء المتاحة).
 
 ## 5) كل أنواع الحلقات
-```rin
+```kotlin
 @tmpl times(n) repeat n as i;           @times(3) { print i; }
 @tmpl attempts(n) retry n as a;         @attempts(5) { callFlaky(); }
 @tmpl up(n) for (let i = 0; i < n; i++) limit 1000;
@@ -52,7 +52,7 @@ outer: @evens(xs) { ... continue outer; ... }   // التسميات تعمل
 ```
 
 ## 6) داخل التعابير
-```rin
+```kotlin
 [@evens(xs) yield x * x]            sum @evens(xs) yield x
 count @evens(1 to 9)                {@evens(xs) yield x : x * x}
 ```
@@ -60,14 +60,14 @@ count @evens(1 to 9)                {@evens(xs) yield x : x * x}
 ## 7) قوالب الكتلة و`@body`
 حين يلزم أكثر من ترويسة (حلقات متداخلة، تغليف) اكتب القالب بين `{ }` وضع `@body` مكان جسم المستدعي،
 واكشف المتغيّرات بـ `as`:
-```rin
+```kotlin
 @tmpl grid(r, c) as i, j { each i in 1 to r { each j in 1 to c { @body } } }
 @grid(2, 3) { print i + "," + j; }
 @grid(4, 4) as row, col { if (row == col) { print row; } }
 ```
 
 ## 8) قالب يستعمل قالباً آخر
-```rin
+```kotlin
 @tmpl evenSquares(xs) @evens(xs) take 2;
 ```
 

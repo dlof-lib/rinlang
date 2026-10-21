@@ -10,14 +10,14 @@
 | `lib/rinml.og.rin` | `nd_` `ml_` | جبر خطي، نماذج تعلّم آلة، شبكات عصبية، مقاييس |
 | `lib/rinai.og.rin` | `ai_` | مساحات عمل داخل الحاويات، AutoML، أنابيب، جسر HTTP |
 
-```rin
+```kotlin
 @import "lib/rinai.og.rin";   // يستورد rindf و rinml تلقائياً
 ```
 شغّل الأمثلة من جذر المستودع: `rin run examples/ai/ai_container_demo.rin`
 والاختبارات: `rin run tests/rinai_tests.rin`
 
 ## مثال سريع
-```rin
+```kotlin
 let df = df_read_csv("data.csv");
 df_print(df_describe(df));
 let res = ai_auto_classify(df_dropna(df), "label", ["f1", "f2"], 1);

@@ -2,7 +2,7 @@
 
 `@import "lib/rinplot.og.rin";` (يستورد rinstat) — بادئة `pl_`. مشهد مجرّد واحد يُخرَج إلى **SVG** (نص، يدعم العربية) و**PNG** (دوال `img*` الأصلية). الألوان بـ `colorMix/colorParse/colorTextOn`، والتنسيق بـ `numberFormat/numberRound`.
 
-```rin
+```kotlin
 let fig = pl_figure(960, 640, 1, 2, "عنوان");     // عرض، ارتفاع، صفوف، أعمدة
 let ax  = pl_axes(fig, 0, 0);                      // أو pl_axes_span(fig, r, c, rs, cs)
 pl_regplot(ax, xs, ys, {"predband": true});

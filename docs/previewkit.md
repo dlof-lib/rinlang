@@ -3,7 +3,7 @@
 مكتبة Rin خالصة (`lib/previewkit.og.rin`، مضمّنة في كل البنى) تحوّل ملفاً إلى **صفحة HTML كاملة** تُعرض في WebView أو المتصفح،
 وتُعيد توليدها تلقائياً عند أي تعديل. كل ما فيها مكتوب بـ Rin فوق natives موجودة، مع native واحد جديد: `zlibInflate`.
 
-```rin
+```kotlin
 @import "lib/previewkit.og.rin";
 
 pvRun("notes.md", {});                                   // يكتب notes.md.preview.html ويعيد الملخص

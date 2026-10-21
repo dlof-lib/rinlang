@@ -19,7 +19,7 @@
 
 الكشف يعمل داخل أي تعبير (let / print / if / return / lambda / match ...).
 
-```rin
+```kotlin
 @make.(poster)
     kind task;
     use image; use ocr; use io;
@@ -57,7 +57,7 @@
 `paplay/aplay/afplay` لا تقرأ الروابط — لن تُختار تلقائياً لمصدر http.
 
 ## make.api — جلب البيانات
-```rin
+```kotlin
 let r = make.api("https://api.example.com/users", {
     "query":   {"page": 2, "q": "علي"},          // ?page=2&q=%D8%B9... تلقائياً
     "auth":    "TOKEN",                           // Bearer | {"basic":"u:p"} | {"key":"K","header":"X-API-Key"}
@@ -89,7 +89,7 @@ print r.ok; print r.data; print r.attempts; print r.cached;
 الصور تُعرَّف من **البايتات** لا الامتداد، فملف SVG/MVG متنكّر بامتداد صورة يُرفض.
 
 ## make.ocr(src, opts?) = make.image.text
-```rin
+```kotlin
 let o = make.ocr("scan.png", {"lang": "ara+eng", "enhance": true, "words": true});
 print o.text; print o.confidence; print o.lines;
 ```
@@ -113,7 +113,7 @@ ML Kit **لا يدعم العربية** إطلاقاً (لاتيني/صيني/د
 2. `assets/tessdata/` داخل الـ APK — ضمّنها وقت البناء بـ `scripts/fetch_tessdata.sh` (يعمل بعدها بلا إنترنت)
 3. تنزيل مرة واحدة من tessdata_fast إن مرّرت `download: true`
 
-```rin
+```kotlin
 let o = make.ocr("receipt.png", {"lang": "ara+eng", "enhance": true, "download": true});
 print o.text; print o.backend;   // android.tesseract
 ```

@@ -148,7 +148,7 @@ rin_run tests/channel47_rin_test.rin                                        # 57
 - **الدمج**: القواميس تُدمج بعمق؛ المصفوفات والجداول والقيم تُستبدل كاملة.
 
 ## داخل Rin: `lib/channel47.og.rin`
-```rin
+```kotlin
 @import "lib/channel47.og.rin";
 let r = c47_try(readFile("package.ch47"));
 if (r.ok) { print c47_get(r.value, "deps", []); } else { print r.error.code + " @ " + str(r.error.line); }

@@ -6,7 +6,7 @@
 
 `lib/indsinweb.og.rin` مكتبة مكتوبة بلغة Rin فقط (مضمَّنة في التطبيق، فلا تحتاج ملفًا على القرص):
 
-```rin
+```kotlin
 @import "lib/indsinweb.og.rin";
 ```
 
@@ -15,7 +15,7 @@
 
 ## مثال سريع
 
-```rin
+```kotlin
 @import "lib/indsinweb.og.rin";
 
 @container=Demo
@@ -66,7 +66,7 @@
 
 شاشة جاهزة تعرض أي رابط حسب نوعه قبل فتحه، داخل عنصر `WebView`:
 
-```rin
+```kotlin
 @view.WebView=Screen
     html=iwLinkScreen("https://youtu.be/dQw4w9WgXcQ", {"lang": "ar", "theme": "dark"});
     height=340;
@@ -104,7 +104,7 @@
 
 ## مثال: متصفح مصغّر
 
-```rin
+```kotlin
 let nav = iwNavNew();
 let r = iwResolveInput(userInput, {"engine": "duckduckgo"});   // رابط أو بحث
 if (r["kind"] == "url" or r["kind"] == "search") { iwNavVisit(nav, r["url"]); }

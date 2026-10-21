@@ -15,7 +15,7 @@ All are embedded, so imports work even without a `lib/` folder.
 | `lib/passkitdb.og.rin` | `pd` | database layer over RCSQL doc containers, encrypted fields, security models, container linking |
 | `lib/passkitlang.og.rin` | `passkit*` | the `<passkit>` tag language as a library (generated from `examples/customlang/passkit/`) |
 
-```rin
+```kotlin
 @import "lib/passkit.og.rin";        // pk*
 @import "lib/passkitcrypt.og.rin";   // pc*
 @import "lib/passkitdb.og.rin";      // pd*

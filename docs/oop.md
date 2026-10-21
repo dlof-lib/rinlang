@@ -12,7 +12,7 @@
 
 ## 1) `interface` — عقد بتواقيع فقط
 
-```rin
+```kotlin
 interface Shape { fun area(); fun name(); }
 interface Solid extends Shape { fun volume(); }   // واجهة ترث واجهات
 
@@ -30,7 +30,7 @@ class Square implements Shape {
 
 ## 2) `trait` — كود قابل لإعادة الاستخدام
 
-```rin
+```kotlin
 trait Loggable {
     let history = [];
     fun log(msg) { push(self.history, msg); }
@@ -44,7 +44,7 @@ class Service uses Loggable, Timestamps { ... }
 
 ## 3) `abstract` / `final` / `override`
 
-```rin
+```kotlin
 abstract class Account {
     abstract fun fee();                 // بلا جسم؛ يجب أن ينفّذها كل صنف فرعي حقيقي
     final fun id() { return 1; }        // لا يجوز إعادة تعريفها
@@ -62,7 +62,7 @@ final class Leaf extends Account { override fun fee() { return 0; } }  // لا �
 
 ## 4) `static`
 
-```rin
+```kotlin
 class Counter {
     static let total = 0;
     static fun make() { return Counter(); }
@@ -79,7 +79,7 @@ print Counter.total;       // 1
 
 ## 5) الصلاحيات: `public` (افتراضي) / `private` / `protected`
 
-```rin
+```kotlin
 class Account {
     private let balance = 0;          // داخل Account فقط
     protected let owner = "";         // داخل Account وأبنائه
@@ -94,7 +94,7 @@ class Account {
 
 ## 6) الخصائص `get` / `set`
 
-```rin
+```kotlin
 class Temp {
     let _c = 0;
     get f() { return self._c * 9 / 5 + 32; }
@@ -125,7 +125,7 @@ print t.c;      // 100
 
 ## 8) `instanceof` وفحص الأنواع
 
-```rin
+```kotlin
 if (shape instanceof Shape) { ... }        // صنف أب، واجهة، أو سمة
 fun total(s: Shape): Number { ... }        // وسيط بنوع واجهة يعمل أيضاً
 ```
@@ -178,7 +178,7 @@ fun total(s: Shape): Number { ... }        // وسيط بنوع واجهة يع�
 ## 11) دوال الربط (binding)
 
 ### أ) ربط الدوال بكائن
-```rin
+```kotlin
 let inc = oop.bind(counter, "inc");     // دالة مربوطة: self ثابتة = counter
 inc(); inc();                           // counter.n == 2 (تصلح callback مثل onClick)
 
@@ -194,7 +194,7 @@ oop.isBound(fn)   oop.boundTo(fn)
 `oop.bind(obj, "m")` **تحترم** `private`/`protected` (تُعامَل كنداء من خارج الصنف).
 
 ### ب) تطبيق جزئي وCurry
-```rin
+```kotlin
 fun vol(a, b, c) { return a * b * c; }
 oop.partial(vol, 2)(3, 4);              // 24   — تثبيت الوسائط الأولى
 oop.curry(vol)(2)(3)(4);                // 24   — وسيط واحد لكل نداء
@@ -202,7 +202,7 @@ oop.curry(vol)(2)(3)(4);                // 24   — وسيط واحد لكل ن�
 تعمل أيضاً على الدوال المربوطة: `oop.partial(counter.add, 5)(6)`.
 
 ### ج) ربط الخصائص (Data binding)
-```rin
+```kotlin
 let id = oop.observe(model, "name", fun(newV, oldV, obj, field) { ... });  // "*" = أي حقل
 oop.bindProperty(src, "v", dst, "w");                       // اتجاه واحد + مزامنة فورية
 oop.bindProperty(src, "v", dst, "label", fun(x) { return "v=" + str(x); }); // مع تحويل
@@ -216,7 +216,7 @@ oop.unobserve(id)   oop.unobserveAll(obj)   oop.observers(obj)
 - كلفة صفر على الكتابة ما دام لم تُسجَّل أي مراقبة.
 
 ### د) الأحداث
-```rin
+```kotlin
 oop.on(btn, "click", fun(x, y) { ... });     // -> id
 oop.once(btn, "click", fun() { ... });       // يُزال بعد أول تشغيل
 oop.emit(btn, "click", 1, 2);                // -> عدد المستمعين المستدعَين
@@ -233,7 +233,7 @@ oop.listeners(btn, "click")   oop.off(btn, "click")   oop.off(btn)   // كل أ�
 [`tests/tools/test_indsin_oop_bind.cpp`](../tests/tools/test_indsin_oop_bind.cpp) (جلسة Indsin حقيقية + tap).
 
 ### أ) الحاويات
-```rin
+```kotlin
 @container=Store
     state counter = 0;
     on update(prev) { print "changed from " + str(prev); }
@@ -253,7 +253,7 @@ oop.bindContainerTwoWay(m, "n", "Store", "counter");    // اتجاهان
 ### ب) Indsin (خلايا Warp)
 خلايا `warp name = ...;` هي متغيّرات عامة في مفسّر الجلسة، وIndsin ينقلها إلى المفسّر قبل كل معالج
 (`onTap` وغيره) ويقرؤها بعده. الربط يستفيد من هذا مباشرة:
-```rin
+```kotlin
 warp count = 0;
 let model = Model();
 oop.bindWarpTwoWay(model, "n", "count");          // اتجاهان — الأنسب للواجهات التفاعلية
@@ -271,7 +271,7 @@ fun inc() { model.n = model.n + 1; }              // معالج عادي: الخ
   `nil` تُعامَل كنص فارغ في الاتجاهين. الحاويات تقبل أي قيمة.
 
 ### ج) الخيارات المشتركة `opts`
-```rin
+```kotlin
 oop.bindContainer(m, "name", "Store", "title", {transform: fun(v) { return "Hi " + v; }, init: "object"});
 ```
 | الخيار | المعنى |

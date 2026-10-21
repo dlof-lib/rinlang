@@ -4,7 +4,7 @@
 
 Rin supports compact key-condition forms. Each one is pure syntax sugar over the normal `IfStmt` / `WhileStmt` runtime, so they behave exactly like their long forms (including `break`/`continue`, `#done`, scoping and short-circuiting).
 
-```rin
+```kotlin
 =if=(score >= 80) {
     print "passed";
 }
@@ -40,7 +40,7 @@ Rin supports compact key-condition forms. Each one is pure syntax sugar over the
 
 Any branching form accepts an optional tail: a plain `else`, `=else=`, or any number of `=elif=` links.
 
-```rin
+```kotlin
 =if=(score > 95) { print "A+"; }
 =elif=(score > 80) { print "B"; }
 =elif=(score > 60) { print "C"; }
@@ -51,7 +51,7 @@ Any branching form accepts an optional tail: a plain `else`, `=else=`, or any nu
 
 ### Loops
 
-```rin
+```kotlin
 let i = 0;
 =while=(i < 3) { i = i + 1; }
 =until=(i == 0) { i = i - 1; }
@@ -59,7 +59,7 @@ let i = 0;
 
 ### Several conditions at once
 
-```rin
+```kotlin
 =all=(age >= 18, has(roles, "admin"), present(token)) { grant(); }
 =any=(isNil(a), isNil(b)) { print "something is missing"; }
 =none=(failed, timedOut) { print "clean run"; }
@@ -73,7 +73,7 @@ The same condition vocabulary works inside the constructs that need to decide so
 
 Append `when (c)`, `unless (c)` or `if (c)` before the `;`. Sugar for wrapping the statement in an `if`.
 
-```rin
+```kotlin
 fun label(n) {
     return "neg"  when (n < 0);
     return "zero" if (n == 0);
@@ -94,7 +94,7 @@ let r = goal { achieve found when (isTrue(ok)); };
 
 ### `match` guards
 
-```rin
+```kotlin
 match (level) {
     case Level.High when (vip)     { print "high-vip"; }
     case Level.High                { print "high"; }
@@ -107,7 +107,7 @@ A guarded `case` only runs when its value matches **and** the guard is truthy; o
 
 ### Subject-less `match`: a readable if / else-if chain
 
-```rin
+```kotlin
 match {
     case (score >= 90)            { print "A"; }
     case (between(score, 80, 89)) { print "B"; }
@@ -126,7 +126,7 @@ Every helper above is an ordinary function, so it can be used anywhere an expres
 
 `KEY_TERMS` is runtime vocabulary metadata. It does not change the global lexer keyword table.
 
-```rin
+```kotlin
 .KEY_TERMS = {
     "when": "if",
     "unless": "if",

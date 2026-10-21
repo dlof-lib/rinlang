@@ -21,7 +21,7 @@
 
 خيارات `number`: `default`، `int` (عدد صحيح فقط)، `min`/`max` (+`clamp`)، `base` (2..36)، `exact` (يرفض عدداً صحيحاً يتجاوز 2^53)، `special` (يقبل NaN/inf)، `decimal`/`group` (للصيغ الأوروبية)، `percent`.
 
-```rin
+```kotlin
 print number("١٢٣٫٥");                                   // 123.5
 print number("1.234,5", {decimal: ",", group: "."});     // 1234.5
 print number("abc", 0);                                  // 0
@@ -37,7 +37,7 @@ print numberCheck("1,5").ok;                             // false (لا يُقر
 | `numberPercent(part, whole[, places])` | النسبة المئوية (افتراضياً خانتان) |
 | `numberChange(from, to[, places])` | نسبة التغيّر المئوية |
 
-```rin
+```kotlin
 print numberFormat(1234567.891, {decimals: 2});          // 1,234,567.89
 print numberFormat(1500000, {compact: true});            // 1.5M
 print numberFormat(3200000, {compact: "ar"});            // 3.2 مليون

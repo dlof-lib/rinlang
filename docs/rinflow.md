@@ -19,7 +19,7 @@ auto res = interp.runProgramAsFlow(program, flow::FlowRunOptions{},
 - `metrics` — عدد العقد الكلي/الناجح/الفاشل.
 
 ## مثال حقيقي (من `flow_selftest.cpp`، تحقّقتُ من تشغيله فعليًا)
-```rin
+```kotlin
 fun isAdult(x) { return x > 18; }
 fun myDouble(x) { return x * 2; }
 let data = [10, 20, 30, 5, 40];

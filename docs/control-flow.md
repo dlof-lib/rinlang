@@ -1,7 +1,7 @@
 # control-flow.md — الشروط، الحلقات، `goal`/`achieve`
 
 ## `if` / `else`
-```rin
+```kotlin
 if (a > 3) {
     print "big";
 } else {
@@ -12,7 +12,7 @@ if (a > 3) {
 
 ## `when` / `otherwise`
 صياغة إنجليزية مبسَّطة مرادفة كاملة لـ `if`/`else` (بلا أي فرق في السلوك):
-```rin
+```kotlin
 when (len([1, 2, 3]) == 3) {
     print "when/otherwise يعمل";
 } otherwise {
@@ -21,7 +21,7 @@ when (len([1, 2, 3]) == 3) {
 ```
 
 ## `plus.condition` — شرط ثلاثي على مستوى العبارات
-```rin
+```kotlin
 plus.condition (5 > 3) {
     print "yes branch";
 } / {
@@ -34,7 +34,7 @@ plus.condition (5 > 3) {
 
 ## صيغ الشروط المختصرة `=term=`
 صيغ مختصرة هي سكّر نحوي فوق `if`/`while` (نفس الدلالة بالضبط):
-```rin
+```kotlin
 =if=(score > 95) { print "A+"; }
 =elif=(score > 80) { print "B"; }
 =else= { print "C"; }
@@ -49,7 +49,7 @@ plus.condition (5 > 3) {
 [`key_terms_and_builtins.md`](./key_terms_and_builtins.md).
 
 ## `while`
-```rin
+```kotlin
 let i = 0;
 while (i < 3) {
     print "w" + i;
@@ -58,7 +58,7 @@ while (i < 3) {
 ```
 
 ## `for` (على طراز C)
-```rin
+```kotlin
 for (let j = 0; j < 3; j = j + 1) {
     print "c" + j;
 }
@@ -67,7 +67,7 @@ for (let j = 0; j < 3; j = j + 1) {
 ينتج حلقة لا نهائية إلا بـ `break`.
 
 ## `for ... in` — تكرار حقيقي
-```rin
+```kotlin
 let arr = [1, 2, 3];
 for (let x in arr) { print x; }       // كل عنصر بدوره
 
@@ -79,7 +79,7 @@ for (let ch in "abc") { print ch; }   // كل حرف كنص من محرف واح
 
 ## `break` / `continue`
 تعملان داخل `while`/`for`/`for ... in` بنفس المعنى المعتاد:
-```rin
+```kotlin
 let i = 0;
 while (i < 5) {
     i = i + 1;
@@ -91,7 +91,7 @@ while (i < 5) {
 
 ## `match` / `case`
 مطابقة أنماط، غالبًا على قيمة `enum` (انظر [`enums.md`](./enums.md)):
-```rin
+```kotlin
 enum Status { Active, Paused, Done }
 let current = Status.Paused;
 
@@ -109,7 +109,7 @@ match (current) {
 ```
 
 ### حرّاس الشروط في `match` و`return`/`break`/`continue`
-```rin
+```kotlin
 match (level) {
     case Level.High when (vip) { print "vip"; }   // حارس إضافي على case
     else { print "عادي"; }
@@ -125,7 +125,7 @@ break when (i > 10);   continue unless (ok);   return x when (x > 0);
 `goal { ... }` تعبير يُقيَّم إلى قيمة: إن نُفِّذ `achieve <expr>;` بداخله يتوقف فورًا
 بتلك القيمة؛ إن لم يُنفَّذ أي `achieve` تكون القيمة النهائية `nil`. مفيد لخروج مبكر
 من منطق متعدد الخطوات بلا الحاجة لدالة منفصلة كاملة فقط لأجل `return`:
-```rin
+```kotlin
 fun findFirstEven(arr) {
     let result = goal {
         let i = 0;

@@ -6,7 +6,7 @@ indsin كأي عنصر آخر — انظر [`indsin.md`](../indsin.md)) ودوا
 مباشرة بالعنصر الأول.
 
 ## `@view.Banner` — العنصر
-```rin
+```kotlin
 @view.Banner=b
   tone="info"; title="Hello"; message="World";
 .end/view
@@ -18,7 +18,7 @@ indsin كأي عنصر آخر — انظر [`indsin.md`](../indsin.md)) ودوا
 
 ### تأليف يدوي إضافي (اختياري)
 يمكن تعشيش عناصر حقيقية أخرى بداخل Banner بجانب `title=`/`message=`:
-```rin
+```kotlin
 @view.Banner=b
   title="Update"; message="Ready";
   @view.Button=go label="Go"; tone="primary"; .end/view
@@ -26,7 +26,7 @@ indsin كأي عنصر آخر — انظر [`indsin.md`](../indsin.md)) ودوا
 ```
 
 ### `closable=true` — زر إغلاق حقيقي
-```rin
+```kotlin
 @view.Banner=notice
   title="Heads up"; closable=true;
 .end/view
@@ -42,7 +42,7 @@ indsin كأي عنصر آخر — انظر [`indsin.md`](../indsin.md)) ودوا
 منفصلة تمامًا عن `@view.Banner` أعلاه — تبث حدثًا (`BANNER_CREATED`/`BANNER_SHOWN`/
 `BANNER_DISMISSED`) يمكن لتطبيق مضيف (Android مثلًا) الاستماع إليه لعرض Toast/Snackbar
 أصلي، مع سطر مقروء في لوحة الإخراج:
-```rin
+```kotlin
 bannerInfo("Saved successfully");    // ℹ️ [banner:info] Saved successfully
 bannerSuccess("Great job");          // ✅ [banner:success] Great job
 bannerWarning("Careful");            // ⚠️ [banner:warning] Careful

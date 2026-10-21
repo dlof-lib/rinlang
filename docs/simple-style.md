@@ -4,7 +4,7 @@
 
 ## الأساس
 
-```rin
+```kotlin
 @container=Home
 mask = "home-root";
 let title = "Rin";
@@ -15,13 +15,13 @@ let title = "Rin";
 
 بدلاً من استعمال عدة دوال منخفضة المستوى:
 
-```rin
+```kotlin
 container("Home")
 ```
 
 تُعيد وصفاً صغيراً للحاوية. ويمكن اختصار القراءة والكتابة:
 
-```rin
+```kotlin
 container("Home", "title")
 container("Home", "title", "Hello")
 ```
@@ -30,7 +30,7 @@ container("Home", "title", "Hello")
 
 ## استدعاء Mask
 
-```rin
+```kotlin
 mask("home-root")
 ```
 
@@ -44,7 +44,7 @@ mask("home-root")
 
 ## أسلوب التطبيق المقترح
 
-```rin
+```kotlin
 @container=App
 mask = "app";
 let title = "Welcome";

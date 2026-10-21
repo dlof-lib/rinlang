@@ -19,7 +19,7 @@
 
 نفس صياغة `onTap=` بالضبط — استدعاء دالة حقيقية، أو فعل مدمج:
 
-```rin
+```kotlin
 warp likes = 0;
 fun bump() { likes = likes + 1; }
 
@@ -44,7 +44,7 @@ fun bump() { likes = likes + 1; }
 مخصصة لمضيف يملك مؤشراً حقيقياً (فأرة، قلم رقمي، أو جهاز أندرويد بفأرة
 متصلة) — لا معنى حقيقياً لها على لمس الإصبع المباشر:
 
-```rin
+```kotlin
 @view.Card=row
   @view.Text=label text="مرّر المؤشر هنا"; .end/view
   onHoverEnter=highlight(rowHovered);
@@ -64,7 +64,7 @@ fun bump() { likes = likes + 1; }
 الفجائي، أول مرة يظهر فيها ضمن الشجرة (مثلاً: عند فتح Dialog، أو تحقق شرط
 `if` لم يكن محققاً سابقاً):
 
-```rin
+```kotlin
 @view.Dialog=confirm
   open=dialogOpen;
   effect="scale"; duration="200"; easing="easeOut";
@@ -96,7 +96,7 @@ fun bump() { likes = likes + 1; }
 على كل أبنائه الذين لا يملكون `effect=` خاصاً بهم — فبطاقة كاملة تدخل مع
 محتواها معاً بسطر واحد بدل تكرار الخاصية على كل عنصر فرعي:
 
-```rin
+```kotlin
 @view.Card=welcome
   effect="fade"; duration="300";
   @view.Text=title text="أهلاً بك"; .end/view

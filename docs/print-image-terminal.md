@@ -1,6 +1,6 @@
 # طباعة الصور كنص في الطرفية
 
-```rin
+```kotlin
 print.image("logo.png", mode="blocks", cols=60);                 // نصف كتلة ▀ بألوان 24-بت (الأوضح)
 print.image("logo.png", mode="braille", cols=40, caption="Rin");  // نقاط برايل (دقة أعلى، بلا ألوان)
 print.image("logo.png", mode="ascii", cols=50, invert=true);      // محارف ASCII (invert للطرفية الفاتحة)

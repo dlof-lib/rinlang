@@ -18,7 +18,7 @@ t.weekdayName t.monthName t.dayOfYear t.week t.quarter t.date t.time t.tz t.iso`
 أما `time.parse` فتُرجع `nil` و`time.valid` تُرجع `true/false` لفحص مدخل المستخدم.
 
 ## الدوال
-```rin
+```kotlin
 time()                     time(x)                  time(2026, 10, 11, 14, 30)
 time(x, "YYYY-MM-DD")      // نص منسّق مباشرة
 time.now([zone]) time.utc([x]) time.of(y[,m,d,h,mi,s,ms][,{tz:"+03:00"}])
@@ -43,7 +43,7 @@ time.unix([x])  time.ms([x])
 - **الإعداد** `time.config({lang: "ar", digits: "arabic", weekStart: "sat", weekend: ["fri","sat"]})`. الافتراضي: `en`، أرقام لاتينية، الأسبوع يبدأ الاثنين، العطلة السبت والأحد.
 
 ## أمثلة
-```rin
+```kotlin
 let t = time.parse("tomorrow 14:30");
 print time(t, "dddd D MMMM YYYY, hh:mm A");
 print time.ago(t, "ar");                       // بعد يوم
@@ -57,13 +57,13 @@ print time.diff(time.of(2026, 12, 31), time(), "days");
 
 ## داخل indsin (الواجهات)
 قيمة أي خاصية في `@view` تُقيَّم بمفسّر Rin (docs/indsin_rin.md)، فكل دوال `time.*` النقية تعمل مباشرة:
-```rin
+```kotlin
 let target = time.parse("2027-01-01");
 @view.Text=Left  text="تبقّى " + time.diff(target, time(), "days") + " يوماً";  .end/view
 ```
 - **ممنوع داخل الخصائص** (حارس النقاء): `time.sleep` و`time.measure` و`time.config`.
 - **ساعة حيّة**: عرّف `warp clock = time.ms();` وستتحدث الخلية `clock` كل ثانية، فتُعاد تلقائياً كل خاصية تقرؤها:
-```rin
+```kotlin
 warp clock = time.ms();
 @view.Text=Now  text=time(clock, "HH:mm:ss");  .end/view
 @view.Text=Left text=time.diff(target, clock, "s") + " ثانية";  .end/view

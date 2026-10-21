@@ -1,14 +1,14 @@
 # functions.md — `fun`/`return`، التكرار الذاتي
 
 ## تعريف واستدعاء
-```rin
+```kotlin
 fun add(x, y) {
     return x + y;
 }
 print add(2, 3); // 5
 ```
 دالة بلا `return` صريح تُرجع `nil` تلقائيًا عند انتهاء جسمها:
-```rin
+```kotlin
 fun noReturn() { print "side effect"; }
 let r = noReturn();
 print r; // nil
@@ -16,7 +16,7 @@ print r; // nil
 
 ## التكرار الذاتي (Recursion)
 تعمل بشكل طبيعي تمامًا — لا قيد خاص:
-```rin
+```kotlin
 fun fact(n) {
     if (n <= 1) { return 1; }
     return n * fact(n - 1);
@@ -25,7 +25,7 @@ print fact(5); // 120
 ```
 
 ## أنواع اختيارية للوسائط والإرجاع (Type System — إضافي بحت)
-```rin
+```kotlin
 fun typed(a: Number, b: Number): Number {
     return a + b;
 }
@@ -34,7 +34,7 @@ fun typed(a: Number, b: Number): Number {
 معلَن يبقى بلا أي فحص، ونوع الإرجاع اختياري بالمثل.
 
 ## دوال كقيَم (Lambda literals)
-```rin
+```kotlin
 let square = fun(x) { return x * x; };
 print square(4); // 16
 ```
@@ -45,7 +45,7 @@ print square(4); // 16
 داخل `class`/`struct`، كل `fun` معرَّفة في جسمها تصبح طريقة (method) تُستدعى عبر
 `instance.method()`، وتصل لحقول نفس النسخة عبر `self.field` (انظر
 [`objects.md`](./objects.md#class-struct)):
-```rin
+```kotlin
 class Counter {
     let value = 0;
     fun init(start) { self.value = start; } // "init" = المُنشئ (constructor)

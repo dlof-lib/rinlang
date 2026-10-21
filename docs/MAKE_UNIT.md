@@ -5,7 +5,7 @@
 (`input`/`output`/`public`/`private`) خاصة بها فقط دون أنواع الحاويات الأخرى.
 
 ## الصياغة الأساسية (مُتحقَّق منها فعليًا — تعمل)
-```rin
+```kotlin
 @make.(calc)
     kind app;
     use io;
@@ -50,7 +50,7 @@ Make Unit:
 | `strict;` | يُفعِّل التحقّق الصارم: أي قدرة تُستخدَم بالجسم (مثل `io` لـ`print`/`show`) يجب أن تكون معلَنة صراحة بـ`use`، وإلا خطأ فوري (رأيتُه فعليًا: `is strict: capability 'io' must be declared with 'use io;'`). بلا `strict;`، الوحدة تسلك بشكل متساهل (permissive) بلا أي تحقّق إضافي — تمامًا كحاوية عادية.
 
 ## مثال حقيقي مدمج مع `reckon` (من `examples/reckon_demo.rin`)
-```rin
+```kotlin
 @make.(reportCard)
     kind data;
     use reckon;

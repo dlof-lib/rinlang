@@ -29,7 +29,7 @@ curl -s localhost:8787/health
 
 ## خدمات الربط `/svc/*` (يستدعيها Rin نفسه)
 سكربت Rin يصل لما تقدّمه Go عبر دوال الـ API الموجودة أصلاً في اللغة (`apiRegister`/`apiPost`)، بلا أي تعديل في C++:
-```rin
+```kotlin
 apiRegister("go", "http://127.0.0.1:8787");
 apiHeader("go", "Authorization", "Bearer SECRET");
 let r = apiPost("go", "/svc/hash", {"algo": "sha256", "data": "abc"});
@@ -55,7 +55,7 @@ print r.json["result"];     // ba7816bf8f01cfea...
 
 ### من داخل Rin: `lib/gorinkit.og.rin`
 غلاف جاهز فوق `/svc/*` و`/run` (بلا أي تعديل في C++):
-```rin
+```kotlin
 @import "lib/gorinkit.og.rin";
 gorin_connect("http://127.0.0.1:8787", "SECRET");   // اختياري
 print gorin_hash("sha256", "abc");
@@ -103,8 +103,7 @@ if err := in.Run(`print "hi";`); err != nil { /* *rin.RinError{Code, Msg, Line} 
 ```
 
 ## البنية
-```
-rin/lexer.go   المحلل المعجمي (أرقام علمية، قوالب)
+```kotlin
 rin/parser.go  المحلل النحوي → AST (ast.go)
 rin/interp.go  المفسّر (return/break/continue كقيمة flow، لا panic)
 rin/env.go     النطاقات: مسح خطّي للصغير، تجزئة للكبير

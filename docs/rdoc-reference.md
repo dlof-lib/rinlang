@@ -238,7 +238,7 @@ json-utils = >=1.0
 @throws: unsupported
 @since: 1.0
 @example
-```rin
+```kotlin
 warp page = example_open(link, "عرض");
 ```
 :::

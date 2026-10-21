@@ -11,7 +11,7 @@
 `app/src/main/cpp/rin_interpreter.cpp` نفسه، لم أُعِد كتابتها كاملة هنا.
 
 ## `@import` — استيراد وحدة
-```rin
+```kotlin
 @import "lib/strings.og.rin";
 print capitalize("rin"); // Rin -- الدوال تُدمَج مباشرة في النطاق العام
 ```

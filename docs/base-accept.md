@@ -24,7 +24,7 @@ let     قيمة فقط                       «ما هو الآن؟»
 
 ## `base` — خط أساس
 
-```rin
+```kotlin
 base temp = 20 to 30 step 2;     // خط الأساس 20، الهدف 30، خطوة inc/dec الافتراضية 2
 inc temp;                        // 22   (الخطوة الافتراضية)
 inc temp by 3;                   // 25
@@ -53,7 +53,7 @@ rewind temp; print temp.same;    // true (رجعنا إلى 20)
 
 ## `accept` — حارس قبول
 
-```rin
+```kotlin
 accept age = 20 if age >= 0 and age < 150;
 age = 30;   print age.ok;        // true
 age = 500;                       // مرفوضة: تُتجاهل بصمت
@@ -85,7 +85,7 @@ if (!age.ok) { print "rejected"; }
 
 ## مثال: ترموستات
 
-```rin
+```kotlin
 accept reading = 21 if reading > -50 and reading < 60;   // حارس المدخلات
 base target = 21 to 25 step 1;                            // مرجع الهدف
 let log = [];

@@ -19,7 +19,7 @@
 النواة الآن تدعم أيضاً طبقتَي `raster` و`hrange` وتسميات المحور الرأسي الفئوية `ax["ycats"]`.
 
 ## `lib/rinauto.og.rin` — تحليل آلي كامل
-```rin
+```kotlin
 @import "lib/rinauto.og.rin";
 pl_auto_csv("data.csv", "report.html", "تقرير التجربة", "ar");   // أو "en"
 let r = st_auto(df);   // التحليل فقط: profiles, correlations, comparisons, associations

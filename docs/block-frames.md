@@ -14,7 +14,7 @@
 | **أقواس على طريقة C++** (الموصى به) | `@kind[.sub][=name] {` على نفس السطر | `};` (وتُقبل `}` وحدها) | `}=name;` |
 | **وسم** (القديم، ما زال يعمل) | `@kind[.sub][=name]` | `.end/kind` أو `.end;` | `.end/kind=name` |
 
-```rin
+```kotlin
 @Volume=shop {
     @container=cart {
         state total = 0;

@@ -26,7 +26,7 @@ post x = v if RULE [pre  RULE2] [strict];
 
 ## `pre` — هل يجوز أن أخرج من الحالة الحالية؟
 
-```rin
+```kotlin
 pre door = "closed" if old != "locked";
 door = "open";    print door;     // open
 door = "locked";  print door;     // locked
@@ -37,7 +37,7 @@ print door.ok;                    // false
 
 ## `post` — هل الحالة التي وصلتُ إليها مقبولة؟
 
-```rin
+```kotlin
 post stock = 10 if new >= 0 and new <= old + 100;     // لا سالب، ولا قفزة فوق 100
 stock = 50;   print stock;        // 50
 stock = -5;   print stock;        // 50   ← تراجع
@@ -47,7 +47,7 @@ stock = 500;  print stock;        // 50   ← القفزة أكبر من 100
 
 ## الاثنان معًا
 
-```rin
+```kotlin
 pre lvl = 1 if old < 5 post new <= old + 1;   // لا خروج بعد 5، ولا قفزة أكثر من 1
 lvl = 2; lvl = 4;  print lvl;     // 2   (post: 2→4 قفزة 2)
 inc lvl; inc lvl; inc lvl;        // 3, 4, 5
@@ -68,7 +68,7 @@ inc lvl; print lvl;               // 5   (pre: القديمة 5 ليست < 5)
 | `x.kind` | `"pre"` أو `"post"` (بحسب كلمة التصريح) · `x.vitals` خريطة بكل شيء |
 
 نجحت المحاولة ⇒ `x.post == x`. رُفضت ⇒ `x.pre == x` و`x.post` هي القيمة المرفوضة. ولخدمة `if`:
-```rin
+```kotlin
 stock = 500;
 if (!stock.ok) { print "refused " + str(stock.post) + ", kept " + str(stock.pre); }   // refused 500, kept 50
 ```

@@ -1,6 +1,6 @@
 # env.md — ربط Rin بملف `.env`
 
-```rin
+```kotlin
 Env.load();                         // يقرأ ".env" (اختياري: غيابه لا يرمي خطأ)
 let key  = Env.require("API_KEY");  // يرمي خطأ واضحاً إن لم يوجد
 let port = Env.int("PORT", 8080);   // تحويل مكتوب مع قيمة افتراضية

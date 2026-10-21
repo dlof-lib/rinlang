@@ -42,7 +42,7 @@
 `vecDot` (مُعوَّض الدقة Dot2: `vecDot([1e16,1,-1e16],[1,1,1]) == 1`) · `vecNorm(v[,p])` (بلا فيض: `vecNorm([3e200,4e200]) == 5e200`) · `vecCross` · `vecNormalize` · `vecAngle` (مستقرّة) · `vecProject` · `vecAdd` `vecSub` `vecScale` · `vecDist` · `vecLinspace` · `vecSum`.
 
 ## مثال
-```rin
+```kotlin
 let A = [[4, 1, 0], [1, 3, 1], [0, 1, 2]];
 let b = [1, 2, 3];
 let x = matSolve(A, b);
