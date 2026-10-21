@@ -1,0 +1,221 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>فيديو · صوت · API · إزالة الخلفية · قراءة النص من الصور — Rin</title>
+<meta name="description" content="توثيق لغة البرمجة Rin"><link rel="icon" href="../assets/brand/icon-32.png">
+<link rel="stylesheet" href="assets/style.css"></head><body>
+<header><button id="mn" aria-label="القائمة">☰</button><a class="logo" href="index.html"><img src="../assets/brand/icon-48.png" alt="" width="26">Rin</a>
+<input id="q" type="search" placeholder="ابحث في التوثيق…" autocomplete="off"><button id="th" aria-label="الوضع">◐</button>
+<a class="gh" href="https://github.com/dlof-lib/rinlang">GitHub</a><div id="res"></div></header>
+<div class="wrap"><nav id="sb"><details ><summary>ابدأ هنا</summary><a href="getting-started.html">البداية</a><a href="syntax.html">القواعد النحوية العامة</a><a href="variables.html">let`، مصفوفات، قواميس، نطاق</a><a href="template-strings.html">النصوص القالبية (متغيّرات داخل النص)</a><a href="input.html">إدخال المستخدم (Input)</a><a href="control-flow.html">الشروط، الحلقات، `goal`/`achieve</a><a href="loops.html">حلقات Rin — Loops v2</a><a href="functions.html">fun`/`return`، التكرار الذاتي</a><a href="enums.html">enum`: قوائم اختيار مغلقة</a></details><details ><summary>اللغة</summary><a href="language-reference.html">المرجع الشامل وخريطة ترابط المفاهيم</a><a href="objects.html">class`/`struct`، `.object()`، `@Object`، `document</a><a href="oop.html">البرمجة الكائنية الموسَّعة (Rin 1.0)</a><a href="containers.html">دليل `@container` / `@element` / `@loop</a><a href="table.html">الجدول (`@table` / `@container.table`) ودوال اللغة عليه</a><a href="set.html">Set`: نوع المجموعة الأساسي</a><a href="pipelines.html">عامل الأنابيب `|&gt;</a><a href="RECKON.html">reckon`: مفهوم حسابي بسطرين</a><a href="let-plus.html">let` المطوَّر</a><a href="living-variables.html">المتغيرات الحيّة (Living Variables)</a><a href="label-define.html">label` و`define` (تسمية وتعريف)</a><a href="block-frames.html">بداية الكتل ونهايتها (Block Frames)</a><a href="compare_ops.html">معاملات المقارنة `/=` و `=/=` و `=/</a><a href="max_min.html">max / min family</a><a href="scope-guarantees.html">ضمانات النطاق: `finally` · `defer` · `catch … when` · `rethrow</a><a href="key_terms_and_builtins.html">Rin KEY_TERMS and Built-in Conditions</a><a href="number_builtins.html">Rin Number Built-ins</a></details><details ><summary>الواجهات (Indsin)</summary><a href="indsin.html">Indsin — Interface Design</a><a href="indsin_rin.html">indsin يعتمد على لغة Rin</a><a href="indsin_expansion.html">Indsin — التوسعة الاحترافية (Design System v2)</a><a href="indsin_object.html">indsin-object — API reference</a><a href="indsin_media.html">Indsin Media — اختيار الوسائط ورفعها</a><a href="indsin_icons.html">مكتبة أيقونات indsin (متجهية)</a><a href="indsin_tooling.html">indsin tooling — icon, file association, syntax highlighting</a><a href="indsinweb.html">IndsinWeb — مكتبة WebView والروابط لـ indsin</a><a href="RIN_ELEMENTS.html">دليل `@element.*` الكامل</a><a href="events-effects.html">الأحداث والتأثيرات (Events &amp; Effects) — محرك Indsin UI</a><a href="banner.html">Banner: إشعار شريطي</a><a href="simple-style.html">Rin Simple Style</a></details><details open><summary>بيئة التشغيل</summary><a href="runtime.html">وقت تشغيل Rin (Rin Runtime) · المرجع الرسمي</a><a href="standard-library.html">المكتبة القياسية (`lib/*.og.rin`)</a><a href="errors.html">نظام الأخطاء: أكواد، `try`/`catch`/`throw</a><a href="ERROR_SYSTEM.html">نظام التشخيص: البنية الداخلية + جدول الأكواد الكامل</a><a href="storage.html">تخزين دائم</a><a href="http.html">شبكات</a><a href="env.html">ربط Rin بملف `.env</a><a href="terminal.html">الطرفية التفاعلية — `rin terminal</a><a href="vm.html">RinVM — آلة Rin الافتراضية (بايتكود)</a><a href="rinflow.html">RinFlow: طبقة تنفيذ التدفّق المهيكل</a><a href="MAKE_UNIT.html">@make.(name)`: وحدة بسياسة قدرات صريحة</a><a href="MAKE_MEDIA.html" class=on>فيديو · صوت · API · إزالة الخلفية · قراءة النص من الصور</a><a href="TIME.html">مفهوم `time`: الزمن كقيمة من الدرجة الأولى</a><a href="native-additions.html">دوال Rin الأصلية الجديدة (Rin 1.0)</a></details><details ><summary>الحاويات وقواعد البيانات</summary><a href="container_advanced.html">Rin Container Advanced Built-ins</a><a href="container_pro.html">Rin Container Pro</a><a href="container_sql.html">RIN CONTAINER SQL (RCSQL)</a><a href="cross-file-containers.html">استدعاء إعلانات من ملف آخر</a></details><details ><summary>الحزم والتكامل</summary><a href="api.html">واجهة C المسطَّحة (Embedding API)</a><a href="android.html">استضافة Rin على أندرويد</a><a href="packages-and-interop.html">Rin 1.0 — المكتبات والحزم وجسر C++ وJSON واختبارات rintest</a><a href="rinpak-format.html">RinPak — حزمة مشروع Rin (`.rinpak`)</a><a href="html-projects.html">مشاريع HTML في Rin — الربط بين index.html وملف الحاوية</a><a href="project-og-urin.html">project.og.urin` — البيانات الوصفية لمشروع Rin</a><a href="CONTENT_PACKS.html">حزم المحتوى القابلة للتنزيل (Content Packs)</a><a href="previewkit.html">previewkit — معاينة حيّة لملفات PDF / Markdown / TypeScript</a></details><details ><summary>المكتبات المتخصصة</summary><a href="rinml.html">RinML / RinDF / RinAI — الذكاء الاصطناعي وتحليل البيانات في Rin</a><a href="STATS.html">RinStat — التحليل الإحصائي (`lib/rinstat.og.rin`)</a><a href="STATS_ADV.html">RinStat المتقدّم + RinAuto</a><a href="LINALG.html">الجبر الخطي للمهندسين — `mat*` و`vec*</a><a href="PLOT.html">RinPlot — الرسوم البيانية الإحصائية (`lib/rinplot.og.rin`)</a><a href="ALGO.html">تطوير الخوارزميات والحساب العددي — `algo*</a><a href="NUMBER.html">مفهوم `number` في Rin</a><a href="boat.html">&quot;Boat&quot;: مفاهيم أساسية مجمَّعة</a><a href="passkit.html">passkit — passwords, encryption, databases and a tag language</a><a href="passkit-crypto-db.html">Passkit feature catalog: encryption, databases and container linking</a><a href="hash-family.html">عائلة `#` — مفاهيم ودوال جديدة تبدأ بعلامة `#</a><a href="image-draw.html">إنشاء الصور في Rin — رسم وحفظ PNG وlog كصورة</a><a href="image-terminal.html">طباعة الصور في الـ terminal — `printImage` / `imageAnsi` / `imageInfo</a></details><details ><summary>المشروع</summary><a href="CONTRIBUTING.html">المساهمة في Rin</a><a href="CODE_OF_CONDUCT.html">قواعد السلوك</a><a href="SECURITY.html">سياسة الأمان</a><a href="SUPPORT.html">الحصول على المساعدة</a><a href="TRADEMARKS.html">سياسة العلامة التجارية — Trademark Policy</a><a href="THIRD_PARTY_NOTICES.html">إشعارات المكوّنات الخارجية — Third-Party Notices</a></details><details ><summary>مراجع إضافية</summary><a href="ANDROID_VERSIONS.html">حزم RinStudio لكل إصدار أندرويد</a><a href="TOKEN.html">مفهوم `token` في Rin</a><a href="TOOLCHAIN.html">Rin Professional Language Toolchain</a><a href="TOOLCHAIN_UPGRADE.html">Toolchain Upgrade — 2026-09</a><a href="architecture.html">المعمارية وبنية المستودع</a><a href="base-accept.html">base` و`accept`: متغيّران يخدمان `if</a><a href="channel47.html">channel47 — لغة وصف البيانات والإعدادات</a><a href="ci.html">CI وأدوات المستودع</a><a href="loop-templates.html">قوالب الحلقات `@tmpl</a><a href="pre-post.html">pre` و`post` (ما قبل / ما بعد): عقد انتقال حول الإسناد</a><a href="print-fonts.html">خطوط `print` — bold / italic / underline وغيرها</a><a href="print-image-terminal.html">طباعة الصور كنص في الطرفية</a><a href="print-templates.html">قوالب الطباعة `@tmpl ... print` — قوالب نصية خطية وتنسيقية</a><a href="rdoc.html">rdoc — Documentation Container</a><a href="rdoc-reference.html">وثيقة rdoc الشاملة — Documentation Container</a><a href="screenshots.html">لقطات من RinStudio</a></details></nav>
+<main><article><h1 id="make_mediamd-api">MAKE_MEDIA.md — فيديو · صوت · API · إزالة الخلفية · قراءة النص من الصور<a class="headerlink" href="#make_mediamd-api" title="Permanent link">#</a></h1>
+<p>كلها دوال داخل مساحة الاسم <code>make</code> (جنب <code>make.qr</code> / <code>make.file</code> / <code>make.hash</code>)، وتخضع لسياسة قدرات
+<a href="MAKE_UNIT.html"><code>@make.(name)</code></a>.</p>
+<p><strong>قاعدة الأخطاء:</strong> فشل البيئة (أداة مفقودة، شبكة، ملف غير صالح) <strong>لا يرمي خطأً</strong> — يُرجع <code>{ok: false, error: "..."}</code>.
+سوء استخدام الدالة (نوع وسيط خاطئ، عدد وسائط خاطئ) يرمي خطأً صريحاً كبقية اللغة.
+كل المسارات المحلية تمر عبر <code>resolvePath</code> فتبقى داخل مجلد المشروع. لا shell إطلاقاً (argv مباشرة).</p>
+<h2 id="_1">القدرات (للسياسة)<a class="headerlink" href="#_1" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الاستدعاء</th>
+<th>القدرة</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>make.video</code>, <code>make.video.info/thumbnail/stop</code></td>
+<td><code>video</code></td>
+</tr>
+<tr>
+<td><code>make.audio</code>, <code>make.audio.info/stop</code></td>
+<td><code>audio</code></td>
+</tr>
+<tr>
+<td><code>make.api</code>, <code>make.api.download/clearCache</code></td>
+<td><code>api</code></td>
+</tr>
+<tr>
+<td><code>make.image.removeBg</code></td>
+<td><code>image</code></td>
+</tr>
+<tr>
+<td><code>make.ocr</code>, <code>make.image.text</code></td>
+<td><code>ocr</code></td>
+</tr>
+<tr>
+<td><code>make.media.tools</code></td>
+<td>— (لا قدرة)</td>
+</tr>
+</tbody>
+</table></div>
+<p>الكشف يعمل داخل أي تعبير (let / print / if / return / lambda / match ...).</p>
+<pre><code class="language-kotlin">@make.(poster)
+    kind task;
+    use image; use ocr; use io;
+    need image;
+    deny api;        // أي make.api هنا = خطأ فوري
+    strict;
+    let r = make.image.removeBg(&quot;photo.png&quot;, &quot;photo.nobg.png&quot;);
+    print r.ok;
+.end/make=poster
+</code></pre>
+<p>الأنواع التي تسمح افتراضياً: <code>page</code> (api, video, audio, image, ocr) · <code>component</code> (video, audio, image) ·
+<code>service</code> (api, image, ocr) · <code>task</code> (api, audio, image, ocr) · <code>plugin</code> (الكل) · <code>app</code> (بلا قيود).
+<code>library</code> / <code>module</code> / <code>data</code> لا تسمح بشيء من هذه إلا بـ <code>allow</code> صريحة.</p>
+<h2 id="makemediatools">make.media.tools()<a class="headerlink" href="#makemediatools" title="Permanent link">#</a></h2>
+<p>يُرجع ما يعمل فعلاً على هذا الجهاز: <code>platform</code>, <code>bridge</code>, <code>tools{...}</code>, <code>videoPlayers[]</code>, <code>audioPlayers[]</code>,
+<code>ocrLangs[]</code>, <code>display</code>, <code>removeBg</code> (<code>rembg</code> | <code>imagemagick</code> | <code>bridge</code> | <code>none</code>), <code>ocr</code>.</p>
+<h2 id="_2">الفيديو<a class="headerlink" href="#_2" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الدالة</th>
+<th>الوصف</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>make.video(src, opts?)</code></td>
+<td>يفتح/يشغّل فيديو (ملف أو http/https) في مشغّل النظام</td>
+</tr>
+<tr>
+<td><code>make.video.info(src)</code></td>
+<td><code>duration, width, height, fps, videoCodec, audioCodec, bitrate, size, format...</code> (ffprobe)</td>
+</tr>
+<tr>
+<td><code>make.video.thumbnail(src, out, opts?)</code></td>
+<td>إطار كصورة <code>.png/.jpg/.webp</code> — <code>at</code> (ثوانٍ، 1)، <code>width</code></td>
+</tr>
+<tr>
+<td><code>make.video.stop()</code></td>
+<td>يوقف المشغّلات التي فتحها <code>make.video</code></td>
+</tr>
+</tbody>
+</table></div>
+<p>خيارات <code>make.video</code>: <code>player</code> (<code>mpv</code>/<code>vlc</code>/<code>ffplay</code>/<code>xdg-open</code>/<code>open</code> — تلقائي إن غاب)، <code>fullscreen</code>, <code>loop</code>, <code>mute</code>,
+<code>start</code> (ثوانٍ), <code>volume</code> (0–100), <code>wait</code> (انتظر انتهاء التشغيل), <code>timeout</code>, <code>dryRun</code> (يعرض الأمر فقط).
+النتيجة: <code>{ok, backend, pid, playing, command[], ignored[]}</code> — <code>ignored</code> الخيارات التي لا يدعمها المشغّل المختار.</p>
+<h2 id="_3">الصوت<a class="headerlink" href="#_3" title="Permanent link">#</a></h2>
+<p><code>make.audio(src, opts?)</code> · <code>make.audio.info(src)</code> · <code>make.audio.stop()</code>.
+الخيارات: <code>player</code> (<code>mpv</code>/<code>ffplay</code>/<code>vlc</code>/<code>afplay</code>/<code>paplay</code>/<code>aplay</code>)، <code>loop</code>, <code>start</code>, <code>volume</code>, <code>wait</code>, <code>timeout</code>, <code>dryRun</code>.
+<code>paplay/aplay/afplay</code> لا تقرأ الروابط — لن تُختار تلقائياً لمصدر http.</p>
+<h2 id="makeapi">make.api — جلب البيانات<a class="headerlink" href="#makeapi" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">let r = make.api(&quot;https://api.example.com/users&quot;, {
+    &quot;query&quot;:   {&quot;page&quot;: 2, &quot;q&quot;: &quot;علي&quot;},          // ?page=2&amp;q=%D8%B9... تلقائياً
+    &quot;auth&quot;:    &quot;TOKEN&quot;,                           // Bearer | {&quot;basic&quot;:&quot;u:p&quot;} | {&quot;key&quot;:&quot;K&quot;,&quot;header&quot;:&quot;X-API-Key&quot;}
+    &quot;path&quot;:    &quot;data.items[0].name&quot;,              // يستخرج جزءاً من JSON (json.get)
+    &quot;retries&quot;: 3, &quot;backoff&quot;: 400,                 // إعادة محاولة عند فشل الاتصال/429/5xx بتراجع أسّي (يحترم Retry-After)
+    &quot;cache&quot;:   60,                                // ثوانٍ (GET فقط)
+    &quot;expect&quot;:  [200, 404],                        // رقم | مصفوفة | &quot;2xx&quot; | &quot;any&quot;
+    &quot;fallback&quot;: []                                // قيمة بديلة في data عند الفشل
+});
+print r.ok; print r.data; print r.attempts; print r.cached;
+</code></pre>
+<p>بقية الخيارات: <code>method</code>, <code>headers</code>, <code>body</code> (قاموس/مصفوفة ⇒ JSON تلقائياً), <code>timeout</code>.
+النتيجة: <code>ok, status, statusText, data, json, body, headers, error, attempts, cached, ms, url</code>.
+الافتراضي: <code>retries = 2</code> لـ GET و<code>0</code> لغيره (تجنباً لتكرار POST).</p>
+<p><code>make.api.download(url, path, opts?)</code> — تنزيل ثنائي سليم بايت ببايت: <code>overwrite</code> (true), <code>maxBytes</code>, <code>timeout</code>, <code>headers</code>, <code>auth</code>.
+النتيجة: <code>ok, path, bytes, status, contentType</code>. <code>make.api.clearCache()</code> يفرّغ الكاش.</p>
+<h2 id="makeimageremovebgsrc-out-opts">make.image.removeBg(src, out?, opts?)<a class="headerlink" href="#makeimageremovebgsrc-out-opts" title="Permanent link">#</a></h2>
+<p>الإخراج <code>.png</code> أو <code>.webp</code> (شفافية). الطرق (<code>method</code>):
+- <code>auto</code> (الافتراضي): <code>rembg</code> (ذكاء اصطناعي) إن وُجد، وإلا الملء الفيضي.
+- <code>ai</code>: <code>rembg</code> حصراً. · <code>color</code>: الملء الفيضي حصراً.</p>
+<p>الملء الفيضي يكتشف لون الخلفية من الزوايا الأربع ويزيل <strong>المتصل بالحواف فقط</strong> — فتبقى المناطق الداخلية بنفس اللون
+(عين بيضاء، نص...). مناسب للخلفيات الموحّدة؛ للصور المعقدة ثبّت <code>rembg</code>.
+الخيارات: <code>tolerance</code> (0–100، 12), <code>feather</code> (0–10، 1), <code>erode</code> (0–5), <code>trim</code> (قصّ الأطراف الشفافة),
+<code>color</code> (لون الخلفية يدوياً), <code>bg</code> (تعبئة بلون بدل الشفافية، يسمح بـ <code>.jpg</code>), <code>out</code>.
+النتيجة: <code>ok, path, method, background, tolerance, width, height, sourceWidth, sourceHeight, bytes, removedPercent</code>.
+الصور تُعرَّف من <strong>البايتات</strong> لا الامتداد، فملف SVG/MVG متنكّر بامتداد صورة يُرفض.</p>
+<h2 id="makeocrsrc-opts-makeimagetext">make.ocr(src, opts?) = make.image.text<a class="headerlink" href="#makeocrsrc-opts-makeimagetext" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">let o = make.ocr(&quot;scan.png&quot;, {&quot;lang&quot;: &quot;ara+eng&quot;, &quot;enhance&quot;: true, &quot;words&quot;: true});
+print o.text; print o.confidence; print o.lines;
+</code></pre>
+<p>الخيارات: <code>lang</code> (الافتراضي <code>ara+eng</code> المثبّتتان فعلاً)، <code>psm</code> (0–13، 3; استخدم 6 لكتلة و7 لسطر), <code>minConfidence</code>,
+<code>words</code> (إحداثيات وثقة كل كلمة), <code>enhance</code> (تدرّج رمادي + تكبير + تحسين تباين قبل القراءة), <code>timeout</code>.
+النتيجة: <code>ok, text, confidence, wordCount, lines[], lang, psm, enhanced[, words[]]</code>.
+حزمة لغة غير مثبّتة ⇒ <code>ok:false</code> مع قائمة المتاح وأمر التثبيت.</p>
+<h2 id="ocr">OCR على أندرويد (عربي + إنجليزي)<a class="headerlink" href="#ocr" title="Permanent link">#</a></h2>
+<p>ML Kit <strong>لا يدعم العربية</strong> إطلاقاً (لاتيني/صيني/ديفاناغاري/ياباني/كوري فقط)، لذا العربية تمر عبر Tesseract
+(<code>cz.adaptech.tesseract4android</code>). المحرّك يُختار تلقائياً (<code>engine</code>: <code>auto</code> | <code>tesseract</code> | <code>mlkit</code>):</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الطلب</th>
+<th>المحرّك</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>بلا <code>lang</code></td>
+<td><code>ara+eng</code> عبر Tesseract إن كان الملفان متاحين، وإلا ML Kit (لاتيني) مع <code>warning</code> يشرح كيف تفعّل العربية</td>
+</tr>
+<tr>
+<td><code>lang</code> فيه أي لغة غير <code>eng</code>/<code>latin</code> (مثل <code>ara</code>, <code>ara+eng</code>)</td>
+<td>Tesseract</td>
+</tr>
+<tr>
+<td><code>lang: "eng"</code> أو <code>"latin"</code></td>
+<td>ML Kit (أسرع وبلا ملفات)</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>ملفات اللغة</strong> (<code>&lt;code&gt;.traineddata</code>، نماذج tessdata_fast ~1–4MB للغة) تُبحث بالترتيب:
+1. <code>filesDir/tessdata/</code> (نُسخت سابقاً)
+2. <code>assets/tessdata/</code> داخل الـ APK — ضمّنها وقت البناء بـ <code>scripts/fetch_tessdata.sh</code> (يعمل بعدها بلا إنترنت)
+3. تنزيل مرة واحدة من tessdata_fast إن مرّرت <code>download: true</code></p>
+<pre><code class="language-kotlin">let o = make.ocr(&quot;receipt.png&quot;, {&quot;lang&quot;: &quot;ara+eng&quot;, &quot;enhance&quot;: true, &quot;download&quot;: true});
+print o.text; print o.backend;   // android.tesseract
+</code></pre>
+<p><code>make.media.tools().ocrLangs</code> على أندرويد يعرض ما هو متاح الآن (مثل <code>["ara","eng","latin"]</code>).
+قيود: <code>minConfidence</code> و<code>words</code> لا يُطبَّقان على Tesseract في أندرويد (الثقة العامة فقط).</p>
+<h2 id="_4">ما يلزم تثبيته<a class="headerlink" href="#_4" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>المنصة</th>
+<th>المتطلبات</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>لينكس</td>
+<td><code>sudo apt install ffmpeg mpv imagemagick tesseract-ocr tesseract-ocr-ara</code> (+ <code>pip install rembg[cli]</code> اختياري)</td>
+</tr>
+<tr>
+<td>macOS</td>
+<td><code>brew install ffmpeg mpv imagemagick tesseract tesseract-lang</code></td>
+</tr>
+<tr>
+<td>أندرويد</td>
+<td>بلا تثبيت للفيديو والصوت وإزالة الخلفية (<code>RinMediaBridge.kt</code>). <strong>OCR:</strong> الإنجليزية عبر ML Kit بلا ملفات؛ <strong>العربية</strong> عبر Tesseract وتحتاج <code>ara.traineddata</code> + <code>eng.traineddata</code> (انظر «OCR على أندرويد»)</td>
+</tr>
+<tr>
+<td>ويندوز / WASM</td>
+<td>غير مدعوم بعد: تُرجع الدوال <code>ok:false</code> برسالة واضحة</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="_5">حدود معروفة<a class="headerlink" href="#_5" title="Permanent link">#</a></h2>
+<ul>
+<li><code>make.video</code>/<code>make.audio</code> يحتاجان شاشة/جهاز صوت؛ على خادم بلا <code>DISPLAY</code> يُرجع <code>make.video</code> خطأً واضحاً (استعمل <code>dryRun</code>).</li>
+<li>إزالة الخلفية بالملء الفيضي لا تفصل جسماً عن خلفية متدرجة/مزدحمة.</li>
+<li>كاش <code>make.api</code> في الذاكرة لعملية واحدة (حتى 200 مدخل).</li>
+<li><code>httpGet</code> / <code>apiCall</code> / <code>net.*</code> القديمة لا تُعدّ قدرة <code>api</code> (حفاظاً على توافق الوحدات <code>strict</code> الحالية)؛ <code>make.api</code> وحدها تُعدّ.</li>
+</ul></article>
+<div class="pnav"><a class="pn" href="MAKE_UNIT.html">→ @make.(name)`: وحدة بسياسة قدرات صريحة</a><a class="pn" href="TIME.html">مفهوم `time`: الزمن كقيمة من الدرجة الأولى ←</a></div><p class="edit"><a href="https://github.com/dlof-lib/rinlang/edit/main/docs/MAKE_MEDIA.md">✎ عدّل هذه الصفحة على GitHub</a></p>
+<footer>Rin 1.0.0 · رخصة MIT</footer></main>
+<aside id="toc"><b>في هذه الصفحة</b><div class="toc">
+<ul>
+<li><a href="#_1">القدرات (للسياسة)</a></li>
+<li><a href="#makemediatools">make.media.tools()</a></li>
+<li><a href="#_2">الفيديو</a></li>
+<li><a href="#_3">الصوت</a></li>
+<li><a href="#makeapi">make.api — جلب البيانات</a></li>
+<li><a href="#makeimageremovebgsrc-out-opts">make.image.removeBg(src, out?, opts?)</a></li>
+<li><a href="#makeocrsrc-opts-makeimagetext">make.ocr(src, opts?) = make.image.text</a></li>
+<li><a href="#ocr">OCR على أندرويد (عربي + إنجليزي)</a></li>
+<li><a href="#_4">ما يلزم تثبيته</a></li>
+<li><a href="#_5">حدود معروفة</a></li>
+</ul>
+</div>
+</aside></div>
+<script src="assets/app.js"></script></body></html>
