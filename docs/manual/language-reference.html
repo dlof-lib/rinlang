@@ -1,0 +1,112 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>المرجع الشامل وخريطة ترابط المفاهيم — Rin</title>
+<meta name="description" content="توثيق لغة البرمجة Rin"><link rel="icon" href="../assets/brand/icon-32.png">
+<link rel="stylesheet" href="assets/style.css"></head><body>
+<header><button id="mn" aria-label="القائمة">☰</button><a class="logo" href="index.html"><img src="../assets/brand/icon-48.png" alt="" width="26">Rin</a>
+<input id="q" type="search" placeholder="ابحث في التوثيق…" autocomplete="off"><button id="th" aria-label="الوضع">◐</button>
+<a class="gh" href="https://github.com/dlof-lib/rinlang">GitHub</a><div id="res"></div></header>
+<div class="wrap"><nav id="sb"><details ><summary>ابدأ هنا</summary><a href="getting-started.html">البداية</a><a href="syntax.html">القواعد النحوية العامة</a><a href="variables.html">let`، مصفوفات، قواميس، نطاق</a><a href="template-strings.html">النصوص القالبية (متغيّرات داخل النص)</a><a href="input.html">إدخال المستخدم (Input)</a><a href="control-flow.html">الشروط، الحلقات، `goal`/`achieve</a><a href="loops.html">حلقات Rin — Loops v2</a><a href="functions.html">fun`/`return`، التكرار الذاتي</a><a href="enums.html">enum`: قوائم اختيار مغلقة</a></details><details open><summary>اللغة</summary><a href="language-reference.html" class=on>المرجع الشامل وخريطة ترابط المفاهيم</a><a href="objects.html">class`/`struct`، `.object()`، `@Object`، `document</a><a href="oop.html">البرمجة الكائنية الموسَّعة (Rin 1.0)</a><a href="containers.html">دليل `@container` / `@element` / `@loop</a><a href="table.html">الجدول (`@table` / `@container.table`) ودوال اللغة عليه</a><a href="set.html">Set`: نوع المجموعة الأساسي</a><a href="pipelines.html">عامل الأنابيب `|&gt;</a><a href="RECKON.html">reckon`: مفهوم حسابي بسطرين</a><a href="let-plus.html">let` المطوَّر</a><a href="living-variables.html">المتغيرات الحيّة (Living Variables)</a><a href="label-define.html">label` و`define` (تسمية وتعريف)</a><a href="block-frames.html">بداية الكتل ونهايتها (Block Frames)</a><a href="compare_ops.html">معاملات المقارنة `/=` و `=/=` و `=/</a><a href="max_min.html">max / min family</a><a href="scope-guarantees.html">ضمانات النطاق: `finally` · `defer` · `catch … when` · `rethrow</a><a href="key_terms_and_builtins.html">Rin KEY_TERMS and Built-in Conditions</a><a href="number_builtins.html">Rin Number Built-ins</a></details><details ><summary>الواجهات (Indsin)</summary><a href="indsin.html">Indsin — Interface Design</a><a href="indsin_rin.html">indsin يعتمد على لغة Rin</a><a href="indsin_expansion.html">Indsin — التوسعة الاحترافية (Design System v2)</a><a href="indsin_object.html">indsin-object — API reference</a><a href="indsin_media.html">Indsin Media — اختيار الوسائط ورفعها</a><a href="indsin_icons.html">مكتبة أيقونات indsin (متجهية)</a><a href="indsin_tooling.html">indsin tooling — icon, file association, syntax highlighting</a><a href="indsinweb.html">IndsinWeb — مكتبة WebView والروابط لـ indsin</a><a href="RIN_ELEMENTS.html">دليل `@element.*` الكامل</a><a href="events-effects.html">الأحداث والتأثيرات (Events &amp; Effects) — محرك Indsin UI</a><a href="banner.html">Banner: إشعار شريطي</a><a href="simple-style.html">Rin Simple Style</a></details><details ><summary>بيئة التشغيل</summary><a href="runtime.html">وقت تشغيل Rin (Rin Runtime) · المرجع الرسمي</a><a href="standard-library.html">المكتبة القياسية (`lib/*.og.rin`)</a><a href="errors.html">نظام الأخطاء: أكواد، `try`/`catch`/`throw</a><a href="ERROR_SYSTEM.html">نظام التشخيص: البنية الداخلية + جدول الأكواد الكامل</a><a href="storage.html">تخزين دائم</a><a href="http.html">شبكات</a><a href="env.html">ربط Rin بملف `.env</a><a href="terminal.html">الطرفية التفاعلية — `rin terminal</a><a href="vm.html">RinVM — آلة Rin الافتراضية (بايتكود)</a><a href="rinflow.html">RinFlow: طبقة تنفيذ التدفّق المهيكل</a><a href="MAKE_UNIT.html">@make.(name)`: وحدة بسياسة قدرات صريحة</a><a href="MAKE_MEDIA.html">فيديو · صوت · API · إزالة الخلفية · قراءة النص من الصور</a><a href="TIME.html">مفهوم `time`: الزمن كقيمة من الدرجة الأولى</a><a href="native-additions.html">دوال Rin الأصلية الجديدة (Rin 1.0)</a></details><details ><summary>الحاويات وقواعد البيانات</summary><a href="container_advanced.html">Rin Container Advanced Built-ins</a><a href="container_pro.html">Rin Container Pro</a><a href="container_sql.html">RIN CONTAINER SQL (RCSQL)</a><a href="cross-file-containers.html">استدعاء إعلانات من ملف آخر</a></details><details ><summary>الحزم والتكامل</summary><a href="api.html">واجهة C المسطَّحة (Embedding API)</a><a href="android.html">استضافة Rin على أندرويد</a><a href="packages-and-interop.html">Rin 1.0 — المكتبات والحزم وجسر C++ وJSON واختبارات rintest</a><a href="rinpak-format.html">RinPak — حزمة مشروع Rin (`.rinpak`)</a><a href="html-projects.html">مشاريع HTML في Rin — الربط بين index.html وملف الحاوية</a><a href="project-og-urin.html">project.og.urin` — البيانات الوصفية لمشروع Rin</a><a href="CONTENT_PACKS.html">حزم المحتوى القابلة للتنزيل (Content Packs)</a><a href="previewkit.html">previewkit — معاينة حيّة لملفات PDF / Markdown / TypeScript</a></details><details ><summary>المكتبات المتخصصة</summary><a href="rinml.html">RinML / RinDF / RinAI — الذكاء الاصطناعي وتحليل البيانات في Rin</a><a href="STATS.html">RinStat — التحليل الإحصائي (`lib/rinstat.og.rin`)</a><a href="STATS_ADV.html">RinStat المتقدّم + RinAuto</a><a href="LINALG.html">الجبر الخطي للمهندسين — `mat*` و`vec*</a><a href="PLOT.html">RinPlot — الرسوم البيانية الإحصائية (`lib/rinplot.og.rin`)</a><a href="ALGO.html">تطوير الخوارزميات والحساب العددي — `algo*</a><a href="NUMBER.html">مفهوم `number` في Rin</a><a href="boat.html">&quot;Boat&quot;: مفاهيم أساسية مجمَّعة</a><a href="passkit.html">passkit — passwords, encryption, databases and a tag language</a><a href="passkit-crypto-db.html">Passkit feature catalog: encryption, databases and container linking</a><a href="hash-family.html">عائلة `#` — مفاهيم ودوال جديدة تبدأ بعلامة `#</a><a href="image-draw.html">إنشاء الصور في Rin — رسم وحفظ PNG وlog كصورة</a><a href="image-terminal.html">طباعة الصور في الـ terminal — `printImage` / `imageAnsi` / `imageInfo</a></details><details ><summary>المشروع</summary><a href="CONTRIBUTING.html">المساهمة في Rin</a><a href="CODE_OF_CONDUCT.html">قواعد السلوك</a><a href="SECURITY.html">سياسة الأمان</a><a href="SUPPORT.html">الحصول على المساعدة</a><a href="TRADEMARKS.html">سياسة العلامة التجارية — Trademark Policy</a><a href="THIRD_PARTY_NOTICES.html">إشعارات المكوّنات الخارجية — Third-Party Notices</a></details><details ><summary>مراجع إضافية</summary><a href="ANDROID_VERSIONS.html">حزم RinStudio لكل إصدار أندرويد</a><a href="TOKEN.html">مفهوم `token` في Rin</a><a href="TOOLCHAIN.html">Rin Professional Language Toolchain</a><a href="TOOLCHAIN_UPGRADE.html">Toolchain Upgrade — 2026-09</a><a href="architecture.html">المعمارية وبنية المستودع</a><a href="base-accept.html">base` و`accept`: متغيّران يخدمان `if</a><a href="channel47.html">channel47 — لغة وصف البيانات والإعدادات</a><a href="ci.html">CI وأدوات المستودع</a><a href="loop-templates.html">قوالب الحلقات `@tmpl</a><a href="pre-post.html">pre` و`post` (ما قبل / ما بعد): عقد انتقال حول الإسناد</a><a href="print-fonts.html">خطوط `print` — bold / italic / underline وغيرها</a><a href="print-image-terminal.html">طباعة الصور كنص في الطرفية</a><a href="print-templates.html">قوالب الطباعة `@tmpl ... print` — قوالب نصية خطية وتنسيقية</a><a href="rdoc.html">rdoc — Documentation Container</a><a href="rdoc-reference.html">وثيقة rdoc الشاملة — Documentation Container</a><a href="screenshots.html">لقطات من RinStudio</a></details></nav>
+<main><article><h1 id="language-referencemd">language-reference.md — المرجع الشامل وخريطة ترابط المفاهيم<a class="headerlink" href="#language-referencemd" title="Permanent link">#</a></h1>
+<p>هذا الملف هو نقطة البداية التي يشير إليها <code>README.md</code> — خريطة <strong>سردية</strong> (وليست
+قائمة مسطَّحة) لكيفية ترابط كل مفاهيم Rin ببعضها، لتقرأها بترتيب منطقي بدل
+القفز عشوائيًا بين الملفات. كل الملفات المذكورة هنا <strong>موجودة وموثَّقة فعليًا</strong> (لا
+روابط ميتة) بنفس درجة التحقّق: كل مثال كود في كل ملف جُرِّب فعليًا عبر المفسِّر
+الحقيقي (أو أداة <code>rin</code> الرسمية) قبل كتابته.</p>
+<h2 id="1">1) اللغة الأساسية — نقطة البداية<a class="headerlink" href="#1" title="Permanent link">#</a></h2>
+<p>ابدأ بـ<a href="getting-started.html"><code>getting-started.md</code></a> لتثبيت/بناء أداة <code>rin</code> الرسمية
+وتشغيل أول برنامج. بعدها، القواعد الأساسية بالترتيب:</p>
+<p><code>syntax.md</code> (القواعد النحوية العامة) → <code>variables.md</code> (<code>let</code>، مصفوفات، قواميس)
+→ <code>control-flow.md</code> (<code>if</code>/<code>while</code>/<code>for</code>/<code>match</code>/<code>goal</code>) → <code>functions.md</code> (<code>fun</code>)
+→ <code>enums.md</code> (<code>enum</code>) → <code>objects.md</code> (<code>class</code>/<code>struct</code>/<code>.object()</code>/<code>@Object</code>).</p>
+<p>وتتوسّع <code>let</code> نفسها في <a href="let-plus.html"><code>let-plus.md</code></a> (تفكيك وحراسة وتبديل). بعدها <a href="living-variables.html"><code>living-variables.md</code></a>: المتغيرات الحيّة
+(<code>stone</code>/<code>gauge</code>/<code>tape</code>/<code>lens</code>/<code>fuse</code>/<code>bell</code>/<code>trial</code>) — إضافة اختيارية فوق <code>let</code>. ويخدم <code>if</code> نوعان إضافيان: <a href="base-accept.html"><code>base-accept.md</code></a> (<code>base</code> مرجع يُقاس منه، <code>accept</code> حارس قبول) و<a href="pre-post.html"><code>pre-post.md</code></a> (<code>pre</code> ما قبل الكتابة، <code>post</code> ما بعدها).</p>
+<p>هذه الستة تكفي وحدها لقراءة/كتابة أي برنامج Rin إجرائي عادي.</p>
+<h2 id="2">2) الحاويات — حيث يلتقي المنطق بالبيانات والواجهة<a class="headerlink" href="#2" title="Permanent link">#</a></h2>
+<p><a href="containers.html"><code>containers.md</code></a> يقدّم الفصل الثلاثي المحوري في Rin:
+<code>@container</code> (السلوك) / <code>@loop</code> (الشكل) / <code>@element</code> (الوظيفة البصرية-الخالية).
+<a href="RIN_ELEMENTS.html"><code>RIN_ELEMENTS.md</code></a> كتالوج كل أنواع <code>@element.*</code> الكامل.
+<a href="cross-file-containers.html"><code>cross-file-containers.md</code></a> يوضّح صراحةً حدود مشاركة
+هذه الإعلانات بين ملفات متعددة اليوم (<code>@import</code> فقط — لا استيراد مُسمَّى انتقائي
+بعد). <a href="MAKE_UNIT.html"><code>MAKE_UNIT.md</code></a> نوع حاوية خاص (<code>@make.(name)</code>) بسياسة
+قدرات صريحة (<code>use</code>/<code>need</code>/<code>allow</code>/<code>deny</code>/<code>strict</code>) — نفس كلمات السياسة التي عُمِّمت
+لاحقًا لأي <code>@container</code> عادي في <code>containers.md</code> نفسها.</p>
+<h2 id="3">3) طبقة التنفيذ — تحويل البيانات لا مجرد تخزينها<a class="headerlink" href="#3" title="Permanent link">#</a></h2>
+<p><a href="pipelines.html"><code>pipelines.md</code></a> (عامل <code>|&gt;</code>) هو الأساس الذي يُبنى عليه
+<a href="RECKON.html"><code>RECKON.md</code></a> (<code>reckon</code>: حساب إحصائي بسطرين). كلاهما يمكن تتبّعهما
+خطوة بخطوة (رسم بياني، إلغاء، مهلة زمنية) عبر <a href="rinflow.html"><code>rinflow.md</code></a> —
+طبقة استضافة اختيارية لا تغيّر النتيجة، فقط تضيف رؤية/تحكّمًا.</p>
+<h2 id="4">4) بيئة التشغيل — ما يمنحه المفسِّر جاهزًا<a class="headerlink" href="#4" title="Permanent link">#</a></h2>
+<p><a href="standard-library.html"><code>standard-library.md</code></a> فهرس مكتبات <code>lib/*.og.rin</code>
+(عبر <code>@import</code>). <a href="http.html"><code>http.md</code></a> و<a href="storage.html"><code>storage.md</code></a> الاتصال
+بالخارج (شبكة، ملفات، ذاكرة تخزين مؤقت). <a href="errors.html"><code>errors.md</code></a> كيف تلتقط
+الأخطاء (<code>try</code>/<code>catch</code>/<code>throw</code>) و<a href="ERROR_SYSTEM.html"><code>ERROR_SYSTEM.md</code></a> الجدول
+الكامل لكل كود خطأ قد تراه في أي ملف آخر من هذه القائمة.</p>
+<h2 id="5">5) الواجهة — من الوصف إلى البكسلات<a class="headerlink" href="#5" title="Permanent link">#</a></h2>
+<p><a href="indsin.html"><code>../indsin.md</code></a> هو محرّك التنفيذ الذي يحوّل <code>@element</code>/<code>@loop</code>/
+<code>@container</code> (القسم 2 أعلاه) إلى شجرة مقاسة ثم بكسلات فعلية — بما في ذلك القدرة
+الجديدة على جعل <code>@element</code> جذر شاشة مستقل بذاته. <a href="banner.html"><code>banner.md</code></a> مثال
+تطبيقي كامل لعنصر واجهة واحد (اختصارات <code>title=</code>/<code>message=</code>، <code>closable=</code> وربط Warp
+التلقائي، ودوال Banner الأصلية المستقلة عنه).</p>
+<h2 id="6-rin">6) الاستضافة والتضمين — تشغيل Rin داخل تطبيق آخر<a class="headerlink" href="#6-rin" title="Permanent link">#</a></h2>
+<p><a href="api.html"><code>api.md</code></a> واجهة C المسطَّحة (<code>rin_c_api.h</code>/<code>rin_indsin_c_api.h</code>) التي
+يُبنى فوقها أي مضيف. <a href="android.html"><code>android.md</code></a> المثال العملي الكامل لذلك:
+جسر JNI (<code>RinEngine.kt</code>) فوق نفس واجهة <code>api.md</code> بالضبط، وعارض (<code>IndsinFabricView.kt</code>)
+يقرأ شجرة Fabric (من <code>indsin.md</code>) برسم <code>Canvas</code> أصلي مستقل.</p>
+<h2 id="7-boat">7) أخيرًا: مكتبة "Boat"<a class="headerlink" href="#7-boat" title="Permanent link">#</a></h2>
+<p><a href="boat.html"><code>boat.md</code></a> مجموعة أنواع بيانات جاهزة (<code>list</code>/<code>tuple</code>/<code>dict</code>/<code>set</code>/
+<code>tmap</code>/<code>window</code>) فوق <code>array</code>/<code>map</code> الأصليتين — مستقلة عن بقية الأقسام أعلاه، إضافة
+اختيارية بحتة (<code>@import "lib/boat.og.rin";</code>) لا تُبنى فوقها أي ميزة لغة أخرى.</p>
+<h2 id="readmemd">خريطة سريعة (كل الملفات، بترتيب <code>README.md</code>)<a class="headerlink" href="#readmemd" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>القسم</th>
+<th>الملفات</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>اللغة</td>
+<td><code>syntax</code> <code>language-reference</code> <code>variables</code> <code>control-flow</code> <code>functions</code> <code>enums</code> <code>objects</code> <code>containers</code> <code>cross-file-containers</code> <code>boat</code></td>
+</tr>
+<tr>
+<td>بيئة التشغيل</td>
+<td><code>standard-library</code> <code>errors</code> <code>ERROR_SYSTEM</code> <code>storage</code> <code>http</code></td>
+</tr>
+<tr>
+<td>التنفيذ</td>
+<td><code>pipelines</code> <code>RECKON</code> <code>MAKE_UNIT</code> <code>rinflow</code></td>
+</tr>
+<tr>
+<td>الواجهة</td>
+<td><code>../indsin.md</code> <code>RIN_ELEMENTS</code> <code>banner</code> <code>android</code></td>
+</tr>
+<tr>
+<td>API</td>
+<td><code>api</code></td>
+</tr>
+<tr>
+<td>البداية</td>
+<td><code>getting-started</code></td>
+</tr>
+</tbody>
+</table></div>
+<ul>
+<li>عائلة <code>#</code>: انظر <a href="hash-family.html">hash-family.md</a>.</li>
+</ul></article>
+<div class="pnav"><a class="pn" href="enums.html">→ enum`: قوائم اختيار مغلقة</a><a class="pn" href="objects.html">class`/`struct`، `.object()`، `@Object`، `document ←</a></div><p class="edit"><a href="https://github.com/dlof-lib/rinlang/edit/main/docs/language-reference.md">✎ عدّل هذه الصفحة على GitHub</a></p>
+<footer>Rin 1.0.0 · رخصة MIT</footer></main>
+<aside id="toc"><b>في هذه الصفحة</b><div class="toc">
+<ul>
+<li><a href="#1">1) اللغة الأساسية — نقطة البداية</a></li>
+<li><a href="#2">2) الحاويات — حيث يلتقي المنطق بالبيانات والواجهة</a></li>
+<li><a href="#3">3) طبقة التنفيذ — تحويل البيانات لا مجرد تخزينها</a></li>
+<li><a href="#4">4) بيئة التشغيل — ما يمنحه المفسِّر جاهزًا</a></li>
+<li><a href="#5">5) الواجهة — من الوصف إلى البكسلات</a></li>
+<li><a href="#6-rin">6) الاستضافة والتضمين — تشغيل Rin داخل تطبيق آخر</a></li>
+<li><a href="#7-boat">7) أخيرًا: مكتبة "Boat"</a></li>
+<li><a href="#readmemd">خريطة سريعة (كل الملفات، بترتيب README.md)</a></li>
+</ul>
+</div>
+</aside></div>
+<script src="assets/app.js"></script></body></html>
