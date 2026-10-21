@@ -23,7 +23,7 @@ CPP_DIR="../app/src/main/cpp"
 #   - src/pkg/*.cpp (RinPM) غير مُضمَّنة: تفترض وصول شبكة/نظام ملفات حقيقي لسجلّات الحزم؛
 #     ملفات .rin التي يشغّلها RinHTML داخل صفحة HTML لا تستورد حزماً عن بُعد.
 emcc \
-  -std=c++17 -O2 \
+  -std=c++23 -O2 \
   -I "$CPP_DIR" \
   "$CPP_DIR"/rin_lexer.cpp \
   "$CPP_DIR"/rin_parser.cpp \
