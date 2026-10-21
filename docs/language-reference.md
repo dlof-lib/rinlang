@@ -39,6 +39,7 @@
 [`compose.md`](./compose.md) (`@import "compose";`) مكتبة أساسية تربط كل ما سبق ببعضه: أي مفهوم
 (map، array، `Set`، `enum`، كائن `class`، حاوية، سجلات جدول) يتحوّل بـ`asFn`/`asMap`/`asArray`/`asSet`،
 فيصلح مرحلة في `compose`/`chain`/`through`، ويُدمج بـ`combine`/`mergeWith`، ويتفاعل بـ`connect`/`sync`.
+ويوسّعها ست مكتبات مساعدة (`compose_seq` `compose_path` `compose_flow` `compose_schema` `compose_diff` `compose_store`) في [`compose-helpers.md`](./compose-helpers.md).
 
 ## 4) بيئة التشغيل — ما يمنحه المفسِّر جاهزًا
 [`standard-library.md`](./standard-library.md) فهرس مكتبات `lib/*.og.rin`
