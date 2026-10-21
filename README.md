@@ -16,6 +16,7 @@
 
 <p>
 <a href="https://dlof-lib.github.io/rinlang/"><b>الموقع</b></a> ·
+<a href="https://dlof-lib.github.io/rinlang/manual/"><b>التوثيق</b></a> ·
 <a href="./docs/getting-started.md"><b>البداية</b></a> ·
 <a href="./docs/language-reference.md"><b>المرجع</b></a> ·
 <a href="./lib/README.md"><b>المكتبات</b></a> ·
