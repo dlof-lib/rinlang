@@ -31,7 +31,7 @@ fi
 
 echo "== بناء محرّك Rin لـ playground.html (rin_run_source) =="
 
-em++ -O2 -std=c++17 -fexceptions \
+em++ -O2 -std=c++23 -fexceptions \
   -I "$CPP_DIR" \
   "$CPP_DIR"/rin_lexer.cpp \
   "$CPP_DIR"/rin_parser.cpp \
