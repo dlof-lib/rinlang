@@ -1,0 +1,15 @@
+📦 @import: تم استيراد "lib/compose.og.rin" (مكتبة مدمجة)
+↺ @import: "lib/compose.og.rin" مستورَدة مسبقاً بالفعل (تم تجاهل التكرار)
+📦 @import: تم استيراد "lib/compose_path.og.rin" (مكتبة مدمجة)
+📦 @import: تم استيراد "lib/compose_diff.og.rin" (مكتبة مدمجة)
+[{"op": "change", "path": ["n"], "from": 1, "to": 2}, {"op": "change", "path": ["o", "y", 1], "from": 2, "to": 9}, {"op": "remove", "path": ["o", "y", 2], "from": 3, "to": nil}, {"op": "remove", "path": ["gone"], "from": 5, "to": nil}, {"op": "add", "path": ["new"], "from": nil, "to": "hi"}]
+["~ n: 1 -> 2", "~ o.y.1: 2 -> 9", "- o.y.2", "- gone", "+ new = hi"]
+[["n"], ["o", "y", 1], ["o", "y", 2], ["gone"], ["new"]]
+true
+true
+[{"op": "add", "path": [2], "from": nil, "to": 3}]
+[{"op": "change", "path": [], "from": Set{1}, "to": Set{2}}]
+{"value": {"a": 10, "b": 20, "c": 33}, "conflicts": []}
+{"value": {"a": 5, "b": 2, "c": 3}, "conflicts": [["a"]]}
+[]
+[]
