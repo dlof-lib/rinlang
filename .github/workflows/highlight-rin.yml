@@ -1,0 +1,92 @@
+name: Highlight Rin code on GitHub (تلوين كود Rin)
+
+# ───────────────────────────────────────────────────────────────────────────────
+# GitHub يلوّن الكود عبر مشروع github-linguist، ولا يعرف لغة Rin بعد (إضافة لغة جديدة
+# تتطلب PR مقبولاً في linguist بشرط ≥2000 ملف .rin منتشر علناً — انظر linguist-submission/).
+# الحل العملي الآن، وهو يعمل فوراً داخل مستودعك:
+#   1) كتلة مُدارة في .gitattributes تجعل GitHub يعرض ملفات *.rin و *.og.rin بتلوين لغة قريبة
+#      (الافتراضي Kotlin: يشارك Rin كلمات fun / if / else / while / for / true / false والتعليقات //
+#      والاستدعاءات @import) + يُخرج الملفات المولَّدة والمكتبات الخارجية من إحصاء اللغات.
+#   2) (اختياري) تحويل كتل ```rin داخل ملفات md إلى لغة التلوين نفسها، لأن GitHub
+#      لا يلوّن ```rin في README والتوثيق.
+# تشغيل: Actions ← Highlight Rin code on GitHub ← Run workflow (آمن للتكرار).
+# ───────────────────────────────────────────────────────────────────────────────
+
+on:
+  workflow_dispatch:
+    inputs:
+      language:
+        description: "لغة التلوين البديلة"
+        type: choice
+        default: Kotlin
+        options: [Kotlin, Swift, JavaScript, Rust, Go]
+      rewrite_md_fences:
+        description: "تحويل كتل ```rin في ملفات md إلى لغة التلوين"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  highlight:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Update .gitattributes (managed block)
+        env:
+          LANGUAGE: ${{ inputs.language }}
+        run: |
+          python3 - <<'PY'
+          import os, re
+          from pathlib import Path
+          lang = os.environ["LANGUAGE"]
+          BEGIN, END = "# >>> rin-highlight (managed)", "# <<< rin-highlight"
+          block = f"""{BEGIN}
+          *.rin linguist-language={lang} linguist-detectable
+          *.og.rin linguist-language={lang} linguist-detectable
+          app/src/main/cpp/third_party/** linguist-vendored
+          app/src/main/cpp/rin_stdlib_libs.h linguist-generated
+          docs/**/*.html linguist-documentation
+          {END}
+          """
+          block = "\n".join(l.strip() for l in block.splitlines()) + "\n"
+          p = Path(".gitattributes")
+          t = p.read_text() if p.exists() else ""
+          t = re.sub(re.escape(BEGIN) + r".*?" + re.escape(END) + r"\n?", "", t, flags=re.S)
+          p.write_text(t.rstrip("\n") + "\n\n" + block)
+          print(block)
+          PY
+
+      - name: Rewrite ```rin fences in Markdown
+        if: ${{ inputs.rewrite_md_fences }}
+        env:
+          LANGUAGE: ${{ inputs.language }}
+        run: |
+          python3 - <<'PY'
+          import os, re
+          from pathlib import Path
+          lang = os.environ["LANGUAGE"].lower()
+          pat = re.compile(r"^(\s*(?:>\s*)*)(`{3,}|~{3,})\s*(?:rin|og\.rin)\b[^\n]*$", re.M)
+          n = files = 0
+          for p in Path(".").rglob("*.md"):
+              if ".git" in p.parts: continue
+              t = p.read_text(encoding="utf-8", errors="replace")
+              new, c = pat.subn(lambda m: f"{m.group(1)}{m.group(2)}{lang}", t)
+              if c: p.write_text(new, encoding="utf-8"); n += c; files += 1
+          print(f"{n} كتلة في {files} ملف")
+          PY
+
+      - name: Commit & push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "لا تغييرات."
+          else
+            git commit -m "chore: Rin syntax highlighting via linguist overrides [skip ci]"
+            git push
+          fi
