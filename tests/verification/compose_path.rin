@@ -1,0 +1,18 @@
+@import "compose_path";
+let cfg = {"a": {"b": [10, {"c": 5}]}, "x": 1};
+print getIn(cfg, "a.b.1.c", 0); print getIn(cfg, "a.z", "none"); print getIn(cfg, ["a","b",0], 0);
+print hasIn(cfg, "a.b.1"); print hasIn(cfg, "a.q");
+let n = setIn(cfg, "a.b.1.c", 99); print n; print cfg;
+print setIn({}, "u.v.w", 1); print setIn({}, ["l", 0, "k"], 1);
+print updateIn(cfg, "x", fun(v){ return v + 1; });
+print deleteIn(cfg, "a.b.0"); print deleteIn(cfg, "x");
+let t = {}; putIn(t, "p.q", 7); putIn(t, "p.r", 8); print t;
+print leafPaths(cfg); print flattenKeys(cfg, "."); print unflattenKeys({"a.b": 1, "a.c": 2, "d": 3}, ".");
+print findPaths(cfg, fun(v){ return type(v) == "number" and v > 4; });
+print keepKeys({"a":1,"b":2}, ["a","z"]); print dropKeys({"a":1,"b":2}, ["a"]); print renameKeys({"a":1,"b":2}, {"a":"A"});
+print mapKeys({"a":1}, fun(k){ return upper(k); }); print invertMap({"a":1,"b":2}); print dropNil({"a":nil,"b":{"c":nil,"d":1}});
+print withDefaults({"a":1}, {"a":0,"b":2});
+print mapLeaves(cfg, fun(v){ return v * 2; });
+print walkValues([1,[2]], fun(v){ return v; });
+let c = cloneDeep(cfg); c["a"]["b"][0] = 0; print cfg["a"]["b"][0];
+print pathOf("a.b"); print flattenKeys({"k":[1,2]}, "/");
