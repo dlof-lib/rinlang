@@ -1,0 +1,231 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>IndsinWeb — مكتبة WebView والروابط لـ indsin — Rin</title>
+<meta name="description" content="توثيق لغة البرمجة Rin"><link rel="icon" href="../assets/brand/icon-32.png">
+<link rel="stylesheet" href="assets/style.css"></head><body>
+<header><button id="mn" aria-label="القائمة">☰</button><a class="logo" href="index.html"><img src="../assets/brand/icon-48.png" alt="" width="26">Rin</a>
+<input id="q" type="search" placeholder="ابحث في التوثيق…" autocomplete="off"><button id="th" aria-label="الوضع">◐</button>
+<a class="gh" href="https://github.com/dlof-lib/rinlang">GitHub</a><div id="res"></div></header>
+<div class="wrap"><nav id="sb"><details ><summary>ابدأ هنا</summary><a href="getting-started.html">البداية</a><a href="syntax.html">القواعد النحوية العامة</a><a href="variables.html">let`، مصفوفات، قواميس، نطاق</a><a href="template-strings.html">النصوص القالبية (متغيّرات داخل النص)</a><a href="input.html">إدخال المستخدم (Input)</a><a href="control-flow.html">الشروط، الحلقات، `goal`/`achieve</a><a href="loops.html">حلقات Rin — Loops v2</a><a href="functions.html">fun`/`return`، التكرار الذاتي</a><a href="enums.html">enum`: قوائم اختيار مغلقة</a></details><details ><summary>اللغة</summary><a href="language-reference.html">المرجع الشامل وخريطة ترابط المفاهيم</a><a href="objects.html">class`/`struct`، `.object()`، `@Object`، `document</a><a href="oop.html">البرمجة الكائنية الموسَّعة (Rin 1.0)</a><a href="containers.html">دليل `@container` / `@element` / `@loop</a><a href="table.html">الجدول (`@table` / `@container.table`) ودوال اللغة عليه</a><a href="set.html">Set`: نوع المجموعة الأساسي</a><a href="pipelines.html">عامل الأنابيب `|&gt;</a><a href="RECKON.html">reckon`: مفهوم حسابي بسطرين</a><a href="let-plus.html">let` المطوَّر</a><a href="living-variables.html">المتغيرات الحيّة (Living Variables)</a><a href="label-define.html">label` و`define` (تسمية وتعريف)</a><a href="block-frames.html">بداية الكتل ونهايتها (Block Frames)</a><a href="compare_ops.html">معاملات المقارنة `/=` و `=/=` و `=/</a><a href="max_min.html">max / min family</a><a href="scope-guarantees.html">ضمانات النطاق: `finally` · `defer` · `catch … when` · `rethrow</a><a href="key_terms_and_builtins.html">Rin KEY_TERMS and Built-in Conditions</a><a href="number_builtins.html">Rin Number Built-ins</a></details><details open><summary>الواجهات (Indsin)</summary><a href="indsin.html">Indsin — Interface Design</a><a href="indsin_rin.html">indsin يعتمد على لغة Rin</a><a href="indsin_expansion.html">Indsin — التوسعة الاحترافية (Design System v2)</a><a href="indsin_object.html">indsin-object — API reference</a><a href="indsin_media.html">Indsin Media — اختيار الوسائط ورفعها</a><a href="indsin_icons.html">مكتبة أيقونات indsin (متجهية)</a><a href="indsin_tooling.html">indsin tooling — icon, file association, syntax highlighting</a><a href="indsinweb.html" class=on>IndsinWeb — مكتبة WebView والروابط لـ indsin</a><a href="RIN_ELEMENTS.html">دليل `@element.*` الكامل</a><a href="events-effects.html">الأحداث والتأثيرات (Events &amp; Effects) — محرك Indsin UI</a><a href="banner.html">Banner: إشعار شريطي</a><a href="simple-style.html">Rin Simple Style</a></details><details ><summary>بيئة التشغيل</summary><a href="runtime.html">وقت تشغيل Rin (Rin Runtime) · المرجع الرسمي</a><a href="standard-library.html">المكتبة القياسية (`lib/*.og.rin`)</a><a href="errors.html">نظام الأخطاء: أكواد، `try`/`catch`/`throw</a><a href="ERROR_SYSTEM.html">نظام التشخيص: البنية الداخلية + جدول الأكواد الكامل</a><a href="storage.html">تخزين دائم</a><a href="http.html">شبكات</a><a href="env.html">ربط Rin بملف `.env</a><a href="terminal.html">الطرفية التفاعلية — `rin terminal</a><a href="vm.html">RinVM — آلة Rin الافتراضية (بايتكود)</a><a href="rinflow.html">RinFlow: طبقة تنفيذ التدفّق المهيكل</a><a href="MAKE_UNIT.html">@make.(name)`: وحدة بسياسة قدرات صريحة</a><a href="MAKE_MEDIA.html">فيديو · صوت · API · إزالة الخلفية · قراءة النص من الصور</a><a href="TIME.html">مفهوم `time`: الزمن كقيمة من الدرجة الأولى</a><a href="native-additions.html">دوال Rin الأصلية الجديدة (Rin 1.0)</a></details><details ><summary>الحاويات وقواعد البيانات</summary><a href="container_advanced.html">Rin Container Advanced Built-ins</a><a href="container_pro.html">Rin Container Pro</a><a href="container_sql.html">RIN CONTAINER SQL (RCSQL)</a><a href="cross-file-containers.html">استدعاء إعلانات من ملف آخر</a></details><details ><summary>الحزم والتكامل</summary><a href="api.html">واجهة C المسطَّحة (Embedding API)</a><a href="android.html">استضافة Rin على أندرويد</a><a href="packages-and-interop.html">Rin 1.0 — المكتبات والحزم وجسر C++ وJSON واختبارات rintest</a><a href="rinpak-format.html">RinPak — حزمة مشروع Rin (`.rinpak`)</a><a href="html-projects.html">مشاريع HTML في Rin — الربط بين index.html وملف الحاوية</a><a href="project-og-urin.html">project.og.urin` — البيانات الوصفية لمشروع Rin</a><a href="CONTENT_PACKS.html">حزم المحتوى القابلة للتنزيل (Content Packs)</a><a href="previewkit.html">previewkit — معاينة حيّة لملفات PDF / Markdown / TypeScript</a></details><details ><summary>المكتبات المتخصصة</summary><a href="rinml.html">RinML / RinDF / RinAI — الذكاء الاصطناعي وتحليل البيانات في Rin</a><a href="STATS.html">RinStat — التحليل الإحصائي (`lib/rinstat.og.rin`)</a><a href="STATS_ADV.html">RinStat المتقدّم + RinAuto</a><a href="LINALG.html">الجبر الخطي للمهندسين — `mat*` و`vec*</a><a href="PLOT.html">RinPlot — الرسوم البيانية الإحصائية (`lib/rinplot.og.rin`)</a><a href="ALGO.html">تطوير الخوارزميات والحساب العددي — `algo*</a><a href="NUMBER.html">مفهوم `number` في Rin</a><a href="boat.html">&quot;Boat&quot;: مفاهيم أساسية مجمَّعة</a><a href="passkit.html">passkit — passwords, encryption, databases and a tag language</a><a href="passkit-crypto-db.html">Passkit feature catalog: encryption, databases and container linking</a><a href="hash-family.html">عائلة `#` — مفاهيم ودوال جديدة تبدأ بعلامة `#</a><a href="image-draw.html">إنشاء الصور في Rin — رسم وحفظ PNG وlog كصورة</a><a href="image-terminal.html">طباعة الصور في الـ terminal — `printImage` / `imageAnsi` / `imageInfo</a></details><details ><summary>المشروع</summary><a href="CONTRIBUTING.html">المساهمة في Rin</a><a href="CODE_OF_CONDUCT.html">قواعد السلوك</a><a href="SECURITY.html">سياسة الأمان</a><a href="SUPPORT.html">الحصول على المساعدة</a><a href="TRADEMARKS.html">سياسة العلامة التجارية — Trademark Policy</a><a href="THIRD_PARTY_NOTICES.html">إشعارات المكوّنات الخارجية — Third-Party Notices</a></details><details ><summary>مراجع إضافية</summary><a href="ANDROID_VERSIONS.html">حزم RinStudio لكل إصدار أندرويد</a><a href="TOKEN.html">مفهوم `token` في Rin</a><a href="TOOLCHAIN.html">Rin Professional Language Toolchain</a><a href="TOOLCHAIN_UPGRADE.html">Toolchain Upgrade — 2026-09</a><a href="architecture.html">المعمارية وبنية المستودع</a><a href="base-accept.html">base` و`accept`: متغيّران يخدمان `if</a><a href="channel47.html">channel47 — لغة وصف البيانات والإعدادات</a><a href="ci.html">CI وأدوات المستودع</a><a href="loop-templates.html">قوالب الحلقات `@tmpl</a><a href="pre-post.html">pre` و`post` (ما قبل / ما بعد): عقد انتقال حول الإسناد</a><a href="print-fonts.html">خطوط `print` — bold / italic / underline وغيرها</a><a href="print-image-terminal.html">طباعة الصور كنص في الطرفية</a><a href="print-templates.html">قوالب الطباعة `@tmpl ... print` — قوالب نصية خطية وتنسيقية</a><a href="rdoc.html">rdoc — Documentation Container</a><a href="rdoc-reference.html">وثيقة rdoc الشاملة — Documentation Container</a><a href="screenshots.html">لقطات من RinStudio</a></details></nav>
+<main><article><h1 id="indsinweb-webview-indsin">IndsinWeb — مكتبة WebView والروابط لـ indsin<a class="headerlink" href="#indsinweb-webview-indsin" title="Permanent link">#</a></h1>
+<p><img alt="icon" src="../assets/branding/indsinweb_icon.png" /></p>
+<p>الإصدار <strong>1.0.0</strong> · الأيقونة: <code>assets/branding/indsinweb_icon.png</code> (512×512) و<code>indsinweb_icon.svg</code>.</p>
+<p><code>lib/indsinweb.og.rin</code> مكتبة مكتوبة بلغة Rin فقط (مضمَّنة في التطبيق، فلا تحتاج ملفًا على القرص):</p>
+<pre><code class="language-kotlin">@import &quot;lib/indsinweb.og.rin&quot;;
+</code></pre>
+<p>تُجهّز كل ما يحتاجه عنصر <code>WebView</code> في indsin (<code>url=</code> / <code>src=</code> / <code>html=</code> / <code>ratio=</code>) وتتعامل مع كل أنواع الروابط
+بأمان. كل الدوال تبدأ بـ <code>iw</code>، ولا تنفّذ أي JavaScript؛ كل نص يدخل في HTML يُهرَّب.</p>
+<h2 id="_1">مثال سريع<a class="headerlink" href="#_1" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">@import &quot;lib/indsinweb.og.rin&quot;;
+
+@container=Demo
+    warp site = &quot;youtube.com/watch?v=dQw4w9WgXcQ&quot;;
+
+    @view.Column=Root
+        padding=16;
+        gap=12;
+
+        @view.WebView=Player
+            url=iwEmbedUrl(iwNormalize(site));
+            ratio=&quot;16:9&quot;;
+        .end/view
+
+        @view.WebView=Card
+            html=iwFragment(iwLinkHtml(&quot;مكتبات Rin&quot;, iwRinLibrary(&quot;majd&quot;, &quot;math&quot;)), {&quot;dir&quot;: &quot;rtl&quot;, &quot;padding&quot;: 12});
+        .end/view
+    .end/view
+.end/container
+</code></pre>
+<h2 id="_2">المرجع<a class="headerlink" href="#_2" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>القسم</th>
+<th>الدوال</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>نصوص وترميز</td>
+<td><code>iwEscape</code> · <code>iwUrlEncode</code> · <code>iwUrlEncodeKeep</code> · <code>iwUrlDecode</code> · <code>iwUrlDecodeEx(s, plus)</code> (UTF-8 صحيح للعربية)</td>
+</tr>
+<tr>
+<td>تحليل</td>
+<td><code>iwParseUrl</code> (scheme, userinfo, host, port, path, query, fragment) · <code>iwNormalize</code> · <code>iwOrigin</code> · <code>iwScheme</code> · <code>iwHost</code> · <code>iwJoin(base, rel)</code> · <code>iwDisplay</code> · <code>iwShorten</code></td>
+</tr>
+<tr>
+<td>أمان</td>
+<td><code>iwIsSafe</code> · <code>iwIsSafeEx(url, schemes, allowUserinfo)</code> · <code>iwIsHttps</code> · <code>iwHostAllowed(url, hosts)</code> · <code>iwSameOrigin</code> · <code>iwSanitizeHtml</code></td>
+</tr>
+<tr>
+<td>استعلام</td>
+<td><code>iwQuery(map)</code> · <code>iwParseQuery</code> · <code>iwWithParams(url, map)</code> · <code>iwGetParam(url, name, default)</code> · <code>iwRemoveParam</code></td>
+</tr>
+<tr>
+<td>أنواع الروابط</td>
+<td><code>iwLinkKind</code> · <code>iwMailto</code> · <code>iwTel</code> · <code>iwSms</code> · <code>iwGeo</code> · <code>iwMapsUrl</code> · <code>iwWhatsApp</code> · <code>iwTelegram</code> · <code>iwPlayStore</code> · <code>iwPlayStoreWeb</code> · <code>iwAndroidIntent</code> · <code>iwDeepLink</code></td>
+</tr>
+<tr>
+<td>روابط Rin</td>
+<td><code>iwRinProfile(user)</code> · <code>iwRinLibrary(user, lib)</code> · <code>iwParseRinLink(url)</code> (القانوني والقديم <code>?@user/lib.og.rin</code>)</td>
+</tr>
+<tr>
+<td>فيديو/تضمين</td>
+<td><code>iwYoutubeId</code> · <code>iwYoutubeEmbedUrl(url, opts)</code> · <code>iwYoutubeThumb</code> · <code>iwVimeoEmbedUrl</code> · <code>iwEmbedUrl</code></td>
+</tr>
+<tr>
+<td>HTML لـ <code>html=</code></td>
+<td><code>iwLinkHtml</code> / <code>iwLinkHtmlEx</code> · <code>iwIframeHtml</code> · <code>iwEmbedHtml</code> · <code>iwTapButton</code> · <code>iwFragment</code> · <code>iwPage</code></td>
+</tr>
+<tr>
+<td>عنصر WebView</td>
+<td><code>iwRatio</code> · <code>iwHeightForRatio</code> · <code>iwWebViewAttrs(src, opts)</code> · <code>iwWebViewSource(name, src, opts)</code> · <code>iwYoutubeWebView</code></td>
+</tr>
+<tr>
+<td>سجل التنقّل</td>
+<td><code>iwNavNew</code> · <code>iwNavVisit</code> · <code>iwNavBack</code> · <code>iwNavForward</code> · <code>iwNavCurrent</code> · <code>iwCanBack</code> · <code>iwCanForward</code> · <code>iwNavList</code></td>
+</tr>
+<tr>
+<td>تنظيف وكشف</td>
+<td><code>iwStripTracking</code> (utm_*/fbclid/gclid...) · <code>iwIsPrivateHost</code> (localhost/10.x/192.168.x/172.16-31/169.254/IPv6 المحلي) · <code>iwIsPublicWeb</code> · <code>iwFileName</code> · <code>iwExtension</code> · <code>iwMediaKind</code> (image/video/audio/pdf/document/archive/page)</td>
+</tr>
+<tr>
+<td>شريط العنوان</td>
+<td><code>iwSearchUrl(engine, q)</code> · <code>iwResolveInput(input, {engine})</code> → <code>url</code> / <code>search</code> / <code>blocked</code> / <code>empty</code></td>
+</tr>
+<tr>
+<td>مشاركة</td>
+<td><code>iwShareUrl(network, url, msg)</code>: x · facebook · linkedin · telegram · whatsapp · reddit · email · sms</td>
+</tr>
+<tr>
+<td>مزوّدون</td>
+<td><code>iwSpotifyEmbedUrl</code> · <code>iwDailymotionEmbedUrl</code> · <code>iwDriveEmbedUrl</code> · <code>iwMapsEmbedUrl</code> · <code>iwIsEmbeddable</code> (و<code>iwEmbedUrl</code> يعرفهم جميعًا)</td>
+</tr>
+<tr>
+<td>توجيه عميق</td>
+<td><code>iwRoute(url, ["open/item/:id", "/u/:name"])</code> → <code>matched</code> / <code>params</code> / <code>query</code></td>
+</tr>
+<tr>
+<td>روابط في النصوص</td>
+<td><code>iwExtractUrls</code> · <code>iwLinkify(text, opts)</code> (تهريب + روابط آمنة + <code>&lt;br&gt;</code>) · <code>iwAuditHtml(html)</code> (كل <code>href</code> مع النوع والأمان)</td>
+</tr>
+<tr>
+<td>خطة الفتح</td>
+<td><code>iwOpenPlan(url, opts)</code> → <code>webview</code> / <code>external</code> / <code>blocked</code> مع السبب (<code>allow</code>, <code>allowPrivate</code>, <code>allowIntent</code>)</td>
+</tr>
+<tr>
+<td>صفحات WebView</td>
+<td><code>iwCardHtml(title, desc, url, image)</code> · <code>iwErrorHtml(title, msg, {retry})</code> · <code>iwLoadingHtml</code> · وخيار <code>theme: "dark"/"light"</code> في <code>iwFragment</code></td>
+</tr>
+<tr>
+<td>شاشة الربط</td>
+<td><code>iwLinkScreen(url, opts)</code> · <code>iwLinkScreenAttrs</code> · <code>iwLinkScreenSource(name, url, opts)</code> · <code>iwScreenKind</code> · <code>iwLabels</code> (انظر أدناه)</td>
+</tr>
+<tr>
+<td>المفضّلة</td>
+<td><code>iwBookmarksNew</code> · <code>iwBookmarkAdd/Remove/Has/List</code> · <code>iwBookmarksSave/Load</code> (JSON، يعاد فحص كل رابط عند التحميل)</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="link-screen">شاشة الربط (Link Screen)<a class="headerlink" href="#link-screen" title="Permanent link">#</a></h2>
+<p>شاشة جاهزة تعرض أي رابط حسب نوعه قبل فتحه، داخل عنصر <code>WebView</code>:</p>
+<pre><code class="language-kotlin">@view.WebView=Screen
+    html=iwLinkScreen(&quot;https://youtu.be/dQw4w9WgXcQ&quot;, {&quot;lang&quot;: &quot;ar&quot;, &quot;theme&quot;: &quot;dark&quot;});
+    height=340;
+.end/view
+</code></pre>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>نوع الرابط</th>
+<th>ما تعرضه الشاشة</th>
+<th>الزر الرئيسي</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>فيديو (يوتيوب/Vimeo/Dailymotion)</td>
+<td>صورة مصغّرة + زر تشغيل (أو مشغّل مضمَّن مع <code>mode: "embed"</code>)</td>
+<td>تشغيل</td>
+</tr>
+<tr>
+<td>صفحة ويب</td>
+<td>النطاق + 🔒 HTTPS أو ⚠️ HTTP</td>
+<td>فتح</td>
+</tr>
+<tr>
+<td>صورة</td>
+<td>معاينة الصورة (https فقط)</td>
+<td>فتح</td>
+</tr>
+<tr>
+<td>صوت (Spotify/ملف صوت)</td>
+<td>بطاقة صوت</td>
+<td>تشغيل/فتح</td>
+</tr>
+<tr>
+<td>PDF / مستند / مضغوط</td>
+<td>اسم الملف</td>
+<td>تنزيل (أو تشغيل لمعاينة Drive)</td>
+</tr>
+<tr>
+<td>بريد / هاتف / رسالة / موقع</td>
+<td>العنوان أو الرقم</td>
+<td>إرسال/اتصال/فتح الموقع</td>
+</tr>
+<tr>
+<td>واتساب / تيليجرام / متجر / intent</td>
+<td>"يُفتح في تطبيق آخر"</td>
+<td>فتح في التطبيق</td>
+</tr>
+<tr>
+<td>مكتبة Rin</td>
+<td><code>@user / library</code></td>
+<td>فتح</td>
+</tr>
+<tr>
+<td>محجوب (<code>javascript:</code> أو محلي أو خارج <code>allow</code>)</td>
+<td>شاشة "الرابط محجوب" بلا أي رابط</td>
+<td>—</td>
+</tr>
+</tbody>
+</table></div>
+<p>الخيارات: <code>lang</code> (<code>en</code>/<code>ar</code>) · <code>theme</code> (<code>dark</code>/<code>light</code>) · <code>title</code> · <code>mode</code> (<code>preview</code>/<code>embed</code>) · <code>allow</code> · <code>allowPrivate</code> · <code>allowIntent</code>.
+بلا JavaScript؛ الأزرار روابط عادية، وكل النصوص مهرَّبة.</p>
+<h2 id="_3">قواعد الأمان<a class="headerlink" href="#_3" title="Permanent link">#</a></h2>
+<ul>
+<li><code>iwIsSafe</code> يقبل <code>https</code>/<code>http</code> فقط افتراضيًا؛ يُرفض <code>javascript:</code> و<code>data:</code> و<code>file:</code> وأي رابط فيه مسافات أو رموز
+  تحكّم (<code>java\nscript:</code>) أو <code>userinfo</code> (<code>https://google.com@evil.com</code>) أو بلا مضيف.</li>
+<li><code>iwWebViewAttrs</code> يقبل أيضًا <code>blockPrivate: true</code> (يحجب العناوين المحلية/الخاصة، أي SSRF) و<code>stripTracking: true</code>.</li>
+<li><code>iwWebViewAttrs</code> لا يرمي أخطاء: عند الرفض يعيد <code>ok=false</code> وسمات <code>html</code> تشرح السبب، فلا ينهار العنصر.
+  الخيار <code>allow: ["example.com", "*.cdn.com"]</code> يحصر المواقع المسموحة، و<code>embed: true</code> يحوّل روابط الفيديو لروابط تضمين.</li>
+<li><code>iwSanitizeHtml</code> دفاع إضافي (يحذف <code>script</code>/<code>iframe</code>/<code>on*=</code>/<code>javascript:</code>...)؛ للنص المجهول استعمل <code>iwEscape</code>.</li>
+<li>روابط يوتيوب تُضمَّن عبر <code>youtube-nocookie.com</code>، ويُتحقَّق من المضيف الحقيقي (<code>evilyoutube.com</code> مرفوض).</li>
+</ul>
+<h2 id="_4">ملاحظات عن اللغة اكتُشفت أثناء الكتابة<a class="headerlink" href="#_4" title="Permanent link">#</a></h2>
+<p><code>text</code> و<code>style</code> و<code>to</code> كلمات محجوزة في Rin فلا تصلح أسماء متغيرات/معاملات؛ والنفي يُكتب <code>!</code> وليس <code>not</code>.</p>
+<h2 id="_5">مثال: متصفح مصغّر<a class="headerlink" href="#_5" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">let nav = iwNavNew();
+let r = iwResolveInput(userInput, {&quot;engine&quot;: &quot;duckduckgo&quot;});   // رابط أو بحث
+if (r[&quot;kind&quot;] == &quot;url&quot; or r[&quot;kind&quot;] == &quot;search&quot;) { iwNavVisit(nav, r[&quot;url&quot;]); }
+let attrs = iwWebViewAttrs(iwNavCurrent(nav), {&quot;blockPrivate&quot;: true, &quot;stripTracking&quot;: true, &quot;embed&quot;: true});
+// أرسل attrs[&quot;attrs&quot;] إلى @view.WebView، أو iwWebViewSource لتوليد الكود
+let plan = iwOpenPlan(&quot;mailto:a@b.co&quot;, {});                      // external → افتح تطبيق البريد
+</code></pre>
+<h2 id="_6">الاختبار<a class="headerlink" href="#_6" title="Permanent link">#</a></h2>
+<pre><code class="language-bash">rin tests/indsinweb_tests.rin     # 287 اختبارًا
+</code></pre></article>
+<div class="pnav"><a class="pn" href="indsin_tooling.html">→ indsin tooling — icon, file association, syntax highlighting</a><a class="pn" href="RIN_ELEMENTS.html">دليل `@element.*` الكامل ←</a></div><p class="edit"><a href="https://github.com/dlof-lib/rinlang/edit/main/docs/indsinweb.md">✎ عدّل هذه الصفحة على GitHub</a></p>
+<footer>Rin 1.0.0 · رخصة MIT</footer></main>
+<aside id="toc"><b>في هذه الصفحة</b><div class="toc">
+<ul>
+<li><a href="#_1">مثال سريع</a></li>
+<li><a href="#_2">المرجع</a></li>
+<li><a href="#link-screen">شاشة الربط (Link Screen)</a></li>
+<li><a href="#_3">قواعد الأمان</a></li>
+<li><a href="#_4">ملاحظات عن اللغة اكتُشفت أثناء الكتابة</a></li>
+<li><a href="#_5">مثال: متصفح مصغّر</a></li>
+<li><a href="#_6">الاختبار</a></li>
+</ul>
+</div>
+</aside></div>
+<script src="assets/app.js"></script></body></html>
