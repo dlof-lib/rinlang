@@ -3,10 +3,11 @@ name: Cleanup & Organize Project (تنظيف وترتيب المشروع)
 # ───────────────────────────────────────────────────────────────────────────────
 # ينظّف المستودع ويرتّبه (يدوي فقط — Actions ← Cleanup & Organize Project ← Run workflow):
 #   • يحذف build-artifact/ (ثنائيات ~15MB مرفوضة أصلاً في .gitignore)
+#   • يحذف لقطات الشاشة الخام ذات الأسماء الرقمية (175532.png …) من الجذر/screenshots/uploads
 #   • يحذف النسخ المتطابقة 100% من tools/test_*.cpp و verification/ (النسخة الأصلية في tests/)
 #     وينقل ما ليس له نسخة إلى tests/tools و tests/verification (الملف المختلف لا يُمسّ)
-#   • يدمج ~65 ملف CHANGES_*.md (+BUILD_REPAIR/MANIFEST_CHANGES) في CHANGELOG.md واحد
-#     ويصلح الروابط التي تشير إليها
+#   • يدمج ~65 ملف CHANGES_*.md (+BUILD_REPAIR/MANIFEST_CHANGES) في ملف واحد داخل المجلد
+#     المخفي .changelog/CHANGELOG.md ويحذف الأصلية ويصلح الروابط التي تشير إليها
 #   • يولّد lib/README.md (فهرس المكتبات) ويضيف كتلة مُدارة إلى .gitignore
 #   • (اختياري) يحذف سير العمل المكررة/الميتة — يحتاج سر WORKFLOW_PAT (انظر الأسفل)
 #
@@ -25,7 +26,7 @@ on:
         type: boolean
         default: true
       merge_changelogs:
-        description: "دمج CHANGES_*.md في CHANGELOG.md وحذف الأصلية"
+        description: "دمج CHANGES_*.md في .changelog/CHANGELOG.md وحذف الأصلية"
         type: boolean
         default: true
 
@@ -61,6 +62,8 @@ jobs:
           from pathlib import Path
 
           ROOT = Path(".").resolve()
+          CL_DIR = Path(".changelog")           # مجلد مخفي يحوي السجل المدمج
+          CL_FILE = CL_DIR / "CHANGELOG.md"
           LOG = []
           def log(kind, msg): LOG.append((kind, msg)); print(f"[{kind}] {msg}")
           def sha(p): return hashlib.sha256(Path(p).read_bytes()).hexdigest()
@@ -99,6 +102,16 @@ jobs:
           merge_dir("tools", "tests/tools", "test_*.cpp")
           merge_dir("samples", "examples/samples")
 
+
+          # 2b) لقطات شاشة خام مرفوعة بأسماء رقمية (مثل 175532.png) في الجذر أو screenshots/ — النسخ المعالَجة في docs/assets/screenshots
+          import re as _re
+          RAW = _re.compile(r"^\d{5,}\.(png|jpe?g|webp)$", _re.I)
+          for base in (Path("."), Path("screenshots"), Path("uploads")):
+              if base.is_dir():
+                  for f in sorted(base.iterdir()):
+                      if f.is_file() and RAW.match(f.name):
+                          remove(f, "لقطة شاشة خام (النسخة المعالَجة في docs/assets/screenshots)")
+
           # 3) سير عمل قديمة/مكرّرة (تحتاج توكن بصلاحية workflows)
           STALE_WF = {
               "build-signed__release.yml": "مكرّر لـ rin__apk.yml (يبني ويوقّع نفس الـ APK)",
@@ -117,7 +130,7 @@ jobs:
               else:
                   log("يدوي", f"{p}  ← {why} (يلزم سر WORKFLOW_PAT أو احذفه بنفسك: git rm {p})")
 
-          # 4) دمج سجلات التغييرات المتفرقة في CHANGELOG.md واحد
+          # 4) دمج سجلات التغييرات المتفرقة في .changelog/CHANGELOG.md (مجلد مخفي)
           if os.environ.get("MERGE_CHANGELOGS", "1") == "1":
               srcs = sorted(p for p in Path(".").glob("CHANGES*.md")) + \
                      [p for p in (Path("BUILD_REPAIR.md"), Path("MANIFEST_CHANGES.md")) if p.exists()]
@@ -145,23 +158,25 @@ jobs:
                       toc.append(f"- [{t}](#{anchor(t)})")
                       body.append(f"## {t}\n\n<sub>المصدر الأصلي: `{p.name}`</sub>\n\n"
                                   f"{demote(p.read_text(encoding='utf-8', errors='replace'))}\n")
-                  old = Path("CHANGELOG.md")
+                  old = CL_FILE if CL_FILE.exists() else Path("CHANGELOG.md")
                   header = "# سجل التغييرات — Rin\n\n> مجمَّع آلياً من ملفات `CHANGES_*.md` المتفرّقة (انظر `cleanup-project.yml`). أضف الجديد هنا مباشرةً.\n\n"
                   prev = old.read_text(encoding="utf-8") if old.exists() else ""
                   if prev and "مجمَّع آلياً" not in prev:
                       body.insert(0, f"## القديم\n\n{demote(prev)}\n"); toc.insert(0, "- [القديم](#القديم)")
-                  old.write_text(header + "## الفهرس\n\n" + "\n".join(toc) + "\n\n---\n\n" + "\n---\n\n".join(body),
+                  CL_DIR.mkdir(exist_ok=True)
+                  if old != CL_FILE and old.exists(): old.unlink()
+                  CL_FILE.write_text(header + "## الفهرس\n\n" + "\n".join(toc) + "\n\n---\n\n" + "\n---\n\n".join(body),
                                  encoding="utf-8")
-                  log("إنشاء", f"CHANGELOG.md ← دمج {len(srcs)} ملف")
-                  for p in srcs: remove(p, "دُمج في CHANGELOG.md")
+                  log("إنشاء", f"{CL_FILE} ← دمج {len(srcs)} ملف")
+                  for p in srcs: remove(p, "دُمج في .changelog/CHANGELOG.md")
                   # إصلاح الروابط المكسورة في ملفات md الأخرى
                   pat = re.compile(r"(?:\.{1,2}/)*(?:CHANGES(?:_[A-Z0-9_]+)?|BUILD_REPAIR|MANIFEST_CHANGES)\.md")
                   for md in ROOT.rglob("*.md"):
-                      if ".git" in md.parts or md.name == "CHANGELOG.md": continue
+                      if ".git" in md.parts or CL_DIR.name in md.parts: continue
                       rel = md.relative_to(ROOT); depth = len(rel.parts) - 1
                       txt = md.read_text(encoding="utf-8", errors="replace")
-                      new = pat.sub(lambda m: "../" * depth + "CHANGELOG.md" if depth else "CHANGELOG.md", txt)
-                      if new != txt: md.write_text(new, encoding="utf-8"); log("رابط", f"{rel} → CHANGELOG.md")
+                      new = pat.sub(lambda m: "../" * depth + CL_FILE.as_posix(), txt)
+                      if new != txt: md.write_text(new, encoding="utf-8"); log("رابط", f"{rel} → {CL_FILE}")
 
           # 5) فهرس المكتبات lib/README.md (README الرئيسي يشير إليه)
           lib = Path("lib")
@@ -225,7 +240,6 @@ jobs:
               "# تقرير التنظيف\n\n| العملية | التفاصيل |\n|---|---|\n" +
               "\n".join(f"| {k} | `{m}` |" for k, m in LOG) + "\n", encoding="utf-8")
           print(f"\n{len(LOG)} عملية — التقرير: {REPORT}")
-
 
       - name: Report
         if: always()
