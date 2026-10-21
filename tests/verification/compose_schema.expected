@@ -1,0 +1,24 @@
+📦 @import: تم استيراد "lib/compose.og.rin" (مكتبة مدمجة)
+↺ @import: "lib/compose.og.rin" مستورَدة مسبقاً بالفعل (تم تجاهل التكرار)
+📦 @import: تم استيراد "lib/compose_path.og.rin" (مكتبة مدمجة)
+📦 @import: تم استيراد "lib/compose_schema.og.rin" (مكتبة مدمجة)
+{"ok": true, "errors": []}
+["name: أصغر من الحد الأدنى 2", "age: أكبر من الحد الأقصى 150", "role: قيمة غير مسموحة: x", "tags.1: النوع المتوقع string لكن وُجد number"]
+["name: القيمة مطلوبة", "age: القيمة مطلوبة", "role: القيمة مطلوبة", "tags: القيمة مطلوبة"]
+{"ok": true, "value": {"name": "Rin", "age": 5, "role": "user", "tags": [], "nick": "anon"}}
+{"ok": true, "value": {"age": 42, "on": true}}
+true
+false
+true
+false
+true
+false
+true
+{"type": "map", "fields": {"a": {"type": "number"}, "b": {"type": "array", "items": {"type": "bool"}}, "c": {"type": "map", "fields": {"d": {"type": "string"}}}}}
+["(root): الطول يجب أن يكون 3"]
+true
+false
+5
+(root): النوع المتوقع string لكن وُجد number
+{"ok": true, "value": [1, 2]}
+true
