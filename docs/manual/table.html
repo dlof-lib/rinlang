@@ -1,0 +1,313 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>الجدول (`@table` / `@container.table`) ودوال اللغة عليه — Rin</title>
+<meta name="description" content="توثيق لغة البرمجة Rin"><link rel="icon" href="../assets/brand/icon-32.png">
+<link rel="stylesheet" href="assets/style.css"></head><body>
+<header><button id="mn" aria-label="القائمة">☰</button><a class="logo" href="index.html"><img src="../assets/brand/icon-48.png" alt="" width="26">Rin</a>
+<input id="q" type="search" placeholder="ابحث في التوثيق…" autocomplete="off"><button id="th" aria-label="الوضع">◐</button>
+<a class="gh" href="https://github.com/dlof-lib/rinlang">GitHub</a><div id="res"></div></header>
+<div class="wrap"><nav id="sb"><details ><summary>ابدأ هنا</summary><a href="getting-started.html">البداية</a><a href="syntax.html">القواعد النحوية العامة</a><a href="variables.html">let`، مصفوفات، قواميس، نطاق</a><a href="template-strings.html">النصوص القالبية (متغيّرات داخل النص)</a><a href="input.html">إدخال المستخدم (Input)</a><a href="control-flow.html">الشروط، الحلقات، `goal`/`achieve</a><a href="loops.html">حلقات Rin — Loops v2</a><a href="functions.html">fun`/`return`، التكرار الذاتي</a><a href="enums.html">enum`: قوائم اختيار مغلقة</a></details><details open><summary>اللغة</summary><a href="language-reference.html">المرجع الشامل وخريطة ترابط المفاهيم</a><a href="objects.html">class`/`struct`، `.object()`، `@Object`، `document</a><a href="oop.html">البرمجة الكائنية الموسَّعة (Rin 1.0)</a><a href="containers.html">دليل `@container` / `@element` / `@loop</a><a href="table.html" class=on>الجدول (`@table` / `@container.table`) ودوال اللغة عليه</a><a href="set.html">Set`: نوع المجموعة الأساسي</a><a href="pipelines.html">عامل الأنابيب `|&gt;</a><a href="RECKON.html">reckon`: مفهوم حسابي بسطرين</a><a href="let-plus.html">let` المطوَّر</a><a href="living-variables.html">المتغيرات الحيّة (Living Variables)</a><a href="label-define.html">label` و`define` (تسمية وتعريف)</a><a href="block-frames.html">بداية الكتل ونهايتها (Block Frames)</a><a href="compare_ops.html">معاملات المقارنة `/=` و `=/=` و `=/</a><a href="max_min.html">max / min family</a><a href="scope-guarantees.html">ضمانات النطاق: `finally` · `defer` · `catch … when` · `rethrow</a><a href="key_terms_and_builtins.html">Rin KEY_TERMS and Built-in Conditions</a><a href="number_builtins.html">Rin Number Built-ins</a></details><details ><summary>الواجهات (Indsin)</summary><a href="indsin.html">Indsin — Interface Design</a><a href="indsin_rin.html">indsin يعتمد على لغة Rin</a><a href="indsin_expansion.html">Indsin — التوسعة الاحترافية (Design System v2)</a><a href="indsin_object.html">indsin-object — API reference</a><a href="indsin_media.html">Indsin Media — اختيار الوسائط ورفعها</a><a href="indsin_icons.html">مكتبة أيقونات indsin (متجهية)</a><a href="indsin_tooling.html">indsin tooling — icon, file association, syntax highlighting</a><a href="indsinweb.html">IndsinWeb — مكتبة WebView والروابط لـ indsin</a><a href="RIN_ELEMENTS.html">دليل `@element.*` الكامل</a><a href="events-effects.html">الأحداث والتأثيرات (Events &amp; Effects) — محرك Indsin UI</a><a href="banner.html">Banner: إشعار شريطي</a><a href="simple-style.html">Rin Simple Style</a></details><details ><summary>بيئة التشغيل</summary><a href="runtime.html">وقت تشغيل Rin (Rin Runtime) · المرجع الرسمي</a><a href="standard-library.html">المكتبة القياسية (`lib/*.og.rin`)</a><a href="errors.html">نظام الأخطاء: أكواد، `try`/`catch`/`throw</a><a href="ERROR_SYSTEM.html">نظام التشخيص: البنية الداخلية + جدول الأكواد الكامل</a><a href="storage.html">تخزين دائم</a><a href="http.html">شبكات</a><a href="env.html">ربط Rin بملف `.env</a><a href="terminal.html">الطرفية التفاعلية — `rin terminal</a><a href="vm.html">RinVM — آلة Rin الافتراضية (بايتكود)</a><a href="rinflow.html">RinFlow: طبقة تنفيذ التدفّق المهيكل</a><a href="MAKE_UNIT.html">@make.(name)`: وحدة بسياسة قدرات صريحة</a><a href="MAKE_MEDIA.html">فيديو · صوت · API · إزالة الخلفية · قراءة النص من الصور</a><a href="TIME.html">مفهوم `time`: الزمن كقيمة من الدرجة الأولى</a><a href="native-additions.html">دوال Rin الأصلية الجديدة (Rin 1.0)</a></details><details ><summary>الحاويات وقواعد البيانات</summary><a href="container_advanced.html">Rin Container Advanced Built-ins</a><a href="container_pro.html">Rin Container Pro</a><a href="container_sql.html">RIN CONTAINER SQL (RCSQL)</a><a href="cross-file-containers.html">استدعاء إعلانات من ملف آخر</a></details><details ><summary>الحزم والتكامل</summary><a href="api.html">واجهة C المسطَّحة (Embedding API)</a><a href="android.html">استضافة Rin على أندرويد</a><a href="packages-and-interop.html">Rin 1.0 — المكتبات والحزم وجسر C++ وJSON واختبارات rintest</a><a href="rinpak-format.html">RinPak — حزمة مشروع Rin (`.rinpak`)</a><a href="html-projects.html">مشاريع HTML في Rin — الربط بين index.html وملف الحاوية</a><a href="project-og-urin.html">project.og.urin` — البيانات الوصفية لمشروع Rin</a><a href="CONTENT_PACKS.html">حزم المحتوى القابلة للتنزيل (Content Packs)</a><a href="previewkit.html">previewkit — معاينة حيّة لملفات PDF / Markdown / TypeScript</a></details><details ><summary>المكتبات المتخصصة</summary><a href="rinml.html">RinML / RinDF / RinAI — الذكاء الاصطناعي وتحليل البيانات في Rin</a><a href="STATS.html">RinStat — التحليل الإحصائي (`lib/rinstat.og.rin`)</a><a href="STATS_ADV.html">RinStat المتقدّم + RinAuto</a><a href="LINALG.html">الجبر الخطي للمهندسين — `mat*` و`vec*</a><a href="PLOT.html">RinPlot — الرسوم البيانية الإحصائية (`lib/rinplot.og.rin`)</a><a href="ALGO.html">تطوير الخوارزميات والحساب العددي — `algo*</a><a href="NUMBER.html">مفهوم `number` في Rin</a><a href="boat.html">&quot;Boat&quot;: مفاهيم أساسية مجمَّعة</a><a href="passkit.html">passkit — passwords, encryption, databases and a tag language</a><a href="passkit-crypto-db.html">Passkit feature catalog: encryption, databases and container linking</a><a href="hash-family.html">عائلة `#` — مفاهيم ودوال جديدة تبدأ بعلامة `#</a><a href="image-draw.html">إنشاء الصور في Rin — رسم وحفظ PNG وlog كصورة</a><a href="image-terminal.html">طباعة الصور في الـ terminal — `printImage` / `imageAnsi` / `imageInfo</a></details><details ><summary>المشروع</summary><a href="CONTRIBUTING.html">المساهمة في Rin</a><a href="CODE_OF_CONDUCT.html">قواعد السلوك</a><a href="SECURITY.html">سياسة الأمان</a><a href="SUPPORT.html">الحصول على المساعدة</a><a href="TRADEMARKS.html">سياسة العلامة التجارية — Trademark Policy</a><a href="THIRD_PARTY_NOTICES.html">إشعارات المكوّنات الخارجية — Third-Party Notices</a></details><details ><summary>مراجع إضافية</summary><a href="ANDROID_VERSIONS.html">حزم RinStudio لكل إصدار أندرويد</a><a href="TOKEN.html">مفهوم `token` في Rin</a><a href="TOOLCHAIN.html">Rin Professional Language Toolchain</a><a href="TOOLCHAIN_UPGRADE.html">Toolchain Upgrade — 2026-09</a><a href="architecture.html">المعمارية وبنية المستودع</a><a href="base-accept.html">base` و`accept`: متغيّران يخدمان `if</a><a href="channel47.html">channel47 — لغة وصف البيانات والإعدادات</a><a href="ci.html">CI وأدوات المستودع</a><a href="loop-templates.html">قوالب الحلقات `@tmpl</a><a href="pre-post.html">pre` و`post` (ما قبل / ما بعد): عقد انتقال حول الإسناد</a><a href="print-fonts.html">خطوط `print` — bold / italic / underline وغيرها</a><a href="print-image-terminal.html">طباعة الصور كنص في الطرفية</a><a href="print-templates.html">قوالب الطباعة `@tmpl ... print` — قوالب نصية خطية وتنسيقية</a><a href="rdoc.html">rdoc — Documentation Container</a><a href="rdoc-reference.html">وثيقة rdoc الشاملة — Documentation Container</a><a href="screenshots.html">لقطات من RinStudio</a></details></nav>
+<main><article><h1 id="tablemd-table-containertable">table.md — الجدول (<code>@table</code> / <code>@container.table</code>) ودوال اللغة عليه<a class="headerlink" href="#tablemd-table-containertable" title="Permanent link">#</a></h1>
+<p>الجدول حاوية صفوف: <code>row cells=[...]</code> لكل صف، و<code>style value="..."</code> لنمط العرض، و<code>save format=png</code>
+لتصدير صورة. <strong>لا توجد دوال <code>table*</code> جديدة</strong>: الجدول يُقرأ ويُعدَّل بدوال اللغة الموجودة أصلاً
+(دوال الحاويات + دوال المصفوفات + عائلة <code>#</code>)، لأنه يُكشَف كحقول افتراضية داخل الحاوية.</p>
+<pre><code class="language-kotlin">@table=scores
+    style value=&quot;style://dark&quot;;
+    row cells=[&quot;name&quot;, &quot;score&quot;];
+    row cells=[&quot;sara&quot;, 95];
+    row cells=[&quot;yusuf&quot;, 88];
+.end/table
+</code></pre>
+<h2 id="_1">الحقول الافتراضية<a class="headerlink" href="#_1" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الحقل</th>
+<th>المعنى</th>
+<th>كتابة؟</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>rows</code></td>
+<td><strong>مقبض حيّ</strong> على مصفوفة الصفوف نفسها (كل صف مصفوفة خلايا)</td>
+<td>نعم (<code>container.set</code> = مصفوفة صفوف)</td>
+</tr>
+<tr>
+<td><code>header</code></td>
+<td>أول صف إن كانت كل خلاياه نصوصاً (وإلا مصفوفة فارغة)</td>
+<td>نعم (مصفوفة نصوص؛ يستبدل الرأس أو يُدرَج)</td>
+</tr>
+<tr>
+<td><code>body</code></td>
+<td>صفوف الجسم (بعد الرأس) — نسخة</td>
+<td>نعم: مصفوفة صفوف تستبدل الجسم وتُبقي الرأس</td>
+</tr>
+<tr>
+<td><code>records</code></td>
+<td>الجسم كقواميس <code>{عنوان: خلية}</code> — نسخة</td>
+<td>نعم: قائمة قواميس → جدول (الرأس = اتحاد المفاتيح بترتيب ظهورها، الغائب <code>nil</code>)</td>
+</tr>
+<tr>
+<td><code>columns</code></td>
+<td>الأعمدة كمصفوفة مصفوفات (نسخة؛ الخلية الناقصة <code>nil</code>)</td>
+<td>نعم: مصفوفة أعمدة تُقلَب إلى صفوف — بها تُضاف الأعمدة وتُحذف وتُرتَّب</td>
+</tr>
+<tr>
+<td><em>اسم عمود</em></td>
+<td>قيم الجسم لذلك العمود (نسخة) — العمود حقل بحدّ ذاته، انظر «الأعمدة كحقول»</td>
+<td>نعم (للعمود الموجود)</td>
+</tr>
+<tr>
+<td><code>style</code></td>
+<td>آخر <code>style value=...</code> (يظهر فقط إن وُجد)</td>
+<td>نعم (نص)</td>
+</tr>
+</tbody>
+</table></div>
+<p>الأولوية: <strong>متغيّر حقيقي</strong> داخل الجدول (<code>text rows = ...</code> مثلاً) ثم <strong>الحقول المحجوزة</strong> (<code>rows header body records columns style</code>) ثم <strong>أسماء الأعمدة</strong>.
+أسماء الأعمدة لا تظهر في <code>fieldNames</code>/<code>fields</code>/<code>snapshot</code> (حتى لا تتكرّر البيانات)؛ اكتشفها من <code>container.get(t, "header")</code>.</p>
+<h2 id="_2">دوال الحاويات الموجودة أصلاً (أصبحت تفهم الجدول)<a class="headerlink" href="#_2" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">let rows = getField(&quot;scores&quot;, &quot;rows&quot;);          // = container.get
+container.has(&quot;scores&quot;, &quot;rows&quot;);                // true
+container.fieldNames(&quot;scores&quot;);                 // [&quot;rows&quot;, &quot;header&quot;, &quot;body&quot;, &quot;records&quot;, &quot;columns&quot;, &quot;style&quot;]
+container.fieldType(&quot;scores&quot;, &quot;rows&quot;);          // &quot;array&quot;
+container.fields(&quot;scores&quot;);                     // map يضمّ rows/columns/style
+container.info(&quot;scores&quot;).rows;                  // عدد الصفوف
+container.info(&quot;scores&quot;).columns;               // عرض الجدول (أكبر صف)
+container.set(&quot;scores&quot;, &quot;rows&quot;, [[&quot;a&quot;, 1]]);    // استبدال الصفوف (المقابض القديمة تبقى صالحة)
+container.set(&quot;scores&quot;, &quot;style&quot;, &quot;style://light&quot;);
+container.deleteField(&quot;scores&quot;, &quot;rows&quot;);        // تفريغ الصفوف  (و&quot;style&quot; يزيل النمط)
+container.clearFields(&quot;scores&quot;);                // يفرّغ المتغيّرات والصفوف والنمط
+container.empty(&quot;scores&quot;);                      // true فقط بلا متغيّرات وبلا صفوف
+</code></pre>
+<h2 id="rows">دوال المصفوفات الموجودة أصلاً على <code>rows</code><a class="headerlink" href="#rows" title="Permanent link">#</a></h2>
+<p>لأن <code>rows</code> مقبض حيّ، كل دالة تعدّل المصفوفة في مكانها تعدّل الجدول نفسه:
+<code>push</code> · <code>pop</code> · <code>#add</code> · <code>#swap</code> (و<code>sort</code> تفرز مصفوفة أعمدة/خلايا رقمية أو نصية، لا مصفوفة صفوف).
+والدوال التي ترجع نسخة (<code>reverse</code> · <code>slice</code> · <code>concat</code>) تُكتب للجدول عبر <code>container.set</code>:</p>
+<pre><code class="language-kotlin">container.set(&quot;scores&quot;, &quot;rows&quot;, reverse(getField(&quot;scores&quot;, &quot;rows&quot;)));
+</code></pre>
+<h2 id="_3">عائلة <code>#</code> على الجدول<a class="headerlink" href="#_3" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">let rows = getField(&quot;scores&quot;, &quot;rows&quot;);
+#add(rows, [&quot;omar&quot;, 70]);                     // صف جديد في مكانه (يظهر في save/png/zip)
+#swap(rows, 1, 3);                            // تبديل صفّين فعلاً
+#diff(rowsA, rowsB);                          // الصفوف الموجودة في A وغائبة عن B
+let col = container.get(&quot;scores&quot;, &quot;columns&quot;)[1];
+#sum(slice(col, 1));                          // مجموع عمود (slice لتخطّي صف الرأس)
+for (let i in 0 #to len(rows) - 1) { print rows[i]; }
+</code></pre>
+<blockquote>
+<p><code>#sum</code> على صفوف فيها نص يرمي <code>E0004</code> كما هو معتاد في <code>#sum</code> — خُذ عموداً رقمياً بعد <code>slice</code>.
+<code>columns</code> وقيم الأعمدة نسخ لحظية: أعد قراءتها بعد أي تعديل على <code>rows</code>.</p>
+</blockquote>
+<h2 id="row">الرأس و<code>row</code> بقاموس<a class="headerlink" href="#row" title="Permanent link">#</a></h2>
+<p>أول صف نصي بالكامل = رأس الجدول. بعده يمكن كتابة الصف بقاموس فيُرتَّب حسب الرأس (الغائب <code>nil</code>):</p>
+<pre><code class="language-kotlin">@table=staff
+    row cells=[&quot;name&quot;, &quot;dept&quot;, &quot;score&quot;];
+    row cells=[&quot;sara&quot;, &quot;dev&quot;, 95];
+    row cells={&quot;name&quot;: &quot;huda&quot;, &quot;score&quot;: 99, &quot;dept&quot;: &quot;ops&quot;};   // = [&quot;huda&quot;, &quot;ops&quot;, 99]
+.end/table
+</code></pre>
+<p>قاموس بلا رأس نصي → <code>E0004</code>، وعمود غير موجود في الرأس → <code>E0007</code>.
+جدول بلا رأس نصي (كله أرقام مثلاً) تُسمّى أعمدته <code>c1, c2, ...</code> لأغراض الاستعلام، وكل صفوفه جسم.</p>
+<h2 id="rcsql">استعلامات RCSQL الموجودة أصلاً<a class="headerlink" href="#rcsql" title="Permanent link">#</a></h2>
+<p>دوال <code>sql*</code> الموجودة تقرأ الجدول كمجموعة مستندات: الأعمدة = الرأس، و<code>_id</code> = رقم صف الجسم (1-based).
+لا تحتاج <code>@doc</code> ولا نسخ البيانات:</p>
+<pre><code class="language-kotlin">sqlCount(&quot;staff &amp; dept:eq(dev)&quot;);
+sqlOne(&quot;staff &amp; order:desc(score) &amp; limit:eq(1)&quot;);
+sqlSum(&quot;staff &amp; dept:eq(ops)&quot;, &quot;score&quot;);
+sqlGroupBy(&quot;staff&quot;, &quot;dept&quot;);
+sql(&quot;staff &amp; score:gte(90) &amp; order:asc(name) &amp; select:has(name)&quot;);
+sqlUpdate(&quot;staff &amp; name:eq(omar)&quot;, &quot;score&quot;, 75);   // يكتب الخلية في الجدول (العمود يجب أن يكون في الرأس، وإلا E0035)
+sqlDelete(&quot;staff &amp; dept:eq(ops)&quot;);                  // يحذف الصفوف المطابقة من rows
+</code></pre>
+<p>الأرقام <code>_id</code> لقطة لحظة الاستعلام؛ بعد <code>sqlDelete</code> أعد الاستعلام قبل استعمال معرّفات قديمة.
+<code>groupSnapshot</code>/<code>volumeSnapshot</code> تضيف الآن <code>rows</code> لأي جدول عضو.</p>
+<h2 id="_4">الأعمدة كحقول<a class="headerlink" href="#_4" title="Permanent link">#</a></h2>
+<p>اسم العمود (من الرأس النصي) يعمل كحقل في دوال الحقول الموجودة نفسها:</p>
+<pre><code class="language-kotlin">getField(&quot;staff&quot;, &quot;score&quot;);                     // [95, 88, 99]  (قيم الجسم)
+container.has(&quot;staff&quot;, &quot;dept&quot;);                 // true
+setField(&quot;staff&quot;, &quot;score&quot;, [1, 2, 3]);          // بطول الجسم، وإلا E0007
+setField(&quot;staff&quot;, &quot;dept&quot;, &quot;all&quot;);               // قيمة مفردة تملأ العمود كله
+container.renameField(&quot;staff&quot;, &quot;score&quot;, &quot;points&quot;);   // يغيّر عنوان العمود (false إن غاب أو كان الاسم الجديد موجوداً)
+container.deleteField(&quot;staff&quot;, &quot;dept&quot;);         // يحذف العمود: عنوانه وخلاياه
+container.contains(&quot;staff&quot;, &quot;name&quot;, &quot;sara&quot;);    // هل القيمة في العمود؟
+container.getOr(&quot;staff&quot;, &quot;nope&quot;, &quot;none&quot;);
+</code></pre>
+<p><strong>إضافة عمود</strong> أو ترتيب الأعمدة: عدّل <code>columns</code> (أو <code>records</code>):</p>
+<pre><code class="language-kotlin">let cols = container.get(&quot;staff&quot;, &quot;columns&quot;);
+container.set(&quot;staff&quot;, &quot;columns&quot;, concat(cols, [[&quot;flag&quot;, true, false, true]]));
+</code></pre>
+<p><code>container.push(t, "rows", صف)</code> يُلحق صفاً (مصفوفة أو قاموساً مرتّباً حسب الرأس) ويرجع الطول الجديد، و<code>container.pop(t, "rows")</code> يزيل آخر صف ويرجعه.</p>
+<h2 id="insertdoc-updatedoc">دوال المستندات الموجودة (insertDoc / updateDoc / ...)<a class="headerlink" href="#insertdoc-updatedoc" title="Permanent link">#</a></h2>
+<p>الجدول مجموعة مستندات: <strong>المعرّف = رقم صف الجسم (1-based)</strong> كما في RCSQL. المعرّفات موضعية: تنزاح بعد الحذف.</p>
+<pre><code class="language-kotlin">allDocs(&quot;staff&quot;);                       // كل الصفوف كقواميس
+countDocs(&quot;staff&quot;);   docIds(&quot;staff&quot;);  // 3 · [&quot;1&quot;,&quot;2&quot;,&quot;3&quot;]
+findDoc(&quot;staff&quot;, &quot;2&quot;);                  // قاموس أو nil
+queryDocs(&quot;staff&quot;, &quot;dept&quot;, &quot;dev&quot;);      queryOneDoc(&quot;staff&quot;, &quot;name&quot;, &quot;sara&quot;);
+insertDoc(&quot;staff&quot;, &quot;9&quot;, {&quot;name&quot;: &quot;omar&quot;, &quot;score&quot;: 70});  // معرّف خارج النطاق = إلحاق (true) · داخله = استبدال (false)
+updateDoc(&quot;staff&quot;, &quot;1&quot;, {&quot;score&quot;: 99}); // دمج جزئي؛ false إن لم يوجد الصف
+deleteDoc(&quot;staff&quot;, &quot;2&quot;);
+</code></pre>
+<p>عمود غير موجود في الرأس → <code>E0007</code> · وسيط ليس قاموساً → <code>E0020</code> (<code>insertDoc</code>) أو <code>E0004</code> (<code>updateDoc</code>) · جدول بلا رأس نصي → <code>E0004</code>.</p>
+<h2 id="_5">دوال الحاويات على عمود<a class="headerlink" href="#_5" title="Permanent link">#</a></h2>
+<p>دوال <code>container.*</code> التي تأخذ «نوعاً وحقلاً» تقبل أيضاً <strong>اسم جدول وعموداً</strong> (أي أول وسيط اسم جدول موجود):</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الدالة</th>
+<th>الناتج على جدول</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sum</code> <code>avg</code> <code>min</code> <code>max</code></td>
+<td>على الخلايا الرقمية في العمود (<code>avg/min/max</code> = <code>nil</code> إن لم توجد أرقام)</td>
+</tr>
+<tr>
+<td><code>pluck</code> <code>distinct</code> <code>countBy</code></td>
+<td>مصفوفة العمود · قيمه المميّزة · <code>{قيمة: تكرار}</code></td>
+</tr>
+<tr>
+<td><code>groupBy</code></td>
+<td><code>{قيمة: [معرّفات الصفوف]}</code></td>
+</tr>
+<tr>
+<td><code>sortBy(t, col, desc?)</code> · <code>top(t, col, n)</code></td>
+<td>معرّفات الصفوف مرتّبة (الخلايا الفارغة أخيراً) · أعلى <code>n</code></td>
+</tr>
+<tr>
+<td><code>query(t, شروط?, خيارات?)</code></td>
+<td>معرّفات الصفوف؛ الشروط <code>{col: قيمة}</code> أو <code>{col: {gt, gte, lt, lte, in, contains, ne, exists}}</code> والخيارات <code>sortBy/desc/limit</code></td>
+</tr>
+<tr>
+<td><code>search(نص, t)</code></td>
+<td>معرّفات الصفوف التي تحوي النص في أي خلية</td>
+</tr>
+<tr>
+<td><code>paginate(t, page, size)</code></td>
+<td><code>{items, page, size, total, pages}</code> — العناصر سجلّات فيها <code>_id</code></td>
+</tr>
+<tr>
+<td><code>stats(t)</code></td>
+<td><code>{count, fields: {col: {count, numeric, min, max, sum, avg}}}</code></td>
+</tr>
+<tr>
+<td><code>toRows(t, أعمدة?)</code></td>
+<td>سجلّات <code>[{_id, ...}]</code></td>
+</tr>
+<tr>
+<td><code>equals(a, b)</code> · <code>diff(a, b)</code> · <code>checksum(t)</code></td>
+<td>مقارنة جدولين · <code>{same, added, removed}</code> بسجلّات · SHA-256 للصفوف</td>
+</tr>
+<tr>
+<td><code>mergeFrom(dst, src)</code></td>
+<td>يُلحق سجلّات <code>src</code> بـ <code>dst</code> (الأعمدة الجديدة تُضاف للرأس) ويرجع عددها</td>
+</tr>
+<tr>
+<td><code>clone</code> <code>rename</code> <code>remove</code></td>
+<td>تحمل الصفوف والنمط معها (كانت تُفقد)</td>
+</tr>
+</tbody>
+</table></div>
+<p>عمود غير موجود → <code>E0007</code>.</p>
+<h2 id="_6">التصدير والاستيراد<a class="headerlink" href="#_6" title="Permanent link">#</a></h2>
+<p><code>save</code> يقبل الآن صيغاً نصية للجدول (مثل <code>png</code>): <code>csv</code> · <code>json</code> · <code>md</code> · <code>html</code> · <code>txt</code>:</p>
+<pre><code class="language-kotlin">@table=staff
+    row cells=[&quot;name&quot;, &quot;score&quot;];
+    row cells=[&quot;sara&quot;, 95];
+    save path=&quot;staff.csv&quot; format=csv;     // بلا path: staff.csv
+    save format=md;                       // | name | score | …
+.end/table
+</code></pre>
+<ul>
+<li><code>csv</code>: يقرأ الصفوف كما هي (الخلايا النصية التي تبدأ بـ <code>= + - @</code> تُسبق بـ <code>'</code> حماية من حقن الصيغ، وتُعكس عند الاستيراد).</li>
+<li><code>json</code>: سجلّ لكل سطر <code>[{"name":"sara","score":95}, …]</code> (مصفوفة مصفوفات إن لم يوجد رأس نصي).</li>
+<li><code>md</code> · <code>html</code> (<code>&lt;table class="rin-table" data-style=…&gt;</code> بهروب كامل) · <code>txt</code> (إطار ASCII).</li>
+</ul>
+<p>وبدون <code>save</code>، بدوال الحاويات الموجودة:</p>
+<pre><code class="language-kotlin">container.toCsv(&quot;staff&quot;, [&quot;name&quot;, &quot;score&quot;]);      container.exportCsv(&quot;staff&quot;, &quot;out.csv&quot;);
+container.toJson(&quot;staff&quot;);                          container.exportToFile(&quot;staff&quot;, &quot;out.json&quot;);   // الامتداد csv/md/html/txt يغيّر الصيغة
+container.fromJson(&quot;t&quot;, &quot;[{\&quot;a\&quot;:1},{\&quot;a\&quot;:2,\&quot;b\&quot;:3}]&quot;);  // مصفوفة قواميس -&gt; جدول (overwrite=false: يُلحِق)
+container.importFromFile(&quot;t&quot;, &quot;in.csv&quot;);            // CSV: الصف الأول رأس · الأرقام أرقام · الفارغ nil
+</code></pre>
+<p><code>fromJson</code> لغير مصفوفة سجلّات يرجع <code>false</code> بلا تغيير.</p>
+<h2 id="_7">تصدير الملف المحفوظ<a class="headerlink" href="#_7" title="Permanent link">#</a></h2>
+<p><code>save</code> (ملف <code>.rin</code>) و<code>save format=png</code> و<code>installation &lt;name&gt; format=zip</code> تقرأ <strong>الصفوف الحالية</strong>،
+فأي تعديل عبر ما سبق ينعكس عليها مباشرة.</p>
+<h2 id="_8">الأخطاء<a class="headerlink" href="#_8" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الحالة</th>
+<th>الكود</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>container.set(t, "rows", غير-مصفوفة)</code> أو صف ليس مصفوفة</td>
+<td><code>E0004</code></td>
+</tr>
+<tr>
+<td><code>container.set(t, "columns"/"body", غير-مصفوفة)</code> أو عمود/صف ليس مصفوفة</td>
+<td><code>E0004</code></td>
+</tr>
+<tr>
+<td><code>setField(t, عمود, مصفوفة)</code> بطول يخالف عدد صفوف الجسم</td>
+<td><code>E0007</code></td>
+</tr>
+<tr>
+<td>عمود غير موجود في <code>insertDoc</code>/<code>updateDoc</code>/<code>container.sum</code>...</td>
+<td><code>E0007</code></td>
+</tr>
+<tr>
+<td><code>insertDoc</code> بوسيط ليس قاموساً</td>
+<td><code>E0020</code></td>
+</tr>
+<tr>
+<td><code>save format=csv/json/md/html/txt</code> خارج جدول</td>
+<td><code>E0014</code></td>
+</tr>
+<tr>
+<td><code>header</code> ليست نصوصاً · <code>records</code> ليست قواميس</td>
+<td><code>E0004</code></td>
+</tr>
+<tr>
+<td><code>row</code> بقاموس بلا رأس نصي</td>
+<td><code>E0004</code></td>
+</tr>
+<tr>
+<td><code>row</code> بقاموس فيه عمود غير موجود في الرأس</td>
+<td><code>E0007</code></td>
+</tr>
+<tr>
+<td><code>sqlUpdate</code> على عمود غير موجود في رأس الجدول</td>
+<td><code>E0035</code></td>
+</tr>
+<tr>
+<td><code>container.set(t, "style", غير-نص)</code></td>
+<td><code>E0004</code></td>
+</tr>
+</tbody>
+</table></div>
+<p>اختبارات: <code>tests/verification/table_bridge.rin</code> · <code>table_sql.rin</code> · <code>table_columns.rin</code> · <code>table_docs.rin</code> · <code>table_aggregate.rin</code> · <code>table_export.rin</code> · <code>table_lifecycle.rin</code>.
+التنفيذ: <code>app/src/main/cpp/rin_table.cpp</code> (يُضمَّن في <code>rin_interpreter.cpp</code>)؛ ومعها خطّاف سطر واحد <code>tableNative(...)</code> في أول كل دالة موجودة معنية.</p></article>
+<div class="pnav"><a class="pn" href="containers.html">→ دليل `@container` / `@element` / `@loop</a><a class="pn" href="set.html">Set`: نوع المجموعة الأساسي ←</a></div><p class="edit"><a href="https://github.com/dlof-lib/rinlang/edit/main/docs/table.md">✎ عدّل هذه الصفحة على GitHub</a></p>
+<footer>Rin 1.0.0 · رخصة MIT</footer></main>
+<aside id="toc"><b>في هذه الصفحة</b><div class="toc">
+<ul>
+<li><a href="#_1">الحقول الافتراضية</a></li>
+<li><a href="#_2">دوال الحاويات الموجودة أصلاً (أصبحت تفهم الجدول)</a></li>
+<li><a href="#rows">دوال المصفوفات الموجودة أصلاً على rows</a></li>
+<li><a href="#_3">عائلة # على الجدول</a></li>
+<li><a href="#row">الرأس وrow بقاموس</a></li>
+<li><a href="#rcsql">استعلامات RCSQL الموجودة أصلاً</a></li>
+<li><a href="#_4">الأعمدة كحقول</a></li>
+<li><a href="#insertdoc-updatedoc">دوال المستندات الموجودة (insertDoc / updateDoc / ...)</a></li>
+<li><a href="#_5">دوال الحاويات على عمود</a></li>
+<li><a href="#_6">التصدير والاستيراد</a></li>
+<li><a href="#_7">تصدير الملف المحفوظ</a></li>
+<li><a href="#_8">الأخطاء</a></li>
+</ul>
+</div>
+</aside></div>
+<script src="assets/app.js"></script></body></html>
