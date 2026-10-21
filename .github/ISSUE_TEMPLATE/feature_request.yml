@@ -1,0 +1,20 @@
+name: 💡 اقتراح ميزة / Feature
+description: اقترح تحسيناً في اللغة أو الأدوات أو المكتبات
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: المشكلة
+      description: ما الذي يصعب فعله اليوم؟
+    validations: { required: true }
+  - type: textarea
+    id: idea
+    attributes:
+      label: الحل المقترح
+      description: مثال لشكل الكود أو الأمر بعد الميزة
+    validations: { required: true }
+  - type: textarea
+    id: alt
+    attributes:
+      label: بدائل فكّرت بها
