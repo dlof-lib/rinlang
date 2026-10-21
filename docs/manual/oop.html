@@ -1,0 +1,381 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>البرمجة الكائنية الموسَّعة (Rin 1.0) — Rin</title>
+<meta name="description" content="توثيق لغة البرمجة Rin"><link rel="icon" href="../assets/brand/icon-32.png">
+<link rel="stylesheet" href="assets/style.css"></head><body>
+<header><button id="mn" aria-label="القائمة">☰</button><a class="logo" href="index.html"><img src="../assets/brand/icon-48.png" alt="" width="26">Rin</a>
+<input id="q" type="search" placeholder="ابحث في التوثيق…" autocomplete="off"><button id="th" aria-label="الوضع">◐</button>
+<a class="gh" href="https://github.com/dlof-lib/rinlang">GitHub</a><div id="res"></div></header>
+<div class="wrap"><nav id="sb"><details ><summary>ابدأ هنا</summary><a href="getting-started.html">البداية</a><a href="syntax.html">القواعد النحوية العامة</a><a href="variables.html">let`، مصفوفات، قواميس، نطاق</a><a href="template-strings.html">النصوص القالبية (متغيّرات داخل النص)</a><a href="input.html">إدخال المستخدم (Input)</a><a href="control-flow.html">الشروط، الحلقات، `goal`/`achieve</a><a href="loops.html">حلقات Rin — Loops v2</a><a href="functions.html">fun`/`return`، التكرار الذاتي</a><a href="enums.html">enum`: قوائم اختيار مغلقة</a></details><details open><summary>اللغة</summary><a href="language-reference.html">المرجع الشامل وخريطة ترابط المفاهيم</a><a href="objects.html">class`/`struct`، `.object()`، `@Object`، `document</a><a href="oop.html" class=on>البرمجة الكائنية الموسَّعة (Rin 1.0)</a><a href="containers.html">دليل `@container` / `@element` / `@loop</a><a href="table.html">الجدول (`@table` / `@container.table`) ودوال اللغة عليه</a><a href="set.html">Set`: نوع المجموعة الأساسي</a><a href="pipelines.html">عامل الأنابيب `|&gt;</a><a href="RECKON.html">reckon`: مفهوم حسابي بسطرين</a><a href="let-plus.html">let` المطوَّر</a><a href="living-variables.html">المتغيرات الحيّة (Living Variables)</a><a href="label-define.html">label` و`define` (تسمية وتعريف)</a><a href="block-frames.html">بداية الكتل ونهايتها (Block Frames)</a><a href="compare_ops.html">معاملات المقارنة `/=` و `=/=` و `=/</a><a href="max_min.html">max / min family</a><a href="scope-guarantees.html">ضمانات النطاق: `finally` · `defer` · `catch … when` · `rethrow</a><a href="key_terms_and_builtins.html">Rin KEY_TERMS and Built-in Conditions</a><a href="number_builtins.html">Rin Number Built-ins</a></details><details ><summary>الواجهات (Indsin)</summary><a href="indsin.html">Indsin — Interface Design</a><a href="indsin_rin.html">indsin يعتمد على لغة Rin</a><a href="indsin_expansion.html">Indsin — التوسعة الاحترافية (Design System v2)</a><a href="indsin_object.html">indsin-object — API reference</a><a href="indsin_media.html">Indsin Media — اختيار الوسائط ورفعها</a><a href="indsin_icons.html">مكتبة أيقونات indsin (متجهية)</a><a href="indsin_tooling.html">indsin tooling — icon, file association, syntax highlighting</a><a href="indsinweb.html">IndsinWeb — مكتبة WebView والروابط لـ indsin</a><a href="RIN_ELEMENTS.html">دليل `@element.*` الكامل</a><a href="events-effects.html">الأحداث والتأثيرات (Events &amp; Effects) — محرك Indsin UI</a><a href="banner.html">Banner: إشعار شريطي</a><a href="simple-style.html">Rin Simple Style</a></details><details ><summary>بيئة التشغيل</summary><a href="runtime.html">وقت تشغيل Rin (Rin Runtime) · المرجع الرسمي</a><a href="standard-library.html">المكتبة القياسية (`lib/*.og.rin`)</a><a href="errors.html">نظام الأخطاء: أكواد، `try`/`catch`/`throw</a><a href="ERROR_SYSTEM.html">نظام التشخيص: البنية الداخلية + جدول الأكواد الكامل</a><a href="storage.html">تخزين دائم</a><a href="http.html">شبكات</a><a href="env.html">ربط Rin بملف `.env</a><a href="terminal.html">الطرفية التفاعلية — `rin terminal</a><a href="vm.html">RinVM — آلة Rin الافتراضية (بايتكود)</a><a href="rinflow.html">RinFlow: طبقة تنفيذ التدفّق المهيكل</a><a href="MAKE_UNIT.html">@make.(name)`: وحدة بسياسة قدرات صريحة</a><a href="MAKE_MEDIA.html">فيديو · صوت · API · إزالة الخلفية · قراءة النص من الصور</a><a href="TIME.html">مفهوم `time`: الزمن كقيمة من الدرجة الأولى</a><a href="native-additions.html">دوال Rin الأصلية الجديدة (Rin 1.0)</a></details><details ><summary>الحاويات وقواعد البيانات</summary><a href="container_advanced.html">Rin Container Advanced Built-ins</a><a href="container_pro.html">Rin Container Pro</a><a href="container_sql.html">RIN CONTAINER SQL (RCSQL)</a><a href="cross-file-containers.html">استدعاء إعلانات من ملف آخر</a></details><details ><summary>الحزم والتكامل</summary><a href="api.html">واجهة C المسطَّحة (Embedding API)</a><a href="android.html">استضافة Rin على أندرويد</a><a href="packages-and-interop.html">Rin 1.0 — المكتبات والحزم وجسر C++ وJSON واختبارات rintest</a><a href="rinpak-format.html">RinPak — حزمة مشروع Rin (`.rinpak`)</a><a href="html-projects.html">مشاريع HTML في Rin — الربط بين index.html وملف الحاوية</a><a href="project-og-urin.html">project.og.urin` — البيانات الوصفية لمشروع Rin</a><a href="CONTENT_PACKS.html">حزم المحتوى القابلة للتنزيل (Content Packs)</a><a href="previewkit.html">previewkit — معاينة حيّة لملفات PDF / Markdown / TypeScript</a></details><details ><summary>المكتبات المتخصصة</summary><a href="rinml.html">RinML / RinDF / RinAI — الذكاء الاصطناعي وتحليل البيانات في Rin</a><a href="STATS.html">RinStat — التحليل الإحصائي (`lib/rinstat.og.rin`)</a><a href="STATS_ADV.html">RinStat المتقدّم + RinAuto</a><a href="LINALG.html">الجبر الخطي للمهندسين — `mat*` و`vec*</a><a href="PLOT.html">RinPlot — الرسوم البيانية الإحصائية (`lib/rinplot.og.rin`)</a><a href="ALGO.html">تطوير الخوارزميات والحساب العددي — `algo*</a><a href="NUMBER.html">مفهوم `number` في Rin</a><a href="boat.html">&quot;Boat&quot;: مفاهيم أساسية مجمَّعة</a><a href="passkit.html">passkit — passwords, encryption, databases and a tag language</a><a href="passkit-crypto-db.html">Passkit feature catalog: encryption, databases and container linking</a><a href="hash-family.html">عائلة `#` — مفاهيم ودوال جديدة تبدأ بعلامة `#</a><a href="image-draw.html">إنشاء الصور في Rin — رسم وحفظ PNG وlog كصورة</a><a href="image-terminal.html">طباعة الصور في الـ terminal — `printImage` / `imageAnsi` / `imageInfo</a></details><details ><summary>المشروع</summary><a href="CONTRIBUTING.html">المساهمة في Rin</a><a href="CODE_OF_CONDUCT.html">قواعد السلوك</a><a href="SECURITY.html">سياسة الأمان</a><a href="SUPPORT.html">الحصول على المساعدة</a><a href="TRADEMARKS.html">سياسة العلامة التجارية — Trademark Policy</a><a href="THIRD_PARTY_NOTICES.html">إشعارات المكوّنات الخارجية — Third-Party Notices</a></details><details ><summary>مراجع إضافية</summary><a href="ANDROID_VERSIONS.html">حزم RinStudio لكل إصدار أندرويد</a><a href="TOKEN.html">مفهوم `token` في Rin</a><a href="TOOLCHAIN.html">Rin Professional Language Toolchain</a><a href="TOOLCHAIN_UPGRADE.html">Toolchain Upgrade — 2026-09</a><a href="architecture.html">المعمارية وبنية المستودع</a><a href="base-accept.html">base` و`accept`: متغيّران يخدمان `if</a><a href="channel47.html">channel47 — لغة وصف البيانات والإعدادات</a><a href="ci.html">CI وأدوات المستودع</a><a href="loop-templates.html">قوالب الحلقات `@tmpl</a><a href="pre-post.html">pre` و`post` (ما قبل / ما بعد): عقد انتقال حول الإسناد</a><a href="print-fonts.html">خطوط `print` — bold / italic / underline وغيرها</a><a href="print-image-terminal.html">طباعة الصور كنص في الطرفية</a><a href="print-templates.html">قوالب الطباعة `@tmpl ... print` — قوالب نصية خطية وتنسيقية</a><a href="rdoc.html">rdoc — Documentation Container</a><a href="rdoc-reference.html">وثيقة rdoc الشاملة — Documentation Container</a><a href="screenshots.html">لقطات من RinStudio</a></details></nav>
+<main><article><h1 id="oopmd-rin-10">oop.md — البرمجة الكائنية الموسَّعة (Rin 1.0)<a class="headerlink" href="#oopmd-rin-10" title="Permanent link">#</a></h1>
+<p>يبني هذا الدليل فوق <code>class</code> / <code>struct</code> / <code>extends</code> / <code>super</code> الموثَّقة في <a href="objects.html"><code>objects.md</code></a>.
+كل ما هنا <strong>إضافي بحت</strong>: أي برنامج قديم لا يستخدم هذه الكلمات يتصرّف كما كان تماماً. الكلمات
+(<code>interface</code> <code>trait</code> <code>abstract</code> <code>final</code> <code>override</code> <code>static</code> <code>private</code> <code>protected</code> <code>get</code> <code>set</code>
+<code>implements</code> <code>uses</code> <code>instanceof</code>) <strong>سياقية غير محجوزة</strong> — يبقى استخدامها أسماء متغيّرات صالحاً.</p>
+<p>الأمثلة المرجعية: <a href="https://github.com/dlof-lib/rinlang/blob/main/examples/oop/bank.rin"><code>examples/oop/bank.rin</code></a> و
+<a href="https://github.com/dlof-lib/rinlang/blob/main/tests/verification/oop_advanced.rin"><code>tests/verification/oop_advanced.rin</code></a>.</p>
+<hr />
+<h2 id="1-interface">1) <code>interface</code> — عقد بتواقيع فقط<a class="headerlink" href="#1-interface" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">interface Shape { fun area(); fun name(); }
+interface Solid extends Shape { fun volume(); }   // واجهة ترث واجهات
+
+class Square implements Shape {
+    let s = 1;
+    fun init(s) { self.s = s; }
+    fun area() { return self.s * self.s; }
+    fun name() { return &quot;square&quot;; }
+}
+</code></pre>
+<ul>
+<li>التواقيع تنتهي بـ <code>;</code> بلا جسم. لا حقول داخل الواجهة.</li>
+<li>عند <strong>إنشاء</strong> الصنف يُتحقَّق أن كل توقيع له تنفيذ <strong>بنفس عدد الوسائط</strong>، وإلا يظهر خطأ يسمّي الدالة الناقصة والواجهة المطلوبة.</li>
+<li>يمكن تنفيذ أكثر من واجهة: <code>class A implements X, Y { ... }</code>.</li>
+<li>لا يمكن إنشاء <code>interface</code> مباشرة.</li>
+</ul>
+<h2 id="2-trait">2) <code>trait</code> — كود قابل لإعادة الاستخدام<a class="headerlink" href="#2-trait" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">trait Loggable {
+    let history = [];
+    fun log(msg) { push(self.history, msg); }
+}
+class Service uses Loggable, Timestamps { ... }
+</code></pre>
+<ul>
+<li>السمة تحمل <strong>حقولاً ودوالاً</strong> (وحتى <code>get</code>/<code>set</code> و<code>abstract fun</code>). حقولها تُهيَّأ لكل كائن على حدة.</li>
+<li>الأولوية: دوال الصنف نفسه ← دوال سماته ← دوال الأب. حقول الصنف تطغى على حقول سماته.</li>
+<li>سمة تستخدم سمات أخرى: <code>trait A uses B { ... }</code>.</li>
+<li><code>x instanceof Loggable</code> صحيحة.</li>
+</ul>
+<h2 id="3-abstract-final-override">3) <code>abstract</code> / <code>final</code> / <code>override</code><a class="headerlink" href="#3-abstract-final-override" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">abstract class Account {
+    abstract fun fee();                 // بلا جسم؛ يجب أن ينفّذها كل صنف فرعي حقيقي
+    final fun id() { return 1; }        // لا يجوز إعادة تعريفها
+}
+final class Leaf extends Account { override fun fee() { return 0; } }  // لا يمكن الوراثة من Leaf
+</code></pre>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الكلمة</th>
+<th>الأثر</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>abstract class</code></td>
+<td>لا يُنشأ مباشرة؛ يجوز أن يحوي <code>abstract fun</code>.</td>
+</tr>
+<tr>
+<td><code>abstract fun f(a);</code></td>
+<td>توقيع بلا جسم؛ مسموح فقط في <code>abstract class</code> أو <code>trait</code>.</td>
+</tr>
+<tr>
+<td><code>final class</code></td>
+<td>الوراثة منه خطأ <strong>عند التعريف</strong>.</td>
+</tr>
+<tr>
+<td><code>final fun</code></td>
+<td>إعادة تعريفها في صنف فرعي خطأ.</td>
+</tr>
+<tr>
+<td><code>final let x = ...;</code></td>
+<td>حقل يُكتب داخل <code>init</code> فقط.</td>
+</tr>
+<tr>
+<td><code>override fun</code></td>
+<td>تأكيد أن الدالة تستبدل أخرى من الأب/سمة/واجهة؛ خطأ إن لم توجد (يلتقط أخطاء الإملاء).</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="4-static">4) <code>static</code><a class="headerlink" href="#4-static" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">class Counter {
+    static let total = 0;
+    static fun make() { return Counter(); }
+    fun init() { Counter.total = Counter.total + 1; }
+}
+Counter.make();
+print Counter.total;       // 1
+</code></pre>
+<ul>
+<li>الحقل static مشترك بين كل النسخ، ويُهيَّأ <strong>كسولاً</strong> عند أول وصول (فيمكنه الإشارة لأصناف معرَّفة لاحقاً).</li>
+<li>يُورَّث: <code>Child.total</code> يصل لنفس حقل <code>Parent</code>.</li>
+<li>دالة <code>static fun</code> بلا <code>self</code>. يمكن أيضاً تخزين دالة في حقل static واستدعاؤها.</li>
+<li>لا <code>static</code> داخل <code>trait</code>، ولا <code>static get/set</code>.</li>
+<li>ملاحظة: متغيّر محلي بنفس اسم الصنف يظلّل الصنف (<code>let Counter = 5;</code> ثم <code>Counter.x</code> تقرأ المتغيّر).</li>
+</ul>
+<h2 id="5-public-private-protected">5) الصلاحيات: <code>public</code> (افتراضي) / <code>private</code> / <code>protected</code><a class="headerlink" href="#5-public-private-protected" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">class Account {
+    private let balance = 0;          // داخل Account فقط
+    protected let owner = &quot;&quot;;         // داخل Account وأبنائه
+    private fun audit() { ... }
+    private fun init() { ... }        // مُنشئ خاص (للـ Singleton مثلاً)
+}
+</code></pre>
+<ul>
+<li>تنطبق على الحقول والدوال والخصائص والمُنشئ والأعضاء static.</li>
+<li>الفحص <strong>وقت التشغيل</strong> حسب <em>الصنف الذي كُتب فيه الكود</em> (لا حسب الكائن): كائن من <code>Account</code> يستطيع قراءة <code>private</code> لكائن آخر من <code>Account</code>، كما في Java/C#.</li>
+<li>الدوال المجهولة (lambda) داخل دالة صنف ترث سياق ذلك الصنف.</li>
+<li>بلا أي استخدام لهذه الكلمات في البرنامج، لا يُجرى أي فحص إطلاقاً (كلفة صفر).</li>
+</ul>
+<h2 id="6-get-set">6) الخصائص <code>get</code> / <code>set</code><a class="headerlink" href="#6-get-set" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">class Temp {
+    let _c = 0;
+    get f() { return self._c * 9 / 5 + 32; }
+    set f(v) { self._c = (v - 32) * 5 / 9; }
+    get c() { return self._c; }       // بلا set =&gt; للقراءة فقط
+}
+let t = Temp();
+t.f = 212;      // يستدعي set f
+print t.c;      // 100
+</code></pre>
+<ul>
+<li>داخل <code>get f</code> نفسها، <code>self.f</code> تقرأ <strong>الحقل الخام</strong> (لا تكرار لانهائي)؛ لكن الأفضل اسم حقل مختلف (<code>_c</code>).</li>
+<li>الكتابة على خاصية بلا <code>set</code> خطأ واضح.</li>
+</ul>
+<h2 id="7">7) العوامل والدوال السحرية<a class="headerlink" href="#7" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الدالة</th>
+<th>يُفعِّل</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>__add__</code> <code>__sub__</code> <code>__mul__</code> <code>__div__</code> <code>__mod__</code> <code>__neg__</code></td>
+<td><code>+ - * / % -x</code> <em>(موجودة سابقاً)</em></td>
+</tr>
+<tr>
+<td><code>__eq__</code> / <code>__ne__</code></td>
+<td><code>==</code> / <code>!=</code> بين كائنين (<code>!=</code> تعكس <code>__eq__</code> إن لم تُعرَّف <code>__ne__</code>)</td>
+</tr>
+<tr>
+<td><code>__lt__</code> <code>__le__</code> <code>__gt__</code> <code>__ge__</code></td>
+<td><code>&lt; &lt;= &gt; &gt;=</code> (إن غابت واحدة تُستعمل المعكوسة للطرف الآخر)</td>
+</tr>
+<tr>
+<td><code>__cmp__(o)</code></td>
+<td>رقم سالب/صفر/موجب — يغطي كل المقارنات الأربع</td>
+</tr>
+<tr>
+<td><code>__str__()</code> أو <code>toString()</code></td>
+<td><code>print</code> والدمج النصي و<code>str()</code></td>
+</tr>
+<tr>
+<td><code>__len__()</code></td>
+<td><code>len(obj)</code></td>
+</tr>
+<tr>
+<td><code>__contains__(x)</code></td>
+<td><code>contains(obj, x)</code></td>
+</tr>
+<tr>
+<td><code>__getitem__(i)</code> / <code>__setitem__(i, v)</code></td>
+<td><code>obj[i]</code> / <code>obj[i] = v</code></td>
+</tr>
+<tr>
+<td><code>__call__(...)</code></td>
+<td><code>obj(...)</code></td>
+</tr>
+<tr>
+<td><code>__iter__()</code></td>
+<td><code>for (let x in obj)</code> — يعيد مصفوفة (أو قاموساً → مفاتيحه)</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="8-instanceof">8) <code>instanceof</code> وفحص الأنواع<a class="headerlink" href="#8-instanceof" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">if (shape instanceof Shape) { ... }        // صنف أب، واجهة، أو سمة
+fun total(s: Shape): Number { ... }        // وسيط بنوع واجهة يعمل أيضاً
+</code></pre>
+<p><code>instanceof</code> اختصار لـ <code>oop.isInstance(value, "Name")</code> وتعمل مع الأنواع المدمجة (<code>Number</code> <code>String</code> ...).</p>
+<h2 id="9">9) استدعاء متسلسل بأي عمق (إصلاح)<a class="headerlink" href="#9" title="Permanent link">#</a></h2>
+<p><code>self.engine.start()</code> و<code>a.b.c.d()</code> كانت تفشل بـ "is not a function" (يُدعم مقطع واحد فقط). الآن
+تُقرأ المقاطع الوسيطة كحقول/خصائص ثم تُنادى الدالة الأخيرة. كذلك <code>Class.staticField.method()</code>.</p>
+<hr />
+<h2 id="10-oop">10) مرجع دوال <code>oop.*</code><a class="headerlink" href="#10-oop" title="Permanent link">#</a></h2>
+<blockquote>
+<p><code>cls</code> = اسم صنف (نص) أو كائن. دوال <code>get/set/call/new/staticGet/staticSet</code> <strong>تحترم</strong> الصلاحيات؛
+<code>peek/poke/toMap/inspect/assign/pick/omit</code> مفاتيح استبطان <strong>تتجاوزها</strong> عمداً (تشخيص/تسلسل/اختبار) — ولا تتجاوز <code>freeze</code>.</p>
+</blockquote>
+<p><strong>أنواع ووراثة:</strong> <code>oop.className(x)</code> · <code>oop.isInstance(x, T)</code> / <code>oop.is</code> · <code>oop.exists(name)</code> ·
+<code>oop.isClass/isInterface/isTrait(name)</code> · <code>oop.isAbstract(cls)</code> · <code>oop.isFinal(cls)</code> · <code>oop.isStruct(cls)</code> ·
+<code>oop.isSubclass(a, b)</code> · <code>oop.parent(cls)</code> · <code>oop.ancestors(cls)</code> · <code>oop.children(cls)</code> ·
+<code>oop.descendants(cls)</code> · <code>oop.classes(kind?)</code> (<code>"class"</code>/<code>"interface"</code>/<code>"trait"</code>/<code>"all"</code>) ·
+<code>oop.interfaces(cls)</code> · <code>oop.traits(cls)</code> · <code>oop.implements(cls, iface)</code></p>
+<p><strong>استبطان الأعضاء:</strong> <code>oop.methods(cls, inherited=true)</code> · <code>oop.staticMethods(cls)</code> ·
+<code>oop.abstractMethods(cls)</code> <em>(غير المنفَّذ فقط)</em> · <code>oop.fields(cls|obj)</code> · <code>oop.staticFields(cls)</code> ·
+<code>oop.properties(cls)</code> · <code>oop.hasMethod/hasField/hasProperty/hasStatic(cls, name)</code> ·
+<code>oop.arity(cls, m)</code> · <code>oop.params(cls, m)</code> · <code>oop.signature(cls, m)</code> · <code>oop.access(cls, name)</code> ·
+<code>oop.describe(cls)</code> (قاموس شامل)</p>
+<p><strong>عمليات ديناميكية:</strong> <code>oop.get(obj, name, default?)</code> · <code>oop.set(obj, name, v)</code> · <code>oop.peek</code> · <code>oop.poke</code> ·
+<code>oop.call(obj, "m", [args])</code> · <code>oop.callStatic(cls, "m", [args])</code> · <code>oop.new("Cls", args...)</code> ·
+<code>oop.newWith("Cls", [args])</code> · <code>oop.staticGet/staticSet</code> · <code>oop.extend(obj, {name: v|fun})</code> · <code>oop.delete(obj, name)</code></p>
+<p><strong>أدوات الكائنات:</strong> <code>oop.toMap</code> · <code>oop.fromMap("Cls", map)</code> <em>(بلا استدعاء init)</em> · <code>oop.entries</code> ·
+<code>oop.pick(obj, [names])</code> · <code>oop.omit(obj, [names])</code> · <code>oop.assign(dst, src)</code> · <code>oop.clone</code> ·
+<code>oop.deepClone</code> · <code>oop.equals(a, b)</code> <em>(مساواة تركيبية عميقة حتى لـ class)</em> · <code>oop.same(a, b)</code> <em>(هوية)</em> ·
+<code>oop.hash(x)</code> <em>(ثابت بين التشغيلات)</em> · <code>oop.toString</code> · <code>oop.inspect</code> <em>(عرض متعدد الأسطر)</em> ·
+<code>oop.freeze(obj, deep=false)</code> · <code>oop.isFrozen</code></p>
+<p><strong>أنماط:</strong> <code>oop.singleton("Cls", args...)</code> · <code>oop.hasSingleton</code> · <code>oop.resetSingleton</code></p>
+<p><strong>مصفوفات كائنات:</strong> <code>oop.compare(a, b)</code> · <code>oop.sort(arr, desc=false)</code> · <code>oop.sortBy(arr, field, desc=false)</code> ·
+<code>oop.min</code> · <code>oop.max</code> · <code>oop.pluck(arr, field)</code> · <code>oop.groupBy(arr, field)</code> ·
+<code>oop.findBy(arr, field, v)</code> · <code>oop.filterBy(arr, field, v)</code></p>
+<p><code>oop.sort/min/max/compare</code> تعمل على الأرقام والنصوص، وعلى الكائنات عبر <code>__lt__</code>/<code>__gt__</code>/<code>__cmp__</code>.</p>
+<hr />
+<h2 id="11-binding">11) دوال الربط (binding)<a class="headerlink" href="#11-binding" title="Permanent link">#</a></h2>
+<h3 id="_1">أ) ربط الدوال بكائن<a class="headerlink" href="#_1" title="Permanent link">#</a></h3>
+<pre><code class="language-kotlin">let inc = oop.bind(counter, &quot;inc&quot;);     // دالة مربوطة: self ثابتة = counter
+inc(); inc();                           // counter.n == 2 (تصلح callback مثل onClick)
+
+fun getN() { return self.n; }
+let g = oop.bind(getN, counter);        // ربط دالة/lambda عادية بكائن =&gt; تستطيع استخدام self
+oop.callWith(getN, other, []);          // نداء لمرة واحدة بكائن آخر
+oop.apply(counter.add, [1, 2]);         // نداء بمصفوفة وسائط
+let loose = oop.unbind(inc);            // نسخة بلا self -&gt; oop.bind(loose, anotherObj)
+oop.bindAll(counter)                    // {اسم: دالة مربوطة} لكل الدوال العامة (بلا init/__x__/private)
+oop.bindAll(counter, [&quot;inc&quot;, &quot;add&quot;])    // أو أسماء محددة
+oop.isBound(fn)   oop.boundTo(fn)
+</code></pre>
+<p><code>oop.bind(obj, "m")</code> <strong>تحترم</strong> <code>private</code>/<code>protected</code> (تُعامَل كنداء من خارج الصنف).</p>
+<h3 id="curry">ب) تطبيق جزئي وCurry<a class="headerlink" href="#curry" title="Permanent link">#</a></h3>
+<pre><code class="language-kotlin">fun vol(a, b, c) { return a * b * c; }
+oop.partial(vol, 2)(3, 4);              // 24   — تثبيت الوسائط الأولى
+oop.curry(vol)(2)(3)(4);                // 24   — وسيط واحد لكل نداء
+</code></pre>
+<p>تعمل أيضاً على الدوال المربوطة: <code>oop.partial(counter.add, 5)(6)</code>.</p>
+<h3 id="data-binding">ج) ربط الخصائص (Data binding)<a class="headerlink" href="#data-binding" title="Permanent link">#</a></h3>
+<pre><code class="language-kotlin">let id = oop.observe(model, &quot;name&quot;, fun(newV, oldV, obj, field) { ... });  // &quot;*&quot; = أي حقل
+oop.bindProperty(src, &quot;v&quot;, dst, &quot;w&quot;);                       // اتجاه واحد + مزامنة فورية
+oop.bindProperty(src, &quot;v&quot;, dst, &quot;label&quot;, fun(x) { return &quot;v=&quot; + str(x); }); // مع تحويل
+oop.bindTwoWay(a, &quot;v&quot;, b, &quot;w&quot;);                             // اتجاهان -&gt; [id, id]
+oop.unobserve(id)   oop.unobserveAll(obj)   oop.observers(obj)
+</code></pre>
+<ul>
+<li>تُطلَق عند أي كتابة: <code>obj.f = v</code> أو <code>oop.set/poke/assign</code> أو <code>set f(v)</code> (للخصائص المحسوبة يُعطى القيمة قبل/بعد عبر <code>get</code>).</li>
+<li>تُطلَق <strong>فقط عند تغيّر القيمة فعلاً</strong>؛ وهذا ما يُنهي حلقة <code>bindTwoWay</code> تلقائياً.</li>
+<li>الـ callback يقبل أي عدد وسائط من 0 إلى 4 <code>(new, old, obj, field)</code> — الزائد يُقصّ.</li>
+<li>المراقب لا يُبقي الكائن حياً (يعتمد <code>weak_ptr</code>)، وتُنظَّف المراقبات المنتهية تلقائياً.</li>
+<li>كلفة صفر على الكتابة ما دام لم تُسجَّل أي مراقبة.</li>
+</ul>
+<h3 id="_2">د) الأحداث<a class="headerlink" href="#_2" title="Permanent link">#</a></h3>
+<pre><code class="language-kotlin">oop.on(btn, &quot;click&quot;, fun(x, y) { ... });     // -&gt; id
+oop.once(btn, &quot;click&quot;, fun() { ... });       // يُزال بعد أول تشغيل
+oop.emit(btn, &quot;click&quot;, 1, 2);                // -&gt; عدد المستمعين المستدعَين
+oop.listeners(btn, &quot;click&quot;)   oop.off(btn, &quot;click&quot;)   oop.off(btn)   // كل أحداث الكائن
+</code></pre>
+<h2 id="oopfreeze-struct-struct"><strong>ملاحظات:</strong> يُرفض الربط داخل كائن مجمَّد (<code>oop.freeze</code>). المراقبون على كائنات <code>struct</code> ينطبقون على <em>النسخة</em> التي سُجّل عليها فقط، لأن <code>struct</code> تُنسخ عند الإسناد.<a class="headerlink" href="#oopfreeze-struct-struct" title="Permanent link">#</a></h2>
+<h2 id="12-container-indsin">12) الربط بالحاويات (container) وبـ Indsin<a class="headerlink" href="#12-container-indsin" title="Permanent link">#</a></h2>
+<p>يربط <strong>حقل كائن</strong> بهدف خارجي، وكل كتابة على أحد الطرفين تنتقل إلى الآخر تلقائياً. الأمثلة المرجعية:
+<a href="https://github.com/dlof-lib/rinlang/blob/main/tests/verification/oop_links.rin"><code>tests/verification/oop_links.rin</code></a> (حاويات + Warp عبر CLI) و
+<a href="https://github.com/dlof-lib/rinlang/blob/main/tests/tools/test_indsin_oop_bind.cpp"><code>tests/tools/test_indsin_oop_bind.cpp</code></a> (جلسة Indsin حقيقية + tap).</p>
+<h3 id="_3">أ) الحاويات<a class="headerlink" href="#_3" title="Permanent link">#</a></h3>
+<pre><code class="language-kotlin">@container=Store
+    state counter = 0;
+    on update(prev) { print &quot;changed from &quot; + str(prev); }
+.end/container
+
+let m = Model();
+oop.bindContainer(m, &quot;n&quot;, &quot;Store&quot;, &quot;counter&quot;);          // الكائن -&gt; الحاوية
+oop.bindContainerFrom(m, &quot;n&quot;, &quot;Store&quot;, &quot;counter&quot;);      // الحاوية -&gt; الكائن
+oop.bindContainerTwoWay(m, &quot;n&quot;, &quot;Store&quot;, &quot;counter&quot;);    // اتجاهان
+</code></pre>
+<ul>
+<li>الكتابة في الحاوية تمر بنفس مسار الإسناد المراعي لـ <code>state</code>، فيُطلَق <code>on update(prev)</code> تلقائياً.</li>
+<li>المسارات التي تُلتقط عند الحاوية: الإسناد داخلها (<code>x = v</code>)، و<code>setState</code> و<code>setField</code>/<code>container.set</code>.</li>
+<li>مراقبة بحتة بلا كائن: <code>oop.watchContainer("Store", "counter" | "*", fun(new, old, key, container) { ... })</code> → id.</li>
+<li>نسخ لمرة واحدة: <code>oop.toContainer(obj, "Store", [fields]?)</code> (حقول الكائن <strong>العامة</strong> فقط ما لم تُحدَّد أسماء) و
+  <code>oop.fromContainer(obj, "Store", [fields]?)</code> (الحقول الموجودة أصلاً في الكائن). كلاهما يعيد عدد الحقول المنسوخة.</li>
+</ul>
+<h3 id="indsin-warp">ب) Indsin (خلايا Warp)<a class="headerlink" href="#indsin-warp" title="Permanent link">#</a></h3>
+<p>خلايا <code>warp name = ...;</code> هي متغيّرات عامة في مفسّر الجلسة، وIndsin ينقلها إلى المفسّر قبل كل معالج
+(<code>onTap</code> وغيره) ويقرؤها بعده. الربط يستفيد من هذا مباشرة:</p>
+<pre><code class="language-kotlin">warp count = 0;
+let model = Model();
+oop.bindWarpTwoWay(model, &quot;n&quot;, &quot;count&quot;);          // اتجاهان — الأنسب للواجهات التفاعلية
+oop.bindWarp(model, &quot;msg&quot;, &quot;label&quot;);              // الكائن -&gt; الشاشة فقط
+oop.bindWarpFrom(model, &quot;flag&quot;, &quot;on&quot;);            // الشاشة -&gt; الكائن فقط
+oop.bindView(form, &quot;ui_&quot;);                        // كل حقل بدائي عام f مع الخلية ui_f (إن كانت معرَّفة)
+oop.bindView(form, {title: &quot;ui_title&quot;});          // أو خريطة صريحة {حقل: خلية}
+
+fun inc() { model.n = model.n + 1; }              // معالج عادي: الخلية count تتغيّر وIndsin يُعيد رسم ما يعتمد عليها
+</code></pre>
+<ul>
+<li><strong>كتابة الكائن</strong> تظهر في <code>changedWarpNames</code> لنفس الـ tap، فتُحلَّل العناصر المشتركة في الخلية من جديد.</li>
+<li><strong>كتابة الشاشة</strong> (خلية غيّرها Indsin) تُسحَب إلى الكائن <strong>قبل</strong> تشغيل المعالج التالي، فيرى المعالج حالة متّسقة.</li>
+<li>في تشغيل <code>rin run</code> العادي (بلا Indsin) لا أحد ينقل الخلايا، فاستدعِ <code>oop.syncLinks()</code> بعد أي كتابة خام على خلية.</li>
+<li>حدّ Warp: Indsin يخزّن الخلايا أرقاماً أو نصوصاً (والمنطقي نصاً "true"/"false" يُعاد منطقياً) — اربط حقولاً بدائية.
+  <code>nil</code> تُعامَل كنص فارغ في الاتجاهين. الحاويات تقبل أي قيمة.</li>
+</ul>
+<h3 id="opts">ج) الخيارات المشتركة <code>opts</code><a class="headerlink" href="#opts" title="Permanent link">#</a></h3>
+<pre><code class="language-kotlin">oop.bindContainer(m, &quot;name&quot;, &quot;Store&quot;, &quot;title&quot;, {transform: fun(v) { return &quot;Hi &quot; + v; }, init: &quot;object&quot;});
+</code></pre>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الخيار</th>
+<th>المعنى</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>transform: fn(value, obj)</code></td>
+<td>تحويل القيمة العابرة في الاتجاه الوحيد (push أو pull). <strong>مرفوض مع two-way</strong> لأن لا معكوس له.</td>
+</tr>
+<tr>
+<td><code>init</code></td>
+<td>المزامنة الأولية: <code>"object"</code> (الافتراضي لـ push وtwo-way: الكائن مصدر الحقيقة)، <code>"target"</code> (الافتراضي لـ pull: القيمة تُنسخ من الهدف إلى الكائن)، <code>"none"</code> (لا شيء).</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="_4">د) السلوك الدقيق<a class="headerlink" href="#_4" title="Permanent link">#</a></h3>
+<ul>
+<li><strong>لا حلقات:</strong> الاتجاهان يمنعان الصدى بتذكّر آخر قيمة نُقلت، والنقل لا يحدث إلا عند تغيّر القيمة فعلاً.</li>
+<li>الحقول <code>private</code>/<code>protected</code> والخصائص <code>get</code>/<code>set</code> تُربَط (الربط يعمل بسياق صنف الكائن). حقول <code>final</code> والكائنات المجمَّدة
+  (<code>oop.freeze</code>) ترفض السحب إليها بخطأ — وكتابة الحاوية نفسها <strong>تكون قد تمت</strong> قبل أن يُرفَض السحب إلى الكائن.</li>
+<li>الإلغاء: <code>oop.unobserve(id)</code> و<code>oop.unobserveAll(obj)</code>؛ وتظهر الروابط في <code>oop.observers(obj)</code> بأنواع <code>container</code>/<code>warp</code>.</li>
+<li>الربط لا يُبقي الكائن حياً (<code>weak_ptr</code>)، وتُنظَّف الروابط المنتهية تلقائياً. كلفة صفر على الحاويات والـ tap ما لم يُنشأ رابط.</li>
+<li><code>oop.syncLinks()</code> يسحب يدوياً كل الروابط التي تقرأ من حاوية/خلية (مفيد بعد كتابات خام لا تمر بمسارات الإسناد، مثل <code>container.restore</code>).</li>
+</ul>
+<hr />
+<h2 id="13">13) حدود معروفة (بصراحة)<a class="headerlink" href="#13" title="Permanent link">#</a></h2>
+<ul>
+<li>الصلاحيات و<code>abstract</code> و<code>final</code> و<code>override</code> تُفحَص <strong>وقت التشغيل</strong> (عند الوصول/الإنشاء)، لا ساكنياً؛
+  لكن مخالفات الوراثة من <code>final class</code> تُكتشف عند التعريف.</li>
+<li><code>rin build</code> (المترجم الأصلي <code>rinc</code>) لا يدعم OOP أصلاً — كما قبل؛ استخدم <code>rin run</code>.</li>
+<li>وراثة واحدة فقط (<code>extends</code>)، والتعدد عبر <code>implements</code>/<code>uses</code>.</li>
+<li>لا generics، ولا <code>protected</code> خاصة بالحزمة (package)، ولا <code>static get/set</code>، ولا <code>static</code> داخل <code>trait</code>.</li>
+<li><code>struct</code> تبقى بدلالة القيمة؛ <code>oop.freeze</code> على نسخة struct يجمّد تلك النسخة فقط.</li>
+<li>الربط بالحاويات يلتقط الكتابات التي تمر بمسارات الإسناد (<code>x = v</code> داخل الحاوية، <code>setState</code>، <code>setField</code>)؛ أما الكتابات الخام مثل <code>container.restore</code> فتحتاج <code>oop.syncLinks()</code>.</li>
+<li>الربط بـ Indsin يتم على مستوى <strong>خلايا Warp</strong> (لا على سمات العناصر مباشرة): العنصر يقرأ الخلية بـ <code>{cell}</code> والكائن مربوط بالخلية.</li>
+</ul></article>
+<div class="pnav"><a class="pn" href="objects.html">→ class`/`struct`، `.object()`، `@Object`، `document</a><a class="pn" href="containers.html">دليل `@container` / `@element` / `@loop ←</a></div><p class="edit"><a href="https://github.com/dlof-lib/rinlang/edit/main/docs/oop.md">✎ عدّل هذه الصفحة على GitHub</a></p>
+<footer>Rin 1.0.0 · رخصة MIT</footer></main>
+<aside id="toc"><b>في هذه الصفحة</b><div class="toc">
+<ul>
+<li><a href="#1-interface">1) interface — عقد بتواقيع فقط</a></li>
+<li><a href="#2-trait">2) trait — كود قابل لإعادة الاستخدام</a></li>
+<li><a href="#3-abstract-final-override">3) abstract / final / override</a></li>
+<li><a href="#4-static">4) static</a></li>
+<li><a href="#5-public-private-protected">5) الصلاحيات: public (افتراضي) / private / protected</a></li>
+<li><a href="#6-get-set">6) الخصائص get / set</a></li>
+<li><a href="#7">7) العوامل والدوال السحرية</a></li>
+<li><a href="#8-instanceof">8) instanceof وفحص الأنواع</a></li>
+<li><a href="#9">9) استدعاء متسلسل بأي عمق (إصلاح)</a></li>
+<li><a href="#10-oop">10) مرجع دوال oop.*</a></li>
+<li><a href="#11-binding">11) دوال الربط (binding)</a><ul>
+<li><a href="#_1">أ) ربط الدوال بكائن</a></li>
+<li><a href="#curry">ب) تطبيق جزئي وCurry</a></li>
+<li><a href="#data-binding">ج) ربط الخصائص (Data binding)</a></li>
+<li><a href="#_2">د) الأحداث</a></li>
+</ul>
+</li>
+<li><a href="#oopfreeze-struct-struct">ملاحظات: يُرفض الربط داخل كائن مجمَّد (oop.freeze). المراقبون على كائنات struct ينطبقون على النسخة التي سُجّل عليها فقط، لأن struct تُنسخ عند الإسناد.</a></li>
+<li><a href="#12-container-indsin">12) الربط بالحاويات (container) وبـ Indsin</a><ul>
+<li><a href="#_3">أ) الحاويات</a></li>
+<li><a href="#indsin-warp">ب) Indsin (خلايا Warp)</a></li>
+<li><a href="#opts">ج) الخيارات المشتركة opts</a></li>
+<li><a href="#_4">د) السلوك الدقيق</a></li>
+</ul>
+</li>
+<li><a href="#13">13) حدود معروفة (بصراحة)</a></li>
+</ul>
+</div>
+</aside></div>
+<script src="assets/app.js"></script></body></html>
