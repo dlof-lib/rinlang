@@ -1,0 +1,207 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Indsin — Interface Design — Rin</title>
+<meta name="description" content="توثيق لغة البرمجة Rin"><link rel="icon" href="../assets/brand/icon-32.png">
+<link rel="stylesheet" href="assets/style.css"></head><body>
+<header><button id="mn" aria-label="القائمة">☰</button><a class="logo" href="index.html"><img src="../assets/brand/icon-48.png" alt="" width="26">Rin</a>
+<input id="q" type="search" placeholder="ابحث في التوثيق…" autocomplete="off"><button id="th" aria-label="الوضع">◐</button>
+<a class="gh" href="https://github.com/dlof-lib/rinlang">GitHub</a><div id="res"></div></header>
+<div class="wrap"><nav id="sb"><details ><summary>ابدأ هنا</summary><a href="getting-started.html">البداية</a><a href="syntax.html">القواعد النحوية العامة</a><a href="variables.html">let`، مصفوفات، قواميس، نطاق</a><a href="template-strings.html">النصوص القالبية (متغيّرات داخل النص)</a><a href="input.html">إدخال المستخدم (Input)</a><a href="control-flow.html">الشروط، الحلقات، `goal`/`achieve</a><a href="loops.html">حلقات Rin — Loops v2</a><a href="functions.html">fun`/`return`، التكرار الذاتي</a><a href="enums.html">enum`: قوائم اختيار مغلقة</a></details><details ><summary>اللغة</summary><a href="language-reference.html">المرجع الشامل وخريطة ترابط المفاهيم</a><a href="objects.html">class`/`struct`، `.object()`، `@Object`، `document</a><a href="oop.html">البرمجة الكائنية الموسَّعة (Rin 1.0)</a><a href="containers.html">دليل `@container` / `@element` / `@loop</a><a href="table.html">الجدول (`@table` / `@container.table`) ودوال اللغة عليه</a><a href="set.html">Set`: نوع المجموعة الأساسي</a><a href="pipelines.html">عامل الأنابيب `|&gt;</a><a href="RECKON.html">reckon`: مفهوم حسابي بسطرين</a><a href="let-plus.html">let` المطوَّر</a><a href="living-variables.html">المتغيرات الحيّة (Living Variables)</a><a href="label-define.html">label` و`define` (تسمية وتعريف)</a><a href="block-frames.html">بداية الكتل ونهايتها (Block Frames)</a><a href="compare_ops.html">معاملات المقارنة `/=` و `=/=` و `=/</a><a href="max_min.html">max / min family</a><a href="scope-guarantees.html">ضمانات النطاق: `finally` · `defer` · `catch … when` · `rethrow</a><a href="key_terms_and_builtins.html">Rin KEY_TERMS and Built-in Conditions</a><a href="number_builtins.html">Rin Number Built-ins</a></details><details open><summary>الواجهات (Indsin)</summary><a href="indsin.html" class=on>Indsin — Interface Design</a><a href="indsin_rin.html">indsin يعتمد على لغة Rin</a><a href="indsin_expansion.html">Indsin — التوسعة الاحترافية (Design System v2)</a><a href="indsin_object.html">indsin-object — API reference</a><a href="indsin_media.html">Indsin Media — اختيار الوسائط ورفعها</a><a href="indsin_icons.html">مكتبة أيقونات indsin (متجهية)</a><a href="indsin_tooling.html">indsin tooling — icon, file association, syntax highlighting</a><a href="indsinweb.html">IndsinWeb — مكتبة WebView والروابط لـ indsin</a><a href="RIN_ELEMENTS.html">دليل `@element.*` الكامل</a><a href="events-effects.html">الأحداث والتأثيرات (Events &amp; Effects) — محرك Indsin UI</a><a href="banner.html">Banner: إشعار شريطي</a><a href="simple-style.html">Rin Simple Style</a></details><details ><summary>بيئة التشغيل</summary><a href="runtime.html">وقت تشغيل Rin (Rin Runtime) · المرجع الرسمي</a><a href="standard-library.html">المكتبة القياسية (`lib/*.og.rin`)</a><a href="errors.html">نظام الأخطاء: أكواد، `try`/`catch`/`throw</a><a href="ERROR_SYSTEM.html">نظام التشخيص: البنية الداخلية + جدول الأكواد الكامل</a><a href="storage.html">تخزين دائم</a><a href="http.html">شبكات</a><a href="env.html">ربط Rin بملف `.env</a><a href="terminal.html">الطرفية التفاعلية — `rin terminal</a><a href="vm.html">RinVM — آلة Rin الافتراضية (بايتكود)</a><a href="rinflow.html">RinFlow: طبقة تنفيذ التدفّق المهيكل</a><a href="MAKE_UNIT.html">@make.(name)`: وحدة بسياسة قدرات صريحة</a><a href="MAKE_MEDIA.html">فيديو · صوت · API · إزالة الخلفية · قراءة النص من الصور</a><a href="TIME.html">مفهوم `time`: الزمن كقيمة من الدرجة الأولى</a><a href="native-additions.html">دوال Rin الأصلية الجديدة (Rin 1.0)</a></details><details ><summary>الحاويات وقواعد البيانات</summary><a href="container_advanced.html">Rin Container Advanced Built-ins</a><a href="container_pro.html">Rin Container Pro</a><a href="container_sql.html">RIN CONTAINER SQL (RCSQL)</a><a href="cross-file-containers.html">استدعاء إعلانات من ملف آخر</a></details><details ><summary>الحزم والتكامل</summary><a href="api.html">واجهة C المسطَّحة (Embedding API)</a><a href="android.html">استضافة Rin على أندرويد</a><a href="packages-and-interop.html">Rin 1.0 — المكتبات والحزم وجسر C++ وJSON واختبارات rintest</a><a href="rinpak-format.html">RinPak — حزمة مشروع Rin (`.rinpak`)</a><a href="html-projects.html">مشاريع HTML في Rin — الربط بين index.html وملف الحاوية</a><a href="project-og-urin.html">project.og.urin` — البيانات الوصفية لمشروع Rin</a><a href="CONTENT_PACKS.html">حزم المحتوى القابلة للتنزيل (Content Packs)</a><a href="previewkit.html">previewkit — معاينة حيّة لملفات PDF / Markdown / TypeScript</a></details><details ><summary>المكتبات المتخصصة</summary><a href="rinml.html">RinML / RinDF / RinAI — الذكاء الاصطناعي وتحليل البيانات في Rin</a><a href="STATS.html">RinStat — التحليل الإحصائي (`lib/rinstat.og.rin`)</a><a href="STATS_ADV.html">RinStat المتقدّم + RinAuto</a><a href="LINALG.html">الجبر الخطي للمهندسين — `mat*` و`vec*</a><a href="PLOT.html">RinPlot — الرسوم البيانية الإحصائية (`lib/rinplot.og.rin`)</a><a href="ALGO.html">تطوير الخوارزميات والحساب العددي — `algo*</a><a href="NUMBER.html">مفهوم `number` في Rin</a><a href="boat.html">&quot;Boat&quot;: مفاهيم أساسية مجمَّعة</a><a href="passkit.html">passkit — passwords, encryption, databases and a tag language</a><a href="passkit-crypto-db.html">Passkit feature catalog: encryption, databases and container linking</a><a href="hash-family.html">عائلة `#` — مفاهيم ودوال جديدة تبدأ بعلامة `#</a><a href="image-draw.html">إنشاء الصور في Rin — رسم وحفظ PNG وlog كصورة</a><a href="image-terminal.html">طباعة الصور في الـ terminal — `printImage` / `imageAnsi` / `imageInfo</a></details><details ><summary>المشروع</summary><a href="CONTRIBUTING.html">المساهمة في Rin</a><a href="CODE_OF_CONDUCT.html">قواعد السلوك</a><a href="SECURITY.html">سياسة الأمان</a><a href="SUPPORT.html">الحصول على المساعدة</a><a href="TRADEMARKS.html">سياسة العلامة التجارية — Trademark Policy</a><a href="THIRD_PARTY_NOTICES.html">إشعارات المكوّنات الخارجية — Third-Party Notices</a></details><details ><summary>مراجع إضافية</summary><a href="ANDROID_VERSIONS.html">حزم RinStudio لكل إصدار أندرويد</a><a href="TOKEN.html">مفهوم `token` في Rin</a><a href="TOOLCHAIN.html">Rin Professional Language Toolchain</a><a href="TOOLCHAIN_UPGRADE.html">Toolchain Upgrade — 2026-09</a><a href="architecture.html">المعمارية وبنية المستودع</a><a href="base-accept.html">base` و`accept`: متغيّران يخدمان `if</a><a href="channel47.html">channel47 — لغة وصف البيانات والإعدادات</a><a href="ci.html">CI وأدوات المستودع</a><a href="loop-templates.html">قوالب الحلقات `@tmpl</a><a href="pre-post.html">pre` و`post` (ما قبل / ما بعد): عقد انتقال حول الإسناد</a><a href="print-fonts.html">خطوط `print` — bold / italic / underline وغيرها</a><a href="print-image-terminal.html">طباعة الصور كنص في الطرفية</a><a href="print-templates.html">قوالب الطباعة `@tmpl ... print` — قوالب نصية خطية وتنسيقية</a><a href="rdoc.html">rdoc — Documentation Container</a><a href="rdoc-reference.html">وثيقة rdoc الشاملة — Documentation Container</a><a href="screenshots.html">لقطات من RinStudio</a></details></nav>
+<main><article><h1 id="indsin-interface-design">Indsin — Interface Design<a class="headerlink" href="#indsin-interface-design" title="Permanent link">#</a></h1>
+<p><code>indsin</code> هو الاسم الموحَّد لكل ما كان يُعرَف سابقاً باسم "Loom": محرّك عرض الواجهات
+(rendering engine) في Rin، بكل مضيفيه الثلاثة (أندرويد، سطح المكتب، CLI). الاسم
+اختصار لـ <strong>Interface Design</strong>، ويحلّ محل الاستعارة القديمة "النَّسج" كعنوان موحَّد
+لكل طبقات تنفيذ الواجهة، بحيث يصبح كل ما يخصّ الـ UI في المشروع تحت مظلّة واحدة
+بدل تعدّد الأسماء (Loom / Fabric / Loomtime...).</p>
+<h2 id="indsin">ما الذي يغطّيه indsin<a class="headerlink" href="#indsin" title="Permanent link">#</a></h2>
+<p><code>indsin</code> هو طبقة <strong>التنفيذ (runtime)</strong> التي تُحوّل مفاهيم اللغة الوصفية —
+<code>@element</code> / <code>@loop</code> / <code>@container</code> (انظر <a href="containers.html"><code>docs/containers.md</code></a>
+للدليل الكامل، و<a href="RIN_ELEMENTS.html"><code>docs/RIN_ELEMENTS.md</code></a> لكتالوج
+<code>@element.*</code> كاملاً) —
+إلى شجرة عناصر مقاسة (measured tree)، ثم إلى عمليات رسم (paint ops)، ثم إلى بكسلات
+فعلية على الشاشة. اللغة نفسها لا تتغيّر: <code>@element.button</code>، <code>@loop</code>، <code>on.x.click=</code>
+كلها كما هي. ما تغيّر هو اسم المحرّك الذي يُنفِّذها والمكوّنات المبنية عليه.</p>
+<h3 id="element"><code>@element</code> كجذر شاشة مستقل<a class="headerlink" href="#element" title="Permanent link">#</a></h3>
+<p><code>@element</code> كان يعمل فقط متداخلاً داخل <code>@view</code> (أو <code>@loop</code>) — أي برنامج يحتوي على
+<code>@element</code> وحده بدون <code>@view</code>/<code>@loop</code> كان يفشل بخطأ "no top-level ... root found"،
+رغم أن المحرّك (<code>buildFabric</code>/<code>layout</code>/<code>paint</code>) لا يميّز أصلاً بين عنصر من نوع
+<code>role=VIEW</code> وآخر من نوع <code>role=ELEMENT</code> عند بناء الشجرة أو قياسها أو رسمها — التمييز
+كان فقط في <em>اختيار الجذر</em>. الآن <code>pickRootFromProgram()</code>
+(<code>rin_indsin_pipeline.h</code>) يقبل <code>@element</code> كجذر شاشة مستقل عند غيابِ أي <code>@view</code>/<code>@loop</code>
+على المستوى الأعلى، مع حفظ الأولوية الكاملة لـ<code>@view</code>/<code>@loop</code> عند وجودهما معًا (سلوك
+قديم لم يتغيّر). <code>sanitizeElements()</code> تبقى تُطبَّق كما هي — كون العنصر جذرًا لا يمنحه
+تنسيقًا بصريًا مدمجًا لم يكن يملكه أصلاً؛ يبقى "وظيفيًا بحتًا" حتى وهو الشاشة كاملةً.</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الطبقة</th>
+<th>الموقع</th>
+<th>ملاحظات</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>المحرّك الأساسي (C++)</td>
+<td><code>app/src/main/cpp/indsin/</code></td>
+<td><code>rin_indsin_layout.h</code>, <code>rin_indsin_paint.h</code>, <code>rin_indsin_strand.h</code>, <code>rin_indsin_needle.h</code> (hit-test)، <code>rin_indsin_shuttle.h</code> (hot-reload)، إلخ. الواجهة العامة المستقرة: <code>rin_indsin_c_api.h/.cpp</code>.</td>
+</tr>
+<tr>
+<td>أندرويد (Kotlin)</td>
+<td><code>app/src/main/java/com/dlof/rinlang/Indsin*.kt</code></td>
+<td><code>IndsinFabricView</code> (المُصيِّر)، <code>IndsinPreviewActivity</code>/<code>IndsinPreviewManager</code> (المعاينة الحيّة)، <code>IndsinViewTracer</code>. مربوطة بالمحرّك عبر <code>RinEngine.IndsinSession</code> (JNI).</td>
+</tr>
+<tr>
+<td>سطح المكتب</td>
+<td><code>tools/rin_indsin_desktop.cpp</code></td>
+<td>نافذة X11 حقيقية فوق نفس مسار الرسم (<code>rin_indsin_session_render_rgb</code>).</td>
+</tr>
+<tr>
+<td>CLI</td>
+<td><code>tools/rin_indsin_run.cpp</code></td>
+<td>يُخرج JSON (fabric + paint ops) لأي ملف <code>.rin</code>، بلا أي واجهة رسومية — مفيد للاختبار والـ CI.</td>
+</tr>
+</tbody>
+</table></div>
+<p>هذه المضيفة الثلاثة (أندرويد/سطح المكتب/CLI) تُشغِّل <strong>نفس</strong> مسار القياس والرسم في
+المحرّك — لا يوجد تكرار أو إعادة تنفيذ منطق لكل منصّة.</p>
+<h2 id="_1">المصطلحات الداخلية<a class="headerlink" href="#_1" title="Permanent link">#</a></h2>
+<p>المصطلحات الاستعارية الداخلية للمحرّك (Strand، Needle، Shuttle، Warp، Fabric) بقيت
+كما هي — هذه أسماء لبُنى داخل <code>indsin</code> نفسه (شجرة القياس، البحث بالإحداثيات،
+إعادة التحميل الحيّ، حالة التفاعل، شجرة العرض الناتجة) وليست أسماء بديلة للمحرّك
+ذاته. <code>indsin</code> هو الاسم الوحيد للمحرّك/الماركة؛ وما دونه تفاصيل تنفيذ داخلية.</p>
+<h2 id="_2">خريطة إعادة التسمية (للمُساهمين)<a class="headerlink" href="#_2" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>القديم</th>
+<th>الجديد</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Loom</code> (كاسم للمحرّك)</td>
+<td><code>Indsin</code></td>
+</tr>
+<tr>
+<td><code>Loomtime</code></td>
+<td><code>Indsintime</code></td>
+</tr>
+<tr>
+<td><code>LoomSession</code> / <code>loomSession*Native</code></td>
+<td><code>IndsinSession</code> / <code>indsinSession*Native</code></td>
+</tr>
+<tr>
+<td><code>LoomFabricView</code></td>
+<td><code>IndsinFabricView</code></td>
+</tr>
+<tr>
+<td><code>LoomPreviewActivity</code> / <code>LoomPreviewManager</code></td>
+<td><code>IndsinPreviewActivity</code> / <code>IndsinPreviewManager</code></td>
+</tr>
+<tr>
+<td><code>rin_loom_*.h/.cpp</code></td>
+<td><code>rin_indsin_*.h/.cpp</code></td>
+</tr>
+<tr>
+<td><code>app/src/main/cpp/loom/</code></td>
+<td><code>app/src/main/cpp/indsin/</code></td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="_3">انظر أيضاً<a class="headerlink" href="#_3" title="Permanent link">#</a></h2>
+<ul>
+<li><a href="oop.html"><code>docs/oop.md</code></a> §12 — ربط كائنات OOP بخلايا Warp (<code>oop.bindWarpTwoWay</code> / <code>oop.bindView</code>) وبحقول الحاويات.</li>
+<li><a href="containers.html"><code>docs/containers.md</code></a> — <code>@container</code>، <code>@element</code>، <code>@loop</code> بالتفصيل.</li>
+<li><a href="RIN_ELEMENTS.html"><code>docs/RIN_ELEMENTS.md</code></a> — كتالوج <code>@element.*</code> الكامل.</li>
+<li><a href="https://github.com/dlof-lib/rinlang/blob/main/docs/language.html"><code>docs/language.html</code></a> — "جولة في لغة Rin": جولة عامة في اللغة
+  من المتغيّر الأول إلى الحاوية الكاملة (لم يكن يغطي <code>@element</code>/<code>@loop</code> قبل هذا
+  الملف — <code>docs/containers.md</code> أعلاه هو المكمِّل له لهذا الجزء تحديدًا).</li>
+</ul>
+<h2 id="preview">المعاينة الصحيحة (Preview) — ما الذي تغيّر<a class="headerlink" href="#preview" title="Permanent link">#</a></h2>
+<p>المعاينة الأصلية (<code>rasterizeToBuffer</code>) كانت ترسم كل حرف كشرطة وتتجاهل <code>radius</code>، وكان الجذر يتقلّص
+حول محتواه. الآن:</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الموضوع</th>
+<th>السلوك الجديد</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>جذر الشاشة</td>
+<td><code>Strand::screenRoot</code> يُضبَط من المضيف (C API): الجذر يملأ عرض الـ viewport، و<code>Column</code> الجذر يمدّ أبناءه افتراضياً (<code>align="stretch"</code>). أي <code>Column</code> آخر يبقى <code>left</code> كما كان.</td>
+</tr>
+<tr>
+<td><code>align="stretch"</code> / <code>valign="stretch"</code></td>
+<td>تعمل فعلياً (كانت تتخطى الإزاحة فقط): الابن يأخذ كامل عرض/ارتفاع الحاوية ما لم يحدّد <code>width=</code>/<code>height=</code>. <code>Card</code> الممدود يمرّر العرض لأبنائه.</td>
+</tr>
+<tr>
+<td>كاش التخطيط</td>
+<td>مفتاح الكاش يشمل <code>minW/minH</code> وليس <code>maxW/maxH</code> فقط.</td>
+</tr>
+<tr>
+<td><code>DrawCommand</code> (نص)</td>
+<td>حقول جديدة: <code>fontSize</code>، <code>align</code> (0 بداية/1 وسط/2 نهاية)، <code>bold</code>، <code>singleLine</code> — تُملأ في <code>Dye::paintInto</code>، وتظهر في JSON الخاص بـ paint (<code>fontSize/align/bold/singleLine</code>، و<code>start/sweep</code> للأقواس).</td>
+</tr>
+<tr>
+<td>المُرسِم الأصلي</td>
+<td>حواف ناعمة، <code>radius</code> للتعبئة والإطار، <code>STROKE_ARC</code>، ونص حقيقي (خط 5x7 لـ ASCII، <code>rin_indsin_font.h</code>) مع لفّ الأسطر و"…" وتوسيط الأزرار. العربية/CJK/الإيموجي تُرسَم كأشرطة "هيكلية" (لا تشكيل بلا اعتماديات).</td>
+</tr>
+<tr>
+<td>معاينة HTML</td>
+<td><code>rin_indsin_session_export_html()</code> (<code>rin_indsin_html.h</code>): نفس خطة الرسم لكن النص يضعه المتصفح، فالعربية وRTL والإيموجي صحيحة. هذا هو المسار الدقيق للنصوص غير اللاتينية.</td>
+</tr>
+<tr>
+<td>ألوان</td>
+<td><code>bg=</code> بديل صريح للتعبئة (يتقدّم على <code>color=</code> الذي يصبح لون نص الزر)، و<code>textColor=</code> لنص الزر.</td>
+</tr>
+<tr>
+<td><code>onTap</code></td>
+<td>قيم warp المنطقية تعود للمفسّر كـ bool حقيقي (كانت نصّاً "false" = صادقاً، فيفشل <code>open = !open</code> و<code>if (flag)</code>).</td>
+</tr>
+<tr>
+<td>اللغة</td>
+<td><code>show(x)</code> في موضع تعبير (<code>onTap=show(dialogOpen)</code>) لم تعد تُحلَّل كـ <code>print</code>.</td>
+</tr>
+<tr>
+<td>المفسّر</td>
+<td>إصلاح segfault في <code>mask*</code> (التقاط مرجع لـ lambda محلّي بعد انتهاء نطاقه).</td>
+</tr>
+</tbody>
+</table></div>
+<p>أداة سطر الأوامر: <code>tools/rin_indsin_preview.cpp</code></p>
+<pre><code>rin_indsin_preview file.rin --width 390 --png out.png --html out.html --tap 60,160
+</code></pre>
+<p>الاختبار: <code>tools/test_indsin_preview.cpp</code>. قوالب المشاريع الخمسة (آلة حاسبة/مدونة/أزرار/معرض/ويب فيو)
+موجودة كملفات في <code>examples/indsin_templates/</code> ومولَّدة من <code>ProjectManager.kt</code>.</p>
+<h2 id="design-system-v2">التوسعة الاحترافية (Design System v2)<a class="headerlink" href="#design-system-v2" title="Permanent link">#</a></h2>
+<p>توكنز موسَّعة (elevation/z/breakpoints/duration/opacity)، ثيمات جديدة (HighContrast وSepia وForest وRose)،
+مولّد ثيم من لون واحد مع فحص WCAG، تصميم متجاوب بلاحقات <code>_md/_lg</code>، حركات متتابعة <code>stagger=</code>،
+8 actions جديدة، مدقّق إمكانية الوصول، وواجهة استعلام للشجرة — راجع
+<a href="indsin_expansion.html"><code>docs/indsin_expansion.md</code></a> والمثال <code>examples/samples/indsin_system_demo.rin</code>.</p>
+<hr />
+<h2 id="rin">Rin كأساس لقيم الخصائص (جديد)<a class="headerlink" href="#rin" title="Permanent link">#</a></h2>
+<p>قيم خصائص <code>@view</code> تُقيَّم الآن بمفسّر Rin الحقيقي: متغيرات <code>let</code>، دوال أصلية و<code>fun</code>، مقارنات و<code>and/or/!</code>، فهرسة، <code>Set</code>،
+ودوال <code>indsin.*</code> لنظام التصميم. التفاصيل والقيود (حارس النقاء): <a href="indsin_rin.html">docs/indsin_rin.md</a>.</p>
+<hr />
+<h2 id="_4">اختيار الوسائط ورفعها (جديد)<a class="headerlink" href="#_4" title="Permanent link">#</a></h2>
+<p><code>pickMedia</code> / <code>uploadMedia</code> / <code>clearMedia</code> / <code>removeMedia</code> مع خلايا حالة وتقدّم — راجع <a href="indsin_media.html">docs/indsin_media.md</a>.</p></article>
+<div class="pnav"><a class="pn" href="number_builtins.html">→ Rin Number Built-ins</a><a class="pn" href="indsin_rin.html">indsin يعتمد على لغة Rin ←</a></div><p class="edit"><a href="https://github.com/dlof-lib/rinlang/edit/main/indsin.md">✎ عدّل هذه الصفحة على GitHub</a></p>
+<footer>Rin 1.0.0 · رخصة MIT</footer></main>
+<aside id="toc"><b>في هذه الصفحة</b><div class="toc">
+<ul>
+<li><a href="#indsin">ما الذي يغطّيه indsin</a><ul>
+<li><a href="#element">@element كجذر شاشة مستقل</a></li>
+</ul>
+</li>
+<li><a href="#_1">المصطلحات الداخلية</a></li>
+<li><a href="#_2">خريطة إعادة التسمية (للمُساهمين)</a></li>
+<li><a href="#_3">انظر أيضاً</a></li>
+<li><a href="#preview">المعاينة الصحيحة (Preview) — ما الذي تغيّر</a></li>
+<li><a href="#design-system-v2">التوسعة الاحترافية (Design System v2)</a></li>
+<li><a href="#rin">Rin كأساس لقيم الخصائص (جديد)</a></li>
+<li><a href="#_4">اختيار الوسائط ورفعها (جديد)</a></li>
+</ul>
+</div>
+</aside></div>
+<script src="assets/app.js"></script></body></html>
