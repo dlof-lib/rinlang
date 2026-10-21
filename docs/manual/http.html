@@ -1,0 +1,123 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>شبكات — Rin</title>
+<meta name="description" content="توثيق لغة البرمجة Rin"><link rel="icon" href="../assets/brand/icon-32.png">
+<link rel="stylesheet" href="assets/style.css"></head><body>
+<header><button id="mn" aria-label="القائمة">☰</button><a class="logo" href="index.html"><img src="../assets/brand/icon-48.png" alt="" width="26">Rin</a>
+<input id="q" type="search" placeholder="ابحث في التوثيق…" autocomplete="off"><button id="th" aria-label="الوضع">◐</button>
+<a class="gh" href="https://github.com/dlof-lib/rinlang">GitHub</a><div id="res"></div></header>
+<div class="wrap"><nav id="sb"><details ><summary>ابدأ هنا</summary><a href="getting-started.html">البداية</a><a href="syntax.html">القواعد النحوية العامة</a><a href="variables.html">let`، مصفوفات، قواميس، نطاق</a><a href="template-strings.html">النصوص القالبية (متغيّرات داخل النص)</a><a href="input.html">إدخال المستخدم (Input)</a><a href="control-flow.html">الشروط، الحلقات، `goal`/`achieve</a><a href="loops.html">حلقات Rin — Loops v2</a><a href="functions.html">fun`/`return`، التكرار الذاتي</a><a href="enums.html">enum`: قوائم اختيار مغلقة</a></details><details ><summary>اللغة</summary><a href="language-reference.html">المرجع الشامل وخريطة ترابط المفاهيم</a><a href="objects.html">class`/`struct`، `.object()`، `@Object`، `document</a><a href="oop.html">البرمجة الكائنية الموسَّعة (Rin 1.0)</a><a href="containers.html">دليل `@container` / `@element` / `@loop</a><a href="table.html">الجدول (`@table` / `@container.table`) ودوال اللغة عليه</a><a href="set.html">Set`: نوع المجموعة الأساسي</a><a href="pipelines.html">عامل الأنابيب `|&gt;</a><a href="RECKON.html">reckon`: مفهوم حسابي بسطرين</a><a href="let-plus.html">let` المطوَّر</a><a href="living-variables.html">المتغيرات الحيّة (Living Variables)</a><a href="label-define.html">label` و`define` (تسمية وتعريف)</a><a href="block-frames.html">بداية الكتل ونهايتها (Block Frames)</a><a href="compare_ops.html">معاملات المقارنة `/=` و `=/=` و `=/</a><a href="max_min.html">max / min family</a><a href="scope-guarantees.html">ضمانات النطاق: `finally` · `defer` · `catch … when` · `rethrow</a><a href="key_terms_and_builtins.html">Rin KEY_TERMS and Built-in Conditions</a><a href="number_builtins.html">Rin Number Built-ins</a></details><details ><summary>الواجهات (Indsin)</summary><a href="indsin.html">Indsin — Interface Design</a><a href="indsin_rin.html">indsin يعتمد على لغة Rin</a><a href="indsin_expansion.html">Indsin — التوسعة الاحترافية (Design System v2)</a><a href="indsin_object.html">indsin-object — API reference</a><a href="indsin_media.html">Indsin Media — اختيار الوسائط ورفعها</a><a href="indsin_icons.html">مكتبة أيقونات indsin (متجهية)</a><a href="indsin_tooling.html">indsin tooling — icon, file association, syntax highlighting</a><a href="indsinweb.html">IndsinWeb — مكتبة WebView والروابط لـ indsin</a><a href="RIN_ELEMENTS.html">دليل `@element.*` الكامل</a><a href="events-effects.html">الأحداث والتأثيرات (Events &amp; Effects) — محرك Indsin UI</a><a href="banner.html">Banner: إشعار شريطي</a><a href="simple-style.html">Rin Simple Style</a></details><details open><summary>بيئة التشغيل</summary><a href="runtime.html">وقت تشغيل Rin (Rin Runtime) · المرجع الرسمي</a><a href="standard-library.html">المكتبة القياسية (`lib/*.og.rin`)</a><a href="errors.html">نظام الأخطاء: أكواد، `try`/`catch`/`throw</a><a href="ERROR_SYSTEM.html">نظام التشخيص: البنية الداخلية + جدول الأكواد الكامل</a><a href="storage.html">تخزين دائم</a><a href="http.html" class=on>شبكات</a><a href="env.html">ربط Rin بملف `.env</a><a href="terminal.html">الطرفية التفاعلية — `rin terminal</a><a href="vm.html">RinVM — آلة Rin الافتراضية (بايتكود)</a><a href="rinflow.html">RinFlow: طبقة تنفيذ التدفّق المهيكل</a><a href="MAKE_UNIT.html">@make.(name)`: وحدة بسياسة قدرات صريحة</a><a href="MAKE_MEDIA.html">فيديو · صوت · API · إزالة الخلفية · قراءة النص من الصور</a><a href="TIME.html">مفهوم `time`: الزمن كقيمة من الدرجة الأولى</a><a href="native-additions.html">دوال Rin الأصلية الجديدة (Rin 1.0)</a></details><details ><summary>الحاويات وقواعد البيانات</summary><a href="container_advanced.html">Rin Container Advanced Built-ins</a><a href="container_pro.html">Rin Container Pro</a><a href="container_sql.html">RIN CONTAINER SQL (RCSQL)</a><a href="cross-file-containers.html">استدعاء إعلانات من ملف آخر</a></details><details ><summary>الحزم والتكامل</summary><a href="api.html">واجهة C المسطَّحة (Embedding API)</a><a href="android.html">استضافة Rin على أندرويد</a><a href="packages-and-interop.html">Rin 1.0 — المكتبات والحزم وجسر C++ وJSON واختبارات rintest</a><a href="rinpak-format.html">RinPak — حزمة مشروع Rin (`.rinpak`)</a><a href="html-projects.html">مشاريع HTML في Rin — الربط بين index.html وملف الحاوية</a><a href="project-og-urin.html">project.og.urin` — البيانات الوصفية لمشروع Rin</a><a href="CONTENT_PACKS.html">حزم المحتوى القابلة للتنزيل (Content Packs)</a><a href="previewkit.html">previewkit — معاينة حيّة لملفات PDF / Markdown / TypeScript</a></details><details ><summary>المكتبات المتخصصة</summary><a href="rinml.html">RinML / RinDF / RinAI — الذكاء الاصطناعي وتحليل البيانات في Rin</a><a href="STATS.html">RinStat — التحليل الإحصائي (`lib/rinstat.og.rin`)</a><a href="STATS_ADV.html">RinStat المتقدّم + RinAuto</a><a href="LINALG.html">الجبر الخطي للمهندسين — `mat*` و`vec*</a><a href="PLOT.html">RinPlot — الرسوم البيانية الإحصائية (`lib/rinplot.og.rin`)</a><a href="ALGO.html">تطوير الخوارزميات والحساب العددي — `algo*</a><a href="NUMBER.html">مفهوم `number` في Rin</a><a href="boat.html">&quot;Boat&quot;: مفاهيم أساسية مجمَّعة</a><a href="passkit.html">passkit — passwords, encryption, databases and a tag language</a><a href="passkit-crypto-db.html">Passkit feature catalog: encryption, databases and container linking</a><a href="hash-family.html">عائلة `#` — مفاهيم ودوال جديدة تبدأ بعلامة `#</a><a href="image-draw.html">إنشاء الصور في Rin — رسم وحفظ PNG وlog كصورة</a><a href="image-terminal.html">طباعة الصور في الـ terminal — `printImage` / `imageAnsi` / `imageInfo</a></details><details ><summary>المشروع</summary><a href="CONTRIBUTING.html">المساهمة في Rin</a><a href="CODE_OF_CONDUCT.html">قواعد السلوك</a><a href="SECURITY.html">سياسة الأمان</a><a href="SUPPORT.html">الحصول على المساعدة</a><a href="TRADEMARKS.html">سياسة العلامة التجارية — Trademark Policy</a><a href="THIRD_PARTY_NOTICES.html">إشعارات المكوّنات الخارجية — Third-Party Notices</a></details><details ><summary>مراجع إضافية</summary><a href="ANDROID_VERSIONS.html">حزم RinStudio لكل إصدار أندرويد</a><a href="TOKEN.html">مفهوم `token` في Rin</a><a href="TOOLCHAIN.html">Rin Professional Language Toolchain</a><a href="TOOLCHAIN_UPGRADE.html">Toolchain Upgrade — 2026-09</a><a href="architecture.html">المعمارية وبنية المستودع</a><a href="base-accept.html">base` و`accept`: متغيّران يخدمان `if</a><a href="channel47.html">channel47 — لغة وصف البيانات والإعدادات</a><a href="ci.html">CI وأدوات المستودع</a><a href="loop-templates.html">قوالب الحلقات `@tmpl</a><a href="pre-post.html">pre` و`post` (ما قبل / ما بعد): عقد انتقال حول الإسناد</a><a href="print-fonts.html">خطوط `print` — bold / italic / underline وغيرها</a><a href="print-image-terminal.html">طباعة الصور كنص في الطرفية</a><a href="print-templates.html">قوالب الطباعة `@tmpl ... print` — قوالب نصية خطية وتنسيقية</a><a href="rdoc.html">rdoc — Documentation Container</a><a href="rdoc-reference.html">وثيقة rdoc الشاملة — Documentation Container</a><a href="screenshots.html">لقطات من RinStudio</a></details></nav>
+<main><article><h1 id="httpmd">http.md — شبكات<a class="headerlink" href="#httpmd" title="Permanent link">#</a></h1>
+<h2 id="http">طلبات HTTP مباشرة<a class="headerlink" href="#http" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">let r = httpGet(&quot;https://example.com&quot;);
+print r.ok;      // true/false -- نجح الاتصال فعلياً (بصرف النظر عن status)
+print r.status;  // رمز الحالة (403 مثلًا)
+print type(r.body); // string -- نص الجسم الخام
+print r.json;    // نفس الجسم مُفكَّكًا كـ JSON تلقائيًا إن أمكن، وإلا القيمة الخام كنص
+print r.error;   // نص خطأ إن فشل الاتصال نفسه (فارغ إن نجح، بصرف النظر عن status)
+</code></pre>
+<p>كل استدعاء يُجري <strong>طلب شبكة حقيقيًا فعليًا</strong> (عبر <code>http::performRequest</code>، خلف
+<code>rin_http.cpp</code>) — وليس محاكاة. فشل الاتصال (رابط غير موجود، DNS، رفض اتصال، مهلة)
+لا يرمي خطأً يوقف البرنامج — يُرجع نتيجة بـ<code>ok: false</code> ورسالة عربية واضحة في
+<code>error</code> (تحقّقتُ من هذا فعليًا: <code>"فشل الاتصال (DNS/رفض الاتصال/انتهاء المهلة) —
+تحقق من الرابط والشبكة"</code>).</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الدالة</th>
+<th>الوصف</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>httpGet(url)</code></td>
+<td>GET.</td>
+</tr>
+<tr>
+<td><code>httpPost(url, body)</code></td>
+<td>POST.</td>
+</tr>
+<tr>
+<td><code>httpPut(url, body)</code></td>
+<td>PUT.</td>
+</tr>
+<tr>
+<td><code>httpPatch(url, body)</code></td>
+<td>PATCH.</td>
+</tr>
+<tr>
+<td><code>httpDelete(url)</code></td>
+<td>DELETE.</td>
+</tr>
+<tr>
+<td><code>httpRequest(method, url, headers, body)</code></td>
+<td>طلب عام بأي فعل HTTP، وترويسات مخصَّصة (قاموس).</td>
+</tr>
+<tr>
+<td><code>httpSetTimeout(ms)</code></td>
+<td>يضبط مهلة كل الطلبات التالية بالمللي ثانية.</td>
+</tr>
+</tbody>
+</table></div>
+<p><code>body</code> لأي طلب POST/PUT/PATCH: قيمة نصية تُرسَل كما هي، أو قاموس/مصفوفة يُحوَّل
+تلقائيًا إلى JSON (مع ترويسة <code>Content-Type</code> مناسبة تُضاف تلقائيًا عند الحاجة).</p>
+<h2 id="api">طبقة API مسمّاة (لتجميع رابط أساسي + ترويسات ثابتة)<a class="headerlink" href="#api" title="Permanent link">#</a></h2>
+<p>مفيدة عندما تستدعي نفس الخدمة عدّة مرات (مفتاح API/توكن واحد لا يتكرر كتابته):</p>
+<pre><code class="language-kotlin">apiRegister(&quot;myapi&quot;, &quot;https://api.example.com&quot;);
+apiHeader(&quot;myapi&quot;, &quot;Authorization&quot;, &quot;Bearer xyz&quot;);
+
+let r = apiGet(&quot;myapi&quot;, &quot;/users/1&quot;);
+print r.ok;
+// apiRegister بلا تسجيل مسبق -&gt; خطأ واضح (E0037):
+// &quot;لا يوجد API حقيقي مسجَّل باسم 'x' — سجِّله أولاً: apiRegister(&quot;x&quot;, &quot;https://...&quot;);&quot;
+</code></pre>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الدالة</th>
+<th>الوصف</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>apiRegister(name, baseUrl)</code></td>
+<td>يسجِّل خدمة باسم + رابط أساسي.</td>
+</tr>
+<tr>
+<td><code>apiHeader(name, key, value)</code></td>
+<td>يضيف ترويسة ثابتة تُرسَل مع كل طلب لهذا الاسم.</td>
+</tr>
+<tr>
+<td><code>apiGet(name, path)</code> / <code>apiPost(name, path, body)</code> / <code>apiPut(...)</code> / <code>apiPatch(...)</code> / <code>apiDelete(name, path)</code></td>
+<td>يبني الرابط الكامل (<code>baseUrl + path</code>) ويُجري الطلب بترويسات الخدمة المسجَّلة.</td>
+</tr>
+<tr>
+<td><code>apiCall(name, method, path, body)</code></td>
+<td>نفس الفكرة بفعل HTTP عام صريح.</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="json">JSON<a class="headerlink" href="#json" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">let s = jsonEncode({&quot;name&quot;: &quot;Ali&quot;, &quot;tags&quot;: [1, 2, 3]});
+print s; // {&quot;name&quot;:&quot;Ali&quot;,&quot;tags&quot;:[1,2,3]}
+print jsonDecode(s)[&quot;name&quot;]; // Ali
+</code></pre>
+<p><code>jsonDecode</code> على نص غير صالح كـJSON يُرجع النص الخام كما هو (<code>decodeOrRaw</code>) بدل
+رمي خطأ — نفس السلوك الذي يستخدمه <code>r.json</code> أعلاه تلقائيًا لأي استجابة HTTP.</p>
+<h2 id="_1">انظر أيضًا<a class="headerlink" href="#_1" title="Permanent link">#</a></h2>
+<ul>
+<li><a href="standard-library.html"><code>standard-library.md</code></a> — <code>httpkit.og.rin</code>/<code>urlkit.og.rin</code> (مساعدات إضافية فوق هذه الدوال).</li>
+<li><a href="errors.html"><code>errors.md</code></a> — E0037 (خطأ شبكة)، الكود المستخدَم عند استدعاء API غير مسجَّل.</li>
+<li><a href="storage.html"><code>storage.md</code></a> — تخزين نتيجة استجابة على القرص إن احتجت الاحتفاظ بها.</li>
+</ul></article>
+<div class="pnav"><a class="pn" href="storage.html">→ تخزين دائم</a><a class="pn" href="env.html">ربط Rin بملف `.env ←</a></div><p class="edit"><a href="https://github.com/dlof-lib/rinlang/edit/main/docs/http.md">✎ عدّل هذه الصفحة على GitHub</a></p>
+<footer>Rin 1.0.0 · رخصة MIT</footer></main>
+<aside id="toc"><b>في هذه الصفحة</b><div class="toc">
+<ul>
+<li><a href="#http">طلبات HTTP مباشرة</a></li>
+<li><a href="#api">طبقة API مسمّاة (لتجميع رابط أساسي + ترويسات ثابتة)</a></li>
+<li><a href="#json">JSON</a></li>
+<li><a href="#_1">انظر أيضًا</a></li>
+</ul>
+</div>
+</aside></div>
+<script src="assets/app.js"></script></body></html>
