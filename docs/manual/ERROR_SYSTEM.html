@@ -1,0 +1,304 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>نظام التشخيص: البنية الداخلية + جدول الأكواد الكامل — Rin</title>
+<meta name="description" content="توثيق لغة البرمجة Rin"><link rel="icon" href="../assets/brand/icon-32.png">
+<link rel="stylesheet" href="assets/style.css"></head><body>
+<header><button id="mn" aria-label="القائمة">☰</button><a class="logo" href="index.html"><img src="../assets/brand/icon-48.png" alt="" width="26">Rin</a>
+<input id="q" type="search" placeholder="ابحث في التوثيق…" autocomplete="off"><button id="th" aria-label="الوضع">◐</button>
+<a class="gh" href="https://github.com/dlof-lib/rinlang">GitHub</a><div id="res"></div></header>
+<div class="wrap"><nav id="sb"><details ><summary>ابدأ هنا</summary><a href="getting-started.html">البداية</a><a href="syntax.html">القواعد النحوية العامة</a><a href="variables.html">let`، مصفوفات، قواميس، نطاق</a><a href="template-strings.html">النصوص القالبية (متغيّرات داخل النص)</a><a href="input.html">إدخال المستخدم (Input)</a><a href="control-flow.html">الشروط، الحلقات، `goal`/`achieve</a><a href="loops.html">حلقات Rin — Loops v2</a><a href="functions.html">fun`/`return`، التكرار الذاتي</a><a href="enums.html">enum`: قوائم اختيار مغلقة</a></details><details ><summary>اللغة</summary><a href="language-reference.html">المرجع الشامل وخريطة ترابط المفاهيم</a><a href="objects.html">class`/`struct`، `.object()`، `@Object`، `document</a><a href="oop.html">البرمجة الكائنية الموسَّعة (Rin 1.0)</a><a href="containers.html">دليل `@container` / `@element` / `@loop</a><a href="table.html">الجدول (`@table` / `@container.table`) ودوال اللغة عليه</a><a href="set.html">Set`: نوع المجموعة الأساسي</a><a href="pipelines.html">عامل الأنابيب `|&gt;</a><a href="RECKON.html">reckon`: مفهوم حسابي بسطرين</a><a href="let-plus.html">let` المطوَّر</a><a href="living-variables.html">المتغيرات الحيّة (Living Variables)</a><a href="label-define.html">label` و`define` (تسمية وتعريف)</a><a href="block-frames.html">بداية الكتل ونهايتها (Block Frames)</a><a href="compare_ops.html">معاملات المقارنة `/=` و `=/=` و `=/</a><a href="max_min.html">max / min family</a><a href="scope-guarantees.html">ضمانات النطاق: `finally` · `defer` · `catch … when` · `rethrow</a><a href="key_terms_and_builtins.html">Rin KEY_TERMS and Built-in Conditions</a><a href="number_builtins.html">Rin Number Built-ins</a></details><details ><summary>الواجهات (Indsin)</summary><a href="indsin.html">Indsin — Interface Design</a><a href="indsin_rin.html">indsin يعتمد على لغة Rin</a><a href="indsin_expansion.html">Indsin — التوسعة الاحترافية (Design System v2)</a><a href="indsin_object.html">indsin-object — API reference</a><a href="indsin_media.html">Indsin Media — اختيار الوسائط ورفعها</a><a href="indsin_icons.html">مكتبة أيقونات indsin (متجهية)</a><a href="indsin_tooling.html">indsin tooling — icon, file association, syntax highlighting</a><a href="indsinweb.html">IndsinWeb — مكتبة WebView والروابط لـ indsin</a><a href="RIN_ELEMENTS.html">دليل `@element.*` الكامل</a><a href="events-effects.html">الأحداث والتأثيرات (Events &amp; Effects) — محرك Indsin UI</a><a href="banner.html">Banner: إشعار شريطي</a><a href="simple-style.html">Rin Simple Style</a></details><details open><summary>بيئة التشغيل</summary><a href="runtime.html">وقت تشغيل Rin (Rin Runtime) · المرجع الرسمي</a><a href="standard-library.html">المكتبة القياسية (`lib/*.og.rin`)</a><a href="errors.html">نظام الأخطاء: أكواد، `try`/`catch`/`throw</a><a href="ERROR_SYSTEM.html" class=on>نظام التشخيص: البنية الداخلية + جدول الأكواد الكامل</a><a href="storage.html">تخزين دائم</a><a href="http.html">شبكات</a><a href="env.html">ربط Rin بملف `.env</a><a href="terminal.html">الطرفية التفاعلية — `rin terminal</a><a href="vm.html">RinVM — آلة Rin الافتراضية (بايتكود)</a><a href="rinflow.html">RinFlow: طبقة تنفيذ التدفّق المهيكل</a><a href="MAKE_UNIT.html">@make.(name)`: وحدة بسياسة قدرات صريحة</a><a href="MAKE_MEDIA.html">فيديو · صوت · API · إزالة الخلفية · قراءة النص من الصور</a><a href="TIME.html">مفهوم `time`: الزمن كقيمة من الدرجة الأولى</a><a href="native-additions.html">دوال Rin الأصلية الجديدة (Rin 1.0)</a></details><details ><summary>الحاويات وقواعد البيانات</summary><a href="container_advanced.html">Rin Container Advanced Built-ins</a><a href="container_pro.html">Rin Container Pro</a><a href="container_sql.html">RIN CONTAINER SQL (RCSQL)</a><a href="cross-file-containers.html">استدعاء إعلانات من ملف آخر</a></details><details ><summary>الحزم والتكامل</summary><a href="api.html">واجهة C المسطَّحة (Embedding API)</a><a href="android.html">استضافة Rin على أندرويد</a><a href="packages-and-interop.html">Rin 1.0 — المكتبات والحزم وجسر C++ وJSON واختبارات rintest</a><a href="rinpak-format.html">RinPak — حزمة مشروع Rin (`.rinpak`)</a><a href="html-projects.html">مشاريع HTML في Rin — الربط بين index.html وملف الحاوية</a><a href="project-og-urin.html">project.og.urin` — البيانات الوصفية لمشروع Rin</a><a href="CONTENT_PACKS.html">حزم المحتوى القابلة للتنزيل (Content Packs)</a><a href="previewkit.html">previewkit — معاينة حيّة لملفات PDF / Markdown / TypeScript</a></details><details ><summary>المكتبات المتخصصة</summary><a href="rinml.html">RinML / RinDF / RinAI — الذكاء الاصطناعي وتحليل البيانات في Rin</a><a href="STATS.html">RinStat — التحليل الإحصائي (`lib/rinstat.og.rin`)</a><a href="STATS_ADV.html">RinStat المتقدّم + RinAuto</a><a href="LINALG.html">الجبر الخطي للمهندسين — `mat*` و`vec*</a><a href="PLOT.html">RinPlot — الرسوم البيانية الإحصائية (`lib/rinplot.og.rin`)</a><a href="ALGO.html">تطوير الخوارزميات والحساب العددي — `algo*</a><a href="NUMBER.html">مفهوم `number` في Rin</a><a href="boat.html">&quot;Boat&quot;: مفاهيم أساسية مجمَّعة</a><a href="passkit.html">passkit — passwords, encryption, databases and a tag language</a><a href="passkit-crypto-db.html">Passkit feature catalog: encryption, databases and container linking</a><a href="hash-family.html">عائلة `#` — مفاهيم ودوال جديدة تبدأ بعلامة `#</a><a href="image-draw.html">إنشاء الصور في Rin — رسم وحفظ PNG وlog كصورة</a><a href="image-terminal.html">طباعة الصور في الـ terminal — `printImage` / `imageAnsi` / `imageInfo</a></details><details ><summary>المشروع</summary><a href="CONTRIBUTING.html">المساهمة في Rin</a><a href="CODE_OF_CONDUCT.html">قواعد السلوك</a><a href="SECURITY.html">سياسة الأمان</a><a href="SUPPORT.html">الحصول على المساعدة</a><a href="TRADEMARKS.html">سياسة العلامة التجارية — Trademark Policy</a><a href="THIRD_PARTY_NOTICES.html">إشعارات المكوّنات الخارجية — Third-Party Notices</a></details><details ><summary>مراجع إضافية</summary><a href="ANDROID_VERSIONS.html">حزم RinStudio لكل إصدار أندرويد</a><a href="TOKEN.html">مفهوم `token` في Rin</a><a href="TOOLCHAIN.html">Rin Professional Language Toolchain</a><a href="TOOLCHAIN_UPGRADE.html">Toolchain Upgrade — 2026-09</a><a href="architecture.html">المعمارية وبنية المستودع</a><a href="base-accept.html">base` و`accept`: متغيّران يخدمان `if</a><a href="channel47.html">channel47 — لغة وصف البيانات والإعدادات</a><a href="ci.html">CI وأدوات المستودع</a><a href="loop-templates.html">قوالب الحلقات `@tmpl</a><a href="pre-post.html">pre` و`post` (ما قبل / ما بعد): عقد انتقال حول الإسناد</a><a href="print-fonts.html">خطوط `print` — bold / italic / underline وغيرها</a><a href="print-image-terminal.html">طباعة الصور كنص في الطرفية</a><a href="print-templates.html">قوالب الطباعة `@tmpl ... print` — قوالب نصية خطية وتنسيقية</a><a href="rdoc.html">rdoc — Documentation Container</a><a href="rdoc-reference.html">وثيقة rdoc الشاملة — Documentation Container</a><a href="screenshots.html">لقطات من RinStudio</a></details></nav>
+<main><article><h1 id="error_systemmd">ERROR_SYSTEM.md — نظام التشخيص: البنية الداخلية + جدول الأكواد الكامل<a class="headerlink" href="#error_systemmd" title="Permanent link">#</a></h1>
+<blockquote>
+<p><code>app/src/main/cpp/diagnostics/diagnostic.h</code> نفسه يشير إلى هذا الملف كـ"جدول
+كامل بكل الأكواد" — هذا هو ذلك الجدول، مبنيّ مباشرة على <code>enum class Code</code> فيه.</p>
+</blockquote>
+<h2 id="diagnostic-rinerror">البنية: <code>Diagnostic</code> مقابل <code>RinError</code><a class="headerlink" href="#diagnostic-rinerror" title="Permanent link">#</a></h2>
+<p>كل مرحلة معالجة (Lexer/Parser/Interpreter، وطبقة قاعدة البيانات المدمجة:
+schema/index/relation/transaction...) تُصدر أخطاءها بإحدى طريقتين:</p>
+<ul>
+<li><strong><code>Diagnostic</code></strong> (عبر <code>DiagnosticEngine::emit(d)</code>) — لخطأ يمكن <strong>الاستمرار
+  بأمان</strong> بعده (error recovery). يُجمَّع في قائمة (<code>DiagnosticEngine::all()</code>)
+  بدل التوقّف فورًا، بحيث يمكن الإبلاغ عن عدّة أخطاء دفعة واحدة من تشغيل واحد
+  (مثل مُجمِّعات اللغات الحديثة) بدل التوقّف عند أول خطأ فقط.</li>
+<li><strong><code>RinError</code></strong> (استثناء C++ عادي يحمل <code>Diagnostic</code> كامل) — لخطأ <strong>لا يمكن</strong>
+  الاستمرار بأمان بعده (فشل قراءة ملف، أو حالة لا يجد فيها المحلِّل نقطة
+  synchronization) — يُرفَع فورًا ويوقف التنفيذ.</li>
+</ul>
+<p><code>try</code>/<code>catch</code> على مستوى لغة Rin (انظر <a href="errors.html"><code>errors.md</code></a>) يلتقط تحديدًا
+هذه الأخطاء غير القابلة للاستمرار (<code>RinError</code>) أثناء التنفيذ، محوَّلة إلى قاموس
+(map) بحقول <code>code</code>/<code>message</code>/<code>line</code>.</p>
+<h2 id="severity"><code>Severity</code><a class="headerlink" href="#severity" title="Permanent link">#</a></h2>
+<p>كل <code>Diagnostic</code> له مستوى خطورة واحد من أربعة: <code>Error</code>, <code>Warning</code>, <code>Note</code>, <code>Help</code>
+(<code>Note</code>/<code>Help</code> يُستخدَمان للسياق الإضافي المرفَق بخطأ/تحذير رئيسي، وليس ككيان
+قائم بذاته — تمامًا كقسمَي <code>reason</code>/<code>help</code> في مثال الرسالة الغنيّة في
+<a href="errors.html#رسائل-الخطأ-الغنيّة-rich-diagnostics"><code>errors.md</code></a>).</p>
+<h2 id="diagcode">جدول الأكواد الكامل (<code>diag::Code</code>)<a class="headerlink" href="#diagcode" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>كود</th>
+<th>المعنى</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>E0001</td>
+<td>متغيّر غير معرَّف (Undefined Variable)</td>
+</tr>
+<tr>
+<td>E0002</td>
+<td>متغيّر مكرَّر (Duplicate Variable)</td>
+</tr>
+<tr>
+<td>E0003</td>
+<td>إسناد غير صالح</td>
+</tr>
+<tr>
+<td>E0004</td>
+<td>نوع غير صالح لعامل/عملية</td>
+</tr>
+<tr>
+<td>E0005</td>
+<td>عدم تطابق أنواع</td>
+</tr>
+<tr>
+<td>E0006</td>
+<td>دالة غير معروفة</td>
+</tr>
+<tr>
+<td>E0007</td>
+<td>وسائط غير صالحة</td>
+</tr>
+<tr>
+<td>E0008</td>
+<td><code>return</code> غير صالح</td>
+</tr>
+<tr>
+<td>E0009</td>
+<td><code>return</code> مفقود</td>
+</tr>
+<tr>
+<td>E0010</td>
+<td>خطأ تحليل نحوي عام</td>
+</tr>
+<tr>
+<td>E0011</td>
+<td>توكن غير متوقَّع</td>
+</tr>
+<tr>
+<td>E0012</td>
+<td>توكن مفقود</td>
+</tr>
+<tr>
+<td>E0013</td>
+<td>تعبير غير صالح</td>
+</tr>
+<tr>
+<td>E0014</td>
+<td>حاوية غير صالحة</td>
+</tr>
+<tr>
+<td>E0015</td>
+<td>حاوية غير معروفة</td>
+</tr>
+<tr>
+<td>E0016</td>
+<td>خاصية غير صالحة (يشمل أخطاء سياسة Make Unit، انظر <a href="MAKE_UNIT.html"><code>MAKE_UNIT.md</code></a>)</td>
+</tr>
+<tr>
+<td>E0017</td>
+<td>خاصية غير معرَّفة</td>
+</tr>
+<tr>
+<td>E0018</td>
+<td>مخطَّط (Schema) غير صالح</td>
+</tr>
+<tr>
+<td>E0019</td>
+<td>انتهاك مخطَّط</td>
+</tr>
+<tr>
+<td>E0020</td>
+<td>مستند غير صالح</td>
+</tr>
+<tr>
+<td>E0021</td>
+<td>فهرس غير صالح (خارج المدى)</td>
+</tr>
+<tr>
+<td>E0022</td>
+<td>علاقة غير صالحة</td>
+</tr>
+<tr>
+<td>E0023</td>
+<td>خطأ معاملة (Transaction)</td>
+</tr>
+<tr>
+<td>E0024</td>
+<td>خطأ ترحيل (Migration)</td>
+</tr>
+<tr>
+<td>E0025</td>
+<td>خطأ ذاكرة تخزين مؤقت</td>
+</tr>
+<tr>
+<td>E0026</td>
+<td>خطأ غير متزامن (Async)</td>
+</tr>
+<tr>
+<td>E0027</td>
+<td><code>await</code> خارج سياق <code>async</code></td>
+</tr>
+<tr>
+<td>E0028</td>
+<td>خطأ استيراد</td>
+</tr>
+<tr>
+<td>E0029</td>
+<td>وحدة غير موجودة</td>
+</tr>
+<tr>
+<td>E0030</td>
+<td>اعتمادية دائرية</td>
+</tr>
+<tr>
+<td>E0031</td>
+<td>خطأ عام (Generic)</td>
+</tr>
+<tr>
+<td>E0032</td>
+<td>وسيط generic غير صالح</td>
+</tr>
+<tr>
+<td>E0033</td>
+<td>خطأ ملكية (Ownership)</td>
+</tr>
+<tr>
+<td>E0034</td>
+<td>خطأ استعارة (Borrow)</td>
+</tr>
+<tr>
+<td>E0035</td>
+<td>خطأ تشغيل عام</td>
+</tr>
+<tr>
+<td>E0036</td>
+<td>فشل إدخال/إخراج</td>
+</tr>
+<tr>
+<td>E0037</td>
+<td>خطأ شبكة</td>
+</tr>
+<tr>
+<td>E0038</td>
+<td>خطأ حزمة</td>
+</tr>
+<tr>
+<td>E0039</td>
+<td>خطأ داخلي في المترجم</td>
+</tr>
+<tr>
+<td>E0040</td>
+<td>ميزة غير مدعومة</td>
+</tr>
+<tr>
+<td>E0041</td>
+<td>اعتمادية مفقودة (<code>requires X;</code> حيث X غير موجودة في الشجرة وقت الفحص)</td>
+</tr>
+<tr>
+<td>E0042</td>
+<td>خطأ تركيبي في استعلام RCSQL، أو رمز خارج القائمة المسموحة</td>
+</tr>
+<tr>
+<td>E0043</td>
+<td>إسناد/تعديل لمتغيّر <code>stone</code> (مُجمَّد) — انظر <a href="living-variables.html"><code>living-variables.md</code></a></td>
+</tr>
+<tr>
+<td>E0044</td>
+<td>قيمة خارج مدى <code>gauge ... strict</code>، أو <code>gauge</code> يحمل غير الأرقام، أو مدى فارغ</td>
+</tr>
+<tr>
+<td>E0045</td>
+<td>إسناد إلى <code>lens</code> (للقراءة فقط)، أو <code>lens</code> يعتمد على نفسه</td>
+</tr>
+<tr>
+<td>E0046</td>
+<td>استعمال خاطئ للمتغيرات الحيّة: <code>undo</code> بلا <code>tape</code>، <code>bell</code> على <code>lens</code>، <code>abort</code> خارج <code>trial</code>، عدّاد غير صحيح</td>
+</tr>
+<tr>
+<td>E0047</td>
+<td>جرس (<code>bell</code>) يعيد تفعيل نفسه بلا نهاية (عمق التداخل &gt; 16)</td>
+</tr>
+<tr>
+<td>E0048</td>
+<td><code>let ... else { ... }</code>: كتلة <code>else</code> انتهت دون مغادرة النطاق — انظر <a href="let-plus.html"><code>let-plus.md</code></a></td>
+</tr>
+<tr>
+<td>E0049</td>
+<td><code>accept</code>: قيمة رفضها شرط القبول (في <code>strict</code>، أو كانت القيمة الابتدائية مرفوضة ولا <code>else</code>، أو رُفض البديل نفسه) — انظر <a href="base-accept.html"><code>base-accept.md</code></a></td>
+</tr>
+<tr>
+<td>E0050</td>
+<td><code>base</code>: <code>inc</code>/<code>dec</code> على غير رقم، أو <code>rebase</code>/<code>rewind</code> على متغيّر ليس <code>base</code>، أو <code>step</code> يساوي صفرًا، أو خاصية رقمية (<code>delta</code>/<code>up</code>/<code>down</code>...) على قيمة غير رقمية</td>
+</tr>
+<tr>
+<td>E0051</td>
+<td><code>pre</code>/<code>post</code> في <code>strict</code>: شرط «قبل» منع الكتابة، أو شرط «بعد» كُذِّب فتُراجَع، أو القيمة الابتدائية لا تحقّق شرط «بعد» — انظر <a href="pre-post.html"><code>pre-post.md</code></a></td>
+</tr>
+<tr>
+<td>W0001</td>
+<td>متغيّر غير مستخدَم</td>
+</tr>
+<tr>
+<td>W0002</td>
+<td>استيراد غير مستخدَم</td>
+</tr>
+<tr>
+<td>W0003</td>
+<td>كود غير قابل للوصول</td>
+</tr>
+<tr>
+<td>W0004</td>
+<td>ميزة مهجورة (Deprecated)</td>
+</tr>
+<tr>
+<td>W0005</td>
+<td>تظليل متغيّر (Shadowed)</td>
+</tr>
+<tr>
+<td>W0006</td>
+<td>تحويل غير ضروري</td>
+</tr>
+<tr>
+<td>W0007</td>
+<td>دالة غير مستخدَمة</td>
+</tr>
+<tr>
+<td>W0008</td>
+<td>مقارنة مريبة</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="_1">انظر أيضًا<a class="headerlink" href="#_1" title="Permanent link">#</a></h2>
+<ul>
+<li><a href="errors.html"><code>errors.md</code></a> — الاستخدام الفعلي: <code>try</code>/<code>catch</code>/<code>throw</code> وشكل
+  الرسالة الغنيّة، بأمثلة حقيقية.</li>
+<li>
+<p><code>app/src/main/cpp/diagnostics/</code> — التنفيذ الكامل (<code>diagnostic.h</code>/<code>.cpp</code>،
+  <code>diagnostic_engine.h</code>/<code>.cpp</code>، <code>diagnostic_renderer.h</code>/<code>.cpp</code>، <code>source_manager.h</code>/<code>.cpp</code>).</p>
+</li>
+<li>
+<p>E0043 يشمل أيضاً <code>#ban</code> (انظر <a href="hash-family.html">hash-family.md</a>).</p>
+</li>
+</ul></article>
+<div class="pnav"><a class="pn" href="errors.html">→ نظام الأخطاء: أكواد، `try`/`catch`/`throw</a><a class="pn" href="storage.html">تخزين دائم ←</a></div><p class="edit"><a href="https://github.com/dlof-lib/rinlang/edit/main/docs/ERROR_SYSTEM.md">✎ عدّل هذه الصفحة على GitHub</a></p>
+<footer>Rin 1.0.0 · رخصة MIT</footer></main>
+<aside id="toc"><b>في هذه الصفحة</b><div class="toc">
+<ul>
+<li><a href="#diagnostic-rinerror">البنية: Diagnostic مقابل RinError</a></li>
+<li><a href="#severity">Severity</a></li>
+<li><a href="#diagcode">جدول الأكواد الكامل (diag::Code)</a></li>
+<li><a href="#_1">انظر أيضًا</a></li>
+</ul>
+</div>
+</aside></div>
+<script src="assets/app.js"></script></body></html>
