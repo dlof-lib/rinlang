@@ -1,0 +1,275 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>الطرفية التفاعلية — `rin terminal — Rin</title>
+<meta name="description" content="توثيق لغة البرمجة Rin"><link rel="icon" href="../assets/brand/icon-32.png">
+<link rel="stylesheet" href="assets/style.css"></head><body>
+<header><button id="mn" aria-label="القائمة">☰</button><a class="logo" href="index.html"><img src="../assets/brand/icon-48.png" alt="" width="26">Rin</a>
+<input id="q" type="search" placeholder="ابحث في التوثيق…" autocomplete="off"><button id="th" aria-label="الوضع">◐</button>
+<a class="gh" href="https://github.com/dlof-lib/rinlang">GitHub</a><div id="res"></div></header>
+<div class="wrap"><nav id="sb"><details ><summary>ابدأ هنا</summary><a href="getting-started.html">البداية</a><a href="syntax.html">القواعد النحوية العامة</a><a href="variables.html">let`، مصفوفات، قواميس، نطاق</a><a href="template-strings.html">النصوص القالبية (متغيّرات داخل النص)</a><a href="input.html">إدخال المستخدم (Input)</a><a href="control-flow.html">الشروط، الحلقات، `goal`/`achieve</a><a href="loops.html">حلقات Rin — Loops v2</a><a href="functions.html">fun`/`return`، التكرار الذاتي</a><a href="enums.html">enum`: قوائم اختيار مغلقة</a></details><details ><summary>اللغة</summary><a href="language-reference.html">المرجع الشامل وخريطة ترابط المفاهيم</a><a href="objects.html">class`/`struct`، `.object()`، `@Object`، `document</a><a href="oop.html">البرمجة الكائنية الموسَّعة (Rin 1.0)</a><a href="containers.html">دليل `@container` / `@element` / `@loop</a><a href="table.html">الجدول (`@table` / `@container.table`) ودوال اللغة عليه</a><a href="set.html">Set`: نوع المجموعة الأساسي</a><a href="pipelines.html">عامل الأنابيب `|&gt;</a><a href="RECKON.html">reckon`: مفهوم حسابي بسطرين</a><a href="let-plus.html">let` المطوَّر</a><a href="living-variables.html">المتغيرات الحيّة (Living Variables)</a><a href="label-define.html">label` و`define` (تسمية وتعريف)</a><a href="block-frames.html">بداية الكتل ونهايتها (Block Frames)</a><a href="compare_ops.html">معاملات المقارنة `/=` و `=/=` و `=/</a><a href="max_min.html">max / min family</a><a href="scope-guarantees.html">ضمانات النطاق: `finally` · `defer` · `catch … when` · `rethrow</a><a href="key_terms_and_builtins.html">Rin KEY_TERMS and Built-in Conditions</a><a href="number_builtins.html">Rin Number Built-ins</a></details><details ><summary>الواجهات (Indsin)</summary><a href="indsin.html">Indsin — Interface Design</a><a href="indsin_rin.html">indsin يعتمد على لغة Rin</a><a href="indsin_expansion.html">Indsin — التوسعة الاحترافية (Design System v2)</a><a href="indsin_object.html">indsin-object — API reference</a><a href="indsin_media.html">Indsin Media — اختيار الوسائط ورفعها</a><a href="indsin_icons.html">مكتبة أيقونات indsin (متجهية)</a><a href="indsin_tooling.html">indsin tooling — icon, file association, syntax highlighting</a><a href="indsinweb.html">IndsinWeb — مكتبة WebView والروابط لـ indsin</a><a href="RIN_ELEMENTS.html">دليل `@element.*` الكامل</a><a href="events-effects.html">الأحداث والتأثيرات (Events &amp; Effects) — محرك Indsin UI</a><a href="banner.html">Banner: إشعار شريطي</a><a href="simple-style.html">Rin Simple Style</a></details><details open><summary>بيئة التشغيل</summary><a href="runtime.html">وقت تشغيل Rin (Rin Runtime) · المرجع الرسمي</a><a href="standard-library.html">المكتبة القياسية (`lib/*.og.rin`)</a><a href="errors.html">نظام الأخطاء: أكواد، `try`/`catch`/`throw</a><a href="ERROR_SYSTEM.html">نظام التشخيص: البنية الداخلية + جدول الأكواد الكامل</a><a href="storage.html">تخزين دائم</a><a href="http.html">شبكات</a><a href="env.html">ربط Rin بملف `.env</a><a href="terminal.html" class=on>الطرفية التفاعلية — `rin terminal</a><a href="vm.html">RinVM — آلة Rin الافتراضية (بايتكود)</a><a href="rinflow.html">RinFlow: طبقة تنفيذ التدفّق المهيكل</a><a href="MAKE_UNIT.html">@make.(name)`: وحدة بسياسة قدرات صريحة</a><a href="MAKE_MEDIA.html">فيديو · صوت · API · إزالة الخلفية · قراءة النص من الصور</a><a href="TIME.html">مفهوم `time`: الزمن كقيمة من الدرجة الأولى</a><a href="native-additions.html">دوال Rin الأصلية الجديدة (Rin 1.0)</a></details><details ><summary>الحاويات وقواعد البيانات</summary><a href="container_advanced.html">Rin Container Advanced Built-ins</a><a href="container_pro.html">Rin Container Pro</a><a href="container_sql.html">RIN CONTAINER SQL (RCSQL)</a><a href="cross-file-containers.html">استدعاء إعلانات من ملف آخر</a></details><details ><summary>الحزم والتكامل</summary><a href="api.html">واجهة C المسطَّحة (Embedding API)</a><a href="android.html">استضافة Rin على أندرويد</a><a href="packages-and-interop.html">Rin 1.0 — المكتبات والحزم وجسر C++ وJSON واختبارات rintest</a><a href="rinpak-format.html">RinPak — حزمة مشروع Rin (`.rinpak`)</a><a href="html-projects.html">مشاريع HTML في Rin — الربط بين index.html وملف الحاوية</a><a href="project-og-urin.html">project.og.urin` — البيانات الوصفية لمشروع Rin</a><a href="CONTENT_PACKS.html">حزم المحتوى القابلة للتنزيل (Content Packs)</a><a href="previewkit.html">previewkit — معاينة حيّة لملفات PDF / Markdown / TypeScript</a></details><details ><summary>المكتبات المتخصصة</summary><a href="rinml.html">RinML / RinDF / RinAI — الذكاء الاصطناعي وتحليل البيانات في Rin</a><a href="STATS.html">RinStat — التحليل الإحصائي (`lib/rinstat.og.rin`)</a><a href="STATS_ADV.html">RinStat المتقدّم + RinAuto</a><a href="LINALG.html">الجبر الخطي للمهندسين — `mat*` و`vec*</a><a href="PLOT.html">RinPlot — الرسوم البيانية الإحصائية (`lib/rinplot.og.rin`)</a><a href="ALGO.html">تطوير الخوارزميات والحساب العددي — `algo*</a><a href="NUMBER.html">مفهوم `number` في Rin</a><a href="boat.html">&quot;Boat&quot;: مفاهيم أساسية مجمَّعة</a><a href="passkit.html">passkit — passwords, encryption, databases and a tag language</a><a href="passkit-crypto-db.html">Passkit feature catalog: encryption, databases and container linking</a><a href="hash-family.html">عائلة `#` — مفاهيم ودوال جديدة تبدأ بعلامة `#</a><a href="image-draw.html">إنشاء الصور في Rin — رسم وحفظ PNG وlog كصورة</a><a href="image-terminal.html">طباعة الصور في الـ terminal — `printImage` / `imageAnsi` / `imageInfo</a></details><details ><summary>المشروع</summary><a href="CONTRIBUTING.html">المساهمة في Rin</a><a href="CODE_OF_CONDUCT.html">قواعد السلوك</a><a href="SECURITY.html">سياسة الأمان</a><a href="SUPPORT.html">الحصول على المساعدة</a><a href="TRADEMARKS.html">سياسة العلامة التجارية — Trademark Policy</a><a href="THIRD_PARTY_NOTICES.html">إشعارات المكوّنات الخارجية — Third-Party Notices</a></details><details ><summary>مراجع إضافية</summary><a href="ANDROID_VERSIONS.html">حزم RinStudio لكل إصدار أندرويد</a><a href="TOKEN.html">مفهوم `token` في Rin</a><a href="TOOLCHAIN.html">Rin Professional Language Toolchain</a><a href="TOOLCHAIN_UPGRADE.html">Toolchain Upgrade — 2026-09</a><a href="architecture.html">المعمارية وبنية المستودع</a><a href="base-accept.html">base` و`accept`: متغيّران يخدمان `if</a><a href="channel47.html">channel47 — لغة وصف البيانات والإعدادات</a><a href="ci.html">CI وأدوات المستودع</a><a href="loop-templates.html">قوالب الحلقات `@tmpl</a><a href="pre-post.html">pre` و`post` (ما قبل / ما بعد): عقد انتقال حول الإسناد</a><a href="print-fonts.html">خطوط `print` — bold / italic / underline وغيرها</a><a href="print-image-terminal.html">طباعة الصور كنص في الطرفية</a><a href="print-templates.html">قوالب الطباعة `@tmpl ... print` — قوالب نصية خطية وتنسيقية</a><a href="rdoc.html">rdoc — Documentation Container</a><a href="rdoc-reference.html">وثيقة rdoc الشاملة — Documentation Container</a><a href="screenshots.html">لقطات من RinStudio</a></details></nav>
+<main><article><h1 id="rin-terminal">الطرفية التفاعلية — <code>rin terminal</code><a class="headerlink" href="#rin-terminal" title="Permanent link">#</a></h1>
+<p>طرفية C++ حقيقية فوق نفس محرّك المفسّر (<code>rin::Interpreter</code>)، بلا أي مكتبة خارجية (لا readline).
+الملفات: <code>cli/linux/src/terminal/rin_terminal.{h,cpp}</code>.</p>
+<h2 id="_1">التشغيل<a class="headerlink" href="#_1" title="Permanent link">#</a></h2>
+<pre><code class="language-bash">rin                       # عند وجود tty
+rin terminal [خيارات] [ملفات.rin ...]     # أو rin repl / rin shell
+rin terminal -i lib.rin -e 'let x = 1;'   # تحميل ملف وتنفيذ شيفرة قبل أول مؤشّر
+printf '1 + 2\n' | rin terminal --batch   # وضع غير تفاعلي (يعيد 1 إن فشل أي أمر)
+</code></pre>
+<p>خيارات: <code>--no-color --no-highlight --no-hints --no-history --no-banner --no-autoprint --timing=auto|on|off --theme=dark|light --history-file P --batch</code>.</p>
+<h2 id="_2">ما تفعله<a class="headerlink" href="#_2" title="Permanent link">#</a></h2>
+<ul>
+<li><strong>حالة تبقى بين الأوامر</strong>: <code>let</code> / <code>fun</code> / <code>class</code> تبقى طوال الجلسة.</li>
+<li><strong>تعبير حرّ يطبع قيمته</strong>: <code>x * 2</code> ← <code>=&gt; 10</code> (<code>;</code> في آخره تمنع الطباعة؛ <code>_</code> = آخر قيمة). تُضاف <code>;</code> تلقائياً إن لزم.</li>
+<li><strong>أسطر متتابعة</strong>: أقواس/نصوص/قوالب مفتوحة، أو سطر ينتهي بمُشغّل (<code>1 +</code>، <code>and</code>)، مع مسافة بادئة تلقائية وفك <code>}</code>.</li>
+<li><strong>تحرير</strong>: الأسهم، Home/End، Ctrl-A/E/B/F/W/U/K/Y/T/L، Alt-B/F/D، لصق متعدد الأسطر (bracketed paste).</li>
+<li><strong>تاريخ</strong> دائم (<code>~/.local/state/rin/history</code>)، ↑/↓ ببحث بالبادئة، Ctrl-R بحث عكسي، اقتراح باهت يُقبل بـ → أو End، <code>!!</code> و<code>!N</code>.</li>
+<li><strong>Tab</strong>: كلمات اللغة، متغيراتك ودوالك، الأوامر، ومسارات الملفات (حتى داخل <code>"..."</code>).</li>
+<li><strong>تلوين الصيغة</strong> أثناء الكتابة.</li>
+<li><strong>Ctrl-C</strong> أثناء تشغيل برنامج يوقفه والحالة محفوظة (ضغطتان: خروج فوري). <code>input()</code> يعمل داخل الطرفية.</li>
+</ul>
+<h2 id="help">الأوامر (<code>:help</code> داخل الطرفية)<a class="headerlink" href="#help" title="Permanent link">#</a></h2>
+<p><code>:load :reload :save :edit :vars :type :time -n N :check :history :keywords :set :pkg :sh :cd :pwd :ls :ocr :img :session :reset :clear :version :quit</code></p>
+<h3 id="set"><code>:set</code> — إعدادات الطرفية<a class="headerlink" href="#set" title="Permanent link">#</a></h3>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الصيغة</th>
+<th>المعنى</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>:set</code></td>
+<td>جدول كل الإعدادات (القيمة الحالية، <code>*</code> = معدَّلة عن الافتراضي، الوصف)</td>
+</tr>
+<tr>
+<td><code>:set &lt;خيار&gt;</code> أو <code>&lt;خيار&gt;?</code></td>
+<td>تفاصيل خيار (القيم المسموحة والافتراضي)</td>
+</tr>
+<tr>
+<td><code>:set &lt;خيار&gt; &lt;قيمة&gt;</code> أو <code>&lt;خيار&gt;=&lt;قيمة&gt;</code></td>
+<td>تعيين (<code>on/off/true/false/yes/no/1/0/toggle</code>)</td>
+</tr>
+<tr>
+<td><code>:set no&lt;خيار&gt;</code> / <code>&lt;خيار&gt;!</code></td>
+<td>إيقاف / تبديل</td>
+</tr>
+<tr>
+<td><code>:set theme light hints off noautoprint</code></td>
+<td>عدّة تعيينات في سطر واحد (تُتحقَّق كلها قبل تطبيق أي منها)</td>
+</tr>
+<tr>
+<td><code>:set reset [خيار]</code></td>
+<td>استرجاع الافتراضي</td>
+</tr>
+<tr>
+<td><code>:set save</code></td>
+<td>حفظ القيم المعدَّلة في <code>terminal.rc</code> (كتلة مُدارة، لا تمسّ بقية الملف) فتُطبَّق عند كل بدء</td>
+</tr>
+</tbody>
+</table></div>
+<p>الخيارات: <code>color highlight hints autoprint timing(auto|on|off) indent theme(dark|light)</code>.
+الخيار الخاطئ يعيد اقتراح "هل تقصد؟". إن لم تدعم الطرفية الألوان (ليست tty أو <code>NO_COLOR</code>) تُحفَظ القيمة المطلوبة ويُنبَّه أنها غير فعّالة الآن.</p>
+<p>وكلمات <code>exit</code> / <code>quit</code> / <code>help</code> / <code>clear</code> تعمل كما هي ما لم تعرّف متغيراً بنفس الاسم.</p>
+<h2 id="_3">المشاريع<a class="headerlink" href="#_3" title="Permanent link">#</a></h2>
+<pre><code>:new hello                         # مشروع console (rin.toml + src/main.rin + tests/ + README + .gitignore)
+:new ui-app --template indsin      # مشروع واجهة (عدّاد جاهز بـ @view + onTap)
+:new mylib -t lib                  # مكتبة
+:init [console|indsin|lib]         # تحويل المجلد الحالي إلى مشروع (لا يكتب فوق ملف موجود)
+:project   :tree   :run   :test
+</code></pre>
+<p><code>:new</code> يدخل المجلد الجديد تلقائياً. <code>:run</code> بلا وسائط يشغّل <code>src/main.rin</code> (ومشروع الواجهة يُفتح في indsin).
+<code>:test</code> يشغّل كل <code>tests/*.rin</code>، كلٌّ في مفسّر <strong>نظيف</strong>، وينجح الملف إن لم يُطلق خطأ ولم يطبع <code>FAIL</code>.</p>
+<h2 id="ocr">طباعة نص صورة (<code>:ocr</code>)<a class="headerlink" href="#ocr" title="Permanent link">#</a></h2>
+<pre><code>:ocr صورة.png [--lang ara+eng] [--psm N] [--enhance] [--min N]
+:ocr &quot;مسار فيه مسافات.png&quot;
+</code></pre>
+<p>يطبع النص المقروء من الصورة بـ Unicode كما هو (عربي/لاتيني) داخل إطار خفيف عنوانه اسم الملف، ملتفّاً عند عرض الطرفية مع حفظ الفقرات، وفي سطره السفلي: الثقة · عدد الكلمات · اللغة (ASCII <code>+ - |</code> إن لم تدعم الطرفية UTF-8). لرسم الصورة نفسها استعمل <code>:img</code>.
+لا منطق OCR جديد: الأمر يستدعي الدالة الموجودة <code>make.image.text</code> (انظر <code>docs/MAKE_MEDIA.md</code>) داخل المفسّر نفسه، فنفس الأدوات (tesseract) ونفس شروط الأمان والأخطاء الواضحة (أداة/لغة مفقودة).
+تُحذف أحرف التحكم (ESC وC0/C1) من النص الخارج حتى لا تحقن الصورة تسلسلات طرفية؛ يبقى <code>\n</code> و<code>\t</code>. العربية تحتاج <code>tesseract-ocr-ara</code>.</p>
+<h2 id="indsin">indsin داخل الطرفية<a class="headerlink" href="#indsin" title="Permanent link">#</a></h2>
+<pre><code>:indsin [ملف.rin] [--width N]      # تفاعلي (بلا ملف: src/main.rin للمشروع)
+:indsin --dump | --plain           # إطار واحد (ANSI | نص فقط) بلا TUI
+rin indsin ملف.rin [...]           # الأمر نفسه من الشل مباشرة
+</code></pre>
+<ul>
+<li>نفس مسار المحرّك (<code>rin_indsin_session_*</code>: layout + Dye + الـ rasterizer الوحيد) — لا منطق رسم مكرّر ولا نافذة.</li>
+<li>يُعرَض بنصف-كتل <code>▀</code> ملوّنة (24-bit؛ 256 لوناً احتياطاً، <code>RIN_TRUECOLOR=0</code> لفرضها)، والنصوص حروف حقيقية فوق الخلفية.</li>
+<li><strong>الفأرة (SGR 1006)</strong>: نقرة = <code>onTap</code> فعلي (تتغيّر حالة warp)، نقرتان = double-tap، زر أيمن = long-press، حركة = hover، العجلة تمرّر.</li>
+<li><strong>لوحة المفاتيح</strong>: <code>q</code>/Esc خروج، <code>r</code> إعادة تحميل، <code>+</code>/<code>-</code> عرض الواجهة (يعيد الجلسة)، الأسهم/PgUp/PgDn/Home/End تمرير، <code>s</code> يحفظ PNG.</li>
+<li><strong>تحميل حيّ</strong>: حفظ الملف في أي محرّر يحدّث العرض (Shuttle) مع بقاء الحالة.</li>
+<li>حدود: طلبات الوسائط (<code>pickMedia</code>/<code>uploadMedia</code>) تحتاج منتقي ملفات المضيف فتظهر رسالة في الشريط؛ النص العربي يعتمد على bidi في الطرفية نفسها.</li>
+</ul>
+<h2 id="unicode">عرض صورة بحروف Unicode<a class="headerlink" href="#unicode" title="Permanent link">#</a></h2>
+<pre><code>:img صورة.png                          # الأنسب تلقائياً: نصف-كتل ملوّنة، أو braille إن لم تتوفر ألوان
+:img &quot;صورة بمسافة.jpg&quot; --width 60      # عرض بالأعمدة (8–400؛ الافتراضي عرض الطرفية حتى 100)
+:img logo.png --mode braille           # نقاط براي ⣿ — أدق تفصيلاً
+:img logo.png --mode shade --invert    # ظلال ░▒▓█ (--invert لطرفية فاتحة الخلفية)
+rin img logo.png --plain &gt; logo.txt    # من الشل: بلا ألوان، مناسب للحفظ أو الأنابيب
+</code></pre>
+<ul>
+<li>الأنماط: <code>half</code> (▀ بلونين، 24-bit أو 256 تلقائياً) · <code>braille</code> (2×4 نقطة لكل خانة) · <code>shade</code> · <code>ascii</code> (للطرفيات غير UTF-8).</li>
+<li>يعتمد النمط الافتراضي على الألوان: <code>half</code> معها، و<code>braille</code> بدونها (أنبوب، <code>NO_COLOR</code>، <code>--plain</code>).</li>
+<li>الصيغ: png jpg gif bmp (مدمجة) · webp tiff (عبر ImageMagick إن وُجد) — الإطار الأول للمتحركة. تُعرَّف الصيغة من محتوى الملف لا من امتداده، فملف SVG بامتداد png يُرفض.</li>
+<li>مفكّك الصور مدمج (<code>rin_imgdec.h</code>، يعتمد على zlib فقط): لا ImageMagick ولا أدوات خارجية لـ png/jpg/gif/bmp. JPEG الأساسي والتدريجي مع تدوير EXIF، وصور الكاميرا الضخمة (&gt;12 ميغابكسل) تُفكّ بمقياس 1/8 بذاكرة صغيرة. webp/tiff فقط تحتاج ImageMagick إن وُجد (احتياطي، يُشغَّل بلا shell). رموز الخروج لـ <code>rin img</code>: 0 نجاح · 1 فشل · 2 وسائط خاطئة.</li>
+</ul>
+<h2 id="100">100 أمر إضافي (<code>$ …</code>)<a class="headerlink" href="#100" title="Permanent link">#</a></h2>
+<p>أوامر نظام وملفات ونصوص مبنيّة داخل الطرفية نفسها (بلا تشغيل أي برنامج خارجي)، فتعمل <strong>بالمثل في لينكس وفي RinStudio</strong>. الأسلوب:</p>
+<pre><code>$ cat -n main.rin            # يبدأ الأمر بـ $   (أو بـ : كما قبل — $ ls == :ls)
+$ cp *.rin ~/                # *  ?  [..] تُوسَّع (glob)، و ~/ هو مجلد المنزل
+$ seq 1:10        $ seq 1…10:3         # المدى A:B أو A…B  (… للتكرار/المدى)
+$ cat main.rin -r 5:12       $ cut -d , -f 2:4 data.csv
+$ grep -rn &quot;let&quot; . | ...     # لا أنابيب: كل أمر مستقل، ويقبل -e &quot;نص&quot; بدل الملف
+$ alias ll='cat -n'          # ثم:  $ ll main.rin
+</code></pre>
+<p>النصوص المُقتبسة <code>"…"</code> و<code>'…'</code> تمنع التوسيع؛ <code>$VAR</code> و<code>${VAR}</code> تُوسَّع من البيئة؛ <code>\</code> للهروب. <code>$ help &lt;أمر&gt;</code> أو <code>:help</code> يعرضان الاستخدام. جميع نصوص هذه الأوامر ومخرجاتها بالإنجليزية.</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>المجموعة</th>
+<th>الأوامر</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>قراءة</td>
+<td><code>cat head tail wc</code></td>
+</tr>
+<tr>
+<td>بحث</td>
+<td><code>grep find</code></td>
+</tr>
+<tr>
+<td>ملفات ومجلدات</td>
+<td><code>mkdir rmdir rm cp mv touch stat du realpath basename dirname</code></td>
+</tr>
+<tr>
+<td>نصوص</td>
+<td><code>echo sort uniq tac rev nl upper lower cut cmp</code></td>
+</tr>
+<tr>
+<td>تجزئة وترميز</td>
+<td><code>sha256 base64 hexdump crc32</code></td>
+</tr>
+<tr>
+<td>نظام وبيئة</td>
+<td><code>env export unset date whoami hostname uname which uptime free nproc df</code></td>
+</tr>
+<tr>
+<td>أدوات</td>
+<td><code>seq sleep alias unalias pushd popd dirs</code></td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>الدفعة الثانية (50 أمراً أخرى):</strong></p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>المجموعة</th>
+<th>الأوامر</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ملفات</td>
+<td><code>ll ln chmod readlink file mktemp exists tee append split</code></td>
+</tr>
+<tr>
+<td>نصوص</td>
+<td><code>diff comm paste tr fold replace trim shuf wordfreq count rot13</code></td>
+</tr>
+<tr>
+<td>تجزئة وترميز</td>
+<td><code>md5 sha1 urlencode urldecode hex unhex ascii conv</code></td>
+</tr>
+<tr>
+<td>رياضيات</td>
+<td><code>calc factor primes fib gcd rand uuid</code></td>
+</tr>
+<tr>
+<td>وقت</td>
+<td><code>timestamp cal datediff</code></td>
+</tr>
+<tr>
+<td>نظام</td>
+<td><code>id ps cpuinfo mounts printenv yes true false term path numfmt</code></td>
+</tr>
+</tbody>
+</table></div>
+<p>أمثلة: <code>$ calc 2*(3+4)^2 / sqrt(16)</code> · <code>$ conv 255 -t 2</code> · <code>$ replace -i old new *.rin</code> · <code>$ diff a.rin b.rin</code> · <code>$ cal 10 2026</code> · <code>$ timestamp "2026-10-17 12:00:00" -u</code> · <code>$ ll -h ~/</code> · <code>$ chmod u+x run.sh</code>.
+<code>replace -i</code> يعدّل الملفات في مكانها؛ <code>tee</code>/<code>append</code> تكتبان نصاً في ملف (بديل <code>echo &gt; file</code>)؛ <code>diff</code> حتى 3000 سطر؛ <code>calc</code> يدعم <code>+ - * / % ^ ( )</code> و<code>sqrt sin cos tan ln log exp abs floor ceil round pow min max pi e</code>.
+الكود في <code>rin_terminal_xcmds.h</code> (الدفعة 1) و<code>rin_terminal_xcmds2.h</code> (الدفعة 2).</p>
+<p>ملاحظات: <code>rm</code> يرفض <code>/</code> ومجلد المنزل و<code>.</code>/<code>..</code>؛ <code>grep -E</code> تعبير منتظم، وبدونه بحث نصي؛ <code>find</code> يستعمل <code>-name/-iname/-type f|d/-maxdepth</code>؛ <code>sleep</code> حتى 300 ثانية؛ <code>seq</code> حتى 100000 عنصر؛ الملفات الأكبر من 64MiB تُرفض. ملف <code>terminal.rc</code> يقبل أسطر <code>$</code> أيضاً. الكود في <code>cli/linux/src/terminal/rin_terminal_xcmds.h</code>.
+في RinStudio يلزم البادئة <code>$</code> (أو <code>:</code>) فتذهب للجلسة الأصلية؛ أمر <code>grep</code> بلا بادئة يبقى أمر السجل القديم في المحرر.</p>
+<h2 id="_4">بيئة<a class="headerlink" href="#_4" title="Permanent link">#</a></h2>
+<p><code>RIN_HISTFILE</code>، <code>RIN_TERMINAL_RC</code> (أو <code>~/.config/rin/terminal.rc</code>: أوامر <code>:</code> تُنفَّذ عند البدء)، <code>RIN_LANG=en</code>، <code>RIN_THEME=light</code>، <code>NO_COLOR</code>.</p>
+<h2 id="_5">حدود معروفة<a class="headerlink" href="#_5" title="Permanent link">#</a></h2>
+<ul>
+<li>المعرّفات العربية غير مقبولة من Lexer اللغة نفسها (النصوص العربية تعمل).</li>
+<li>المحرّك يراكم مخرجاته داخلياً طوال الجلسة؛ <code>:reset</code> يبدأ جلسة نظيفة.</li>
+<li>لا إلغاء تعاوني في المحرك: Ctrl-C يستخدم سقف الجمل (<code>setExecutionBudget</code>)، فلا يقطع استدعاء native عالقاً (الضغطة الثانية تفعل).</li>
+<li>Linux/POSIX فقط حالياً (macOS قابل للنقل بإضافة الملف وسطر الاستدعاء؛ Windows يحتاج ConPTY).</li>
+</ul>
+<h2 id="_6">الاختبار<a class="headerlink" href="#_6" title="Permanent link">#</a></h2>
+<p><code>RIN_BIN=./build/rin tests/terminal/run.sh</code> (جلستان دفعيتان مقارنتان بملف متوقَّع، وفحوص pty حقيقية تشمل نقرات فأرة على واجهة indsin).</p>
+<h2 id="rinstudio">داخل محرّر RinStudio (أندرويد)<a class="headerlink" href="#rinstudio" title="Permanent link">#</a></h2>
+<p>طرفية لينكس نفسها مبنيّة داخل <code>librinengine.so</code> (الصنف <code>EmbeddedTerminal</code>، جسر JNI في <code>app/src/main/cpp/terminal/</code>) ومربوطة بتبويب Terminal في المحرّر:</p>
+<pre><code>:vars                     # أي أمر : يذهب لجلسة لينكس الأصلية (مفسّر دائم الحالة)
+:load main.rin            # مسارات الملفات نسبةً لمجلد المشروع؛ :cd يغيّر مجلد الجلسة لا مجلد التطبيق
+:ocr scan.png             # يعمل بمحرّك OCR في التطبيق
+native on                 # كل شيفرة Rin تعمل في الجلسة الأصلية (حالة حقيقية بدل إعادة تشغيل التصريحات)
+native off                # العودة للـ REPL المعتاد (أوامر : تبقى تعمل)
+</code></pre>
+<ul>
+<li><code>:ocr</code> تطبع الإطار الملوّن (الثقة بالأخضر/الأصفر/الأحمر) كما في لينكس، وتُرسم ألوان ANSI في الشاشة.</li>
+<li>لا تعمل في المحرّر: <code>:sh</code> و<code>:edit</code> و<code>:pkg</code> و<code>:indsin</code> (تحتاج شلاً أو tty) — تردّ برسالة واضحة. <code>:img</code> يعمل على أندرويد أيضاً (png/jpg/gif/bmp) بالمفكّك المدمج.</li>
+<li>المحرّك الأصلي لا يقبل المقاطعة: <code>^C</code> أثناء أمر طويل يعرض رسالة بدل الإيقاف. <code>^C</code> يلغي الأمر الناقص (متعدد الأسطر).</li>
+<li>الأمر الناقص (قوس/نص مفتوح) يكمل في السطر التالي داخل الجلسة نفسها، و<code>input()</code> يظهر في سطر الـ terminal.</li>
+<li>بُني بالعلم <code>RIN_TERMINAL_EMBED</code> (بدون RinPM). اختبار الجانب C++: <code>tests/terminal/embed_harness.cpp</code>.</li>
+</ul>
+<h2 id="rinstudio_1">RinStudio<a class="headerlink" href="#rinstudio_1" title="Permanent link">#</a></h2>
+<p>طرفية RinStudio تدعم <code>ocr &lt;صورة&gt; [--lang ara+eng] [--psm N] [--enhance] [--min N]</code> (نفس <code>make.image.text</code>)، وتعرض ألوان ANSI
+(<code>colorAnsi</code> وغيرها) فوق Unicode؛ التفاصيل في <code>../.changelog/CHANGELOG.md</code>.</p>
+<h3 id="3">أوامر <code>$</code> المتقدمة (الدفعة 3)<a class="headerlink" href="#3" title="Permanent link">#</a></h3>
+<p><code>$ bigfiles</code> <code>$ recent</code> <code>$ dupes</code> <code>$ empty</code> <code>$ loc</code> <code>$ todo</code> — استكشاف الملفات · <code>$ trash</code> <code>$ backup</code> <code>$ sync</code> <code>$ rename</code> — أمان ونسخ · <code>$ json</code> <code>$ csv</code> <code>$ stats</code> <code>$ context</code> <code>$ verify</code> — بيانات.
+أمثلة: <code>$ sync . ~/backup</code> · <code>$ trash old.rin ~/tmp</code> · <code>$ rename '(.*)\.txt' '$1.rin' *.txt</code> · <code>$ json ~/cfg.json server.port</code> · <code>$ csv ~/sales.csv -n 20</code> · <code>$ stats -e "3 1 4 1 5" -h</code>.
+تفاصيل في <code>../.changelog/CHANGELOG.md</code>.</p>
+<h3 id="4-500">الدفعة 4 — 500 أمر إضافي<a class="headerlink" href="#4-500" title="Permanent link">#</a></h3>
+<p><code>$ convert 5 kg lb</code> وعشرات الاختصارات (<code>km2mi</code>، <code>c2f</code>…) · نصوص (<code>camel</code>، <code>slugify</code>، <code>levenshtein</code>، <code>roman</code>، <code>morse</code>…) · ترميز/هاش (<code>base58</code>، <code>sha512</code>، <code>hmac</code>، <code>crc16</code>، <code>luhn</code>…) · ألوان (<code>hex2rgb</code>، <code>contrast</code>…) · شبكة (<code>cidr</code>، <code>urlparse</code>…) · رياضيات وإحصاء ومالية (<code>fact</code>، <code>stdev</code>، <code>percentile</code>، <code>loan</code>، <code>rpn</code>…) · تواريخ (<code>age</code>، <code>workdays</code>، <code>hijri</code>، <code>easter</code>…) · مولّدات (<code>dice</code>، <code>password</code>، <code>ulid</code>…) · ملفات (<code>tree</code>، <code>eol</code>، <code>fixeol</code>، <code>magic</code>، <code>sums</code>…) · أدوات Rin (<code>rinlint</code>، <code>rinblocks</code>، <code>rinids</code>…) · بيانات (<code>csv2json</code>، <code>csvsort</code>، <code>jsonkeys</code>، <code>spark</code>…). التفاصيل في <code>../.changelog/CHANGELOG.md</code>.</p>
+<h2 id="rin-shell-rin-toolbox">الهوية: Rin Shell و Rin Toolbox<a class="headerlink" href="#rin-shell-rin-toolbox" title="Permanent link">#</a></h2>
+<p>الطرفية اسمها الرسمي <strong>Rin Shell</strong>، ومكتبة أوامرها المدمجة <strong>Rin Toolbox</strong> (615 أمراً في 13 عائلة). <code>:about</code> يعرض الشعار والإصدار، و<code>:toolbox</code> يعرض العائلات (<code>:toolbox math</code> يسرد أوامر عائلة). الأيقونات في <code>assets/branding/shell/</code>، والتفاصيل في <code>../.changelog/CHANGELOG.md</code>.</p>
+<h2 id="_7">مؤشرات التشغيل والتحميل (حسب نوع الأمر)<a class="headerlink" href="#_7" title="Permanent link">#</a></h2>
+<p>أثناء أي تشغيل يطول (&gt; ~0.35s) على طرفية حقيقية يظهر سطر حيّ بهويّة نوع الأمر:
+<code>⠋ Loading  slow.rin · importing rin.ui · Parsing · 2 lines  1.1s</code>. يختفي عند أي مخرجات وعند <code>input()</code>، ويعرض المكتبة
+الجارية فعلاً. <code>:test</code> و<code>:time -n N</code> يرسمان شريط تقدّم (عدّاد + ETA + سرعة). التعطيل: <code>RIN_PROGRESS=plain</code>.
+التفاصيل: <code>../.changelog/CHANGELOG.md</code>.</p></article>
+<div class="pnav"><a class="pn" href="env.html">→ ربط Rin بملف `.env</a><a class="pn" href="vm.html">RinVM — آلة Rin الافتراضية (بايتكود) ←</a></div><p class="edit"><a href="https://github.com/dlof-lib/rinlang/edit/main/docs/terminal.md">✎ عدّل هذه الصفحة على GitHub</a></p>
+<footer>Rin 1.0.0 · رخصة MIT</footer></main>
+<aside id="toc"><b>في هذه الصفحة</b><div class="toc">
+<ul>
+<li><a href="#_1">التشغيل</a></li>
+<li><a href="#_2">ما تفعله</a></li>
+<li><a href="#help">الأوامر (:help داخل الطرفية)</a><ul>
+<li><a href="#set">:set — إعدادات الطرفية</a></li>
+</ul>
+</li>
+<li><a href="#_3">المشاريع</a></li>
+<li><a href="#ocr">طباعة نص صورة (:ocr)</a></li>
+<li><a href="#indsin">indsin داخل الطرفية</a></li>
+<li><a href="#unicode">عرض صورة بحروف Unicode</a></li>
+<li><a href="#100">100 أمر إضافي ($ …)</a></li>
+<li><a href="#_4">بيئة</a></li>
+<li><a href="#_5">حدود معروفة</a></li>
+<li><a href="#_6">الاختبار</a></li>
+<li><a href="#rinstudio">داخل محرّر RinStudio (أندرويد)</a></li>
+<li><a href="#rinstudio_1">RinStudio</a><ul>
+<li><a href="#3">أوامر $ المتقدمة (الدفعة 3)</a></li>
+<li><a href="#4-500">الدفعة 4 — 500 أمر إضافي</a></li>
+</ul>
+</li>
+<li><a href="#rin-shell-rin-toolbox">الهوية: Rin Shell و Rin Toolbox</a></li>
+<li><a href="#_7">مؤشرات التشغيل والتحميل (حسب نوع الأمر)</a></li>
+</ul>
+</div>
+</aside></div>
+<script src="assets/app.js"></script></body></html>
