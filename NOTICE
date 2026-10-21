@@ -3,9 +3,19 @@ Version 1.0.0
 
 Copyright (c) 2026 Rin Project Contributors
 
-Rin is distributed as open-source software under the MIT License.
+Rin is distributed as open-source software under the MIT License
+(see LICENSE). SPDX-License-Identifier: MIT
 
-Third-party components, if present, retain their original copyright notices
-and applicable license terms.
+The "Rin" name, logo and visual identity are NOT licensed by the MIT
+License. See COPYRIGHT and TRADEMARKS.md.
 
-SPDX-License-Identifier: MIT
+This product includes third-party components that keep their original
+copyright notices and license terms:
+
+  - stb_image v2.30         (Sean Barrett)            MIT or Public Domain
+  - JetBrains Mono          (JetBrains Mono Project)  SIL OFL 1.1
+  - zlib                    (Gailly & Adler)          zlib License (linked, not bundled)
+  - AndroidX / Material / ZXing / Firebase / apksig /
+    Tesseract4Android / ML Kit  (Android app only)    see THIRD_PARTY_NOTICES.md
+
+Full texts and details: THIRD_PARTY_NOTICES.md
