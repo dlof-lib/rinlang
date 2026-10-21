@@ -35,6 +35,11 @@
 خطوة بخطوة (رسم بياني، إلغاء، مهلة زمنية) عبر [`rinflow.md`](./rinflow.md) —
 طبقة استضافة اختيارية لا تغيّر النتيجة، فقط تضيف رؤية/تحكّمًا.
 
+## 3ب) الجسر بين المفاهيم — التركيب والدمج والتفاعل
+[`compose.md`](./compose.md) (`@import "compose";`) مكتبة أساسية تربط كل ما سبق ببعضه: أي مفهوم
+(map، array، `Set`، `enum`، كائن `class`، حاوية، سجلات جدول) يتحوّل بـ`asFn`/`asMap`/`asArray`/`asSet`،
+فيصلح مرحلة في `compose`/`chain`/`through`، ويُدمج بـ`combine`/`mergeWith`، ويتفاعل بـ`connect`/`sync`.
+
 ## 4) بيئة التشغيل — ما يمنحه المفسِّر جاهزًا
 [`standard-library.md`](./standard-library.md) فهرس مكتبات `lib/*.og.rin`
 (عبر `@import`). [`http.md`](./http.md) و[`storage.md`](./storage.md) الاتصال
@@ -65,7 +70,7 @@
 |---|---|
 | اللغة | `syntax` `language-reference` `variables` `control-flow` `functions` `enums` `objects` `containers` `cross-file-containers` `boat` |
 | بيئة التشغيل | `standard-library` `errors` `ERROR_SYSTEM` `storage` `http` |
-| التنفيذ | `pipelines` `RECKON` `MAKE_UNIT` `rinflow` |
+| التنفيذ | `pipelines` `RECKON` `MAKE_UNIT` `rinflow` `compose` |
 | الواجهة | `../indsin.md` `RIN_ELEMENTS` `banner` `android` |
 | API | `api` |
 | البداية | `getting-started` |
