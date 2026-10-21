@@ -69,6 +69,36 @@ object BuiltinLibraries {
             "compose • chain • through • combine • mergeWith • mapOver • filterOver • connect • sync"
         ),
         BuiltinLibraryInfo(
+            "lib/compose_seq.og.rin", "compose_seq",
+            "مساعدة compose — ترتيب مستقر وتجميع وتقطيع وضمّ وبحث فوق أي مفهوم (array وSet وmap وكائن ونص)",
+            "sortBy • groupOver • tally • chunkOver • windowOver • zipWith • flattenDeep • findOver"
+        ),
+        BuiltinLibraryInfo(
+            "lib/compose_path.og.rin", "compose_path",
+            "مساعدة compose — مسارات \"a.b.0\" للقراءة والكتابة غير المُعدِّلة والتسطيح والنسخ العميق",
+            "getIn • setIn • updateIn • deleteIn • flattenKeys • cloneDeep • mapLeaves"
+        ),
+        BuiltinLibraryInfo(
+            "lib/compose_flow.og.rin", "compose_flow",
+            "مساعدة compose — curry وmemoize وretry وcond وmatchKind ونتائج Result وتتبّع المراحل",
+            "curryN • memoize1 • retry • cond • matchKind • safeChain • traceChain"
+        ),
+        BuiltinLibraryInfo(
+            "lib/compose_schema.og.rin", "compose_schema",
+            "مساعدة compose — مخططات تحقّق وتطبيع مختصرة (أنواع، حقول، عناصر، enum، default، coerce)",
+            "schemaCheck • schemaConform • schemaAssert • schemaOf • isValid"
+        ),
+        BuiltinLibraryInfo(
+            "lib/compose_diff.og.rin", "compose_diff",
+            "مساعدة compose — مقارنة البنى وتطبيق الفروق وعكسها ودمج ثلاثي",
+            "diffDeep • patchDeep • invertChanges • describeChanges • merge3"
+        ),
+        BuiltinLibraryInfo(
+            "lib/compose_store.og.rin", "compose_store",
+            "مساعدة compose — مخزن حالة تفاعلي: اشتراكات وقيم مشتقّة وbatch وتراجع وربط بالحاويات",
+            "storeNew • storeSet • storeSubscribe • storeComputed • storeBatch • storeUndo"
+        ),
+        BuiltinLibraryInfo(
             "lib/indsinicons.og.rin", "indsinicons",
             "مكتبة أيقونات متجهية (SVG) لواجهات indsin: 187 أيقونة مرسومة على شبكة 24×24 مع بحث وأسماء بديلة وتوليد SVG جاهز",
             "ic_svg • ic_search • ic_has • ic_snippet • ic_html • ic_dataUri • ic_sprite • ic_register • ic_audit",
