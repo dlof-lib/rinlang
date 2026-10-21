@@ -1,0 +1,10 @@
+@import "compose";
+class P { let n = 1; let m = "x"; }
+print sizeOf([1,2]); print sizeOf(Set([1])); print sizeOf("abc"); print sizeOf(P()); print sizeOf(nil); print sizeOf(5);
+print isEmptyValue([]); print isEmptyValue({}); print isEmptyValue(0); print isEmptyValue("");
+print kindIs([1], ["array","set"]); print kindIs(5, "map");
+print toKind("12", "number"); print toKind(5, "string"); print toKind(nil, "bool"); print toKind(0, "bool"); print toKind([1,1], "set");
+print hasKey([5,6], 1); print hasKey(Set(["a"]), "a"); print hasKey(P(), "n"); print hasKey({"a":1}, "b");
+print getOr({"a":1}, "b", 0); print getOr([5,6], 1, 0); print getOr("xyz", 2, "?");
+print keysOf([7,8]); print keysOf(Set([4])); print keysOf(P()); print valuesOf("ab");
+print describeValue([1,2,3]); print describeValue(5); print composeVersion(); print len(composeLibraries());
