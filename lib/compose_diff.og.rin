@@ -1,0 +1,139 @@
+// ============================================================================
+//  lib/compose_diff.og.rin — مقارنة البنى وتطبيق الفروق ودمج ثلاثي (مساعدة لـ compose)
+//
+//  الفرق (change) map: {"op": "add"|"remove"|"change", "path": [...], "from": قديمة, "to": جديدة}
+//
+//    diffDeep(a, b)           -> مصفوفة فروق من a إلى b (map وarray وكائن؛ الباقي بالمساواة ==)
+//    patchDeep(x, changes)    -> بنية جديدة بعد تطبيق الفروق (x لا تتغير)
+//    invertChanges(changes)   -> الفروق العكسية (patchDeep(b, invert(diff(a,b))) == a)
+//    changedPaths(a, b)       -> مسارات الفروق فقط
+//    describeChanges(changes) -> نصوص مقروءة: "+ a.b = 1" · "- a.c" · "~ a.d: 1 -> 2"
+//    merge3(base, mine, theirs) -> {"value": النتيجة, "conflicts": [مسارات]}   (دمج ثلاثي)
+//
+//  استيراد:  @import "lib/compose_diff.og.rin";   (تستورد compose + compose_path)
+// ============================================================================
+@import "compose";
+@import "compose_path";
+
+fun _isNode(x) {
+    let k = valueKind(x);
+    return k == "map" or k == "array" or k == "instance";
+}
+
+fun _diffInto(a, b, prefix, out) {
+    let ka = valueKind(a);
+    let kb = valueKind(b);
+    let bothMaps = (ka == "map" or ka == "instance") and (kb == "map" or kb == "instance");
+    if (bothMaps) {
+        let ma = asMap(a);
+        let mb = asMap(b);
+        let ksA = keys(ma);
+        let i = 0;
+        while (i < len(ksA)) {
+            let k = ksA[i];
+            if (!has(mb, k)) { push(out, {"op": "remove", "path": concat(prefix, [k]), "from": ma[k], "to": nil}); }
+            else { _diffInto(ma[k], mb[k], concat(prefix, [k]), out); }
+            i = i + 1;
+        }
+        let ksB = keys(mb);
+        let j = 0;
+        while (j < len(ksB)) {
+            if (!has(ma, ksB[j])) { push(out, {"op": "add", "path": concat(prefix, [ksB[j]]), "from": nil, "to": mb[ksB[j]]}); }
+            j = j + 1;
+        }
+        return nil;
+    }
+    if (ka == "array" and kb == "array") {
+        let common = len(a) < len(b) ? len(a) : len(b);
+        let i = 0;
+        while (i < common) { _diffInto(a[i], b[i], concat(prefix, [i]), out); i = i + 1; }
+        // الزيادة تُضاف بالترتيب، والنقص يُحذف من الأعلى فهرساً للأدنى ليبقى التطبيق المتسلسل صحيحاً
+        let k = common;
+        while (k < len(b)) { push(out, {"op": "add", "path": concat(prefix, [k]), "from": nil, "to": b[k]}); k = k + 1; }
+        let r = len(a) - 1;
+        while (r >= common) { push(out, {"op": "remove", "path": concat(prefix, [r]), "from": a[r], "to": nil}); r = r - 1; }
+        return nil;
+    }
+    if (a != b) { push(out, {"op": "change", "path": prefix, "from": a, "to": b}); }
+    return nil;
+}
+
+fun diffDeep(a, b) {
+    let out = [];
+    _diffInto(a, b, [], out);
+    return out;
+}
+
+fun changedPaths(a, b) {
+    let ch = diffDeep(a, b);
+    let out = [];
+    let i = 0;
+    while (i < len(ch)) { push(out, ch[i]["path"]); i = i + 1; }
+    return out;
+}
+
+fun patchDeep(x, changes) {
+    let cur = x;
+    let i = 0;
+    while (i < len(changes)) {
+        let c = changes[i];
+        if (c["op"] == "remove") { cur = deleteIn(cur, c["path"]); }
+        else { cur = setIn(cur, c["path"], c["to"]); }
+        i = i + 1;
+    }
+    return cur;
+}
+
+fun invertChanges(changes) {
+    let out = [];
+    let i = len(changes) - 1;
+    while (i >= 0) {
+        let c = changes[i];
+        let op = c["op"];
+        if (op == "add") { push(out, {"op": "remove", "path": c["path"], "from": c["to"], "to": nil}); }
+        else if (op == "remove") { push(out, {"op": "add", "path": c["path"], "from": nil, "to": c["from"]}); }
+        else { push(out, {"op": "change", "path": c["path"], "from": c["to"], "to": c["from"]}); }
+        i = i - 1;
+    }
+    return out;
+}
+
+fun describeChanges(changes) {
+    let out = [];
+    let i = 0;
+    while (i < len(changes)) {
+        let c = changes[i];
+        let p = _joinSegs(c["path"], ".");
+        if (c["op"] == "add") { push(out, "+ " + p + " = " + str(c["to"])); }
+        else if (c["op"] == "remove") { push(out, "- " + p); }
+        else { push(out, "~ " + p + ": " + str(c["from"]) + " -> " + str(c["to"])); }
+        i = i + 1;
+    }
+    return out;
+}
+
+// merge3: تطبيق تغييرات الطرفين على base؛ إن غيّر الطرفان المسار نفسه بقيمتين مختلفتين
+// فهو تعارض وتفوز قيمة mine ويُسجَّل المسار.
+fun merge3(base, mine, theirs) {
+    let mineCh = diffDeep(base, mine);
+    let theirCh = diffDeep(base, theirs);
+    let result = patchDeep(base, mineCh);
+    let conflicts = [];
+    let i = 0;
+    while (i < len(theirCh)) {
+        let t = theirCh[i];
+        let clash = nil;
+        let j = 0;
+        while (j < len(mineCh)) {
+            if (mineCh[j]["path"] == t["path"]) { clash = mineCh[j]; break; }
+            j = j + 1;
+        }
+        if (clash == nil) { result = patchDeep(result, [t]); }
+        else {
+            let same = clash["op"] == t["op"] and clash["to"] == t["to"];
+            if (!same) { push(conflicts, t["path"]); }
+        }
+        i = i + 1;
+    }
+    return {"value": result, "conflicts": conflicts};
+}
