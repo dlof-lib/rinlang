@@ -26751,6 +26751,16 @@ static const char* kLib_compose_og_rin = R"COMPOSEOGRIN(
 //    2) التركيب            compose / chain / through / juxt / branch / allOf ...
 //    3) الدمج              combine / mergeWith / mergeAll / mergeInto / joinRecords
 //    4) التفاعل            mapOver / filterOver / reduceOver / connect / sync
+//    5) token <-> number   numbersIn / identifiersIn
+//    6) أدوات عامة         sizeOf / isEmptyValue / toKind / hasKey / getOr / keysOf / valuesOf / describeValue
+//
+//  مكتبات مساعدة توسّع compose (كل واحدة تستورد compose تلقائياً):
+//    compose_seq    ترتيب وتجميع وتقطيع وضمّ وبحث فوق أي مفهوم
+//    compose_path   مسارات "a.b.0" للقراءة والكتابة والتسطيح والنسخ العميق
+//    compose_flow   curry/memoize/retry/cond/matchKind ونتائج Result وتتبّع المراحل
+//    compose_schema مخططات تحقّق وتطبيع (types, fields, items, enum, coerce, default)
+//    compose_diff   diffDeep / patchDeep / invertChanges / merge3
+//    compose_store  مخزن حالة تفاعلي: اشتراكات، قيم مشتقّة، batch، تراجع، ربط بالحاويات
 //
 //  استيراد:
 //    @import "lib/compose.og.rin";
@@ -27268,7 +27278,1936 @@ fun identifiersIn(src) {
     while (i < len(toks)) { push(out, toks[i]["lexeme"]); i = i + 1; }
     return out;
 }
+
+// ───────────────────────── 6) أدوات عامة ─────────────────────────
+
+// الحجم الموحَّد: عدد عناصر array/Set/map/كائن، وطول النص؛ nil -> 0؛ غير ذلك -> 1
+fun sizeOf(x) {
+    let k = valueKind(x);
+    if (k == "nil") { return 0; }
+    if (k == "string" or k == "array") { return len(x); }
+    if (k == "set") { return x.size(); }
+    if (k == "map") { return len(x); }
+    if (k == "instance") { return len(oop.toMap(x)); }
+    return 1;
+}
+
+// فارغ؟ nil أو نص/array/Set/map/كائن بلا عناصر
+fun isEmptyValue(x) {
+    let k = valueKind(x);
+    if (k == "nil") { return true; }
+    if (k == "string" or k == "array" or k == "set" or k == "map" or k == "instance") { return sizeOf(x) == 0; }
+    return false;
+}
+
+// هل نوع x أحد الأنواع؟  kindIs(x, ["array", "set"])  أو  kindIs(x, "map")
+fun kindIs(x, kinds) {
+    let k = valueKind(x);
+    if (type(kinds) == "string") { return k == kinds; }
+    let i = 0;
+    while (i < len(kinds)) { if (kinds[i] == k) { return true; } i = i + 1; }
+    return false;
+}
+
+// تحويل صريح إلى نوع: map array set string number bool function
+//   string من array/map تُنتج تمثيل str؛ number من نص رقمي؛ bool من الحقيقية (nil و false فقط خطأ)
+fun toKind(x, kind) {
+    if (kind == "map") { return asMap(x); }
+    if (kind == "array") { return asArray(x); }
+    if (kind == "set") { return asSet(x); }
+    if (kind == "function") { return asFn(x); }
+    if (kind == "string") { return str(x); }
+    if (kind == "number") {
+        if (type(x) == "number") { return x; }
+        if (type(x) == "bool") { return x ? 1 : 0; }
+        return number(x);
+    }
+    if (kind == "bool") { return x != nil and x != false; }
+    throw "toKind: نوع غير معروف: " + str(kind);
+}
+
+// وجود مفتاح بنفس الصيغة لكل مفهوم: map/كائن -> مفتاح · array -> فهرس · Set -> عضو · نص -> فهرس
+fun hasKey(x, key) {
+    let k = valueKind(x);
+    if (k == "map" or k == "instance") { return has(asMap(x), key); }
+    if (k == "array" or k == "string") { return type(key) == "number" and key >= 0 and key < len(x); }
+    if (k == "set") { return x.has(key); }
+    return false;
+}
+
+// قراءة آمنة بمفتاح واحد من أي مفهوم، أو fallback
+fun getOr(x, key, fallback) {
+    let k = valueKind(x);
+    if (k == "map" or k == "instance") {
+        let m = asMap(x);
+        if (has(m, key)) { return m[key]; }
+        return fallback;
+    }
+    if (k == "array" or k == "string") {
+        if (type(key) == "number" and key >= 0 and key < len(x)) { return x[key]; }
+        return fallback;
+    }
+    if (k == "set") {
+        if (x.has(key)) { return key; }
+        return fallback;
+    }
+    return fallback;
+}
+
+// مفاتيح وقيم موحَّدة (array -> الفهارس · Set -> العناصر · map/كائن -> مفاتيحها)
+fun keysOf(x) {
+    let k = valueKind(x);
+    if (k == "array" or k == "string") {
+        let out = [];
+        let i = 0;
+        while (i < len(x)) { push(out, i); i = i + 1; }
+        return out;
+    }
+    if (k == "set") { return x.toArray(); }
+    if (k == "nil") { return []; }
+    return keys(asMap(x));
+}
+
+fun valuesOf(x) {
+    if (valueKind(x) == "string") {
+        let out = [];
+        let i = 0;
+        while (i < len(x)) { push(out, substr(x, i, 1)); i = i + 1; }
+        return out;
+    }
+    return asArray(x);
+}
+
+// وصف مختصر مقروء للقيمة: "array(3)" "map(2)" "number" ...
+fun describeValue(x) {
+    let k = valueKind(x);
+    if (k == "array" or k == "set" or k == "map" or k == "instance" or k == "string") {
+        return k + "(" + str(sizeOf(x)) + ")";
+    }
+    return k;
+}
+
+// قائمة المكتبات المساعدة وإصدار طبقة compose
+fun composeVersion() { return "2.0.0"; }
+
+fun composeLibraries() {
+    return ["compose", "compose_seq", "compose_path", "compose_flow", "compose_schema", "compose_diff", "compose_store"];
+}
 )COMPOSEOGRIN";
+
+static const char* kLib_compose_seq_og_rin = R"CMPSEQ(
+// ============================================================================
+//  lib/compose_seq.og.rin — خوارزميات التسلسلات فوق أي مفهوم (مساعدة لـ compose)
+//
+//  كل الدوال تقبل array أو Set أو map أو كائن أو نص (عبر seqItems) وتُرجع array
+//  ما لم يُذكر غير ذلك. لا تُعدِّل مدخلاتها أبداً.
+//
+//    ترتيب    : cmpValues  sortWith  sortBy  sortDesc  minOver  maxOver  isSorted
+//    تجميع    : groupOver  indexBy  countBy  partitionOver  uniqBy  tally
+//    تقطيع    : takeOver  dropOver  takeWhileOver  dropWhileOver  chunkOver
+//               windowOver  sliceOver  rangeOf  repeatOver
+//    ضمّ      : zipWith  zipAll  unzipPairs  flatMapOver  flattenDeep  intersperse
+//    بحث/عدّ  : findOver  findIndexOver  anyOver  allOver  noneOver  countOver
+//               sumBy  scan  firstOf  lastOf
+//
+//  استيراد:  @import "lib/compose_seq.og.rin";   (تستورد compose تلقائياً)
+// ============================================================================
+@import "compose";
+
+// عناصر أي مفهوم كمصفوفة (نص -> أحرفه)
+fun seqItems(x) {
+    if (valueKind(x) == "string") {
+        let out = [];
+        let i = 0;
+        while (i < len(x)) { push(out, substr(x, i, 1)); i = i + 1; }
+        return out;
+    }
+    return asArray(x);
+}
+
+// ───────────────────────── ترتيب ─────────────────────────
+
+fun _kindRank(k) {
+    if (k == "nil") { return 0; }
+    if (k == "bool") { return 1; }
+    if (k == "number") { return 2; }
+    if (k == "string") { return 3; }
+    return 4;
+}
+
+// مقارنة نصين حرفاً حرفاً بكود الحرف (Rin لا تدعم < على النصوص)
+fun _cmpStrings(a, b) {
+    let n = len(a);
+    if (len(b) < n) { n = len(b); }
+    let i = 0;
+    while (i < n) {
+        let x = ord(substr(a, i, 1));
+        let y = ord(substr(b, i, 1));
+        if (x < y) { return -1; }
+        if (x > y) { return 1; }
+        i = i + 1;
+    }
+    if (len(a) < len(b)) { return -1; }
+    if (len(a) > len(b)) { return 1; }
+    return 0;
+}
+
+// مقارنة عامة لأي قيمتين: -1 / 0 / 1.
+// الترتيب بين الأنواع: nil < bool < number < string < غيرها. المصفوفات تُقارن عنصراً عنصراً.
+fun cmpValues(a, b) {
+    let ka = valueKind(a);
+    let kb = valueKind(b);
+    if (ka != kb) {
+        let ra = _kindRank(ka);
+        let rb = _kindRank(kb);
+        if (ra < rb) { return -1; }
+        if (ra > rb) { return 1; }
+        return 0;
+    }
+    if (ka == "number") {
+        if (a < b) { return -1; }
+        if (a > b) { return 1; }
+        return 0;
+    }
+    if (ka == "string") { return _cmpStrings(a, b); }
+    if (ka == "bool") {
+        if (a == b) { return 0; }
+        if (a) { return 1; }
+        return -1;
+    }
+    if (ka == "array") {
+        let n = len(a);
+        if (len(b) < n) { n = len(b); }
+        let i = 0;
+        while (i < n) {
+            let c = cmpValues(a[i], b[i]);
+            if (c != 0) { return c; }
+            i = i + 1;
+        }
+        if (len(a) < len(b)) { return -1; }
+        if (len(a) > len(b)) { return 1; }
+        return 0;
+    }
+    return 0;
+}
+
+fun _mergeSorted(left, right, cmp) {
+    let out = [];
+    let i = 0;
+    let j = 0;
+    while (i < len(left) and j < len(right)) {
+        if (cmp(left[i], right[j]) <= 0) { push(out, left[i]); i = i + 1; }
+        else { push(out, right[j]); j = j + 1; }
+    }
+    while (i < len(left)) { push(out, left[i]); i = i + 1; }
+    while (j < len(right)) { push(out, right[j]); j = j + 1; }
+    return out;
+}
+
+// ترتيب مستقر (merge sort) بدالة مقارنة cmp(a, b) -> رقم سالب/صفر/موجب
+fun sortWith(x, cmp) {
+    let items = seqItems(x);
+    if (len(items) < 2) { return concat([], items); }
+    let mid = floor(len(items) / 2);
+    let left = [];
+    let right = [];
+    let i = 0;
+    while (i < len(items)) {
+        if (i < mid) { push(left, items[i]); } else { push(right, items[i]); }
+        i = i + 1;
+    }
+    return _mergeSorted(sortWith(left, cmp), sortWith(right, cmp), cmp);
+}
+
+// ترتيب بمفتاح: keyFn أي مفهوم قابل للاستدعاء (دالة، اسم حقل عبر map، ...)
+fun sortBy(x, keyFn) {
+    let kf = asFn(keyFn);
+    return sortWith(x, fun(a, b) { return cmpValues(kf(a), kf(b)); });
+}
+
+fun sortAsc(x) { return sortWith(x, cmpValues); }
+fun sortDesc(x) { return sortWith(x, fun(a, b) { return cmpValues(b, a); }); }
+
+fun isSorted(x) {
+    let items = seqItems(x);
+    let i = 1;
+    while (i < len(items)) {
+        if (cmpValues(items[i - 1], items[i]) > 0) { return false; }
+        i = i + 1;
+    }
+    return true;
+}
+
+fun minOver(x, keyFn) {
+    let kf = asFn(keyFn);
+    let items = seqItems(x);
+    if (len(items) == 0) { return nil; }
+    let best = items[0];
+    let bk = kf(best);
+    let i = 1;
+    while (i < len(items)) {
+        let k = kf(items[i]);
+        if (cmpValues(k, bk) < 0) { best = items[i]; bk = k; }
+        i = i + 1;
+    }
+    return best;
+}
+
+fun maxOver(x, keyFn) {
+    let kf = asFn(keyFn);
+    let items = seqItems(x);
+    if (len(items) == 0) { return nil; }
+    let best = items[0];
+    let bk = kf(best);
+    let i = 1;
+    while (i < len(items)) {
+        let k = kf(items[i]);
+        if (cmpValues(k, bk) > 0) { best = items[i]; bk = k; }
+        i = i + 1;
+    }
+    return best;
+}
+
+// ───────────────────────── تجميع ─────────────────────────
+
+fun _keyText(k) { return str(k); }
+
+// groupOver(x, keyFn) -> {مفتاح: [عناصر]}  (المفتاح يتحوّل لنص)
+fun groupOver(x, keyFn) {
+    let kf = asFn(keyFn);
+    let items = seqItems(x);
+    let out = {};
+    let i = 0;
+    while (i < len(items)) {
+        let k = _keyText(kf(items[i]));
+        if (!has(out, k)) { out[k] = []; }
+        push(out[k], items[i]);
+        i = i + 1;
+    }
+    return out;
+}
+
+// indexBy(x, keyFn) -> {مفتاح: عنصر}  (الأخير يفوز عند التكرار)
+fun indexBy(x, keyFn) {
+    let kf = asFn(keyFn);
+    let items = seqItems(x);
+    let out = {};
+    let i = 0;
+    while (i < len(items)) { out[_keyText(kf(items[i]))] = items[i]; i = i + 1; }
+    return out;
+}
+
+// countBy(x, keyFn) -> {مفتاح: عدد}
+fun countBy(x, keyFn) {
+    let kf = asFn(keyFn);
+    let items = seqItems(x);
+    let out = {};
+    let i = 0;
+    while (i < len(items)) {
+        let k = _keyText(kf(items[i]));
+        if (!has(out, k)) { out[k] = 0; }
+        out[k] = out[k] + 1;
+        i = i + 1;
+    }
+    return out;
+}
+
+// tally(x) -> {قيمة: تكرارها}
+fun tally(x) { return countBy(x, identity); }
+
+// partitionOver(x, pred) -> [المطابقة, غير المطابقة]
+fun partitionOver(x, pred) {
+    let p = asFn(pred);
+    let items = seqItems(x);
+    let yes = [];
+    let no = [];
+    let i = 0;
+    while (i < len(items)) {
+        if (p(items[i])) { push(yes, items[i]); } else { push(no, items[i]); }
+        i = i + 1;
+    }
+    return [yes, no];
+}
+
+// إزالة التكرار حسب مفتاح (يُبقي أول ظهور)
+fun uniqBy(x, keyFn) {
+    let kf = asFn(keyFn);
+    let items = seqItems(x);
+    let seen = Set();
+    let out = [];
+    let i = 0;
+    while (i < len(items)) {
+        let k = str(kf(items[i]));
+        if (!seen.has(k)) { seen.add(k); push(out, items[i]); }
+        i = i + 1;
+    }
+    return out;
+}
+
+fun uniqOver(x) { return uniqBy(x, identity); }
+
+// ───────────────────────── تقطيع ─────────────────────────
+
+fun takeOver(x, n) {
+    let items = seqItems(x);
+    let out = [];
+    let i = 0;
+    while (i < len(items) and i < n) { push(out, items[i]); i = i + 1; }
+    return out;
+}
+
+fun dropOver(x, n) {
+    let items = seqItems(x);
+    let out = [];
+    let i = n < 0 ? 0 : n;
+    while (i < len(items)) { push(out, items[i]); i = i + 1; }
+    return out;
+}
+
+fun sliceOver(x, from, to) {
+    let items = seqItems(x);
+    let out = [];
+    let i = from < 0 ? 0 : from;
+    while (i < len(items) and i < to) { push(out, items[i]); i = i + 1; }
+    return out;
+}
+
+fun takeWhileOver(x, pred) {
+    let p = asFn(pred);
+    let items = seqItems(x);
+    let out = [];
+    let i = 0;
+    while (i < len(items) and p(items[i])) { push(out, items[i]); i = i + 1; }
+    return out;
+}
+
+fun dropWhileOver(x, pred) {
+    let p = asFn(pred);
+    let items = seqItems(x);
+    let i = 0;
+    while (i < len(items) and p(items[i])) { i = i + 1; }
+    let out = [];
+    while (i < len(items)) { push(out, items[i]); i = i + 1; }
+    return out;
+}
+
+fun chunkOver(x, size) {
+    let items = seqItems(x);
+    let out = [];
+    if (size <= 0) { return out; }
+    let i = 0;
+    while (i < len(items)) {
+        let g = [];
+        let j = i;
+        while (j < len(items) and j < i + size) { push(g, items[j]); j = j + 1; }
+        push(out, g);
+        i = i + size;
+    }
+    return out;
+}
+
+// نوافذ منزلقة بطول size: windowOver([1,2,3,4], 2) -> [[1,2],[2,3],[3,4]]
+fun windowOver(x, size) {
+    let items = seqItems(x);
+    let out = [];
+    if (size <= 0) { return out; }
+    let i = 0;
+    while (i + size <= len(items)) {
+        let g = [];
+        let j = i;
+        while (j < i + size) { push(g, items[j]); j = j + 1; }
+        push(out, g);
+        i = i + 1;
+    }
+    return out;
+}
+
+// rangeOf(from, to, step): من from (شاملة) إلى to (غير شاملة). step موجبة أو سالبة.
+fun rangeOf(from, to, step) {
+    let out = [];
+    if (step == 0) { return out; }
+    let v = from;
+    if (step > 0) { while (v < to) { push(out, v); v = v + step; } }
+    else { while (v > to) { push(out, v); v = v + step; } }
+    return out;
+}
+
+fun repeatOver(v, n) {
+    let out = [];
+    let i = 0;
+    while (i < n) { push(out, v); i = i + 1; }
+    return out;
+}
+
+// ───────────────────────── ضمّ ─────────────────────────
+
+// zipWith(a, b, f): f(x, y) لكل زوج (بأقصر الطولين)
+fun zipWith(a, b, f) {
+    let g = asFn(f);
+    let xs = seqItems(a);
+    let ys = seqItems(b);
+    let out = [];
+    let n = len(xs);
+    if (len(ys) < n) { n = len(ys); }
+    let i = 0;
+    while (i < n) { push(out, g(xs[i], ys[i])); i = i + 1; }
+    return out;
+}
+
+fun zipAll(a, b) { return zipWith(a, b, fun(x, y) { return [x, y]; }); }
+
+fun unzipPairs(pairs) {
+    let l = [];
+    let r = [];
+    let i = 0;
+    while (i < len(pairs)) { push(l, pairs[i][0]); push(r, pairs[i][1]); i = i + 1; }
+    return [l, r];
+}
+
+fun flatMapOver(x, f) {
+    let g = asFn(f);
+    let items = seqItems(x);
+    let out = [];
+    let i = 0;
+    while (i < len(items)) {
+        let r = g(items[i]);
+        if (valueKind(r) == "array") {
+            let j = 0;
+            while (j < len(r)) { push(out, r[j]); j = j + 1; }
+        } else { push(out, r); }
+        i = i + 1;
+    }
+    return out;
+}
+
+// تسطيح كل مستويات المصفوفات المتداخلة
+fun flattenDeep(x) {
+    let out = [];
+    let items = seqItems(x);
+    let i = 0;
+    while (i < len(items)) {
+        if (valueKind(items[i]) == "array") {
+            let inner = flattenDeep(items[i]);
+            let j = 0;
+            while (j < len(inner)) { push(out, inner[j]); j = j + 1; }
+        } else { push(out, items[i]); }
+        i = i + 1;
+    }
+    return out;
+}
+
+fun intersperse(x, sep) {
+    let items = seqItems(x);
+    let out = [];
+    let i = 0;
+    while (i < len(items)) {
+        if (i > 0) { push(out, sep); }
+        push(out, items[i]);
+        i = i + 1;
+    }
+    return out;
+}
+
+// ───────────────────────── بحث وعدّ ─────────────────────────
+
+fun findOver(x, pred) {
+    let p = asFn(pred);
+    let items = seqItems(x);
+    let i = 0;
+    while (i < len(items)) { if (p(items[i])) { return items[i]; } i = i + 1; }
+    return nil;
+}
+
+fun findIndexOver(x, pred) {
+    let p = asFn(pred);
+    let items = seqItems(x);
+    let i = 0;
+    while (i < len(items)) { if (p(items[i])) { return i; } i = i + 1; }
+    return -1;
+}
+
+fun anyOver(x, pred) { return findIndexOver(x, pred) >= 0; }
+
+fun allOver(x, pred) {
+    let p = asFn(pred);
+    let items = seqItems(x);
+    let i = 0;
+    while (i < len(items)) { if (!p(items[i])) { return false; } i = i + 1; }
+    return true;
+}
+
+fun noneOver(x, pred) { return !anyOver(x, pred); }
+
+fun countOver(x, pred) {
+    let p = asFn(pred);
+    let items = seqItems(x);
+    let n = 0;
+    let i = 0;
+    while (i < len(items)) { if (p(items[i])) { n = n + 1; } i = i + 1; }
+    return n;
+}
+
+fun sumBy(x, f) {
+    let g = asFn(f);
+    let items = seqItems(x);
+    let total = 0;
+    let i = 0;
+    while (i < len(items)) { total = total + g(items[i]); i = i + 1; }
+    return total;
+}
+
+// scan(x, f, init): كل القيم الوسيطة للاختزال (تبدأ بـ init)
+fun scan(x, f, init) {
+    let items = seqItems(x);
+    let acc = init;
+    let out = [init];
+    let i = 0;
+    while (i < len(items)) { acc = f(acc, items[i]); push(out, acc); i = i + 1; }
+    return out;
+}
+
+fun firstOf(x, fallback) {
+    let items = seqItems(x);
+    if (len(items) == 0) { return fallback; }
+    return items[0];
+}
+
+fun lastOf(x, fallback) {
+    let items = seqItems(x);
+    if (len(items) == 0) { return fallback; }
+    return items[len(items) - 1];
+}
+)CMPSEQ";
+
+static const char* kLib_compose_path_og_rin = R"CMPPATH(
+// ============================================================================
+//  lib/compose_path.og.rin — الوصول والتعديل بالمسارات داخل أي بنية متداخلة
+//  (مساعدة لـ compose)
+//
+//  المسار: مصفوفة مقاطع ["a", 0, "b"] أو نص منقّط "a.0.b" (المقطع الرقمي يُفهم كفهرس
+//  حين يكون الهدف array، وكمفتاح حين يكون map). تعمل على map/array/كائن class.
+//
+//    قراءة    : getIn  hasIn  pathOf  leafPaths  findPaths
+//    كتابة    : setIn (غير مُعدِّلة)  putIn (في المكان)  updateIn  deleteIn
+//    تسطيح    : flattenKeys  unflattenKeys
+//    شكل      : keepKeys  dropKeys  renameKeys  mapKeys  invertMap  dropNil  withDefaults
+//    مشي      : walkValues  mapLeaves  cloneDeep
+//
+//  استيراد:  @import "lib/compose_path.og.rin";   (تستورد compose تلقائياً)
+// ============================================================================
+@import "compose";
+
+// ───────────────────────── المسارات ─────────────────────────
+
+// نص رقمي صحيح؟  "12" -> true   "a1" -> false
+fun _isIndexText(s) {
+    if (type(s) != "string" or len(s) == 0) { return false; }
+    let i = 0;
+    while (i < len(s)) {
+        let c = ord(substr(s, i, 1));
+        if (c < 48 or c > 57) { return false; }
+        i = i + 1;
+    }
+    return true;
+}
+
+// pathOf("a.0.b") -> ["a", "0", "b"]   pathOf(["a", 0]) -> ["a", 0]   pathOf(nil) -> []
+fun pathOf(p) {
+    if (type(p) == "array") { return p; }
+    if (p == nil) { return []; }
+    if (type(p) == "number") { return [p]; }
+    if (p == "") { return []; }
+    return split(p, ".");
+}
+
+// مقطع -> مفتاح مناسب لنوع الحاوية
+fun _segFor(holder, seg) {
+    if (valueKind(holder) == "array") {
+        if (type(seg) == "number") { return seg; }
+        if (_isIndexText(seg)) { return number(seg); }
+        return nil;
+    }
+    return seg;
+}
+
+// خطوة واحدة للأسفل: (found, value)
+fun _stepIn(cur, seg) {
+    let k = valueKind(cur);
+    if (k == "array") {
+        let idx = _segFor(cur, seg);
+        if (idx == nil or idx < 0 or idx >= len(cur)) { return [false, nil]; }
+        return [true, cur[idx]];
+    }
+    if (k == "map" or k == "instance") {
+        let m = asMap(cur);
+        if (has(m, seg)) { return [true, m[seg]]; }
+        if (type(seg) == "number" and has(m, str(seg))) { return [true, m[str(seg)]]; }
+        if (_isIndexText(seg) and has(m, number(seg))) { return [true, m[number(seg)]]; }
+        return [false, nil];
+    }
+    return [false, nil];
+}
+
+fun hasIn(x, path) {
+    let segs = pathOf(path);
+    let cur = x;
+    let i = 0;
+    while (i < len(segs)) {
+        let r = _stepIn(cur, segs[i]);
+        if (!r[0]) { return false; }
+        cur = r[1];
+        i = i + 1;
+    }
+    return true;
+}
+
+// getIn(x, path, fallback): القيمة عند المسار أو fallback إن لم يوجد
+fun getIn(x, path, fallback) {
+    let segs = pathOf(path);
+    let cur = x;
+    let i = 0;
+    while (i < len(segs)) {
+        let r = _stepIn(cur, segs[i]);
+        if (!r[0]) { return fallback; }
+        cur = r[1];
+        i = i + 1;
+    }
+    return cur;
+}
+
+// ───────────────────────── نسخ ─────────────────────────
+
+fun _shallow(x) {
+    let k = valueKind(x);
+    if (k == "array") { return concat([], x); }
+    if (k == "map") { return mergeWith({}, x, "override"); }
+    if (k == "set") { return Set(x.toArray()); }
+    if (k == "instance") { return mergeWith({}, x, "override"); }
+    return x;
+}
+
+// نسخة عميقة لـ map/array/Set (الكائنات تتحوّل إلى map بحقولها)
+fun cloneDeep(x) {
+    let k = valueKind(x);
+    if (k == "array") {
+        let out = [];
+        let i = 0;
+        while (i < len(x)) { push(out, cloneDeep(x[i])); i = i + 1; }
+        return out;
+    }
+    if (k == "map" or k == "instance") {
+        let m = asMap(x);
+        let out = {};
+        let ks = keys(m);
+        let i = 0;
+        while (i < len(ks)) { out[ks[i]] = cloneDeep(m[ks[i]]); i = i + 1; }
+        return out;
+    }
+    if (k == "set") {
+        let out = Set();
+        for (let e in x) { out.add(cloneDeep(e)); }
+        return out;
+    }
+    return x;
+}
+
+// ───────────────────────── كتابة ─────────────────────────
+
+fun _emptyFor(nextSeg) {
+    if (type(nextSeg) == "number") { return []; }
+    return {};
+}
+
+// setIn(x, path, value) -> بنية جديدة (الأصل لا يتغير؛ ما لا يمسّه المسار يُشارَك)
+fun setIn(x, path, value) {
+    let segs = pathOf(path);
+    if (len(segs) == 0) { return value; }
+    return _setAt(x, segs, 0, value);
+}
+
+fun _setAt(cur, segs, depth, value) {
+    let seg = segs[depth];
+    let last = depth == len(segs) - 1;
+    let k = valueKind(cur);
+    if (k == "array" and _segFor(cur, seg) != nil) {
+        let idx = _segFor(cur, seg);
+        let out = concat([], cur);
+        while (len(out) <= idx) { push(out, nil); }
+        if (last) { out[idx] = value; }
+        else { out[idx] = _setAt(out[idx], segs, depth + 1, value); }
+        return out;
+    }
+    let base = {};
+    if (k == "map" or k == "instance") { base = mergeWith({}, cur, "override"); }
+    if (last) { base[seg] = value; return base; }
+    let child = nil;
+    if (has(base, seg)) { child = base[seg]; }
+    if (child == nil) { child = _emptyFor(segs[depth + 1]); }
+    base[seg] = _setAt(child, segs, depth + 1, value);
+    return base;
+}
+
+// putIn(x, path, value): نفس setIn لكن في المكان (x يجب أن يكون map/array) ويُرجع x
+fun putIn(x, path, value) {
+    let segs = pathOf(path);
+    if (len(segs) == 0) { throw "putIn: المسار فارغ"; }
+    let cur = x;
+    let i = 0;
+    while (i < len(segs) - 1) {
+        let r = _stepIn(cur, segs[i]);
+        let child = r[1];
+        if (!r[0] or child == nil or (valueKind(child) != "map" and valueKind(child) != "array")) {
+            child = _emptyFor(segs[i + 1]);
+            if (valueKind(cur) == "array") { cur[_segFor(cur, segs[i])] = child; }
+            else { cur[segs[i]] = child; }
+        }
+        cur = child;
+        i = i + 1;
+    }
+    let lastSeg = segs[len(segs) - 1];
+    if (valueKind(cur) == "array") {
+        let idx = _segFor(cur, lastSeg);
+        while (len(cur) <= idx) { push(cur, nil); }
+        cur[idx] = value;
+    } else { cur[lastSeg] = value; }
+    return x;
+}
+
+// updateIn(x, path, f): القيمة الجديدة = f(القيمة الحالية أو nil)
+fun updateIn(x, path, f) {
+    let g = asFn(f);
+    return setIn(x, path, g(getIn(x, path, nil)));
+}
+
+// deleteIn(x, path) -> بنية جديدة بدون المسار (غير موجود: نفس x)
+fun deleteIn(x, path) {
+    let segs = pathOf(path);
+    if (len(segs) == 0 or !hasIn(x, segs)) { return x; }
+    return _deleteAt(x, segs, 0);
+}
+
+fun _deleteAt(cur, segs, depth) {
+    let seg = segs[depth];
+    let last = depth == len(segs) - 1;
+    if (valueKind(cur) == "array") {
+        let idx = _segFor(cur, seg);
+        let out = [];
+        let i = 0;
+        while (i < len(cur)) {
+            if (i == idx) {
+                if (!last) { push(out, _deleteAt(cur[i], segs, depth + 1)); }
+            } else { push(out, cur[i]); }
+            i = i + 1;
+        }
+        return out;
+    }
+    let m = asMap(cur);
+    let out = {};
+    let ks = keys(m);
+    let i = 0;
+    while (i < len(ks)) {
+        let same = ks[i] == seg or str(ks[i]) == str(seg);
+        if (same) {
+            if (!last) { out[ks[i]] = _deleteAt(m[ks[i]], segs, depth + 1); }
+        } else { out[ks[i]] = m[ks[i]]; }
+        i = i + 1;
+    }
+    return out;
+}
+
+// ───────────────────────── مشي وتسطيح ─────────────────────────
+
+// leafPaths(x) -> كل مسارات الأوراق (قيم ليست map/array) كمصفوفات مقاطع
+fun leafPaths(x) {
+    let out = [];
+    _collectLeaves(x, [], out);
+    return out;
+}
+
+fun _collectLeaves(cur, prefix, out) {
+    let k = valueKind(cur);
+    if (k == "array" and len(cur) > 0) {
+        let i = 0;
+        while (i < len(cur)) { _collectLeaves(cur[i], concat(prefix, [i]), out); i = i + 1; }
+        return nil;
+    }
+    if ((k == "map" or k == "instance") and len(asMap(cur)) > 0) {
+        let m = asMap(cur);
+        let ks = keys(m);
+        let i = 0;
+        while (i < len(ks)) { _collectLeaves(m[ks[i]], concat(prefix, [ks[i]]), out); i = i + 1; }
+        return nil;
+    }
+    push(out, prefix);
+    return nil;
+}
+
+// findPaths(x, pred) -> مسارات الأوراق التي تحقق الشرط
+fun findPaths(x, pred) {
+    let p = asFn(pred);
+    let all = leafPaths(x);
+    let out = [];
+    let i = 0;
+    while (i < len(all)) {
+        if (p(getIn(x, all[i], nil))) { push(out, all[i]); }
+        i = i + 1;
+    }
+    return out;
+}
+
+fun _joinSegs(segs, sep) {
+    let out = "";
+    let i = 0;
+    while (i < len(segs)) {
+        if (i > 0) { out = out + sep; }
+        out = out + str(segs[i]);
+        i = i + 1;
+    }
+    return out;
+}
+
+// flattenKeys(x, sep): {"a": {"b": 1}, "c": [5]} -> {"a.b": 1, "c.0": 5}
+fun flattenKeys(x, sep) {
+    let paths = leafPaths(x);
+    let out = {};
+    let i = 0;
+    while (i < len(paths)) {
+        out[_joinSegs(paths[i], sep)] = getIn(x, paths[i], nil);
+        i = i + 1;
+    }
+    return out;
+}
+
+// unflattenKeys(m, sep): عكس flattenKeys (المقاطع الرقمية تبقى مفاتيح map نصية)
+fun unflattenKeys(m, sep) {
+    let out = {};
+    let ks = keys(m);
+    let i = 0;
+    while (i < len(ks)) {
+        putIn(out, split(str(ks[i]), sep), m[ks[i]]);
+        i = i + 1;
+    }
+    return out;
+}
+
+// walkValues(x, f): يطبّق f على كل عقدة من الأسفل للأعلى ويُعيد بنية جديدة
+fun walkValues(x, f) {
+    let k = valueKind(x);
+    let rebuilt = x;
+    if (k == "array") {
+        rebuilt = [];
+        let i = 0;
+        while (i < len(x)) { push(rebuilt, walkValues(x[i], f)); i = i + 1; }
+    } else if (k == "map" or k == "instance") {
+        let m = asMap(x);
+        rebuilt = {};
+        let ks = keys(m);
+        let i = 0;
+        while (i < len(ks)) { rebuilt[ks[i]] = walkValues(m[ks[i]], f); i = i + 1; }
+    }
+    return f(rebuilt);
+}
+
+// mapLeaves(x, f): يطبّق f على الأوراق فقط (غير map/array) ويحفظ الشكل
+fun mapLeaves(x, f) {
+    return walkValues(x, fun(v) {
+        let k = valueKind(v);
+        if (k == "map" or k == "array" or k == "instance") { return v; }
+        return f(v);
+    });
+}
+
+// ───────────────────────── أشكال map ─────────────────────────
+
+fun keepKeys(x, wanted) {
+    let m = asMap(x);
+    let out = {};
+    let i = 0;
+    while (i < len(wanted)) {
+        if (has(m, wanted[i])) { out[wanted[i]] = m[wanted[i]]; }
+        i = i + 1;
+    }
+    return out;
+}
+
+fun dropKeys(x, blocked) {
+    let m = asMap(x);
+    let skip = Set(blocked);
+    let out = {};
+    let ks = keys(m);
+    let i = 0;
+    while (i < len(ks)) {
+        if (!skip.has(ks[i])) { out[ks[i]] = m[ks[i]]; }
+        i = i + 1;
+    }
+    return out;
+}
+
+// renameKeys(x, {"old": "new"})
+fun renameKeys(x, mapping) {
+    let m = asMap(x);
+    let out = {};
+    let ks = keys(m);
+    let i = 0;
+    while (i < len(ks)) {
+        let nk = ks[i];
+        if (has(mapping, ks[i])) { nk = mapping[ks[i]]; }
+        out[nk] = m[ks[i]];
+        i = i + 1;
+    }
+    return out;
+}
+
+// mapKeys(x, f): يحوّل المفاتيح بدالة (أي مفهوم قابل للاستدعاء)
+fun mapKeys(x, f) {
+    let g = asFn(f);
+    let m = asMap(x);
+    let out = {};
+    let ks = keys(m);
+    let i = 0;
+    while (i < len(ks)) { out[g(ks[i])] = m[ks[i]]; i = i + 1; }
+    return out;
+}
+
+// invertMap({"a": 1}) -> {"1": "a"}
+fun invertMap(x) {
+    let m = asMap(x);
+    let out = {};
+    let ks = keys(m);
+    let i = 0;
+    while (i < len(ks)) { out[str(m[ks[i]])] = ks[i]; i = i + 1; }
+    return out;
+}
+
+// dropNil: يحذف الحقول التي قيمتها nil (عميقاً)
+fun dropNil(x) {
+    let k = valueKind(x);
+    if (k == "array") {
+        let out = [];
+        let i = 0;
+        while (i < len(x)) { if (x[i] != nil) { push(out, dropNil(x[i])); } i = i + 1; }
+        return out;
+    }
+    if (k == "map" or k == "instance") {
+        let m = asMap(x);
+        let out = {};
+        let ks = keys(m);
+        let i = 0;
+        while (i < len(ks)) { if (m[ks[i]] != nil) { out[ks[i]] = dropNil(m[ks[i]]); } i = i + 1; }
+        return out;
+    }
+    return x;
+}
+
+// withDefaults(x, defaults): يملأ الحقول الناقصة فقط (عميقاً) — قيم x لها الأولوية
+fun withDefaults(x, defaults) {
+    return mergeWith(defaults, x, "deep");
+}
+)CMPPATH";
+
+static const char* kLib_compose_flow_og_rin = R"CMPFLOW(
+// ============================================================================
+//  lib/compose_flow.og.rin — مُركِّبات تدفّق التحكم والنتائج (مساعدة لـ compose)
+//
+//    وسطاء    : applyArgs  spread  curry2  curry3  curryN  partialN  rpartial1
+//    ذاكرة    : memoize1  memoizeWith  once  lazy
+//    تكرار    : times  retry  iterate  until
+//    ذكاء     : cond  matchKind  juxtMap  converge  firstNonNil  defaultTo  guard
+//    نتائج    : okResult  failResult  isOkResult  tryResult  mapOk  thenResult
+//               resultOr  safeChain  collectResults  traceChain  timed
+//
+//  "Result" هو map عادية: {"ok": true, "value": v} أو {"ok": false, "error": e}،
+//  فتمرّ بلا أي نوع جديد وتُطبع وتُدمج وتُخزَّن كأي map.
+//
+//  استيراد:  @import "lib/compose_flow.og.rin";   (تستورد compose تلقائياً)
+// ============================================================================
+@import "compose";
+
+// ───────────────────────── وسطاء ─────────────────────────
+
+// applyArgs(f, [a, b, c]) == f(a, b, c)
+fun applyArgs(f, args) { return callFn(f, args); }
+
+// spread(f)(arr) == f(arr[0], arr[1], ...)
+fun spread(f) { return fun(arr) { return callFn(f, arr); }; }
+
+// curry2(f)(a)(b) == f(a, b)
+fun curry2(f) {
+    return fun(a) { return fun(b) { return f(a, b); }; };
+}
+
+fun curry3(f) {
+    return fun(a) { return fun(b) { return fun(c) { return f(a, b, c); }; }; };
+}
+
+// curryN(f, n): كاري لأي عدد وسطاء — يُستدعى بوسيط واحد كل مرة حتى يكتمل العدد n
+fun curryN(f, n) {
+    return _curryCollect(f, n, []);
+}
+
+fun _curryCollect(f, n, got) {
+    return fun(x) {
+        let next = concat(got, [x]);
+        if (len(next) >= n) { return callFn(f, next); }
+        return _curryCollect(f, n, next);
+    };
+}
+
+// partialN(f, [a, b])(c, d) == f(a, b, c, d) — تُستدعى بمصفوفة وسطاء متبقية: partialN(f, pre)(rest)
+fun partialN(f, pre) {
+    return fun(rest) { return callFn(f, concat(pre, asArray(rest))); };
+}
+
+// rpartial1(f, b)(a) == f(a, b)  — تثبيت آخر وسيط
+fun rpartial1(f, b) { return fun(a) { return f(a, b); }; }
+
+// ───────────────────────── ذاكرة ─────────────────────────
+
+// memoizeWith(f, keyFn): يخزّن نتيجة f لكل مفتاح keyFn(x). memoize1 تستعمل str(x) كمفتاح.
+fun memoizeWith(f, keyFn) {
+    let kf = asFn(keyFn);
+    let cache = {};
+    return fun(x) {
+        let k = str(kf(x));
+        if (has(cache, k)) { return cache[k]; }
+        let v = f(x);
+        cache[k] = v;
+        return v;
+    };
+}
+
+fun memoize1(f) { return memoizeWith(f, identity); }
+
+// once(f): تنفَّذ مرة واحدة فقط وتُعاد نتيجتها في كل نداء لاحق
+fun once(f) {
+    let state = {"done": false, "value": nil};
+    return fun(x) {
+        if (!state["done"]) { state["value"] = f(x); state["done"] = true; }
+        return state["value"];
+    };
+}
+
+// lazy(f): قيمة كسولة — lazy(f)() تحسب f() أول مرة فقط
+fun lazy(f) {
+    let state = {"done": false, "value": nil};
+    return fun() {
+        if (!state["done"]) { state["value"] = f(); state["done"] = true; }
+        return state["value"];
+    };
+}
+
+// ───────────────────────── تكرار ─────────────────────────
+
+// times(n, f) -> [f(0), f(1), ..., f(n-1)]
+fun times(n, f) {
+    let g = asFn(f);
+    let out = [];
+    let i = 0;
+    while (i < n) { push(out, g(i)); i = i + 1; }
+    return out;
+}
+
+// retry(f, attempts)(x): يعيد المحاولة عند الخطأ حتى attempts مرة ثم يرمي آخر خطأ
+fun retry(f, attempts) {
+    let g = asFn(f);
+    return fun(x) {
+        let lastErr = nil;
+        let i = 0;
+        while (i < attempts) {
+            let out = nil;
+            let failed = false;
+            try { out = g(x); } catch (e) { failed = true; lastErr = e; }
+            if (!failed) { return out; }
+            i = i + 1;
+        }
+        throw lastErr;
+    };
+}
+
+// iterate(f, x, n) -> [x, f(x), f(f(x)), ...] بطول n+1
+fun iterate(f, x, n) {
+    let g = asFn(f);
+    let out = [x];
+    let v = x;
+    let i = 0;
+    while (i < n) { v = g(v); push(out, v); i = i + 1; }
+    return out;
+}
+
+// until(pred, f)(x): كرّر f حتى يتحقق pred (حد أقصى 100000 خطوة للأمان)
+fun until(pred, f) {
+    let p = asFn(pred);
+    let g = asFn(f);
+    return fun(x) {
+        let v = x;
+        let guardCount = 0;
+        while (!p(v) and guardCount < 100000) { v = g(v); guardCount = guardCount + 1; }
+        return v;
+    };
+}
+
+// ───────────────────────── ذكاء ─────────────────────────
+
+// cond([[pred, f], ...])(x): أول شرط يتحقق تُنفَّذ دالته؛ لا شرط -> nil.  استعمل constant(true) كـ"وإلا".
+fun cond(pairs) {
+    let ps = [];
+    let fs = [];
+    let i = 0;
+    while (i < len(pairs)) {
+        push(ps, asFn(pairs[i][0]));
+        push(fs, asFn(pairs[i][1]));
+        i = i + 1;
+    }
+    return fun(x) {
+        let j = 0;
+        while (j < len(ps)) { if (ps[j](x)) { return fs[j](x); } j = j + 1; }
+        return nil;
+    };
+}
+
+// matchKind(handlers)(x): يوجّه حسب valueKind(x). المفاتيح: "array" "map" "set" "number" "string"
+// "bool" "nil" "function" "instance" وأخيراً "default" (اختياري).
+fun matchKind(handlers) {
+    return fun(x) {
+        let k = valueKind(x);
+        if (has(handlers, k)) { return asFn(handlers[k])(x); }
+        if (has(handlers, "default")) { return asFn(handlers["default"])(x); }
+        return nil;
+    };
+}
+
+// juxtMap({"sum": f, "n": g})(x) -> {"sum": f(x), "n": g(x)}
+fun juxtMap(fnsByName) {
+    return fun(x) {
+        let out = {};
+        let ks = keys(fnsByName);
+        let i = 0;
+        while (i < len(ks)) { out[ks[i]] = asFn(fnsByName[ks[i]])(x); i = i + 1; }
+        return out;
+    };
+}
+
+// converge(f, [g, h])(x) == f(g(x), h(x))
+fun converge(f, branches) {
+    let bs = [];
+    let i = 0;
+    while (i < len(branches)) { push(bs, asFn(branches[i])); i = i + 1; }
+    return fun(x) {
+        let args = [];
+        let j = 0;
+        while (j < len(bs)) { push(args, bs[j](x)); j = j + 1; }
+        return callFn(f, args);
+    };
+}
+
+// firstNonNil([a, b, c]): أول قيمة ليست nil
+fun firstNonNil(values) {
+    let i = 0;
+    while (i < len(values)) { if (values[i] != nil) { return values[i]; } i = i + 1; }
+    return nil;
+}
+
+// defaultTo(v)(x): x إن لم تكن nil وإلا v
+fun defaultTo(v) {
+    return fun(x) { if (x == nil) { return v; } return x; };
+}
+
+// guard(pred, message)(x): يمرّر x إن حقق الشرط وإلا يرمي message
+fun guard(pred, message) {
+    let p = asFn(pred);
+    return fun(x) {
+        if (!p(x)) { throw message; }
+        return x;
+    };
+}
+
+// ───────────────────────── نتائج ─────────────────────────
+
+fun okResult(v) { return {"ok": true, "value": v}; }
+fun failResult(e) { return {"ok": false, "error": e}; }
+fun isOkResult(r) { return type(r) == "map" and has(r, "ok") and r["ok"] == true; }
+
+// نص الخطأ من قيمة catch (map فيها message) أو من أي قيمة
+fun _errorText(e) {
+    if (type(e) == "map" and has(e, "message")) { return e["message"]; }
+    return e;
+}
+
+// tryResult(f)(x): ينفّذ f(x) ويُرجع Result بدل رمي الخطأ
+fun tryResult(f) {
+    let g = asFn(f);
+    return fun(x) {
+        let out = nil;
+        let failed = false;
+        let why = nil;
+        try { out = g(x); } catch (e) { failed = true; why = e; }
+        if (failed) { return failResult(_errorText(why)); }
+        return okResult(out);
+    };
+}
+
+// mapOk(r, f): يطبّق f على value إن نجحت النتيجة (الفشل يمرّ كما هو)
+fun mapOk(r, f) {
+    if (!isOkResult(r)) { return r; }
+    return tryResult(f)(r["value"]);
+}
+
+// thenResult(r, f): f تُرجع Result بنفسها (للتسلسل)
+fun thenResult(r, f) {
+    if (!isOkResult(r)) { return r; }
+    return asFn(f)(r["value"]);
+}
+
+fun resultOr(r, fallback) {
+    if (isOkResult(r)) { return r["value"]; }
+    return fallback;
+}
+
+// safeChain(stages)(x): chain يتوقف عند أول خطأ ويُرجع Result
+fun safeChain(stages) {
+    let fns = [];
+    let i = 0;
+    while (i < len(stages)) { push(fns, tryResult(stages[i])); i = i + 1; }
+    return fun(x) {
+        let r = okResult(x);
+        let j = 0;
+        while (j < len(fns) and isOkResult(r)) { r = fns[j](r["value"]); j = j + 1; }
+        return r;
+    };
+}
+
+// collectResults([r1, r2]): كلها نجحت -> ok(قائمة القيم) وإلا أول فشل
+fun collectResults(results) {
+    let vals = [];
+    let i = 0;
+    while (i < len(results)) {
+        if (!isOkResult(results[i])) { return results[i]; }
+        push(vals, results[i]["value"]);
+        i = i + 1;
+    }
+    return okResult(vals);
+}
+
+// traceChain(stages)(x) -> {"result": Result, "steps": [{"stage": i, "in": v, "out": w}]}
+// للتتبّع: يسجّل دخل وخرج كل مرحلة ويتوقف عند الخطأ.
+fun traceChain(stages) {
+    let fns = [];
+    let i = 0;
+    while (i < len(stages)) { push(fns, asFn(stages[i])); i = i + 1; }
+    return fun(x) {
+        let steps = [];
+        let v = x;
+        let j = 0;
+        while (j < len(fns)) {
+            let out = nil;
+            let failed = false;
+            let why = nil;
+            try { out = fns[j](v); } catch (e) { failed = true; why = e; }
+            if (failed) {
+                push(steps, {"stage": j, "in": v, "error": _errorText(why)});
+                return {"result": failResult(_errorText(why)), "steps": steps};
+            }
+            push(steps, {"stage": j, "in": v, "out": out});
+            v = out;
+            j = j + 1;
+        }
+        return {"result": okResult(v), "steps": steps};
+    };
+}
+
+// timed(f)(x) -> {"value": f(x), "ms": الزمن بالميلي ثانية}
+fun timed(f) {
+    let g = asFn(f);
+    return fun(x) {
+        let t0 = time.now()["epoch"];
+        let v = g(x);
+        let t1 = time.now()["epoch"];
+        return {"value": v, "ms": t1 - t0};
+    };
+}
+)CMPFLOW";
+
+static const char* kLib_compose_schema_og_rin = R"CMPSCHEMA(
+// ============================================================================
+//  lib/compose_schema.og.rin — مخططات تحقّق وتطبيع على أي بنية (مساعدة لـ compose)
+//
+//  المخطّط (schema) map عادية، وله اختصارات:
+//      "number"                      نوع فقط            (valueKind: nil bool number string
+//                                                         array map set function instance any)
+//      Set(["a", "b"])               قيمة من مجموعة (enum)
+//      fun(v) { return v > 0; }      شرط مخصّص
+//      [مخطّط]                       array كل عناصرها بهذا المخطّط
+//      {"name": "string", "age": ...}  map لها هذه الحقول (كلها مطلوبة)
+//
+//  المفاتيح الكاملة:
+//      type  nullable  required(مصفوفة أسماء)  fields(map)  items  min  max  length
+//      enum  equals  check(دالة)  oneOf(مصفوفة مخططات)  allOf  default  coerce  message
+//
+//    schemaCheck(schema, value)   -> {"ok": bool, "errors": [{"path": "a.b", "message": "..."}]}
+//    schemaConform(schema, value) -> Result: {"ok": true, "value": المُطبَّعة} أو {"ok": false, "errors": [...]}
+//                                    يملأ default ويحوّل الأنواع عند coerce:true
+//    schemaAssert(schema, value)  -> value أو يرمي نص الأخطاء
+//    schemaOf(value)              -> مخطّط مُستنتَج من قيمة نموذجية
+//    isValid(schema, value)       -> bool
+//    schemaErrors(result)         -> نصوص الأخطاء "path: message"
+//
+//  استيراد:  @import "lib/compose_schema.og.rin";   (تستورد compose + compose_path)
+// ============================================================================
+@import "compose";
+@import "compose_path";
+
+fun _schemaKeys() {
+    return Set(["type", "nullable", "required", "fields", "items", "min", "max", "length",
+                "enum", "equals", "check", "oneOf", "allOf", "default", "coerce", "message"]);
+}
+
+// توحيد الاختصارات إلى map كاملة
+fun schemaNormalize(s) {
+    let k = valueKind(s);
+    if (k == "string") { return {"type": s}; }
+    if (k == "set") { return {"enum": s}; }
+    if (k == "function") { return {"check": s}; }
+    if (k == "array") {
+        if (len(s) == 0) { return {"type": "array"}; }
+        return {"type": "array", "items": s[0]};
+    }
+    if (k == "map") {
+        let ks = keys(s);
+        let i = 0;
+        while (i < len(ks)) {
+            if (_schemaKeys().has(ks[i])) { return s; }
+            i = i + 1;
+        }
+        // map بلا أي مفتاح مخطّط: اختصار الحقول
+        return {"type": "map", "fields": s};
+    }
+    return {"type": "any"};
+}
+
+fun _fail(path, message) { return {"path": _joinSegs(path, "."), "message": message}; }
+
+fun _lenOf(v) {
+    let k = valueKind(v);
+    if (k == "string" or k == "array") { return len(v); }
+    if (k == "map") { return len(v); }
+    if (k == "set") { return v.size(); }
+    return nil;
+}
+
+// تحويل قيمة لنوع مطلوب عند coerce:true (يُرجع القيمة نفسها إن تعذّر)
+fun _coerceTo(want, v) {
+    let have = valueKind(v);
+    if (have == want) { return v; }
+    if (want == "number" and have == "string") {
+        let out = v;
+        try { out = number(trim(v)); } catch (e) { out = v; }
+        return out;
+    }
+    if (want == "string" and (have == "number" or have == "bool")) { return str(v); }
+    if (want == "bool" and have == "string") {
+        let t = lower(trim(v));
+        if (t == "true" or t == "yes" or t == "1") { return true; }
+        if (t == "false" or t == "no" or t == "0") { return false; }
+        return v;
+    }
+    if (want == "bool" and have == "number") { return v != 0; }
+    if (want == "array" and have != "nil") { return asArray(v); }
+    if (want == "set" and have == "array") { return Set(v); }
+    return v;
+}
+
+// الفحص الأساسي: يُرجع قائمة أخطاء، ويبني value المُطبَّعة في out["value"] إن طُلب conform
+fun _run(schema, value, path, conform, out) {
+    let s = schemaNormalize(schema);
+    let errors = [];
+    let v = value;
+    let msg = nil;
+    if (has(s, "message")) { msg = s["message"]; }
+
+    if (v == nil and has(s, "default")) { v = s["default"]; }
+    if (v == nil) {
+        if (has(s, "nullable") and s["nullable"] == true) { out["value"] = v; return errors; }
+        if (has(s, "default")) { out["value"] = v; return errors; }
+        if (has(s, "type") and s["type"] == "nil") { out["value"] = v; return errors; }
+        if (has(s, "type") and s["type"] == "any" and !has(s, "fields") and !has(s, "check")) {
+            out["value"] = v;
+            return errors;
+        }
+        push(errors, _fail(path, msg == nil ? "القيمة مطلوبة" : msg));
+        out["value"] = v;
+        return errors;
+    }
+
+    if (has(s, "type") and s["type"] != "any") {
+        if (conform and has(s, "coerce") and s["coerce"] == true) { v = _coerceTo(s["type"], v); }
+        let sameKind = valueKind(v) == s["type"] or (s["type"] == "map" and valueKind(v) == "instance");
+        if (!sameKind) {
+            push(errors, _fail(path, msg == nil ? "النوع المتوقع " + s["type"] + " لكن وُجد " + valueKind(v) : msg));
+            out["value"] = v;
+            return errors;
+        }
+    }
+
+    let kind = valueKind(v);
+
+    if (has(s, "equals") and v != s["equals"]) {
+        push(errors, _fail(path, msg == nil ? "يجب أن تساوي " + str(s["equals"]) : msg));
+    }
+    if (has(s, "enum")) {
+        let allowed = asSet(s["enum"]);
+        if (!allowed.has(v)) { push(errors, _fail(path, msg == nil ? "قيمة غير مسموحة: " + str(v) : msg)); }
+    }
+    if (has(s, "min")) {
+        let measure = kind == "number" ? v : _lenOf(v);
+        if (measure != nil and measure < s["min"]) {
+            push(errors, _fail(path, msg == nil ? "أصغر من الحد الأدنى " + str(s["min"]) : msg));
+        }
+    }
+    if (has(s, "max")) {
+        let measure = kind == "number" ? v : _lenOf(v);
+        if (measure != nil and measure > s["max"]) {
+            push(errors, _fail(path, msg == nil ? "أكبر من الحد الأقصى " + str(s["max"]) : msg));
+        }
+    }
+    if (has(s, "length")) {
+        let n = _lenOf(v);
+        if (n != nil and n != s["length"]) {
+            push(errors, _fail(path, msg == nil ? "الطول يجب أن يكون " + str(s["length"]) : msg));
+        }
+    }
+    if (has(s, "check")) {
+        let ok = true;
+        try { ok = s["check"](v); } catch (e) { ok = false; }
+        if (!ok) { push(errors, _fail(path, msg == nil ? "فشل الشرط المخصّص" : msg)); }
+    }
+    if (has(s, "allOf")) {
+        let i = 0;
+        while (i < len(s["allOf"])) {
+            let sub = {};
+            let errs = _run(s["allOf"][i], v, path, conform, sub);
+            let j = 0;
+            while (j < len(errs)) { push(errors, errs[j]); j = j + 1; }
+            if (conform and len(errs) == 0) { v = sub["value"]; }
+            i = i + 1;
+        }
+    }
+    if (has(s, "oneOf")) {
+        let matched = false;
+        let i = 0;
+        while (i < len(s["oneOf"]) and !matched) {
+            let sub = {};
+            let errs = _run(s["oneOf"][i], v, path, conform, sub);
+            if (len(errs) == 0) { matched = true; if (conform) { v = sub["value"]; } }
+            i = i + 1;
+        }
+        if (!matched) { push(errors, _fail(path, msg == nil ? "لا يطابق أي مخطّط من oneOf" : msg)); }
+    }
+
+    // الحقول (map / كائن)
+    if (has(s, "fields") and (kind == "map" or kind == "instance")) {
+        let m = asMap(v);
+        let fields = s["fields"];
+        let required = nil;
+        if (has(s, "required")) { required = Set(s["required"]); }
+        let result = conform ? mergeWith({}, m, "override") : m;
+        let names = keys(fields);
+        let i = 0;
+        while (i < len(names)) {
+            let name = names[i];
+            let present = has(m, name);
+            let fs = schemaNormalize(fields[name]);
+            let isRequired = required == nil ? !(has(fs, "default") or (has(fs, "nullable") and fs["nullable"] == true)) : required.has(name);
+            if (!present and !isRequired and !has(fs, "default")) { i = i + 1; continue; }
+            let sub = {};
+            let errs = _run(fields[name], present ? m[name] : nil, concat(path, [name]), conform, sub);
+            let j = 0;
+            while (j < len(errs)) { push(errors, errs[j]); j = j + 1; }
+            if (conform and len(errs) == 0) { result[name] = sub["value"]; }
+            i = i + 1;
+        }
+        if (conform) { v = result; }
+    }
+
+    // العناصر (array / Set)
+    if (has(s, "items") and (kind == "array" or kind == "set")) {
+        let list = asArray(v);
+        let outList = [];
+        let i = 0;
+        while (i < len(list)) {
+            let sub = {};
+            let errs = _run(s["items"], list[i], concat(path, [i]), conform, sub);
+            let j = 0;
+            while (j < len(errs)) { push(errors, errs[j]); j = j + 1; }
+            push(outList, len(errs) == 0 ? sub["value"] : list[i]);
+            i = i + 1;
+        }
+        if (conform) { v = kind == "set" ? Set(outList) : outList; }
+    }
+
+    out["value"] = v;
+    return errors;
+}
+
+fun schemaCheck(schema, value) {
+    let sink = {};
+    let errors = _run(schema, value, [], false, sink);
+    return {"ok": len(errors) == 0, "errors": errors};
+}
+
+fun isValid(schema, value) { return schemaCheck(schema, value)["ok"]; }
+
+// schemaConform: يطبّق default والتحويلات (coerce) ويُرجع Result
+fun schemaConform(schema, value) {
+    let sink = {};
+    let errors = _run(schema, value, [], true, sink);
+    if (len(errors) > 0) { return {"ok": false, "errors": errors}; }
+    return {"ok": true, "value": sink["value"]};
+}
+
+fun schemaErrors(result) {
+    let out = [];
+    if (!has(result, "errors")) { return out; }
+    let i = 0;
+    while (i < len(result["errors"])) {
+        let e = result["errors"][i];
+        push(out, (e["path"] == "" ? "(root)" : e["path"]) + ": " + e["message"]);
+        i = i + 1;
+    }
+    return out;
+}
+
+fun schemaAssert(schema, value) {
+    let r = schemaCheck(schema, value);
+    if (!r["ok"]) { throw join(schemaErrors(r), "; "); }
+    return value;
+}
+
+// مخطّط مُستنتَج: map -> حقولها، array -> أول عنصر، غير ذلك -> نوعها
+fun schemaOf(value) {
+    let k = valueKind(value);
+    if (k == "map" or k == "instance") {
+        let m = asMap(value);
+        let fields = {};
+        let ks = keys(m);
+        let i = 0;
+        while (i < len(ks)) { fields[ks[i]] = schemaOf(m[ks[i]]); i = i + 1; }
+        return {"type": k, "fields": fields};
+    }
+    if (k == "array") {
+        if (len(value) == 0) { return {"type": "array"}; }
+        return {"type": "array", "items": schemaOf(value[0])};
+    }
+    return {"type": k};
+}
+)CMPSCHEMA";
+
+static const char* kLib_compose_diff_og_rin = R"CMPDIFF(
+// ============================================================================
+//  lib/compose_diff.og.rin — مقارنة البنى وتطبيق الفروق ودمج ثلاثي (مساعدة لـ compose)
+//
+//  الفرق (change) map: {"op": "add"|"remove"|"change", "path": [...], "from": قديمة, "to": جديدة}
+//
+//    diffDeep(a, b)           -> مصفوفة فروق من a إلى b (map وarray وكائن؛ الباقي بالمساواة ==)
+//    patchDeep(x, changes)    -> بنية جديدة بعد تطبيق الفروق (x لا تتغير)
+//    invertChanges(changes)   -> الفروق العكسية (patchDeep(b, invert(diff(a,b))) == a)
+//    changedPaths(a, b)       -> مسارات الفروق فقط
+//    describeChanges(changes) -> نصوص مقروءة: "+ a.b = 1" · "- a.c" · "~ a.d: 1 -> 2"
+//    merge3(base, mine, theirs) -> {"value": النتيجة, "conflicts": [مسارات]}   (دمج ثلاثي)
+//
+//  استيراد:  @import "lib/compose_diff.og.rin";   (تستورد compose + compose_path)
+// ============================================================================
+@import "compose";
+@import "compose_path";
+
+fun _isNode(x) {
+    let k = valueKind(x);
+    return k == "map" or k == "array" or k == "instance";
+}
+
+fun _diffInto(a, b, prefix, out) {
+    let ka = valueKind(a);
+    let kb = valueKind(b);
+    let bothMaps = (ka == "map" or ka == "instance") and (kb == "map" or kb == "instance");
+    if (bothMaps) {
+        let ma = asMap(a);
+        let mb = asMap(b);
+        let ksA = keys(ma);
+        let i = 0;
+        while (i < len(ksA)) {
+            let k = ksA[i];
+            if (!has(mb, k)) { push(out, {"op": "remove", "path": concat(prefix, [k]), "from": ma[k], "to": nil}); }
+            else { _diffInto(ma[k], mb[k], concat(prefix, [k]), out); }
+            i = i + 1;
+        }
+        let ksB = keys(mb);
+        let j = 0;
+        while (j < len(ksB)) {
+            if (!has(ma, ksB[j])) { push(out, {"op": "add", "path": concat(prefix, [ksB[j]]), "from": nil, "to": mb[ksB[j]]}); }
+            j = j + 1;
+        }
+        return nil;
+    }
+    if (ka == "array" and kb == "array") {
+        let common = len(a) < len(b) ? len(a) : len(b);
+        let i = 0;
+        while (i < common) { _diffInto(a[i], b[i], concat(prefix, [i]), out); i = i + 1; }
+        // الزيادة تُضاف بالترتيب، والنقص يُحذف من الأعلى فهرساً للأدنى ليبقى التطبيق المتسلسل صحيحاً
+        let k = common;
+        while (k < len(b)) { push(out, {"op": "add", "path": concat(prefix, [k]), "from": nil, "to": b[k]}); k = k + 1; }
+        let r = len(a) - 1;
+        while (r >= common) { push(out, {"op": "remove", "path": concat(prefix, [r]), "from": a[r], "to": nil}); r = r - 1; }
+        return nil;
+    }
+    if (a != b) { push(out, {"op": "change", "path": prefix, "from": a, "to": b}); }
+    return nil;
+}
+
+fun diffDeep(a, b) {
+    let out = [];
+    _diffInto(a, b, [], out);
+    return out;
+}
+
+fun changedPaths(a, b) {
+    let ch = diffDeep(a, b);
+    let out = [];
+    let i = 0;
+    while (i < len(ch)) { push(out, ch[i]["path"]); i = i + 1; }
+    return out;
+}
+
+fun patchDeep(x, changes) {
+    let cur = x;
+    let i = 0;
+    while (i < len(changes)) {
+        let c = changes[i];
+        if (c["op"] == "remove") { cur = deleteIn(cur, c["path"]); }
+        else { cur = setIn(cur, c["path"], c["to"]); }
+        i = i + 1;
+    }
+    return cur;
+}
+
+fun invertChanges(changes) {
+    let out = [];
+    let i = len(changes) - 1;
+    while (i >= 0) {
+        let c = changes[i];
+        let op = c["op"];
+        if (op == "add") { push(out, {"op": "remove", "path": c["path"], "from": c["to"], "to": nil}); }
+        else if (op == "remove") { push(out, {"op": "add", "path": c["path"], "from": nil, "to": c["from"]}); }
+        else { push(out, {"op": "change", "path": c["path"], "from": c["to"], "to": c["from"]}); }
+        i = i - 1;
+    }
+    return out;
+}
+
+fun describeChanges(changes) {
+    let out = [];
+    let i = 0;
+    while (i < len(changes)) {
+        let c = changes[i];
+        let p = _joinSegs(c["path"], ".");
+        if (c["op"] == "add") { push(out, "+ " + p + " = " + str(c["to"])); }
+        else if (c["op"] == "remove") { push(out, "- " + p); }
+        else { push(out, "~ " + p + ": " + str(c["from"]) + " -> " + str(c["to"])); }
+        i = i + 1;
+    }
+    return out;
+}
+
+// merge3: تطبيق تغييرات الطرفين على base؛ إن غيّر الطرفان المسار نفسه بقيمتين مختلفتين
+// فهو تعارض وتفوز قيمة mine ويُسجَّل المسار.
+fun merge3(base, mine, theirs) {
+    let mineCh = diffDeep(base, mine);
+    let theirCh = diffDeep(base, theirs);
+    let result = patchDeep(base, mineCh);
+    let conflicts = [];
+    let i = 0;
+    while (i < len(theirCh)) {
+        let t = theirCh[i];
+        let clash = nil;
+        let j = 0;
+        while (j < len(mineCh)) {
+            if (mineCh[j]["path"] == t["path"]) { clash = mineCh[j]; break; }
+            j = j + 1;
+        }
+        if (clash == nil) { result = patchDeep(result, [t]); }
+        else {
+            let same = clash["op"] == t["op"] and clash["to"] == t["to"];
+            if (!same) { push(conflicts, t["path"]); }
+        }
+        i = i + 1;
+    }
+    return {"value": result, "conflicts": conflicts};
+}
+)CMPDIFF";
+
+static const char* kLib_compose_store_og_rin = R"CMPSTORE(
+// ============================================================================
+//  lib/compose_store.og.rin — مخزن حالة تفاعلي (مساعد لـ compose)
+//
+//  مخزن واحد يجمع الحالة + المشتركين + القيم المشتقّة + التراجع، ويتصل بالحاويات.
+//  الحالة تُعدَّل دائماً بشكل غير مُعدِّل (setIn)، فالحالات القديمة تبقى سليمة للتراجع.
+//
+//    storeNew(initial)                  -> مخزن (map) — لا تلمس حقوله مباشرة
+//    storeGet(s, path)  storeState(s)   -> قراءة
+//    storeSet(s, path, v)  storeUpdate(s, path, f)  storeMerge(s, map)  storeReplace(s, state)
+//    storeSubscribe(s, path, fn)        -> معرّف الاشتراك؛ fn(new, old, path) عند تغيّر القيمة
+//    storeUnsubscribe(s, id)
+//    storeComputed(s, name, fn)         -> قيمة مشتقّة تُحسب عند الطلب وتُخزَّن حتى يتغيّر شيء
+//    storeRead(s, name)                 -> قراءة قيمة مشتقّة
+//    storeBatch(s, fn)                  -> تجميع تعديلات؛ الإشعارات تُرسل مرة واحدة في النهاية
+//    storeUndo(s)  storeRedo(s)  storeCanUndo(s)  storeHistoryLength(s)
+//    storeToContainer(s, path, name, key)    -> يدفع قيمة المسار إلى حقل حاوية كلما تغيّرت
+//    storeFromContainer(s, path, name, key)  -> يراقب حقل حاوية ويكتب قيمه في المخزن
+//
+//  استيراد:  @import "lib/compose_store.og.rin";   (تستورد compose + compose_path)
+// ============================================================================
+@import "compose";
+@import "compose_path";
+
+fun storeNew(initial) {
+    return {
+        "state": initial == nil ? {} : initial,
+        "subs": [],
+        "nextId": 1,
+        "computed": {},
+        "version": 0,
+        "past": [],
+        "future": [],
+        "batchDepth": 0,
+        "pending": []
+    };
+}
+
+fun storeState(s) { return s["state"]; }
+
+fun storeGet(s, path) { return getIn(s["state"], path, nil); }
+
+// أرسل الإشعارات للمشتركين المتأثرين بين حالتين
+fun _notify(s, before, after) {
+    let subs = s["subs"];
+    let i = 0;
+    while (i < len(subs)) {
+        let sub = subs[i];
+        let oldV = getIn(before, sub["path"], nil);
+        let newV = getIn(after, sub["path"], nil);
+        if (oldV != newV) { sub["fn"](newV, oldV, sub["path"]); }
+        i = i + 1;
+    }
+    return nil;
+}
+
+// طبّق حالة جديدة: سجّل للتراجع، وأشعر (أو أجّل داخل batch)
+fun _commit(s, newState, recordHistory) {
+    let before = s["state"];
+    if (before == newState) { return s; }
+    if (recordHistory) {
+        push(s["past"], before);
+        s["future"] = [];
+    }
+    s["state"] = newState;
+    s["version"] = s["version"] + 1;
+    if (s["batchDepth"] > 0) {
+        if (len(s["pending"]) == 0) { push(s["pending"], before); }
+    } else { _notify(s, before, newState); }
+    return s;
+}
+
+fun storeSet(s, path, value) { return _commit(s, setIn(s["state"], path, value), true); }
+
+fun storeUpdate(s, path, f) { return _commit(s, updateIn(s["state"], path, f), true); }
+
+fun storeMerge(s, m) { return _commit(s, mergeWith(s["state"], m, "deep"), true); }
+
+fun storeReplace(s, state) { return _commit(s, state, true); }
+
+fun storeSubscribe(s, path, fn) {
+    let id = s["nextId"];
+    s["nextId"] = id + 1;
+    push(s["subs"], {"id": id, "path": path, "fn": fn});
+    return id;
+}
+
+fun storeUnsubscribe(s, id) {
+    let keep = [];
+    let i = 0;
+    while (i < len(s["subs"])) {
+        if (s["subs"][i]["id"] != id) { push(keep, s["subs"][i]); }
+        i = i + 1;
+    }
+    let removed = len(keep) != len(s["subs"]);
+    s["subs"] = keep;
+    return removed;
+}
+
+// قيمة مشتقّة: fn(state) تُحسب عند storeRead فقط إن تغيّر version منذ آخر حساب
+fun storeComputed(s, name, fn) {
+    s["computed"][name] = {"fn": fn, "version": -1, "value": nil};
+    return s;
+}
+
+fun storeRead(s, name) {
+    let c = s["computed"][name];
+    if (c["version"] != s["version"]) {
+        c["value"] = c["fn"](s["state"]);
+        c["version"] = s["version"];
+    }
+    return c["value"];
+}
+
+// storeBatch: كل التعديلات داخل fn تُصدِر إشعاراً واحداً بالمقارنة بين الحالة الأولى والأخيرة
+fun storeBatch(s, fn) {
+    s["batchDepth"] = s["batchDepth"] + 1;
+    let failed = false;
+    let why = nil;
+    try { fn(s); } catch (e) { failed = true; why = e; }
+    s["batchDepth"] = s["batchDepth"] - 1;
+    if (s["batchDepth"] == 0 and len(s["pending"]) > 0) {
+        let before = s["pending"][0];
+        s["pending"] = [];
+        _notify(s, before, s["state"]);
+    }
+    if (failed) { throw why; }
+    return s;
+}
+
+fun storeCanUndo(s) { return len(s["past"]) > 0; }
+fun storeCanRedo(s) { return len(s["future"]) > 0; }
+fun storeHistoryLength(s) { return len(s["past"]); }
+
+fun storeUndo(s) {
+    if (len(s["past"]) == 0) { return s; }
+    let prev = pop(s["past"]);
+    push(s["future"], s["state"]);
+    _commit(s, prev, false);
+    return s;
+}
+
+fun storeRedo(s) {
+    if (len(s["future"]) == 0) { return s; }
+    let nxt = pop(s["future"]);
+    push(s["past"], s["state"]);
+    _commit(s, nxt, false);
+    return s;
+}
+
+// المخزن -> حقل حاوية: كلما تغيّرت قيمة المسار تُكتب في container[key]. يُرجع معرّف الاشتراك.
+fun storeToContainer(s, path, name, key) {
+    if (!container.exists(name)) { throw "storeToContainer: الحاوية غير موجودة: " + name; }
+    container.set(name, key, storeGet(s, path));
+    return storeSubscribe(s, path, fun(newV, oldV, p) { container.set(name, key, newV); });
+}
+
+// حقل حاوية -> المخزن: أي تغيير في container[key] يُكتب في المسار. يُرجع معرّف المراقبة.
+fun storeFromContainer(s, path, name, key) {
+    if (!container.exists(name)) { throw "storeFromContainer: الحاوية غير موجودة: " + name; }
+    return oop.watchContainer(name, key, fun(newValue, oldValue, k, c) {
+        storeSet(s, path, newValue);
+    });
+}
+)CMPSTORE";
 
 inline const std::unordered_map<std::string, std::string>& embeddedRinLibraries() {
     static const std::unordered_map<std::string, std::string> libs = {
@@ -27278,6 +29217,12 @@ inline const std::unordered_map<std::string, std::string>& embeddedRinLibraries(
         {"lib/validate.og.rin", kLib_validate_og_rin},
         {"lib/inputkit.og.rin", kLib_inputkit_og_rin},
         {"lib/functional.og.rin", kLib_functional_og_rin},
+        {"lib/compose_store.og.rin", kLib_compose_store_og_rin},
+        {"lib/compose_diff.og.rin", kLib_compose_diff_og_rin},
+        {"lib/compose_schema.og.rin", kLib_compose_schema_og_rin},
+        {"lib/compose_flow.og.rin", kLib_compose_flow_og_rin},
+        {"lib/compose_path.og.rin", kLib_compose_path_og_rin},
+        {"lib/compose_seq.og.rin", kLib_compose_seq_og_rin},
         {"lib/compose.og.rin", kLib_compose_og_rin},
         {"lib/oglang.og.rin", kLib_oglang_og_rin},
         {"lib/ringo.og.rin", kLib_ringo_og_rin},
