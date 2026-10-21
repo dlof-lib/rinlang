@@ -4,9 +4,9 @@
 
 # Rin
 
-**لغة برمجة صغيرة وواضحة — محرّك C++17 واحد يعمل من سطر الأوامر والهاتف والمتصفح**
+**لغة برمجة صغيرة وواضحة — محرّك C++23 واحد يعمل من سطر الأوامر والهاتف والمتصفح**
 
-<sub>A small, readable programming language · one C++17 engine · CLI · Android IDE · WebAssembly</sub>
+<sub>A small, readable programming language · one C++23 engine · CLI · Android IDE · WebAssembly</sub>
 
 <p>
 <a href="https://github.com/dlof-lib/rinlang/actions/workflows/rin__apk.yml"><img alt="CI" src="https://github.com/dlof-lib/rinlang/actions/workflows/rin__apk.yml/badge.svg" /></a>
