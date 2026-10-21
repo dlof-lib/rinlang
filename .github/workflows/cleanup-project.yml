@@ -1,0 +1,256 @@
+name: Cleanup & Organize Project (تنظيف وترتيب المشروع)
+
+# ───────────────────────────────────────────────────────────────────────────────
+# ينظّف المستودع ويرتّبه (يدوي فقط — Actions ← Cleanup & Organize Project ← Run workflow):
+#   • يحذف build-artifact/ (ثنائيات ~15MB مرفوضة أصلاً في .gitignore)
+#   • يحذف النسخ المتطابقة 100% من tools/test_*.cpp و verification/ (النسخة الأصلية في tests/)
+#     وينقل ما ليس له نسخة إلى tests/tools و tests/verification (الملف المختلف لا يُمسّ)
+#   • يدمج ~65 ملف CHANGES_*.md (+BUILD_REPAIR/MANIFEST_CHANGES) في CHANGELOG.md واحد
+#     ويصلح الروابط التي تشير إليها
+#   • يولّد lib/README.md (فهرس المكتبات) ويضيف كتلة مُدارة إلى .gitignore
+#   • (اختياري) يحذف سير العمل المكررة/الميتة — يحتاج سر WORKFLOW_PAT (انظر الأسفل)
+#
+# dry_run=true (الافتراضي): ينفّذ كل شيء على نسخة العمل ويعرض التقرير فقط بلا commit/push.
+#
+# ⚠️ حذف/تعديل ملفات داخل .github/workflows لا يسمح به GITHUB_TOKEN. لتفعيله: أنشئ
+#    Personal Access Token (classic: صلاحيتا repo + workflow) وأضِفه سراً باسم WORKFLOW_PAT.
+#    بدونه تُسرد الملفات في التقرير لتحذفها يدوياً.
+# ───────────────────────────────────────────────────────────────────────────────
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "تجربة فقط (بدون commit/push)"
+        type: boolean
+        default: true
+      merge_changelogs:
+        description: "دمج CHANGES_*.md في CHANGELOG.md وحذف الأصلية"
+        type: boolean
+        default: true
+
+concurrency:
+  group: cleanup-project
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.WORKFLOW_PAT || github.token }}
+
+      - name: Run cleanup
+        shell: python {0}
+        env:
+          HAVE_PAT: ${{ secrets.WORKFLOW_PAT && '1' || '0' }}
+          MERGE_CHANGELOGS: ${{ inputs.merge_changelogs && '1' || '0' }}
+          REPORT: ${{ runner.temp }}/cleanup-report.md
+        run: |
+          #!/usr/bin/env python3
+          """Rin repo cleanup: remove junk/duplicates, merge CHANGES_*.md into CHANGELOG.md,
+          generate lib/README.md. Idempotent. Env: DRY (not used to skip edits; the commit step decides),
+          HAVE_PAT=1 allows deleting .github/workflows files, MERGE_CHANGELOGS=1/0."""
+          import hashlib, os, re, shutil, subprocess, sys
+          from pathlib import Path
+
+          ROOT = Path(".").resolve()
+          LOG = []
+          def log(kind, msg): LOG.append((kind, msg)); print(f"[{kind}] {msg}")
+          def sha(p): return hashlib.sha256(Path(p).read_bytes()).hexdigest()
+          def tracked(p):
+              return subprocess.run(["git", "ls-files", "--error-unmatch", str(p)],
+                                    capture_output=True).returncode == 0
+          def remove(p, why):
+              p = Path(p)
+              if not p.exists(): return
+              if p.is_dir():
+                  shutil.rmtree(p)
+              else:
+                  p.unlink()
+              log("حذف", f"{p}  ← {why}")
+
+          # 1) بنايات ثنائية مرفوضة أصلاً في .gitignore (~15MB)
+          remove("build-artifact", "ثنائيات مبنية (مُستثناة في .gitignore) — تُبنى من جديد في CI")
+
+          # 2) نقل/دمج المجلدات القديمة إلى مواقعها الجديدة، وحذف النسخ المتطابقة فقط
+          def merge_dir(old, new, pattern="*"):
+              old, new = Path(old), Path(new)
+              if not old.is_dir(): return
+              new.mkdir(parents=True, exist_ok=True)
+              for f in sorted(old.glob(pattern)):
+                  if not f.is_file(): continue
+                  dst = new / f.name
+                  if not dst.exists():
+                      shutil.move(str(f), dst); log("نقل", f"{f} → {dst}")
+                  elif sha(f) == sha(dst):
+                      f.unlink(); log("حذف", f"{f}  ← نسخة مطابقة تماماً لـ {dst}")
+                  else:
+                      log("تخطّي", f"{f} يختلف عن {dst} — لم يُمسّ (راجعه يدوياً)")
+              if old.is_dir() and not any(old.iterdir()): old.rmdir()
+
+          merge_dir("verification", "tests/verification")
+          merge_dir("tools", "tests/tools", "test_*.cpp")
+          merge_dir("samples", "examples/samples")
+
+          # 3) سير عمل قديمة/مكرّرة (تحتاج توكن بصلاحية workflows)
+          STALE_WF = {
+              "build-signed__release.yml": "مكرّر لـ rin__apk.yml (يبني ويوقّع نفس الـ APK)",
+              "build__apk.yml": "مكرّر لـ rin__apk.yml (يبني ويوقّع نفس الـ APK)",
+              "build-apk.yml": "بناء debug على كل push لكل فرع — rin__apk.yml يغطّيه",
+              "cleanup-step.yml": "غير صالح (بلا on: ولا jobs:) فلا يعمل أصلاً",
+              "delete-loom.yml": "مهمّة لمرة واحدة؛ rin__apk.yml ينفّذ delete_loom.sh تلقائياً",
+              "delete-md.yml": "خطِر ومهمّة لمرة واحدة (يحذف كل ملفات md)",
+              "cleanup-organize.yml": "حلّ محلّه cleanup-project.yml",
+          }
+          for name, why in STALE_WF.items():
+              p = Path(".github/workflows") / name
+              if not p.exists(): continue
+              if os.environ.get("HAVE_PAT") == "1":
+                  remove(p, why)
+              else:
+                  log("يدوي", f"{p}  ← {why} (يلزم سر WORKFLOW_PAT أو احذفه بنفسك: git rm {p})")
+
+          # 4) دمج سجلات التغييرات المتفرقة في CHANGELOG.md واحد
+          if os.environ.get("MERGE_CHANGELOGS", "1") == "1":
+              srcs = sorted(p for p in Path(".").glob("CHANGES*.md")) + \
+                     [p for p in (Path("BUILD_REPAIR.md"), Path("MANIFEST_CHANGES.md")) if p.exists()]
+              srcs = [p for p in srcs if p.exists()]
+              if srcs:
+                  def title(p):
+                      s = p.stem
+                      if s == "CHANGES": return "GENERAL"
+                      return re.sub(r"^CHANGES_", "", s).replace("_", " ")
+                  def demote(text, by=2):
+                      out, fence = [], False
+                      for line in text.splitlines():
+                          if line.lstrip().startswith("```"): fence = not fence
+                          m = re.match(r"^(#{1,6})(\s.*)$", line)
+                          if m and not fence:
+                              line = "#" * min(6, len(m.group(1)) + by) + m.group(2)
+                          out.append(line)
+                      return "\n".join(out).strip()
+                  def anchor(t): return re.sub(r"[^a-z0-9-]", "", t.lower().replace(" ", "-"))
+                  order = ([p for p in srcs if p.stem == "CHANGES"] +
+                           [p for p in srcs if p.stem not in ("CHANGES",)])
+                  body, toc = [], []
+                  for p in order:
+                      t = title(p)
+                      toc.append(f"- [{t}](#{anchor(t)})")
+                      body.append(f"## {t}\n\n<sub>المصدر الأصلي: `{p.name}`</sub>\n\n"
+                                  f"{demote(p.read_text(encoding='utf-8', errors='replace'))}\n")
+                  old = Path("CHANGELOG.md")
+                  header = "# سجل التغييرات — Rin\n\n> مجمَّع آلياً من ملفات `CHANGES_*.md` المتفرّقة (انظر `cleanup-project.yml`). أضف الجديد هنا مباشرةً.\n\n"
+                  prev = old.read_text(encoding="utf-8") if old.exists() else ""
+                  if prev and "مجمَّع آلياً" not in prev:
+                      body.insert(0, f"## القديم\n\n{demote(prev)}\n"); toc.insert(0, "- [القديم](#القديم)")
+                  old.write_text(header + "## الفهرس\n\n" + "\n".join(toc) + "\n\n---\n\n" + "\n---\n\n".join(body),
+                                 encoding="utf-8")
+                  log("إنشاء", f"CHANGELOG.md ← دمج {len(srcs)} ملف")
+                  for p in srcs: remove(p, "دُمج في CHANGELOG.md")
+                  # إصلاح الروابط المكسورة في ملفات md الأخرى
+                  pat = re.compile(r"(?:\.{1,2}/)*(?:CHANGES(?:_[A-Z0-9_]+)?|BUILD_REPAIR|MANIFEST_CHANGES)\.md")
+                  for md in ROOT.rglob("*.md"):
+                      if ".git" in md.parts or md.name == "CHANGELOG.md": continue
+                      rel = md.relative_to(ROOT); depth = len(rel.parts) - 1
+                      txt = md.read_text(encoding="utf-8", errors="replace")
+                      new = pat.sub(lambda m: "../" * depth + "CHANGELOG.md" if depth else "CHANGELOG.md", txt)
+                      if new != txt: md.write_text(new, encoding="utf-8"); log("رابط", f"{rel} → CHANGELOG.md")
+
+          # 5) فهرس المكتبات lib/README.md (README الرئيسي يشير إليه)
+          lib = Path("lib")
+          if lib.is_dir():
+              rows = []
+              for f in sorted(lib.glob("*.og.rin")):
+                  head = f.read_text(encoding="utf-8", errors="replace").splitlines()[:12]
+                  desc = ""
+                  for line in head:
+                      m = re.match(r"^\s*//\s*(?:=+|-+)?\s*(?:lib/)?\S+\.og\.rin\s*[—\-:]+\s*(.+)$", line)
+                      if m: desc = m.group(1).strip(); break
+                  if not desc:
+                      for line in head:
+                          t = re.sub(r"^\s*//+\s*", "", line).strip(" =-")
+                          if t and not t.startswith("@"): desc = t; break
+                  desc = desc if len(desc) <= 110 else desc[:107].rstrip() + "..."
+                  rows.append((f.name.replace(".og.rin", ""), desc.replace("|", "\\|"), f.stat().st_size))
+              md = ["<!-- generated by cleanup-project.yml -->",
+                    "# مكتبات Rin الرسمية", "",
+                    f"**{len(rows)} مكتبة** بصيغة `.og.rin`. الاستيراد:", "",
+                    "```kotlin", '@import "lib/math.og.rin" as mathx;', "```", "",
+                    "| المكتبة | الوصف | الحجم |", "|---|---|--:|"]
+              md += [f"| `{n}` | {d} | {s/1024:.1f} KB |" for n, d, s in rows]
+              (lib / "README.md").write_text("\n".join(md) + "\n", encoding="utf-8")
+              log("إنشاء", f"lib/README.md ({len(rows)} مكتبة)")
+
+          # 6) .gitignore (كتلة مُدارة، آمنة للتكرار)
+          BEGIN, END = "# >>> cleanup-project (managed)", "# <<< cleanup-project"
+          block = f"""{BEGIN}
+          build/
+          .gradle/
+          .idea/
+          local.properties
+          *.apk
+          *.aab
+          *.class
+          *.so
+          *.log
+          *.tmp
+          *.bak
+          *.orig
+          *.rej
+          *~
+          Thumbs.db
+          *.pyc
+          node_modules/
+          {END}
+          """
+          gi = Path(".gitignore"); txt = gi.read_text() if gi.exists() else ""
+          txt = re.sub(re.escape(BEGIN) + r".*?" + re.escape(END) + r"\n?", "", txt, flags=re.S)
+          gi.write_text(txt.rstrip("\n") + "\n\n" + block)
+          log("تحديث", ".gitignore")
+
+          # 7) مجلدات فارغة
+          for d in sorted((p for p in ROOT.rglob("*") if p.is_dir() and ".git" not in p.parts), reverse=True):
+              if not any(d.iterdir()): d.rmdir(); log("حذف", f"{d.relative_to(ROOT)}/  ← مجلد فارغ")
+
+          # تقرير
+          REPORT = Path(os.environ.get("REPORT", "/tmp/cleanup-report.md"))
+          REPORT.write_text(
+              "# تقرير التنظيف\n\n| العملية | التفاصيل |\n|---|---|\n" +
+              "\n".join(f"| {k} | `{m}` |" for k, m in LOG) + "\n", encoding="utf-8")
+          print(f"\n{len(LOG)} عملية — التقرير: {REPORT}")
+
+
+      - name: Report
+        if: always()
+        run: |
+          if [ -f "${{ runner.temp }}/cleanup-report.md" ]; then
+            cat "${{ runner.temp }}/cleanup-report.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cleanup-report
+          path: ${{ runner.temp }}/cleanup-report.md
+          if-no-files-found: ignore
+
+      - name: Commit & push
+        if: ${{ inputs.dry_run == false }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "لا تغييرات — المستودع نظيف أصلاً."
+          else
+            git commit -m "chore: cleanup & organize project [skip ci]"
+            git push
+          fi
