@@ -1,0 +1,186 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>المتغيرات الحيّة (Living Variables) — Rin</title>
+<meta name="description" content="توثيق لغة البرمجة Rin"><link rel="icon" href="../assets/brand/icon-32.png">
+<link rel="stylesheet" href="assets/style.css"></head><body>
+<header><button id="mn" aria-label="القائمة">☰</button><a class="logo" href="index.html"><img src="../assets/brand/icon-48.png" alt="" width="26">Rin</a>
+<input id="q" type="search" placeholder="ابحث في التوثيق…" autocomplete="off"><button id="th" aria-label="الوضع">◐</button>
+<a class="gh" href="https://github.com/dlof-lib/rinlang">GitHub</a><div id="res"></div></header>
+<div class="wrap"><nav id="sb"><details ><summary>ابدأ هنا</summary><a href="getting-started.html">البداية</a><a href="syntax.html">القواعد النحوية العامة</a><a href="variables.html">let`، مصفوفات، قواميس، نطاق</a><a href="template-strings.html">النصوص القالبية (متغيّرات داخل النص)</a><a href="input.html">إدخال المستخدم (Input)</a><a href="control-flow.html">الشروط، الحلقات، `goal`/`achieve</a><a href="loops.html">حلقات Rin — Loops v2</a><a href="functions.html">fun`/`return`، التكرار الذاتي</a><a href="enums.html">enum`: قوائم اختيار مغلقة</a></details><details open><summary>اللغة</summary><a href="language-reference.html">المرجع الشامل وخريطة ترابط المفاهيم</a><a href="objects.html">class`/`struct`، `.object()`، `@Object`، `document</a><a href="oop.html">البرمجة الكائنية الموسَّعة (Rin 1.0)</a><a href="containers.html">دليل `@container` / `@element` / `@loop</a><a href="table.html">الجدول (`@table` / `@container.table`) ودوال اللغة عليه</a><a href="set.html">Set`: نوع المجموعة الأساسي</a><a href="pipelines.html">عامل الأنابيب `|&gt;</a><a href="RECKON.html">reckon`: مفهوم حسابي بسطرين</a><a href="let-plus.html">let` المطوَّر</a><a href="living-variables.html" class=on>المتغيرات الحيّة (Living Variables)</a><a href="label-define.html">label` و`define` (تسمية وتعريف)</a><a href="block-frames.html">بداية الكتل ونهايتها (Block Frames)</a><a href="compare_ops.html">معاملات المقارنة `/=` و `=/=` و `=/</a><a href="max_min.html">max / min family</a><a href="scope-guarantees.html">ضمانات النطاق: `finally` · `defer` · `catch … when` · `rethrow</a><a href="key_terms_and_builtins.html">Rin KEY_TERMS and Built-in Conditions</a><a href="number_builtins.html">Rin Number Built-ins</a></details><details ><summary>الواجهات (Indsin)</summary><a href="indsin.html">Indsin — Interface Design</a><a href="indsin_rin.html">indsin يعتمد على لغة Rin</a><a href="indsin_expansion.html">Indsin — التوسعة الاحترافية (Design System v2)</a><a href="indsin_object.html">indsin-object — API reference</a><a href="indsin_media.html">Indsin Media — اختيار الوسائط ورفعها</a><a href="indsin_icons.html">مكتبة أيقونات indsin (متجهية)</a><a href="indsin_tooling.html">indsin tooling — icon, file association, syntax highlighting</a><a href="indsinweb.html">IndsinWeb — مكتبة WebView والروابط لـ indsin</a><a href="RIN_ELEMENTS.html">دليل `@element.*` الكامل</a><a href="events-effects.html">الأحداث والتأثيرات (Events &amp; Effects) — محرك Indsin UI</a><a href="banner.html">Banner: إشعار شريطي</a><a href="simple-style.html">Rin Simple Style</a></details><details ><summary>بيئة التشغيل</summary><a href="runtime.html">وقت تشغيل Rin (Rin Runtime) · المرجع الرسمي</a><a href="standard-library.html">المكتبة القياسية (`lib/*.og.rin`)</a><a href="errors.html">نظام الأخطاء: أكواد، `try`/`catch`/`throw</a><a href="ERROR_SYSTEM.html">نظام التشخيص: البنية الداخلية + جدول الأكواد الكامل</a><a href="storage.html">تخزين دائم</a><a href="http.html">شبكات</a><a href="env.html">ربط Rin بملف `.env</a><a href="terminal.html">الطرفية التفاعلية — `rin terminal</a><a href="vm.html">RinVM — آلة Rin الافتراضية (بايتكود)</a><a href="rinflow.html">RinFlow: طبقة تنفيذ التدفّق المهيكل</a><a href="MAKE_UNIT.html">@make.(name)`: وحدة بسياسة قدرات صريحة</a><a href="MAKE_MEDIA.html">فيديو · صوت · API · إزالة الخلفية · قراءة النص من الصور</a><a href="TIME.html">مفهوم `time`: الزمن كقيمة من الدرجة الأولى</a><a href="native-additions.html">دوال Rin الأصلية الجديدة (Rin 1.0)</a></details><details ><summary>الحاويات وقواعد البيانات</summary><a href="container_advanced.html">Rin Container Advanced Built-ins</a><a href="container_pro.html">Rin Container Pro</a><a href="container_sql.html">RIN CONTAINER SQL (RCSQL)</a><a href="cross-file-containers.html">استدعاء إعلانات من ملف آخر</a></details><details ><summary>الحزم والتكامل</summary><a href="api.html">واجهة C المسطَّحة (Embedding API)</a><a href="android.html">استضافة Rin على أندرويد</a><a href="packages-and-interop.html">Rin 1.0 — المكتبات والحزم وجسر C++ وJSON واختبارات rintest</a><a href="rinpak-format.html">RinPak — حزمة مشروع Rin (`.rinpak`)</a><a href="html-projects.html">مشاريع HTML في Rin — الربط بين index.html وملف الحاوية</a><a href="project-og-urin.html">project.og.urin` — البيانات الوصفية لمشروع Rin</a><a href="CONTENT_PACKS.html">حزم المحتوى القابلة للتنزيل (Content Packs)</a><a href="previewkit.html">previewkit — معاينة حيّة لملفات PDF / Markdown / TypeScript</a></details><details ><summary>المكتبات المتخصصة</summary><a href="rinml.html">RinML / RinDF / RinAI — الذكاء الاصطناعي وتحليل البيانات في Rin</a><a href="STATS.html">RinStat — التحليل الإحصائي (`lib/rinstat.og.rin`)</a><a href="STATS_ADV.html">RinStat المتقدّم + RinAuto</a><a href="LINALG.html">الجبر الخطي للمهندسين — `mat*` و`vec*</a><a href="PLOT.html">RinPlot — الرسوم البيانية الإحصائية (`lib/rinplot.og.rin`)</a><a href="ALGO.html">تطوير الخوارزميات والحساب العددي — `algo*</a><a href="NUMBER.html">مفهوم `number` في Rin</a><a href="boat.html">&quot;Boat&quot;: مفاهيم أساسية مجمَّعة</a><a href="passkit.html">passkit — passwords, encryption, databases and a tag language</a><a href="passkit-crypto-db.html">Passkit feature catalog: encryption, databases and container linking</a><a href="hash-family.html">عائلة `#` — مفاهيم ودوال جديدة تبدأ بعلامة `#</a><a href="image-draw.html">إنشاء الصور في Rin — رسم وحفظ PNG وlog كصورة</a><a href="image-terminal.html">طباعة الصور في الـ terminal — `printImage` / `imageAnsi` / `imageInfo</a></details><details ><summary>المشروع</summary><a href="CONTRIBUTING.html">المساهمة في Rin</a><a href="CODE_OF_CONDUCT.html">قواعد السلوك</a><a href="SECURITY.html">سياسة الأمان</a><a href="SUPPORT.html">الحصول على المساعدة</a><a href="TRADEMARKS.html">سياسة العلامة التجارية — Trademark Policy</a><a href="THIRD_PARTY_NOTICES.html">إشعارات المكوّنات الخارجية — Third-Party Notices</a></details><details ><summary>مراجع إضافية</summary><a href="ANDROID_VERSIONS.html">حزم RinStudio لكل إصدار أندرويد</a><a href="TOKEN.html">مفهوم `token` في Rin</a><a href="TOOLCHAIN.html">Rin Professional Language Toolchain</a><a href="TOOLCHAIN_UPGRADE.html">Toolchain Upgrade — 2026-09</a><a href="architecture.html">المعمارية وبنية المستودع</a><a href="base-accept.html">base` و`accept`: متغيّران يخدمان `if</a><a href="channel47.html">channel47 — لغة وصف البيانات والإعدادات</a><a href="ci.html">CI وأدوات المستودع</a><a href="loop-templates.html">قوالب الحلقات `@tmpl</a><a href="pre-post.html">pre` و`post` (ما قبل / ما بعد): عقد انتقال حول الإسناد</a><a href="print-fonts.html">خطوط `print` — bold / italic / underline وغيرها</a><a href="print-image-terminal.html">طباعة الصور كنص في الطرفية</a><a href="print-templates.html">قوالب الطباعة `@tmpl ... print` — قوالب نصية خطية وتنسيقية</a><a href="rdoc.html">rdoc — Documentation Container</a><a href="rdoc-reference.html">وثيقة rdoc الشاملة — Documentation Container</a><a href="screenshots.html">لقطات من RinStudio</a></details></nav>
+<main><article><h1 id="living-variablesmd-living-variables">living-variables.md — المتغيرات الحيّة (Living Variables)<a class="headerlink" href="#living-variablesmd-living-variables" title="Permanent link">#</a></h1>
+<blockquote>
+<p>كل مثال هنا جُرِّب فعليًا عبر المفسِّر (انظر <code>tests/verification/living_*.rin</code> و<code>examples/living_variables_demo.rin</code>).</p>
+</blockquote>
+<p><code>let</code> متغيّر «ميت»: يخزّن قيمة فقط. المتغيرات الحيّة تضيف <strong>سلوكًا</strong> إلى الاسم نفسه، بكلمة واحدة لكل سلوك.
+كلها <strong>كلمات سياقية غير محجوزة</strong>: <code>let tape = 5;</code> و<code>fun lens(x){...}</code> ما زالا صالحين تمامًا.
+برنامج لا يستعملها لا يدفع أي كلفة (الكود كله خلف راية لا تُفعَّل إلا عند أول استعمال).</p>
+<h2 id="_1">الخريطة (من الأسهل إلى الأعمق)<a class="headerlink" href="#_1" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>المستوى</th>
+<th>الصيغة</th>
+<th>الفكرة</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>سهل</td>
+<td><code>stone x = v;</code></td>
+<td>ثابت</td>
+</tr>
+<tr>
+<td>سهل</td>
+<td><code>gauge x = v within A to B [strict\|wrap] [keep N];</code></td>
+<td>مقياس محصور في مدى</td>
+</tr>
+<tr>
+<td>متوسط</td>
+<td><code>tape x = v [keep N];</code></td>
+<td>يتذكّر: <code>undo</code> / <code>redo</code></td>
+</tr>
+<tr>
+<td>متوسط</td>
+<td><code>lens x = expr;</code></td>
+<td>مشتق يُحسب عند كل قراءة</td>
+</tr>
+<tr>
+<td>متوسط</td>
+<td><code>fuse x = v [burns N];</code></td>
+<td>يحترق (<code>nil</code>) بعد N قراءة</td>
+</tr>
+<tr>
+<td>عميق</td>
+<td><code>bell x [(old, new)] { ... }</code></td>
+<td>يرنّ عند كل تغيّر فعلي</td>
+</tr>
+<tr>
+<td>عميق</td>
+<td><code>trial { ... } [else { ... }]</code></td>
+<td>معاملة: تراجع تلقائي</td>
+</tr>
+</tbody>
+</table></div>
+<p>الأنواع <strong>تتركّب</strong>: <code>gauge hp = 50 within 0 to 100 keep 5;</code> مقياس بذاكرة، و<code>bell</code> يعمل على أي متغيّر حتى <code>let</code>.</p>
+<h2 id="stone"><code>stone</code> — ثابت<a class="headerlink" href="#stone" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">stone PI = 3.14159;
+PI = 3;                    // error[E0043]
+stone cfg = {&quot;mode&quot;: &quot;dark&quot;};
+cfg[&quot;mode&quot;] = &quot;light&quot;;     // error[E0043] — يحمي الربط والكتابة المباشرة في المحتوى
+</code></pre>
+<blockquote>
+<p>لا يمنع دوال تعدّل في المكان مثل <code>push()</code>.</p>
+</blockquote>
+<h2 id="gauge"><code>gauge</code> — مقياس<a class="headerlink" href="#gauge" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">gauge hp = 80 within 0 to 100;      // clamp (الافتراضي)
+hp = hp + 50;  print hp;            // 100
+gauge ammo = 5 within 0 to 10 strict;
+ammo = 11;                          // error[E0044]
+gauge angle = 350 within 0 to 360 wrap;
+angle = angle + 30; print angle;    // 20   (النطاق نصف مفتوح [lo, hi))
+</code></pre>
+<p>يقبل أرقامًا فقط. خصائص: <code>x.min x.max x.mode x.fill</code> (0..1) <code>x.full x.empty</code>.</p>
+<h2 id="tape"><code>tape</code> — شريط ذاكرة<a class="headerlink" href="#tape" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">tape score = 0 keep 3;          // الافتراضي keep 10
+score = 10; score = 20; score = 30; score = 40;
+print score.past;               // [10, 20, 30]
+undo score;      print score;   // 30
+undo score 2;    print score;   // 10
+redo score;      print score;   // 20
+</code></pre>
+<ul>
+<li>إسناد قيمة <strong>مختلفة</strong> فقط يُسجَّل؛ كتابة جديدة تقطع مسار <code>redo</code>.</li>
+<li>خصائص: <code>x.past x.undone x.canUndo x.canRedo x.keep</code>.</li>
+<li><code>undo</code>/<code>redo</code> بلا شيء متاح: لا أثر (اسأل <code>canUndo</code> قبلها).</li>
+</ul>
+<h2 id="lens"><code>lens</code> — مشتق<a class="headerlink" href="#lens" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">let price = 10; let qty = 3;
+lens total = price * qty;
+qty = 5; print total;           // 50
+total = 1;                      // error[E0045] للقراءة فقط
+lens a = b + 1; lens b = a + 1; print a;  // error[E0045]: يعتمد على نفسه
+</code></pre>
+<p>يُحسب من جديد عند كل قراءة داخل النطاق الذي صُرِّح فيه (بلا تخزين مؤقت).</p>
+<h2 id="fuse"><code>fuse</code> — فتيل<a class="headerlink" href="#fuse" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">fuse otp = &quot;4821&quot; burns 2;
+print otp; print otp; print otp;   // 4821  4821  nil
+rearm otp;                          // يعود للقيمة المسلَّحة
+otp = &quot;9999&quot;;                       // إسناد جديد يعيد التسليح
+</code></pre>
+<p>خصائص: <code>x.left x.burnt</code>. الافتراضي <code>burns 1</code>.</p>
+<h2 id="bell"><code>bell</code> — جرس<a class="headerlink" href="#bell" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">let hp = 100;
+bell hp (old, new) { print old + &quot; -&gt; &quot; + new; }
+hp = 90; hp = 90;       // يرنّ مرة واحدة (التغيّر الفعلي فقط)
+unbell hp;              // يزيل كل الأجراس
+</code></pre>
+<p>وسائط الجرس: بلا وسائط، أو <code>(new)</code>، أو <code>(old, new)</code>. يرنّ أيضًا بعد <code>undo</code>/<code>redo</code>. لا يُوضع على <code>lens</code>.
+جرس يعيد تفعيل نفسه بلا نهاية يوقفه <code>E0047</code> عند عمق 16.</p>
+<h2 id="trial"><code>trial</code> — تجربة<a class="headerlink" href="#trial" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">let a = 100; let b = 0;
+trial { a = a - 30; b = b + 30; abort; }   // يتراجع كل شيء
+trial { a = 0; fail(); } else { print &quot;rolled back&quot;; }
+</code></pre>
+<p>عند <code>abort;</code> أو خطأ أو <code>throw</code> يُعاد كل متغيّر مُسنَد داخلها (حتى حالة <code>tape</code> و<code>gauge</code> و<code>fuse</code>)، ثم يُنفَّذ <code>else</code> إن وُجد
+(وبدونه يُعاد رمي الخطأ). تعمل متداخلة. <code>return</code>/<code>break</code>/<code>continue</code> خروج عادي <strong>يُثبّت</strong> التغييرات.</p>
+<blockquote>
+<p>تتراجع عن <strong>إسنادات المتغيرات فقط</strong> — لا عن <code>push()</code> ولا <code>print</code> ولا الملفات.</p>
+<p>الأجراس تُرنّ فورًا داخل <code>trial</code>، وتراجع <code>trial</code> يعيد القيم <strong>دون</strong> إعادة الرنين.</p>
+</blockquote>
+<h2 id="_2">خصائص عامة لأي متغيّر حيّ<a class="headerlink" href="#_2" title="Permanent link">#</a></h2>
+<p><code>x.kind</code> (<code>stone|gauge|tape|lens|fuse|plain</code>) · <code>x.reads</code> · <code>x.writes</code> · <code>x.bells</code> · <code>x.vitals</code> (خريطة بكل شيء).
+حقل بيانات حقيقي بنفس الاسم (مفتاح <code>kind</code> في قاموس مثلًا) يغلب الخاصية.</p>
+<h2 id="_3">الأخطاء<a class="headerlink" href="#_3" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الكود</th>
+<th>المعنى</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>E0043</td>
+<td>تعديل <code>stone</code></td>
+</tr>
+<tr>
+<td>E0044</td>
+<td>خارج مدى <code>strict</code> / غير رقم في <code>gauge</code> / مدى فارغ</td>
+</tr>
+<tr>
+<td>E0045</td>
+<td>إسناد إلى <code>lens</code> أو اعتماده على نفسه</td>
+</tr>
+<tr>
+<td>E0046</td>
+<td>استعمال خاطئ: <code>undo</code> بلا <code>tape</code>، <code>abort</code> خارج <code>trial</code>، <code>bell</code> على <code>lens</code>، عدّاد غير صالح</td>
+</tr>
+<tr>
+<td>E0047</td>
+<td>جرس لا نهائي</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="_4">حدود معروفة<a class="headerlink" href="#_4" title="Permanent link">#</a></h2>
+<p><code>lens</code> بلا تخزين مؤقت · <code>trial</code> للمتغيرات فقط · مترجم <code>rinc</code> (Rin → C) لا يدعم هذه الصيغ بعد · لم تُختبر مع <code>export</code>.</p>
+<h2 id="_5">انظر أيضًا<a class="headerlink" href="#_5" title="Permanent link">#</a></h2>
+<p><a href="variables.html"><code>variables.md</code></a> · <a href="errors.html"><code>errors.md</code></a> · <a href="ERROR_SYSTEM.html"><code>ERROR_SYSTEM.md</code></a> · <code>examples/living_variables_demo.rin</code> · <a href="base-accept.html"><code>base-accept.md</code></a> (<code>base</code>/<code>accept</code>: متغيّران يخدمان <code>if</code>) · <a href="pre-post.html"><code>pre-post.md</code></a> (<code>pre</code>/<code>post</code>: ما قبل / ما بعد) · <a href="label-define.html"><code>label-define.md</code></a> (<code>label</code>/<code>define</code>: تسمية وتعريف)</p></article>
+<div class="pnav"><a class="pn" href="let-plus.html">→ let` المطوَّر</a><a class="pn" href="label-define.html">label` و`define` (تسمية وتعريف) ←</a></div><p class="edit"><a href="https://github.com/dlof-lib/rinlang/edit/main/docs/living-variables.md">✎ عدّل هذه الصفحة على GitHub</a></p>
+<footer>Rin 1.0.0 · رخصة MIT</footer></main>
+<aside id="toc"><b>في هذه الصفحة</b><div class="toc">
+<ul>
+<li><a href="#_1">الخريطة (من الأسهل إلى الأعمق)</a></li>
+<li><a href="#stone">stone — ثابت</a></li>
+<li><a href="#gauge">gauge — مقياس</a></li>
+<li><a href="#tape">tape — شريط ذاكرة</a></li>
+<li><a href="#lens">lens — مشتق</a></li>
+<li><a href="#fuse">fuse — فتيل</a></li>
+<li><a href="#bell">bell — جرس</a></li>
+<li><a href="#trial">trial — تجربة</a></li>
+<li><a href="#_2">خصائص عامة لأي متغيّر حيّ</a></li>
+<li><a href="#_3">الأخطاء</a></li>
+<li><a href="#_4">حدود معروفة</a></li>
+<li><a href="#_5">انظر أيضًا</a></li>
+</ul>
+</div>
+</aside></div>
+<script src="assets/app.js"></script></body></html>
