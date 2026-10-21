@@ -26739,6 +26739,537 @@ fun pvTsOutline(src, lang) {
 }
 )PREVIEWKITOGRIN";
 
+static const char* kLib_compose_og_rin = R"COMPOSEOGRIN(
+// ============================================================================
+//  lib/compose.og.rin — تركيب ودمج وتفاعل كل مفاهيم Rin ببعضها
+//
+//  المشكلة: لكل مفهوم في Rin (دالة، map، array، Set، كائن class، حاوية، enum،
+//  سجلات جدول، token، number) طريقته الخاصة ومكتبته الخاصة، ولا يوجد جسر واحد
+//  بينها. هذه المكتبة تضع ذلك الجسر في ثلاث طبقات تعمل معاً:
+//
+//    1) التحويل الموحَّد   valueKind / asMap / asArray / asSet / entriesOf / asFn
+//    2) التركيب            compose / chain / through / juxt / branch / allOf ...
+//    3) الدمج              combine / mergeWith / mergeAll / mergeInto / joinRecords
+//    4) التفاعل            mapOver / filterOver / reduceOver / connect / sync
+//
+//  استيراد:
+//    @import "lib/compose.og.rin";
+//    @import "lib/compose.og.rin" as cx;
+//
+//  كل الدوال هنا مبنيّة على مفاهيم Rin الأصلية فقط (type / oop.* / container.* /
+//  Set / tokenList / number) — لا تضيف نوع قيمة جديداً ولا تغيّر سلوك أي شيء قائم.
+//  راجع docs/compose.md للشرح الكامل.
+// ============================================================================
+
+// ───────────────────────── 1) التحويل الموحَّد ─────────────────────────
+
+// يُرجع نوع القيمة كنص: nil bool number string array map set function instance
+// (أي كائن class/struct يُسمّى "instance"). الـ enum يظهر كـ map لأنه كذلك فعلاً.
+fun valueKind(x) {
+    let t = type(x);
+    if (t == "nil" or t == "bool" or t == "number" or t == "string" or t == "array" or t == "map" or t == "set" or t == "function") {
+        return t;
+    }
+    return "instance";
+}
+
+// أي قيمة -> map.
+//   map      -> نفسها            instance -> حقوله العامة
+//   array    -> {index: قيمة}     set      -> {عنصر: true}
+//   nil      -> {}               غير ذلك  -> {"value": x}
+fun asMap(x) {
+    let k = valueKind(x);
+    if (k == "map") { return x; }
+    if (k == "instance") { return oop.toMap(x); }
+    let out = {};
+    if (k == "nil") { return out; }
+    if (k == "array") {
+        let i = 0;
+        while (i < len(x)) { out[i] = x[i]; i = i + 1; }
+        return out;
+    }
+    if (k == "set") {
+        for (let e in x) { out[e] = true; }
+        return out;
+    }
+    out["value"] = x;
+    return out;
+}
+
+// أي قيمة -> array.
+//   array -> نفسها   set -> عناصرها   map/instance -> قيمها   nil -> []   غير ذلك -> [x]
+fun asArray(x) {
+    let k = valueKind(x);
+    if (k == "array") { return x; }
+    if (k == "set") { return x.toArray(); }
+    if (k == "map") { return values(x); }
+    if (k == "instance") { return values(oop.toMap(x)); }
+    if (k == "nil") { return []; }
+    return [x];
+}
+
+// أي قيمة -> Set.   map/instance -> مفاتيحها (كما يفعل Set(map)) وما عداها عبر asArray.
+fun asSet(x) {
+    let k = valueKind(x);
+    if (k == "set") { return x; }
+    if (k == "map") { return Set(keys(x)); }
+    if (k == "instance") { return Set(keys(oop.toMap(x))); }
+    return Set(asArray(x));
+}
+
+// أي قيمة -> مصفوفة أزواج [[مفتاح, قيمة], ...] (array: الفهرس، set: العنصر نفسه مرتين).
+fun entriesOf(x) {
+    let k = valueKind(x);
+    let out = [];
+    if (k == "set") {
+        for (let e in x) { push(out, [e, e]); }
+        return out;
+    }
+    let m = asMap(x);
+    let ks = keys(m);
+    let i = 0;
+    while (i < len(ks)) { push(out, [ks[i], m[ks[i]]]); i = i + 1; }
+    return out;
+}
+
+// عكس entriesOf: مصفوفة أزواج -> map.
+fun entriesToMap(pairs) {
+    let out = {};
+    let i = 0;
+    while (i < len(pairs)) { out[pairs[i][0]] = pairs[i][1]; i = i + 1; }
+    return out;
+}
+
+// أي قيمة -> دالة بوسيط واحد، فيصير كل مفهوم "قابلاً للاستدعاء" ويصلح مرحلة في compose/through:
+//   function -> نفسها
+//   map / enum / instance -> بحث: asFn(m)(k) = m[k] (أو nil)
+//   array    -> بحث بالفهرس: asFn(a)(i) = a[i] (أو nil)
+//   set      -> فحص عضوية: asFn(s)(x) = هل x ∈ s
+//   قيمة بسيطة (number/string/bool) -> ثابت: asFn(5)(_) = 5
+fun asFn(x) {
+    let k = valueKind(x);
+    if (k == "function") { return x; }
+    if (k == "map" or k == "instance") {
+        let m = asMap(x);
+        return fun(key) {
+            if (has(m, key)) { return m[key]; }
+            return nil;
+        };
+    }
+    if (k == "array") {
+        return fun(i) {
+            if (type(i) == "number" and i >= 0 and i < len(x)) { return x[i]; }
+            return nil;
+        };
+    }
+    if (k == "set") {
+        return fun(e) { return x.has(e); };
+    }
+    return fun(_) { return x; };
+}
+
+fun isCallable(x) { return isFunction(x); }
+
+// ───────────────────────── 2) التركيب ─────────────────────────
+
+fun identity(x) { return x; }
+
+fun constant(v) { return fun(_) { return v; }; }
+
+// chain([f, g, h])(x) == h(g(f(x)))  — المراحل أي مفهوم قابل للتحويل بـ asFn
+fun chain(stages) {
+    let fns = [];
+    let i = 0;
+    while (i < len(stages)) { push(fns, asFn(stages[i])); i = i + 1; }
+    return fun(x) {
+        let v = x;
+        let j = 0;
+        while (j < len(fns)) { v = fns[j](v); j = j + 1; }
+        return v;
+    };
+}
+
+// compose([f, g, h])(x) == f(g(h(x)))  — الترتيب الرياضي المعتاد
+fun compose(stages) {
+    let rev = [];
+    let i = len(stages) - 1;
+    while (i >= 0) { push(rev, stages[i]); i = i - 1; }
+    return chain(rev);
+}
+
+// through(x, stages) == chain(stages)(x) — تمرير قيمة مباشرة عبر مراحل من أي نوع
+fun through(x, stages) { return chain(stages)(x); }
+
+// partial1(f, a)(b) == f(a, b)  — تثبيت أول وسيط
+fun partial1(f, a) { return fun(b) { return f(a, b); }; }
+
+// flip2(f)(a, b) == f(b, a)
+fun flip2(f) { return fun(a, b) { return f(b, a); }; }
+
+// tap(f)(x): ينفّذ f(x) لأثرها الجانبي ويُعيد x كما هي (للتتبّع داخل خط الأنابيب)
+fun tap(f) {
+    let g = asFn(f);
+    return fun(x) { g(x); return x; };
+}
+
+// juxt([f, g])(x) == [f(x), g(x)]
+fun juxt(stages) {
+    let fns = [];
+    let i = 0;
+    while (i < len(stages)) { push(fns, asFn(stages[i])); i = i + 1; }
+    return fun(x) {
+        let out = [];
+        let j = 0;
+        while (j < len(fns)) { push(out, fns[j](x)); j = j + 1; }
+        return out;
+    };
+}
+
+// branch(pred, f, g)(x) == pred(x) ? f(x) : g(x)
+fun branch(pred, f, g) {
+    let p = asFn(pred); let a = asFn(f); let b = asFn(g);
+    return fun(x) {
+        if (p(x)) { return a(x); }
+        return b(x);
+    };
+}
+
+// attempt(f, fallback)(x): ينفّذ f(x) وإن رمت خطأً يُعيد fallback (قيمة أو دالة تأخذ رسالة الخطأ)
+fun attempt(f, fallback) {
+    let g = asFn(f);
+    return fun(x) {
+        let out = nil;
+        let failed = false;
+        let why = nil;
+        try { out = g(x); } catch (e) { failed = true; why = e; }
+        if (!failed) { return out; }
+        if (isFunction(fallback)) { return fallback(why); }
+        return fallback;
+    };
+}
+
+// جبر الشروط — كل شرط يقبل أي مفهوم (Set = عضوية، map = قيمة حقيقية، دالة).
+fun negate(pred) { let p = asFn(pred); return fun(x) { return !p(x); }; }
+
+fun allOf(preds) {
+    let ps = [];
+    let i = 0;
+    while (i < len(preds)) { push(ps, asFn(preds[i])); i = i + 1; }
+    return fun(x) {
+        let j = 0;
+        while (j < len(ps)) { if (!ps[j](x)) { return false; } j = j + 1; }
+        return true;
+    };
+}
+
+fun anyOf(preds) {
+    let ps = [];
+    let i = 0;
+    while (i < len(preds)) { push(ps, asFn(preds[i])); i = i + 1; }
+    return fun(x) {
+        let j = 0;
+        while (j < len(ps)) { if (ps[j](x)) { return true; } j = j + 1; }
+        return false;
+    };
+}
+
+fun neitherOf(preds) { return negate(anyOf(preds)); }
+
+// ───────────────────────── 3) الدمج ─────────────────────────
+//
+// سياسات الدمج (policy) لكل مفتاح متعارض:
+//   "deep"     (الافتراضي) map+map يُدمجان بعمق، array+array تُلصق، set+set اتحاد،
+//              وغير ذلك: قيمة الطرف الثاني تفوز
+//   "override" قيمة الطرف الثاني تفوز دائماً (دمج سطحي)
+//   "keep"     قيمة الطرف الأول تبقى إن وُجد المفتاح (يُضاف الجديد فقط)
+//   دالة fn(old, new, key) -> القيمة النهائية
+
+fun _mergeValues(a, b, policy, key) {
+    if (isFunction(policy)) { return policy(a, b, key); }
+    if (policy == "keep") { return a; }
+    if (policy == "override") { return b; }
+    let ka = valueKind(a);
+    let kb = valueKind(b);
+    if (ka == "map" and kb == "map") { return mergeWith(a, b, policy); }
+    if (ka == "array" and kb == "array") { return concat(a, b); }
+    if (ka == "set" and kb == "set") { return a + b; }
+    return b;
+}
+
+// دمج map/instance/map-like مع آخر -> map جديد (لا يُعدَّل أيٌّ من المدخلين)
+fun mergeWith(a, b, policy) {
+    let ma = asMap(a);
+    let mb = asMap(b);
+    let out = {};
+    let ka = keys(ma);
+    let i = 0;
+    while (i < len(ka)) { out[ka[i]] = ma[ka[i]]; i = i + 1; }
+    let kb = keys(mb);
+    let j = 0;
+    while (j < len(kb)) {
+        let key = kb[j];
+        if (has(out, key)) { out[key] = _mergeValues(out[key], mb[key], policy, key); }
+        else { out[key] = mb[key]; }
+        j = j + 1;
+    }
+    return out;
+}
+
+// دمج أي قيمتين من نفس العائلة بسياسة "deep":
+//   map/instance -> map  ·  array -> لصق  ·  set -> اتحاد  ·  string -> لصق  ·  number -> جمع
+// نوعان مختلفان: يُحوَّل الاثنان إلى map إن كانا من (map|instance|array|set) وإلا يفوز الثاني.
+fun combine(a, b) {
+    let ka = valueKind(a);
+    let kb = valueKind(b);
+    if (ka == "nil") { return b; }
+    if (kb == "nil") { return a; }
+    if (ka == "array" and kb == "array") { return concat(a, b); }
+    if (ka == "set" and kb == "set") { return a + b; }
+    if (ka == "string" and kb == "string") { return a + b; }
+    if (ka == "number" and kb == "number") { return a + b; }
+    let structured = ka == "map" or ka == "instance" or ka == "array" or ka == "set";
+    let structuredB = kb == "map" or kb == "instance" or kb == "array" or kb == "set";
+    if (structured and structuredB) { return mergeWith(a, b, "deep"); }
+    return b;
+}
+
+// دمج قائمة كاملة من أي قيم بسياسة صريحة: mergeAllWith([a, b, c], policy)
+// (Rin بلا معاملات افتراضية، لذا لكل دالة اختيارية نسختان: المختصرة و*With)
+fun mergeAllWith(list, policy) {
+    if (len(list) == 0) { return nil; }
+    let acc = list[0];
+    let i = 1;
+    while (i < len(list)) {
+        if (policy == nil) { acc = combine(acc, list[i]); }
+        else { acc = mergeWith(acc, list[i], policy); }
+        i = i + 1;
+    }
+    return acc;
+}
+
+// دمج في المكان داخل الهدف نفسه (يُعدَّل ويُرجَع):
+//   map      <- map/instance/..  (بسياسة policy اختيارية)
+//   array    <- أي قابل للتحويل لمصفوفة (يُلصق)
+//   set      <- أي قابل للتحويل لـ Set (addAll)
+//   instance <- map/instance (حقول الكائن الموجودة فقط تُحدَّث عبر oop.assign)
+fun mergeIntoWith(target, source, policy) {
+    let k = valueKind(target);
+    if (k == "map") {
+        let merged = mergeWith(target, source, policy == nil ? "deep" : policy);
+        let ks = keys(merged);
+        let i = 0;
+        while (i < len(ks)) { target[ks[i]] = merged[ks[i]]; i = i + 1; }
+        return target;
+    }
+    if (k == "array") {
+        let add = asArray(source);
+        let i = 0;
+        while (i < len(add)) { push(target, add[i]); i = i + 1; }
+        return target;
+    }
+    if (k == "set") {
+        target.addAll(asArray(source));
+        return target;
+    }
+    if (k == "instance") {
+        oop.assign(target, asMap(source));
+        return target;
+    }
+    throw "mergeInto: لا يمكن الدمج داخل قيمة من نوع " + k;
+}
+
+// دمج حاوية في حاوية بالاسم: mergeContainers("dst", "src", overwrite=true) -> dst
+fun mergeContainersWith(dst, src, overwrite) {
+    if (!container.exists(dst)) { throw "mergeContainers: الحاوية غير موجودة: " + dst; }
+    if (!container.exists(src)) { throw "mergeContainers: الحاوية غير موجودة: " + src; }
+    container.mergeFields(dst, container.fields(src), overwrite == nil ? true : overwrite);
+    return dst;
+}
+
+// حقول كائن أو حاوية (بالاسم) كـ map موحَّدة — للتعامل مع الاثنين بنفس الكود
+fun fieldsOf(x) {
+    if (type(x) == "string" and container.exists(x)) { return container.fields(x); }
+    return asMap(x);
+}
+
+// ضمّ سجلّين من نوع "جدول records" (مصفوفة maps) على مفتاح مشترك key:
+// الصفوف المتطابقة تُدمج (سياسة policy اختيارية)، وغير المتطابقة تبقى من الجهتين.
+fun joinRecordsWith(left, right, key, policy) {
+    let out = [];
+    let seen = {};
+    let i = 0;
+    while (i < len(left)) {
+        let row = left[i];
+        let match = nil;
+        let j = 0;
+        while (j < len(right)) {
+            if (has(right[j], key) and has(row, key) and right[j][key] == row[key]) { match = right[j]; break; }
+            j = j + 1;
+        }
+        if (match == nil) { push(out, row); }
+        else { push(out, mergeWith(row, match, policy == nil ? "override" : policy)); seen[row[key]] = true; }
+        i = i + 1;
+    }
+    let r = 0;
+    while (r < len(right)) {
+        if (!has(right[r], key) or !has(seen, right[r][key])) { push(out, right[r]); }
+        r = r + 1;
+    }
+    return out;
+}
+
+
+// النسخ المختصرة (السياسة الافتراضية)
+fun mergeAll(list) { return mergeAllWith(list, nil); }
+fun mergeInto(target, source) { return mergeIntoWith(target, source, nil); }
+fun mergeContainers(dst, src) { return mergeContainersWith(dst, src, true); }
+fun joinRecords(left, right, key) { return joinRecordsWith(left, right, key, nil); }
+
+// ───────────────────────── 4) التفاعل ─────────────────────────
+
+// mapOver(x, f): دالة map واحدة تعمل على أي مفهوم ولا تغيّر نوعه:
+//   array -> array · set -> Set · map -> map (على القيم) · instance -> map (حقول الكائن)
+//   string -> نص (على كل حرف) · غير ذلك -> f(x)
+fun mapOver(x, f) {
+    let g = asFn(f);
+    let k = valueKind(x);
+    if (k == "array") {
+        let out = [];
+        let i = 0;
+        while (i < len(x)) { push(out, g(x[i])); i = i + 1; }
+        return out;
+    }
+    if (k == "set") {
+        let out = Set();
+        for (let e in x) { out.add(g(e)); }
+        return out;
+    }
+    if (k == "map" or k == "instance") {
+        let m = asMap(x);
+        let out = {};
+        let ks = keys(m);
+        let i = 0;
+        while (i < len(ks)) { out[ks[i]] = g(m[ks[i]]); i = i + 1; }
+        return out;
+    }
+    if (k == "string") {
+        let out = "";
+        let i = 0;
+        while (i < len(x)) { out = out + str(g(substr(x, i, 1))); i = i + 1; }
+        return out;
+    }
+    return g(x);
+}
+
+// filterOver(x, pred): يُبقي ما يحقق الشرط — pred أي مفهوم (دالة، Set، map...)
+fun filterOver(x, pred) {
+    let p = asFn(pred);
+    let k = valueKind(x);
+    if (k == "array") {
+        let out = [];
+        let i = 0;
+        while (i < len(x)) { if (p(x[i])) { push(out, x[i]); } i = i + 1; }
+        return out;
+    }
+    if (k == "set") {
+        let out = Set();
+        for (let e in x) { if (p(e)) { out.add(e); } }
+        return out;
+    }
+    if (k == "map" or k == "instance") {
+        let m = asMap(x);
+        let out = {};
+        let ks = keys(m);
+        let i = 0;
+        while (i < len(ks)) { if (p(m[ks[i]])) { out[ks[i]] = m[ks[i]]; } i = i + 1; }
+        return out;
+    }
+    if (k == "string") {
+        let out = "";
+        let i = 0;
+        while (i < len(x)) { let c = substr(x, i, 1); if (p(c)) { out = out + c; } i = i + 1; }
+        return out;
+    }
+    if (p(x)) { return x; }
+    return nil;
+}
+
+// reduceOver(x, f, init): f(acc, value) على قيم أي مفهوم بالترتيب
+fun reduceOver(x, f, init) {
+    let items = asArray(x);
+    if (valueKind(x) == "string") {
+        items = [];
+        let i = 0;
+        while (i < len(x)) { push(items, substr(x, i, 1)); i = i + 1; }
+    }
+    let acc = init;
+    let j = 0;
+    while (j < len(items)) { acc = f(acc, items[j]); j = j + 1; }
+    return acc;
+}
+
+// ربط حقل بحقل عبر "عالمين" مختلفين بنفس الصيغة. كل طرف إما:
+//   كائن class (instance)  أو  اسم حاوية (string) — الاتجاه: src -> dst
+//   connect(src, srcKey, dst, dstKey) · connectWith(..., transform) -> معرّف الربط
+// الحالات: كائن->كائن (oop.bindProperty) · كائن->حاوية (oop.bindContainer) ·
+//          حاوية->كائن (oop.bindContainerFrom) · حاوية->حاوية (مراقبة watch).
+fun connectWith(src, srcKey, dst, dstKey, transform) {
+    let srcIsContainer = type(src) == "string";
+    let dstIsContainer = type(dst) == "string";
+    if (!srcIsContainer and !dstIsContainer) {
+        if (transform == nil) { return oop.bindProperty(src, srcKey, dst, dstKey); }
+        return oop.bindProperty(src, srcKey, dst, dstKey, transform);
+    }
+    if (!srcIsContainer and dstIsContainer) {
+        if (transform == nil) { return oop.bindContainer(src, srcKey, dst, dstKey); }
+        return oop.bindContainer(src, srcKey, dst, dstKey, {"transform": transform});
+    }
+    if (srcIsContainer and !dstIsContainer) {
+        if (transform == nil) { return oop.bindContainerFrom(dst, dstKey, src, srcKey); }
+        return oop.bindContainerFrom(dst, dstKey, src, srcKey, {"transform": transform});
+    }
+    // حاوية -> حاوية
+    let t = transform == nil ? identity : transform;
+    return oop.watchContainer(src, srcKey, fun(newValue, oldValue, key, c) {
+        container.set(dst, dstKey, t(newValue));
+    });
+}
+
+fun connect(src, srcKey, dst, dstKey) { return connectWith(src, srcKey, dst, dstKey, nil); }
+
+// sync(a, keyA, b, keyB): اتجاهان بين كائنين أو كائن وحاوية (حاوية<->حاوية = connectWith مرتين)
+fun sync(a, keyA, b, keyB) {
+    let aC = type(a) == "string";
+    let bC = type(b) == "string";
+    if (!aC and !bC) { return oop.bindTwoWay(a, keyA, b, keyB); }
+    if (!aC and bC) { return oop.bindContainerTwoWay(a, keyA, b, keyB); }
+    if (aC and !bC) { return oop.bindContainerTwoWay(b, keyB, a, keyA); }
+    let one = connectWith(a, keyA, b, keyB, nil);
+    let two = connectWith(b, keyB, a, keyA, nil);
+    return [one, two];
+}
+
+// ───────────────────────── 5) جسر token ↔ number ─────────────────────────
+
+// كل القيم الرقمية الحرفية في مصدر Rin (عبر الـ Lexer الحقيقي)
+fun numbersIn(src) {
+    let toks = tokenList(src, {"only": "NUMBER"});
+    let out = [];
+    let i = 0;
+    while (i < len(toks)) { push(out, toks[i]["value"]); i = i + 1; }
+    return out;
+}
+
+// أسماء المعرّفات (IDENT) في مصدر Rin بترتيب ظهورها
+fun identifiersIn(src) {
+    let toks = tokenList(src, {"only": "IDENT"});
+    let out = [];
+    let i = 0;
+    while (i < len(toks)) { push(out, toks[i]["lexeme"]); i = i + 1; }
+    return out;
+}
+)COMPOSEOGRIN";
+
 inline const std::unordered_map<std::string, std::string>& embeddedRinLibraries() {
     static const std::unordered_map<std::string, std::string> libs = {
         {"lib/math.og.rin", kLib_math_og_rin},
@@ -26747,6 +27278,7 @@ inline const std::unordered_map<std::string, std::string>& embeddedRinLibraries(
         {"lib/validate.og.rin", kLib_validate_og_rin},
         {"lib/inputkit.og.rin", kLib_inputkit_og_rin},
         {"lib/functional.og.rin", kLib_functional_og_rin},
+        {"lib/compose.og.rin", kLib_compose_og_rin},
         {"lib/oglang.og.rin", kLib_oglang_og_rin},
         {"lib/ringo.og.rin", kLib_ringo_og_rin},
         {"lib/langkit.og.rin", kLib_langkit_og_rin},
