@@ -9,6 +9,16 @@
 //    2) التركيب            compose / chain / through / juxt / branch / allOf ...
 //    3) الدمج              combine / mergeWith / mergeAll / mergeInto / joinRecords
 //    4) التفاعل            mapOver / filterOver / reduceOver / connect / sync
+//    5) token <-> number   numbersIn / identifiersIn
+//    6) أدوات عامة         sizeOf / isEmptyValue / toKind / hasKey / getOr / keysOf / valuesOf / describeValue
+//
+//  مكتبات مساعدة توسّع compose (كل واحدة تستورد compose تلقائياً):
+//    compose_seq    ترتيب وتجميع وتقطيع وضمّ وبحث فوق أي مفهوم
+//    compose_path   مسارات "a.b.0" للقراءة والكتابة والتسطيح والنسخ العميق
+//    compose_flow   curry/memoize/retry/cond/matchKind ونتائج Result وتتبّع المراحل
+//    compose_schema مخططات تحقّق وتطبيع (types, fields, items, enum, coerce, default)
+//    compose_diff   diffDeep / patchDeep / invertChanges / merge3
+//    compose_store  مخزن حالة تفاعلي: اشتراكات، قيم مشتقّة، batch، تراجع، ربط بالحاويات
 //
 //  استيراد:
 //    @import "lib/compose.og.rin";
@@ -526,3 +536,119 @@ fun identifiersIn(src) {
     while (i < len(toks)) { push(out, toks[i]["lexeme"]); i = i + 1; }
     return out;
 }
+
+// ───────────────────────── 6) أدوات عامة ─────────────────────────
+
+// الحجم الموحَّد: عدد عناصر array/Set/map/كائن، وطول النص؛ nil -> 0؛ غير ذلك -> 1
+fun sizeOf(x) {
+    let k = valueKind(x);
+    if (k == "nil") { return 0; }
+    if (k == "string" or k == "array") { return len(x); }
+    if (k == "set") { return x.size(); }
+    if (k == "map") { return len(x); }
+    if (k == "instance") { return len(oop.toMap(x)); }
+    return 1;
+}
+
+// فارغ؟ nil أو نص/array/Set/map/كائن بلا عناصر
+fun isEmptyValue(x) {
+    let k = valueKind(x);
+    if (k == "nil") { return true; }
+    if (k == "string" or k == "array" or k == "set" or k == "map" or k == "instance") { return sizeOf(x) == 0; }
+    return false;
+}
+
+// هل نوع x أحد الأنواع؟  kindIs(x, ["array", "set"])  أو  kindIs(x, "map")
+fun kindIs(x, kinds) {
+    let k = valueKind(x);
+    if (type(kinds) == "string") { return k == kinds; }
+    let i = 0;
+    while (i < len(kinds)) { if (kinds[i] == k) { return true; } i = i + 1; }
+    return false;
+}
+
+// تحويل صريح إلى نوع: map array set string number bool function
+//   string من array/map تُنتج تمثيل str؛ number من نص رقمي؛ bool من الحقيقية (nil و false فقط خطأ)
+fun toKind(x, kind) {
+    if (kind == "map") { return asMap(x); }
+    if (kind == "array") { return asArray(x); }
+    if (kind == "set") { return asSet(x); }
+    if (kind == "function") { return asFn(x); }
+    if (kind == "string") { return str(x); }
+    if (kind == "number") {
+        if (type(x) == "number") { return x; }
+        if (type(x) == "bool") { return x ? 1 : 0; }
+        return number(x);
+    }
+    if (kind == "bool") { return x != nil and x != false; }
+    throw "toKind: نوع غير معروف: " + str(kind);
+}
+
+// وجود مفتاح بنفس الصيغة لكل مفهوم: map/كائن -> مفتاح · array -> فهرس · Set -> عضو · نص -> فهرس
+fun hasKey(x, key) {
+    let k = valueKind(x);
+    if (k == "map" or k == "instance") { return has(asMap(x), key); }
+    if (k == "array" or k == "string") { return type(key) == "number" and key >= 0 and key < len(x); }
+    if (k == "set") { return x.has(key); }
+    return false;
+}
+
+// قراءة آمنة بمفتاح واحد من أي مفهوم، أو fallback
+fun getOr(x, key, fallback) {
+    let k = valueKind(x);
+    if (k == "map" or k == "instance") {
+        let m = asMap(x);
+        if (has(m, key)) { return m[key]; }
+        return fallback;
+    }
+    if (k == "array" or k == "string") {
+        if (type(key) == "number" and key >= 0 and key < len(x)) { return x[key]; }
+        return fallback;
+    }
+    if (k == "set") {
+        if (x.has(key)) { return key; }
+        return fallback;
+    }
+    return fallback;
+}
+
+// مفاتيح وقيم موحَّدة (array -> الفهارس · Set -> العناصر · map/كائن -> مفاتيحها)
+fun keysOf(x) {
+    let k = valueKind(x);
+    if (k == "array" or k == "string") {
+        let out = [];
+        let i = 0;
+        while (i < len(x)) { push(out, i); i = i + 1; }
+        return out;
+    }
+    if (k == "set") { return x.toArray(); }
+    if (k == "nil") { return []; }
+    return keys(asMap(x));
+}
+
+fun valuesOf(x) {
+    if (valueKind(x) == "string") {
+        let out = [];
+        let i = 0;
+        while (i < len(x)) { push(out, substr(x, i, 1)); i = i + 1; }
+        return out;
+    }
+    return asArray(x);
+}
+
+// وصف مختصر مقروء للقيمة: "array(3)" "map(2)" "number" ...
+fun describeValue(x) {
+    let k = valueKind(x);
+    if (k == "array" or k == "set" or k == "map" or k == "instance" or k == "string") {
+        return k + "(" + str(sizeOf(x)) + ")";
+    }
+    return k;
+}
+
+// قائمة المكتبات المساعدة وإصدار طبقة compose
+fun composeVersion() { return "2.0.0"; }
+
+fun composeLibraries() {
+    return ["compose", "compose_seq", "compose_path", "compose_flow", "compose_schema", "compose_diff", "compose_store"];
+}
+
