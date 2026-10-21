@@ -132,6 +132,7 @@ Rin
 | الوحدة | الوصف |
 |---|---|
 | `compose.og.rin` | **مكتبة أساسية**: تركيب ودمج وتفاعل كل المفاهيم (دوال، map، array، Set، كائنات، حاويات، سجلات). انظر [`compose.md`](./compose.md). |
+| `compose_seq` `compose_path` `compose_flow` `compose_schema` `compose_diff` `compose_store` | **مساعدة compose** (كل واحدة تستورد `compose` تلقائيًا): تسلسلات، مسارات، تدفّق ونتائج، مخططات تحقّق، فروق ودمج ثلاثي، مخزن حالة. انظر [`compose-helpers.md`](./compose-helpers.md). |
 | `boat.og.rin` | "Boat": مفاهيم أساسية مجمَّعة (دوال، قيم منطقية، حاويات بيانات). انظر `examples/boat_demo.rin`. |
 
 ## انظر أيضًا
