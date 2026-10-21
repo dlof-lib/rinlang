@@ -1,0 +1,30 @@
+name: 🐞 خطأ / Bug
+description: أبلغ عن سلوك خاطئ في اللغة أو الأداة أو RinStudio
+labels: [bug]
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: المكوّن
+      options: [المحرّك / اللغة, أداة rin (CLI), RinStudio (أندرويد), WebAssembly / Playground, مكتبة lib/, الوثائق, أخرى]
+    validations: { required: true }
+  - type: textarea
+    id: what
+    attributes:
+      label: ما الذي حدث؟
+      description: وما الذي كنت تتوقعه؟
+    validations: { required: true }
+  - type: textarea
+    id: repro
+    attributes:
+      label: خطوات إعادة الإنتاج
+      description: أقل كود `.rin` يُظهر المشكلة
+      render: kotlin
+    validations: { required: true }
+  - type: textarea
+    id: env
+    attributes:
+      label: البيئة
+      description: ناتج `rin --version` و`rin doctor`، أو إصدار أندرويد/المتصفح
+      render: text
+    validations: { required: true }
