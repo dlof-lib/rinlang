@@ -1,0 +1,108 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>مفهوم `time`: الزمن كقيمة من الدرجة الأولى — Rin</title>
+<meta name="description" content="توثيق لغة البرمجة Rin"><link rel="icon" href="../assets/brand/icon-32.png">
+<link rel="stylesheet" href="assets/style.css"></head><body>
+<header><button id="mn" aria-label="القائمة">☰</button><a class="logo" href="index.html"><img src="../assets/brand/icon-48.png" alt="" width="26">Rin</a>
+<input id="q" type="search" placeholder="ابحث في التوثيق…" autocomplete="off"><button id="th" aria-label="الوضع">◐</button>
+<a class="gh" href="https://github.com/dlof-lib/rinlang">GitHub</a><div id="res"></div></header>
+<div class="wrap"><nav id="sb"><details ><summary>ابدأ هنا</summary><a href="getting-started.html">البداية</a><a href="syntax.html">القواعد النحوية العامة</a><a href="variables.html">let`، مصفوفات، قواميس، نطاق</a><a href="template-strings.html">النصوص القالبية (متغيّرات داخل النص)</a><a href="input.html">إدخال المستخدم (Input)</a><a href="control-flow.html">الشروط، الحلقات، `goal`/`achieve</a><a href="loops.html">حلقات Rin — Loops v2</a><a href="functions.html">fun`/`return`، التكرار الذاتي</a><a href="enums.html">enum`: قوائم اختيار مغلقة</a></details><details ><summary>اللغة</summary><a href="language-reference.html">المرجع الشامل وخريطة ترابط المفاهيم</a><a href="objects.html">class`/`struct`، `.object()`، `@Object`، `document</a><a href="oop.html">البرمجة الكائنية الموسَّعة (Rin 1.0)</a><a href="containers.html">دليل `@container` / `@element` / `@loop</a><a href="table.html">الجدول (`@table` / `@container.table`) ودوال اللغة عليه</a><a href="set.html">Set`: نوع المجموعة الأساسي</a><a href="pipelines.html">عامل الأنابيب `|&gt;</a><a href="RECKON.html">reckon`: مفهوم حسابي بسطرين</a><a href="let-plus.html">let` المطوَّر</a><a href="living-variables.html">المتغيرات الحيّة (Living Variables)</a><a href="label-define.html">label` و`define` (تسمية وتعريف)</a><a href="block-frames.html">بداية الكتل ونهايتها (Block Frames)</a><a href="compare_ops.html">معاملات المقارنة `/=` و `=/=` و `=/</a><a href="max_min.html">max / min family</a><a href="scope-guarantees.html">ضمانات النطاق: `finally` · `defer` · `catch … when` · `rethrow</a><a href="key_terms_and_builtins.html">Rin KEY_TERMS and Built-in Conditions</a><a href="number_builtins.html">Rin Number Built-ins</a></details><details ><summary>الواجهات (Indsin)</summary><a href="indsin.html">Indsin — Interface Design</a><a href="indsin_rin.html">indsin يعتمد على لغة Rin</a><a href="indsin_expansion.html">Indsin — التوسعة الاحترافية (Design System v2)</a><a href="indsin_object.html">indsin-object — API reference</a><a href="indsin_media.html">Indsin Media — اختيار الوسائط ورفعها</a><a href="indsin_icons.html">مكتبة أيقونات indsin (متجهية)</a><a href="indsin_tooling.html">indsin tooling — icon, file association, syntax highlighting</a><a href="indsinweb.html">IndsinWeb — مكتبة WebView والروابط لـ indsin</a><a href="RIN_ELEMENTS.html">دليل `@element.*` الكامل</a><a href="events-effects.html">الأحداث والتأثيرات (Events &amp; Effects) — محرك Indsin UI</a><a href="banner.html">Banner: إشعار شريطي</a><a href="simple-style.html">Rin Simple Style</a></details><details open><summary>بيئة التشغيل</summary><a href="runtime.html">وقت تشغيل Rin (Rin Runtime) · المرجع الرسمي</a><a href="standard-library.html">المكتبة القياسية (`lib/*.og.rin`)</a><a href="errors.html">نظام الأخطاء: أكواد، `try`/`catch`/`throw</a><a href="ERROR_SYSTEM.html">نظام التشخيص: البنية الداخلية + جدول الأكواد الكامل</a><a href="storage.html">تخزين دائم</a><a href="http.html">شبكات</a><a href="env.html">ربط Rin بملف `.env</a><a href="terminal.html">الطرفية التفاعلية — `rin terminal</a><a href="vm.html">RinVM — آلة Rin الافتراضية (بايتكود)</a><a href="rinflow.html">RinFlow: طبقة تنفيذ التدفّق المهيكل</a><a href="MAKE_UNIT.html">@make.(name)`: وحدة بسياسة قدرات صريحة</a><a href="MAKE_MEDIA.html">فيديو · صوت · API · إزالة الخلفية · قراءة النص من الصور</a><a href="TIME.html" class=on>مفهوم `time`: الزمن كقيمة من الدرجة الأولى</a><a href="native-additions.html">دوال Rin الأصلية الجديدة (Rin 1.0)</a></details><details ><summary>الحاويات وقواعد البيانات</summary><a href="container_advanced.html">Rin Container Advanced Built-ins</a><a href="container_pro.html">Rin Container Pro</a><a href="container_sql.html">RIN CONTAINER SQL (RCSQL)</a><a href="cross-file-containers.html">استدعاء إعلانات من ملف آخر</a></details><details ><summary>الحزم والتكامل</summary><a href="api.html">واجهة C المسطَّحة (Embedding API)</a><a href="android.html">استضافة Rin على أندرويد</a><a href="packages-and-interop.html">Rin 1.0 — المكتبات والحزم وجسر C++ وJSON واختبارات rintest</a><a href="rinpak-format.html">RinPak — حزمة مشروع Rin (`.rinpak`)</a><a href="html-projects.html">مشاريع HTML في Rin — الربط بين index.html وملف الحاوية</a><a href="project-og-urin.html">project.og.urin` — البيانات الوصفية لمشروع Rin</a><a href="CONTENT_PACKS.html">حزم المحتوى القابلة للتنزيل (Content Packs)</a><a href="previewkit.html">previewkit — معاينة حيّة لملفات PDF / Markdown / TypeScript</a></details><details ><summary>المكتبات المتخصصة</summary><a href="rinml.html">RinML / RinDF / RinAI — الذكاء الاصطناعي وتحليل البيانات في Rin</a><a href="STATS.html">RinStat — التحليل الإحصائي (`lib/rinstat.og.rin`)</a><a href="STATS_ADV.html">RinStat المتقدّم + RinAuto</a><a href="LINALG.html">الجبر الخطي للمهندسين — `mat*` و`vec*</a><a href="PLOT.html">RinPlot — الرسوم البيانية الإحصائية (`lib/rinplot.og.rin`)</a><a href="ALGO.html">تطوير الخوارزميات والحساب العددي — `algo*</a><a href="NUMBER.html">مفهوم `number` في Rin</a><a href="boat.html">&quot;Boat&quot;: مفاهيم أساسية مجمَّعة</a><a href="passkit.html">passkit — passwords, encryption, databases and a tag language</a><a href="passkit-crypto-db.html">Passkit feature catalog: encryption, databases and container linking</a><a href="hash-family.html">عائلة `#` — مفاهيم ودوال جديدة تبدأ بعلامة `#</a><a href="image-draw.html">إنشاء الصور في Rin — رسم وحفظ PNG وlog كصورة</a><a href="image-terminal.html">طباعة الصور في الـ terminal — `printImage` / `imageAnsi` / `imageInfo</a></details><details ><summary>المشروع</summary><a href="CONTRIBUTING.html">المساهمة في Rin</a><a href="CODE_OF_CONDUCT.html">قواعد السلوك</a><a href="SECURITY.html">سياسة الأمان</a><a href="SUPPORT.html">الحصول على المساعدة</a><a href="TRADEMARKS.html">سياسة العلامة التجارية — Trademark Policy</a><a href="THIRD_PARTY_NOTICES.html">إشعارات المكوّنات الخارجية — Third-Party Notices</a></details><details ><summary>مراجع إضافية</summary><a href="ANDROID_VERSIONS.html">حزم RinStudio لكل إصدار أندرويد</a><a href="TOKEN.html">مفهوم `token` في Rin</a><a href="TOOLCHAIN.html">Rin Professional Language Toolchain</a><a href="TOOLCHAIN_UPGRADE.html">Toolchain Upgrade — 2026-09</a><a href="architecture.html">المعمارية وبنية المستودع</a><a href="base-accept.html">base` و`accept`: متغيّران يخدمان `if</a><a href="channel47.html">channel47 — لغة وصف البيانات والإعدادات</a><a href="ci.html">CI وأدوات المستودع</a><a href="loop-templates.html">قوالب الحلقات `@tmpl</a><a href="pre-post.html">pre` و`post` (ما قبل / ما بعد): عقد انتقال حول الإسناد</a><a href="print-fonts.html">خطوط `print` — bold / italic / underline وغيرها</a><a href="print-image-terminal.html">طباعة الصور كنص في الطرفية</a><a href="print-templates.html">قوالب الطباعة `@tmpl ... print` — قوالب نصية خطية وتنسيقية</a><a href="rdoc.html">rdoc — Documentation Container</a><a href="rdoc-reference.html">وثيقة rdoc الشاملة — Documentation Container</a><a href="screenshots.html">لقطات من RinStudio</a></details></nav>
+<main><article><h1 id="timemd-time">TIME.md — مفهوم <code>time</code>: الزمن كقيمة من الدرجة الأولى<a class="headerlink" href="#timemd-time" title="Permanent link">#</a></h1>
+<p><code>time</code> دالة وفضاء أسماء معاً. <strong>اللحظة</strong> (Time) خريطة عادية فيها <code>epoch</code> (ميلي ثانية) و<code>offset</code> (دقائق)
+وكل أجزائها جاهزة، فتُقرأ مباشرة: <code>t.year t.month t.day t.hour t.minute t.second t.ms t.weekday
+t.weekdayName t.monthName t.dayOfYear t.week t.quarter t.date t.time t.tz t.iso</code>.</p>
+<p>كل دالة تقبل أي شيء يشبه الزمن:</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>المدخل</th>
+<th>المعنى</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>لحظة</td>
+<td>تُستعمل كما هي</td>
+</tr>
+<tr>
+<td>رقم</td>
+<td>ثوانٍ إن كان أقل من 1e11، وإلا ميلي ثانية (تلقائياً)</td>
+</tr>
+<tr>
+<td>نص</td>
+<td>ISO · <code>11/10/2026</code> (اليوم أولاً) · <code>11 أكتوبر 2026</code> · <code>October 11, 2026</code> · <code>14:30</code> · <code>today/tomorrow/yesterday/اليوم/غداً/أمس</code> · <code>in 3 days / بعد 3 أيام</code> · <code>2 hours ago / قبل ساعتين</code> · <code>next friday / الجمعة القادمة</code> · <code>tomorrow 14:30</code> (الأرقام العربية ٠-٩ مقبولة)</td>
+</tr>
+<tr>
+<td>خريطة أجزاء</td>
+<td><code>{year: 2026, month: 1}</code> (الناقص يُملأ بالمنطقي: الشهر 1، اليوم 1، الوقت 00:00)</td>
+</tr>
+<tr>
+<td><code>nil</code></td>
+<td>الآن</td>
+</tr>
+</tbody>
+</table></div>
+<p>لا تُعدِّل أي دالة مدخلاتها؛ تُرجع قيمة جديدة. سوء الاستخدام يرمي خطأً صريحاً فيه الصيغ المقبولة،
+أما <code>time.parse</code> فتُرجع <code>nil</code> و<code>time.valid</code> تُرجع <code>true/false</code> لفحص مدخل المستخدم.</p>
+<h2 id="_1">الدوال<a class="headerlink" href="#_1" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">time()                     time(x)                  time(2026, 10, 11, 14, 30)
+time(x, &quot;YYYY-MM-DD&quot;)      // نص منسّق مباشرة
+time.now([zone]) time.utc([x]) time.of(y[,m,d,h,mi,s,ms][,{tz:&quot;+03:00&quot;}])
+time.parse(text[, &quot;DD/MM/YYYY HH:mm&quot; | {tz, format}])   time.valid(text[, fmt])
+time.unix([x])  time.ms([x])
+</code></pre>
+<ul>
+<li><strong>التنسيق</strong> <code>time.format(t[, pattern[, {lang, digits, tz}]])</code>: رموز <code>YYYY YY MMMM MMM MM M dddd ddd DD D HH H hh h mm m ss s SSS A a Z ZZ Q W X x d</code>، والنص الحرفي بين <code>[ ]</code>.
+  قوالب جاهزة: <code>iso date time datetime short long date.long time12 rfc compact</code>.</li>
+<li><strong>الحساب</strong> <code>time.add(t, 3, "days")</code> · <code>time.add(t, "1h30m")</code> · <code>time.add(t, {months: 1, days: 20})</code> · <code>time.sub(...)</code>.
+  الأشهر والسنوات تقويمية وتثبّت اليوم عند آخر الشهر (31 يناير + شهر = 28 فبراير).</li>
+<li><strong>الفرق</strong> <code>time.diff(a, b)</code> يعطي مدة (<code>.text .long .totalHours ...</code>)، و<code>time.diff(a, b, "days")</code> رقماً.</li>
+<li><strong>الحدود</strong> <code>time.startOf(t, "week")</code> · <code>time.endOf(t, "month")</code> (وحدات: ms s m h d w M q y أو بالعربية).</li>
+<li><strong>المقارنة</strong> <code>before after same(a,b,"day") between(t,a,b) min max is(t,"today|past|future|weekend|weekday|leap")</code>.</li>
+<li><strong>المدد</strong> <code>time.span(3725000)</code> · <code>time.span("1h30m")</code> · <code>time.span({hours: 2})</code> · <code>time.span(90, "s")</code>.</li>
+<li><strong>القوائم</strong> <code>time.range(a, b[, "1 month"])</code> (حتى 100000 عنصر).</li>
+<li><strong>الصياغة البشرية</strong> <code>time.ago(t[, "ar" | {lang, digits, now}])</code> → «منذ 3 ساعات» / <code>in 2 days</code>، مع مثنّى العربية.</li>
+<li><strong>المناطق</strong> <code>time.zone(t, "+03:00" | "Riyadh" | "Asia/Riyadh")</code> · <code>time.zones()</code>.
+  أسماء المدن بلا توقيت صيفي مدمجة؛ أسماء IANA الأخرى تُقرأ من tzdata الجهاز عند توفّره، والإزاحة ثابتة عند لحظة التحويل.</li>
+<li><strong>الهجري</strong> <code>time.hijri(t[, {lang, digits}])</code> · <code>time.fromHijri(y, m, d)</code> — تقويم حسابي (جدولي)، قد يختلف يوماً عن رؤية الهلال.</li>
+<li><strong>التقويم</strong> <code>time.isLeap(y)</code> · <code>time.daysIn(y, m)</code>.</li>
+<li><strong>القياس</strong> <code>time.sleep(ms | "2s")</code> (حد أقصى 10 دقائق) · <code>time.stopwatch()</code> · <code>time.elapsed(sw[, "s"])</code> · <code>time.measure(fun, ...args)</code> → <code>{result, ms, seconds, text}</code>.</li>
+<li><strong>الإعداد</strong> <code>time.config({lang: "ar", digits: "arabic", weekStart: "sat", weekend: ["fri","sat"]})</code>. الافتراضي: <code>en</code>، أرقام لاتينية، الأسبوع يبدأ الاثنين، العطلة السبت والأحد.</li>
+</ul>
+<h2 id="_2">أمثلة<a class="headerlink" href="#_2" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">let t = time.parse(&quot;tomorrow 14:30&quot;);
+print time(t, &quot;dddd D MMMM YYYY, hh:mm A&quot;);
+print time.ago(t, &quot;ar&quot;);                       // بعد يوم
+print time.hijri(t, {lang: &quot;ar&quot;}).text;
+print time.diff(time.of(2026, 12, 31), time(), &quot;days&quot;);
+</code></pre>
+<h2 id="_3">التوافق<a class="headerlink" href="#_3" title="Permanent link">#</a></h2>
+<p><code>time</code> اسم مدمج جديد، لكن أي <code>fun time()</code> أو <code>class time</code> أو <code>let time = {...}</code> يعرّفه المستخدم يغلب في نطاقه
+(استثناء مقصود من قاعدة منع التسمية بدالة مدمجة)، فلا يتعطل كود موجود. <code>${#time}</code> في النصوص القالبية كما هي.</p>
+<h2 id="indsin">داخل indsin (الواجهات)<a class="headerlink" href="#indsin" title="Permanent link">#</a></h2>
+<p>قيمة أي خاصية في <code>@view</code> تُقيَّم بمفسّر Rin (docs/indsin_rin.md)، فكل دوال <code>time.*</code> النقية تعمل مباشرة:</p>
+<pre><code class="language-kotlin">let target = time.parse(&quot;2027-01-01&quot;);
+@view.Text=Left  text=&quot;تبقّى &quot; + time.diff(target, time(), &quot;days&quot;) + &quot; يوماً&quot;;  .end/view
+</code></pre>
+<ul>
+<li><strong>ممنوع داخل الخصائص</strong> (حارس النقاء): <code>time.sleep</code> و<code>time.measure</code> و<code>time.config</code>.</li>
+<li><strong>ساعة حيّة</strong>: عرّف <code>warp clock = time.ms();</code> وستتحدث الخلية <code>clock</code> كل ثانية، فتُعاد تلقائياً كل خاصية تقرؤها:</li>
+</ul>
+<pre><code class="language-kotlin">warp clock = time.ms();
+@view.Text=Now  text=time(clock, &quot;HH:mm:ss&quot;);  .end/view
+@view.Text=Left text=time.diff(target, clock, &quot;s&quot;) + &quot; ثانية&quot;;  .end/view
+</code></pre>
+<p>على المضيف أن يستدعي <code>rin_indsin_session_tick</code> كل ثانية ما دام الغلاف فيه <code>"ticking":true</code>
+  (أندرويد: <code>IndsinPreviewActivity</code> يفعل ذلك). الاختبار: <code>tests/tools/test_indsin_time.cpp</code>، المثال: <code>examples/samples/indsin_time_demo.rin</code>.
+- القيمة التي تُقرأ من <code>time()</code> مباشرة داخل خاصية تُحسب لحظة البناء ولا تتجدد وحدها؛ استعمل <code>clock</code> للتحديث الحيّ.</p></article>
+<div class="pnav"><a class="pn" href="MAKE_MEDIA.html">→ فيديو · صوت · API · إزالة الخلفية · قراءة النص من الصور</a><a class="pn" href="native-additions.html">دوال Rin الأصلية الجديدة (Rin 1.0) ←</a></div><p class="edit"><a href="https://github.com/dlof-lib/rinlang/edit/main/docs/TIME.md">✎ عدّل هذه الصفحة على GitHub</a></p>
+<footer>Rin 1.0.0 · رخصة MIT</footer></main>
+<aside id="toc"><b>في هذه الصفحة</b><div class="toc">
+<ul>
+<li><a href="#_1">الدوال</a></li>
+<li><a href="#_2">أمثلة</a></li>
+<li><a href="#_3">التوافق</a></li>
+<li><a href="#indsin">داخل indsin (الواجهات)</a></li>
+</ul>
+</div>
+</aside></div>
+<script src="assets/app.js"></script></body></html>
