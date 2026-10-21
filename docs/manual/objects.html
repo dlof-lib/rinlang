@@ -1,0 +1,124 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>class`/`struct`، `.object()`، `@Object`، `document — Rin</title>
+<meta name="description" content="توثيق لغة البرمجة Rin"><link rel="icon" href="../assets/brand/icon-32.png">
+<link rel="stylesheet" href="assets/style.css"></head><body>
+<header><button id="mn" aria-label="القائمة">☰</button><a class="logo" href="index.html"><img src="../assets/brand/icon-48.png" alt="" width="26">Rin</a>
+<input id="q" type="search" placeholder="ابحث في التوثيق…" autocomplete="off"><button id="th" aria-label="الوضع">◐</button>
+<a class="gh" href="https://github.com/dlof-lib/rinlang">GitHub</a><div id="res"></div></header>
+<div class="wrap"><nav id="sb"><details ><summary>ابدأ هنا</summary><a href="getting-started.html">البداية</a><a href="syntax.html">القواعد النحوية العامة</a><a href="variables.html">let`، مصفوفات، قواميس، نطاق</a><a href="template-strings.html">النصوص القالبية (متغيّرات داخل النص)</a><a href="input.html">إدخال المستخدم (Input)</a><a href="control-flow.html">الشروط، الحلقات، `goal`/`achieve</a><a href="loops.html">حلقات Rin — Loops v2</a><a href="functions.html">fun`/`return`، التكرار الذاتي</a><a href="enums.html">enum`: قوائم اختيار مغلقة</a></details><details open><summary>اللغة</summary><a href="language-reference.html">المرجع الشامل وخريطة ترابط المفاهيم</a><a href="objects.html" class=on>class`/`struct`، `.object()`، `@Object`، `document</a><a href="oop.html">البرمجة الكائنية الموسَّعة (Rin 1.0)</a><a href="containers.html">دليل `@container` / `@element` / `@loop</a><a href="table.html">الجدول (`@table` / `@container.table`) ودوال اللغة عليه</a><a href="set.html">Set`: نوع المجموعة الأساسي</a><a href="pipelines.html">عامل الأنابيب `|&gt;</a><a href="RECKON.html">reckon`: مفهوم حسابي بسطرين</a><a href="let-plus.html">let` المطوَّر</a><a href="living-variables.html">المتغيرات الحيّة (Living Variables)</a><a href="label-define.html">label` و`define` (تسمية وتعريف)</a><a href="block-frames.html">بداية الكتل ونهايتها (Block Frames)</a><a href="compare_ops.html">معاملات المقارنة `/=` و `=/=` و `=/</a><a href="max_min.html">max / min family</a><a href="scope-guarantees.html">ضمانات النطاق: `finally` · `defer` · `catch … when` · `rethrow</a><a href="key_terms_and_builtins.html">Rin KEY_TERMS and Built-in Conditions</a><a href="number_builtins.html">Rin Number Built-ins</a></details><details ><summary>الواجهات (Indsin)</summary><a href="indsin.html">Indsin — Interface Design</a><a href="indsin_rin.html">indsin يعتمد على لغة Rin</a><a href="indsin_expansion.html">Indsin — التوسعة الاحترافية (Design System v2)</a><a href="indsin_object.html">indsin-object — API reference</a><a href="indsin_media.html">Indsin Media — اختيار الوسائط ورفعها</a><a href="indsin_icons.html">مكتبة أيقونات indsin (متجهية)</a><a href="indsin_tooling.html">indsin tooling — icon, file association, syntax highlighting</a><a href="indsinweb.html">IndsinWeb — مكتبة WebView والروابط لـ indsin</a><a href="RIN_ELEMENTS.html">دليل `@element.*` الكامل</a><a href="events-effects.html">الأحداث والتأثيرات (Events &amp; Effects) — محرك Indsin UI</a><a href="banner.html">Banner: إشعار شريطي</a><a href="simple-style.html">Rin Simple Style</a></details><details ><summary>بيئة التشغيل</summary><a href="runtime.html">وقت تشغيل Rin (Rin Runtime) · المرجع الرسمي</a><a href="standard-library.html">المكتبة القياسية (`lib/*.og.rin`)</a><a href="errors.html">نظام الأخطاء: أكواد، `try`/`catch`/`throw</a><a href="ERROR_SYSTEM.html">نظام التشخيص: البنية الداخلية + جدول الأكواد الكامل</a><a href="storage.html">تخزين دائم</a><a href="http.html">شبكات</a><a href="env.html">ربط Rin بملف `.env</a><a href="terminal.html">الطرفية التفاعلية — `rin terminal</a><a href="vm.html">RinVM — آلة Rin الافتراضية (بايتكود)</a><a href="rinflow.html">RinFlow: طبقة تنفيذ التدفّق المهيكل</a><a href="MAKE_UNIT.html">@make.(name)`: وحدة بسياسة قدرات صريحة</a><a href="MAKE_MEDIA.html">فيديو · صوت · API · إزالة الخلفية · قراءة النص من الصور</a><a href="TIME.html">مفهوم `time`: الزمن كقيمة من الدرجة الأولى</a><a href="native-additions.html">دوال Rin الأصلية الجديدة (Rin 1.0)</a></details><details ><summary>الحاويات وقواعد البيانات</summary><a href="container_advanced.html">Rin Container Advanced Built-ins</a><a href="container_pro.html">Rin Container Pro</a><a href="container_sql.html">RIN CONTAINER SQL (RCSQL)</a><a href="cross-file-containers.html">استدعاء إعلانات من ملف آخر</a></details><details ><summary>الحزم والتكامل</summary><a href="api.html">واجهة C المسطَّحة (Embedding API)</a><a href="android.html">استضافة Rin على أندرويد</a><a href="packages-and-interop.html">Rin 1.0 — المكتبات والحزم وجسر C++ وJSON واختبارات rintest</a><a href="rinpak-format.html">RinPak — حزمة مشروع Rin (`.rinpak`)</a><a href="html-projects.html">مشاريع HTML في Rin — الربط بين index.html وملف الحاوية</a><a href="project-og-urin.html">project.og.urin` — البيانات الوصفية لمشروع Rin</a><a href="CONTENT_PACKS.html">حزم المحتوى القابلة للتنزيل (Content Packs)</a><a href="previewkit.html">previewkit — معاينة حيّة لملفات PDF / Markdown / TypeScript</a></details><details ><summary>المكتبات المتخصصة</summary><a href="rinml.html">RinML / RinDF / RinAI — الذكاء الاصطناعي وتحليل البيانات في Rin</a><a href="STATS.html">RinStat — التحليل الإحصائي (`lib/rinstat.og.rin`)</a><a href="STATS_ADV.html">RinStat المتقدّم + RinAuto</a><a href="LINALG.html">الجبر الخطي للمهندسين — `mat*` و`vec*</a><a href="PLOT.html">RinPlot — الرسوم البيانية الإحصائية (`lib/rinplot.og.rin`)</a><a href="ALGO.html">تطوير الخوارزميات والحساب العددي — `algo*</a><a href="NUMBER.html">مفهوم `number` في Rin</a><a href="boat.html">&quot;Boat&quot;: مفاهيم أساسية مجمَّعة</a><a href="passkit.html">passkit — passwords, encryption, databases and a tag language</a><a href="passkit-crypto-db.html">Passkit feature catalog: encryption, databases and container linking</a><a href="hash-family.html">عائلة `#` — مفاهيم ودوال جديدة تبدأ بعلامة `#</a><a href="image-draw.html">إنشاء الصور في Rin — رسم وحفظ PNG وlog كصورة</a><a href="image-terminal.html">طباعة الصور في الـ terminal — `printImage` / `imageAnsi` / `imageInfo</a></details><details ><summary>المشروع</summary><a href="CONTRIBUTING.html">المساهمة في Rin</a><a href="CODE_OF_CONDUCT.html">قواعد السلوك</a><a href="SECURITY.html">سياسة الأمان</a><a href="SUPPORT.html">الحصول على المساعدة</a><a href="TRADEMARKS.html">سياسة العلامة التجارية — Trademark Policy</a><a href="THIRD_PARTY_NOTICES.html">إشعارات المكوّنات الخارجية — Third-Party Notices</a></details><details ><summary>مراجع إضافية</summary><a href="ANDROID_VERSIONS.html">حزم RinStudio لكل إصدار أندرويد</a><a href="TOKEN.html">مفهوم `token` في Rin</a><a href="TOOLCHAIN.html">Rin Professional Language Toolchain</a><a href="TOOLCHAIN_UPGRADE.html">Toolchain Upgrade — 2026-09</a><a href="architecture.html">المعمارية وبنية المستودع</a><a href="base-accept.html">base` و`accept`: متغيّران يخدمان `if</a><a href="channel47.html">channel47 — لغة وصف البيانات والإعدادات</a><a href="ci.html">CI وأدوات المستودع</a><a href="loop-templates.html">قوالب الحلقات `@tmpl</a><a href="pre-post.html">pre` و`post` (ما قبل / ما بعد): عقد انتقال حول الإسناد</a><a href="print-fonts.html">خطوط `print` — bold / italic / underline وغيرها</a><a href="print-image-terminal.html">طباعة الصور كنص في الطرفية</a><a href="print-templates.html">قوالب الطباعة `@tmpl ... print` — قوالب نصية خطية وتنسيقية</a><a href="rdoc.html">rdoc — Documentation Container</a><a href="rdoc-reference.html">وثيقة rdoc الشاملة — Documentation Container</a><a href="screenshots.html">لقطات من RinStudio</a></details></nav>
+<main><article><h1 id="objectsmd-classstruct-object-object-document">objects.md — <code>class</code>/<code>struct</code>، <code>.object()</code>، <code>@Object</code>، <code>document</code><a class="headerlink" href="#objectsmd-classstruct-object-object-document" title="Permanent link">#</a></h1>
+<p>في Rin أربع طرق مختلفة لتمثيل "شيء له حقول"، كل واحدة لغرض مختلف: <code>class</code>/<code>struct</code>
+لبيانات + سلوك (methods)، <code>.object("id")</code> لكائن سريع بمعرِّف صريح ومعاينة حيّة،
+<code>@Object=name</code> لتسجيله كحاوية داخل شجرة الحاويات، و<code>document</code> لسجل داخل حاوية NoSQL
+(<code>@container.doc</code>).</p>
+<h2 id="class-struct"><code>class</code> / <code>struct</code><a class="headerlink" href="#class-struct" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">class Animal {
+    let name = &quot;unknown&quot;;
+    fun speak() {
+        print self.name + &quot; makes a sound&quot;;
+    }
+}
+class Dog extends Animal {
+    fun speak() {
+        print self.name + &quot; barks&quot;;
+    }
+}
+let d = Dog();
+d.name = &quot;Rex&quot;;
+d.speak(); // Rex barks
+</code></pre>
+<ul>
+<li><code>self</code> (وليس <code>this</code>) هو مرجع النسخة الحالية داخل أي طريقة (method).</li>
+<li><code>fun init(...) { ... }</code> — إن عُرِّفت — هي المُنشئ (constructor)، تُستدعى تلقائيًا
+  عند <code>ClassName(args)</code>:
+  <code>kotlin
+  class Counter {
+      let value = 0;
+      fun init(start) { self.value = start; }
+      fun inc() { self.value = self.value + 1; }
+  }
+  let c = Counter(10);
+  c.inc();
+  print c.value; // 11</code></li>
+<li><code>extends</code> وراثة عادية — الصنف الفرعي يرث الحقول والطرق، ويمكنه إعادة تعريف
+  (override) أي طريقة.</li>
+<li><code>struct</code> بنفس صياغة <code>class</code> حرفيًا، والفرق الوحيد <strong>دلالة وقت التشغيل</strong>: نسخة
+  <code>struct</code> لها <strong>دلالة قيمة (value semantics)</strong> — تُنسخ عند الإسناد — بينما <code>class</code>
+  لها <strong>دلالة مرجع (reference semantics)</strong> الافتراضية:
+  <code>kotlin
+  struct Point { let x = 0; let y = 0; }
+  let p1 = Point();
+  p1.x = 5;
+  let p2 = p1;   // نسخة مستقلة، لا مرجع لنفس p1
+  p2.x = 99;
+  print p1.x; // 5  -- لم يتأثر
+  print p2.x; // 99</code></li>
+</ul>
+<h2 id="objectid-endobject"><code>.object("id") ... .end/object</code> — كائن سريع بمعرِّف<a class="headerlink" href="#objectid-endobject" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">.object(&quot;user01&quot;)
+    name(&quot;ABOO&quot;);
+    age(19);
+    online(true);
+.end/object
+
+print user01;          // الكائن مُعرَّف تلقائيًا كمتغيّر باسم المعرِّف نفسه
+print user01[&quot;name&quot;];  // فهرسة عادية كأي قاموس آخر
+</code></pre>
+<p>كل سطر بداخله هو استدعاء دالة باسم الحقل: <code>field(value)</code> يضبط الحقل، و<code>field()</code>
+بلا وسيطة تعني قيمته <code>nil</code>. الصياغة المُنمَّطة <code>field:(value)</code> مرادفة تمامًا
+لـ<code>field(value)</code> بلا أي فرق دلالي.</p>
+<p><code>container.();</code> (اختياري) يسجّل الكائن في سجل عام (objectRegistry) يمكن الوصول
+إليه لاحقًا بنفس المعرِّف من أي مكان — يحتاجه <code>view.print/object</code> عند تمرير نص
+(id) بدل الكائن نفسه مباشرة:</p>
+<pre><code class="language-kotlin">.object(&quot;user02&quot;)
+    name(&quot;Sara&quot;);
+    age(27);
+    container.();
+.end/object
+
+view.print/object(&quot;user02&quot;);  // معاينة حيّة بالبحث عن id مسجَّل
+view.print/object(user01);     // أو معاينة قيمة كائن مباشرة (بلا تسجيل مسبق)
+</code></pre>
+<h2 id="objectname-endobject"><code>@Object=name ... .end/Object</code><a class="headerlink" href="#objectname-endobject" title="Permanent link">#</a></h2>
+<p>اختصار لـ<code>@container.object=name ... .end/container.object</code> — يسجِّل حاوية بيانات
+نقية (بلا دوال ولا حاويات متداخلة) من نوع <code>ContainerKind::OBJECT</code> داخل شجرة
+الحاويات. الحقول بداخلها تُكتب بصياغة <code>let</code> عادية (لا صياغة <code>field(value)</code> كما في
+<code>.object()</code>):</p>
+<pre><code class="language-kotlin">@Object=profile
+    let name = &quot;Sara&quot;;
+    let age = 30;
+.end/Object
+</code></pre>
+<p>بخلاف <code>.object("id")</code>، هذا الشكل <strong>لا</strong> يُعرِّف <code>profile</code> تلقائيًا كمتغيّر قابل
+للقراءة المباشرة بعد <code>.end/Object</code> — الوصول إلى محتواه يمر عبر دوال الحاويات
+الديناميكية العامة (<code>getField(container, key)</code>, <code>hasField(...)</code>, ...) الموثَّقة في
+<a href="containers.html"><code>containers.md</code></a>، لا عبر اسمه مباشرة كأي <code>let</code> عادي.</p>
+<h2 id="document-nosql"><code>document</code> — سجل داخل حاوية NoSQL<a class="headerlink" href="#document-nosql" title="Permanent link">#</a></h2>
+<p>يُستخدَم <strong>داخل</strong> جسم <code>@container.doc</code> (أو <code>@doc</code>) فقط — لا بعد إغلاقها:</p>
+<pre><code class="language-kotlin">@container.doc=users
+    document id=&quot;u1&quot; fields={ name: &quot;Ali&quot;, age: 30 };
+.end/container.doc
+</code></pre>
+<p><code>fields</code> قاموس حر البنية (schema-less) تمامًا كمستندات JSON في قواعد بيانات
+NoSQL — إدراج بنفس <code>id</code> موجود مسبقًا يُحدِّثه بدل تكراره.</p>
+<h2 id="_1">انظر أيضًا<a class="headerlink" href="#_1" title="Permanent link">#</a></h2>
+<ul>
+<li><a href="oop.html"><code>oop.md</code></a> — الامتداد الكامل لـ<code>class</code>: <code>interface</code>/<code>trait</code>/<code>abstract</code>/<code>static</code>/<code>private</code>/<code>get</code>/<code>set</code>/دوال <code>oop.*</code>.</li>
+<li><a href="containers.html"><code>containers.md</code></a> — <code>@container</code> بكل أنواعه (<code>doc</code>, <code>data</code>,
+  <code>table</code>, ...) ودوال الوصول الديناميكي العامة للحاويات.</li>
+<li><a href="variables.html"><code>variables.md</code></a> — القواميس (map) التي تُبنى عليها كل هذه الأشكال.</li>
+<li><a href="enums.html"><code>enums.md</code></a> — بديل لبيانات مغلقة (closed set) بدل كائن حر.</li>
+</ul></article>
+<div class="pnav"><a class="pn" href="language-reference.html">→ المرجع الشامل وخريطة ترابط المفاهيم</a><a class="pn" href="oop.html">البرمجة الكائنية الموسَّعة (Rin 1.0) ←</a></div><p class="edit"><a href="https://github.com/dlof-lib/rinlang/edit/main/docs/objects.md">✎ عدّل هذه الصفحة على GitHub</a></p>
+<footer>Rin 1.0.0 · رخصة MIT</footer></main>
+<aside id="toc"><b>في هذه الصفحة</b><div class="toc">
+<ul>
+<li><a href="#class-struct">class / struct</a></li>
+<li><a href="#objectid-endobject">.object("id") ... .end/object — كائن سريع بمعرِّف</a></li>
+<li><a href="#objectname-endobject">@Object=name ... .end/Object</a></li>
+<li><a href="#document-nosql">document — سجل داخل حاوية NoSQL</a></li>
+<li><a href="#_1">انظر أيضًا</a></li>
+</ul>
+</div>
+</aside></div>
+<script src="assets/app.js"></script></body></html>
