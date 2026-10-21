@@ -137,7 +137,7 @@ build_desktop() {
     fi
 
     if ! printf '#include <X11/Xlib.h>\nint main(){return 0;}\n' \
-            | "$cxx" -std=c++17 -x c++ -o /dev/null - -lX11 >/dev/null 2>&1; then
+            | "$cxx" -std=c++23 -x c++ -o /dev/null - -lX11 >/dev/null 2>&1; then
         warn "SKIP desktop: X11 dev headers/libs not found."
         warn "              Debian/Ubuntu: sudo apt install libx11-dev"
         warn "              Fedora:        sudo dnf install libX11-devel"
@@ -145,7 +145,7 @@ build_desktop() {
     fi
 
     mkdir -p "$DIST/desktop"
-    "$cxx" -std=c++17 -O2 -I "$CORE" -o "$DIST/desktop/rin_indsin_desktop" \
+    "$cxx" -std=c++23 -O2 -I "$CORE" -o "$DIST/desktop/rin_indsin_desktop" \
         "$REPO_DIR/tools/rin_indsin_desktop.cpp" \
         "$CORE/indsin/rin_indsin_c_api.cpp" \
         "$CORE/rin_c_api.cpp" \
