@@ -1,0 +1,110 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>تطوير الخوارزميات والحساب العددي — `algo* — Rin</title>
+<meta name="description" content="توثيق لغة البرمجة Rin"><link rel="icon" href="../assets/brand/icon-32.png">
+<link rel="stylesheet" href="assets/style.css"></head><body>
+<header><button id="mn" aria-label="القائمة">☰</button><a class="logo" href="index.html"><img src="../assets/brand/icon-48.png" alt="" width="26">Rin</a>
+<input id="q" type="search" placeholder="ابحث في التوثيق…" autocomplete="off"><button id="th" aria-label="الوضع">◐</button>
+<a class="gh" href="https://github.com/dlof-lib/rinlang">GitHub</a><div id="res"></div></header>
+<div class="wrap"><nav id="sb"><details ><summary>ابدأ هنا</summary><a href="getting-started.html">البداية</a><a href="syntax.html">القواعد النحوية العامة</a><a href="variables.html">let`، مصفوفات، قواميس، نطاق</a><a href="template-strings.html">النصوص القالبية (متغيّرات داخل النص)</a><a href="input.html">إدخال المستخدم (Input)</a><a href="control-flow.html">الشروط، الحلقات، `goal`/`achieve</a><a href="loops.html">حلقات Rin — Loops v2</a><a href="functions.html">fun`/`return`، التكرار الذاتي</a><a href="enums.html">enum`: قوائم اختيار مغلقة</a></details><details ><summary>اللغة</summary><a href="language-reference.html">المرجع الشامل وخريطة ترابط المفاهيم</a><a href="objects.html">class`/`struct`، `.object()`، `@Object`، `document</a><a href="oop.html">البرمجة الكائنية الموسَّعة (Rin 1.0)</a><a href="containers.html">دليل `@container` / `@element` / `@loop</a><a href="table.html">الجدول (`@table` / `@container.table`) ودوال اللغة عليه</a><a href="set.html">Set`: نوع المجموعة الأساسي</a><a href="pipelines.html">عامل الأنابيب `|&gt;</a><a href="RECKON.html">reckon`: مفهوم حسابي بسطرين</a><a href="let-plus.html">let` المطوَّر</a><a href="living-variables.html">المتغيرات الحيّة (Living Variables)</a><a href="label-define.html">label` و`define` (تسمية وتعريف)</a><a href="block-frames.html">بداية الكتل ونهايتها (Block Frames)</a><a href="compare_ops.html">معاملات المقارنة `/=` و `=/=` و `=/</a><a href="max_min.html">max / min family</a><a href="scope-guarantees.html">ضمانات النطاق: `finally` · `defer` · `catch … when` · `rethrow</a><a href="key_terms_and_builtins.html">Rin KEY_TERMS and Built-in Conditions</a><a href="number_builtins.html">Rin Number Built-ins</a></details><details ><summary>الواجهات (Indsin)</summary><a href="indsin.html">Indsin — Interface Design</a><a href="indsin_rin.html">indsin يعتمد على لغة Rin</a><a href="indsin_expansion.html">Indsin — التوسعة الاحترافية (Design System v2)</a><a href="indsin_object.html">indsin-object — API reference</a><a href="indsin_media.html">Indsin Media — اختيار الوسائط ورفعها</a><a href="indsin_icons.html">مكتبة أيقونات indsin (متجهية)</a><a href="indsin_tooling.html">indsin tooling — icon, file association, syntax highlighting</a><a href="indsinweb.html">IndsinWeb — مكتبة WebView والروابط لـ indsin</a><a href="RIN_ELEMENTS.html">دليل `@element.*` الكامل</a><a href="events-effects.html">الأحداث والتأثيرات (Events &amp; Effects) — محرك Indsin UI</a><a href="banner.html">Banner: إشعار شريطي</a><a href="simple-style.html">Rin Simple Style</a></details><details ><summary>بيئة التشغيل</summary><a href="runtime.html">وقت تشغيل Rin (Rin Runtime) · المرجع الرسمي</a><a href="standard-library.html">المكتبة القياسية (`lib/*.og.rin`)</a><a href="errors.html">نظام الأخطاء: أكواد، `try`/`catch`/`throw</a><a href="ERROR_SYSTEM.html">نظام التشخيص: البنية الداخلية + جدول الأكواد الكامل</a><a href="storage.html">تخزين دائم</a><a href="http.html">شبكات</a><a href="env.html">ربط Rin بملف `.env</a><a href="terminal.html">الطرفية التفاعلية — `rin terminal</a><a href="vm.html">RinVM — آلة Rin الافتراضية (بايتكود)</a><a href="rinflow.html">RinFlow: طبقة تنفيذ التدفّق المهيكل</a><a href="MAKE_UNIT.html">@make.(name)`: وحدة بسياسة قدرات صريحة</a><a href="MAKE_MEDIA.html">فيديو · صوت · API · إزالة الخلفية · قراءة النص من الصور</a><a href="TIME.html">مفهوم `time`: الزمن كقيمة من الدرجة الأولى</a><a href="native-additions.html">دوال Rin الأصلية الجديدة (Rin 1.0)</a></details><details ><summary>الحاويات وقواعد البيانات</summary><a href="container_advanced.html">Rin Container Advanced Built-ins</a><a href="container_pro.html">Rin Container Pro</a><a href="container_sql.html">RIN CONTAINER SQL (RCSQL)</a><a href="cross-file-containers.html">استدعاء إعلانات من ملف آخر</a></details><details ><summary>الحزم والتكامل</summary><a href="api.html">واجهة C المسطَّحة (Embedding API)</a><a href="android.html">استضافة Rin على أندرويد</a><a href="packages-and-interop.html">Rin 1.0 — المكتبات والحزم وجسر C++ وJSON واختبارات rintest</a><a href="rinpak-format.html">RinPak — حزمة مشروع Rin (`.rinpak`)</a><a href="html-projects.html">مشاريع HTML في Rin — الربط بين index.html وملف الحاوية</a><a href="project-og-urin.html">project.og.urin` — البيانات الوصفية لمشروع Rin</a><a href="CONTENT_PACKS.html">حزم المحتوى القابلة للتنزيل (Content Packs)</a><a href="previewkit.html">previewkit — معاينة حيّة لملفات PDF / Markdown / TypeScript</a></details><details open><summary>المكتبات المتخصصة</summary><a href="rinml.html">RinML / RinDF / RinAI — الذكاء الاصطناعي وتحليل البيانات في Rin</a><a href="STATS.html">RinStat — التحليل الإحصائي (`lib/rinstat.og.rin`)</a><a href="STATS_ADV.html">RinStat المتقدّم + RinAuto</a><a href="LINALG.html">الجبر الخطي للمهندسين — `mat*` و`vec*</a><a href="PLOT.html">RinPlot — الرسوم البيانية الإحصائية (`lib/rinplot.og.rin`)</a><a href="ALGO.html" class=on>تطوير الخوارزميات والحساب العددي — `algo*</a><a href="NUMBER.html">مفهوم `number` في Rin</a><a href="boat.html">&quot;Boat&quot;: مفاهيم أساسية مجمَّعة</a><a href="passkit.html">passkit — passwords, encryption, databases and a tag language</a><a href="passkit-crypto-db.html">Passkit feature catalog: encryption, databases and container linking</a><a href="hash-family.html">عائلة `#` — مفاهيم ودوال جديدة تبدأ بعلامة `#</a><a href="image-draw.html">إنشاء الصور في Rin — رسم وحفظ PNG وlog كصورة</a><a href="image-terminal.html">طباعة الصور في الـ terminal — `printImage` / `imageAnsi` / `imageInfo</a></details><details ><summary>المشروع</summary><a href="CONTRIBUTING.html">المساهمة في Rin</a><a href="CODE_OF_CONDUCT.html">قواعد السلوك</a><a href="SECURITY.html">سياسة الأمان</a><a href="SUPPORT.html">الحصول على المساعدة</a><a href="TRADEMARKS.html">سياسة العلامة التجارية — Trademark Policy</a><a href="THIRD_PARTY_NOTICES.html">إشعارات المكوّنات الخارجية — Third-Party Notices</a></details><details ><summary>مراجع إضافية</summary><a href="ANDROID_VERSIONS.html">حزم RinStudio لكل إصدار أندرويد</a><a href="TOKEN.html">مفهوم `token` في Rin</a><a href="TOOLCHAIN.html">Rin Professional Language Toolchain</a><a href="TOOLCHAIN_UPGRADE.html">Toolchain Upgrade — 2026-09</a><a href="architecture.html">المعمارية وبنية المستودع</a><a href="base-accept.html">base` و`accept`: متغيّران يخدمان `if</a><a href="channel47.html">channel47 — لغة وصف البيانات والإعدادات</a><a href="ci.html">CI وأدوات المستودع</a><a href="loop-templates.html">قوالب الحلقات `@tmpl</a><a href="pre-post.html">pre` و`post` (ما قبل / ما بعد): عقد انتقال حول الإسناد</a><a href="print-fonts.html">خطوط `print` — bold / italic / underline وغيرها</a><a href="print-image-terminal.html">طباعة الصور كنص في الطرفية</a><a href="print-templates.html">قوالب الطباعة `@tmpl ... print` — قوالب نصية خطية وتنسيقية</a><a href="rdoc.html">rdoc — Documentation Container</a><a href="rdoc-reference.html">وثيقة rdoc الشاملة — Documentation Container</a><a href="screenshots.html">لقطات من RinStudio</a></details></nav>
+<main><article><h1 id="algo">تطوير الخوارزميات والحساب العددي — <code>algo*</code><a class="headerlink" href="#algo" title="Permanent link">#</a></h1>
+<p>23 دالة أصلية (<code>rin_extra_natives11.cpp</code>) تغطي ما يحتاجه المهندس حول خوارزميته: حلّ وتحسين، تفاضل وتكامل، معادلات تفاضلية، استيفاء وتوفيق، إشارات، وأدوات <strong>قياس وتحقق</strong> لخوارزميتك أنت.</p>
+<h2 id="_1">كيف تتكامل مع الموجود<a class="headerlink" href="#_1" title="Permanent link">#</a></h2>
+<ul>
+<li><code>algoPolyFit</code> و<code>algoNewton</code> و<code>algoPolyRoots</code> تقوم على محرّك الجبر الخطي نفسه (SVD، LU، القيم الذاتية في <a href="LINALG.html"><code>LINALG.md</code></a>) — لا نسخة ثانية.</li>
+<li><code>algoCheck</code> يقارن بدلالة <code>numberApprox</code>؛ <code>algoTrapz</code> يجمع بـ Neumaier كـ <code>numberSum</code>.</li>
+<li>الدوال الممرَّرة (<code>f</code>, <code>fn</code>, <code>gen</code>) دوال Rin عادية أو lambdas أو كائنات <code>__call__</code> (نفس مسار <code>map/filter</code>). الدوال الأصلية (مثل <code>numberSum</code>) لا تُمرَّر بالاسم؛ لُفّها: <code>fun(a) { return numberSum(a); }</code>.</li>
+<li>الأخطاء بنظام التشخيص وقابلة للالتقاط؛ مع <code>try/finally</code> و<code>defer</code> (ضمانات النطاق) يمكن تنظيف الموارد حول القياس.</li>
+</ul>
+<h2 id="_2">الجذور والتحسين<a class="headerlink" href="#_2" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الدالة</th>
+<th>الوصف</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>algoRoot(f, a, b[,{method:"brent"\|"bisect", tol, maxIter}])</code></td>
+<td>جذر في قوس يغيّر الإشارة (Brent افتراضياً). بلا تغيّر إشارة ← خطأ يقترح <code>algoBracket</code></td>
+</tr>
+<tr>
+<td><code>algoRoot(f, x0[,{method:"newton"\|"secant", df}])</code></td>
+<td>من نقطة؛ <code>df</code> مشتقة تحليلية اختيارية (وإلا عددية)</td>
+</tr>
+<tr>
+<td><code>algoBracket(f, x0[,{step,grow}])</code></td>
+<td>يوسّع حول <code>x0</code> حتى تتغيّر الإشارة ← <code>{a,b,fa,fb}</code></td>
+</tr>
+<tr>
+<td><code>algoMinimize(f, a, b)</code></td>
+<td>متغيّر واحد (Brent)</td>
+</tr>
+<tr>
+<td><code>algoMinimize(f, [x0...][,{tol,maxIter,step}])</code></td>
+<td>عدة متغيّرات (Nelder–Mead)؛ <code>f</code> تستقبل مصفوفة</td>
+</tr>
+<tr>
+<td><code>algoMinimize(f, [x0...],{method:"bfgs", grad, gtol})</code></td>
+<td>شبه نيوتن BFGS مع بحث خطي؛ <code>grad</code> اختيارية (وإلا تدرّج عددي)، وتقلّل التقييمات كثيراً</td>
+</tr>
+<tr>
+<td><code>algoNewton(F, x0[,{jacobian,tol,maxIter}])</code></td>
+<td>جملة <code>F(x)=0</code>: جاكوبيان عددي + LU + بحث خطي (backtracking)</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="_3">التفاضل والتكامل<a class="headerlink" href="#_3" title="Permanent link">#</a></h2>
+<p><code>algoDiff(f, x[,{order:1\|2, h, info}])</code> (ريدرز: استكمال ريتشاردسون مع تقدير الخطأ) · <code>algoGrad(f, xVec)</code> · <code>algoJacobian(F, xVec)</code> · <code>algoIntegrate(f, a, b[,{tol,limit}])</code> (Gauss–Kronrod 7/15 تكيّفي، يدعم حدوداً لانهائية، يُرجع <code>{value, error, evaluations, converged}</code>) · <code>algoTrapz(ys[, xs\|dx])</code>.</p>
+<p>اللانهاية في Rin: <code>number("inf", {special:true})</code>.</p>
+<h2 id="_4">المعادلات التفاضلية<a class="headerlink" href="#_4" title="Permanent link">#</a></h2>
+<p><code>algoOde(f, y0, t0, t1[,{method:"rk45"\|"rk4"\|"stiff", rtol, atol, h, steps, maxSteps}])</code> حيث <code>f(t, y)</code>؛ <code>y</code> رقم أو متجه، والناتج <code>{t, y, steps, rejected, evaluations}</code>. الافتراضي Dormand–Prince 5(4) تكيّفي؛ <code>rk4</code> بخطوات ثابتة. <code>stiff</code> للمسائل الصلبة (Euler ضمني تكيّفي بمضاعفة الخطوة + استكمال محلي، جاكوبيان عددي + LU): على <code>y'=-1000y+3000-2000e^{-t}</code> يحتاج عشرات الخطوات بينما RK45 يحتاج مئات. يدعم التكامل للخلف (<code>t1 &lt; t0</code>).</p>
+<h2 id="_5">الاستيفاء والتوفيق والإشارات<a class="headerlink" href="#_5" title="Permanent link">#</a></h2>
+<p><code>algoInterp(xs, ys, x[,{method:"linear"\|"spline"\|"nearest", extrapolate}])</code> · <code>algoPolyFit(xs, ys, deg)</code> ← <code>{coeffs (صعوداً), r2, rmse, rank}</code> · <code>algoPolyEval(c, x)</code> · <code>algoPolyRoots(c)</code> ← <code>[{re,im}]</code> · <code>algoFFT(signal[,{inverse}])</code> ← <code>{re, im}</code> لأي طول (Radix-2 + Bluestein) · <code>algoRandom(n,{seed,min,max,int,sorted,unique})</code> (حتمية).</p>
+<h2 id="_6">القياس والتحقق (لخوارزميتك)<a class="headerlink" href="#_6" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">fun mySort(a) { /* ... */ return a; }
+fun refSort(a) { return sort(a); }   // أي مرجع تثق به
+
+// 1) صحة: اختبار تفاضلي على مدخلات عشوائية
+let inputs = [];
+for i in 1 to 50 { push(inputs, algoRandom(i, {seed: i, int: true, max: 20})); }
+print algoCheck(mySort, refSort, inputs);      // {ok, tested, failed, failures:[{index,input,got,expected}]}
+
+// 2) سرعة
+print algoBench(mySort, {args: [algoRandom(1000, {seed: 1})], runs: 20});
+
+// 3) رتبة النمو تجريبياً
+let c = algoComplexity(mySort, [500, 1000, 2000, 4000, 8000]);
+print c.best, c.exponent;                      // مثلاً O(n^2)  1.97
+
+// 4) مقارنة
+print algoCompare({mine: mySort, ref: refSort}, {args: [algoRandom(2000, {seed: 2})]});
+</code></pre>
+<ul>
+<li><code>algoBench</code> ← <code>{runs, meanMs, minMs, maxMs, medianMs, stdevMs, totalMs}</code>؛ <code>warmup</code> افتراضياً 1.</li>
+<li><code>algoComplexity(fn, sizes[,{gen: fn(n), runs, seed}])</code>: يقيس <strong>أقل</strong> زمن لكل حجم، ويُرجع <code>exponent</code> (ميل log-log) و<code>best</code> (أبسط نموذج متّسق مع القياس ضمن ضجيج ≈ 8%: <code>O(1) O(log n) O(n) O(n log n) O(n^2) O(n^3)</code>) و<code>candidates</code> و<code>fits</code>. تقدير إرشادي: استعمل 4–6 أحجام تتضاعف، وأحجاماً كبيرة بما يكفي ليتجاوز الزمن ضجيج المؤقّت. <code>gen</code> يولّد مدخلاً مخصصاً (الافتراضي مصفوفة أرقام عشوائية)، وتُمرَّر <code>fn</code> نسخة جديدة في كل تشغيل.</li>
+<li><code>algoCheck(fn, ref, inputs[,{spread, rel, abs, maxFailures}])</code>: كل عنصر في <code>inputs</code> وسيط واحد (أو قائمة وسائط مع <code>spread:true</code>). إن رمى الاثنان خطأ يُعدّان متطابقين؛ وإن رمى واحد فقط فهو فشل.</li>
+</ul>
+<h2 id="_7">المخططات (على مصفوفة الأوزان)<a class="headerlink" href="#_7" title="Permanent link">#</a></h2>
+<p><code>algoGraphMatrix(edges, n[,{directed}])</code> ← مصفوفة أوزان (القطر 0، غياب الحافة <code>Infinity</code>) · <code>algoDijkstra(W, src[, dst])</code> ← <code>{dist, prev, path}</code> (يرفض الأوزان السالبة) · <code>algoFloyd(W)</code> ← <code>{dist, negativeCycle}</code>. المصفوفة نفسها تُغذّي <code>matPowerIter</code> (PageRank) و<code>matEigSym</code> (طيف لابلاس).</p>
+<h2 id="_8">ملاحظات<a class="headerlink" href="#_8" title="Permanent link">#</a></h2>
+<ul>
+<li>كل التحسين والجذور تُرجع <code>converged</code> ولا ترمي عند عدم التقارب (إلا الحالات المستحيلة: مشتقة صفرية، جاكوبيان منفرد، تباعد، تجاوز <code>maxSteps</code>).</li>
+<li>الاختبار: <code>tests/verification/linalg_algo.rin</code>.</li>
+</ul></article>
+<div class="pnav"><a class="pn" href="PLOT.html">→ RinPlot — الرسوم البيانية الإحصائية (`lib/rinplot.og.rin`)</a><a class="pn" href="NUMBER.html">مفهوم `number` في Rin ←</a></div><p class="edit"><a href="https://github.com/dlof-lib/rinlang/edit/main/docs/ALGO.md">✎ عدّل هذه الصفحة على GitHub</a></p>
+<footer>Rin 1.0.0 · رخصة MIT</footer></main>
+<aside id="toc"><b>في هذه الصفحة</b><div class="toc">
+<ul>
+<li><a href="#_1">كيف تتكامل مع الموجود</a></li>
+<li><a href="#_2">الجذور والتحسين</a></li>
+<li><a href="#_3">التفاضل والتكامل</a></li>
+<li><a href="#_4">المعادلات التفاضلية</a></li>
+<li><a href="#_5">الاستيفاء والتوفيق والإشارات</a></li>
+<li><a href="#_6">القياس والتحقق (لخوارزميتك)</a></li>
+<li><a href="#_7">المخططات (على مصفوفة الأوزان)</a></li>
+<li><a href="#_8">ملاحظات</a></li>
+</ul>
+</div>
+</aside></div>
+<script src="assets/app.js"></script></body></html>
