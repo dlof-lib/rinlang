@@ -2220,3 +2220,7 @@ Official AGP compatibility: AGP 8.13 requires Gradle 8.13 and JDK 17.
 - Added `mask(name)` runtime sugar returning `{mask,name,kind}` or `nil`.
 - Added `docs/simple-style.md` and `examples/simple_container_mask.rin`.
 - Existing `@container=...`, `mask = ...;`, and low-level APIs remain compatible.
+
+## COMPOSE
+
+- **`lib/compose.og.rin` (مكتبة أساسية مدمجة)**: تحويل موحَّد (`valueKind` `asMap` `asArray` `asSet` `asFn`)، تركيب (`compose` `chain` `through` `juxt` `branch` `attempt` وجبر الشروط)، دمج (`combine` `mergeWith` `mergeAll` `mergeInto` `mergeContainers` `joinRecords`)، تفاعل (`mapOver` `filterOver` `reduceOver` `connect` `sync`)، وجسر token↔number. التوثيق: `docs/compose.md`، الاختبار: `tests/verification/compose_basic.rin`.
