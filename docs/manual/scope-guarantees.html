@@ -1,0 +1,137 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>ضمانات النطاق: `finally` · `defer` · `catch … when` · `rethrow — Rin</title>
+<meta name="description" content="توثيق لغة البرمجة Rin"><link rel="icon" href="../assets/brand/icon-32.png">
+<link rel="stylesheet" href="assets/style.css"></head><body>
+<header><button id="mn" aria-label="القائمة">☰</button><a class="logo" href="index.html"><img src="../assets/brand/icon-48.png" alt="" width="26">Rin</a>
+<input id="q" type="search" placeholder="ابحث في التوثيق…" autocomplete="off"><button id="th" aria-label="الوضع">◐</button>
+<a class="gh" href="https://github.com/dlof-lib/rinlang">GitHub</a><div id="res"></div></header>
+<div class="wrap"><nav id="sb"><details ><summary>ابدأ هنا</summary><a href="getting-started.html">البداية</a><a href="syntax.html">القواعد النحوية العامة</a><a href="variables.html">let`، مصفوفات، قواميس، نطاق</a><a href="template-strings.html">النصوص القالبية (متغيّرات داخل النص)</a><a href="input.html">إدخال المستخدم (Input)</a><a href="control-flow.html">الشروط، الحلقات، `goal`/`achieve</a><a href="loops.html">حلقات Rin — Loops v2</a><a href="functions.html">fun`/`return`، التكرار الذاتي</a><a href="enums.html">enum`: قوائم اختيار مغلقة</a></details><details open><summary>اللغة</summary><a href="language-reference.html">المرجع الشامل وخريطة ترابط المفاهيم</a><a href="objects.html">class`/`struct`، `.object()`، `@Object`، `document</a><a href="oop.html">البرمجة الكائنية الموسَّعة (Rin 1.0)</a><a href="containers.html">دليل `@container` / `@element` / `@loop</a><a href="table.html">الجدول (`@table` / `@container.table`) ودوال اللغة عليه</a><a href="set.html">Set`: نوع المجموعة الأساسي</a><a href="pipelines.html">عامل الأنابيب `|&gt;</a><a href="RECKON.html">reckon`: مفهوم حسابي بسطرين</a><a href="let-plus.html">let` المطوَّر</a><a href="living-variables.html">المتغيرات الحيّة (Living Variables)</a><a href="label-define.html">label` و`define` (تسمية وتعريف)</a><a href="block-frames.html">بداية الكتل ونهايتها (Block Frames)</a><a href="compare_ops.html">معاملات المقارنة `/=` و `=/=` و `=/</a><a href="max_min.html">max / min family</a><a href="scope-guarantees.html" class=on>ضمانات النطاق: `finally` · `defer` · `catch … when` · `rethrow</a><a href="key_terms_and_builtins.html">Rin KEY_TERMS and Built-in Conditions</a><a href="number_builtins.html">Rin Number Built-ins</a></details><details ><summary>الواجهات (Indsin)</summary><a href="indsin.html">Indsin — Interface Design</a><a href="indsin_rin.html">indsin يعتمد على لغة Rin</a><a href="indsin_expansion.html">Indsin — التوسعة الاحترافية (Design System v2)</a><a href="indsin_object.html">indsin-object — API reference</a><a href="indsin_media.html">Indsin Media — اختيار الوسائط ورفعها</a><a href="indsin_icons.html">مكتبة أيقونات indsin (متجهية)</a><a href="indsin_tooling.html">indsin tooling — icon, file association, syntax highlighting</a><a href="indsinweb.html">IndsinWeb — مكتبة WebView والروابط لـ indsin</a><a href="RIN_ELEMENTS.html">دليل `@element.*` الكامل</a><a href="events-effects.html">الأحداث والتأثيرات (Events &amp; Effects) — محرك Indsin UI</a><a href="banner.html">Banner: إشعار شريطي</a><a href="simple-style.html">Rin Simple Style</a></details><details ><summary>بيئة التشغيل</summary><a href="runtime.html">وقت تشغيل Rin (Rin Runtime) · المرجع الرسمي</a><a href="standard-library.html">المكتبة القياسية (`lib/*.og.rin`)</a><a href="errors.html">نظام الأخطاء: أكواد، `try`/`catch`/`throw</a><a href="ERROR_SYSTEM.html">نظام التشخيص: البنية الداخلية + جدول الأكواد الكامل</a><a href="storage.html">تخزين دائم</a><a href="http.html">شبكات</a><a href="env.html">ربط Rin بملف `.env</a><a href="terminal.html">الطرفية التفاعلية — `rin terminal</a><a href="vm.html">RinVM — آلة Rin الافتراضية (بايتكود)</a><a href="rinflow.html">RinFlow: طبقة تنفيذ التدفّق المهيكل</a><a href="MAKE_UNIT.html">@make.(name)`: وحدة بسياسة قدرات صريحة</a><a href="MAKE_MEDIA.html">فيديو · صوت · API · إزالة الخلفية · قراءة النص من الصور</a><a href="TIME.html">مفهوم `time`: الزمن كقيمة من الدرجة الأولى</a><a href="native-additions.html">دوال Rin الأصلية الجديدة (Rin 1.0)</a></details><details ><summary>الحاويات وقواعد البيانات</summary><a href="container_advanced.html">Rin Container Advanced Built-ins</a><a href="container_pro.html">Rin Container Pro</a><a href="container_sql.html">RIN CONTAINER SQL (RCSQL)</a><a href="cross-file-containers.html">استدعاء إعلانات من ملف آخر</a></details><details ><summary>الحزم والتكامل</summary><a href="api.html">واجهة C المسطَّحة (Embedding API)</a><a href="android.html">استضافة Rin على أندرويد</a><a href="packages-and-interop.html">Rin 1.0 — المكتبات والحزم وجسر C++ وJSON واختبارات rintest</a><a href="rinpak-format.html">RinPak — حزمة مشروع Rin (`.rinpak`)</a><a href="html-projects.html">مشاريع HTML في Rin — الربط بين index.html وملف الحاوية</a><a href="project-og-urin.html">project.og.urin` — البيانات الوصفية لمشروع Rin</a><a href="CONTENT_PACKS.html">حزم المحتوى القابلة للتنزيل (Content Packs)</a><a href="previewkit.html">previewkit — معاينة حيّة لملفات PDF / Markdown / TypeScript</a></details><details ><summary>المكتبات المتخصصة</summary><a href="rinml.html">RinML / RinDF / RinAI — الذكاء الاصطناعي وتحليل البيانات في Rin</a><a href="STATS.html">RinStat — التحليل الإحصائي (`lib/rinstat.og.rin`)</a><a href="STATS_ADV.html">RinStat المتقدّم + RinAuto</a><a href="LINALG.html">الجبر الخطي للمهندسين — `mat*` و`vec*</a><a href="PLOT.html">RinPlot — الرسوم البيانية الإحصائية (`lib/rinplot.og.rin`)</a><a href="ALGO.html">تطوير الخوارزميات والحساب العددي — `algo*</a><a href="NUMBER.html">مفهوم `number` في Rin</a><a href="boat.html">&quot;Boat&quot;: مفاهيم أساسية مجمَّعة</a><a href="passkit.html">passkit — passwords, encryption, databases and a tag language</a><a href="passkit-crypto-db.html">Passkit feature catalog: encryption, databases and container linking</a><a href="hash-family.html">عائلة `#` — مفاهيم ودوال جديدة تبدأ بعلامة `#</a><a href="image-draw.html">إنشاء الصور في Rin — رسم وحفظ PNG وlog كصورة</a><a href="image-terminal.html">طباعة الصور في الـ terminal — `printImage` / `imageAnsi` / `imageInfo</a></details><details ><summary>المشروع</summary><a href="CONTRIBUTING.html">المساهمة في Rin</a><a href="CODE_OF_CONDUCT.html">قواعد السلوك</a><a href="SECURITY.html">سياسة الأمان</a><a href="SUPPORT.html">الحصول على المساعدة</a><a href="TRADEMARKS.html">سياسة العلامة التجارية — Trademark Policy</a><a href="THIRD_PARTY_NOTICES.html">إشعارات المكوّنات الخارجية — Third-Party Notices</a></details><details ><summary>مراجع إضافية</summary><a href="ANDROID_VERSIONS.html">حزم RinStudio لكل إصدار أندرويد</a><a href="TOKEN.html">مفهوم `token` في Rin</a><a href="TOOLCHAIN.html">Rin Professional Language Toolchain</a><a href="TOOLCHAIN_UPGRADE.html">Toolchain Upgrade — 2026-09</a><a href="architecture.html">المعمارية وبنية المستودع</a><a href="base-accept.html">base` و`accept`: متغيّران يخدمان `if</a><a href="channel47.html">channel47 — لغة وصف البيانات والإعدادات</a><a href="ci.html">CI وأدوات المستودع</a><a href="loop-templates.html">قوالب الحلقات `@tmpl</a><a href="pre-post.html">pre` و`post` (ما قبل / ما بعد): عقد انتقال حول الإسناد</a><a href="print-fonts.html">خطوط `print` — bold / italic / underline وغيرها</a><a href="print-image-terminal.html">طباعة الصور كنص في الطرفية</a><a href="print-templates.html">قوالب الطباعة `@tmpl ... print` — قوالب نصية خطية وتنسيقية</a><a href="rdoc.html">rdoc — Documentation Container</a><a href="rdoc-reference.html">وثيقة rdoc الشاملة — Documentation Container</a><a href="screenshots.html">لقطات من RinStudio</a></details></nav>
+<main><article><h1 id="scope-guaranteesmd-finally-defer-catch-when-rethrow">scope-guarantees.md — ضمانات النطاق: <code>finally</code> · <code>defer</code> · <code>catch … when</code> · <code>rethrow</code><a class="headerlink" href="#scope-guaranteesmd-finally-defer-catch-when-rethrow" title="Permanent link">#</a></h1>
+<h2 id="_1">لماذا؟ (الفجوة التي تسدّها)<a class="headerlink" href="#_1" title="Permanent link">#</a></h2>
+<p>كان في Rin التقاط للأخطاء (<code>try</code>/<code>catch</code>/<code>throw</code>) لكن <strong>بلا أي ضمان للتنظيف</strong>: ملف فُتح، اتصال،
+حاوية، قفل، أو حالة مؤقتة — كلها تبقى معلَّقة إذا خرج الكود مبكراً بـ<code>return</code> أو <code>break</code> أو خطأ.
+وكان كل <code>catch</code> يلتقط <strong>كل</strong> شيء بلا فلترة، فلا يمكن معالجة خطأ معيّن وترك البقية تصعد.</p>
+<p>هذه الإضافة تجمع أربع كلمات سياقية (غير محجوزة، فلا تكسر أي اسم متغيّر قديم) تشكّل معاً <strong>عقداً واحداً</strong>:</p>
+<blockquote>
+<p>ما تفتحه تغلقه، وما تلتقطه تحدّده، وما لا تعرفه يكمل طريقه كما هو.</p>
+</blockquote>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الصيغة</th>
+<th>المعنى</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>try { } finally { }</code></td>
+<td><code>finally</code> يُنفَّذ <strong>دائماً</strong> عند مغادرة <code>try</code> (طبيعي، <code>return</code>، <code>break</code>، <code>continue</code>، خطأ)</td>
+</tr>
+<tr>
+<td><code>try { } catch (e) { } finally { }</code></td>
+<td>الثلاثة معاً</td>
+</tr>
+<tr>
+<td><code>defer &lt;عبارة&gt;;</code></td>
+<td>تأجيل عبارة إلى لحظة مغادرة الكتلة الحاوية (LIFO: آخر ما أُجِّل أول ما يُنفَّذ)</td>
+</tr>
+<tr>
+<td><code>catch (e) when (شرط) { }</code></td>
+<td>بند catch بحارس؛ يمكن كتابة عدّة بنود، وأول مطابق يفوز</td>
+</tr>
+<tr>
+<td><code>rethrow;</code></td>
+<td>يعيد رمي الخطأ الذي يعالجه أقرب <code>catch</code> <strong>كما هو</strong> (يحفظ <code>code</code>/<code>message</code>/<code>line</code>)</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="finally"><code>finally</code><a class="headerlink" href="#finally" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">try {
+    print &quot;work&quot;;
+} finally {
+    print &quot;always&quot;;
+}
+</code></pre>
+<ul>
+<li>يعمل مع <code>return</code> داخل الدالة: يُنفَّذ قبل الخروج وتبقى قيمة <code>return</code>.</li>
+<li>لو لم يوجد <code>catch</code> فالخطأ يكمل صعوده <strong>بعد</strong> <code>finally</code> (لا يُبتلع).</li>
+<li>لو أنهى <code>finally</code> نفسه بـ<code>return</code>/<code>break</code>/<code>continue</code> فهو يحسم النتيجة ويلغي الخطأ المعلَّق.
+  (استخدمه عمداً فقط.)</li>
+</ul>
+<h2 id="defer"><code>defer</code><a class="headerlink" href="#defer" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">fun report(path) {
+    defer print &quot;closing&quot;, path;      // يُنفَّذ آخراً
+    defer print &quot;flushing&quot;;           // يُنفَّذ أولاً
+    print &quot;writing&quot;;
+    return true;
+}
+</code></pre>
+<ul>
+<li><code>defer</code> يلفّ <strong>ما بعده</strong> في نفس الكتلة داخل <code>try { … } finally { عبارة }</code> وقت التحليل،
+  فالنتيجة نفس ضمانات <code>finally</code> بالضبط (أي مسار خروج، ترتيب LIFO).</li>
+<li>العبارة المؤجَّلة تُقيَّم <strong>عند الخروج</strong> لا عند السطر (مثل <code>finally</code>)، فترى آخر قيم المتغيّرات.</li>
+<li>كتلة كاملة مسموحة: <code>defer { a(); b(); }</code>.</li>
+<li>داخل حلقة: يعمل في <strong>كل دورة</strong> عند نهاية جسم الحلقة (حتى مع <code>continue</code>/<code>break</code>).</li>
+<li>على مستوى الملف: يعمل عند نهاية البرنامج. ⚠️ ما بعده يصبح داخل نطاق فرعي، فضعه في أول الملف أو داخل دالة.</li>
+<li><code>defer</code> بعد <code>=</code> أو <code>(</code> أو <code>.</code> أو <code>[</code> تبقى اسماً عادياً: <code>let defer = 5;</code> صالح.</li>
+</ul>
+<h2 id="catch-when"><code>catch … when</code><a class="headerlink" href="#catch-when" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">try {
+    openAccount(id);
+}
+catch (e) when (e.code == &quot;E_NOT_FOUND&quot;) { print &quot;no such account&quot;; }
+catch (e) when (e.code == &quot;E_DENIED&quot;)    { print &quot;permission denied&quot;; }
+catch (e)                                { print &quot;unexpected:&quot;, e.message; }
+</code></pre>
+<ul>
+<li>الحارس يُقيَّم بعد ربط المتغيّر <code>e</code>.</li>
+<li>لو لم يطابق أي بند، يكمل <strong>الخطأ الأصلي</strong> صعوده إلى المُعالج الأبعد (أو <code>finally</code> ثم الأعلى).</li>
+<li><code>catch when</code> بلا متغيّر خطأ غير مسموح (الحارس يحتاج <code>e</code>).</li>
+</ul>
+<h3 id="ecode">توحيد شكل الخطأ: <code>e.code</code> للجميع<a class="headerlink" href="#ecode" title="Permanent link">#</a></h3>
+<ul>
+<li>أخطاء النظام: <code>e.code</code> = <code>E0021</code>… (كما كان).</li>
+<li><code>throw</code> لقاموس فيه <code>code</code>: يظهر <code>e.code</code> مباشرة (وتبقى القيمة الأصلية في <code>e.value</code>).</li>
+</ul>
+<pre><code class="language-kotlin">throw {&quot;code&quot;: &quot;E_NOT_FOUND&quot;, &quot;message&quot;: &quot;missing&quot;};
+// في catch:  e.code == &quot;E_NOT_FOUND&quot;   و   e.value.message == &quot;missing&quot;
+</code></pre>
+<h2 id="rethrow"><code>rethrow</code><a class="headerlink" href="#rethrow" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">try {
+    try { let x = [1, 2][10]; }
+    catch (e) { print &quot;logging&quot;, e.code; rethrow; }   // يرمي E0021 الأصلي نفسه
+} catch (outer) { print outer.code; }                 // E0021
+</code></pre>
+<p>مسموح <strong>داخل <code>catch</code> فقط</strong> (خطأ تحليل واضح خارجه).</p>
+<h2 id="rin">كيف تتماسك مع بقية Rin<a class="headerlink" href="#rin" title="Permanent link">#</a></h2>
+<ul>
+<li><strong>الحاويات والمكتبات</strong>: أي مورد (<code>file</code>، <code>http</code>، قاعدة بيانات الحاويات) يُغلَق بـ<code>defer</code>/<code>finally</code> مهما كان مسار الخروج.</li>
+<li><strong><code>retry</code></strong>: يعمل كما كان؛ ويمكن وضع <code>defer</code> داخل جسمه (ينفَّذ في كل محاولة).</li>
+<li><strong><code>#ignorance</code></strong> و<code>try { } catch { }</code> القديمة: بلا أي تغيير في السلوك.</li>
+<li><strong>المفسِّر والـVM</strong>: العبارات الجديدة تُنفَّذ عبر المفسِّر مباشرة (تفويض من الـVM)، فالنتيجة واحدة بلا ازدواج منطق.</li>
+</ul>
+<h2 id="_2">حدود معروفة (صراحةً)<a class="headerlink" href="#_2" title="Permanent link">#</a></h2>
+<ul>
+<li>لا <code>defer</code> بقيَم مُلتقَطة وقت السطر (نمط Go)؛ التقييم عند الخروج.</li>
+<li><code>rin build</code> (rinc) يدعم المجموعة الفرعية فقط؛ العبارات الجديدة تعمل عبر <code>rin run</code>.</li>
+<li>مفسّر Go (<code>gorin</code>) لم يُحدَّث بعد.</li>
+</ul>
+<p>الاختبار: <code>tests/verification/scope_guarantees.rin</code> (+ <code>.expected</code>).</p></article>
+<div class="pnav"><a class="pn" href="max_min.html">→ max / min family</a><a class="pn" href="key_terms_and_builtins.html">Rin KEY_TERMS and Built-in Conditions ←</a></div><p class="edit"><a href="https://github.com/dlof-lib/rinlang/edit/main/docs/scope-guarantees.md">✎ عدّل هذه الصفحة على GitHub</a></p>
+<footer>Rin 1.0.0 · رخصة MIT</footer></main>
+<aside id="toc"><b>في هذه الصفحة</b><div class="toc">
+<ul>
+<li><a href="#_1">لماذا؟ (الفجوة التي تسدّها)</a></li>
+<li><a href="#finally">finally</a></li>
+<li><a href="#defer">defer</a></li>
+<li><a href="#catch-when">catch … when</a><ul>
+<li><a href="#ecode">توحيد شكل الخطأ: e.code للجميع</a></li>
+</ul>
+</li>
+<li><a href="#rethrow">rethrow</a></li>
+<li><a href="#rin">كيف تتماسك مع بقية Rin</a></li>
+<li><a href="#_2">حدود معروفة (صراحةً)</a></li>
+</ul>
+</div>
+</aside></div>
+<script src="assets/app.js"></script></body></html>
