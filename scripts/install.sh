@@ -55,14 +55,14 @@ BUILD_DIR="$(mktemp -d)"
 trap 'rm -rf "$BUILD_DIR"' EXIT
 
 echo "[rin-install] بناء rin ..."
-"$CXX" -std=c++17 -O2 -I"$CORE" -o "$BUILD_DIR/rin" \
+"$CXX" -std=c++23 -O2 -I"$CORE" -o "$BUILD_DIR/rin" \
     "$REPO_DIR/cli/linux/src/main.cpp" \
     "$CORE/rin_lexer.cpp" "$CORE/rin_parser.cpp" "$CORE/rin_interpreter.cpp" "$CORE/rin_http.cpp" \
     "$CORE/diagnostics/diagnostic.cpp" "$CORE/diagnostics/source_manager.cpp" \
     "$CORE/diagnostics/diagnostic_engine.cpp" "$CORE/diagnostics/diagnostic_renderer.cpp"
 
 echo "[rin-install] بناء rinc ..."
-"$CXX" -std=c++17 -O2 -o "$BUILD_DIR/rinc" "$REPO_DIR/compiler/rinc.cpp"
+"$CXX" -std=c++23 -O2 -o "$BUILD_DIR/rinc" "$REPO_DIR/compiler/rinc.cpp"
 
 # ---------------------------------------------------------------------------
 # 3) التثبيت
