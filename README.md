@@ -4,48 +4,123 @@
 
 # Rin
 
-### لغة برمجة صغيرة بمحرّك C++17 واحد — من سطر الأوامر، إلى الهاتف، إلى المتصفح
+**لغة برمجة صغيرة وواضحة بمحرّك C++17 واحد — تعمل من سطر الأوامر وعلى الهاتف وفي المتصفح**
 
-<sub>A small programming language · one C++17 engine · CLI, Android IDE (RinStudio) and WebAssembly</sub>
+<sub>A small, readable programming language · one C++17 engine · CLI, Android IDE (RinStudio) and WebAssembly</sub>
 
 <p>
-<img alt="Version" src="https://img.shields.io/badge/Rin-1.0.0-1DB143?style=for-the-badge" />
-<img alt="Engine" src="https://img.shields.io/badge/engine-C%2B%2B17-00599C?style=for-the-badge&logo=cplusplus&logoColor=white" />
-<img alt="Android" src="https://img.shields.io/badge/RinStudio-Android%2015%2B-3DDC84?style=for-the-badge&logo=android&logoColor=white" />
-<img alt="WASM" src="https://img.shields.io/badge/Web-WebAssembly-654FF0?style=for-the-badge&logo=webassembly&logoColor=white" />
-<img alt="License" src="https://img.shields.io/badge/license-MIT-4E4E4E?style=for-the-badge" />
+<a href="https://github.com/dlof-lib/rinlang/actions/workflows/rin__apk.yml"><img alt="CI" src="https://github.com/dlof-lib/rinlang/actions/workflows/rin__apk.yml/badge.svg" /></a>
+<img alt="Version" src="https://img.shields.io/badge/version-1.0.0-1DB143" />
+<img alt="Engine" src="https://img.shields.io/badge/engine-C%2B%2B17-00599C?logo=cplusplus&logoColor=white" />
+<img alt="Android" src="https://img.shields.io/badge/RinStudio-Android%2015%2B-3DDC84?logo=android&logoColor=white" />
+<img alt="WASM" src="https://img.shields.io/badge/web-WebAssembly-654FF0?logo=webassembly&logoColor=white" />
+<a href="./LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-4E4E4E" /></a>
 </p>
 
 <p>
 <a href="https://dlof-lib.github.io/rinlang/"><b>🌐 الموقع</b></a> ·
-<a href="./docs/getting-started.md"><b>🚀 ابدأ</b></a> ·
+<a href="./docs/getting-started.md"><b>🚀 البداية</b></a> ·
 <a href="./docs/language-reference.md"><b>📖 المرجع</b></a> ·
 <a href="./lib/README.md"><b>📚 المكتبات</b></a> ·
-<a href="https://dlof-lib.github.io/rinlang/?view=libraries"><b>📦 متجر الحزم</b></a>
+<a href="https://dlof-lib.github.io/rinlang/?view=libraries"><b>📦 متجر الحزم</b></a> ·
+<a href="./.changelog/CHANGELOG.md"><b>📝 التغييرات</b></a>
 </p>
+
+<br/>
+
+<img src="./docs/assets/screenshots/hero.png" alt="لقطات من RinStudio" width="100%" />
 
 </div>
 
 ---
 
-## إصدارات أندرويد المدعومة
+## الفهرس
 
-| | الإصدار |
-|---|---|
-| الحد الأدنى | Android 15 (API 35) |
-| الهدف | Android 16 (API 36) |
+- [نظرة عامة](#-نظرة-عامة)
+- [لقطات من RinStudio](#-لقطات-من-rinstudio)
+- [مثال سريع](#-مثال-سريع)
+- [التثبيت والتشغيل](#-التثبيت-والتشغيل)
+- [اللغة باختصار](#-اللغة-باختصار)
+- [RinStudio لأندرويد](#-rinstudio-لأندرويد)
+- [المكتبات والحزم](#-المكتبات-والحزم)
+- [المعمارية](#-المعمارية)
+- [بنية المستودع](#-بنية-المستودع)
+- [التوثيق](#-التوثيق)
+- [المساهمة](#-المساهمة)
+- [CI وأدوات المستودع](#-ci-وأدوات-المستودع)
+- [الترخيص](#-الترخيص)
 
-التفاصيل الكاملة في [CHANGELOG.md](CHANGELOG.md#android16).
+---
 
-## ✨ لمحة
+## ✨ نظرة عامة
 
-**Rin** لغة صغيرة وواضحة: Lexer + Parser + Interpreter مكتوبة بـ C++17، ونفس المحرّك بالضبط يعمل في ثلاثة أماكن — لا نسخ مكرَّرة ولا محاكاة:
+**Rin** لغة برمجة صغيرة: Lexer + Parser + Interpreter مكتوبة بـ C++17. **المحرّك نفسه** يُستخدم في كل مكان — لا نسخ مكرَّرة ولا محاكاة — لذلك يعطي البرنامج النتيجة نفسها أينما شغّلته:
 
 | | المضيف | الاستخدام |
 |:-:|---|---|
-| 💻 | **`rin` CLI** | تشغيل الملفات، REPL، فحص نحوي، مشاريع جديدة |
+| 💻 | **أداة `rin`** | تشغيل الملفات، REPL، فحص نحوي، إنشاء المشاريع، إدارة الحزم |
 | 📱 | **RinStudio** | بيئة تطوير كاملة على أندرويد: محرّر، مشاريع، معاينة واجهات، نشر حزم |
-| 🌍 | **المتصفح** | تشغيل Rin عبر WebAssembly ([playground](./docs/playground.html)) |
+| 🌍 | **المتصفح** | تشغيل Rin عبر WebAssembly في [Playground](./docs/playground.html) |
+
+**أبرز الميزات**
+
+- بنية بسيطة: متغيّرات، دوال، `enum`، `match`، أنابيب `|>`، حاويات `@container` وكائنات `@Object`.
+- لغة واجهات مدمجة (**Indsin**) بمعاينة حيّة.
+- **82 مكتبة رسمية** جاهزة: بيانات، رياضيات، نصوص، شبكة، تشفير، ذكاء اصطناعي، وصناعة لغات.
+- مدير حزم (RinPM) ومتجر حزم على الويب.
+- أدوات ربط (bindings) لاستدعاء Rin من Python وNode.js وC.
+
+---
+
+## 📸 لقطات من RinStudio
+
+لقطات حقيقية من التطبيق (واجهة عربية وإنجليزية). كل اللقطات المفردة في [`docs/assets/screenshots`](./docs/assets/screenshots).
+
+### ✍️ المحرّر والطرفية
+
+<div align="center"><img src="./docs/assets/screenshots/strip-editor.png" alt="المحرّر" width="62%" /></div>
+
+محرّر بتلوين نحوي وعدّاد أسطر وطيّ للكتل، وتحته **Rin Shell** (طرفية تفاعلية) وتبويب **التشغيلات** لسجل المخرجات.
+
+### 🧭 القوائم
+
+<div align="center"><img src="./docs/assets/screenshots/strip-menus.png" alt="قوائم File / Edit / View / Run" width="100%" /></div>
+
+`File` (ملف جديد، فتح، حفظ، مشاريع، مكتبات) · `Edit` (بحث واستبدال، نقل/تكرار الأسطر، إدراج مقتطف Rin) · `View` (الخط، الطيّ، المخطط Outline، الإعدادات) · `Run` (تشغيل، فحص الأقواس، معاينة حيّة، فحص وسوم الحاويات).
+
+### 🗂️ المشاريع والملفات
+
+<div align="center"><img src="./docs/assets/screenshots/strip-projects.png" alt="المشاريع والملفات" width="100%" /></div>
+
+إدارة المشاريع وملفاتها (`main.rin` · `container.rin` · `index.html` · `style.css`)، ومعاينة مشروع **HTML + Rin** يعمل مباشرةً: الواجهة من `index.html` والمنطق من ملف الحاوية.
+
+### 🐙 تطبيق حقيقي: GitHub Explorer
+
+<div align="center"><img src="./docs/assets/screenshots/strip-github.png" alt="GitHub Explorer مكتوب بـ Rin" width="100%" /></div>
+
+برنامج Rin من 310 أسطر يستدعي واجهة GitHub REST (`apiRegister` · `apiHeader` · `apiGet`) ويعرض الملف الشخصي والمستودعات والفروع والإصدارات وحدّ الاستعلام.
+
+### ➕ مشروع جديد
+
+<div align="center"><img src="./docs/assets/screenshots/strip-new-project.png" alt="مشروع جديد" width="82%" /></div>
+
+قوالب **الويب** (HTML + Rin، HTML + JS) وقوالب **Rin** (Free Project · Container · Table · UI · Illust)، مع قالب Indsin اختياري ومصمّم واجهة بمعاينة مباشرة (الألوان، نمط الأزرار، الخط، الشريط العلوي والجانبي).
+
+### 📦 تصدير APK
+
+<div align="center"><img src="./docs/assets/screenshots/strip-apk.png" alt="تصدير APK" width="38%" /></div>
+
+تصدير المشروع كتطبيق أندرويد: الاسم، ملف البداية، الأيقونة، شاشة البداية، والتوافق (الحد الأدنى API 35 / الهدف API 36).
+
+### 🛒 المتجر والحزم
+
+<div align="center"><img src="./docs/assets/screenshots/strip-store.png" alt="المتجر وتفاصيل الحزمة" width="70%" /></div>
+
+متجر حزم Rin: بحث وتقييم وتثبيت/إدراج بنقرة، وصفحة تفاصيل لكل حزمة تعرض ملفاتها (`assets` · `examples` · `lib`).
+
+---
+
+## ⚡ مثال سريع
 
 ```kotlin
 @import "lib/math.og.rin";
@@ -60,47 +135,57 @@ print factorial(5);      // 120
 
 ---
 
-## 🚀 ابدأ في دقيقة
+## 🚀 التثبيت والتشغيل
+
+### 1. بناء أداة `rin` (Linux)
+
+المتطلبات: `cmake` و`g++` و`zlib1g-dev`.
 
 ```bash
 git clone https://github.com/dlof-lib/rinlang.git
-cd rinlang/cli/linux && ./build.sh        # يحتاج cmake + g++ + zlib1g-dev
+cd rinlang/cli/linux
+./build.sh
 ```
 
+| المنصة | المسار | أمر البناء |
+|---|---|---|
+| Linux | [`cli/linux`](./cli/linux) | `./build.sh` |
+| macOS | [`cli/macos`](./cli/macos) | `./build.sh` |
+| Windows | [`cli/windows`](./cli/windows) | `build.bat` |
+| الكل عبر `make` | الجذر | `make apk` · `make web` · `make desktop` · `make all` |
+
+### 2. الاستخدام
+
 ```bash
-rin -c 'print 1 + 1;'      # تشغيل كود مباشر
-rin run hello.rin          # تشغيل ملف
-rin check hello.rin        # فحص نحوي بلا تشغيل
-rin new myproj --template console   # مشروع جديد (rin.toml + src/main.rin)
+rin -c 'print 1 + 1;'                  # تشغيل كود مباشر
+rin run hello.rin                      # تشغيل ملف
+rin check hello.rin                    # فحص نحوي بلا تشغيل
+rin new myproj --template console      # مشروع جديد (rin.toml + src/main.rin)
 ```
 
 <details>
-<summary><b>🧰 بقية الأوامر ومنصات البناء</b></summary>
+<summary><b>🧰 كل الأوامر</b></summary>
 
 <br/>
 
 | الأمر | الغرض |
 |---|---|
 | `rin` | REPL تفاعلي (أو قراءة من stdin) |
+| `rin run <file>` | تشغيل ملف بالمفسِّر (الطريقة الكاملة لأي برنامج) |
+| `rin check <file>` | فحص نحوي بلا تشغيل |
 | `rin test [dir]` | تشغيل ملفات اختبار `.rin` |
 | `rin fmt <file> [--write]` | إعادة محاذاة المسافات البادئة |
+| `rin new <name> --template <t>` | إنشاء مشروع جديد |
 | `rin build <file> -o out` | تنفيذي أصلي عبر `rinc` — مجموعة فرعية من اللغة فقط |
 | `rin doctor` | فحص بيئة التطوير |
 
-| المنصة | المسار |
-|---|---|
-| Linux | [`cli/linux`](./cli/linux) — `./build.sh` |
-| macOS | [`cli/macos`](./cli/macos) — `./build.sh` |
-| Windows | [`cli/windows`](./cli/windows) — `build.bat` |
-| الكل عبر `make` | `make apk` · `make web` · `make desktop` · `make all` |
-
-> `rin run` (المفسِّر) هو الطريقة الكاملة لتشغيل أي برنامج Rin؛ أمّا `rin build` فيدعم حالياً الجزء الإجرائي الأساسي + `@container` البسيطة فقط. التفاصيل في [`getting-started.md`](./docs/getting-started.md).
+> `rin build` يدعم حالياً الجزء الإجرائي الأساسي + `@container` البسيطة فقط؛ استخدم `rin run` لأي برنامج كامل. التفاصيل في [`getting-started.md`](./docs/getting-started.md).
 
 </details>
 
 ---
 
-## 🧩 اللغة في نظرة
+## 🧩 اللغة باختصار
 
 | المفهوم | مثال | التوثيق |
 |---|---|---|
@@ -115,23 +200,28 @@ rin new myproj --template console   # مشروع جديد (rin.toml + src/main.r
 
 ---
 
-## 📱 RinStudio
+## 📱 RinStudio لأندرويد
 
-بيئة التطوير الرسمية لـ Rin على أندرويد (`com.dlof.rinlang`) — مبنيّة على نفس المحرّك عبر JNI:
+بيئة التطوير الرسمية لـ Rin على أندرويد (`com.dlof.rinlang`)، مبنيّة على المحرّك نفسه عبر JNI.
 
-- ✍️ محرّر أصلي بتلوين نحوي، ومستكشف مشاريع وألبومات.
+| | الإصدار |
+|---|---|
+| الحد الأدنى | Android 15 (API 35) |
+| الهدف | Android 16 (API 36) |
+
+- ✍️ محرّر أصلي بتلوين نحوي، ومستكشف مشاريع.
 - 👁️ معاينة حيّة للواجهات (Indsin) وتتبّع مسار التنفيذ (Flow / Pipeline).
-- 📚 شاشة **المكتبات**: المكتبات المدمجة + مكتبات مشروعك + حزم المجتمع.
-- 📤 **RinPM**: انشر حزمتك من التطبيق فتظهر تلقائياً في [متجر الحزم](https://dlof-lib.github.io/rinlang/?view=libraries).
+- 📚 شاشة **المكتبات**: المدمجة + مكتبات مشروعك + حزم المجتمع.
+- 📤 **RinPM**: انشر حزمتك من التطبيق فتظهر في [متجر الحزم](https://dlof-lib.github.io/rinlang/?view=libraries).
 - 📦 تصدير المشروع كتطبيق APK موقَّع.
 
-التفاصيل: [`docs/android.md`](./docs/android.md)
+التفاصيل: [`docs/android.md`](./docs/android.md) · سجل إصدارات أندرويد في [`.changelog/CHANGELOG.md`](./.changelog/CHANGELOG.md#android16).
 
 ---
 
 ## 📚 المكتبات والحزم
 
-مجلد [`lib/`](./lib) يضم **82 مكتبة رسمية** بصيغة `.og.rin`، مرتّبة في 10 مجالات، بترويسة موحَّدة (وصف · `@version` · `@category` · `@prefix` · الاستيراد):
+مجلد [`lib/`](./lib) يضم **82 مكتبة رسمية** بصيغة `.og.rin`، بترويسة موحَّدة (وصف · `@version` · `@category` · `@prefix` · الاستيراد):
 
 | المجال | أمثلة |
 |---|---|
@@ -142,16 +232,33 @@ rin new myproj --template console   # مشروع جديد (rin.toml + src/main.r
 | 🖥️ النظام والويب | `syskit` · `httpkit` · `urlkit` · `router` · `logger` · `rinzip` |
 | 🔁 الحلقات والتفاعل | `loopkit` · `gridkit` · `movingmask` · `behaviorkit` |
 | 🎨 الواجهات | `colors` · `layout` · `rinxg` · `relyRIN` · `previewkit` · `indsinweb` · `boat` |
-| 🔐 Passwords, crypto & databases | `passkit` · `passkitcrypt` · `passkitdb` · `passkitlang` (`.passkit` tag language) |
-| 🤖 الذكاء الاصطناعي وتحليل البيانات | `rindf` · `rinml` · `rinai` (انظر `docs/rinml.md`) |
+| 🔐 كلمات المرور والتشفير | `passkit` · `passkitcrypt` · `passkitdb` · `passkitlang` |
+| 🤖 الذكاء الاصطناعي والبيانات | `rindf` · `rinml` · `rinai` (انظر [`docs/rinml.md`](./docs/rinml.md)) |
 | 🧬 صناعة اللغات | `langkit` · `lexkit` · `parsekit` · `astwalk` · `oglang` |
 
 ```kotlin
-@import "lib/strings.og.rin" as strx;      // كحاوية باسم مستعار
-@import "lib/data.og.rin";                 // أو دمج مباشر
+@import "lib/strings.og.rin" as strx;     // كحاوية باسم مستعار
+@import "lib/data.og.rin";                // أو دمج مباشر
 ```
 
-👉 الفهرس الكامل بالأوصاف والدوال والأحجام: **[`lib/README.md`](./lib/README.md)** (يُولَّد آلياً بـ workflow ‏`cleanup-project.yml`).
+الفهرس الكامل بالأوصاف والأحجام: **[`lib/README.md`](./lib/README.md)**.
+
+---
+
+## 🏗️ المعمارية
+
+```text
+            ┌──────────────────────────────┐
+            │   Lexer → Parser → AST       │
+            │        Interpreter           │   app/src/main/cpp  (C++17)
+            └──────────────┬───────────────┘
+        ┌──────────────────┼──────────────────┐
+        ▼                  ▼                  ▼
+   rin CLI           RinStudio (JNI)     WebAssembly
+ linux·macos·win        Android          المتصفح / Pages
+```
+
+مسار البناء والاختبار الرئيسي (`rin__apk.yml`): **فحص مبكر ← اختبارات المحرّك ‖ بناء APK موقَّع ← Release**.
 
 ---
 
@@ -159,27 +266,28 @@ rin new myproj --template console   # مشروع جديد (rin.toml + src/main.r
 
 ```text
 rinlang/
-├── 📖 README.md · CHANGELOG.md · indsin.md · LICENSE · VERSION
+├── README.md · indsin.md · LICENSE · VERSION
+├── .changelog/      سجل التغييرات المدمج (مجلد مخفي)
 │
-├── 📱 app/             RinStudio (أندرويد) + محرّك C++ في app/src/main/cpp
-├── 💻 cli/             أداة rin لـ linux · macos · windows (+ rin_vm · rin_ava)
-├── ⚙️ compiler/        rinc — المترجم الأصلي
-├── 🐹 gorin/           محرّك Go مساعد (واجهات API وربط وتكامل)
-├── 🎨 pitok/           لغة واجهات مستقلة (تجريبي)
+├── app/             RinStudio (أندرويد) + المحرّك في app/src/main/cpp
+├── cli/             أداة rin لـ linux · macos · windows
+├── compiler/        rinc — المترجم الأصلي
+├── gorin/           محرّك Go مساعد
+├── pitok/           لغة واجهات مستقلة (تجريبي)
 │
-├── 📚 lib/             مكتبات Rin الرسمية (.og.rin) + فهرسها lib/README.md
-├── 🧪 examples/        أمثلة وقوالب (samples · customlang · indsin_templates …)
-├── 🧩 templates/ · content-packs/   قوالب المشاريع وحزم المحتوى واللغات
-├── 📄 docs/            التوثيق الكامل (docs/README.md فهرس الصفحات)
+├── lib/             المكتبات الرسمية (.og.rin) + الفهرس
+├── examples/        أمثلة وقوالب
+├── templates/ · content-packs/   قوالب المشاريع وحزم المحتوى واللغات
+├── docs/            التوثيق الكامل
 │
-├── 🌍 web/ · user-site/   موقع Rin + متجر المكتبات + WebAssembly
-├── 🔗 bindings/        استدعاء Rin من Python · Node.js · C
-├── ✏️ src/ · syntaxes/ · editors/ · linguist-submission/   دعم المحرّرات (Visual Studio · TextMate · VS Code · Linguist)
+├── web/ · user-site/   الموقع + متجر الحزم + WebAssembly
+├── bindings/        Python · Node.js · C
+├── src/ · syntaxes/ · editors/ · linguist-submission/   دعم المحرّرات
 │
-├── ✅ tests/           الاختبارات (tools · verification · diagnostics · vm · bench · web …)
-├── 🛠️ tools/ · scripts/   أدوات التشغيل والبناء والنشر
-├── 🔏 signing/ · packaging/ · schemas/   التوقيع والتغليف والمخططات
-└── 🤖 .github/         سير عمل CI (انظر أدناه)
+├── tests/           الاختبارات (tools · verification · diagnostics · vm · bench · web)
+├── tools/ · scripts/   أدوات التشغيل والبناء والنشر
+├── signing/ · packaging/ · schemas/
+└── .github/         سير عمل CI
 ```
 
 ---
@@ -194,15 +302,16 @@ rinlang/
 | 🎛️ **الواجهات** | [`indsin.md`](./indsin.md) · [`RIN_ELEMENTS.md`](./docs/RIN_ELEMENTS.md) · [`events-effects.md`](./docs/events-effects.md) |
 | 🔌 **API والتكامل** | [`api.md`](./docs/api.md) · [`bindings/`](./bindings/README.md) · [`android.md`](./docs/android.md) |
 
-الفهرس الكامل لكل الصفحات: [`docs/README.md`](./docs/README.md)
+الفهرس الكامل: [`docs/README.md`](./docs/README.md)
 
 ---
 
 ## 🤝 المساهمة
 
-1. ابنِ الأداة وشغّل الاختبارات في [`tests/`](./tests) (`rin test tests`).
-2. مكتبة جديدة؟ أضف `lib/name.og.rin` بترويسة موحّدة تبدأ بسطر `// lib/name.og.rin — الوصف`، ثم شغّل workflow ‏**Cleanup & Organize Project** ليحدّث [`lib/README.md`](./lib/README.md).
-3. سجّل أي تغيير مهم في [`CHANGELOG.md`](./CHANGELOG.md) (ملف واحد بدل ملفات `CHANGES_*.md` المتفرّقة).
+1. ابنِ الأداة وشغّل الاختبارات: `rin test tests`.
+2. **مكتبة جديدة؟** أضف `lib/name.og.rin` بترويسة موحّدة تبدأ بسطر `// lib/name.og.rin — الوصف`، ثم شغّل workflow **Cleanup & Organize Project** ليحدّث [`lib/README.md`](./lib/README.md).
+3. سجّل أي تغيير مهم في [`CHANGELOG.md`](./.changelog/CHANGELOG.md).
+4. افتح Pull Request بوصف واضح للتغيير والاختبارات التي أضفتها.
 
 ---
 
@@ -215,19 +324,18 @@ rinlang/
 | `linux-cli` · `macos-cli` · `windows-cli` | بناء واختبار أداة `rin` لكل منصة |
 | [`pages.yml`](.github/workflows/pages.yml) | بناء الموقع + WASM ونشره على GitHub Pages |
 | [`build.yml`](.github/workflows/build.yml) | بناء إضافة Visual Studio (`RinLangVSSDK`) |
-| [`cleanup-project.yml`](.github/workflows/cleanup-project.yml) | تنظيف المستودع وترتيبه ودمج سجلات التغييرات وتوليد فهرس المكتبات (يدوي) |
+| [`cleanup-project.yml`](.github/workflows/cleanup-project.yml) | تنظيف المستودع، دمج سجلات التغييرات، توليد فهرس المكتبات (يدوي) |
 | [`highlight-rin.yml`](.github/workflows/highlight-rin.yml) | تلوين كود Rin على GitHub (يدوي) |
 
-### 🎨 تلوين Rin على GitHub
-
-GitHub لا يعرف لغة Rin أصلياً (يحتاج PR مقبولاً في [linguist](https://github.com/github-linguist/linguist) بشرط انتشار ≥2000 ملف `.rin` — التفاصيل في [`linguist-submission/`](./linguist-submission/README.md)). لذلك يضيف `highlight-rin.yml` كتلة `linguist-language` في `.gitattributes` فتظهر ملفات `.rin` و`.og.rin` بتلوين Kotlin (الأقرب نحوياً)، ويحوّل كتل `` ```rin `` في ملفات md إلى اللغة نفسها. للتلوين الكامل داخل المحرّرات استخدم [`syntaxes/rin.tmLanguage.json`](./syntaxes/rin.tmLanguage.json) أو إضافة VS Code.
+**تلوين Rin على GitHub:** لغة Rin غير معروفة لـ [linguist](https://github.com/github-linguist/linguist) بعد (إضافتها تتطلب انتشار ≥2000 ملف `.rin` علناً — انظر [`linguist-submission/`](./linguist-submission/README.md)). لذلك يضبط `highlight-rin.yml` قاعدة `linguist-language` في `.gitattributes` فتظهر ملفات `.rin` و`.og.rin` بتلوين Kotlin (الأقرب نحوياً). للتلوين الكامل في المحرّرات استخدم [`syntaxes/rin.tmLanguage.json`](./syntaxes/rin.tmLanguage.json).
 
 ---
 
 ## 📄 الترخيص
 
-[MIT](./LICENSE) © 2026 Rin Project Contributors — اسم Rin وشعارها وهويتها البصرية غير مرخّصة للاستخدام المطلق تلقائياً؛ راجع [`COPYRIGHT`](./COPYRIGHT) و[`NOTICE`](./NOTICE).
+[MIT](./LICENSE) © 2026 Rin Project Contributors.
+اسم Rin وشعارها وهويتها البصرية غير مرخّصة للاستخدام المطلق تلقائياً؛ راجع [`COPYRIGHT`](./COPYRIGHT) و[`NOTICE`](./NOTICE).
 
 <div align="center">
-<sub>صُنعت بـ 💚 — Rin 1.0.0 · Edition 2026</sub>
+<sub>Rin 1.0.0 · Edition 2026</sub>
 </div>
