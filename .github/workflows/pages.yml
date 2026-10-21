@@ -58,7 +58,7 @@ jobs:
           # لأن indsin/indsinc.cpp يتضمّن rin_indsin_pipeline.h الذي يشغّل rin::Interpreter حقيقياً
           # (runColdPipelineWithRuntime)، وليس مجرّد lex+parse فقط؛ بدون rin_interpreter.cpp وكل ما
           # يعتمد عليه (diagnostics/, loader_ui/, clc/) يفشل الربط بأخطاء "undefined reference".
-          g++ -O2 -std=c++17 -o indsinc_native_check \
+          g++ -O2 -std=c++23 -o indsinc_native_check \
             app/src/main/cpp/indsin/indsinc.cpp \
             app/src/main/cpp/rin_lexer.cpp \
             app/src/main/cpp/rin_parser.cpp \
@@ -110,7 +110,7 @@ jobs:
           # web/rin_wasm_bridge.cpp + indsin/rin_indsin_c_api.cpp. بدون rin_make.cpp أو
           # diagnostics/ أو loader_ui/ أو clc/ يفشل الربط بأخطاء "undefined symbol"
           # (nearestMatches، validateMakeUnit، validateContainerPolicy، ...).
-          em++ -O2 -std=c++17 -fexceptions \
+          em++ -O2 -std=c++23 -fexceptions \
             -I app/src/main/cpp \
             app/src/main/cpp/rin_lexer.cpp \
             app/src/main/cpp/rin_parser.cpp \
