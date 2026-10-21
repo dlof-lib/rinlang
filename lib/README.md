@@ -19,7 +19,13 @@
 | `channel47` | channel47 — قارئ لغة وصف البيانات والإعدادات (.ch47) داخل Rin. المواصفة: docs/channel47.md | 24.2 KB |
 | `collections` | Rin Collections Pro — non-mutating and mutating collection utilities. | 1.9 KB |
 | `colors` | Rin Colors Pro — the language-level face of Rin's Color Engine (see app/src/main/cpp/ | 6.3 KB |
-| `compose` | مكتبة أساسية: تركيب ودمج وتفاعل كل مفاهيم Rin (دوال، map، array، Set، كائنات، حاويات) | 20.0 KB |
+| `compose` | مكتبة أساسية: تركيب ودمج وتفاعل كل مفاهيم Rin (دوال، map، array، Set، كائنات، حاويات) | 25.5 KB |
+| `compose_diff` | مساعدة compose: diffDeep / patchDeep / invertChanges / merge3 (دمج ثلاثي) | 5.4 KB |
+| `compose_flow` | مساعدة compose: curry، memoize، retry، cond، matchKind، نتائج Result وتتبّع المراحل | 10.7 KB |
+| `compose_path` | مساعدة compose: مسارات "a.b.0" للقراءة والكتابة والتسطيح والنسخ العميق | 13.2 KB |
+| `compose_schema` | مساعدة compose: مخططات تحقّق وتطبيع (types, fields, items, enum, coerce, default) | 11.1 KB |
+| `compose_seq` | مساعدة compose: ترتيب وتجميع وتقطيع وضمّ وبحث فوق أي مفهوم | 13.7 KB |
+| `compose_store` | مساعدة compose: مخزن حالة تفاعلي (اشتراكات، قيم مشتقّة، batch، تراجع، حاويات) | 6.3 KB |
 | `config` | Rin Config Pro — layered configuration maps. | 0.7 KB |
 | `csv` | Rin CSV Pro — CSV utilities for ordinary text data. | 1.0 KB |
 | `data` | أدوات مصفوفات وقواميس (arrays/maps) فوق stdlib الأساسية | 6.0 KB |
