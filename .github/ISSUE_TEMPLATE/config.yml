@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: سؤال أو نقاش
+    url: https://github.com/dlof-lib/rinlang/discussions
+    about: للأسئلة العامة وطلب المساعدة
+  - name: ثغرة أمنية
+    url: https://github.com/dlof-lib/rinlang/security/advisories/new
+    about: أبلغ عنها بشكل خاص، لا تفتح Issue علنياً
+  - name: التوثيق
+    url: https://github.com/dlof-lib/rinlang/tree/main/docs
+    about: راجع الوثائق قبل فتح Issue
