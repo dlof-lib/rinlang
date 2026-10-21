@@ -55,6 +55,29 @@ print branch(Set([1, 2]), dbl, inc)(2);                 // Set كشرط → 4
 ## 5) token ↔ number
 `numbersIn(src)` أرقام المصدر الحرفية، و`identifiersIn(src)` المعرّفات، عبر الـ Lexer الحقيقي.
 
+## 6) أدوات عامة
+| الدالة | الوظيفة |
+|---|---|
+| `sizeOf(x)` / `isEmptyValue(x)` | الحجم الموحَّد لأي مفهوم، وفحص الفراغ |
+| `kindIs(x, kinds)` | هل نوع `x` أحد الأنواع (نص أو مصفوفة أنواع) |
+| `toKind(x, kind)` | تحويل صريح إلى `map array set string number bool function` |
+| `hasKey(x, k)` / `getOr(x, k, fallback)` | وجود وقراءة آمنة بمفتاح واحد من map/كائن/array/Set/نص |
+| `keysOf(x)` / `valuesOf(x)` | مفاتيح وقيم موحَّدة (array→الفهارس، Set→العناصر) |
+| `describeValue(x)` | وصف مقروء: `array(3)` `map(2)` `number` |
+| `composeVersion()` / `composeLibraries()` | إصدار الطبقة وأسماء مكتباتها |
+
+## مكتبات مساعدة
+ست مكتبات مدمجة توسّع `compose` (كل واحدة تستورد `compose` بنفسها). التفصيل الكامل في [`compose-helpers.md`](./compose-helpers.md):
+
+| المكتبة | الغرض |
+|---|---|
+| `compose_seq` | ترتيب (`sortBy`) وتجميع (`groupOver` `tally`) وتقطيع (`chunkOver` `windowOver`) وضمّ وبحث |
+| `compose_path` | مسارات `"a.b.0"`: `getIn` `setIn` `updateIn` `deleteIn` `flattenKeys` `cloneDeep` |
+| `compose_flow` | `curryN` `memoize1` `retry` `cond` `matchKind` وجبر `Result` (`safeChain` `traceChain`) |
+| `compose_schema` | `schemaCheck` `schemaConform` `schemaOf` بمخططات مختصرة |
+| `compose_diff` | `diffDeep` `patchDeep` `invertChanges` `merge3` |
+| `compose_store` | `storeNew` + اشتراكات وقيم مشتقّة وbatch وتراجع وربط بالحاويات |
+
 ## حدود معروفة
 - المتغيرات الحيّة (`gauge` `tape` `lens` `bell`) و`base`/`accept`/`pre`/`post` صياغات نحوية لا تُمرَّر كقيم، فلا تدخل هذه الطبقة.
 - لا معاملات افتراضية في Rin: لكل دالة اختيارية نسخة مختصرة ونسخة `*With`.
