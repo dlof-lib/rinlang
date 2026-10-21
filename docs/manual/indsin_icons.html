@@ -1,0 +1,98 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>مكتبة أيقونات indsin (متجهية) — Rin</title>
+<meta name="description" content="توثيق لغة البرمجة Rin"><link rel="icon" href="../assets/brand/icon-32.png">
+<link rel="stylesheet" href="assets/style.css"></head><body>
+<header><button id="mn" aria-label="القائمة">☰</button><a class="logo" href="index.html"><img src="../assets/brand/icon-48.png" alt="" width="26">Rin</a>
+<input id="q" type="search" placeholder="ابحث في التوثيق…" autocomplete="off"><button id="th" aria-label="الوضع">◐</button>
+<a class="gh" href="https://github.com/dlof-lib/rinlang">GitHub</a><div id="res"></div></header>
+<div class="wrap"><nav id="sb"><details ><summary>ابدأ هنا</summary><a href="getting-started.html">البداية</a><a href="syntax.html">القواعد النحوية العامة</a><a href="variables.html">let`، مصفوفات، قواميس، نطاق</a><a href="template-strings.html">النصوص القالبية (متغيّرات داخل النص)</a><a href="input.html">إدخال المستخدم (Input)</a><a href="control-flow.html">الشروط، الحلقات، `goal`/`achieve</a><a href="loops.html">حلقات Rin — Loops v2</a><a href="functions.html">fun`/`return`، التكرار الذاتي</a><a href="enums.html">enum`: قوائم اختيار مغلقة</a></details><details ><summary>اللغة</summary><a href="language-reference.html">المرجع الشامل وخريطة ترابط المفاهيم</a><a href="objects.html">class`/`struct`، `.object()`، `@Object`، `document</a><a href="oop.html">البرمجة الكائنية الموسَّعة (Rin 1.0)</a><a href="containers.html">دليل `@container` / `@element` / `@loop</a><a href="table.html">الجدول (`@table` / `@container.table`) ودوال اللغة عليه</a><a href="set.html">Set`: نوع المجموعة الأساسي</a><a href="pipelines.html">عامل الأنابيب `|&gt;</a><a href="RECKON.html">reckon`: مفهوم حسابي بسطرين</a><a href="let-plus.html">let` المطوَّر</a><a href="living-variables.html">المتغيرات الحيّة (Living Variables)</a><a href="label-define.html">label` و`define` (تسمية وتعريف)</a><a href="block-frames.html">بداية الكتل ونهايتها (Block Frames)</a><a href="compare_ops.html">معاملات المقارنة `/=` و `=/=` و `=/</a><a href="max_min.html">max / min family</a><a href="scope-guarantees.html">ضمانات النطاق: `finally` · `defer` · `catch … when` · `rethrow</a><a href="key_terms_and_builtins.html">Rin KEY_TERMS and Built-in Conditions</a><a href="number_builtins.html">Rin Number Built-ins</a></details><details open><summary>الواجهات (Indsin)</summary><a href="indsin.html">Indsin — Interface Design</a><a href="indsin_rin.html">indsin يعتمد على لغة Rin</a><a href="indsin_expansion.html">Indsin — التوسعة الاحترافية (Design System v2)</a><a href="indsin_object.html">indsin-object — API reference</a><a href="indsin_media.html">Indsin Media — اختيار الوسائط ورفعها</a><a href="indsin_icons.html" class=on>مكتبة أيقونات indsin (متجهية)</a><a href="indsin_tooling.html">indsin tooling — icon, file association, syntax highlighting</a><a href="indsinweb.html">IndsinWeb — مكتبة WebView والروابط لـ indsin</a><a href="RIN_ELEMENTS.html">دليل `@element.*` الكامل</a><a href="events-effects.html">الأحداث والتأثيرات (Events &amp; Effects) — محرك Indsin UI</a><a href="banner.html">Banner: إشعار شريطي</a><a href="simple-style.html">Rin Simple Style</a></details><details ><summary>بيئة التشغيل</summary><a href="runtime.html">وقت تشغيل Rin (Rin Runtime) · المرجع الرسمي</a><a href="standard-library.html">المكتبة القياسية (`lib/*.og.rin`)</a><a href="errors.html">نظام الأخطاء: أكواد، `try`/`catch`/`throw</a><a href="ERROR_SYSTEM.html">نظام التشخيص: البنية الداخلية + جدول الأكواد الكامل</a><a href="storage.html">تخزين دائم</a><a href="http.html">شبكات</a><a href="env.html">ربط Rin بملف `.env</a><a href="terminal.html">الطرفية التفاعلية — `rin terminal</a><a href="vm.html">RinVM — آلة Rin الافتراضية (بايتكود)</a><a href="rinflow.html">RinFlow: طبقة تنفيذ التدفّق المهيكل</a><a href="MAKE_UNIT.html">@make.(name)`: وحدة بسياسة قدرات صريحة</a><a href="MAKE_MEDIA.html">فيديو · صوت · API · إزالة الخلفية · قراءة النص من الصور</a><a href="TIME.html">مفهوم `time`: الزمن كقيمة من الدرجة الأولى</a><a href="native-additions.html">دوال Rin الأصلية الجديدة (Rin 1.0)</a></details><details ><summary>الحاويات وقواعد البيانات</summary><a href="container_advanced.html">Rin Container Advanced Built-ins</a><a href="container_pro.html">Rin Container Pro</a><a href="container_sql.html">RIN CONTAINER SQL (RCSQL)</a><a href="cross-file-containers.html">استدعاء إعلانات من ملف آخر</a></details><details ><summary>الحزم والتكامل</summary><a href="api.html">واجهة C المسطَّحة (Embedding API)</a><a href="android.html">استضافة Rin على أندرويد</a><a href="packages-and-interop.html">Rin 1.0 — المكتبات والحزم وجسر C++ وJSON واختبارات rintest</a><a href="rinpak-format.html">RinPak — حزمة مشروع Rin (`.rinpak`)</a><a href="html-projects.html">مشاريع HTML في Rin — الربط بين index.html وملف الحاوية</a><a href="project-og-urin.html">project.og.urin` — البيانات الوصفية لمشروع Rin</a><a href="CONTENT_PACKS.html">حزم المحتوى القابلة للتنزيل (Content Packs)</a><a href="previewkit.html">previewkit — معاينة حيّة لملفات PDF / Markdown / TypeScript</a></details><details ><summary>المكتبات المتخصصة</summary><a href="rinml.html">RinML / RinDF / RinAI — الذكاء الاصطناعي وتحليل البيانات في Rin</a><a href="STATS.html">RinStat — التحليل الإحصائي (`lib/rinstat.og.rin`)</a><a href="STATS_ADV.html">RinStat المتقدّم + RinAuto</a><a href="LINALG.html">الجبر الخطي للمهندسين — `mat*` و`vec*</a><a href="PLOT.html">RinPlot — الرسوم البيانية الإحصائية (`lib/rinplot.og.rin`)</a><a href="ALGO.html">تطوير الخوارزميات والحساب العددي — `algo*</a><a href="NUMBER.html">مفهوم `number` في Rin</a><a href="boat.html">&quot;Boat&quot;: مفاهيم أساسية مجمَّعة</a><a href="passkit.html">passkit — passwords, encryption, databases and a tag language</a><a href="passkit-crypto-db.html">Passkit feature catalog: encryption, databases and container linking</a><a href="hash-family.html">عائلة `#` — مفاهيم ودوال جديدة تبدأ بعلامة `#</a><a href="image-draw.html">إنشاء الصور في Rin — رسم وحفظ PNG وlog كصورة</a><a href="image-terminal.html">طباعة الصور في الـ terminal — `printImage` / `imageAnsi` / `imageInfo</a></details><details ><summary>المشروع</summary><a href="CONTRIBUTING.html">المساهمة في Rin</a><a href="CODE_OF_CONDUCT.html">قواعد السلوك</a><a href="SECURITY.html">سياسة الأمان</a><a href="SUPPORT.html">الحصول على المساعدة</a><a href="TRADEMARKS.html">سياسة العلامة التجارية — Trademark Policy</a><a href="THIRD_PARTY_NOTICES.html">إشعارات المكوّنات الخارجية — Third-Party Notices</a></details><details ><summary>مراجع إضافية</summary><a href="ANDROID_VERSIONS.html">حزم RinStudio لكل إصدار أندرويد</a><a href="TOKEN.html">مفهوم `token` في Rin</a><a href="TOOLCHAIN.html">Rin Professional Language Toolchain</a><a href="TOOLCHAIN_UPGRADE.html">Toolchain Upgrade — 2026-09</a><a href="architecture.html">المعمارية وبنية المستودع</a><a href="base-accept.html">base` و`accept`: متغيّران يخدمان `if</a><a href="channel47.html">channel47 — لغة وصف البيانات والإعدادات</a><a href="ci.html">CI وأدوات المستودع</a><a href="loop-templates.html">قوالب الحلقات `@tmpl</a><a href="pre-post.html">pre` و`post` (ما قبل / ما بعد): عقد انتقال حول الإسناد</a><a href="print-fonts.html">خطوط `print` — bold / italic / underline وغيرها</a><a href="print-image-terminal.html">طباعة الصور كنص في الطرفية</a><a href="print-templates.html">قوالب الطباعة `@tmpl ... print` — قوالب نصية خطية وتنسيقية</a><a href="rdoc.html">rdoc — Documentation Container</a><a href="rdoc-reference.html">وثيقة rdoc الشاملة — Documentation Container</a><a href="screenshots.html">لقطات من RinStudio</a></details></nav>
+<main><article><h1 id="indsin">مكتبة أيقونات indsin (متجهية)<a class="headerlink" href="#indsin" title="Permanent link">#</a></h1>
+<p>187 أيقونة مرسومة من الصفر على شبكة 24×24، خط سماكته 2 وأطراف دائرية، كل أيقونة مسار SVG واحد
+(أوامر <code>M L H V C A Z</code> فقط). المصدر الوحيد: <code>tools/icons/icons_def.py</code>، والتوليد:
+<code>python3 tools/icons/gen_indsin_icons.py</code>.</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الناتج</th>
+<th>الاستعمال</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>assets/indsin-icons/svg/*.svg</code></td>
+<td>ملف لكل أيقونة</td>
+</tr>
+<tr>
+<td><code>assets/indsin-icons/indsin-icons.svg</code></td>
+<td>sprite (<code>&lt;use href="#ic-home"&gt;</code>)</td>
+</tr>
+<tr>
+<td><code>assets/indsin-icons/icons.json</code></td>
+<td>فهرس (اسم، فئة، بدائل، مسار)</td>
+</tr>
+<tr>
+<td><code>assets/indsin-icons/gallery.html</code></td>
+<td>معرض مستقل بحث + نسخ</td>
+</tr>
+<tr>
+<td><code>lib/indsinicons.og.rin</code></td>
+<td>مكتبة Rin (<code>ic_*</code>)</td>
+</tr>
+<tr>
+<td><code>app/src/main/cpp/indsin/rin_indsin_iconpaths.h</code></td>
+<td>جدول C++ (<code>iconRegistry().vectorPath(name)</code>)</td>
+</tr>
+<tr>
+<td><code>indsin_object.html</code></td>
+<td><code>@view.Icon</code> يرسم SVG حقيقياً في معاينة الويب</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="rin">من Rin<a class="headerlink" href="#rin" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">@import &quot;lib/indsinicons.og.rin&quot;;
+print ic_svg(&quot;home&quot;, nil);
+print ic_svg(&quot;heart&quot;, {&quot;size&quot;: 32, &quot;color&quot;: &quot;#e11d48&quot;, &quot;filled&quot;: true});
+print ic_search(&quot;gear&quot;);                       // [&quot;settings&quot;]
+ic_register(&quot;my-logo&quot;, &quot;brand&quot;, &quot;M4 4H20V20H4Z&quot;);
+</code></pre>
+<p>الدوال: <code>ic_count ic_names ic_has ic_resolve ic_aliasesOf ic_category ic_categories ic_categoryName
+ic_byCategory ic_search ic_path ic_svg ic_svgn ic_html ic_dataUri ic_sprite ic_symbol ic_snippet
+ic_audit ic_register ic_validPath</code>. خيارات <code>opts</code>: <code>size color stroke filled title class</code>.
+الاسم المجهول يعطي أيقونة <code>help</code> مع <code>data-missing</code> بدل فراغ صامت.</p>
+<h2 id="indsin_1">في واجهة indsin<a class="headerlink" href="#indsin_1" title="Permanent link">#</a></h2>
+<pre><code>@view.Icon=ico
+    icon=&quot;settings&quot;;   // أو الاسم البديل gear
+    size=&quot;lg&quot;;
+.end/view
+</code></pre>
+<p>الأسماء القديمة (27 اسماً في سجل المحرّك + أسماء معاينة الويب) كلها محفوظة وتُحلّ إلى أيقونات.</p>
+<h2 id="_1">حدود معروفة<a class="headerlink" href="#_1" title="Permanent link">#</a></h2>
+<p>الـrasterizer الأصلي في C++ ما زال بلا عملية رسم مسارات، فيبقى الرسم الأصلي على الرموز النصية؛
+الجدول جاهز لتلك العملية. لم يُبنَ APK/WASM.</p>
+<h2 id="_2">الاختبارات<a class="headerlink" href="#_2" title="Permanent link">#</a></h2>
+<p><code>RIN_BIN=rin python3 tools/icons/test_icons.py</code> · <code>rin tests/indsin_icons_tests.rin</code> ·
+<code>g++ -std=c++17 -Iapp/src/main/cpp/indsin tools/test_indsin_icon_vectors.cpp</code>.</p>
+<h2 id="rinstudio">داخل تطبيق RinStudio<a class="headerlink" href="#rinstudio" title="Permanent link">#</a></h2>
+<ul>
+<li><strong>مكتبة مدمجة:</strong> <code>lib/indsinicons.og.rin</code> مضمَّنة في المفسّر (<code>rin_stdlib_libs.h</code>) فيعمل <code>@import "lib/indsinicons.og.rin";</code>
+  في أي مشروع دون رفع ملف. بعد أي تعديل: <code>python3 tools/icons/gen_indsin_icons.py &amp;&amp; python3 tools/embed_indsinicons.py</code>.</li>
+<li><strong>شاشة المكتبات (<code>LibrariesActivity</code>) بتصميم جديد:</strong> بحث حيّ، شرائح فئات (واجهات/بيانات/لغات وأدوات/ألعاب وفيزياء/نظام وأمان)،
+  بطاقة مميّزة لمكتبة الأيقونات (معاينة ستّ أيقونات حقيقية + تصفّح + إدراج <code>@import</code>)، وحبّة فئة على كل مكتبة مدمجة.</li>
+<li><strong>متصفّح الأيقونات (<code>IconLibraryActivity</code>):</strong> شبكة 187 أيقونة تُرسم من مسارات SVG عبر <code>IndsinIconView</code>، بحث بالاسم أو البديل،
+  وتفاصيل مع «إدراج في الكود» (يُدرج سطر <code>@view.Icon</code> عند المؤشر).</li>
+<li><strong>أيقونة المكتبة:</strong> <code>res/drawable/ic_lib_indsinicons.xml</code> (شبكة 2×2 من البلاطات) و<code>assets/branding/indsinicons_icon.svg</code>.</li>
+<li>لم يُبنَ APK هنا (لا Android SDK ولا مترجم Kotlin في بيئة العمل): تحقّق من البناء والشكل على جهاز قبل الإصدار.</li>
+</ul></article>
+<div class="pnav"><a class="pn" href="indsin_media.html">→ Indsin Media — اختيار الوسائط ورفعها</a><a class="pn" href="indsin_tooling.html">indsin tooling — icon, file association, syntax highlighting ←</a></div><p class="edit"><a href="https://github.com/dlof-lib/rinlang/edit/main/docs/indsin_icons.md">✎ عدّل هذه الصفحة على GitHub</a></p>
+<footer>Rin 1.0.0 · رخصة MIT</footer></main>
+<aside id="toc"><b>في هذه الصفحة</b><div class="toc">
+<ul>
+<li><a href="#rin">من Rin</a></li>
+<li><a href="#indsin_1">في واجهة indsin</a></li>
+<li><a href="#_1">حدود معروفة</a></li>
+<li><a href="#_2">الاختبارات</a></li>
+<li><a href="#rinstudio">داخل تطبيق RinStudio</a></li>
+</ul>
+</div>
+</aside></div>
+<script src="assets/app.js"></script></body></html>
