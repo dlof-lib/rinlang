@@ -1,0 +1,915 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Passkit feature catalog: encryption, databases and container linking — Rin</title>
+<meta name="description" content="توثيق لغة البرمجة Rin"><link rel="icon" href="../assets/brand/icon-32.png">
+<link rel="stylesheet" href="assets/style.css"></head><body>
+<header><button id="mn" aria-label="القائمة">☰</button><a class="logo" href="index.html"><img src="../assets/brand/icon-48.png" alt="" width="26">Rin</a>
+<input id="q" type="search" placeholder="ابحث في التوثيق…" autocomplete="off"><button id="th" aria-label="الوضع">◐</button>
+<a class="gh" href="https://github.com/dlof-lib/rinlang">GitHub</a><div id="res"></div></header>
+<div class="wrap"><nav id="sb"><details ><summary>ابدأ هنا</summary><a href="getting-started.html">البداية</a><a href="syntax.html">القواعد النحوية العامة</a><a href="variables.html">let`، مصفوفات، قواميس، نطاق</a><a href="template-strings.html">النصوص القالبية (متغيّرات داخل النص)</a><a href="input.html">إدخال المستخدم (Input)</a><a href="control-flow.html">الشروط، الحلقات، `goal`/`achieve</a><a href="loops.html">حلقات Rin — Loops v2</a><a href="functions.html">fun`/`return`، التكرار الذاتي</a><a href="enums.html">enum`: قوائم اختيار مغلقة</a></details><details ><summary>اللغة</summary><a href="language-reference.html">المرجع الشامل وخريطة ترابط المفاهيم</a><a href="objects.html">class`/`struct`، `.object()`، `@Object`، `document</a><a href="oop.html">البرمجة الكائنية الموسَّعة (Rin 1.0)</a><a href="containers.html">دليل `@container` / `@element` / `@loop</a><a href="table.html">الجدول (`@table` / `@container.table`) ودوال اللغة عليه</a><a href="set.html">Set`: نوع المجموعة الأساسي</a><a href="pipelines.html">عامل الأنابيب `|&gt;</a><a href="RECKON.html">reckon`: مفهوم حسابي بسطرين</a><a href="let-plus.html">let` المطوَّر</a><a href="living-variables.html">المتغيرات الحيّة (Living Variables)</a><a href="label-define.html">label` و`define` (تسمية وتعريف)</a><a href="block-frames.html">بداية الكتل ونهايتها (Block Frames)</a><a href="compare_ops.html">معاملات المقارنة `/=` و `=/=` و `=/</a><a href="max_min.html">max / min family</a><a href="scope-guarantees.html">ضمانات النطاق: `finally` · `defer` · `catch … when` · `rethrow</a><a href="key_terms_and_builtins.html">Rin KEY_TERMS and Built-in Conditions</a><a href="number_builtins.html">Rin Number Built-ins</a></details><details ><summary>الواجهات (Indsin)</summary><a href="indsin.html">Indsin — Interface Design</a><a href="indsin_rin.html">indsin يعتمد على لغة Rin</a><a href="indsin_expansion.html">Indsin — التوسعة الاحترافية (Design System v2)</a><a href="indsin_object.html">indsin-object — API reference</a><a href="indsin_media.html">Indsin Media — اختيار الوسائط ورفعها</a><a href="indsin_icons.html">مكتبة أيقونات indsin (متجهية)</a><a href="indsin_tooling.html">indsin tooling — icon, file association, syntax highlighting</a><a href="indsinweb.html">IndsinWeb — مكتبة WebView والروابط لـ indsin</a><a href="RIN_ELEMENTS.html">دليل `@element.*` الكامل</a><a href="events-effects.html">الأحداث والتأثيرات (Events &amp; Effects) — محرك Indsin UI</a><a href="banner.html">Banner: إشعار شريطي</a><a href="simple-style.html">Rin Simple Style</a></details><details ><summary>بيئة التشغيل</summary><a href="runtime.html">وقت تشغيل Rin (Rin Runtime) · المرجع الرسمي</a><a href="standard-library.html">المكتبة القياسية (`lib/*.og.rin`)</a><a href="errors.html">نظام الأخطاء: أكواد، `try`/`catch`/`throw</a><a href="ERROR_SYSTEM.html">نظام التشخيص: البنية الداخلية + جدول الأكواد الكامل</a><a href="storage.html">تخزين دائم</a><a href="http.html">شبكات</a><a href="env.html">ربط Rin بملف `.env</a><a href="terminal.html">الطرفية التفاعلية — `rin terminal</a><a href="vm.html">RinVM — آلة Rin الافتراضية (بايتكود)</a><a href="rinflow.html">RinFlow: طبقة تنفيذ التدفّق المهيكل</a><a href="MAKE_UNIT.html">@make.(name)`: وحدة بسياسة قدرات صريحة</a><a href="MAKE_MEDIA.html">فيديو · صوت · API · إزالة الخلفية · قراءة النص من الصور</a><a href="TIME.html">مفهوم `time`: الزمن كقيمة من الدرجة الأولى</a><a href="native-additions.html">دوال Rin الأصلية الجديدة (Rin 1.0)</a></details><details ><summary>الحاويات وقواعد البيانات</summary><a href="container_advanced.html">Rin Container Advanced Built-ins</a><a href="container_pro.html">Rin Container Pro</a><a href="container_sql.html">RIN CONTAINER SQL (RCSQL)</a><a href="cross-file-containers.html">استدعاء إعلانات من ملف آخر</a></details><details ><summary>الحزم والتكامل</summary><a href="api.html">واجهة C المسطَّحة (Embedding API)</a><a href="android.html">استضافة Rin على أندرويد</a><a href="packages-and-interop.html">Rin 1.0 — المكتبات والحزم وجسر C++ وJSON واختبارات rintest</a><a href="rinpak-format.html">RinPak — حزمة مشروع Rin (`.rinpak`)</a><a href="html-projects.html">مشاريع HTML في Rin — الربط بين index.html وملف الحاوية</a><a href="project-og-urin.html">project.og.urin` — البيانات الوصفية لمشروع Rin</a><a href="CONTENT_PACKS.html">حزم المحتوى القابلة للتنزيل (Content Packs)</a><a href="previewkit.html">previewkit — معاينة حيّة لملفات PDF / Markdown / TypeScript</a></details><details open><summary>المكتبات المتخصصة</summary><a href="rinml.html">RinML / RinDF / RinAI — الذكاء الاصطناعي وتحليل البيانات في Rin</a><a href="STATS.html">RinStat — التحليل الإحصائي (`lib/rinstat.og.rin`)</a><a href="STATS_ADV.html">RinStat المتقدّم + RinAuto</a><a href="LINALG.html">الجبر الخطي للمهندسين — `mat*` و`vec*</a><a href="PLOT.html">RinPlot — الرسوم البيانية الإحصائية (`lib/rinplot.og.rin`)</a><a href="ALGO.html">تطوير الخوارزميات والحساب العددي — `algo*</a><a href="NUMBER.html">مفهوم `number` في Rin</a><a href="boat.html">&quot;Boat&quot;: مفاهيم أساسية مجمَّعة</a><a href="passkit.html">passkit — passwords, encryption, databases and a tag language</a><a href="passkit-crypto-db.html" class=on>Passkit feature catalog: encryption, databases and container linking</a><a href="hash-family.html">عائلة `#` — مفاهيم ودوال جديدة تبدأ بعلامة `#</a><a href="image-draw.html">إنشاء الصور في Rin — رسم وحفظ PNG وlog كصورة</a><a href="image-terminal.html">طباعة الصور في الـ terminal — `printImage` / `imageAnsi` / `imageInfo</a></details><details ><summary>المشروع</summary><a href="CONTRIBUTING.html">المساهمة في Rin</a><a href="CODE_OF_CONDUCT.html">قواعد السلوك</a><a href="SECURITY.html">سياسة الأمان</a><a href="SUPPORT.html">الحصول على المساعدة</a><a href="TRADEMARKS.html">سياسة العلامة التجارية — Trademark Policy</a><a href="THIRD_PARTY_NOTICES.html">إشعارات المكوّنات الخارجية — Third-Party Notices</a></details><details ><summary>مراجع إضافية</summary><a href="ANDROID_VERSIONS.html">حزم RinStudio لكل إصدار أندرويد</a><a href="TOKEN.html">مفهوم `token` في Rin</a><a href="TOOLCHAIN.html">Rin Professional Language Toolchain</a><a href="TOOLCHAIN_UPGRADE.html">Toolchain Upgrade — 2026-09</a><a href="architecture.html">المعمارية وبنية المستودع</a><a href="base-accept.html">base` و`accept`: متغيّران يخدمان `if</a><a href="channel47.html">channel47 — لغة وصف البيانات والإعدادات</a><a href="ci.html">CI وأدوات المستودع</a><a href="loop-templates.html">قوالب الحلقات `@tmpl</a><a href="pre-post.html">pre` و`post` (ما قبل / ما بعد): عقد انتقال حول الإسناد</a><a href="print-fonts.html">خطوط `print` — bold / italic / underline وغيرها</a><a href="print-image-terminal.html">طباعة الصور كنص في الطرفية</a><a href="print-templates.html">قوالب الطباعة `@tmpl ... print` — قوالب نصية خطية وتنسيقية</a><a href="rdoc.html">rdoc — Documentation Container</a><a href="rdoc-reference.html">وثيقة rdoc الشاملة — Documentation Container</a><a href="screenshots.html">لقطات من RinStudio</a></details></nav>
+<main><article><h1 id="passkit-feature-catalog-encryption-databases-and-container-linking">Passkit feature catalog: encryption, databases and container linking<a class="headerlink" href="#passkit-feature-catalog-encryption-databases-and-container-linking" title="Permanent link">#</a></h1>
+<p>185 features. Every row is a check in <code>tests/verification/passkit_features.rin</code> that runs on the real interpreter.
+Generated by <code>tools/gen_features_doc.py</code> — do not edit by hand.</p>
+<h2 id="encryption-encoding-and-randomness">Encryption: encoding and randomness<a class="headerlink" href="#encryption-encoding-and-randomness" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Feature</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>F001</td>
+<td>pcToHex: number to hex with fixed width</td>
+</tr>
+<tr>
+<td>F002</td>
+<td>pcHexToNum: hex to number</td>
+</tr>
+<tr>
+<td>F003</td>
+<td>pcB64UrlEncode/Decode: round trip (non-ASCII text)</td>
+</tr>
+<tr>
+<td>F004</td>
+<td>pcB64UrlEncodeHex: binary-safe, no =, +, /</td>
+</tr>
+<tr>
+<td>F005</td>
+<td>pcBase32Encode: RFC 4648 vectors</td>
+</tr>
+<tr>
+<td>F006</td>
+<td>pcBase32Decode: inverse, ignores case and dashes</td>
+</tr>
+<tr>
+<td>F007</td>
+<td>pcRandomHex: correct length and distinct values</td>
+</tr>
+<tr>
+<td>F008</td>
+<td>pcRandomInt: roughly uniform within [0,n)</td>
+</tr>
+<tr>
+<td>F009</td>
+<td>pcRandomId: id with a prefix</td>
+</tr>
+<tr>
+<td>F010</td>
+<td>pcUuid4: valid UUID v4 shape</td>
+</tr>
+<tr>
+<td>F011</td>
+<td>pcXorHex: XOR of hex strings</td>
+</tr>
+<tr>
+<td>F012</td>
+<td>pcEqual: constant-time comparison</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="hashing-and-integrity">Hashing and integrity<a class="headerlink" href="#hashing-and-integrity" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Feature</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>F013</td>
+<td>pcHmacHex: RFC 4231 vector #1</td>
+</tr>
+<tr>
+<td>F014</td>
+<td>pcFingerprint: readable ab:cd:... fingerprint</td>
+</tr>
+<tr>
+<td>F015</td>
+<td>pcDoubleSha: double sha256 differs from single</td>
+</tr>
+<tr>
+<td>F016</td>
+<td>pcShortHash: short hash with a byte count</td>
+</tr>
+<tr>
+<td>F017</td>
+<td>pcHashFile: file hash</td>
+</tr>
+<tr>
+<td>F018</td>
+<td>pcHashChain: a verified hash chain</td>
+</tr>
+<tr>
+<td>F019</td>
+<td>pcHashChainVerify: detects tampering and reports where</td>
+</tr>
+<tr>
+<td>F020</td>
+<td>pcMerkleRoot: deterministic and order-sensitive</td>
+</tr>
+<tr>
+<td>F021</td>
+<td>pcMerkleProof/Verify: membership proof for every leaf</td>
+</tr>
+<tr>
+<td>F022</td>
+<td>pcMerkleVerify: rejects a leaf that is not in the tree</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="key-derivation">Key derivation<a class="headerlink" href="#key-derivation" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Feature</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>F023</td>
+<td>pcHkdfExtract: RFC 5869 case 1</td>
+</tr>
+<tr>
+<td>F024</td>
+<td>pcHkdf/pcHkdfExpand: RFC 5869 case 1 (42 bytes)</td>
+</tr>
+<tr>
+<td>F025</td>
+<td>pcPbkdf2: PBKDF2-HMAC-SHA256 vectors (1 and 4096 iterations)</td>
+</tr>
+<tr>
+<td>F026</td>
+<td>pcGenerateKey: random key of the requested size</td>
+</tr>
+<tr>
+<td>F027</td>
+<td>pcKeyId: stable key id that does not reveal the key</td>
+</tr>
+<tr>
+<td>F028</td>
+<td>pcDeriveSubkey: independent subkeys per purpose</td>
+</tr>
+<tr>
+<td>F029</td>
+<td>pcKeyCheck: rejects weak or malformed keys</td>
+</tr>
+<tr>
+<td>F030</td>
+<td>pcKeyFromPassword: deterministic with the same salt</td>
+</tr>
+<tr>
+<td>F031</td>
+<td>pcPepper: secret pepper before hashing</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="authenticated-encryption">Authenticated encryption<a class="headerlink" href="#authenticated-encryption" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Feature</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>F032</td>
+<td>pcSeal/pcOpen: round trip (non-ASCII + emoji)</td>
+</tr>
+<tr>
+<td>F033</td>
+<td>pcOpen: rejects any change to the ciphertext</td>
+</tr>
+<tr>
+<td>F034</td>
+<td>pcOpen: rejects the wrong key</td>
+</tr>
+<tr>
+<td>F035</td>
+<td>AAD: binds ciphertext to its context (different context fails)</td>
+</tr>
+<tr>
+<td>F036</td>
+<td>Random nonce: same text gives different ciphertexts</td>
+</tr>
+<tr>
+<td>F037</td>
+<td>Empty plaintext</td>
+</tr>
+<tr>
+<td>F038</td>
+<td>Long multi-block plaintext (400+ bytes)</td>
+</tr>
+<tr>
+<td>F039</td>
+<td>pcSealObject/pcOpenObject: JSON objects</td>
+</tr>
+<tr>
+<td>F040</td>
+<td>pcSealWithPassword/Open: password-based encryption (embedded salt)</td>
+</tr>
+<tr>
+<td>F041</td>
+<td>pcOpenWithPassword: wrong password fails</td>
+</tr>
+<tr>
+<td>F042</td>
+<td>Corrupt or truncated input returns ok:false without crashing</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="keyring-envelope">Keyring / Envelope<a class="headerlink" href="#keyring-envelope" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Feature</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>F043</td>
+<td>pcKeyringSeal/Open: key chosen from the kid</td>
+</tr>
+<tr>
+<td>F044</td>
+<td>pcKeyringRotate: old keys still decrypt and the new one is active</td>
+</tr>
+<tr>
+<td>F045</td>
+<td>pcKeyringRewrap: re-encrypt under the active key</td>
+</tr>
+<tr>
+<td>F046</td>
+<td>Unknown kid is rejected clearly</td>
+</tr>
+<tr>
+<td>F047</td>
+<td>pcEnvelopeSeal/Open: data key wrapped by a master key</td>
+</tr>
+<tr>
+<td>F048</td>
+<td>pcEnvelopeRewrap: master key rotation without touching the body</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="signing-and-tokens">Signing and tokens<a class="headerlink" href="#signing-and-tokens" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Feature</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>F049</td>
+<td>pcSign/pcVerifySig: detached signature</td>
+</tr>
+<tr>
+<td>F050</td>
+<td>pcTokenSign/Verify: signed token (HS256) with its claims</td>
+</tr>
+<tr>
+<td>F051</td>
+<td>Token: expiry (exp)</td>
+</tr>
+<tr>
+<td>F052</td>
+<td>Token: not valid before nbf</td>
+</tr>
+<tr>
+<td>F053</td>
+<td>Token: iss and aud checks</td>
+</tr>
+<tr>
+<td>F054</td>
+<td>Token: rejects alg:none and any algorithm other than HS256</td>
+</tr>
+<tr>
+<td>F055</td>
+<td>Token: rejects a modified payload (signature mismatch)</td>
+</tr>
+<tr>
+<td>F056</td>
+<td>pcSignUrl/pcVerifyUrl: signed URL with expiry</td>
+</tr>
+<tr>
+<td>F057</td>
+<td>Signed URL: expires and rejects tampering</td>
+</tr>
+<tr>
+<td>F058</td>
+<td>pcSignRequest/pcVerifyRequest: API request signing</td>
+</tr>
+<tr>
+<td>F059</td>
+<td>Replay protection through a nonce</td>
+</tr>
+<tr>
+<td>F060</td>
+<td>Rejects a request outside the time window (skew)</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="otp-recovery-and-secret-sharing">OTP, recovery and secret sharing<a class="headerlink" href="#otp-recovery-and-secret-sharing" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Feature</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>F061</td>
+<td>pcTotp: the six RFC 6238 (SHA256) vectors</td>
+</tr>
+<tr>
+<td>F062</td>
+<td>pcTotpVerify: a +/-1 window compensates for clock drift</td>
+</tr>
+<tr>
+<td>F063</td>
+<td>pcOtpAuthUri: otpauth link for authenticator apps</td>
+</tr>
+<tr>
+<td>F064</td>
+<td>pcRecoveryCodes: XXXXX-XXXXX recovery codes and hashes</td>
+</tr>
+<tr>
+<td>F065</td>
+<td>pcRecoveryVerify: a code is consumed once</td>
+</tr>
+<tr>
+<td>F066</td>
+<td>pcShamirSplit/Combine: recover the secret from k shares</td>
+</tr>
+<tr>
+<td>F067</td>
+<td>Shamir: any k shares are enough</td>
+</tr>
+<tr>
+<td>F068</td>
+<td>Shamir: fewer than k shares do not reveal the secret</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="databases">Databases<a class="headerlink" href="#databases" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Feature</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>F069</td>
+<td>pdCreate/pdExists</td>
+</tr>
+<tr>
+<td>F070</td>
+<td>pdInsert/pdGet (with createdAt)</td>
+</tr>
+<tr>
+<td>F071</td>
+<td>pdInsert: rejects a duplicate id</td>
+</tr>
+<tr>
+<td>F072</td>
+<td>pdUpdate: update with updatedAt</td>
+</tr>
+<tr>
+<td>F073</td>
+<td>pdUpsert: insert or update</td>
+</tr>
+<tr>
+<td>F074</td>
+<td>pdDelete</td>
+</tr>
+<tr>
+<td>F075</td>
+<td>pdAll/pdCount/pdIds</td>
+</tr>
+<tr>
+<td>F076</td>
+<td>pdFind: search by a value containing @ and . (bypasses the RCSQL limit)</td>
+</tr>
+<tr>
+<td>F077</td>
+<td>pdFindOne</td>
+</tr>
+<tr>
+<td>F078</td>
+<td>pdWhere: RCSQL query</td>
+</tr>
+<tr>
+<td>F079</td>
+<td>pdWhere: a bad query is reported without crashing</td>
+</tr>
+<tr>
+<td>F080</td>
+<td>pdPage: pagination</td>
+</tr>
+<tr>
+<td>F081</td>
+<td>pdInsertUnique: unique field</td>
+</tr>
+<tr>
+<td>F082</td>
+<td>pdValidate: schema (type/required/oneOf/startsWith/min/max)</td>
+</tr>
+<tr>
+<td>F083</td>
+<td>Soft delete, restore and pdActive</td>
+</tr>
+<tr>
+<td>F084</td>
+<td>pdPurgeDeleted: permanent delete after a delay</td>
+</tr>
+<tr>
+<td>F085</td>
+<td>pdNextId: persistent sequential counter</td>
+</tr>
+<tr>
+<td>F086</td>
+<td>Transaction: snapshot then pdRollback restores the state</td>
+</tr>
+<tr>
+<td>F087</td>
+<td>Transaction: pdCommit makes it permanent</td>
+</tr>
+<tr>
+<td>F088</td>
+<td>pdExportJson/pdImportJson: JSON snapshot</td>
+</tr>
+<tr>
+<td>F089</td>
+<td>pdChecksum: changes with any edit</td>
+</tr>
+<tr>
+<td>F090</td>
+<td>pdMigrate: migrations in order, once</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="encrypted-databases">Encrypted databases<a class="headerlink" href="#encrypted-databases" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Feature</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>F091</td>
+<td>pdInsertEnc: encrypted fields do not appear in plain form in storage</td>
+</tr>
+<tr>
+<td>F092</td>
+<td>pdGetDec: read with decryption</td>
+</tr>
+<tr>
+<td>F093</td>
+<td>Positional AAD: moving ciphertext between rows fails</td>
+</tr>
+<tr>
+<td>F094</td>
+<td>pdFindByBlind: search an encrypted field without revealing it</td>
+</tr>
+<tr>
+<td>F095</td>
+<td>pdReencrypt: rotate the key of a whole table</td>
+</tr>
+<tr>
+<td>F096</td>
+<td>pdExportEncrypted: encrypted and authenticated backup (restorable under a new name via sourceTable)</td>
+</tr>
+<tr>
+<td>F097</td>
+<td>pdImportEncrypted: wrong key or different table is rejected</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="security-models">Security models<a class="headerlink" href="#security-models" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Feature</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>F098</td>
+<td>pdUserCreate: no plain email or password in storage</td>
+</tr>
+<tr>
+<td>F099</td>
+<td>pdUserCreate: rejects a duplicate email (via the blind index)</td>
+</tr>
+<tr>
+<td>F100</td>
+<td>pdUserCreate: the password policy is enforced</td>
+</tr>
+<tr>
+<td>F101</td>
+<td>pdUserLogin: correct login</td>
+</tr>
+<tr>
+<td>F102</td>
+<td>Uniform error message (does not reveal whether the email exists)</td>
+</tr>
+<tr>
+<td>F103</td>
+<td>Account lockout after failed attempts (with retryAfter)</td>
+</tr>
+<tr>
+<td>F104</td>
+<td>A locked account refuses even the right password, then unlocks after the delay</td>
+</tr>
+<tr>
+<td>F105</td>
+<td>pdUserChangePassword: change with history</td>
+</tr>
+<tr>
+<td>F106</td>
+<td>Blocks reuse of a previous password</td>
+</tr>
+<tr>
+<td>F107</td>
+<td>pdSessionCreate/Check: session with a lifetime</td>
+</tr>
+<tr>
+<td>F108</td>
+<td>Session: the token itself is not stored (sha256 only)</td>
+</tr>
+<tr>
+<td>F109</td>
+<td>Session: expiry</td>
+</tr>
+<tr>
+<td>F110</td>
+<td>pdSessionRevoke: revoke a session</td>
+</tr>
+<tr>
+<td>F111</td>
+<td>pdSessionRevokeUser: sign out of every device</td>
+</tr>
+<tr>
+<td>F112</td>
+<td>pdSessionPurge: clean expired or revoked sessions</td>
+</tr>
+<tr>
+<td>F113</td>
+<td>pdApiKeyCreate/Verify: API key stored hashed only</td>
+</tr>
+<tr>
+<td>F114</td>
+<td>API key: scopes</td>
+</tr>
+<tr>
+<td>F115</td>
+<td>API key: a wrong or modified key is rejected</td>
+</tr>
+<tr>
+<td>F116</td>
+<td>API key: ttl expiry and the * scope</td>
+</tr>
+<tr>
+<td>F117</td>
+<td>pdApiKeyRotate: new key with the same scopes and the old one is revoked</td>
+</tr>
+<tr>
+<td>F118</td>
+<td>pdApiKeyRevoke</td>
+</tr>
+<tr>
+<td>F119</td>
+<td>pdAuditLog/pdAuditVerify: audit log linked by a hash chain</td>
+</tr>
+<tr>
+<td>F120</td>
+<td>Audit: detects any edit</td>
+</tr>
+<tr>
+<td>F121</td>
+<td>Audit: detects deletion of the last record</td>
+</tr>
+<tr>
+<td>F122</td>
+<td>pdRateLimit: windowed rate limit</td>
+</tr>
+<tr>
+<td>F123</td>
+<td>Reset token: single use, expiring and hashed</td>
+</tr>
+<tr>
+<td>F124</td>
+<td>Reset token: expires</td>
+</tr>
+<tr>
+<td>F125</td>
+<td>pdNonceUse: first use only (against replay)</td>
+</tr>
+<tr>
+<td>F126</td>
+<td>pdTotpEnroll: secret encrypted in the database + uri + recovery codes</td>
+</tr>
+<tr>
+<td>F127</td>
+<td>pdTotpCheck: correct code</td>
+</tr>
+<tr>
+<td>F128</td>
+<td>pdTotpCheck: reuse of the same code is blocked (replay)</td>
+</tr>
+<tr>
+<td>F129</td>
+<td>2FA: one-time recovery code</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="rin-containers">Rin containers<a class="headerlink" href="#rin-containers" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Feature</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>F130</td>
+<td>pdContEnsure: create a container of a kind</td>
+</tr>
+<tr>
+<td>F131</td>
+<td>pdContSet/Get/Has</td>
+</tr>
+<tr>
+<td>F132</td>
+<td>pdContDelete/pdContFields</td>
+</tr>
+<tr>
+<td>F133</td>
+<td>pdContFromMap/ToMap with a prefix and nested types</td>
+</tr>
+<tr>
+<td>F134</td>
+<td>pdContChecksum: changes with an edit</td>
+</tr>
+<tr>
+<td>F135</td>
+<td>pdContExport/Import: JSON</td>
+</tr>
+<tr>
+<td>F136</td>
+<td>pdContClone</td>
+</tr>
+<tr>
+<td>F137</td>
+<td>pdContSeal/Open: encrypt a field inside the container in place</td>
+</tr>
+<tr>
+<td>F138</td>
+<td>Container AAD: moving ciphertext to another field fails</td>
+</tr>
+<tr>
+<td>F139</td>
+<td>pdContSealAll/OpenAll</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="passkit-tags">.passkit tags<a class="headerlink" href="#passkit-tags" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Feature</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>F140</td>
+<td><crypt keygen/seal/open></td>
+</tr>
+<tr>
+<td>F141</td>
+<td><crypt hmac/pbkdf2/hkdf> (RFC vectors)</td>
+</tr>
+<tr>
+<td>F142</td>
+<td><crypt sealpw/openpw></td>
+</tr>
+<tr>
+<td>F143</td>
+<td><crypt envelope/unenvelope></td>
+</tr>
+<tr>
+<td>F144</td>
+<td><crypt shamir/combine></td>
+</tr>
+<tr>
+<td>F145</td>
+<td><crypt b64/b32/merkle/uuid></td>
+</tr>
+<tr>
+<td>F146</td>
+<td><token sign/verify> (claim.* and ttl and iss)</td>
+</tr>
+<tr>
+<td>F147</td>
+<td><token signurl/verifyurl></td>
+</tr>
+<tr>
+<td>F148</td>
+<td><otp secret/code/verify/uri></td>
+</tr>
+<tr>
+<td>F149</td>
+<td><otp recovery/recoverycheck></td>
+</tr>
+<tr>
+<td>F150</td>
+<td><db insert/get/find/count></td>
+</tr>
+<tr>
+<td>F151</td>
+<td><db insert enc + find blind + get key></td>
+</tr>
+<tr>
+<td>F152</td>
+<td><db insert>: refuses a raw password field</td>
+</tr>
+<tr>
+<td>F153</td>
+<td><db user.create/user.login></td>
+</tr>
+<tr>
+<td>F154</td>
+<td><db session.create/check></td>
+</tr>
+<tr>
+<td>F155</td>
+<td><db apikey.create/verify></td>
+</tr>
+<tr>
+<td>F156</td>
+<td><db audit/audit.verify></td>
+</tr>
+<tr>
+<td>F157</td>
+<td><db ratelimit></td>
+</tr>
+<tr>
+<td>F158</td>
+<td><db begin/rollback></td>
+</tr>
+<tr>
+<td>F159</td>
+<td><container ensure/set/get/has></td>
+</tr>
+<tr>
+<td>F160</td>
+<td><container load/save> between container and variables</td>
+</tr>
+<tr>
+<td>F161</td>
+<td><container seal/open>: an encrypted field in the container</td>
+</tr>
+<tr>
+<td>F162</td>
+<td><container exec>: code as data inside a container</td>
+</tr>
+<tr>
+<td>F163</td>
+<td><container bind/sync>: bind a variable to a field and push it</td>
+</tr>
+<tr>
+<td>F164</td>
+<td>passkitFromContainer: container fields as inputs</td>
+</tr>
+<tr>
+<td>F165</td>
+<td>passkitToContainer: run result into a container</td>
+</tr>
+<tr>
+<td>F166</td>
+<td>passkitRunContainer: run a stored source with container fields as inputs</td>
+</tr>
+<tr>
+<td>F167</td>
+<td>passkitRunLinked: run and write outputs back into the container</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="standard-primitives-aes-gcm-pbkdf2-csprng">Standard primitives: AES-GCM, PBKDF2, CSPRNG<a class="headerlink" href="#standard-primitives-aes-gcm-pbkdf2-csprng" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Feature</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>F168</td>
+<td>sec.aesGcmSeal: NIST SP 800-38D test case 4 (AES-128-GCM with AAD)</td>
+</tr>
+<tr>
+<td>F169</td>
+<td>sec.aesGcmSeal: NIST test case 1 (empty message, tag only)</td>
+</tr>
+<tr>
+<td>F170</td>
+<td>sec.aesGcmSeal: NIST test case 15 (AES-256-GCM)</td>
+</tr>
+<tr>
+<td>F171</td>
+<td>sec.aesGcmOpen: round trip returns the plaintext</td>
+</tr>
+<tr>
+<td>F172</td>
+<td>sec.aesGcmOpen: wrong AAD returns nil (authentication fails)</td>
+</tr>
+<tr>
+<td>F173</td>
+<td>sec.aesGcmOpen: a flipped ciphertext bit returns nil</td>
+</tr>
+<tr>
+<td>F174</td>
+<td>sec.pbkdf2Sha256: RFC 7914 vector (c=1, 64 bytes)</td>
+</tr>
+<tr>
+<td>F175</td>
+<td>sec.pbkdf2Sha256: RFC 7914 vector (c=80000)</td>
+</tr>
+<tr>
+<td>F176</td>
+<td>pcPbkdf2 (Rin API) matches the native primitive</td>
+</tr>
+<tr>
+<td>F177</td>
+<td>pcSeal now produces AES-256-GCM (format pc2)</td>
+</tr>
+<tr>
+<td>F178</td>
+<td>pcOpen opens pc2 and rejects a wrong AAD</td>
+</tr>
+<tr>
+<td>F179</td>
+<td>pcOpen rejects a modified pc2 ciphertext</td>
+</tr>
+<tr>
+<td>F180</td>
+<td>pcOpen still reads legacy pc1 data (backward compatible)</td>
+</tr>
+<tr>
+<td>F181</td>
+<td>pcSeal uses a fresh random nonce each time</td>
+</tr>
+<tr>
+<td>F182</td>
+<td>pkHash now produces pk2 (PBKDF2-HMAC-SHA256) and verifies</td>
+</tr>
+<tr>
+<td>F183</td>
+<td>legacy pk1 hashes still verify and are flagged for re-hash</td>
+</tr>
+<tr>
+<td>F184</td>
+<td>pk2 hash with the default iterations is not flagged; lower iterations are</td>
+</tr>
+<tr>
+<td>F185</td>
+<td>sec.randomToken uses the OS CSPRNG: correct length, never repeats</td>
+</tr>
+</tbody>
+</table></div></article>
+<div class="pnav"><a class="pn" href="passkit.html">→ passkit — passwords, encryption, databases and a tag language</a><a class="pn" href="hash-family.html">عائلة `#` — مفاهيم ودوال جديدة تبدأ بعلامة `# ←</a></div><p class="edit"><a href="https://github.com/dlof-lib/rinlang/edit/main/docs/passkit-crypto-db.md">✎ عدّل هذه الصفحة على GitHub</a></p>
+<footer>Rin 1.0.0 · رخصة MIT</footer></main>
+<aside id="toc"><b>في هذه الصفحة</b><div class="toc">
+<ul>
+<li><a href="#encryption-encoding-and-randomness">Encryption: encoding and randomness</a></li>
+<li><a href="#hashing-and-integrity">Hashing and integrity</a></li>
+<li><a href="#key-derivation">Key derivation</a></li>
+<li><a href="#authenticated-encryption">Authenticated encryption</a></li>
+<li><a href="#keyring-envelope">Keyring / Envelope</a></li>
+<li><a href="#signing-and-tokens">Signing and tokens</a></li>
+<li><a href="#otp-recovery-and-secret-sharing">OTP, recovery and secret sharing</a></li>
+<li><a href="#databases">Databases</a></li>
+<li><a href="#encrypted-databases">Encrypted databases</a></li>
+<li><a href="#security-models">Security models</a></li>
+<li><a href="#rin-containers">Rin containers</a></li>
+<li><a href="#passkit-tags">.passkit tags</a></li>
+<li><a href="#standard-primitives-aes-gcm-pbkdf2-csprng">Standard primitives: AES-GCM, PBKDF2, CSPRNG</a></li>
+</ul>
+</div>
+</aside></div>
+<script src="assets/app.js"></script></body></html>
