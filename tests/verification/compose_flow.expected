@@ -1,0 +1,45 @@
+📦 @import: تم استيراد "lib/compose.og.rin" (مكتبة مدمجة)
+📦 @import: تم استيراد "lib/compose_flow.og.rin" (مكتبة مدمجة)
+3
+7
+3
+6
+6
+6
+15
+16
+1
+9
+2
+7
+102
+[0, 2, 4]
+[1, 2, 4, 8, 16]
+96
+101
+3
+one
+other
+3
+?
+{"d": 10, "i": 6}
+16
+3
+0
+9
+{"ok": false, "error": "bad"}
+{"ok": true, "value": 8}
+{"ok": true, "value": 4}
+{"ok": false, "error": "e"}
+{"ok": true, "value": 3}
+0
+true
+{"ok": false, "error": "stop"}
+{"ok": true, "value": 4}
+{"ok": true, "value": [1, 2]}
+{"ok": false, "error": "z"}
+{"result": {"ok": true, "value": 4}, "steps": [{"stage": 0, "in": 1, "out": 2}, {"stage": 1, "in": 2, "out": 4}]}
+{"result": {"ok": false, "error": "oops"}, "steps": [{"stage": 0, "in": 1, "out": 2}, {"stage": 1, "in": 2, "error": "oops"}]}
+8
+5
+{"ok": false, "error": "neg"}
