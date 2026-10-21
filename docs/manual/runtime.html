@@ -1,0 +1,278 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>وقت تشغيل Rin (Rin Runtime) · المرجع الرسمي — Rin</title>
+<meta name="description" content="توثيق لغة البرمجة Rin"><link rel="icon" href="../assets/brand/icon-32.png">
+<link rel="stylesheet" href="assets/style.css"></head><body>
+<header><button id="mn" aria-label="القائمة">☰</button><a class="logo" href="index.html"><img src="../assets/brand/icon-48.png" alt="" width="26">Rin</a>
+<input id="q" type="search" placeholder="ابحث في التوثيق…" autocomplete="off"><button id="th" aria-label="الوضع">◐</button>
+<a class="gh" href="https://github.com/dlof-lib/rinlang">GitHub</a><div id="res"></div></header>
+<div class="wrap"><nav id="sb"><details ><summary>ابدأ هنا</summary><a href="getting-started.html">البداية</a><a href="syntax.html">القواعد النحوية العامة</a><a href="variables.html">let`، مصفوفات، قواميس، نطاق</a><a href="template-strings.html">النصوص القالبية (متغيّرات داخل النص)</a><a href="input.html">إدخال المستخدم (Input)</a><a href="control-flow.html">الشروط، الحلقات، `goal`/`achieve</a><a href="loops.html">حلقات Rin — Loops v2</a><a href="functions.html">fun`/`return`، التكرار الذاتي</a><a href="enums.html">enum`: قوائم اختيار مغلقة</a></details><details ><summary>اللغة</summary><a href="language-reference.html">المرجع الشامل وخريطة ترابط المفاهيم</a><a href="objects.html">class`/`struct`، `.object()`، `@Object`، `document</a><a href="oop.html">البرمجة الكائنية الموسَّعة (Rin 1.0)</a><a href="containers.html">دليل `@container` / `@element` / `@loop</a><a href="table.html">الجدول (`@table` / `@container.table`) ودوال اللغة عليه</a><a href="set.html">Set`: نوع المجموعة الأساسي</a><a href="pipelines.html">عامل الأنابيب `|&gt;</a><a href="RECKON.html">reckon`: مفهوم حسابي بسطرين</a><a href="let-plus.html">let` المطوَّر</a><a href="living-variables.html">المتغيرات الحيّة (Living Variables)</a><a href="label-define.html">label` و`define` (تسمية وتعريف)</a><a href="block-frames.html">بداية الكتل ونهايتها (Block Frames)</a><a href="compare_ops.html">معاملات المقارنة `/=` و `=/=` و `=/</a><a href="max_min.html">max / min family</a><a href="scope-guarantees.html">ضمانات النطاق: `finally` · `defer` · `catch … when` · `rethrow</a><a href="key_terms_and_builtins.html">Rin KEY_TERMS and Built-in Conditions</a><a href="number_builtins.html">Rin Number Built-ins</a></details><details ><summary>الواجهات (Indsin)</summary><a href="indsin.html">Indsin — Interface Design</a><a href="indsin_rin.html">indsin يعتمد على لغة Rin</a><a href="indsin_expansion.html">Indsin — التوسعة الاحترافية (Design System v2)</a><a href="indsin_object.html">indsin-object — API reference</a><a href="indsin_media.html">Indsin Media — اختيار الوسائط ورفعها</a><a href="indsin_icons.html">مكتبة أيقونات indsin (متجهية)</a><a href="indsin_tooling.html">indsin tooling — icon, file association, syntax highlighting</a><a href="indsinweb.html">IndsinWeb — مكتبة WebView والروابط لـ indsin</a><a href="RIN_ELEMENTS.html">دليل `@element.*` الكامل</a><a href="events-effects.html">الأحداث والتأثيرات (Events &amp; Effects) — محرك Indsin UI</a><a href="banner.html">Banner: إشعار شريطي</a><a href="simple-style.html">Rin Simple Style</a></details><details open><summary>بيئة التشغيل</summary><a href="runtime.html" class=on>وقت تشغيل Rin (Rin Runtime) · المرجع الرسمي</a><a href="standard-library.html">المكتبة القياسية (`lib/*.og.rin`)</a><a href="errors.html">نظام الأخطاء: أكواد، `try`/`catch`/`throw</a><a href="ERROR_SYSTEM.html">نظام التشخيص: البنية الداخلية + جدول الأكواد الكامل</a><a href="storage.html">تخزين دائم</a><a href="http.html">شبكات</a><a href="env.html">ربط Rin بملف `.env</a><a href="terminal.html">الطرفية التفاعلية — `rin terminal</a><a href="vm.html">RinVM — آلة Rin الافتراضية (بايتكود)</a><a href="rinflow.html">RinFlow: طبقة تنفيذ التدفّق المهيكل</a><a href="MAKE_UNIT.html">@make.(name)`: وحدة بسياسة قدرات صريحة</a><a href="MAKE_MEDIA.html">فيديو · صوت · API · إزالة الخلفية · قراءة النص من الصور</a><a href="TIME.html">مفهوم `time`: الزمن كقيمة من الدرجة الأولى</a><a href="native-additions.html">دوال Rin الأصلية الجديدة (Rin 1.0)</a></details><details ><summary>الحاويات وقواعد البيانات</summary><a href="container_advanced.html">Rin Container Advanced Built-ins</a><a href="container_pro.html">Rin Container Pro</a><a href="container_sql.html">RIN CONTAINER SQL (RCSQL)</a><a href="cross-file-containers.html">استدعاء إعلانات من ملف آخر</a></details><details ><summary>الحزم والتكامل</summary><a href="api.html">واجهة C المسطَّحة (Embedding API)</a><a href="android.html">استضافة Rin على أندرويد</a><a href="packages-and-interop.html">Rin 1.0 — المكتبات والحزم وجسر C++ وJSON واختبارات rintest</a><a href="rinpak-format.html">RinPak — حزمة مشروع Rin (`.rinpak`)</a><a href="html-projects.html">مشاريع HTML في Rin — الربط بين index.html وملف الحاوية</a><a href="project-og-urin.html">project.og.urin` — البيانات الوصفية لمشروع Rin</a><a href="CONTENT_PACKS.html">حزم المحتوى القابلة للتنزيل (Content Packs)</a><a href="previewkit.html">previewkit — معاينة حيّة لملفات PDF / Markdown / TypeScript</a></details><details ><summary>المكتبات المتخصصة</summary><a href="rinml.html">RinML / RinDF / RinAI — الذكاء الاصطناعي وتحليل البيانات في Rin</a><a href="STATS.html">RinStat — التحليل الإحصائي (`lib/rinstat.og.rin`)</a><a href="STATS_ADV.html">RinStat المتقدّم + RinAuto</a><a href="LINALG.html">الجبر الخطي للمهندسين — `mat*` و`vec*</a><a href="PLOT.html">RinPlot — الرسوم البيانية الإحصائية (`lib/rinplot.og.rin`)</a><a href="ALGO.html">تطوير الخوارزميات والحساب العددي — `algo*</a><a href="NUMBER.html">مفهوم `number` في Rin</a><a href="boat.html">&quot;Boat&quot;: مفاهيم أساسية مجمَّعة</a><a href="passkit.html">passkit — passwords, encryption, databases and a tag language</a><a href="passkit-crypto-db.html">Passkit feature catalog: encryption, databases and container linking</a><a href="hash-family.html">عائلة `#` — مفاهيم ودوال جديدة تبدأ بعلامة `#</a><a href="image-draw.html">إنشاء الصور في Rin — رسم وحفظ PNG وlog كصورة</a><a href="image-terminal.html">طباعة الصور في الـ terminal — `printImage` / `imageAnsi` / `imageInfo</a></details><details ><summary>المشروع</summary><a href="CONTRIBUTING.html">المساهمة في Rin</a><a href="CODE_OF_CONDUCT.html">قواعد السلوك</a><a href="SECURITY.html">سياسة الأمان</a><a href="SUPPORT.html">الحصول على المساعدة</a><a href="TRADEMARKS.html">سياسة العلامة التجارية — Trademark Policy</a><a href="THIRD_PARTY_NOTICES.html">إشعارات المكوّنات الخارجية — Third-Party Notices</a></details><details ><summary>مراجع إضافية</summary><a href="ANDROID_VERSIONS.html">حزم RinStudio لكل إصدار أندرويد</a><a href="TOKEN.html">مفهوم `token` في Rin</a><a href="TOOLCHAIN.html">Rin Professional Language Toolchain</a><a href="TOOLCHAIN_UPGRADE.html">Toolchain Upgrade — 2026-09</a><a href="architecture.html">المعمارية وبنية المستودع</a><a href="base-accept.html">base` و`accept`: متغيّران يخدمان `if</a><a href="channel47.html">channel47 — لغة وصف البيانات والإعدادات</a><a href="ci.html">CI وأدوات المستودع</a><a href="loop-templates.html">قوالب الحلقات `@tmpl</a><a href="pre-post.html">pre` و`post` (ما قبل / ما بعد): عقد انتقال حول الإسناد</a><a href="print-fonts.html">خطوط `print` — bold / italic / underline وغيرها</a><a href="print-image-terminal.html">طباعة الصور كنص في الطرفية</a><a href="print-templates.html">قوالب الطباعة `@tmpl ... print` — قوالب نصية خطية وتنسيقية</a><a href="rdoc.html">rdoc — Documentation Container</a><a href="rdoc-reference.html">وثيقة rdoc الشاملة — Documentation Container</a><a href="screenshots.html">لقطات من RinStudio</a></details></nav>
+<main><article><h1 id="runtimemd-rin-rin-runtime">runtime.md — وقت تشغيل Rin (Rin Runtime) · المرجع الرسمي<a class="headerlink" href="#runtimemd-rin-rin-runtime" title="Permanent link">#</a></h1>
+<blockquote>
+<p>هذه الصفحة هي المرجع الرسمي لكيفية عمل وقت تشغيل Rin: بنيته، نموذج التنفيذ، الحدود والضمانات،
+التحسينات المضمونة، وطرق تضمينه. كل رقم هنا قيس على المفسِّر الحقيقي؛ ما لم يُقَس ذُكر صراحةً
+تحت «حدود معروفة». التفاصيل التاريخية للتقوية في <a href="https://github.com/dlof-lib/rinlang/blob/main/docs/runtime-hardening.md"><code>runtime-hardening.md</code></a>.</p>
+</blockquote>
+<h2 id="1">1. البنية<a class="headerlink" href="#1" title="Permanent link">#</a></h2>
+<pre><code> مصدر .rin ──► Lexer ──► Parser ──► AST ──► Interpreter ──► النتيجة / RinError
+ (rin_lexer)   (rin_parser)  (rin_ast.h)   (rin_interpreter)
+                                   │
+                                   └─► تشخيصات منسَّقة (diagnostics/)  ·  دوال أصلية (natives)
+</code></pre>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الطبقة</th>
+<th>الملف</th>
+<th>المسؤولية</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Lexer</td>
+<td><code>rin_lexer.cpp</code></td>
+<td>تحويل النص إلى رموز، بما فيها الأرقام العلمية والنصوص القالبية</td>
+</tr>
+<tr>
+<td>Parser</td>
+<td><code>rin_parser.cpp</code></td>
+<td>شجرة AST، وإطارات الكتل (<code>{ }</code> / <code>.end</code>)، وحارس التعشيش <code>NestGuard</code></td>
+</tr>
+<tr>
+<td>Interpreter</td>
+<td><code>rin_interpreter.cpp</code></td>
+<td>مفسِّر يمشي على الشجرة (tree-walking) + بيئات متسلسلة + الدوال الأصلية</td>
+</tr>
+<tr>
+<td>Diagnostics</td>
+<td><code>diagnostics/</code></td>
+<td>أكواد الأخطاء <code>Exxxx</code>، اقتباس السطر، اقتراحات «هل تقصد»</td>
+</tr>
+<tr>
+<td>الواجهات</td>
+<td><code>rin_c_api.h</code> · <code>cli/linux/src/main.cpp</code> · <code>jni_bridge.cpp</code></td>
+<td>CLI، وC API، وأندرويد (JNI)</td>
+</tr>
+</tbody>
+</table></div>
+<p>كل الأهداف (Linux CLI · APK · WASM) تبني <strong>نفس</strong> ملفات المحرّك، فأي تحسين هنا ينعكس عليها جميعاً.</p>
+<h2 id="2">2. نموذج القيم والبيئات<a class="headerlink" href="#2" title="Permanent link">#</a></h2>
+<ul>
+<li><strong><code>Value</code></strong>: <code>nil · number(double) · string · bool · function · array · map · instance · set</code>.</li>
+<li>المصفوفة والقاموس والمجموعة والكائن (<code>class</code>) <strong>مرجعية</strong> (<code>shared_ptr</code>)؛ و<code>struct</code> <strong>قيمية</strong> (تُنسخ عند الإسناد والتمرير).</li>
+<li><strong><code>Environment</code></strong>: جدول متغيّرات + مؤشر للأب. البحث يصعد السلسلة حتى أول تعريف.</li>
+<li>المتغيّرات الحيّة (<code>stone/gauge/tape/lens/fuse/bell</code>) وحقول <code>state</code> في الحاويات تمرّ بمسار إسناد خاص يُطلق
+  <code>on update</code> والروابط؛ المتغيّرات العادية لا تدفع كلفة هذا المسار.</li>
+</ul>
+<h2 id="3">3. نموذج التنفيذ<a class="headerlink" href="#3" title="Permanent link">#</a></h2>
+<h3 id="31-flow">3.1 انتقال التحكّم (Flow) بدل الاستثناءات<a class="headerlink" href="#31-flow" title="Permanent link">#</a></h3>
+<p><code>return</code> و<code>break</code> و<code>continue</code> تنتقل <strong>كقيمة</strong> <code>Flow</code> عبر <code>exec()</code>/<code>execBlockFlow()</code> وليست استثناءات C++
+(الاستثناء ≈ 30µs). واجهة <code>execute()</code> القديمة تحوِّل <code>Flow</code> إلى الاستثناءات نفسها للمستدعين القدامى، فلا يكسر
+ذلك أي مضيف. الاستثناءات تبقى لـ <code>throw</code> الخاص بالمستخدم والأخطاء فقط.</p>
+<h3 id="32">3.2 عمق الاستدعاء<a class="headerlink" href="#32" title="Permanent link">#</a></h3>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>المضيف</th>
+<th>الحد الافتراضي</th>
+<th>ملاحظة</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>rin</code> (CLI)</td>
+<td><strong>10000</strong></td>
+<td>المفسِّر يعمل على خيط بمكدّس 1GB (ذاكرة افتراضية، لا تُحجز إلا عند الاستخدام)</td>
+</tr>
+<tr>
+<td>أندرويد / المضمَّن</td>
+<td>300</td>
+<td>يُرفع بـ <code>Interpreter::setDefaultMaxCallDepth(n)</code> قبل إنشاء المفسِّر، أو <code>setMaxCallDepth(n)</code> لمفسِّر بعينه</td>
+</tr>
+</tbody>
+</table></div>
+<p>تجاوز الحد يرمي <code>E0035</code> <strong>قابلاً للالتقاط</strong> بـ <code>try/catch</code> — لا انهيار ولا segfault.</p>
+<h3 id="33-execution-budget">3.3 حدّ التنفيذ (Execution Budget)<a class="headerlink" href="#33-execution-budget" title="Permanent link">#</a></h3>
+<p><code>setExecutionBudget(maxStatements)</code> يضع سقفاً لعدد العبارات؛ تجاوزه يوقف البرنامج برسالة
+<code>Execution limit exceeded</code>. يستعمله Live Preview لحماية الواجهة من الحلقات اللانهائية، ويُنصح به لأي مضيف
+يشغّل شيفرة غير موثوقة. القيمة <code>0</code> (الافتراضي) = بلا حد وبلا أي كلفة.</p>
+<h2 id="4">4. الضمانات (لا انهيار)<a class="headerlink" href="#4" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الخطر</th>
+<th>الضمان</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>تعشيش عميق جداً (آلاف <code>(</code> أو <code>-</code>)</td>
+<td><code>NestGuard</code> بحد 150 وحدة (≈ 75 مستوى) → خطأ <code>E0010</code> واضح</td>
+</tr>
+<tr>
+<td>تكرار لانهائي</td>
+<td><code>E0035</code> قابل للالتقاط عند حد العمق</td>
+</tr>
+<tr>
+<td>استثناء C++ قياسي من دالة أصلية (<code>bad_alloc</code>…)</td>
+<td>يتحوّل في <code>invokeCallee</code> إلى <code>RinError</code> (<code>E0035</code>) قابل للالتقاط</td>
+</tr>
+<tr>
+<td>وسائط ناقصة للدوال الأصلية</td>
+<td><code>E0007</code> بدل segfault</td>
+</tr>
+<tr>
+<td>أخطاء وقت التشغيل</td>
+<td>تحمل سطرها الصحيح (<code>file.rin:4:1</code>) لأن كل عقدة تعبير تُختم بسطرها</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="5">5. التحسينات المضمونة في هذا الإصدار<a class="headerlink" href="#5" title="Permanent link">#</a></h2>
+<blockquote>
+<p>لا كلمات ولا دوال ولا متغيّرات جديدة في اللغة سوى <strong>الصيغة العلمية للأرقام</strong> (§5.3). كل ما عداها تحت الغطاء
+ونتائج البرامج القائمة متطابقة حرفياً.</p>
+</blockquote>
+<h3 id="51-map">5.1 القاموس <code>map</code> بفهرس تجزئة كسول<a class="headerlink" href="#51-map" title="Permanent link">#</a></h3>
+<p><code>MapData</code> ما زال قائمة أزواج <strong>بترتيب الإدخال</strong> (التكرار والطباعة والتصدير كما كانت)، وأُضيف إليه فهرس تجزئة
+للمفاتيح البدائية (رقم/نص/منطقي/<code>nil</code>):</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>العملية</th>
+<th>قبل</th>
+<th>بعد</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>m[k]</code> / <code>m[k] = v</code> / <code>has(m, k)</code> / <code>remove(m, k)</code> / حرفي <code>{...}</code></td>
+<td>O(n)</td>
+<td>O(1) تقريباً حين <code>size ≥ 12</code></td>
+</tr>
+<tr>
+<td>مفتاح مركّب (مصفوفة/قاموس/كائن)</td>
+<td>O(n)</td>
+<td>O(n) (بالمقارنة التركيبية كما كان)</td>
+</tr>
+</tbody>
+</table></div>
+<p>قواعد الدلالة (مطابقة تماماً لـ <code>valuesEqual</code>): لا مساواة بين أنواع مختلفة (<code>1</code> ≠ <code>"1"</code>)، و<code>-0 == 0</code>،
+و<code>NaN</code> لا يُفهرَس. الفهرس <strong>كسول</strong>: يُبنى عند أول بحث، ويسقط تلقائياً عند أي تعديل يغيّر الحجم بطرق قديمة
+(<code>push_back</code>/<code>erase</code>…)، ويتحقق <code>findIndex</code> من المفتاح الفعلي في الموضع فلا يعيد عنصراً خاطئاً أبداً.
+للمطوّرين في C++: استعملوا <code>MapData::findValue/findIndex/put/append/eraseAt</code> بدل المسح الخطّي اليدوي.</p>
+<h3 id="52-s-s-x">5.2 تجميع النصوص <code>s = s + x</code><a class="headerlink" href="#52-s-s-x" title="Permanent link">#</a></h3>
+<p>العبارة المستقلة <code>s = s + &lt;حرفي أو متغيّر أو جمع منها&gt;</code> حين <code>s</code> نص عادي تُلحَق <strong>في مكانها</strong> بدل نسخ النص
+كاملاً مرتين في كل تكرار (كان تربيعياً). تُطبَّق فقط حين يستحيل أن يغيّر الطرف الأيمن <code>s</code>، ولا توجد متغيّرات
+حيّة، و<code>s</code> ليس حقلاً في حاوية؛ وإلا يُنفَّذ المسار الأصلي نفسه.</p>
+<h3 id="53">5.3 الأرقام العلمية<a class="headerlink" href="#53" title="Permanent link">#</a></h3>
+<pre><code class="language-kotlin">print 1e3;        // 1000
+print 2.5e-2;     // 0.025
+print 1E18 &gt; 1e17;
+</code></pre>
+<p>يُستهلك الأس فقط إن تبعه رقم فعلاً (<code>e</code> أو <code>E</code>، وإشارة اختيارية)، فلا تتأثر الأسماء الملاصقة للأرقام.</p>
+<h3 id="54">5.4 ما قيس<a class="headerlink" href="#54" title="Permanent link">#</a></h3>
+<p>قيست على الجهاز نفسه، <code>-O2</code>، نواة واحدة، <strong>قبل → بعد</strong> (القيم النهائية في <code>tests/bench/</code>):</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الاختبار</th>
+<th>قبل</th>
+<th>بعد</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>20 ألف إدراج + قراءة في قاموس (<code>map_big.rin</code>)</td>
+<td>1.2–2.2 ث</td>
+<td>0.06–0.08 ث</td>
+</tr>
+<tr>
+<td>60 ألف إلحاق نص (<code>str_cat.rin</code>)</td>
+<td>0.25–0.31 ث</td>
+<td>0.04–0.05 ث</td>
+</tr>
+<tr>
+<td><code>fib(24)</code> (<code>fib.rin</code>)</td>
+<td>≈0.10 ث</td>
+<td>≈0.10 ث (لم يتغيّر)</td>
+</tr>
+</tbody>
+</table></div>
+<p>التفاصيل في <a href="https://github.com/dlof-lib/rinlang/blob/main/tests/bench/results.md"><code>tests/bench/results.md</code></a>. استدعاء الدوال لم يُحسَّن في هذا الإصدار.</p>
+<h3 id="55">5.5 حدود قابلة للضبط من سطر الأوامر<a class="headerlink" href="#55" title="Permanent link">#</a></h3>
+<pre><code class="language-kotlin">rin --budget=N    file.rin     سقف عدد العبارات (0 = بلا حد)
+</code></pre>
+<p>تُعطى قبل اسم الملف فقط حتى لا تلتبس بوسائط البرنامج. جُرّب عمق 49990 بلا انهيار.</p>
+<h2 id="6">6. التضمين<a class="headerlink" href="#6" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الواجهة</th>
+<th>الاستعمال</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CLI</td>
+<td><code>rin file.rin</code> · <code>rin</code> (طرفية تفاعلية) · <code>rin pkg ...</code></td>
+</tr>
+<tr>
+<td>C API (<code>rin_c_api.h</code>)</td>
+<td><code>rin_run(source, basePath)</code> لتشغيل لمرة واحدة · <code>rin_session_create/run/free</code> لجلسة تحتفظ بحالتها · <code>rin_engine_version()</code> · حرّر النصوص المعادة بـ <code>rin_free_string</code></td>
+</tr>
+<tr>
+<td>C++ مباشر</td>
+<td><code>rin::Interpreter</code> + <code>setMaxCallDepth</code> + <code>setExecutionBudget</code></td>
+</tr>
+<tr>
+<td>أندرويد</td>
+<td><code>jni_bridge.cpp</code> (حد العمق 300 افتراضياً)</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="7">7. الاختبار<a class="headerlink" href="#7" title="Permanent link">#</a></h2>
+<pre><code>tests/verification/*.rin + *.expected     مقارنة بايت ببايت
+tests/diagnostics/block_frames/           رسائل الأخطاء الدقيقة
+tests/bench/                              قياسات الأداء + نتائجها
+</code></pre>
+<p>فحص الانحدار الإلزامي لأي تعديل في المحرّك: شغِّل كل ملف في <code>tests/verification</code> و<code>examples</code> بالنسخة
+قبل التعديل وبعده وقارن المخرجات حرفياً.</p>
+<h2 id="8">8. حدود معروفة<a class="headerlink" href="#8" title="Permanent link">#</a></h2>
+<ul>
+<li>المفسِّر يمشي على الشجرة (لا bytecode ولا JIT)، فالحلقات العددية الثقيلة أبطأ من اللغات المترجمة.</li>
+<li><code>Value</code> بنية عريضة (نص + عدة مؤشرات)؛ نسخها أغلى من لغات القيم المضغوطة.</li>
+<li>مفاتيح القاموس المركّبة تُبحث خطّياً.</li>
+<li><code>s = s + x</code> المُسرَّع يخص العبارة المستقلة؛ داخل تعبير أكبر أو مع طرف أيمن فيه استدعاء يبقى المسار الأصلي.</li>
+<li><code>rinc</code> وتلوين المحرّرات لم يتغيّرا.</li>
+</ul>
+<h2 id="_1">انظر أيضاً<a class="headerlink" href="#_1" title="Permanent link">#</a></h2>
+<p><a href="https://github.com/dlof-lib/rinlang/blob/main/docs/runtime-hardening.md"><code>runtime-hardening.md</code></a> · <a href="block-frames.html"><code>block-frames.md</code></a> ·
+<a href="errors.html"><code>errors.md</code></a> · <a href="api.html"><code>api.md</code></a> · <a href="functions.html"><code>functions.md</code></a></p></article>
+<div class="pnav"><a class="pn" href="simple-style.html">→ Rin Simple Style</a><a class="pn" href="standard-library.html">المكتبة القياسية (`lib/*.og.rin`) ←</a></div><p class="edit"><a href="https://github.com/dlof-lib/rinlang/edit/main/docs/runtime.md">✎ عدّل هذه الصفحة على GitHub</a></p>
+<footer>Rin 1.0.0 · رخصة MIT</footer></main>
+<aside id="toc"><b>في هذه الصفحة</b><div class="toc">
+<ul>
+<li><a href="#1">1. البنية</a></li>
+<li><a href="#2">2. نموذج القيم والبيئات</a></li>
+<li><a href="#3">3. نموذج التنفيذ</a><ul>
+<li><a href="#31-flow">3.1 انتقال التحكّم (Flow) بدل الاستثناءات</a></li>
+<li><a href="#32">3.2 عمق الاستدعاء</a></li>
+<li><a href="#33-execution-budget">3.3 حدّ التنفيذ (Execution Budget)</a></li>
+</ul>
+</li>
+<li><a href="#4">4. الضمانات (لا انهيار)</a></li>
+<li><a href="#5">5. التحسينات المضمونة في هذا الإصدار</a><ul>
+<li><a href="#51-map">5.1 القاموس map بفهرس تجزئة كسول</a></li>
+<li><a href="#52-s-s-x">5.2 تجميع النصوص s = s + x</a></li>
+<li><a href="#53">5.3 الأرقام العلمية</a></li>
+<li><a href="#54">5.4 ما قيس</a></li>
+<li><a href="#55">5.5 حدود قابلة للضبط من سطر الأوامر</a></li>
+</ul>
+</li>
+<li><a href="#6">6. التضمين</a></li>
+<li><a href="#7">7. الاختبار</a></li>
+<li><a href="#8">8. حدود معروفة</a></li>
+<li><a href="#_1">انظر أيضاً</a></li>
+</ul>
+</div>
+</aside></div>
+<script src="assets/app.js"></script></body></html>
