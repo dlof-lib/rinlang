@@ -71,6 +71,11 @@
 
 ---
 
+## مكتبات مقسَّمة (Split Libraries)
+
+- مكتبة = مجلد `<name>.og.rin/` فيه `disconom.json|xml` + أجزاء `.zpp` (أي اسم/مجلد) + ملفات تشغيل `.rinz` + `native/*.cpp` اختياري؛ يستوردها `@import "name"` كأي مكتبة.
+- جديد: `rin_libdir.h` (JSON/XML/semver/اكتشاف الأجزاء/مولِّد)، `rin_libdir.cpp` (التكامل + `rinlib.*` + أغلفة C++ التلقائية)، `rin lib new|check|info|list|run`، وتشغيل `.rinz` مباشرة. التفاصيل: `docs/split-libraries.md`.
+
 ## GENERAL
 
 <sub>المصدر الأصلي: `CHANGES.md`</sub>
