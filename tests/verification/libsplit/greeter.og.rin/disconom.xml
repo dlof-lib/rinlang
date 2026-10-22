@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<disconom format="1">
+  <name>greeter</name>
+  <version>0.3.1</version>
+  <description>Greeter with native sum</description>
+  <rin>&gt;=1.0.0</rin>
+  <authors><author>Jo</author></authors>
+  <license>MIT</license>
+  <native std="c++17" required="false">
+    <source>native/sum.cpp</source>
+    <function name="greeter_sum" params="numbers"/>
+  </native>
+</disconom>
