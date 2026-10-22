@@ -10,11 +10,13 @@
                                 // وdocs/RIN_INTEGRATION.md في مستودع rin-clc الأصلي.
 #include "loader_ui/library_loader_ui.h" // rin::loaderui — انظر setImportUISink/setImportUIMode أدناه
 #include "rin_candle.h" // rin::CandleRegistry — طبقة id-to-id غير محدودة فوق mask/id مباشرة، انظر docs/candle.md
+#include "rin_libdir.h" // rin::libdir — مكتبات Rin المقسَّمة (مجلد .og.rin: Disconom + .zpp + .rinz + native/)
 #include "rin_container_sql.h" // rin::sql — RIN CONTAINER SQL (RCSQL): محلّل استعلام /  : & () # فقط، انظر sqlViews/sqlExecute أدناه
                                           // وربطها الفعلي مع @import في rin_interpreter.cpp.
 #include <string_view>
 #include <sstream>
 #include <iostream>
+#include <map>
 #include <unordered_map>
 #include <unordered_set>
 #include <memory>
@@ -633,6 +635,21 @@ public:
     // مستقل بلا ملفات مرافقة. فارغة افتراضياً فلا أثر على أي استدعاء سابق.
     void setVirtualFiles(std::unordered_map<std::string, std::string> files) { virtualFiles_ = std::move(files); }
 
+    // ---- مكتبات Rin المقسَّمة (rin_libdir.h / rin_libdir.cpp) ----
+    // مكتبة = مجلد  <name>.og.rin/  فيه Disconom (disconom.json|xml) + أجزاء .zpp + ملفات تشغيل .rinz
+    // + native/*.cpp اختياري. يستوردها @import "name" كأي مكتبة عادية (انظر docs/split-libraries.md).
+    // true = لا تُنفَّذ ملفات .rinz عند استيراد مكتبة مقسَّمة (يستعمله `rin run x.rinz`: الملف نفسه هو المشغِّل).
+    void setSkipLibraryRun(bool skip) { skipLibraryRun_ = skip; }
+    struct LibraryCheckReport {
+        bool ok = false;
+        std::string root, name, version;
+        std::vector<std::string> errors, warnings, parts, runFiles;
+    };
+    // فحص ساكن كامل لمجلد مكتبة (Disconom + تحليل كل .zpp/.rinz بالمحلّل الحقيقي) دون تنفيذ أي شيء.
+    LibraryCheckReport checkLibraryDir(const std::string& root);
+    // يحوّل اسماً (math) أو مساراً إلى مجلد مكتبة مقسَّمة إن وُجد (نفس منطق @import).
+    bool locateLibraryDir(const std::string& nameOrPath, std::string& rootOut) const;
+
     // ---- Live streaming (Rin Run Queue + Code Output 2.0 — انظر jni_bridge.cpp) ----
     // [sink] اختياري، غير مفعّل افتراضياً، لذا [run] يتصرف حرفياً كما كان قبله متى لم يُضبط أي sink
     // (وهذا هو حال runSourceNative/runSourceStructuredNative القديمتين تماماً — توافق تام). عند
@@ -818,6 +835,29 @@ public:
 private:
     std::vector<std::string> programArgs_;
     std::unordered_map<std::string, std::string> virtualFiles_;
+    // ---- مكتبات Rin المقسَّمة (rin_libdir.cpp) ----
+    struct LoadedLibrary {
+        std::shared_ptr<libdir::Plan> plan;
+        bool nativeLoaded = false;
+        int nativeHandle = 0;
+        std::string nativeStatus = "none";   // none | loaded | disabled | failed: ...
+    };
+    struct LibraryUnit {
+        std::string root, name, version;
+        std::shared_ptr<libdir::Plan> plan;
+        std::vector<StmtPtr> statements;                              // [تبعيات][أغلفة native احتياطية][أجزاء .zpp][أغلفة native][ملفات .rinz]
+        std::vector<std::pair<size_t, std::string>> segments;         // (نهاية المقطع، اسم الملف) لتحديد مصدر الأخطاء
+        std::string nativeNote;
+        std::string describe() const;                                 // " (مكتبة مقسَّمة: ...)" لسطر الاستيراد
+    };
+    std::map<std::string, LoadedLibrary> loadedLibs_;
+    std::vector<std::string> loadedLibOrder_;
+    bool skipLibraryRun_ = false;
+    libdir::FS makeLibFS() const;
+    bool findLibraryDir(const std::string& rawPath, const std::string& libPath, std::string& rootOut) const;
+    void loadLibraryUnit(const std::string& root, int line, LibraryUnit& unit);
+    void execLibraryBody(const std::vector<StmtPtr>& stmts, const std::vector<std::pair<size_t, std::string>>* segs, const EnvPtr& env);
+    void registerNativesLibDir();   // rin_libdir.cpp — rinlib.*
     EnvPtr globals;
     std::ostringstream output;
     std::string sourceFile = "<input>"; // نظام Diagnostics — انظر setSourceFile() أعلاه
