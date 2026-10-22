@@ -6801,6 +6801,7 @@ void Interpreter::registerNatives() {
     registerNativesExtra8(); // مفهوم token: tokenList/tokenStats/tokenAt/... (rin_extra_natives8.cpp، docs/TOKEN.md)
     registerNativesExtra10(); // مفهوم linalg: mat*/vec* (rin_extra_natives10.cpp، docs/LINALG.md)
     registerNativesExtra11(); // مفهوم algo: algo* (rin_extra_natives11.cpp، docs/ALGO.md)
+    registerNativesLibDir(); // مكتبات Rin المقسَّمة: rinlib.* (rin_libdir.cpp، docs/split-libraries.md)
     registerNativesExtra9(); // مفهوم number: دوال الأرقام العملية (rin_extra_natives9.cpp، docs/NUMBER.md)
     registerNativesOop(); // Rin 1.0: oop.* — استبطان الأصناف والكائنات + أدوات OOP (rin_oop_natives.cpp)
     registerNativesInput(); // Rin 1.0: نماذج الإدخال (معاملة/تداخل/مُدقِّق النموذج) فوق input() — بعد oop.* لأنها تستدعيها (rin_input.cpp)
@@ -9108,14 +9109,20 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
 
         // 1) أولاً: هل هذا اسم مكتبة مدمجة داخل المفسّر نفسه (مثل lib/data.og.rin)؟
         //    هذا يجعل @import يعمل مباشرة على أي منصة (بما فيها أندرويد) دون أي ملفات إضافية على القرص.
+        std::string splitRoot;
+        const bool isSplitLib = findLibraryDir(rawPath, libPath, splitRoot);
+        if (isSplitLib) libPath = splitRoot;
+        LibraryUnit libUnit;
         const auto& embedded = embeddedRinLibraries();
         auto libIt = embedded.find(libPath);
-        bool fromEmbedded = (libIt != embedded.end());
+        bool fromEmbedded = !isSplitLib && (libIt != embedded.end());
 
         std::string source;
         auto virtIt = virtualFiles_.find(libPath);
         if (virtIt == virtualFiles_.end()) virtIt = virtualFiles_.find(rawPath);
-        if (virtIt != virtualFiles_.end()) {
+        if (isSplitLib) {
+            // مكتبة مقسَّمة (مجلد): تُحمَّل أدناه عبر loadLibraryUnit
+        } else if (virtIt != virtualFiles_.end()) {
             source = virtIt->second;   // ملف مُضمَّن في صورة rin_vm (له الأولوية على القرص)
         } else if (fromEmbedded) {
             source = libIt->second;
@@ -9195,12 +9202,23 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
 
         std::vector<StmtPtr> importedStatements;
         try {
+            if (isSplitLib) {
+                loadLibraryUnit(splitRoot, s->line, libUnit);
+                importUI.stage(loaderui::LoadStage::Parsing);
+                importedStatements = libUnit.statements;
+            } else {
             Lexer importedLexer(source, libPath);
             auto importedTokens = importedLexer.scanTokens();
             importUI.stage(loaderui::LoadStage::Parsing);
             Parser importedParser(importedTokens, libPath);
             importedStatements = importedParser.parse();
+            }
         } catch (RinError& e) {
+            if (isSplitLib) {
+                loaderui::LoadOutcome failed; failed.success = false; failed.errorMessage = e.message;
+                importUI.finish(failed);
+                throw;
+            }
             loaderui::LoadOutcome failed;
             failed.success = false;
             failed.errorMessage = e.message;
@@ -9232,10 +9250,10 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
                 }
                 importUI.stage(loaderui::LoadStage::Initializing);
                 if (!hasExports) {
-                    executeBlock(importedStatements, env);
+                    execLibraryBody(importedStatements, isSplitLib ? &libUnit.segments : nullptr, env);
                 } else {
                     auto libEnv = std::make_shared<Environment>(env);
-                    executeBlock(importedStatements, libEnv);
+                    execLibraryBody(importedStatements, isSplitLib ? &libUnit.segments : nullptr, libEnv);
                     for (auto& st : importedStatements) {
                         if (!st->exported) continue;
                         std::string name;
@@ -9259,7 +9277,7 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
                 // فيمكن لاحقاً استخدام link/tying/merge معها كأي حاوية أخرى دون تلويث النطاق الحالي.
                 auto libEnv = std::make_shared<Environment>(env);
                 importUI.stage(loaderui::LoadStage::Initializing);
-                executeBlock(importedStatements, libEnv);
+                execLibraryBody(importedStatements, isSplitLib ? &libUnit.segments : nullptr, libEnv);
                 containers[s->alias] = libEnv;
                 containerKinds[s->alias] = ContainerKind::IMPORT;
                 importUI.stage(loaderui::LoadStage::Registering);
@@ -9289,7 +9307,7 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
         importUI.finish(ok);
         output << (fromEmbedded ? "📦" : "📥") << " @import: تم استيراد \"" << libPath << "\""
                << (s->alias.empty() ? "" : (" باسم '" + s->alias + "'"))
-               << (fromEmbedded ? " (مكتبة مدمجة)" : " (من القرص)") << "\n";
+               << (fromEmbedded ? std::string(" (مكتبة مدمجة)") : isSplitLib ? libUnit.describe() : std::string(" (من القرص)")) << "\n";
         return Flow::None;
     }
 
@@ -9319,14 +9337,20 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
 
         importUI.stage(loaderui::LoadStage::Locating);
 
+        std::string splitRoot;
+        const bool isSplitLib = findLibraryDir(rawPath, libPath, splitRoot);
+        if (isSplitLib) libPath = splitRoot;
+        LibraryUnit libUnit;
         const auto& embedded = embeddedRinLibraries();
         auto libIt = embedded.find(libPath);
-        bool fromEmbedded = (libIt != embedded.end());
+        bool fromEmbedded = !isSplitLib && (libIt != embedded.end());
 
         std::string source;
         auto virtIt = virtualFiles_.find(libPath);
         if (virtIt == virtualFiles_.end()) virtIt = virtualFiles_.find(rawPath);
-        if (virtIt != virtualFiles_.end()) {
+        if (isSplitLib) {
+            // مكتبة مقسَّمة (مجلد): تُحمَّل أدناه عبر loadLibraryUnit
+        } else if (virtIt != virtualFiles_.end()) {
             source = virtIt->second;   // ملف مُضمَّن في صورة rin_vm
         } else if (fromEmbedded) {
             source = libIt->second;
@@ -9380,12 +9404,23 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
 
         std::vector<StmtPtr> importedStatements;
         try {
+            if (isSplitLib) {
+                loadLibraryUnit(splitRoot, s->line, libUnit);
+                importUI.stage(loaderui::LoadStage::Parsing);
+                importedStatements = libUnit.statements;
+            } else {
             Lexer importedLexer(source, libPath);
             auto importedTokens = importedLexer.scanTokens();
             importUI.stage(loaderui::LoadStage::Parsing);
             Parser importedParser(importedTokens, libPath);
             importedStatements = importedParser.parse();
+            }
         } catch (RinError& e) {
+            if (isSplitLib) {
+                loaderui::LoadOutcome failed; failed.success = false; failed.errorMessage = e.message;
+                importUI.finish(failed);
+                throw;
+            }
             loaderui::LoadOutcome failed;
             failed.success = false;
             failed.errorMessage = e.message;
@@ -9402,7 +9437,7 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
         try {
             ++importDepth_;
             importUI.stage(loaderui::LoadStage::Initializing);
-            executeBlock(importedStatements, libEnv);
+            execLibraryBody(importedStatements, isSplitLib ? &libUnit.segments : nullptr, libEnv);
             --importDepth_;
         } catch (RinError& e) {
             --importDepth_;
@@ -9460,7 +9495,7 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
             if (i) output << ", ";
             output << s->names[i];
         }
-        output << " من \"" << libPath << "\"" << (fromEmbedded ? " (مكتبة مدمجة)" : " (من القرص)") << "\n";
+        output << " من \"" << libPath << "\"" << (fromEmbedded ? std::string(" (مكتبة مدمجة)") : isSplitLib ? libUnit.describe() : std::string(" (من القرص)")) << "\n";
         return Flow::None;
     }
 
@@ -12675,6 +12710,7 @@ bool Interpreter::livePropertyGet(const EnvPtr& env, const std::string& name, co
 #include "rin_extra_natives9.cpp" // مفهوم number (docs/NUMBER.md)
 #include "rin_extra_natives10.cpp" // مفهوم linalg (docs/LINALG.md)
 #include "rin_extra_natives11.cpp" // مفهوم algo (docs/ALGO.md)
+#include "rin_libdir.cpp" // مكتبات Rin المقسَّمة (docs/split-libraries.md)
 #include "rin_table.cpp" // توسعة الجدول: دوال اللغة الموجودة تفهم الجدول (انظر رأس الملف)
 #include "rin_conditions.cpp" // متغيّرات الشروط الموسّعة (docs/key_terms_and_builtins.md)
 #include "rin_image_ansi.cpp" // صور داخل الـ terminal كنص (docs/image-terminal.md)
