@@ -1,0 +1,7 @@
+@import "tests/verification/libsplit/greeter.og.rin";
+print greet("Rin");
+print greeter_sum([1, 2, 3]);
+print rinlib.hasNative("greeter");
+print rinlib.nativeInfo("greeter").status;
+print rinlib.info("greeter").format;
+print rinlib.manifest("greeter").version;
