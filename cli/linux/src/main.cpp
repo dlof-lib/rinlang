@@ -215,6 +215,7 @@ void printUsage() {
         "  rin vm <file> [--disasm] [--stats]      run on RinVM (real bytecode VM)\n"
         "  rin --vm <file>                         run any program on RinVM\n"
         "  rin toolchain-new <name>                generate a complete toolchain project skeleton\n"
+        "  rin lib <new|check|info|list|run>      مكتبات Rin المقسَّمة (.og.rin: Disconom + .zpp + .rinz) — rin lib --help\n"
         "  rin test [dir]                         تشغيل اختبارات .rin\n"
         "  rin fmt <file> [--write]               إعادة محاذاة المسافات البادئة\n"
         "  rin clean                              حذف مخرجات ./build\n"
@@ -396,6 +397,105 @@ int cmdBuild(const std::vector<std::string>& args) {
 }
 
 // ---------------------------------------------------------------------------
+// مكتبات Rin المقسَّمة (<name>.og.rin/ : Disconom + .zpp + .rinz + native/) — docs/split-libraries.md
+//   rin lib new <name> [--dir D] [--xml] [--native] [--version V] [--author A] [--desc T]
+//   rin lib check <name|dir>     rin lib info <name|dir>     rin lib list [dir]     rin lib run <name|dir>
+// ---------------------------------------------------------------------------
+// ملف .rinz داخل مكتبة: يُشغَّل وحده بعد ربط أجزاء مكتبته (لا يُنفَّذ مرتين). يُعيد بادئة @import على نفس السطر الأول.
+static std::string rinzPrelude(const std::string& file, rin::Interpreter& interp) {
+    if (file.size() < 5 || file.compare(file.size() - 5, 5, ".rinz") != 0) return "";
+    char buf[PATH_MAX];
+    if (!realpath(file.c_str(), buf)) return "";
+    std::string dir = buf;
+    for (int i = 0; i < 16; ++i) {
+        size_t k = dir.find_last_of('/');
+        if (k == std::string::npos || k == 0) break;
+        dir = dir.substr(0, k);
+        struct stat st;
+        if (stat((dir + "/disconom.json").c_str(), &st) == 0 || stat((dir + "/disconom.xml").c_str(), &st) == 0) {
+            interp.setSkipLibraryRun(true);
+            return "@import \"" + dir + "\"; ";
+        }
+    }
+    return "";
+}
+
+static bool resolveLibArg(const std::string& arg, std::string& root) {
+    rin::Interpreter probe;
+    return probe.locateLibraryDir(arg, root);
+}
+
+int cmdLib(const std::vector<std::string>& args) {
+    namespace ld = rin::libdir;
+    if (args.empty() || args[0] == "--help" || args[0] == "-h") {
+        std::cout <<
+            "rin lib — مكتبات Rin المقسَّمة (مجلد <name>.og.rin: Disconom + .zpp + .rinz + native/)\n"
+            "  rin lib new <name> [--dir D] [--xml] [--native] [--version V] [--author A] [--desc T]\n"
+            "  rin lib check <name|dir>   فحص Disconom + تحليل كل .zpp/.rinz (يخرج برمز 1 عند وجود أخطاء)\n"
+            "  rin lib info  <name|dir>   عرض وصف المكتبة وترتيب تحميل أجزائها\n"
+            "  rin lib list  [dir]        سرد المكتبات المقسَّمة في مجلد (الافتراضي lib)\n"
+            "  rin lib run   <name|dir>   استيراد المكتبة وتنفيذ ملفات .rinz (أضف --allow-native للكود C++)\n";
+        return 0;
+    }
+    const std::string sub = args[0];
+    if (sub == "new") {
+        ld::ScaffoldOpts o; std::string dir = "lib";
+        for (size_t i = 1; i < args.size(); ++i) {
+            const std::string& a = args[i];
+            auto val = [&](std::string& dst) { if (i + 1 < args.size()) dst = args[++i]; };
+            if (a == "--dir") val(dir); else if (a == "--xml") o.xml = true; else if (a == "--native") o.native = true;
+            else if (a == "--version") val(o.version); else if (a == "--author") val(o.author); else if (a == "--desc") val(o.description);
+            else if (a == "--license") val(o.license);
+            else if (!a.empty() && a[0] != '-') o.name = a;
+        }
+        if (o.name.empty()) { std::cerr << "rin lib new: يلزم اسم المكتبة\n"; return 2; }
+        std::string root, err; std::vector<std::string> created;
+        if (!ld::scaffoldLibrary(dir, o, kVersion, root, created, err)) { std::cerr << "rin lib new: " << err << "\n"; return 1; }
+        std::cout << "تم إنشاء " << root << "\n";
+        for (auto& f : created) std::cout << "  + " << f << "\n";
+        return 0;
+    }
+    if (sub == "list") {
+        std::string dir = args.size() > 1 ? args[1] : "lib";
+        rin::Interpreter in; std::string src = "for (let l in rinlib.discover(\"" + dir + "\")) { print l.name + \" \" + l.version + \"  \" + l.root + \"  — \" + l.description; }";
+        return runSource(src, "<rin lib list>", in) ? 0 : 1;
+    }
+    if (args.size() < 2) { std::cerr << "rin lib " << sub << ": يلزم اسم المكتبة أو مسارها\n"; return 2; }
+    std::string root;
+    if (!resolveLibArg(args[1], root)) { std::cerr << "rin lib " << sub << ": لم أجد مكتبة مقسَّمة '" << args[1] << "'\n"; return 1; }
+    if (sub == "check") {
+        rin::Interpreter in; auto rep = in.checkLibraryDir(root);
+        std::cout << root << "  " << rep.name << " " << rep.version << "\n";
+        for (auto& p : rep.parts) std::cout << "  part  " << p << "\n";
+        for (auto& p : rep.runFiles) std::cout << "  run   " << p << "\n";
+        for (auto& w : rep.warnings) std::cout << "  تحذير: " << w << "\n";
+        for (auto& e : rep.errors) std::cout << "  خطأ: " << e << "\n";
+        std::cout << (rep.ok ? "OK" : "FAILED") << "\n";
+        return rep.ok ? 0 : 1;
+    }
+    if (sub == "info") {
+        ld::Plan plan; std::vector<std::string> errs;
+        ld::planLibrary(ld::diskFS(), root, "", plan, errs);
+        const auto& m = plan.manifest;
+        std::cout << m.name << " " << m.version << "  (" << plan.root << ")\n";
+        if (!m.description.empty()) std::cout << "  " << m.description << "\n";
+        std::cout << "  Disconom: " << (plan.hasManifest ? plan.manifestFile : "—") << "   Rin: " << (m.rin.empty() ? "—" : m.rin) << "\n";
+        for (auto& d : m.dependencies) std::cout << "  dep   " << d.name << " " << d.range << "\n";
+        int i = 1; for (auto& p : plan.parts) std::cout << "  " << i++ << ". part " << p << "\n";
+        for (auto& p : plan.runFiles) std::cout << "  " << i++ << ". run  " << p << "\n";
+        for (auto& s : m.native.sources) std::cout << "  native " << s << "\n";
+        for (auto& e : errs) std::cout << "  خطأ: " << e << "\n";
+        return errs.empty() ? 0 : 1;
+    }
+    if (sub == "run") {
+        rin::Interpreter in;
+        return runSource("@import \"" + root + "\";", "<rin lib run>", in) ? 0 : 1;
+    }
+    std::cerr << "rin lib: أمر غير معروف '" << sub << "' (rin lib --help)\n";
+    return 2;
+}
+
+// ---------------------------------------------------------------------------
 // rin run [file]
 // ---------------------------------------------------------------------------
 int cmdRun(const std::vector<std::string>& args) {
@@ -421,6 +521,7 @@ int cmdRun(const std::vector<std::string>& args) {
         return 2;
     }
     rin::Interpreter interp;
+    source = rinzPrelude(file, interp) + source;   // ملف .rinz داخل مكتبة: اربط أجزاءها أولاً
     // --import-progress اختياري تماماً: بدونه السلوك مطابق تماماً لما كان عليه قبل هذه الميزة
     // (لا شريط تحميل، لا أي فرق في الناتج). راجع rin::loaderui في app/src/main/cpp/loader_ui/.
     if (importProgress) interp.setImportUIMode(rin::loaderui::Mode::Verbose);
@@ -1038,6 +1139,7 @@ static int realMain(int argc, char** argv) {
         if (cmd == "fmt") return cmdFmt(rest);
         if (cmd == "clean") return cmdClean();
         if (cmd == "doctor") return cmdDoctor();
+        if (cmd == "lib") return cmdLib(rest);
         if (cmd == "analyze") return cmdAnalyze(rest);
         if (cmd == "bytecode") return cmdBytecode(rest, false);
         if (cmd == "vm") return cmdRealVM(rest);
@@ -1089,6 +1191,7 @@ static int realMain(int argc, char** argv) {
 
     rin::Interpreter interp;
     if (g_runtimeBudget > 0) interp.setExecutionBudget(g_runtimeBudget);
+    if (sourceName != "<stdin>" && sourceName != "<inline>") source = rinzPrelude(sourceName, interp) + source;
     interp.setProgramArgs(rest);
     bool ok = runSource(source, sourceName, interp);
     return ok ? 0 : 1;
