@@ -33,6 +33,7 @@ print RINTWIST.lib.name;        // مكتبة/توكن أداة جارٍ است�
 | `rintwist.get("lib.name", dflt)` | قراءة حقل بمسار منقَّط، تدعم فهارس المصفوفات (`"stack.1.name"`)، وتُرجع `dflt` (أو `nil`) إن لم يوجد |
 | `rintwist.fmt(template, extra?)` | قالب نصي: `rintwist.fmt("{file.stem}-{date.date}.log")`. `{{` و`}}` أقواس حرفية. الوسيط الثاني (map) تتقدّم مفاتيحه على حقول RINTWIST |
 | `rintwist.stack()` | سلسلة الاستيراد (نفس `RINTWIST.stack`) |
+| `rintwist.rsf([عضو, وسائط...])` | مكتبة [`__rsf__`](rsf.md): منع التكرار تلقائياً + كشف الدورات؛ بلا وسائط تُرجع الواجهة كاملة |
 
 ```rin
 let logName = rintwist.fmt("{file.stem}-{date.date}.log");   // app-2026-10-24.log
