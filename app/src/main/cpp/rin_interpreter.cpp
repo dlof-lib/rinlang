@@ -5976,6 +5976,94 @@ void Interpreter::registerNatives() {
         return out;
     };
 
+    // ---- ns.*: introspection + dynamic access for the namespace tree (container / group / Volume) ----
+    // Paths are absolute and dotted, e.g. "Store.Inventory.items". See docs/namespaces.md.
+    auto nsNodeOrErr = [this](const char* fn, std::vector<Value>& a, int line) -> std::shared_ptr<NsNode> {
+        std::string path = asString(a[0], fn, line);
+        auto n = nsResolvePath(path);
+        if (!n) throw diagErr(diag::Code::E0001_UndefinedVariable, line, std::string(fn) + ": no namespace `" + path + "`");
+        return n;
+    };
+    natives["ns.has"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("ns.has", a, 1, line);
+        return Value::boolean_(nsResolvePath(asString(a[0], "ns.has", line)) != nullptr);
+    };
+    natives["ns.kind"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("ns.kind", a, 1, line);
+        auto n = nsResolvePath(asString(a[0], "ns.kind", line));
+        return n ? Value::string(n->kindName()) : Value::nil();
+    };
+    natives["ns.paths"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("ns.paths", a, 0, line);
+        std::vector<std::string> out;
+        for (auto& r : nsRoots) nsCollectPaths(r.second, out);
+        auto arr = std::make_shared<ArrayData>();
+        for (auto& p : out) arr->push_back(Value::string(p));
+        return Value::makeArray(arr);
+    };
+    natives["ns.parent"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("ns.parent", a, 1, line);
+        auto n = nsResolvePath(asString(a[0], "ns.parent", line));
+        if (!n) return Value::nil();
+        auto p = n->parent.lock();
+        return p ? Value::string(p->path()) : Value::nil();
+    };
+    natives["ns.members"] = [this, nsNodeOrErr](std::vector<Value>& a, int line) -> Value {
+        expectArgs("ns.members", a, 1, line);
+        auto n = nsNodeOrErr("ns.members", a, line);
+        auto arr = std::make_shared<ArrayData>();
+        for (auto& c : n->children) arr->push_back(Value::string(c.first));
+        return Value::makeArray(arr);
+    };
+    natives["ns.fields"] = [this, nsNodeOrErr](std::vector<Value>& a, int line) -> Value {
+        expectArgs("ns.fields", a, 1, line);
+        auto n = nsNodeOrErr("ns.fields", a, line);
+        std::vector<std::string> names;
+        for (auto& kv : n->env->values) names.push_back(kv.first);
+        std::sort(names.begin(), names.end());
+        auto arr = std::make_shared<ArrayData>();
+        for (auto& k : names) arr->push_back(Value::string(k));
+        return Value::makeArray(arr);
+    };
+    natives["ns.capabilities"] = [this, nsNodeOrErr](std::vector<Value>& a, int line) -> Value {
+        expectArgs("ns.capabilities", a, 1, line);
+        auto n = nsNodeOrErr("ns.capabilities", a, line);
+        auto m = std::make_shared<MapData>();
+        auto put = [&](const char* k, Value v) { m->push_back({Value::string(k), std::move(v)}); };
+        put("kind", Value::string(n->kindName()));
+        put("read", Value::boolean_(true));
+        put("write", Value::boolean_(n->canWrite()));
+        put("call", Value::boolean_(n->canCall()));
+        put("state", Value::boolean_(n->hasStateHooks()));
+        put("transaction", Value::boolean_(n->canTransact()));
+        put("nest", Value::boolean_(true));
+        return Value::makeMap(m);
+    };
+    natives["ns.snapshot"] = [this, nsNodeOrErr](std::vector<Value>& a, int line) -> Value {
+        expectArgs("ns.snapshot", a, 1, line);
+        return nsSnapshot(nsNodeOrErr("ns.snapshot", a, line));
+    };
+    natives["ns.get"] = [this, nsNodeOrErr](std::vector<Value>& a, int line) -> Value {
+        expectArgs("ns.get", a, 2, line);
+        auto n = nsNodeOrErr("ns.get", a, line);
+        return nsGet(n, asString(a[1], "ns.get", line), line);
+    };
+    natives["ns.set"] = [this, nsNodeOrErr](std::vector<Value>& a, int line) -> Value {
+        expectArgs("ns.set", a, 3, line);
+        auto n = nsNodeOrErr("ns.set", a, line);
+        return nsSet(n, asString(a[1], "ns.set", line), a[2], line);
+    };
+    natives["ns.call"] = [this, nsNodeOrErr](std::vector<Value>& a, int line) -> Value {
+        if (a.size() < 2 || a.size() > 3) expectArgs("ns.call", a, 3, line);
+        auto n = nsNodeOrErr("ns.call", a, line);
+        std::vector<Value> cargs;
+        if (a.size() == 3) {
+            if (a[2].type != Value::Type::ARRAY) throw diagErr(diag::Code::E0004_InvalidType, line, "ns.call: arguments must be an array");
+            cargs = *a[2].array;
+        }
+        return nsCall(n, asString(a[1], "ns.call", line), cargs, line);
+    };
+
     natives["container.exists"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("container.exists", a, 1, line);
         return Value::boolean_(containers.count(asString(a[0], "container.exists", line)) > 0);
@@ -9021,6 +9109,9 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
         }
         std::string savedFilePath = currentFilePath;
         currentFilePath.clear(); // كل حاوية تبدأ بمسار ملف نظيف حتى لا يرث container.import مساراً من حاوية سابقة
+        // Namespace: a NAMED container is a node in the namespace tree for the whole of its definition
+        // (body + lifecycle hooks + container.import), nested under whichever group/volume/container is open.
+        NsScope nsGuard(this, s->name.empty() ? nullptr : nsOpen(NsNode::Kind::Container, s->name, containerKey, containerEnv));
         containerStack.push_back(containerKey);
         executeBlock(s->body, containerEnv);
         containerStack.pop_back();
@@ -9551,11 +9642,14 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
         }
 
         output << "🗂️ Containers.Group" << (s->name.empty() ? "" : (" = " + s->name)) << "\n";
+        {
+        NsScope nsGuard(this, s->name.empty() ? nullptr : nsOpen(NsNode::Kind::Group, s->name, groupKey, groupEnv));
         groupStack.push_back(groupKey);
         openCollectorKinds.push_back('G');
         executeBlock(s->body, groupEnv);
         openCollectorKinds.pop_back();
         groupStack.pop_back();
+        }
 
         auto& members = groupMembers[groupKey];
         output << "✅ .end/Containers.Group" << (s->name.empty() ? "" : (" (" + s->name + ")"));
@@ -9603,11 +9697,14 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
         }
 
         output << "📚 Volume" << (s->name.empty() ? "" : (" = " + s->name)) << "\n";
+        {
+        NsScope nsGuard(this, s->name.empty() ? nullptr : nsOpen(NsNode::Kind::Volume, s->name, volumeKey, volumeEnv));
         volumeStack.push_back(volumeKey);
         openCollectorKinds.push_back('V');
         executeBlock(s->body, volumeEnv);
         openCollectorKinds.pop_back();
         volumeStack.pop_back();
+        }
 
         auto& members = volumeMembers[volumeKey];
         output << "✅ .end/Volume" << (s->name.empty() ? "" : (" (" + s->name + ")"));
@@ -10187,6 +10284,173 @@ void Interpreter::assignStateAware(Environment* owner, const std::string& name, 
     if (linksExist_) onContainerWrite(containerKey, name, linkOld, newValue, line);
 }
 
+// ============================================================================
+// Namespaces: container / Containers.Group / Volume as nestable name scopes (see NsNode in the header)
+// ============================================================================
+
+std::shared_ptr<NsNode> Interpreter::nsOpen(NsNode::Kind kind, const std::string& name, const std::string& key, const EnvPtr& env) {
+    auto node = std::make_shared<NsNode>();
+    node->kind = kind; node->name = name; node->key = key; node->env = env;
+    env->ns = node;
+    auto replaceIn = [&](std::vector<std::pair<std::string, std::shared_ptr<NsNode>>>& list) {
+        for (auto& c : list) if (c.first == name) { c.second = node; return; } // re-executed definition replaces the old one
+        list.emplace_back(name, node);
+    };
+    if (!nsStack.empty()) { node->parent = nsStack.back(); replaceIn(nsStack.back()->children); }
+    else replaceIn(nsRoots);
+    return node;
+}
+
+Interpreter::NsScope::NsScope(Interpreter* i, std::shared_ptr<NsNode> n) : in(i), active(n != nullptr) {
+    if (active) in->nsStack.push_back(std::move(n));
+}
+Interpreter::NsScope::~NsScope() { if (active && !in->nsStack.empty()) in->nsStack.pop_back(); }
+
+// Lexical lookup of the FIRST segment of a qualified name: walk the scope chain outwards; every
+// namespace scope on the way contributes itself and its children (so siblings are visible by plain
+// name, and a namespace can name itself). Root namespaces are the last resort.
+std::shared_ptr<NsNode> Interpreter::nsResolveHead(const std::string& name, const EnvPtr& env) const {
+    for (Environment* e = env.get(); e; e = e->parent.get()) {
+        if (auto n = e->ns.lock()) {
+            if (n->name == name) return n;
+            if (auto c = n->child(name)) return c;
+        }
+    }
+    for (auto& r : nsRoots) if (r.first == name) return r.second;
+    return nullptr;
+}
+
+std::shared_ptr<NsNode> Interpreter::nsResolveExpr(const ExprPtr& obj, const EnvPtr& env) const {
+    if (nsRoots.empty() || !obj) return nullptr;
+    if (obj->exprKind == ExprKind::Variable) {
+        auto ve = std::static_pointer_cast<VariableExpr>(obj);
+        if (env->lookup(ve->name)) return nullptr; // a real variable always shadows a namespace of the same name
+        return nsResolveHead(ve->name, env);
+    }
+    if (obj->exprKind == ExprKind::Get) {
+        auto ge = std::static_pointer_cast<GetExpr>(obj);
+        auto parent = nsResolveExpr(ge->object, env);
+        return parent ? parent->child(ge->name) : nullptr;
+    }
+    return nullptr;
+}
+
+std::shared_ptr<NsNode> Interpreter::nsResolvePath(const std::string& dotted) const {
+    std::shared_ptr<NsNode> cur;
+    size_t st = 0;
+    bool first = true;
+    while (true) {
+        size_t d = dotted.find('.', st);
+        std::string seg = dotted.substr(st, d == std::string::npos ? std::string::npos : d - st);
+        if (seg.empty()) return nullptr;
+        if (first) {
+            for (auto& r : nsRoots) if (r.first == seg) { cur = r.second; break; }
+            first = false;
+        } else cur = cur ? cur->child(seg) : nullptr;
+        if (!cur) return nullptr;
+        if (d == std::string::npos) return cur;
+        st = d + 1;
+    }
+}
+
+Value Interpreter::nsSnapshot(const std::shared_ptr<NsNode>& n) const {
+    auto m = std::make_shared<MapData>();
+    std::vector<std::string> names;
+    for (auto& kv : n->env->values) if (kv.second.type != Value::Type::FUNCTION) names.push_back(kv.first);
+    std::sort(names.begin(), names.end());
+    for (auto& k : names) m->push_back({Value::string(k), n->env->values.find(k)->second});
+    for (auto& c : n->children) m->push_back({Value::string(c.first), nsSnapshot(c.second)});
+    return Value::makeMap(m);
+}
+
+static RinError nsNoMemberErr(const std::shared_ptr<NsNode>& n, const std::string& member, int line,
+                              const std::string& file, const char* what) {
+    diag::Diagnostic d(diag::Code::E0001_UndefinedVariable,
+                       std::string("namespace `") + n->path() + "` has no " + what + " `" + member + "`",
+                       diag::SourceLocation::point(file, line, 1));
+    d.withReason(std::string("`") + n->path() + "` is a " + n->kindName() + " namespace; it only exposes names declared directly inside it");
+    std::vector<std::string> candidates;
+    for (auto& kv : n->env->values) candidates.push_back(kv.first);
+    for (auto& c : n->children) candidates.push_back(c.first);
+    auto matches = diag::nearestMatches(member, candidates, 2, 3);
+    for (auto& m : matches) d.withSuggestion(m);
+    if (!matches.empty()) d.withHint("did you mean `" + n->path() + "." + matches.front() + "`?");
+    return RinError(std::move(d));
+}
+
+Value Interpreter::nsGet(const std::shared_ptr<NsNode>& n, const std::string& member, int line) {
+    if (auto c = n->child(member)) return nsSnapshot(c); // a bare namespace reads as a snapshot map of its fields
+    auto it = n->env->values.find(member);
+    if (it == n->env->values.end()) throw nsNoMemberErr(n, member, line, sourceFile, "member");
+    if (liveActive_ && !n->env->live.empty()) {
+        auto lit = n->env->live.find(member);
+        if (lit != n->env->live.end()) return liveRead(n->env.get(), lit->second, member, line);
+    }
+    return it->second;
+}
+
+Value Interpreter::nsSet(const std::shared_ptr<NsNode>& n, const std::string& member, const Value& v, int line) {
+    if (!n->canWrite()) {
+        throw errWithReason(diag::Code::E0035_RuntimeError, line,
+                            "cannot write `" + n->path() + "." + member + "`: a Volume is read-only",
+                            "Volume is the read-only organisation layer; keep mutable data in a Containers.Group (shared fields) or a container");
+    }
+    if (n->child(member)) {
+        throw diagErr(diag::Code::E0004_InvalidType, line,
+                      "cannot assign to `" + n->path() + "." + member + "`: it is a nested namespace, not a variable");
+    }
+    if (!n->env->values.count(member)) throw nsNoMemberErr(n, member, line, sourceFile, "variable");
+    Value stored = copyForBinding(v);
+    if (liveActive_) return liveAssign(n->env.get(), member, stored, line);
+    assignStateAware(n->env.get(), member, stored, line); // fires `on update(prev)` for `state` fields of containers
+    return stored;
+}
+
+Value Interpreter::nsCall(const std::shared_ptr<NsNode>& n, const std::string& member, std::vector<Value>& args, int line) {
+    if (!n->canCall()) {
+        throw errWithReason(diag::Code::E0035_RuntimeError, line,
+                            std::string("cannot call `") + n->path() + "." + member + "()`: a " + n->kindName() + " does not expose functions",
+                            "only a container can be called through its qualified name; put the function in a container");
+    }
+    auto it = n->env->values.find(member);
+    if (it == n->env->values.end()) throw nsNoMemberErr(n, member, line, sourceFile, "function");
+    if (it->second.type != Value::Type::FUNCTION) {
+        throw diagErr(diag::Code::E0006_UnknownFunction, line, "`" + n->path() + "." + member + "` is not a function");
+    }
+    Value fn = it->second; // copy: the call may mutate the namespace
+    return callFunction(fn.function, args, line);
+}
+
+void Interpreter::nsCollectPaths(const std::shared_ptr<NsNode>& n, std::vector<std::string>& out) const {
+    out.push_back(n->path());
+    for (auto& c : n->children) nsCollectPaths(c.second, out);
+}
+
+// `a.b.fn(args)` arrives from the parser as one dotted callee string. Resolve it through the
+// namespace tree first; returns false (and touches nothing) when the head is not a namespace.
+bool Interpreter::nsTryCallDotted(const std::string& callee, std::vector<Value>& args, int line, const EnvPtr& env, Value& out) {
+    std::vector<std::string> segs;
+    for (size_t st = 0;;) {
+        size_t d = callee.find('.', st);
+        if (d == std::string::npos) { segs.push_back(callee.substr(st)); break; }
+        segs.push_back(callee.substr(st, d - st));
+        st = d + 1;
+    }
+    if (segs.size() < 2 || env->lookup(segs[0])) return false;
+    auto n = nsResolveHead(segs[0], env);
+    for (size_t i = 1; n && i + 1 < segs.size(); ++i) n = n->child(segs[i]);
+    if (!n) return false;
+    const std::string& member = segs.back();
+    auto it = n->env->values.find(member);
+    if (it == n->env->values.end()) {
+        if (natives.count(callee)) return false; // e.g. a namespace that happens to be named like a built-in family
+        throw nsNoMemberErr(n, member, line, sourceFile, "function");
+    }
+    if (it->second.type != Value::Type::FUNCTION) return false; // a map/array member: let the normal `.method()` path handle it
+    out = nsCall(n, member, args, line);
+    return true;
+}
+
 // ---- RCS-1.0 §3.5 Tree (Phase 2) ----
 
 // انظر إعلانها في rin_interpreter.h للشرح الكامل: تمشي صعوداً من startEnv عبر Environment::parent
@@ -10695,6 +10959,11 @@ Value Interpreter::invokeCallee(const std::string& callee, std::vector<Value>& a
     }
     if (callee == "libraryImportUrl") {
         return doLibraryImportUrl(args, line, env);
+    }
+
+    if (!nsRoots.empty() && callee.find('.') != std::string::npos) { // namespaces: shop.users.add(x)
+        Value nsOut;
+        if (nsTryCallDotted(callee, args, line, env, nsOut)) return nsOut;
     }
 
     auto nativeIt = natives.find(callee);
@@ -11271,6 +11540,9 @@ Value Interpreter::evaluateTree(const ExprPtr& expr, const EnvPtr& env) {
                 if (livePropertyGet(env, ve->name, e->name, e->line, liveProp)) return liveProp;
             }
         }
+        if (!nsRoots.empty()) { // namespaces: shop.users.count  (container / group / Volume, any nesting)
+            if (auto ns = nsResolveExpr(e->object, env)) return nsGet(ns, e->name, e->line);
+        }
         Value obj = evaluate(e->object, env);
         if (obj.type == Value::Type::INSTANCE) {
             return readMember(obj, e->name, env, e->line); // خصائص get + صلاحيات + حقول + دوال مربوطة
@@ -11295,6 +11567,12 @@ Value Interpreter::evaluateTree(const ExprPtr& expr, const EnvPtr& env) {
                     Value sval = evaluate(e->value, env);
                     return staticSet(sve->name, e->name, sval, env, e->line);
                 }
+            }
+        }
+        if (!nsRoots.empty()) { // namespaces: shop.users.count = 3;
+            if (auto ns = nsResolveExpr(e->object, env)) {
+                Value nval = evaluate(e->value, env);
+                return nsSet(ns, e->name, nval, e->line);
             }
         }
         Value obj = evaluate(e->object, env);
@@ -11327,6 +11605,14 @@ Value Interpreter::evaluateTree(const ExprPtr& expr, const EnvPtr& env) {
                                   "`super." + e->method + "` is not a method");
                 }
                 return callFunction(bound.function, superArgs, e->line);
+            }
+        }
+        if (!nsRoots.empty()) {
+            if (auto ns = nsResolveExpr(e->object, env)) {
+                std::vector<Value> nargs;
+                nargs.reserve(e->args.size());
+                for (auto& a : e->args) nargs.push_back(evaluate(a, env));
+                return nsCall(ns, e->method, nargs, e->line);
             }
         }
         Value obj = evaluate(e->object, env);
