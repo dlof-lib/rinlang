@@ -90,6 +90,16 @@ private:
         return i;
     }
     int stmtRef(const StmtPtr& s) { P_->stmts.push_back(s); return static_cast<int>(P_->stmts.size()) - 1; }
+    // true for `a` or `a.b.c...` (a chain of plain names): the only shapes that can denote a namespace path
+    static bool isPathExpr(const ExprPtr& e) {
+        for (const Expr* cur = e.get(); cur; ) {
+            if (cur->exprKind == ExprKind::Variable) return true;
+            if (cur->exprKind != ExprKind::Get) return false;
+            cur = static_cast<const GetExpr*>(cur)->object.get();
+        }
+        return false;
+    }
+
     int exprRef(const ExprPtr& e) { P_->exprs.push_back(e); return static_cast<int>(P_->exprs.size()) - 1; }
     int constNum(double d) {
         P_->consts.push_back(Value::num(d));
@@ -260,6 +270,13 @@ private:
         }
         case ExprKind::Get: {
             auto e = std::static_pointer_cast<GetExpr>(ep);
+            // Namespaces (container/group/Volume): a.b / a.b.c may name a namespace member. Resolved at
+            // run time (cheap no-op when no namespace exists); otherwise the normal code below runs.
+            int nsJump = -1;
+            if (isPathExpr(e->object) && !(e->object->exprKind == ExprKind::Variable &&
+                                           std::static_pointer_cast<VariableExpr>(e->object)->name == "super")) {
+                nsJump = emit(Op::NsGet, exprRef(ep), -1, e->line);
+            }
             if (e->object && e->object->exprKind == ExprKind::Variable) {
                 auto ve = std::static_pointer_cast<VariableExpr>(e->object);
                 if (ve->name == "super") emit(Op::GetSuper, str(e->name), 0, e->line);
@@ -268,11 +285,20 @@ private:
                 expr(e->object);
                 emit(Op::GetProp, str(e->name), e->line);
             }
+            if (nsJump >= 0) patchBHere(nsJump);
             break;
         }
         case ExprKind::Set: {
             auto e = std::static_pointer_cast<SetExpr>(ep);
             emit(Op::LiveGuard, exprRef(e->object), e->line);
+            int nsEnd = -1;
+            if (isPathExpr(e->object)) { // namespace.field = v  (see NsGet above)
+                int nt = emit(Op::NsSetTest, exprRef(ep), -1, e->line);
+                expr(e->value);
+                emit(Op::NsSet, exprRef(ep), 0, e->line);
+                nsEnd = emitJump(Op::Jmp);
+                P_->code[static_cast<size_t>(nt)].b = here();
+            }
             if (e->object && e->object->exprKind == ExprKind::Variable) {
                 auto sve = std::static_pointer_cast<VariableExpr>(e->object);
                 int test = emit(Op::StaticSetTest, str(sve->name), -1);
@@ -289,6 +315,7 @@ private:
                 expr(e->value);
                 emit(Op::SetProp, str(e->name), e->line);
             }
+            if (nsEnd >= 0) patchHere(nsEnd);
             break;
         }
         case ExprKind::MethodCall: {
