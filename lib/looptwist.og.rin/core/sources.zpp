@@ -1,0 +1,207 @@
+// core/sources.zpp — مصادر التكرار: دوال نقيّة تُرجع مصفوفات جديدة ولا تعدّل مدخلاتها.
+
+// نسخة مصفوفة (أو حروف نص) كمصفوفة جديدة
+fun lt_arr(x, who) {
+    if (type(x) == "array") { return slice(x, 0, len(x)); }
+    if (type(x) == "string") {
+        let out = [];
+        for (let ch in x) { push(out, ch); }
+        return out;
+    }
+    throw "looptwist: " + who + " expects an array or a string, found " + type(x);
+}
+
+// range(n) | range(a, b) | range(a, b, step) — نهاية حصرية؛ الخطوة السالبة تعدّ تنازلياً
+fun ltx_range(a, b, step) {
+    let from = 0;
+    let to = a;
+    if (b != nil) { from = a; to = b; }
+    let st = step == nil ? 1 : step;
+    if (type(from) != "number" or type(to) != "number" or type(st) != "number") { throw "looptwist: lt_range expects numbers"; }
+    if (st == 0) { throw "looptwist: lt_range step cannot be 0"; }
+    let out = [];
+    let v = from;
+    let n = 0;
+    if (st > 0) { while (v < to) { push(out, v); v = v + st; n = n + 1; lt_guard(n, "lt_range"); } }
+    else { while (v > to) { push(out, v); v = v + st; n = n + 1; lt_guard(n, "lt_range"); } }
+    return out;
+}
+
+// irange(a, b[, step]) — نهاية شاملة: irange(1, 5) = [1,2,3,4,5]، وتنازلياً irange(5, 1, -2) = [5,3,1]
+fun ltx_irange(a, b, step) {
+    let st = step == nil ? (b >= a ? 1 : -1) : step;
+    if (st == 0) { throw "looptwist: lt_irange step cannot be 0"; }
+    return ltx_range(a, st > 0 ? b + 1 : b - 1, st);
+}
+
+// n نقطة متساوية البعد من a إلى b (شاملتين)
+export fun lt_linspace(a, b, n) {
+    lt_checkInt(n, "lt_linspace");
+    if (n < 1) { return []; }
+    if (n == 1) { return [a]; }
+    let out = [];
+    let stp = (b - a) / (n - 1);
+    for (let i = 0; i < n; i++) { push(out, a + stp * i); }
+    return out;
+}
+
+// [[x, i], ...] — الفهرس يبدأ من start (الافتراضي 0)
+fun ltx_enumerate(xs, start) {
+    let s = start == nil ? 0 : start;
+    let out = [];
+    let i = s;
+    for (let x in lt_arr(xs, "lt_enumerate")) { push(out, [x, i]); i = i + 1; }
+    return out;
+}
+
+// zip(a, b) → [[a0,b0], ...] وبأقصر طول. zipAll([a, b, c]) لأي عدد مصادر.
+export fun lt_zip(a, b) { return lt_zipAll([a, b]); }
+export fun lt_zipAll(lists) {
+    if (type(lists) != "array" or len(lists) == 0) { return []; }
+    let arrs = [];
+    let shortest = -1;
+    for (let l in lists) {
+        let a = lt_arr(l, "lt_zipAll");
+        push(arrs, a);
+        if (shortest < 0 or len(a) < shortest) { shortest = len(a); }
+    }
+    let out = [];
+    for (let i = 0; i < shortest; i++) {
+        let row = [];
+        for (let a in arrs) { push(row, a[i]); }
+        push(out, row);
+    }
+    return out;
+}
+
+// مجموعات متتالية بحجم n (الأخيرة قد تكون أقصر): chunk([1,2,3,4,5], 2) = [[1,2],[3,4],[5]]
+export fun lt_chunk(xs, n) {
+    lt_checkInt(n, "lt_chunk");
+    if (n < 1) { throw "looptwist: lt_chunk size must be >= 1"; }
+    let a = lt_arr(xs, "lt_chunk");
+    let out = [];
+    for (let i = 0; i < len(a); i = i + n) { push(out, slice(a, i, min(i + n, len(a)))); }
+    return out;
+}
+
+// نوافذ متحركة بحجم n (خطوة اختيارية): window([1,2,3,4], 2) = [[1,2],[2,3],[3,4]]
+fun ltx_window(xs, n, step) {
+    lt_checkInt(n, "lt_window");
+    if (n < 1) { throw "looptwist: lt_window size must be >= 1"; }
+    let stp = step == nil ? 1 : step;
+    if (stp < 1) { throw "looptwist: lt_window step must be >= 1"; }
+    let a = lt_arr(xs, "lt_window");
+    let out = [];
+    for (let i = 0; i + n <= len(a); i = i + stp) { push(out, slice(a, i, i + n)); }
+    return out;
+}
+
+// أزواج متجاورة: pairs([1,2,3]) = [[1,2],[2,3]]
+export fun lt_pairs(xs) { return ltx_window(xs, 2, 1); }
+
+// فرد مستوى واحد
+export fun lt_flatten(xs) {
+    let out = [];
+    for (let x in lt_arr(xs, "lt_flatten")) {
+        if (type(x) == "array") { for (let y in x) { push(out, y); } } else { push(out, x); }
+    }
+    return out;
+}
+
+// حذف التكرار بترتيب أول ظهور (keyFn اختيارية)
+fun ltx_unique(xs, keyFn) {
+    let seen = {};
+    let out = [];
+    for (let x in lt_arr(xs, "lt_unique")) {
+        let k = toString(type(x)) + ":" + toString(keyFn == nil ? x : keyFn(x));
+        if (!has(seen, k)) { seen[k] = true; push(out, x); }
+    }
+    return out;
+}
+
+// ضرب ديكارتي لمصدرين: product([1,2], ["a","b"]) = [[1,"a"],[1,"b"],[2,"a"],[2,"b"]]
+export fun lt_product(a, b) {
+    let out = [];
+    let n = 0;
+    for (let x in lt_arr(a, "lt_product")) {
+        for (let y in lt_arr(b, "lt_product")) { push(out, [x, y]); n = n + 1; lt_guard(n, "lt_product"); }
+    }
+    return out;
+}
+
+// تكرار المصدر n مرة (cycle) أو قيمة واحدة n مرة (fill)
+export fun lt_cycle(xs, times) {
+    lt_checkInt(times, "lt_cycle");
+    let a = lt_arr(xs, "lt_cycle");
+    let out = [];
+    for (let t = 0; t < times; t++) { for (let x in a) { push(out, x); lt_guard(len(out), "lt_cycle"); } }
+    return out;
+}
+export fun lt_fill(value, n) {
+    lt_checkInt(n, "lt_fill");
+    let out = [];
+    for (let i = 0; i < n; i++) { push(out, value); lt_guard(i + 1, "lt_fill"); }
+    return out;
+}
+
+export fun lt_take(xs, n) { let a = lt_arr(xs, "lt_take"); return slice(a, 0, max(0, min(n, len(a)))); }
+export fun lt_skip(xs, n) { let a = lt_arr(xs, "lt_skip"); return slice(a, min(max(0, n), len(a)), len(a)); }
+export fun lt_reversed(xs) {
+    let a = lt_arr(xs, "lt_reversed");
+    let out = [];
+    for (let i = len(a) - 1; i >= 0; i--) { push(out, a[i]); }
+    return out;
+}
+
+// تجميع حسب مفتاح: group(words, fun(w) { return len(w); }) = {"3": [...], "5": [...]}
+export fun lt_group(xs, keyFn) {
+    lt_checkFn(keyFn, "lt_group");
+    let out = {};
+    for (let x in lt_arr(xs, "lt_group")) {
+        let k = toString(keyFn(x));
+        if (!has(out, k)) { out[k] = []; }
+        push(out[k], x);
+    }
+    return out;
+}
+
+// [المطابقة, غير المطابقة]
+export fun lt_partition(xs, pred) {
+    lt_checkFn(pred, "lt_partition");
+    let yes = [];
+    let no = [];
+    for (let x in lt_arr(xs, "lt_partition")) { if (pred(x)) { push(yes, x); } else { push(no, x); } }
+    return [yes, no];
+}
+
+// عدّ التكرارات حسب مفتاح (أو بالقيمة نفسها): countBy(["a","b","a"]) = {"a": 2, "b": 1}
+fun ltx_countBy(xs, keyFn) {
+    let out = {};
+    for (let x in lt_arr(xs, "lt_countBy")) {
+        let k = toString(keyFn == nil ? x : keyFn(x));
+        out[k] = has(out, k) ? out[k] + 1 : 1;
+    }
+    return out;
+}
+
+// نسخة مرتّبة (الأصل لا يتغيّر): sorted(xs) أو sorted(xs, keyFn) أو sorted(xs, keyFn, true) للتنازلي
+fun ltx_sorted(xs, keyFn, desc) {
+    let a = lt_arr(xs, "lt_sorted");
+    if (keyFn == nil) {
+        let s = sort(a);
+        return desc == true ? lt_reversed(s) : s;
+    }
+    lt_checkFn(keyFn, "lt_sorted");
+    let pairs = [];
+    for (let x in a) { push(pairs, [keyFn(x), x]); }
+    // ترتيب ثابت بالإدراج على المفتاح (آمن لأي نوع قابل للمقارنة)
+    for (let i = 1; i < len(pairs); i++) {
+        let cur = pairs[i];
+        let j = i - 1;
+        while (j >= 0 and (desc == true ? pairs[j][0] < cur[0] : pairs[j][0] > cur[0])) { pairs[j + 1] = pairs[j]; j = j - 1; }
+        pairs[j + 1] = cur;
+    }
+    let out = [];
+    for (let p in pairs) { push(out, p[1]); }
+    return out;
+}
