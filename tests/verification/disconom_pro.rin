@@ -1,0 +1,19 @@
+// Disconom 2: مانيفست TOML، تبعيات اختيارية بميزات، rinlib.manifest بالحقول الجديدة
+@import "tests/verification/disconom/pro.og.rin";
+print pro_hello("Rin");
+print pro_double(21);
+print PRO_VERSION;
+let m = rinlib.manifest("tests/verification/disconom/pro.og.rin");
+print m.name + " " + m.version;
+print m.features.default;
+print m.scripts.test;
+print m.optionalDependencies;
+print m.devDependencies;
+print rinlib.info("pro").dependencies;
+print rinlib.info("extra").loaded;
+@import "tests/verification/disconom/optfeat.og.rin";
+print optfeat_ok();
+@import "tests/verification/disconom/optauto.og.rin";
+print optauto_ok();
+print rinlib.check("tests/verification/disconom/pro.og.rin").ok;
+print rinlib.check("tests/verification/disconom/badfeat.og.rin").ok;
