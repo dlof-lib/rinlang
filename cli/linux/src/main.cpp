@@ -36,6 +36,7 @@
 #include "rin_vm.h"
 
 #include <chrono>
+#include <filesystem>
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -420,20 +421,29 @@ static std::string rinzPrelude(const std::string& file, rin::Interpreter& interp
     return "";
 }
 
-static bool resolveLibArg(const std::string& arg, std::string& root) {
+static bool resolveLibArg(const std::string& arg, rin::libdir::PackageRef& ref) {
     rin::Interpreter probe;
-    return probe.locateLibraryDir(arg, root);
+    if (probe.resolvePackage(arg, ref)) return true;
+    std::string root;   // مجلد صريح بلا لاحقة .og.rin وبلا Disconom (يُقبل لـ check/info)
+    std::error_code ec;
+    if (std::filesystem::is_directory(arg, ec)) { ref.kind = rin::libdir::PackageKind::Library; ref.root = arg; return true; }
+    return false;
 }
 
 int cmdLib(const std::vector<std::string>& args) {
     namespace ld = rin::libdir;
     if (args.empty() || args[0] == "--help" || args[0] == "-h") {
         std::cout <<
-            "rin lib — مكتبات Rin المقسَّمة (مجلد <name>.og.rin: Disconom + .zpp + .rinz + native/)\n"
-            "  rin lib new <name> [--dir D] [--xml] [--native] [--version V] [--author A] [--desc T]\n"
-            "  rin lib check <name|dir>   فحص Disconom + تحليل كل .zpp/.rinz (يخرج برمز 1 عند وجود أخطاء)\n"
-            "  rin lib info  <name|dir>   عرض وصف المكتبة وترتيب تحميل أجزائها\n"
-            "  rin lib list  [dir]        سرد المكتبات المقسَّمة في مجلد (الافتراضي lib)\n"
+            "rin lib — الحزم: «مكتبة» (مجلد <name>.og.rin: Disconom + .zpp + .rinz + native/) و«توكن أداة OG» (ملف واحد <rinname>.og.rin)\n"
+            "  rin lib new <name> [--dir D] [--xml] [--native] [--version V] [--author A] [--desc T]   إنشاء مكتبة جديدة\n"
+            "  rin lib check <name|dir>   فحص (مكتبة: Disconom + تحليل كل .zpp/.rinz + التبعيات المتعدّية؛ توكن: صياغة) — رمز 1 عند الأخطاء\n"
+            "  rin lib info  <name|dir>   وصف الحزمة وترتيب تحميل أجزائها\n"
+            "  rin lib kind  <name>       نوع الحزمة: library | tool-token\n"
+            "  rin lib list  [dir]        سرد المكتبات (المجلدات) في مجلد (الافتراضي lib)\n"
+            "  rin lib tokens [dir]       سرد توكنات الأداة OG (الملفات المفردة + المدمجة في المفسّر)\n"
+            "  rin lib packages [dir]     كل الحزم (مكتبات + توكنات)\n"
+            "  rin lib graph <name|dir>   رسم التبعيات المتعدّية بترتيب التحميل (يكشف الدورات وعدم توافق الإصدارات)\n"
+            "  rin lib fingerprint <name|dir>   بصمة SHA-256 لمحتوى الحزمة\n"
             "  rin lib run   <name|dir>   استيراد المكتبة وتنفيذ ملفات .rinz (أضف --allow-native للكود C++)\n";
         return 0;
     }
@@ -451,33 +461,64 @@ int cmdLib(const std::vector<std::string>& args) {
         if (o.name.empty()) { std::cerr << "rin lib new: يلزم اسم المكتبة\n"; return 2; }
         std::string root, err; std::vector<std::string> created;
         if (!ld::scaffoldLibrary(dir, o, kVersion, root, created, err)) { std::cerr << "rin lib new: " << err << "\n"; return 1; }
-        std::cout << "تم إنشاء " << root << "\n";
+        std::cout << "تم إنشاء مكتبة " << root << "\n";
         for (auto& f : created) std::cout << "  + " << f << "\n";
         return 0;
     }
-    if (sub == "list") {
+    if (sub == "list" || sub == "tokens" || sub == "packages") {
         std::string dir = args.size() > 1 ? args[1] : "lib";
-        rin::Interpreter in; std::string src = "for (let l in rinlib.discover(\"" + dir + "\")) { print l.name + \" \" + l.version + \"  \" + l.root + \"  — \" + l.description; }";
-        return runSource(src, "<rin lib list>", in) ? 0 : 1;
+        const char* fn = sub == "list" ? "discover" : sub == "tokens" ? "tokens" : "packages";
+        rin::Interpreter in;
+        std::string src = std::string("for (let l in rinlib.") + fn + "(\"" + dir + "\") { let v = l.version; if (v == nil) { v = \"\"; } " +
+            "let d = l.description; if (d == nil) { d = \"\"; } print l.name + \" [\" + l.kind + \"] \" + v + \"  \" + l.root + (d == \"\" ? \"\" : \"  — \" + d); }";
+        return runSource(src, "<rin lib " + sub + ">", in) ? 0 : 1;
     }
-    if (args.size() < 2) { std::cerr << "rin lib " << sub << ": يلزم اسم المكتبة أو مسارها\n"; return 2; }
-    std::string root;
-    if (!resolveLibArg(args[1], root)) { std::cerr << "rin lib " << sub << ": لم أجد مكتبة مقسَّمة '" << args[1] << "'\n"; return 1; }
+    if (args.size() < 2) { std::cerr << "rin lib " << sub << ": يلزم اسم الحزمة أو مسارها\n"; return 2; }
+    ld::PackageRef ref;
+    if (!resolveLibArg(args[1], ref)) { std::cerr << "rin lib " << sub << ": لم أجد مكتبة ولا توكن أداة OG باسم '" << args[1] << "'\n"; return 1; }
+    const std::string root = ref.root;
+    if (sub == "kind") { std::cout << ld::kindName(ref.kind) << "  (" << ld::kindLabelAr(ref.kind) << ", " << (ref.source.empty() ? "disk" : ref.source) << ")  " << root << "\n"; return 0; }
+    if (sub == "fingerprint") {
+        rin::Interpreter in; std::string fp = in.libraryFingerprint(root);
+        if (fp.empty()) { std::cerr << "rin lib fingerprint: تعذّر حساب البصمة\n"; return 1; }
+        std::cout << fp << "  " << root << "\n"; return 0;
+    }
+    if (sub == "graph") {
+        rin::Interpreter in; auto g = in.dependencyGraph(root);
+        int i = 1;
+        for (auto& n : g.nodes) {
+            std::cout << "  " << i++ << ". " << n.name << (n.version.empty() ? "" : " " + n.version) << "  [" << ld::kindName(n.kind) << "]"
+                      << (n.range.empty() ? "" : "  يطلب " + n.range) << (n.found ? "" : "  (غير موجودة)") << (n.satisfied ? "" : "  (إصدار غير مطابق)") << "\n";
+            for (auto& d : n.deps) std::cout << "       └─ " << d << "\n";
+        }
+        for (auto& c : g.cycles) std::cout << "  دورة: " << c << "\n";
+        for (auto& p : g.problems) std::cout << "  خطأ: " << p << "\n";
+        for (auto& m : g.missing) std::cout << "  تحذير: " << m << "\n";
+        std::cout << (g.ok() ? "OK" : "FAILED") << "\n";
+        return g.ok() ? 0 : 1;
+    }
     if (sub == "check") {
         rin::Interpreter in; auto rep = in.checkLibraryDir(root);
-        std::cout << root << "  " << rep.name << " " << rep.version << "\n";
+        std::cout << root << "  [" << ld::kindName(ref.kind) << "]  " << rep.name << (rep.version.empty() ? "" : " " + rep.version) << "\n";
         for (auto& p : rep.parts) std::cout << "  part  " << p << "\n";
         for (auto& p : rep.runFiles) std::cout << "  run   " << p << "\n";
+        if (rep.loadOrder.size() > 1) { std::cout << "  load  "; for (size_t i = 0; i < rep.loadOrder.size(); ++i) std::cout << (i ? " → " : "") << rep.loadOrder[i]; std::cout << "\n"; }
+        if (!rep.fingerprint.empty()) std::cout << "  " << rep.fingerprint << "\n";
         for (auto& w : rep.warnings) std::cout << "  تحذير: " << w << "\n";
         for (auto& e : rep.errors) std::cout << "  خطأ: " << e << "\n";
         std::cout << (rep.ok ? "OK" : "FAILED") << "\n";
         return rep.ok ? 0 : 1;
     }
     if (sub == "info") {
+        if (ref.kind == ld::PackageKind::ToolToken) {
+            std::cout << ref.name << "  [توكن أداة OG]  " << root << "  (" << ref.source << ", " << ref.bytes << " bytes)\n"
+                      << "  ملف واحد بلا Disconom — لتحويله إلى مكتبة بإصدار وتبعيات: rin lib new " << ref.name << "\n";
+            return 0;
+        }
         ld::Plan plan; std::vector<std::string> errs;
         ld::planLibrary(ld::diskFS(), root, "", plan, errs);
         const auto& m = plan.manifest;
-        std::cout << m.name << " " << m.version << "  (" << plan.root << ")\n";
+        std::cout << m.name << " " << m.version << "  [مكتبة]  (" << plan.root << ")\n";
         if (!m.description.empty()) std::cout << "  " << m.description << "\n";
         std::cout << "  Disconom: " << (plan.hasManifest ? plan.manifestFile : "—") << "   Rin: " << (m.rin.empty() ? "—" : m.rin) << "\n";
         for (auto& d : m.dependencies) std::cout << "  dep   " << d.name << " " << d.range << "\n";
