@@ -71,6 +71,20 @@
 
 ---
 
+## looptwist — حلقات Rin القوية فوق RINTWIST
+
+- مكتبة `lib/looptwist.og.rin` (Disconom 2 بصيغة TOML، 7 أجزاء): ~70 دالة — مصادر (`range/chunk/window/zip/product/group/partition/sorted…`)، حلقات بسقف أمان و`LT_STOP`، `retry` بتراجع أُسّي، `poll`، `budget`، `timed`، شريط تقدّم مع ETA، واختصارات `LT.*`.
+- الإعدادات الافتراضية من RINTWIST: `limit` حسب `app.mode`، `trace` حسب `app.debug`، الوسم من `file.stem`/`lib.name` وقت الاستدعاء، الساعة من `run.uptimeMs`، `lt_where/lt_logName` عبر `rintwist.fmt`. التفاصيل: `docs/looptwist.md`. الاختبار: `tests/verification/looptwist_basic.rin`.
+
+## Disconom 2 + مترجم Disconom
+
+- **الصيغة 2**: `optionalDependencies` / `peerDependencies` / `devDependencies` / `features` (+`RIN_FEATURES`) / `scripts` / `files` / `workspaces` / `private` / `bugs` / `funding` / `readme` / `categories` / `platforms` / `contributors`، مع تحقق موسَّع (دورات الميزات، مسارات آمنة، SPDX، روابط…). صيغة 1 تعمل بلا تغيير.
+- **`disconom.toml`**: صيغة ثالثة متكافئة (محلّل TOML مدمج في `rin_libdir.h`)؛ `rin lib new --toml`.
+- **المترجم** `rin_disconom.h`: `rin lib translate` بين json/xml/toml + استيراد/تصدير `package.json` و`rin.toml` (RinPM)، و`rin lib fmt [--check]` لإعادة الكتابة القانونية.
+- **`disconom.lock`**: `rin lib lock [--check]` — إصدارات محلولة + بصمات sha256 (حتمي).
+- **السكربتات**: `rin lib scripts|script --allow-scripts`.
+- مخطط JSON: `schemas/disconom.schema.json`. اختبارات: `tests/verification/disconom/run_tests.sh` (61 فحصاً) و`tests/verification/disconom_pro.rin`.
+
 ## مكتبات مقسَّمة (Split Libraries)
 
 - مكتبة = مجلد `<name>.og.rin/` فيه `disconom.json|xml` + أجزاء `.zpp` (أي اسم/مجلد) + ملفات تشغيل `.rinz` + `native/*.cpp` اختياري؛ يستوردها `@import "name"` كأي مكتبة.
