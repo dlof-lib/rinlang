@@ -1,0 +1,88 @@
+// core/dedupe.zpp — منع التكرار تلقائياً: كل شيء يعتمد على المفتاح القانوني rsf_key، فيعمل مع المصفوفات والخرائط المتداخلة.
+
+// ---- مجموعة رؤية (seen set) محفوظة الترتيب ----
+export fun rsf_set() { return {kind: "rsf.set", seen: {}, items: []}; }
+fun rsf_checkSet(s, who) {
+    if (type(s) != "map" or s["kind"] != "rsf.set") { throw "__rsf__: " + who + " expects a set made by rsf_set(), found " + type(s); }
+}
+// يضيف v؛ يُرجع true إن كانت جديدة، و false إن كانت مكرَّرة (ولا يضيفها).
+export fun rsf_add(s, v) {
+    rsf_checkSet(s, "rsf_add");
+    let k = rsf_key(v);
+    if (has(s["seen"], k)) { return false; }
+    s["seen"][k] = true;
+    push(s["items"], v);
+    return true;
+}
+export fun rsf_has(s, v) { rsf_checkSet(s, "rsf_has"); return has(s["seen"], rsf_key(v)); }
+export fun rsf_size(s) { rsf_checkSet(s, "rsf_size"); return len(s["items"]); }
+// نسخة من العناصر بترتيب أول ظهور
+export fun rsf_items(s) { rsf_checkSet(s, "rsf_items"); return slice(s["items"], 0, len(s["items"])); }
+
+// ---- مصفوفات ----
+// يحذف المكرَّر ويُبقي أول ظهور؛ لا يعدّل الأصل.
+export fun rsf_dedupe(xs) { return rsf_dedupeKey(xs, nil); }
+// مكرَّر بحسب مفتاح محسوب: rsf_dedupeBy(users, fun(u) { return u.id; })
+export fun rsf_dedupeBy(xs, keyFn) { rsf_checkFn(keyFn, "rsf_dedupeBy"); return rsf_dedupeKey(xs, keyFn); }
+fun rsf_dedupeKey(xs, keyFn) {
+    let s = rsf_set();
+    let out = [];
+    for (let x in rsf_arr(xs, "rsf_dedupe")) {
+        if (rsf_add(s, keyFn == nil ? x : keyFn(x))) { push(out, x); }
+    }
+    return out;
+}
+// القيم التي تكررت (مرة لكل قيمة، بترتيب أول تكرار)
+export fun rsf_duplicates(xs) {
+    let seen = rsf_set();
+    let rep = rsf_set();
+    let out = [];
+    for (let x in rsf_arr(xs, "rsf_duplicates")) {
+        if (!rsf_add(seen, x) and rsf_add(rep, x)) { push(out, x); }
+    }
+    return out;
+}
+export fun rsf_hasDuplicates(xs) {
+    let seen = rsf_set();
+    for (let x in rsf_arr(xs, "rsf_hasDuplicates")) { if (!rsf_add(seen, x)) { return true; } }
+    return false;
+}
+// عدد مرات كل قيمة: [[قيمة, عدد], ...] بترتيب أول ظهور
+export fun rsf_counts(xs) {
+    let idx = {};
+    let out = [];
+    for (let x in rsf_arr(xs, "rsf_counts")) {
+        let k = rsf_key(x);
+        if (has(idx, k)) { let p = out[idx[k]]; p[1] = p[1] + 1; }
+        else { idx[k] = len(out); push(out, [x, 1]); }
+    }
+    return out;
+}
+
+// ---- دالة تتذكّر نتائجها (وتكشف الدورات) ----
+// rsf_memo(fn): تُرجع دالة بوسيط واحد تنفّذ fn مرة واحدة لكل قيمة وسيط (مقارنة بنيوية).
+// وإن عادت fn إلى نفس الوسيط أثناء تنفيذه (استدعاء ذاتي دائري) تُرمى «cycle» مع سلسلة الاستدعاء بدل التكرار اللانهائي.
+export fun rsf_memo(fn) {
+    rsf_checkFn(fn, "rsf_memo");
+    let cache = {};
+    let running = {};
+    let chain = [];
+    return fun(x) {
+        let k = rsf_key(x);
+        if (has(cache, k)) { return cache[k]; }
+        if (has(running, k)) {
+            let desc = "";
+            for (let c in chain) { desc = desc + toString(c) + " -> "; }
+            throw "__rsf__: cycle detected in rsf_memo: " + desc + toString(x);
+        }
+        running[k] = true;
+        push(chain, x);
+        let r = nil;
+        try { r = fn(x); }
+        catch (e) { running[k] = nil; pop(chain); throw e["message"]; }
+        running[k] = nil;
+        pop(chain);
+        cache[k] = r;
+        return r;
+    };
+}
