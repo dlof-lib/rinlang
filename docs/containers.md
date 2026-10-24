@@ -145,6 +145,10 @@
 كاملةً بدل حاوية واحدة). `@Volume=name ... .end/Volume` تعشيش كامل بنفس حرّية
 `@container` العادية — غرضها تنظيمي بحت (تجميع منطقي)، لا قيد إضافي على المحتوى.
 
+**فضاءات أسماء:** كل واحد من `@container` و`@Containers.Group` و`@Volume` المُسمّاة هو أيضاً فضاء أسماء
+قابل للتعشيش: `Store.Inventory.items.count` و`app.counter = 5` و`app.inc()`. `container` هو الأساس ويعمل وحده،
+و`Group`/`Volume` اختياريان. التفاصيل في [`namespaces.md`](./namespaces.md).
+
 ## مثال كامل مُتحقَّق منه (الفصل الثلاثي كاملاً)
 
 ```kotlin
