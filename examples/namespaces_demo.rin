@@ -1,0 +1,120 @@
+// tests/verification/namespaces.rin
+// container / Containers.Group / Volume as real namespaces.
+// `container` alone is enough; Group and Volume are optional extra levels.
+
+// ---- 1) a lone container is already a namespace ----------------------------------
+@container=app
+    state counter = 0;
+    let title = "Rin";
+    fun inc() { counter = counter + 1; return counter; }
+    on update(prev) { print "[update] was " + prev["counter"]; }
+.end/container
+
+print "title=" + app.title;
+app.counter = 5;
+print "counter=" + app.counter;
+print "inc=" + app.inc();
+print "counter=" + app.counter;
+app.title = "Rin 2";
+print "title=" + app.title;
+
+// ---- 2) same names live side by side in different namespaces ---------------------
+@Volume=Store
+    let owner = "Sara";
+    @Containers.Group=Inventory
+        @container=items
+            let count = 3;
+            fun add(n) { count = count + n; return count; }
+        .end/container
+    .end/Containers.Group
+    @Containers.Group=Archive
+        @container=items
+            let count = 100;
+        .end/container
+    .end/Containers.Group
+.end/Volume
+
+print "owner=" + Store.owner;
+print "inv=" + Store.Inventory.items.count;
+print "arc=" + Store.Archive.items.count;
+print "add=" + Store.Inventory.items.add(4);
+print "inv=" + Store.Inventory.items.count;
+print "arc=" + Store.Archive.items.count;
+Store.Archive.items.count = 0;
+print "arc=" + Store.Archive.items.count;
+
+// ---- 3) Group without Volume, container without Group ----------------------------
+@Containers.Group=Net
+    let region = "eu";
+    @container=api
+        let port = 8080;
+    .end/container
+.end/Containers.Group
+print "net=" + Net.region + ":" + Net.api.port;
+
+// ---- 4) nested containers nest namespaces ----------------------------------------
+@container=outer
+    let tag = "O";
+    @container=inner
+        let tag = "I";
+    .end/container
+.end/container
+print outer.tag + outer.inner.tag;
+
+// ---- 5) relative resolution from inside a namespace ------------------------------
+@Containers.Group=Shop
+    @container=prices
+        let apple = 2;
+    .end/container
+    @container=cart
+        fun total(n) { return prices.apple * n; }
+    .end/container
+.end/Containers.Group
+print "total=" + Shop.cart.total(5);
+
+// ---- 6) a real variable shadows a namespace of the same name ---------------------
+let app = {title: "shadow"};
+print app.title;
+
+// ---- 7) introspection ------------------------------------------------------------
+print ns.has("Store.Inventory.items");
+print ns.has("Store.Nope");
+print ns.kind("Store");
+print ns.kind("Store.Inventory");
+print ns.kind("Store.Inventory.items");
+print ns.parent("Store.Inventory.items");
+print ns.members("Store");
+print ns.fields("Store.Inventory.items");
+print ns.get("Store.Inventory.items", "count");
+ns.set("Store.Inventory.items", "count", 1);
+print ns.call("Store.Inventory.items", "add", [10]);
+print ns.snapshot("Net");
+
+// ---- 8) Differences: container is the strongest -----------------------------------
+// Volume = read-only | Group = read+write | container = read+write+call+state+transaction
+@Volume=Cfg
+    let mode = "prod";
+    @Containers.Group=Shared
+        let hits = 0;
+        fun nope() { return 1; }
+        @container=svc
+            let n = 1;
+            fun bump() { n = n + 1; return n; }
+        .end/container
+    .end/Containers.Group
+.end/Volume
+
+print Cfg.mode;
+try { Cfg.mode = "dev"; } catch (e) { print "volume write: " + e["code"]; }
+Cfg.Shared.hits = 5;
+print "group write: " + Cfg.Shared.hits;
+try { Cfg.Shared.nope(); } catch (e) { print "group call: " + e["code"]; }
+print "container call: " + Cfg.Shared.svc.bump();
+print ns.capabilities("Cfg");
+print ns.capabilities("Cfg.Shared");
+print ns.capabilities("Cfg.Shared.svc");
+try {
+    ns.transaction("Cfg.Shared.svc", fun() { Cfg.Shared.svc.n = 99; throw "boom"; });
+} catch (e) { print "rolled back, n=" + Cfg.Shared.svc.n; }
+print ns.transaction("Cfg.Shared.svc", fun() { Cfg.Shared.svc.n = 7; return "ok"; }) + " n=" + Cfg.Shared.svc.n;
+try { ns.transaction("Cfg.Shared", fun() { return 1; }); } catch (e) { print "group tx: " + e["code"]; }
