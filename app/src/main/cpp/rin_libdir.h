@@ -1,7 +1,17 @@
 // ============================================================================
-//  rin_libdir.h — مكتبات Rin "المقسَّمة" (Split Libraries): مكتبة = مجلد، لا ملف مضغوط.
+//  rin_libdir.h — نظام الحزم في Rin: «توكن الأداة OG» (ملف واحد) و«المكتبات» (مجلدات).
 // ----------------------------------------------------------------------------
-//  الفكرة (وصف المستخدم): مكتبة اسمها math تُكتب كمجلد  math.og.rin/  بداخله:
+//  التسمية الرسمية (v2):
+//
+//    توكن الأداة OG  (Tool Token OG)   ← ما كان يُسمّى سابقاً «مكتبة Rin» القديمة: ملف واحد فقط
+//                                         <rinname>.og.rin   مثل  lib/math.og.rin
+//    مكتبة           (Library)          ← الجديد: مجلد فيه ملفات ومجلدات فرعية
+//                                         <name>.og.rin/   (التقسيم حر، كل أجزائها تُربط كأنها ملف واحد)
+//
+//  الاستيراد واحد للنوعين: @import "math";  — والمحرّك يميّز النوع تلقائياً (المجلد = مكتبة، الملف = توكن أداة).
+//  إن وُجد الاثنان بالاسم نفسه فالمكتبة (المجلد) لها الأولوية.
+//
+//  بنية المكتبة:
 //
 //     math.og.rin/
 //       disconom.json | disconom.xml   ← وصف المكتبة (Disconom): الاسم، الإصدار، إصدار اللغة المطلوب،
@@ -16,8 +26,9 @@
 //  كأنها ملف واحد، ثم يُطبَّق عليها نفس منطق @import/export المعتاد.
 //
 //  هذا الملف مستقلّ تماماً عن المفسّر (لا يُضمِّن rin_interpreter.h): فيه محلّل JSON/XML صغير، قارئ
-//  Disconom، مطابقة إصدارات، اكتشاف الأجزاء وترتيبها، ومولِّد هيكل مكتبة جديدة. لذلك يستعمله
-//  المفسّر (rin_libdir.cpp) وأداة سطر الأوامر (`rin lib ...`) بنفس الشيفرة بالضبط.
+//  Disconom، مطابقة إصدارات، اكتشاف الأجزاء وترتيبها، مولِّد هيكل مكتبة جديدة، وأنواع التصنيف
+//  (PackageKind / PackageRef / TokenInfo / DepGraph) المشتركة بين المفسّر (rin_libdir.cpp) وأداة
+//  سطر الأوامر (`rin lib ...`) بنفس الشيفرة بالضبط.
 // ============================================================================
 #pragma once
 
@@ -43,6 +54,46 @@ inline constexpr const char* kLibDirSuffix = ".og.rin";   // اسم مجلد ا�
 inline constexpr const char* kPartExt = ".zpp";           // جزء مكتبة (كود Rin)
 inline constexpr const char* kRunExt = ".rinz";           // ملف تشغيل/تهيئة (كود Rin يُنفَّذ بعد ربط الأجزاء)
 inline constexpr int kDisconomFormat = 1;                 // أعلى إصدار لصيغة Disconom يفهمه هذا المحرّك
+inline constexpr const char* kToolTokenSuffix = ".og.rin"; // توكن أداة OG: ملف واحد <rinname>.og.rin (التسمية القديمة «مكتبة Rin»)
+
+// نوع الحزمة التي يحلّ إليها @import / rinlib.resolve.
+enum class PackageKind { None, ToolToken, Library };
+inline const char* kindName(PackageKind k) {          // معرّف ثابت للبرامج (JSON / rinlib.kind)
+    return k == PackageKind::ToolToken ? "tool-token" : k == PackageKind::Library ? "library" : "none";
+}
+inline const char* kindLabelAr(PackageKind k) {       // اسم للعرض
+    return k == PackageKind::ToolToken ? "توكن أداة OG" : k == PackageKind::Library ? "مكتبة" : "—";
+}
+
+// مرجع حزمة محلولة (مسار منطقي + مصدرها الفعلي). المصدر بترتيب أولوية @import:
+//   مجلد (مكتبة)  >  ملف افتراضي (صورة rin_vm)  >  مدمج داخل المفسّر  >  ملف على القرص
+struct PackageRef {
+    PackageKind kind = PackageKind::None;
+    std::string name;            // الاسم العاري: math
+    std::string root;            // المسار المنطقي: lib/math.og.rin (مجلد للمكتبة، ملف للتوكن)
+    std::string source;          // "disk" | "virtual" | "embedded"
+    size_t bytes = 0;            // حجم التوكن (0 للمكتبة)
+    bool found() const { return kind != PackageKind::None; }
+};
+
+// عنصر في قائمة توكنات الأداة (rinlib.tokens / rin lib tokens).
+struct TokenInfo { std::string name, root, source; size_t bytes = 0; };
+
+// رسم التبعيات: العُقد بترتيب التحميل الفعلي (التبعيات قبل من يعتمد عليها، والجذر أخيراً).
+struct GraphNode {
+    std::string name, version, root, range;  // range = القيد الذي طلبه المعتمِد (فارغ للجذر)
+    PackageKind kind = PackageKind::None;
+    std::string source;
+    bool found = true, satisfied = true;
+    std::vector<std::string> deps;           // أسماء التبعيات المباشرة
+};
+struct DepGraph {
+    std::vector<GraphNode> nodes;            // ترتيب التحميل
+    std::vector<std::string> cycles;         // "a -> b -> a"
+    std::vector<std::string> problems;       // إصدار غير مطابق / عمق تبعيات مفرط (أخطاء)
+    std::vector<std::string> missing;        // تبعية لم تُوجَد (تحذير: قد تكون حزمة RinPM تُحلّ وقت التشغيل)
+    bool ok() const { return cycles.empty() && problems.empty(); }
+};
 
 // ============================================================================
 //  JSON صغير (DOM)
