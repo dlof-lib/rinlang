@@ -213,3 +213,8 @@ for (let i = 0; i < n; i++) limit 1000 { ... }    // سقف أمان، و nobrea
 ## قوالب الحلقات `@tmpl`
 عرّف حلقة مرة واحدة وأعد استخدامها مع مجموعات مختلفة: `@tmpl evens(xs) each x in xs where x % 2 == 0;` ثم `@evens(nums) { print x; }`.
 التفاصيل الكاملة في [loop-templates.md](loop-templates.md).
+
+---
+
+## looptwist — مكتبة حلقات فوق RINTWIST
+مصادر جاهزة (`chunk/window/zip/range…`)، حلقات بسقف أمان، `retry/poll/budget`، تقدّم، واختصارات `LT.*`، بإعدادات من RINTWIST. التفاصيل: [looptwist.md](looptwist.md).
