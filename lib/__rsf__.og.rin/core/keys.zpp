@@ -1,0 +1,26 @@
+// core/keys.zpp — مفتاح قانوني لأي قيمة: القيمتان متساويتان بنيوياً ⇔ مفتاحاهما متطابقان.
+// النوع جزء من المفتاح (1 ≠ "1")، وترتيب مفاتيح الخريطة لا يهمّ، والنص مسبوق بطوله فلا التباس.
+fun rsf_keyAt(v, depth) {
+    if (depth > RSF_CFG["depth"]) { throw "__rsf__: value nested deeper than " + toString(RSF_CFG["depth"]) + " (self-referential?)"; }
+    let t = type(v);
+    if (v == nil) { return "z"; }
+    if (t == "boolean") { return v ? "T" : "F"; }
+    if (t == "number") { return "n" + toString(v) + ";"; }
+    if (t == "string") { return "s" + toString(len(v)) + ":" + v; }
+    if (t == "array") {
+        let out = "a" + toString(len(v)) + "[";
+        for (let x in v) { out = out + rsf_keyAt(x, depth + 1) + ","; }
+        return out + "]";
+    }
+    if (t == "map") {
+        let ks = sort(keys(v));
+        let out = "m" + toString(len(ks)) + "{";
+        for (let k in ks) { out = out + rsf_keyAt(k, depth + 1) + "=" + rsf_keyAt(v[k], depth + 1) + ","; }
+        return out + "}";
+    }
+    return "o" + t + ":" + toString(v);
+}
+// المفتاح القانوني (نص) لأي قيمة
+export fun rsf_key(v) { return rsf_keyAt(v, 0); }
+// تساوٍ بنيوي
+export fun rsf_equal(a, b) { return rsf_keyAt(a, 0) == rsf_keyAt(b, 0); }
