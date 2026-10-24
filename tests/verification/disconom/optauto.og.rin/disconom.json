@@ -1,0 +1,2 @@
+{ "disconom": 2, "name": "optauto", "version": "1.0.0", "rin": ">=1.0.0", "license": "MIT", "description": "اختيارية تلقائية",
+  "optionalDependencies": { "extra": "^1.0.0", "no_such_optional_dep": "^1.0.0" } }
