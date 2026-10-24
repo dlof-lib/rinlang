@@ -635,20 +635,32 @@ public:
     // مستقل بلا ملفات مرافقة. فارغة افتراضياً فلا أثر على أي استدعاء سابق.
     void setVirtualFiles(std::unordered_map<std::string, std::string> files) { virtualFiles_ = std::move(files); }
 
-    // ---- مكتبات Rin المقسَّمة (rin_libdir.h / rin_libdir.cpp) ----
-    // مكتبة = مجلد  <name>.og.rin/  فيه Disconom (disconom.json|xml) + أجزاء .zpp + ملفات تشغيل .rinz
-    // + native/*.cpp اختياري. يستوردها @import "name" كأي مكتبة عادية (انظر docs/split-libraries.md).
-    // true = لا تُنفَّذ ملفات .rinz عند استيراد مكتبة مقسَّمة (يستعمله `rin run x.rinz`: الملف نفسه هو المشغِّل).
+    // ---- الحزم: توكن الأداة OG + المكتبات (rin_libdir.h / rin_libdir.cpp) ----
+    // توكن الأداة OG = ملف واحد <rinname>.og.rin (ما كان يُسمّى «مكتبة Rin» القديمة).
+    // مكتبة         = مجلد  <name>.og.rin/  فيه Disconom (disconom.json|xml) + أجزاء .zpp + ملفات تشغيل .rinz
+    //                 + native/*.cpp اختياري. كلاهما يستورده @import "name" (انظر docs/split-libraries.md).
+    // true = لا تُنفَّذ ملفات .rinz عند استيراد مكتبة (يستعمله `rin run x.rinz`: الملف نفسه هو المشغِّل).
     void setSkipLibraryRun(bool skip) { skipLibraryRun_ = skip; }
     struct LibraryCheckReport {
         bool ok = false;
         std::string root, name, version;
+        std::string kind;          // "library" | "tool-token"
+        std::string fingerprint;   // SHA-256 لمحتوى كل ملفات المكتبة (فارغ عند وجود أخطاء تخطيط)
         std::vector<std::string> errors, warnings, parts, runFiles;
+        std::vector<std::string> loadOrder;   // أسماء التبعيات المتعدّية بترتيب تحميلها (الجذر أخيراً)
     };
     // فحص ساكن كامل لمجلد مكتبة (Disconom + تحليل كل .zpp/.rinz بالمحلّل الحقيقي) دون تنفيذ أي شيء.
     LibraryCheckReport checkLibraryDir(const std::string& root);
-    // يحوّل اسماً (math) أو مساراً إلى مجلد مكتبة مقسَّمة إن وُجد (نفس منطق @import).
+    // يحوّل اسماً (math) أو مساراً إلى مجلد مكتبة إن وُجد (نفس منطق @import).
     bool locateLibraryDir(const std::string& nameOrPath, std::string& rootOut) const;
+    // يحلّ اسماً أو مساراً إلى حزمة من أيّ نوع: مكتبة (مجلد) أو توكن أداة OG (ملف: افتراضي/مدمج/قرص).
+    bool resolvePackage(const std::string& nameOrPath, libdir::PackageRef& out) const;
+    // يسرد توكنات الأداة (ملفات <name>.og.rin) في مجلد (الافتراضي lib) مع المدمجة داخل المفسّر.
+    std::vector<libdir::TokenInfo> listToolTokens(const std::string& dir = "lib") const;
+    // رسم التبعيات المتعدّية لمكتبة (كشف الدورات، فحص الإصدارات، ترتيب التحميل).
+    libdir::DepGraph dependencyGraph(const std::string& nameOrRoot) const;
+    // بصمة SHA-256 ثابتة لمحتوى المكتبة (مسارات + بايتات، مرتبة) — للتحقق من السلامة والأقفال.
+    std::string libraryFingerprint(const std::string& nameOrRoot) const;
 
     // ---- Live streaming (Rin Run Queue + Code Output 2.0 — انظر jni_bridge.cpp) ----
     // [sink] اختياري، غير مفعّل افتراضياً، لذا [run] يتصرف حرفياً كما كان قبله متى لم يُضبط أي sink
@@ -841,6 +853,7 @@ private:
         bool nativeLoaded = false;
         int nativeHandle = 0;
         std::string nativeStatus = "none";   // none | loaded | disabled | failed: ...
+        double loadMillis = 0;               // زمن التحميل الفعلي (قراءة + تحليل + native) بالمللي ثانية
     };
     struct LibraryUnit {
         std::string root, name, version;
@@ -848,16 +861,21 @@ private:
         std::vector<StmtPtr> statements;                              // [تبعيات][أغلفة native احتياطية][أجزاء .zpp][أغلفة native][ملفات .rinz]
         std::vector<std::pair<size_t, std::string>> segments;         // (نهاية المقطع، اسم الملف) لتحديد مصدر الأخطاء
         std::string nativeNote;
-        std::string describe() const;                                 // " (مكتبة مقسَّمة: ...)" لسطر الاستيراد
+        std::string describe() const;                                 // " (مكتبة: ...)" لسطر الاستيراد
     };
     std::map<std::string, LoadedLibrary> loadedLibs_;
     std::vector<std::string> loadedLibOrder_;
     bool skipLibraryRun_ = false;
     libdir::FS makeLibFS() const;
     bool findLibraryDir(const std::string& rawPath, const std::string& libPath, std::string& rootOut) const;
+    // تبعية مكتبة: تُبحث بجوار المكتبة نفسها (sibling=true) ثم في lib/ . true = وُجدت كمكتبة (مجلد).
+    bool findDependencyDir(const std::string& libRoot, const std::string& depName, std::string& depRootOut, bool* sibling = nullptr) const;
+    // محتوى توكن أداة OG (افتراضي ← مدمج ← قرص) بنفس أولوية @import.
+    bool readToolToken(const libdir::PackageRef& ref, std::string& out) const;
     void loadLibraryUnit(const std::string& root, int line, LibraryUnit& unit);
     void execLibraryBody(const std::vector<StmtPtr>& stmts, const std::vector<std::pair<size_t, std::string>>* segs, const EnvPtr& env);
     void registerNativesLibDir();   // rin_libdir.cpp — rinlib.*
+    void registerNativesRintwist(); // rin_rintwist.cpp — rintwist.get / fmt / stack
     EnvPtr globals;
     std::ostringstream output;
     std::string sourceFile = "<input>"; // نظام Diagnostics — انظر setSourceFile() أعلاه
@@ -875,6 +893,18 @@ private:
     std::streamoff streamMark_ = 0; // كل ما قبل هذا الموضع في [output] سبق بثّه عبر streamSink_ (يمنع التكرار عند تفريغ ما قبل الإدخال)
 
     std::shared_ptr<loaderui::ILoadSink> importUISink_; // انظر setImportUISink()/setImportUIMode() أعلاه — nullptr افتراضياً (no-op)
+    // ---- RINTWIST: متغيّر مضمَّن للقراءة فقط يصف سياق التنفيذ (ملف/خادم/تاريخ/تطبيق/مكتبة) — انظر docs/rintwist.md ----
+    // إطار لكل @import جارٍ تنفيذه (الأحدث في النهاية)؛ فارغ = نحن في الملف الرئيسي.
+    struct ExecFrame { std::string path, kind /*library|tool-token*/, libName, libVersion, libRoot, part; };
+    std::vector<ExecFrame> execFrames_;
+    struct ExecFrameScope {                      // RAII: يدفع الإطار عند بدء تنفيذ الاستيراد ويسحبه حتى مع الاستثناءات
+        ExecFrameScope(Interpreter& in, const std::string& path, const LibraryUnit* unit);
+        ~ExecFrameScope();
+        Interpreter& in_;
+    };
+    std::chrono::steady_clock::time_point startedAt_ = std::chrono::steady_clock::now();   // RINTWIST.run.uptimeMs
+    long long startedUnixMs_ = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    Value rintwistValue() const;                 // يبني خريطة RINTWIST الحيّة لحظة القراءة
     std::size_t importDepth_ = 0; // عمق @import الحالي (0 = أعلى مستوى)، يُمرَّر إلى LoadSession في execute()
 
     // ---- Diagnostics helpers (src/diagnostics) ----
