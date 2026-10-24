@@ -1,4 +1,15 @@
-# مكتبات Rin المقسَّمة — `.og.rin/` و`.zpp` و`.rinz` و`disconom`
+# الحزم في Rin — «توكن الأداة OG» و«المكتبات» (`.og.rin` · `.zpp` · `.rinz` · `disconom`)
+
+## التسمية
+
+| الاسم | الشكل | المعنى |
+|---|---|---|
+| **توكن الأداة OG** (Tool Token OG) | **ملف واحد** `rinname.og.rin` مثل `lib/math.og.rin` | ما كان يُسمّى سابقاً «مكتبة Rin» القديمة. لا إصدار ولا تبعيات مُعلَنة. |
+| **مكتبة** (Library) | **مجلد** `name.og.rin/` فيه ملفات ومجلدات | الجديد: Disconom + أجزاء `.zpp` + `.rinz` + `native/` + `data/`. |
+
+الاستيراد واحد للنوعين: `@import "name";` — والمحرّك يميّز النوع تلقائياً (المجلد = مكتبة، الملف = توكن أداة).
+إن وُجد الاثنان بالاسم نفسه فالمكتبة (المجلد) لها الأولوية. أولوية المصدر: **مجلد ← ملف افتراضي (rin_vm) ← مدمج في المفسّر ← قرص**.
+للاستعلام: `rinlib.kind("math")` ⇒ `"tool-token"` أو `"library"` أو `nil`.
 
 المكتبة هنا **مجلد** وليست ملفاً مضغوطاً: ملفات نصية بلغة Rin نفسها تُربط معاً كأنها ملف واحد.
 
@@ -64,13 +75,21 @@ import { circle_area } from "shapes"; // انتقائي (يتطلب export)
 ## دوال `rinlib.*`
 | الدالة | الوصف |
 |---|---|
-| `rinlib.info(name)` / `list()` / `manifest(name)` / `exists(name)` | معلومات المكتبة (محمَّلة أو لا) |
+| `rinlib.info(name)` / `list()` / `manifest(name)` / `exists(name)` | معلومات المكتبة (محمَّلة أو لا) — `info` يضيف `kind` و`loadMs`؛ ولتوكن الأداة يُرجع `{kind, name, root, source, bytes}` |
+| `rinlib.kind(name)` / `resolve(name)` | نوع الحزمة (`library`/`tool-token`) وتفاصيل حلّها: `{kind, label, name, root, source, bytes}` حيث `source` = `disk`/`virtual`/`embedded` |
+| `rinlib.tokens([dir])` / `libraries([dir])` / `packages([dir])` | سرد توكنات الأداة / المكتبات / الاثنين معاً (المكتبة تحجب التوكن بنفس الاسم) |
+| `rinlib.graph(name)` | التبعيات المتعدّية بترتيب التحميل: `{ok, order, nodes, cycles, problems, missing}` (كشف الدورات وعدم توافق الإصدارات) |
+| `rinlib.fingerprint(name)` / `rinlib.verify(name, hash)` | بصمة `sha256:…` لمحتوى المكتبة (مسارات + بايتات) أو التوكن، والتحقق منها |
 | `rinlib.discover(dir)` / `files(name)` | اكتشاف مكتبات في مجلد / ملفات مكتبة |
 | `rinlib.read(name, rel)` / `has` / `path` | ملفات المكتبة (مسارات نسبية فقط، بلا `..`) |
 | `rinlib.json(name, rel)` / `rinlib.xml(name, rel)` | تحليل ملف بيانات؛ XML ⇒ `{tag, attrs, text, children}` |
 | `rinlib.native(name, fn, args)` / `hasNative` / `nativeInfo` | استدعاء C++ مباشرة |
 | `rinlib.check(path)` / `rinlib.scaffold(dir, name, {xml, native, …})` | فحص / إنشاء هيكل |
 
+> أمان: `rinlib.read/json/xml/path/has` تقبل مساراً نسبياً فقط، وترفض `..` والمسارات المطلقة **والروابط الرمزية التي تخرج من مجلد المكتبة**.
+
 ## الأداة `rin lib`
-`rin lib new <name> [--xml] [--native] [--dir D]` · `check` · `info` · `list` · `run`.
+`rin lib new <name> [--xml] [--native] [--dir D]` · `check` · `info` · `kind` · `list` · `tokens` · `packages` · `graph` · `fingerprint` · `run`.
+`check` يعمل على المكتبات (Disconom + صياغة كل جزء + التبعيات المتعدّية + بصمة) وعلى توكنات الأداة (صياغة).
+أخطاء `check`: دورة تبعيات، إصدار تبعية غير مطابق، Disconom غير صالح. تحذيرات: تبعية غير موجودة (قد تكون حزمة RinPM).
 ملف `.rinz` داخل مكتبة يُشغَّل وحده: `rin run mylib.og.rin/run.rinz` (تُربط الأجزاء ثم ينفَّذ هو مرة واحدة).
