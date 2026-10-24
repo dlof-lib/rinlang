@@ -1,0 +1,176 @@
+// core/control.zpp — حلقات بدوال: كلها بسقف أمان (limit) ودعم الإيقاف المبكر بـ `return LT_STOP;`.
+//   الدوال ذات اللاحقة i تمرّر الفهرس كوسيط ثانٍ: fn(x, i). (Rin يشترط تطابق عدد الوسائط.)
+
+// ينفّذ fn(i) بالضبط n مرة. يُرجع عدد الدورات المنفَّذة فعلاً (أقل من n إن أوقفتها fn بـ LT_STOP).
+export fun lt_times(n, fn) {
+    lt_checkInt(n, "lt_times");
+    lt_checkFn(fn, "lt_times");
+    let i = 0;
+    while (i < n) {
+        lt_guard(i + 1, "lt_times");
+        if (fn(i) == LT_STOP) { i = i + 1; break; }
+        i = i + 1;
+    }
+    return i;
+}
+
+// لكل عنصر: fn(x). يُرجع عدد العناصر التي عُولجت.
+export fun lt_each(xs, fn) {
+    lt_checkFn(fn, "lt_each");
+    let a = lt_arr(xs, "lt_each");
+    let n = 0;
+    for (let x in a) {
+        n = n + 1;
+        lt_guard(n, "lt_each");
+        if (fn(x) == LT_STOP) { break; }
+    }
+    return n;
+}
+// لكل عنصر مع الفهرس: fn(x, i)
+export fun lt_eachi(xs, fn) {
+    lt_checkFn(fn, "lt_eachi");
+    let a = lt_arr(xs, "lt_eachi");
+    let n = 0;
+    for (let x in a) {
+        lt_guard(n + 1, "lt_eachi");
+        let r = fn(x, n);
+        n = n + 1;
+        if (r == LT_STOP) { break; }
+    }
+    return n;
+}
+// لكل (مفتاح، قيمة) في قاموس: fn(k, v) — بترتيب keys()
+export fun lt_eachKV(m, fn) {
+    lt_checkFn(fn, "lt_eachKV");
+    if (type(m) != "map") { throw "looptwist: lt_eachKV expects a map, found " + type(m); }
+    let n = 0;
+    for (let k in keys(m)) {
+        n = n + 1;
+        lt_guard(n, "lt_eachKV");
+        if (fn(k, m[k]) == LT_STOP) { break; }
+    }
+    return n;
+}
+
+export fun lt_map(xs, fn) {
+    lt_checkFn(fn, "lt_map");
+    let out = [];
+    for (let x in lt_arr(xs, "lt_map")) { push(out, fn(x)); lt_guard(len(out), "lt_map"); }
+    return out;
+}
+export fun lt_mapi(xs, fn) {
+    lt_checkFn(fn, "lt_mapi");
+    let out = [];
+    let i = 0;
+    for (let x in lt_arr(xs, "lt_mapi")) { push(out, fn(x, i)); i = i + 1; lt_guard(i, "lt_mapi"); }
+    return out;
+}
+export fun lt_filter(xs, pred) {
+    lt_checkFn(pred, "lt_filter");
+    let out = [];
+    for (let x in lt_arr(xs, "lt_filter")) { if (pred(x)) { push(out, x); } }
+    return out;
+}
+export fun lt_filteri(xs, pred) {
+    lt_checkFn(pred, "lt_filteri");
+    let out = [];
+    let i = 0;
+    for (let x in lt_arr(xs, "lt_filteri")) { if (pred(x, i)) { push(out, x); } i = i + 1; }
+    return out;
+}
+// reduce(xs, fn(acc, x), init) — بلا init تبدأ من أول عنصر (مصفوفة فارغة بلا init ⇒ nil)
+fun ltx_reduce(xs, fn, init) {
+    lt_checkFn(fn, "lt_reduce");
+    let a = lt_arr(xs, "lt_reduce");
+    let acc = init;
+    let start = 0;
+    if (init == nil) {
+        if (len(a) == 0) { return nil; }
+        acc = a[0];
+        start = 1;
+    }
+    for (let i = start; i < len(a); i++) { acc = fn(acc, a[i]); }
+    return acc;
+}
+fun ltx_sum(xs, fn) {
+    let total = 0;
+    for (let x in lt_arr(xs, "lt_sum")) { total = total + (fn == nil ? x : fn(x)); }
+    return total;
+}
+fun ltx_count(xs, pred) {
+    if (pred == nil) { return len(lt_arr(xs, "lt_count")); }
+    let n = 0;
+    for (let x in lt_arr(xs, "lt_count")) { if (pred(x)) { n = n + 1; } }
+    return n;
+}
+// أول عنصر يحقق الشرط (أو nil) — يتوقف عنده
+export fun lt_find(xs, pred) {
+    lt_checkFn(pred, "lt_find");
+    for (let x in lt_arr(xs, "lt_find")) { if (pred(x)) { return x; } }
+    return nil;
+}
+export fun lt_findIndex(xs, pred) {
+    lt_checkFn(pred, "lt_findIndex");
+    let i = 0;
+    for (let x in lt_arr(xs, "lt_findIndex")) { if (pred(x)) { return i; } i = i + 1; }
+    return -1;
+}
+export fun lt_any(xs, pred) {
+    lt_checkFn(pred, "lt_any");
+    for (let x in lt_arr(xs, "lt_any")) { if (pred(x)) { return true; } }
+    return false;
+}
+export fun lt_all(xs, pred) {
+    lt_checkFn(pred, "lt_all");
+    for (let x in lt_arr(xs, "lt_all")) { if (!pred(x)) { return false; } }
+    return true;
+}
+
+// حلقة while بدوال: cond() و body(i). يُرجع عدد الدورات.
+export fun lt_whileDo(cond, body) {
+    lt_checkFn(cond, "lt_whileDo");
+    lt_checkFn(body, "lt_whileDo");
+    let i = 0;
+    while (cond()) {
+        lt_guard(i + 1, "lt_whileDo");
+        ltx_trace("while", "iteration " + toString(i));
+        let r = body(i);
+        i = i + 1;
+        if (r == LT_STOP) { break; }
+    }
+    return i;
+}
+// حتى يتحقق الشرط: cond() تُفحص قبل كل دورة
+export fun lt_untilDo(cond, body) {
+    lt_checkFn(cond, "lt_untilDo");
+    lt_checkFn(body, "lt_untilDo");
+    let i = 0;
+    while (!cond()) {
+        lt_guard(i + 1, "lt_untilDo");
+        ltx_trace("until", "iteration " + toString(i));
+        let r = body(i);
+        i = i + 1;
+        if (r == LT_STOP) { break; }
+    }
+    return i;
+}
+// حلقة لا نهائية آمنة: body(i) حتى `return LT_STOP;` (أو بلوغ السقف ⇒ خطأ واضح)
+export fun lt_loopDo(body) {
+    lt_checkFn(body, "lt_loopDo");
+    let i = 0;
+    while (true) {
+        lt_guard(i + 1, "lt_loopDo");
+        let r = body(i);
+        i = i + 1;
+        if (r == LT_STOP) { break; }
+    }
+    return i;
+}
+
+// يستدعي fn(i) في كل n-ياً دورة فقط (i % n == 0): للسجلّات والتقدّم دون إغراق المخرجات.
+export fun lt_every(n, i, fn) {
+    lt_checkInt(n, "lt_every");
+    if (n < 1) { throw "looptwist: lt_every n must be >= 1"; }
+    if (i % n == 0) { return fn(i); }
+    return nil;
+}
