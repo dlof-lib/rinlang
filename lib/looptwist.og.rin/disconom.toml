@@ -1,0 +1,17 @@
+# looptwist — حلقات Rin القوية: مصادر تكرار، حلقات آمنة، إعادة محاولة، قياس زمن وتقدّم،
+# وكلها تأخذ إعداداتها الافتراضية من RINTWIST (المنصة، وضع التصحيح، اسم الملف/المكتبة).
+disconom = 2
+name = "looptwist"
+version = "1.0.0"
+description = "حلقات Rin قوية بإعدادات واختصارات مبنية على RINTWIST: range/chunk/window/zip، حلقات بسقف أمان، retry/poll/budget، تقدّم وقياس زمن"
+authors = ["Rin"]
+license = "MIT"
+keywords = ["loops", "iteration", "rintwist", "حلقات"]
+categories = ["language", "utilities"]
+rin = ">=1.0.0"
+main = "main.zpp"
+parts = ["main.zpp", "core/context.zpp", "core/sources.zpp", "core/control.zpp", "core/timing.zpp", "core/api.zpp", "core/facade.zpp"]
+
+[scripts]
+test = "cd ../.. && rin tests/verification/looptwist_basic.rin"
+check = "rin lib check ."
