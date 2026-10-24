@@ -1,0 +1,54 @@
+// core/api.zpp — الواجهة العامة ذات الأسماء القصيرة. Rin يشترط تطابق عدد الوسائط ولا يدعم القيم الافتراضية،
+// لذلك كل صيغة اختيارية لها اسم صريح: lt_range(n) / lt_range(a, b) → lt_upto(n) / lt_range(a, b) / lt_rangeBy(a, b, step) ...
+// (الدوال ltx_* الداخلية تقبل nil للوسائط الاختيارية وهي ما تستعمله هذه الواجهات).
+
+// ---- مصادر ----
+// 0..n-1
+export fun lt_upto(n) { return ltx_range(n, nil, nil); }
+// a..b-1
+export fun lt_range(a, b) { return ltx_range(a, b, nil); }
+export fun lt_rangeBy(a, b, step) { return ltx_range(a, b, step); }
+// a..b شاملة (الاتجاه تلقائي: irange(5, 1) = [5,4,3,2,1])
+export fun lt_irange(a, b) { return ltx_irange(a, b, nil); }
+export fun lt_irangeBy(a, b, step) { return ltx_irange(a, b, step); }
+export fun lt_enumerate(xs) { return ltx_enumerate(xs, nil); }
+export fun lt_enumerateFrom(xs, start) { return ltx_enumerate(xs, start); }
+export fun lt_window(xs, n) { return ltx_window(xs, n, nil); }
+export fun lt_windowBy(xs, n, step) { return ltx_window(xs, n, step); }
+export fun lt_unique(xs) { return ltx_unique(xs, nil); }
+export fun lt_uniqueBy(xs, keyFn) { return ltx_unique(xs, keyFn); }
+export fun lt_sorted(xs) { return ltx_sorted(xs, nil, nil); }
+export fun lt_sortedDesc(xs) { return ltx_sorted(xs, nil, true); }
+export fun lt_sortedBy(xs, keyFn) { return ltx_sorted(xs, keyFn, nil); }
+export fun lt_sortedByDesc(xs, keyFn) { return ltx_sorted(xs, keyFn, true); }
+// عدّ التكرارات: tally(["a","b","a"]) = {"a": 2, "b": 1} ؛ countBy بمفتاح محسوب
+export fun lt_tally(xs) { return ltx_countBy(xs, nil); }
+export fun lt_countBy(xs, keyFn) { return ltx_countBy(xs, keyFn); }
+
+// ---- حلقات ----
+// reduce بلا قيمة ابتدائية (تبدأ من أول عنصر؛ فارغة ⇒ nil) / fold بقيمة ابتدائية
+export fun lt_reduce(xs, fn) { return ltx_reduce(xs, fn, nil); }
+export fun lt_fold(xs, init, fn) { return ltx_reduce(xs, fn, init); }
+export fun lt_sum(xs) { return ltx_sum(xs, nil); }
+export fun lt_sumBy(xs, fn) { return ltx_sum(xs, fn); }
+export fun lt_count(xs) { return ltx_count(xs, nil); }
+export fun lt_countIf(xs, pred) { return ltx_count(xs, pred); }
+
+// ---- زمن ----
+// retry(attempts, fn): بلا انتظار بين المحاولات. retryWith(attempts, fn, {delay, factor, maxDelay, onRetry}) للتحكّم الكامل.
+export fun lt_retry(attempts, fn) { return ltx_retry(attempts, fn, nil); }
+export fun lt_retryWith(attempts, fn, opts) { return ltx_retry(attempts, fn, opts); }
+// poll(cond): كل 50ms حتى 5s. pollEvery(cond, intervalMs, timeoutMs)
+export fun lt_poll(cond) { return ltx_poll(cond, nil, nil); }
+export fun lt_pollEvery(cond, intervalMs, timeoutMs) { return ltx_poll(cond, intervalMs, timeoutMs); }
+export fun lt_progress(total) { return ltx_progress(total, nil); }
+export fun lt_progressWidth(total, width) { return ltx_progress(total, width); }
+export fun lt_tick(p) { return ltx_tick(p, nil); }
+export fun lt_tickBy(p, n) { return ltx_tick(p, n); }
+
+// ---- سياق RINTWIST ----
+export fun lt_trace(label) { return ltx_trace(label, nil); }
+export fun lt_traceWith(label, details) { return ltx_trace(label, details); }
+// app-2026-10-24.log
+export fun lt_logName() { return ltx_logName(nil); }
+export fun lt_logNameExt(ext) { return ltx_logName(ext); }
