@@ -1,0 +1,20 @@
+📥 @import: تم استيراد "tests/verification/libsplit/twist.og.rin" (مكتبة: twist 0.3.0 — 2 أجزاء)
+false
+dflt
+main
+1
+2
+main > library:twist 0.3.0 extra.zpp
+twist@0.3.0:extra
+{literal} rin-1.0.0
+jo@rin
+20
+true
+true
+true
+array
+string
+true
+bool
+[E0035] rintwist.fmt: unknown field `nope.x` (use a path such as {file.name}, {lib.name}, {date.iso}, {app.version}, {server.host})
+[E0035] rintwist.fmt: unclosed '{' in template (template: {open)
