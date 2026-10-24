@@ -76,6 +76,14 @@
 - مكتبة `lib/looptwist.og.rin` (Disconom 2 بصيغة TOML، 7 أجزاء): ~70 دالة — مصادر (`range/chunk/window/zip/product/group/partition/sorted…`)، حلقات بسقف أمان و`LT_STOP`، `retry` بتراجع أُسّي، `poll`، `budget`، `timed`، شريط تقدّم مع ETA، واختصارات `LT.*`.
 - الإعدادات الافتراضية من RINTWIST: `limit` حسب `app.mode`، `trace` حسب `app.debug`، الوسم من `file.stem`/`lib.name` وقت الاستدعاء، الساعة من `run.uptimeMs`، `lt_where/lt_logName` عبر `rintwist.fmt`. التفاصيل: `docs/looptwist.md`. الاختبار: `tests/verification/looptwist_basic.rin`.
 
+## Namespaces — container / Group / Volume كفضاءات أسماء
+
+- كل `@container` و`@Containers.Group` و`@Volume` مُسمّاة صارت عقدة في شجرة فضاءات أسماء قابلة للتعشيش؛ `container` هو الأساس وحده يكفي، و`Group`/`Volume` اختياريان.
+- وصول مؤهَّل قراءةً وكتابةً واستدعاءً: `Store.Inventory.items.count`، `app.counter = 5` (يُطلق `on update`)، `app.inc()`؛ حل نسبي للأشقاء؛ نفس الاسم في فضاءين لا يتعارض؛ المتغيّر العادي يغلب الفضاء بنفس الاسم.
+- دوال استعلام جديدة: `ns.has/kind/parent/members/fields/snapshot/get/set/call/paths`.
+- الفروقات: `Volume` للقراءة فقط، `Group` قراءة+كتابة، و`container` الأقوى (قراءة+كتابة+استدعاء دوال+`state`/`on update`+`ns.transaction`). `ns.capabilities(path)` تعرضها.
+- يعمل في المفسّر الشجري وفي RinVM (تعليمات `NsGet`/`NsSetTest`/`NsSet`). التوثيق: `docs/namespaces.md`. الاختبارات: `tests/verification/namespaces*.rin`.
+
 ## Disconom 2 + مترجم Disconom
 
 - **الصيغة 2**: `optionalDependencies` / `peerDependencies` / `devDependencies` / `features` (+`RIN_FEATURES`) / `scripts` / `files` / `workspaces` / `private` / `bugs` / `funding` / `readme` / `categories` / `platforms` / `contributors`، مع تحقق موسَّع (دورات الميزات، مسارات آمنة، SPDX، روابط…). صيغة 1 تعمل بلا تغيير.
