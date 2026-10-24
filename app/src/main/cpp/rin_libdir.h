@@ -14,7 +14,7 @@
 //  بنية المكتبة:
 //
 //     math.og.rin/
-//       disconom.json | disconom.xml   ← وصف المكتبة (Disconom): الاسم، الإصدار، إصدار اللغة المطلوب،
+//       disconom.json | .xml | .toml   ← وصف المكتبة (Disconom): الاسم، الإصدار، إصدار اللغة المطلوب،
 //                                         التفاصيل، التبعيات، الأجزاء، الكود الأصلي…  (الأهم)
 //       main.zpp                       ← الجزء الأساسي (يُحمَّل أولاً)
 //       job.zpp / print.zpp / oop.zpp  ← أجزاء أخرى بأي اسم وفي أي مجلد فرعي (تقسيم حر)
@@ -53,7 +53,9 @@ namespace libdir {
 inline constexpr const char* kLibDirSuffix = ".og.rin";   // اسم مجلد المكتبة: <name>.og.rin
 inline constexpr const char* kPartExt = ".zpp";           // جزء مكتبة (كود Rin)
 inline constexpr const char* kRunExt = ".rinz";           // ملف تشغيل/تهيئة (كود Rin يُنفَّذ بعد ربط الأجزاء)
-inline constexpr int kDisconomFormat = 1;                 // أعلى إصدار لصيغة Disconom يفهمه هذا المحرّك
+inline constexpr int kDisconomFormat = 2;                 // أعلى إصدار لصيغة Disconom يفهمه هذا المحرّك (2 = scripts/features/devDependencies/…)
+inline constexpr const char* kManifestFiles[] = {"disconom.json", "disconom.xml", "disconom.toml"};   // بترتيب الأولوية
+inline constexpr const char* kLockFile = "disconom.lock";  // ملف القفل (JSON) الذي يولّده `rin lib lock`
 inline constexpr const char* kToolTokenSuffix = ".og.rin"; // توكن أداة OG: ملف واحد <rinname>.og.rin (التسمية القديمة «مكتبة Rin»)
 
 // نوع الحزمة التي يحلّ إليها @import / rinlib.resolve.
@@ -297,6 +299,228 @@ inline bool parseJson(const std::string& text, J& out, std::string& err) {
     return true;
 }
 inline std::string dumpJson(const J& j, int indent = 2) { std::string o; detail::dumpJ(j, o, indent, 0); return o; }
+
+// ============================================================================
+//  TOML (مجموعة جزئية كافية للمانيفست): جداول [a.b] ومصفوفات الجداول [[a]]، مفاتيح منقّطة،
+//  نصوص (أساسية/حرفية/متعدّدة الأسطر)، أعداد، منطقيات، مصفوفات (متعدّدة الأسطر)، جداول مضمّنة { }،
+//  وتواريخ (تُقرأ كنص). يُحوَّل إلى نفس DOM الخاص بـ JSON فتُستعمل manifestFromJson نفسها.
+// ============================================================================
+namespace detail {
+struct TomlParser {
+    const std::string& s;
+    size_t p = 0;
+    std::string err;
+    explicit TomlParser(const std::string& text) : s(text) {
+        if (s.size() >= 3 && (unsigned char)s[0] == 0xEF && (unsigned char)s[1] == 0xBB && (unsigned char)s[2] == 0xBF) p = 3;
+    }
+    bool fail(const std::string& m) {
+        if (err.empty()) {
+            int line = 1, col = 1;
+            for (size_t i = 0; i < p && i < s.size(); ++i) { if (s[i] == '\n') { ++line; col = 1; } else ++col; }
+            err = m + " (line " + std::to_string(line) + ", column " + std::to_string(col) + ")";
+        }
+        return false;
+    }
+    bool eof() const { return p >= s.size(); }
+    void sp() { while (p < s.size() && (s[p] == ' ' || s[p] == '\t')) ++p; }
+    void comment() { if (p < s.size() && s[p] == '#') while (p < s.size() && s[p] != '\n') ++p; }
+    void skipAll() {   // مسافات + أسطر + تعليقات
+        while (p < s.size()) {
+            if (s[p] == ' ' || s[p] == '\t' || s[p] == '\r' || s[p] == '\n') ++p;
+            else if (s[p] == '#') comment();
+            else break;
+        }
+    }
+    static bool bareChar(char c) { return std::isalnum((unsigned char)c) || c == '_' || c == '-'; }
+    bool basicString(std::string& out, bool multi) {   // p بعد علامة الفتح
+        while (p < s.size()) {
+            if (multi) { if (s.compare(p, 3, "\"\"\"") == 0) { p += 3; while (p < s.size() && s[p] == '"') { out += '"'; ++p; } return true; } }
+            else if (s[p] == '"') { ++p; return true; }
+            char c = s[p++];
+            if (!multi && (c == '\n' || c == '\r')) return fail("unterminated string");
+            if (c != '\\') { out += c; continue; }
+            if (p >= s.size()) return fail("bad escape");
+            char e = s[p++];
+            switch (e) {
+                case 'n': out += '\n'; break; case 't': out += '\t'; break; case 'r': out += '\r'; break;
+                case 'b': out += '\b'; break; case 'f': out += '\f'; break; case '\\': out += '\\'; break; case '"': out += '"'; break;
+                case 'u': case 'U': {
+                    int n = e == 'u' ? 4 : 8; if (p + n > s.size()) return fail("bad unicode escape");
+                    unsigned cp = 0;
+                    for (int i = 0; i < n; ++i) {
+                        char h = s[p + i]; cp <<= 4;
+                        if (h >= '0' && h <= '9') cp |= h - '0'; else if (h >= 'a' && h <= 'f') cp |= h - 'a' + 10; else if (h >= 'A' && h <= 'F') cp |= h - 'A' + 10; else return fail("bad unicode escape");
+                    }
+                    p += n; appendUtf8(out, cp); break;
+                }
+                case '\n': case '\r': if (multi) { while (p < s.size() && std::isspace((unsigned char)s[p])) ++p; break; } return fail("bad escape");
+                default: return fail("bad escape");
+            }
+        }
+        return fail("unterminated string");
+    }
+    bool str(std::string& out) {   // عند " أو '
+        if (s.compare(p, 3, "\"\"\"") == 0) { p += 3; if (p < s.size() && s[p] == '\r') ++p; if (p < s.size() && s[p] == '\n') ++p; return basicString(out, true); }
+        if (s.compare(p, 3, "'''") == 0) {
+            p += 3; if (p < s.size() && s[p] == '\r') ++p; if (p < s.size() && s[p] == '\n') ++p;
+            size_t e = s.find("'''", p); if (e == std::string::npos) return fail("unterminated string");
+            out = s.substr(p, e - p); p = e + 3; return true;
+        }
+        if (s[p] == '"') { ++p; return basicString(out, false); }
+        ++p; size_t e = p;
+        while (e < s.size() && s[e] != '\'' && s[e] != '\n') ++e;
+        if (e >= s.size() || s[e] != '\'') return fail("unterminated string");
+        out = s.substr(p, e - p); p = e + 1; return true;
+    }
+    bool keyPart(std::string& out) {
+        sp();
+        if (p < s.size() && (s[p] == '"' || s[p] == '\'')) return str(out);
+        size_t b = p; while (p < s.size() && bareChar(s[p])) ++p;
+        if (p == b) return fail("expected a key");
+        out = s.substr(b, p - b); return true;
+    }
+    bool keyPath(std::vector<std::string>& path) {
+        while (true) {
+            std::string k; if (!keyPart(k)) return false; path.push_back(k); sp();
+            if (p < s.size() && s[p] == '.') { ++p; continue; }
+            return true;
+        }
+    }
+    bool value(J& out, int depth) {
+        if (depth > 64) return fail("nesting too deep");
+        sp();
+        if (p >= s.size()) return fail("expected a value");
+        char c = s[p];
+        if (c == '"' || c == '\'') { std::string v; if (!str(v)) return false; out = J::string(std::move(v)); return true; }
+        if (c == '[') {
+            ++p; out = J::array();
+            while (true) {
+                skipAll();
+                if (p < s.size() && s[p] == ']') { ++p; return true; }
+                J v; if (!value(v, depth + 1)) return false;
+                out.a.push_back(std::move(v)); skipAll();
+                if (p < s.size() && s[p] == ',') { ++p; continue; }
+                if (p < s.size() && s[p] == ']') { ++p; return true; }
+                return fail("expected ',' or ']'");
+            }
+        }
+        if (c == '{') {
+            ++p; out = J::object();
+            while (true) {
+                skipAll();
+                if (p < s.size() && s[p] == '}') { ++p; return true; }
+                std::vector<std::string> path; if (!keyPath(path)) return false; sp();
+                if (p >= s.size() || s[p] != '=') return fail("expected '='");
+                ++p; J v; if (!value(v, depth + 1)) return false;
+                if (!assign(out, path, std::move(v))) return false;
+                skipAll();
+                if (p < s.size() && s[p] == ',') { ++p; continue; }
+                if (p < s.size() && s[p] == '}') { ++p; return true; }
+                return fail("expected ',' or '}'");
+            }
+        }
+        size_t b = p;
+        while (p < s.size() && s[p] != ',' && s[p] != ']' && s[p] != '}' && s[p] != '\n' && s[p] != '\r' && s[p] != '#' && s[p] != ' ' && s[p] != '\t') ++p;
+        std::string tok = s.substr(b, p - b);
+        if (tok == "true") { out = J::boolean(true); return true; }
+        if (tok == "false") { out = J::boolean(false); return true; }
+        if (tok.empty()) return fail("expected a value");
+        std::string num; for (char ch : tok) if (ch != '_') num += ch;
+        char* end = nullptr; double d = std::strtod(num.c_str(), &end);
+        if (end && *end == '\0' && (std::isdigit((unsigned char)num[0]) || num[0] == '-' || num[0] == '+')) { out = J::number(d); return true; }
+        if (std::isdigit((unsigned char)tok[0])) {   // تاريخ/وقت: يُحفظ كنص
+            if (p < s.size() && s[p] == ' ' && p + 1 < s.size() && std::isdigit((unsigned char)s[p + 1])) { ++p; size_t b2 = p; while (p < s.size() && s[p] != ',' && s[p] != ']' && s[p] != '}' && s[p] != '\n' && s[p] != '#' && s[p] != ' ') ++p; tok += " " + s.substr(b2, p - b2); }
+            out = J::string(tok); return true;
+        }
+        p = b; return fail("unexpected value '" + tok + "'");
+    }
+    // يصل إلى كائن (ينشئه عند الحاجة). مصفوفة جداول ⇒ آخر عنصر.
+    J* objAt(J& parent, const std::string& k) {
+        for (auto& kv : parent.o) if (kv.first == k) {
+            if (kv.second.t == J::Obj) return &kv.second;
+            if (kv.second.t == J::Arr && !kv.second.a.empty() && kv.second.a.back().t == J::Obj) return &kv.second.a.back();
+            fail("key '" + k + "' is already defined as a value"); return nullptr;
+        }
+        parent.o.emplace_back(k, J::object()); return &parent.o.back().second;
+    }
+    bool assign(J& cur, const std::vector<std::string>& path, J v) {
+        J* t = &cur;
+        for (size_t i = 0; i + 1 < path.size(); ++i) { t = objAt(*t, path[i]); if (!t) return false; }
+        if (t->get(path.back())) return fail("duplicate key '" + path.back() + "'");
+        t->o.emplace_back(path.back(), std::move(v)); return true;
+    }
+    bool doc(J& root) {
+        root = J::object(); J* cur = &root;
+        while (true) {
+            skipAll();
+            if (eof()) return true;
+            if (s[p] == '[') {
+                bool dbl = (p + 1 < s.size() && s[p + 1] == '[');
+                p += dbl ? 2 : 1;
+                std::vector<std::string> path; if (!keyPath(path)) return false; sp();
+                if (dbl ? s.compare(p, 2, "]]") != 0 : (p >= s.size() || s[p] != ']')) return fail("expected ']'");
+                p += dbl ? 2 : 1;
+                J* t = &root;
+                for (size_t i = 0; i + 1 < path.size(); ++i) { t = objAt(*t, path[i]); if (!t) return false; }
+                if (dbl) {
+                    J* arr = nullptr;
+                    for (auto& kv : t->o) if (kv.first == path.back()) arr = &kv.second;
+                    if (!arr) { t->o.emplace_back(path.back(), J::array()); arr = &t->o.back().second; }
+                    if (arr->t != J::Arr) return fail("'" + path.back() + "' is not an array of tables");
+                    arr->a.push_back(J::object()); cur = &arr->a.back();
+                } else {
+                    cur = objAt(*t, path.back()); if (!cur) return false;
+                }
+            } else {
+                std::vector<std::string> path; if (!keyPath(path)) return false; sp();
+                if (p >= s.size() || s[p] != '=') return fail("expected '='");
+                ++p; J v; if (!value(v, 0)) return false;
+                if (!assign(*cur, path, std::move(v))) return false;
+            }
+            sp(); comment();
+            if (!eof() && s[p] != '\n' && s[p] != '\r') return fail("unexpected content after value");
+        }
+    }
+};
+
+inline std::string tomlKey(const std::string& k) {
+    bool bare = !k.empty();
+    for (char c : k) if (!(std::isalnum((unsigned char)c) || c == '_' || c == '-')) bare = false;
+    if (bare) return k;
+    std::string o; dumpStr(k, o); return o;
+}
+inline void tomlInline(const J& j, std::string& o) {
+    switch (j.t) {
+        case J::Null: o += "\"\""; break;
+        case J::Bool: o += j.b ? "true" : "false"; break;
+        case J::Num: dumpJ(j, o, 0, 0); break;
+        case J::Str: dumpStr(j.s, o); break;
+        case J::Arr: o += '['; for (size_t i = 0; i < j.a.size(); ++i) { if (i) o += ", "; tomlInline(j.a[i], o); } o += ']'; break;
+        case J::Obj: o += "{ "; for (size_t i = 0; i < j.o.size(); ++i) { if (i) o += ", "; o += tomlKey(j.o[i].first) + " = "; tomlInline(j.o[i].second, o); } o += j.o.empty() ? "}" : " }"; break;
+    }
+}
+inline void tomlTable(const J& obj, const std::string& path, std::string& o, bool& first) {
+    bool header = false;
+    auto emitHeader = [&]() { if (!path.empty() && !header) { if (!first) o += "\n"; o += "[" + path + "]\n"; header = true; first = false; } };
+    for (auto& kv : obj.o) {
+        if (kv.second.t == J::Obj || kv.second.t == J::Null) continue;
+        emitHeader();
+        o += tomlKey(kv.first) + " = "; tomlInline(kv.second, o); o += "\n"; first = false;
+    }
+    for (auto& kv : obj.o) {
+        if (kv.second.t != J::Obj || kv.second.o.empty()) continue;
+        tomlTable(kv.second, path.empty() ? tomlKey(kv.first) : path + "." + tomlKey(kv.first), o, first);
+    }
+}
+} // namespace detail
+
+inline bool parseToml(const std::string& text, J& out, std::string& err) {
+    detail::TomlParser tp(text);
+    if (!tp.doc(out)) { err = tp.err; return false; }
+    return true;
+}
+// J (كائن) → TOML: القيم البسيطة والمصفوفات أولاً ثم الجداول؛ الكائنات الفارغة تُحذف.
+inline std::string dumpToml(const J& obj) { std::string o; bool first = true; detail::tomlTable(obj, "", o, first); return o; }
 
 // ============================================================================
 //  XML صغير (DOM): عناصر + سمات + نص (+ CDATA + تعليقات + كيانات أساسية)
@@ -622,6 +846,18 @@ struct Manifest {
     std::vector<std::string> parts, exclude, run;
     bool hasParts = false, hasRun = false;
     std::vector<Dep> dependencies;
+    // ---- Disconom 2 ----
+    std::vector<Dep> devDependencies;        // للتطوير/الاختبار فقط: لا تُحمَّل عند استيراد المكتبة
+    std::vector<Dep> optionalDependencies;   // تُحمَّل إن وُجدت، ولا تُعدّ غيابها خطأً
+    std::vector<Dep> peerDependencies;       // يجب أن يوفّرها المستهلِك (تُفحص ولا تُحمَّل)
+    std::vector<std::pair<std::string, std::string>> scripts;                    // اسم → أمر
+    std::vector<std::pair<std::string, std::vector<std::string>>> features;     // اسم → [تبعيات اختيارية/ميزات أخرى]
+    std::vector<std::string> defaultFeatures;   // الميزات المفعّلة افتراضياً (features.default)
+    std::vector<std::string> files;          // ما يُضمَّن عند النشر/الحزم (فارغ = الكل)
+    std::vector<std::string> categories, platforms, workspaces, contributors;
+    std::string bugs, readme, funding;
+    bool isPrivate = false;                  // true = لا يُنشر إلى سجلّ
+    bool hasFormat2 = false;                 // استُعملت حقول من الصيغة 2 (للتحذير إن أُعلنت الصيغة 1)
     NativeSpec native;
     J raw;                                   // محتوى JSON الأصلي كاملاً (حقول إضافية مخصّصة) إن كان المصدر JSON
     bool hasRaw = false;
@@ -658,7 +894,7 @@ inline bool manifestFromJson(const J& j, Manifest& m, std::vector<std::string>& 
     for (const char* k : {"description", "details", "desc"}) if (auto* x = j.get(k)) { if (x->t == J::Str) { m.description = x->s; break; } }
     m.license = strOf(j.get("license"));
     m.homepage = strOf(j.get("homepage"));
-    m.repository = strOf(j.get("repository"));
+    if (auto* r = j.get("repository")) { if (r->t == J::Str) m.repository = r->s; else if (r->t == J::Obj) m.repository = strOf(r->get("url")); }
     m.authors = strList(j.get("authors"));
     if (m.authors.empty()) m.authors = strList(j.get("author"));
     m.keywords = strList(j.get("keywords"));
@@ -675,15 +911,43 @@ inline bool manifestFromJson(const J& j, Manifest& m, std::vector<std::string>& 
     if (auto* x = j.get("parts")) { m.hasParts = true; m.parts = strList(x); if (x->t != J::Arr && x->t != J::Str) errs.push_back("'parts' must be an array of paths/globs"); }
     m.exclude = strList(j.get("exclude"));
     if (auto* x = j.get("run")) { m.hasRun = true; m.run = strList(x); if (x->t != J::Arr && x->t != J::Str) errs.push_back("'run' must be a path or an array of paths"); }
-    if (auto* d = j.get("dependencies")) {
-        if (d->t == J::Obj) { for (auto& kv : d->o) m.dependencies.push_back({kv.first, kv.second.t == J::Str ? kv.second.s : std::string("*")}); }
+    auto depList = [&](const J* d, std::vector<Dep>& out, const char* label) {
+        if (!d) return;
+        if (d->t == J::Obj) { for (auto& kv : d->o) out.push_back({kv.first, kv.second.t == J::Str ? kv.second.s : std::string("*")}); }
         else if (d->t == J::Arr) {
             for (auto& e : d->a) {
-                if (e.t == J::Str) m.dependencies.push_back({e.s, "*"});
-                else if (e.t == J::Obj) { std::string n = strOf(e.get("name")), v = strOf(e.get("version")); if (v.empty()) v = strOf(e.get("range")); m.dependencies.push_back({n, v.empty() ? "*" : v}); }
+                if (e.t == J::Str) out.push_back({e.s, "*"});
+                else if (e.t == J::Obj) { std::string n = strOf(e.get("name")), v = strOf(e.get("version")); if (v.empty()) v = strOf(e.get("range")); out.push_back({n, v.empty() ? "*" : v}); }
             }
-        } else errs.push_back("'dependencies' must be an object {name: range} or an array");
+        } else errs.push_back(std::string("'") + label + "' must be an object {name: range} or an array");
+    };
+    auto firstOf = [&](std::initializer_list<const char*> keys) -> const J* { for (const char* k : keys) if (auto* x = j.get(k)) return x; return nullptr; };
+    depList(j.get("dependencies"), m.dependencies, "dependencies");
+    if (auto* x = firstOf({"devDependencies", "dev-dependencies", "dev_dependencies"})) { depList(x, m.devDependencies, "devDependencies"); m.hasFormat2 = true; }
+    if (auto* x = firstOf({"optionalDependencies", "optional-dependencies", "optional_dependencies"})) { depList(x, m.optionalDependencies, "optionalDependencies"); m.hasFormat2 = true; }
+    if (auto* x = firstOf({"peerDependencies", "peer-dependencies", "peer_dependencies"})) { depList(x, m.peerDependencies, "peerDependencies"); m.hasFormat2 = true; }
+    if (auto* x = j.get("scripts")) {
+        m.hasFormat2 = true;
+        if (x->t == J::Obj) { for (auto& kv : x->o) { if (kv.second.t == J::Str) m.scripts.emplace_back(kv.first, kv.second.s); else errs.push_back("'scripts." + kv.first + "' must be a command string"); } }
+        else errs.push_back("'scripts' must be an object {name: command}");
     }
+    if (auto* x = j.get("features")) {
+        m.hasFormat2 = true;
+        if (x->t == J::Obj) {
+            for (auto& kv : x->o) {
+                if (kv.first == "default") { m.defaultFeatures = strList(&kv.second); continue; }
+                if (kv.second.t != J::Arr) { errs.push_back("'features." + kv.first + "' must be an array of strings"); continue; }
+                m.features.emplace_back(kv.first, strList(&kv.second));
+            }
+        } else errs.push_back("'features' must be an object {name: [items]}");
+    }
+    if (auto* x = j.get("files")) { m.files = strList(x); m.hasFormat2 = true; }
+    m.categories = strList(j.get("categories")); m.platforms = strList(j.get("platforms"));
+    m.workspaces = strList(j.get("workspaces")); m.contributors = strList(j.get("contributors"));
+    if (auto* x = j.get("bugs")) { if (x->t == J::Str) m.bugs = x->s; else if (x->t == J::Obj) m.bugs = strOf(x->get("url")); }
+    m.readme = strOf(j.get("readme")); m.funding = strOf(j.get("funding"));
+    if (auto* x = j.get("private")) { if (x->t == J::Bool) m.isPrivate = x->b; else errs.push_back("'private' must be true or false"); m.hasFormat2 = true; }
+    if (!m.categories.empty() || !m.platforms.empty() || !m.workspaces.empty() || !m.contributors.empty() || !m.bugs.empty() || !m.funding.empty() || !m.readme.empty()) m.hasFormat2 = true;
     if (auto* n = j.get("native")) {
         NativeSpec& ns = m.native;
         if (n->t == J::Arr || n->t == J::Str) ns.sources = strList(n);
@@ -741,13 +1005,37 @@ inline bool manifestFromXml(const X& root, Manifest& m, std::vector<std::string>
     if (root.child("parts")) { m.hasParts = true; m.parts = list("parts", "part"); }
     else { auto p = list("parts", "part"); if (!p.empty()) { m.hasParts = true; m.parts = p; } }
     if (root.child("run")) { m.hasRun = true; if (!root.child("run")->kids.empty()) m.run = list("run", "file"); else if (!root.child("run")->text.empty()) m.run = {root.child("run")->text}; }
-    if (auto* d = root.child("dependencies")) {
+    auto xdeps = [&](const char* tag, std::vector<Dep>& out) {
+        auto* d = root.child(tag); if (!d) return false;
         for (auto& k : d->kids) {
             std::string n = k.attr("name") ? *k.attr("name") : k.tag == "dependency" ? k.text : k.tag;
             std::string v = k.attr("version") ? *k.attr("version") : (k.attr("range") ? *k.attr("range") : (k.tag != "dependency" ? k.text : ""));
-            m.dependencies.push_back({n, v.empty() ? "*" : v});
+            out.push_back({n, v.empty() ? "*" : v});
+        }
+        return true;
+    };
+    xdeps("dependencies", m.dependencies);
+    if (xdeps("devDependencies", m.devDependencies) | xdeps("optionalDependencies", m.optionalDependencies) | xdeps("peerDependencies", m.peerDependencies)) m.hasFormat2 = true;
+    if (auto* sc = root.child("scripts")) {
+        m.hasFormat2 = true;
+        for (auto& k : sc->kids) m.scripts.emplace_back(k.attr("name") ? *k.attr("name") : k.tag, k.text);
+    }
+    if (auto* fe = root.child("features")) {
+        m.hasFormat2 = true;
+        for (auto& k : fe->kids) {
+            std::string n = k.attr("name") ? *k.attr("name") : k.tag;
+            std::vector<std::string> items;
+            for (auto& it : k.kids) items.push_back(it.text);
+            if (items.empty() && !k.text.empty()) items = splitCsv(k.text);
+            if (n == "default") m.defaultFeatures = items; else m.features.emplace_back(n, items);
         }
     }
+    if (root.child("files")) { m.files = list("files", "file"); m.hasFormat2 = true; }
+    m.categories = list("categories", "category"); m.platforms = list("platforms", "platform");
+    m.workspaces = list("workspaces", "workspace"); m.contributors = list("contributors", "contributor");
+    m.bugs = scalar("bugs"); m.readme = scalar("readme"); m.funding = scalar("funding");
+    { std::string pv = scalar("private"); if (!pv.empty()) { m.isPrivate = (pv == "true" || pv == "1" || pv == "yes"); m.hasFormat2 = true; } }
+    if (!m.categories.empty() || !m.platforms.empty() || !m.workspaces.empty() || !m.contributors.empty() || !m.bugs.empty() || !m.funding.empty() || !m.readme.empty()) m.hasFormat2 = true;
     if (auto* n = root.child("native")) {
         NativeSpec& ns = m.native;
         for (auto& k : n->kids) {
@@ -767,6 +1055,15 @@ inline bool manifestFromXml(const X& root, Manifest& m, std::vector<std::string>
     return true;
 }
 
+// Disconom بصيغة TOML (disconom.toml): نفس مفاتيح JSON تماماً، بجداول [dependencies] [scripts] [features] [native] …
+inline bool manifestFromToml(const std::string& text, Manifest& m, std::vector<std::string>& errs) {
+    J j; std::string e;
+    if (!parseToml(text, j, e)) { errs.push_back(e); return false; }
+    if (!manifestFromJson(j, m, errs)) return false;
+    m.formatName = "toml";
+    return true;
+}
+
 // الشكل الموحَّد (normalized) للمانيفست كـ JSON — يستعمله rinlib.manifest و`rin lib info --json`.
 inline J manifestToJson(const Manifest& m) {
     J j = J::object();
@@ -780,11 +1077,33 @@ inline J manifestToJson(const Manifest& m) {
     j.set("homepage", J::string(m.homepage)); j.set("repository", J::string(m.repository));
     j.set("keywords", arr(m.keywords));
     j.set("main", J::string(m.main)); j.set("parts", arr(m.parts)); j.set("exclude", arr(m.exclude)); j.set("run", arr(m.run));
-    J deps = J::object(); for (auto& d : m.dependencies) deps.set(d.name, J::string(d.range));
-    j.set("dependencies", deps);
+    auto depObj = [](const std::vector<Dep>& v) { J o = J::object(); for (auto& d : v) o.set(d.name, J::string(d.range)); return o; };
+    j.set("dependencies", depObj(m.dependencies));
+    if (!m.devDependencies.empty()) j.set("devDependencies", depObj(m.devDependencies));
+    if (!m.optionalDependencies.empty()) j.set("optionalDependencies", depObj(m.optionalDependencies));
+    if (!m.peerDependencies.empty()) j.set("peerDependencies", depObj(m.peerDependencies));
+    if (!m.scripts.empty()) { J o = J::object(); for (auto& kv : m.scripts) o.set(kv.first, J::string(kv.second)); j.set("scripts", o); }
+    if (!m.features.empty() || !m.defaultFeatures.empty()) {
+        J o = J::object();
+        if (!m.defaultFeatures.empty()) o.set("default", arr(m.defaultFeatures));
+        for (auto& kv : m.features) o.set(kv.first, arr(kv.second));
+        j.set("features", o);
+    }
+    if (!m.files.empty()) j.set("files", arr(m.files));
+    if (!m.categories.empty()) j.set("categories", arr(m.categories));
+    if (!m.platforms.empty()) j.set("platforms", arr(m.platforms));
+    if (!m.workspaces.empty()) j.set("workspaces", arr(m.workspaces));
+    if (!m.contributors.empty()) j.set("contributors", arr(m.contributors));
+    if (!m.bugs.empty()) j.set("bugs", J::string(m.bugs));
+    if (!m.readme.empty()) j.set("readme", J::string(m.readme));
+    if (!m.funding.empty()) j.set("funding", J::string(m.funding));
+    if (m.isPrivate) j.set("private", J::boolean(true));
     J nat = J::object();
     nat.set("sources", arr(m.native.sources)); nat.set("std", J::string(m.native.std));
     nat.set("required", J::boolean(m.native.required));
+    if (!m.native.flags.empty()) nat.set("flags", arr(m.native.flags));
+    if (!m.native.libs.empty()) nat.set("libs", arr(m.native.libs));
+    if (!m.native.includes.empty()) nat.set("includes", arr(m.native.includes));
     J fns = J::array();
     for (auto& f : m.native.functions) {
         J fo = J::object(); fo.set("name", J::string(f.name));
@@ -805,6 +1124,7 @@ inline bool validIdent(const std::string& s) {
 inline bool hasSuffix(const std::string& s, const std::string& suf) { return s.size() >= suf.size() && s.compare(s.size() - suf.size(), suf.size(), suf) == 0; }
 inline std::string baseNameOf(const std::string& p) { size_t k = p.find_last_of('/'); return k == std::string::npos ? p : p.substr(k + 1); }
 inline std::string lower(std::string s) { for (auto& c : s) c = (char)std::tolower((unsigned char)c); return s; }
+inline std::string stripDotSlashLite(std::string p) { while (p.rfind("./", 0) == 0) p.erase(0, 2); return p; }
 inline bool safeRelPath(const std::string& rel) {   // يرفض المسارات المطلقة والهروب بـ ..
     if (rel.empty() || rel[0] == '/' || rel[0] == '\\' || rel.find(':') != std::string::npos || rel.find('\\') != std::string::npos) return false;
     std::stringstream ss(rel); std::string seg;
@@ -838,9 +1158,111 @@ inline void validateManifest(const Manifest& m, const std::string& dirBase, cons
         else if (!validRange(d.range)) errs.push_back("Disconom: invalid version range '" + d.range + "' for dependency '" + d.name + "'");
         if (d.name == m.name && !m.name.empty()) errs.push_back("Disconom: a library cannot depend on itself");
     }
+    // ---- Disconom 2: تبعيات التطوير/الاختيارية/النظيرة ----
+    std::set<std::string> seenDeps;
+    for (auto& d : m.dependencies) seenDeps.insert(d.name);
+    auto checkDeps = [&](const std::vector<Dep>& v, const char* label) {
+        std::set<std::string> local;
+        for (auto& d : v) {
+            if (!validIdent(d.name)) errs.push_back(std::string("Disconom: invalid ") + label + " name '" + d.name + "'");
+            else if (!validRange(d.range)) errs.push_back("Disconom: invalid version range '" + d.range + "' for " + label + " '" + d.name + "'");
+            if (d.name == m.name && !m.name.empty()) errs.push_back(std::string("Disconom: a library cannot list itself in ") + label);
+            if (!local.insert(d.name).second) warns.push_back(std::string("Disconom: duplicate ") + label + " '" + d.name + "'");
+            else if (seenDeps.count(d.name)) warns.push_back("Disconom: '" + d.name + "' is declared in more than one dependency section (" + label + " and another)");
+        }
+        for (auto& d : v) seenDeps.insert(d.name);
+    };
+    {
+        std::set<std::string> dup;
+        for (auto& d : m.dependencies) if (!dup.insert(d.name).second) warns.push_back("Disconom: duplicate dependency '" + d.name + "'");
+    }
+    checkDeps(m.optionalDependencies, "optionalDependency");
+    checkDeps(m.peerDependencies, "peerDependency");
+    checkDeps(m.devDependencies, "devDependency");
+    if (m.format < 2 && m.hasFormat2)
+        warns.push_back("Disconom: uses format-2 fields (devDependencies/scripts/features/files/private/...) but declares \"disconom\": " + std::to_string(m.format) + " — set it to 2");
+    for (auto& kv : m.scripts) {
+        bool okName = !kv.first.empty();
+        for (char c : kv.first) if (!(std::isalnum((unsigned char)c) || c == '_' || c == '-' || c == ':' || c == '.')) okName = false;
+        if (!okName) errs.push_back("Disconom: invalid script name '" + kv.first + "' (letters, digits, '_', '-', ':', '.')");
+        if (trimStr(kv.second).empty()) errs.push_back("Disconom: script '" + kv.first + "' has an empty command");
+    }
+    {   // features: عناصرها = تبعيات اختيارية | ميزات أخرى | dep:<name> ؛ بلا دورات؛ default يجب أن تكون ميزات موجودة
+        std::set<std::string> fnames, optNames;
+        for (auto& f : m.features) {
+            if (!fnames.insert(f.first).second) errs.push_back("Disconom: duplicate feature '" + f.first + "'");
+            if (!validIdent(f.first)) errs.push_back("Disconom: invalid feature name '" + f.first + "'");
+        }
+        for (auto& d : m.optionalDependencies) optNames.insert(d.name);
+        for (auto& f : m.features)
+            for (auto& it : f.second) {
+                std::string n = it.rfind("dep:", 0) == 0 ? it.substr(4) : it;
+                if (!fnames.count(n) && !optNames.count(n))
+                    errs.push_back("Disconom: feature '" + f.first + "' references '" + it + "' which is neither a feature nor an optional dependency");
+            }
+        for (auto& d : m.defaultFeatures) if (!fnames.count(d)) errs.push_back("Disconom: default feature '" + d + "' is not defined in 'features'");
+        std::map<std::string, int> color;   // 0 = لم تُزَر، 1 = قيد الزيارة، 2 = انتهت
+        std::function<bool(const std::string&)> cyc = [&](const std::string& n) -> bool {
+            int& c = color[n];
+            if (c == 1) return true;
+            if (c == 2) return false;
+            c = 1;
+            for (auto& f : m.features) if (f.first == n) for (auto& it : f.second) if (fnames.count(it) && cyc(it)) return true;
+            color[n] = 2; return false;
+        };
+        for (auto& f : m.features) if (cyc(f.first)) { errs.push_back("Disconom: feature cycle involving '" + f.first + "'"); break; }
+    }
+    for (auto& f : m.files) if (!safeRelPath(stripDotSlashLite(f))) errs.push_back("Disconom: unsafe 'files' path '" + f + "'");
+    for (auto& w : m.workspaces) if (!safeRelPath(stripDotSlashLite(w))) errs.push_back("Disconom: unsafe 'workspaces' path '" + w + "'");
+    if (!m.readme.empty() && !safeRelPath(m.readme)) errs.push_back("Disconom: unsafe 'readme' path '" + m.readme + "'");
+    {
+        static const std::set<std::string> kPlat = {"linux", "android", "windows", "macos", "ios", "web", "wasm"};
+        for (auto& p : m.platforms) if (!kPlat.count(lower(p))) warns.push_back("Disconom: unknown platform '" + p + "' (linux, android, windows, macos, ios, web, wasm)");
+    }
+    auto isUrl = [](const std::string& u) { return u.rfind("http://", 0) == 0 || u.rfind("https://", 0) == 0 || u.rfind("git+", 0) == 0 || u.rfind("git@", 0) == 0 || u.rfind("ssh://", 0) == 0; };
+    if (!m.homepage.empty() && !isUrl(m.homepage)) warns.push_back("Disconom: 'homepage' is not a URL: " + m.homepage);
+    if (!m.repository.empty() && !isUrl(m.repository)) warns.push_back("Disconom: 'repository' is not a URL: " + m.repository);
+    if (!m.bugs.empty() && !isUrl(m.bugs) && m.bugs.find('@') == std::string::npos) warns.push_back("Disconom: 'bugs' is neither a URL nor an e-mail: " + m.bugs);
+    if (!m.license.empty()) {
+        bool okLic = true;
+        for (char c : m.license) if (!(std::isalnum((unsigned char)c) || c == '.' || c == '-' || c == '+' || c == ' ' || c == '(' || c == ')')) okLic = false;
+        if (!okLic && m.license.rfind("SEE LICENSE", 0) != 0) warns.push_back("Disconom: 'license' is not a valid SPDX expression: " + m.license);
+    }
+    if (m.name.size() > 64) errs.push_back("Disconom: library name longer than 64 characters");
+    if (m.keywords.size() > 20) warns.push_back("Disconom: more than 20 keywords");
+    if (m.description.size() > 400) warns.push_back("Disconom: 'description' is longer than 400 characters");
+    if (m.isPrivate && m.name.empty() == false && m.repository.empty() && m.homepage.empty()) { /* خاصة: لا تحذيرات إضافية */ }
     for (auto& s : m.native.sources) if (!safeRelPath(s)) errs.push_back("Disconom: unsafe native source path '" + s + "'");
     for (auto& f : m.native.functions) if (!validIdent(f.name) || f.name.find('.') != std::string::npos || f.name.find('-') != std::string::npos)
         errs.push_back("Disconom: invalid native function name '" + f.name + "' (must be a valid Rin identifier)");
+}
+
+// ---- الميزات (features) ----------------------------------------------------
+// الميزات المفعّلة = default ∪ extra، موسَّعة تعدّياً (ميزة تحوي ميزات أخرى). تُرجع أسماء الميزات فقط.
+inline std::set<std::string> activeFeatures(const Manifest& m, const std::set<std::string>& extra = {}, bool useDefault = true) {
+    std::map<std::string, std::vector<std::string>> byName;
+    for (auto& f : m.features) byName[f.first] = f.second;
+    std::set<std::string> on;
+    std::vector<std::string> work;
+    if (useDefault) for (auto& d : m.defaultFeatures) work.push_back(d);
+    for (auto& e : extra) work.push_back(e);
+    while (!work.empty()) {
+        std::string f = work.back(); work.pop_back();
+        if (!byName.count(f) || !on.insert(f).second) continue;
+        for (auto& it : byName[f]) if (byName.count(it)) work.push_back(it);
+    }
+    return on;
+}
+// التبعيات الاختيارية المفعَّلة: التي لا تذكرها أي ميزة تُفعَّل دائماً (وتُحمَّل إن وُجدت)،
+// والتي تذكرها ميزة تُفعَّل فقط إذا كانت ميزة مفعّلة تشير إليها (name أو dep:name).
+inline std::vector<Dep> enabledOptionalDeps(const Manifest& m, const std::set<std::string>& extraFeatures = {}) {
+    std::set<std::string> mentioned, enabled;
+    for (auto& f : m.features) for (auto& it : f.second) mentioned.insert(it.rfind("dep:", 0) == 0 ? it.substr(4) : it);
+    std::set<std::string> on = activeFeatures(m, extraFeatures);
+    for (auto& f : m.features) if (on.count(f.first)) for (auto& it : f.second) enabled.insert(it.rfind("dep:", 0) == 0 ? it.substr(4) : it);
+    std::vector<Dep> out;
+    for (auto& d : m.optionalDependencies) if (!mentioned.count(d.name) || enabled.count(d.name)) out.push_back(d);
+    return out;
 }
 
 // ============================================================================
@@ -879,7 +1301,7 @@ struct Plan {
     std::string dirBase;         // math
     Manifest manifest;
     bool hasManifest = false;
-    std::string manifestFile;    // مسار نسبي: disconom.json
+    std::string manifestFile;    // مسار نسبي: disconom.json | .xml | .toml
     std::vector<std::string> parts;      // مسارات نسبية بترتيب التحميل
     std::vector<std::string> runFiles;   // مسارات نسبية بترتيب التنفيذ (بعد كل الأجزاء)
     std::vector<std::string> files;      // كل ملفات المكتبة (نسبية)
@@ -942,13 +1364,13 @@ inline bool planLibrary(const FS& fsys, const std::string& root, const std::stri
 
     // ---- Disconom ----
     std::string mf;
-    for (const char* want : {"disconom.json", "disconom.xml"}) {
+    for (const char* want : kManifestFiles) {
         for (auto& f : plan.files) if (lower(f) == want) { mf = f; break; }
         if (!mf.empty()) break;
     }
     size_t errBefore = errs.size();
     if (mf.empty()) {
-        plan.warnings.push_back("no Disconom file (disconom.json / disconom.xml) — defaults used; add one to declare name, version and the Rin version");
+        plan.warnings.push_back("no Disconom file (disconom.json / disconom.xml / disconom.toml) — defaults used; add one to declare name, version and the Rin version");
         plan.manifest.name = plan.dirBase; plan.manifest.version = "0.0.0"; plan.manifest.formatName = "none";
     } else {
         plan.hasManifest = true; plan.manifestFile = mf; plan.manifest.file = mf;
@@ -958,14 +1380,18 @@ inline bool planLibrary(const FS& fsys, const std::string& root, const std::stri
             J j; std::string e;
             if (!parseJson(text, j, e)) errs.push_back(mf + ": " + e);
             else manifestFromJson(j, plan.manifest, errs);
+        } else if (lower(mf) == "disconom.toml") {
+            std::vector<std::string> te;
+            if (!manifestFromToml(text, plan.manifest, te)) for (auto& e : te) errs.push_back(mf + ": " + e);
+            else for (auto& e : te) errs.push_back(e);
         } else {
             X x; std::string e;
             if (!parseXml(text, x, e)) errs.push_back(mf + ": " + e);
             else manifestFromXml(x, plan.manifest, errs);
         }
         if (errs.size() == errBefore) validateManifest(plan.manifest, plan.dirBase, engineVersion, errs, plan.warnings);
-        for (auto& f : plan.files) if (f != mf && lower(f) == (lower(mf) == "disconom.json" ? "disconom.xml" : "disconom.json"))
-            plan.warnings.push_back("both disconom.json and disconom.xml exist — using " + mf);
+        for (auto& f : plan.files) if (f != mf) for (const char* other : kManifestFiles)
+            if (lower(f) == other) { plan.warnings.push_back(std::string("both ") + mf + " and " + f + " exist — using " + mf); break; }
     }
     if (errs.size() != errBefore) return false;
     const Manifest& m = plan.manifest;
@@ -1045,6 +1471,7 @@ inline bool planLibrary(const FS& fsys, const std::string& root, const std::stri
 struct ScaffoldOpts {
     std::string name, version = "0.1.0", description, author, license = "MIT";
     bool xml = false;       // disconom.xml بدل disconom.json
+    bool toml = false;      // disconom.toml بدل disconom.json
     bool native = false;    // أضف native/helper.cpp
 };
 
@@ -1083,6 +1510,7 @@ inline bool scaffoldLibrary(const std::string& parentDir, const ScaffoldOpts& o,
         j.set("license", J::string(o.license));
         j.set("main", J::string("main.zpp"));
         j.set("dependencies", J::object());
+        { J sc = J::object(); sc.set("test", J::string("rin tests/basic.rin")); j.set("scripts", sc); }
         if (o.native) {
             J nat = J::object();
             J src = J::array(); src.push(J::string("native/helper.cpp")); nat.set("sources", src);
@@ -1091,7 +1519,8 @@ inline bool scaffoldLibrary(const std::string& parentDir, const ScaffoldOpts& o,
             nat.set("functions", fn);
             j.set("native", nat);
         }
-        put("disconom.json", dumpJson(j, 2) + "\n");
+        if (o.toml) put("disconom.toml", dumpToml(j));
+        else put("disconom.json", dumpJson(j, 2) + "\n");
     } else {
         std::string x = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<disconom format=\"" + std::to_string(kDisconomFormat) + "\">\n";
         x += "  <name>" + N + "</name>\n  <version>" + o.version + "</version>\n  <description>" + desc + "</description>\n";
@@ -1154,7 +1583,7 @@ inline bool scaffoldLibrary(const std::string& parentDir, const ScaffoldOpts& o,
         "# " + N + " " + o.version + "\n\n" + desc + "\n\n"
         "مكتبة Rin مقسّمة (`" + N + ".og.rin/`):\n\n"
         "| الملف | الدور |\n|---|---|\n"
-        "| `disconom." + std::string(o.xml ? "xml" : "json") + "` | وصف المكتبة: الاسم، الإصدار، إصدار Rin المطلوب، التبعيات |\n"
+        "| `disconom." + std::string(o.xml ? "xml" : o.toml ? "toml" : "json") + "` | وصف المكتبة: الاسم، الإصدار، إصدار Rin المطلوب، التبعيات |\n"
         "| `main.zpp` | الجزء الأساسي |\n| `core/*.zpp` | أجزاء إضافية (أي اسم/مجلد) |\n"
         "| `run.rinz` | ملف تشغيل/تهيئة بعد ربط الأجزاء |\n| `data/*.json\\|xml` | بيانات تقرؤها المكتبة عبر `rinlib.json/xml` |\n"
         + std::string(o.native ? "| `native/*.cpp` | كود C++ مساعد (يتطلب `--allow-native`) |\n" : "") +
