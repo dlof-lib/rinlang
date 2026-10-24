@@ -1,0 +1,14 @@
+// A missing / mis-typed member of a namespace is a catchable error that names the namespace.
+@container=conf
+    let timeout = 30;
+    @container=db
+        let host = "h";
+    .end/container
+.end/container
+print conf.timeout;
+print conf.db.host;
+try { print conf.timeot; } catch (e) { print "caught: " + e["message"]; }
+try { conf.nothing = 1; } catch (e) { print "caught: " + e["message"]; }
+try { conf.db = 1; } catch (e) { print "caught: " + e["message"]; }
+try { conf.run(); } catch (e) { print "caught: " + e["message"]; }
+try { conf.timeout(); } catch (e) { print "caught: " + e["message"]; }
