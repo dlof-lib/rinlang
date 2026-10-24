@@ -208,13 +208,26 @@ libdir::FS Interpreter::makeLibFS() const {
 //   @import "lib/math.og.rin"    -> المجلد نفسه إن كان مجلداً (وإلا يبقى استيراد توكن أداة/ملف كالمعتاد)
 //   @import "libs/shapes"        -> libs/shapes.og.rin/ أو libs/shapes/ (الأخير يتطلب Disconom)
 //   @import "./vendor/x.og.rin"  -> نسبةً إلى مجلد الملف المستورِد (عند غياب basePath)
+// ميزات إضافية يفعّلها المستخدم: RIN_FEATURES="feat1,feat2" (تُطبَّق على كل مكتبة تعرّفها).
+static std::set<std::string> envFeatures() {
+    std::set<std::string> out;
+    if (const char* e = std::getenv("RIN_FEATURES")) {
+        std::string cur;
+        for (const char* q = e;; ++q) {
+            if (*q == ',' || *q == ' ' || *q == '\0') { if (!cur.empty()) out.insert(cur); cur.clear(); if (!*q) break; }
+            else cur += *q;
+        }
+    }
+    return out;
+}
+
 bool Interpreter::findLibraryDir(const std::string& rawPath, const std::string& libPath, std::string& rootOut) const {
     using namespace libint;
     libdir::FS fsys = makeLibFS();
     auto hasManifest = [&](const std::string& d) {
         std::string t;
-        return fsys.read(d + "/disconom.json", t) || fsys.read(d + "/disconom.xml", t) ||
-               fsys.read(d + "/Disconom.json", t) || fsys.read(d + "/Disconom.xml", t);
+        return fsys.read(d + "/disconom.json", t) || fsys.read(d + "/disconom.xml", t) || fsys.read(d + "/disconom.toml", t) ||
+               fsys.read(d + "/Disconom.json", t) || fsys.read(d + "/Disconom.xml", t) || fsys.read(d + "/Disconom.toml", t);
     };
     std::vector<std::pair<std::string, bool>> cand;   // (مسار، يتطلب Disconom)
     std::set<std::string> dedup;
@@ -410,7 +423,12 @@ libdir::DepGraph Interpreter::dependencyGraph(const std::string& nameOrRoot) con
             libdir::planLibrary(fsys, pr.root, "", plan, errs);
             if (!plan.manifest.name.empty()) node.name = plan.manifest.name;
             node.version = plan.manifest.version;
-            for (auto& dep : plan.manifest.dependencies) {
+            std::vector<libdir::Dep> allDeps = plan.manifest.dependencies;
+            for (auto& od : libdir::enabledOptionalDeps(plan.manifest, envFeatures())) {
+                std::string probe; libdir::PackageRef pref;
+                if (findDependencyDir(pr.root, od.name, probe) || resolvePackage(od.name, pref)) allDeps.push_back(od);   // اختيارية: تدخل الرسم إن وُجدت فقط
+            }
+            for (auto& dep : allDeps) {
                 Child c; c.name = dep.name; c.range = dep.range; c.found = false;
                 std::string depRoot;
                 if (findDependencyDir(pr.root, dep.name, depRoot)) {
@@ -501,7 +519,12 @@ void Interpreter::loadLibraryUnit(const std::string& root, int line, LibraryUnit
     unit.root = root; unit.plan = plan; unit.name = m.name; unit.version = m.version;
 
     // ---- 1) التبعيات: عبارات @import مُصطنعة تُنفَّذ أولاً بنفس آلية الاستيراد (كشف دورات، منع تكرار...) ----
-    for (auto& dep : m.dependencies) {
+    std::vector<libdir::Dep> loadDeps = m.dependencies;
+    for (auto& od : libdir::enabledOptionalDeps(m, envFeatures())) {   // اختيارية: تُحمَّل إن وُجدت، وغيابها ليس خطأً
+        std::string probe; libdir::PackageRef pref;
+        if (findDependencyDir(root, od.name, probe) || resolvePackage(od.name, pref)) loadDeps.push_back(od);
+    }
+    for (auto& dep : loadDeps) {
         std::string depRoot, depImport = dep.name;
         bool sibling = false;
         const bool foundLib = findDependencyDir(root, dep.name, depRoot, &sibling);
@@ -522,7 +545,7 @@ void Interpreter::loadLibraryUnit(const std::string& root, int line, LibraryUnit
         imp->path = lit; imp->line = 0;
         unit.statements.push_back(imp);
     }
-    if (!m.dependencies.empty()) unit.segments.push_back({unit.statements.size(), "dependencies of " + m.name});
+    if (!loadDeps.empty()) unit.segments.push_back({unit.statements.size(), "dependencies of " + m.name});
 
     // ---- 2) كود C++ المساعد (اختياري) ----
     LoadedLibrary lib;
@@ -710,7 +733,7 @@ Interpreter::LibraryCheckReport Interpreter::checkLibraryDir(const std::string& 
     rep.warnings = plan.warnings;
     rep.name = plan.manifest.name; rep.version = plan.manifest.version;
     rep.parts = plan.parts; rep.runFiles = plan.runFiles;
-    if (!plan.hasManifest && planned) rep.errors.push_back("missing Disconom file (disconom.json or disconom.xml) — it declares the library name, version and required Rin version");
+    if (!plan.hasManifest && planned) rep.errors.push_back("missing Disconom file (disconom.json, disconom.xml or disconom.toml) — it declares the library name, version and required Rin version");
     if (planned) {
         auto syntax = [&](const std::string& rel) {
             std::string text, logical = root + "/" + rel;
@@ -726,6 +749,15 @@ Interpreter::LibraryCheckReport Interpreter::checkLibraryDir(const std::string& 
         for (auto& c : g.cycles) rep.errors.push_back("dependency cycle: " + c);
         for (auto& p : g.problems) rep.errors.push_back(p);
         for (auto& w : g.missing) rep.warnings.push_back(w);
+        // تبعيات النظير (peer): يجب أن يوفّرها المستهلِك — نفحصها إن كانت موجودة (خطأ عند عدم مطابقة الإصدار، تحذير إن غابت)
+        for (auto& pd : plan.manifest.peerDependencies) {
+            std::string pdRoot;
+            if (findDependencyDir(root, pd.name, pdRoot)) {
+                libdir::Plan pp; std::vector<std::string> pe;
+                if (libdir::planLibrary(fsys, pdRoot, "", pp, pe) && !libdir::satisfies(pp.manifest.version, pd.range))
+                    rep.errors.push_back("peer dependency `" + pd.name + "` " + pd.range + " is not satisfied (found " + pp.manifest.version + ")");
+            } else rep.warnings.push_back("peer dependency `" + pd.name + "` " + pd.range + " is not present — the consumer must provide it");
+        }
         if (rep.errors.empty()) rep.fingerprint = libraryFingerprint(root);
     }
     rep.ok = rep.errors.empty();
@@ -849,7 +881,7 @@ void Interpreter::registerNativesLibDir() {
             if (slash == std::string::npos) continue;
             std::string top = rel.substr(0, slash);
             if (endsWith(top, libdir::kLibDirSuffix)) names.insert(top);
-            else { std::string leaf = rel.substr(slash + 1); if (leaf == "disconom.json" || leaf == "disconom.xml") names.insert(top); }
+            else { std::string leaf = rel.substr(slash + 1); if (leaf == "disconom.json" || leaf == "disconom.xml" || leaf == "disconom.toml") names.insert(top); }
         }
         std::vector<Value> out;
         for (auto& n : names) {
