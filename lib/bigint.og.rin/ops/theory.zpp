@@ -1,0 +1,58 @@
+// نظرية الأعداد وعمليات متقدمة
+export fun big_gcd(a, b) {
+    let x = big_abs(a); let y = big_abs(b);
+    while (!big_isZero(y)) { let r = big_mod(x, y); x = y; y = r; }
+    return x;
+}
+export fun big_lcm(a, b) {
+    if (big_isZero(a) or big_isZero(b)) { return big(0); }
+    return big_abs(big_mul(big_div(a, big_gcd(a, b)), b));
+}
+// (base^exp) mod m — exp رقم ضخم غير سالب، m موجب
+export fun big_powmod(base, exp, m) {
+    let mm = big(m); let e = big(exp);
+    if (mm.s <= 0) { bi_fail("big_powmod(): the modulus must be positive"); }
+    if (e.s < 0) { bi_fail("big_powmod(): the exponent must be non-negative"); }
+    let result = big_mod(1, mm); let b = big_mod(base, mm);
+    let ed = slice(e.d, 0, len(e.d));
+    while (len(ed) > 0) {
+        let dm = mag_divmod_small(ed, 2);
+        if (dm[1] == 1) { result = big_mod(big_mul(result, b), mm); }
+        ed = dm[0];
+        if (len(ed) > 0) { b = big_mod(big_mul(b, b), mm); }
+    }
+    return result;
+}
+// الجذر التربيعي الصحيح (floor) لعدد غير سالب — نيوتن
+export fun big_isqrt(a) {
+    let n = big(a);
+    if (n.s < 0) { bi_fail("big_isqrt(): negative number"); }
+    if (n.s == 0) { return big(0); }
+    let x = big_pow(10, floor((big_digits(n) + 1) / 2));
+    while (true) {
+        let y = big_div(big_add(x, big_div(n, x)), 2);
+        if (big_cmp(y, x) >= 0) { return x; }
+        x = y;
+    }
+}
+// n! لعدد عادي 0 <= n <= 10^6
+export fun big_fact(n) {
+    if (type(n) != "number" or n < 0 or n != floor(n) or n > 1000000) { bi_fail("big_fact(): n must be an integer between 0 and 1000000"); }
+    let mag = [1]; let i = 2;
+    while (i <= n) { mag = mag_mul_small(mag, i); i = i + 1; }
+    return bi_make(1, mag);
+}
+// عدد فيبوناتشي رقم n (مضاعفة سريعة)
+fun bi_fib_pair(n) {
+    if (n == 0) { return [big(0), big(1)]; }
+    let h = bi_fib_pair(floor(n / 2));
+    let a = h[0]; let b = h[1];
+    let c = big_mul(a, big_sub(big_mul(b, 2), a));
+    let d = big_add(big_mul(a, a), big_mul(b, b));
+    if (n % 2 == 0) { return [c, d]; }
+    return [d, big_add(c, d)];
+}
+export fun big_fib(n) {
+    if (type(n) != "number" or n < 0 or n != floor(n)) { bi_fail("big_fib(): n must be a non-negative integer"); }
+    return bi_fib_pair(n)[0];
+}
