@@ -20,6 +20,7 @@
 //    rintwist.get("lib.name", default)     ← قراءة حقل بمسار منقَّط (يدعم فهارس المصفوفات: "stack.1.name")
 //    rintwist.fmt("{file.stem}-{date.date}.log", {extra})   ← قالب نصي (لتسمية الملفات والسجلات)، {{ و }} للأقواس
 //    rintwist.stack()                       ← سلسلة الاستيراد
+//    rintwist.rsf([member, args...])        ← مكتبة __rsf__: منع التكرار تلقائياً + كشف الدورات (تُحمَّل عند أول استدعاء)
 //
 //  file.kind: "main" (الملف الرئيسي) | "library-part" (جزء من مكتبة) | "tool-token" (توكن أداة OG: ملف واحد)
 //  القيمة لقطة وقت القراءة: لتعرف مكتبةٌ نفسها من داخل دوالها، التقطها عند التحميل:  export let TW = RINTWIST;
@@ -270,6 +271,28 @@ void Interpreter::registerNativesRintwist() {
         Value snap = rintwistValue();
         const Value* v = rtResolve(snap, "stack");
         return v ? *v : Value::nil();
+    };
+    // rintwist.rsf() — يحمّل المكتبة __rsf__ (Disconom) عند أول طلب ويُرجع واجهتها RSF؛
+    // rintwist.rsf("dedupe", xs) — استدعاء مباشر لعضو من الواجهة: منع التكرار تلقائياً وكشف الدورات (docs/rsf.md).
+    natives["rintwist.rsf"] = [this](Args& a, int line) -> Value {
+        Value facade;
+        if (!globals->get("RSF", facade) || facade.type != Value::Type::MAP) {
+            Lexer lx("@import \"__rsf__\";", "<rintwist.rsf>");
+            Parser ps(lx.scanTokens(), "<rintwist.rsf>");
+            auto stmts = ps.parse();
+            for (auto& st : stmts) execute(st, globals);
+            if (!globals->get("RSF", facade) || facade.type != Value::Type::MAP)
+                throw errWithReason(diag::Code::E0035_RuntimeError, line, "rintwist.rsf: library `__rsf__` did not provide RSF",
+                                    "make sure lib/__rsf__.og.rin exists");
+        }
+        if (a.empty()) return facade;
+        if (a[0].type != Value::Type::STRING)
+            throw err(diag::Code::E0004_InvalidType, line, "'rintwist.rsf' expects a member name (string) but got " + a[0].typeName());
+        const Value* fn = extra4::o4get(facade, a[0].str);
+        if (!fn) throw errWithReason(diag::Code::E0035_RuntimeError, line, "rintwist.rsf: unknown member `" + a[0].str + "`",
+                                     "see docs/rsf.md for the list (dedupe, cycles, iterate, graph, selfCheck, ...)");
+        Args rest(a.begin() + 1, a.end());
+        return callValue(*fn, rest, line);
     };
     // rintwist.fmt("{file.stem}-{date.date}.log") — الأقواس المزدوجة {{ و }} تُنتج { و } حرفياً.
     // وسيط ثانٍ اختياري (map) تُقدَّم مفاتيحه على حقول RINTWIST: rintwist.fmt("{user}@{server.host}", {user: "jo"})
