@@ -1,0 +1,21 @@
+// bigint — أرقام صحيحة ضخمة (الجزء الأساسي: الثوابت والبنية)
+// التمثيل: خريطة { s: الإشارة (-1 | 0 | 1), d: مصفوفة خانات base 10^7 من الأصغر إلى الأكبر }
+// القيم غير قابلة للتعديل عملياً: كل دالة تُرجع قيمة جديدة ولا تغيّر مدخلاتها.
+let BIG_BASE = 10000000;
+let BIG_DIGITS = 7;
+let BIG_KARATSUBA = 32;
+
+fun bi_make(sign, mag) {
+    mag_trim(mag);
+    if (len(mag) == 0) { return {s: 0, d: []}; }
+    return {s: sign, d: mag};
+}
+fun bi_fail(msg) { throw "bigint: " + msg; }
+
+// هل القيمة رقم ضخم من هذه المكتبة؟
+export fun big_isBig(x) {
+    if (type(x) != "map") { return false; }
+    if (!has(x, "s")) { return false; }
+    if (!has(x, "d")) { return false; }
+    return true;
+}
