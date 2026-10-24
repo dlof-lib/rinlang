@@ -1,0 +1,100 @@
+// core/timing.zpp — زمن وتقدّم وإعادة محاولة. الساعة من RINTWIST.run.uptimeMs.
+
+fun lt_round1(x) { return round(x * 10) / 10; }
+
+// يقيس زمن fn() بالميلي ثانية → {value, ms, label}. يتتبّع النتيجة إن كان trace مفعّلاً.
+export fun lt_timed(label, fn) {
+    lt_checkFn(fn, "lt_timed");
+    let t0 = lt_clock();
+    let v = fn();
+    let ms = lt_clock() - t0;
+    ltx_trace("timed " + toString(label), toString(lt_round1(ms)) + " ms");
+    return {value: v, ms: ms, label: label};
+}
+
+// يكرّر body(i) ما دامت ميزانية الزمن (ms) لم تنتهِ → {iterations, ms, stopped} حيث stopped = "budget" | "stop"
+export fun lt_budget(ms, body) {
+    lt_checkFn(body, "lt_budget");
+    if (type(ms) != "number" or ms < 0) { throw "looptwist: lt_budget expects a non-negative number of milliseconds"; }
+    let t0 = lt_clock();
+    let i = 0;
+    let why = "budget";
+    while (lt_clock() - t0 < ms) {
+        lt_guard(i + 1, "lt_budget");
+        let r = body(i);
+        i = i + 1;
+        if (r == LT_STOP) { why = "stop"; break; }
+    }
+    return {iterations: i, ms: lt_clock() - t0, stopped: why};
+}
+
+// إعادة المحاولة: fn(attempt) (attempt يبدأ من 1). أي throw يعيد المحاولة؛ بعد attempts محاولة يُعاد رمي الخطأ الأخير.
+//   opts: {delay: ms الأولي (0)، factor: مضاعف التأخير (1 = ثابت، 2 = أُسّي)، maxDelay: سقف التأخير، onRetry: fun(attempt, err, nextDelay)}
+fun ltx_retry(attempts, fn, opts) {
+    lt_checkInt(attempts, "lt_retry");
+    lt_checkFn(fn, "lt_retry");
+    if (attempts < 1) { throw "looptwist: lt_retry attempts must be >= 1"; }
+    let o = opts == nil ? {} : opts;
+    let delay = has(o, "delay") ? o["delay"] : 0;
+    let factor = has(o, "factor") ? o["factor"] : 1;
+    let maxDelay = has(o, "maxDelay") ? o["maxDelay"] : 60000;
+    let lastErr = nil;
+    for (let a = 1; a <= attempts; a++) {
+        try {
+            ltx_trace("retry", "attempt " + toString(a) + "/" + toString(attempts));
+            return fn(a);
+        } catch (e) {
+            lastErr = e;
+            if (a < attempts) {
+                let wait = min(delay, maxDelay);
+                if (has(o, "onRetry")) { o["onRetry"](a, e, wait); }
+                if (wait > 0 and LT_CFG["sleep"]) { time.sleep(wait); }
+                delay = delay * factor;
+            }
+        }
+    }
+    // أعد رمي الخطأ الأصلي نفسه (catch يغلّف القيمة المرمية في {value, message, line})
+    if (type(lastErr) == "map" and has(lastErr, "value")) { throw lastErr["value"]; }
+    throw lastErr;
+}
+
+// ينتظر حتى تُرجع cond() صحيحاً: يفحص كل intervalMs (الافتراضي 50) حتى timeoutMs (الافتراضي 5000).
+// يُرجع true عند التحقق، false عند انتهاء المهلة.
+fun ltx_poll(cond, intervalMs, timeoutMs) {
+    lt_checkFn(cond, "lt_poll");
+    let every = intervalMs == nil ? 50 : intervalMs;
+    let limit = timeoutMs == nil ? 5000 : timeoutMs;
+    let t0 = lt_clock();
+    let n = 0;
+    while (true) {
+        n = n + 1;
+        lt_guard(n, "lt_poll");
+        if (cond()) { return true; }
+        if (lt_clock() - t0 >= limit) { return false; }
+        if (LT_CFG["sleep"]) { time.sleep(every); }
+    }
+}
+
+// ---- شريط تقدّم + تقدير الزمن المتبقي ----
+fun ltx_progress(total, width) {
+    if (type(total) != "number" or total < 0) { throw "looptwist: lt_progress expects a non-negative total"; }
+    return {total: total, done: 0, width: width == nil ? 20 : width, start: lt_clock()};
+}
+// يزيد المنجَز بمقدار n (الافتراضي 1) ويُرجع المنجَز الحالي
+fun ltx_tick(p, n) {
+    p["done"] = min(p["total"], p["done"] + (n == nil ? 1 : n));
+    return p["done"];
+}
+// سطر جاهز: "[########------------] 40% 4/10 1.2s eta 1.8s"
+export fun lt_progressLine(p) {
+    let total = p["total"];
+    let done = p["done"];
+    let frac = total == 0 ? 1 : done / total;
+    let filled = floor(frac * p["width"]);
+    let bar = "";
+    for (let i = 0; i < p["width"]; i++) { bar = bar + (i < filled ? "#" : "-"); }
+    let elapsed = lt_clock() - p["start"];
+    let eta = (done > 0 and done < total) ? elapsed / done * (total - done) : 0;
+    return "[" + bar + "] " + toString(floor(frac * 100)) + "% " + toString(done) + "/" + toString(total) +
+           " " + toString(lt_round1(elapsed / 1000)) + "s eta " + toString(lt_round1(eta / 1000)) + "s";
+}
