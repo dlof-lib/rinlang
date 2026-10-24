@@ -1,0 +1,1 @@
+fun xmlfull_ok() { return 1; }
