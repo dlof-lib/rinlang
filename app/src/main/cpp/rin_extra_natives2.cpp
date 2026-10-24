@@ -1115,6 +1115,36 @@ void Interpreter::registerNativesExtra2() {
             throw;
         }
     };
+    // ns.transaction(path, fn) — atomic edit of ONE container namespace (container only: Group/Volume have no
+    // transactions). Same all-or-nothing rollback as container.transaction, addressed by qualified path.
+    natives["ns.transaction"] = [this](Args& a, int line) -> Value {
+        need("ns.transaction", a, 2, 2, line);
+        if (a[1].type != Value::Type::FUNCTION || !a[1].function)
+            throw diagErr(diag::Code::E0004_InvalidType, line, "'ns.transaction' expects a function as its second argument");
+        std::string path = str(a[0], "ns.transaction", line);
+        auto n = nsResolvePath(path);
+        if (!n) throw diagErr(diag::Code::E0001_UndefinedVariable, line, "ns.transaction: no namespace `" + path + "`");
+        if (!n->canTransact())
+            throw errWithReason(diag::Code::E0035_RuntimeError, line, "ns.transaction: `" + path + "` is a " + n->kindName() + ", not a container",
+                                "only a container supports transactions");
+        MapData snap;
+        for (const auto& kv : n->env->values) {
+            if (kv.second.type == Value::Type::FUNCTION) continue;
+            snap.push_back({Value::string(kv.first), deepCopyValue(kv.second)});
+        }
+        auto env = n->env;
+        Args callArgs;
+        try {
+            return callFunction(a[1].function, callArgs, line);
+        } catch (...) {
+            auto& vals = env->values;
+            for (auto vi = vals.begin(); vi != vals.end();) {
+                if (vi->second.type == Value::Type::FUNCTION) ++vi; else vi = vals.erase(vi);
+            }
+            for (const auto& kv : snap) vals[kv.first.toDisplayString()] = deepCopyValue(kv.second);
+            throw;
+        }
+    };
     // container.attempt(name | [names], fn) -> {ok, value, error} — transaction بلا try/catch: لا يرمي أبداً؛
     // ok=true => value نتيجة fn؛ ok=false => التراجع تمّ وerror = {message, line[, value][, code]}.
     natives["container.attempt"] = [this](Args& a, int line) -> Value {
