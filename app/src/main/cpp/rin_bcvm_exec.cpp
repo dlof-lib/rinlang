@@ -725,6 +725,35 @@ Interpreter::Flow Interpreter::vmLoop(vm::RunState& rs, Value& ret) {
             throw diagErr(diag::Code::E0004_InvalidType, line,
                           "cannot access property `." + prop + "` on a value of type `" + obj.typeName() + "`");
         }
+        // ---- Namespaces (container / group / Volume) ----
+        case Op::NsGet: {
+            if (!nsRoots.empty()) {
+                auto ge = std::static_pointer_cast<GetExpr>(P->exprs[static_cast<size_t>(in.a)]);
+                if (auto ns = nsResolveExpr(ge->object, envs.back())) {
+                    f->pc = pc;
+                    stack.push_back(nsGet(ns, ge->name, in.c));
+                    pc = static_cast<uint32_t>(in.b);
+                }
+            }
+            break;
+        }
+        case Op::NsSetTest: {
+            bool isNs = false;
+            if (!nsRoots.empty()) {
+                auto se = std::static_pointer_cast<SetExpr>(P->exprs[static_cast<size_t>(in.a)]);
+                isNs = nsResolveExpr(se->object, envs.back()) != nullptr;
+            }
+            if (!isNs) pc = static_cast<uint32_t>(in.b);
+            break;
+        }
+        case Op::NsSet: {
+            f->pc = pc;
+            auto se = std::static_pointer_cast<SetExpr>(P->exprs[static_cast<size_t>(in.a)]);
+            Value val = popV();
+            auto ns = nsResolveExpr(se->object, envs.back());
+            stack.push_back(nsSet(ns, se->name, val, in.c));
+            break;
+        }
         case Op::GetSuper:
             f->pc = pc;
             stack.push_back(evaluateSuperGet(P->strs[static_cast<size_t>(in.a)], envs.back(), in.c));
