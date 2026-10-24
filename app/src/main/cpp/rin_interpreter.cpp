@@ -347,6 +347,13 @@ RinError Interpreter::errWithReason(diag::Code code, int line, std::string messa
 }
 
 RinError Interpreter::undefinedVariableErr(const std::string& name, int line, const EnvPtr& env) const {
+    if (name == "RINTWIST") {   // القراءة لا تصل إلى هنا أبداً، فهذا إسناد: المتغيّر للقراءة فقط
+        diag::Diagnostic rd(diag::Code::E0035_RuntimeError, "`RINTWIST` is read-only",
+                            diag::SourceLocation::point(sourceFile, line, 1));
+        rd.withReason("RINTWIST is a built-in snapshot of the running context (file / server / date / app / lib)")
+          .withHint("copy it first: `let ctx = RINTWIST;`, or declare your own variable with a different name");
+        return RinError(std::move(rd));
+    }
     diag::Diagnostic d(diag::Code::E0001_UndefinedVariable, "undefined variable `" + name + "`",
                         diag::SourceLocation::point(sourceFile, line, 1));
     d.withReason("no variable named `" + name + "` exists in this scope");
@@ -6801,6 +6808,7 @@ void Interpreter::registerNatives() {
     registerNativesExtra8(); // مفهوم token: tokenList/tokenStats/tokenAt/... (rin_extra_natives8.cpp، docs/TOKEN.md)
     registerNativesExtra10(); // مفهوم linalg: mat*/vec* (rin_extra_natives10.cpp، docs/LINALG.md)
     registerNativesExtra11(); // مفهوم algo: algo* (rin_extra_natives11.cpp، docs/ALGO.md)
+    registerNativesRintwist(); // RINTWIST: rintwist.get/fmt/stack (rin_rintwist.cpp، docs/rintwist.md)
     registerNativesLibDir(); // مكتبات Rin المقسَّمة: rinlib.* (rin_libdir.cpp، docs/split-libraries.md)
     registerNativesExtra9(); // مفهوم number: دوال الأرقام العملية (rin_extra_natives9.cpp، docs/NUMBER.md)
     registerNativesOop(); // Rin 1.0: oop.* — استبطان الأصناف والكائنات + أدوات OOP (rin_oop_natives.cpp)
@@ -9233,6 +9241,7 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
 
         try {
             ++importDepth_;
+            ExecFrameScope frameScope_(*this, libPath, isSplitLib ? &libUnit : nullptr);
             if (s->alias.empty()) {
                 // دمج مباشر: كل fun/let/text أعلى مستوى في المكتبة تصبح متاحة في النطاق الحالي مباشرة،
                 // تماماً كـ #include. أي @container بداخل المكتبة يُسجَّل عالمياً كأي حاوية عادية.
@@ -9436,6 +9445,7 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
         auto libEnv = std::make_shared<Environment>(env);
         try {
             ++importDepth_;
+            ExecFrameScope frameScope_(*this, libPath, isSplitLib ? &libUnit : nullptr);
             importUI.stage(loaderui::LoadStage::Initializing);
             execLibraryBody(importedStatements, isSplitLib ? &libUnit.segments : nullptr, libEnv);
             --importDepth_;
@@ -10935,6 +10945,7 @@ Value Interpreter::evaluateTree(const ExprPtr& expr, const EnvPtr& env) {
         }
         // lookup بلا نسخة وسيطة: نسخة واحدة فقط من القيمة (كانت get() تنسخ إلى out ثم تُعاد).
         if (const Value* found = env->lookup(e->name)) return *found;
+        if (e->name == "RINTWIST") return rintwistValue();   // متغيّر مضمَّن حيّ (قراءة فقط)
         throw undefinedVariableErr(e->name, e->line, env);
     }
     case ExprKind::Assign: { auto e = std::static_pointer_cast<AssignExpr>(expr);
@@ -12711,6 +12722,7 @@ bool Interpreter::livePropertyGet(const EnvPtr& env, const std::string& name, co
 #include "rin_extra_natives10.cpp" // مفهوم linalg (docs/LINALG.md)
 #include "rin_extra_natives11.cpp" // مفهوم algo (docs/ALGO.md)
 #include "rin_libdir.cpp" // مكتبات Rin المقسَّمة (docs/split-libraries.md)
+#include "rin_rintwist.cpp" // RINTWIST: سياق التنفيذ (docs/rintwist.md)
 #include "rin_table.cpp" // توسعة الجدول: دوال اللغة الموجودة تفهم الجدول (انظر رأس الملف)
 #include "rin_conditions.cpp" // متغيّرات الشروط الموسّعة (docs/key_terms_and_builtins.md)
 #include "rin_image_ansi.cpp" // صور داخل الـ terminal كنص (docs/image-terminal.md)
