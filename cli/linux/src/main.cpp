@@ -26,6 +26,7 @@
 #include "rin_lexer.h"
 #include "rin_parser.h"
 #include "rin_interpreter.h"
+#include "rin_disconom.h"   // مترجم Disconom + disconom.lock (rin lib translate|fmt|lock)
 #include "rin_bcvm.h"
 #include "diagnostics/diagnostic_renderer.h"
 #include "diagnostics/source_manager.h"
@@ -413,7 +414,7 @@ static std::string rinzPrelude(const std::string& file, rin::Interpreter& interp
         if (k == std::string::npos || k == 0) break;
         dir = dir.substr(0, k);
         struct stat st;
-        if (stat((dir + "/disconom.json").c_str(), &st) == 0 || stat((dir + "/disconom.xml").c_str(), &st) == 0) {
+        if (stat((dir + "/disconom.json").c_str(), &st) == 0 || stat((dir + "/disconom.xml").c_str(), &st) == 0 || stat((dir + "/disconom.toml").c_str(), &st) == 0) {
             interp.setSkipLibraryRun(true);
             return "@import \"" + dir + "\"; ";
         }
@@ -430,12 +431,167 @@ static bool resolveLibArg(const std::string& arg, rin::libdir::PackageRef& ref) 
     return false;
 }
 
+
+// ---------------------------------------------------------------------------
+// Disconom: المترجم (translate/fmt)، ملف القفل (lock)، السكربتات (scripts/script)
+// ---------------------------------------------------------------------------
+namespace ds = rin::disconom;
+
+static bool isRegularFile(const std::string& p) { struct stat st; return stat(p.c_str(), &st) == 0 && S_ISREG(st.st_mode); }
+
+// arg = ملف مانيفست، أو مجلد مكتبة (يُبحث فيه عن disconom.json|xml|toml ثم rin.toml ثم package.json)، أو اسم مكتبة في lib/.
+static bool findManifestFile(const std::string& arg, std::string& path, ds::Fmt& fmt, std::string& text, std::string& err) {
+    std::string dir;
+    if (isRegularFile(arg)) path = arg;
+    else {
+        if (isDir(arg)) dir = arg;
+        else { rin::libdir::PackageRef ref; if (resolveLibArg(arg, ref) && ref.kind == rin::libdir::PackageKind::Library) dir = ref.root; }
+        if (dir.empty()) { err = "لم أجد ملفاً ولا مجلد مكتبة باسم '" + arg + "'"; return false; }
+        for (const char* f : {"disconom.json", "disconom.xml", "disconom.toml", "rin.toml", "package.json"})
+            if (isRegularFile(dir + "/" + f)) { path = dir + "/" + f; break; }
+        if (path.empty()) { err = "لا يوجد ملف Disconom (disconom.json|xml|toml) في '" + dir + "'"; return false; }
+    }
+    if (!readFile(path, text)) { err = "تعذّر قراءة '" + path + "'"; return false; }
+    return true;
+}
+
+static void printDsMessages(const ds::Result& r, bool quiet) {
+    for (auto& e : r.errors) std::cerr << "  خطأ: " << e << "\n";
+    if (quiet) return;
+    for (auto& w : r.warnings) std::cerr << "  تحذير: " << w << "\n";
+    for (auto& n : r.notes) std::cerr << "  ملاحظة: " << n << "\n";
+}
+
+// rin lib translate <ملف|مجلد|اسم> --to json|xml|toml|rinpm|npm [--from F] [-o OUT] [--write] [--force] [--strict] [--quiet]
+// rin lib fmt       <ملف|مجلد|اسم> [--write] [--check]   (إعادة كتابة الوصف بالشكل القانوني بنفس صيغته)
+static int cmdDisconomTranslate(const std::vector<std::string>& args, bool isFmt) {
+    std::string input, toName, fromName, outFile;
+    bool write = false, force = false, strict = false, quiet = false, check = false;
+    for (size_t i = 1; i < args.size(); ++i) {
+        const std::string& a = args[i];
+        auto val = [&](std::string& dst) { if (i + 1 < args.size()) dst = args[++i]; };
+        if (a == "--to") val(toName); else if (a == "--from") val(fromName); else if (a == "-o" || a == "--out") val(outFile);
+        else if (a == "--write") write = true; else if (a == "--force") force = true; else if (a == "--strict") strict = true;
+        else if (a == "--quiet" || a == "-q") quiet = true; else if (a == "--check") check = true;
+        else if (!a.empty() && a[0] != '-') input = a;
+    }
+    const std::string cmd = isFmt ? "fmt" : "translate";
+    if (input.empty()) { std::cerr << "rin lib " << cmd << ": يلزم ملف أو مجلد مكتبة\n"; return 2; }
+    std::string path, text, err;
+    ds::Fmt from = ds::Fmt::Json, to = ds::Fmt::Json;
+    if (!findManifestFile(input, path, from, text, err)) { std::cerr << "rin lib " << cmd << ": " << err << "\n"; return 1; }
+    if (!fromName.empty()) { if (!ds::parseFmtName(fromName, from)) { std::cerr << "rin lib " << cmd << ": صيغة --from غير معروفة '" << fromName << "' (json|xml|toml|rinpm|npm)\n"; return 2; } }
+    else if (!ds::detect(path, text, from)) { std::cerr << "rin lib " << cmd << ": تعذّر تخمين صيغة '" << path << "' — استعمل --from\n"; return 1; }
+    if (isFmt) to = from;
+    else {
+        if (toName.empty()) { std::cerr << "rin lib translate: يلزم --to json|xml|toml|rinpm|npm\n"; return 2; }
+        if (!ds::parseFmtName(toName, to)) { std::cerr << "rin lib translate: صيغة --to غير معروفة '" << toName << "' (json|xml|toml|rinpm|npm)\n"; return 2; }
+    }
+    ds::Result r = ds::translate(text, from, to, strict);
+    if (!r.ok) { std::cerr << path << " [" << ds::fmtName(from) << "]\n"; printDsMessages(r, quiet); std::cerr << "FAILED\n"; return 1; }
+    if (isFmt && check) {
+        bool same = (r.out == text);
+        std::cout << path << (same ? "  مُنسَّق" : "  يحتاج إعادة تنسيق (rin lib fmt --write)") << "\n";
+        return same ? 0 : 1;
+    }
+    std::string target = outFile;
+    if (target.empty() && write) {
+        std::string dir = path.find('/') == std::string::npos ? std::string(".") : path.substr(0, path.find_last_of('/'));
+        target = isFmt ? path : dir + "/" + ds::fmtFile(to);
+    }
+    if (target.empty()) { std::cout << r.out; printDsMessages(r, quiet); return 0; }
+    if (!isFmt && target != path && isRegularFile(target) && !force) { std::cerr << "rin lib translate: '" << target << "' موجود — استعمل --force للاستبدال\n"; return 1; }
+    std::ofstream out(target, std::ios::binary | std::ios::trunc);
+    if (!out) { std::cerr << "rin lib " << cmd << ": تعذّرت الكتابة في '" << target << "'\n"; return 1; }
+    out << r.out; out.close();
+    std::cout << (isFmt ? "أُعيدت كتابة " : "كُتب ") << target << "  [" << ds::fmtName(from) << " → " << ds::fmtName(to) << "]\n";
+    printDsMessages(r, quiet);
+    return 0;
+}
+
+// rin lib lock <name|dir> [--check] [-o FILE]  — يولّد/يتحقق من disconom.lock (الإصدارات المحلولة + بصمة sha256 لكل تبعية)
+static int cmdDisconomLock(const std::vector<std::string>& args) {
+    namespace ld = rin::libdir;
+    std::string input, outFile; bool check = false;
+    for (size_t i = 1; i < args.size(); ++i) {
+        if (args[i] == "--check") check = true;
+        else if ((args[i] == "-o" || args[i] == "--out") && i + 1 < args.size()) outFile = args[++i];
+        else if (!args[i].empty() && args[i][0] != '-') input = args[i];
+    }
+    if (input.empty()) { std::cerr << "rin lib lock: يلزم اسم مكتبة أو مجلدها\n"; return 2; }
+    ld::PackageRef ref;
+    if (!resolveLibArg(input, ref) || ref.kind != ld::PackageKind::Library) { std::cerr << "rin lib lock: لم أجد مكتبة (مجلد) باسم '" << input << "'\n"; return 1; }
+    ld::Plan plan; std::vector<std::string> errs;
+    ld::planLibrary(ld::diskFS(), ref.root, "", plan, errs);
+    if (!errs.empty()) { for (auto& e : errs) std::cerr << "  خطأ: " << e << "\n"; return 1; }
+    rin::Interpreter in;
+    ld::DepGraph g = in.dependencyGraph(ref.root);
+    for (auto& cy : g.cycles) std::cerr << "  دورة: " << cy << "\n";
+    for (auto& pr : g.problems) std::cerr << "  خطأ: " << pr << "\n";
+    if (!g.ok()) { std::cerr << "FAILED — أصلح رسم التبعيات قبل القفل\n"; return 1; }
+    for (auto& m : g.missing) std::cerr << "  تحذير: " << m << "\n";
+    ds::J lock = ds::buildLock(plan.manifest, g, kVersion, [&](const std::string& root) { return in.libraryFingerprint(root); });
+    const std::string lockPath = outFile.empty() ? ref.root + "/" + ld::kLockFile : outFile;
+    if (check) {
+        std::string old;
+        if (!readFile(lockPath, old)) { std::cerr << "rin lib lock --check: لا يوجد " << lockPath << " (شغّل rin lib lock " << input << ")\n"; return 1; }
+        ld::J saved; std::string perr;
+        if (!ld::parseJson(old, saved, perr)) { std::cerr << "rin lib lock --check: " << lockPath << ": " << perr << "\n"; return 1; }
+        auto diffs = ds::compareLock(saved, lock);
+        for (auto& d : diffs) std::cout << "  " << d << "\n";
+        std::cout << lockPath << (diffs.empty() ? "  محدَّث (OK)" : "  لا يطابق (FAILED) — شغّل rin lib lock لتحديثه") << "\n";
+        return diffs.empty() ? 0 : 1;
+    }
+    std::ofstream out(lockPath, std::ios::binary | std::ios::trunc);
+    if (!out) { std::cerr << "rin lib lock: تعذّرت الكتابة في '" << lockPath << "'\n"; return 1; }
+    out << ld::dumpJson(lock, 2) << "\n"; out.close();
+    size_t n = 0; if (auto* pk = lock.get("packages")) n = pk->a.size();
+    std::cout << "كُتب " << lockPath << "  (" << n << " تبعية مقفولة)\n";
+    return 0;
+}
+
+static std::string shQuote(const std::string& s) { std::string o = "'"; for (char ch : s) { if (ch == '\'') o += "'\\''"; else o += ch; } return o + "'"; }
+
+// rin lib scripts <lib>             يسرد scripts المعلنة في Disconom
+// rin lib script  <lib> <name> [--allow-scripts] [-- args…]   يشغّل أمراً منها داخل مجلد المكتبة (يتطلب --allow-scripts صراحةً)
+static int cmdDisconomScripts(const std::vector<std::string>& args, bool run) {
+    namespace ld = rin::libdir;
+    std::string input, name; bool allow = false; std::string extra;
+    bool afterDash = false;
+    for (size_t i = 1; i < args.size(); ++i) {
+        if (afterDash) { extra += " " + shQuote(args[i]); continue; }
+        if (args[i] == "--") { afterDash = true; continue; }
+        if (args[i] == "--allow-scripts") { allow = true; continue; }
+        if (!args[i].empty() && args[i][0] != '-') { if (input.empty()) input = args[i]; else if (name.empty()) name = args[i]; }
+    }
+    if (input.empty()) { std::cerr << "rin lib " << (run ? "script" : "scripts") << ": يلزم اسم مكتبة أو مجلدها\n"; return 2; }
+    ld::PackageRef ref;
+    if (!resolveLibArg(input, ref) || ref.kind != ld::PackageKind::Library) { std::cerr << "rin lib script: لم أجد مكتبة (مجلد) باسم '" << input << "'\n"; return 1; }
+    ld::Plan plan; std::vector<std::string> errs;
+    ld::planLibrary(ld::diskFS(), ref.root, "", plan, errs);
+    if (!errs.empty()) { for (auto& e : errs) std::cerr << "  خطأ: " << e << "\n"; return 1; }
+    const auto& sc = plan.manifest.scripts;
+    if (!run || name.empty()) {
+        if (sc.empty()) { std::cout << plan.manifest.name << ": لا توجد scripts في Disconom\n"; return 0; }
+        for (auto& kv : sc) std::cout << "  " << kv.first << "  →  " << kv.second << "\n";
+        return 0;
+    }
+    const std::string* cmd = nullptr;
+    for (auto& kv : sc) if (kv.first == name) cmd = &kv.second;
+    if (!cmd) { std::cerr << "rin lib script: لا يوجد script باسم '" << name << "' (rin lib scripts " << input << ")\n"; return 1; }
+    if (!allow) { std::cerr << "rin lib script: '" << name << "' = " << *cmd << "\n  لن يُنفَّذ دون --allow-scripts (الأوامر تأتي من ملف المكتبة، فتأكد أنك تثق بها)\n"; return 1; }
+    std::string full = "cd " + shQuote(ref.root) + " && " + *cmd + extra;
+    std::cerr << "> " << plan.manifest.name << " " << name << ": " << *cmd << extra << "\n";
+    int rc = std::system(full.c_str());
+    return WIFEXITED(rc) ? WEXITSTATUS(rc) : 1;
+}
+
 int cmdLib(const std::vector<std::string>& args) {
     namespace ld = rin::libdir;
     if (args.empty() || args[0] == "--help" || args[0] == "-h") {
         std::cout <<
             "rin lib — الحزم: «مكتبة» (مجلد <name>.og.rin: Disconom + .zpp + .rinz + native/) و«توكن أداة OG» (ملف واحد <rinname>.og.rin)\n"
-            "  rin lib new <name> [--dir D] [--xml] [--native] [--version V] [--author A] [--desc T]   إنشاء مكتبة جديدة\n"
+            "  rin lib new <name> [--dir D] [--xml|--toml] [--native] [--version V] [--author A] [--desc T]   إنشاء مكتبة جديدة\n"
             "  rin lib check <name|dir>   فحص (مكتبة: Disconom + تحليل كل .zpp/.rinz + التبعيات المتعدّية؛ توكن: صياغة) — رمز 1 عند الأخطاء\n"
             "  rin lib info  <name|dir>   وصف الحزمة وترتيب تحميل أجزائها\n"
             "  rin lib kind  <name>       نوع الحزمة: library | tool-token\n"
@@ -444,7 +600,12 @@ int cmdLib(const std::vector<std::string>& args) {
             "  rin lib packages [dir]     كل الحزم (مكتبات + توكنات)\n"
             "  rin lib graph <name|dir>   رسم التبعيات المتعدّية بترتيب التحميل (يكشف الدورات وعدم توافق الإصدارات)\n"
             "  rin lib fingerprint <name|dir>   بصمة SHA-256 لمحتوى الحزمة\n"
-            "  rin lib run   <name|dir>   استيراد المكتبة وتنفيذ ملفات .rinz (أضف --allow-native للكود C++)\n";
+            "  rin lib run   <name|dir>   استيراد المكتبة وتنفيذ ملفات .rinz (أضف --allow-native للكود C++)\n"
+            "  rin lib translate <ملف|dir> --to json|xml|toml|rinpm|npm [--from F] [-o OUT|--write] [--strict]   مترجم Disconom بين الصيغ (+ package.json وrin.toml)\n"
+            "  rin lib fmt   <ملف|dir> [--write|--check]   إعادة كتابة Disconom بالشكل القانوني بنفس صيغته\n"
+            "  rin lib lock  <name|dir> [--check]         توليد/فحص disconom.lock (الإصدارات المحلولة + بصمات sha256)\n"
+            "  rin lib scripts <name|dir>                 سرد scripts المعلنة؛ rin lib script <name|dir> <script> --allow-scripts لتشغيل واحد\n"
+            "  (ميزات اختيارية: RIN_FEATURES=feat1,feat2 قبل rin run/check)\n";
         return 0;
     }
     const std::string sub = args[0];
@@ -453,7 +614,7 @@ int cmdLib(const std::vector<std::string>& args) {
         for (size_t i = 1; i < args.size(); ++i) {
             const std::string& a = args[i];
             auto val = [&](std::string& dst) { if (i + 1 < args.size()) dst = args[++i]; };
-            if (a == "--dir") val(dir); else if (a == "--xml") o.xml = true; else if (a == "--native") o.native = true;
+            if (a == "--dir") val(dir); else if (a == "--xml") o.xml = true; else if (a == "--toml") o.toml = true; else if (a == "--native") o.native = true;
             else if (a == "--version") val(o.version); else if (a == "--author") val(o.author); else if (a == "--desc") val(o.description);
             else if (a == "--license") val(o.license);
             else if (!a.empty() && a[0] != '-') o.name = a;
@@ -465,6 +626,11 @@ int cmdLib(const std::vector<std::string>& args) {
         for (auto& f : created) std::cout << "  + " << f << "\n";
         return 0;
     }
+    if (sub == "translate") return cmdDisconomTranslate(args, false);
+    if (sub == "fmt") return cmdDisconomTranslate(args, true);
+    if (sub == "lock") return cmdDisconomLock(args);
+    if (sub == "scripts") return cmdDisconomScripts(args, false);
+    if (sub == "script") return cmdDisconomScripts(args, true);
     if (sub == "list" || sub == "tokens" || sub == "packages") {
         std::string dir = args.size() > 1 ? args[1] : "lib";
         const char* fn = sub == "list" ? "discover" : sub == "tokens" ? "tokens" : "packages";
@@ -518,10 +684,28 @@ int cmdLib(const std::vector<std::string>& args) {
         ld::Plan plan; std::vector<std::string> errs;
         ld::planLibrary(ld::diskFS(), root, "", plan, errs);
         const auto& m = plan.manifest;
-        std::cout << m.name << " " << m.version << "  [مكتبة]  (" << plan.root << ")\n";
+        for (size_t i = 2; i < args.size(); ++i) if (args[i] == "--json") {
+            std::cout << ld::dumpJson(ds::canonicalJson(m), 2) << "\n";
+            return errs.empty() ? 0 : 1;
+        }
+        std::cout << m.name << " " << m.version << "  [مكتبة]" << (m.isPrivate ? " [خاصة]" : "") << "  (" << plan.root << ")\n";
         if (!m.description.empty()) std::cout << "  " << m.description << "\n";
         std::cout << "  Disconom: " << (plan.hasManifest ? plan.manifestFile : "—") << "   Rin: " << (m.rin.empty() ? "—" : m.rin) << "\n";
+        if (!m.license.empty() || !m.authors.empty()) {
+            std::cout << "  ";
+            if (!m.license.empty()) std::cout << "license " << m.license << "   ";
+            for (size_t k = 0; k < m.authors.size(); ++k) std::cout << (k ? ", " : "authors ") << m.authors[k];
+            std::cout << "\n";
+        }
         for (auto& d : m.dependencies) std::cout << "  dep   " << d.name << " " << d.range << "\n";
+        for (auto& d : m.optionalDependencies) std::cout << "  opt   " << d.name << " " << d.range << "\n";
+        for (auto& d : m.peerDependencies) std::cout << "  peer  " << d.name << " " << d.range << "\n";
+        for (auto& d : m.devDependencies) std::cout << "  dev   " << d.name << " " << d.range << "\n";
+        if (!m.features.empty()) {
+            auto on = ld::activeFeatures(m);
+            for (auto& f : m.features) { std::cout << "  feat  " << f.first << (on.count(f.first) ? " (افتراضية)" : "") << " = ["; for (size_t k = 0; k < f.second.size(); ++k) std::cout << (k ? ", " : "") << f.second[k]; std::cout << "]\n"; }
+        }
+        for (auto& kv : m.scripts) std::cout << "  script " << kv.first << " → " << kv.second << "\n";
         int i = 1; for (auto& p : plan.parts) std::cout << "  " << i++ << ". part " << p << "\n";
         for (auto& p : plan.runFiles) std::cout << "  " << i++ << ". run  " << p << "\n";
         for (auto& s : m.native.sources) std::cout << "  native " << s << "\n";
