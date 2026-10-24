@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rinlang.dev/schemas/disconom-2.json",
+  "title": "Disconom 2 — Rin library manifest",
+  "description": "وصف مكتبة Rin. يصلح لـ disconom.json وكذلك disconom.toml (نفس المفاتيح). الحقول غير المعروفة مسموحة (تُحفظ عند الترجمة) والأفضل أن تبدأ بـ x-.",
+  "type": "object",
+  "required": ["name", "version"],
+  "additionalProperties": true,
+  "$defs": {
+    "semver": {"type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?$"},
+    "range": {"type": "string", "description": "قيد إصدار: ^1.2.0 ~1.2 >=1 <2 1.x * || (مسافة = AND)"},
+    "ident": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_.-]*$", "maxLength": 64},
+    "relpath": {"type": "string", "pattern": "^(?!/)(?!.*\\.\\.)(?!.*:)(?!.*\\\\).+$", "description": "مسار نسبي آمن: بلا .. ولا مطلق"},
+    "stringList": {"type": "array", "items": {"type": "string"}},
+    "depMap": {"type": "object", "additionalProperties": {"$ref": "#/$defs/range"}}
+  },
+  "properties": {
+    "disconom": {"type": "integer", "minimum": 1, "maximum": 2, "description": "إصدار الصيغة (2 = scripts/features/devDependencies/…)"},
+    "name": {"$ref": "#/$defs/ident"},
+    "version": {"$ref": "#/$defs/semver"},
+    "description": {"type": "string", "maxLength": 400},
+    "authors": {"$ref": "#/$defs/stringList"},
+    "contributors": {"$ref": "#/$defs/stringList"},
+    "license": {"type": "string", "description": "تعبير SPDX مثل MIT أو MIT OR Apache-2.0"},
+    "keywords": {"type": "array", "items": {"type": "string"}, "maxItems": 20},
+    "categories": {"$ref": "#/$defs/stringList"},
+    "homepage": {"type": "string"},
+    "repository": {"type": "string"},
+    "bugs": {"type": "string"},
+    "funding": {"type": "string"},
+    "readme": {"$ref": "#/$defs/relpath"},
+    "language": {"const": "rin"},
+    "rin": {"$ref": "#/$defs/range", "description": "إصدارات لغة Rin المدعومة"},
+    "platforms": {"type": "array", "items": {"enum": ["linux", "android", "windows", "macos", "ios", "web", "wasm"]}},
+    "private": {"type": "boolean", "description": "true = لا تُنشر إلى سجلّ"},
+    "main": {"$ref": "#/$defs/relpath"},
+    "parts": {"type": "array", "items": {"type": "string"}, "description": "مسارات/مجلدات/globs لأجزاء .zpp بترتيب التحميل"},
+    "exclude": {"$ref": "#/$defs/stringList"},
+    "run": {"oneOf": [{"type": "string"}, {"$ref": "#/$defs/stringList"}]},
+    "files": {"type": "array", "items": {"$ref": "#/$defs/relpath"}, "description": "ما يُضمَّن عند الحزم/النشر (فارغ = الكل)"},
+    "workspaces": {"type": "array", "items": {"$ref": "#/$defs/relpath"}},
+    "dependencies": {"$ref": "#/$defs/depMap"},
+    "optionalDependencies": {"$ref": "#/$defs/depMap", "description": "تُحمَّل إن وُجدت؛ غيابها ليس خطأً"},
+    "peerDependencies": {"$ref": "#/$defs/depMap", "description": "يوفّرها المستهلِك؛ تُفحص ولا تُحمَّل"},
+    "devDependencies": {"$ref": "#/$defs/depMap", "description": "للتطوير والاختبار فقط"},
+    "scripts": {
+      "type": "object",
+      "propertyNames": {"pattern": "^[A-Za-z0-9_.:-]+$"},
+      "additionalProperties": {"type": "string", "minLength": 1},
+      "description": "أوامر مسمّاة: rin lib script <lib> <name> --allow-scripts"
+    },
+    "features": {
+      "type": "object",
+      "properties": {"default": {"$ref": "#/$defs/stringList"}},
+      "additionalProperties": {"$ref": "#/$defs/stringList"},
+      "description": "اسم ميزة → [تبعية اختيارية | dep:اسم | ميزة أخرى]. تفعيل إضافي: RIN_FEATURES=a,b"
+    },
+    "native": {
+      "type": "object",
+      "properties": {
+        "sources": {"type": "array", "items": {"$ref": "#/$defs/relpath"}},
+        "std": {"type": "string", "default": "c++17"},
+        "required": {"type": "boolean", "default": false},
+        "flags": {"$ref": "#/$defs/stringList"},
+        "libs": {"$ref": "#/$defs/stringList"},
+        "includes": {"$ref": "#/$defs/stringList"},
+        "functions": {
+          "type": "array",
+          "items": {"oneOf": [
+            {"type": "string"},
+            {"type": "object", "required": ["name"], "properties": {"name": {"$ref": "#/$defs/ident"}, "params": {"$ref": "#/$defs/stringList"}}}
+          ]}
+        }
+      }
+    }
+  }
+}
