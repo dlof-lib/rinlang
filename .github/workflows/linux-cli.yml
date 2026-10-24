@@ -11,6 +11,9 @@ on:
       - 'app/src/main/cpp/rin_lexer.*'
       - 'app/src/main/cpp/rin_parser.*'
       - 'app/src/main/cpp/rin_interpreter.*'
+      - 'app/src/main/cpp/rin_libdir.*'
+      - 'app/src/main/cpp/rin_disconom.h'
+      - 'tests/verification/disconom/**'
       - 'app/src/main/cpp/rin_ast.h'
       - 'app/src/main/cpp/rin_common.h'
       - 'app/src/main/cpp/rin_stdlib_libs.h'
@@ -31,6 +34,9 @@ jobs:
 
       - name: Build
         run: cmake --build cli/linux/build -- -j"$(nproc)"
+
+      - name: Disconom tests
+        run: RIN=cli/linux/build/rin bash tests/verification/disconom/run_tests.sh
 
       - name: Collect rin
         run: |
