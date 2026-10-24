@@ -117,7 +117,10 @@ namespace rin::vm {
     X(ForInPrep)    /* a=سطر  iterable → items idx */ \
     X(ForInNext)    /* a=نهاية b=stmt(ForInStmt)  items idx → items idx' (+بيئة) */ \
     X(MatchTest)    /* v → bool   (subject تحتها) */ \
-    X(ExecStmt)     /* a=stmt — تفويض لعبارة تصريحية للـ runtime */
+    X(ExecStmt)     /* a=stmt — تفويض لعبارة تصريحية للـ runtime */ \
+    X(NsGet)        /* a=expr(GetExpr) b=قفزة: إن حُلّ المسار كـ namespace (container/group/Volume) → قيمته ثم قفز إلى b */ \
+    X(NsSetTest)    /* a=expr(SetExpr) b=قفزة-إن-ليس-namespace */ \
+    X(NsSet)        /* a=expr(SetExpr)  v → المخزَّن (namespace.field = v) */
 
 enum class Op : uint8_t {
 #define X(n) n,
