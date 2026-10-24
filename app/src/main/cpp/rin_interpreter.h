@@ -36,6 +36,7 @@ namespace vm { struct State; struct RunState; struct Proto; struct Stats; } // R
 
 struct Environment;
 using EnvPtr = std::shared_ptr<Environment>;
+struct NsNode; // Namespace tree node (container / group / Volume) - defined right after Environment
 
 struct Value; // fwd
 struct InstanceData; // fwd (see full definition after Value below — OOP: class/struct instances)
@@ -338,6 +339,7 @@ struct Environment : std::enable_shared_from_this<Environment> {
     ValueMap values;
     std::unordered_map<std::string, std::shared_ptr<LiveMeta>> live; // المتغيرات الحيّة فقط (غالباً فارغة)
     EnvPtr parent;
+    std::weak_ptr<NsNode> ns; // set only on the private env of a named container/group/Volume (namespace root scope)
     explicit Environment(EnvPtr parentEnv = nullptr) : parent(std::move(parentEnv)) {}
 
     // إعادة التعريف (let جديدة/معامل دالة) بنفس الاسم في نفس البيئة تُنهي حياة المتغيّر الحيّ السابق.
@@ -374,6 +376,49 @@ struct Environment : std::enable_shared_from_this<Environment> {
     void collectVisibleNames(std::unordered_set<std::string>& out) const {
         for (auto& kv : values) out.insert(kv.first);
         if (parent) parent->collectVisibleNames(out);
+    }
+};
+
+// ============================================================================
+// Namespaces - container / Containers.Group / Volume as real, nestable name scopes
+// ============================================================================
+// Every NAMED container, Containers.Group and Volume is also a node in one namespace tree.
+// `container` is the foundation: it works as a namespace entirely on its own at top level.
+// `Containers.Group` and `Volume` are optional extra levels you may wrap around it (any order,
+// any depth); nothing requires them. `@container` nested inside `@container` nests namespaces too.
+//
+//   shop.users.count            read   a variable of namespace `shop.users`
+//   shop.users.count = 3;       write  (fires `on update` for `state` fields, like any assignment)
+//   shop.users.add("x");        call   a function declared inside that namespace
+//
+// A node owns ONLY the names declared directly inside it (`env->values`), so the same name may
+// live in many namespaces without clashing. Child namespaces are looked up before variables.
+struct NsNode {
+    enum class Kind { Container, Group, Volume };
+    Kind kind = Kind::Container;
+    std::string name;                 // local (unqualified) name
+    std::string key;                  // legacy flat registry key (containers / groupEnvs / volumeEnvs)
+    EnvPtr env;                       // private scope holding this namespace's own names
+    std::weak_ptr<NsNode> parent;     // empty for a root namespace
+    std::vector<std::pair<std::string, std::shared_ptr<NsNode>>> children; // insertion order
+    std::shared_ptr<NsNode> child(const std::string& n) const {
+        for (auto& c : children) if (c.first == n) return c.second;
+        return nullptr;
+    }
+    // ---- Capabilities: what the QUALIFIED access (`a.b.x`) may do. container is the strongest. ----
+    //   Volume    : read-only organisation layer (config / constants / grouping)
+    //   Group     : read + write shared fields                (no calls)
+    //   container : read + write + call functions + `state`/`on update` hooks + transactions
+    bool canWrite() const { return kind != Kind::Volume; }
+    bool canCall() const { return kind == Kind::Container; }
+    bool hasStateHooks() const { return kind == Kind::Container; }
+    bool canTransact() const { return kind == Kind::Container; }
+    const char* kindName() const {
+        return kind == Kind::Container ? "container" : kind == Kind::Group ? "group" : "volume";
+    }
+    std::string path() const {        // fully qualified dotted path, e.g. "Store.Inventory.items"
+        auto p = parent.lock();
+        return p ? p->path() + "." + name : name;
     }
 };
 
@@ -980,6 +1025,20 @@ private:
     // الحارس، فتبقى مرئية عبر التفرّع دون ازدواج. Containers.Group نفسها لا تستخدم هذا الحارس على
     // الإطلاق (تسجيلها في groupStack يبقى كما كان قبل وجود Volume إطلاقاً، بلا أي تغيير سلوك).
     std::vector<char> openCollectorKinds;
+    // ---- Namespaces (see NsNode above) ----
+    std::vector<std::pair<std::string, std::shared_ptr<NsNode>>> nsRoots; // root namespaces, insertion order
+    std::vector<std::shared_ptr<NsNode>> nsStack;                         // namespaces open at definition time
+    std::shared_ptr<NsNode> nsOpen(NsNode::Kind kind, const std::string& name, const std::string& key, const EnvPtr& env);
+    struct NsScope { Interpreter* in; bool active; NsScope(Interpreter* i, std::shared_ptr<NsNode> n); ~NsScope(); };
+    std::shared_ptr<NsNode> nsResolveHead(const std::string& name, const EnvPtr& env) const; // lexical, innermost first
+    std::shared_ptr<NsNode> nsResolveExpr(const ExprPtr& obj, const EnvPtr& env) const;      // `a`, `a.b`, `a.b.c` -> node or null
+    std::shared_ptr<NsNode> nsResolvePath(const std::string& dotted) const;                  // absolute "a.b.c" -> node or null
+    Value nsGet(const std::shared_ptr<NsNode>& n, const std::string& member, int line);
+    Value nsSet(const std::shared_ptr<NsNode>& n, const std::string& member, const Value& v, int line);
+    Value nsCall(const std::shared_ptr<NsNode>& n, const std::string& member, std::vector<Value>& args, int line);
+    Value nsSnapshot(const std::shared_ptr<NsNode>& n) const;
+    bool nsTryCallDotted(const std::string& callee, std::vector<Value>& args, int line, const EnvPtr& env, Value& out);
+    void nsCollectPaths(const std::shared_ptr<NsNode>& n, std::vector<std::string>& out) const;
     std::unordered_map<std::string, std::string> translations; // lang -> text (آخر ترجمة مسجّلة لكل لغة)
     std::unordered_set<std::string> installedNames;          // ما تم "تثبيته" عبر installation (بما فيها ما حُمِّل من فهرس سابق فعلي على القرص)
     std::vector<std::string> containerStack;                 // مفتاح الحاوية الحالية (لأجل link/tying/merge/save/route/call)
