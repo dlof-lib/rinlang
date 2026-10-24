@@ -1,0 +1,21 @@
+// مكتبة bigint: حساب بأرقام ضخمة (القيم المرجعية محسوبة بـ Python)
+@import "bigint";
+print big_str(big_add("99999999999999999999", 1));
+print big_str(big_sub(5, "100000000000000000000"));
+print big_str(big_mul("123456789012345678901234567890", "987654321098765432109876543210"));
+print big_str(big_pow(2, 100));
+print big_str(big_fact(30));
+print big_str(big_fib(100));
+print big_str(big_isqrt("99999999999999999999999999999999"));
+print big_str(big_gcd("123456789012345678901234567890", "987654321098765432109876543210"));
+print big_str(big_powmod(4, 13, 497));
+let qr = big_divmod("-100000000000000000000", 7);
+print big_str(qr[0]) + " " + big_str(qr[1]);
+print big_str(big_mod("-100000000000000000000", 7));
+print big_digits(big_pow(7, 1000));
+print big_cmp("100000000000000000000", "99999999999999999999");
+print big_isEven("100000000000000000000");
+try { big_div(1, 0); } catch (e) { print e.message; }
+try { big("12x4"); } catch (e) { print e.message; }
+print rinlib.check("bigint").ok;
+print rinlib.kind("bigint");
