@@ -1,0 +1,22 @@
+// tests/verification/datalist_basic.rin — container.datalist: قائمة بيانات مرتّبة بمعرّفات تلقائية
+// + RCSQL القوي (in/nin/between/before/after/on/isa/empty/filled/notlike + group/agg/having)
+@container.datalist=sales
+    document fields={"item": "pen", "qty": 10, "price": 2.5, "day": "2026-01-05", "tags": ["a"]};
+    document fields={"item": "book", "qty": 2, "price": 12, "day": "2026-01-20", "tags": []};
+    document fields={"item": "pen", "qty": 5, "price": 2.5, "day": "2026-02-02", "tags": ["a", "b"]};
+    document id="x9" fields={"item": "bag", "qty": 1, "price": 40, "day": "2026-03-15", "note": ""};
+    document fields={"item": "book", "qty": 7, "price": 12, "day": "2026-03-30"};
+.end/container.datalist
+
+print "kind=" + container.kind("sales") + " ids=" + docIds("sales");
+print "insert=" + insertDoc("sales", "6", {"item": "ink", "qty": 3, "price": 8, "day": "2026-04-01"});
+print "in=" + sqlCount("sales&item:in(pen/bag)") + " nin=" + sqlCount("sales&item:nin(pen/bag)");
+print "between=" + sqlCount("sales&qty:between(2/7)") + " dates=" + sqlCount("sales&day:between(2026-01-01/2026-02-28)");
+print "before=" + sqlCount("sales&day:before(2026-02)") + " after=" + sqlCount("sales&day:after(2026-03-01)") + " on=" + sqlCount("sales&day:on(2026-03)");
+print "isa=" + sqlCount("sales&qty:isa(number)") + " empty=" + sqlCount("sales&tags:empty()") + " filled=" + sqlCount("sales&tags:filled()") + " emptyNote=" + sqlCount("sales&note:empty()");
+print "notlike=" + sqlCount("sales&item:notlike(pe)") + " nstarts=" + sqlCount("sales&item:nstarts(b)") + " nends=" + sqlCount("sales&item:nends(k)");
+print sql("sales&group:by(item)&agg:sum(qty)&agg:avg(price)&agg:min(day)&agg:max(day)&order:desc(sum_qty)");
+print sql("sales&group:by(item)&having(count:gt(1))&order:asc(item)&select:has(item)&select:has(count)");
+print sql("sales&agg:sum(qty)");
+print "groups=" + sqlCount("sales&group:by(item)");
+try { sql("sales&qty:sum(1)"); } catch (e) { print "caught: modifier-only op"; }
