@@ -258,6 +258,7 @@ private:
     std::shared_ptr<ViewStmt> loopCanvasDeclaration(); // @loop.<Kind>=name ... .end/loop OR @loop=name ...
     StmtPtr uiBindingStatement(); // on.<element>.<event>=handler(...); inside a Container
     StmtPtr warpDeclaration();                    // warp name = expr;
+    StmtPtr easyKeyDeclaration();                // easy_key = "key";        داخل جسم الحاوية
     StmtPtr maskDeclaration();                    // mask = expr;              (يُستدعى بعد استهلاك 'warp')
     StmtPtr themeDeclaration();                   // @theme=Name key=expr; ... .end/theme  (يُستدعى بعد استهلاك '@' و'theme')
 
