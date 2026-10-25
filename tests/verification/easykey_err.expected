@@ -1,0 +1,10 @@
+📦 container = one
+✅ .end/container (one)
+📦 container = two
+
+error[E0014]: easy_key "same" مستعمل أصلاً لحاوية `one` — اختر مفتاحاً فريداً
+  --> tests/verification/easykey_err.rin:5:1
+
+ 5 | @container=two
+   | ^
+
