@@ -296,7 +296,7 @@ std::string Interpreter::tableExport(const std::string& name, const std::string&
 }
 
 // ---------------------------------------------------------------- الخطّاف الموحَّد للدوال الموجودة
-bool Interpreter::tableNative(const std::string& fn, std::vector<Value>& a, int line, Value& out) {
+bool Interpreter::tableNativeCore(const std::string& fn, std::vector<Value>& a, int line, Value& out) {
     // container.search(text, kind) هي الوحيدة التي يقع اسم الحاوية فيها ثانياً
     std::string name;
     if (fn == "container.search") {
@@ -306,7 +306,17 @@ bool Interpreter::tableNative(const std::string& fn, std::vector<Value>& a, int 
         if (a.empty() || a[0].type != Value::Type::STRING) return false;
         name = a[0].str;
     }
-    if (!isTableContainer(name)) return false;
+    if (isDatalistContainer(name)) {
+        // container.datalist: التحليلات والتصدير (قراءة فقط) تعمل عبر نسخة جدولية متزامنة؛ أما insertDoc/updateDoc/
+        // deleteDoc/push/pop... فتبقى على المسار العادي للمستندات (docStore) فلا تُكتب في نسخة مؤقتة.
+        static const std::unordered_set<std::string> ok = {
+            "container.sum", "container.avg", "container.min", "container.max", "container.pluck", "container.distinct",
+            "container.countBy", "container.groupBy", "container.sortBy", "container.top", "container.paginate",
+            "container.query", "container.search", "container.stats", "container.toRows", "container.toCsv",
+            "container.toJson", "container.exportCsv", "container.exportToFile", "container.checksum", "container.contains"};
+        if (!ok.count(fn)) return false;
+        datalistSync(name);
+    } else if (!isTableContainer(name)) return false;
     const size_t n = a.size();
     auto docs = [&]() { return tableAsDocs(name); };
     auto bodyOff = [&]() { std::vector<std::string> h; return tableHeader(name, h) ? size_t(1) : size_t(0); };
@@ -679,6 +689,41 @@ bool Interpreter::tableNative(const std::string& fn, std::vector<Value>& a, int 
         return true;
     }
     return false;
+}
+
+
+// container.datalist: دوال sortBy/top/search/groupBy تُعيد «معرّفات صفوف» بأرقام مواضعها (1-based) كما في الجدول؛
+// للقائمة نُحوّلها إلى المعرّفات الحقيقية (قد تكون صريحة مثل "x9").
+static Value datalistRemapIds(const Value& v, const std::vector<std::pair<std::string, Value>>& docs) {
+    if (v.type == Value::Type::STRING) {
+        char* end = nullptr;
+        unsigned long p = std::strtoul(v.str.c_str(), &end, 10);
+        if (end && *end == '\0' && !v.str.empty() && p >= 1 && p <= docs.size()) return Value::string(docs[p - 1].first);
+        return v;
+    }
+    if (v.type == Value::Type::ARRAY && v.array) {
+        auto a = std::make_shared<ArrayData>();
+        for (auto& e : *v.array) a->push_back(datalistRemapIds(e, docs));
+        return Value::makeArray(a);
+    }
+    if (v.type == Value::Type::MAP && v.map) {
+        auto m = std::make_shared<MapData>();
+        for (auto& kv : *v.map) m->push_back({kv.first, datalistRemapIds(kv.second, docs)});
+        return Value::makeMap(m);
+    }
+    return v;
+}
+
+bool Interpreter::tableNative(const std::string& fn, std::vector<Value>& a, int line, Value& out) {
+    if (!tableNativeCore(fn, a, line, out)) return false;
+    if (fn == "container.sortBy" || fn == "container.top" || fn == "container.search" || fn == "container.groupBy") {
+        const std::string& name = fn == "container.search" ? a[1].str : a[0].str;
+        if (isDatalistContainer(name)) {
+            auto it = docStore.find(name);
+            if (it != docStore.end()) out = datalistRemapIds(out, it->second);
+        }
+    }
+    return true;
 }
 
 } // namespace rin
