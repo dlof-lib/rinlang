@@ -1027,6 +1027,12 @@ private:
     std::vector<char> openCollectorKinds;
     // ---- Namespaces (see NsNode above) ----
     std::vector<std::pair<std::string, std::shared_ptr<NsNode>>> nsRoots; // root namespaces, insertion order
+    // Easy_key: مفتاح داخلي فريد لكل حاوية. الافتراضي = اسمها، وعند تعارض اسم حاويتين في مساري أسماء مختلفين
+    // تأخذ الثانية مفتاحها = مسارها الكامل (A.app / B.app). ويمكن كتابة مفتاح بديل: easy_key = "main"; داخل الجسم.
+    std::unordered_map<std::string, std::string> easyKeys;           // مفتاح مكتوب -> المفتاح الداخلي
+    std::unordered_map<std::string, std::string> easyKeyOfContainer; // المفتاح الداخلي -> المفتاح المكتوب
+    std::unordered_map<std::string, std::string> containerPathOf;    // المفتاح الداخلي -> مسار فضاء الأسماء
+    std::string canonContainer(const std::string& n) const;          // اسم/مفتاح مكتوب/مسار -> المفتاح الداخلي
     std::vector<std::shared_ptr<NsNode>> nsStack;                         // namespaces open at definition time
     std::shared_ptr<NsNode> nsOpen(NsNode::Kind kind, const std::string& name, const std::string& key, const EnvPtr& env);
     struct NsScope { Interpreter* in; bool active; NsScope(Interpreter* i, std::shared_ptr<NsNode> n); ~NsScope(); };
@@ -1072,6 +1078,11 @@ private:
     // أي متغيّر حقيقي بنفس الاسم داخل الجدول له الأولوية (لا يُحجَب بحقل افتراضي).
     bool isTableContainer(const std::string& name) const;
     std::shared_ptr<ArrayData> tableRowsOf(const std::string& name);
+    // container.datalist: يُكشَف بنفس آلية الجدول (حقول افتراضية items/ids/size/first/last/header + دوال container.* التحليلية)
+    bool isDatalistContainer(const std::string& name) const;
+    void datalistSync(const std::string& name); // يعيد بناء tableRows[name] (رأس + صفوف) من docStore
+    bool datalistVirtualGet(const std::string& name, const std::string& key, Value& out);
+    bool datalistVirtualSet(const std::string& name, const std::string& key, const Value& v, int line);
     bool tableVirtualGet(const std::string& name, const std::string& key, Value& out);
     bool tableVirtualSet(const std::string& name, const std::string& key, const Value& v, int line);
     bool tableVirtualDelete(const std::string& name, const std::string& key);
@@ -1084,6 +1095,7 @@ private:
     //      container.toCsv/renameField/clone/rename/...) و`save format=csv|json|md|html|txt` — بلا أي اسم دالة جديد. ----
     // خطّاف واحد تستدعيه الدوال الموجودة في أول سطر منها: يرجع true (ومعه out) إن كان الوسيط الأول جدولاً وعالجتها بدلاً منه.
     bool tableNative(const std::string& fn, std::vector<Value>& a, int line, Value& out);
+    bool tableNativeCore(const std::string& fn, std::vector<Value>& a, int line, Value& out);
     // عمود باسمه (من الرأس النصي، أو c1,c2.. إن لم يوجد رأس) -> قيم الجسم؛ false إن لم يوجد العمود.
     bool tableColumnValues(const std::string& name, const std::string& col, std::vector<Value>& out) const;
     // ترتيب سجلّ (قاموس) حسب رأس الجدول: الغائب nil · عمود غير موجود E0007 · بلا رأس E0004.
