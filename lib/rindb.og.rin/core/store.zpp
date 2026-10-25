@@ -1,0 +1,100 @@
+// rindb/core/store.zpp — الجداول والمستندات في الذاكرة (فوق container.doc + insertDoc/findDoc/...).
+
+fun rdb__fail(msg) { throw "rindb: " + msg; }
+
+fun rdb__opt(o, k, d) {
+    if (o == nil) { return d; }
+    if (type(o) != "map") { return d; }
+    if (has(o, k)) { return o[k]; }
+    return d;
+}
+
+fun rdb__isId(v) {
+    let t = type(v);
+    return t == "string" or t == "number";
+}
+
+fun rdb__id(v) {
+    if (!rdb__isId(v)) { rdb__fail("document id must be a string or number"); }
+    return toString(v);
+}
+
+fun rdb__validName(s) {
+    if (type(s) != "string" or len(s) == 0) { return false; }
+    let ok = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789";
+    let i = 0;
+    while (i < len(s)) {
+        if (!contains(ok, substr(s, i, 1))) { return false; }
+        i = i + 1;
+    }
+    return !contains("0123456789", substr(s, 0, 1));
+}
+
+fun rdb__key(db, t) { return db["name"] + "__" + t; }
+
+fun rdb__table(db, t) {
+    if (!db["open"]) { rdb__fail("database `" + db["name"] + "` is closed"); }
+    if (!has(db["tables"], t)) { rdb__fail("no such table `" + t + "` in `" + db["name"] + "`"); }
+    return rdb__key(db, t);
+}
+
+fun rdb__copyMap(m) {
+    let out = {};
+    for (let k in keys(m)) { out[k] = m[k]; }
+    return out;
+}
+
+fun rdb__withId(id, doc) {
+    let out = {"_id": id};
+    for (let k in keys(doc)) { out[k] = doc[k]; }
+    return out;
+}
+
+// يطبّق عملية على الحالة في الذاكرة (يستعملها الاسترجاع والتنفيذ الحي معاً).
+fun rdb__apply(db, op) {
+    let o = op["o"];
+    if (o == "B") {
+        for (let x in op["ops"]) { rdb__apply(db, x); }
+    } else if (o == "T") {
+        let t = op["t"];
+        let key = rdb__key(db, t);
+        spawn("doc", key);
+        db["tables"][t] = {"schema": nil, "indexes": []};
+        db["seq"][t] = 0;
+        if (has(op, "s") and op["s"] != nil) { defineSchema(key, op["s"]); db["tables"][t]["schema"] = op["s"]; }
+        if (has(op, "i") and op["i"] != nil) {
+            for (let f in op["i"]) { createIndex(key, f); push(db["tables"][t]["indexes"], f); }
+        }
+    } else if (o == "X") {
+        let t = op["t"];
+        if (has(db["tables"], t)) {
+            destroyContainer(rdb__key(db, t));
+            remove(db["tables"], t);
+            remove(db["seq"], t);
+        }
+    } else if (o == "P") {
+        let t = op["t"];
+        let key = rdb__key(db, t);
+        let id = op["i"];
+        if (findDoc(key, id) != nil) { deleteDoc(key, id); }
+        insertDoc(key, id, rdb__withId(id, op["d"]));   // _id يُخزَّن داخل المستند: كل قراءة (حتى findByIndex) تحمله
+        rdb__bump(db, t, id);
+    } else if (o == "D") {
+        deleteDoc(rdb__key(db, op["t"]), op["i"]);
+    } else if (o == "Q") {
+        db["seq"][op["t"]] = op["n"];
+    }
+}
+
+fun rdb__bump(db, t, id) {
+    if (len(id) == 0 or len(id) > 15) { return nil; }
+    let digits = "0123456789";
+    let i = 0;
+    while (i < len(id)) {
+        if (!contains(digits, substr(id, i, 1))) { return nil; }
+        i = i + 1;
+    }
+    let n = toNumber(id);
+    if (n > db["seq"][t]) { db["seq"][t] = n; }
+    return nil;
+}
