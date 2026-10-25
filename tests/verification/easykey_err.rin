@@ -1,0 +1,7 @@
+// easy_key مكرَّر بين حاويتين = خطأ صريح، لا استبدال صامت
+@container=one
+    easy_key = "same";
+.end/container
+@container=two
+    easy_key = "same";
+.end/container
