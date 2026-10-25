@@ -1,0 +1,164 @@
+// rindb/core/persist.zpp — التخزين الدائم: ملف نصي واحد، سجل أمامي (WAL) سطراً لكل عملية.
+// صيغة السطر: «<16 خانة من sha256 للـJSON> <JSON>». سطر ناقص/تالف في الذيل = ذيل ممزَّق (يُقصّ)،
+// وتالف في الوسط = تلف حقيقي (يُرفض الفتح إلا مع {"recover": true} ويُحفظ ملف .corrupt).
+// نقطة التفتيش (checkpoint): تكتب لقطة كاملة في path.tmp تنتهي بسطر {"o":"E"} ثم تحلّ محل الملف؛
+// إن انقطع التنفيذ بينهما فتُستعمل اللقطة الكاملة عند الفتح.
+
+fun rdb__line(op) {
+    let js = json.stringify(op);
+    return substr(hash(js), 0, 16) + " " + js;
+}
+
+// يعيد {ok, op} أو {ok:false}
+fun rdb__parseLine(line) {
+    if (len(line) < 19) { return {"ok": false}; }
+    if (substr(line, 16, 1) != " ") { return {"ok": false}; }
+    let js = substr(line, 17, len(line) - 17);
+    if (substr(hash(js), 0, 16) != substr(line, 0, 16)) { return {"ok": false}; }
+    let r = json.tryParse(js);
+    if (!r["ok"]) { return {"ok": false}; }
+    return {"ok": true, "op": r["value"]};
+}
+
+// يفحص نص الملف كله: {ops, good (عدد الأسطر السليمة), torn, corrupt, err, name, ended, lines}
+fun rdb__scan(content) {
+    let lines = split(content, "\n");
+    let last = len(lines) - 1;
+    while (last >= 0 and lines[last] == "") { last = last - 1; }
+    let res = {"ops": [], "good": [], "torn": false, "corrupt": false, "err": nil, "name": nil, "ended": false};
+    let i = 0;
+    while (i <= last) {
+        let ln = lines[i];
+        if (ln != "") {
+            let p = rdb__parseLine(ln);
+            if (!p["ok"]) {
+                if (i == last) { res["torn"] = true; }
+                else { res["corrupt"] = true; res["err"] = "damaged record at line " + toString(i + 1); }
+                return res;
+            }
+            let op = p["op"];
+            if (op["o"] == "M" and res["name"] == nil) { res["name"] = op["name"]; }
+            if (op["o"] == "E") { res["ended"] = true; }
+            push(res["ops"], op);
+            push(res["good"], ln);
+        }
+        i = i + 1;
+    }
+    return res;
+}
+
+fun rdb__snapshotLines(db) {
+    let out = [rdb__line({"o": "M", "name": db["name"], "fmt": 1})];
+    for (let t in keys(db["tables"])) {
+        let meta = db["tables"][t];
+        push(out, rdb__line({"o": "T", "t": t, "s": meta["schema"], "i": meta["indexes"]}));
+        if (db["seq"][t] > 0) { push(out, rdb__line({"o": "Q", "t": t, "n": db["seq"][t]})); }
+        let key = rdb__key(db, t);
+        for (let id in docIds(key)) { push(out, rdb__line({"o": "P", "t": t, "i": id, "d": rdb__cleanDoc(findDoc(key, id))})); }
+    }
+    return out;
+}
+
+fun rdb__writeLines(path, lines) {
+    writeFile(path, join(lines, "\n") + "\n");
+    return true;
+}
+
+fun rdb__checkpoint(db) {
+    if (db["path"] == nil) { return false; }
+    let lines = rdb__snapshotLines(db);
+    let full = [];
+    for (let l in lines) { push(full, l); }
+    push(full, rdb__line({"o": "E"}));
+    let tmp = db["path"] + ".tmp";
+    rdb__writeLines(tmp, full);          // 1) لقطة كاملة منتهية بعلامة E
+    rdb__writeLines(db["path"], lines);  // 2) تحلّ محل الملف
+    deleteFile(tmp);                     // 3) تنظيف
+    db["wal"] = 0;
+    db["checkpoints"] = db["checkpoints"] + 1;
+    return true;
+}
+
+// تسجيل عملية: داخل معاملة تُؤجَّل، وإلا تُكتب فوراً.
+fun rdb__log(db, op) {
+    if (db["path"] == nil) { return nil; }
+    if (db["tx"] != nil) { push(db["tx"], op); return nil; }
+    appendFile(db["path"], rdb__line(op) + "\n");
+    db["wal"] = db["wal"] + 1;
+    db["records"] = db["records"] + 1;
+    if (db["autoCheckpoint"] > 0 and db["wal"] >= db["autoCheckpoint"]) { rdb__checkpoint(db); }
+    return nil;
+}
+
+fun rdb__newDb(name, path, opts) {
+    if (!rdb__validName(name)) { rdb__fail("invalid database name `" + toString(name) + "` (letters, digits, _)"); }
+    if (has(RDB["dbs"], name)) { rdb__fail("database `" + name + "` is already open"); }
+    return {"name": name, "path": path, "tables": {}, "seq": {}, "tx": nil, "open": true,
+            "readonly": rdb__opt(opts, "readonly", false), "wal": 0, "records": 0, "checkpoints": 0,
+            "autoCheckpoint": rdb__opt(opts, "autoCheckpoint", 5000)};
+}
+
+fun rdb__register(db) {
+    RDB["dbs"][db["name"]] = db;
+    RinDB.catalog.openCount = len(keys(RDB["dbs"]));
+}
+
+fun rdb__dropTables(db) {
+    for (let t in keys(db["tables"])) { destroyContainer(rdb__key(db, t)); }
+    db["tables"] = {};
+    db["seq"] = {};
+}
+
+// يفتح قاعدة (opts: readonly, recover, autoCheckpoint). path = nil → في الذاكرة.
+fun rdb_openWith(name, path, opts) {
+    let db = rdb__newDb(name, path, opts);
+    if (path == nil) { rdb__register(db); return db; }
+    let recover = rdb__opt(opts, "recover", false);
+    let tmp = path + ".tmp";
+    // لقطة كاملة بقيت من نقطة تفتيش انقطعت: هي الأحدث
+    if (fileExists(tmp)) {
+        let ts = rdb__scan(readFile(tmp));
+        if (ts["ended"] and !ts["torn"] and !ts["corrupt"]) {
+            let keep = [];
+            for (let l in ts["good"]) { if (rdb__parseLine(l)["op"]["o"] != "E") { push(keep, l); } }
+            rdb__writeLines(path, keep);
+        }
+        deleteFile(tmp);
+    }
+    if (fileExists(path) and len(readFile(path)) > 0) {
+        let sc = rdb__scan(readFile(path));
+        if (sc["corrupt"] and !recover) {
+            rdb__fail("the file is corrupt (" + sc["err"] + ") — reopen with {\"recover\": true} to keep everything before it");
+        }
+        if (sc["name"] != nil and sc["name"] != name) {
+            rdb__fail("this database was created as `" + sc["name"] + "`; it cannot be opened as `" + name + "`");
+        }
+        if (len(sc["ops"]) == 0 or sc["ops"][0]["o"] != "M") { rdb__fail("this file is not a rindb database"); }
+        for (let op in sc["ops"]) { rdb__apply(db, op); }
+        db["records"] = len(sc["ops"]);
+        db["wal"] = len(sc["ops"]);
+        if (sc["corrupt"] or sc["torn"]) {
+            if (!db["readonly"]) {
+                if (sc["corrupt"]) { writeFile(path + ".corrupt", readFile(path)); }
+                rdb__writeLines(path, sc["good"]);   // قصّ الذيل التالف
+            }
+            db["recovered"] = true;
+        }
+    } else {
+        if (db["readonly"]) { rdb__fail("database file not found: `" + path + "`"); }
+        rdb__writeLines(path, [rdb__line({"o": "M", "name": name, "fmt": 1})]);
+        db["records"] = 1;
+    }
+    rdb__register(db);
+    return db;
+}
+
+fun rdb_open(name, path) { return rdb_openWith(name, path, {}); }
+
+// فحص سلامة ملف بلا فتحه: {ok, records, torn, error}
+fun rdb_verify(path) {
+    if (!fileExists(path)) { return {"ok": false, "records": 0, "torn": false, "error": "file not found"}; }
+    let sc = rdb__scan(readFile(path));
+    let ok = !sc["torn"] and !sc["corrupt"] and sc["name"] != nil;
+    return {"ok": ok, "records": len(sc["ops"]), "torn": sc["torn"], "name": sc["name"], "error": sc["err"]};
+}
