@@ -1,0 +1,49 @@
+// tests/verification/datalist_more.rin — container.datalist: حقول افتراضية + دوال container.* التحليلية + RCSQL موسَّع
+@container.datalist=orders
+    document fields={"item": "pen", "qty": 10, "price": 2.5, "day": "2026-01-05", "tags": ["office", "blue"]};
+    document fields={"item": "book", "qty": 2, "price": 12, "day": "2026-01-20", "tags": ["paper"]};
+    document fields={"item": "pen", "qty": 5, "price": 2.5, "day": "2026-02-02", "tags": []};
+    document id="x9" fields={"item": "bag", "qty": 1, "price": 40, "day": "2026-02-15"};
+    document fields={"item": "book", "qty": 7, "price": 12, "day": "2026-03-30", "tags": ["paper", "gift"]};
+.end/container.datalist
+
+// ---- حقول افتراضية (بنفس أسلوب الجدول، بلا دوال جديدة) ----
+print "size=" + container.get("orders", "size") + " ids=" + container.get("orders", "ids");
+print "first=" + container.get("orders", "first");
+print "last=" + container.get("orders", "last");
+print "header=" + container.get("orders", "header");
+print "qty column=" + container.get("orders", "qty");
+print "has items=" + container.has("orders", "items") + " empty=" + container.empty("orders");
+print "info=" + container.info("orders");
+
+// ---- دوال container.* التحليلية الموجودة أصلاً تعمل الآن على القائمة ----
+print "sum=" + container.sum("orders", "qty") + " avg=" + container.avg("orders", "price") + " min=" + container.min("orders", "qty") + " max=" + container.max("orders", "qty");
+print "distinct=" + container.distinct("orders", "item");
+print "countBy=" + container.countBy("orders", "item");
+print "top2 ids=" + container.top("orders", "qty", 2);
+print "sortBy ids=" + container.sortBy("orders", "qty");
+print "search=" + container.search("GIFT", "orders");
+print "csv:";
+print container.toCsv("orders");
+
+// ---- استبدال القائمة كاملة عبر items (id تلقائي أو صريح) ----
+container.set("orders", "items", [{"item": "ink", "qty": 3}, {"_id": "z", "item": "cap", "qty": 4}]);
+print "after set: ids=" + docIds("orders") + " size=" + container.get("orders", "size");
+try { container.set("orders", "size", 9); } catch (e) { print "caught: read-only"; }
+container.deleteField("orders", "items");
+print "cleared: size=" + container.get("orders", "size") + " empty=" + container.empty("orders");
+
+// ---- RCSQL الموسَّع ----
+@container.datalist=log
+    document fields={"who": "sara", "day": "2026-01-05", "ms": 120, "note": "Login OK"};
+    document fields={"who": "omar", "day": "2026-01-20", "ms": 80, "note": "timeout"};
+    document fields={"who": "sara", "day": "2026-02-02", "ms": 100, "note": "Upload"};
+    document fields={"who": "sara", "day": "2026-02-20", "ms": 300, "note": "login failed", "tags": ["auth", "err"]};
+    document fields={"who": "lina", "day": "2026-03-01", "ms": 60};
+.end/container.datalist
+print sql("log&group:month(day)&agg:count(who)&agg:distinct(who)&agg:median(ms)&order:asc(month_day)");
+print sql("log&group:year(day)&agg:sum(ms)");
+print "search any=" + sqlCount("log&search:any(login)") + " tag any=" + sqlCount("log&tags:any(err)");
+print sqlIds("log&order:asc(day)&page:of(2/2)");
+try { sql("log&page:of(0/2)"); } catch (e) { print "caught: bad page"; }
+try { sql("log&ms:median(1)"); } catch (e) { print "caught: modifier-only"; }
