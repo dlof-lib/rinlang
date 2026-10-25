@@ -54,6 +54,10 @@ bool isSupportedOp(const std::string& op) {
     static const char* ops[] = {
         "eq", "ne", "ieq", "gt", "gte", "lt", "lte",
         "has", "like", "starts", "ends", "exists", "missing",
+        // عمليات إضافية (RCSQL القوي): نفي النص، قوائم، نطاق، تواريخ، نوع، فراغ
+        "notlike", "nstarts", "nends", "in", "nin", "between", "before", "after", "on", "isa", "empty", "filled",
+        // أسماء عمليات المُعدِّلات group:by / agg:sum|avg|min|max (لا تصلح كشرط فلترة)
+        "by", "sum", "avg", "min", "max", "count", "distinct", "median", "year", "month", "day", "of", "any",
         "asc", "desc" // أسماء عمليات المُعدِّل order:asc/order:desc (انظر applyModifierIfReserved)
     };
     for (const char* o : ops) if (op == o) return true;
@@ -103,6 +107,10 @@ Predicate readPredicateLeaf(Lexer& lex, std::string firstIdent) {
     }
     if (lex.peekChar() != ')') {
         p.arg = lex.readIdent("وسيط العملية '" + op + "'");
+        // in/nin/between: قيم متعددة مفصولة بـ '/' (رمز مسموح أصلاً في اللغة)
+        if (op == "in" || op == "nin" || op == "between" || op == "of") {
+            while (lex.peekChar() == '/') { lex.consumeSymbol('/'); p.arg += "/" + lex.readIdent("قيمة بعد '/' في '" + op + "'"); }
+        }
     }
     if (!lex.consumeSymbol(')')) {
         throw SqlSyntaxError("RIN CONTAINER SQL: توقّعتُ ')' بعد وسيط العملية '" + op + "'");
@@ -129,6 +137,12 @@ std::vector<Predicate> readGroupBody(Lexer& lex, const std::string& groupName) {
 // يتبعها '(' مباشرة -- مثال: or:eq(x) شرط عادي على حقل اسمه "or").
 Predicate readPredicate(Lexer& lex) {
     std::string first = lex.readIdent("اسم حقل أو or(...)/and(...)/not(...)");
+    if (first == "having" && lex.peekChar() == '(') {
+        lex.consumeSymbol('(');
+        Predicate hv; hv.isGroup = true; hv.groupOp = "having";
+        hv.subs = readGroupBody(lex, "having");
+        return hv;
+    }
     if ((first == "or" || first == "and" || first == "not") && lex.peekChar() == '(') {
         lex.consumeSymbol('(');
         Predicate group;
@@ -152,7 +166,29 @@ Predicate readPredicate(Lexer& lex) {
 // distinct)؛ إن كان كذلك يُطبَّق أثره على q ويعاد true (فلا يُضاف إلى q.predicates كشرط فلترة
 // حقيقي). يرمي SqlSyntaxError إن كان اسم الحقل محجوزاً لكن الشكل (العملية/الوسيط) غير صالح.
 bool applyModifierIfReserved(Query& q, const Predicate& p) {
+    if (p.isGroup && p.groupOp == "having") { for (auto& s : p.subs) q.having.push_back(s); return true; }
     if (p.isGroup) return false;
+    if (p.field == "group" && (p.op == "by" || p.op == "year" || p.op == "month" || p.op == "day")) {
+        if (p.arg.empty()) throw SqlSyntaxError("RIN CONTAINER SQL: 'group' يحتاج اسم حقل: group:by(field) أو group:month(dateField)");
+        q.groupFields.push_back(p.arg);
+        q.groupBuckets.push_back(p.op == "by" ? std::string() : p.op);
+        return true;
+    }
+    if (p.field == "page" && p.op == "of") {
+        size_t sl = p.arg.find('/');
+        char* e1 = nullptr; char* e2 = nullptr;
+        long pg = sl == std::string::npos ? -1 : std::strtol(p.arg.substr(0, sl).c_str(), &e1, 10);
+        long sz = sl == std::string::npos ? -1 : std::strtol(p.arg.substr(sl + 1).c_str(), &e2, 10);
+        if (sl == std::string::npos || pg < 1 || sz < 1 || *e1 != '\0' || *e2 != '\0')
+            throw SqlSyntaxError("RIN CONTAINER SQL: page:of(P/S) يحتاج رقم صفحة وحجماً موجبين، مثال: page:of(2/10)");
+        q.offset = (pg - 1) * sz; q.limit = sz;
+        return true;
+    }
+    if (p.field == "agg" && (p.op == "sum" || p.op == "avg" || p.op == "min" || p.op == "max" || p.op == "count" || p.op == "distinct" || p.op == "median")) {
+        if (p.arg.empty()) throw SqlSyntaxError("RIN CONTAINER SQL: 'agg' يحتاج اسم حقل: agg:" + p.op + "(field)");
+        q.aggregates.push_back(Aggregate{p.op, p.arg});
+        return true;
+    }
     if (p.field == "order") {
         if (p.op != "asc" && p.op != "desc") {
             throw SqlSyntaxError("RIN CONTAINER SQL: 'order' يتوقّع asc(field) أو desc(field)، وليس '" + p.op + "'");
@@ -222,6 +258,10 @@ Query parse(const std::string& text) {
     while (lex.consumeSymbol('&')) {
         Predicate p = readPredicate(lex);
         if (!applyModifierIfReserved(q, p)) {
+            if (!p.isGroup && (p.op == "by" || p.op == "sum" || p.op == "avg" || p.op == "min" || p.op == "max" ||
+                               p.op == "count" || p.op == "distinct" || p.op == "median" || p.op == "year" || p.op == "month" ||
+                               p.op == "day" || p.op == "of"))
+                throw SqlSyntaxError("RIN CONTAINER SQL: العملية '" + p.op + "' تُستعمل فقط في group:by|year|month|day(field) و agg:sum|avg|min|max|count|distinct|median(field) و page:of(P/S)");
             q.predicates.push_back(std::move(p));
         }
     }
