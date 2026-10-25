@@ -1,0 +1,282 @@
+// rindb/core/api.zpp — الواجهة العامة (كل الدوال تبدأ بـ rdb_).
+
+// ---- قواعد ----------------------------------------------------------------------------
+fun rdb_close(db) {
+    if (db["tx"] != nil) { rdb__fail("close is not allowed inside a transaction"); }
+    if (db["path"] != nil and !db["readonly"] and db["wal"] > 0) { rdb__checkpoint(db); }
+    rdb__dropTables(db);
+    db["open"] = false;
+    remove(RDB["dbs"], db["name"]);
+    RinDB.catalog.openCount = len(keys(RDB["dbs"]));
+    return true;
+}
+
+fun rdb_checkpoint(db) {
+    if (db["tx"] != nil) { rdb__fail("checkpoint is not allowed inside a transaction"); }
+    if (db["readonly"]) { rdb__fail("database is read-only"); }
+    return rdb__checkpoint(db);
+}
+
+fun rdb_backup(db, dest) {
+    if (db["path"] == nil) { rdb__fail("an in-memory database has no file to back up"); }
+    rdb_checkpoint(db);
+    writeFile(dest, readFile(db["path"]));
+    return true;
+}
+
+// يحذف القاعدة وملفها (يتطلب confirm=true)
+fun rdb_dropDatabase(db, confirm) {
+    if (confirm != true) { rdb__fail("destructive — pass true to delete database `" + db["name"] + "` and its file"); }
+    let path = db["path"];
+    db["wal"] = 0;
+    rdb_close(db);
+    if (path != nil and fileExists(path)) { deleteFile(path); }
+    return true;
+}
+
+fun rdb_info(db) {
+    let docs = 0;
+    for (let t in keys(db["tables"])) { docs = docs + len(docIds(rdb__key(db, t))); }
+    return {"name": db["name"], "path": db["path"], "persistent": db["path"] != nil, "readonly": db["readonly"],
+            "tables": len(keys(db["tables"])), "documents": docs, "records": db["records"],
+            "checkpoints": db["checkpoints"], "inTransaction": db["tx"] != nil};
+}
+
+fun rdb_list() { return keys(RDB["dbs"]); }
+
+// ---- جداول (حاويات doc تُنشأ وقت التشغيل) ---------------------------------------------
+fun rdb__structure(db) {
+    if (!db["open"]) { rdb__fail("database `" + db["name"] + "` is closed"); }
+    if (db["readonly"]) { rdb__fail("database is read-only"); }
+    if (db["tx"] != nil) { rdb__fail("structure changes (create/drop table) are not allowed inside a transaction"); }
+}
+
+// opts: schema {حقل: نوع}, indexes [حقول], ifNotExists
+fun rdb_createTableWith(db, t, opts) {
+    rdb__structure(db);
+    if (!rdb__validName(t)) { rdb__fail("invalid table name `" + toString(t) + "` (letters, digits, _)"); }
+    if (has(db["tables"], t)) {
+        if (rdb__opt(opts, "ifNotExists", false)) { return false; }
+        rdb__fail("table `" + t + "` already exists (use ifNotExists)");
+    }
+    let op = {"o": "T", "t": t, "s": rdb__opt(opts, "schema", nil), "i": rdb__opt(opts, "indexes", [])};
+    rdb__apply(db, op);
+    rdb__log(db, op);
+    return true;
+}
+fun rdb_createTable(db, t) { return rdb_createTableWith(db, t, {}); }
+
+fun rdb_dropTable(db, t) {
+    rdb__structure(db);
+    rdb__table(db, t);
+    let op = {"o": "X", "t": t};
+    rdb__apply(db, op);
+    rdb__log(db, op);
+    return true;
+}
+
+fun rdb_tables(db) { return keys(db["tables"]); }
+fun rdb_hasTable(db, t) { return has(db["tables"], t); }
+
+// ---- مستندات --------------------------------------------------------------------------
+fun rdb__writable(db) {
+    if (db["readonly"]) { rdb__fail("database is read-only"); }
+}
+
+fun rdb__cleanDoc(doc) {
+    if (type(doc) != "map") { rdb__fail("a document must be a map but got " + type(doc)); }
+    let out = rdb__copyMap(doc);
+    if (has(out, "_id")) { remove(out, "_id"); }
+    return out;
+}
+
+fun rdb__put(db, t, id, doc, mustBeNew) {
+    rdb__writable(db);
+    let key = rdb__table(db, t);
+    let i = rdb__id(id);
+    let d = rdb__cleanDoc(doc);
+    let existed = findDoc(key, i) != nil;
+    if (mustBeNew and existed) { rdb__fail("document `" + i + "` already exists in `" + t + "` (use rdb_put to overwrite)"); }
+    let prev = findDoc(key, i);
+    let op = {"o": "P", "t": t, "i": i, "d": d};
+    try { rdb__apply(db, op); }
+    catch (e) {
+        // فشل (مثلاً مخالفة schema): أعد الحالة السابقة كي لا يضيع مستند قديم
+        if (existed and findDoc(key, i) == nil) { insertDoc(key, i, prev); }   // prev يحمل _id أصلاً
+        throw e["message"];
+    }
+    rdb__log(db, op);
+    return !existed;   // true = أُنشئ جديداً
+}
+
+fun rdb_put(db, t, id, doc) { return rdb__put(db, t, id, doc, false); }
+fun rdb_insert(db, t, id, doc) { return rdb__put(db, t, id, doc, true); }
+
+fun rdb_add(db, t, doc) {
+    rdb__table(db, t);
+    let key = rdb__key(db, t);
+    let n = db["seq"][t] + 1;
+    while (findDoc(key, toString(n)) != nil) { n = n + 1; }
+    db["seq"][t] = n;
+    rdb__put(db, t, toString(n), doc, true);
+    return toString(n);
+}
+
+fun rdb_get(db, t, id) {
+    let key = rdb__table(db, t);
+    let d = findDoc(key, rdb__id(id));
+    if (d == nil) { return nil; }
+    return rdb__withId(rdb__id(id), d);
+}
+
+fun rdb_has(db, t, id) { return findDoc(rdb__table(db, t), rdb__id(id)) != nil; }
+
+// دمج جزئي: يعيد false إن لم يوجد المستند
+fun rdb_update(db, t, id, patch) {
+    rdb__writable(db);
+    let key = rdb__table(db, t);
+    let i = rdb__id(id);
+    let cur = findDoc(key, i);
+    if (cur == nil) { return false; }
+    let merged = rdb__copyMap(cur);
+    for (let k in keys(patch)) { if (k != "_id") { merged[k] = patch[k]; } }
+    rdb__put(db, t, i, merged, false);
+    return true;
+}
+
+// يزيد حقلاً رقمياً (غير الموجود يبدأ من 0) ويعيد القيمة الجديدة
+fun rdb_incr(db, t, id, field, by) {
+    let cur = rdb_get(db, t, id);
+    if (cur == nil) { rdb__fail("no document `" + toString(id) + "` in `" + t + "`"); }
+    let old = 0;
+    if (has(cur, field)) {
+        if (type(cur[field]) != "number") { rdb__fail("field `" + field + "` is not a number"); }
+        old = cur[field];
+    }
+    let patch = {};
+    patch[field] = old + by;
+    rdb_update(db, t, id, patch);
+    return old + by;
+}
+
+fun rdb_delete(db, t, id) {
+    rdb__writable(db);
+    let key = rdb__table(db, t);
+    let i = rdb__id(id);
+    if (findDoc(key, i) == nil) { return false; }
+    let op = {"o": "D", "t": t, "i": i};
+    rdb__apply(db, op);
+    rdb__log(db, op);
+    return true;
+}
+
+fun rdb_count(db, t) { return len(docIds(rdb__table(db, t))); }
+fun rdb_ids(db, t) { return docIds(rdb__table(db, t)); }
+
+fun rdb_all(db, t) {
+    let key = rdb__table(db, t);
+    let out = [];
+    for (let id in docIds(key)) { push(out, rdb__withId(id, findDoc(key, id))); }
+    return out;
+}
+
+// بحث بتساوي حقل (يستعمل الفهرس إن وُجد)
+fun rdb_find(db, t, field, value) {
+    let key = rdb__table(db, t);
+    let out = [];
+    let hasIdx = false;
+    for (let f in db["tables"][t]["indexes"]) { if (f == field) { hasIdx = true; } }
+    if (hasIdx) {
+        for (let d in findByIndex(key, field, value)) { push(out, d); }
+        return out;
+    }
+    for (let d in queryDocs(key, field, value)) { push(out, d); }
+    return out;
+}
+
+fun rdb_truncate(db, t) {
+    let n = 0;
+    for (let id in rdb_ids(db, t)) { rdb_delete(db, t, id); n = n + 1; }
+    return n;
+}
+
+// ---- RCSQL: «جدول&شرط:op(قيمة)&order...» ; اسم الجدول يُترجم إلى حاويته الحقيقية ------------
+fun rdb__sql(db, q) {
+    let parts = split(q, "&");
+    let t = trim(parts[0]);
+    let key = rdb__table(db, t);
+    let rest = "";
+    let i = 1;
+    while (i < len(parts)) { rest = rest + "&" + parts[i]; i = i + 1; }
+    return key + rest;
+}
+// الصف يحمل _id من المستند ومن sql معاً: نُسقط التكرار
+fun rdb__dedupe(row) {
+    if (type(row) != "map") { return row; }
+    let out = {};
+    for (let k in keys(row)) { out[k] = row[k]; }
+    return out;
+}
+fun rdb_query(db, q) {
+    let out = [];
+    for (let r in sql(rdb__sql(db, q))) { push(out, rdb__dedupe(r)); }
+    return out;
+}
+fun rdb_queryCount(db, q) { return sqlCount(rdb__sql(db, q)); }
+fun rdb_queryOne(db, q) { return rdb__dedupe(sqlOne(rdb__sql(db, q))); }
+fun rdb_queryIds(db, q) { return sqlIds(rdb__sql(db, q)); }
+
+// ---- معاملات --------------------------------------------------------------------------
+fun rdb_begin(db) {
+    if (!db["open"]) { rdb__fail("database `" + db["name"] + "` is closed"); }
+    if (db["tx"] != nil) { rdb__fail("a transaction is already open (nested transactions are not supported)"); }
+    beginTransaction();
+    db["tx"] = [];
+    db["txSeq"] = rdb__copyMap(db["seq"]);
+    return true;
+}
+
+fun rdb_commit(db) {
+    if (db["tx"] == nil) { rdb__fail("no open transaction"); }
+    let ops = db["tx"];
+    db["tx"] = nil;
+    commitTransaction();
+    if (db["path"] != nil and len(ops) > 0) {
+        let rec = {"o": "B", "ops": ops};
+        appendFile(db["path"], rdb__line(rec) + "\n");   // سطر واحد = ذرّية الدفعة كلها
+        db["wal"] = db["wal"] + 1;
+        db["records"] = db["records"] + 1;
+        if (db["autoCheckpoint"] > 0 and db["wal"] >= db["autoCheckpoint"]) { rdb__checkpoint(db); }
+    }
+    return true;
+}
+
+fun rdb_rollback(db) {
+    if (db["tx"] == nil) { rdb__fail("no open transaction"); }
+    db["tx"] = nil;
+    rollbackTransaction();
+    db["seq"] = db["txSeq"];
+    return true;
+}
+
+// ينفّذ fn داخل معاملة: commit عند النجاح، rollback ثم إعادة رمي الخطأ عند الفشل
+fun rdb_transaction(db, fn) {
+    rdb_begin(db);
+    let result = nil;
+    try { result = fn(); }
+    catch (e) { rdb_rollback(db); throw e["message"]; }
+    rdb_commit(db);
+    return result;
+}
+
+// دفعة ذرّية: مصفوفة مستندات (مع _id اختياري)؛ تفشل كلها أو تنجح كلها
+fun rdb_bulk(db, t, docs) {
+    return rdb_transaction(db, fun() {
+        let ids = [];
+        for (let d in docs) {
+            if (type(d) == "map" and has(d, "_id")) { rdb_put(db, t, d["_id"], d); push(ids, toString(d["_id"])); }
+            else { push(ids, rdb_add(db, t, d)); }
+        }
+        return ids;
+    });
+}
