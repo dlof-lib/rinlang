@@ -1015,6 +1015,7 @@ static std::string containerTagName(ContainerKind k) {
         case ContainerKind::TABLE: return "container.table";
         // نفس المبدأ لـ "@container.doc=" / "@doc=" -> دائماً "container.doc" موحَّدة.
         case ContainerKind::DOC: return "container.doc";
+        case ContainerKind::DATALIST: return "container.datalist";
         // نفس المبدأ لمفاهيم التنسيق/الستايل الجديدة: "@Object="/"@portal="/"@block=" توحَّد دائماً
         // إلى "container.object"/"container.portal"/"container.block" عند الحفظ وإعادة القراءة.
         case ContainerKind::OBJECT: return "container.object";
@@ -1042,6 +1043,7 @@ static std::string containerIcon(ContainerKind k) {
         case ContainerKind::IMPORT: return "📦⬅️";
         case ContainerKind::TABLE: return "📊";
         case ContainerKind::DOC: return "🧾";
+        case ContainerKind::DATALIST: return "📋";
         case ContainerKind::OBJECT: return "🧩";
         case ContainerKind::PORTAL: return "🎨";
         case ContainerKind::BLOCK: return "🧱";
@@ -1068,6 +1070,7 @@ static ContainerKind resolveContainerKindName(const std::string& raw) {
     if (s == "api") return ContainerKind::API;
     if (s == "table") return ContainerKind::TABLE;
     if (s == "doc") return ContainerKind::DOC;
+    if (s == "datalist" || s == "list") return ContainerKind::DATALIST;
     if (s == "object") return ContainerKind::OBJECT;
     if (s == "portal") return ContainerKind::PORTAL;
     if (s == "block") return ContainerKind::BLOCK;
@@ -1310,6 +1313,17 @@ bool sqlMatchPredicate(const Value& doc, const rin::sql::Predicate& pr) {
         return false; // مُعامل مجموعة غير معروف -- لا ينبغي أن يحدث (parse() لا تُنتج غير or/and/not)
     }
 
+    if (pr.op == "any" && pr.field == "search") { // search:any(text) — نص غير حسّاس للحالة في أي حقل (نص/رقم/مصفوفة نصوص)
+        if (doc.type != Value::Type::MAP || !doc.map) return false;
+        std::string needle = sqlLower(pr.arg);
+        for (auto& kv : *doc.map) {
+            if (kv.second.type == Value::Type::STRING && sqlLower(kv.second.str).find(needle) != std::string::npos) return true;
+            if (kv.second.type == Value::Type::NUMBER && sqlLower(kv.second.toDisplayString()).find(needle) != std::string::npos) return true;
+            if (kv.second.type == Value::Type::ARRAY && kv.second.array)
+                for (auto& el : *kv.second.array) if (el.type == Value::Type::STRING && sqlLower(el.str).find(needle) != std::string::npos) return true;
+        }
+        return false;
+    }
     Value field;
     bool found = sqlGetNestedField(doc, sqlSplitSlash(pr.field), field);
     if (pr.op == "exists") return found;
@@ -1345,6 +1359,77 @@ bool sqlMatchPredicate(const Value& doc, const rin::sql::Predicate& pr) {
     if (pr.op == "like") {
         if (field.type != Value::Type::STRING) return false;
         return sqlLower(field.str).find(sqlLower(pr.arg)) != std::string::npos;
+    }
+    // ---- عمليات RCSQL الإضافية ----
+    if (pr.op == "notlike") {
+        if (field.type != Value::Type::STRING) return false;
+        return sqlLower(field.str).find(sqlLower(pr.arg)) == std::string::npos;
+    }
+    if (pr.op == "nstarts" || pr.op == "nends") {
+        if (field.type != Value::Type::STRING) return false;
+        std::string hay = sqlLower(field.str), needle = sqlLower(pr.arg);
+        if (needle.size() > hay.size()) return true;
+        bool hit = pr.op == "nstarts" ? hay.compare(0, needle.size(), needle) == 0
+                                      : hay.compare(hay.size() - needle.size(), needle.size(), needle) == 0;
+        return !hit;
+    }
+    if (pr.op == "in" || pr.op == "nin" || pr.op == "between") {
+        std::vector<std::string> items; { std::string cur; for (char ch : pr.arg) { if (ch == '/') { items.push_back(cur); cur.clear(); } else cur += ch; } items.push_back(cur); }
+        if (pr.op == "between") {
+            if (items.size() != 2) return false;
+            if (field.type == Value::Type::NUMBER) {
+                Value lo = sqlParseArg(items[0]), hi = sqlParseArg(items[1]);
+                if (lo.type != Value::Type::NUMBER || hi.type != Value::Type::NUMBER) return false;
+                return field.number >= lo.number && field.number <= hi.number;
+            }
+            if (field.type != Value::Type::STRING) return false;
+            // نص/تاريخ ISO: مقارنة بطول كل حدّ (2026-01 يطابق كل الشهر)
+            auto pre = [&](const std::string& lim) { return field.str.substr(0, lim.size()); };
+            return pre(items[0]) >= items[0] && pre(items[1]) <= items[1];
+        }
+        bool hit = false;
+        for (auto& it2 : items) if (valuesEqual(field, sqlParseArg(it2))) { hit = true; break; }
+        return pr.op == "in" ? hit : !hit;
+    }
+    if (pr.op == "before" || pr.op == "after" || pr.op == "on") {
+        if (field.type == Value::Type::NUMBER) {
+            Value a = sqlParseArg(pr.arg);
+            if (a.type != Value::Type::NUMBER) return false;
+            if (pr.op == "before") return field.number < a.number;
+            if (pr.op == "after") return field.number > a.number;
+            return field.number == a.number;
+        }
+        if (field.type != Value::Type::STRING) return false;
+        std::string pfx = field.str.substr(0, pr.arg.size()); // تاريخ ISO: 2026-03 يطابق كل مارس
+        if (pr.op == "before") return pfx < pr.arg;
+        if (pr.op == "after") return pfx > pr.arg;
+        return pfx == pr.arg;
+    }
+    if (pr.op == "any") { // f:any(text): نص أو أي عنصر نصي في مصفوفة يحتوي النص
+        std::string needle = sqlLower(pr.arg);
+        if (field.type == Value::Type::STRING) return sqlLower(field.str).find(needle) != std::string::npos;
+        if (field.type == Value::Type::ARRAY && field.array)
+            for (auto& el : *field.array) if (el.type == Value::Type::STRING && sqlLower(el.str).find(needle) != std::string::npos) return true;
+        return false;
+    }
+    if (pr.op == "isa") {
+        std::string t = sqlLower(pr.arg);
+        switch (field.type) {
+            case Value::Type::NUMBER: return t == "number";
+            case Value::Type::STRING: return t == "string";
+            case Value::Type::BOOL: return t == "bool" || t == "boolean";
+            case Value::Type::ARRAY: return t == "array";
+            case Value::Type::MAP: return t == "map";
+            default: return t == "nil";
+        }
+    }
+    if (pr.op == "empty" || pr.op == "filled") {
+        bool e = false;
+        if (field.type == Value::Type::STRING) e = field.str.empty();
+        else if (field.type == Value::Type::ARRAY) e = !field.array || field.array->empty();
+        else if (field.type == Value::Type::MAP) e = !field.map || field.map->empty();
+        else if (field.type == Value::Type::NIL) e = true;
+        return pr.op == "empty" ? e : !e;
     }
     if (pr.op == "starts" || pr.op == "ends") {
         if (field.type != Value::Type::STRING) return false;
@@ -1411,7 +1496,7 @@ std::string Interpreter::sqlResolveTargetContainer(const rin::sql::Query& q) con
         return it != containerMasks.end() ? it->second : std::string();
     }
     if (q.targetPath.empty()) return std::string();
-    if (q.targetPath.size() == 1) return q.targetPath[0];
+    if (q.targetPath.size() == 1) return canonContainer(q.targetPath[0]); // اسم/مفتاح مكتوب/مسار
     // مسار متعدد الأجزاء: تحقّق أن كل جزء لاحق عضو مباشر (groupMembers) في سابقه، خطوة بخطوة.
     for (size_t k = 0; k + 1 < q.targetPath.size(); k++) {
         auto git = groupMembers.find(q.targetPath[k]);
@@ -1453,6 +1538,93 @@ Interpreter::SqlRawResult Interpreter::sqlRunRaw(const std::string& rawArg, int 
             if (!sqlMatchPredicate(entry.second, pr)) { ok = false; break; }
         }
         if (ok) rows.push_back(entry);
+    }
+
+    // 1ب) GROUP BY + تجميعات + HAVING: كل مجموعة تصير «مستنداً» {حقول التجميع, count, sum_f, avg_f, ...}
+    //     فتعمل بعدها كل مراحل distinct/order/offset/limit/select (وشروط having) على الناتج كالمعتاد.
+    if (!q.groupFields.empty() || !q.aggregates.empty()) {
+        struct Grp { std::vector<Value> key; long count = 0; std::vector<std::vector<Value>> vals; };
+        std::vector<std::vector<std::string>> gpaths, apaths;
+        for (auto& f : q.groupFields) gpaths.push_back(sqlSplitSlash(f));
+        for (auto& a : q.aggregates) apaths.push_back(sqlSplitSlash(a.field));
+        auto bucketLen = [](const std::string& b) -> size_t { return b == "year" ? 4 : b == "month" ? 7 : b == "day" ? 10 : 0; };
+        std::vector<Grp> groups;
+        for (auto& row : rows) {
+            std::vector<Value> key;
+            for (size_t k = 0; k < gpaths.size(); k++) {
+                Value v;
+                if (!sqlGetNestedField(row.second, gpaths[k], v)) v = Value::nil();
+                size_t bl = k < q.groupBuckets.size() ? bucketLen(q.groupBuckets[k]) : 0;
+                if (bl && v.type == Value::Type::STRING) v = Value::string(v.str.substr(0, bl)); // 2026-03-15 -> 2026-03
+                key.push_back(v);
+            }
+            Grp* g = nullptr;
+            for (auto& cand : groups) {
+                bool eq = true;
+                for (size_t k = 0; k < key.size(); k++) if (!valuesEqual(cand.key[k], key[k])) { eq = false; break; }
+                if (eq) { g = &cand; break; }
+            }
+            if (!g) { groups.push_back(Grp{}); g = &groups.back(); g->key = key; g->vals.assign(q.aggregates.size(), {}); }
+            g->count++;
+            for (size_t k = 0; k < q.aggregates.size(); k++) {
+                Value v;
+                if (sqlGetNestedField(row.second, apaths[k], v) && v.type != Value::Type::NIL) g->vals[k].push_back(v);
+            }
+        }
+        if (groups.empty() && q.groupFields.empty()) { groups.push_back(Grp{}); groups.back().vals.assign(q.aggregates.size(), {}); }
+        std::vector<std::pair<std::string, Value>> grouped;
+        for (auto& g : groups) {
+            auto m = std::make_shared<MapData>();
+            std::string gid;
+            for (size_t k = 0; k < q.groupFields.size(); k++) {
+                std::string nm = q.groupFields[k];
+                for (auto& ch : nm) if (ch == '/') ch = '_';
+                if (k < q.groupBuckets.size() && !q.groupBuckets[k].empty()) nm = q.groupBuckets[k] + "_" + nm;
+                m->push_back({Value::string(nm), g.key[k]});
+                if (k) gid += "|";
+                gid += g.key[k].toDisplayString();
+            }
+            if (gid.empty()) gid = "all";
+            m->push_back({Value::string("count"), Value::num(static_cast<double>(g.count))});
+            for (size_t k = 0; k < q.aggregates.size(); k++) {
+                std::string nm = q.aggregates[k].field;
+                for (auto& ch : nm) if (ch == '/') ch = '_';
+                const std::string& fn = q.aggregates[k].fn;
+                auto& vs = g.vals[k];
+                std::vector<double> nums;
+                for (auto& v : vs) if (v.type == Value::Type::NUMBER) nums.push_back(v.number);
+                Value out = Value::nil();
+                if (fn == "sum") { double t = 0; for (double x : nums) t += x; out = Value::num(t); }
+                else if (fn == "avg") { if (!nums.empty()) { double t = 0; for (double x : nums) t += x; out = Value::num(t / static_cast<double>(nums.size())); } }
+                else if (fn == "count") out = Value::num(static_cast<double>(vs.size()));
+                else if (fn == "distinct") {
+                    std::vector<Value> seen;
+                    for (auto& v : vs) { bool dup = false; for (auto& s2 : seen) if (valuesEqual(s2, v)) { dup = true; break; } if (!dup) seen.push_back(v); }
+                    out = Value::num(static_cast<double>(seen.size()));
+                } else if (fn == "median") {
+                    if (!nums.empty()) {
+                        std::sort(nums.begin(), nums.end());
+                        size_t n2 = nums.size();
+                        out = Value::num(n2 % 2 ? nums[n2 / 2] : (nums[n2 / 2 - 1] + nums[n2 / 2]) / 2.0);
+                    }
+                } else { // min / max على أرقام أو نصوص (تواريخ) من نفس النوع
+                    bool have = false;
+                    for (auto& v : vs) {
+                        if (v.type != Value::Type::NUMBER && v.type != Value::Type::STRING) continue;
+                        if (!have) { out = v; have = true; continue; }
+                        if (v.type != out.type) continue;
+                        int c = sqlCompareValues(v, out);
+                        if ((fn == "min" && c < 0) || (fn == "max" && c > 0)) out = v;
+                    }
+                }
+                m->push_back({Value::string(fn + "_" + nm), out});
+            }
+            Value doc = Value::makeMap(m);
+            bool ok = true;
+            for (auto& hp : q.having) if (!sqlMatchPredicate(doc, hp)) { ok = false; break; }
+            if (ok) grouped.push_back({gid, doc});
+        }
+        rows = std::move(grouped);
     }
 
     // 2) DISTINCT (إبقاء أول ظهور فقط لكل تركيبة قيم مختلفة لحقول q.distinctFields معاً -- حقل
@@ -3732,15 +3904,15 @@ void Interpreter::registerNatives() {
     natives["insertDoc"] = [this](std::vector<Value>& a, int line) -> Value {
         { Value tv_; if (tableNative("insertDoc", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         expectArgs("insertDoc", a, 3, line);
-        std::string container = asString(a[0], "insertDoc", line);
+        std::string container = canonContainer(asString(a[0], "insertDoc", line));
         std::string id = asString(a[1], "insertDoc", line);
         if (a[2].type != Value::Type::MAP) {
             throw diagErr(diag::Code::E0020_InvalidDocument, line, "'insertDoc' expects a map as the third argument (document fields)");
         }
-        if (!containerKinds.count(container) || containerKinds[container] != ContainerKind::DOC) {
+        if (!containerKinds.count(container) || (containerKinds[container] != ContainerKind::DOC && containerKinds[container] != ContainerKind::DATALIST)) {
             throw errWithReason(diag::Code::E0020_InvalidDocument, line,
                                  "'" + container + "' is not a NoSQL document collection",
-                                 "expected a `container.doc` / `doc` container, defined with `container.doc`");
+                                 "expected a `container.doc` / `doc` / `container.datalist` container");
         }
         auto errors = schemaErrors(container, a[2]);
         if (!errors.empty()) {
@@ -3763,7 +3935,7 @@ void Interpreter::registerNatives() {
     natives["updateDoc"] = [this](std::vector<Value>& a, int line) -> Value {
         { Value tv_; if (tableNative("updateDoc", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         expectArgs("updateDoc", a, 3, line);
-        std::string container = asString(a[0], "updateDoc", line);
+        std::string container = canonContainer(asString(a[0], "updateDoc", line));
         std::string id = asString(a[1], "updateDoc", line);
         if (a[2].type != Value::Type::MAP) {
             throw diagErr(diag::Code::E0004_InvalidType, line, "'updateDoc' يتوقّع كائناً/قاموساً (map) كوسيط ثالث للحقول الجديدة");
@@ -3802,7 +3974,7 @@ void Interpreter::registerNatives() {
     natives["deleteDoc"] = [this](std::vector<Value>& a, int line) -> Value {
         { Value tv_; if (tableNative("deleteDoc", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         expectArgs("deleteDoc", a, 2, line);
-        std::string container = asString(a[0], "deleteDoc", line);
+        std::string container = canonContainer(asString(a[0], "deleteDoc", line));
         std::string id = asString(a[1], "deleteDoc", line);
         auto it = docStore.find(container);
         if (it != docStore.end()) {
@@ -3824,7 +3996,7 @@ void Interpreter::registerNatives() {
     natives["findDoc"] = [this](std::vector<Value>& a, int line) -> Value {
         { Value tv_; if (tableNative("findDoc", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         expectArgs("findDoc", a, 2, line);
-        std::string container = asString(a[0], "findDoc", line);
+        std::string container = canonContainer(asString(a[0], "findDoc", line));
         std::string id = asString(a[1], "findDoc", line);
         auto it = docStore.find(container);
         if (it != docStore.end()) {
@@ -3837,7 +4009,7 @@ void Interpreter::registerNatives() {
     natives["queryDocs"] = [this](std::vector<Value>& a, int line) -> Value {
         { Value tv_; if (tableNative("queryDocs", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         expectArgs("queryDocs", a, 3, line);
-        std::string container = asString(a[0], "queryDocs", line);
+        std::string container = canonContainer(asString(a[0], "queryDocs", line));
         std::string field = asString(a[1], "queryDocs", line);
         Value target = a[2];
         auto result = std::make_shared<ArrayData>();
@@ -3861,7 +4033,7 @@ void Interpreter::registerNatives() {
     natives["queryOneDoc"] = [this](std::vector<Value>& a, int line) -> Value {
         { Value tv_; if (tableNative("queryOneDoc", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         expectArgs("queryOneDoc", a, 3, line);
-        std::string container = asString(a[0], "queryOneDoc", line);
+        std::string container = canonContainer(asString(a[0], "queryOneDoc", line));
         std::string field = asString(a[1], "queryOneDoc", line);
         Value target = a[2];
         auto it = docStore.find(container);
@@ -4257,7 +4429,7 @@ void Interpreter::registerNatives() {
     natives["docIds"] = [this](std::vector<Value>& a, int line) -> Value {
         { Value tv_; if (tableNative("docIds", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         expectArgs("docIds", a, 1, line);
-        std::string container = asString(a[0], "docIds", line);
+        std::string container = canonContainer(asString(a[0], "docIds", line));
         auto result = std::make_shared<ArrayData>();
         auto it = docStore.find(container);
         if (it != docStore.end()) for (auto& entry : it->second) result->push_back(Value::string(entry.first));
@@ -4268,7 +4440,7 @@ void Interpreter::registerNatives() {
     natives["allDocs"] = [this](std::vector<Value>& a, int line) -> Value {
         { Value tv_; if (tableNative("allDocs", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         expectArgs("allDocs", a, 1, line);
-        std::string container = asString(a[0], "allDocs", line);
+        std::string container = canonContainer(asString(a[0], "allDocs", line));
         auto result = std::make_shared<ArrayData>();
         auto it = docStore.find(container);
         if (it != docStore.end()) for (auto& entry : it->second) result->push_back(entry.second);
@@ -4279,7 +4451,7 @@ void Interpreter::registerNatives() {
     natives["countDocs"] = [this](std::vector<Value>& a, int line) -> Value {
         { Value tv_; if (tableNative("countDocs", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         expectArgs("countDocs", a, 1, line);
-        std::string container = asString(a[0], "countDocs", line);
+        std::string container = canonContainer(asString(a[0], "countDocs", line));
         auto it = docStore.find(container);
         return Value::num(it != docStore.end() ? static_cast<double>(it->second.size()) : 0.0);
     };
@@ -4290,7 +4462,7 @@ void Interpreter::registerNatives() {
     // (أو boolean)/array/map (أو object)/any. يستبدل أي مخطط سابق لنفس المجموعة بالكامل.
     natives["defineSchema"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("defineSchema", a, 2, line);
-        std::string container = asString(a[0], "defineSchema", line);
+        std::string container = canonContainer(asString(a[0], "defineSchema", line));
         if (a[1].type != Value::Type::MAP) {
             throw diagErr(diag::Code::E0004_InvalidType, line, "'defineSchema' يتوقّع كائناً/قاموساً (map) كوسيط ثانٍ: {field: \"type\", ...}");
         }
@@ -4342,7 +4514,7 @@ void Interpreter::registerNatives() {
     // createIndex(collection, field) -> true إن أُنشئ فهرس جديد، false إن كان موجوداً أصلاً (يُعاد بناؤه بأي حال)
     natives["createIndex"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("createIndex", a, 2, line);
-        std::string container = asString(a[0], "createIndex", line);
+        std::string container = canonContainer(asString(a[0], "createIndex", line));
         std::string field = asString(a[1], "createIndex", line);
         auto& fields = indexStore[container];
         bool exists = false;
@@ -4355,7 +4527,7 @@ void Interpreter::registerNatives() {
     // dropIndex(collection, field) -> true إن حُذف فعلاً، false إن لم يوجد أصلاً
     natives["dropIndex"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("dropIndex", a, 2, line);
-        std::string container = asString(a[0], "dropIndex", line);
+        std::string container = canonContainer(asString(a[0], "dropIndex", line));
         std::string field = asString(a[1], "dropIndex", line);
         auto it = indexStore.find(container);
         if (it == indexStore.end()) return Value::boolean_(false);
@@ -4380,7 +4552,7 @@ void Interpreter::registerNatives() {
     // إن لم يوجد فهرس على field بعد، يُنشأ تلقائياً (فهرسة كسولة/lazy) قبل البحث.
     natives["findByIndex"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("findByIndex", a, 3, line);
-        std::string container = asString(a[0], "findByIndex", line);
+        std::string container = canonContainer(asString(a[0], "findByIndex", line));
         std::string field = asString(a[1], "findByIndex", line);
         Value target = a[2];
         auto& fields = indexStore[container];
@@ -5133,7 +5305,7 @@ void Interpreter::registerNatives() {
     // hasContainer(name) -> true إن كانت هناك حاوية مسجَّلة بهذا الاسم (عبر @container أو spawn)
     natives["hasContainer"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("hasContainer", a, 1, line);
-        return Value::boolean_(containers.count(asString(a[0], "hasContainer", line)) > 0);
+        return Value::boolean_(containers.count(canonContainer(asString(a[0], "hasContainer", line))) > 0);
     };
 
     // container(name) — أسلوب كتابة بسيط للوصول إلى حاوية موجودة.
@@ -5657,7 +5829,7 @@ void Interpreter::registerNatives() {
     // دالة Rin كقيمة حقل (value من نوع FUNCTION)، تُستدعى لاحقاً عبر callFn(). يُعيد true عند النجاح.
     natives["setField"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("setField", a, 3, line);
-        std::string name = asString(a[0], "setField", line);
+        std::string name = canonContainer(asString(a[0], "setField", line));
         std::string key = asString(a[1], "setField", line);
         auto it = containers.find(name);
         if (it == containers.end()) {
@@ -5706,7 +5878,7 @@ void Interpreter::registerNatives() {
     // getField(container, key) -> قيمة الحقل key بداخل الحاوية container، أو nil إن لم يكن معرَّفاً
     natives["getField"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("getField", a, 2, line);
-        std::string name = asString(a[0], "getField", line);
+        std::string name = canonContainer(asString(a[0], "getField", line));
         std::string key = asString(a[1], "getField", line);
         auto it = containers.find(name);
         if (it == containers.end()) {
@@ -5921,7 +6093,7 @@ void Interpreter::registerNatives() {
 
     natives["hasField"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("hasField", a, 2, line);
-        std::string name = asString(a[0], "hasField", line);
+        std::string name = canonContainer(asString(a[0], "hasField", line));
         auto it = containers.find(name);
         if (it == containers.end()) return Value::boolean_(false);
         Value out;
@@ -6066,26 +6238,27 @@ void Interpreter::registerNatives() {
 
     natives["container.exists"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("container.exists", a, 1, line);
-        return Value::boolean_(containers.count(asString(a[0], "container.exists", line)) > 0);
+        return Value::boolean_(containers.count(canonContainer(asString(a[0], "container.exists", line))) > 0);
     };
     natives["container.kind"] = [this, kindNameOf](std::vector<Value>& a, int line) -> Value {
         expectArgs("container.kind", a, 1, line);
-        std::string name = asString(a[0], "container.kind", line);
+        std::string name = canonContainer(asString(a[0], "container.kind", line));
         if (!containers.count(name)) return Value::nil();
         return Value::string(kindNameOf(name));
     };
     natives["container.size"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("container.size", a, 1, line);
-        std::string name = asString(a[0], "container.size", line);
+        std::string name = canonContainer(asString(a[0], "container.size", line));
         auto it = containers.find(name);
         if (it == containers.end()) return Value::nil();
         return Value::num(static_cast<double>(it->second->values.size()));
     };
     natives["container.empty"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("container.empty", a, 1, line);
-        std::string name = asString(a[0], "container.empty", line);
+        std::string name = canonContainer(asString(a[0], "container.empty", line));
         auto it = containers.find(name);
         if (it == containers.end()) return Value::nil();
+        if (isDatalistContainer(name)) { auto di = docStore.find(name); if (di != docStore.end() && !di->second.empty()) return Value::boolean_(false); }
         if (isTableContainer(name)) { // جدول فارغ = بلا متغيّرات وبلا صفوف
             auto rit = tableRows.find(name);
             if (rit != tableRows.end() && rit->second && !rit->second->empty()) return Value::boolean_(false);
@@ -6094,19 +6267,19 @@ void Interpreter::registerNatives() {
     };
     natives["container.childCount"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("container.childCount", a, 1, line);
-        std::string name = asString(a[0], "container.childCount", line);
+        std::string name = canonContainer(asString(a[0], "container.childCount", line));
         auto it = containerChildren.find(name);
         return Value::num(it == containerChildren.end() ? 0.0 : static_cast<double>(it->second.size()));
     };
     natives["container.hasChildren"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("container.hasChildren", a, 1, line);
-        std::string name = asString(a[0], "container.hasChildren", line);
+        std::string name = canonContainer(asString(a[0], "container.hasChildren", line));
         auto it = containerChildren.find(name);
         return Value::boolean_(it != containerChildren.end() && !it->second.empty());
     };
     natives["container.depth"] = [this, ancestorsOf](std::vector<Value>& a, int line) -> Value {
         expectArgs("container.depth", a, 1, line);
-        std::string name = asString(a[0], "container.depth", line);
+        std::string name = canonContainer(asString(a[0], "container.depth", line));
         if (!containers.count(name)) return Value::nil();
         return Value::num(static_cast<double>(ancestorsOf(name).size()));
     };
@@ -6130,21 +6303,21 @@ void Interpreter::registerNatives() {
     natives["container.siblings"] = natives["siblingsOf"];
     natives["container.ancestors"] = [this, ancestorsOf](std::vector<Value>& a, int line) -> Value {
         expectArgs("container.ancestors", a, 1, line);
-        std::string name = asString(a[0], "container.ancestors", line);
+        std::string name = canonContainer(asString(a[0], "container.ancestors", line));
         auto out = std::make_shared<ArrayData>();
         for (auto& n : ancestorsOf(name)) out->push_back(Value::string(n));
         return Value::makeArray(out);
     };
     natives["container.descendants"] = [this, descendantsOf](std::vector<Value>& a, int line) -> Value {
         expectArgs("container.descendants", a, 1, line);
-        std::string name = asString(a[0], "container.descendants", line);
+        std::string name = canonContainer(asString(a[0], "container.descendants", line));
         auto out = std::make_shared<ArrayData>();
         for (auto& n : descendantsOf(name)) out->push_back(Value::string(n));
         return Value::makeArray(out);
     };
     natives["container.path"] = [this, ancestorsOf](std::vector<Value>& a, int line) -> Value {
         expectArgs("container.path", a, 1, line);
-        std::string name = asString(a[0], "container.path", line);
+        std::string name = canonContainer(asString(a[0], "container.path", line));
         if (!containers.count(name)) return Value::nil();
         auto chain = ancestorsOf(name); // من الأب المباشر صعوداً حتى الجذر
         auto out = std::make_shared<ArrayData>();
@@ -6154,7 +6327,7 @@ void Interpreter::registerNatives() {
     };
     natives["container.info"] = [this, kindNameOf](std::vector<Value>& a, int line) -> Value {
         expectArgs("container.info", a, 1, line);
-        std::string name = asString(a[0], "container.info", line);
+        std::string name = canonContainer(asString(a[0], "container.info", line));
         auto it = containers.find(name);
         if (it == containers.end()) return Value::nil();
         auto m = std::make_shared<MapData>();
@@ -6165,6 +6338,17 @@ void Interpreter::registerNatives() {
         m->push_back({Value::string("parent"), parentIt == containerParent.end() ? Value::nil() : Value::string(parentIt->second)});
         auto childIt = containerChildren.find(name);
         m->push_back({Value::string("childCount"), Value::num(childIt == containerChildren.end() ? 0.0 : static_cast<double>(childIt->second.size()))});
+        { auto ek = easyKeyOfContainer.find(name); auto pp = containerPathOf.find(name);
+          m->push_back({Value::string("key"), Value::string(ek != easyKeyOfContainer.end() ? ek->second : name)}); // Easy_key: المكتوب أو الافتراضي
+          m->push_back({Value::string("path"), Value::string(pp != containerPathOf.end() ? pp->second : name)}); }
+        if (isDatalistContainer(name)) { // قائمة بيانات: عدد السجلات والأعمدة
+            datalistSync(name);
+            auto rws = tableRowsOf(name);
+            size_t w = rws->empty() || (*rws)[0].type != Value::Type::ARRAY ? 0 : (*rws)[0].array->size();
+            auto di = docStore.find(name);
+            m->push_back({Value::string("items"), Value::num(di == docStore.end() ? 0.0 : static_cast<double>(di->second.size()))});
+            m->push_back({Value::string("columns"), Value::num(static_cast<double>(w))});
+        }
         if (isTableContainer(name)) { // جدول: عدد الصفوف وعرض الجدول (أكبر عدد خلايا في صف)
             auto rows = tableRowsOf(name);
             size_t width = 0;
@@ -6176,7 +6360,7 @@ void Interpreter::registerNatives() {
     };
     natives["container.fields"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("container.fields", a, 1, line);
-        std::string name = asString(a[0], "container.fields", line);
+        std::string name = canonContainer(asString(a[0], "container.fields", line));
         auto it = containers.find(name);
         if (it == containers.end()) return Value::nil();
         auto m = std::make_shared<MapData>();
@@ -6190,7 +6374,7 @@ void Interpreter::registerNatives() {
     natives["container.snapshot"] = natives["container.fields"];
     natives["container.fieldNames"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("container.fieldNames", a, 1, line);
-        std::string name = asString(a[0], "container.fieldNames", line);
+        std::string name = canonContainer(asString(a[0], "container.fieldNames", line));
         auto it = containers.find(name);
         if (it == containers.end()) return Value::nil();
         auto out = std::make_shared<ArrayData>();
@@ -6203,7 +6387,7 @@ void Interpreter::registerNatives() {
     };
     natives["container.fieldType"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("container.fieldType", a, 2, line);
-        std::string name = asString(a[0], "container.fieldType", line);
+        std::string name = canonContainer(asString(a[0], "container.fieldType", line));
         auto it = containers.find(name);
         if (it == containers.end()) return Value::nil();
         Value out;
@@ -6256,7 +6440,7 @@ void Interpreter::registerNatives() {
     natives["container.renameField"] = [this](std::vector<Value>& a, int line) -> Value {
         { Value tv_; if (tableNative("container.renameField", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         expectArgs("container.renameField", a, 3, line);
-        std::string name = asString(a[0], "container.renameField", line);
+        std::string name = canonContainer(asString(a[0], "container.renameField", line));
         auto it = containers.find(name);
         if (it == containers.end()) return Value::boolean_(false);
         std::string oldKey = asString(a[1], "container.renameField", line);
@@ -6270,7 +6454,7 @@ void Interpreter::registerNatives() {
     };
     natives["container.deleteField"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("container.deleteField", a, 2, line);
-        std::string name = asString(a[0], "container.deleteField", line);
+        std::string name = canonContainer(asString(a[0], "container.deleteField", line));
         auto it = containers.find(name);
         if (it == containers.end()) return Value::boolean_(false);
         std::string key = asString(a[1], "container.deleteField", line);
@@ -6279,7 +6463,7 @@ void Interpreter::registerNatives() {
     };
     natives["container.mergeFields"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgsRange("container.mergeFields", a, 2, 3, line);
-        std::string name = asString(a[0], "container.mergeFields", line);
+        std::string name = canonContainer(asString(a[0], "container.mergeFields", line));
         auto it = containers.find(name);
         if (it == containers.end()) return Value::boolean_(false);
         if (a[1].type != Value::Type::MAP) throw diagErr(diag::Code::E0004_InvalidType, line, "`container.mergeFields` expects a map as its second argument");
@@ -6293,11 +6477,12 @@ void Interpreter::registerNatives() {
     };
     natives["container.clearFields"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("container.clearFields", a, 1, line);
-        std::string name = asString(a[0], "container.clearFields", line);
+        std::string name = canonContainer(asString(a[0], "container.clearFields", line));
         auto it = containers.find(name);
         if (it == containers.end()) return Value::boolean_(false);
         it->second->values.clear();
         if (isTableContainer(name)) { tableRowsOf(name)->clear(); containerStyles.erase(name); } // الجدول: + الصفوف والنمط
+        if (isDatalistContainer(name)) { docStore[name].clear(); refreshIndexesForContainer(name); } // القائمة: + السجلات
         return Value::boolean_(true);
     };
     natives["container.count"] = [this](std::vector<Value>& a, int line) -> Value {
@@ -7477,13 +7662,114 @@ bool Interpreter::isTableContainer(const std::string& name) const {
     return k != containerKinds.end() && k->second == ContainerKind::TABLE;
 }
 
+std::string Interpreter::canonContainer(const std::string& n) const {
+    if (containers.count(n)) return n;
+    auto e = easyKeys.find(n);
+    if (e != easyKeys.end() && containers.count(e->second)) return e->second;
+    if (auto node = nsResolvePath(n)) if (node->kind == NsNode::Kind::Container && containers.count(node->key)) return node->key;
+    return n;
+}
+
+bool Interpreter::isDatalistContainer(const std::string& name) const {
+    auto k = containerKinds.find(name);
+    return k != containerKinds.end() && k->second == ContainerKind::DATALIST;
+}
+
+// نسخة جدولية من القائمة: الصف الأول = رأس (اتحاد المفاتيح بترتيب ظهورها)، ثم صف لكل سجل.
+void Interpreter::datalistSync(const std::string& name) {
+    auto& slot = tableRows[name];
+    if (!slot) slot = std::make_shared<ArrayData>();
+    slot->clear();
+    auto it = docStore.find(name);
+    if (it == docStore.end() || it->second.empty()) return;
+    std::vector<std::string> hdr;
+    for (auto& e : it->second)
+        if (e.second.type == Value::Type::MAP && e.second.map)
+            for (auto& kv : *e.second.map) {
+                std::string k = kv.first.toDisplayString();
+                if (std::find(hdr.begin(), hdr.end(), k) == hdr.end()) hdr.push_back(k);
+            }
+    auto head = std::make_shared<ArrayData>();
+    for (auto& h : hdr) head->push_back(Value::string(h));
+    slot->push_back(Value::makeArray(head));
+    for (auto& e : it->second) {
+        auto row = std::make_shared<ArrayData>();
+        for (auto& h : hdr) {
+            Value v = Value::nil();
+            if (e.second.type == Value::Type::MAP && e.second.map)
+                for (auto& kv : *e.second.map) if (kv.first.toDisplayString() == h) { v = kv.second; break; }
+            row->push_back(v);
+        }
+        slot->push_back(Value::makeArray(row));
+    }
+}
+
+static Value datalistRecord(const std::string& id, const Value& doc) {
+    auto m = std::make_shared<MapData>();
+    m->push_back({Value::string("_id"), Value::string(id)});
+    if (doc.type == Value::Type::MAP && doc.map) for (auto& kv : *doc.map) m->push_back(kv);
+    return Value::makeMap(m);
+}
+
+bool Interpreter::datalistVirtualGet(const std::string& name, const std::string& key, Value& out) {
+    auto env = containers.find(name);
+    if (env != containers.end() && env->second && env->second->values.count(key)) return false; // متغيّر حقيقي أولاً
+    auto& docs = docStore[name];
+    if (key == "items") { auto a = std::make_shared<ArrayData>(); for (auto& e : docs) a->push_back(datalistRecord(e.first, e.second)); out = Value::makeArray(a); return true; }
+    if (key == "ids") { auto a = std::make_shared<ArrayData>(); for (auto& e : docs) a->push_back(Value::string(e.first)); out = Value::makeArray(a); return true; }
+    if (key == "size") { out = Value::num(static_cast<double>(docs.size())); return true; }
+    if (key == "first") { out = docs.empty() ? Value::nil() : datalistRecord(docs.front().first, docs.front().second); return true; }
+    if (key == "last") { out = docs.empty() ? Value::nil() : datalistRecord(docs.back().first, docs.back().second); return true; }
+    datalistSync(name);
+    std::vector<std::string> hdr;
+    bool named = tableHeader(name, hdr);
+    if (key == "header") { auto a = std::make_shared<ArrayData>(); if (named) for (auto& h : hdr) a->push_back(Value::string(h)); out = Value::makeArray(a); return true; }
+    std::vector<Value> vals;
+    if (named && tableColumnValues(name, key, vals)) { out = Value::makeArray(std::make_shared<ArrayData>(vals.begin(), vals.end())); return true; } // عمود باسمه
+    return false;
+}
+
+// items = استبدال القائمة كاملة بمصفوفة سجلات (قاموس لكل سجل؛ _id اختياري وإلا تلقائي) مع فحص schema
+bool Interpreter::datalistVirtualSet(const std::string& name, const std::string& key, const Value& v, int line) {
+    auto env = containers.find(name);
+    if (env != containers.end() && env->second && env->second->values.count(key)) return false;
+    if (key != "items") {
+        if (key == "ids" || key == "size" || key == "first" || key == "last" || key == "header")
+            throw diagErr(diag::Code::E0004_InvalidType, line, "الحقل '" + key + "' في container.datalist للقراءة فقط (عدّل items أو استعمل insertDoc/updateDoc/deleteDoc)");
+        return false;
+    }
+    if (v.type != Value::Type::ARRAY || !v.array)
+        throw diagErr(diag::Code::E0004_InvalidType, line, "items: يتوقّع مصفوفة سجلات (قواميس)");
+    std::vector<std::pair<std::string, Value>> fresh;
+    for (auto& rec : *v.array) {
+        if (rec.type != Value::Type::MAP || !rec.map)
+            throw diagErr(diag::Code::E0004_InvalidType, line, "items: كل سجل يجب أن يكون قاموساً، وُجد `" + rec.typeName() + "`");
+        std::string id; auto body = std::make_shared<MapData>();
+        for (auto& kv : *rec.map) {
+            if (kv.first.type == Value::Type::STRING && kv.first.str == "_id") id = kv.second.toDisplayString();
+            else body->push_back(kv);
+        }
+        Value doc = Value::makeMap(body);
+        auto errors = schemaErrors(name, doc);
+        if (!errors.empty()) { auto d = diagErr(diag::Code::E0019_SchemaViolation, line, "schema violation in `" + name + "`"); d.diagnostic->withReason(joinErrors(errors)); throw d; }
+        if (id.empty()) { long n = static_cast<long>(fresh.size()) + 1; auto taken = [&](long k) { for (auto& e : fresh) if (e.first == std::to_string(k)) return true; return false; }; while (taken(n)) n++; id = std::to_string(n); }
+        for (auto& e : fresh) if (e.first == id) throw diagErr(diag::Code::E0020_InvalidDocument, line, "items: المعرّف `" + id + "` مكرَّر");
+        fresh.push_back({id, doc});
+    }
+    docStore[name] = std::move(fresh);
+    refreshIndexesForContainer(name);
+    return true;
+}
+
 std::shared_ptr<ArrayData> Interpreter::tableRowsOf(const std::string& name) {
+    if (isDatalistContainer(name)) datalistSync(name);
     auto& slot = tableRows[name];
     if (!slot) slot = std::make_shared<ArrayData>();
     return slot;
 }
 
 std::vector<std::string> Interpreter::tableVirtualKeys(const std::string& name) const {
+    if (isDatalistContainer(name)) return {"items", "ids", "size", "first", "last", "header"};
     std::vector<std::string> keys{"rows", "header", "body", "records", "columns"};
     if (containerStyles.count(name)) keys.push_back("style");
     return keys;
@@ -7511,6 +7797,7 @@ bool Interpreter::tableHeader(const std::string& name, std::vector<std::string>&
 // صفوف الجسم كمستندات {عمود: خلية} بمعرّف = رقم الصف في الجسم (1-based) — هذا ما تراه استعلامات RCSQL.
 std::vector<std::pair<std::string, Value>> Interpreter::tableAsDocs(const std::string& name) const {
     std::vector<std::pair<std::string, Value>> docs;
+    if (isDatalistContainer(name)) { auto di = docStore.find(name); if (di != docStore.end()) docs = di->second; return docs; } // معرّفات حقيقية
     auto it = tableRows.find(name);
     if (it == tableRows.end() || !it->second) return docs;
     std::vector<std::string> header;
@@ -7530,6 +7817,7 @@ std::vector<std::pair<std::string, Value>> Interpreter::tableAsDocs(const std::s
 // rows = مقبض حيّ على صفوف الجدول · columns = أعمدة الجدول كمصفوفة مصفوفات (نسخة، الخلية الناقصة nil)
 // · style = آخر style value=... مسجَّل. المتغيّر الحقيقي بنفس الاسم داخل الحاوية له الأولوية دائماً.
 bool Interpreter::tableVirtualGet(const std::string& name, const std::string& key, Value& out) {
+    if (isDatalistContainer(name)) return datalistVirtualGet(name, key, out);
     if (!isTableContainer(name)) return false;
     auto env = containers.find(name);
     if (env != containers.end() && env->second && env->second->values.count(key)) return false; // متغيّر حقيقي في الجدول نفسه له الأولوية
@@ -7591,6 +7879,7 @@ bool Interpreter::tableVirtualGet(const std::string& name, const std::string& ke
 }
 
 bool Interpreter::tableVirtualSet(const std::string& name, const std::string& key, const Value& v, int line) {
+    if (isDatalistContainer(name)) return datalistVirtualSet(name, key, v, line);
     if (!isTableContainer(name)) return false;
     auto env = containers.find(name);
     if (env != containers.end() && env->second && env->second->values.count(key)) return false; // متغيّر حقيقي في الجدول نفسه له الأولوية
@@ -7711,6 +8000,12 @@ bool Interpreter::tableVirtualSet(const std::string& name, const std::string& ke
 }
 
 bool Interpreter::tableVirtualDelete(const std::string& name, const std::string& key) {
+    if (isDatalistContainer(name)) {
+        auto env = containers.find(name);
+        if (env != containers.end() && env->second && env->second->values.count(key)) return false;
+        if (key == "items") { docStore[name].clear(); refreshIndexesForContainer(name); return true; }
+        return false;
+    }
     if (!isTableContainer(name)) return false;
     auto env = containers.find(name);
     if (env != containers.end() && env->second && env->second->values.count(key)) return false; // متغيّر حقيقي في الجدول نفسه له الأولوية
@@ -7963,7 +8258,7 @@ std::string Interpreter::buildSaveDocument(const std::string& key, const EnvPtr&
                                     : ("    row cells=" + cellsLit + ";\n");
             }
         }
-    } else if (kind == ContainerKind::DOC) {
+    } else if (kind == ContainerKind::DOC || kind == ContainerKind::DATALIST) {
         // نفس المبدأ: مستندات container.doc/doc مخزَّنة في docStore داخل المفسّر، لا في بيئة الحاوية،
         // فتُلحَق هنا نصياً كسلسلة عبارات 'document id=... fields=...;' قابلة لإعادة القراءة كاملة.
         auto docsIt = docStore.find(key);
@@ -9090,8 +9385,25 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
         }
         output << icon << " " << tag << (s->name.empty() ? "" : (" = " + s->name)) << "\n";
         std::string containerKey = s->name.empty() ? ("#" + std::to_string(containers.size())) : s->name;
+        if (!s->name.empty()) {
+            // Easy_key الافتراضي: إن وُجدت حاوية حيّة بنفس الاسم في مسار أسماء *مختلف* (A.app مقابل B.app) فلا تُدهَس
+            // (docStore/schema/فهارس تُفهرَس بالمفتاح): تأخذ هذه مفتاحاً = مسارها الكامل. إعادة تعريف نفس المسار تستبدل كما كان.
+            std::string pathNow = (nsStack.empty() ? std::string() : nsStack.back()->path() + ".") + s->name;
+            auto po = containerPathOf.find(containerKey);
+            if (containers.count(containerKey) && po != containerPathOf.end() && po->second != pathNow) containerKey = pathNow;
+            containerPathOf[containerKey] = pathNow;
+        }
         containers[containerKey] = containerEnv;
         containerKinds[containerKey] = s->kind;
+        if (!s->easyKey.empty()) { // Easy_key المكتوب: فريد على مستوى كل الحاويات
+            auto ek = easyKeys.find(s->easyKey);
+            if ((ek != easyKeys.end() && ek->second != containerKey) || (containers.count(s->easyKey) && s->easyKey != containerKey))
+                throw diagErr(diag::Code::E0014_InvalidContainer, s->line, "easy_key \"" + s->easyKey + "\" مستعمل أصلاً" +
+                    (ek != easyKeys.end() ? " لحاوية `" + ek->second + "`" : " كاسم حاوية") + " — اختر مفتاحاً فريداً");
+            if (auto old = easyKeyOfContainer.find(containerKey); old != easyKeyOfContainer.end()) easyKeys.erase(old->second);
+            easyKeys[s->easyKey] = containerKey;
+            easyKeyOfContainer[containerKey] = s->easyKey;
+        }
         if (!s->mask.empty()) containerMasks[s->mask] = containerKey;
         if (!groupStack.empty()) {
             groupMembers[groupStack.back()].push_back(containerKey);
@@ -9657,7 +9969,9 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
             output << " [تحتوي: ";
             for (size_t i = 0; i < members.size(); i++) {
                 if (i) output << ", ";
-                output << members[i];
+                { auto pp = containerPathOf.find(members[i]); std::string dn = members[i]; // اسم العرض (المفتاح الافتراضي قد يكون المسار)
+                  if (pp != containerPathOf.end()) { auto dot = pp->second.rfind('.'); dn = dot == std::string::npos ? pp->second : pp->second.substr(dot + 1); }
+                  output << dn; }
             }
             output << "]";
         }
@@ -9712,7 +10026,9 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
             output << " [تحتوي: ";
             for (size_t i = 0; i < members.size(); i++) {
                 if (i) output << ", ";
-                output << members[i];
+                { auto pp = containerPathOf.find(members[i]); std::string dn = members[i]; // اسم العرض (المفتاح الافتراضي قد يكون المسار)
+                  if (pp != containerPathOf.end()) { auto dot = pp->second.rfind('.'); dn = dot == std::string::npos ? pp->second : pp->second.substr(dot + 1); }
+                  output << dn; }
             }
             output << "]";
         }
@@ -10037,10 +10353,20 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
     }
 
     case StmtKind::DocumentStmt: { auto s = std::static_pointer_cast<DocumentStmt>(stmt);
-        if (containerStack.empty() || containerKinds[containerStack.back()] != ContainerKind::DOC) {
-            throw diagErr(diag::Code::E0014_InvalidContainer, s->line, "عبارة 'document' يجب أن تُستخدم داخل @container.doc أو @doc");
+        if (containerStack.empty() || (containerKinds[containerStack.back()] != ContainerKind::DOC && containerKinds[containerStack.back()] != ContainerKind::DATALIST)) {
+            throw diagErr(diag::Code::E0014_InvalidContainer, s->line, "عبارة 'document' يجب أن تُستخدم داخل @container.doc أو @doc أو @container.datalist");
         }
-        Value idVal = evaluate(s->id, env);
+        Value idVal;
+        if (!s->id) {
+            // document fields={...}; بلا id: معرّف تلقائي تصاعدي — لـ container.datalist فقط
+            if (containerKinds[containerStack.back()] != ContainerKind::DATALIST)
+                throw diagErr(diag::Code::E0004_InvalidType, s->line, "document: 'id' مطلوب في container.doc (المعرّف التلقائي لـ container.datalist فقط)");
+            auto& cur = docStore[containerStack.back()];
+            long n = static_cast<long>(cur.size()) + 1;
+            auto taken = [&](long k) { for (auto& e : cur) if (e.first == std::to_string(k)) return true; return false; };
+            while (taken(n)) n++;
+            idVal = Value::string(std::to_string(n));
+        } else idVal = evaluate(s->id, env);
         if (idVal.type != Value::Type::STRING) {
             throw diagErr(diag::Code::E0004_InvalidType, s->line, "document: قيمة 'id' يجب أن تكون نصاً (مثال: document id=\"u1\" fields={...};)");
         }
