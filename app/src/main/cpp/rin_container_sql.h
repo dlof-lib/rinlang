@@ -63,6 +63,15 @@ struct Predicate {
     std::string field; // قد يحوي '/' لحقل متداخل، محفوظاً كما كُتب: "address/city" -- فقط إن !isGroup
     std::string op;    // eq|ne|ieq|gt|gte|lt|lte|has|like|starts|ends|exists|missing -- فقط إن !isGroup
     std::string arg;   // نص الوسيط الخام (قد يكون فارغاً لعمليات exists/missing) -- فقط إن !isGroup
+                       // in/nin/between: قيم مفصولة بـ '/' (الرمز المسموح أصلاً): status:in(open/closed)
+};
+
+// تجميع (aggregate) واحد: agg:sum|avg|min|max|count|distinct|median(field).
+// count = عدد القيم غير الفارغة، distinct = عدد القيم المختلفة، median = وسيط الأرقام.
+// صفحات: page:of(P/S) = الصفحة P بحجم S؛ بحث: search:any(text) = في أي حقل نصي.
+struct Aggregate {
+    std::string fn;    // sum | avg | min | max
+    std::string field; // قد يحوي '/' لحقل متداخل
 };
 
 // مفتاح فرز واحد ضمن order:asc(field)/order:desc(field).
@@ -84,6 +93,16 @@ struct Query {
     long offset = 0;                       // 0 = بلا تخطٍّ
     std::vector<std::string> selectFields; // فارغ = كل الحقول؛ وإلا إسقاط لهذه الحقول فقط
     std::vector<std::string> distinctFields; // فارغ = بلا إزالة تكرار؛ عدّة حقول = مفتاح تفريد مركّب
+
+    // ---- تجميع (GROUP BY) — بعد الفلترة (WHERE) وقبل distinct/order/limit ----
+    //   group:by(field)        -- تجميع حسب حقل (تُكرَّر لمفتاح مركّب)
+    //   agg:sum(f) agg:avg(f) agg:min(f) agg:max(f) -- تجميعات؛ يُضاف دوماً الحقل count
+    //   having(count:gt(1) & sum_price:gte(100)) -- فلترة المجموعات (AND) على حقول الناتج
+    // صف الناتج: {حقول التجميع..., count, sum_price, avg_price, min_price, max_price}
+    std::vector<std::string> groupFields;
+    std::vector<std::string> groupBuckets; // بالتوازي مع groupFields: "" | year | month | day (تجميع تواريخ ISO: group:month(day))
+    std::vector<Aggregate> aggregates;
+    std::vector<Predicate> having;
 };
 
 // خطأ تركيبي (syntax) في نص RCSQL -- بما في ذلك استخدام أي رمز خارج القائمة المسموحة، أو مُعدِّل
