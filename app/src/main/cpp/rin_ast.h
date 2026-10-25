@@ -728,7 +728,9 @@ struct TextStmt : Stmt { TextStmt() { stmtKind = StmtKind::TextStmt; }
 
 enum class ObjectStyleFieldKind { Text, Image, File, Fonts, Background, Css3 };
 
-enum class ContainerKind { PLAIN, PIPE, DATA, API, IMPORT, TABLE, DOC, OBJECT, PORTAL, BLOCK, STICKER, AUKT, CHATBOT, EVERYTHING, SQL };
+enum class ContainerKind { PLAIN, PIPE, DATA, API, IMPORT, TABLE, DOC, OBJECT, PORTAL, BLOCK, STICKER, AUKT, CHATBOT, EVERYTHING, SQL, DATALIST };
+// DATALIST: @container.datalist / @datalist — قائمة بيانات مرتّبة من السجلات (مستندات بمعرّفات تلقائية)،
+// مخزَّنة في docStore فتعمل معها كل دوال المستندات وRCSQL بلا أي دالة جديدة.
 
 // ---- RIN CONTAINER SQL (RCSQL) — استعلام مُعرَّف/مُسمّى (انظر rin_container_sql.h للصياغة الكاملة) ----
 // @container.sql=name  text query = "..."; .end/container.sql
@@ -801,6 +803,7 @@ enum class ContainerKind { PLAIN, PIPE, DATA, API, IMPORT, TABLE, DOC, OBJECT, P
 
 struct ContainerStmt : Stmt { ContainerStmt() { stmtKind = StmtKind::ContainerStmt; }
     std::string name; // قد تكون فارغة إن لم يُحدَّد اسم
+    std::string easyKey; // Easy_key المكتوب: easy_key = "main"; — مفتاح بديل فريد يُحلّ به اسم الحاوية في دوال container.* (الافتراضي: مفتاحها الداخلي)
     std::string mask; // قناع: هوية منطقية مستقرة للحاوية، مستقلة عن الاسم
     std::vector<StmtPtr> body;
     ContainerKind kind = ContainerKind::PLAIN;
@@ -827,6 +830,7 @@ struct ContainerStmt : Stmt { ContainerStmt() { stmtKind = StmtKind::ContainerSt
 // يُحوّل parser إلى هذا البيان حتى يربطه المفسّر بالنطاق الحاوي الحالي.
 struct MaskStmt : Stmt { MaskStmt() { stmtKind = StmtKind::MaskStmt; }
     ExprPtr value;
+    bool easyKey = false; // easy_key = "..."; (نفس الشكل، يحمله MaskStmt ويلتقطه parser ويضعه في ContainerStmt::easyKey)
 };
 
 // ---- Lifecycle (RCS-1.0 §3.2) ----
