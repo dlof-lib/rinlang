@@ -357,6 +357,10 @@ StmtPtr Parser::declaration() {
     }
     // قناع: mask = expr; داخل الحاويات/المجموعات/Volume. داخل @view/@element/@loop
     // يبقى Attribute عادياً ويُلتقط هناك، لذلك لا يوجد تعارض بين الشكلين.
+    if (check(TokenType::IDENT) && peek().lexeme == "easy_key" && checkNext(TokenType::EQUAL)) {
+        advance();
+        return easyKeyDeclaration();
+    }
     if (check(TokenType::IDENT) && peek().lexeme == "mask" && checkNext(TokenType::EQUAL)) {
         advance();
         return maskDeclaration();
@@ -2580,7 +2584,7 @@ std::string Parser::readTagKeyword() {
             const std::string& w = tokens[current + 1].lexeme;
             nextIsContextualWord = (w == "data" || w == "api" || w == "import" || w == "table" || w == "doc" ||
                                      w == "object" || w == "portal" || w == "block" || w == "aukt" || w == "open" ||
-                                     w == "chatbot" || w == "everything" || w == "make" || w == "sql");
+                                     w == "chatbot" || w == "everything" || w == "make" || w == "sql" || w == "datalist" || w == "list");
         }
         // لا نستهلك '.' إلا إذا كانت متبوعة مباشرة بإحدى هذه الكلمات، وإلا فقد تكون في الحقيقة
         // بداية وسم إغلاق آخر مجاور مثل '.end/container' تلاه '.end/Containers.Group'
@@ -2942,6 +2946,17 @@ StmtPtr Parser::uiBindingStatement() {
     return s;
 }
 
+// easy_key = "key";   (Easy_key المكتوب لحاوية؛ الافتراضي يُعيَّن تلقائياً)
+StmtPtr Parser::easyKeyDeclaration() {
+    Token tok = previous();
+    consume(TokenType::EQUAL, "Expected '=' after easy_key");
+    ExprPtr value = expression();
+    consume(TokenType::SEMICOLON, "Expected ';' after easy_key declaration");
+    auto s = std::make_shared<MaskStmt>();
+    s->value = value; s->line = tok.line; s->easyKey = true;
+    return s;
+}
+
 // mask = expr;
 StmtPtr Parser::maskDeclaration() {
     Token tok = previous();
@@ -3073,7 +3088,7 @@ static bool isContainerFamilyTag(const std::string& tag) {
     static const std::unordered_set<std::string> s = {
         "container", "container.pipe", "pipe", "container.data", "data",
         "container.api", "api", "container.import",
-        "container.table", "table", "container.doc", "doc",
+        "container.table", "table", "container.doc", "doc", "container.datalist", "datalist", "container.list",
         "container.object", "Object", "container.open/object",
         "container.portal", "portal", "container.block", "block",
         "container.sticker", "sticker", "container.aukt", "AUKT",
@@ -3169,7 +3184,7 @@ StmtPtr Parser::atBlock() {
     std::string tag = readTagKeyword();
     static const std::vector<std::string> validTags = {
         "container", "container.pipe", "container.data", "container.api", "container.import", "container.table",
-        "container.doc", "Containers.Group", "Volume", "table", "doc",
+        "container.doc", "Containers.Group", "Volume", "table", "doc", "container.datalist", "datalist", "container.list",
         // مفاهيم التنسيق والستايل: كائن (Object) / بوابة تنسيق (portal) / كتلة واجهة جاهزة (block)
         "container.object", "Object", "container.open/object", "container.portal", "portal", "container.block", "block",
         "container.sticker", "sticker", "container.aukt", "AUKT", "container.chatbot", "chatbot",
@@ -3199,7 +3214,7 @@ StmtPtr Parser::atBlock() {
             d.diagnostic->withHint("did you mean `@" + best + "`?");
         } else {
             d.diagnostic->withHint("expected one of: container, container.pipe, container.data, container.api, "
-                                    "container.import, container.table, container.doc, container.object, "
+                                    "container.import, container.table, container.doc, container.datalist, container.object, "
                                     "container.portal, container.block, container.sticker, container.aukt, "
                                     "container.chatbot, container.sql, container.make (or make / Rin.make / the legacy "
                                     "container.everything / Everything), Containers.Group, or Volume");
@@ -3209,6 +3224,7 @@ StmtPtr Parser::atBlock() {
     std::string name = readOptionalName("a `@" + tag + "` block");
     std::vector<StmtPtr> body;
     std::string mask;
+    std::string easyKey;
     // RCS-1.0 §7 Phase 0/1: قبل كل عبارة عادية، نجرّب أولاً قراءتها كتوجيه سياسة (policy_block)
     // إن كانت هذه حاوية من عائلة container أو @Containers.Group (Volume تبقى خارج النطاق حالياً،
     // لا حاجة/طلب لها هناك). tryParsePolicyDirective يستعيد موضع القارئ بنفسه إن لم يطابق النمط،
@@ -3222,7 +3238,12 @@ StmtPtr Parser::atBlock() {
     while (!checkClosingTag() && !isAtEnd()) {
         if ((familyTag || groupTag) && tryParsePolicyDirective(policyAccum)) continue;
         auto st = declaration();
-        if (auto m = std::dynamic_pointer_cast<MaskStmt>(st)) {
+        if (auto m = std::dynamic_pointer_cast<MaskStmt>(st); m && m->easyKey) {
+            auto lit = std::dynamic_pointer_cast<LiteralExpr>(m->value);
+            if (!lit || lit->kind != LiteralExpr::Kind::STRING || lit->str.empty())
+                throw err(diag::Code::E0013_InvalidExpression, previous(), "easy_key يجب أن يكون نصاً حرفياً غير فارغ، مثال: easy_key = \"main\";");
+            easyKey = lit->str;
+        } else if (auto m = std::dynamic_pointer_cast<MaskStmt>(st)) {
             if (auto lit = std::dynamic_pointer_cast<LiteralExpr>(m->value); lit && lit->kind == LiteralExpr::Kind::STRING) mask = lit->str;
             else body.push_back(st);
         } else body.push_back(st);
@@ -3232,7 +3253,7 @@ StmtPtr Parser::atBlock() {
     if (tag == "container" || tag == "container.pipe" || tag == "pipe" || tag == "container.data" || tag == "data" ||
         tag == "container.api" || tag == "api" || tag == "container.import" ||
         tag == "container.table" || tag == "table" ||
-        tag == "container.doc" || tag == "doc" ||
+        tag == "container.doc" || tag == "doc" || tag == "container.datalist" || tag == "datalist" || tag == "container.list" ||
         tag == "container.object" || tag == "Object" || tag == "container.open/object" ||
         tag == "container.portal" || tag == "portal" ||
         tag == "container.block" || tag == "block" ||
@@ -3249,14 +3270,14 @@ StmtPtr Parser::atBlock() {
         // بداخل أيٍّ منها (وليس فقط container.table) لضبط نمط العرض (مفهوم التنسيق/الستايل)، وكذلك
         // 'link'/'file' تعملان بداخلها بلا أي قيد إضافي (روابط links() وملف انتقال transition.file).
         if (tag != "container.open/object" && (tag == "container.data" || tag == "data" || tag == "container.table" || tag == "table" ||
-            tag == "container.doc" || tag == "doc" ||
+            tag == "container.doc" || tag == "doc" || tag == "container.datalist" || tag == "datalist" || tag == "container.list" ||
             tag == "container.object" || tag == "Object" || tag == "container.open/object" ||
             tag == "container.portal" || tag == "portal" ||
             tag == "container.block" || tag == "block" ||
             tag == "container.sticker" || tag == "sticker" ||
             tag == "container.sql" || tag == "sql")) validateDataContainerBody(body);
         auto s = std::make_shared<ContainerStmt>();
-        s->name = name; s->mask = mask; s->body = body; s->line = atTok.line;
+        s->name = name; s->mask = mask; s->easyKey = easyKey; s->body = body; s->line = atTok.line;
         if (policyAccum.hasPolicy) {
             s->uses = policyAccum.uses; s->needs = policyAccum.needs;
             s->allows = policyAccum.allows; s->denies = policyAccum.denies;
@@ -3269,6 +3290,7 @@ StmtPtr Parser::atBlock() {
         else if (tag == "container.import") s->kind = ContainerKind::IMPORT;
         else if (tag == "container.table" || tag == "table") s->kind = ContainerKind::TABLE;
         else if (tag == "container.doc" || tag == "doc") s->kind = ContainerKind::DOC;
+        else if (tag == "container.datalist" || tag == "datalist" || tag == "container.list") s->kind = ContainerKind::DATALIST;
         else if (tag == "container.object" || tag == "Object" || tag == "container.open/object") s->kind = ContainerKind::OBJECT;
         else if (tag == "container.portal" || tag == "portal") s->kind = ContainerKind::PORTAL;
         else if (tag == "container.block" || tag == "block") s->kind = ContainerKind::BLOCK;
@@ -3281,6 +3303,8 @@ StmtPtr Parser::atBlock() {
         else s->kind = ContainerKind::PLAIN;
         return s;
     }
+    if (!easyKey.empty() && (tag == "Containers.Group" || tag == "Volume"))
+        throw err(diag::Code::E0013_InvalidExpression, previous(), "easy_key مدعوم داخل الحاويات (@container...) فقط، وليس في Containers.Group أو Volume");
     if (tag == "Containers.Group") {
         auto s = std::make_shared<ContainerGroupStmt>();
         s->name = name; s->mask = mask; s->body = body; s->line = atTok.line;
@@ -3647,6 +3671,14 @@ StmtPtr Parser::styleStatement() {
 StmtPtr Parser::documentStatement() {
     Token tok = previous(); // 'document'
     Token idKey = consume(TokenType::IDENT, "Expected 'id' after 'document'");
+    if (idKey.lexeme == "fields") { // document fields={...};  -> معرّف تلقائي (container.datalist فقط)
+        consume(TokenType::EQUAL, "Expected '=' after 'fields'");
+        ExprPtr fe = expression();
+        consume(TokenType::SEMICOLON, "Expected ';' after document statement");
+        auto ds = std::make_shared<DocumentStmt>();
+        ds->id = nullptr; ds->fields = fe; ds->line = tok.line;
+        return ds;
+    }
     if (idKey.lexeme != "id")
         throw errRich(diag::Code::E0016_InvalidProperty, idKey,
                        "expected 'id' attribute after 'document' (e.g. document id=\"u1\" fields={...};)",
