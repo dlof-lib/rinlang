@@ -1,0 +1,70 @@
+// rindb/core/bind.zpp — كائنات مربوطة بالقاعدة/الجدول: تُخزَّن في متغير داخل أي حاوية/مجموعة/حجم
+// وتُستدعى بلا تمرير db في كل نداء.
+//
+//   @container=app
+//       let db = rdb_connect("shop", "shop.rdb");      // أو rdb_bind(rdb_open(...))
+//       let users = db.table("users");                  // كائن الجدول
+//       fun setup() { db.createTable("users", {"indexes": ["name"]}); users.put("u1", {"name": "Sara"}); }
+//   .end/container
+
+// كائن جدول واحد
+fun rdb_tableOf(db, t) {
+    return {
+        "name": t,
+        "put": fun(id, doc) { return rdb_put(db, t, id, doc); },
+        "insert": fun(id, doc) { return rdb_insert(db, t, id, doc); },
+        "add": fun(doc) { return rdb_add(db, t, doc); },
+        "get": fun(id) { return rdb_get(db, t, id); },
+        "has": fun(id) { return rdb_has(db, t, id); },
+        "update": fun(id, patch) { return rdb_update(db, t, id, patch); },
+        "incr": fun(id, field, by) { return rdb_incr(db, t, id, field, by); },
+        "delete": fun(id) { return rdb_delete(db, t, id); },
+        "count": fun() { return rdb_count(db, t); },
+        "ids": fun() { return rdb_ids(db, t); },
+        "all": fun() { return rdb_all(db, t); },
+        "find": fun(field, value) { return rdb_find(db, t, field, value); },
+        "truncate": fun() { return rdb_truncate(db, t); },
+        "bulk": fun(docs) { return rdb_bulk(db, t, docs); },
+        "query": fun(rest) { return rdb_query(db, t + "&" + rest); },
+        "queryCount": fun(rest) { return rdb_queryCount(db, t + "&" + rest); }
+    };
+}
+
+// كائن قاعدة مربوط (يحتفظ بالمقبض الأصلي في الحقل handle)
+fun rdb_bind(db) {
+    return {
+        "handle": db,
+        "name": db["name"],
+        "table": fun(t) { return rdb_tableOf(db, t); },
+        "createTable": fun(t, opts) { return rdb_createTableWith(db, t, opts); },
+        "dropTable": fun(t) { return rdb_dropTable(db, t); },
+        "tables": fun() { return rdb_tables(db); },
+        "hasTable": fun(t) { return rdb_hasTable(db, t); },
+        "put": fun(t, id, doc) { return rdb_put(db, t, id, doc); },
+        "insert": fun(t, id, doc) { return rdb_insert(db, t, id, doc); },
+        "add": fun(t, doc) { return rdb_add(db, t, doc); },
+        "get": fun(t, id) { return rdb_get(db, t, id); },
+        "has": fun(t, id) { return rdb_has(db, t, id); },
+        "update": fun(t, id, patch) { return rdb_update(db, t, id, patch); },
+        "delete": fun(t, id) { return rdb_delete(db, t, id); },
+        "count": fun(t) { return rdb_count(db, t); },
+        "all": fun(t) { return rdb_all(db, t); },
+        "find": fun(t, field, value) { return rdb_find(db, t, field, value); },
+        "query": fun(q) { return rdb_query(db, q); },
+        "queryCount": fun(q) { return rdb_queryCount(db, q); },
+        "queryOne": fun(q) { return rdb_queryOne(db, q); },
+        "begin": fun() { return rdb_begin(db); },
+        "commit": fun() { return rdb_commit(db); },
+        "rollback": fun() { return rdb_rollback(db); },
+        "transaction": fun(body) { return rdb_transaction(db, body); },
+        "checkpoint": fun() { return rdb_checkpoint(db); },
+        "backup": fun(dest) { return rdb_backup(db, dest); },
+        "info": fun() { return rdb_info(db); },
+        "close": fun() { return rdb_close(db); },
+        "drop": fun(confirm) { return rdb_dropDatabase(db, confirm); }
+    };
+}
+
+// يفتح ويربط دفعة واحدة
+fun rdb_connect(name, path) { return rdb_bind(rdb_open(name, path)); }
+fun rdb_connectWith(name, path, opts) { return rdb_bind(rdb_openWith(name, path, opts)); }
