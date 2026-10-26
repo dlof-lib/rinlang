@@ -925,6 +925,7 @@ struct MakeStmt : ContainerStmt {
 struct ContainerGroupStmt : Stmt { ContainerGroupStmt() { stmtKind = StmtKind::ContainerGroupStmt; }
     std::string name;
     std::string mask;
+    std::string easyKey; // easy_key = "..."; (مفتاح مكتوب بديل للمجموعة/الحجم)
     std::vector<StmtPtr> body;
 
     // ---- Policy block (RCS-1.0 §3.13 Security) ----
@@ -953,6 +954,7 @@ struct ContainerGroupStmt : Stmt { ContainerGroupStmt() { stmtKind = StmtKind::C
 struct VolumeStmt : Stmt { VolumeStmt() { stmtKind = StmtKind::VolumeStmt; }
     std::string name;
     std::string mask;
+    std::string easyKey; // easy_key = "..."; (مفتاح مكتوب بديل للمجموعة/الحجم)
     std::vector<StmtPtr> body;
 };
 
