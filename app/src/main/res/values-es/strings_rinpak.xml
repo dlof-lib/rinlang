@@ -28,6 +28,7 @@
     <string name="rinpak_trust_changed">⛔ Advertencia: la clave de firma (%1$s) difiere de la de un paquete con el mismo nombre que importaste antes (%2$s). Podría ser una suplantación — continúa solo si confías en el origen.</string>
     <string name="rinpak_trust_removed">⛔ Advertencia: un paquete con el mismo nombre que importaste antes estaba firmado (%1$s), pero este no lo está. La firma pudo eliminarse a propósito.</string>
     <string name="rinpak_launcher_label">RinPak</string>
+    <string name="rinpak_open_label">Abrir con Rin</string>
     <!-- التحليل الأمني والهوية (RinPak.analyze) -->
     <string name="rinpak_info_id">ID: %s</string>
     <string name="rinpak_fingerprint">Huella: %s</string>
