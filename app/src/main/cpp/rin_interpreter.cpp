@@ -1530,6 +1530,43 @@ Interpreter::SqlRawResult Interpreter::sqlRunRaw(const std::string& rawArg, int 
     else if (isTableContainer(result.container)) { tableDocs = tableAsDocs(result.container); source = &tableDocs; }
     if (!source) return result;
 
+    // 0) JOIN: يُبنى الصف المربوط قبل الفلترة فتصلح الشروط على الحقول المربوطة (other_field)
+    std::vector<std::pair<std::string, Value>> joinedRows;
+    if (!q.joins.empty()) {
+        joinedRows = *source;
+        for (auto& jn : q.joins) {
+            std::string other = canonContainer(jn.target);
+            std::vector<std::pair<std::string, Value>> otherDocs;
+            auto ot = docStore.find(other);
+            if (ot != docStore.end()) otherDocs = ot->second;
+            else if (isTableContainer(other)) otherDocs = tableAsDocs(other);
+            else throw diagErr(diag::Code::E0042_InvalidSql, line, "RIN CONTAINER SQL: join: الحاوية `" + jn.target + "` غير موجودة أو ليست حاوية مستندات/جدول");
+            std::string prefix = jn.target;
+            for (auto& ch : prefix) if (ch == '.' || ch == '/') ch = '_';
+            auto lpath = sqlSplitSlash(jn.local), fpath = sqlSplitSlash(jn.foreign);
+            std::vector<std::pair<std::string, Value>> next;
+            for (auto& row : joinedRows) {
+                Value lv; bool has = jn.local == "_id" ? (lv = Value::string(row.first), true) : sqlGetNestedField(row.second, lpath, lv);
+                bool matched = false;
+                if (has && lv.type != Value::Type::NIL)
+                    for (auto& od : otherDocs) {
+                        Value fv; bool fh = jn.foreign == "_id" ? (fv = Value::string(od.first), true) : sqlGetNestedField(od.second, fpath, fv);
+                        if (!fh || !valuesEqual(lv, fv)) continue;
+                        matched = true;
+                        auto m = std::make_shared<MapData>();
+                        if (row.second.type == Value::Type::MAP && row.second.map) for (auto& kv : *row.second.map) m->push_back(kv);
+                        if (od.second.type == Value::Type::MAP && od.second.map)
+                            for (auto& kv : *od.second.map) m->push_back({Value::string(prefix + "_" + kv.first.toDisplayString()), kv.second});
+                        m->push_back({Value::string(prefix + "__id"), Value::string(od.first)});
+                        next.push_back({row.first + "+" + od.first, Value::makeMap(m)});
+                    }
+                if (!matched && jn.left) next.push_back(row);
+            }
+            joinedRows = std::move(next);
+        }
+        source = &joinedRows;
+    }
+
     // 1) فلترة (AND بين q.predicates، كل عنصر قد يكون بدوره مجموعة OR داخلية)
     std::vector<std::pair<std::string, Value>> rows;
     for (auto& entry : *source) {
@@ -3611,7 +3648,7 @@ void Interpreter::registerNatives() {
     // ---- Containers.Group: استعلام عن أعضاء المجموعة ----
     natives["groupContainers"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("groupContainers", a, 1, line);
-        std::string name = asString(a[0], "groupContainers", line);
+        std::string name = canonGroup(asString(a[0], "groupContainers", line));
         auto result = std::make_shared<ArrayData>();
         if (groupMembers.count(name)) {
             std::vector<std::string> flat;
@@ -3622,7 +3659,7 @@ void Interpreter::registerNatives() {
     };
     natives["groupMembers"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("groupMembers", a, 1, line);
-        std::string name = asString(a[0], "groupMembers", line);
+        std::string name = canonGroup(asString(a[0], "groupMembers", line));
         auto result = std::make_shared<ArrayData>();
         auto it = groupMembers.find(name);
         if (it != groupMembers.end()) {
@@ -3654,7 +3691,7 @@ void Interpreter::registerNatives() {
     // = "..."; مباشرة داخل @Containers.Group). map فارغ إن لم تُعرَّف مجموعة بهذا الاسم.
     natives["groupVars"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("groupVars", a, 1, line);
-        std::string name = asString(a[0], "groupVars", line);
+        std::string name = canonGroup(asString(a[0], "groupVars", line));
         auto it = groupEnvs.find(name);
         auto result = (it != groupEnvs.end()) ? envVarsAsMap(it->second) : std::make_shared<MapData>();
         return Value::makeMap(result);
@@ -3663,7 +3700,7 @@ void Interpreter::registerNatives() {
     // أو نص فارغ "" إن كانت "name" مجموعة جذر (أو غير معرَّفة أصلاً).
     natives["groupParent"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("groupParent", a, 1, line);
-        std::string name = asString(a[0], "groupParent", line);
+        std::string name = canonGroup(asString(a[0], "groupParent", line));
         auto it = groupParentOf.find(name);
         return Value::string(it != groupParentOf.end() ? it->second : std::string());
     };
@@ -3672,7 +3709,7 @@ void Interpreter::registerNatives() {
     // فارغة إن لم تُعرَّف مجموعة بهذا الاسم أصلاً.
     natives["groupPath"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("groupPath", a, 1, line);
-        std::string name = asString(a[0], "groupPath", line);
+        std::string name = canonGroup(asString(a[0], "groupPath", line));
         auto result = std::make_shared<ArrayData>();
         if (!groupMembers.count(name)) return Value::makeArray(result);
         std::vector<std::string> chain;
@@ -3692,7 +3729,7 @@ void Interpreter::registerNatives() {
     // المجموعات الفرعية المتداخلة (نفس تفرّع groupContainers لكن عدداً فقط بدل مصفوفة الأسماء).
     natives["groupContainerCount"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("groupContainerCount", a, 1, line);
-        std::string name = asString(a[0], "groupContainerCount", line);
+        std::string name = canonGroup(asString(a[0], "groupContainerCount", line));
         std::vector<std::string> flat;
         if (groupMembers.count(name)) collectGroupContainerNames(groupMembers, name, flat);
         return Value::num(static_cast<double>(flat.size()));
@@ -3701,7 +3738,7 @@ void Interpreter::registerNatives() {
     // (مباشرة أو عبر تفرّع مجموعة فرعية متداخلة) داخل المجموعة "name".
     natives["groupHasContainer"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("groupHasContainer", a, 2, line);
-        std::string name = asString(a[0], "groupHasContainer", line);
+        std::string name = canonGroup(asString(a[0], "groupHasContainer", line));
         std::string target = asString(a[1], "groupHasContainer", line);
         std::vector<std::string> flat;
         if (groupMembers.count(name)) collectGroupContainerNames(groupMembers, name, flat);
@@ -3713,7 +3750,7 @@ void Interpreter::registerNatives() {
     // قابلة للاستعلام دفعة واحدة (شبيه بجدول/قائمة سجلّات)، بدل مجرّد تسجيل عضوية اسمي.
     natives["groupSnapshot"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("groupSnapshot", a, 1, line);
-        std::string name = asString(a[0], "groupSnapshot", line);
+        std::string name = canonGroup(asString(a[0], "groupSnapshot", line));
         auto result = std::make_shared<ArrayData>();
         std::vector<std::string> flat;
         if (groupMembers.count(name)) collectGroupContainerNames(groupMembers, name, flat);
@@ -3740,7 +3777,7 @@ void Interpreter::registerNatives() {
     // Volume فرعية متداخلة، وأي Containers.Group متداخلة بداخلها).
     natives["volumeContainers"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("volumeContainers", a, 1, line);
-        std::string name = asString(a[0], "volumeContainers", line);
+        std::string name = canonVolume(asString(a[0], "volumeContainers", line));
         auto result = std::make_shared<ArrayData>();
         if (volumeMembers.count(name)) {
             std::vector<std::string> flat;
@@ -3753,7 +3790,7 @@ void Interpreter::registerNatives() {
     // فعلية أو مجموعات/أحجام فرعية متداخلة كما هي.
     natives["volumeMembers"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("volumeMembers", a, 1, line);
-        std::string name = asString(a[0], "volumeMembers", line);
+        std::string name = canonVolume(asString(a[0], "volumeMembers", line));
         auto result = std::make_shared<ArrayData>();
         auto it = volumeMembers.find(name);
         if (it != volumeMembers.end()) {
@@ -3780,7 +3817,7 @@ void Interpreter::registerNatives() {
     // text owner = "..."; مباشرة داخل @Volume). map فارغ إن لم تُعرَّف Volume بهذا الاسم.
     natives["volumeVars"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("volumeVars", a, 1, line);
-        std::string name = asString(a[0], "volumeVars", line);
+        std::string name = canonVolume(asString(a[0], "volumeVars", line));
         auto it = volumeEnvs.find(name);
         auto result = (it != volumeEnvs.end()) ? envVarsAsMap(it->second) : std::make_shared<MapData>();
         return Value::makeMap(result);
@@ -3789,7 +3826,7 @@ void Interpreter::registerNatives() {
     // متداخلة، أو نص فارغ "" إن كانت "name" Volume جذر (أو غير معرَّفة أصلاً).
     natives["volumeParent"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("volumeParent", a, 1, line);
-        std::string name = asString(a[0], "volumeParent", line);
+        std::string name = canonVolume(asString(a[0], "volumeParent", line));
         auto it = volumeParentOf.find(name);
         return Value::string(it != volumeParentOf.end() ? it->second : std::string());
     };
@@ -3798,7 +3835,7 @@ void Interpreter::registerNatives() {
     // لم تُعرَّف Volume بهذا الاسم أصلاً.
     natives["volumePath"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("volumePath", a, 1, line);
-        std::string name = asString(a[0], "volumePath", line);
+        std::string name = canonVolume(asString(a[0], "volumePath", line));
         auto result = std::make_shared<ArrayData>();
         if (!volumeMembers.count(name)) return Value::makeArray(result);
         std::vector<std::string> chain;
@@ -3818,7 +3855,7 @@ void Interpreter::registerNatives() {
     // الأعضاء الفرعيين المتداخلين (نفس تفرّع volumeContainers لكن عدداً فقط بدل مصفوفة الأسماء).
     natives["volumeContainerCount"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("volumeContainerCount", a, 1, line);
-        std::string name = asString(a[0], "volumeContainerCount", line);
+        std::string name = canonVolume(asString(a[0], "volumeContainerCount", line));
         std::vector<std::string> flat;
         if (volumeMembers.count(name)) collectVolumeContainerNames(volumeMembers, groupMembers, name, flat);
         return Value::num(static_cast<double>(flat.size()));
@@ -3827,7 +3864,7 @@ void Interpreter::registerNatives() {
     // (مباشرة أو عبر تفرّع عضو فرعي متداخل) داخل Volume "name".
     natives["volumeHasContainer"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("volumeHasContainer", a, 2, line);
-        std::string name = asString(a[0], "volumeHasContainer", line);
+        std::string name = canonVolume(asString(a[0], "volumeHasContainer", line));
         std::string target = asString(a[1], "volumeHasContainer", line);
         std::vector<std::string> flat;
         if (volumeMembers.count(name)) collectVolumeContainerNames(volumeMembers, groupMembers, name, flat);
@@ -3840,7 +3877,7 @@ void Interpreter::registerNatives() {
     // بدل مجرّد تسجيل عضوية اسمي كما كانت الحال سابقاً.
     natives["volumeSnapshot"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("volumeSnapshot", a, 1, line);
-        std::string name = asString(a[0], "volumeSnapshot", line);
+        std::string name = canonVolume(asString(a[0], "volumeSnapshot", line));
         auto result = std::make_shared<ArrayData>();
         std::vector<std::string> flat;
         if (volumeMembers.count(name)) collectVolumeContainerNames(volumeMembers, groupMembers, name, flat);
@@ -7080,6 +7117,7 @@ void Interpreter::registerNatives() {
     registerNativesExtra7(); // مفهوم time: time() و time.* (rin_extra_natives7.cpp، docs/TIME.md)
     registerNativesExtra8(); // مفهوم token: tokenList/tokenStats/tokenAt/... (rin_extra_natives8.cpp، docs/TOKEN.md)
     registerNativesExtra10(); // مفهوم linalg: mat*/vec* (rin_extra_natives10.cpp، docs/LINALG.md)
+    registerNativesExtra12(); // fileSync/fileLock/fileRename/fileSize/findByRange (rin_extra_natives12.cpp، docs/FILEDB.md)
     registerNativesExtra11(); // مفهوم algo: algo* (rin_extra_natives11.cpp، docs/ALGO.md)
     registerNativesRintwist(); // RINTWIST: rintwist.get/fmt/stack (rin_rintwist.cpp، docs/rintwist.md)
     registerNativesLibDir(); // مكتبات Rin المقسَّمة: rinlib.* (rin_libdir.cpp، docs/split-libraries.md)
@@ -7668,6 +7706,32 @@ std::string Interpreter::canonContainer(const std::string& n) const {
     if (e != easyKeys.end() && containers.count(e->second)) return e->second;
     if (auto node = nsResolvePath(n)) if (node->kind == NsNode::Kind::Container && containers.count(node->key)) return node->key;
     return n;
+}
+
+std::string Interpreter::canonGroup(const std::string& n) const {
+    if (groupEnvs.count(n)) return n;
+    auto e = easyGroupKeys.find(n);
+    if (e != easyGroupKeys.end() && groupEnvs.count(e->second)) return e->second;
+    if (auto node = nsResolvePath(n)) if (node->kind == NsNode::Kind::Group && groupEnvs.count(node->key)) return node->key;
+    return n;
+}
+std::string Interpreter::canonVolume(const std::string& n) const {
+    if (volumeEnvs.count(n)) return n;
+    auto e = easyVolumeKeys.find(n);
+    if (e != easyVolumeKeys.end() && volumeEnvs.count(e->second)) return e->second;
+    if (auto node = nsResolvePath(n)) if (node->kind == NsNode::Kind::Volume && volumeEnvs.count(node->key)) return node->key;
+    return n;
+}
+// المفتاح المكتوب فريد على الحاويات والمجموعات والأحجام معاً (ولا يطابق اسم كيان آخر)
+bool Interpreter::easyKeyTaken(const std::string& key, const std::string& kind, const std::string& internal) const {
+    auto owned = [&](const std::unordered_map<std::string, std::string>& m, const char* k) {
+        auto it = m.find(key); return it != m.end() && !(kind == k && it->second == internal);
+    };
+    if (owned(easyKeys, "container") || owned(easyGroupKeys, "group") || owned(easyVolumeKeys, "volume")) return true;
+    if (containers.count(key) && !(kind == "container" && key == internal)) return true;
+    if (groupEnvs.count(key) && !(kind == "group" && key == internal)) return true;
+    if (volumeEnvs.count(key) && !(kind == "volume" && key == internal)) return true;
+    return false;
 }
 
 bool Interpreter::isDatalistContainer(const std::string& name) const {
@@ -9395,11 +9459,9 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
         }
         containers[containerKey] = containerEnv;
         containerKinds[containerKey] = s->kind;
-        if (!s->easyKey.empty()) { // Easy_key المكتوب: فريد على مستوى كل الحاويات
-            auto ek = easyKeys.find(s->easyKey);
-            if ((ek != easyKeys.end() && ek->second != containerKey) || (containers.count(s->easyKey) && s->easyKey != containerKey))
-                throw diagErr(diag::Code::E0014_InvalidContainer, s->line, "easy_key \"" + s->easyKey + "\" مستعمل أصلاً" +
-                    (ek != easyKeys.end() ? " لحاوية `" + ek->second + "`" : " كاسم حاوية") + " — اختر مفتاحاً فريداً");
+        if (!s->easyKey.empty()) { // Easy_key المكتوب: فريد على الحاويات والمجموعات والأحجام
+            if (easyKeyTaken(s->easyKey, "container", containerKey))
+                throw diagErr(diag::Code::E0014_InvalidContainer, s->line, "easy_key \"" + s->easyKey + "\" مستعمل أصلاً (مفتاح أو اسم كيان آخر) — اختر مفتاحاً فريداً");
             if (auto old = easyKeyOfContainer.find(containerKey); old != easyKeyOfContainer.end()) easyKeys.erase(old->second);
             easyKeys[s->easyKey] = containerKey;
             easyKeyOfContainer[containerKey] = s->easyKey;
@@ -9927,9 +9989,21 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
         }
         // مفتاح داخلي للمجموعات المجهولة الاسم، بنفس أسلوب الحاويات المجهولة.
         std::string groupKey = s->name.empty() ? ("#group" + std::to_string(groupEnvs.size())) : s->name;
+        if (!s->name.empty()) { // Easy_key الافتراضي: تعارض اسم مجموعتين في مسارين مختلفين => مفتاح الثانية = مسارها
+            std::string pathNow = (nsStack.empty() ? std::string() : nsStack.back()->path() + ".") + s->name;
+            auto po = groupPathOf.find(groupKey);
+            if (groupEnvs.count(groupKey) && po != groupPathOf.end() && po->second != pathNow) groupKey = pathNow;
+            groupPathOf[groupKey] = pathNow;
+        }
         auto groupEnv = std::make_shared<Environment>(env); // نطاق خاص بالمجموعة (بدل التنفيذ المباشر داخل البيئة الأب)
         groupEnvs[groupKey] = groupEnv;
         groupMembers.emplace(groupKey, std::vector<std::string>{});
+        if (!s->easyKey.empty()) {
+            if (easyKeyTaken(s->easyKey, "group", groupKey))
+                throw diagErr(diag::Code::E0014_InvalidContainer, s->line, "easy_key \"" + s->easyKey + "\" مستعمل أصلاً — اختر مفتاحاً فريداً");
+            for (auto it2 = easyGroupKeys.begin(); it2 != easyGroupKeys.end();) { if (it2->second == groupKey) it2 = easyGroupKeys.erase(it2); else ++it2; }
+            easyGroupKeys[s->easyKey] = groupKey;
+        }
         if (!s->mask.empty()) groupMasks[s->mask] = groupKey; // تضمن وجود مُدخَل حتى لو بقيت فارغة
         // نفس مبدأ sectionOrder/volumeOrder: يُسجَّل مرة واحدة فقط بترتيب أول ظهور، حتى لو أُعيد
         // تنفيذ نفس المجموعة (مثلاً داخل حلقة) -- عندها تُحدَّث بيئتها/أعضاؤها لأحدث تنفيذ بلا
@@ -9988,9 +10062,21 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
         // volumeStack: Volume داخل Volume أخرى تُسجَّل أباً/ابناً (volumeParentOf) وكعضو مباشر في
         // أبيها، تماماً كمجموعة متداخلة داخل مجموعة أخرى أعلاه.
         std::string volumeKey = s->name.empty() ? ("#volume" + std::to_string(volumeEnvs.size())) : s->name;
+        if (!s->name.empty()) {
+            std::string pathNow = (nsStack.empty() ? std::string() : nsStack.back()->path() + ".") + s->name;
+            auto po = volumePathOf.find(volumeKey);
+            if (volumeEnvs.count(volumeKey) && po != volumePathOf.end() && po->second != pathNow) volumeKey = pathNow;
+            volumePathOf[volumeKey] = pathNow;
+        }
         auto volumeEnv = std::make_shared<Environment>(env); // نطاق خاص بـ Volume (بدل التنفيذ المباشر داخل البيئة الأب)
         volumeEnvs[volumeKey] = volumeEnv;
         volumeMembers.emplace(volumeKey, std::vector<std::string>{});
+        if (!s->easyKey.empty()) {
+            if (easyKeyTaken(s->easyKey, "volume", volumeKey))
+                throw diagErr(diag::Code::E0014_InvalidContainer, s->line, "easy_key \"" + s->easyKey + "\" مستعمل أصلاً — اختر مفتاحاً فريداً");
+            for (auto it2 = easyVolumeKeys.begin(); it2 != easyVolumeKeys.end();) { if (it2->second == volumeKey) it2 = easyVolumeKeys.erase(it2); else ++it2; }
+            easyVolumeKeys[s->easyKey] = volumeKey;
+        }
         if (!s->mask.empty()) volumeMasks[s->mask] = volumeKey;
 
         // بنفس مبدأ groupOrder: يُسجَّل مرة واحدة فقط بترتيب أول ظهور، حتى لو أُعيد تنفيذ نفس
@@ -10643,6 +10729,10 @@ std::shared_ptr<NsNode> Interpreter::nsResolveHead(const std::string& name, cons
         }
     }
     for (auto& r : nsRoots) if (r.first == name) return r.second;
+    // Easy_key المكتوب كرأس مسار: cfg.theme / grp.app.v
+    if (auto it = easyKeys.find(name); it != easyKeys.end()) { auto c = containers.find(it->second); if (c != containers.end() && c->second) if (auto n = c->second->ns.lock()) return n; }
+    if (auto it = easyGroupKeys.find(name); it != easyGroupKeys.end()) { auto c = groupEnvs.find(it->second); if (c != groupEnvs.end() && c->second) if (auto n = c->second->ns.lock()) return n; }
+    if (auto it = easyVolumeKeys.find(name); it != easyVolumeKeys.end()) { auto c = volumeEnvs.find(it->second); if (c != volumeEnvs.end() && c->second) if (auto n = c->second->ns.lock()) return n; }
     return nullptr;
 }
 
@@ -13333,6 +13423,7 @@ bool Interpreter::livePropertyGet(const EnvPtr& env, const std::string& name, co
 #include "rin_extra_natives9.cpp" // مفهوم number (docs/NUMBER.md)
 #include "rin_extra_natives10.cpp" // مفهوم linalg (docs/LINALG.md)
 #include "rin_extra_natives11.cpp" // مفهوم algo (docs/ALGO.md)
+#include "rin_extra_natives12.cpp" // ملفات وقواعد بيانات: fileSync/fileLock/fileRename/fileSize/findByRange (docs/FILEDB.md)
 #include "rin_libdir.cpp" // مكتبات Rin المقسَّمة (docs/split-libraries.md)
 #include "rin_rintwist.cpp" // RINTWIST: سياق التنفيذ (docs/rintwist.md)
 #include "rin_table.cpp" // توسعة الجدول: دوال اللغة الموجودة تفهم الجدول (انظر رأس الملف)
