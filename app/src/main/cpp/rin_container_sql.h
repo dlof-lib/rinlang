@@ -66,6 +66,14 @@ struct Predicate {
                        // in/nin/between: قيم مفصولة بـ '/' (الرمز المسموح أصلاً): status:in(open/closed)
 };
 
+// ربط (JOIN) بحاوية أخرى: join:to(other/localField/otherField) (داخلي) و join:left(...) (يُبقي الصفوف بلا مطابق).
+// حقول الصف المربوط تُضاف بالبادئة «other_»: other_field، ومعرّف الصف الآخر other__id. المعرّف الناتج «id+otherId».
+// الشروط (WHERE) تُطبَّق بعد الربط فتصلح على الحقول المربوطة؛ ثم group/agg/order/limit كالمعتاد.
+struct JoinSpec {
+    std::string target, local, foreign;
+    bool left = false;
+};
+
 // تجميع (aggregate) واحد: agg:sum|avg|min|max|count|distinct|median(field).
 // count = عدد القيم غير الفارغة، distinct = عدد القيم المختلفة، median = وسيط الأرقام.
 // صفحات: page:of(P/S) = الصفحة P بحجم S؛ بحث: search:any(text) = في أي حقل نصي.
@@ -103,6 +111,7 @@ struct Query {
     std::vector<std::string> groupBuckets; // بالتوازي مع groupFields: "" | year | month | day (تجميع تواريخ ISO: group:month(day))
     std::vector<Aggregate> aggregates;
     std::vector<Predicate> having;
+    std::vector<JoinSpec> joins;
 };
 
 // خطأ تركيبي (syntax) في نص RCSQL -- بما في ذلك استخدام أي رمز خارج القائمة المسموحة، أو مُعدِّل
