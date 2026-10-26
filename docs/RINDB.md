@@ -28,7 +28,7 @@ rdb_close(db);
 - **جداول:** `rdb_createTable(db, t)`, `rdb_createTableWith(db, t, {schema, indexes, ifNotExists})`, `rdb_dropTable`, `rdb_tables`, `rdb_hasTable`
 - **مستندات:** `rdb_put` (يستبدل) / `rdb_insert` (يرفض المكرر) / `rdb_add` (معرّف تلقائي) / `rdb_get` / `rdb_has` / `rdb_update` (دمج) / `rdb_incr` / `rdb_delete` / `rdb_count` / `rdb_ids` / `rdb_all` / `rdb_find` / `rdb_truncate` / `rdb_bulk`
 - **استعلام:** `rdb_query / rdb_queryCount / rdb_queryOne / rdb_queryIds` بصيغة RCSQL مع اسم الجدول أولاً: `"users&age:gt(30)"`
-- **معاملات:** `rdb_begin / rdb_commit / rdb_rollback / rdb_transaction(db, fun)`؛ المعاملة تُكتب في الملف كسطر واحد (ذرّية)
+- **معاملات (متداخلة):** `rdb_begin / rdb_commit / rdb_rollback / rdb_depth / rdb_transaction(db, fun)`؛ كل begin نقطة حفظ، وrollback الداخلية تتراجع لنقطتها فقط، وcommit الداخلية تدمج في الأب؛ تُكتب في الملف مرة واحدة كسطر واحد (ذرّية) عند commit الخارجية
 
 كل مستند يحمل `_id`. الأخطاء تُرمى كنص يبدأ بـ`rindb:` ويُلتقط بـ`catch (e)` ← `e["message"]`.
 
@@ -66,10 +66,17 @@ print u.query("name:like(sara)");
 - `rdb_checkpoint` يكتب لقطة كاملة في `path.tmp` تنتهي بسطر `E` ثم تحلّ محل الملف؛ إن انقطع بينهما تُستعمل اللقطة الكاملة عند الفتح.
 - لا يمكن فتح قاعدة باسم غير اسمها المخزَّن.
 
+## المتانة والقفل (تتطلب دوال `file*` الجديدة — docs/FILEDB.md)
+- `rdb_openWith(name, path, {"sync": ...})`: `"commit"` (الافتراضي) = `fileSync` عند commit الخارجية وعند checkpoint · `"always"` = بعد كل سجل · `"off"` = بلا fsync.
+- نقطة التفتيش ذرّية فعلاً: كتابة `path.tmp` ← `fileSync` ← `fileRename` فوق الملف.
+- الفتح للكتابة يأخذ قفلاً حصرياً على `path.lock` (`fileLock`)؛ فتح ثانٍ من عملية أخرى يفشل بـ«in use by another process». الفتح `{"readonly": true}` لا يحتاج قفلاً. يُحرَّر القفل عند `rdb_close`/`rdb_dropDatabase` أو بانتهاء العملية. ملف `.lock` يبقى بعد الإغلاق (لا يضرّ) ويُحذف مع `rdb_dropDatabase`.
+- `rdb_findRange(db, t, field, lo, hi)` = `findByRange` (nil = حدّ مفتوح).
+
 ## حدود (مقصودة وصريحة)
 - كل البيانات في الذاكرة؛ الحجم محدود بالـ RAM، وفتح الملف يعيد تشغيل السجل كله.
-- `beginTransaction` في اللغة تلتقط لقطة عميقة لكل المستندات (كلفة تتناسب مع حجم كل الجداول)؛ لا معاملات متداخلة.
+- `beginTransaction` في اللغة تلتقط لقطة عميقة لكل المستندات (كلفة تتناسب مع حجم كل الجداول).
 - تغيير البنية (إنشاء/حذف جدول) ممنوع داخل معاملة.
-- لا يوجد `fsync` في اللغة: انهيار العملية آمن، لكن انقطاع الكهرباء قد يفقد آخر الكتابات.
+- المتانة عند انقطاع الكهرباء تعتمد على وضع `sync` (انظر أدناه)؛ مع `"off"` قد تضيع آخر الكتابات.
 - لا joins ولا فهارس نطاق؛ الاستعلام هو RCSQL كما في اللغة.
-- لا تشغيل متزامن من عمليتين على الملف نفسه (لا قفل ملفات في اللغة).
+- القفل استشاري: يمنع عملية rindb أخرى فقط، لا أي برنامج يكتب في الملف مباشرةً.
+- `rdb_findRange` مسح مرتّب (O(n))، وليس فهرس نطاق.
