@@ -95,10 +95,10 @@
     <string name="ext_publish_hint_permissions_note">Only select what your extension actually needs — these permissions will be shown to every user on the pre-install security screen.</string>
     <string name="ext_publish_hint_content_files">Extension content files</string>
     <string name="ext_publish_action_pick_files">Choose extension files</string>
-    <string name="ext_publish_files_selected_format">%1$d file(s) selected</string>
+    <string name="ext_publish_files_selected_format">Files selected: %1$d</string>
     <string name="ext_publish_hint_screenshots">Optional screenshots (up to 5) shown on the extension detail page</string>
     <string name="ext_publish_action_pick_screenshots">Choose screenshots</string>
-    <string name="ext_publish_screenshots_selected_format">%1$d screenshot(s) selected</string>
+    <string name="ext_publish_screenshots_selected_format">Screenshots selected: %1$d</string>
     <string name="ext_publish_action_submit">Publish Extension</string>
     <string name="ext_publish_content_required">Choose at least one file for the extension content</string>
     <string name="ext_publish_success">Your extension was published to the Rin Extensions Marketplace ✓</string>
