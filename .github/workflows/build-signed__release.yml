@@ -25,6 +25,9 @@ on:
         required: false
         default: "RinLang-release"
 
+permissions:
+  contents: read
+
 jobs:
   build-signed-release:
     name: Build & sign release APK
