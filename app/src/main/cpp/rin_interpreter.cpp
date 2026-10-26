@@ -5695,13 +5695,13 @@ void Interpreter::registerNatives() {
     // v4 يجعل القناع سجلاً قابلاً للإدارة: يمكن تنظيمه داخل namespace، تعطيله، وصفه،
     // إعطاؤه نسخة، وبناء علاقات أب/ابن مستقلة عن أسماء الحاويات.
     auto maskResolve4 = maskResolveInternal;
-    auto maskType4 = [this](const std::string& mask) -> std::string {
+    [[maybe_unused]] auto maskType4 = [this](const std::string& mask) -> std::string {
         if (containerMasks.count(mask)) return "container";
         if (groupMasks.count(mask)) return "group";
         if (volumeMasks.count(mask)) return "volume";
         return "";
     };
-    auto maskTarget4 = [this](const std::string& mask) -> std::string {
+    [[maybe_unused]] auto maskTarget4 = [this](const std::string& mask) -> std::string {
         auto c=containerMasks.find(mask); if(c!=containerMasks.end()) return c->second;
         auto g=groupMasks.find(mask); if(g!=groupMasks.end()) return g->second;
         auto v=volumeMasks.find(mask); if(v!=volumeMasks.end()) return v->second;
@@ -5710,25 +5710,33 @@ void Interpreter::registerNatives() {
 
     natives["maskActive"] = [this, maskResolve4](std::vector<Value>& a, int line) -> Value {
         expectArgs("maskActive", a, 1, line); std::string m=maskResolve4(asString(a[0],"maskActive",line));
-        if(m.empty()) return Value::boolean_(false); auto it=maskEnabled.find(m); return Value::boolean_(it==maskEnabled.end() ? true : it->second);
+if(m.empty()) return Value::boolean_(false);
+        auto it=maskEnabled.find(m);
+        return Value::boolean_(it==maskEnabled.end() ? true : it->second);
     };
     natives["maskEnable"] = [this, maskResolve4](std::vector<Value>& a, int line) -> Value {
         expectArgs("maskEnable", a, 1, line); std::string m=maskResolve4(asString(a[0],"maskEnable",line));
-        if(m.empty()) throw err(diag::Code::E0035_RuntimeError,line,"maskEnable: unknown mask"); maskEnabled[m]=true; return Value::boolean_(true);
+if(m.empty()) throw err(diag::Code::E0035_RuntimeError,line,"maskEnable: unknown mask");
+        maskEnabled[m]=true;
+        return Value::boolean_(true);
     };
     natives["maskDisable"] = [this, maskResolve4](std::vector<Value>& a, int line) -> Value {
         expectArgs("maskDisable", a, 1, line); std::string m=maskResolve4(asString(a[0],"maskDisable",line));
-        if(m.empty()) throw err(diag::Code::E0035_RuntimeError,line,"maskDisable: unknown mask"); maskEnabled[m]=false; return Value::boolean_(true);
+if(m.empty()) throw err(diag::Code::E0035_RuntimeError,line,"maskDisable: unknown mask");
+        maskEnabled[m]=false;
+        return Value::boolean_(true);
     };
     natives["maskNamespace"] = [this, maskResolve4](std::vector<Value>& a, int line) -> Value {
         expectArgsRange("maskNamespace", a, 1, 2, line); std::string m=maskResolve4(asString(a[0],"maskNamespace",line));
-        if(m.empty()) return Value::nil(); if(a.size()==1){ auto it=maskNamespaces.find(m); return it==maskNamespaces.end()?Value::nil():Value::string(it->second); }
+if(m.empty()) return Value::nil();
+        if(a.size()==1){ auto it=maskNamespaces.find(m); return it==maskNamespaces.end()?Value::nil():Value::string(it->second); }
         if(lockedMasks.count(m)) throw err(diag::Code::E0035_RuntimeError,line,"maskNamespace: mask is locked");
         std::string ns=asString(a[1],"maskNamespace",line); if(ns.empty()) maskNamespaces.erase(m); else maskNamespaces[m]=ns; return Value::boolean_(true);
     };
     natives["maskByNamespace"] = [this, maskResolve4](std::vector<Value>& a, int line) -> Value {
         expectArgs("maskByNamespace", a, 1, line); std::string ns=asString(a[0],"maskByNamespace",line); auto out=std::make_shared<ArrayData>();
-        for(auto& kv:maskNamespaces) if(kv.second==ns && !maskResolve4(kv.first).empty()) out->push_back(Value::string(kv.first)); return Value::makeArray(out);
+for(auto& kv:maskNamespaces) if(kv.second==ns && !maskResolve4(kv.first).empty()) out->push_back(Value::string(kv.first));
+        return Value::makeArray(out);
     };
     natives["maskVersion"] = [this, maskResolve4](std::vector<Value>& a, int line) -> Value {
         expectArgsRange("maskVersion", a, 1, 2, line); std::string m=maskResolve4(asString(a[0],"maskVersion",line)); if(m.empty()) return Value::nil();
@@ -5740,7 +5748,8 @@ void Interpreter::registerNatives() {
     };
     natives["maskParentSet"] = [this, maskResolve4](std::vector<Value>& a, int line) -> Value {
         expectArgs("maskParentSet", a, 2, line); std::string child=maskResolve4(asString(a[0],"maskParentSet",line)); std::string parent=maskResolve4(asString(a[1],"maskParentSet",line));
-        if(child.empty()||parent.empty()||child==parent) throw err(diag::Code::E0035_RuntimeError,line,"maskParentSet: invalid mask relation"); if(lockedMasks.count(child)) throw err(diag::Code::E0035_RuntimeError,line,"maskParentSet: child is locked");
+if(child.empty()||parent.empty()||child==parent) throw err(diag::Code::E0035_RuntimeError,line,"maskParentSet: invalid mask relation");
+        if(lockedMasks.count(child)) throw err(diag::Code::E0035_RuntimeError,line,"maskParentSet: child is locked");
         std::string p=parent; for(int i=0;i<64&&!p.empty();++i){ if(p==child) throw err(diag::Code::E0035_RuntimeError,line,"maskParentSet: cyclic relation"); auto it=maskParents.find(p); if(it==maskParents.end()) break; p=maskResolve4(it->second); }
         maskParents[child]=parent; return Value::boolean_(true);
     };
@@ -5749,7 +5758,8 @@ void Interpreter::registerNatives() {
     };
     natives["maskChildrenOf"] = [this, maskResolve4](std::vector<Value>& a, int line) -> Value {
         expectArgs("maskChildrenOf", a, 1, line); std::string parent=maskResolve4(asString(a[0],"maskChildrenOf",line)); auto out=std::make_shared<ArrayData>(); if(parent.empty()) return Value::makeArray(out);
-        for(auto& kv:maskParents) if(maskResolve4(kv.second)==parent && !maskResolve4(kv.first).empty()) out->push_back(Value::string(kv.first)); return Value::makeArray(out);
+for(auto& kv:maskParents) if(maskResolve4(kv.second)==parent && !maskResolve4(kv.first).empty()) out->push_back(Value::string(kv.first));
+        return Value::makeArray(out);
     };
     natives["maskDescendants"] = [this, maskResolve4](std::vector<Value>& a, int line) -> Value {
         expectArgs("maskDescendants", a, 1, line); std::string root=maskResolve4(asString(a[0],"maskDescendants",line)); auto out=std::make_shared<ArrayData>(); if(root.empty()) return Value::makeArray(out);
