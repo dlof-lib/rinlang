@@ -28,6 +28,7 @@
     <string name="rinpak_trust_changed">⛔ تحذير: مفتاح التوقيع (%1$s) يختلف عن المفتاح الذي استوردتَ به حزمة بنفس الاسم سابقاً (%2$s). قد تكون حزمة منتحَلة — تابع فقط إن كنت واثقاً من المصدر.</string>
     <string name="rinpak_trust_removed">⛔ تحذير: حزمة بنفس الاسم استوردتَها سابقاً موقّعة (%1$s)، وهذه الحزمة بلا توقيع. قد يكون التوقيع حُذف عمداً.</string>
     <string name="rinpak_launcher_label">RinPak</string>
+    <string name="rinpak_open_label">فتح بواسطة Rin</string>
     <!-- التحليل الأمني والهوية (RinPak.analyze) -->
     <string name="rinpak_info_id">المعرّف: %s</string>
     <string name="rinpak_fingerprint">البصمة: %s</string>
