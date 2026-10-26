@@ -6,7 +6,7 @@
       "id": "lang-en",
       "type": "language",
       "language": "en",
-      "version": 1,
+      "version": 3,
       "title": "English",
       "description": "English interface strings",
       "source": "lang/en"
@@ -15,7 +15,7 @@
       "id": "lang-es",
       "type": "language",
       "language": "es",
-      "version": 1,
+      "version": 3,
       "title": "Español",
       "description": "Cadenas de la interfaz en español",
       "source": "lang/es"
