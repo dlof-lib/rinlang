@@ -33,12 +33,12 @@
     <string name="edit_package_rename_title">Rename</string>
     <string name="edit_package_delete_confirm">Permanently delete “%1$s” from this package?</string>
     <string name="edit_package_need_library">The package must keep at least one library file (lib/*.og.rin)</string>
-    <string name="edit_package_files_added">%1$d file(s) added</string>
+    <string name="edit_package_files_added">Files added: %1$d</string>
     <string name="edit_package_file_saved">File saved</string>
     <string name="edit_package_not_editable">This file is not text or is too large to open in the editor.</string>
     <string name="edit_package_preparing">Preparing package…</string>
     <string name="edit_package_readme_created">New README.md created</string>
-    <string name="edit_package_folder_meta">%1$d file(s)</string>
+    <string name="edit_package_folder_meta">Files: %1$d</string>
     <string name="edit_package_file_meta">%1$s</string>
     <string name="edit_package_no_changes">No changes to save</string>
     <string name="edit_package_file_unsaved_title">Save changes?</string>
