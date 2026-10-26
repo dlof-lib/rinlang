@@ -1,0 +1,12 @@
+🗂️ Containers.Group = RinDB
+📦 container = catalog
+✅ .end/container (catalog)
+✅ .end/Containers.Group (RinDB) [تحتوي: catalog]
+📥 @import: تم استيراد "lib/rindb.og.rin" (مكتبة: rindb 1.0.0 — 5 أجزاء)
+depth=1
+depth=2 count=2
+inner rolled back: depth=1 count=1 b=false
+after commits: ["a", "c"] depth=0
+outer rolled back too: inner fails
+final: ["a", "c"]
+reopened: ["x", "y"]
