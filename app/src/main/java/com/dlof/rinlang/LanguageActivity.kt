@@ -1,6 +1,7 @@
 package com.dlof.rinlang
 
 import android.graphics.Color
+import android.graphics.Typeface
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
@@ -11,13 +12,19 @@ import androidx.appcompat.app.AppCompatActivity
 import com.dlof.rinlang.packs.LanguagePacks
 import com.dlof.rinlang.packs.PackDownloadDialog
 
-/** Professional language picker with language families, country flags, search and instant locale switching. */
+/**
+ * Language picker: gradient hero with the current language, search, family filter chips,
+ * country cards with flags and a pack status pill (built-in / installed / download).
+ */
 class LanguageActivity : RinBaseActivity() {
     data class LanguageCountry(val flag:String, val name:String, val nativeName:String, val tag:String, val group:String)
 
     private lateinit var list: LinearLayout
     private lateinit var search: EditText
-    private lateinit var empty: TextView
+    private lateinit var empty: View
+    private lateinit var chips: LinearLayout
+    private lateinit var clear: View
+    private var groupFilter: String? = null
     private val all = listOf(
         // Arabic — all 22 Arab League countries; Syria intentionally first.
         LanguageCountry("🇸🇾","Syria","سورية","ar-SY","Arabic"), LanguageCountry("🇩🇿","Algeria","الجزائر","ar-DZ","Arabic"),
@@ -68,35 +75,141 @@ class LanguageActivity : RinBaseActivity() {
         findViewById<TextView>(R.id.txtLanguageTitle).text = getString(R.string.language_picker_title)
         findViewById<TextView>(R.id.txtLanguageSubtitle).text = getString(R.string.language_picker_subtitle)
         findViewById<View>(R.id.btnLanguageBack).setOnClickListener { finish() }
-        search = findViewById(R.id.editLanguageSearch); list = findViewById(R.id.languageList); empty = findViewById(R.id.txtLanguageEmpty)
+        search = findViewById(R.id.editLanguageSearch)
+        list = findViewById(R.id.languageList)
+        empty = findViewById(R.id.languageEmptyState)
+        chips = findViewById(R.id.languageChips)
+        clear = findViewById(R.id.btnLanguageClear)
         search.hint = getString(R.string.language_picker_search)
-        search.addTextChangedListener(object: TextWatcher { override fun beforeTextChanged(s:CharSequence?,st:Int,c:Int,a:Int){}; override fun onTextChanged(s:CharSequence?,st:Int,b:Int,c:Int){ render(s?.toString().orEmpty()) }; override fun afterTextChanged(e:Editable?){}})
-        render("")
+        clear.contentDescription = getString(R.string.language_search_clear)
+        clear.setOnClickListener { search.setText("") }
+        search.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, st: Int, c: Int, a: Int) {}
+            override fun onTextChanged(s: CharSequence?, st: Int, b: Int, c: Int) {
+                clear.visibility = if (s.isNullOrEmpty()) View.GONE else View.VISIBLE
+                render()
+            }
+            override fun afterTextChanged(e: Editable?) {}
+        })
+        bindCurrentLanguage()
+        buildChips()
+        render()
     }
 
-    private fun render(query:String) {
-        list.removeAllViews(); val q=query.trim().lowercase()
-        var currentGroup=""
-        val filtered=all.filter { q.isEmpty() || it.name.lowercase().contains(q) || it.nativeName.lowercase().contains(q) || it.tag.lowercase().contains(q) }
-        empty.visibility=if(filtered.isEmpty()) View.VISIBLE else View.GONE
-        filtered.forEach { item ->
-            if(item.group != currentGroup){ currentGroup=item.group; addHeader(item.group) }
-            addCountry(item)
+    private fun dp(v: Int): Int = (v * resources.displayMetrics.density + 0.5f).toInt()
+
+    /** Language code currently applied; Arabic is the built-in default. */
+    private fun currentLang(): String = LocaleHelper.getCurrentAppLocaleTag()?.substringBefore('-') ?: LocaleHelper.LANG_ARABIC
+
+    private fun languageDisplayName(lang: String): String = when (lang) {
+        LocaleHelper.LANG_ARABIC -> getString(R.string.lang_name_ar)
+        LocaleHelper.LANG_ENGLISH -> getString(R.string.lang_name_en)
+        LocaleHelper.LANG_SPANISH -> getString(R.string.lang_name_es)
+        else -> lang
+    }
+
+    private fun bindCurrentLanguage() {
+        val lang = currentLang()
+        val rep = all.firstOrNull { it.tag.substringBefore('-') == lang } ?: all.first()
+        findViewById<TextView>(R.id.txtCurrentFlag).text = rep.flag
+        findViewById<TextView>(R.id.txtCurrentLabel).text = getString(R.string.language_picker_current)
+        findViewById<TextView>(R.id.txtCurrentName).text = languageDisplayName(lang)
+    }
+
+    private fun buildChips() {
+        chips.removeAllViews()
+        val options = listOf<Pair<String?, String>>(
+            null to getString(R.string.language_filter_all),
+            "Arabic" to getString(R.string.lang_name_ar),
+            "English" to getString(R.string.lang_name_en),
+            "Spanish" to getString(R.string.lang_name_es)
+        )
+        options.forEach { (group, label) ->
+            val selected = group == groupFilter
+            val chip = TextView(this)
+            chip.text = label
+            chip.textSize = 13f
+            chip.setTypeface(null, Typeface.BOLD)
+            chip.gravity = Gravity.CENTER
+            chip.setPadding(dp(16), 0, dp(16), 0)
+            chip.setBackgroundResource(if (selected) R.drawable.bg_lang_chip_selected else R.drawable.bg_lang_chip)
+            chip.setTextColor(if (selected) Color.WHITE else getColor(R.color.rin_on_toolbar))
+            chip.isClickable = true
+            chip.isFocusable = true
+            chip.setOnClickListener { groupFilter = group; buildChips(); render() }
+            val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(38))
+            lp.marginEnd = dp(8)
+            chips.addView(chip, lp)
         }
     }
-    private fun addHeader(group:String){ val t=TextView(this); t.text=when(group){"Arabic"->getString(R.string.language_group_arabic);"English"->getString(R.string.language_group_english);else->getString(R.string.language_group_spanish)}; t.setTextColor(getColor(R.color.rin_accent)); t.textSize=13f; t.setTypeface(null,1); t.setPadding(6,20,6,8); list.addView(t) }
-    private fun addCountry(item:LanguageCountry){
-        val card=LinearLayout(this); card.orientation=LinearLayout.HORIZONTAL; card.gravity=Gravity.CENTER_VERTICAL; card.setPadding(16,10,12,10); card.background=getDrawable(if(LocaleHelper.getCurrentAppLocaleTag()==item.tag.substringBefore('-')) R.drawable.bg_lang_option_selected else R.drawable.bg_list_card); card.isClickable=true; card.isFocusable=true
-        val flag=TextView(this); flag.text=item.flag; flag.textSize=27f; flag.gravity=Gravity.CENTER; card.addView(flag,LinearLayout.LayoutParams(52,52))
-        val col=LinearLayout(this); col.orientation=LinearLayout.VERTICAL; col.layoutParams=LinearLayout.LayoutParams(0,-2,1f); val name=TextView(this); name.text=item.name; name.textSize=15f; name.setTextColor(getColor(R.color.rin_on_toolbar)); name.setTypeface(null,1); val native=TextView(this); native.text=item.nativeName+"  •  "+item.tag; native.textSize=11f; native.setTextColor(getColor(R.color.rin_editor_hint)); native.setPadding(0,3,0,0); col.addView(name); col.addView(native); card.addView(col)
-        val check=TextView(this); check.text=if(LocaleHelper.getCurrentAppLocaleTag()==item.tag.substringBefore('-')) "✓" else ""; check.textSize=20f; check.setTextColor(getColor(R.color.rin_accent)); check.gravity=Gravity.CENTER; card.addView(check,LinearLayout.LayoutParams(40,52))
-        val lp=LinearLayout.LayoutParams(-1,68); lp.setMargins(0,4,0,4); list.addView(card,lp)
-        card.setOnClickListener { selectLanguage(item) }
+
+    private fun render() {
+        list.removeAllViews()
+        val q = search.text.toString().trim().lowercase()
+        val current = currentLang()
+        val filtered = all.filter { item ->
+            (groupFilter == null || item.group == groupFilter) &&
+                (q.isEmpty() || item.name.lowercase().contains(q) || item.nativeName.lowercase().contains(q) || item.tag.lowercase().contains(q))
+        }
+        empty.visibility = if (filtered.isEmpty()) View.VISIBLE else View.GONE
+        var currentGroup = ""
+        filtered.forEach { item ->
+            if (item.group != currentGroup) {
+                currentGroup = item.group
+                val groupName = currentGroup
+                addHeader(groupName, filtered.count { it.group == groupName })
+            }
+            addCountry(item, current)
+        }
+    }
+
+    private fun addHeader(group: String, count: Int) {
+        val header = layoutInflater.inflate(R.layout.item_language_header, list, false) as TextView
+        val title = when (group) {
+            "Arabic" -> getString(R.string.language_group_arabic)
+            "English" -> getString(R.string.language_group_english)
+            else -> getString(R.string.language_group_spanish)
+        }
+        header.text = title + "  ·  " + getString(R.string.language_picker_count_format, count)
+        list.addView(header)
+    }
+
+    private fun addCountry(item: LanguageCountry, current: String) {
+        val lang = item.tag.substringBefore('-')
+        val selected = lang == current
+        val row = layoutInflater.inflate(R.layout.item_language_country, list, false)
+        row.setBackgroundResource(if (selected) R.drawable.bg_lang_option_selected else R.drawable.bg_list_card)
+        row.findViewById<TextView>(R.id.txtLanguageFlag).text = item.flag
+        row.findViewById<TextView>(R.id.txtLanguageName).text = item.name
+        row.findViewById<TextView>(R.id.txtLanguageNative).text = item.nativeName + "  •  " + item.tag
+        row.findViewById<TextView>(R.id.txtLanguageCheck).visibility = if (selected) View.VISIBLE else View.INVISIBLE
+
+        val status = row.findViewById<TextView>(R.id.txtLanguageStatus)
+        when {
+            LanguagePacks.isBuiltin(lang) -> {
+                status.setText(R.string.language_status_builtin)
+                status.setBackgroundResource(R.drawable.bg_lang_status_builtin)
+                status.setTextColor(getColor(R.color.rin_accent_green))
+            }
+            LanguagePacks.isAvailable(this, lang) -> {
+                status.setText(R.string.language_status_installed)
+                status.setBackgroundResource(R.drawable.bg_lang_status_installed)
+                status.setTextColor(getColor(R.color.rin_accent))
+            }
+            else -> {
+                status.setText(R.string.language_status_download)
+                status.setBackgroundResource(R.drawable.bg_lang_status_download)
+                status.setTextColor(getColor(R.color.rin_on_toolbar_dim))
+            }
+        }
+        row.contentDescription = item.name + ", " + item.nativeName
+        row.setOnClickListener { selectLanguage(item) }
+        list.addView(row)
     }
 
     /**
-     * العربية مدمجة في التطبيق فتُطبَّق فوراً؛ أي لغة أخرى (الإنجليزية/الإسبانية) تُنزَّل كحزمة لغة أولاً
-     * (لتقليل حجم التطبيق) ثم تُطبَّق عند اكتمال التنزيل.
+     * Arabic is built into the app and applies instantly; any other language (English/Spanish)
+     * is downloaded as a language pack first (to keep the app small) and applied once installed.
      */
     private fun selectLanguage(item: LanguageCountry) {
         val lang = item.tag.substringBefore('-')
