@@ -2,4 +2,10 @@
 <resources>
     <string name="albums_title">Álbumes</string>
     <string name="album_move_title">Mover proyecto al álbum</string>
+    <string name="album_count_format">%1$d álbumes</string>
+    <string name="album_projects_count_format">%1$d proyectos</string>
+    <string name="album_create_description">Crea un espacio ordenado para un grupo de tus proyectos.</string>
+    <string name="album_delete_title">Eliminar álbum</string>
+    <string name="album_delete_confirm">¿Eliminar el álbum “%1$s”? Los proyectos que contiene también se eliminarán.</string>
+    <string name="back">Atrás</string>
 </resources>
