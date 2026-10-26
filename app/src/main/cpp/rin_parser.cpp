@@ -3303,11 +3303,9 @@ StmtPtr Parser::atBlock() {
         else s->kind = ContainerKind::PLAIN;
         return s;
     }
-    if (!easyKey.empty() && (tag == "Containers.Group" || tag == "Volume"))
-        throw err(diag::Code::E0013_InvalidExpression, previous(), "easy_key مدعوم داخل الحاويات (@container...) فقط، وليس في Containers.Group أو Volume");
     if (tag == "Containers.Group") {
         auto s = std::make_shared<ContainerGroupStmt>();
-        s->name = name; s->mask = mask; s->body = body; s->line = atTok.line;
+        s->name = name; s->mask = mask; s->easyKey = easyKey; s->body = body; s->line = atTok.line;
         if (policyAccum.hasPolicy) {
             s->uses = policyAccum.uses; s->needs = policyAccum.needs;
             s->allows = policyAccum.allows; s->denies = policyAccum.denies;
@@ -3317,7 +3315,7 @@ StmtPtr Parser::atBlock() {
         return s;
     }
     auto s = std::make_shared<VolumeStmt>();
-    s->name = name; s->mask = mask; s->body = body; s->line = atTok.line;
+    s->name = name; s->mask = mask; s->easyKey = easyKey; s->body = body; s->line = atTok.line;
     return s;
 }
 
