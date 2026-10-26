@@ -286,7 +286,8 @@ inline int to256(const Rgb& c) {
     int r = c8(c.r), g = c8(c.g), b = c8(c.b);
     if (std::abs(r - g) < 8 && std::abs(g - b) < 8) {            // تدرّج رمادي: 232..255
         int v = (r + g + b) / 3;
-        if (v < 8) return 16; if (v > 248) return 231;
+if (v < 8) return 16;
+        if (v > 248) return 231;
         return 232 + (v - 8) * 24 / 240;
     }
     return 16 + 36 * (r * 5 / 255) + 6 * (g * 5 / 255) + (b * 5 / 255);
