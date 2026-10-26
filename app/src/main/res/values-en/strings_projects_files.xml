@@ -31,6 +31,7 @@
     <string name="project_meta_format">%1$d files</string>
     <string name="project_meta_with_time_format">%1$d files • %2$s</string>
     <string name="import_project_action">Import project</string>
+    <string name="export_project_action">Export project</string>
     <string name="sort_projects_action">Sort projects</string>
     <string name="projects_sort_recent">Recently edited</string>
     <string name="projects_sort_name">Name</string>
