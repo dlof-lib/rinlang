@@ -9,8 +9,8 @@ name: Build APP RIN
 #   build-apk     يبني APK موقَّعاً (+ AAB اختيارياً) ويتحقق من توقيعه فعلياً.
 #   release       ينشر Release (APK + SHA-256 [+ AAB]) فقط إن نجح الاثنان السابقان.
 #
-# مفتاح التوقيع الدائم: أول تشغيل ناجح على فرع يُولِّد signing/release.keystore و
-# signing/keystore-credentials.txt ويحفظهما بـ commit واحد [skip ci]؛ كل تشغيل تالٍ يستخدمهما.
+# مفتاح التوقيع: يُقرأ من GitHub Secrets (ANDROID_KEYSTORE_BASE64 / KEYSTORE_PASSWORD / KEY_ALIAS /
+# KEY_PASSWORD) ولا يُحفَظ في المستودع أبداً. بدون الأسرار يُولَّد مفتاح مؤقت لكل تشغيل.
 # ⚠️ كلمتا المرور بنص صريح داخل المستودع — أبقِ المستودع Private.
 #
 # إعداد لمرة واحدة: Settings ← Actions ← General ← Workflow permissions ← Read and write.
@@ -287,9 +287,8 @@ jobs:
     if: needs.preflight.outputs.proceed == 'true' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    # contents: write لازمة فقط لحفظ المفتاح في أول تشغيل على الإطلاق.
     permissions:
-      contents: write
+      contents: read
     env:
       GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx3g"
     steps:
@@ -346,58 +345,34 @@ jobs:
 
       # لا يُولَّد keystore جديد إلا إن لم يكن موجوداً. PKCS12 لا يدعم كلمة مرور منفصلة
       # للمفتاح، لذا KEY_PASS = STORE_PASS عمداً.
-      - name: Ensure permanent signing keystore
-        id: keystore
+      # التوقيع: المفتاح لا يُحفَظ داخل المستودع أبداً. يُقرأ من GitHub Secrets:
+      #   ANDROID_KEYSTORE_BASE64 · KEYSTORE_PASSWORD · KEY_ALIAS · KEY_PASSWORD
+      # إن لم تكن الأسرار مضبوطة يُولَّد مفتاح مؤقت لهذا التشغيل فقط (الـ APK يُثبَّت
+      # لكن لا يمكن تحديثه فوق إصدار موقَّع بمفتاح آخر).
+      - name: Prepare signing key (from secrets, never committed)
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.KEYSTORE_PASSWORD }}
+          KS_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KS_KEYPASS: ${{ secrets.KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          mkdir -p signing
-          if [ -s signing/release.keystore ] && [ -s signing/keystore-credentials.txt ]; then
-            echo "keystore دائم موجود — لا توليد."
-            echo "generated=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          if [ "${GITHUB_REF_TYPE}" != "branch" ]; then
-            echo "::error::لا يمكن توليد مفتاح جديد على وسم (tag) — شغّل الـ workflow على فرع أولاً."
-            exit 1
-          fi
-
-          STORE_PASS="$(openssl rand -base64 48 | tr -dc 'A-Za-z0-9' | cut -c1-40)"
-          echo "::add-mask::$STORE_PASS"
-          KEY_ALIAS="rinlang"
-
-          keytool -genkeypair \
-            -keystore signing/release.keystore \
-            -alias "$KEY_ALIAS" \
-            -keyalg RSA -keysize 4096 -validity 36500 \
-            -storepass "$STORE_PASS" -keypass "$STORE_PASS" \
-            -dname "CN=RinLang, OU=RinLang App, O=DLoF, L=NA, S=NA, C=SA" > /dev/null 2>&1
-
-          {
-            echo "keystore_password=$STORE_PASS"
-            echo "key_alias=$KEY_ALIAS"
-            echo "key_password=$STORE_PASS"
-          } > signing/keystore-credentials.txt
-
-          echo "generated=true" >> "$GITHUB_OUTPUT"
-          echo "::notice::وُلِّد مفتاح التوقيع الدائم لأول مرة وسيُحفَظ في المستودع بعد نجاح البناء."
-
-      # قراءة آمنة (بدون source) ثم تقنيع كلمات المرور وتصديرها لخطوة البناء فقط.
-      - name: Load signing credentials
-        run: |
-          set -euo pipefail
-          get() { grep -m1 "^$1=" signing/keystore-credentials.txt | cut -d= -f2-; }
-          store_pass="$(get keystore_password)"
-          key_pass="$(get key_password)"
-          key_alias="$(get key_alias)"
-          if [ -z "$store_pass" ] || [ -z "$key_pass" ] || [ -z "$key_alias" ]; then
-            echo "::error file=signing/keystore-credentials.txt::ملف بيانات التوقيع ناقص أو تالف."
-            exit 1
+          ks="$RUNNER_TEMP/release.keystore"
+          if [ -n "$KS_B64" ] && [ -n "$KS_PASS" ] && [ -n "$KS_ALIAS" ]; then
+            echo "$KS_B64" | base64 -d > "$ks"
+            store_pass="$KS_PASS"; key_pass="${KS_KEYPASS:-$KS_PASS}"; key_alias="$KS_ALIAS"
+          else
+            echo "::warning::أسرار التوقيع غير مضبوطة — سيُولَّد مفتاح مؤقت لهذا التشغيل فقط."
+            store_pass="$(openssl rand -hex 24)"; key_pass="$store_pass"; key_alias="rinlang"
+            keytool -genkeypair -keystore "$ks" -alias "$key_alias" \
+              -keyalg RSA -keysize 4096 -validity 3650 \
+              -storepass "$store_pass" -keypass "$key_pass" \
+              -dname "CN=RinLang, OU=RinLang App, O=DLoF, C=SA" > /dev/null 2>&1
           fi
           echo "::add-mask::$store_pass"
           echo "::add-mask::$key_pass"
           {
-            echo "RIN_KEYSTORE_PATH=$GITHUB_WORKSPACE/signing/release.keystore"
+            echo "RIN_KEYSTORE_PATH=$ks"
             echo "RIN_KEY_ALIAS=$key_alias"
             echo "RIN_KEYSTORE_PASSWORD=$store_pass"
             echo "RIN_KEY_PASSWORD=$key_pass"
@@ -512,44 +487,6 @@ jobs:
             app/.cxx/**/*.log
           if-no-files-found: ignore
           retention-days: 7
-
-      # يُحفَظ المفتاح مرة واحدة فقط (أول تشغيل ناجح). يعيد المزامنة مع الفرع قبل الدفع
-      # ويعيد المحاولة، فلا يفشل لو تقدّم الفرع أثناء البناء الطويل.
-      - name: Commit the permanent keystore (first run only)
-        if: success() && steps.keystore.outputs.generated == 'true'
-        env:
-          BRANCH: ${{ github.ref_name }}
-        run: |
-          set -euo pipefail
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          stash="$(mktemp -d)"
-          cp signing/release.keystore signing/keystore-credentials.txt "$stash/"
-
-          for attempt in 1 2 3; do
-            git fetch --depth=1 origin "$BRANCH"
-            git reset --hard FETCH_HEAD
-
-            if git cat-file -e "FETCH_HEAD:signing/release.keystore" 2>/dev/null; then
-              echo "::warning::مفتاح دائم موجود أصلاً على الفرع (تشغيل متزامن سبقنا) — لن يُستبدَل."
-              exit 0
-            fi
-
-            mkdir -p signing
-            cp "$stash/release.keystore" "$stash/keystore-credentials.txt" signing/
-            git add -f signing/release.keystore signing/keystore-credentials.txt
-            git commit -m "chore: store permanent auto-generated release signing keystore [skip ci]"
-
-            if git push origin "HEAD:$BRANCH"; then
-              echo "حُفظ المفتاح الدائم في المستودع."
-              exit 0
-            fi
-            echo "فشل الدفع (محاولة $attempt) — إعادة المحاولة..."
-            sleep $((attempt * 4))
-          done
-          echo "::error::تعذّر حفظ المفتاح بعد 3 محاولات."
-          exit 1
 
   # ═════════════════════════════════════════════════════════════════════════════
   release:
