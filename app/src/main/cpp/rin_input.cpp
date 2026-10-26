@@ -24,7 +24,7 @@ namespace inputx {
 // ---------------------------------------------------------------------------
 static bool isTypeWord(const std::string& s) { return s == "number" || s == "bool" || s == "string" || s == "text"; }
 
-static const char* kindName(FieldKind k) {
+[[maybe_unused]] static const char* kindName(FieldKind k) {
     switch (k) {
         case FieldKind::Text: return "text";
         case FieldKind::Number: return "number";
@@ -262,7 +262,7 @@ std::string Program::disassemble() const {
       << " check=" << (hasCheck ? "yes" : "no") << "\n";
     for (size_t pc = 0; pc < code.size(); ++pc) {
         const Instr& in = code[pc];
-        char head[32];
+        char head[64];
         std::snprintf(head, sizeof head, "%04zu  %-10s s%d", pc, names[static_cast<int>(in.op)], in.scope);
         o << head;
         if (in.op == Op::Enter) {
