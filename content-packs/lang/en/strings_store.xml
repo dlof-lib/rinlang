@@ -10,10 +10,10 @@
     <!-- Store screen -->
     <string name="rin_store_title">Rin Store</string>
     <string name="store_empty">No packages match your search. Try another word or clear the filter.</string>
-    <string name="action_install">Install/Insert</string>
+    <string name="action_install">Install &amp; insert</string>
     <string name="store_item_meta_format">%1$s • %2$s • %3$d downloads</string>
     <string name="package_installed_toast">Package installed and added to this project\'s libraries</string>
-    <string name="package_installed_import_toast">%1$s package(s) installed and @import lines inserted directly into the code ✓</string>
+    <string name="package_installed_import_toast">Packages installed: %1$s — @import lines were added to your code ✓</string>
 
     <!-- Search, sort, and category filtering inside the store -->
     <string name="store_search_hint">Search by package name or description…</string>
@@ -66,7 +66,7 @@
     <string name="action_pick_readme">Upload my own README.md</string>
     <string name="action_pick_license">Upload my own license file</string>
     <string name="file_selected_generic">File selected ✓</string>
-    <string name="assets_selected_format">%1$d file(s) selected</string>
+    <string name="assets_selected_format">Files selected: %1$d</string>
     <string name="label_package_visual_identity">Package visual identity (optional)</string>
     <string name="label_package_icon">Package icon</string>
     <string name="label_package_thumbnail">Package thumbnail</string>
