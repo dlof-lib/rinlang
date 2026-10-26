@@ -70,7 +70,7 @@ static size_t countTruthy(const Value& arr, const char* fn, int line) {
 static bool isIntegral(double d) { return std::isfinite(d) && std::floor(d) == d; }
 
 // يحوّل النص الرقمي إلى رقم؛ false إن لم يكن النص بأكمله رقماً صحيحاً صالحاً.
-static bool parseNumeric(const std::string& s, double& out) {
+[[maybe_unused]] static bool parseNumeric(const std::string& s, double& out) {
     size_t b = 0, e = s.size();
     while (b < e && std::isspace(static_cast<unsigned char>(s[b]))) ++b;
     while (e > b && std::isspace(static_cast<unsigned char>(s[e - 1]))) --e;
