@@ -132,11 +132,11 @@
     <string name="find_hint">Find…</string>
     <string name="replace_hint">Replace with…</string>
     <string name="btn_find_next">Next</string>
-    <string name="btn_find_prev">Prev</string>
+    <string name="btn_find_prev">Previous</string>
     <string name="btn_replace_one">Replace</string>
     <string name="btn_replace_all">All</string>
     <string name="find_not_found_toast">"Not found: %1$s"</string>
-    <string name="replaced_count_toast">Replaced %1$d occurrence(s)</string>
+    <string name="replaced_count_toast">Replacements made: %1$d</string>
     <string name="find_close_desc">Close find bar</string>
     <string name="find_case_sensitive_desc">Toggle case-sensitive search</string>
     <string name="find_case_sensitive_on_toast">Case-sensitive search: on</string>
@@ -188,7 +188,7 @@
     <string name="job_copy_cta">Copy</string>
     <string name="job_share_cta">Share</string>
     <string name="job_rerun_cta">Rerun</string>
-    <string name="job_rerun_toast">Re-running run #%1$d…</string>
+    <string name="job_rerun_toast">Re-running #%1$d…</string>
     <string name="job_time_fmt">%1$s</string>
     <string name="diag_reason_label">reason</string>
     <string name="diag_expected_label">expected</string>
@@ -275,12 +275,12 @@ print \"Hello, \" + name + \"!\";
     <string name="rin_apps_empty_title">No exported apps yet</string>
     <string name="rin_apps_empty_hint">Tap + to export your first app from one of your projects</string>
     <string name="rin_apps_more_actions">More actions</string>
-    <string name="rin_apps_count_format">%d exported app(s)</string>
+    <string name="rin_apps_count_format">Exported apps: %d</string>
     <string name="rin_app_action_details">Details</string>
     <string name="rin_app_action_reexport">Re-export</string>
     <string name="rin_app_action_delete">Delete</string>
     <string name="rin_app_meta_format">%1$s · %2$d KB · %3$s · %4$s</string>
-    <string name="rin_app_delete_confirm">The APK file will be permanently removed from the device. Any current install on the device (if any) is unaffected.</string>
+    <string name="rin_app_delete_confirm">The APK file will be permanently deleted from this device. Copies already installed on the device are not affected.</string>
     <string name="rin_app_deleted_toast">App removed from the list</string>
     <string name="rin_app_not_found_toast">Couldn\'t find this app in the list</string>
     <string name="rin_app_settings_screen_title">App Settings</string>
@@ -304,7 +304,7 @@ print \"Hello, \" + name + \"!\";
     <string name="avatar_picker_upload_studio">Upload photo from studio</string>
 
     <!-- ===== Splash screen ===== -->
-    <string name="splash_tagline">A light and fast programming language</string>
+    <string name="splash_tagline">A lightweight, fast programming language</string>
 
     <!-- ===== Live Preview (Indsintime rendering engine / "Mirror Indsin") ===== -->
     <string name="indsin_preview_title">Live Preview</string>
@@ -325,7 +325,7 @@ print \"Hello, \" + name + \"!\";
     <string name="indsin_internal_error">The preview received an unreadable result from the engine.</string>
     <string name="indsin_unknown_error">Unknown error</string>
     <string name="indsin_error_format">Error: %1$s</string>
-    <string name="indsin_error_line_format">Snag on line %1$d: %2$s — still showing the last good frame</string>
+    <string name="indsin_error_line_format">Error on line %1$d: %2$s — still showing the last good frame</string>
     <string name="indsin_stats_error_only">No good frame yet — fix the error above and keep typing.</string>
     <string name="indsin_stats_idle">Waiting for the first render…</string>
     <string name="indsin_stats_format">%1$d strands · rendered in %2$dms · cache hits %3$d · long-press an element to inspect it</string>
@@ -376,4 +376,20 @@ print \"Hello, \" + name + \"!\";
     <string name="rin_input_title">Input</string>
     <string name="rin_input_hint">Type your answer</string>
     <string name="rin_input_default_prompt">The program is waiting for input</string>
+    <string name="apk_install_allow_unknown_sources">Allow installs from this source, then come back and tap Install again</string>
+    <string name="clip_empty">Clipboard is empty</string>
+    <string name="clip_large_title">Large paste</string>
+    <string name="clip_large_message_fmt">Paste %1$d lines (about %2$d KB)? This may take a moment.</string>
+    <string name="clip_large_confirm">Paste</string>
+    <string name="clip_history_title">Clipboard history</string>
+    <string name="clip_history_empty">Clipboard history is empty</string>
+    <string name="clip_history_clear">Clear all</string>
+    <string name="clip_history_meta_fmt">%1$d lines · %2$d chars</string>
+    <string name="clip_history_whole_lines">whole lines</string>
+    <string name="action_copy_line">Copy line</string>
+    <string name="action_cut_line">Cut line</string>
+    <string name="action_paste_plain">Paste as is</string>
+    <string name="action_clip_history">Clipboard history…</string>
+    <string name="action_select_line">Select line</string>
+    <string name="action_copy_markdown">Copy as Markdown</string>
 </resources>
