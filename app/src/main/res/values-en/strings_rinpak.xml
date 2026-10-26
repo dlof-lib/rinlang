@@ -28,6 +28,7 @@
     <string name="rinpak_trust_changed">⛔ Warning: the signing key (%1$s) differs from the key of a package with the same name you imported before (%2$s). It may be an impersonation — continue only if you trust the source.</string>
     <string name="rinpak_trust_removed">⛔ Warning: a package with the same name you imported before was signed (%1$s), but this one is unsigned. The signature may have been stripped on purpose.</string>
     <string name="rinpak_launcher_label">RinPak</string>
+    <string name="rinpak_open_label">Open with Rin</string>
     <!-- التحليل الأمني والهوية (RinPak.analyze) -->
     <string name="rinpak_info_id">ID: %s</string>
     <string name="rinpak_fingerprint">Fingerprint: %s</string>
