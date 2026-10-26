@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Cadenas en español. -->
+<resources>
+    <string name="terminal_help_native">Comandos de la terminal Linux (sesión nativa persistente):\n  :help        lista completa de comandos : (:load :vars :type :time :check :ocr :img :cd :ls ...)\n  :ocr &lt;imagen&gt;  muestra el texto encontrado en una imagen\n  :img &lt;imagen&gt;  muestra una imagen con caracteres Unicode (png, jpg, gif, bmp)\n  $ cmd …      100 comandos adicionales (en inglés): $ cat f -n | $ cp *.rin ~/ | $ grep -r palabra . | $ find . -name *.rin | $ seq 1:10 | $ sha256 f ...\n  native on    ejecuta todo el código en la sesión nativa (estado real); native off para volver\n:sh, :edit, :pkg e :indsin no están disponibles aquí. El motor nativo no se puede interrumpir.</string>
+    <string name="terminal_native_unavailable">La terminal Linux nativa no está disponible en esta compilación.</string>
+    <string name="terminal_native_busy">La sesión nativa está ocupada o hay un programa en ejecución — espera a que termine (no se puede interrumpir).</string>
+    <string name="terminal_native_on">native: activado — todo el código se ejecuta en la sesión de la terminal Linux nativa</string>
+    <string name="terminal_native_off">native: desactivado — el código se ejecuta en el REPL normal (los comandos : siguen funcionando)</string>
+</resources>
