@@ -213,7 +213,7 @@ void Interpreter::registerNativesOopLink() {
     using Args = std::vector<Value>;
 
     auto N = [](double d) { return Value::num(d); };
-    auto S = [](const std::string& s) { return Value::string(s); };
+    [[maybe_unused]] auto S = [](const std::string& s) { return Value::string(s); };
 
     auto needInst = [](const Value& v, const std::string& fn, int line) {
         if (v.type != Value::Type::INSTANCE || !v.instance)
