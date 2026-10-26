@@ -57,7 +57,7 @@ bool isSupportedOp(const std::string& op) {
         // عمليات إضافية (RCSQL القوي): نفي النص، قوائم، نطاق، تواريخ، نوع، فراغ
         "notlike", "nstarts", "nends", "in", "nin", "between", "before", "after", "on", "isa", "empty", "filled",
         // أسماء عمليات المُعدِّلات group:by / agg:sum|avg|min|max (لا تصلح كشرط فلترة)
-        "by", "sum", "avg", "min", "max", "count", "distinct", "median", "year", "month", "day", "of", "any",
+        "by", "sum", "avg", "min", "max", "count", "distinct", "median", "year", "month", "day", "of", "any", "to", "left",
         "asc", "desc" // أسماء عمليات المُعدِّل order:asc/order:desc (انظر applyModifierIfReserved)
     };
     for (const char* o : ops) if (op == o) return true;
@@ -108,7 +108,7 @@ Predicate readPredicateLeaf(Lexer& lex, std::string firstIdent) {
     if (lex.peekChar() != ')') {
         p.arg = lex.readIdent("وسيط العملية '" + op + "'");
         // in/nin/between: قيم متعددة مفصولة بـ '/' (رمز مسموح أصلاً في اللغة)
-        if (op == "in" || op == "nin" || op == "between" || op == "of") {
+        if (op == "in" || op == "nin" || op == "between" || op == "of" || op == "to" || op == "left") {
             while (lex.peekChar() == '/') { lex.consumeSymbol('/'); p.arg += "/" + lex.readIdent("قيمة بعد '/' في '" + op + "'"); }
         }
     }
@@ -172,6 +172,17 @@ bool applyModifierIfReserved(Query& q, const Predicate& p) {
         if (p.arg.empty()) throw SqlSyntaxError("RIN CONTAINER SQL: 'group' يحتاج اسم حقل: group:by(field) أو group:month(dateField)");
         q.groupFields.push_back(p.arg);
         q.groupBuckets.push_back(p.op == "by" ? std::string() : p.op);
+        return true;
+    }
+    if (p.field == "join" && (p.op == "to" || p.op == "left")) {
+        JoinSpec j; j.left = p.op == "left";
+        size_t a1 = p.arg.find('/'), a2 = a1 == std::string::npos ? std::string::npos : p.arg.find('/', a1 + 1);
+        if (a1 == std::string::npos || a2 == std::string::npos || p.arg.find('/', a2 + 1) != std::string::npos)
+            throw SqlSyntaxError("RIN CONTAINER SQL: join:" + p.op + "(other/localField/otherField) يحتاج ثلاثة أجزاء، مثال: join:to(users/user/_id)");
+        j.target = p.arg.substr(0, a1); j.local = p.arg.substr(a1 + 1, a2 - a1 - 1); j.foreign = p.arg.substr(a2 + 1);
+        if (j.target.empty() || j.local.empty() || j.foreign.empty())
+            throw SqlSyntaxError("RIN CONTAINER SQL: join يحتاج حاوية وحقلاً محلياً وحقلاً للحاوية الأخرى غير فارغة");
+        q.joins.push_back(j);
         return true;
     }
     if (p.field == "page" && p.op == "of") {
@@ -260,8 +271,8 @@ Query parse(const std::string& text) {
         if (!applyModifierIfReserved(q, p)) {
             if (!p.isGroup && (p.op == "by" || p.op == "sum" || p.op == "avg" || p.op == "min" || p.op == "max" ||
                                p.op == "count" || p.op == "distinct" || p.op == "median" || p.op == "year" || p.op == "month" ||
-                               p.op == "day" || p.op == "of"))
-                throw SqlSyntaxError("RIN CONTAINER SQL: العملية '" + p.op + "' تُستعمل فقط في group:by|year|month|day(field) و agg:sum|avg|min|max|count|distinct|median(field) و page:of(P/S)");
+                               p.op == "day" || p.op == "of" || p.op == "to" || p.op == "left"))
+                throw SqlSyntaxError("RIN CONTAINER SQL: العملية '" + p.op + "' تُستعمل فقط في group:by|year|month|day(field) و agg:sum|avg|min|max|count|distinct|median(field) و page:of(P/S) و join:to|left(other/local/foreign)");
             q.predicates.push_back(std::move(p));
         }
     }
