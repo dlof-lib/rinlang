@@ -1,3 +1,7 @@
+# بناء APK موقَّع. التوقيع من GitHub Secrets: ANDROID_KEYSTORE_BASE64 / KEYSTORE_PASSWORD /
+# KEY_ALIAS / KEY_PASSWORD. لا يُحفَظ أي مفتاح أو كلمة مرور داخل المستودع.
+# بدون الأسرار يُولَّد مفتاح مؤقت لكل تشغيل (لا يصلح لتحديث تطبيق مثبَّت).
+
 name: Build Signed Release APK (Rin Lang - Auto Signing)
 
 # نسخة احترافية من بناء الـ APK: تُنتج ملف release *موقَّعاً* رقمياً (لا debug)، وتُولِّد أسرار
@@ -34,7 +38,7 @@ on:
         default: "RinLang-release"
 
 permissions:
-  contents: write   # لازمة فقط لحفظ ملفَي التوقيع داخل المستودع في أول تشغيل
+  contents: read
 
 jobs:
   build-signed-release:
@@ -82,58 +86,35 @@ jobs:
       - name: Grant execute permission (if wrapper is present)
         run: chmod +x ./gradlew || true
 
-      # يتحقّق أولاً هل ملفَا التوقيع موجودان أصلاً ضمن المستودع (من تشغيل سابق) — إن كانا
-      # موجودَين لا يُولَّد شيء جديد إطلاقاً. لا يُولَّد keystore جديد إلا في المرة الأولى
-      # على الإطلاق في تاريخ المستودع كله، بمفتاح RSA 4096-بت وكلمتَي مرور عشوائيتين (32 بايت
-      # لكل منها)، ولا تُطبع أيّ منها في السجلّ إطلاقاً.
-      - name: Generate the permanent signing keystore (only if it never existed)
-        id: keystore
+      # التوقيع من GitHub Secrets فقط — لا يُحفَظ أي مفتاح أو كلمة مرور داخل المستودع.
+      # بدون الأسرار يُولَّد مفتاح مؤقت لهذا التشغيل (لا يصلح للتحديث فوق إصدار سابق).
+      - name: Prepare signing key (from secrets, never committed)
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.KEYSTORE_PASSWORD }}
+          KS_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KS_KEYPASS: ${{ secrets.KEY_PASSWORD }}
         run: |
-          set -e
-          mkdir -p signing
-          if [ -f signing/release.keystore ] && [ -f signing/keystore-credentials.txt ]; then
-            echo "لا حاجة للتوليد — keystore دائم موجود مسبقاً من تشغيل سابق."
-            echo "generated=false" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          ks="$RUNNER_TEMP/release.keystore"
+          if [ -n "$KS_B64" ] && [ -n "$KS_PASS" ] && [ -n "$KS_ALIAS" ]; then
+            echo "$KS_B64" | base64 -d > "$ks"
+            store_pass="$KS_PASS"; key_pass="${KS_KEYPASS:-$KS_PASS}"; key_alias="$KS_ALIAS"
           else
-            STORE_PASS="$(openssl rand -base64 32 | tr -d '\n/+=' | cut -c1-40)"
-            # ملاحظة مهمة: نوع الـ keystore الافتراضي في JDK الحديث هو PKCS12، وهو لا يدعم كلمة
-            # مرور منفصلة للمفتاح عن كلمة مرور الـ store (keytool يتجاهل -keypass بصمت مع تحذير
-            # "Different store and key passwords not supported for PKCS12 KeyStores"). لذلك يجب
-            # أن تكون KEY_PASS مطابقة لـ STORE_PASS تماماً، وإلا يفشل التوقيع لاحقاً بخطأ
-            # "Given final block not properly padded" عند محاولة Gradle فك تشفير المفتاح
-            # بكلمة مرور مختلفة عن التي استُخدمت فعلياً في التشفير.
-            KEY_PASS="$STORE_PASS"
-            KEY_ALIAS="rinlang"
-
-            keytool -genkeypair -v \
-              -keystore signing/release.keystore \
-              -alias "$KEY_ALIAS" \
-              -keyalg RSA -keysize 4096 -validity 36500 \
-              -storepass "$STORE_PASS" -keypass "$KEY_PASS" \
-              -dname "CN=RinLang, OU=RinLang App, O=DLoF, L=NA, S=NA, C=SA"
-
-            {
-              echo "keystore_password=$STORE_PASS"
-              echo "key_alias=$KEY_ALIAS"
-              echo "key_password=$KEY_PASS"
-            } > signing/keystore-credentials.txt
-
-            echo "generated=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::أسرار التوقيع غير مضبوطة — سيُولَّد مفتاح مؤقت لهذا التشغيل فقط."
+            store_pass="$(openssl rand -hex 24)"; key_pass="$store_pass"; key_alias="rinlang"
+            keytool -genkeypair -keystore "$ks" -alias "$key_alias" \
+              -keyalg RSA -keysize 4096 -validity 3650 \
+              -storepass "$store_pass" -keypass "$key_pass" \
+              -dname "CN=RinLang, OU=RinLang App, O=DLoF, C=SA" > /dev/null 2>&1
           fi
-
-      # تُقرأ كلمات المرور من ملف signing/keystore-credentials.txt (سواء وُلِّد للتو أو كان
-      # محفوظاً مسبقاً في المستودع) وتُصدَّر كمتغيّرات بيئة لخطوة البناء، مع تقنيعها بالسجلّ.
-      - name: Load signing credentials into environment
-        run: |
-          set -e
-          source <(sed 's/^/export /' signing/keystore-credentials.txt)
-          echo "::add-mask::$keystore_password"
-          echo "::add-mask::$key_password"
+          echo "::add-mask::$store_pass"
+          echo "::add-mask::$key_pass"
           {
-            echo "RIN_KEYSTORE_PATH=$(pwd)/signing/release.keystore"
+            echo "RIN_KEYSTORE_PATH=$ks"
             echo "RIN_KEY_ALIAS=$key_alias"
-            echo "RIN_KEYSTORE_PASSWORD=$keystore_password"
-            echo "RIN_KEY_PASSWORD=$key_password"
+            echo "RIN_KEYSTORE_PASSWORD=$store_pass"
+            echo "RIN_KEY_PASSWORD=$key_pass"
           } >> "$GITHUB_ENV"
 
       - name: Build signed release APK
@@ -141,8 +122,10 @@ jobs:
 
       - name: Rename output APK
         id: rename
+        env:
+          PKG_NAME: ${{ github.event.inputs.package_name }}
         run: |
-          name="${{ github.event.inputs.package_name }}"
+          name="$PKG_NAME"
           if [ -z "$name" ]; then name="RinLang-release"; fi
           src=$(find app/build/outputs/apk/release -maxdepth 1 -name "*.apk" | head -n1)
           if [ -z "$src" ]; then
@@ -159,17 +142,3 @@ jobs:
           name: rin-lang-release-apk
           path: ${{ steps.rename.outputs.apk_path }}
           if-no-files-found: error
-
-      # يُحفَظ ملفَا التوقيع داخل المستودع نفسه (نفس الفرع) بـ commit *مرّة واحدة فقط* — أول
-      # تشغيل ناجح على الإطلاق. الوسم [skip ci] يمنع هذا الدفع من تشغيل الـ workflow من جديد.
-      # كل تشغيل تالٍ يجد signing/release.keystore موجوداً أصلاً عبر actions/checkout العادي،
-      # فلا حاجة لأي commit إضافي بعد ذلك — مصدر الحقيقة الدائم هو المستودع نفسه.
-      - name: Commit the permanent keystore to the repo (only the first time ever)
-        if: steps.keystore.outputs.generated == 'true'
-        run: |
-          set -e
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -f signing/release.keystore signing/keystore-credentials.txt
-          git commit -m "chore: store permanent auto-generated release signing keystore [skip ci]"
-          git push origin "HEAD:${{ github.ref_name }}"
