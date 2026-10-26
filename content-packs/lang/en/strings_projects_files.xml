@@ -167,7 +167,7 @@
     <string name="zip_tools_title">ZIP Archive</string>
     <string name="zip_upload_extract">Upload an archive and extract it here</string>
     <string name="zip_download_project">Download project as a ZIP archive</string>
-    <string name="zip_extracted_toast">Extracted %1$d file(s) into the project</string>
+    <string name="zip_extracted_toast">Extracted %1$d files into the project</string>
     <string name="zip_extract_error">Failed to extract the archive</string>
 
     <!-- New navigation button inside the editor (MainActivity) -->
