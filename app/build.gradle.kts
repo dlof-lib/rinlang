@@ -16,8 +16,8 @@ val rinVersionParts = rinVersionName.split("\\.")
 // versionCode = major*10000 + minor*100 + patch — يضمن تصاعداً رقمياً صحيحاً
 // عبر أي تسلسل SemVer صالح (patch/minor حتى 99)، كما يطلبه Play Store.
 val rinVersionCode = (rinVersionParts[0].toInt() * 10000) +
-                     (rinVersionParts[1].toInt() * 100) +
-                      rinVersionParts[2].toInt()
+                      (rinVersionParts[1].toInt() * 100) +
+                       rinVersionParts[2].toInt()
 
 // ---- تقليص حجم التطبيق ---------------------------------------------------------------------
 // خصائص gradle (gradle.properties أو -P): rin.minify=false يعطّل R8/shrinkResources في release،
@@ -71,7 +71,10 @@ android {
     externalNativeBuild {
         cmake {
             path = File("src/main/cpp/CMakeLists.txt")
-            version = "3.22.1"
+            // CMake 3.22.x لا يفهم metadata XML من Android SDK الحديثة (version 4)،
+            // لذلك نرفعها إلى إصدار حديث يدعم هذه البنية. هذا يتوافق مع سير العمل
+            // في GitHub Actions ويمنع فشل buildCMakeRelWithDebInfo على runners الجديدة.
+            version = "3.31.5"
         }
     }
 
