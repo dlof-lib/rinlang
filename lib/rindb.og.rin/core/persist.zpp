@@ -72,8 +72,8 @@ fun rdb__checkpoint(db) {
     push(full, rdb__line({"o": "E"}));
     let tmp = db["path"] + ".tmp";
     rdb__writeLines(tmp, full);          // 1) لقطة كاملة منتهية بعلامة E
-    rdb__writeLines(db["path"], lines);  // 2) تحلّ محل الملف
-    deleteFile(tmp);                     // 3) تنظيف
+    if (db["sync"] != "off") { fileSync(tmp); }   // 2) تُفرَّغ إلى القرص فعلاً (fsync)
+    fileRename(tmp, db["path"]);         // 3) استبدال ذرّي للملف (rename) — لا حالة نصف مكتوبة
     db["wal"] = 0;
     db["checkpoints"] = db["checkpoints"] + 1;
     return true;
@@ -84,6 +84,7 @@ fun rdb__log(db, op) {
     if (db["path"] == nil) { return nil; }
     if (db["tx"] != nil) { push(db["tx"], op); return nil; }
     appendFile(db["path"], rdb__line(op) + "\n");
+    if (db["sync"] == "always") { fileSync(db["path"]); }
     db["wal"] = db["wal"] + 1;
     db["records"] = db["records"] + 1;
     if (db["autoCheckpoint"] > 0 and db["wal"] >= db["autoCheckpoint"]) { rdb__checkpoint(db); }
@@ -93,8 +94,9 @@ fun rdb__log(db, op) {
 fun rdb__newDb(name, path, opts) {
     if (!rdb__validName(name)) { rdb__fail("invalid database name `" + toString(name) + "` (letters, digits, _)"); }
     if (has(RDB["dbs"], name)) { rdb__fail("database `" + name + "` is already open"); }
-    return {"name": name, "path": path, "tables": {}, "seq": {}, "tx": nil, "open": true,
+    return {"name": name, "path": path, "tables": {}, "seq": {}, "tx": nil, "txStack": [], "open": true,
             "readonly": rdb__opt(opts, "readonly", false), "wal": 0, "records": 0, "checkpoints": 0,
+            "sync": rdb__opt(opts, "sync", "commit"), "lockPath": nil,
             "autoCheckpoint": rdb__opt(opts, "autoCheckpoint", 5000)};
 }
 
@@ -109,10 +111,26 @@ fun rdb__dropTables(db) {
     db["seq"] = {};
 }
 
-// يفتح قاعدة (opts: readonly, recover, autoCheckpoint). path = nil → في الذاكرة.
+fun rdb__unlock(db) {
+    if (db["lockPath"] != nil) { fileUnlock(db["lockPath"]); db["lockPath"] = nil; }
+}
+
+// يفتح قاعدة. opts: readonly, recover, autoCheckpoint, sync ("commit" افتراضي: fsync عند commit/checkpoint،
+// "always": بعد كل سجل، "off": بلا fsync). الفتح للكتابة يأخذ قفلاً حصرياً على path.lock (عملية واحدة فقط).
 fun rdb_openWith(name, path, opts) {
     let db = rdb__newDb(name, path, opts);
     if (path == nil) { rdb__register(db); return db; }
+    let sm = db["sync"];
+    if (sm != "commit" and sm != "always" and sm != "off") { rdb__fail("sync must be \"commit\", \"always\" or \"off\""); }
+    if (!db["readonly"]) {
+        if (!fileLock(path + ".lock")) { rdb__fail("database `" + path + "` is in use by another process (locked)"); }
+        db["lockPath"] = path + ".lock";
+    }
+    try { return rdb__openFile(db, name, path, opts); }
+    catch (e) { rdb__unlock(db); throw e["message"]; }
+}
+
+fun rdb__openFile(db, name, path, opts) {
     let recover = rdb__opt(opts, "recover", false);
     let tmp = path + ".tmp";
     // لقطة كاملة بقيت من نقطة تفتيش انقطعت: هي الأحدث
