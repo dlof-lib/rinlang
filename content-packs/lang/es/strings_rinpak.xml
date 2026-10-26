@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Cadenas en español. -->
+<resources>
+    <string name="rinpak_export_dialog_title">Exportar paquete RinPak</string>
+    <string name="rinpak_field_version">Versión (p. ej., 1.0.0)</string>
+    <string name="rinpak_field_author">Autor</string>
+    <string name="rinpak_field_description">Descripción breve</string>
+    <string name="rinpak_field_license">Licencia (p. ej., MIT)</string>
+    <string name="rinpak_export_share">Compartir</string>
+    <string name="rinpak_export_save">Guardar en Descargas</string>
+    <string name="rinpak_share_chooser">Compartir paquete del proyecto</string>
+    <string name="rinpak_preview_continue">Continuar…</string>
+    <string name="rinpak_preview_verify">Solo verificar</string>
+    <string name="rinpak_warning_title">⚠ Advertencia — paquete sospechoso</string>
+    <string name="rinpak_choice_import_new">Importar como proyecto nuevo</string>
+    <string name="rinpak_choice_replace">Reemplazar el proyecto existente “%1$s”</string>
+    <string name="rinpak_choice_replace_confirm">Reemplazar</string>
+    <string name="rinpak_choice_import_trust">Importar y confiar en este editor</string>
+    <string name="rinpak_replace_warning">El contenido del proyecto “%1$s” será reemplazado por completo por el del paquete. Esta acción no se puede deshacer. ¿Continuar?</string>
+    <string name="rinpak_verify_ok">El paquete está íntegro: %1$d archivos — todos los hashes SHA-256 coinciden y la firma (si la hay) es válida.</string>
+    <string name="rinpak_verify_fail">El paquete no está íntegro</string>
+    <string name="rinpak_verify_legacy">El formato antiguo (.rinproj) no incluye hashes de integridad; su contenido solo se comprueba durante la importación.</string>
+    <string name="rinpak_trust_unsigned">⚠ Sin firmar — no se puede verificar la identidad del creador</string>
+    <string name="rinpak_trust_own">🔏 Tu propio paquete — firmado con la clave de este dispositivo (%1$s)</string>
+    <string name="rinpak_trust_trusted">✅ Editor de confianza%1$s — clave %2$s</string>
+    <string name="rinpak_trust_known">🔏 Firmado con la misma clave con la que importaste este paquete antes (%1$s)</string>
+    <string name="rinpak_trust_new">🔏 Firmado con una clave nueva que no habías visto (%1$s) — la firma es válida, pero no demuestra la identidad del editor</string>
+    <string name="rinpak_trust_changed">⛔ Advertencia: la clave de firma (%1$s) difiere de la clave de un paquete con el mismo nombre que importaste antes (%2$s). Podría ser una suplantación — continúa solo si confías en el origen.</string>
+    <string name="rinpak_trust_removed">⛔ Advertencia: un paquete con el mismo nombre que importaste antes estaba firmado (%1$s), pero este no lo está. Es posible que la firma se haya eliminado a propósito.</string>
+    <string name="rinpak_launcher_label">RinPak</string>
+    <string name="rinpak_open_label">Abrir con Rin</string>
+    <string name="rinpak_info_id">ID: %s</string>
+    <string name="rinpak_fingerprint">Huella: %s</string>
+    <string name="rinpak_find_native">⛔ Contiene código nativo: %s</string>
+    <string name="rinpak_find_bidi">⛔ Nombre de archivo camuflado con trucos de dirección del texto: %s</string>
+    <string name="rinpak_find_package">⚠ Contiene paquetes de aplicación/Jar: %s</string>
+    <string name="rinpak_find_script">⚠ Contiene scripts de shell: %s</string>
+    <string name="rinpak_find_perms">⚠ Solicita permisos sensibles: %s</string>
+    <string name="rinpak_find_newer">⛔ Requiere Rin %s o posterior — actualiza primero la aplicación</string>
+    <string name="rinpak_risk_confirm_title">Paquete de alto riesgo</string>
+    <string name="rinpak_risk_confirm_message">Este paquete contiene elementos que podrían ser dañinos. Impórtalo solo si confías plenamente en su origen. ¿Continuar?</string>
+    <string name="rinpak_risk_confirm_yes">Importar bajo mi responsabilidad</string>
+</resources>
