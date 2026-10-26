@@ -1,7 +1,195 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-  This file is intentionally left empty.
-  The same resource names are already defined in the main strings XML files for each locale,
-  and keeping a second copy here caused duplicate resource merge failures during the Android build.
--->
-<resources />
+<!-- نصوص شاشتي "المشاريع" و"الملفات" (العربية — الافتراضية). action_duplicate معرَّفة في strings.xml. -->
+<resources>
+    <!-- أزرار عامة تستخدمها حوارات المشاريع/الملفات -->
+    <string name="create">إنشاء</string>
+    <string name="cancel">إلغاء</string>
+    <string name="rename">إعادة تسمية</string>
+    <string name="delete">حذف</string>
+
+    <!-- الشريط العلوي الموحد للشاشات الفرعية -->
+    <string name="action_back">رجوع</string>
+    <string name="projects_screen_title">المشاريع</string>
+    <string name="files_screen_title">الملفات</string>
+
+    <!-- شاشة المشاريع -->
+    <string name="new_project_title">مشروع جديد</string>
+    <string name="rename_project_title">إعادة تسمية المشروع</string>
+    <string name="delete_project_title">حذف المشروع</string>
+    <string name="delete_project_confirm">هل تريد حذف المشروع \"%1$s\" وكل ملفاته؟</string>
+    <string name="project_name_hint">اسم المشروع</string>
+    <string name="no_projects_yet">لا توجد مشاريع بعد. اضغط + لإنشاء أول مشروع.</string>
+    <string name="no_projects_hint">أنشئ أول مشروع بزر + في الأسفل</string>
+    <string name="projects_screen_heading">المشاريع</string>
+    <string name="projects_count_zero">لا توجد مشاريع</string>
+    <string name="projects_count_format">%1$d مشاريع</string>
+    <string name="search_projects_hint">ابحث في المشاريع</string>
+    <string name="open_project_action">فتح المشروع</string>
+    <string name="project_more_actions">خيارات المشروع</string>
+    <string name="project_not_found">المشروع غير موجود</string>
+    <string name="no_search_results">لا توجد مشاريع مطابقة</string>
+    <string name="project_meta_format">%1$d ملفات</string>
+    <string name="project_meta_with_time_format">%1$d ملفات • %2$s</string>
+    <string name="import_project_action">استيراد مشروع</string>
+    <string name="sort_projects_action">ترتيب المشاريع</string>
+    <string name="projects_sort_recent">الأحدث تعديلاً</string>
+    <string name="projects_sort_name">الاسم</string>
+    <string name="projects_sort_type">النوع</string>
+
+    <!-- أنواع المشاريع (تُختار عند الإنشاء وتُحفظ في project.og.urin) -->
+    <string name="project_type_label">اختر النوع</string>
+    <string name="project_type_container">حاوية</string>
+    <string name="project_type_table">جدول</string>
+    <string name="project_type_ui">واجهة</string>
+    <string name="project_type_free">مشروع حر</string>
+    <string name="project_type_container_desc">بيانات حية داخل حاوية</string>
+    <string name="project_type_table_desc">صفوف وأعمدة</string>
+    <string name="project_type_ui_desc">شاشات وعناصر عرض</string>
+    <string name="project_type_free_desc">ملف كود فارغ</string>
+    <string name="project_type_illust">Illust</string>
+    <string name="project_type_illust_desc">لغة رسم/SVG جاهزة فوق Rin</string>
+    <string name="project_type_html">HTML + Rin</string>
+    <string name="project_type_html_desc">واجهة HTML بمنطق Rin</string>
+    <string name="project_type_html_js">HTML + JS</string>
+    <string name="project_type_html_js_desc">واجهة HTML بمنطق JavaScript</string>
+    <string name="create_section_web">الويب</string>
+    <string name="create_section_rin">مشاريع Rin</string>
+    <string name="create_local_preview_hint">بعد الإنشاء، عاين مشاريع HTML وRin في متصفحك على http://localhost:7700/</string>
+    <string name="html_run_open_browser">فتح في المتصفح (localhost:7700)</string>
+    <string name="local_server_started">الخادم المحلي يعمل على %1$s</string>
+    <string name="local_server_failed">تعذّر تشغيل الخادم المحلي (المنافذ 7700–7710 مشغولة)</string>
+    <string name="menu_run_open_localhost">فتح على localhost:7700</string>
+    <string name="html_run_title">تشغيل HTML — %1$s</string>
+    <string name="html_run_reload">إعادة تحميل</string>
+    <string name="html_run_close">إغلاق</string>
+    <string name="html_run_no_logic">لا يوجد ملف منطق Rin: أضف container.rin أو سمِّ ملفاً بالوسم &lt;link rel=\"rin\" href=\"app.rin\"&gt; في index.html.</string>
+    <string name="html_run_state_cleared">تم مسح الحالة المحفوظة</string>
+    <string name="html_run_no_index">لا يحتوي هذا المشروع على index.html.</string>
+    <string name="html_run_rin_error">تعذّر تشغيل container.rin: %1$s</string>
+
+    <string name="indsin_template_label">قالب indsin جاهز (اختياري)</string>
+    <string name="indsin_template_calculator">آلة حاسبة</string>
+    <string name="indsin_template_blog">مدونة</string>
+    <string name="indsin_template_buttons">أزرار</string>
+    <string name="indsin_template_gallery">معرض صور</string>
+    <string name="indsin_template_webview">WebView</string>
+
+    <!-- خيارات "ارسم الواجهة" في حوار مشروع الواجهة الجديد -->
+    <string name="ui_design_section_title">ارسم الواجهة</string>
+    <string name="ui_design_section_desc">اختر عناصر الشاشة الرئيسية قبل إنشاء المشروع</string>
+    <string name="ui_design_topbar_label">الشريط العلوي</string>
+    <string name="ui_design_topbar_desc">شريط عنوان ثابت أعلى الشاشة</string>
+    <string name="ui_design_sidebar_label">الشريط الجانبي</string>
+    <string name="ui_design_sidebar_desc">قائمة تنقل جانبية بعناصرها</string>
+    <string name="ui_design_colors_label">الألوان</string>
+    <string name="color_picker_title">اختر لوناً</string>
+    <string name="color_picker_custom_desc">إضافة لون جديد</string>
+    <string name="color_picker_edit_desc">لون مخصص — اضغط مطولاً للإزالة</string>
+    <string name="color_picker_back">تطبيق</string>
+    <string name="color_removed_toast">تمت إزالة اللون</string>
+
+    <!-- قسم "خيارات الحاوية" -->
+    <string name="container_options_section_title">خيارات الحاوية</string>
+    <string name="container_options_section_desc">اسم المتغير الحي الأولي داخل الحاوية وقيمته الابتدائية</string>
+    <string name="container_var_name_label">اسم المتغير</string>
+    <string name="container_var_value_label">القيمة الابتدائية</string>
+
+    <!-- قسم "خيارات الجدول" -->
+    <string name="table_options_section_title">خيارات الجدول</string>
+    <string name="table_options_section_desc">عدد الأعمدة وعدد صفوف البيانات التجريبية عند الإنشاء</string>
+    <string name="table_columns_label">الأعمدة</string>
+    <string name="table_rows_label">الصفوف</string>
+
+    <!-- قسم "خيارات المشروع الحر" -->
+    <string name="free_options_section_title">خيارات المشروع</string>
+    <string name="free_options_section_desc">اختر شكل main.rin عند الإنشاء</string>
+    <string name="free_template_empty">فارغ تماماً</string>
+    <string name="free_template_greeting">تعليق ترحيبي</string>
+    <string name="free_template_example">أمثلة تعليمية</string>
+
+    <!-- قسم "خيارات الرسم" في مشروع Illust -->
+    <string name="illust_options_section_title">خيارات الرسم</string>
+    <string name="illust_options_section_desc">ابدأ بمثال جاهز أو بلوحة فارغة</string>
+    <string name="illust_include_example_label">تضمين مثال جاهز</string>
+    <string name="illust_include_example_desc">ملف hello.illust يشرح أساسيات اللغة</string>
+
+    <!-- مراحل إنشاء المشروع -->
+    <string name="project_creating_title">جارٍ إنشاء المشروع</string>
+    <string name="project_stage_loading">جارٍ التحميل..</string>
+    <string name="project_stage_preparing">جارٍ التحضير..</string>
+    <string name="project_stage_done">تم..</string>
+
+    <!-- شاشة الملفات -->
+    <string name="new_file_title">ملف جديد</string>
+    <string name="upload_file">رفع ملف</string>
+    <string name="upload_media">رفع وسائط</string>
+    <string name="delete_file_title">حذف الملف</string>
+    <string name="delete_file_confirm">هل تريد حذف الملف \"%1$s\"؟</string>
+    <string name="file_name_hint">اسم الملف (مثال: main.rin أو layout.indsin)</string>
+    <string name="no_files_yet">لا توجد ملفات بعد. أنشئ ملفاً جديداً أو ارفع ملفاً أو وسائط من جهازك.</string>
+    <string name="file_uploaded_toast">تم رفع الملف: %1$s</string>
+    <string name="file_meta_format">%1$s • %2$s</string>
+    <string name="no_app_to_open_file">لا يوجد تطبيق مثبّت يستطيع فتح هذا النوع من الملفات</string>
+    <string name="more_actions">المزيد</string>
+    <string name="action_move">نقل إلى...</string>
+    <string name="action_copy_path">نسخ المسار</string>
+    <string name="file_duplicated_toast">تم إنشاء نسخة: %1$s</string>
+    <string name="path_copied_toast">تم نسخ المسار</string>
+    <string name="move_dialog_title">نقل \"%1$s\" إلى مجلد</string>
+    <string name="move_root_option">(جذر المشروع)</string>
+    <string name="move_no_folders">لا توجد مجلدات أخرى لنقل الملف إليها بعد</string>
+    <string name="file_moved_toast">تم النقل إلى: %1$s</string>
+    <string name="search_files_hint">🔍 ابحث في ملفات المشروع...</string>
+    <string name="search_no_results">لا توجد نتائج مطابقة</string>
+    <string name="search_result_meta_format">%1$s</string>
+
+    <!-- المجلدات الفرعية وإعادة التسمية -->
+    <string name="new_folder_title">مجلد جديد</string>
+    <string name="folder_name_hint">اسم المجلد</string>
+    <string name="folder_meta_format">مجلد • %1$s</string>
+    <string name="delete_folder_title">حذف المجلد</string>
+    <string name="delete_folder_confirm">هل تريد حذف المجلد \"%1$s\" وكل ما بداخله؟</string>
+    <string name="rename_file_title">إعادة تسمية الملف</string>
+    <string name="rename_folder_title">إعادة تسمية المجلد</string>
+    <string name="rename_library_title">إعادة تسمية المكتبة</string>
+    <string name="file_renamed_toast">تمت إعادة التسمية إلى: %1$s</string>
+    <string name="folder_renamed_toast">تمت إعادة التسمية إلى: %1$s</string>
+    <string name="library_renamed_toast">تمت إعادة التسمية إلى: %1$s</string>
+
+    <!-- أدوات أرشيف ZIP -->
+    <string name="zip_tools_title">أرشيف ZIP</string>
+    <string name="zip_upload_extract">ارفع أرشيفاً وفُكّ ضغطه هنا</string>
+    <string name="zip_download_project">تنزيل المشروع كأرشيف ZIP</string>
+    <string name="zip_extracted_toast">تم فك %1$d ملفات داخل المشروع</string>
+    <string name="zip_extract_error">فشل فك ضغط الأرشيف</string>
+
+    <!-- زر تنقل جديد داخل المحرر (MainActivity) -->
+    <string name="btn_projects">المشاريع</string>
+
+    <!-- ألبومات المشاريع (ProjectAlbumManager / ProjectsActivity) -->
+    <string name="album_new">ألبوم جديد</string>
+    <string name="album_name_hint">اسم الألبوم</string>
+    <string name="album_created">تم إنشاء الألبوم</string>
+    <string name="album_create_first">أنشئ ألبوماً أولاً</string>
+    <string name="album_uncategorized">غير مصنّف</string>
+    <string name="album_empty">لا توجد مشاريع في هذا الألبوم</string>
+
+    <string name="ui_design_more_options">خيارات الواجهة المتقدمة</string>
+    <string name="ui_design_bottom_nav">شريط التنقل السفلي</string>
+    <string name="ui_design_button_style">نمط الأزرار</string>
+    <string name="ui_design_button_filled">ممتلئ</string>
+    <string name="ui_design_button_soft">ناعم</string>
+    <string name="ui_design_button_outline">محدد بإطار</string>
+    <string name="ui_design_font">الخط</string>
+    <string name="ui_design_typography">حجم النص</string>
+    <string name="ui_design_radius">استدارة الزوايا</string>
+    <string name="ui_design_background">لون الخلفية</string>
+    <string name="ui_design_text_color">لون النص</string>
+    <string name="ui_design_preview">معاينة حية</string>
+    <string-array name="ui_font_names"><item>Sans</item><item>Serif</item><item>Monospace</item></string-array>
+    <string-array name="ui_font_values"><item>sans</item><item>serif</item><item>mono</item></string-array>
+    <string-array name="ui_typography_names"><item>صغير</item><item>متوسط</item><item>كبير</item></string-array>
+    <string-array name="ui_typography_values"><item>small</item><item>medium</item><item>large</item></string-array>
+    <string-array name="ui_radius_names"><item>0</item><item>10</item><item>14</item><item>22</item><item>30</item></string-array>
+    <integer-array name="ui_radius_values"><item>0</item><item>10</item><item>14</item><item>22</item><item>30</item></integer-array>
+</resources>
