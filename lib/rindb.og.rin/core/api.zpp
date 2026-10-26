@@ -5,6 +5,7 @@ fun rdb_close(db) {
     if (db["tx"] != nil) { rdb__fail("close is not allowed inside a transaction"); }
     if (db["path"] != nil and !db["readonly"] and db["wal"] > 0) { rdb__checkpoint(db); }
     rdb__dropTables(db);
+    rdb__unlock(db);
     db["open"] = false;
     remove(RDB["dbs"], db["name"]);
     RinDB.catalog.openCount = len(keys(RDB["dbs"]));
@@ -31,6 +32,7 @@ fun rdb_dropDatabase(db, confirm) {
     db["wal"] = 0;
     rdb_close(db);
     if (path != nil and fileExists(path)) { deleteFile(path); }
+    if (path != nil and fileExists(path + ".lock")) { deleteFile(path + ".lock"); }
     return true;
 }
 
@@ -39,7 +41,7 @@ fun rdb_info(db) {
     for (let t in keys(db["tables"])) { docs = docs + len(docIds(rdb__key(db, t))); }
     return {"name": db["name"], "path": db["path"], "persistent": db["path"] != nil, "readonly": db["readonly"],
             "tables": len(keys(db["tables"])), "documents": docs, "records": db["records"],
-            "checkpoints": db["checkpoints"], "inTransaction": db["tx"] != nil};
+            "checkpoints": db["checkpoints"], "sync": db["sync"], "locked": db["lockPath"] != nil, "inTransaction": db["tx"] != nil, "txDepth": len(db["txStack"])};
 }
 
 fun rdb_list() { return keys(RDB["dbs"]); }
@@ -194,6 +196,9 @@ fun rdb_find(db, t, field, value) {
     return out;
 }
 
+// مستندات حقلها ضمن [lo, hi] مرتّبة تصاعدياً (nil = حدّ مفتوح): أرقام أو نصوص/تواريخ ISO (مسح مرتّب بالدالة findByRange)
+fun rdb_findRange(db, t, field, lo, hi) { return findByRange(rdb__table(db, t), field, lo, hi); }
+
 fun rdb_truncate(db, t) {
     let n = 0;
     for (let id in rdb_ids(db, t)) { rdb_delete(db, t, id); n = n + 1; }
@@ -227,23 +232,38 @@ fun rdb_queryOne(db, q) { return rdb__dedupe(sqlOne(rdb__sql(db, q))); }
 fun rdb_queryIds(db, q) { return sqlIds(rdb__sql(db, q)); }
 
 // ---- معاملات --------------------------------------------------------------------------
+// معاملات متداخلة: كل begin لقطة جديدة (beginTransaction في اللغة تدعم التداخل). commit الداخلية تدمج سجلها في الأب،
+// وrollback الداخلية تتراجع إلى لحظة begin الخاصة بها فقط. الكتابة في الملف مرة واحدة عند commit الخارجية.
+fun rdb__topOps(db) {
+    let st = db["txStack"];
+    if (len(st) == 0) { return nil; }
+    return st[len(st) - 1]["ops"];
+}
+
 fun rdb_begin(db) {
     if (!db["open"]) { rdb__fail("database `" + db["name"] + "` is closed"); }
-    if (db["tx"] != nil) { rdb__fail("a transaction is already open (nested transactions are not supported)"); }
     beginTransaction();
-    db["tx"] = [];
-    db["txSeq"] = rdb__copyMap(db["seq"]);
+    push(db["txStack"], {"ops": [], "seq": rdb__copyMap(db["seq"])});
+    db["tx"] = rdb__topOps(db);
     return true;
 }
 
+fun rdb_depth(db) { return len(db["txStack"]); }
+
 fun rdb_commit(db) {
-    if (db["tx"] == nil) { rdb__fail("no open transaction"); }
-    let ops = db["tx"];
-    db["tx"] = nil;
+    if (len(db["txStack"]) == 0) { rdb__fail("no open transaction"); }
+    let top = pop(db["txStack"]);
     commitTransaction();
+    db["tx"] = rdb__topOps(db);
+    if (db["tx"] != nil) {                       // داخلية: ادمج في الأب
+        for (let op in top["ops"]) { push(db["tx"], op); }
+        return true;
+    }
+    let ops = top["ops"];
     if (db["path"] != nil and len(ops) > 0) {
         let rec = {"o": "B", "ops": ops};
         appendFile(db["path"], rdb__line(rec) + "\n");   // سطر واحد = ذرّية الدفعة كلها
+        if (db["sync"] != "off") { fileSync(db["path"]); }  // المعاملة المُلتزَمة تصير دائمة على القرص
         db["wal"] = db["wal"] + 1;
         db["records"] = db["records"] + 1;
         if (db["autoCheckpoint"] > 0 and db["wal"] >= db["autoCheckpoint"]) { rdb__checkpoint(db); }
@@ -252,10 +272,11 @@ fun rdb_commit(db) {
 }
 
 fun rdb_rollback(db) {
-    if (db["tx"] == nil) { rdb__fail("no open transaction"); }
-    db["tx"] = nil;
+    if (len(db["txStack"]) == 0) { rdb__fail("no open transaction"); }
+    let top = pop(db["txStack"]);
     rollbackTransaction();
-    db["seq"] = db["txSeq"];
+    db["seq"] = top["seq"];
+    db["tx"] = rdb__topOps(db);
     return true;
 }
 
