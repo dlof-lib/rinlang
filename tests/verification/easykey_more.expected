@@ -1,0 +1,17 @@
+📚 Volume = Store
+🗂️ Containers.Group = Shop
+📦 container = app
+✅ .end/container (app)
+✅ .end/Containers.Group (Shop) [تحتوي: app]
+✅ .end/Volume (Store) [تحتوي: Shop]
+📚 Volume = Other
+🗂️ Containers.Group = Shop
+📦 container = app
+✅ .end/container (app)
+✅ .end/Containers.Group (Shop) [تحتوي: app]
+✅ .end/Volume (Other) [تحتوي: Other.Shop]
+paths: store-shop-app | other-shop-app
+by key: store-shop-app | store-shop-app | store-shop-app
+natives by key: ["app"] ["Shop"]
+container.get by key: store-shop-app
+same-named group no longer clobbers: ["app"] / ["Other.Shop.app"]
