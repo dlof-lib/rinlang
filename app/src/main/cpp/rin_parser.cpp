@@ -4333,10 +4333,10 @@ StmtPtr lIf(ExprPtr c, StmtPtr t, StmtPtr e, int line) { auto s = std::make_shar
 std::shared_ptr<BlockStmt> lBlock(std::vector<StmtPtr> v, int line) { auto b = std::make_shared<BlockStmt>(); b->statements = std::move(v); b->line = line; return b; }
 StmtPtr lThrow(ExprPtr e, int line) { auto s = std::make_shared<ThrowStmt>(); s->value = e; s->line = line; return s; }
 ExprPtr lUnaryNot(ExprPtr e, int line) { auto n = std::make_shared<UnaryExpr>(); n->op = TokenType::BANG; n->right = e; n->line = line; return n; }
-std::shared_ptr<LogicalExpr> lLogicalAnd(ExprPtr a, ExprPtr b) { auto l = std::make_shared<LogicalExpr>(); l->left = a; l->op = TokenType::AND; l->right = b; l->line = a->line; return l; }
+[[maybe_unused]] std::shared_ptr<LogicalExpr> lLogicalAnd(ExprPtr a, ExprPtr b) { auto l = std::make_shared<LogicalExpr>(); l->left = a; l->op = TokenType::AND; l->right = b; l->line = a->line; return l; }
 StmtPtr lBreak(int line) { auto s = std::make_shared<BreakStmt>(); s->line = line; return s; }
 StmtPtr lContinue(int line) { auto s = std::make_shared<ContinueStmt>(); s->line = line; return s; }
-StmtPtr asBlock(StmtPtr s, int line) {
+[[maybe_unused]] StmtPtr asBlock(StmtPtr s, int line) {
     if (s && s->stmtKind == StmtKind::BlockStmt) return s;
     std::vector<StmtPtr> v; if (s) v.push_back(s);
     return lBlock(std::move(v), line);
