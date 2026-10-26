@@ -30,4 +30,27 @@
     <!-- Editor messages after returning from the Libraries screen -->
     <string name="library_import_inserted_toast">@import line inserted at cursor position</string>
     <string name="libraries_need_project_toast">Open a project first so your libraries are saved inside it and @import works</string>
+    <string name="libs_filter_all">All</string>
+    <string name="libs_filter_ui">UI</string>
+    <string name="libs_filter_data">Data</string>
+    <string name="libs_filter_language">Languages &amp; tools</string>
+    <string name="libs_filter_games">Games &amp; physics</string>
+    <string name="libs_filter_system">System &amp; security</string>
+    <string name="libs_search_hint">Search libraries…</string>
+    <string name="libs_clear_search">Clear search</string>
+    <string name="libs_no_results">No library matches your search</string>
+    <string name="libs_builtin_count_format">%1$d libraries</string>
+    <string name="libs_featured_badge">New</string>
+    <string name="libs_featured_title">Icon library</string>
+    <string name="libs_featured_subtitle_format">%1$d vector icons on a 24×24 grid, with search and aliases</string>
+    <string name="libs_icons_open">Browse icons</string>
+    <string name="icons_screen_title">indsin icons</string>
+    <string name="icons_search_hint">Search: home, arrow, file…</string>
+    <string name="icons_count_format">%1$d icons</string>
+    <string name="icons_empty">No icon with that name</string>
+    <string name="icons_aliases_format">Also accepts: %1$s</string>
+    <string name="icons_action_insert">Insert into code</string>
+    <string name="icons_action_copy_name">Copy name</string>
+    <string name="icons_name_copied">Name copied: %1$s</string>
+    <string name="icons_close">Close</string>
 </resources>
