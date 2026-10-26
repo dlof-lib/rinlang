@@ -80,4 +80,12 @@
 <string name="settings_language_current">English 🇺🇸</string><string name="language_picker_title">Choose language</string><string name="language_picker_subtitle">Choose a language and country</string><string name="language_picker_search">Search a language or country…</string><string name="language_picker_applied">Applied %1$s</string><string name="language_group_arabic">Arabic • Arab countries</string><string name="language_group_english">English • English-speaking countries</string><string name="language_group_spanish">Español • Spanish-speaking countries</string>
     <string name="settings_container_style">Container block style</string>
     <string name="settings_container_style_hint">Draw a thin colored guide line and color the opening and closing tags per container type.</string>
+    <string name="language_picker_current">Current language</string>
+    <string name="language_filter_all">All</string>
+    <string name="language_status_builtin">Built-in</string>
+    <string name="language_status_installed">Installed</string>
+    <string name="language_status_download">Download</string>
+    <string name="language_picker_empty">No languages match your search</string>
+    <string name="language_picker_count_format">%1$d countries</string>
+    <string name="language_search_clear">Clear search</string>
 </resources>
