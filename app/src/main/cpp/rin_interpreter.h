@@ -1032,7 +1032,13 @@ private:
     std::unordered_map<std::string, std::string> easyKeys;           // مفتاح مكتوب -> المفتاح الداخلي
     std::unordered_map<std::string, std::string> easyKeyOfContainer; // المفتاح الداخلي -> المفتاح المكتوب
     std::unordered_map<std::string, std::string> containerPathOf;    // المفتاح الداخلي -> مسار فضاء الأسماء
+    std::unordered_map<std::string, std::string> easyGroupKeys;      // مفتاح مكتوب -> مفتاح المجموعة الداخلي
+    std::unordered_map<std::string, std::string> easyVolumeKeys;     // مفتاح مكتوب -> مفتاح الحجم الداخلي
+    std::unordered_map<std::string, std::string> groupPathOf, volumePathOf; // المفتاح الداخلي -> المسار
     std::string canonContainer(const std::string& n) const;          // اسم/مفتاح مكتوب/مسار -> المفتاح الداخلي
+    std::string canonGroup(const std::string& n) const;
+    std::string canonVolume(const std::string& n) const;
+    bool easyKeyTaken(const std::string& key, const std::string& kind, const std::string& internal) const;
     std::vector<std::shared_ptr<NsNode>> nsStack;                         // namespaces open at definition time
     std::shared_ptr<NsNode> nsOpen(NsNode::Kind kind, const std::string& name, const std::string& key, const EnvPtr& env);
     struct NsScope { Interpreter* in; bool active; NsScope(Interpreter* i, std::shared_ptr<NsNode> n); ~NsScope(); };
@@ -1314,6 +1320,7 @@ private:
     void registerNativesExtra7(); // rin_extra_natives7.cpp — مفهوم time (docs/TIME.md)
     void registerNativesExtra8(); // rin_extra_natives8.cpp — مفهوم token: tokenList/tokenStats/tokenAt/... (docs/TOKEN.md)
     void registerNativesExtra10(); // rin_extra_natives10.cpp — مفهوم linalg: mat*/vec* للجبر الخطي (docs/LINALG.md)
+    void registerNativesExtra12(); // rin_extra_natives12.cpp — fileSync/fileLock/fileRename/fileSize/findByRange (docs/FILEDB.md)
     void registerNativesExtra11(); // rin_extra_natives11.cpp — مفهوم algo: algo* لتطوير الخوارزميات والحساب العددي (docs/ALGO.md)
     void registerNativesExtra9(); // rin_extra_natives9.cpp — مفهوم number: number/numberRound/numberFormat/... (docs/NUMBER.md)
     void registerNativesImageDraw(); // rin_image_draw.cpp — imgNew/imgLine/imgText/imgSave/imgFromLog…: إنشاء صور ورسمها وحفظها PNG (docs/image-draw.md)
