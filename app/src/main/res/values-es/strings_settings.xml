@@ -80,4 +80,12 @@
 <string name="settings_language_current">Español 🇪🇸</string><string name="language_picker_title">Elegir idioma</string><string name="language_picker_subtitle">Elige idioma y país</string><string name="language_picker_search">Buscar idioma o país…</string><string name="language_picker_applied">Aplicado: %1$s</string><string name="language_group_arabic">العربية • Países árabes</string><string name="language_group_english">English • Países anglófonos</string><string name="language_group_spanish">Español • Países hispanohablantes</string>
     <string name="settings_container_style">Estilo de bloques contenedor</string>
     <string name="settings_container_style_hint">Dibuja una línea guía fina y colorea las etiquetas de apertura y cierre según el tipo de contenedor.</string>
+    <string name="language_picker_current">Idioma actual</string>
+    <string name="language_filter_all">Todos</string>
+    <string name="language_status_builtin">Integrado</string>
+    <string name="language_status_installed">Instalado</string>
+    <string name="language_status_download">Descargar</string>
+    <string name="language_picker_empty">Ningún idioma coincide con tu búsqueda</string>
+    <string name="language_picker_count_format">%1$d países</string>
+    <string name="language_search_clear">Borrar búsqueda</string>
 </resources>
