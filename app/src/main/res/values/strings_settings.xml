@@ -85,4 +85,12 @@
 <string name="settings_language_current">العربية 🇸🇾</string><string name="language_picker_title">اختيار اللغة</string><string name="language_picker_subtitle">اختر لغة وبلد الواجهة</string><string name="language_picker_search">ابحث عن لغة أو بلد…</string><string name="language_picker_applied">تم تطبيق %1$s</string><string name="language_group_arabic">العربية • الدول العربية</string><string name="language_group_english">English • English-speaking countries</string><string name="language_group_spanish">Español • Países hispanohablantes</string>
     <string name="settings_container_style">Container block style</string>
     <string name="settings_container_style_hint">Draw a thin colored guide line and color the opening and closing tags per container type.</string>
+    <string name="language_picker_current">اللغة الحالية</string>
+    <string name="language_filter_all">الكل</string>
+    <string name="language_status_builtin">مدمجة</string>
+    <string name="language_status_installed">مثبّتة</string>
+    <string name="language_status_download">تنزيل</string>
+    <string name="language_picker_empty">لا توجد لغة تطابق بحثك</string>
+    <string name="language_picker_count_format">%1$d دولة</string>
+    <string name="language_search_clear">مسح البحث</string>
 </resources>
