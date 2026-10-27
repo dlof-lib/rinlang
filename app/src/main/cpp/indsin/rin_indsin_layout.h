@@ -178,6 +178,14 @@ struct Indsin {
         s->lastConstraints = cIncoming; s->hasLastConstraints = true;
         s->lastContentHash = s->contentHash; s->hasLastContentHash = true;
 
+        // visible=false (عام لكل العناصر — يعتمد عليه <If>/<Else> في صيغة الوسوم): يُطوى إلى حجم صفر فلا يشغل
+        // مساحة ولا يُرسم (انظر Dye::paintInto). Banner/Tag/Drawer لهم قاعدتهم الخاصة أدناه.
+        if (s->kind != StrandKind::BANNER && s->kind != StrandKind::TAG && s->attrStr("visible", "true") == "false") {
+            s->geometry = {originXIncoming, originYIncoming, 0, 0};
+            s->geometryOuter = s->geometry;
+            return s->geometryOuter;
+        }
+
         // ---- Margin box model (new: style/screen/spacing/width/height feature pass) -----------
         // Margin is space OUTSIDE this Strand's own box: reserved so siblings don't overlap it,
         // but never painted into by this Strand's own background/border/content. Resolved against
