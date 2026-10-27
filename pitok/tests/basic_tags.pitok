@@ -1,0 +1,24 @@
+<warp count={0} />
+
+<Column#root gap=16 padding=20>
+  <Card#header padding=16 shadow=10>
+    <Text#title size=22>Welcome to Rin</Text>
+    <Text#subtitle size=14 color="#8b899c">Indsintime rendering engine</Text>
+  </Card>
+
+  <Row#actions gap=12>
+    <Button#cta>Continue</Button>
+    <Button#incBtn onTap={increment(count)}>Tap to increment</Button>
+  </Row>
+
+  <Card#counter padding=16 gradient="#2c2140,#241a30">
+    <Text#countText size=18>Count: {count}</Text>
+  </Card>
+
+  <Row#media gap=10>
+    <Image#thumb src="poster.png" width=120 height=72 />
+    <Card#blurCard padding=14>
+      <Text#blurLabel size=12 color="#c9c6dd">Effects: shadow / gradient / color</Text>
+    </Card>
+  </Row>
+</Column>
