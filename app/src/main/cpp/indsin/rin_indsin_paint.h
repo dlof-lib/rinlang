@@ -178,7 +178,13 @@ enum class DrawOp { FILL_RECT, STROKE_RECT, TEXT_RUN, SCRIM_RECT, STROKE_ARC };
 // TEXT_RUN today.
 struct DrawCommand { DrawOp op; Rect bounds; Color color; std::string text; StrandId owner; double radius = 0; double strokeWidth = 0; double startAngleDeg = 0; double sweepAngleDeg = 360;
     // TEXT_RUN style (filled by Dye::paintInto's post-pass; 0 = unset): px font size, align 0=start(auto RTL) 1=center 2=end, bold, single-line (ellipsize) vs wrapped.
-    double fontSize = 0; int align = 0; bool bold = false; bool singleLine = false; };
+    double fontSize = 0; int align = 0; bool bold = false; bool singleLine = false;
+    // Linear gradient fill (FILL_RECT only): from `color` to `color2` along `angleDeg` (CSS convention: 180 = top->bottom, 90 = left->right).
+    std::vector<Color> stops; /* >= 2 colors => linear gradient (equal spacing), stops[0] == color */ double angleDeg = 180;
+    bool isGradient() const { return stops.size() >= 2; }
+    // Drop shadow under a FILL_RECT (box-shadow semantics): blur radius px, y offset, spread, color (alpha = strength). 0 blur / a=0 => none.
+    double shadowBlur = 0, shadowDy = 0, shadowSpread = 0; Color shadowColor{0, 0, 0, 0};
+    bool hasShadow() const { return shadowBlur > 0 && shadowColor.a > 0; } };
 using DrawList = std::vector<DrawCommand>;
 
 // The scrim's color, ~55% black — a fixed near-black rather than a Theme role, since a scrim
@@ -187,8 +193,106 @@ using DrawList = std::vector<DrawCommand>;
 // renderers dim a modal's backdrop by the same amount now that both understand real alpha.
 inline Color scrimColor() { return {0, 0, 0, 140}; }
 
+// ---- Shadows: `elevation=` tokens, `shadow=` blur, `shadowColor=`, `shadowY=` --------------------------------
+// elevation (none/xs/sm/md/lg/xl or 0..5) mirrors rin_indsin_system.h's Elevation table (kept in sync by hand: that
+// header includes this one). `shadow=N` is the older blur-only spelling (Android already drew it: dy = N/2.5, ~47% black).
+// `shadowColor="#6C5CE7"` turns either into a colored glow; `shadowY=` overrides the offset.
+struct ShadowSpec { double blur = 0, dy = 0, spread = 0; Color color{0, 0, 0, 0}; };
+inline bool resolveShadow(const StrandPtr& s, ShadowSpec& out) {
+    static const double table[6][4] = {{0,0,0,0},{2,1,0,0.12},{4,2,0,0.14},{8,4,0,0.16},{16,8,1,0.18},{24,12,2,0.22}};
+    ShadowSpec sp; bool any = false;
+    if (auto e = s->attr("elevation")) {
+        int lvl = -1;
+        if (e->kind == Value::Kind::NUMBER) lvl = (int)std::lround(e->number);
+        else if (e->kind == Value::Kind::STRING) {
+            static const char* names[] = {"none","xs","sm","md","lg","xl"};
+            for (int i = 0; i < 6; i++) if (e->str == names[i]) lvl = i;
+            if (lvl < 0 && e->str.size() == 1 && e->str[0] >= '0' && e->str[0] <= '5') lvl = e->str[0] - '0';
+        }
+        if (lvl > 5) lvl = 5;
+        if (lvl > 0) { sp.blur = table[lvl][0]; sp.dy = table[lvl][1]; sp.spread = table[lvl][2]; sp.color = Color{0, 0, 0, (unsigned char)std::lround(table[lvl][3] * 255 * 2.0)}; any = true; }
+    }
+    if (auto sh = s->attr("shadow")) {
+        double n = sh->asNumber(0);
+        if (n > 0) { sp.blur = n; sp.dy = n / 2.5; sp.spread = 0; sp.color = Color{0, 0, 0, 120}; any = true; }
+    }
+    if (!any) return false;
+    Color gc;
+    if (resolveColorAttr(s, "shadowColor", gc)) { unsigned char a = sp.color.a; sp.color = gc; if (gc.a == 255) sp.color.a = std::max<unsigned char>(a, 90); }
+    if (auto y = s->attr("shadowY")) sp.dy = y->asNumber(sp.dy);
+    out = sp;
+    return true;
+}
+
+// ---- Canvas (screen background) -----------------------------------------------------------------
+// Before this, the area behind the Fabric was a hard-coded gray (the rasterizer's initial fill / the
+// HTML export's `#121212`), independent of the active theme and impossible to change. The canvas color
+// now resolves, first match wins:
+//   1. the root's `canvas="..."` (what `<Screen bg=...>` writes)  — any literal or theme role
+//   2. the host's default background (rin_indsin_session_set_default_background) — an app/user setting
+//   3. the active theme's `background` role
+// ---- Gradient spec: "c1,c2[,angle]" (commas inside rgb()/hsl() are respected) --------------------------------
+// Used by `gradient=` on any box and by `canvas=`/`<Screen bg="#0B1020,#1A1040,160">` for the screen background.
+inline bool parseGradientSpec(const std::string& spec, std::vector<Color>& stops, double& angle) {
+    std::vector<std::string> parts; std::string cur; int depth = 0;
+    for (char ch : spec) {
+        if (ch == '(') depth++; else if (ch == ')') depth = std::max(0, depth - 1);
+        if (ch == ',' && depth == 0) { parts.push_back(cur); cur.clear(); } else cur += ch;
+    }
+    parts.push_back(cur);
+    for (auto& p : parts) { size_t f = p.find_first_not_of(" \t"), l = p.find_last_not_of(" \t"); p = f == std::string::npos ? "" : p.substr(f, l - f + 1); }
+    stops.clear(); angle = 180;
+    size_t i = 0;
+    for (; i < parts.size() && looksLikeHexColor(parts[i]); i++) stops.push_back(parseHexColor(parts[i], Color{0, 0, 0}));
+    if (stops.size() < 2 || stops.size() > 16) return false;
+    if (i < parts.size()) { // one trailing number = the CSS angle; anything else is not a gradient spec
+        if (i + 1 != parts.size()) return false;
+        try { size_t k = 0; angle = std::stod(parts[i], &k); if (k != parts[i].size()) return false; } catch (...) { return false; }
+    }
+    return true;
+}
+struct CanvasInfo { Color color; const char* source; std::vector<Color> stops; double angle = 180; bool gradient() const { return stops.size() >= 2; } };
+struct HostBackground { bool set = false; Color color{0, 0, 0}; std::vector<Color> stops; double angle = 180; };
+inline CanvasInfo resolveCanvas(const StrandPtr& root, const HostBackground& host) {
+    Color c = themeRegistry().active().background;
+    if (root) {
+        Color tmp = c;
+        if (auto cv = root->attr("canvas")) {
+            std::vector<Color> st; double ang;
+            if (cv->kind == Value::Kind::STRING && cv->str.find(',') != std::string::npos && parseGradientSpec(cv->str, st, ang)) {
+                for (auto& k : st) k.a = 255;
+                CanvasInfo gi{st[0], "screen"}; gi.stops = st; gi.angle = ang; return gi;
+            }
+        }
+        if (resolveColorAttr(root, "canvas", tmp)) { c = tmp; c.a = 255; return {c, "screen"}; }
+    }
+    if (host.set) {
+        Color h = host.color; h.a = 255;
+        CanvasInfo hi{h, "host"};
+        if (host.stops.size() >= 2) { hi.stops = host.stops; hi.color = hi.stops[0]; hi.angle = host.angle; for (auto& k : hi.stops) k.a = 255; }
+        return hi;
+    }
+    c.a = 255;
+    return {c, "theme"};
+}
+
 struct Dye {
+    bool canvasHandlesRoot = false; // set by paintFrame(): the root's default fill is replaced by the canvas
     DrawList paint(const StrandPtr& s) { DrawList list; paintInto(s, list); return list; }
+
+    // Full frame: the canvas fill (screen background, W x H) first, then the document + overlay layer.
+    DrawList paintFrame(const StrandPtr& root, OverlayLayer& layer, double W, double H, const HostBackground& host) {
+        DrawList list;
+        CanvasInfo ci = resolveCanvas(root, host);
+        DrawCommand cv{DrawOp::FILL_RECT, Rect{0, 0, W, H}, ci.color, "", 0, 0, 0};
+        if (ci.gradient()) { cv.stops = ci.stops; cv.angleDeg = ci.angle; }
+        list.push_back(cv);
+        canvasHandlesRoot = true;
+        DrawList body = paintWithOverlay(root, layer);
+        canvasHandlesRoot = false;
+        list.insert(list.end(), body.begin(), body.end());
+        return list;
+    }
 
     // Overlay Engine (rin_indsin_overlay.h): paints the main document exactly as paint() above
     // always has, then appends the overlay layer strictly afterward, in its own back-to-front
@@ -211,6 +315,28 @@ struct Dye {
         if (s->kind != StrandKind::BANNER && s->kind != StrandKind::TAG && s->attrStr("visible", "true") == "false") return; // مخفي
         size_t first = list.size();
         paintIntoImpl(s, list);
+        // Shadow (elevation=/shadow=/shadowColor=): attached to this strand's own box fill, drawn right under it.
+        {
+            ShadowSpec sp;
+            if (resolveShadow(s, sp)) {
+                for (size_t i = first; i < list.size(); i++) {
+                    if (list[i].op == DrawOp::FILL_RECT && list[i].owner == s->id) {
+                        list[i].shadowBlur = sp.blur; list[i].shadowDy = sp.dy; list[i].shadowSpread = sp.spread; list[i].shadowColor = sp.color; break;
+                    }
+                }
+            }
+        }
+        // `gradient="c1,c2[,angle]"` on any strand: its own box fill (the first FILL_RECT it emitted) becomes a linear gradient.
+        if (auto gv = s->attr("gradient")) {
+            std::vector<Color> st; double ang;
+            if (gv->kind == Value::Kind::STRING && parseGradientSpec(gv->str, st, ang)) {
+                for (size_t i = first; i < list.size(); i++) {
+                    if (list[i].op == DrawOp::FILL_RECT && list[i].owner == s->id) {
+                        list[i].color = st[0]; list[i].stops = st; list[i].angleDeg = ang; break;
+                    }
+                }
+            }
+        }
         bool centered = s->kind == StrandKind::BUTTON || s->kind == StrandKind::ICONBUTTON || s->kind == StrandKind::TABITEM ||
                         s->kind == StrandKind::BADGE || s->kind == StrandKind::AVATAR || s->kind == StrandKind::TAG;
         bool single = centered || s->kind == StrandKind::INPUT || s->kind == StrandKind::SEARCH || s->kind == StrandKind::SELECT ||
@@ -355,7 +481,16 @@ struct Dye {
         }
 
         if (s->kind != StrandKind::TEXT) {
-            list.push_back({DrawOp::FILL_RECT, s->geometry, resolveColor(s), "", s->id, r, 0});
+            // Plain layout containers (Column/Row/Stack/Spacer) are transparent unless given an explicit fill: their
+            // old default fill was the theme `background`, which hid a custom canvas color and painted a stray
+            // background-colored box over Cards. The screen root is covered by the canvas fill (paintFrame) — outside
+            // a frame (canvasHandlesRoot == false) the root still paints the theme background, exactly as before.
+            bool explicitFill = s->attr("bg") || s->attr("color") || s->attr("background") || s->attr("tone");
+            bool plainContainer = s->kind == StrandKind::COLUMN || s->kind == StrandKind::ROW ||
+                                  s->kind == StrandKind::STACK  || s->kind == StrandKind::SPACER;
+            bool skipFill = plainContainer && !explicitFill && (!s->screenRoot || canvasHandlesRoot);
+            if (!skipFill)
+                list.push_back({DrawOp::FILL_RECT, s->geometry, resolveColor(s), "", s->id, r, 0});
             // `border=` was already a real padding contributor (rin_indsin_layout.h) but never
             // actually painted anything -- a Strand with border="2" reserved space for a stroke
             // that never appeared. Now it draws one, in borderColor= (or the Theme's border
@@ -769,16 +904,51 @@ inline std::vector<unsigned char> rasterizeToBuffer(const DrawList& list, int W,
         double inside = std::min(std::max(std::fabs(px-cx) - (hw - r), std::fabs(py-cy) - (hh - r)), 0.0);
         return std::sqrt(dx*dx + dy*dy) + inside - r;
     };
-    auto fillRound = [&](const Rect& b, double radius, Color c) {
+    auto fillRound = [&](const Rect& b, double radius, Color c, const DrawCommand* g = nullptr) {
         double x0=b.x, y0=b.y, x1=b.x+b.w, y1=b.y+b.h;
+        // Gradient: t in [0,1] along the CSS angle across the whole box (w*|sin|+h*|cos| long), per pixel centre.
+        double gdx = 0, gdy = 0, gL = 1, gcx = (x0+x1)/2, gcy = (y0+y1)/2;
+        if (g && g->isGradient()) {
+            double th = g->angleDeg * 3.14159265358979 / 180.0;
+            gdx = std::sin(th); gdy = -std::cos(th);
+            gL = std::max(1e-6, std::fabs(b.w * gdx) + std::fabs(b.h * gdy));
+        }
+        auto colorAt = [&](int x, int y) -> Color {
+            if (!g || !g->isGradient()) return c;
+            double t = clamp01((((x + 0.5) - gcx) * gdx + ((y + 0.5) - gcy) * gdy) / gL + 0.5);
+            const auto& st = g->stops;
+            double pos = t * (double)(st.size() - 1);
+            size_t k = std::min((size_t)pos, st.size() - 2);
+            double u = pos - (double)k;
+            const Color &p = st[k], &q = st[k + 1];
+            Color o;
+            o.r = (unsigned char)(p.r + (q.r - p.r) * u + 0.5);
+            o.g = (unsigned char)(p.g + (q.g - p.g) * u + 0.5);
+            o.b = (unsigned char)(p.b + (q.b - p.b) * u + 0.5);
+            o.a = (unsigned char)(p.a + (q.a - p.a) * u + 0.5);
+            return o;
+        };
         if (radius <= 0.5) { // square corners: snap to whole pixels so neighbours never show seams
             x0=std::round(x0); y0=std::round(y0); x1=std::round(x1); y1=std::round(y1);
-            for (int y=(int)y0;y<(int)y1;y++) for (int x=(int)x0;x<(int)x1;x++) plot(x,y,c,1.0);
+            for (int y=(int)y0;y<(int)y1;y++) for (int x=(int)x0;x<(int)x1;x++) plot(x,y,colorAt(x,y),1.0);
             return;
         }
         double cx=(x0+x1)/2, cy=(y0+y1)/2, hw=(x1-x0)/2, hh=(y1-y0)/2, r=std::min(radius, std::min(hw,hh));
         for (int y=(int)std::floor(y0);y<(int)std::ceil(y1);y++) for (int x=(int)std::floor(x0);x<(int)std::ceil(x1);x++)
-            plot(x,y,c,clamp01(0.5 - sdRound(x+0.5,y+0.5,cx,cy,hw,hh,r)));
+            plot(x,y,colorAt(x,y),clamp01(0.5 - sdRound(x+0.5,y+0.5,cx,cy,hw,hh,r)));
+    };
+    // Drop shadow: soft falloff of the signed distance to the (offset, spread-grown) rounded box, smoothstepped over `blur`.
+    auto shadowRound = [&](const DrawCommand& cmd) {
+        const Rect& b = cmd.bounds; double blur = std::max(1.0, cmd.shadowBlur), sp = cmd.shadowSpread;
+        double cx = b.x + b.w / 2, cy = b.y + b.h / 2 + cmd.shadowDy, hw = b.w / 2 + sp, hh = b.h / 2 + sp;
+        double r = std::min(std::max(cmd.radius + sp, 0.0), std::min(hw, hh));
+        int x0 = (int)std::floor(cx - hw - blur), x1 = (int)std::ceil(cx + hw + blur);
+        int y0 = (int)std::floor(cy - hh - blur), y1 = (int)std::ceil(cy + hh + blur);
+        for (int y = std::max(0, y0); y < std::min(H, y1); y++) for (int x = std::max(0, x0); x < std::min(W, x1); x++) {
+            double d = sdRound(x + 0.5, y + 0.5, cx, cy, hw, hh, r);
+            double t = clamp01(0.5 - d / (2.0 * blur));
+            plot(x, y, cmd.shadowColor, t * t * (3 - 2 * t));
+        }
     };
     auto strokeRound = [&](const Rect& b, double radius, double t, Color c) {
         double x0=b.x, y0=b.y, x1=b.x+b.w, y1=b.y+b.h; t = std::max(1.0, t);
@@ -887,7 +1057,9 @@ inline std::vector<unsigned char> rasterizeToBuffer(const DrawList& list, int W,
     };
     for (auto& cmd : list) {
         switch (cmd.op) {
-            case DrawOp::FILL_RECT: case DrawOp::SCRIM_RECT: fillRound(cmd.bounds, cmd.radius, cmd.color); break;
+            case DrawOp::FILL_RECT: case DrawOp::SCRIM_RECT:
+                if (cmd.hasShadow()) shadowRound(cmd);
+                fillRound(cmd.bounds, cmd.radius, cmd.color, &cmd); break;
             case DrawOp::STROKE_RECT: strokeRound(cmd.bounds, cmd.radius, cmd.strokeWidth, cmd.color); break;
             case DrawOp::STROKE_ARC: arc(cmd); break;
             case DrawOp::TEXT_RUN: drawText(cmd); break;
@@ -1088,6 +1260,13 @@ inline std::string drawListToJsonString(const DrawList& list) {
            << ",\"alpha\":" << colorAlphaUnit(d.color)
            << ",\"radius\":" << d.radius
            << ",\"strokeWidth\":" << d.strokeWidth;
+        if (d.hasShadow()) os << ",\"shadow\":{\"blur\":" << d.shadowBlur << ",\"dy\":" << d.shadowDy << ",\"spread\":" << d.shadowSpread
+                              << ",\"color\":\"" << colorToHex(d.shadowColor) << "\",\"alpha\":" << colorAlphaUnit(d.shadowColor) << "}";
+        if (d.isGradient()) {
+            os << ",\"color2\":\"" << colorToHex(d.stops.back()) << "\",\"angle\":" << d.angleDeg << ",\"stops\":[";
+            for (size_t k = 0; k < d.stops.size(); k++) os << (k ? "," : "") << "\"" << colorToHex(d.stops[k]) << "\"";
+            os << "]";
+        }
         if (d.op == DrawOp::STROKE_ARC) os << ",\"start\":" << d.startAngleDeg << ",\"sweep\":" << d.sweepAngleDeg;
         if (d.op == DrawOp::TEXT_RUN) os << ",\"fontSize\":" << d.fontSize << ",\"align\":" << d.align << ",\"bold\":" << (d.bold?"true":"false") << ",\"singleLine\":" << (d.singleLine?"true":"false");
         if (!d.text.empty()) os << ",\"text\":\"" << jsonEscape(d.text) << "\"";
