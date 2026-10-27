@@ -111,3 +111,9 @@ rin_indsin_preview file.rin --width 390 --png out.png --html out.html --tap 60,1
 ## صيغة الوسوم `<>` (جديد)
 يمكن كتابة الواجهات بأقواس الزاوية: `<Column#root gap=16> … </Column>`، `<Text>Count: {n}</Text>`، `<warp n={0} />`. تُترجَم
 إلى لهجة `@view` قبل التحليل فتعمل مع كل المضيفين دون تغيير — راجع [docs/indsin_tags.md](docs/indsin_tags.md).
+
+---
+## حرية التصميم: الحجم والألوان وخلفية الشاشة (جديد)
+`<Screen size=phone bg=#0B1020>` لحجم الشاشة ولونها، خلفية افتراضية من المضيف (`rin_indsin_session_set_default_background`)،
+أحجام نسبية (`half`، `60vw`، `aspect="16:9"`)، وثيم كامل من لون واحد `<Palette seed=#6C5CE7 dark />` — راجع
+[docs/indsin_design_freedom.md](docs/indsin_design_freedom.md).
