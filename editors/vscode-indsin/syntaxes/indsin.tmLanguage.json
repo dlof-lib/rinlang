@@ -10,6 +10,9 @@
       "include": "#comments"
     },
     {
+      "include": "#tag-comment"
+    },
+    {
       "include": "#import"
     },
     {
@@ -23,6 +26,12 @@
     },
     {
       "include": "#view-close"
+    },
+    {
+      "include": "#tag-close"
+    },
+    {
+      "include": "#tag-open"
     },
     {
       "include": "#attribute"
@@ -211,6 +220,110 @@
     "response-binding": {
       "name": "variable.other.binding.indsin",
       "match": "\\{\\{\\s*[A-Za-z_][\\w.\\[\\]]*\\s*\\}\\}"
+    },
+    "tag-comment": {
+      "name": "comment.block.html.indsin",
+      "begin": "<!--",
+      "end": "-->",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.comment.indsin"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.comment.indsin"
+        }
+      }
+    },
+    "tag-close": {
+      "match": "(</)((?:[A-Za-z_][\\w]*)(?:\\.[A-Za-z_]\\w*)?)?\\s*(>)",
+      "captures": {
+        "1": {
+          "name": "punctuation.definition.tag.indsin"
+        },
+        "2": {
+          "name": "support.class.element.indsin"
+        },
+        "3": {
+          "name": "punctuation.definition.tag.indsin"
+        }
+      }
+    },
+    "tag-open": {
+      "begin": "(<)(?=[A-Za-z_>])((?:[A-Za-z_]\\w*)(?:\\.[A-Za-z_]\\w*)?)?(?:(#)([A-Za-z_]\\w*))?",
+      "end": "(/?>)",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.tag.indsin"
+        },
+        "2": {
+          "name": "support.class.element.indsin"
+        },
+        "3": {
+          "name": "punctuation.definition.tag.id.indsin"
+        },
+        "4": {
+          "name": "entity.name.tag.view-name.indsin"
+        }
+      },
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.tag.indsin"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#tag-comment"
+        },
+        {
+          "match": "\\b([A-Za-z_]\\w*?)(_(?:sm|md|lg|xl))?(?==)",
+          "captures": {
+            "1": {
+              "name": "variable.parameter.attribute.indsin"
+            },
+            "2": {
+              "name": "storage.modifier.responsive.indsin"
+            }
+          }
+        },
+        {
+          "match": "\\b[A-Za-z_]\\w*\\b",
+          "name": "variable.parameter.attribute.indsin"
+        },
+        {
+          "begin": "\\{",
+          "end": "\\}",
+          "name": "meta.embedded.expression.indsin",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.section.embedded.begin.indsin"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.section.embedded.end.indsin"
+            }
+          },
+          "patterns": [
+            {
+              "include": "source.rin"
+            }
+          ]
+        },
+        {
+          "include": "#strings"
+        },
+        {
+          "include": "#colors"
+        },
+        {
+          "include": "#lengths"
+        },
+        {
+          "include": "#numbers"
+        }
+      ]
     }
   }
 }
