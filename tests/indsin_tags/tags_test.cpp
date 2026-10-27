@@ -55,6 +55,28 @@ int main(int argc, char** argv) {
     err("text twice", "<Text text=\"a\">b</Text>", 1, "both");
     err("warp not self-closed", "<warp a={1}>", 1, "self-closing");
 
+    // ── حرية التصميم: Screen / Theme / Palette + قيم نسبية ──
+    eq("screen", "<Screen#app size=phone bg=#0B1020 width=300 height=500>\n</Screen>",
+       "@view.Column=app screen=\"phone\"; canvas=\"#0B1020\"; canvas_width=300; canvas_height=500;\n.end/view");
+    eq("screen background alias", "<Screen#a background=#fff />", "@view.Column=a canvas=\"#fff\"; .end/view");
+    eq("relative values", "<Card#c width=50% w2=60vw h=10vh s=390x844 />",
+       "@view.Card=c width=\"50%\"; w2=\"60vw\"; h=\"10vh\"; s=\"390x844\"; .end/view");
+    eq("theme", "<Theme#Brand primary=#6C5CE7 active />", "@theme=Brand primary=\"#6C5CE7\"; active=true; .end/theme");
+    eq("palette", "<Palette seed=#6C5CE7 dark />", "@theme=palette_1 seed=\"#6C5CE7\"; dark=true; active=true; .end/theme");
+    eq("palette light", "<Palette#p seed=#6C5CE7 light />", "@theme=p seed=\"#6C5CE7\"; mode=\"light\"; active=true; .end/theme");
+    err("palette needs seed", "<Palette dark />", 1, "seed");
+    err("theme not self-closed", "<Theme#a primary=#fff>", 1, "self-closing");
+
+    // ── Tokens / Style / class ──
+    eq("tokens", "<Tokens brand=#6C5CE7 gap=16 />", "let brand = \"#6C5CE7\"; let gap = 16; ");
+    eq("style+class", "<Style#card radius=16 bg=#fff />\n<Card#c class=\"card\" radius=4 />",
+       "\n@view.Card=c radius=4; bg=\"#fff\"; .end/view");
+    eq("style extends + last class wins", "<Style#a w=1 h=1 /><Style#b extends=\"a\" h=2 />\n<Box#x class=\"b\" />",
+       "\n@view.Box=x w=1; h=2; .end/view");
+    err("unknown style", "<Box#x class=\"nope\" />", 1, "unknown style");
+    err("style extends unknown", "<Style#a extends=\"zz\" />", 1, "extends unknown");
+    err("tokens not self-closed", "<Tokens a=1>", 1, "self-closing");
+
     // ── مفاهيم متقدمة ──
     eq("fun", "<Fun#add params=\"a,b\">\n  return a + b;\n</Fun>", "fun add(a, b) {\n  return a + b;\n}");
     eq("rin raw", "<Rin>\nlet x = 1 < 2;\n</Rin>", "\nlet x = 1 < 2;\n");
