@@ -1,0 +1,87 @@
+<!-- تطبيق indsin كامل: لوحة مهام بثيم من لون واحد، حالة تفاعلية، قوالب، تكرار، وشروط.
+     التشغيل: rin_indsin_preview app_full.rin --png out.png   (أو داخل معاينة التطبيق) -->
+
+<!-- ثيم كامل من لون واحد -->
+<Palette seed=#6C5CE7 dark />
+
+<!-- الحالة -->
+<warp done={0} />
+<warp total={5} />
+<warp showTips={true} />
+<warp water={0} />
+
+<!-- دوال -->
+<Fun#complete>
+  if (done < total) { done = done + 1; }
+</Fun>
+<Fun#addWater>
+  water = water + 1;
+</Fun>
+<Fun#reset>
+  done = 0;
+  water = 0;
+</Fun>
+
+<!-- قالب مكوّن: بطاقة إحصائية -->
+<Define#Stat label="Stat" value="0" tint=#6C5CE7>
+  <Card#box width=30% padding=12 radius=16 bg={tint}>
+    <Text#v size=heading color=#ffffff>{value}</Text>
+    <Text#l size=small color=#ffffffcc>{label}</Text>
+  </Card>
+</Define>
+
+<!-- الشاشة: حجم الهاتف + لون خلفية خاص -->
+<Screen#app size=phone bg=#0B1020 padding=20 gap=16>
+
+  <Text#hello size=heading>مرحباً 👋</Text>
+  <Text#sub size=small color=#9aa4bf>Today's plan · {done}/{total} done</Text>
+
+  <!-- إحصائيات: ثلاث بطاقات بعرض الثلث -->
+  <Row#stats gap=10>
+    <Stat label="Done" value={done} tint=#6C5CE7 />
+    <Stat label="Left" value={total - done} tint=#00B894 />
+    <Stat label="Water" value={water} tint=#0984E3 />
+  </Row>
+
+  <!-- شريط التقدّم -->
+  <Progress#bar value={done * 100 / total} max=100 />
+
+  <!-- مهام مكرّرة وقت الترجمة -->
+  <Card#tasks padding=14 radius=16 gap=8>
+    <Text#th size=title>Tasks</Text>
+    <Repeat times=3 as=k>
+      <Row#task gap=10>
+        <Text#n color=primary>#{k + 1}</Text>
+        <Text#t>Task number {k + 1}</Text>
+      </Row>
+    </Repeat>
+    <Divider />
+    <Button#do variant=gradient onTap={complete()}>Complete a task</Button>
+  </Card>
+
+  <!-- صورة بنسبة 16:9 -->
+  <Card#banner width=full aspect="16:9" radius=18 bg=#FD79A8>
+    <Text#bt size=title color=#ffffff>Keep going!</Text>
+  </Card>
+
+  <!-- شرط تفاعلي -->
+  <If cond={done >= total}>
+    <Banner#win type=success message="All tasks done 🎉" />
+  </If>
+  <Else>
+    <Text#left color=#9aa4bf>{total - done} tasks to go</Text>
+  </Else>
+
+  <!-- نصيحة قابلة للإخفاء -->
+  <If cond={showTips}>
+    <Card#tip padding=12 radius=12 bg=#161B33>
+      <Text#tt size=small>Tip: tap Water to track your drinks.</Text>
+    </Card>
+  </If>
+
+  <Row#actions gap=10>
+    <Button#w width=40% onTap={addWater()}>Water +1</Button>
+    <Button#tg width=25% variant=outline onTap={toggle(showTips)}>Tips</Button>
+    <Button#rs variant=outline onTap={reset()}>Reset</Button>
+  </Row>
+</Screen>
