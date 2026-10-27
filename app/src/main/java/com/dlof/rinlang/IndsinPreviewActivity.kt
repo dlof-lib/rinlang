@@ -34,6 +34,17 @@ class IndsinPreviewActivity : RinBaseActivity(), IndsinPreviewManager.Listener {
          * "main.rin"). Used as the starting point for real page navigation below. */
         const val EXTRA_FILE_NAME = "indsin_preview_file_name"
         private val DEVICE_WIDTHS = listOf(360, 390, 414, 428, 768)
+        private const val BG_MENU_ID = 1000
+        /** Default-background presets (label, color literal) offered in the device menu. */
+        private val BACKGROUND_PRESETS = listOf(
+            R.string.indsin_background_black to "#000000",
+            R.string.indsin_background_midnight to "#0D0E18",
+            R.string.indsin_background_slate to "#1E1E2E",
+            R.string.indsin_background_paper to "#F5F5F8",
+            R.string.indsin_background_white to "#FFFFFF",
+            R.string.indsin_background_aurora to "#0B1020,#4B2A8A,160",   // gradients: "c1,c2[,c3…][,angle]"
+            R.string.indsin_background_ocean to "#021B33,#0A6E8A,180",
+        )
         /** القيمة الافتراضية قبل أن نقيس عرض سطح المعاينة الفعلي على الشاشة (أول تخطيط فقط). */
         private const val DEFAULT_DEVICE_WIDTH = 390
     }
@@ -378,7 +389,10 @@ class IndsinPreviewActivity : RinBaseActivity(), IndsinPreviewManager.Listener {
         // makes the preview effectively invisible and produces the h=1000000000 inspector value.
         sanitizePreviewGeometry(fabric)
         val h = fabric.optDouble("h", 640.0).toInt().coerceAtLeast(120)
-        fabricView.setFabric(fabric, currentDeviceWidth, h, result.optJSONArray("overlays"))
+        // Design canvas: a `<Screen size=…>` / `screen=` in the source may declare its own width (any device size).
+        val canvasInfo = result.optJSONObject("canvas")
+        val canvasW = canvasInfo?.optInt("width", currentDeviceWidth)?.takeIf { it > 0 } ?: currentDeviceWidth
+        fabricView.setFabric(fabric, canvasW, h, result.optJSONArray("overlays"), canvasInfo)
 
         val hasSnag = result.has("snag") || result.has("error")
         if (hasSnag) showError(formatError(result)) else hideError()
@@ -490,7 +504,18 @@ class IndsinPreviewActivity : RinBaseActivity(), IndsinPreviewManager.Listener {
         DEVICE_WIDTHS.forEachIndexed { index, width ->
             popup.menu.add(0, index, index + 1, getString(R.string.indsin_device_width_format, width))
         }
+        // Default screen background (design freedom): theme default or a preset; `<Screen bg=…>` in the source still wins.
+        val bgMenu = popup.menu.addSubMenu(0, BG_MENU_ID, 100, getString(R.string.indsin_background_menu))
+        bgMenu.add(0, BG_MENU_ID + 1, 0, getString(R.string.indsin_background_theme))
+        BACKGROUND_PRESETS.forEachIndexed { i, (nameRes, _) -> bgMenu.add(0, BG_MENU_ID + 2 + i, i + 1, getString(nameRes)) }
         popup.setOnMenuItemClickListener { item ->
+            if (item.itemId > BG_MENU_ID) {
+                val idx = item.itemId - BG_MENU_ID - 2
+                val color = BACKGROUND_PRESETS.getOrNull(idx)?.second ?: ""
+                IndsinPreviewManager.setDefaultBackground(color)
+                Toast.makeText(this, getString(R.string.indsin_background_changed_toast), Toast.LENGTH_SHORT).show()
+                return@setOnMenuItemClickListener true
+            }
             val width = if (item.itemId == -1) fitDeviceWidth() else DEVICE_WIDTHS.getOrNull(item.itemId)
             if (width != null && width != currentDeviceWidth) {
                 currentDeviceWidth = width
