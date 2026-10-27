@@ -25,6 +25,8 @@
 #include <string>
 #include <unordered_map>
 #include <cmath>
+#include <cstring>
+#include <algorithm>
 
 namespace indsin {
 
@@ -305,11 +307,65 @@ inline double resolveSpacing(const Strand& s, const std::string& key, double def
 // width/height/min_width/max_width/min_height/max_height with percentage support: "50%" resolves
 // against `base` (the relevant axis of the parent's own available box). Non-percentage values
 // behave exactly as the old direct s->attrNum(key, def) call they replace.
+// ---- Viewport context for vw/vh units (set by the host session on every relayout) ---------------
+// 0 = unknown: vw/vh then resolve against the parent's own extent, like a plain percentage.
+inline double& viewportWidthPx()  { static double v = 0; return v; }
+inline double& viewportHeightPx() { static double v = 0; return v; }
+
+// Size *keywords* and viewport units for width/height/min_*/max_*: the "design freedom" layer.
+//   full | fill -> 100%      half -> 50%     third -> 33.33%   two-thirds -> 66.67%   quarter -> 25%
+//   "60vw" / "50vh" / "100vmin" / "100vmax"  -> a share of the screen (the session's viewport)
+// Returns true and sets `out` when `v` is one of these forms (plain numbers and "%" stay with the
+// callers below, so existing sources resolve exactly as before).
+inline bool resolveSizeKeyword(const Value* v, double base, double& out) {
+    if (!v || v->kind != Value::Kind::STRING || v->str.empty()) return false;
+    const std::string& t = v->str;
+    if (t == "full" || t == "fill") { out = base; return true; }
+    if (t == "half")        { out = base * 0.5;       return true; }
+    if (t == "third")       { out = base / 3.0;       return true; }
+    if (t == "two-thirds")  { out = base * 2.0 / 3.0; return true; }
+    if (t == "quarter")     { out = base * 0.25;      return true; }
+    static const char* units[] = {"vmin", "vmax", "vw", "vh"};
+    for (const char* u : units) {
+        size_t ul = std::strlen(u);
+        if (t.size() <= ul || t.compare(t.size() - ul, ul, u) != 0) continue;
+        try {
+            size_t idx = 0; double n = std::stod(t.substr(0, t.size() - ul), &idx);
+            if (idx != t.size() - ul) return false;
+            double vw = viewportWidthPx() > 0 ? viewportWidthPx() : base;
+            double vh = viewportHeightPx() > 0 ? viewportHeightPx() : base;
+            double ref = std::string(u) == "vw" ? vw : std::string(u) == "vh" ? vh
+                       : std::string(u) == "vmin" ? std::min(vw, vh) : std::max(vw, vh);
+            out = ref * n / 100.0; return true;
+        } catch (...) { return false; }
+    }
+    return false;
+}
 inline double resolveSizeAttr(const Strand& s, const std::string& key, double base, double def) {
     double pct;
     const Value* v = s.attr(key);
     if (isPercentValue(v, pct)) return base * pct / 100.0;
+    double kw; if (resolveSizeKeyword(v, base, kw)) return kw;
     return v ? v->asNumber(def) : def;
+}
+
+// True for width/height values that are relative to the parent/screen ("50%", half, 30vw, ...).
+inline bool isRelativeSize(const Value* v) {
+    double d; 
+    return isPercentValue(v, d) || resolveSizeKeyword(v, 1.0, d);
+}
+
+// `aspect="16:9"` | "1.5" | 1.5 -> width/height ratio (true when valid and > 0).
+inline bool parseAspectRatio(const Value* v, double& out) {
+    if (!v) return false;
+    if (v->kind == Value::Kind::NUMBER) { out = v->number; return out > 0; }
+    if (v->kind != Value::Kind::STRING || v->str.empty()) return false;
+    try {
+        size_t c = v->str.find(':');
+        if (c == std::string::npos) { size_t i = 0; out = std::stod(v->str, &i); return i == v->str.size() && out > 0; }
+        double a = std::stod(v->str.substr(0, c)), b = std::stod(v->str.substr(c + 1));
+        if (a <= 0 || b <= 0) return false; out = a / b; return true;
+    } catch (...) { return false; }
 }
 
 // ---- Margin (new: external spacing outside a Strand's own painted box) ------------------------
@@ -335,15 +391,53 @@ inline void resolveMargin(const Strand& s, double parentWidth,
 // canvas size without spelling out width=/height= by hand. Explicit width=/height= on the same
 // Loop always take priority — the call site in layout() only applies a preset value for whichever
 // of the two axes has no explicit attribute at all.
-inline bool resolveScreenPreset(const std::string& name, double& w, double& h) {
-    if (name == "phone_small")   { w = 360;  h = 640;  return true; }
-    if (name == "phone")         { w = 390;  h = 844;  return true; } // common modern phone viewport
-    if (name == "phone_large")   { w = 430;  h = 932;  return true; }
-    if (name == "tablet")        { w = 768;  h = 1024; return true; }
-    if (name == "tablet_large")  { w = 1024; h = 1366; return true; }
-    if (name == "desktop")       { w = 1280; h = 800;  return true; }
-    if (name == "desktop_wide")  { w = 1440; h = 900;  return true; }
-    return false;
+inline bool resolveScreenPreset(const std::string& nameIn, double& w, double& h) {
+    std::string name = nameIn;
+    bool landscape = false;
+    static const std::string suf = "_landscape";
+    if (name.size() > suf.size() && name.compare(name.size() - suf.size(), suf.size(), suf) == 0) {
+        landscape = true; name.resize(name.size() - suf.size());
+    }
+    bool ok = true;
+    if      (name == "watch")        { w = 184;  h = 224;  }
+    else if (name == "phone_small")  { w = 360;  h = 640;  }
+    else if (name == "phone")        { w = 390;  h = 844;  } // common modern phone viewport
+    else if (name == "phone_large")  { w = 430;  h = 932;  }
+    else if (name == "foldable")     { w = 673;  h = 841;  }
+    else if (name == "square")       { w = 600;  h = 600;  }
+    else if (name == "tablet")       { w = 768;  h = 1024; }
+    else if (name == "tablet_large") { w = 1024; h = 1366; }
+    else if (name == "laptop")       { w = 1280; h = 720;  }
+    else if (name == "desktop")      { w = 1280; h = 800;  }
+    else if (name == "desktop_wide") { w = 1440; h = 900;  }
+    else if (name == "tv")           { w = 1920; h = 1080; }
+    else {
+        // custom "WxH" (390x844) — either side may be 0/auto ("390x0" = fixed width, natural height)
+        size_t x = name.find_first_of("xX");
+        ok = false;
+        if (x != std::string::npos && x > 0 && x + 1 < name.size()) {
+            try {
+                size_t i1 = 0, i2 = 0;
+                double a = std::stod(name.substr(0, x), &i1), b = std::stod(name.substr(x + 1), &i2);
+                if (i1 == x && i2 == name.size() - x - 1 && a >= 0 && b >= 0) { w = a; h = b; ok = true; }
+            } catch (...) {}
+        }
+    }
+    if (ok && landscape) std::swap(w, h);
+    return ok;
+}
+
+// The design canvas a ROOT strand asks for (new: "design freedom" for screen size):
+//   screen="phone|tablet|desktop|watch|...|390x844|phone_landscape"   preset or custom WxH
+//   canvas_width= / canvas_height=   numbers, "%" of the host width, or "vw/vh" — override the preset per axis
+// `height` is a *minimum*: content taller than it still grows the canvas (it is a scrollable design
+// canvas, see Strand::screenRoot). 0 on an axis means "unspecified" (host width / natural height).
+inline bool resolveCanvasSize(const Strand& root, double hostW, double& w, double& h) {
+    w = 0; h = 0; bool any = false;
+    if (root.attr("screen")) { any = resolveScreenPreset(root.attrStr("screen", ""), w, h); }
+    if (root.attr("canvas_width"))  { w = resolveSizeAttr(root, "canvas_width",  hostW, w); any = true; }
+    if (root.attr("canvas_height")) { h = resolveSizeAttr(root, "canvas_height", hostW, h); any = true; }
+    return any;
 }
 
 // ---- Radius tokens (§10) -------------------------------------------------------------------
@@ -409,6 +503,9 @@ inline double resolveFontSize(const Strand& s, const std::string& key, double de
 // theme, same as before. Either way only the roles actually given get overridden -- e.g.
 // `@theme=Midnight primary="#7C5CFF"; .end/theme` keeps the rest of Midnight's palette and only
 // swaps its primary.
+// تعريف في rin_indsin_system.h (يُدرَج بعد هذا الملف).
+inline Theme themeFromSeedLiteral(const std::string& name, const std::string& seedLiteral, bool dark);
+
 inline void registerThemesFromProgram(const std::vector<rin::StmtPtr>& program, WarpScope& warp) {
     for (auto& stmt : program) {
         auto t = std::dynamic_pointer_cast<rin::ThemeStmt>(stmt);
@@ -418,9 +515,21 @@ inline void registerThemesFromProgram(const std::vector<rin::StmtPtr>& program, 
         Theme theme = (existing != reg.themes.end()) ? existing->second : reg.active();
         theme.name = t->name;
         bool makeActive = false;
+        // `seed="#6C5CE7"` (+ optional `dark=true|false`): derive the whole palette from ONE color (WCAG-checked
+        // tonal theme, rin_indsin_system.h), then let the explicit role attributes below override single slots.
+        {
+            std::string seed; bool dark = true;
+            for (auto& a : t->attrs) {
+                if (a.key == "seed") seed = evalAttrExprKeyed(a.key, a.value, warp, nullptr).asString();
+                else if (a.key == "dark") dark = evalAttrExprKeyed(a.key, a.value, warp, nullptr).asString() != "false";
+                else if (a.key == "mode") dark = evalAttrExprKeyed(a.key, a.value, warp, nullptr).asString() != "light";
+            }
+            if (!seed.empty() && looksLikeHexColor(seed)) { theme = themeFromSeedLiteral(t->name, seed, dark); }
+        }
         for (auto& a : t->attrs) {
             Value v = evalAttrExprKeyed(a.key, a.value, warp, nullptr);
             if (a.key == "active") { makeActive = (v.asString() == "true"); continue; }
+            if (a.key == "seed" || a.key == "dark" || a.key == "mode") continue;
             if (looksLikeHexColor(v.asString())) theme.setSlot(a.key, parseHexColor(v.asString(), {0,0,0}));
         }
         reg.registerTheme(theme);
