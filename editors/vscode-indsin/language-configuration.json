@@ -1,20 +1,85 @@
 {
-  "comments": { "lineComment": "//", "blockComment": ["/*", "*/"] },
-  "brackets": [["{", "}"], ["[", "]"], ["(", ")"]],
-  "autoClosingPairs": [
-    { "open": "{", "close": "}" }, { "open": "[", "close": "]" }, { "open": "(", "close": ")" },
-    { "open": "\"", "close": "\"", "notIn": ["string", "comment"] },
-    { "open": "`", "close": "`", "notIn": ["string", "comment"] }
+  "comments": {
+    "lineComment": "//",
+    "blockComment": [
+      "/*",
+      "*/"
+    ]
+  },
+  "brackets": [
+    [
+      "{",
+      "}"
+    ],
+    [
+      "[",
+      "]"
+    ],
+    [
+      "(",
+      ")"
+    ]
   ],
-  "surroundingPairs": [["{", "}"], ["[", "]"], ["(", ")"], ["\"", "\""], ["`", "`"]],
+  "autoClosingPairs": [
+    {
+      "open": "{",
+      "close": "}"
+    },
+    {
+      "open": "[",
+      "close": "]"
+    },
+    {
+      "open": "(",
+      "close": ")"
+    },
+    {
+      "open": "\"",
+      "close": "\"",
+      "notIn": [
+        "string",
+        "comment"
+      ]
+    },
+    {
+      "open": "`",
+      "close": "`",
+      "notIn": [
+        "string",
+        "comment"
+      ]
+    }
+  ],
+  "surroundingPairs": [
+    [
+      "{",
+      "}"
+    ],
+    [
+      "[",
+      "]"
+    ],
+    [
+      "(",
+      ")"
+    ],
+    [
+      "\"",
+      "\""
+    ],
+    [
+      "`",
+      "`"
+    ]
+  ],
   "indentationRules": {
-    "increaseIndentPattern": "^\\s*(@container\\b|@view\\.).*$",
-    "decreaseIndentPattern": "^\\s*\\.end/(view|container)\\b"
+    "increaseIndentPattern": "^\\s*(@container\\b|@view\\.|<(?!/)[A-Za-z_]?[^<>]*(?<!/)>\\s*$)",
+    "decreaseIndentPattern": "^\\s*(\\.end/(view|container|loop|element)\\b|</)"
   },
   "folding": {
     "markers": {
-      "start": "^\\s*(@container\\b|@view\\.)",
-      "end": "^\\s*\\.end/(view|container)\\b"
+      "start": "^\\s*(@container\\b|@view\\.|<(?!/)[A-Za-z_]?[^<>]*(?<!/)>\\s*$)",
+      "end": "^\\s*(\\.end/(view|container|loop|element)\\b|</)"
     }
   },
   "wordPattern": "(-?\\d*\\.\\d\\w*)|([A-Za-z_][A-Za-z0-9_]*)"
