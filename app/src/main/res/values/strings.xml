@@ -397,4 +397,14 @@ print \"Hello, \" + name + \"!\";
     <string name="action_duplicate">Duplicate</string>
     <string name="action_select_line">Select line</string>
     <string name="action_copy_markdown">Copy as Markdown</string>
+    <string name="indsin_background_menu">Screen background</string>
+    <string name="indsin_background_theme">Theme default</string>
+    <string name="indsin_background_black">Black</string>
+    <string name="indsin_background_midnight">Midnight</string>
+    <string name="indsin_background_slate">Slate</string>
+    <string name="indsin_background_paper">Paper</string>
+    <string name="indsin_background_white">White</string>
+    <string name="indsin_background_changed_toast">Default background changed</string>
+    <string name="indsin_background_aurora">Aurora gradient</string>
+    <string name="indsin_background_ocean">Ocean gradient</string>
 </resources>
