@@ -15,6 +15,7 @@
 // برسالة lex/parse واضحة، وهذا متوقع تمامًا (انظر pitok/README.md لقرار النطاق).
 #include "pitok_lexer.h"
 #include "pitok_parser.h"
+#include "../../app/src/main/cpp/indsin/rin_indsin_tags.h" // صيغة الوسوم <> → @view (header مستقل، بلا rin_*)
 #include "indsin/pitok_indsin_bridge.h"
 #include "indsin/rin_indsin_layout.h"
 #include "indsin/rin_indsin_paint.h"
@@ -40,6 +41,8 @@ int main(int argc, char** argv) {
     if (!in) { std::cerr << "cannot open " << argv[1] << "\n"; return 1; }
     std::ostringstream ss; ss << in.rdbuf();
     std::string source = ss.str();
+    try { source = indsin::tags::desugar(source); }
+    catch (const indsin::tags::TagError& e) { std::cerr << "[pitok] tag syntax error at " << argv[1] << ":" << e.line << " -- " << e.message << "\n"; return 1; }
 
     int rootWidth = argc >= 3 ? std::atoi(argv[2]) : 390;
     std::string outPath = argc >= 4 ? argv[3] : "pitok_out.ppm";
