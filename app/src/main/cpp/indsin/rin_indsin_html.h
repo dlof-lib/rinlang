@@ -16,13 +16,19 @@ inline std::string cssRgba(const Color& c) {
     std::ostringstream os; os << "rgba(" << (int)c.r << "," << (int)c.g << "," << (int)c.b << "," << (c.a/255.0) << ")"; return os.str();
 }
 
-inline std::string drawListToHtml(const DrawList& list, int W, int H, const std::string& title = "indsin preview") {
+inline std::string gradientCss(const DrawCommand& d) {
+    std::string o = "linear-gradient(" + std::to_string((int)d.angleDeg) + "deg";
+    for (auto& c : d.stops) o += "," + cssRgba(c);
+    return o + ")";
+}
+
+inline std::string drawListToHtml(const DrawList& list, int W, int H, const std::string& title = "indsin preview", Color canvas = Color{18, 18, 18}) {
     std::ostringstream os;
     os << "<!doctype html><html lang=\"ar\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
        << "<title>" << htmlEscape(title) << "</title><style>"
        << "body{margin:0;min-height:100vh;background:#0d0e14;display:flex;justify-content:center;padding:24px;box-sizing:border-box;font-family:system-ui,-apple-system,'Segoe UI',Roboto,'Noto Sans Arabic','Noto Sans',sans-serif}"
        << ".dev{border:10px solid #23242e;border-radius:34px;box-shadow:0 20px 60px #000a;overflow:hidden;height:fit-content}"
-       << ".scr{position:relative;background:#121212;overflow:hidden}"
+       << ".scr{position:relative;background:" << cssRgba(canvas) << ";overflow:hidden}"
        << ".scr>*{position:absolute;box-sizing:border-box}"
        << ".t{display:flex;padding:0 2px;overflow:hidden;unicode-bidi:plaintext;text-align:start}"
        << ".t.c{justify-content:center;text-align:center}.t.e{text-align:end}"
@@ -37,8 +43,11 @@ inline std::string drawListToHtml(const DrawList& list, int W, int H, const std:
         pos << "left:" << b.x << "px;top:" << b.y << "px;width:" << b.w << "px;height:" << b.h << "px;";
         switch (d.op) {
             case DrawOp::FILL_RECT: case DrawOp::SCRIM_RECT:
-                os << "<div data-o=\"" << d.owner << "\" style=\"" << pos.str() << "background:" << cssRgba(d.color)
-                   << ";border-radius:" << std::min(d.radius, std::min(b.w, b.h)/2) << "px\"></div>\n"; break;
+                os << "<div data-o=\"" << d.owner << "\" style=\"" << pos.str() << "background:"
+                   << (d.isGradient() ? gradientCss(d) : cssRgba(d.color))
+                   << ";border-radius:" << std::min(d.radius, std::min(b.w, b.h)/2) << "px"
+                   << (d.hasShadow() ? ";box-shadow:0 " + std::to_string(d.shadowDy) + "px " + std::to_string(d.shadowBlur) + "px " + std::to_string(d.shadowSpread) + "px " + cssRgba(d.shadowColor) : std::string())
+                   << "\"></div>\n"; break;
             case DrawOp::STROKE_RECT:
                 os << "<div data-o=\"" << d.owner << "\" style=\"" << pos.str() << "border:" << std::max(1.0, d.strokeWidth) << "px solid "
                    << cssRgba(d.color) << ";border-radius:" << std::min(d.radius, std::min(b.w, b.h)/2) << "px\"></div>\n"; break;
