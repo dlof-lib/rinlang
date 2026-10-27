@@ -748,6 +748,14 @@ Java_com_dlof_rinlang_RinEngine_indsinSessionSetViewportNative(JNIEnv* /* env */
     rin_indsin_session_set_viewport(reinterpret_cast<void*>(handle), (int)viewportHeight);
 }
 
+// indsinSessionSetDefaultBackgroundNative(handle, color) -> default screen background ("" clears; JNI: 1 = accepted).
+// Precedence in the engine: root `<Screen bg>` > this host default > theme background (rin_indsin_c_api.h).
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_dlof_rinlang_RinEngine_indsinSessionSetDefaultBackgroundNative(JNIEnv* env, jobject /* this */, jlong handle, jstring colorJStr) {
+    std::string color = rin_jni::toStd(env, colorJStr);
+    return rin_indsin_session_set_default_background(reinterpret_cast<void*>(handle), color.c_str()) ? JNI_TRUE : JNI_FALSE;
+}
+
 // ---- Design System v2 / Audit / Introspection (rin_indsin_system.h, _audit.h, _query.h) ----------
 // ثماني دوال C جديدة (انظر docs/indsin_expansion.md §8) تُرجع كلها JSON/نصاً مُخصَّصاً بـ malloc.
 // نمط واحد موحَّد: نقرأ النص المُمرَّر بأمان (null -> "")، نستدعي الدالة C، ننسخ الناتج إلى jstring
