@@ -215,6 +215,24 @@ class IndsinFabricView @JvmOverloads constructor(
     // (so the normal recursive walk skips them and their descendants), their back-to-front
     // stacking order, and their scrim/modal metadata.
     private var overlayEntries: List<JSONObject> = emptyList()
+    /** Screen (canvas) background from the engine; null = old engine/no info -> containers fill as before. */
+    private var canvasColor: Int? = null
+    /** Canvas gradient end color + CSS angle (engine "canvas".background2/angle); null = solid canvas. */
+    private var canvasColor2: Int? = null
+    /** All canvas gradient stops (2..16, equally spaced) when the engine sends "stops"; overrides [canvasColor2]. */
+    private var canvasStops: IntArray? = null
+    private var canvasAngle: Float = 180f
+
+    /** Linear gradient across [rect] along a CSS angle (180 = top->bottom, 90 = left->right) — same math as the native rasterizer. */
+    private fun gradientShader(rect: RectF, c1: Int, c2: Int, angleDeg: Float, stops: IntArray? = null): LinearGradient {
+        val th = Math.toRadians(angleDeg.toDouble())
+        val dx = Math.sin(th).toFloat(); val dy = (-Math.cos(th)).toFloat()
+        val half = (Math.abs(rect.width() * dx) + Math.abs(rect.height() * dy)) / 2f
+        val cx = rect.centerX(); val cy = rect.centerY()
+        if (stops != null && stops.size >= 2)
+            return LinearGradient(cx - dx * half, cy - dy * half, cx + dx * half, cy + dy * half, stops, null, Shader.TileMode.CLAMP)
+        return LinearGradient(cx - dx * half, cy - dy * half, cx + dx * half, cy + dy * half, c1, c2, Shader.TileMode.CLAMP)
+    }
     private var overlayNames: Set<String> = emptySet()
 
     /** Fired with root-px coordinates on a single tap — forwarded straight to [IndsinPreviewManager.tap]. */
@@ -443,8 +461,19 @@ class IndsinFabricView @JvmOverloads constructor(
      * Engine yet; every open Dialog/anchored Tooltip then simply draws inline at whatever
      * position the Fabric tree gives it, exactly as before this feature existed.
      */
-    fun setFabric(node: JSONObject?, rootW: Int, rootH: Int, overlays: org.json.JSONArray? = null) {
+    fun setFabric(node: JSONObject?, rootW: Int, rootH: Int, overlays: org.json.JSONArray? = null, canvasInfo: JSONObject? = null) {
         fabric = node
+        // Design canvas (engine envelope "canvas": {width,height,background,source}): the screen background
+        // behind the Fabric — the root's `<Screen bg>`, else the host default, else the theme background.
+        canvasColor = canvasInfo?.optString("background")?.takeIf { it.length == 7 && it[0] == '#' }
+            ?.let { try { Color.parseColor(it) } catch (_: Throwable) { null } }
+        canvasColor2 = canvasInfo?.optString("background2")?.takeIf { it.length == 7 && it[0] == '#' }
+            ?.let { try { Color.parseColor(it) } catch (_: Throwable) { null } }
+        canvasAngle = canvasInfo?.optDouble("angle", 180.0)?.toFloat() ?: 180f
+        canvasStops = canvasInfo?.optJSONArray("stops")?.let { arr ->
+            val out = (0 until arr.length()).mapNotNull { i -> try { Color.parseColor(arr.optString(i)) } catch (_: Throwable) { null } }
+            if (out.size >= 2) out.toIntArray() else null
+        }
         rootWidthPx = max(1, rootW)
         rootHeightPx = max(1, rootH)
 
@@ -542,6 +571,15 @@ class IndsinFabricView @JvmOverloads constructor(
         // visually cut at the phone's edge — exactly where a real device would cut it — instead
         // of spilling into the surrounding preview chrome and looking broken/unbounded.
         canvas.clipRect(0f, 0f, rootWidthPx.toFloat(), rootHeightPx.toFloat())
+
+        canvasColor?.let { c ->
+            fillPaint.shader = null; fillPaint.clearShadowLayer(); fillPaint.color = c
+            val c2 = canvasColor2
+            val full = RectF(0f, 0f, rootWidthPx.toFloat(), rootHeightPx.toFloat())
+            if (c2 != null) fillPaint.shader = gradientShader(full, c, c2, canvasAngle, canvasStops)
+            canvas.drawRect(full, fillPaint)
+            fillPaint.shader = null
+        }
 
         val root = fabric
         if (root != null) {
@@ -773,7 +811,14 @@ class IndsinFabricView @JvmOverloads constructor(
             Kind.TIMELINEITEM -> drawTimelineItem(canvas, rect, attrs)
             Kind.BREADCRUMB, Kind.PAGINATION -> { /* plain Row of real synthesized Text/Button children -- they draw themselves */ }
 
-            else -> drawBox(canvas, rect, attrs, resolved ?: defaultContainer, defaultRadius = 0f, borderColorFallback = resolvedBorderColor(node) ?: Color.WHITE) // Column/Row/Stack/Box/Grid/Wrap/Custom
+            else -> {
+                // Plain layout containers are transparent unless given an explicit fill (mirrors
+                // indsin::Dye::paintIntoImpl) so the canvas color shows through; old engines (no canvas info) keep the fill.
+                val plain = kind == Kind.COLUMN || kind == Kind.ROW || kind == Kind.STACK
+                val explicitFill = attrs.has("bg") || attrs.has("color") || attrs.has("background") || attrs.has("tone")
+                val fill = if (plain && !explicitFill && canvasColor != null) Color.TRANSPARENT else (resolved ?: defaultContainer)
+                drawBox(canvas, rect, attrs, fill, defaultRadius = 0f, borderColorFallback = resolvedBorderColor(node) ?: Color.WHITE) // Column/Row/Stack/Box/Grid/Wrap/Custom
+            }
         }
 
         // Table draws its own header + cell children explicitly (needs column geometry), so it
@@ -853,6 +898,23 @@ class IndsinFabricView @JvmOverloads constructor(
         }
     }
 
+    /** (blur px, y offset px, color) for elevation=/shadow=/shadowColor=/shadowY=, or null when the box has no shadow. */
+    private fun shadowOf(attrs: JSONObject, shadowBlurAttr: Float?): Triple<Float, Float, Int>? {
+        val table = arrayOf(floatArrayOf(0f, 0f, 0f), floatArrayOf(2f, 1f, .12f), floatArrayOf(4f, 2f, .14f),
+            floatArrayOf(8f, 4f, .16f), floatArrayOf(16f, 8f, .18f), floatArrayOf(24f, 12f, .22f))
+        var blur = 0f; var dy = 0f; var alpha = 0
+        val e = attrs.optString("elevation")
+        val lvl = when (e) { "none" -> 0; "xs" -> 1; "sm" -> 2; "md" -> 3; "lg" -> 4; "xl" -> 5; else -> e.toFloatOrNull()?.toInt() ?: -1 }
+        if (lvl > 0) { val t = table[lvl.coerceAtMost(5)]; blur = t[0]; dy = t[1]; alpha = Math.round(t[2] * 255f * 2f) }
+        if (shadowBlurAttr != null && shadowBlurAttr > 0f) { blur = shadowBlurAttr; dy = shadowBlurAttr / 2.5f; alpha = 120 }
+        if (blur <= 0f) return null
+        var color = Color.argb(alpha, 0, 0, 0)
+        val sc = attrs.optString("shadowColor").takeIf { it.isNotBlank() }
+        if (sc != null) { val c = parseHexColor(sc, color); color = if (Color.alpha(c) == 255) Color.argb(maxOf(alpha, 90), Color.red(c), Color.green(c), Color.blue(c)) else c }
+        attrs.optString("shadowY").toFloatOrNull()?.let { dy = it }
+        return Triple(blur, dy, color)
+    }
+
     private fun drawBox(canvas: Canvas, rect: RectF, attrs: JSONObject, fallback: Int, defaultRadius: Float, borderColorFallback: Int = Color.WHITE) {
         if (rect.width() <= 0f || rect.height() <= 0f) return
         val radius = attrs.optString("radius").toFloatOrNull() ?: defaultRadius
@@ -863,17 +925,19 @@ class IndsinFabricView @JvmOverloads constructor(
         fillPaint.clearShadowLayer()
 
         if (gradient != null) {
-            val parts = gradient.split(',')
-            val c1 = parseHexColor(parts.getOrNull(0)?.trim(), fallback)
-            val c2 = parseHexColor(parts.getOrNull(1)?.trim(), fallback)
-            fillPaint.shader = LinearGradient(rect.left, rect.top, rect.left, rect.bottom, c1, c2, Shader.TileMode.CLAMP)
+            // "c1,c2[,c3…][,angle]": leading entries are colors (equally spaced), one trailing number is the CSS angle.
+            val parts = gradient.split(',').map { it.trim() }
+            val gAngle = parts.lastOrNull()?.toFloatOrNull()
+            val colorParts = if (gAngle != null) parts.dropLast(1) else parts
+            val cols = colorParts.map { parseHexColor(it, fallback) }.toIntArray()
+            if (cols.size >= 2) fillPaint.shader = gradientShader(rect, cols[0], cols[cols.size - 1], gAngle ?: 180f, cols)
+            else fillPaint.color = fallback
         } else {
             fillPaint.color = parseHexColor(attrs.optString("color").ifBlank { null }, fallback)
         }
 
-        if (shadow != null && shadow > 0f) {
-            fillPaint.setShadowLayer(shadow, 0f, shadow / 2.5f, Color.argb(120, 0, 0, 0))
-        }
+        // Shadows mirror indsin::resolveShadow (rin_indsin_paint.h): elevation= tokens, shadow= blur, shadowColor=, shadowY=.
+        shadowOf(attrs, shadow)?.let { (blur, dy, color) -> fillPaint.setShadowLayer(blur, 0f, dy, color) }
 
         canvas.drawRoundRect(rect, radius, radius, fillPaint)
 
