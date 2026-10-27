@@ -30,6 +30,9 @@ struct IndsinSession {
     indsin::Indsin indsinEngine;
     std::unordered_map<indsin::StrandId, indsin::StrandPtr> index; // rebuilt after any structural change
     int rootWidth = 390;
+    int canvasW = 0;          // effective canvas width (root `screen=`/`canvas_width=`); 0 => rootWidth
+    int canvasMinH = 0;       // declared minimum canvas height (0 => none)
+    indsin::HostBackground hostBg; // host default background (rin_indsin_session_set_default_background)
     int viewportHeight = 844; // Overlay Engine: see rin_indsin_session_set_viewport's doc comment
     indsin::OverlayLayer overlayLayer; // rebuilt every relayout() -- see rin_indsin_overlay.h
 
@@ -67,18 +70,63 @@ double nowMsFor(IndsinSession* sess) {
     return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - sess->clockStart).count();
 }
 
+int canvasWidthOf(const IndsinSession* sess) { return sess->canvasW > 0 ? sess->canvasW : sess->rootWidth; }
+
+// Frame (canvas fill + document + overlay) for the session's current state; W/H = canvas size.
+indsin::DrawList paintSessionFrame(IndsinSession* sess, int& W, int& H) {
+    W = canvasWidthOf(sess);
+    H = (int)std::ceil(sess->state.fabric->geometry.h);
+    if (H <= 0) H = sess->viewportHeight; // degenerate/empty Fabric: fall back to a sane canvas
+    if (H < sess->canvasMinH) H = sess->canvasMinH;
+    indsin::Dye dye;
+    return dye.paintFrame(sess->state.fabric, sess->overlayLayer, (double)W, (double)H, sess->hostBg);
+}
+
+std::string canvasJson(IndsinSession* sess) {
+    int W = canvasWidthOf(sess);
+    int H = (int)std::ceil(sess->state.fabric->geometry.h);
+    if (H < sess->canvasMinH) H = sess->canvasMinH;
+    indsin::CanvasInfo ci = indsin::resolveCanvas(sess->state.fabric, sess->hostBg);
+    std::ostringstream os;
+    char hex[16]; std::snprintf(hex, sizeof hex, "#%02X%02X%02X", ci.color.r, ci.color.g, ci.color.b);
+    os << "{\"width\":" << W << ",\"height\":" << H << ",\"background\":\"" << hex
+       << "\",\"source\":\"" << ci.source << "\"";
+    if (ci.gradient()) {
+        char hex2[16]; std::snprintf(hex2, sizeof hex2, "#%02X%02X%02X", ci.stops.back().r, ci.stops.back().g, ci.stops.back().b);
+        os << ",\"background2\":\"" << hex2 << "\",\"angle\":" << ci.angle << ",\"stops\":[";
+        for (size_t k = 0; k < ci.stops.size(); k++) {
+            char hx[16]; std::snprintf(hx, sizeof hx, "#%02X%02X%02X", ci.stops[k].r, ci.stops[k].g, ci.stops[k].b);
+            os << (k ? "," : "") << "\"" << hx << "\"";
+        }
+        os << "]";
+    }
+    os << "}";
+    return os.str();
+}
+
 void relayout(IndsinSession* sess) {
     if (!sess->state.ok || !sess->state.fabric) return;
     sess->indsinEngine = indsin::Indsin{}; // fresh stats per call; Tension caching lives on the Strands themselves
     sess->state.fabric->screenRoot = true;
+    // Design canvas (root `screen=` / `canvas_width=` / `canvas_height=`): the screen may be any size
+    // the design asks for, not only the host's width. Falls back to the host width.
+    double cw = 0, ch = 0;
+    sess->canvasW = 0; sess->canvasMinH = 0;
+    if (indsin::resolveCanvasSize(*sess->state.fabric, (double)sess->rootWidth, cw, ch)) {
+        if (cw >= 1) sess->canvasW = (int)std::lround(cw);
+        if (ch >= 1) sess->canvasMinH = (int)std::lround(ch);
+    }
+    const double W = (double)canvasWidthOf(sess);
+    indsin::viewportWidthPx() = W;
+    indsin::viewportHeightPx() = sess->canvasMinH > 0 ? (double)sess->canvasMinH : (double)sess->viewportHeight;
     // Responsive attrs (rin_indsin_responsive.h): apply columns_md=/gap_lg=/... for the current width
     // BEFORE measuring. Idempotent, so running it on every relayout (tap, edit, resize) is safe.
-    indsin::applyResponsiveAttrs(sess->state.fabric, (double)sess->rootWidth);
-    sess->indsinEngine.layout(sess->state.fabric, indsin::Constraints{(double)sess->rootWidth, (double)sess->rootWidth, 0, 1e9}, 0, 0);
+    indsin::applyResponsiveAttrs(sess->state.fabric, W);
+    sess->indsinEngine.layout(sess->state.fabric, indsin::Constraints{W, W, 0, 1e9}, 0, 0);
     // Overlay Engine second pass: re-homes every open Dialog / anchored Tooltip against the
     // viewport now that the whole tree (including their own content boxes) has been measured.
     sess->overlayLayer = indsin::buildOverlayLayer(sess->indsinEngine, sess->state.fabric,
-                                                  (double)sess->rootWidth, (double)sess->viewportHeight);
+                                                  W, indsin::viewportHeightPx());
     // Effects Engine: applied last, after both passes above, so the geometry it nudges
     // (translate/scale for an in-progress enter animation) is this frame's FINAL geometry —
     // anything painted or exported after this reflects the current animation frame for free.
@@ -119,9 +167,10 @@ std::string overlayLayerJson(const indsin::OverlayLayer& layer) {
 // fields (already-serialized, comma-prefixed) spliced in before "fabric".
 std::string fabricEnvelope(IndsinSession* sess, const std::string& extraFields) {
     std::ostringstream os;
-    indsin::Dye dye;
-    auto draw = dye.paintWithOverlay(sess->state.fabric, sess->overlayLayer);
+    int cvW = 0, cvH = 0;
+    auto draw = paintSessionFrame(sess, cvW, cvH);
     os << "{\"ok\":true" << extraFields
+       << ",\"canvas\":" << canvasJson(sess)
        << ",\"strandsMeasured\":" << sess->indsinEngine.stats.strandsMeasured
        << ",\"cacheHits\":" << sess->indsinEngine.stats.cacheHits
        << ",\"animating\":" << (sess->animating ? "true" : "false")
@@ -174,13 +223,24 @@ RIN_API char* rin_indsin_render_json(const char* source, int rootWidth) {
 
     indsin::Indsin indsinEngine;
     r.fabric->screenRoot = true;
-    indsin::applyResponsiveAttrs(r.fabric, (double)rootWidth);
-    indsinEngine.layout(r.fabric, indsin::Constraints{(double)rootWidth, (double)rootWidth, 0, 1e9}, 0, 0);
+    double cw = 0, ch = 0;
+    int canvasW = rootWidth;
+    if (indsin::resolveCanvasSize(*r.fabric, (double)rootWidth, cw, ch) && cw >= 1) canvasW = (int)std::lround(cw);
+    indsin::viewportWidthPx() = canvasW; indsin::viewportHeightPx() = ch >= 1 ? ch : 844;
+    indsin::applyResponsiveAttrs(r.fabric, (double)canvasW);
+    indsinEngine.layout(r.fabric, indsin::Constraints{(double)canvasW, (double)canvasW, 0, 1e9}, 0, 0);
 
     indsin::Dye dye;
     auto draw = dye.paint(r.fabric);
+    {
+        indsin::CanvasInfo ci = indsin::resolveCanvas(r.fabric, indsin::HostBackground{});
+        indsin::DrawCommand cv{indsin::DrawOp::FILL_RECT,
+            indsin::Rect{0, 0, (double)canvasW, std::max(ch, std::ceil(r.fabric->geometry.h))}, ci.color, "", 0, 0, 0};
+        if (ci.gradient()) { cv.stops = ci.stops; cv.angleDeg = ci.angle; }
+        draw.insert(draw.begin(), cv);
+    }
     std::ostringstream os;
-    os << "{\"ok\":true,\"strandsMeasured\":" << indsinEngine.stats.strandsMeasured
+    os << "{\"ok\":true,\"canvasWidth\":" << canvasW << ",\"strandsMeasured\":" << indsinEngine.stats.strandsMeasured
        << ",\"cacheHits\":" << indsinEngine.stats.cacheHits
        << ",\"paint\":" << indsin::drawListToJsonString(draw)
        << ",\"fabric\":" << indsin::fabricToJsonString(r.fabric) << "}";
@@ -429,11 +489,8 @@ RIN_API unsigned char* rin_indsin_session_render_rgb(void* sessionPtr, int* outW
     auto* sess = static_cast<IndsinSession*>(sessionPtr);
     if (!sess || !sess->state.ok || !sess->state.fabric) return nullptr;
 
-    indsin::Dye dye;
-    auto draw = dye.paintWithOverlay(sess->state.fabric, sess->overlayLayer);
-    int W = sess->rootWidth;
-    int H = (int)std::ceil(sess->state.fabric->geometry.h);
-    if (H <= 0) H = sess->viewportHeight; // degenerate/empty Fabric: fall back to a sane canvas
+    int W = 0, H = 0;
+    auto draw = paintSessionFrame(sess, W, H);
     auto buf = indsin::rasterizeToBuffer(draw, W, H); // the ONE rasterizer -- see header comment
 
     unsigned char* out = static_cast<unsigned char*>(std::malloc(buf.size()));
@@ -452,11 +509,8 @@ RIN_API int rin_indsin_session_export_png(void* sessionPtr, const char* path) {
     auto* sess = static_cast<IndsinSession*>(sessionPtr);
     if (!sess || !sess->state.ok || !sess->state.fabric || !path) return 0;
 
-    indsin::Dye dye;
-    auto draw = dye.paintWithOverlay(sess->state.fabric, sess->overlayLayer);
-    int W = sess->rootWidth;
-    int H = (int)std::ceil(sess->state.fabric->geometry.h);
-    if (H <= 0) H = sess->viewportHeight;
+    int W = 0, H = 0;
+    auto draw = paintSessionFrame(sess, W, H);
     auto buf = indsin::rasterizeToBuffer(draw, W, H);
     return indsin::writePNG(path, W, H, buf) ? 1 : 0;
 }
@@ -464,11 +518,48 @@ RIN_API int rin_indsin_session_export_png(void* sessionPtr, const char* path) {
 RIN_API char* rin_indsin_session_export_html(void* sessionPtr) {
     auto* sess = static_cast<IndsinSession*>(sessionPtr);
     if (!sess || !sess->state.ok || !sess->state.fabric) return nullptr;
-    indsin::Dye dye;
-    auto draw = dye.paintWithOverlay(sess->state.fabric, sess->overlayLayer);
-    int H = (int)std::ceil(sess->state.fabric->geometry.h);
-    if (H <= 0) H = sess->viewportHeight;
-    return dupToC(indsin::drawListToHtml(draw, sess->rootWidth, H));
+    int W = 0, H = 0;
+    auto draw = paintSessionFrame(sess, W, H);
+    indsin::CanvasInfo ci = indsin::resolveCanvas(sess->state.fabric, sess->hostBg);
+    return dupToC(indsin::drawListToHtml(draw, W, H, "indsin preview", ci.color));
+}
+
+// Default background (host setting). "" / NULL clears it (back to the theme's `background`). Any color literal
+// the engine understands is accepted (#RGB, #RRGGBB, rgb(), hsl(), CSS names); returns 0 on an unparsable value.
+RIN_API int rin_indsin_session_set_default_background(void* sessionPtr, const char* color) {
+    auto* sess = static_cast<IndsinSession*>(sessionPtr);
+    if (!sess) return 0;
+    std::string c = color ? color : "";
+    if (c.empty()) { sess->hostBg = indsin::HostBackground{}; return 1; }
+    // Gradient default: "#0B1020,#4B2A8A[,#…][,angle]" — 2..16 colors + optional CSS angle.
+    if (c.find(',') != std::string::npos) {
+        std::vector<indsin::Color> st; double ang = 180;
+        if (!indsin::parseGradientSpec(c, st, ang)) return 0;
+        sess->hostBg = indsin::HostBackground{}; sess->hostBg.set = true; sess->hostBg.color = st[0];
+        sess->hostBg.stops = st; sess->hostBg.angle = ang;
+        return 1;
+    }
+    if (!indsin::looksLikeHexColor(c)) return 0;
+    sess->hostBg = indsin::HostBackground{};
+    sess->hostBg.set = true;
+    sess->hostBg.color = indsin::parseHexColor(c, indsin::Color{0, 0, 0});
+    return 1;
+}
+
+// Host resize: new base width (and optional viewport height, 0 = keep). A root `screen=`/`canvas_width=` still wins.
+RIN_API void rin_indsin_session_resize(void* sessionPtr, int width, int viewportHeight) {
+    auto* sess = static_cast<IndsinSession*>(sessionPtr);
+    if (!sess) return;
+    if (width > 0) sess->rootWidth = width;
+    if (viewportHeight > 0) sess->viewportHeight = viewportHeight;
+    relayout(sess);
+}
+
+// {"width","height","background":"#RRGGBB","source":"screen|host|theme"} — what the host should size/clear its surface with.
+RIN_API char* rin_indsin_session_canvas_json(void* sessionPtr) {
+    auto* sess = static_cast<IndsinSession*>(sessionPtr);
+    if (!sess || !sess->state.ok || !sess->state.fabric) return dupToC(sessionErrorJson(sess));
+    return dupToC(canvasJson(sess));
 }
 
 RIN_API void rin_indsin_session_set_viewport(void* sessionPtr, int viewportHeight) {
@@ -487,7 +578,7 @@ RIN_API char* rin_indsin_session_audit_json(void* sessionPtr) {
     auto* sess = static_cast<IndsinSession*>(sessionPtr);
     if (!sess || !sess->state.ok) return dupToC(sessionErrorJson(sess));
     indsin::AuditOptions opt;
-    opt.screenWidth = (double)sess->rootWidth;
+    opt.screenWidth = (double)canvasWidthOf(sess);
     return dupToC(indsin::auditReportToJson(indsin::auditFabric(sess->state.fabric, opt)));
 }
 // Node/depth/kind/category statistics of the current Fabric.
