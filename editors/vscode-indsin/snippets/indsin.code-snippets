@@ -1,17 +1,282 @@
 {
-  "container": { "prefix": "container", "description": "indsin container", "body": ["@container=${1:App}", "\t$0", ".end/container"] },
-  "view": { "prefix": "view", "description": "Generic element", "body": ["@view.${1|Column,Row,Stack,Card,Box,Grid,Wrap,Scaffold|}=${2:Name}", "\t$0", ".end/view"] },
-  "column": { "prefix": "column", "description": "Column layout", "body": ["@view.Column=${1:Root}", "\tpadding=\"${2|compact,normal,comfortable,spacious|}\";", "\tgap=\"${3|compact,normal,comfortable,spacious|}\";", "\t$0", ".end/view"] },
-  "row": { "prefix": "row", "description": "Row layout", "body": ["@view.Row=${1:Row}", "\tgap=\"normal\";", "\t$0", ".end/view"] },
-  "card": { "prefix": "card", "description": "Card", "body": ["@view.Card=${1:Card}", "\ttitle=\"${2:Title}\";", "\televation=\"${3|none,xs,sm,md,lg,xl|}\";", "\t$0", ".end/view"] },
-  "text": { "prefix": "text", "description": "Text", "body": ["@view.Text=${1:Label}", "\ttext=\"${2:Hello}\";", "\tsize=\"${3|caption,body,label,subtitle,title,heading,headline,display|}\";", ".end/view"] },
-  "button": { "prefix": "button", "description": "Button with tap handler", "body": ["@view.Button=${1:Action}", "\tlabel=\"${2:Click me}\";", "\tvariant=\"${3|fill,outline,ghost,link,glass,gradient|}\";", "\tonTap=${4:count = count + 1};", ".end/view"] },
-  "input": { "prefix": "input", "description": "Text input", "body": ["@view.Input=${1:Field}", "\tlabel=\"${2:Name}\";", "\tplaceholder=\"${3:Type here}\";", ".end/view"] },
-  "image": { "prefix": "image", "description": "Image", "body": ["@view.Image=${1:Photo}", "\tsrc=\"${2:https://example.com/image.png}\";", "\talt=\"${3:Description}\";", "\tfit=\"${4|cover,contain|}\";", ".end/view"] },
-  "banner": { "prefix": "banner", "description": "Banner", "body": ["@view.Banner=${1:Notice}", "\ttype=\"${2|info,success,warning,error,action,progress|}\";", "\tmessage=\"${3:Saved}\";", "\tdismissible=true;", ".end/view"] },
-  "tabs": { "prefix": "tabs", "description": "Tabs", "body": ["@view.Tabs=${1:Tabs}", "\t@view.TabItem=${2:One}", "\t\tlabel=\"${2}\";", "\t.end/view", "\t@view.TabItem=${3:Two}", "\t\tlabel=\"${3}\";", "\t.end/view", ".end/view"] },
-  "list": { "prefix": "list", "description": "List", "body": ["@view.List=${1:Items}", "\t@view.ListItem=${2:Item}", "\t\ttext=\"${3:Entry}\";", "\t.end/view", ".end/view"] },
-  "responsive": { "prefix": "responsive", "description": "Responsive attribute set", "body": ["${1:padding}=\"compact\";", "${1}_md=\"normal\";", "${1}_lg=\"spacious\";"] },
-  "effect": { "prefix": "effect", "description": "Entrance effect", "body": ["effect=\"${1|fade,slideUp,slideDown,slideLeft,slideRight,pulse,shake,bounce,grow|}\";", "duration=\"${2|instant,fast,normal,slow,slower|}\";", "easing=\"${3|ease,easeout,easeinout,spring,bounce|}\";"] },
-  "warp": { "prefix": "warp", "description": "Reactive state", "body": ["warp ${1:count} = ${2:0};"] }
+  "container": {
+    "prefix": "container",
+    "description": "indsin container",
+    "body": [
+      "@container=${1:App}",
+      "\t$0",
+      ".end/container"
+    ]
+  },
+  "view": {
+    "prefix": "view",
+    "description": "Generic element",
+    "body": [
+      "@view.${1|Column,Row,Stack,Card,Box,Grid,Wrap,Scaffold|}=${2:Name}",
+      "\t$0",
+      ".end/view"
+    ]
+  },
+  "column": {
+    "prefix": "column",
+    "description": "Column layout",
+    "body": [
+      "@view.Column=${1:Root}",
+      "\tpadding=\"${2|compact,normal,comfortable,spacious|}\";",
+      "\tgap=\"${3|compact,normal,comfortable,spacious|}\";",
+      "\t$0",
+      ".end/view"
+    ]
+  },
+  "row": {
+    "prefix": "row",
+    "description": "Row layout",
+    "body": [
+      "@view.Row=${1:Row}",
+      "\tgap=\"normal\";",
+      "\t$0",
+      ".end/view"
+    ]
+  },
+  "card": {
+    "prefix": "card",
+    "description": "Card",
+    "body": [
+      "@view.Card=${1:Card}",
+      "\ttitle=\"${2:Title}\";",
+      "\televation=\"${3|none,xs,sm,md,lg,xl|}\";",
+      "\t$0",
+      ".end/view"
+    ]
+  },
+  "text": {
+    "prefix": "text",
+    "description": "Text",
+    "body": [
+      "@view.Text=${1:Label}",
+      "\ttext=\"${2:Hello}\";",
+      "\tsize=\"${3|caption,body,label,subtitle,title,heading,headline,display|}\";",
+      ".end/view"
+    ]
+  },
+  "button": {
+    "prefix": "button",
+    "description": "Button with tap handler",
+    "body": [
+      "@view.Button=${1:Action}",
+      "\tlabel=\"${2:Click me}\";",
+      "\tvariant=\"${3|fill,outline,ghost,link,glass,gradient|}\";",
+      "\tonTap=${4:count = count + 1};",
+      ".end/view"
+    ]
+  },
+  "input": {
+    "prefix": "input",
+    "description": "Text input",
+    "body": [
+      "@view.Input=${1:Field}",
+      "\tlabel=\"${2:Name}\";",
+      "\tplaceholder=\"${3:Type here}\";",
+      ".end/view"
+    ]
+  },
+  "image": {
+    "prefix": "image",
+    "description": "Image",
+    "body": [
+      "@view.Image=${1:Photo}",
+      "\tsrc=\"${2:https://example.com/image.png}\";",
+      "\talt=\"${3:Description}\";",
+      "\tfit=\"${4|cover,contain|}\";",
+      ".end/view"
+    ]
+  },
+  "banner": {
+    "prefix": "banner",
+    "description": "Banner",
+    "body": [
+      "@view.Banner=${1:Notice}",
+      "\ttype=\"${2|info,success,warning,error,action,progress|}\";",
+      "\tmessage=\"${3:Saved}\";",
+      "\tdismissible=true;",
+      ".end/view"
+    ]
+  },
+  "tabs": {
+    "prefix": "tabs",
+    "description": "Tabs",
+    "body": [
+      "@view.Tabs=${1:Tabs}",
+      "\t@view.TabItem=${2:One}",
+      "\t\tlabel=\"${2}\";",
+      "\t.end/view",
+      "\t@view.TabItem=${3:Two}",
+      "\t\tlabel=\"${3}\";",
+      "\t.end/view",
+      ".end/view"
+    ]
+  },
+  "list": {
+    "prefix": "list",
+    "description": "List",
+    "body": [
+      "@view.List=${1:Items}",
+      "\t@view.ListItem=${2:Item}",
+      "\t\ttext=\"${3:Entry}\";",
+      "\t.end/view",
+      ".end/view"
+    ]
+  },
+  "responsive": {
+    "prefix": "responsive",
+    "description": "Responsive attribute set",
+    "body": [
+      "${1:padding}=\"compact\";",
+      "${1}_md=\"normal\";",
+      "${1}_lg=\"spacious\";"
+    ]
+  },
+  "effect": {
+    "prefix": "effect",
+    "description": "Entrance effect",
+    "body": [
+      "effect=\"${1|fade,slideUp,slideDown,slideLeft,slideRight,pulse,shake,bounce,grow|}\";",
+      "duration=\"${2|instant,fast,normal,slow,slower|}\";",
+      "easing=\"${3|ease,easeout,easeinout,spring,bounce|}\";"
+    ]
+  },
+  "warp": {
+    "prefix": "warp",
+    "description": "Reactive state",
+    "body": [
+      "warp ${1:count} = ${2:0};"
+    ]
+  },
+  "tag-column": {
+    "prefix": "<column",
+    "description": "Column (tag syntax)",
+    "body": [
+      "<Column#${1:Root} padding=${2|compact,normal,comfortable,spacious|} gap=${3|compact,normal,comfortable,spacious|}>",
+      "\t$0",
+      "</Column>"
+    ]
+  },
+  "tag-row": {
+    "prefix": "<row",
+    "description": "Row (tag syntax)",
+    "body": [
+      "<Row#${1:Row} gap=normal>",
+      "\t$0",
+      "</Row>"
+    ]
+  },
+  "tag-card": {
+    "prefix": "<card",
+    "description": "Card (tag syntax)",
+    "body": [
+      "<Card#${1:Card} title=\"${2:Title}\" elevation=${3|none,xs,sm,md,lg,xl|}>",
+      "\t$0",
+      "</Card>"
+    ]
+  },
+  "tag-text": {
+    "prefix": "<text",
+    "description": "Text with child content",
+    "body": [
+      "<Text#${1:Label} size=${2|caption,body,label,subtitle,title,heading,headline,display|}>${3:Hello {name}}</Text>"
+    ]
+  },
+  "tag-button": {
+    "prefix": "<button",
+    "description": "Button with tap handler",
+    "body": [
+      "<Button#${1:Action} variant=${2|filled,outline,gradient|} onTap={${3:count = count + 1}}>${4:Label}</Button>"
+    ]
+  },
+  "tag-warp": {
+    "prefix": "<warp",
+    "description": "Reactive state cell",
+    "body": [
+      "<warp ${1:count}={${2:0}} />"
+    ]
+  },
+  "tag-import": {
+    "prefix": "<import",
+    "description": "Import library",
+    "body": [
+      "<Import src=\"${1:lib/ui.og.rin}\" />"
+    ]
+  },
+  "tag-loop": {
+    "prefix": "<loop",
+    "description": "Loop root",
+    "body": [
+      "<Loop#${1:canvas}>",
+      "\t$0",
+      "</Loop>"
+    ]
+  },
+  "tag-fragment": {
+    "prefix": "<fragment",
+    "description": "Transparent group",
+    "body": [
+      "<>",
+      "\t$0",
+      "</>"
+    ]
+  },
+  "tag-define": {
+    "prefix": "<define",
+    "description": "Component template",
+    "body": [
+      "<Define#${1:Name} ${2:label}=\"${3:text}\">",
+      "\t$0",
+      "</Define>"
+    ]
+  },
+  "tag-repeat": {
+    "prefix": "<repeat",
+    "description": "Compile-time repeat",
+    "body": [
+      "<Repeat times=${1:3} as=${2:i}>",
+      "\t$0",
+      "</Repeat>"
+    ]
+  },
+  "tag-if": {
+    "prefix": "<if",
+    "description": "Reactive condition",
+    "body": [
+      "<If cond={${1:flag}}>",
+      "\t$0",
+      "</If>"
+    ]
+  },
+  "tag-else": {
+    "prefix": "<else",
+    "description": "Else branch",
+    "body": [
+      "<Else>",
+      "\t$0",
+      "</Else>"
+    ]
+  },
+  "tag-fun": {
+    "prefix": "<fun",
+    "description": "Rin function",
+    "body": [
+      "<Fun#${1:name} params=\"${2:a, b}\">",
+      "\t$0",
+      "</Fun>"
+    ]
+  },
+  "tag-rin": {
+    "prefix": "<rin",
+    "description": "Raw Rin code block",
+    "body": [
+      "<Rin>",
+      "\t$0",
+      "</Rin>"
+    ]
+  }
 }
