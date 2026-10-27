@@ -327,6 +327,9 @@ inline Theme themeFromSeed(const std::string& name, const Color& seed, bool dark
     t.info       = ensureContrast(Color{58, 110, 196}, surface, 3.0);
     return t;
 }
+inline Theme themeFromSeedLiteral(const std::string& name, const std::string& seedLiteral, bool dark) {
+    return themeFromSeed(name, parseHexColor(seedLiteral, Color{108, 78, 245}), dark);
+}
 inline Theme themeFromSeed(const std::string& name, const std::string& seedLiteral, bool dark) {
     return themeFromSeed(name, parseHexColor(seedLiteral, Color{108, 78, 245}), dark);
 }
