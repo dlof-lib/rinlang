@@ -8,6 +8,7 @@
 
 #include "pitok_lexer.h"
 #include "pitok_parser.h"
+#include "../../app/src/main/cpp/indsin/rin_indsin_tags.h" // صيغة الوسوم <> → @view (header مستقل، بلا rin_*)
 #include "pitok_json.h"
 #include <fstream>
 #include <sstream>
@@ -26,6 +27,8 @@ int main(int argc, char** argv) {
     std::stringstream buf;
     buf << in.rdbuf();
     std::string source = buf.str();
+    try { source = indsin::tags::desugar(source); }
+    catch (const indsin::tags::TagError& e) { std::cerr << "[pitok] tag syntax error at " << argv[1] << ":" << e.line << " -- " << e.message << "\n"; return 1; }
 
     try {
         pitok::Lexer lexer(source, argv[1]);
