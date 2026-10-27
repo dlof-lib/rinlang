@@ -14,6 +14,7 @@ Syntax highlighting, snippets, code folding and a dedicated file icon for **inds
 | Responsive suffixes | `padding_md`, `_sm` `_md` `_lg` `_xl` | `storage.modifier.responsive.indsin` |
 | Design tokens | `"spacious"`, `"gradient"`, `"slideUp"` | `constant.language.token.indsin` |
 | Colours / lengths | `"#1E1E2E"`, `120px`, `250ms` | `constant.other.color.*`, `constant.numeric.length.indsin` |
+| Tag syntax | `<Column#root gap=16>`, `</Column>`, `<Text />`, `{count + 1}`, `<!-- -->` | `punctuation.definition.tag.indsin`, `support.class.element.indsin`, `meta.embedded.expression.indsin` |
 | Rin code (handlers, `warp`, strings, comments) | `count = count + 1;` | inherited from `source.rin` |
 
 The grammar is generated from the translator's own catalogue (`node tools/indsin-object/scripts/gen_syntax.js`), so it always matches the elements the interpreter supports.
@@ -28,4 +29,4 @@ code --install-extension indsin-language-1.0.0.vsix
 
 or copy this folder to `~/.vscode/extensions/rinlang.indsin-language-1.0.0`.
 
-Open `examples/sample.indsin` to try it.
+Open `examples/sample.indsin` (classic `@view` syntax) or `examples/sample-tags.indsin` (tag syntax, see [docs/indsin_tags.md](../../docs/indsin_tags.md)) to try it.
