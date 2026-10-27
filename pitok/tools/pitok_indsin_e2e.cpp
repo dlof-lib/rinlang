@@ -10,6 +10,7 @@
 //   /tmp/pitok_indsin_e2e samples/indsin_showcase.rin
 
 #include "pitok_lexer.h"
+#include "../../app/src/main/cpp/indsin/rin_indsin_tags.h"
 #include "pitok_parser.h"
 #include "indsin/pitok_indsin_bridge.h"
 #include "indsin/rin_indsin_layout.h"
@@ -33,7 +34,7 @@ int main(int argc, char** argv) {
     std::stringstream buf; buf << in.rdbuf();
 
     // ---- Stage 1: PITOK lex + parse (no Rin parser involved at all) ----
-    pitok::Lexer lexer(buf.str(), argv[1]);
+    pitok::Lexer lexer(indsin::tags::desugar(buf.str()), argv[1]);
     auto tokens = lexer.scanTokens();
     pitok::Parser parser(tokens, argv[1]);
     pitok::Program prog = parser.parseProgram();
