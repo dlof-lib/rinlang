@@ -1,0 +1,39 @@
+<!-- مفاهيم صيغة الوسوم المتقدمة: قوالب، تكرار، شروط، ودوال.
+     كلها تُوسَّع وقت الترجمة إلى @view عادية (docs/indsin_tags.md). -->
+
+<!-- قالب مكوّن: الخصائص وقيمها الافتراضية تُعلَن على Define، و<Slot /> مكان أبناء الاستعمال -->
+<Define#Pill label="pill" color=#3498db>
+  <Card#box padding=10 radius=16 bg={color}>
+    <Text#t color=#ffffff>{label}</Text>
+    <Slot />
+  </Card>
+</Define>
+
+<!-- دالة Rin عادية: <Fun> تُترجَم إلى fun name(params) { … } -->
+<Fun#bump params="step">
+  count = count + step;
+</Fun>
+
+<warp count={0} />
+<warp open={false} />
+
+<Column#root gap=12 padding=20>
+  <Pill label="Hello" />
+  <Pill label={"Count = " + count} color=#e74c3c />
+
+  <!-- تكرار وقت الترجمة: k يُستبدل بالرقم، والأسماء تصير فريدة لكل نسخة -->
+  <Repeat times=3 as=k>
+    <Text#row>Row {k + 1}</Text>
+  </Repeat>
+
+  <Button#inc onTap={bump(1)}>+1</Button>
+  <Button#toggle onTap={toggle(open)}>Toggle</Button>
+
+  <!-- شرط تفاعلي: يُترجَم إلى visible= على كل ابن مباشر ويُعاد تقييمه مع warp -->
+  <If cond={open}>
+    <Text#opened>Open ✓</Text>
+  </If>
+  <Else>
+    <Text#closed>Closed</Text>
+  </Else>
+</Column>
