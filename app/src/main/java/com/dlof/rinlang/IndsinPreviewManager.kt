@@ -82,6 +82,24 @@ object IndsinPreviewManager {
     @Volatile var viewportHeight: Int = 844
         private set
 
+    /**
+     * Default screen background ("" = theme's `background`), re-applied to every new session so it survives
+     * restarts. `<Screen bg=…>` in the source overrides it. See [setDefaultBackground].
+     */
+    @Volatile var defaultBackground: String = ""
+        private set
+
+    /** Sets the default screen background and re-delivers the current frame (no-op delivery if no session yet). */
+    fun setDefaultBackground(color: String) {
+        defaultBackground = color.trim()
+        val current = session ?: return
+        worker.execute {
+            current.setDefaultBackground(defaultBackground)
+            val json = try { current.currentJson() } catch (t: Throwable) { errorJson(t) }
+            deliver(json, 0)
+        }
+    }
+
     /** True once a session exists — the editor only bothers pushing live edits when this is true. */
     val isRunning: Boolean get() = session != null
 
@@ -120,6 +138,7 @@ object IndsinPreviewManager {
         worker.execute {
             session?.close()
             val fresh = RinEngine.IndsinSession(source, rootWidth)
+            if (defaultBackground.isNotEmpty()) fresh.setDefaultBackground(defaultBackground)
             fresh.setViewport(viewportHeight) // correct the native 844px default immediately -- see [viewportHeight]'s kdoc
             session = fresh
             beginTrackedOperation()
