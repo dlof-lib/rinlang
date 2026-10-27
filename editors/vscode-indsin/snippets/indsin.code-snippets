@@ -278,5 +278,56 @@
       "\t$0",
       "</Rin>"
     ]
+  },
+  "tag-screen": {
+    "prefix": "<screen",
+    "description": "Screen root: size preset or WxH, canvas background",
+    "body": [
+      "<Screen#${1:app} size=${2|phone,tablet,desktop,watch,tv,phone_landscape|} bg=${3:#0B1020} padding=${4:20} gap=${5:14}>",
+      "\t$0",
+      "</Screen>"
+    ]
+  },
+  "tag-palette": {
+    "prefix": "<palette",
+    "description": "Whole theme from ONE seed color (WCAG-checked)",
+    "body": [
+      "<Palette seed=${1:#6C5CE7} ${2|dark,light|} />"
+    ]
+  },
+  "tag-theme": {
+    "prefix": "<theme",
+    "description": "Custom theme roles (primary, background, surface, text…)",
+    "body": [
+      "<Theme#${1:Brand} primary=${2:#6C5CE7} background=${3:#0B1020} surface=${4:#161B33} active />"
+    ]
+  },
+  "tag-aspect": {
+    "prefix": "aspect",
+    "description": "Height follows width (16:9, 1:1, 4:3)",
+    "body": [
+      "aspect=\"${1|16:9,1:1,4:3,3:2,21:9|}\""
+    ]
+  },
+  "tag-tokens": {
+    "prefix": "<tokens",
+    "description": "Design tokens usable as {name}",
+    "body": [
+      "<Tokens ${1:brand}=${2:#6C5CE7} ${3:pad}=${4:20} />"
+    ]
+  },
+  "tag-style": {
+    "prefix": "<style",
+    "description": "Reusable named style (apply with class=\"…\")",
+    "body": [
+      "<Style#${1:card} radius=${2:16} elevation=${3|sm,md,lg,xl|} bg=${4:surface} padding=${5:14} />"
+    ]
+  },
+  "theme-toggle": {
+    "prefix": "toggleTheme",
+    "description": "Dark/Light toggle button",
+    "body": [
+      "<Button#${1:themeBtn} onTap={toggleTheme()}>${2:Theme}</Button>"
+    ]
   }
 }
