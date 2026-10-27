@@ -1,0 +1,7 @@
+<Screen#a size=phone bg="#0B1020,#4B2A8A,160" padding=20 gap=14>
+  <Text#t size=heading>Gradients</Text>
+  <Card#c width=full height=90 radius=18 gradient="#FD79A8,#6C5CE7,90"><Text#x color=#ffffff>left to right</Text></Card>
+  <Card#d width=full height=90 radius=18 gradient="#00B894,#0984E3"><Text#y color=#ffffff>top to bottom</Text></Card>
+  <Card#rainbow width=full height=60 radius=18 gradient="#FF7675,#FDCB6E,#55EFC4,#74B9FF,#A29BFE,90" />
+  <Button#b gradient="#FDCB6E,#E17055,135" onTap={n = 1}>Warm</Button>
+</Screen>
