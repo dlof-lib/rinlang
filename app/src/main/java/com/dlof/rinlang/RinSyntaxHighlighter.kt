@@ -277,11 +277,15 @@ object RinSyntaxHighlighter {
     private val indsinProfile = LangProfile(
         // structure tags + the Rin core keywords/hash family that may appear in handlers and warps
         keyword = Pattern.compile(
-            "@(?:view|container|import)\\b|\\.end/(?:view|container)\\b|" +
+            "@(?:view|container|import)\\b|\\.end/(?:view|container|loop|element)\\b|" +
+                // صيغة الوسوم <Column#id …> … </Column> / <Text /> (انظر docs/indsin_tags.md)
+                "(?<![^\\s])</?(?=[A-Za-z_>])|/>(?=\\s|\\z)|" +
                 wordsPattern(rinCoreKeywords).pattern() + "|#[A-Za-z_][A-Za-z0-9_]*"
         ),
         secondaryKeyword = Pattern.compile(
-            "(?<=@view\\.)(?:" + indsinKinds.sortedByDescending { it.length }.joinToString("|") + ")(?![\\w.])"
+            "(?<=@view\\.)(?:" + indsinKinds.sortedByDescending { it.length }.joinToString("|") + ")(?![\\w.])|" +
+                "(?<=(?<![^\\s])<)(?:" + indsinKinds.sortedByDescending { it.length }.joinToString("|") + ")(?![\\w.])|" +
+                "(?<=(?<![^\\s])</)(?:" + indsinKinds.sortedByDescending { it.length }.joinToString("|") + ")(?![\\w.])"
         ),
         styleField = Pattern.compile(
             "(?<![\\w.\"])(?:" + indsinAttributes.sortedByDescending { it.length }.joinToString("|") +
@@ -290,6 +294,7 @@ object RinSyntaxHighlighter {
         // element / container names after `=` and the existing Rin builtins
         builtin = Pattern.compile(
             "(?<=@view\\.[A-Za-z0-9_.]{1,40}=)[A-Za-z_][\\w.\\-]*|(?<=@container=)[A-Za-z_][\\w.\\-]*|" +
+                "(?<=<[A-Za-z0-9_.]{1,40}#)[A-Za-z_]\\w*|" +
                 wordsPattern(rinBuiltins).pattern()
         ),
         number = Pattern.compile("(?<![\\w.#])-?\\d+(?:\\.\\d+)?(?:px|dp|sp|pt|ms|s|%|vw|vh)?(?![\\w])"),
@@ -299,7 +304,7 @@ object RinSyntaxHighlighter {
         stringToken = Pattern.compile("(?<=\")(?:" + indsinTokenValues.sortedByDescending { it.length }.joinToString("|") + ")(?=\")"),
         stringColor = Pattern.compile("(?<=[\"=\\s(,])" + indsinHexColor + "|(?<=\")#(?:[0-9a-fA-F]{4}|[0-9a-fA-F]{3})(?=\")"),
         lineComment = lineCommentSlash,
-        blockComment = Pattern.compile("/\\*[\\s\\S]*?\\*/")
+        blockComment = Pattern.compile("/\\*[\\s\\S]*?\\*/|<!--[\\s\\S]*?-->")
     )
 
     // ----------------------------------------------------------------------------------
