@@ -208,6 +208,7 @@ struct Dye {
     // Post-pass wrapper: every TEXT_RUN a strand emits gets the strand's real text style so no backend
     // (native rasterizer, HTML export) has to guess font size / alignment / weight from the box height.
     void paintInto(const StrandPtr& s, DrawList& list) {
+        if (s->kind != StrandKind::BANNER && s->kind != StrandKind::TAG && s->attrStr("visible", "true") == "false") return; // مخفي
         size_t first = list.size();
         paintIntoImpl(s, list);
         bool centered = s->kind == StrandKind::BUTTON || s->kind == StrandKind::ICONBUTTON || s->kind == StrandKind::TABITEM ||
