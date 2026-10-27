@@ -9,6 +9,7 @@
 #include "rin_indsin_rinbridge.h" // قيم الخصائص تُقيَّم بمفسّر Rin الحقيقي (docs/indsin_rin.md)
 #include "rin_indsin_rinlib.h"    // دوال indsin.* لكود Rin
 #include "rin_indsin.h"
+#include "rin_indsin_tags.h"     // صيغة الوسوم <Column>…</Column> → لهجة @view (قبل التحليل)
 #include "rin_indsin_tokens.h"
 #include "rin_indsin_object.h"
 #include "rin_indsin_media.h"          // pickMedia()/uploadMedia(): زرع خلايا الوسائط
@@ -143,11 +144,21 @@ inline void sanitizeElements(std::shared_ptr<rin::ViewStmt>& node) {
     for (auto& c: node->children) sanitizeElements(c);
 }
 
+// صيغة الوسوم بالأقواس <> تُحوَّل إلى لهجة @view قبل الـ Lexer (عدد الأسطر محفوظ؛ المصدر بلا وسوم
+// يعود كما هو حرفياً). انظر rin_indsin_tags.h.
+inline std::string expandTagSyntax(const std::string& source) {
+    try {
+        return indsin::tags::desugar(source);
+    } catch (const indsin::tags::TagError& e) {
+        throw rin::RinError(e.message, e.line);
+    }
+}
+
 inline PipelineResult runColdPipelineWithRuntime(const std::string& source, rin::Interpreter& interp,
                                                   long long instructionBudget = 1000000) {
     PipelineResult result;
     try {
-        rin::Lexer lexer(source);
+        rin::Lexer lexer(expandTagSyntax(source));
         auto tokens = lexer.scanTokens();
         rin::Parser parser(tokens);
         auto program = parser.parse();
@@ -296,7 +307,7 @@ inline PipelineResult runColdPipelineForContainerWithRuntime(const std::string& 
                                                               long long instructionBudget = 1000000) {
     PipelineResult result;
     try {
-        rin::Lexer lexer(source);
+        rin::Lexer lexer(expandTagSyntax(source));
         auto tokens = lexer.scanTokens();
         rin::Parser parser(tokens);
         auto program = parser.parse();
@@ -382,7 +393,7 @@ inline PipelineResult runColdPipelineForContainer(const std::string& source, con
 inline std::vector<Patch> runHotPipeline(PipelineResult& state, const std::string& editedSource,
                                           std::string& errorMessage, int& errorLine) {
     try {
-        rin::Lexer lexer(editedSource);
+        rin::Lexer lexer(expandTagSyntax(editedSource));
         auto tokens = lexer.scanTokens();
         rin::Parser parser(tokens);
         auto program = parser.parse();
