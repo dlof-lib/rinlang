@@ -106,3 +106,8 @@ rin_indsin_preview file.rin --width 390 --png out.png --html out.html --tap 60,1
 ---
 ## اختيار الوسائط ورفعها (جديد)
 `pickMedia` / `uploadMedia` / `clearMedia` / `removeMedia` مع خلايا حالة وتقدّم — راجع [docs/indsin_media.md](docs/indsin_media.md).
+
+---
+## صيغة الوسوم `<>` (جديد)
+يمكن كتابة الواجهات بأقواس الزاوية: `<Column#root gap=16> … </Column>`، `<Text>Count: {n}</Text>`، `<warp n={0} />`. تُترجَم
+إلى لهجة `@view` قبل التحليل فتعمل مع كل المضيفين دون تغيير — راجع [docs/indsin_tags.md](docs/indsin_tags.md).
