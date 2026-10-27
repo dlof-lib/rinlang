@@ -371,6 +371,14 @@ object RinEngine {
             synchronized(lock) { if (!closed) try { indsinSessionSetViewportNative(handle, viewportHeight.coerceIn(1, 20000)) } catch (_: Throwable) {} }
         }
 
+        /**
+         * Default screen background ("" clears it back to the theme's `background`). Any color literal the
+         * engine knows (#RGB, #RRGGBB, rgb(), hsl(), CSS names). Returns false if the value is not a color.
+         * A `<Screen bg=…>` in the source still wins. Takes effect on the next [currentJson]/tap result.
+         */
+        fun setDefaultBackground(color: String): Boolean =
+            synchronized(lock) { if (closed) false else try { indsinSessionSetDefaultBackgroundNative(handle, color) } catch (_: Throwable) { false } }
+
         // ---- Design System v2 / Audit / Introspection (docs/indsin_expansion.md §8) ----
         // الدوال الثلاث أدناه لا تلمس المؤشر الأصلي بعد [close] (تفادياً لـ use-after-free) بل تُعيد
         // JSON خطأ آمناً يفهمه المحلّل المطبَّع في IndsinDesignSystem.kt.
@@ -438,5 +446,6 @@ object RinEngine {
     private external fun indsinSessionTickNative(handle: Long): String
     private external fun indsinSessionUpdateSourceNative(handle: Long, newSource: String): String
     private external fun indsinSessionSetViewportNative(handle: Long, viewportHeight: Int)
+    private external fun indsinSessionSetDefaultBackgroundNative(handle: Long, color: String): Boolean
     private external fun indsinSessionFreeNative(handle: Long)
 }
