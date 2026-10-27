@@ -46,6 +46,18 @@ RIN_API void* rin_indsin_session_create_for_container(const char* source, const 
 // whenever the host's visible area actually changes (e.g. rotation).
 RIN_API void rin_indsin_session_set_viewport(void* session, int viewportHeight);
 
+// ---- Design freedom: canvas size + default background (docs/indsin_design_freedom.md) -------------------
+// Default background of the screen canvas (the area behind the Fabric). Precedence: root `canvas=` (what
+// `<Screen bg=...>` writes) > this host default > the active theme's `background`. Pass "" or NULL to clear.
+// Accepts any color literal (#RGB, #RRGGBB, rgb(), hsl(), CSS names). Returns 1 on success, 0 if unparsable.
+RIN_API int rin_indsin_session_set_default_background(void* session, const char* color);
+// Host resize: base width (and viewport height, 0 = keep) -> immediate re-layout. A root `screen="phone|390x844"` /
+// `canvas_width=` declared in the source still overrides the width.
+RIN_API void rin_indsin_session_resize(void* session, int width, int viewportHeight);
+// {"width","height","background":"#RRGGBB","source":"screen|host|theme"} — canvas the host should size/clear with.
+// Every tap/render envelope also carries this object as "canvas". Free with rin_free_string().
+RIN_API char* rin_indsin_session_canvas_json(void* session);
+
 // Current Fabric snapshot plus the exact native Dye paint plan (`paint` array), same JSON shape as rin_indsin_render_json. Free with rin_free_string().
 RIN_API char* rin_indsin_session_render_json(void* session);
 
