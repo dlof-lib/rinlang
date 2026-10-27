@@ -22,6 +22,9 @@
 //   <Loop#canvas> … </Loop>                      →  @loop=canvas … .end/loop
 //   <Container#App> … </Container>               →  @container=App … .end/container
 //   <Element.Button#run> … </Element>            →  @element.Button=run … .end/element
+//   <Screen#app size=phone bg=#0B1020> … </Screen>   →  جذر شاشة بحجم/لون خلفية حرّين (screen / canvas_width / canvas_height / canvas)
+//   <Theme#Brand primary=#6C5CE7 active />        →  @theme=Brand primary="#6C5CE7"; active=true; .end/theme
+//   <Palette seed=#6C5CE7 dark />                 →  ثيم كامل من لون واحد (يُفعَّل تلقائياً)
 //   <Rin> كود Rin خام </Rin>                     →  يُنسَخ حرفياً (دوال/let/…)
 //   <Fun#f params="a,b"> … </Fun>               →  fun f(a, b) { … }
 //   <> … </>                                     →  تجميع شفاف (Fragment): لا يُنتج عنصراً
@@ -78,6 +81,7 @@ struct Macro {
 
 struct Ctx { // حالة مشتركة بين التشغيل الرئيسي وتشغيلات التوسعة (Define/Repeat)
     std::map<std::string, Macro> macros;
+    std::map<std::string, std::vector<Attr>> styles; // <Style#name …> — أنماط قابلة لإعادة الاستعمال عبر class="…"
     int autoId = 0;
     int depth = 0;
 };
@@ -232,7 +236,16 @@ private:
                                                 (std::isdigit((unsigned char)s[i + 1]) || s[i + 1] == '.'))) {
             size_t b = i++;
             while (i < n && (std::isalnum((unsigned char)s[i]) || s[i] == '.' || s[i] == '%' || s[i] == '_')) ++i;
-            return s.substr(b, i - b);
+            std::string tok = s.substr(b, i - b);
+            // النسب (50%) ووحدات الشاشة (60vw، 50vh، 100vmin) وأحجام "390x844" ليست أرقاماً في Rin → تُمرَّر نصاً.
+            size_t t = tok.find_first_not_of("+-.0123456789");
+            if (t != std::string::npos) {
+                std::string tail = lower(tok.substr(t));
+                size_t xp = tail.find('x');
+                bool dims = xp == 0 && tail.size() > 1 && std::isdigit((unsigned char)tail[1]);
+                if (tail == "%" || tail == "vw" || tail == "vh" || tail == "vmin" || tail == "vmax" || dims) return "\"" + tok + "\"";
+            }
+            return tok;
         }
         if (isIdStart(c)) {
             size_t b = i;
@@ -525,6 +538,67 @@ private:
                 out += text;
                 emitNewlines(consumed2);
             };
+            // <Tokens brand=#6C5CE7 gap=16 />  →  let brand = "#6C5CE7"; let gap = 16;   (ثوابت تصميم تُستعمل كـ {brand})
+            if (tl == "tokens") {
+                if (!selfClose) fail("<Tokens> must be self-closing: <Tokens name=value … />", startLine);
+                if (attrs.empty()) fail("<Tokens> needs at least one name=value", startLine);
+                std::string lets;
+                for (auto& a : attrs) lets += "let " + a.key + " = " + a.value + "; ";
+                finish(lets);
+                return;
+            }
+            // <Style#card radius=16 bg=#fff elevation=md [extends="base"] />  — نمط مسمّى؛ يُطبَّق بـ class="card pill"
+            if (tl == "style") {
+                if (!selfClose) fail("<Style#name …> must be self-closing", startLine);
+                if (id.empty()) fail("<Style> needs a name: <Style#card radius=16 />", startLine);
+                std::vector<Attr> merged;
+                auto put1 = [&](const Attr& a) {
+                    for (auto& m : merged) if (m.key == a.key) { m.value = a.value; return; }
+                    merged.push_back(a);
+                };
+                std::string ext = attrVal({"extends"});
+                if (ext.size() >= 2 && (ext.front() == '"' || ext.front() == '\'')) ext = ext.substr(1, ext.size() - 2);
+                for (size_t p = 0; p < ext.size();) {
+                    size_t e = ext.find_first_of(" ,", p); if (e == std::string::npos) e = ext.size();
+                    std::string nm = ext.substr(p, e - p); p = e + 1;
+                    if (nm.empty()) continue;
+                    auto base = ctx.styles.find(nm);
+                    if (base == ctx.styles.end()) fail("<Style#" + id + "> extends unknown style '" + nm + "' (declare it first)", startLine);
+                    for (auto& a : base->second) put1(a);
+                }
+                for (auto& a : attrs) if (a.key != "extends") put1(a);
+                ctx.styles[id] = std::move(merged);
+                finish("");
+                return;
+            }
+            // class="card pill": يدمج سمات الأنماط (اللاحق يغلب السابق) تحت سمات العنصر الصريحة، ثم تُحذف class.
+            if (tl != "define" && tl != "repeat" && tl != "if" && tl != "else" && tl != "fun" && tl != "rin" && !ctx.macros.count(tagName)) {
+                for (size_t ai = 0; ai < attrs.size(); ai++) {
+                    if (attrs[ai].key != "class") continue;
+                    std::string cv = attrs[ai].value;
+                    if (cv.size() >= 2 && (cv.front() == '"' || cv.front() == '\'')) cv = cv.substr(1, cv.size() - 2);
+                    attrs.erase(attrs.begin() + ai);
+                    std::vector<Attr> fromStyles;
+                    for (size_t p = 0; p < cv.size();) {
+                        size_t e = cv.find_first_of(" ,", p); if (e == std::string::npos) e = cv.size();
+                        std::string nm = cv.substr(p, e - p); p = e + 1;
+                        if (nm.empty()) continue;
+                        auto st = ctx.styles.find(nm);
+                        if (st == ctx.styles.end()) fail("unknown style '" + nm + "' in class= (declare <Style#" + nm + " … /> first)", startLine);
+                        for (auto& a : st->second) {
+                            bool replaced = false;
+                            for (auto& f : fromStyles) if (f.key == a.key) { f.value = a.value; replaced = true; }
+                            if (!replaced) fromStyles.push_back(a);
+                        }
+                    }
+                    for (auto& f : fromStyles) {
+                        bool explicitSet = false;
+                        for (auto& a : attrs) if (a.key == f.key) explicitSet = true;
+                        if (!explicitSet) attrs.push_back(f);
+                    }
+                    break;
+                }
+            }
             if (tl == "define") {
                 if (selfClose) fail("<Define#Name> needs a body and </Define>", startLine);
                 if (id.empty()) fail("<Define> needs a name: <Define#Chip label=\"x\">", startLine);
@@ -654,6 +728,24 @@ private:
             kw = hl; closer = ".end/" + hl;
             if (id.empty()) id = hl + "_" + std::to_string(++ctx.autoId);
             stmt = "@" + hl + "=" + id;
+        } else if (hl == "theme" || hl == "palette") {
+            // <Theme#Brand primary=#6C5CE7 background=#0B1020 active />  →  @theme=Brand …; .end/theme
+            // <Palette seed=#6C5CE7 dark />  → theme مشتقّ من لون واحد (WCAG)، يُفعَّل تلقائياً.
+            if (!selfClose) fail(std::string("<") + tagName + "> must be self-closing: <" + tagName + " … />", startLine);
+            if (id.empty()) id = (hl == "palette" ? "palette_" : "theme_") + std::to_string(++ctx.autoId);
+            bool hasActive = false;
+            for (auto& a : attrs) {
+                if (a.key == "active") hasActive = true;
+                if (a.key == "light") { a.key = "mode"; a.value = "\"light\""; }
+            }
+            if (hl == "palette") {
+                bool hasSeed = false;
+                for (auto& a : attrs) if (a.key == "seed") hasSeed = true;
+                if (!hasSeed) fail("<Palette> needs seed=#RRGGBB (one color → a full theme)", startLine);
+                if (!hasActive) attrs.push_back({"active", "true"});
+            }
+            kw = "theme"; closer = ".end/theme";
+            stmt = "@theme=" + id;
         } else if (hl == "element") {
             if (sub.empty()) fail("<Element.Kind#name> needs a kind, e.g. <Element.Button#ok>", startLine);
             kw = "element"; closer = ".end/element";
@@ -661,6 +753,17 @@ private:
             stmt = "@element." + sub + "=" + id;
         } else {
             std::string kind = hl == "view" ? sub : tagName;
+            // <Screen size=phone|"390x844" width=… height=… bg=#fff>: جذر الشاشة = Column + لوحة (canvas) بحجم ولون حرّين.
+            //   size→screen · width→canvas_width · height→canvas_height (حدّ أدنى) · bg/background→canvas (لون خلفية الشاشة)
+            if (hl == "screen") {
+                kind = "Column";
+                for (auto& a : attrs) {
+                    if (a.key == "size") a.key = "screen";
+                    else if (a.key == "width") a.key = "canvas_width";
+                    else if (a.key == "height") a.key = "canvas_height";
+                    else if (a.key == "bg" || a.key == "background") a.key = "canvas";
+                }
+            }
             if (hl == "view" && sub.empty()) fail("<View.Kind#name> needs a kind", startLine);
             if (kind.find('.') != std::string::npos) fail("unexpected '.' in element name <" + tagName + ">", startLine);
             kw = "view"; closer = ".end/view";
