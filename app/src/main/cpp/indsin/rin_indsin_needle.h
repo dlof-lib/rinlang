@@ -137,6 +137,23 @@ inline TapResult executeHandlerExpr(const rin::ExprPtr& handlerExpr, const Stran
     result.handled = true;
     result.targetId = owner->id;
 
+    // Inline assignment handler: `onTap={count = count + 1}` — evaluates the right side against the current
+    // Warp state and writes the cell (the documented tag-syntax form; it used to fail with "must be a handler
+    // name or call"). Only existing Warp cells can be assigned, so a typo is reported instead of silently ignored.
+    if (auto asg = std::dynamic_pointer_cast<rin::AssignExpr>(handlerExpr)) {
+        result.handlerDescription = asg->name + " = expr";
+        if (!warp.has(asg->name)) {
+            result.error = std::string(gestureName) + ": '" + asg->name + "' is not a warp cell (declare it with warp " + asg->name + " = …;)";
+            return result;
+        }
+        Value updated = evalAttrValue(asg->value, warp, nullptr);
+        if (!(updated == warp.get(asg->name))) {
+            warp.set(asg->name, updated);
+            result.changedWarpNames.push_back(asg->name);
+        }
+        return result;
+    }
+
     std::string callee;
     std::vector<rin::ExprPtr> argExprs;
     if (auto call = std::dynamic_pointer_cast<rin::CallExpr>(handlerExpr)) {
@@ -205,6 +222,31 @@ inline TapResult executeHandlerExpr(const rin::ExprPtr& handlerExpr, const Stran
         } else {
             result.error = err;
         }
+        return result;
+    }
+
+    // Runtime theme switching (no `fun` needed): setTheme("Light") · toggleTheme() · setThemeSeed("#6C5CE7" [, dark]).
+    // They change the *active* theme; colors resolve from it at paint time, so the next frame (this result's envelope)
+    // already reflects it — including the canvas background. NOTE: the Pattern Book is process-wide (see tokens.h).
+    if (callee == "setTheme" || callee == "toggleTheme" || callee == "setThemeSeed") {
+        auto& reg = themeRegistry();
+        if (callee == "toggleTheme") {
+            bool dark = !rincolor::isLight(reg.active().background);
+            reg.setActive(dark ? "Light" : "Dark");
+        } else if (callee == "setTheme") {
+            if (argExprs.empty()) { result.error = "setTheme(name) needs a theme name, e.g. setTheme(\"Midnight\")"; return result; }
+            std::string nm = evalAttrValue(argExprs[0], warp, nullptr).asString();
+            if (!reg.themes.count(nm)) { result.error = "setTheme(): unknown theme '" + nm + "' (declare it with <Theme#" + nm + " … /> or use a built-in: Dark, Light, Midnight, Ocean, Sunset, Slate, Sepia, Forest, Rose…)"; return result; }
+            reg.setActive(nm);
+        } else {
+            if (argExprs.empty()) { result.error = "setThemeSeed(color [, dark]) needs a seed color"; return result; }
+            std::string seed = evalAttrValue(argExprs[0], warp, nullptr).asString();
+            if (!looksLikeHexColor(seed)) { result.error = "setThemeSeed(): '" + seed + "' is not a color"; return result; }
+            bool dark = argExprs.size() < 2 || evalAttrValue(argExprs[1], warp, nullptr).asString() != "false";
+            reg.registerTheme(themeFromSeedLiteral("Seed", seed, dark));
+            reg.setActive("Seed");
+        }
+        result.handlerDescription = callee + "()";
         return result;
     }
 
