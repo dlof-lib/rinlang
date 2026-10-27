@@ -43,6 +43,11 @@
 | `<Repeat times=3 as=k>` | تكرار وقت الترجمة |
 | `<If cond={c}>` … `<Else>` | شروط تفاعلية عبر `visible=` |
 | `<Fun#f params="a,b">` | `fun f(a, b) { … }` |
+| `<Screen#app size=phone bg=#0B1020>` … `</Screen>` | جذر شاشة بحجم وخلفية حرّين (انظر [indsin_design_freedom.md](indsin_design_freedom.md)) |
+| `<Palette seed=#6C5CE7 dark />` | ثيم كامل من لون واحد، يُفعَّل تلقائياً |
+| `<Theme#Brand primary=#… active />` | `@theme=Brand …; .end/theme` |
+| `<Tokens brand=#6C5CE7 />` | `let brand = "#6C5CE7";` — ثوابت تصميم |
+| `<Style#card radius=16 />` + `class="card"` | أنماط مسمّاة قابلة للوراثة (`extends=`) |
 | `<!-- تعليق -->` | `// تعليق` |
 
 ## قيم السمات
@@ -51,7 +56,8 @@
 |---|---|
 | `"نص"` أو `'نص'` | سلسلة حرفية |
 | `{تعبير Rin}` | تعبير يُقيَّم ويُعاد تقييمه عند تغيّر warp: `visible={count > 3 and !dark}`، `onTap={count = count + 1}` |
-| `12` `120px` `250ms` `50%` | أرقام وأطوال وأزمنة كما هي |
+| `12` `120px` `250ms` | أرقام وأطوال وأزمنة كما هي |
+| `50%` `60vw` `50vh` `390x844` | تُقتبَس تلقائياً كنص (نسبة/وحدة شاشة/حجم) |
 | `#1E1E2E` | لون (يُقتبَس تلقائياً) |
 | `true` `false` `null` | ثوابت |
 | `spacious` (كلمة مجرّدة) | توكن نصّي كما في HTML، أي `"spacious"` |
