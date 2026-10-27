@@ -396,4 +396,14 @@ print \"Hello, \" + name + \"!\";
     <string name="action_duplicate">تكرار</string>
     <string name="action_select_line">تحديد السطر</string>
     <string name="action_copy_markdown">نسخ كـ Markdown</string>
+    <string name="indsin_background_menu">خلفية الشاشة</string>
+    <string name="indsin_background_theme">افتراضي الثيم</string>
+    <string name="indsin_background_black">أسود</string>
+    <string name="indsin_background_midnight">منتصف الليل</string>
+    <string name="indsin_background_slate">رمادي داكن</string>
+    <string name="indsin_background_paper">ورقي</string>
+    <string name="indsin_background_white">أبيض</string>
+    <string name="indsin_background_changed_toast">تم تغيير الخلفية الافتراضية</string>
+    <string name="indsin_background_aurora">تدرّج الشفق</string>
+    <string name="indsin_background_ocean">تدرّج المحيط</string>
 </resources>
