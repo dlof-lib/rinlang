@@ -32,6 +32,11 @@
     <string name="project_meta_with_time_format">%1$d ملفات • %2$s</string>
     <string name="import_project_action">استيراد مشروع</string>
     <string name="export_project_action">تصدير المشروع</string>
+    <string name="import_project_error">فشل استيراد المشروع</string>
+    <string name="import_project_preview_title">معاينة المشروع المستورد</string>
+    <string name="import_project_success">تم استيراد المشروع «%1$s» بنجاح</string>
+    <string name="export_project_error">فشل تصدير المشروع</string>
+    <string name="export_project_success">تم تصدير المشروع «%1$s» بنجاح</string>
     <string name="sort_projects_action">ترتيب المشاريع</string>
     <string name="projects_sort_recent">الأحدث تعديلاً</string>
     <string name="projects_sort_name">الاسم</string>
