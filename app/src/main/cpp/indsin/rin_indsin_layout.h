@@ -212,6 +212,14 @@ struct Indsin {
             }
         }
 
+        // Design canvas on the screen root (new): `screen="phone|390x844|..."`, `canvas_height=` set a
+        // *minimum* canvas height (width is the session's canvas width, resolved by the host from the same
+        // attributes). Content taller than the minimum still grows the canvas.
+        if (s->screenRoot && s->role != rin::UiRole::LOOP) {
+            double cw = 0, ch = 0;
+            if (resolveCanvasSize(*s, c.maxW, cw, ch) && ch > 0) c.minH = std::min(ch, c.maxH);
+        }
+
         // Explicit width/height (real sizing, not just an estimate hint): if the .rin source sets
         // width=/height= on ANY strand kind, that becomes a hard min==max constraint for it — the
         // same "box model" every real UI toolkit uses — clamped so it never exceeds what the
@@ -221,6 +229,16 @@ struct Indsin {
         Constraints c2 = c;
         if (s->attr("width"))  { double w = std::max(0.0, std::min(resolveSizeAttr(*s, "width", c.maxW, c.maxW), c.maxW));  c2.minW = w; c2.maxW = w; }
         if (s->attr("height")) { double h = std::max(0.0, std::min(resolveSizeAttr(*s, "height", c.maxH, c.maxH), c.maxH)); c2.minH = h; c2.maxH = h; }
+
+        // aspect="16:9" (new, any strand): height follows a *definite* width (explicit width= or a width
+        // forced by the parent, e.g. fill/stretch). An explicit height= always wins.
+        if (s->attr("aspect") && !s->attr("height") && s->kind != StrandKind::TEXT) {
+            double ar = 0;
+            if (parseAspectRatio(s->attr("aspect"), ar)) {
+                double defW = s->attr("width") ? c2.maxW : ((c2.minW > 0 && c2.minW >= c2.maxW - 0.01) ? c2.maxW : -1);
+                if (defW > 0) { double hh = std::min(defW / ar, c.maxH); c2.minH = hh; c2.maxH = hh; }
+            }
+        }
 
         // Constraint System (§6): min/max-*, independent of width=/height= above, so e.g. a
         // content-sized Card can still be given a floor or a ceiling without pinning it exactly.
@@ -658,6 +676,9 @@ struct Indsin {
             flexible[i] = !unboundedMain && isMainAxisFlexible(s->children[i], axis);
             if (flexible[i]) { flexCount++; continue; }
             Constraints probeC = (axis==Axis::Y) ? Constraints{0, innerMaxW, 0, 1e9} : Constraints{0, 1e9, 0, innerMaxH};
+            // Relative widths ("50%", half, 30vw...) inside a Row resolve against the Row's content box, not the
+            // unbounded probe axis (which made "50%" mean "50% of 1e9" -> clamped to the full row).
+            if (axis==Axis::X && innerMain < 1e8 && isRelativeSize(s->children[i]->attr("width"))) probeC.maxW = innerMain;
             // align/valign="stretch": the child claims the container's full (bounded) cross extent.
             if (crossMode == "stretch" && !s->children[i]->attr(axis==Axis::Y ? "width" : "height")) {
                 if (axis==Axis::Y && innerMaxW < 1e8) probeC.minW = innerMaxW;
@@ -706,6 +727,7 @@ struct Indsin {
             if (flexible[i] && implicitSpacerExpand && crossMode != "stretch") {
                 if (axis == Axis::Y) childMaxW = 0; else childMaxH = 0;
             }
+            if (axis==Axis::X && innerMain < 1e8 && !flexible[i] && isRelativeSize(child->attr("width"))) childMaxW = innerMain;
             Constraints cc = flexible[i]
                 ? Constraints{(axis==Axis::Y)?0:mainBudget, childMaxW, (axis==Axis::Y)?mainBudget:0, childMaxH} // flexible: min==max==its share
                 : Constraints{0, childMaxW, 0, childMaxH};
