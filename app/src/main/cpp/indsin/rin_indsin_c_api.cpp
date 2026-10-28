@@ -305,10 +305,36 @@ RIN_API char* rin_indsin_session_render_json(void* sessionPtr) {
     return dupToC(fabricEnvelope(sess, ""));
 }
 
+// Input/TextArea under (x,y): {"id","name","kind","bind","value","placeholder","secure","multiline","error","disabled"}
+// `bind` = the warp cell the field's `value={cell}` is a plain reference to ("" if not bound).
+static std::string focusInfoAt(IndsinSession* sess, double x, double y) {
+    std::vector<indsin::StrandPtr> path;
+    if (!sess->state.fabric || !indsin::hitTestPath(sess->state.fabric, x, y, path) || path.empty()) return "";
+    const indsin::StrandPtr& s = path.front();
+    if (s->kind != indsin::StrandKind::INPUT && s->kind != indsin::StrandKind::TEXTAREA) return "";
+    std::string dis = s->attrStr("disabled", "");
+    if (dis == "true") return "";
+    std::string bind;
+    for (auto& a : s->attrs)
+        if (a.key == "value")
+            if (auto v = std::dynamic_pointer_cast<rin::VariableExpr>(a.rawExpr)) bind = v->name;
+    auto b = [&](const char* k) { return s->attrStr(k, "") == "true" ? "true" : "false"; };
+    std::ostringstream o;
+    o << "{\"id\":" << s->id << ",\"name\":\"" << indsin::jsonEscape(s->name) << "\""
+      << ",\"kind\":\"" << (s->kind == indsin::StrandKind::TEXTAREA ? "textarea" : "input") << "\""
+      << ",\"bind\":\"" << indsin::jsonEscape(bind) << "\""
+      << ",\"value\":\"" << indsin::jsonEscape(s->attrStr("value", "")) << "\""
+      << ",\"placeholder\":\"" << indsin::jsonEscape(s->attrStr("placeholder", "")) << "\""
+      << ",\"inputType\":\"" << indsin::jsonEscape(s->attrStr("type", "text")) << "\""
+      << ",\"secure\":" << b("secure") << ",\"multiline\":" << (s->kind == indsin::StrandKind::TEXTAREA ? "true" : "false") << "}";
+    return o.str();
+}
+
 RIN_API char* rin_indsin_session_tap(void* sessionPtr, double x, double y) {
     auto* sess = static_cast<IndsinSession*>(sessionPtr);
     if (!sess || !sess->state.ok) return dupToC(sessionErrorJson(sess));
     SessionRinHost rinHost(sess); // قيم الخصائص المُعاد حسابها تُقيَّم بمفسّر Rin للجلسة
+    std::string focusJson = focusInfoAt(sess, x, y); // حقل نصّي تحت اللمسة؟ (يحرّره المضيف ثم set_input)
 
     indsin::TapResult tap = indsin::dispatchTapWithOverlay(sess->state.fabric, sess->state.warp,
                                                         sess->state.program, sess->overlayLayer, x, y,
@@ -342,8 +368,26 @@ RIN_API char* rin_indsin_session_tap(void* sessionPtr, double x, double y) {
     extra << "]";
     if (!tap.error.empty()) extra << ",\"error\":\"" << indsin::jsonEscape(tap.error) << "\"";
     extra << mediaExtraJson(tap);
+    if (!focusJson.empty()) extra << ",\"focus\":" << focusJson;
 
     return dupToC(fabricEnvelope(sess, extra.str()));
+}
+
+// Host text entry: writes `text` into warp cell `name` (the cell an Input's `value={cell}` is bound to),
+// re-resolves everything that depends on it and returns the usual envelope with {"changed":[name]}.
+RIN_API char* rin_indsin_session_set_input(void* sessionPtr, const char* name, const char* text) {
+    auto* sess = static_cast<IndsinSession*>(sessionPtr);
+    if (!sess || !sess->state.ok) return dupToC(sessionErrorJson(sess));
+    std::string n = name ? name : "";
+    if (n.empty() || !sess->state.warp.has(n))
+        return dupToC(fabricEnvelope(sess, ",\"handled\":false,\"error\":\"" + indsin::jsonEscape("'" + n + "' is not a warp cell") + "\""));
+    SessionRinHost rinHost(sess);
+    sess->state.warp.set(n, indsin::Value::txt(text ? text : ""));
+    indsin::Shuttle shuttle;
+    shuttle.applyWarpChange(n, sess->state.warp, sess->state.subs, sess->index);
+    indsin::recomputeHashes(sess->state.fabric);
+    relayout(sess);
+    return dupToC(fabricEnvelope(sess, ",\"handled\":true,\"changed\":[\"" + indsin::jsonEscape(n) + "\"]"));
 }
 
 // Shared tail for long-press/double-tap/hover below: applies a dispatched indsin::TapResult exactly
@@ -654,3 +698,176 @@ RIN_API char* rin_indsin_session_media_progress(void* sessionPtr, const char* ce
     applyWarpNames(sess, changed);
     return dupToC(fabricEnvelope(sess, ",\"handled\":true" + changedJson(changed)));
 }
+
+// ============================================================================================
+// Rin ⇄ indsin: واجهة من لغة Rin نفسها لتركيب الواجهات وتشغيلها (أي برنامج Rin، لا indsin فقط).
+//   let h = indsin.mount(source[, width]);   // معرّف جلسة (رقم)
+//   indsin.input(h, "email", "a@b.io");       // يكتب في خلية warp ويعيد {ok, changed, error}
+//   indsin.set(h, "count", 5); indsin.get(h, "count");
+//   indsin.tap(h, x, y) · indsin.tapText(h, "Sign in")  -> {handled, changed:[...], error}
+//   indsin.texts(h) -> كل النصوص الظاهرة · indsin.find(h, "text") -> {x,y,w,h} أو nil
+//   indsin.png(h, path) · indsin.html(h) · indsin.json(h) · indsin.free(h)
+// تُثبَّت عبر rin::interpreterInstallers() فتتوفّر لكل Interpreter في المحرّك.
+// ============================================================================================
+namespace {
+std::unordered_map<int, IndsinSession*>& uiSessions() { static std::unordered_map<int, IndsinSession*> m; return m; }
+int g_uiNextId = 1;
+
+IndsinSession* uiSession(const char* fn, std::vector<rin::Value>& a, size_t i, int line) {
+    if (a.size() <= i || a[i].type != rin::Value::Type::NUMBER)
+        throw rin::RinError(std::string("'") + fn + "' expects a session handle (from indsin.mount) as argument " + std::to_string(i + 1), line);
+    auto it = uiSessions().find((int)a[i].number);
+    if (it == uiSessions().end()) throw rin::RinError(std::string("'") + fn + "': unknown or freed session handle", line);
+    return it->second;
+}
+std::string uiStr(const char* fn, std::vector<rin::Value>& a, size_t i, int line) {
+    if (a.size() <= i || a[i].type != rin::Value::Type::STRING)
+        throw rin::RinError(std::string("'") + fn + "' expects a string as argument " + std::to_string(i + 1), line);
+    return a[i].str;
+}
+rin::Value uiMap(const std::vector<std::pair<std::string, rin::Value>>& kv) {
+    auto m = std::make_shared<rin::MapData>();
+    for (auto& p : kv) m->push_back({rin::Value::string(p.first), p.second});
+    return rin::Value::makeMap(m);
+}
+// يحوّل غلاف JSON (tap/set_input) إلى قاموس Rin: handled / changed / error
+rin::Value uiEnvelope(const std::string& j) {
+    auto arr = std::make_shared<rin::ArrayData>();
+    size_t p = j.find("\"changed\":[");
+    if (p != std::string::npos) {
+        p += 11;
+        size_t e = j.find(']', p);
+        std::string body = j.substr(p, e == std::string::npos ? 0 : e - p), cur; bool in = false;
+        for (char c : body) { if (c == '"') { if (in) { arr->push_back(rin::Value::string(cur)); cur.clear(); } in = !in; } else if (in) cur += c; }
+    }
+    std::string err;
+    size_t q = j.find("\"error\":\"");
+    if (q != std::string::npos) {
+        q += 9;
+        for (size_t i = q; i < j.size() && j[i] != '"'; i++) { if (j[i] == '\\' && i + 1 < j.size()) i++; err += j[i]; }
+    }
+    return uiMap({{"handled", rin::Value::boolean_(j.find("\"handled\":true") != std::string::npos)},
+                  {"changed", rin::Value::makeArray(arr)}, {"error", rin::Value::string(err)}});
+}
+// يجمع النصوص الظاهرة (Text → text، Button → label). `want`: نص مطابق، أو "#name" لاسم العنصر، أو placeholder حقل.
+void uiCollect(const indsin::StrandPtr& s, const std::string* want, std::vector<std::string>& out, indsin::StrandPtr* found) {
+    if (!s) return;
+    if (s->attrStr("visible", "true") == "false") return;
+    std::string t;
+    if (s->kind == indsin::StrandKind::TEXT) t = s->attrStr("text", "");
+    else if (s->kind == indsin::StrandKind::BUTTON) t = s->attrStr("label", s->attrStr("text", ""));
+    if (!t.empty()) out.push_back(t);
+    if (want && found && !*found) {
+        bool byName = !want->empty() && (*want)[0] == '#' && s->name == want->substr(1);
+        bool byText = !t.empty() && t == *want;
+        bool byHint = (s->kind == indsin::StrandKind::INPUT || s->kind == indsin::StrandKind::TEXTAREA) && s->attrStr("placeholder", "") == *want && !want->empty();
+        if (byName || byText || byHint) *found = s;
+    }
+    for (auto& c : s->children) uiCollect(c, want, out, found);
+}
+rin::Value uiTapAt(IndsinSession* s, double x, double y) {
+    char* r = rin_indsin_session_tap(s, x, y);
+    std::string j = r ? r : ""; rin_free_string(r);
+    return uiEnvelope(j);
+}
+} // namespace
+
+static void installRinUiNatives(rin::Interpreter& interp) {
+    using rin::Value; using Args = std::vector<rin::Value>;
+    interp.registerHostNative("indsin.mount", [](Args& a, int line) {
+        std::string src = uiStr("indsin.mount", a, 0, line);
+        int w = a.size() > 1 && a[1].type == Value::Type::NUMBER ? (int)a[1].number : 390;
+        auto* s = static_cast<IndsinSession*>(rin_indsin_session_create(src.c_str(), w));
+        if (!s) throw rin::RinError("'indsin.mount': could not create a session", line);
+        if (!s->state.ok) {
+            std::string e = sessionErrorJson(s); delete s;
+            throw rin::RinError("'indsin.mount': " + e, line);
+        }
+        int id = g_uiNextId++;
+        uiSessions()[id] = s;
+        return Value::num(id);
+    });
+    interp.registerHostNative("indsin.free", [](Args& a, int line) {
+        if (a.empty() || a[0].type != Value::Type::NUMBER) throw rin::RinError("'indsin.free' expects a session handle", line);
+        auto it = uiSessions().find((int)a[0].number);
+        if (it == uiSessions().end()) return Value::boolean_(false);
+        rin_indsin_session_free(it->second); uiSessions().erase(it);
+        return Value::boolean_(true);
+    });
+    interp.registerHostNative("indsin.input", [](Args& a, int line) {
+        auto* s = uiSession("indsin.input", a, 0, line);
+        std::string n = uiStr("indsin.input", a, 1, line), t = uiStr("indsin.input", a, 2, line);
+        char* r = rin_indsin_session_set_input(s, n.c_str(), t.c_str()); std::string j = r ? r : ""; rin_free_string(r);
+        return uiEnvelope(j);
+    });
+    interp.registerHostNative("indsin.set", [](Args& a, int line) {
+        auto* s = uiSession("indsin.set", a, 0, line);
+        std::string n = uiStr("indsin.set", a, 1, line);
+        if (a.size() < 3) throw rin::RinError("'indsin.set' expects (handle, cell, value)", line);
+        if (!s->state.warp.has(n)) return uiMap({{"handled", Value::boolean_(false)}, {"changed", Value::makeArray(std::make_shared<rin::ArrayData>())},
+                                                 {"error", Value::string("'" + n + "' is not a warp cell")}});
+        indsin::Value v = indsin::rinValueToIndsin(a[2]);
+        s->state.warp.set(n, v);
+        indsin::Shuttle sh; sh.applyWarpChange(n, s->state.warp, s->state.subs, s->index);
+        indsin::recomputeHashes(s->state.fabric);
+        relayout(s);
+        auto ch = std::make_shared<rin::ArrayData>(); ch->push_back(Value::string(n));
+        return uiMap({{"handled", Value::boolean_(true)}, {"changed", Value::makeArray(ch)}, {"error", Value::string("")}});
+    });
+    interp.registerHostNative("indsin.get", [](Args& a, int line) {
+        auto* s = uiSession("indsin.get", a, 0, line);
+        std::string n = uiStr("indsin.get", a, 1, line);
+        if (!s->state.warp.has(n)) return Value::nil();
+        return indsin::indsinValueToRin(s->state.warp.get(n));
+    });
+    interp.registerHostNative("indsin.tap", [](Args& a, int line) {
+        auto* s = uiSession("indsin.tap", a, 0, line);
+        if (a.size() < 3 || a[1].type != Value::Type::NUMBER || a[2].type != Value::Type::NUMBER)
+            throw rin::RinError("'indsin.tap' expects (handle, x, y)", line);
+        return uiTapAt(s, a[1].number, a[2].number);
+    });
+    interp.registerHostNative("indsin.find", [](Args& a, int line) {
+        auto* s = uiSession("indsin.find", a, 0, line);
+        std::string want = uiStr("indsin.find", a, 1, line);
+        std::vector<std::string> all; indsin::StrandPtr f;
+        uiCollect(s->state.fabric, &want, all, &f);
+        if (!f) return Value::nil();
+        const auto& g = f->geometry;
+        return uiMap({{"x", Value::num(g.x)}, {"y", Value::num(g.y)}, {"w", Value::num(g.w)}, {"h", Value::num(g.h)},
+                      {"cx", Value::num(g.x + g.w / 2)}, {"cy", Value::num(g.y + g.h / 2)}});
+    });
+    interp.registerHostNative("indsin.tapText", [](Args& a, int line) {
+        auto* s = uiSession("indsin.tapText", a, 0, line);
+        std::string want = uiStr("indsin.tapText", a, 1, line);
+        std::vector<std::string> all; indsin::StrandPtr f;
+        uiCollect(s->state.fabric, &want, all, &f);
+        if (!f) return uiMap({{"handled", Value::boolean_(false)}, {"changed", Value::makeArray(std::make_shared<rin::ArrayData>())},
+                              {"error", Value::string("no element with text `" + want + "`")}});
+        return uiTapAt(s, f->geometry.x + f->geometry.w / 2, f->geometry.y + f->geometry.h / 2);
+    });
+    interp.registerHostNative("indsin.texts", [](Args& a, int line) {
+        auto* s = uiSession("indsin.texts", a, 0, line);
+        std::vector<std::string> all; uiCollect(s->state.fabric, nullptr, all, nullptr);
+        auto arr = std::make_shared<rin::ArrayData>();
+        for (auto& t : all) arr->push_back(Value::string(t));
+        return Value::makeArray(arr);
+    });
+    interp.registerHostNative("indsin.png", [](Args& a, int line) {
+        auto* s = uiSession("indsin.png", a, 0, line);
+        return Value::boolean_(rin_indsin_session_export_png(s, uiStr("indsin.png", a, 1, line).c_str()) != 0);
+    });
+    interp.registerHostNative("indsin.html", [](Args& a, int line) {
+        auto* s = uiSession("indsin.html", a, 0, line);
+        char* r = rin_indsin_session_export_html(s); std::string h = r ? r : ""; rin_free_string(r);
+        return Value::string(h);
+    });
+    interp.registerHostNative("indsin.json", [](Args& a, int line) {
+        auto* s = uiSession("indsin.json", a, 0, line);
+        char* r = rin_indsin_session_render_json(s); std::string h = r ? r : ""; rin_free_string(r);
+        return Value::string(h);
+    });
+}
+static const bool g_rinUiInstalled = [] {
+    rin::interpreterInstallers().push_back([](rin::Interpreter& i) { indsin::registerIndsinRinLib(i); installRinUiNatives(i); });
+    return true;
+}();
