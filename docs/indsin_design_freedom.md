@@ -251,6 +251,23 @@ char* rin_indsin_session_set_input(void* session, const char* name /* focus.bind
 
 مثال: `examples/samples/indsin_widgets.rin` (واختباره بسكربت Rin في `design_freedom_test.cpp` §17).
 
+### التنقّل والهيكل
+
+| الوسم | الخصائص |
+|---|---|
+| `<TopBar>` | `title back action onBack onAction` — شريط علوي: رجوع اختياري + عنوان + إجراء |
+| `<Header>` | `title subtitle` + `<Slot/>` — ترويسة صفحة |
+| `<NavBar>` | `tab={cell} a b c d` — شريط سفلي حتى 4 عناصر؛ المحدّد `fill`، والضغط يكتب 0..3 |
+| `<Breadcrumb>` | `a b c` — مسار |
+| `<SearchBar>` | `value={cell} placeholder` — حقل بحث + زر Clear يظهر عند وجود نص |
+| `<Pagination>` | `page={cell} pages` — Prev/Next يختفيان عند الحدّين |
+| `<Footer>` | `text` + `<Slot/>` — تذييل |
+| `<Fab>` | `label tap tint` — زر إجراء بارز |
+
+لتثبيت `NavBar` أسفل الشاشة ضع `<Spacer />` قبله داخل `<Screen>`: جذر الشاشة الآن يوزّع الفراغ على العناصر المرنة
+(Spacer / `sizing=fill`) بحسب الحدّ الأدنى لارتفاع الشاشة (`size=`/`height=`). مثال: `examples/samples/indsin_navigation.rin`.
+الإغلاق في الوسوم يكون `</Column>` بلا `#id`.
+
 ## 10) Rin ⇄ indsin: التكامل في الاتجاهين
 
 * **indsin يستدعي Rin:** معالجات `<Fun>` وتعابير الخصائص ودوال `indsin.*` ومكتبة `store*` والحاويات وRCSQL — كلها لغة Rin نفسها.
@@ -268,6 +285,29 @@ char* rin_indsin_session_set_input(void* session, const char* name /* focus.bind
 يفتح هذا اختبار الواجهات والأتمتة والتقارير بلغة Rin نفسها (`examples/rin_drives_indsin.rin` يختبر شاشة الحسابات كاملة: تسجيل، تكرار، استعادة من الملف، دخول).
 آلية التثبيت: `rin::interpreterInstallers()` في `rin_interpreter.h` — كل `Interpreter` جديد يستدعي مثبّتات المضيف، فتصل دوال `indsin.*` إلى أي برنامج في المحرّك.
 
+## 11) Box / Container: صندوق مرن وتخصيص شامل
+
+`<Box>` (أسماء بديلة: `Container` · `Panel` · `Frame`) صندوق متعدّد الأبناء. **وضع المرن:** أي من `direction · gap · justify · align · valign`
+يحوّله إلى Row/Column كاملة الميزات؛ بدونها يبقى التكديس الرأسي القديم.
+
+| الخاصية | القيم |
+|---|---|
+| `direction` | `column` (افتراضي) · `row` |
+| `gap` · `padding` · `align` · `valign` | كما في Row/Column |
+| `justify` | `start` · `center` · `end` · `between` · `around` · `evenly` — يوزّع فراغ المحور الرئيسي (يلزم عرض/ارتفاع للصندوق: `width=full` مثلاً) |
+| `shape` | `circle` (قطر = العرض، aspect 1) · `square` · `pill` |
+| `border` + `borderColor` + `border_style` | `solid` · `dashed` · `dotted` (الزوايا المستديرة تُهمل في المتقطع) |
+| `border_top/right/bottom/left` | `"3 #FF7675"` أو `"3 primary"` — حدّ لجهة واحدة |
+| `outline` · `outline_color` · `outline_offset` | حلقة خارج الصندوق |
+| `opacity` | `0..1` أو `50%` — للصندوق وأبنائه كلهم (حدود، نص، ظلال) |
+| `bg_opacity` | شفافية الخلفية فقط |
+| `pattern` · `pattern_color` · `pattern_size` | `stripes` · `vstripes` · `dots` · `grid` · `checker` |
+| `bg` · `gradient` · `radius` · `elevation` · `shadow` · `shadowColor` · `min_*/max_*` · `aspect` | كما سبق |
+
+تعمل خصائص المظهر على أي عنصر لا الصندوق وحده، وهي في الرسم الأصلي وHTML وJSON وأندرويد.
+**تغيير:** `opacity` كان يخفّف الخلفية فقط؛ صار يشمل العنصر وأبناءه (تأثيرات `effect="grow"` تظهر الآن متدرّجة كاملة).
+مثال: `examples/samples/indsin_box.rin`. الملاحظة: لا يوجد padding لكل جهة بعد (استعمل `margin_*` على الأبناء).
+
 ## الاختبار
 
 ```sh
@@ -282,6 +322,6 @@ rin_indsin_preview examples/samples/indsin_design_freedom.rin --bg "#223344" --c
 ## ما تغيّر في الملفات
 
 `rin_indsin_tokens.h` (كلمات الحجم، `vw/vh`، `aspect`، الإعدادات، `resolveCanvasSize`، `seed=`) ·
-`rin_indsin_layout.h` (ارتفاع الشاشة الأدنى، `aspect`، نسب داخل `Row`) · `rin_indsin_paint.h` (`resolveCanvas`/`paintFrame`، حاويات شفافة) ·
+`rin_indsin_layout.h` (ارتفاع الشاشة الأدنى وتوزيع Spacer عليه، `aspect`، نسب داخل `Row`) · `rin_indsin_paint.h` (`resolveCanvas`/`paintFrame`، حاويات شفافة) ·
 `rin_indsin_c_api.*` (`set_input` + `focus`، الخلفية الافتراضية، `resize`، `canvas_json`، حجم اللوحة) · `rin_indsin_html.h` (لون اللوحة) ·
 `rin_interpreter.h/.cpp` (خطّاف `interpreterInstallers`) · `rin_indsin_needle.h` (تعيين مباشر في المعالجات + أفعال الثيم) · `rin_indsin_tags.h` (`<Screen>/<Theme>/<Palette>`، اقتباس القيم النسبية) · أندرويد: `IndsinFabricView/PreviewActivity/PreviewManager/RinEngine` + JNI.
