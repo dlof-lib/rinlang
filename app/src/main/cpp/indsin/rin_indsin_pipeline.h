@@ -11,6 +11,7 @@
 #include "rin_indsin.h"
 #include "rin_indsin_tags.h"     // صيغة الوسوم <Column>…</Column> → لهجة @view (قبل التحليل)
 #include "rin_indsin_tokens.h"
+#include "rin_indsin_system.h" // themeFromSeedLiteral + registerThemesFromProgram
 #include "rin_indsin_object.h"
 #include "rin_indsin_media.h"          // pickMedia()/uploadMedia(): زرع خلايا الوسائط
 #include "rin_indsin_components_ext.h" // UI/UX Library Expansion: Tag/Breadcrumb/Pagination/Steps conveniences
