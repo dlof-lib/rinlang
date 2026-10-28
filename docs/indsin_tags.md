@@ -48,6 +48,7 @@
 | `<Theme#Brand primary=#… active />` | `@theme=Brand …; .end/theme` |
 | `<Tokens brand=#6C5CE7 />` | `let brand = "#6C5CE7";` — ثوابت تصميم |
 | `<Style#card radius=16 />` + `class="card"` | أنماط مسمّاة قابلة للوراثة (`extends=`) |
+| `<Hero>` `<Stat>` `<Chip>` `<Alert>` `<Section>` `<ListTile>` `<Toggle>` `<EmptyState>` | مكوّنات جاهزة تتوسّع وقت الترجمة (انظر [indsin_design_freedom.md](indsin_design_freedom.md) §8) |
 | `<!-- تعليق -->` | `// تعليق` |
 
 ## قيم السمات
