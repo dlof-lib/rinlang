@@ -808,8 +808,84 @@ private:
 } // namespace detail
 
 // يحوّل صيغة الوسوم إلى لهجة @view القديمة. يرمي TagError عند خطأ في الوسوم.
+// ── مكتبة المكوّنات الجاهزة (built-in components) ─────────────────────────────────────────────
+// مكوّنات مركّبة تُعرَّف بـ <Define> وتتوسّع وقت الترجمة إلى عناصر indsin الموجودة (تعمل في كل المضيفين بلا تغيير).
+// تُحقَن في أول المصدر *فقط* إن استُعمل أحدها، وبلا أي سطر جديد (فتبقى أرقام الأسطر صحيحة، ويبقى المصدر
+// بلا مكوّنات مطابقاً حرفياً). تعريف المستخدم لنفس الاسم (<Define#Chip …>) يحلّ محلّها.
+inline const char* builtinPrelude() {
+    return
+        // Chip: حبّة صغيرة ملوّنة (داخل Row كي تلتفّ حول محتواها ولا تتمدّد)
+        "<Define#Chip label=\"Chip\" tint=primary><Row#cw><Card#chip padding=8 radius=14 bg={tint}><Text#t size=small color=#ffffff>{label}</Text></Card></Row></Define>"
+        // Stat: بطاقة رقم + عنوان (w=30% داخل Row)
+        "<Define#Stat label=\"Stat\" value=\"0\" tint=primary w=full><Card#s width={w} padding=12 radius=16 bg={tint} elevation=md><Text#v size=heading color=#ffffff>{value}</Text><Text#l size=small color=#ffffffcc>{label}</Text></Card></Define>"
+        // Alert: تنبيه بدور ثيم (info|success|warning|danger)
+        "<Define#Alert tone=info title=\"Notice\" message=\"\"><Card#a padding=12 radius=12 gap=4 bg={tone}><Text#t size=title color=#ffffff>{title}</Text><Text#m size=small color=#ffffffdd visible={message != \"\"}>{message}</Text><Slot /></Card></Define>"
+        // Section: عنوان + أبناء
+        "<Define#Section title=\"Section\"><Column#sec gap=8><Text#t size=title>{title}</Text><Slot /></Column></Define>"
+        // ListTile: عنوان + وصف + نص جانبي
+        "<Define#ListTile title=\"Title\" subtitle=\"\" trailing=\"\"><Row#tile gap=12 padding=8><Column#c gap=2><Text#t>{title}</Text><Text#s size=small color=text_muted visible={subtitle != \"\"}>{subtitle}</Text></Column><Spacer /><Text#r color=text_muted>{trailing}</Text></Row></Define>"
+        // Hero: بطاقة بتدرّج وتوهّج
+        "<Define#Hero title=\"Title\" subtitle=\"\" grad=\"#6C5CE7,#A29BFE,#FD79A8,35\"><Card#h width=full padding=18 radius=22 gap=4 elevation=lg gradient={grad}><Text#t size=heading color=#ffffff>{title}</Text><Text#s color=#ffffffdd visible={subtitle != \"\"}>{subtitle}</Text><Slot /></Card></Define>"
+        // EmptyState: حالة فارغة
+        "<Define#EmptyState title=\"Nothing here\" message=\"\"><Column#e align=center gap=6 padding=24><Text#t size=title>{title}</Text><Text#m size=small color=text_muted>{message}</Text><Slot /></Column></Define>"
+        // Toggle: سطر بمفتاح تشغيل مرتبط بخلية warp: <Toggle label="…" cell={flag} />
+        "<Define#Toggle label=\"Option\" cell=false><Row#tg gap=12 padding=6><Text#t>{label}</Text><Spacer /><Switch#sw checked={cell} onTap={toggle(cell)} /></Row></Define>"
+        // ---- تسجيل الدخول ----
+        // Field: تسمية + حقل + مساعدة/خطأ. الحقل مرتبط بخلية: value={cell} (يحرّره المضيف عبر set_input)
+        "<Define#Field label=\"\" value=\"\" placeholder=\"\" helper=\"\" error=\"\" secure=false><Column#fld width=full gap=4><Text#fl size=small color=text_muted visible={label != \"\"}>{label}</Text><Input#fi width=full value={value} placeholder={placeholder} secure={secure} error={error} /><Text#fe size=small color=danger visible={error != \"\"}>{error}</Text><Text#fh size=small color=text_muted visible={helper != \"\" and error == \"\"}>{helper}</Text></Column></Define>"
+        // PasswordField: حقل سرّي + زر إظهار/إخفاء (show خلية منطقية) + مقياس قوة اختياري
+        "<Define#PasswordField label=\"Password\" value=\"\" placeholder=\"\" error=\"\" show=false meter=false><Column#pw width=full gap=4><Text#pl size=small color=text_muted visible={label != \"\"}>{label}</Text><Row#pr gap=8><Input#pi width=68% value={value} placeholder={placeholder} secure=true reveal={show} error={error} /><Button#pb variant=outline onTap={toggle(show)}>Show</Button></Row><Progress#pm width=full value={indsin.passwordScore(value)} max=4 tone={indsin.passwordTone(value)} visible={meter and value != \"\"}/><Text#ps size=small color={indsin.passwordTone(value)} visible={meter and value != \"\"}>{indsin.passwordLabel(value)}</Text><Text#pe size=small color=danger visible={error != \"\"}>{error}</Text></Column></Define>"
+        // OrDivider: خطّ مع كلمة في الوسط
+        "<Define#OrDivider text=\"or\"><Row#od gap=10 padding=4><Divider width=25% /><Text#ot size=small color=text_muted>{text}</Text><Divider width=25% /></Row></Define>"
+        // SocialButton: زر دخول عبر مزوّد خارجي: <SocialButton provider="Google" tap={loginGoogle()} />
+        "<Define#SocialButton provider=\"Google\" tap=noop tint=neutral><Button#sb width=full variant=outline tone={tint} onTap={tap}>Continue with {provider}</Button></Define>"
+        // OtpBoxes: ستّ خانات لرمز التحقق من نص code (يُملأ بحقل Input منفصل)
+        "<Define#OtpBoxes code=\"\"><Row#otp gap=8><Card#o0 width=44 height=52 radius=10 padding=12><Text#d0 size=title>{substr(code,0,1)}</Text></Card><Card#o1 width=44 height=52 radius=10 padding=12><Text#d1 size=title>{substr(code,1,1)}</Text></Card><Card#o2 width=44 height=52 radius=10 padding=12><Text#d2 size=title>{substr(code,2,1)}</Text></Card><Card#o3 width=44 height=52 radius=10 padding=12><Text#d3 size=title>{substr(code,3,1)}</Text></Card><Card#o4 width=44 height=52 radius=10 padding=12><Text#d4 size=title>{substr(code,4,1)}</Text></Card><Card#o5 width=44 height=52 radius=10 padding=12><Text#d5 size=title>{substr(code,5,1)}</Text></Card></Row></Define>"
+        // ---- مكوّنات عامة إضافية ----
+        // Tabs: ثلاث تبويبات مرتبطة بخلية رقمية: <Tabs tab={t} a="Home" b="Search" c="Profile" />
+        "<Define#Tabs tab=0 a=\"One\" b=\"Two\" c=\"Three\"><Row#tabs gap=6><Button#t0 width=30% variant={tab == 0 ? \"fill\" : \"outline\"} onTap={tab = 0}>{a}</Button><Button#t1 width=30% variant={tab == 1 ? \"fill\" : \"outline\"} onTap={tab = 1}>{b}</Button><Button#t2 width=30% variant={tab == 2 ? \"fill\" : \"outline\"} onTap={tab = 2}>{c}</Button></Row></Define>"
+        // Stepper: أربع خطوات: <Stepper step={s} /> (step من 1 إلى 4)
+        "<Define#Stepper step=1 tint=primary><Row#stp gap=6><Card#s1 width=22% height=8 radius=4 bg={step >= 1 ? tint : \"border\"} /><Card#s2 width=22% height=8 radius=4 bg={step >= 2 ? tint : \"border\"} /><Card#s3 width=22% height=8 radius=4 bg={step >= 3 ? tint : \"border\"} /><Card#s4 width=22% height=8 radius=4 bg={step >= 4 ? tint : \"border\"} /></Row></Define>"
+        // Badge: شارة نصية صغيرة بدور ثيم
+        "<Define#Badge text=\"New\" tint=danger><Row#bw><Card#bd padding=4 radius=10 bg={tint}><Text#bt size=small color=#ffffff>{text}</Text></Card></Row></Define>"
+        // ProfileCard: صورة رمزية بالحروف الأولى + الاسم والبريد
+        "<Define#ProfileCard name=\"Name\" email=\"\" tint=primary><Card#pc width=full padding=14 radius=18 elevation=sm><Row#pr2 gap=12><Avatar#av initials={indsin.initials(name)} width=48 height=48 tone={tint} /><Column#pi gap=2><Text#pn size=title>{name}</Text><Text#pe2 size=small color=text_muted>{email}</Text></Column></Row><Slot /></Card></Define>"
+        // ConfirmCard: بطاقة تأكيد بزرّين: yes/no معالجات
+        "<Define#ConfirmCard title=\"Are you sure?\" message=\"\" yes=\"Confirm\" no=\"Cancel\" onYes=noop onNo=noop><Card#cc width=full padding=16 radius=18 gap=10 elevation=md><Text#ct size=title>{title}</Text><Text#cm size=small color=text_muted visible={message != \"\"}>{message}</Text><Row#cb gap=8><Button#cn width=45% variant=outline onTap={onNo}>{no}</Button><Button#cy width=45% tone=danger onTap={onYes}>{yes}</Button></Row></Card></Define>"
+        // LoginForm: بطاقة دخول كاملة: بريد + كلمة مرور + تذكّرني + خطأ عام + زر (loading) + «نسيت كلمة المرور»
+        "<Define#LoginForm meter=false title=\"Sign in\" subtitle=\"\" email=\"\" password=\"\" show=false remember=false error=\"\" emailError=\"\" passError=\"\" loading=false action=\"Sign in\" submit=noop forgot=noop><Card#lf width=full padding=20 radius=22 gap=12 elevation=md><Text#lt size=heading>{title}</Text><Text#ls size=small color=text_muted visible={subtitle != \"\"}>{subtitle}</Text><Column#lw visible={error != \"\"}><Alert#le tone=danger title={error} /></Column><Field#lem label=\"Email\" value={email} placeholder=\"you@example.com\" error={emailError} /><PasswordField#lpw label=\"Password\" value={password} show={show} meter={meter} error={passError} /><Toggle#lrm label=\"Remember me\" cell={remember} /><Button#lgo width=full loading={loading} onTap={submit}>{action}</Button><Button#lfg variant=ghost onTap={forgot}>Forgot password?</Button></Card></Define>";
+}
+// مكتبة الحفظ بحاويات Rin (@container.doc) مع ملف JSON اختياري: storeOpen/Save/Get/Has/Delete/All/Count/Find/Flush/Hash.
+inline const char* storeLibPrelude() {
+    return "<Rin>fun storeFlush(coll) { let p = cacheGet(\"store.filePath.\" + coll); if (p == nil or p == \"\") { return 0; } let rows = []; for (let id in docIds(coll)) { push(rows, findDoc(coll, id)); } writeFile(p, json.stringify(rows)); return len(rows); } fun storeOpen(coll, filePath) { container.ensure(\"doc\", coll); cacheSet(\"store.filePath.\" + coll, filePath); if (filePath != \"\" and fileExists(filePath)) { let txt = readFile(filePath); if (json.valid(txt)) { for (let r in json.parse(txt)) { insertDoc(coll, r[\"_id\"], r); } } } return len(docIds(coll)); } fun storeSave(coll, id, data) { container.ensure(\"doc\", coll); data[\"_id\"] = id; insertDoc(coll, id, data); storeFlush(coll); return id; } fun storeGet(coll, id) { container.ensure(\"doc\", coll); return findDoc(coll, id); } fun storeHas(coll, id) { return storeGet(coll, id) != nil; } fun storeDelete(coll, id) { container.ensure(\"doc\", coll); let r = deleteDoc(coll, id); storeFlush(coll); return r; } fun storeAll(coll) { container.ensure(\"doc\", coll); let rows = []; for (let id in docIds(coll)) { push(rows, findDoc(coll, id)); } return rows; } fun storeCount(coll) { container.ensure(\"doc\", coll); return len(docIds(coll)); } fun storeFind(q) { return sql(q); } fun storeHash(plain) { return hash(plain); }</Rin>";
+}
+inline bool usesStoreApi(const std::string& src) {
+    static const char* names[] = {"storeOpen(", "storeSave(", "storeGet(", "storeHas(", "storeDelete(", "storeAll(", "storeCount(", "storeFind(", "storeFlush(", "storeHash("};
+    for (const char* n : names) if (src.find(n) != std::string::npos) return true;
+    return false;
+}
+inline bool usesBuiltinComponent(const std::string& src) {
+    static const char* names[] = {"Chip", "Stat", "Alert", "Section", "ListTile", "Hero", "EmptyState", "Toggle", "Field", "PasswordField", "OrDivider", "SocialButton", "OtpBoxes", "LoginForm", "Tabs", "Stepper", "Badge", "ProfileCard", "ConfirmCard"};
+    for (const char* n : names) {
+        std::string needle = std::string("<") + n;
+        for (size_t p = src.find(needle); p != std::string::npos; p = src.find(needle, p + 1)) {
+            size_t e = p + needle.size();
+            if (e >= src.size() || !(detail::isIdChar(src[e]) || src[e] == '.')) return true;
+        }
+    }
+    return false;
+}
+
 inline std::string desugar(const std::string& source) {
     detail::Ctx ctx;
+    std::string pre;
+    if (usesBuiltinComponent(source)) pre += builtinPrelude();
+    if (usesStoreApi(source)) pre += storeLibPrelude();
+    if (!pre.empty()) {
+        std::string withPrelude = pre + source; // بلا '\n' في المقدمة: الأسطر محفوظة
+        detail::Desugarer d(withPrelude, ctx);
+        return d.run();
+    }
     detail::Desugarer d(source, ctx);
     return d.run();
 }
