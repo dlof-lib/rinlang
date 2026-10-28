@@ -374,13 +374,14 @@ struct Indsin {
             }
             case StrandKind::CHECKBOX: {
                 double sz = std::min(s->attrNum("size", 22), std::min(c2.maxW, c2.maxH));
-                size = {0,0, std::max(sz,c2.minW), std::max(sz,c2.minH)};
+                // Fixed-size control: a parent's cross-axis stretch (screen-root Column) must not blow it up to full width.
+                size = {0,0, s->attr("width") ? std::max(sz,c2.minW) : sz, s->attr("height") ? std::max(sz,c2.minH) : sz};
                 break;
             }
             case StrandKind::SWITCH: {
                 double w = std::min(s->attrNum("width", 44), c2.maxW);
                 double h = std::min(s->attrNum("height", 24), c2.maxH);
-                size = {0,0, std::max(w,c2.minW), std::max(h,c2.minH)};
+                size = {0,0, s->attr("width") ? std::max(w,c2.minW) : w, s->attr("height") ? std::max(h,c2.minH) : h}; // same: no implicit stretch
                 break;
             }
             case StrandKind::AVATAR: {
@@ -528,8 +529,12 @@ struct Indsin {
         // was widened to c.maxW, since they compute min(content, max) without consulting min. This
         // is the one place that applies to every StrandKind uniformly, so individual measure
         // functions don't each need their own copy of the same clamp.
-        size.w = std::max(size.w, c2.minW);
-        size.h = std::max(size.h, c2.minH);
+        // Exception: fixed-size controls (Switch/Checkbox) keep their own size when the parent merely stretches the
+        // cross axis — only an explicit width=/height= or sizing=fill/expand widens them.
+        bool fixedControl = s->kind == StrandKind::SWITCH || s->kind == StrandKind::CHECKBOX;
+        bool wantsFill = sizing == SizingMode::FILL || sizing == SizingMode::EXPAND;
+        if (!(fixedControl && !wantsFill && !s->attr("width")))  size.w = std::max(size.w, c2.minW);
+        if (!(fixedControl && !wantsFill && !s->attr("height"))) size.h = std::max(size.h, c2.minH);
         size.x = originX; size.y = originY;
         s->geometry = size; // true, margin-EXCLUDED box: what paint.h and hit-testing use.
 
