@@ -150,11 +150,7 @@ inline Color resolveColor(const StrandPtr& s) {
     if (!found && resolveColorAttr(s, "color", resolved)) found = true;
     if (!found && resolveColorAttr(s, "background", resolved)) found = true;
 
-    if (auto op = s->attr("opacity")) {
-        double amount = op->asNumber(1.0);
-        if (op->kind == Value::Kind::STRING && !op->str.empty() && op->str.back() == '%') amount = op->asNumber(100.0) / 100.0;
-        resolved.a = rincolor::alphaFromUnit(amount * rincolor::unitFromAlpha(resolved.a));
-    }
+    // `opacity=` is applied to the whole strand subtree by applyBoxStyling() (fill, border, text and children together).
     return resolved;
 }
 
@@ -311,6 +307,139 @@ struct Dye {
         }
         return list;
     }
+    // ---- Box styling (any strand; Box/Container is the natural host) ---------------------------------------------
+    //   bg_opacity=0..1|N%          fill alpha only        opacity=0..1|N%            whole subtree (fill, border, text, children)
+    //   border_top|right|bottom|left="W [color]"           one-sided borders (color literal or theme role; default = border color)
+    //   border_style=dashed|dotted  (with border=W)        outline=W outline_color=… outline_offset=N   ring drawn outside the box
+    //   pattern=stripes|vstripes|dots|grid|checker  pattern_color=#rrggbbaa  pattern_size=N   decorative fill inside the box
+    //   shape=circle|pill           pill radius (circle also forces aspect 1 in layout)
+    static bool parseFraction(const Value* v, double& out) {
+        if (!v) return false;
+        if (v->kind == Value::Kind::NUMBER) { out = v->number; return true; }
+        if (v->kind != Value::Kind::STRING || v->str.empty()) return false;
+        try {
+            size_t i = 0; double n = std::stod(v->str, &i);
+            if (i < v->str.size() && v->str[i] == '%') n /= 100.0;
+            out = n; return true;
+        } catch (...) { return false; }
+    }
+    static void scaleAlpha(Color& c, double k) { c.a = (unsigned char)std::lround(std::max(0.0, std::min(255.0, c.a * k))); }
+    static bool parseSideBorder(const StrandPtr& s, const char* key, double& w, Color& col) {
+        const Value* v = s->attr(key);
+        if (!v) return false;
+        std::string t = v->kind == Value::Kind::NUMBER ? std::to_string(v->number) : v->str;
+        if (t.empty()) return false;
+        size_t sp = t.find(' ');
+        try { w = std::stod(sp == std::string::npos ? t : t.substr(0, sp)); } catch (...) { return false; }
+        if (w <= 0) return false;
+        col = resolveBorderColor(s);
+        if (sp != std::string::npos) {
+            std::string cs = t.substr(sp + 1);
+            while (!cs.empty() && cs[0] == ' ') cs.erase(0, 1);
+            Color tmp = col;
+            if (looksLikeHexColor(cs)) col = parseHexColor(cs, col);
+            else if (resolveSemanticColor(cs, tmp)) col = tmp;
+        }
+        return true;
+    }
+    static void dashedRect(DrawList& out, const Rect& b, double t, Color c, StrandId owner, bool dotted) {
+        double len = dotted ? t : std::max(6.0, t * 3), gap = dotted ? t * 1.6 : len * 0.6, step = len + gap;
+        auto edge = [&](double x0, double y0, double dx, double dy, double total) {
+            for (double p = 0; p < total; p += step) {
+                double l = std::min(len, total - p);
+                Rect r = dx != 0 ? Rect{x0 + p, y0, l, t} : Rect{x0, y0 + p, t, l};
+                out.push_back({DrawOp::FILL_RECT, r, c, "", owner, 0, 0});
+            }
+        };
+        edge(b.x, b.y, 1, 0, b.w);                 // top
+        edge(b.x, b.y + b.h - t, 1, 0, b.w);       // bottom
+        edge(b.x, b.y + t, 0, 1, b.h - 2 * t);     // left
+        edge(b.x + b.w - t, b.y + t, 0, 1, b.h - 2 * t); // right
+    }
+    void applyBoxStyling(const StrandPtr& s, DrawList& list, size_t first) {
+        // shape=circle|pill: radius becomes half the short side (the box fill/stroke it already emitted).
+        std::string shape = s->attrStr("shape", "");
+        if (shape == "circle" || shape == "pill") {
+            for (size_t i = first; i < list.size(); i++)
+                if (list[i].owner == s->id && (list[i].op == DrawOp::FILL_RECT || list[i].op == DrawOp::STROKE_RECT))
+                    list[i].radius = std::min(list[i].bounds.w, list[i].bounds.h) / 2.0;
+        }
+        size_t fillIdx = list.size();
+        for (size_t i = first; i < list.size(); i++) if (list[i].op == DrawOp::FILL_RECT && list[i].owner == s->id) { fillIdx = i; break; }
+        double f;
+        if (fillIdx < list.size() && parseFraction(s->attr("bg_opacity"), f)) {
+            scaleAlpha(list[fillIdx].color, f);
+            for (auto& st : list[fillIdx].stops) scaleAlpha(st, f);
+        }
+        DrawList extra; // decorations drawn right after the box fill (under children)
+        const Rect g = s->geometry;
+        double rad = fillIdx < list.size() ? list[fillIdx].radius : 0;
+        // dashed / dotted border: replace the solid stroke this strand emitted
+        std::string bs = s->attrStr("border_style", "solid");
+        if (bs == "dashed" || bs == "dotted") {
+            for (size_t i = first; i < list.size(); i++) {
+                if (list[i].op == DrawOp::STROKE_RECT && list[i].owner == s->id) {
+                    dashedRect(extra, list[i].bounds, std::max(1.0, list[i].strokeWidth), list[i].color, s->id, bs == "dotted");
+                    list.erase(list.begin() + i); if (fillIdx > i && fillIdx < list.size() + 1) fillIdx--; break;
+                }
+            }
+        }
+        // pattern
+        std::string pat = s->attrStr("pattern", "");
+        if (!pat.empty() && g.w > 0 && g.h > 0) {
+            Color pc = themeRegistry().active().border; resolveColorAttr(s, "pattern_color", pc);
+            if (!s->attr("pattern_color")) pc.a = 90;
+            double sz = std::max(4.0, s->attrNum("pattern_size", 12));
+            double inset = rad > 0 ? rad * 0.29 : 0;
+            Rect in{g.x + inset, g.y + inset, g.w - 2 * inset, g.h - 2 * inset};
+            auto cnt = [&](double step) { return (size_t)((in.w / step + 1) * (in.h / step + 1)); };
+            if (pat == "dots" || pat == "checker") while (cnt(sz) > 700) sz *= 1.5;
+            if (pat == "stripes") {            // horizontal bands
+                for (double y = in.y; y < in.y + in.h; y += sz * 2) extra.push_back({DrawOp::FILL_RECT, Rect{in.x, y, in.w, std::min(sz, in.y + in.h - y)}, pc, "", s->id, 0, 0});
+            } else if (pat == "vstripes") {
+                for (double x = in.x; x < in.x + in.w; x += sz * 2) extra.push_back({DrawOp::FILL_RECT, Rect{x, in.y, std::min(sz, in.x + in.w - x), in.h}, pc, "", s->id, 0, 0});
+            } else if (pat == "grid") {
+                for (double y = in.y; y < in.y + in.h; y += sz) extra.push_back({DrawOp::FILL_RECT, Rect{in.x, y, in.w, 1}, pc, "", s->id, 0, 0});
+                for (double x = in.x; x < in.x + in.w; x += sz) extra.push_back({DrawOp::FILL_RECT, Rect{x, in.y, 1, in.h}, pc, "", s->id, 0, 0});
+            } else if (pat == "dots") {
+                double d = std::max(2.0, sz / 4);
+                for (double y = in.y + sz / 2; y < in.y + in.h; y += sz)
+                    for (double x = in.x + sz / 2; x < in.x + in.w; x += sz)
+                        extra.push_back({DrawOp::FILL_RECT, Rect{x - d / 2, y - d / 2, d, d}, pc, "", s->id, d / 2, 0});
+            } else if (pat == "checker") {
+                int iy = 0;
+                for (double y = in.y; y < in.y + in.h; y += sz, iy++) { int ix = 0;
+                    for (double x = in.x; x < in.x + in.w; x += sz, ix++)
+                        if ((ix + iy) % 2 == 0) extra.push_back({DrawOp::FILL_RECT, Rect{x, y, std::min(sz, in.x + in.w - x), std::min(sz, in.y + in.h - y)}, pc, "", s->id, 0, 0}); }
+            }
+        }
+        // one-sided borders
+        { double w; Color col;
+          if (parseSideBorder(s, "border_top", w, col))    extra.push_back({DrawOp::FILL_RECT, Rect{g.x, g.y, g.w, w}, col, "", s->id, 0, 0});
+          if (parseSideBorder(s, "border_bottom", w, col)) extra.push_back({DrawOp::FILL_RECT, Rect{g.x, g.y + g.h - w, g.w, w}, col, "", s->id, 0, 0});
+          if (parseSideBorder(s, "border_left", w, col))   extra.push_back({DrawOp::FILL_RECT, Rect{g.x, g.y, w, g.h}, col, "", s->id, 0, 0});
+          if (parseSideBorder(s, "border_right", w, col))  extra.push_back({DrawOp::FILL_RECT, Rect{g.x + g.w - w, g.y, w, g.h}, col, "", s->id, 0, 0});
+        }
+        // outline ring outside the box
+        { double ow = s->attrNum("outline", 0);
+          if (ow > 0) {
+              double off = s->attrNum("outline_offset", 0);
+              Color oc = themeRegistry().active().primary; resolveColorAttr(s, "outline_color", oc);
+              Rect r{g.x - off - ow, g.y - off - ow, g.w + 2 * (off + ow), g.h + 2 * (off + ow)};
+              extra.push_back({DrawOp::STROKE_RECT, r, oc, "", s->id, rad > 0 ? rad + off + ow : 0, ow});
+          } }
+        if (!extra.empty()) {
+            size_t at = fillIdx < list.size() ? fillIdx + 1 : first;
+            list.insert(list.begin() + at, extra.begin(), extra.end());
+        }
+        // whole-subtree opacity
+        if (parseFraction(s->attr("opacity"), f) && f < 0.999) {
+            for (size_t i = first; i < list.size(); i++) {
+                scaleAlpha(list[i].color, f); scaleAlpha(list[i].shadowColor, f);
+                for (auto& st : list[i].stops) scaleAlpha(st, f);
+            }
+        }
+    }
     // Post-pass wrapper: every TEXT_RUN a strand emits gets the strand's real text style so no backend
     // (native rasterizer, HTML export) has to guess font size / alignment / weight from the box height.
     void paintInto(const StrandPtr& s, DrawList& list) {
@@ -339,6 +468,7 @@ struct Dye {
                 }
             }
         }
+        applyBoxStyling(s, list, first);
         bool centered = s->kind == StrandKind::BUTTON || s->kind == StrandKind::ICONBUTTON || s->kind == StrandKind::TABITEM ||
                         s->kind == StrandKind::BADGE || s->kind == StrandKind::AVATAR || s->kind == StrandKind::TAG;
         bool single = centered || s->kind == StrandKind::INPUT || s->kind == StrandKind::SEARCH || s->kind == StrandKind::SELECT ||
