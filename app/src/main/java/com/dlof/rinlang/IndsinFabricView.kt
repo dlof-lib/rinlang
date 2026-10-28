@@ -636,7 +636,25 @@ class IndsinFabricView @JvmOverloads constructor(
      * later, by [onDraw]'s explicit overlay pass) and false when [onDraw] calls back into this
      * function to actually draw that overlay's own subtree.
      */
+    /** `opacity=` (0..1 or N%): the whole node subtree is composited at that alpha (mirrors indsin::applyBoxStyling). */
     private fun drawNode(canvas: Canvas, node: JSONObject, skipOverlays: Boolean = true) {
+        val op = fraction(node.optJSONObject("attrs")?.optString("opacity"))
+        if (op != null && op < 0.999f) {
+            val x = node.optDouble("x", 0.0).toFloat(); val y = node.optDouble("y", 0.0).toFloat()
+            val w = node.optDouble("w", 0.0).toFloat(); val h = node.optDouble("h", 0.0).toFloat()
+            val pad = 64f // room for shadows / outlines drawn outside the box
+            val sc = canvas.saveLayerAlpha(x - pad, y - pad, x + w + pad, y + h + pad, (op.coerceIn(0f, 1f) * 255).toInt())
+            try { drawNodeCore(canvas, node, skipOverlays) } finally { canvas.restoreToCount(sc) }
+        } else drawNodeCore(canvas, node, skipOverlays)
+    }
+
+    private fun fraction(raw: String?): Float? {
+        if (raw.isNullOrBlank()) return null
+        val t = raw.trim()
+        return if (t.endsWith("%")) t.dropLast(1).toFloatOrNull()?.div(100f) else t.toFloatOrNull()
+    }
+
+    private fun drawNodeCore(canvas: Canvas, node: JSONObject, skipOverlays: Boolean = true) {
         if (skipOverlays && overlayNames.contains(node.optString("name"))) return
         val kind = node.optString("kind")
         val x = node.optDouble("x", 0.0).toFloat()
@@ -917,7 +935,9 @@ class IndsinFabricView @JvmOverloads constructor(
 
     private fun drawBox(canvas: Canvas, rect: RectF, attrs: JSONObject, fallback: Int, defaultRadius: Float, borderColorFallback: Int = Color.WHITE) {
         if (rect.width() <= 0f || rect.height() <= 0f) return
-        val radius = attrs.optString("radius").toFloatOrNull() ?: defaultRadius
+        val shape = attrs.optString("shape")
+        val radius = if (shape == "circle" || shape == "pill") min(rect.width(), rect.height()) / 2f
+                     else (attrs.optString("radius").toFloatOrNull() ?: defaultRadius)
         val shadow = attrs.optString("shadow").toFloatOrNull()
         val gradient = attrs.optString("gradient").takeIf { it.contains(',') }
 
@@ -939,6 +959,9 @@ class IndsinFabricView @JvmOverloads constructor(
         // Shadows mirror indsin::resolveShadow (rin_indsin_paint.h): elevation= tokens, shadow= blur, shadowColor=, shadowY=.
         shadowOf(attrs, shadow)?.let { (blur, dy, color) -> fillPaint.setShadowLayer(blur, 0f, dy, color) }
 
+        fraction(attrs.optString("bg_opacity"))?.let { k ->
+            if (fillPaint.shader == null) fillPaint.alpha = (Color.alpha(fillPaint.color) * k.coerceIn(0f, 1f)).toInt()
+        }
         canvas.drawRoundRect(rect, radius, radius, fillPaint)
 
         // border= / borderColor=: a real stroked edge, inset by half its own width so it's drawn
@@ -952,7 +975,60 @@ class IndsinFabricView @JvmOverloads constructor(
             val inset = strokeW / 2f
             val strokeRect = RectF(rect.left + inset, rect.top + inset, rect.right - inset, rect.bottom - inset)
             val strokeRadius = max(0f, radius - inset)
+            val style = attrs.optString("border_style")
+            val oldEffect = strokePaint.pathEffect
+            if (style == "dashed") strokePaint.pathEffect = android.graphics.DashPathEffect(floatArrayOf(max(6f, strokeW * 3f), max(4f, strokeW * 2f)), 0f)
+            else if (style == "dotted") { strokePaint.strokeCap = Paint.Cap.ROUND; strokePaint.pathEffect = android.graphics.DashPathEffect(floatArrayOf(0.1f, strokeW * 2.2f), 0f) }
             canvas.drawRoundRect(strokeRect, strokeRadius, strokeRadius, strokePaint)
+            strokePaint.pathEffect = oldEffect
+            strokePaint.strokeCap = Paint.Cap.BUTT
+        }
+        drawBoxDecor(canvas, rect, attrs, radius, borderColorFallback)
+    }
+
+    /** One-sided borders, outline ring and decorative `pattern=` (mirrors indsin::applyBoxStyling's extras). */
+    private fun drawBoxDecor(canvas: Canvas, rect: RectF, attrs: JSONObject, radius: Float, borderFallback: Int) {
+        fillPaint.shader = null; fillPaint.clearShadowLayer()
+        val pat = attrs.optString("pattern")
+        if (pat.isNotEmpty()) {
+            val c = attrs.optString("pattern_color").takeIf { it.isNotBlank() }?.let { parseHexColor(it, Color.argb(90, 128, 128, 128)) } ?: Color.argb(90, 128, 128, 128)
+            val sz = max(4f, attrs.optString("pattern_size").toFloatOrNull() ?: 12f)
+            val inset = radius * 0.29f
+            val r = RectF(rect.left + inset, rect.top + inset, rect.right - inset, rect.bottom - inset)
+            fillPaint.color = c
+            val save = canvas.save(); canvas.clipRect(r)
+            when (pat) {
+                "stripes" -> { var y = r.top; while (y < r.bottom) { canvas.drawRect(r.left, y, r.right, min(y + sz, r.bottom), fillPaint); y += sz * 2 } }
+                "vstripes" -> { var x = r.left; while (x < r.right) { canvas.drawRect(x, r.top, min(x + sz, r.right), r.bottom, fillPaint); x += sz * 2 } }
+                "grid" -> { var y = r.top; while (y < r.bottom) { canvas.drawRect(r.left, y, r.right, y + 1f, fillPaint); y += sz }
+                            var x = r.left; while (x < r.right) { canvas.drawRect(x, r.top, x + 1f, r.bottom, fillPaint); x += sz } }
+                "dots" -> { val d = max(2f, sz / 4f); var y = r.top + sz / 2; while (y < r.bottom) { var x = r.left + sz / 2; while (x < r.right) { canvas.drawCircle(x, y, d / 2, fillPaint); x += sz }; y += sz } }
+                "checker" -> { var iy = 0; var y = r.top; while (y < r.bottom) { var ix = 0; var x = r.left; while (x < r.right) { if ((ix + iy) % 2 == 0) canvas.drawRect(x, y, min(x + sz, r.right), min(y + sz, r.bottom), fillPaint); x += sz; ix++ }; y += sz; iy++ } }
+            }
+            canvas.restoreToCount(save)
+        }
+        fun side(key: String): Pair<Float, Int>? {
+            val raw = attrs.optString(key).trim()
+            if (raw.isEmpty()) return null
+            val sp = raw.indexOf(' ')
+            val w = (if (sp < 0) raw else raw.substring(0, sp)).toFloatOrNull() ?: return null
+            if (w <= 0f) return null
+            val col = if (sp < 0) parseHexColor(attrs.optString("borderColor").ifBlank { null }, borderFallback) else parseHexColor(raw.substring(sp + 1).trim(), borderFallback)
+            return w to col
+        }
+        side("border_top")?.let { (w, c) -> fillPaint.color = c; canvas.drawRect(rect.left, rect.top, rect.right, rect.top + w, fillPaint) }
+        side("border_bottom")?.let { (w, c) -> fillPaint.color = c; canvas.drawRect(rect.left, rect.bottom - w, rect.right, rect.bottom, fillPaint) }
+        side("border_left")?.let { (w, c) -> fillPaint.color = c; canvas.drawRect(rect.left, rect.top, rect.left + w, rect.bottom, fillPaint) }
+        side("border_right")?.let { (w, c) -> fillPaint.color = c; canvas.drawRect(rect.right - w, rect.top, rect.right, rect.bottom, fillPaint) }
+        val ow = attrs.optString("outline").toFloatOrNull()
+        if (ow != null && ow > 0f) {
+            val off = attrs.optString("outline_offset").toFloatOrNull() ?: 0f
+            strokePaint.color = parseHexColor(attrs.optString("outline_color").ifBlank { null }, 0xFF6C5CE7.toInt())
+            strokePaint.strokeWidth = ow
+            val grow = off + ow / 2f
+            val rr = RectF(rect.left - grow, rect.top - grow, rect.right + grow, rect.bottom + grow)
+            val rad = if (radius > 0f) radius + grow else 0f
+            canvas.drawRoundRect(rr, rad, rad, strokePaint)
         }
     }
 
