@@ -1,0 +1,12 @@
+<warp notify={true} />
+<Screen#a size=phone padding=20 gap=14>
+  <Hero title="Library" subtitle="built-in components"><Chip label="new" tint=#00B894 /></Hero>
+  <Row#r gap=10><Stat label="Users" value="128" w=30% /><Stat label="Sales" value="42" tint=success w=30% /></Row>
+  <Alert tone=warning title="Heads up" message="Disk almost full" />
+  <Section title="Settings">
+    <ListTile title="Account" subtitle="you@example.com" trailing="›" />
+    <ListTile title="Language" trailing="AR" />
+    <Toggle label="Notifications" cell={notify} />
+  </Section>
+  <EmptyState title="No messages" message="You're all caught up"><Chip label="Refresh" /></EmptyState>
+</Screen>
