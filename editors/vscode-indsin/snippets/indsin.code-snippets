@@ -413,5 +413,23 @@
     "body": [
       "<PasswordField label=\"Password\" value={${1:password}} show={${2:showPw}} meter=true />"
     ]
+  },
+  "indsin Box row": {
+    "prefix": "boxrow",
+    "description": "Flex Box row",
+    "body": [
+      "<Box#${1:row} direction=row gap=${2:8} justify=${3|between,center,end,around,evenly,start|} padding=${4:10} bg=surface radius=${5:14} width=full>",
+      "  $0",
+      "</Box>"
+    ]
+  },
+  "indsin Box styled": {
+    "prefix": "boxstyle",
+    "description": "Styled Box",
+    "body": [
+      "<Box#${1:box} padding=14 radius=12 border=2 borderColor=primary border_style=${2|dashed,dotted,solid|} outline=3 outline_offset=2 opacity=1>",
+      "  $0",
+      "</Box>"
+    ]
   }
 }
