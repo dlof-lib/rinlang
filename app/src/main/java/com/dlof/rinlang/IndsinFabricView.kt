@@ -1018,11 +1018,19 @@ class IndsinFabricView @JvmOverloads constructor(
     ) {
         if (rect.width() <= 0f || rect.height() <= 0f) return
         drawBox(canvas, rect, attrs, defaultFieldBg, defaultRadius = 8f)
-        strokePaint.color = defaultFieldBorder
-        strokePaint.strokeWidth = 1f
+        val err = attrs.optString("error")
+        val hasError = err.isNotEmpty() && err != "false" && err != "0"
+        strokePaint.color = when {
+            hasError -> 0xFFD14545.toInt()
+            attrs.optString("valid") == "true" -> 0xFF2E9E5B.toInt()
+            else -> defaultFieldBorder
+        }
+        strokePaint.strokeWidth = if (hasError) 2f else 1f
         canvas.drawRoundRect(rect, 8f, 8f, strokePaint)
 
-        val value = attrs.optString("value")
+        var value = attrs.optString("value")
+        if (value.isNotEmpty() && attrs.optString("secure") == "true" && attrs.optString("reveal") != "true")
+            value = "\u2022".repeat(value.codePointCount(0, value.length))
         val placeholder = attrs.optString("placeholder").ifBlank { emptyPlaceholder }
         val (text, color) = if (value.isNotEmpty()) value to defaultText else placeholder to defaultPlaceholder
         if (text.isEmpty()) return
