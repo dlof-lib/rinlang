@@ -232,9 +232,12 @@ struct Indsin {
 
         // aspect="16:9" (new, any strand): height follows a *definite* width (explicit width= or a width
         // forced by the parent, e.g. fill/stretch). An explicit height= always wins.
-        if (s->attr("aspect") && !s->attr("height") && s->kind != StrandKind::TEXT) {
+        // shape="circle"|"square" implies aspect 1 (a circle also gets a pill radius at paint time).
+        Value shapeAspect; const Value* aspectV = s->attr("aspect");
+        { std::string shp = s->attrStr("shape", ""); if (!aspectV && (shp == "circle" || shp == "square")) { shapeAspect = Value::num(1.0); aspectV = &shapeAspect; } }
+        if (aspectV && !s->attr("height") && s->kind != StrandKind::TEXT) {
             double ar = 0;
-            if (parseAspectRatio(s->attr("aspect"), ar)) {
+            if (parseAspectRatio(aspectV, ar)) {
                 double defW = s->attr("width") ? c2.maxW : ((c2.minW > 0 && c2.minW >= c2.maxW - 0.01) ? c2.maxW : -1);
                 if (defW > 0) { double hh = std::min(defW / ar, c.maxH); c2.minH = hh; c2.maxH = hh; }
             }
@@ -350,7 +353,16 @@ struct Indsin {
             // Box (§5/§6, the resolved "Container" naming collision — see the enum comment in
             // rin_indsin_strand.h): the same padded, multi-child, sizing-aware box Card already is,
             // just without Card's elevation-styled default paint (see colorForKind in paint.h).
-            case StrandKind::BOX: size = layoutSingleChildBox(s, c2, resolveSpacing(*s, "padding", 0) + s->attrNum("border", 0), originX, originY); break;
+            case StrandKind::BOX:
+                // Box flex mode: any of direction/gap/justify/align/valign turns the Box into a Row/Column with the full
+                // linear-layout feature set (gap, alignment, Spacer/fill flex, justify). Plain Box keeps the old stacking.
+                if (s->attr("direction") || s->attr("gap") || s->attr("justify") || s->attr("align") || s->attr("valign")) {
+                    std::string dir = s->attrStr("direction", "column");
+                    size = layoutLinear(s, c2, (dir == "row" || dir == "horizontal") ? Axis::X : Axis::Y, originX, originY);
+                } else {
+                    size = layoutSingleChildBox(s, c2, resolveSpacing(*s, "padding", 0) + s->attrNum("border", 0), originX, originY);
+                }
+                break;
 
             case StrandKind::GRID: size = layoutGrid(s, c2, originX, originY); break;
             case StrandKind::WRAP: size = layoutWrap(s, c2, originX, originY); break;
@@ -635,6 +647,11 @@ struct Indsin {
         double crossMax=0, cursorMain=padding;
         double innerMaxW = std::max(0.0, c.maxW - padding*2), innerMaxH = std::max(0.0, c.maxH - padding*2);
         double innerMain = (axis == Axis::Y) ? innerMaxH : innerMaxW;
+        // Screen root (a <Screen size=…> / canvas height): its main axis is unbounded but it has a minimum height,
+        // so flexible children (Spacer / sizing=fill) share the slack of that minimum -- this is what pins a NavBar
+        // placed after a <Spacer /> to the bottom of the screen.
+        if (s->screenRoot && axis == Axis::Y && innerMain >= 1e8 && c.minH > 0 && c.minH < 1e8)
+            innerMain = std::max(0.0, c.minH - padding * 2);
         // Cross-axis alignment: Column (axis=Y) aligns children horizontally via `align`;
         // Row (axis=X) aligns children vertically via `valign`. Default is left/top (offset 0),
         // matching the previous unaligned behavior exactly, so existing .rin files don't move.
@@ -748,6 +765,31 @@ struct Indsin {
             placed.push_back({child, crossSize, localX, mainSize});
         }
         if (flowChildren > 0) mainUsed -= gap;
+
+        // justify= (Row / Column / flex Box): distributes the box's spare main-axis space when nothing flexes.
+        //   start (default) | center | end | between | around | evenly
+        {
+            std::string jm = s->attrStr("justify", "start");
+            double minMain = (axis == Axis::Y) ? c.minH : c.minW;
+            if (jm != "start" && flexCount == 0 && !placed.empty() && minMain > 0 && minMain < 1e8) {
+                double free = minMain - padding * 2 - mainUsed;
+                size_t n = placed.size();
+                if (free > 0.5) {
+                    double lead = 0, between = 0;
+                    if (jm == "center") lead = free / 2;
+                    else if (jm == "end") lead = free;
+                    else if (jm == "between") between = n > 1 ? free / (n - 1) : 0;
+                    else if (jm == "around") { between = free / n; lead = between / 2; }
+                    else if (jm == "evenly") { between = free / (n + 1); lead = between; }
+                    double shift = lead;
+                    for (auto& pl : placed) {
+                        if (axis == Axis::Y) translate(pl.child, 0, shift); else translate(pl.child, shift, 0);
+                        shift += between;
+                    }
+                    mainUsed += free;
+                }
+            }
+        }
 
         // RTL row support (§ ready-elements expansion — "صف يمين يسار"/row right-to-left): a
         // `direction="rtl"` attribute on a Row (or anything else built on this same axis=X path —
