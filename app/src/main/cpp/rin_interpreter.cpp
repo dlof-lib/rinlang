@@ -399,6 +399,7 @@ Interpreter::Interpreter() {
     // seed(n) (انظر natives["seed"] أدناه) عندما يحتاجها المبرمج تحديداً (محاكاة/اختبارات).
     std::srand(static_cast<unsigned int>(std::time(nullptr)));
     registerNatives();
+    for (auto& install : interpreterInstallers()) install(*this); // مكتبات المضيف المربوطة (indsin.* …)
 }
 
 static double asNumber(const Value& v, const std::string& fn, int line) {
