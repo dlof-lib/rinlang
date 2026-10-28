@@ -487,4 +487,48 @@ inline std::string tokensToJson() {
     return os.str();
 }
 
+// (نُقلت هذه الدالة من rin_indsin_tokens.h إلى هنا: تعتمد على themeFromSeedLiteral المعرّفة في هذا الملف،
+//  وكان الإعلان المسبق بلا تعريف يُنتج تحذير -Wundefined-inline في أي وحدة ترجمة لا تضمّ system.h مثل pitokc.)
+// ---- Registering @theme=... declarations from a parsed program --------------------------------
+// Called once by the cold pipeline (see rin_indsin_pipeline.h) after parsing, before the Fabric is
+// built, so that any @theme block earlier in the source is already active by the time Strand
+// colors get resolved. A `@theme=Name ... .end/theme` block starts from whichever Theme is
+// *already registered* under that exact name (Dark/Light/Midnight/Ocean/Sunset/Slate all ship
+// pre-registered -- see the ThemeRegistry constructor above) so `@theme=Midnight active=true;
+// .end/theme` with no color overrides at all just switches the whole palette to the built-in
+// Midnight theme intact. Only a genuinely new name falls back to cloning the currently-active
+// theme, same as before. Either way only the roles actually given get overridden -- e.g.
+// `@theme=Midnight primary="#7C5CFF"; .end/theme` keeps the rest of Midnight's palette and only
+// swaps its primary.
+inline void registerThemesFromProgram(const std::vector<rin::StmtPtr>& program, WarpScope& warp) {
+    for (auto& stmt : program) {
+        auto t = std::dynamic_pointer_cast<rin::ThemeStmt>(stmt);
+        if (!t) continue;
+        auto& reg = themeRegistry();
+        auto existing = reg.themes.find(t->name);
+        Theme theme = (existing != reg.themes.end()) ? existing->second : reg.active();
+        theme.name = t->name;
+        bool makeActive = false;
+        // `seed="#6C5CE7"` (+ optional `dark=true|false`): derive the whole palette from ONE color (WCAG-checked
+        // tonal theme, rin_indsin_system.h), then let the explicit role attributes below override single slots.
+        {
+            std::string seed; bool dark = true;
+            for (auto& a : t->attrs) {
+                if (a.key == "seed") seed = evalAttrExprKeyed(a.key, a.value, warp, nullptr).asString();
+                else if (a.key == "dark") dark = evalAttrExprKeyed(a.key, a.value, warp, nullptr).asString() != "false";
+                else if (a.key == "mode") dark = evalAttrExprKeyed(a.key, a.value, warp, nullptr).asString() != "light";
+            }
+            if (!seed.empty() && looksLikeHexColor(seed)) { theme = themeFromSeedLiteral(t->name, seed, dark); }
+        }
+        for (auto& a : t->attrs) {
+            Value v = evalAttrExprKeyed(a.key, a.value, warp, nullptr);
+            if (a.key == "active") { makeActive = (v.asString() == "true"); continue; }
+            if (a.key == "seed" || a.key == "dark" || a.key == "mode") continue;
+            if (looksLikeHexColor(v.asString())) theme.setSlot(a.key, parseHexColor(v.asString(), {0,0,0}));
+        }
+        reg.registerTheme(theme);
+        if (makeActive) reg.setActive(theme.name);
+    }
+}
+
 } // namespace indsin
