@@ -12,6 +12,14 @@ object IndsinViewTracer {
         """@(?:view|loop)(?:\.[A-Za-z_][A-Za-z0-9_]*)?\s*=\s*[A-Za-z_][A-Za-z0-9_]*"""
     )
 
-    /** True if [source] declares a Indsin root: @view... or @loop.... */
-    fun containsView(source: String): Boolean = rootRegex.containsMatchIn(source)
+    /**
+     * صيغة الوسوم بالأقواس (docs/indsin_tags.md): سطر يبدأ بوسم واجهة معروف، مثل `<Screen#app size=phone>` أو `<Column#root>`.
+     * تُشترط بداية السطر كي لا تُلتقط نصوص HTML/سلاسل داخل برامج Rin العادية.
+     */
+    private val tagRootRegex = Regex(
+        """(?m)^[ \t]*<(?:Screen|Column|Row|Stack|Card|Grid|Scroll|Wrap|Text|Button|Input|Hero|Section|LoginForm|Field|PasswordField|Tabs|Stepper|ProfileCard|ConfirmCard|Stat|Alert|ListTile|EmptyState)(?:#[A-Za-z_][A-Za-z0-9_]*)?(?=[\s/>])"""
+    )
+
+    /** True if [source] declares a Indsin root: @view... / @loop... or a tag-syntax root (`<Screen>`, `<Column>`…). */
+    fun containsView(source: String): Boolean = rootRegex.containsMatchIn(source) || tagRootRegex.containsMatchIn(source)
 }
