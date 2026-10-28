@@ -321,6 +321,9 @@ object RinEngine {
          */
         fun tap(x: Double, y: Double): String = guarded { indsinSessionTapNative(it, x, y) }
 
+        /** Text entry for a bound Input: writes [text] into warp cell [name] (the tap envelope's `focus.bind`). */
+        fun setInput(name: String, text: String): String = guarded { indsinSessionSetInputNative(it, name, text) }
+
         /**
          * Events (spec §events): long-press / double-tap / hover, same envelope shape [tap]
          * returns. The gesture itself (hold duration, double-tap timing window, pointer-in/out) is
@@ -438,6 +441,7 @@ object RinEngine {
     private external fun indsinSessionCreateForContainerNative(source: String, containerName: String, rootWidth: Int): Long
     private external fun indsinSessionRenderJsonNative(handle: Long): String
     private external fun indsinSessionTapNative(handle: Long, x: Double, y: Double): String
+    private external fun indsinSessionSetInputNative(handle: Long, name: String, text: String): String
     private external fun indsinSessionLongPressNative(handle: Long, x: Double, y: Double): String
     private external fun indsinSessionDoubleTapNative(handle: Long, x: Double, y: Double): String
     private external fun indsinSessionHoverNative(handle: Long, x: Double, y: Double, entering: Boolean): String
