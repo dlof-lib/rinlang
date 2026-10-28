@@ -1,0 +1,70 @@
+<!-- حسابات مخزّنة في حاوية Rin (@container.doc) مع ملف JSON دائم: تسجيل + دخول + قائمة مستخدمين.
+     الحفظ: storeSave / storeGet / storeAll / storeFind (RCSQL) / storeDelete — تُحقن مكتبتها تلقائياً.
+     كلمات المرور تُخزَّن مجزّأة (sha256 عبر storeHash)، لا نصاً صريحاً.
+     التشغيل: rin_indsin_preview indsin_accounts.rin --png out.png -->
+<Palette seed=#0984E3 />
+
+<warp email={""} />
+<warp password={""} />
+<warp showPw={false} />
+<warp remember={false} />
+<warp err={""} />
+<warp msg={""} />
+<warp emailErr={""} />
+<warp passErr={""} />
+<warp total={loadUsers()} />
+
+<Rin>
+fun userRow(i) {
+  let rows = storeAll("users");
+  if (i >= len(rows)) { return ""; }
+  return rows[i]["email"];
+}
+fun loadUsers() { return storeOpen("users", "indsin_users.json"); }
+</Rin>
+
+
+<Fun#register>
+  err = ""; msg = "";
+  emailErr = indsin.fieldError("email", email);
+  passErr = indsin.fieldError("password", password);
+  if (email == "") { emailErr = "Required"; }
+  if (emailErr == "" and passErr == "") {
+    if (storeHas("users", email)) { err = "This email is already registered"; }
+    else {
+      storeSave("users", email, { "email": email, "pass": storeHash(password), "remember": remember });
+      total = storeCount("users");
+      msg = "Account created for " + indsin.maskEmail(email);
+    }
+  }
+</Fun>
+
+<Fun#login>
+  err = ""; msg = "";
+  let u = storeGet("users", email);
+  if (u == nil) { err = "No account for this email"; }
+  else if (u["pass"] != storeHash(password)) { err = "Wrong password"; }
+  else { msg = "Welcome back, " + indsin.initials(email); }
+</Fun>
+
+<Fun#wipe>
+  for (let id in docIds("users")) { storeDelete("users", id); }
+  total = storeCount("users");
+  msg = "All accounts deleted";
+</Fun>
+
+<Screen#app size=phone bg="#0984E3,#74B9FF,160" padding=20 gap=12>
+  <Text#hdr size=heading color=#ffffff>Accounts ({total})</Text>
+  <LoginForm meter=true title="Sign in or register" subtitle="Saved in a Rin container"
+             email={email} password={password} show={showPw} remember={remember}
+             error={err} emailError={emailErr} passError={passErr}
+             action="Sign in" submit={login()} forgot={wipe()} />
+  <Button#reg width=full variant=outline onTap={register()}>Create account</Button>
+  <Column#mw visible={msg != ""}><Alert tone=success title={msg} /></Column>
+  <Section title="Registered">
+    <Text#u0 color=#ffffff>{userRow(0)}</Text>
+    <Text#u1 color=#ffffff>{userRow(1)}</Text>
+    <Text#u2 color=#ffffff>{userRow(2)}</Text>
+    <Text#u3 color=#ffffff>{userRow(3)}</Text>
+  </Section>
+</Screen>
