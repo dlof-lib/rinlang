@@ -197,6 +197,15 @@ object IndsinPreviewManager {
         }
     }
 
+    /** Host text entry for a bound Input (login forms etc.); see [RinEngine.IndsinSession.setInput]. */
+    fun setInput(name: String, text: String) {
+        val current = session ?: return
+        worker.execute {
+            val json = try { current.setInput(name, text) } catch (t: Throwable) { errorJson(t) }
+            deliver(json, 0)
+        }
+    }
+
     // ---- Events: long-press / double-tap / hover — same fire-and-forget, worker-thread,
     // busy-indicator-wrapped shape as [tap] above (a handler CAN make a real network call via
     // rin_http.cpp, same as an onTap= handler can, so the same slow-call indicator applies). ----
