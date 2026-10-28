@@ -649,6 +649,14 @@ private:
 
 } // namespace flow
 
+class Interpreter;
+// خطّافات تثبيت مكتبات المضيف: كل دالة هنا تُستدعى على كل Interpreter جديد بعد تسجيل الدوال المدمجة
+// (مثلاً indsin.* و indsin.mount/tap/... من rin_indsin_c_api.cpp)، فتعمل في أي برنامج Rin عادي لا داخل indsin فقط.
+inline std::vector<std::function<void(Interpreter&)>>& interpreterInstallers() {
+    static std::vector<std::function<void(Interpreter&)>> v;
+    return v;
+}
+
 class Interpreter {
 public:
     Interpreter();
