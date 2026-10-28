@@ -371,6 +371,83 @@ int main() {
             if (!(has(out, "1|4"))) std::printf("  output: %s\n", out.c_str());
         }
     }
+    // 18) التنقّل والهيكل: TopBar/NavBar/Pagination/SearchBar/Footer يقودها سكربت Rin
+    {
+        std::ifstream f("examples/samples/indsin_navigation.rin");
+        std::stringstream ss; ss << f.rdbuf(); std::string src = ss.str();
+        CHECK(!src.empty(), "navigation example readable (run from the repo root)");
+        if (!src.empty()) {
+            std::string esc;
+            for (char c : src) { if (c == '"' || c == '\\') esc += '\\'; if (c == '\n') esc += "\\n"; else esc += c; }
+            std::string prog = "let h = indsin.mount(\"" + esc + "\", 390);\n"
+                "let hasBack = false; for (let t in indsin.texts(h)) { if (t == \"Back\") { hasBack = true; } } print hasBack;\n"
+                "indsin.tapText(h, \"Search\"); print indsin.get(h, \"tab\");\n"
+                "let hasBack2 = false; for (let t in indsin.texts(h)) { if (t == \"Back\") { hasBack2 = true; } } print hasBack2;\n"
+                "indsin.tapText(h, \"Back\"); print indsin.get(h, \"tab\");\n"
+                "indsin.tapText(h, \"Next\"); indsin.tapText(h, \"Next\"); print indsin.get(h, \"page\");\n"
+                "indsin.tapText(h, \"More\"); indsin.tapText(h, \"+ New\"); print indsin.get(h, \"taps\");\n"
+                "indsin.input(h, \"q\", \"cats\"); let clear = indsin.find(h, \"Clear\"); print clear != nil;\n"
+                "let nav = indsin.find(h, \"Inbox\"); print nav[\"y\"] > 700;\n";
+            char* o = rin_run(prog.c_str(), "."); std::string out = o ? o : ""; rin_free_string(o);
+            CHECK(out == "false\n1\ntrue\n0\n3\n2\ntrue\ntrue\n", "nav: tabs, back, pagination, actions, search clear, NavBar pinned to bottom");
+            if (out != "false\n1\ntrue\n0\n3\n2\ntrue\ntrue\n") std::printf("  output: %s\n", out.c_str());
+        }
+    }
+    // 19) Box/Container: flex (direction/gap/justify), shape، حدود لكل جهة، outline، opacity، bg_opacity، pattern
+    {
+        const char* head = "<Theme#Dark active /><Screen#a size=\"300x300\" bg=#000000 padding=10 gap=10>";
+        // justify=between داخل صف بعرض كامل: أول صندوق عند الحافة اليسرى وآخر صندوق عند اليمنى
+        void* s = rin_indsin_session_create((std::string(head) +
+            "<Box#row direction=row justify=between width=full height=40><Box#a width=40 height=40 bg=#FF0000 /><Box#b width=40 height=40 bg=#00FF00 /><Box#c width=40 height=40 bg=#0000FF /></Box></Screen>").c_str(), 300);
+        CHECK(is(pixel(s, 12, 30), 255, 0, 0), "justify=between: first box at the left edge");
+        CHECK(is(pixel(s, 288, 30), 0, 0, 255), "justify=between: last box at the right edge");
+        CHECK(is(pixel(s, 150, 30), 0, 255, 0), "justify=between: middle box centred");
+        rin_indsin_session_free(s);
+
+        s = rin_indsin_session_create((std::string(head) +
+            "<Box#row direction=row justify=center width=full height=40><Box#a width=40 height=40 bg=#FF0000 /></Box></Screen>").c_str(), 300);
+        CHECK(is(pixel(s, 150, 30), 255, 0, 0), "justify=center centres a single child");
+        CHECK(!is(pixel(s, 12, 30), 255, 0, 0), "justify=center leaves the edge without the child");
+        rin_indsin_session_free(s);
+
+        // shape=circle: ارتفاع = عرض (aspect 1) وزوايا شفافة
+        s = rin_indsin_session_create((std::string(head) + "<Box#d shape=circle width=60 bg=#FFFFFF /></Screen>").c_str(), 300);
+        CHECK(is(pixel(s, 40, 40), 255, 255, 255), "circle centre filled");
+        CHECK(is(pixel(s, 11, 11), 0, 0, 0), "circle corner empty");
+        CHECK(is(pixel(s, 40, 66), 255, 255, 255), "circle height follows width (aspect 1)");
+        rin_indsin_session_free(s);
+
+        // حدّ جهة واحدة
+        s = rin_indsin_session_create((std::string(head) + "<Box#b width=100 height=50 bg=#222222 border_left=\"6 #00B894\" /></Screen>").c_str(), 300);
+        Px lp = pixel(s, 12, 30), mp = pixel(s, 50, 30);
+        CHECK(is(lp, 0, 184, 148), "border_left painted in the given colour");
+        CHECK(is(mp, 34, 34, 34), "box body untouched by one-sided border");
+        rin_indsin_session_free(s);
+
+        // outline خارج الصندوق
+        s = rin_indsin_session_create((std::string(head) + "<Box#o width=100 height=50 bg=#222222 outline=4 outline_color=#FF0000 outline_offset=2 /></Screen>").c_str(), 300);
+        bool ring = false; for (int x = 2; x < 12; x++) { Px p = pixel(s, x, 35); if (p.r > 200 && p.g < 60) ring = true; }
+        CHECK(ring, "outline ring drawn outside the box edge");
+        rin_indsin_session_free(s);
+
+        // opacity: صندوق أبيض بنصف شفافية فوق أسود => رمادي
+        s = rin_indsin_session_create((std::string(head) + "<Box#f width=100 height=50 bg=#FFFFFF opacity=0.5 /></Screen>").c_str(), 300);
+        Px op = pixel(s, 50, 30);
+        CHECK(op.r > 110 && op.r < 145 && op.r == op.g, "opacity=0.5 blends the box with the canvas");
+        rin_indsin_session_free(s);
+        s = rin_indsin_session_create((std::string(head) + "<Box#f width=100 height=50 bg=#FFFFFF bg_opacity=0.25 /></Screen>").c_str(), 300);
+        Px bp = pixel(s, 50, 30);
+        CHECK(bp.r > 50 && bp.r < 80, "bg_opacity=0.25 blends only the fill");
+        rin_indsin_session_free(s);
+
+        // pattern: الشرائط تضيف بكسلات مختلفة عن الصندوق الساذج
+        auto frame2 = [&](const char* body) {
+            void* x = rin_indsin_session_create((std::string(head) + body + "</Screen>").c_str(), 300);
+            int w, h; unsigned char* b = rin_indsin_session_render_rgb(x, &w, &h);
+            std::string o((char*)b, (size_t)w * h * 3); rin_indsin_free_buffer(b); rin_indsin_session_free(x); return o; };
+        CHECK(frame2("<Box#p width=100 height=60 bg=#222222 />") != frame2("<Box#p width=100 height=60 bg=#222222 pattern=stripes pattern_color=#FFFFFF80 pattern_size=6 />"), "pattern=stripes changes the box");
+        CHECK(frame2("<Box#p width=100 height=60 bg=#222222 border=2 borderColor=#FFFFFF />") != frame2("<Box#p width=100 height=60 bg=#222222 border=2 borderColor=#FFFFFF border_style=dashed />"), "border_style=dashed breaks the border");
+    }
     std::printf(failures ? "%d FAILURE(S)\n" : "ALL OK\n", failures);
     return failures ? 1 : 0;
 }
