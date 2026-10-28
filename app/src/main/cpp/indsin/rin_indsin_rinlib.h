@@ -13,12 +13,18 @@
 //   indsin.palette(seed) · indsin.harmony(seed, kind) · indsin.contrast(fg, bg) · indsin.ensureContrast(fg, bg[, min])
 //   indsin.onColor(bg) · indsin.mix(a, b, t) · indsin.lighten(c, k) · indsin.darken(c, k) · indsin.isLight(c)
 //   indsin.themeScore(theme)  (0..100 فحص WCAG)
+// النماذج وتسجيل الدخول (نقية، تُستعمل في error=/visible=/value= مباشرة):
+//   indsin.isEmail(s) · indsin.isPhone(s) · indsin.isUrl(s) · indsin.passwordScore(s) (0..4)
+//   indsin.passwordLabel(s) ("empty|weak|fair|good|strong") · indsin.passwordTone(s) (دور ثيم: danger|warning|info|success)
+//   indsin.maskEmail(s) · indsin.initials(name) · indsin.slug(s) · indsin.fieldError(kind, value) -> "" أو رسالة
+//     kind: email | password | phone | url | required
 // التعديل (للبرنامج فقط؛ ممنوعة داخل الخصائص):
 //   indsin.useTheme(name) -> bool · indsin.defineTheme(name, seed[, dark]) -> score
 #pragma once
 #include "rin_indsin_system.h"
 #include "../rin_interpreter.h"
 #include <algorithm>
+#include <cstring>
 
 namespace indsin {
 namespace rinlib {
@@ -91,6 +97,43 @@ inline const Theme& themeOrFail(const char* fn, const std::string& name, int lin
     auto it = reg.themes.find(name);
     if (it == reg.themes.end()) fail(line, std::string("'") + fn + "': unknown theme `" + name + "`");
     return it->second;
+}
+
+
+// ---- أدوات النماذج (نقية) ----
+inline bool looksEmail(const std::string& s) {
+    size_t at = s.find('@');
+    if (at == std::string::npos || at == 0 || s.find('@', at + 1) != std::string::npos) return false;
+    for (unsigned char c : s) if (c <= ' ') return false;
+    size_t dot = s.find('.', at + 1);
+    return dot != std::string::npos && dot > at + 1 && dot + 1 < s.size() && s.back() != '.';
+}
+inline bool looksPhone(const std::string& s) {
+    int digits = 0;
+    for (size_t i = 0; i < s.size(); i++) {
+        char c = s[i];
+        if (c >= '0' && c <= '9') digits++;
+        else if (!(c == ' ' || c == '-' || c == '(' || c == ')' || (c == '+' && i == 0))) return false;
+    }
+    return digits >= 7 && digits <= 15;
+}
+inline bool looksUrl(const std::string& s) {
+    auto st = [&](const char* p) { return s.rfind(p, 0) == 0 && s.size() > strlen(p) + 2 && s.find(' ') == std::string::npos; };
+    return st("http://") || st("https://");
+}
+inline int passwordScore(const std::string& s) {
+    if (s.empty()) return 0;
+    bool lo = false, up = false, dg = false, sy = false;
+    for (unsigned char c : s) { if (c >= 'a' && c <= 'z') lo = true; else if (c >= 'A' && c <= 'Z') up = true; else if (c >= '0' && c <= '9') dg = true; else sy = true; }
+    int classes = (int)lo + (int)up + (int)dg + (int)sy;
+    int pts = (s.size() >= 8) + (s.size() >= 12) + (classes >= 2) + (classes >= 3 ? 1 : 0) + (classes >= 4 ? 1 : 0);
+    if (s.size() < 6) pts = std::min(pts, 1);
+    return std::min(4, pts);
+}
+inline const char* passwordLabelOf(int sc, bool empty) {
+    if (empty) return "empty";
+    static const char* n[] = {"weak", "weak", "fair", "good", "strong"};
+    return n[sc];
 }
 
 } // namespace rinlib
@@ -200,6 +243,60 @@ inline void registerIndsinRinLib(rin::Interpreter& interp) {
     reg("themeScore", [](Args& a, int line) {
         needArgs("indsin.themeScore", a, 1, 1, line);
         return Value::num(validateTheme(themeOrFail("indsin.themeScore", needStr("indsin.themeScore", a, 0, line), line)).score());
+    });
+    // ---- النماذج وتسجيل الدخول ----
+    reg("isEmail", [](Args& a, int line) { needArgs("indsin.isEmail", a, 1, 1, line); return Value::boolean_(looksEmail(needStr("indsin.isEmail", a, 0, line))); });
+    reg("isPhone", [](Args& a, int line) { needArgs("indsin.isPhone", a, 1, 1, line); return Value::boolean_(looksPhone(needStr("indsin.isPhone", a, 0, line))); });
+    reg("isUrl", [](Args& a, int line) { needArgs("indsin.isUrl", a, 1, 1, line); return Value::boolean_(looksUrl(needStr("indsin.isUrl", a, 0, line))); });
+    reg("passwordScore", [](Args& a, int line) { needArgs("indsin.passwordScore", a, 1, 1, line); return Value::num(passwordScore(needStr("indsin.passwordScore", a, 0, line))); });
+    reg("passwordLabel", [](Args& a, int line) {
+        needArgs("indsin.passwordLabel", a, 1, 1, line);
+        std::string p = needStr("indsin.passwordLabel", a, 0, line);
+        return Value::string(passwordLabelOf(passwordScore(p), p.empty()));
+    });
+    reg("passwordTone", [](Args& a, int line) {
+        needArgs("indsin.passwordTone", a, 1, 1, line);
+        static const char* t[] = {"danger", "danger", "warning", "info", "success"};
+        return Value::string(t[passwordScore(needStr("indsin.passwordTone", a, 0, line))]);
+    });
+    reg("maskEmail", [](Args& a, int line) {
+        needArgs("indsin.maskEmail", a, 1, 1, line);
+        std::string e = needStr("indsin.maskEmail", a, 0, line);
+        size_t at = e.find('@');
+        if (at == std::string::npos || at < 2) return Value::string(e);
+        return Value::string(e.substr(0, 1) + std::string(at - 1, '*') + e.substr(at));
+    });
+    reg("initials", [](Args& a, int line) {
+        needArgs("indsin.initials", a, 1, 1, line);
+        std::string n = needStr("indsin.initials", a, 0, line), out; bool start = true; int words = 0;
+        for (size_t i = 0; i < n.size() && words < 3;) {
+            unsigned char c = (unsigned char)n[i];
+            size_t len = c < 0x80 ? 1 : (c >= 0xF0 ? 4 : (c >= 0xE0 ? 3 : 2));
+            if (c == ' ') { start = true; i++; continue; }
+            if (start) { out += (c >= 'a' && c <= 'z') ? std::string(1, (char)(c - 32)) : n.substr(i, len); start = false; words++; }
+            i += len;
+        }
+        return Value::string(out);
+    });
+    reg("slug", [](Args& a, int line) {
+        needArgs("indsin.slug", a, 1, 1, line);
+        std::string n = needStr("indsin.slug", a, 0, line), out; bool dash = false;
+        for (unsigned char c : n) {
+            if (std::isalnum(c) || c >= 0x80) { if (dash && !out.empty()) out += '-'; dash = false; out += (char)(c < 0x80 ? std::tolower(c) : c); }
+            else dash = true;
+        }
+        return Value::string(out);
+    });
+    reg("fieldError", [](Args& a, int line) {
+        needArgs("indsin.fieldError", a, 2, 2, line);
+        std::string k = needStr("indsin.fieldError", a, 0, line), v = needStr("indsin.fieldError", a, 1, line);
+        if (k == "required") return Value::string(v.empty() ? "Required" : "");
+        if (v.empty()) return Value::string("");   // لا خطأ قبل الكتابة (استعمل required للإلزام)
+        if (k == "email") return Value::string(looksEmail(v) ? "" : "Enter a valid email");
+        if (k == "phone") return Value::string(looksPhone(v) ? "" : "Enter a valid phone number");
+        if (k == "url") return Value::string(looksUrl(v) ? "" : "Enter a valid URL");
+        if (k == "password") return Value::string(v.size() >= 6 ? "" : "At least 6 characters");
+        fail(line, "'indsin.fieldError': unknown kind `" + k + "` (email, password, phone, url, required)");
     });
     // ---- تعديل (للبرنامج فقط) ----
     reg("useTheme", [](Args& a, int line) {
