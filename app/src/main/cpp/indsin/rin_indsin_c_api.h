@@ -51,6 +51,8 @@ RIN_API void rin_indsin_session_set_viewport(void* session, int viewportHeight);
 // `<Screen bg=...>` writes) > this host default > the active theme's `background`. Pass "" or NULL to clear.
 // Accepts any color literal (#RGB, #RRGGBB, rgb(), hsl(), CSS names). Returns 1 on success, 0 if unparsable.
 RIN_API int rin_indsin_session_set_default_background(void* session, const char* color);
+// Text entry for a bound Input: sets warp cell `name` to `text` (what the tap envelope's "focus.bind" named).
+RIN_API char* rin_indsin_session_set_input(void* session, const char* name, const char* text);
 // Host resize: base width (and viewport height, 0 = keep) -> immediate re-layout. A root `screen="phone|390x844"` /
 // `canvas_width=` declared in the source still overrides the width.
 RIN_API void rin_indsin_session_resize(void* session, int width, int viewportHeight);
