@@ -1,0 +1,18 @@
+<!-- مكوّنات عامة: Tabs · Stepper · Badge · ProfileCard · ConfirmCard (+ Field/Alert/Stat من قبل). -->
+<Palette seed=#00B894 />
+<warp tab={0} />
+<warp step={2} />
+<warp gone={false} />
+
+<Fun#next> if (step < 4) { step = step + 1; } </Fun>
+<Fun#hide> gone = true; </Fun>
+<Fun#keep> gone = false; </Fun>
+
+<Screen#app size=phone padding=20 gap=12>
+  <Tabs tab={tab} a="Home" b="Search" c="Profile" />
+  <Stepper step={step} />
+  <Button#nx variant=outline onTap={next()}>Next step</Button>
+  <ProfileCard name="Layla Ahmad" email="layla@mail.com"><Badge text="Pro" tint=success /></ProfileCard>
+  <ConfirmCard title="Delete account?" message="This cannot be undone." yes="Delete" onYes={hide()} onNo={keep()} />
+  <Text#st color=text_muted>tab={tab} step={step} gone={gone}</Text>
+</Screen>
