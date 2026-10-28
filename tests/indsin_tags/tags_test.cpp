@@ -77,6 +77,24 @@ int main(int argc, char** argv) {
     err("style extends unknown", "<Style#a extends=\"zz\" />", 1, "extends unknown");
     err("tokens not self-closed", "<Tokens a=1>", 1, "self-closing");
 
+    // ── مكتبة المكوّنات الجاهزة ──
+    {
+        ++runs;
+        std::string src = "\n\n<Chip label=\"a\" />\n<Stat label=\"b\" value=\"1\" />\n";
+        try {
+            std::string got = indsin::tags::desugar(src);
+            if (lines(got) != lines(src)) { ++fails; std::cerr << "FAIL builtin prelude changed the line count\n"; }
+            if (got.find("@view.Card") == std::string::npos || got.find("a") == std::string::npos) { ++fails; std::cerr << "FAIL builtin Chip/Stat not expanded\n"; }
+        } catch (indsin::tags::TagError& e) { ++fails; std::cerr << "FAIL builtin expand threw: " << e.message << "\n"; }
+        ++runs;
+        std::string plain = "<Column#r>\n</Column>"; // بلا مكوّنات جاهزة: لا مقدّمة
+        if (indsin::tags::desugar(plain).find("Define") != std::string::npos) { ++fails; std::cerr << "FAIL prelude injected without use\n"; }
+        ++runs;
+        std::string own = "<Define#Chip label=\"x\"><Box#mine /></Define><Chip />"; // تعريف المستخدم يحلّ محلّ الجاهز
+        if (indsin::tags::desugar(own).find("@view.Box") == std::string::npos) { ++fails; std::cerr << "FAIL user <Define#Chip> must override the built-in\n"; }
+    }
+    err("builtin error line", "\n<Section>\n</Row>", 2, "unclosed");
+
     // ── مفاهيم متقدمة ──
     eq("fun", "<Fun#add params=\"a,b\">\n  return a + b;\n</Fun>", "fun add(a, b) {\n  return a + b;\n}");
     eq("rin raw", "<Rin>\nlet x = 1 < 2;\n</Rin>", "\nlet x = 1 < 2;\n");
