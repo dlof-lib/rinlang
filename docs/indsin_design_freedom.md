@@ -140,6 +140,134 @@
 
 مثال: `examples/samples/indsin_styles_themes.rin`.
 
+## 8) عناصر جاهزة (مكتبة المكوّنات)
+
+مكوّنات مركّبة تتوسّع وقت الترجمة إلى عناصر indsin الموجودة، فتعمل في كل المضيفين، وتُحقَن فقط عند استعمالها
+(مصدر بلا مكوّنات يبقى مطابقاً حرفياً، وأرقام الأسطر محفوظة). تعريفك لنفس الاسم (`<Define#Chip …>`) يحلّ محلّها.
+
+| المكوّن | الخصائص | الاستعمال |
+|---|---|---|
+| `<Hero>` | `title` `subtitle` `grad` + أبناء | بطاقة بتدرّج وتوهّج |
+| `<Stat>` | `label` `value` `tint` `w` | بطاقة رقم (`w=30%` داخل Row) |
+| `<Chip>` | `label` `tint` | حبّة صغيرة تلتفّ حول نصّها |
+| `<Alert>` | `tone` (info/success/warning/danger) `title` `message` + أبناء | تنبيه بلون دور ثيم |
+| `<Section>` | `title` + أبناء | عنوان قسم وأبناؤه |
+| `<ListTile>` | `title` `subtitle` `trailing` | سطر قائمة |
+| `<Toggle>` | `label` `cell={flag}` | سطر بمفتاح تشغيل مرتبط بخلية warp |
+| `<EmptyState>` | `title` `message` + أبناء | حالة فارغة |
+
+```rin
+<warp notify={true} />
+<Screen#a size=phone padding=20 gap=14>
+  <Hero title="Library" subtitle="built-in components"><Chip label="new" tint=#00B894 /></Hero>
+  <Row#r gap=10><Stat label="Users" value="128" w=30% /><Stat label="Sales" value="42" tint=success w=30% /></Row>
+  <Alert tone=warning title="Heads up" message="Disk almost full" />
+  <Section title="Settings">
+    <ListTile title="Account" subtitle="you@example.com" trailing="›" />
+    <Toggle label="Notifications" cell={notify} />
+  </Section>
+</Screen>
+```
+
+مثال كامل: `examples/samples/indsin_components.rin`.
+
+### إصلاحات في العناصر الأصلية
+* **`Switch` و`Checkbox`** كانا يُرسمان بلون الخلفية عند التشغيل (مسار «on» غير مرئي) ويتمدّدان لعرض الشاشة داخل جذر `Column`؛
+  صارا بلون `primary` وبحجمهما الثابت (44×24 و22×22) ما لم يُعطَ `width=`/`sizing=fill`. المقبض أبيض عند التشغيل.
+
+## 9) عناصر تسجيل الدخول
+
+**خصائص `Input`/`TextArea` الجديدة:** `secure=true` يخفي القيمة بنقاط «•» (و`reveal=true` يُظهرها)، `error="رسالة"` يلوّن الحدّ بدور `danger`
+(بسماكة 2)، `valid=true` حدّ `success`، `disabled=true` يخفّت الحقل. تعمل في الرسم والـ JSON وأندرويد.
+
+**التحرير المرتبط:** اربط الحقل بخلية `warp` بكتابة `value={cell}` (مرجع مباشر للخلية). لمس الحقل يُرجع في غلاف `tap` الحقل
+`"focus":{"id","name","kind","bind","value","placeholder","inputType","secure","multiline"}`؛ يفتح المضيف لوحة/نافذة تحرير ثم يستدعي
+
+```c
+char* rin_indsin_session_set_input(void* session, const char* name /* focus.bind */, const char* text);
+```
+
+فتتحدّث الخلية وكل ما يعتمد عليها (`changed:[name]`). خلية غير موجودة تُرجع `error`. أندرويد: `IndsinPreviewManager.setInput` + نافذة `showInputDialog`.
+
+**المكوّنات الجاهزة** (تُحقن عند الاستعمال فقط):
+
+| الوسم | الخصائص |
+|---|---|
+| `<Field>` | `label value={cell} placeholder helper error secure` |
+| `<PasswordField>` | `label value={cell} show={cell} error meter` (زر إظهار/إخفاء + مقياس قوة) |
+| `<LoginForm>` | `title subtitle email password show remember error emailError passError loading action submit forgot` |
+| `<SocialButton>` | `provider tap` |
+| `<OrDivider>` | `text` |
+| `<OtpBoxes>` | `code` (ست خانات) |
+
+### ربط Rin بعناصر الدخول: دوال `indsin.*` للنماذج
+
+دوال نقية تعمل داخل أي خاصية (`error=`, `visible=`, `color=`) فتُعاد عند تغيّر الخلية المرتبطة:
+
+| الدالة | الناتج |
+|---|---|
+| `indsin.isEmail(s)` · `isPhone(s)` · `isUrl(s)` | `true/false` |
+| `indsin.passwordScore(s)` | 0..4 |
+| `indsin.passwordLabel(s)` | `empty/weak/fair/good/strong` |
+| `indsin.passwordTone(s)` | دور ثيم: `danger/warning/info/success` |
+| `indsin.fieldError(kind, v)` | `""` أو رسالة (`email/password/phone/url/required`) |
+| `indsin.maskEmail(s)` · `initials(name)` · `slug(s)` | نص |
+
+```
+<Field label="Email" value={email} error={indsin.fieldError("email", email)} />
+<PasswordField value={password} show={showPw} meter=true />   <!-- مقياس + كلمة قوة ملوّنة -->
+```
+
+### الحفظ في حاويات Rin (`store*`)
+
+واجهات indsin تحفظ بياناتها في حاويات `@container.doc` الحقيقية (وتستعلمها بـ RCSQL) عبر مكتبة صغيرة بلغة Rin تُحقن تلقائياً
+عند استعمال أي دالة منها (لا حاجة لأي استيراد):
+
+| الدالة | الوظيفة |
+|---|---|
+| `storeOpen(coll, file)` | ينشئ الحاوية إن لزم ويستعيد مستنداتها من ملف JSON (إن وُجد) ويربطها بالملف؛ يعيد العدد. `file=""` = ذاكرة فقط |
+| `storeSave(coll, id, map)` | يحفظ/يستبدل مستنداً (`_id` تلقائي) ويكتب الملف |
+| `storeGet(coll, id)` · `storeHas` · `storeAll(coll)` · `storeCount(coll)` | قراءة |
+| `storeDelete(coll, id)` · `storeFlush(coll)` | حذف / كتابة يدوية للملف |
+| `storeFind(rcsql)` | استعلام RCSQL مثل `"users&age:gte(18)&order:desc(age)"` |
+| `storeHash(text)` | sha256 — لتخزين كلمات المرور مجزّأة |
+
+الحاوية تعمل أيضاً مع `sql / sqlCount / sqlPluck / insertDoc / queryDocs` مباشرة. القيمة الابتدائية لخلية يمكن أن تستدعي دالة:
+`<warp total={loadUsers()} />` فتُستعاد البيانات عند فتح الشاشة. على أندرويد مرّر مساراً مطلقاً داخل `filesDir` للملف.
+مثال كامل (تسجيل + دخول + استعادة): `examples/samples/indsin_accounts.rin`.
+تنبيه: كلمات محجوزة لا تصلح أسماء دوال/معاملات: `save`, `go`, `show`, `fields`.
+
+مثال كامل: `examples/samples/indsin_login.rin`. ملاحظة: داخل `Fun` استعمل `and`/`or` (لا `&&`)، ولا تسمِّ خلية `show` (كلمة محجوزة).
+
+### مكوّنات عامة إضافية
+
+| الوسم | الخصائص |
+|---|---|
+| `<Tabs>` | `tab={cell} a b c` — ثلاث تبويبات؛ المحدّد `fill` والباقي `outline`، والضغط يكتب 0/1/2 في الخلية |
+| `<Stepper>` | `step={cell}` (1–4) `tint` — أربع شرائح تمتلئ حتى الخطوة الحالية |
+| `<Badge>` | `text tint` — شارة صغيرة بدور ثيم |
+| `<ProfileCard>` | `name email tint` + `<Slot/>` — صورة رمزية بالحروف الأولى (`indsin.initials`) |
+| `<ConfirmCard>` | `title message yes no onYes onNo` — بطاقة تأكيد بزرّين |
+
+مثال: `examples/samples/indsin_widgets.rin` (واختباره بسكربت Rin في `design_freedom_test.cpp` §17).
+
+## 10) Rin ⇄ indsin: التكامل في الاتجاهين
+
+* **indsin يستدعي Rin:** معالجات `<Fun>` وتعابير الخصائص ودوال `indsin.*` ومكتبة `store*` والحاويات وRCSQL — كلها لغة Rin نفسها.
+* **Rin يقود indsin (جديد):** أي برنامج Rin عادي (لا داخل indsin فقط) يملك الآن:
+
+| الدالة | الوظيفة |
+|---|---|
+| `indsin.mount(src[, width])` | يركّب شاشة ويعيد مقبضاً (رقماً)؛ المصدر وسوم أو لهجة `@view` |
+| `indsin.input(h, cell, text)` · `indsin.set(h, cell, v)` · `indsin.get(h, cell)` | كتابة/قراءة خلايا warp |
+| `indsin.tap(h, x, y)` · `indsin.tapText(h, "Sign in")` | ضغط بإحداثيات أو بنص الزر/العنصر (`"#name"` باسم العنصر) → `{handled, changed, error}` |
+| `indsin.find(h, text)` | `{x,y,w,h,cx,cy}` أو `nil` |
+| `indsin.texts(h)` | كل النصوص الظاهرة (Text + Button) |
+| `indsin.png(h, path)` · `indsin.html(h)` · `indsin.json(h)` · `indsin.free(h)` | تصدير وتحرير |
+
+يفتح هذا اختبار الواجهات والأتمتة والتقارير بلغة Rin نفسها (`examples/rin_drives_indsin.rin` يختبر شاشة الحسابات كاملة: تسجيل، تكرار، استعادة من الملف، دخول).
+آلية التثبيت: `rin::interpreterInstallers()` في `rin_interpreter.h` — كل `Interpreter` جديد يستدعي مثبّتات المضيف، فتصل دوال `indsin.*` إلى أي برنامج في المحرّك.
+
 ## الاختبار
 
 ```sh
@@ -155,5 +283,5 @@ rin_indsin_preview examples/samples/indsin_design_freedom.rin --bg "#223344" --c
 
 `rin_indsin_tokens.h` (كلمات الحجم، `vw/vh`، `aspect`، الإعدادات، `resolveCanvasSize`، `seed=`) ·
 `rin_indsin_layout.h` (ارتفاع الشاشة الأدنى، `aspect`، نسب داخل `Row`) · `rin_indsin_paint.h` (`resolveCanvas`/`paintFrame`، حاويات شفافة) ·
-`rin_indsin_c_api.*` (الخلفية الافتراضية، `resize`، `canvas_json`، حجم اللوحة) · `rin_indsin_html.h` (لون اللوحة) ·
-`rin_indsin_needle.h` (تعيين مباشر في المعالجات + أفعال الثيم) · `rin_indsin_tags.h` (`<Screen>/<Theme>/<Palette>`، اقتباس القيم النسبية) · أندرويد: `IndsinFabricView/PreviewActivity/PreviewManager/RinEngine` + JNI.
+`rin_indsin_c_api.*` (`set_input` + `focus`، الخلفية الافتراضية، `resize`، `canvas_json`، حجم اللوحة) · `rin_indsin_html.h` (لون اللوحة) ·
+`rin_interpreter.h/.cpp` (خطّاف `interpreterInstallers`) · `rin_indsin_needle.h` (تعيين مباشر في المعالجات + أفعال الثيم) · `rin_indsin_tags.h` (`<Screen>/<Theme>/<Palette>`، اقتباس القيم النسبية) · أندرويد: `IndsinFabricView/PreviewActivity/PreviewManager/RinEngine` + JNI.
