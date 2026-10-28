@@ -44,6 +44,8 @@ inline Color colorForKind(StrandKind k) {
         // Ready-elements expansion:
         case StrandKind::LINK:   return themeRegistry().active().primary; // reads as a link, not plain text
         case StrandKind::RADIO:  return themeRegistry().active().primary; // same tone role as Checkbox/Switch
+        case StrandKind::SWITCH:
+        case StrandKind::CHECKBOX: return themeRegistry().active().primary; // were falling to `background` => an invisible "on" track/box
         case StrandKind::SLIDER: return themeRegistry().active().primary; // filled portion + thumb, same as Progress
         case StrandKind::SEARCH:
         case StrandKind::SELECT:
@@ -781,7 +783,7 @@ struct Dye {
         double thumbSize = s->geometry.h - 4;
         Rect thumb{ checked ? s->geometry.x + s->geometry.w - thumbSize - 2 : s->geometry.x + 2,
                     s->geometry.y + 2, thumbSize, thumbSize };
-        list.push_back({DrawOp::FILL_RECT, thumb, th.background, "", s->id, thumbSize/2.0, 0});
+        list.push_back({DrawOp::FILL_RECT, thumb, checked ? Color{255, 255, 255} : th.text_muted, "", s->id, thumbSize/2.0, 0});
     }
     void paintAvatar(const StrandPtr& s, DrawList& list, double /*radius*/) {
         double circleRadius = std::min(s->geometry.w, s->geometry.h) / 2.0;
@@ -790,16 +792,37 @@ struct Dye {
         if (!initials.empty())
             list.push_back({DrawOp::TEXT_RUN, s->geometry, themeRegistry().active().background, initials, s->id, 0, 0});
     }
+    // Field: bordered box + value/placeholder. Login-form additions: `secure=true` masks the value with
+    // "•" (one per character; `reveal=true` shows it), `error=true` (or a non-empty `error=` message)
+    // turns the border danger-red, `disabled=true` dims it, and `valid=true` draws a success border.
+    static std::string maskText(const std::string& v) {
+        std::string o;
+        for (unsigned char c : v) if ((c & 0xC0) != 0x80) o += "\xE2\x80\xA2";
+        return o;
+    }
+    static bool attrTrue(const Strand& s, const char* k) {
+        std::string v = s.attrStr(k, "");
+        return v == "true" || v == "1" || v == "yes";
+    }
     void paintField(const StrandPtr& s, DrawList& list, double radius) {
         const Theme& th = themeRegistry().active();
         StrandState state = resolveState(*s);
+        std::string errMsg = s->attrStr("error", "");
+        bool hasError = !errMsg.empty() && errMsg != "false" && errMsg != "0";
+        bool valid = attrTrue(*s, "valid");
+        bool disabled = attrTrue(*s, "disabled") || state == StrandState::DISABLED;
         Color border = (state == StrandState::FOCUSED) ? th.primary : th.border;
-        list.push_back({DrawOp::FILL_RECT, s->geometry, th.surface, "", s->id, radius, 0});
-        list.push_back({DrawOp::STROKE_RECT, s->geometry, border, "", s->id, radius, state == StrandState::FOCUSED ? 2.0 : 1.0});
+        if (valid) border = th.success;
+        if (hasError) border = th.danger;
+        Color fill = th.surface;
+        if (disabled) { border = dimTowardBackground(border, 0.5); fill = dimTowardBackground(fill, 0.4); }
+        list.push_back({DrawOp::FILL_RECT, s->geometry, fill, "", s->id, radius, 0});
+        list.push_back({DrawOp::STROKE_RECT, s->geometry, border, "", s->id, radius, (state == StrandState::FOCUSED || hasError) ? 2.0 : 1.0});
         std::string value = s->attrStr("value", "");
         bool showingPlaceholder = value.empty();
+        if (!showingPlaceholder && attrTrue(*s, "secure") && !attrTrue(*s, "reveal")) value = maskText(value);
         list.push_back({DrawOp::TEXT_RUN, s->geometry,
-                         showingPlaceholder ? th.text_muted : th.text,
+                         showingPlaceholder ? th.text_muted : (disabled ? th.text_muted : th.text),
                          showingPlaceholder ? s->attrStr("placeholder", "") : value, s->id, 0, 0});
     }
 
