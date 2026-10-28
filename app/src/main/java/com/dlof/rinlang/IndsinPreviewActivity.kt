@@ -317,6 +317,8 @@ class IndsinPreviewActivity : RinBaseActivity(), IndsinPreviewManager.Listener {
         renderResult(resultJson, elapsedMs)
         // pickMedia()/uploadMedia() تُخرج طلباً في حقل "media" — المضيف وحده يفتح المنتقي/الشبكة.
         try { JSONObject(resultJson).optJSONObject("media")?.let { mediaHost.handle(it) } } catch (_: Throwable) {}
+        // حقل نصّي تحت اللمسة ("focus"): نافذة تحرير ثم set_input يكتب في الخلية المرتبطة.
+        try { JSONObject(resultJson).optJSONObject("focus")?.let { showInputDialog(it) } } catch (_: Throwable) {}
         // Effects (spec §effects): every result envelope carries "animating" (see
         // rin_indsin_session_tick's doc comment) -- true means at least one Strand's effect=
         // transition is still short of its duration=, so schedule another per-frame tick; false
@@ -326,6 +328,30 @@ class IndsinPreviewActivity : RinBaseActivity(), IndsinPreviewManager.Listener {
         // ساعة time الحيّة (docs/TIME.md): "ticking":true يعني أن المصدر يعرّف `warp clock` فنكرّر tick كل ثانية.
         val ticking = try { JSONObject(resultJson).optBoolean("ticking", false) } catch (t: Throwable) { false }
         if (ticking && !animating) scheduleClockTick() else cancelClockTick()
+    }
+
+    /** يحرّر Input/TextArea مرتبطاً بخلية: password → نقاط، multiline → أسطر متعددة. */
+    private fun showInputDialog(focus: JSONObject) {
+        val bind = focus.optString("bind")
+        if (bind.isEmpty()) return // غير مرتبط بخلية: لا شيء نكتب فيه
+        val edit = android.widget.EditText(this)
+        val secure = focus.optBoolean("secure")
+        val multiline = focus.optBoolean("multiline")
+        edit.hint = focus.optString("placeholder")
+        edit.setText(focus.optString("value"))
+        edit.inputType = when {
+            secure -> android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            multiline -> android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            focus.optString("inputType") == "email" -> android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+            focus.optString("inputType") == "number" -> android.text.InputType.TYPE_CLASS_NUMBER
+            else -> android.text.InputType.TYPE_CLASS_TEXT
+        }
+        edit.setSelection(edit.text.length)
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setView(edit)
+            .setPositiveButton(android.R.string.ok) { _, _ -> IndsinPreviewManager.setInput(bind, edit.text.toString()) }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 
     // ---- ساعة time: tick واحد كل ثانية (لا حاجة لتردد الإطارات؛ الخلية clock بدقة الثانية) ----
