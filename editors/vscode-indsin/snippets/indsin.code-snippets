@@ -329,5 +329,89 @@
     "body": [
       "<Button#${1:themeBtn} onTap={toggleTheme()}>${2:Theme}</Button>"
     ]
+  },
+  "c-hero": {
+    "prefix": "<hero",
+    "description": "Gradient hero card",
+    "body": [
+      "<Hero title=\"${1:Title}\" subtitle=\"${2:Subtitle}\">",
+      "\t$0",
+      "</Hero>"
+    ]
+  },
+  "c-stat": {
+    "prefix": "<stat",
+    "description": "Metric card",
+    "body": [
+      "<Stat label=\"${1:Label}\" value=\"${2:0}\" tint=${3:primary} w=${4:30%} />"
+    ]
+  },
+  "c-chip": {
+    "prefix": "<chip",
+    "description": "Small pill",
+    "body": [
+      "<Chip label=\"${1:Label}\" tint=${2:primary} />"
+    ]
+  },
+  "c-alert": {
+    "prefix": "<alert",
+    "description": "Themed alert",
+    "body": [
+      "<Alert tone=${1|info,success,warning,danger|} title=\"${2:Title}\" message=\"${3:Message}\" />"
+    ]
+  },
+  "c-section": {
+    "prefix": "<section",
+    "description": "Titled section",
+    "body": [
+      "<Section title=\"${1:Title}\">",
+      "\t$0",
+      "</Section>"
+    ]
+  },
+  "c-listtile": {
+    "prefix": "<listtile",
+    "description": "List row",
+    "body": [
+      "<ListTile title=\"${1:Title}\" subtitle=\"${2}\" trailing=\"${3}\" />"
+    ]
+  },
+  "c-toggle": {
+    "prefix": "<toggle",
+    "description": "Switch row bound to a warp cell",
+    "body": [
+      "<Toggle label=\"${1:Label}\" cell={${2:flag}} />"
+    ]
+  },
+  "c-empty": {
+    "prefix": "<emptystate",
+    "description": "Empty state",
+    "body": [
+      "<EmptyState title=\"${1:Nothing here}\" message=\"${2}\">",
+      "\t$0",
+      "</EmptyState>"
+    ]
+  },
+  "indsin LoginForm": {
+    "prefix": "login",
+    "description": "Full login form bound to warp cells",
+    "body": [
+      "<LoginForm email={${1:email}} password={${2:password}} show={${3:showPw}} remember={${4:remember}}",
+      "           error={${5:err}} loading={${6:busy}} submit={${7:signIn()}} />"
+    ]
+  },
+  "indsin Field": {
+    "prefix": "field",
+    "description": "Labelled bound input",
+    "body": [
+      "<Field label=\"${1:Email}\" value={${2:cell}} placeholder=\"${3}\" error={${4:cellErr}} />"
+    ]
+  },
+  "indsin PasswordField": {
+    "prefix": "passfield",
+    "description": "Password field with show/hide",
+    "body": [
+      "<PasswordField label=\"Password\" value={${1:password}} show={${2:showPw}} meter=true />"
+    ]
   }
 }
