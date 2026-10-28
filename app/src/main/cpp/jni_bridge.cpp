@@ -659,6 +659,18 @@ Java_com_dlof_rinlang_RinEngine_indsinSessionTapNative(JNIEnv* env, jobject /* t
     return result;
 }
 
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_dlof_rinlang_RinEngine_indsinSessionSetInputNative(JNIEnv* env, jobject /* this */, jlong handle, jstring jname, jstring jtext) {
+    const char* name = env->GetStringUTFChars(jname, nullptr);
+    const char* text = env->GetStringUTFChars(jtext, nullptr);
+    char* json = rin_indsin_session_set_input(reinterpret_cast<void*>(handle), name, text);
+    env->ReleaseStringUTFChars(jname, name);
+    env->ReleaseStringUTFChars(jtext, text);
+    jstring result = rin_jni::newJString(env, json ? json : "{\"ok\":false,\"error\":\"null result\"}");
+    rin_free_string(json);
+    return result;
+}
+
 // Events & Effects: long-press / double-tap / hover / tick — same envelope-return + free()
 // pattern as indsinSessionTapNative above, just against rin_indsin_session_long_press/_double_tap/
 // _hover/_tick instead of rin_indsin_session_tap. See those functions' own doc comments in
