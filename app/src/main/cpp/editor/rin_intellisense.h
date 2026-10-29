@@ -805,7 +805,7 @@ inline const std::vector<std::string>& atTags() {
         "container", "container.pipe", "container.data", "container.api", "container.import", "container.table",
         "container.doc", "container.object", "container.portal", "container.block", "container.sticker",
         "container.aukt", "container.chatbot", "container.make", "container.everything", "make", "Rin.make", "Object",
-        "Containers.Group", "Volume", "view", "theme", "loop", "import", "tmpl", "body",
+        "Containers.Group", "Volume", "view", "theme", "effect", "loop", "import", "tmpl", "body",
         "element.button", "element.input", "element.search", "element.image", "element.video", "element.audio",
         "element.progress", "element.checkbox", "element.radio", "element.switch", "element.slider",
         "element.select", "element.list", "element.column", "element.box", "element.card", "element.sidebar",
@@ -819,6 +819,7 @@ inline const char* atTagDoc(const std::string& t) {
     if (t == "tmpl") return "تعريف قالب حلقة قابل لإعادة الاستخدام: @tmpl name(args) ...";
     if (t == "body") return "موضع جسم الحلقة داخل قالب @tmpl.";
     if (t == "theme") return "كتلة ثيم: @theme=Name ... .end/theme";
+    if (t == "effect") return "تأثير حركي مخصّص: @effect=Name duration=..; from=\"x:-6\"; at50=\"x:6\"; to=\"x:0\"; ... .end/effect";
     if (t == "loop") return "طبقة اللوحة (canvas): @loop(.Kind)=name ... .end/loop";
     if (t == "view") return "كتلة عرض: @view.<Kind>=name ... .end/view";
     if (t.rfind("element.", 0) == 0) return "عنصر واجهة: @element.<kind>=name ... .end/element";
