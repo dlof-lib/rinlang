@@ -14,7 +14,7 @@
 //   indsin.onColor(bg) · indsin.mix(a, b, t) · indsin.lighten(c, k) · indsin.darken(c, k) · indsin.isLight(c)
 //   indsin.themeScore(theme)  (0..100 فحص WCAG)
 // النماذج وتسجيل الدخول (نقية، تُستعمل في error=/visible=/value= مباشرة):
-//   indsin.isEmail(s) · indsin.isPhone(s) · indsin.isUrl(s) · indsin.passwordScore(s) (0..4)
+//   indsin.isEmail(s) · indsin.isPhone(s) · indsin.isUrl(s) · indsin.isNumber(s) · indsin.passwordScore(s) (0..4)
 //   indsin.passwordLabel(s) ("empty|weak|fair|good|strong") · indsin.passwordTone(s) (دور ثيم: danger|warning|info|success)
 //   indsin.maskEmail(s) · indsin.initials(name) · indsin.slug(s) · indsin.fieldError(kind, value) -> "" أو رسالة
 //     kind: email | password | phone | url | required
@@ -27,6 +27,7 @@
 //   indsin.effects() -> أسماء · indsin.hasEffect(name) (نقيّتان، تُستعملان داخل الخصائص)
 #pragma once
 #include "rin_indsin_system.h"
+#include "rin_indsin_validate.h"
 #include "rin_indsin_effects.h" // Effects Studio: indsin.defineEffect/playEffect…
 #include "../rin_interpreter.h"
 #include <algorithm>
@@ -107,26 +108,6 @@ inline const Theme& themeOrFail(const char* fn, const std::string& name, int lin
 
 
 // ---- أدوات النماذج (نقية) ----
-inline bool looksEmail(const std::string& s) {
-    size_t at = s.find('@');
-    if (at == std::string::npos || at == 0 || s.find('@', at + 1) != std::string::npos) return false;
-    for (unsigned char c : s) if (c <= ' ') return false;
-    size_t dot = s.find('.', at + 1);
-    return dot != std::string::npos && dot > at + 1 && dot + 1 < s.size() && s.back() != '.';
-}
-inline bool looksPhone(const std::string& s) {
-    int digits = 0;
-    for (size_t i = 0; i < s.size(); i++) {
-        char c = s[i];
-        if (c >= '0' && c <= '9') digits++;
-        else if (!(c == ' ' || c == '-' || c == '(' || c == ')' || (c == '+' && i == 0))) return false;
-    }
-    return digits >= 7 && digits <= 15;
-}
-inline bool looksUrl(const std::string& s) {
-    auto st = [&](const char* p) { return s.rfind(p, 0) == 0 && s.size() > strlen(p) + 2 && s.find(' ') == std::string::npos; };
-    return st("http://") || st("https://");
-}
 inline int passwordScore(const std::string& s) {
     if (s.empty()) return 0;
     bool lo = false, up = false, dg = false, sy = false;
@@ -293,16 +274,19 @@ inline void registerIndsinRinLib(rin::Interpreter& interp) {
         }
         return Value::string(out);
     });
+    reg("isNumber", [](Args& a, int line) { needArgs("indsin.isNumber", a, 1, 1, line); return Value::boolean_(looksNumber(needStr("indsin.isNumber", a, 0, line))); });
     reg("fieldError", [](Args& a, int line) {
-        needArgs("indsin.fieldError", a, 2, 2, line);
+        needArgs("indsin.fieldError", a, 2, 4, line);   // (kind, value[, min, max])
         std::string k = needStr("indsin.fieldError", a, 0, line), v = needStr("indsin.fieldError", a, 1, line);
         if (k == "required") return Value::string(v.empty() ? "Required" : "");
         if (v.empty()) return Value::string("");   // لا خطأ قبل الكتابة (استعمل required للإلزام)
-        if (k == "email") return Value::string(looksEmail(v) ? "" : "Enter a valid email");
-        if (k == "phone") return Value::string(looksPhone(v) ? "" : "Enter a valid phone number");
-        if (k == "url") return Value::string(looksUrl(v) ? "" : "Enter a valid URL");
         if (k == "password") return Value::string(v.size() >= 6 ? "" : "At least 6 characters");
-        fail(line, "'indsin.fieldError': unknown kind `" + k + "` (email, password, phone, url, required)");
+        if (k == "email" || k == "phone" || k == "tel" || k == "url" || k == "number") {
+            double lo = a.size() > 2 && a[2].type == rin::Value::Type::NUMBER ? a[2].number : NAN;
+            double hi = a.size() > 3 && a[3].type == rin::Value::Type::NUMBER ? a[3].number : NAN;
+            return Value::string(fieldValidationMessage(k, v, lo, hi));
+        }
+        fail(line, "'indsin.fieldError': unknown kind `" + k + "` (email, password, phone, tel, url, number, required)");
     });
     // ---- تعديل (للبرنامج فقط) ----
     reg("useTheme", [](Args& a, int line) {
