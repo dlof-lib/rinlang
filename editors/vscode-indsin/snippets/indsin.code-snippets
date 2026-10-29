@@ -431,5 +431,43 @@
       "  $0",
       "</Box>"
     ]
+  },
+  "indsin Effect (keyframes)": {
+    "prefix": "effect",
+    "description": "Custom effect with keyframes (Effects Studio)",
+    "body": [
+      "<Effect#${1:wobble} duration=${2:700} easing=${3|linear,easeOut,easeInOut,cubicOut,backOut,spring,elastic|} iterations=${4:1}>",
+      "  <Keyframe at=0% x=0 />",
+      "  <Keyframe at=50% x=${5:8} opacity=${6:0.8} />",
+      "  <Keyframe at=100% x=0 />",
+      "</Effect>"
+    ]
+  },
+  "indsin Effect (formula)": {
+    "prefix": "effectfn",
+    "description": "Effect driven by math formulas (t = progress 0..1)",
+    "body": [
+      "@effect=${1:float}",
+      "  duration=${2:2400}; iterations=\"infinite\"; easing=\"linear\";",
+      "  y_fn=\"${3:sin(t*pi*2)*6}\";",
+      ".end/effect"
+    ]
+  },
+  "indsin effect attribute": {
+    "prefix": "fx",
+    "description": "Enter effect on an element",
+    "body": ["effect=${1|fade,fadeUp,slideUp,zoomIn,pop,drop,rise,heartbeat,glow,float|} duration=${2:400} delay=${3:0}"]
+  },
+  "indsin effect on tap": {
+    "prefix": "fxtap",
+    "description": "Play an effect when tapped / changed",
+    "body": ["effect_tap=${1|shake,pulse,rubber,jelly,bounce,ping,highlight|}"]
+  },
+  "indsin Rin defineEffect": {
+    "prefix": "defineEffect",
+    "description": "Define an effect from Rin code",
+    "body": [
+      "indsin.defineEffect(\"${1:kick}\", \"0%{x:0} 50%{x:${2:40}} 100%{x:0}\", {\"duration\": ${3:400}, \"easing\": \"${4:easeOut}\"});"
+    ]
   }
 }
