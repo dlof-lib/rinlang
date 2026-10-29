@@ -3,6 +3,7 @@ package com.dlof.rinlang
 import android.os.Handler
 import android.os.Looper
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Bridges the code editor ([MainActivity]) and the Live Preview screen ([IndsinPreviewActivity])
@@ -59,6 +60,20 @@ object IndsinPreviewManager {
     @Volatile private var lastResultJson: String? = null
     @Volatile private var lastElapsedMs: Long = 0
 
+    /**
+     * Latest not-yet-applied live edit. Typing can outpace the native re-layout (a big screen, or a
+     * handler doing a network call), so instead of queuing one job per keystroke -- which would make
+     * the preview replay stale intermediate states for seconds after the user stopped typing -- every
+     * [pushLiveEdit] just overwrites this slot and the worker applies only the newest text.
+     */
+    private val pendingEdit = AtomicReference<String?>(null)
+
+    /** The source the native session last successfully received (worker thread only writes). */
+    @Volatile private var appliedSource: String? = null
+
+    /** True between [start] being called and the worker publishing the new session (a few ms), so edits typed in that gap aren't dropped. */
+    @Volatile private var starting = false
+
     // ---- busy-indicator bookkeeping (see beginTrackedOperation/endTrackedOperation below) ----
     @Volatile private var pendingBusyRunnable: Runnable? = null
     @Volatile private var pendingSlowRunnable: Runnable? = null
@@ -100,8 +115,19 @@ object IndsinPreviewManager {
         }
     }
 
+    /**
+     * Whether the embedded live-preview panel in the editor ([IndsinLivePanel]) is currently wanted on
+     * screen. Lives here (process-wide) rather than in the Activity so it survives [MainActivity]
+     * being recreated by a rotation: the new instance reads it and re-attaches to the live session
+     * instead of the panel silently vanishing.
+     */
+    @Volatile var panelVisible: Boolean = false
+
+    /** File name shown in the panel header; restored together with [panelVisible]. */
+    @Volatile var panelTitle: String = "main.rin"
+
     /** True once a session exists — the editor only bothers pushing live edits when this is true. */
-    val isRunning: Boolean get() = session != null
+    val isRunning: Boolean get() = session != null || starting
 
     /**
      * Registers [l] to receive Fabric updates. If a result is already cached (the session was
@@ -123,6 +149,9 @@ object IndsinPreviewManager {
         }
     }
 
+    /** True if [l] is the listener currently receiving frames (a second screen may have replaced it). */
+    fun isAttached(l: Listener): Boolean = listener === l
+
     /** Unregisters [l] if it's still the active listener (no-op if the preview screen was closed/replaced). */
     fun detach(l: Listener) {
         if (listener === l) listener = null
@@ -135,12 +164,16 @@ object IndsinPreviewManager {
     fun start(source: String, rootWidth: Int = this.rootWidth) {
         lastSource = source
         this.rootWidth = rootWidth
+        pendingEdit.set(null) // a restart supersedes any older queued edit
+        starting = true
         worker.execute {
             session?.close()
             val fresh = RinEngine.IndsinSession(source, rootWidth)
             if (defaultBackground.isNotEmpty()) fresh.setDefaultBackground(defaultBackground)
             fresh.setViewport(viewportHeight) // correct the native 844px default immediately -- see [viewportHeight]'s kdoc
             session = fresh
+            appliedSource = source
+            starting = false
             beginTrackedOperation()
             val json = try { fresh.currentJson() } catch (t: Throwable) { errorJson(t) }
             endTrackedOperation()
@@ -172,14 +205,23 @@ object IndsinPreviewManager {
      * [RinEngine.IndsinSession.updateSource]. No-ops silently if no session is running yet.
      */
     fun pushLiveEdit(source: String) {
-        val current = session ?: return
+        if (!isRunning) return
         lastSource = source
+        pendingEdit.set(source)
         worker.execute {
+            // Only the newest text is applied; earlier queued jobs find the slot already drained.
+            val latest = pendingEdit.getAndSet(null) ?: return@execute
+            // Read the session HERE (worker thread), not at call time: a start() queued in between
+            // replaces and closes the old session, and updating that stale handle would deliver a
+            // bogus "session closed" error frame over the fresh render.
+            val current = session ?: return@execute
+            if (latest == appliedSource) return@execute // nothing changed (e.g. undo back to the same text)
             beginTrackedOperation()
             val t0 = System.nanoTime()
-            val json = try { current.updateSource(source) } catch (t: Throwable) { errorJson(t) }
+            val json = try { current.updateSource(latest) } catch (t: Throwable) { errorJson(t) }
             val ms = (System.nanoTime() - t0) / 1_000_000
             endTrackedOperation()
+            appliedSource = latest
             deliver(json, ms)
         }
     }
@@ -285,10 +327,13 @@ object IndsinPreviewManager {
     fun stop() {
         listener = null
         lastResultJson = null
+        pendingEdit.set(null)
+        starting = false
         cancelPendingBusyIndicators()
         worker.execute {
             session?.close()
             session = null
+            appliedSource = null
         }
     }
 
