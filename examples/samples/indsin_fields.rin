@@ -1,0 +1,25 @@
+<!-- أنواع مربعات إدخال النص (Text Field · Text Area · Password · Number · Email · Search · Telephone).
+     كل حقل مرتبط بخلية warp: value={cell}. التحقق تلقائي حسب النوع، والتنقية تحدث عند الكتابة (set_input):
+     number → أرقام فقط · tel → أرقام و+()- · email/url → بلا مسافات · maxlength → اقتطاع.
+     أولية: <Input type=text|password|number|email|tel|search|url …> أو المكوّنات الجاهزة أدناه. -->
+<Palette seed=#0984E3 dark />
+
+<warp name={""} />
+<warp bio={""} />
+<warp pass={""} />
+<warp showPw={false} />
+<warp qty={"12"} />
+<warp mail={"not-an-email"} />
+<warp q={""} />
+<warp phone={""} />
+
+<Screen#app size=phone padding=16 gap=10>
+  <Header title="Profile" subtitle="Seven kinds of text inputs" />
+  <TextField label="Text field" value={name} placeholder="Your name" maxlength=24 helper="Short text: names, titles" />
+  <TextAreaField label="Text area" value={bio} placeholder="Tell us about yourself…" height=100 maxlength=140 />
+  <PasswordField label="Password field" value={pass} show={showPw} meter=true />
+  <NumberField label="Number field" value={qty} min=1 max=99 suffix=" pcs" helper="1 – 99" />
+  <EmailField label="Email field" value={mail} />
+  <SearchField value={q} placeholder="Search files, people…" />
+  <PhoneField label="Telephone field" value={phone} />
+</Screen>
