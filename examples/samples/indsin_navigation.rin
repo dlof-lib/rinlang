@@ -1,0 +1,29 @@
+<!-- هيكل تطبيق: TopBar · Header · Breadcrumb · SearchBar · Pagination · Footer · Fab · NavBar (سفلي بتبويبات). -->
+<Palette seed=#6C5CE7 />
+<warp tab={0} />
+<warp page={1} />
+<warp q={""} />
+<warp taps={0} />
+
+<Fun#more> taps = taps + 1; </Fun>
+<Fun#back> tab = 0; </Fun>
+
+<Screen#app size=phone gap=10>
+  <TopBar title="My App" back={tab != 0} action="More" onBack={back()} onAction={more()} />
+  <Column#body padding=16 gap=12>
+    <Breadcrumb a="Home" b="Library" c="Page" />
+    <Column#home visible={tab == 0} gap=10>
+      <Header title="Welcome" subtitle="Home tab" />
+      <SearchBar value={q} placeholder="Search anything" />
+      <Text#res color=text_muted>query: {q}</Text>
+      <Pagination page={page} pages={5} />
+    </Column>
+    <Column#find visible={tab == 1}><Header title="Search" subtitle="Second tab" /></Column>
+    <Column#inbox visible={tab == 2}><Header title="Inbox" subtitle="Third tab" /></Column>
+    <Column#me visible={tab == 3}><Header title="Profile" subtitle="Fourth tab" /></Column>
+    <Fab label="+ New" tap={more()} />
+    <Footer text={"v1.0 - taps " + taps} />
+  </Column>
+  <Spacer />
+  <NavBar tab={tab} a="Home" b="Search" c="Inbox" d="Me" />
+</Screen>
