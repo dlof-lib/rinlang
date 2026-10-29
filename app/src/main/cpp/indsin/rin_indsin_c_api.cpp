@@ -4,6 +4,7 @@
 #include "rin_indsin_pipeline.h"
 #include "rin_indsin_needle.h"
 #include "rin_indsin_effects.h"
+#include "rin_indsin_effects_paint.h" // Effects Studio: يطبّق الإطارات على DrawList
 #include "rin_indsin_system.h"     // Design System v2: tokens/themes/palette
 #include "rin_indsin_query.h"      // Fabric introspection (stats/outline/catalog)
 #include "rin_indsin_audit.h"      // accessibility + layout audit
@@ -79,7 +80,9 @@ indsin::DrawList paintSessionFrame(IndsinSession* sess, int& W, int& H) {
     if (H <= 0) H = sess->viewportHeight; // degenerate/empty Fabric: fall back to a sane canvas
     if (H < sess->canvasMinH) H = sess->canvasMinH;
     indsin::Dye dye;
-    return dye.paintFrame(sess->state.fabric, sess->overlayLayer, (double)W, (double)H, sess->hostBg);
+    indsin::DrawList list = dye.paintFrame(sess->state.fabric, sess->overlayLayer, (double)W, (double)H, sess->hostBg);
+    indsin::applyEffectsToDrawList(list, sess->effectRuntime); // غير مدمِّر: الإطار الحالي من relayout()
+    return list;
 }
 
 std::string canvasJson(IndsinSession* sess) {
@@ -127,10 +130,11 @@ void relayout(IndsinSession* sess) {
     // viewport now that the whole tree (including their own content boxes) has been measured.
     sess->overlayLayer = indsin::buildOverlayLayer(sess->indsinEngine, sess->state.fabric,
                                                   W, indsin::viewportHeightPx());
-    // Effects Engine: applied last, after both passes above, so the geometry it nudges
-    // (translate/scale for an in-progress enter animation) is this frame's FINAL geometry —
-    // anything painted or exported after this reflects the current animation frame for free.
-    sess->animating = indsin::applyEffectsToFabric(sess->state.fabric, sess->effectRuntime, nowMsFor(sess));
+    // Effects Studio: بعد التخطيط والـOverlay تُحسَب إطارات التأثيرات (لا تُعدَّل هندسة الـFabric إطلاقاً —
+    // تُطبَّق على DrawList وقت الطلاء في paintSessionFrame)، فلا انجراف ولا تعارض مع كاش التخطيط.
+    const double now = nowMsFor(sess);
+    sess->effectRuntime.processPending(sess->state.fabric, now); // أوامر Rin: indsin.playEffect / effect()
+    sess->animating = sess->effectRuntime.update(sess->state.fabric, now);
 }
 void rebuildIndex(IndsinSession* sess) {
     sess->index.clear();
@@ -185,6 +189,16 @@ std::string mediaExtraJson(const indsin::TapResult& t) {
     if (t.mediaUpload) return ",\"media\":" + indsin::media::uploadRequestJson(t.upload);
     if (t.mediaCancel) return ",\"media\":" + indsin::media::cancelRequestJson(t.cancelCell);
     return "";
+}
+// Effects Studio: إيماءة => تأثير effect_tap/effect_hover/…؛ true إن شُغّل شيء أو كان في الطابور أوامر من Rin.
+bool fireGestureEffects(IndsinSession* sess, const char* attrKey, double x, double y) {
+    bool any = false;
+    if (attrKey && sess->state.fabric) {
+        std::vector<indsin::StrandPtr> path;
+        if (indsin::hitTestPath(sess->state.fabric, x, y, path) && !path.empty())
+            any = sess->effectRuntime.fireTrigger(path, attrKey, nowMsFor(sess));
+    }
+    return any || indsin::effectLibrary().hasPending();
 }
 // يطبّق تغييرات Warp (من نتيجة المضيف) كما يفعل tap: Shuttle -> hashes -> relayout.
 void applyWarpNames(IndsinSession* sess, const std::vector<std::string>& names) {
@@ -340,6 +354,7 @@ RIN_API char* rin_indsin_session_tap(void* sessionPtr, double x, double y) {
                                                         sess->state.program, sess->overlayLayer, x, y,
                                                         nullptr, nullptr,
                                                         sess->interp.get(), &sess->interpSeeded);
+    const bool fxFired = fireGestureEffects(sess, "effect_tap", x, y);
 
     if (!tap.changedWarpNames.empty()) {
         indsin::Shuttle shuttle;
@@ -354,6 +369,8 @@ RIN_API char* rin_indsin_session_tap(void* sessionPtr, double x, double y) {
         // rin_indsin_strand.h's recomputeHashes() itself says it exists for.
         indsin::recomputeHashes(sess->state.fabric);
         relayout(sess); // an attribute change (e.g. a longer counter string) may resize its Strand
+    } else if (fxFired) {
+        relayout(sess); // تأثير إيماءة/أمر Rin بلا تغيير Warp
     }
 
     std::ostringstream extra;
@@ -395,7 +412,8 @@ RIN_API char* rin_indsin_session_set_input(void* sessionPtr, const char* name, c
 // then the {"handled":...,"targetId":...,"handler":...,"changed":[...]} envelope fields) so all
 // four gesture endpoints stay byte-for-byte consistent in shape. `error` is only ever set when a
 // handler was actually found but failed at runtime -- same convention as the tap endpoint.
-char* respondToGesture(IndsinSession* sess, const indsin::TapResult& g) {
+char* respondToGesture(IndsinSession* sess, const indsin::TapResult& g, const char* fxKey = nullptr, double fx = 0, double fy = 0) {
+    fireGestureEffects(sess, fxKey, fx, fy);
     if (!g.changedWarpNames.empty()) {
         indsin::Shuttle shuttle;
         for (auto& name : g.changedWarpNames) {
@@ -434,7 +452,7 @@ RIN_API char* rin_indsin_session_long_press(void* sessionPtr, double x, double y
                                                             sess->state.program, sess->overlayLayer, x, y,
                                                             nullptr, nullptr,
                                                             sess->interp.get(), &sess->interpSeeded);
-    return respondToGesture(sess, g);
+    return respondToGesture(sess, g, "effect_longpress", x, y);
 }
 
 RIN_API char* rin_indsin_session_double_tap(void* sessionPtr, double x, double y) {
@@ -445,7 +463,7 @@ RIN_API char* rin_indsin_session_double_tap(void* sessionPtr, double x, double y
                                                             sess->state.program, sess->overlayLayer, x, y,
                                                             nullptr, nullptr,
                                                             sess->interp.get(), &sess->interpSeeded);
-    return respondToGesture(sess, g);
+    return respondToGesture(sess, g, "effect_doubletap", x, y);
 }
 
 RIN_API char* rin_indsin_session_hover(void* sessionPtr, double x, double y, int entering) {
@@ -456,7 +474,7 @@ RIN_API char* rin_indsin_session_hover(void* sessionPtr, double x, double y, int
                                                         sess->state.program, sess->overlayLayer, x, y,
                                                         entering != 0, nullptr, nullptr,
                                                         sess->interp.get(), &sess->interpSeeded);
-    return respondToGesture(sess, g);
+    return respondToGesture(sess, g, entering ? "effect_hover" : nullptr, x, y);
 }
 
 RIN_API char* rin_indsin_session_tick(void* sessionPtr) {
@@ -485,6 +503,42 @@ RIN_API char* rin_indsin_session_tick(void* sessionPtr) {
     std::string extra = ",\"handled\":false" + changedJson(changed);
     if (ticking) extra += ",\"ticking\":true";
     return dupToC(fabricEnvelope(sess, extra));
+}
+
+// ---- Effects Studio: تعريف/تشغيل/سرد التأثيرات من المضيف ----
+RIN_API int rin_indsin_effect_define(const char* name, const char* frames, const char* options) {
+    indsin::fx::KV kv; std::string n = name ? name : "";
+    if (frames && *frames) kv.push_back({"frames", frames});
+    std::string o = options ? options : "", cur;
+    for (char c : o + ";") {
+        if (c == ';') {
+            size_t e = cur.find('=');
+            if (e != std::string::npos) kv.push_back({indsin::fx::trim(cur.substr(0, e)), indsin::fx::trim(cur.substr(e + 1))});
+            cur.clear();
+        } else cur += c;
+    }
+    std::string err;
+    if (!indsin::effectLibrary().define(n, kv, err)) { indsin::effectLibrary().lastError = err; return 0; }
+    return 1;
+}
+RIN_API char* rin_indsin_effects_json(void) {
+    return dupToC("{\"effects\":" + indsin::fx::effectsJson() + ",\"error\":\"" + indsin::fx::jsonStr(indsin::effectLibrary().lastError) + "\"}");
+}
+RIN_API char* rin_indsin_session_play_effect(void* sessionPtr, const char* target, const char* effect) {
+    auto* sess = static_cast<IndsinSession*>(sessionPtr);
+    if (!sess || !sess->state.ok) return dupToC(sessionErrorJson(sess));
+    indsin::fx::PlayRequest r; r.target = target ? target : ""; r.effect = effect ? effect : "";
+    indsin::effectLibrary().queue(std::move(r));
+    relayout(sess);
+    return dupToC(fabricEnvelope(sess, ",\"handled\":true"));
+}
+RIN_API char* rin_indsin_session_stop_effect(void* sessionPtr, const char* target) {
+    auto* sess = static_cast<IndsinSession*>(sessionPtr);
+    if (!sess || !sess->state.ok) return dupToC(sessionErrorJson(sess));
+    indsin::fx::PlayRequest r; r.stop = true; r.target = target ? target : "";
+    indsin::effectLibrary().queue(std::move(r));
+    relayout(sess);
+    return dupToC(fabricEnvelope(sess, ",\"handled\":true"));
 }
 
 RIN_API char* rin_indsin_session_update_source(void* sessionPtr, const char* newSource) {
