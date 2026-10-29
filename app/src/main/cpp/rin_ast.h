@@ -1186,6 +1186,17 @@ struct ThemeStmt : Stmt { ThemeStmt() { stmtKind = StmtKind::ThemeStmt; }
     std::vector<ViewAttr> attrs; // يعاد استخدام ViewAttr (key/value/line) نفسه بدل بنية مكررة
 };
 
+// ---- Rin Indsin: Effect declaration (Effects Studio) ----
+// @effect=<Name>  key=expr; ...  .end/effect   — نفس شكل @theme (سمات مسطّحة)، لذلك يرث ThemeStmt.
+//   مثال:
+//     @effect=wobble
+//       duration=900; easing="easeInOut"; iterations="infinite"; direction="alternate";
+//       from="x:-6"; at50="x:6,opacity:.8"; to="x:0";
+//     .end/effect
+// المفاتيح: duration/delay/easing/iterations/direction/fill/base/frames/from/to/atNN + معادلات x_fn/y_fn/scale_fn/…
+// انظر indsin/rin_indsin_effects.h (registerEffectsFromProgram).
+struct EffectStmt : ThemeStmt { EffectStmt() {} };
+
 // ---- Call-style object literal ----
 // .object("user01")
 //     name("ABOO");
