@@ -6,6 +6,7 @@
 #include "rin_indsin_layout.h" // splitCsv() -- reused here for DonutChart's data=/colors= parsing, same as Breadcrumb/Pagination already reuse it via rin_indsin_components_ext.h
 #include "rin_indsin_overlay.h" // OverlayLayer -- see paintWithOverlay() below
 #include "rin_indsin_icons.h"   // IconRegistry -- §18
+#include "rin_indsin_validate.h"  // field type validation (email/number/tel/url)
 #include <fstream>
 #include <sstream>
 #include <algorithm>
@@ -934,11 +935,26 @@ struct Dye {
         std::string v = s.attrStr(k, "");
         return v == "true" || v == "1" || v == "yes";
     }
+    // `type=` (text | password | number | email | tel | search | url): password masks the value; number/email/tel/url paint a
+    // danger border automatically while the (non-empty) value is invalid (`validate=false` opts out; number honours min=/max=).
+    // `prefix=`/`suffix=` frame the value ("$ 12 kg"), `maxlength=` + `counter=true` (default on TextArea) shows "n/max",
+    // and a search field draws a magnifier. `disabled`/`readonly` dim it.
+    static std::string fieldType(const Strand& s) {
+        std::string t = s.attrStr("type", "");
+        if (t.empty()) t = s.kind == StrandKind::SEARCH ? "search" : "text";
+        return t == "phone" ? "tel" : t;
+    }
     void paintField(const StrandPtr& s, DrawList& list, double radius) {
         const Theme& th = themeRegistry().active();
         StrandState state = resolveState(*s);
+        const std::string type = fieldType(*s);
         std::string errMsg = s->attrStr("error", "");
         bool hasError = !errMsg.empty() && errMsg != "false" && errMsg != "0";
+        std::string raw = s->attrStr("value", "");
+        if (!hasError && s->attrStr("validate", "true") != "false" && !raw.empty()) {
+            double lo = s->attr("min") ? s->attrNum("min", NAN) : NAN, hi = s->attr("max") ? s->attrNum("max", NAN) : NAN;
+            if (!fieldValidationMessage(type, raw, lo, hi).empty()) hasError = true;
+        }
         bool valid = attrTrue(*s, "valid");
         bool disabled = attrTrue(*s, "disabled") || state == StrandState::DISABLED;
         Color border = (state == StrandState::FOCUSED) ? th.primary : th.border;
@@ -948,12 +964,29 @@ struct Dye {
         if (disabled) { border = dimTowardBackground(border, 0.5); fill = dimTowardBackground(fill, 0.4); }
         list.push_back({DrawOp::FILL_RECT, s->geometry, fill, "", s->id, radius, 0});
         list.push_back({DrawOp::STROKE_RECT, s->geometry, border, "", s->id, radius, (state == StrandState::FOCUSED || hasError) ? 2.0 : 1.0});
-        std::string value = s->attrStr("value", "");
+        std::string value = raw;
         bool showingPlaceholder = value.empty();
-        if (!showingPlaceholder && attrTrue(*s, "secure") && !attrTrue(*s, "reveal")) value = maskText(value);
-        list.push_back({DrawOp::TEXT_RUN, s->geometry,
+        if (!showingPlaceholder && (attrTrue(*s, "secure") || type == "password") && !attrTrue(*s, "reveal")) value = maskText(value);
+        if (!showingPlaceholder) value = s->attrStr("prefix", "") + value + s->attrStr("suffix", "");
+        Rect tb = s->geometry;
+        if (type == "search") {   // magnifier glyph: ring + handle, text shifted right
+            double cx = tb.x + 16, cy = tb.y + tb.h / 2 - 1, r = 6;
+            list.push_back({DrawOp::STROKE_RECT, Rect{cx - r, cy - r, 2 * r, 2 * r}, th.text_muted, "", s->id, r, 1.6});
+            for (int i = 0; i < 5; i++) list.push_back({DrawOp::FILL_RECT, Rect{cx + 4.0 + i, cy + 4.0 + i, 2, 2}, th.text_muted, "", s->id, 0, 0});
+            tb.x += 28; tb.w = std::max(0.0, tb.w - 28);
+        }
+        list.push_back({DrawOp::TEXT_RUN, tb,
                          showingPlaceholder ? th.text_muted : (disabled ? th.text_muted : th.text),
                          showingPlaceholder ? s->attrStr("placeholder", "") : value, s->id, 0, 0});
+        // character counter "n/max" (TextArea by default, or counter=true on any field with maxlength=)
+        double maxLen = s->attrNum("maxlength", 0);
+        if (maxLen > 0 && (s->kind == StrandKind::TEXTAREA ? s->attrStr("counter", "true") != "false" : attrTrue(*s, "counter"))) {
+            DrawCommand cnt{DrawOp::TEXT_RUN, Rect{s->geometry.x + 8, s->geometry.y + s->geometry.h - 20, s->geometry.w - 16, 16},
+                            (double)utf8CharCount(raw) > maxLen ? th.danger : th.text_muted,
+                            std::to_string(utf8CharCount(raw)) + "/" + std::to_string((long long)maxLen), s->id, 0, 0};
+            cnt.fontSize = 11; cnt.align = 2; cnt.singleLine = true;
+            list.push_back(cnt);
+        }
     }
 
     // Button Library (§4): renders the 6 treatments a `variant=` selects, each combined with
