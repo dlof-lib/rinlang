@@ -18,6 +18,7 @@
 #   scripts/build_all.sh apk [debug|release]   # default: debug
 #   scripts/build_all.sh web
 #   scripts/build_all.sh desktop
+#   scripts/build_all.sh live                  # Indsin Live Preview server (browser host, all OSes)
 #   scripts/build_all.sh all [debug|release]   # builds every target whose
 #                                               # toolchain is available;
 #                                               # missing toolchains are
@@ -152,7 +153,14 @@ build_desktop() {
         "$CORE/rin_lexer.cpp" \
         "$CORE/rin_parser.cpp" \
         "$CORE/rin_make.cpp" \
+        "$CORE/rin_container_sql.cpp" \
+        "$CORE/rin_artifact.cpp" \
         "$CORE/rin_interpreter.cpp" \
+        "$CORE/binfmt/elf_format.cpp" \
+        "$CORE/binfmt/ar_format.cpp" \
+        "$CORE/binfmt/pe_format.cpp" \
+        "$CORE/binfmt/macho_format.cpp" \
+        "$CORE/binfmt/coff_obj.cpp" \
         "$CORE/loader_ui/library_loader_ui.cpp" \
         "$CORE/rin_http.cpp" \
         "$CORE/diagnostics/diagnostic.cpp" \
@@ -175,6 +183,16 @@ build_desktop() {
     return 0
 }
 
+# ----------------------------------------------------------------------------
+# Live — the cross-platform Indsin Live Preview server (tools/indsin-live/): any
+# browser on any OS is the host. Delegates to its own build.sh (object cache).
+# ----------------------------------------------------------------------------
+build_live() {
+    log "== Live preview server =="
+    OUT="$DIST/live" bash "$REPO_DIR/tools/indsin-live/build.sh" || { warn "FAILED live preview server."; return 1; }
+    return 0
+}
+
 clean_all() {
     log "removing $DIST"
     rm -rf "$DIST"
@@ -191,6 +209,7 @@ usage:
   $0 apk [debug|release]
   $0 web
   $0 desktop
+  $0 live
   $0 all [debug|release]
   $0 clean
 EOF
@@ -202,6 +221,7 @@ main() {
         apk)     build_apk "${2:-debug}"; exit $? ;;
         web)     build_web; exit $? ;;
         desktop) build_desktop; exit $? ;;
+        live)    build_live; exit $? ;;
         clean)   clean_all; exit 0 ;;
         all)
             local variant="${2:-debug}"
@@ -209,11 +229,13 @@ main() {
             build_apk "$variant" && ok=$((ok+1))
             build_web && ok=$((ok+1))
             build_desktop && ok=$((ok+1))
+            build_live && ok=$((ok+1))
             echo
             log "== summary =="
             [ -d "$DIST/apk" ]      && log "apk:     OK -> $DIST/apk/"      || log "apk:     skipped/failed"
             [ -d "$DIST/web" ]      && log "web:     OK -> $DIST/web/"      || log "web:     skipped/failed"
             [ -d "$DIST/desktop" ]  && log "desktop: OK -> $DIST/desktop/"  || log "desktop: skipped/failed"
+            [ -d "$DIST/live" ]     && log "live:    OK -> $DIST/live/"     || log "live:    skipped/failed"
             if [ "$ok" -eq 0 ]; then
                 warn "all targets skipped or failed — see messages above for what to install."
                 exit 1
