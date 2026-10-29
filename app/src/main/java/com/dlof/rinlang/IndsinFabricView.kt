@@ -1095,7 +1095,21 @@ class IndsinFabricView @JvmOverloads constructor(
         if (rect.width() <= 0f || rect.height() <= 0f) return
         drawBox(canvas, rect, attrs, defaultFieldBg, defaultRadius = 8f)
         val err = attrs.optString("error")
-        val hasError = err.isNotEmpty() && err != "false" && err != "0"
+        val fType = attrs.optString("type").lowercase().let { if (it == "phone") "tel" else it }
+        val rawValue = attrs.optString("value")
+        // نفس قواعد rin_indsin_validate.h: حدّ خطر تلقائي للقيم غير الصالحة (validate=false يعطّله)
+        val autoInvalid = rawValue.isNotEmpty() && attrs.optString("validate") != "false" && when (fType) {
+            "email" -> !Regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]{2,}$").matches(rawValue)
+            "tel" -> rawValue.count { it.isDigit() } < 5 || rawValue.any { !(it.isDigit() || it in "+()- ") }
+            "url" -> !Regex("^https?://\\S+\\.\\S+$", RegexOption.IGNORE_CASE).matches(rawValue)
+            "number" -> rawValue.toDoubleOrNull().let { n ->
+                n == null ||
+                    (attrs.optString("min").toDoubleOrNull()?.let { n < it } ?: false) ||
+                    (attrs.optString("max").toDoubleOrNull()?.let { n > it } ?: false)
+            }
+            else -> false
+        }
+        val hasError = (err.isNotEmpty() && err != "false" && err != "0") || autoInvalid
         strokePaint.color = when {
             hasError -> 0xFFD14545.toInt()
             attrs.optString("valid") == "true" -> 0xFF2E9E5B.toInt()
@@ -1105,9 +1119,10 @@ class IndsinFabricView @JvmOverloads constructor(
         canvas.drawRoundRect(rect, 8f, 8f, strokePaint)
 
         var value = attrs.optString("value")
-        if (value.isNotEmpty() && attrs.optString("secure") == "true" && attrs.optString("reveal") != "true")
+        if (value.isNotEmpty() && (attrs.optString("secure") == "true" || fType == "password") && attrs.optString("reveal") != "true")
             value = "\u2022".repeat(value.codePointCount(0, value.length))
         val placeholder = attrs.optString("placeholder").ifBlank { emptyPlaceholder }
+        if (value.isNotEmpty()) value = attrs.optString("prefix") + value + attrs.optString("suffix")
         val (text, color) = if (value.isNotEmpty()) value to defaultText else placeholder to defaultPlaceholder
         if (text.isEmpty()) return
 
