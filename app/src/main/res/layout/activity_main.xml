@@ -507,6 +507,15 @@
         </LinearLayout>
     </LinearLayout>
 
+    <!-- ===== المعاينة الحية المدمجة (IndsinLivePanel): تظهر بين المحرر والكونسول عند الطلب ===== -->
+    <include
+        android:id="@+id/livePreviewPanel"
+        layout="@layout/view_live_preview_panel"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="3"
+        android:visibility="gone" />
+
     <View
         android:id="@+id/editorConsoleDivider"
         android:layout_width="match_parent"
