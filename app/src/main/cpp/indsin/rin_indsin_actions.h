@@ -21,6 +21,7 @@
 // rather than faked; see the architecture doc for the current honest status of each verb.
 #pragma once
 #include "rin_indsin_eval.h"
+#include "rin_indsin_effects.h" // effect()/stopEffect()
 #include "rin_indsin_media.h" // clearMedia()/removeMedia() -- pickMedia()/uploadMedia() live in Needle (need a host)
 #include "../rin_ast.h"
 #include <algorithm>
@@ -112,7 +113,35 @@ inline ActionFn boolFlagAction(bool toValue) {
     };
 }
 
+// اسم الهدف لـ effect(card, "shake"): معرّف مجرّد (اسم عنصر) أو نص.
+inline std::string actionTargetName(const std::vector<rin::ExprPtr>& a, size_t i, WarpScope& w) {
+    if (i >= a.size()) return "";
+    if (auto v = std::dynamic_pointer_cast<rin::VariableExpr>(a[i])) return v->name;
+    return evalAttrValue(a[i], w, nullptr).asString();
+}
+
 inline void ActionRegistry::registerBuiltins() {
+    // ---- Effects Studio: effect(target, "name"[, duration]) · stopEffect(target[, "name"]) — لا تغيّر خلايا Warp ----
+    registerAction("effect", [](const std::vector<rin::ExprPtr>& a, WarpScope& w) -> ActionOutcome {
+        ActionOutcome out;
+        std::string target = actionTargetName(a, 0, w);
+        if (target.empty() || a.size() < 2) { out.error = "effect() needs effect(targetName, \"effectName\")"; return out; }
+        out.recognized = true;
+        fx::PlayRequest r; r.target = target; r.effect = evalAttrValue(a[1], w, nullptr).asString();
+        if (a.size() > 2) r.opts.push_back({"duration", evalAttrValue(a[2], w, nullptr).asString()});
+        effectLibrary().queue(std::move(r));
+        return out;
+    });
+    registerAction("stopEffect", [](const std::vector<rin::ExprPtr>& a, WarpScope& w) -> ActionOutcome {
+        ActionOutcome out;
+        std::string target = actionTargetName(a, 0, w);
+        if (target.empty()) { out.error = "stopEffect() needs a target name"; return out; }
+        out.recognized = true;
+        fx::PlayRequest r; r.stop = true; r.target = target;
+        if (a.size() > 1) r.effect = evalAttrValue(a[1], w, nullptr).asString();
+        effectLibrary().queue(std::move(r));
+        return out;
+    });
     // ---- Media (rin_indsin_media.h): الجزء الذي لا يحتاج مضيفاً. pickMedia/uploadMedia في Needle. ----
     registerAction("clearMedia", [](const std::vector<rin::ExprPtr>& a, WarpScope& w) -> ActionOutcome {
         ActionOutcome out;
