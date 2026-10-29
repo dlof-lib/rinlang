@@ -12,6 +12,7 @@
 #include "rin_indsin_tags.h"     // صيغة الوسوم <Column>…</Column> → لهجة @view (قبل التحليل)
 #include "rin_indsin_tokens.h"
 #include "rin_indsin_system.h" // themeFromSeedLiteral + registerThemesFromProgram
+#include "rin_indsin_effects.h" // registerEffectsFromProgram (@effect)
 #include "rin_indsin_object.h"
 #include "rin_indsin_media.h"          // pickMedia()/uploadMedia(): زرع خلايا الوسائط
 #include "rin_indsin_components_ext.h" // UI/UX Library Expansion: Tag/Breadcrumb/Pagination/Steps conveniences
@@ -206,6 +207,7 @@ inline PipelineResult runColdPipelineWithRuntime(const std::string& source, rin:
         // Rin Indsin: register any @theme=... blocks (Pattern Book) before the Fabric is built,
         // so Strand colors resolve against the right active theme from the very first paint.
         registerThemesFromProgram(program, result.warp);
+        registerEffectsFromProgram(program, result.warp); // Effects Studio: @effect=… قبل بناء الـFabric
         registerObjectsFromProgram(program, result.warp); // §21: Object Inspector source
         registerGroupsFromProgram(program, result.warp); // §21b: Group/Volume as Object Inspector source
 
@@ -358,6 +360,7 @@ inline PipelineResult runColdPipelineForContainerWithRuntime(const std::string& 
             }
         }
         registerThemesFromProgram(*body, result.warp);
+        registerEffectsFromProgram(*body, result.warp);
         registerObjectsFromProgram(*body, result.warp); // §21: Object Inspector source
         registerGroupsFromProgram(*body, result.warp); // §21b: Group/Volume as Object Inspector source
         std::shared_ptr<rin::ViewStmt> root = reachedRoot ? reachedRoot : reachedElementFallback;
@@ -408,6 +411,7 @@ inline std::vector<Patch> runHotPipeline(PipelineResult& state, const std::strin
             }
         }
         registerThemesFromProgram(program, state.warp);
+        registerEffectsFromProgram(program, state.warp); // تعديل حيّ لتعريفات التأثيرات
         registerObjectsFromProgram(program, state.warp); // §21: keep registry fresh on hot edits;
         registerGroupsFromProgram(program, state.warp); // §21b: same, for Group/Volume sources
         // note this does NOT re-synthesize an already-built Object Strand's rows -- same documented
