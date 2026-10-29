@@ -3,6 +3,7 @@
 #include "rin_indsin_html.h"
 #include "rin_indsin_pipeline.h"
 #include "rin_indsin_needle.h"
+#include "rin_indsin_validate.h"
 #include "rin_indsin_effects.h"
 #include "rin_indsin_effects_paint.h" // Effects Studio: يطبّق الإطارات على DrawList
 #include "rin_indsin_system.h"     // Design System v2: tokens/themes/palette
@@ -319,28 +320,52 @@ RIN_API char* rin_indsin_session_render_json(void* sessionPtr) {
     return dupToC(fabricEnvelope(sess, ""));
 }
 
-// Input/TextArea under (x,y): {"id","name","kind","bind","value","placeholder","secure","multiline","error","disabled"}
+// Effective `type=` of an Input-like strand (search kind => "search", "phone" => "tel", default "text").
+static std::string fieldTypeOf(const indsin::StrandPtr& s) {
+    std::string t = s->attrStr("type", "");
+    if (t.empty()) t = s->kind == indsin::StrandKind::SEARCH ? "search" : "text";
+    return t == "phone" ? "tel" : t;
+}
+static bool isFieldKind(const indsin::StrandPtr& s) {
+    return s->kind == indsin::StrandKind::INPUT || s->kind == indsin::StrandKind::TEXTAREA || s->kind == indsin::StrandKind::SEARCH;
+}
+static std::string boundCellOf(const indsin::StrandPtr& s) {
+    for (auto& a : s->attrs)
+        if (a.key == "value")
+            if (auto v = std::dynamic_pointer_cast<rin::VariableExpr>(a.rawExpr)) return v->name;
+    return "";
+}
+// The first field whose `value={cell}` is bound to `cell` (null if none): lets set_input apply type/maxlength rules.
+static indsin::StrandPtr findFieldBoundTo(const indsin::StrandPtr& s, const std::string& cell) {
+    if (!s) return nullptr;
+    if (isFieldKind(s) && boundCellOf(s) == cell) return s;
+    for (auto& c : s->children) if (auto f = findFieldBoundTo(c, cell)) return f;
+    return nullptr;
+}
+
+// Input/TextArea/Search under (x,y): {"id","name","kind","bind","value","placeholder","inputType","maxLength","min","max","secure","multiline","readonly"}
 // `bind` = the warp cell the field's `value={cell}` is a plain reference to ("" if not bound).
 static std::string focusInfoAt(IndsinSession* sess, double x, double y) {
     std::vector<indsin::StrandPtr> path;
     if (!sess->state.fabric || !indsin::hitTestPath(sess->state.fabric, x, y, path) || path.empty()) return "";
     const indsin::StrandPtr& s = path.front();
-    if (s->kind != indsin::StrandKind::INPUT && s->kind != indsin::StrandKind::TEXTAREA) return "";
-    std::string dis = s->attrStr("disabled", "");
-    if (dis == "true") return "";
-    std::string bind;
-    for (auto& a : s->attrs)
-        if (a.key == "value")
-            if (auto v = std::dynamic_pointer_cast<rin::VariableExpr>(a.rawExpr)) bind = v->name;
-    auto b = [&](const char* k) { return s->attrStr(k, "") == "true" ? "true" : "false"; };
+    if (!isFieldKind(s)) return "";
+    if (s->attrStr("disabled", "") == "true" || s->attrStr("readonly", "") == "true") return "";
+    std::string type = fieldTypeOf(s);
+    auto b = [&](bool v) { return v ? "true" : "false"; };
     std::ostringstream o;
     o << "{\"id\":" << s->id << ",\"name\":\"" << indsin::jsonEscape(s->name) << "\""
       << ",\"kind\":\"" << (s->kind == indsin::StrandKind::TEXTAREA ? "textarea" : "input") << "\""
-      << ",\"bind\":\"" << indsin::jsonEscape(bind) << "\""
+      << ",\"bind\":\"" << indsin::jsonEscape(boundCellOf(s)) << "\""
       << ",\"value\":\"" << indsin::jsonEscape(s->attrStr("value", "")) << "\""
       << ",\"placeholder\":\"" << indsin::jsonEscape(s->attrStr("placeholder", "")) << "\""
-      << ",\"inputType\":\"" << indsin::jsonEscape(s->attrStr("type", "text")) << "\""
-      << ",\"secure\":" << b("secure") << ",\"multiline\":" << (s->kind == indsin::StrandKind::TEXTAREA ? "true" : "false") << "}";
+      << ",\"inputType\":\"" << indsin::jsonEscape(type) << "\""
+      << ",\"maxLength\":" << (int)s->attrNum("maxlength", 0)
+      << ",\"secure\":" << b(s->attrStr("secure", "") == "true" || type == "password")
+      << ",\"multiline\":" << b(s->kind == indsin::StrandKind::TEXTAREA);
+    if (s->attr("min")) o << ",\"min\":" << s->attrNum("min", 0);
+    if (s->attr("max")) o << ",\"max\":" << s->attrNum("max", 0);
+    o << "}";
     return o.str();
 }
 
@@ -399,7 +424,10 @@ RIN_API char* rin_indsin_session_set_input(void* sessionPtr, const char* name, c
     if (n.empty() || !sess->state.warp.has(n))
         return dupToC(fabricEnvelope(sess, ",\"handled\":false,\"error\":\"" + indsin::jsonEscape("'" + n + "' is not a warp cell") + "\""));
     SessionRinHost rinHost(sess);
-    sess->state.warp.set(n, indsin::Value::txt(text ? text : ""));
+    std::string clean = text ? text : "";
+    if (auto field = findFieldBoundTo(sess->state.fabric, n))   // type / maxlength rules of the field this cell feeds
+        clean = indsin::sanitizeFieldText(fieldTypeOf(field), clean, (size_t)field->attrNum("maxlength", 0));
+    sess->state.warp.set(n, indsin::Value::txt(clean));
     indsin::Shuttle shuttle;
     shuttle.applyWarpChange(n, sess->state.warp, sess->state.subs, sess->index);
     indsin::recomputeHashes(sess->state.fabric);
