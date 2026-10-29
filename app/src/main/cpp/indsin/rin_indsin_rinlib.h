@@ -20,8 +20,14 @@
 //     kind: email | password | phone | url | required
 // التعديل (للبرنامج فقط؛ ممنوعة داخل الخصائص):
 //   indsin.useTheme(name) -> bool · indsin.defineTheme(name, seed[, dark]) -> score
+// التأثيرات (Effects Studio — rin_indsin_effects.h):
+//   indsin.defineEffect(name, frames[, options]) -> true     frames = "0%{opacity:0,y:20} 100%{opacity:1,y:0}"
+//        options: map — duration · delay · easing · iterations · direction · fill · base · x_fn/y_fn/scale_fn/opacity_fn/glow_fn
+//   indsin.playEffect(target, effect[, options]) · indsin.stopEffect(target[, effect]) · indsin.removeEffect(name)
+//   indsin.effects() -> أسماء · indsin.hasEffect(name) (نقيّتان، تُستعملان داخل الخصائص)
 #pragma once
 #include "rin_indsin_system.h"
+#include "rin_indsin_effects.h" // Effects Studio: indsin.defineEffect/playEffect…
 #include "../rin_interpreter.h"
 #include <algorithm>
 #include <cstring>
@@ -306,6 +312,50 @@ inline void registerIndsinRinLib(rin::Interpreter& interp) {
         if (!r.themes.count(n)) return Value::boolean_(false);
         r.setActive(n);
         return Value::boolean_(true);
+    });
+    // ---- Effects Studio ----
+    auto optsOf = [](const Args& a, size_t i, fx::KV& kv, int line) {
+        if (a.size() <= i || a[i].type == rin::Value::Type::NIL) return;
+        if (a[i].type != rin::Value::Type::MAP || !a[i].map) fail(line, "effect options must be a map, e.g. {duration: 600, easing: \"spring\"}");
+        for (auto& p : *a[i].map) {
+            std::string v;
+            if (p.second.type == rin::Value::Type::NUMBER) { std::ostringstream os; os << p.second.number; v = os.str(); }
+            else if (p.second.type == rin::Value::Type::BOOL) v = p.second.boolean ? "true" : "false";
+            else v = p.second.toDisplayString();
+            kv.push_back({p.first.toDisplayString(), v});
+        }
+    };
+    reg("defineEffect", [optsOf](Args& a, int line) {
+        needArgs("indsin.defineEffect", a, 2, 3, line);
+        std::string name = needStr("indsin.defineEffect", a, 0, line), frames = needStr("indsin.defineEffect", a, 1, line);
+        fx::KV kv; if (!frames.empty()) kv.push_back({"frames", frames});
+        optsOf(a, 2, kv, line);
+        std::string err;
+        if (!effectLibrary().define(name, kv, err)) fail(line, "indsin.defineEffect: " + err);
+        return Value::boolean_(true);
+    });
+    reg("removeEffect", [](Args& a, int line) {
+        needArgs("indsin.removeEffect", a, 1, 1, line);
+        return Value::boolean_(effectLibrary().remove(needStr("indsin.removeEffect", a, 0, line)));
+    });
+    reg("playEffect", [optsOf](Args& a, int line) {
+        needArgs("indsin.playEffect", a, 2, 3, line);
+        fx::PlayRequest r; r.target = needStr("indsin.playEffect", a, 0, line); r.effect = needStr("indsin.playEffect", a, 1, line);
+        optsOf(a, 2, r.opts, line);
+        effectLibrary().queue(std::move(r));
+        return Value::boolean_(true);
+    });
+    reg("stopEffect", [](Args& a, int line) {
+        needArgs("indsin.stopEffect", a, 1, 2, line);
+        fx::PlayRequest r; r.stop = true; r.target = needStr("indsin.stopEffect", a, 0, line);
+        if (a.size() > 1) r.effect = needStr("indsin.stopEffect", a, 1, line);
+        effectLibrary().queue(std::move(r));
+        return Value::boolean_(true);
+    });
+    reg("effects", [](Args& a, int line) { needArgs("indsin.effects", a, 0, 0, line); return arrayOfStrings(effectLibrary().names()); });
+    reg("hasEffect", [](Args& a, int line) {
+        needArgs("indsin.hasEffect", a, 1, 1, line);
+        return Value::boolean_(effectLibrary().has(needStr("indsin.hasEffect", a, 0, line)));
     });
     reg("defineTheme", [](Args& a, int line) {
         needArgs("indsin.defineTheme", a, 2, 3, line);
