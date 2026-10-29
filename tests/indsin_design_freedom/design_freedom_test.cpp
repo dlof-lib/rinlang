@@ -448,6 +448,62 @@ int main() {
         CHECK(frame2("<Box#p width=100 height=60 bg=#222222 />") != frame2("<Box#p width=100 height=60 bg=#222222 pattern=stripes pattern_color=#FFFFFF80 pattern_size=6 />"), "pattern=stripes changes the box");
         CHECK(frame2("<Box#p width=100 height=60 bg=#222222 border=2 borderColor=#FFFFFF />") != frame2("<Box#p width=100 height=60 bg=#222222 border=2 borderColor=#FFFFFF border_style=dashed />"), "border_style=dashed breaks the border");
     }
+    // 20) أنواع حقول الإدخال: type=password/number/email/tel/search، التحقق التلقائي، التنقية في set_input، focus، المكوّنات
+    {
+        const char* head = "<Theme#Dark active /><Screen#a size=\"300x300\" bg=#000000 padding=10 gap=10>";
+        auto frame3 = [&](const std::string& body) {
+            void* x = rin_indsin_session_create((std::string(head) + body + "</Screen>").c_str(), 300);
+            int w, h; unsigned char* b = rin_indsin_session_render_rgb(x, &w, &h);
+            std::string o((char*)b, (size_t)w * h * 3); rin_indsin_free_buffer(b); rin_indsin_session_free(x); return o; };
+        CHECK(frame3("<Input#i width=full value=\"abc\" />") != frame3("<Input#i width=full value=\"abc\" type=password />"), "type=password masks the value");
+        CHECK(frame3("<Input#i width=full value=\"abc\" type=search />") != frame3("<Input#i width=full value=\"abc\" />"), "type=search draws the magnifier");
+        auto redBorder = [&](const std::string& body) {
+            void* x = rin_indsin_session_create((std::string(head) + body + "</Screen>").c_str(), 300);
+            bool red = false; for (int y = 8; y < 14 && !red; y++) { Px p = pixel(x, 100, y); if (p.r > 150 && p.g < 120) red = true; }
+            rin_indsin_session_free(x); return red; };
+        CHECK(redBorder("<Input#i width=full value=\"nope\" type=email />"), "invalid email gets the danger border automatically");
+        CHECK(!redBorder("<Input#i width=full value=\"a@b.co\" type=email />"), "valid email has no danger border");
+        CHECK(redBorder("<Input#i width=full value=\"150\" type=number min=1 max=99 />"), "number above max is flagged");
+        CHECK(redBorder("<Input#i width=full value=\"1x\" type=number />"), "non-numeric number is flagged");
+        CHECK(!redBorder("<Input#i width=full value=\"50\" type=number min=1 max=99 />"), "number inside range is fine");
+        CHECK(redBorder("<Input#i width=full value=\"12\" type=tel />"), "short phone is flagged");
+        CHECK(!redBorder("<Input#i width=full value=\"nope\" type=email validate=false />"), "validate=false opts out");
+
+        // set_input: تنقية حسب النوع + maxlength، وfocus يحمل النوع والحد
+        void* s = rin_indsin_session_create(
+            (std::string("<warp n={\"\"} /><warp t={\"\"} /><warp e={\"\"} /><warp m={\"\"} />") + head +
+             "<Input#n width=full value={n} type=number />"
+             "<Input#t width=full value={t} type=tel />"
+             "<Input#e width=full value={e} type=email />"
+             "<TextArea#m width=full height=60 value={m} maxlength=5 /></Screen>").c_str(), 300);
+        take(rin_indsin_session_set_input(s, "n", "12ab.5.3-"));
+        CHECK(has(take(rin_indsin_session_render_json(s)), "\"value\":\"12.53\""), "number field keeps digits and one dot only");
+        take(rin_indsin_session_set_input(s, "t", "+1 (555) abc 12-3"));
+        CHECK(has(take(rin_indsin_session_render_json(s)), "+1 (555)  12-3"), "tel field keeps phone characters only");
+        take(rin_indsin_session_set_input(s, "e", " a b@c.io "));
+        CHECK(has(take(rin_indsin_session_render_json(s)), "\"value\":\"ab@c.io\""), "email field strips whitespace");
+        take(rin_indsin_session_set_input(s, "m", "abcdefghij"));
+        CHECK(has(take(rin_indsin_session_render_json(s)), "\"value\":\"abcde\""), "maxlength truncates");
+        std::string f1 = take(rin_indsin_session_tap(s, 150, 30));
+        CHECK(has(f1, "\"inputType\":\"number\"") && has(f1, "\"bind\":\"n\""), "focus reports inputType=number");
+        std::string f2 = take(rin_indsin_session_tap(s, 150, 160));
+        CHECK(has(f2, "\"multiline\":true") && has(f2, "\"maxLength\":5"), "focus reports TextArea maxLength");
+        rin_indsin_session_free(s);
+
+        // دوال Rin + المكوّنات الجاهزة
+        char* o = rin_run("print indsin.isNumber(\"12.5\"); print indsin.isNumber(\"1e5\"); print indsin.fieldError(\"number\", \"150\", 1, 99); print indsin.fieldError(\"tel\", \"abc\");", ".");
+        std::string out = o ? o : ""; rin_free_string(o);
+        CHECK(has(out, "true") && has(out, "false") && has(out, "Must be at most 99") && has(out, "Enter a valid phone number"), "indsin.isNumber / fieldError(number|tel)");
+        s = rin_indsin_session_create(
+            (std::string("<warp a={\"bad\"} /><warp b={\"150\"} /><warp c={\"x\"} /><warp d={\"\"} /><warp q={\"\"} />") + head +
+             "<TextField label=\"Name\" value={d} /><EmailField value={a} /><NumberField value={b} min=1 max=99 /><PhoneField value={c} /><SearchField value={q} /><TextAreaField label=\"Bio\" value={d} maxlength=20 /></Screen>").c_str(), 300);
+        std::string cj = take(rin_indsin_session_render_json(s));
+        CHECK(has(cj, "Enter a valid email") && has(cj, "Must be at most 99") && has(cj, "Enter a valid phone number"), "Email/Number/Phone fields validate automatically");
+        take(rin_indsin_session_set_input(s, "b", "50")); take(rin_indsin_session_set_input(s, "a", "ok@mail.com"));
+        cj = take(rin_indsin_session_render_json(s));
+        CHECK(!has(cj, "Enter a valid email") && !has(cj, "Must be at most 99"), "errors clear when the value becomes valid");
+        rin_indsin_session_free(s);
+    }
     std::printf(failures ? "%d FAILURE(S)\n" : "ALL OK\n", failures);
     return failures ? 1 : 0;
 }
