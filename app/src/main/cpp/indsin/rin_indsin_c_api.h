@@ -108,6 +108,16 @@ RIN_API char* rin_indsin_session_hover(void* session, double x, double y, int en
 // ما دام true؛ يكفي نداء كل ثانية). "changed" يحوي "clock" عند حدوث تحديث.
 RIN_API char* rin_indsin_session_tick(void* session);
 
+// ---- Effects Studio (rin_indsin_effects.h) ----
+// تعريف تأثير مخصّص: frames = "0%{opacity:0,y:20} 100%{opacity:1,y:0}" (أو فارغ مع options تحوي x_fn=…)،
+// options = "duration=600;easing=spring;iterations=infinite;…" . يعيد 1 عند النجاح، 0 عند الخطأ (انظر effects_json).
+RIN_API int rin_indsin_effect_define(const char* name, const char* frames, const char* options);
+// قائمة التأثيرات {"effects":[{name,builtin,duration,iterations,channels}],"error":""} — free بـ rin_free_string.
+RIN_API char* rin_indsin_effects_json(void);
+// تشغيل/إيقاف تأثير على كل عنصر باسم target (اسم الـStrand) ويعيد الغلاف المعتاد.
+RIN_API char* rin_indsin_session_play_effect(void* session, const char* target, const char* effect);
+RIN_API char* rin_indsin_session_stop_effect(void* session, const char* target);
+
 // Re-parses `newSource` and diffs it against the session's existing Fabric in place (Shuttle),
 // keeping all current Warp values (so state like a tapped counter survives editing elsewhere in
 // the file). On a parse error the previous Fabric is left completely untouched (Snag containment)
