@@ -33,6 +33,7 @@
 | المحرّك الأساسي (C++) | `app/src/main/cpp/indsin/` | `rin_indsin_layout.h`, `rin_indsin_paint.h`, `rin_indsin_strand.h`, `rin_indsin_needle.h` (hit-test)، `rin_indsin_shuttle.h` (hot-reload)، إلخ. الواجهة العامة المستقرة: `rin_indsin_c_api.h/.cpp`. |
 | أندرويد (Kotlin) | `app/src/main/java/com/dlof/rinlang/Indsin*.kt` | `IndsinFabricView` (المُصيِّر)، `IndsinPreviewActivity`/`IndsinPreviewManager` (المعاينة الحيّة)، `IndsinViewTracer`. مربوطة بالمحرّك عبر `RinEngine.IndsinSession` (JNI). |
 | سطح المكتب | `tools/rin_indsin_desktop.cpp` | نافذة X11 حقيقية فوق نفس مسار الرسم (`rin_indsin_session_render_rgb`). |
+| معاينة حية لكل المنصات | `tools/indsin-live/` | خادم + عميل متصفح فوق نفس المحرّك (ويندوز/ماك/لينكس/هاتف/VS Code) — [`docs/indsin_live_preview.md`](./docs/indsin_live_preview.md). |
 | CLI | `tools/rin_indsin_run.cpp` | يُخرج JSON (fabric + paint ops) لأي ملف `.rin`، بلا أي واجهة رسومية — مفيد للاختبار والـ CI. |
 
 هذه المضيفة الثلاثة (أندرويد/سطح المكتب/CLI) تُشغِّل **نفس** مسار القياس والرسم في
