@@ -171,7 +171,9 @@ class IndsinPreviewActivity : RinBaseActivity(), IndsinPreviewManager.Listener {
         if (savedInstanceState == null) {
             val incomingCode = readIncomingCode(intent)
             if (incomingCode != null) {
-                if (IndsinPreviewManager.isRunning) {
+                // الجلسة الحيّة القادمة من لوحة المحرر المدمجة (panelVisible) بعرض اللوحة الضيّق: نعيد قياسها
+                // بعرض هذه الشاشة الكاملة بدل أن تُرسم بعرض اللوحة داخل إطار أعرض.
+                if (IndsinPreviewManager.isRunning && !IndsinPreviewManager.panelVisible) {
                     IndsinPreviewManager.start(incomingCode, currentDeviceWidth)
                 } else {
                     // جلسة جديدة تماماً: ننتظر أول تخطيط لسطح المعاينة لنقيس عرضه الفعلي على
