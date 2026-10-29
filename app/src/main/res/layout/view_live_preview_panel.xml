@@ -1,0 +1,175 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- لوحة «المعاينة الحية» المدمجة داخل المحرر (بين المحرر والكونسول).
+     تُظهر نفس جلسة IndsinPreviewManager التي تعرضها شاشة IndsinPreviewActivity، لكن بجانب الكود مباشرة:
+     كل ضغطة مفتاح في المحرر تُحدِّث هذه اللوحة حيّاً دون مغادرة الشاشة (انظر IndsinLivePanel.kt).
+     الجذر يُضمَّن من activity_main.xml بـ id=livePreviewPanel وwidth/height/weight هناك. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/rin_background">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="@color/rin_console_header"
+        android:paddingStart="6dp"
+        android:paddingEnd="6dp"
+        android:paddingTop="4dp"
+        android:paddingBottom="4dp">
+
+        <ImageButton
+            android:id="@+id/livePanelBack"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:background="@drawable/bg_toolbar_btn_ghost"
+            android:src="@drawable/ic_back"
+            android:tint="@color/rin_on_toolbar"
+            android:scaleType="center"
+            android:contentDescription="@string/live_panel_back"
+            android:visibility="gone" />
+
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_marginStart="6dp"
+            android:src="@drawable/ic_preview_eye"
+            android:contentDescription="@null" />
+
+        <TextView
+            android:id="@+id/livePanelTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="8dp"
+            android:text="@string/live_panel_title"
+            android:textColor="@color/rin_on_toolbar"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:maxLines="1"
+            android:ellipsize="end" />
+
+        <View
+            android:layout_width="7dp"
+            android:layout_height="7dp"
+            android:layout_marginEnd="4dp"
+            android:background="@drawable/shape_status_dot"
+            android:backgroundTint="@color/indsin_live_dot" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="6dp"
+            android:text="@string/indsin_live_label"
+            android:textColor="@color/indsin_live_dot"
+            android:textSize="10sp"
+            android:textStyle="bold" />
+
+        <ImageButton
+            android:id="@+id/livePanelRefresh"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:background="@drawable/bg_toolbar_btn_ghost"
+            android:src="@drawable/ic_refresh"
+            android:tint="@color/rin_on_toolbar"
+            android:scaleType="center"
+            android:contentDescription="@string/indsin_restart_session" />
+
+        <ImageButton
+            android:id="@+id/livePanelExpand"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:background="@drawable/bg_toolbar_btn_ghost"
+            android:src="@drawable/ic_fullscreen"
+            android:tint="@color/rin_on_toolbar"
+            android:scaleType="center"
+            android:contentDescription="@string/live_panel_expand" />
+
+        <ImageButton
+            android:id="@+id/livePanelClose"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:background="@drawable/bg_toolbar_btn_ghost"
+            android:src="@drawable/ic_close"
+            android:tint="@color/rin_on_toolbar"
+            android:scaleType="center"
+            android:contentDescription="@string/indsin_close" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/livePanelErrorBanner"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="@drawable/bg_indsin_error_banner"
+        android:layout_marginStart="6dp"
+        android:layout_marginEnd="6dp"
+        android:layout_marginTop="4dp"
+        android:padding="6dp"
+        android:visibility="gone"
+        tools:visibility="visible">
+
+        <ImageView
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:src="@drawable/ic_status_warning"
+            android:contentDescription="@null" />
+
+        <TextView
+            android:id="@+id/livePanelError"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="6dp"
+            android:maxLines="3"
+            android:ellipsize="end"
+            android:textColor="@color/indsin_error_text"
+            android:textSize="11sp"
+            tools:text="Snag on line 12: unexpected token" />
+    </LinearLayout>
+
+    <!-- layoutDirection=ltr: إحداثيات Fabric تبدأ من أعلى اليسار دائماً (انظر activity_indsin_preview.xml). -->
+    <HorizontalScrollView
+        android:id="@+id/livePanelHScroll"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_margin="6dp"
+        android:background="@drawable/bg_indsin_device_frame"
+        android:clipToOutline="true"
+        android:fillViewport="true"
+        android:layoutDirection="ltr">
+
+        <ScrollView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:fillViewport="true"
+            android:layoutDirection="ltr">
+
+            <com.dlof.rinlang.IndsinFabricView
+                android:id="@+id/livePanelFabric"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@color/indsin_canvas_bg" />
+        </ScrollView>
+    </HorizontalScrollView>
+
+    <TextView
+        android:id="@+id/livePanelStats"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/rin_console_header"
+        android:paddingStart="10dp"
+        android:paddingEnd="10dp"
+        android:paddingTop="3dp"
+        android:paddingBottom="3dp"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:textColor="@color/indsin_footer_text"
+        android:textSize="10sp"
+        tools:text="14 strands · rendered in 3ms · cache hits 9" />
+</LinearLayout>
