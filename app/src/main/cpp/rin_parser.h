@@ -260,7 +260,7 @@ private:
     StmtPtr warpDeclaration();                    // warp name = expr;
     StmtPtr easyKeyDeclaration();                // easy_key = "key";        داخل جسم الحاوية
     StmtPtr maskDeclaration();                    // mask = expr;              (يُستدعى بعد استهلاك 'warp')
-    StmtPtr themeDeclaration();                   // @theme=Name key=expr; ... .end/theme  (يُستدعى بعد استهلاك '@' و'theme')
+    StmtPtr themeDeclaration(bool isEffect = false);                   // @theme=Name key=expr; ... .end/theme  (يُستدعى بعد استهلاك '@' و'theme')
 
     // expressions (precedence climbing)
     ExprPtr expression();
