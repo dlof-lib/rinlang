@@ -503,7 +503,7 @@ inline std::string tokensToJson() {
 inline void registerThemesFromProgram(const std::vector<rin::StmtPtr>& program, WarpScope& warp) {
     for (auto& stmt : program) {
         auto t = std::dynamic_pointer_cast<rin::ThemeStmt>(stmt);
-        if (!t) continue;
+        if (!t || std::dynamic_pointer_cast<rin::EffectStmt>(stmt)) continue; // @effect يعالجه registerEffectsFromProgram
         auto& reg = themeRegistry();
         auto existing = reg.themes.find(t->name);
         Theme theme = (existing != reg.themes.end()) ? existing->second : reg.active();
