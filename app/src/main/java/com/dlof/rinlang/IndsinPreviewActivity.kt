@@ -345,9 +345,16 @@ class IndsinPreviewActivity : RinBaseActivity(), IndsinPreviewManager.Listener {
             secure -> android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
             multiline -> android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
             focus.optString("inputType") == "email" -> android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
-            focus.optString("inputType") == "number" -> android.text.InputType.TYPE_CLASS_NUMBER
+            focus.optString("inputType") == "number" ->
+                android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL or android.text.InputType.TYPE_NUMBER_FLAG_SIGNED
+            focus.optString("inputType") == "tel" -> android.text.InputType.TYPE_CLASS_PHONE
+            focus.optString("inputType") == "url" -> android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
+            focus.optString("inputType") == "search" -> android.text.InputType.TYPE_CLASS_TEXT
             else -> android.text.InputType.TYPE_CLASS_TEXT
         }
+        if (focus.optString("inputType") == "search") edit.imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
+        val maxLen = focus.optInt("maxLength", 0)
+        if (maxLen > 0) edit.filters = arrayOf<android.text.InputFilter>(android.text.InputFilter.LengthFilter(maxLen))
         edit.setSelection(edit.text.length)
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setView(edit)
