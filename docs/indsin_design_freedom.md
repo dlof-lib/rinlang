@@ -325,3 +325,22 @@ rin_indsin_preview examples/samples/indsin_design_freedom.rin --bg "#223344" --c
 `rin_indsin_layout.h` (ارتفاع الشاشة الأدنى وتوزيع Spacer عليه، `aspect`، نسب داخل `Row`) · `rin_indsin_paint.h` (`resolveCanvas`/`paintFrame`، حاويات شفافة) ·
 `rin_indsin_c_api.*` (`set_input` + `focus`، الخلفية الافتراضية، `resize`، `canvas_json`، حجم اللوحة) · `rin_indsin_html.h` (لون اللوحة) ·
 `rin_interpreter.h/.cpp` (خطّاف `interpreterInstallers`) · `rin_indsin_needle.h` (تعيين مباشر في المعالجات + أفعال الثيم) · `rin_indsin_tags.h` (`<Screen>/<Theme>/<Palette>`، اقتباس القيم النسبية) · أندرويد: `IndsinFabricView/PreviewActivity/PreviewManager/RinEngine` + JNI.
+
+## أنواع حقول الإدخال (Text / TextArea / Password / Number / Email / Search / Tel)
+
+| المكوّن | الأساس | ما يفعله |
+|---|---|---|
+| `<TextField label value placeholder maxlength>` | `Input type=text` | نص قصير (اسم، عنوان) |
+| `<TextAreaField label value height maxlength>` | `TextArea` | فقرات/أكواد متعددة الأسطر + عدّاد `n/max` |
+| `<PasswordField label value meter>` | `Input type=password` | إخفاء الأحرف + مؤشر قوة اختياري |
+| `<NumberField label value min max prefix suffix>` | `Input type=number` | أرقام/كميات، تنقية فورية، تحقق من النطاق |
+| `<EmailField label value>` | `Input type=email` | خطأ تلقائي "Enter a valid email" |
+| `<SearchField value placeholder>` | `Input type=search` | أيقونة بحث + زر مسح |
+| `<PhoneField label value>` | `Input type=tel` | أرقام الهواتف (`+ ( ) -` ومسافات) |
+
+- **الربط**: `value={cell}` يربط الحقل بخلية warp؛ عند الإدخال تُنقّى القيمة حسب النوع (number: أرقام ونقطة واحدة وإشارة بادئة، tel: أرقام ورموز الهاتف، email/url: بلا فراغات) ثم تُقصّ بـ `maxlength`.
+- **التحقق التلقائي**: حدّ أحمر + رسالة للقيم غير الصالحة (`validate=false` يعطّله؛ `min`/`max` للأرقام).
+- **الرسم**: `type=password` يخفي القيمة، `prefix`/`suffix`، عدّاد `maxlength` (`counter=true` لغير TextArea).
+- **focus**: غلاف `tap` يحمل `inputType` و`maxLength` و`multiline` و`min`/`max` ليختار تطبيق الأندرويد لوحة المفاتيح المناسبة.
+- **Rin**: `indsin.isNumber(s)` و`indsin.fieldError(kind, value[, min, max])` (email/password/phone/tel/url/number/required).
+- مثال كامل: `examples/samples/indsin_fields.rin`.
