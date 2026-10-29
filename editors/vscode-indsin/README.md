@@ -30,3 +30,9 @@ code --install-extension indsin-language-1.0.0.vsix
 or copy this folder to `~/.vscode/extensions/rinlang.indsin-language-1.0.0`.
 
 Open `examples/sample.indsin` (classic `@view` syntax) or `examples/sample-tags.indsin` (tag syntax, see [docs/indsin_tags.md](../../docs/indsin_tags.md)) to try it.
+
+## Live Preview
+
+**Indsin: Open Live Preview to the Side** (`Ctrl/Cmd+K V`, or the editor-title button) starts `rin_indsin_live` for the active file and shows the real engine's
+output beside the editor, updating on every keystroke (unsaved buffer included). Also: *Open in Browser*, *Share on Local Network* (phone/tablet), *Stop*.
+Build the server once with `tools/indsin-live/build.sh` and set `indsin.livePreview.serverPath` (or leave it in `dist/live/`). Details: [docs/indsin_live_preview.md](../../docs/indsin_live_preview.md).
