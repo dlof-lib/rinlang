@@ -746,6 +746,35 @@ private:
             }
             kw = "theme"; closer = ".end/theme";
             stmt = "@theme=" + id;
+        } else if (hl == "effect") {
+            // <Effect#wobble duration=900 iterations=infinite> <Keyframe at=50% x=6 /> … </Effect>  →  @effect=wobble …; .end/effect
+            // أو مختصراً: <Effect#fadeIn frames="from{opacity:0} to{opacity:1}" duration=400 />  (Effects Studio)
+            if (id.empty()) fail("<Effect#name …> needs a name, e.g. <Effect#wobble duration=900>", startLine);
+            kw = "effect"; closer = ".end/effect";
+            stmt = "@effect=" + id;
+        } else if (hl == "keyframe") {
+            // <Keyframe at=50% x=6 opacity=.8 />  →  at50="x:6,opacity:.8";   (قيم {expr} تُقيَّم وقت التسجيل)
+            if (!selfClose) fail("<Keyframe> must be self-closing: <Keyframe at=50% y=-8 />", startLine);
+            std::string at, key;
+            for (auto& a : attrs) if (a.key == "at" || a.key == "t") at = a.value;
+            if (at.empty()) fail("<Keyframe> needs at=0%..100% (or at=from / at=to)", startLine);
+            std::string av = at;
+            if (av.size() >= 2 && av.front() == '"' && av.back() == '"') av = av.substr(1, av.size() - 2);
+            if (!av.empty() && av.back() == '%') av.pop_back();
+            for (auto& c : av) if (c == '.') c = '_';
+            std::string lv = lower(av);
+            key = (lv == "from" || lv == "to") ? lv : "at" + av;
+            std::string expr; bool firstDecl = true;
+            for (auto& a : attrs) {
+                if (a.key == "at" || a.key == "t") continue;
+                expr += (expr.empty() ? "" : " + ") + std::string("\"") + (firstDecl ? "" : ",") + a.key + ":\"";
+                firstDecl = false;
+                bool lit = a.value.size() >= 2 && a.value.front() == '"' && a.value.back() == '"';
+                expr += " + " + (lit ? a.value : "(" + a.value + ")");
+            }
+            if (expr.empty()) expr = "\"\"";
+            stmt = key + "=" + expr + ";";
+            isStatement = true;
         } else if (hl == "element") {
             if (sub.empty()) fail("<Element.Kind#name> needs a kind, e.g. <Element.Button#ok>", startLine);
             kw = "element"; closer = ".end/element";
