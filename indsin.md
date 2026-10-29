@@ -117,3 +117,9 @@ rin_indsin_preview file.rin --width 390 --png out.png --html out.html --tap 60,1
 `<Screen size=phone bg=#0B1020>` لحجم الشاشة ولونها، خلفية افتراضية من المضيف (`rin_indsin_session_set_default_background`)،
 أحجام نسبية (`half`، `60vw`، `aspect="16:9"`)، وثيم كامل من لون واحد `<Palette seed=#6C5CE7 dark />` — راجع
 [docs/indsin_design_freedom.md](docs/indsin_design_freedom.md).
+
+---
+## Effects Studio: إنشاء التأثيرات الحركية (جديد)
+تأثيرات مخصّصة بـ keyframes ومعادلات رياضية وألوان وتوهّج، تُعرَّف بـ `<Effect>` / `@effect` / `indsin.defineEffect()` وتُشغَّل
+بالدخول والإيماءات وتغيّر القيم ومن Rin — وتُطبَّق على الرسم دون تعديل الـFabric (إصلاح انجراف الإزاحة القديم). راجع
+[docs/indsin_effects.md](docs/indsin_effects.md) والمثال `examples/samples/indsin_effects.rin`.
