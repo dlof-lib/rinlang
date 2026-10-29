@@ -1,35 +1,66 @@
 {
   "name": "indsin-language",
   "displayName": "indsin — UI language support",
-  "description": "Syntax highlighting, snippets and file icon for indsin (.indsin) UI documents from the Rin language.",
-  "version": "1.0.0",
+  "description": "Syntax highlighting, snippets, file icon and a real Live Preview (native indsin engine) for indsin (.indsin) UI documents from the Rin language.",
+  "version": "1.1.0",
   "publisher": "rinlang",
   "license": "MIT",
   "icon": "images/icon.png",
-  "engines": { "vscode": "^1.60.0" },
-  "categories": ["Programming Languages", "Snippets"],
-  "keywords": ["indsin", "rin", "ui", "layout", "syntax"],
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Snippets"
+  ],
+  "keywords": [
+    "indsin",
+    "rin",
+    "ui",
+    "layout",
+    "syntax"
+  ],
   "contributes": {
     "languages": [
       {
         "id": "indsin",
-        "aliases": ["indsin", "Indsin"],
-        "extensions": [".indsin"],
+        "aliases": [
+          "indsin",
+          "Indsin"
+        ],
+        "extensions": [
+          ".indsin"
+        ],
         "configuration": "./language-configuration.json",
-        "icon": { "light": "./images/file-icon.svg", "dark": "./images/file-icon.svg" }
+        "icon": {
+          "light": "./images/file-icon.svg",
+          "dark": "./images/file-icon.svg"
+        }
       },
       {
         "id": "rin-embedded",
-        "aliases": ["Rin (embedded grammar)"],
+        "aliases": [
+          "Rin (embedded grammar)"
+        ],
         "extensions": []
       }
     ],
     "grammars": [
-      { "language": "indsin", "scopeName": "source.indsin", "path": "./syntaxes/indsin.tmLanguage.json" },
-      { "scopeName": "source.rin", "path": "./syntaxes/rin.tmLanguage.json" }
+      {
+        "language": "indsin",
+        "scopeName": "source.indsin",
+        "path": "./syntaxes/indsin.tmLanguage.json"
+      },
+      {
+        "scopeName": "source.rin",
+        "path": "./syntaxes/rin.tmLanguage.json"
+      }
     ],
     "snippets": [
-      { "language": "indsin", "path": "./snippets/indsin.code-snippets" }
+      {
+        "language": "indsin",
+        "path": "./snippets/indsin.code-snippets"
+      }
     ],
     "configurationDefaults": {
       "[indsin]": {
@@ -40,25 +71,152 @@
       "editor.tokenColorCustomizations": {
         "[*Dark*]": {
           "textMateRules": [
-            { "scope": "support.class.element.indsin", "settings": { "foreground": "#F9E2AF", "fontStyle": "bold" } },
-            { "scope": "variable.parameter.attribute.indsin", "settings": { "foreground": "#89DCEB" } },
-            { "scope": "storage.modifier.responsive.indsin", "settings": { "foreground": "#F5C2E7" } },
-            { "scope": "constant.language.token.indsin", "settings": { "foreground": "#F2CDCD" } },
-            { "scope": "constant.other.color.rgb-value.indsin", "settings": { "foreground": "#F5C2E7" } },
-            { "scope": "entity.name.tag.view-name.indsin", "settings": { "foreground": "#94E2D5" } }
+            {
+              "scope": "support.class.element.indsin",
+              "settings": {
+                "foreground": "#F9E2AF",
+                "fontStyle": "bold"
+              }
+            },
+            {
+              "scope": "variable.parameter.attribute.indsin",
+              "settings": {
+                "foreground": "#89DCEB"
+              }
+            },
+            {
+              "scope": "storage.modifier.responsive.indsin",
+              "settings": {
+                "foreground": "#F5C2E7"
+              }
+            },
+            {
+              "scope": "constant.language.token.indsin",
+              "settings": {
+                "foreground": "#F2CDCD"
+              }
+            },
+            {
+              "scope": "constant.other.color.rgb-value.indsin",
+              "settings": {
+                "foreground": "#F5C2E7"
+              }
+            },
+            {
+              "scope": "entity.name.tag.view-name.indsin",
+              "settings": {
+                "foreground": "#94E2D5"
+              }
+            }
           ]
         },
         "[*Light*]": {
           "textMateRules": [
-            { "scope": "support.class.element.indsin", "settings": { "foreground": "#8A6D00", "fontStyle": "bold" } },
-            { "scope": "variable.parameter.attribute.indsin", "settings": { "foreground": "#00668C" } },
-            { "scope": "storage.modifier.responsive.indsin", "settings": { "foreground": "#A0348A" } },
-            { "scope": "constant.language.token.indsin", "settings": { "foreground": "#B33A3A" } },
-            { "scope": "constant.other.color.rgb-value.indsin", "settings": { "foreground": "#A0348A" } },
-            { "scope": "entity.name.tag.view-name.indsin", "settings": { "foreground": "#00796B" } }
+            {
+              "scope": "support.class.element.indsin",
+              "settings": {
+                "foreground": "#8A6D00",
+                "fontStyle": "bold"
+              }
+            },
+            {
+              "scope": "variable.parameter.attribute.indsin",
+              "settings": {
+                "foreground": "#00668C"
+              }
+            },
+            {
+              "scope": "storage.modifier.responsive.indsin",
+              "settings": {
+                "foreground": "#A0348A"
+              }
+            },
+            {
+              "scope": "constant.language.token.indsin",
+              "settings": {
+                "foreground": "#B33A3A"
+              }
+            },
+            {
+              "scope": "constant.other.color.rgb-value.indsin",
+              "settings": {
+                "foreground": "#A0348A"
+              }
+            },
+            {
+              "scope": "entity.name.tag.view-name.indsin",
+              "settings": {
+                "foreground": "#00796B"
+              }
+            }
           ]
         }
       }
+    },
+    "commands": [
+      {
+        "command": "indsin.openLivePreview",
+        "title": "Indsin: Open Live Preview to the Side",
+        "icon": "$(open-preview)"
+      },
+      {
+        "command": "indsin.openLivePreviewInBrowser",
+        "title": "Indsin: Open Live Preview in Browser"
+      },
+      {
+        "command": "indsin.shareLivePreviewOnNetwork",
+        "title": "Indsin: Share Live Preview on Local Network (phone / tablet)"
+      },
+      {
+        "command": "indsin.stopLivePreview",
+        "title": "Indsin: Stop Live Preview"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "indsin.openLivePreview",
+          "when": "resourceExtname == .indsin || resourceExtname == .rin",
+          "group": "navigation"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "indsin.openLivePreview",
+        "key": "ctrl+k v",
+        "mac": "cmd+k v",
+        "when": "resourceExtname == .indsin || resourceExtname == .rin"
+      }
+    ],
+    "configuration": {
+      "title": "indsin",
+      "properties": {
+        "indsin.livePreview.serverPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to rin_indsin_live (build it with tools/indsin-live/build.sh). Empty = search dist/live, then PATH."
+        },
+        "indsin.livePreview.port": {
+          "type": "number",
+          "default": 5757,
+          "description": "First TCP port to try (the next free one is used if busy)."
+        },
+        "indsin.livePreview.pushUnsavedChanges": {
+          "type": "boolean",
+          "default": true,
+          "description": "Update the preview on every keystroke, before the file is saved."
+        }
+      }
     }
-  }
+  },
+  "main": "./extension.js",
+  "activationEvents": [
+    "onLanguage:indsin",
+    "onCommand:indsin.openLivePreview",
+    "onCommand:indsin.openLivePreviewInBrowser",
+    "onCommand:indsin.shareLivePreviewOnNetwork",
+    "onCommand:indsin.stopLivePreview",
+    "workspaceContains:**/*.indsin"
+  ]
 }
