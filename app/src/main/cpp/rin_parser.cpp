@@ -401,6 +401,13 @@ StmtPtr Parser::declaration() {
         advance(); // 'theme'
         return themeDeclaration();
     }
+    // '@effect=Name key=expr; ... .end/effect' -> تعريف تأثير حركي (Effects Studio) بنفس بنية @theme.
+    if (check(TokenType::AT) && checkNext(TokenType::IDENT) &&
+        current + 1 < tokens.size() && tokens[current + 1].lexeme == "effect") {
+        advance(); // '@'
+        advance(); // 'effect'
+        return themeDeclaration(true);
+    }
     // 'view.print/object(expr);' -> معاينة حيّة لكائن في الكونسول (امتداد إضافي، لا علاقة بـ
     // '@view.<Kind>' أعلاه رغم تشابه الاسم). كلمة سياقية غير محجوزة: 'view' تُقرأ IDENT عادي، فلا
     // تتحوّل لعبارة خاصة إلا عند ظهورها بالضبط بصيغة 'view' '.' 'print' في بداية عبارة (نفس أسلوب
@@ -2986,12 +2993,13 @@ StmtPtr Parser::warpDeclaration() {
 // @theme=<Name>  key=expr; ...  .end/theme
 // يُستدعى بعد أن يكون declaration() قد استهلك بالفعل '@' و'theme'، بنفس أسلوب viewDeclaration()
 // أعلاه تماماً لكن بلا كتل متداخلة (Theme مسطّح: أدوار لونية + العلم الاختياري 'active' فقط).
-StmtPtr Parser::themeDeclaration() {
-    Token themeTok = previous(); // 'theme'
-    consume(TokenType::EQUAL, "Expected '=' after '@theme' (e.g. @theme=Midnight ... .end/theme)");
-    Token nameTok = consume(TokenType::IDENT, "Expected a theme name after '@theme='");
+StmtPtr Parser::themeDeclaration(bool isEffect) {
+    Token themeTok = previous(); // 'theme' | 'effect'
+    const std::string kw = isEffect ? "effect" : "theme";
+    consume(TokenType::EQUAL, "Expected '=' after '@" + kw + "' (e.g. @" + kw + "=Name ... .end/" + kw + ")");
+    Token nameTok = consume(TokenType::IDENT, "Expected a name after '@" + kw + "='");
 
-    auto s = std::make_shared<ThemeStmt>();
+    std::shared_ptr<ThemeStmt> s = isEffect ? std::make_shared<EffectStmt>() : std::make_shared<ThemeStmt>();
     s->name = nameTok.lexeme;
     s->line = themeTok.line;
 
@@ -3016,7 +3024,7 @@ StmtPtr Parser::themeDeclaration() {
                       "`.end/theme" + (s->name.empty() ? "" : ("=" + s->name)) + ";` if you're done",
                       "an identifier followed by '=', or '.end/theme'");
     }
-    consumeEndTag("theme", themeTok.line, s->name);
+    consumeEndTag(kw, themeTok.line, s->name);
     return s;
 }
 
