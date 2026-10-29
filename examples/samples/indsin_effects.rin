@@ -1,0 +1,63 @@
+<!-- Effects Studio: إنشاء تأثيرات كاملة من indsin ومن Rin.
+     1) تعريف بالوسوم:   <Effect#name> + <Keyframe at=…>     2) تعريف بالكتلة: @effect=…  .end/effect
+     3) تعريف من Rin:    indsin.defineEffect(…)               4) معادلات رياضية: x_fn / y_fn / scale_fn / glow_fn …
+     التشغيل: effect= (دخول) · effect_tap= · effect_hover= · effect_on_change= · stagger= · indsin.playEffect(…) -->
+<Palette seed=#6C5CE7 dark />
+
+<!-- (1) keyframes بالوسوم: قفزة بثلاث محطات -->
+<Effect#hop duration=520 easing=cubicOut>
+  <Keyframe at=0% y=0 />
+  <Keyframe at=45% y=-26 scaleY=1.08 />
+  <Keyframe at=100% y=0 />
+</Effect>
+
+<!-- (1b) مختصر: سطر واحد (frames= بصيغة CSS-like) -->
+<Effect#swoosh frames="from{x:-100%,opacity:0} to{x:0,opacity:1}" duration=450 easing=expoOut />
+
+<!-- (2) كتلة @effect: معادلة تموّج لا نهائية (t = تقدّم الدورة 0..1) -->
+@effect=wave
+  duration=1800; iterations="infinite"; easing="linear";
+  y_fn="sin(t*pi*2)*5"; glow_fn="6+5*sin(t*pi*2)";
+.end/effect
+
+<!-- (2b) ألوان وتوهّج: وميض لون ثم عودة -->
+@effect=alarm
+  duration=700; easing="easeOut";
+  from="bg:danger,glow:18,glowColor:danger"; to="";
+.end/effect
+
+<!-- (3) من Rin: تعريف + تشغيل برمجي -->
+indsin.defineEffect("kick", "0%{x:0} 40%{x:36,scaleX:1.15} 100%{x:0}", {"duration": 480, "easing": "spring"});
+warp score = 0;
+fun addPoint() { score = score + 1; }
+fun kickIt() { indsin.playEffect("card", "kick"); }
+
+<Screen#app size=phone padding=16 gap=14 bg=#0B1020>
+  <Text#title size=heading effect=fadeUp>Effects Studio</Text>
+
+  <!-- دخول متتابع: stagger على الحاوية -->
+  <Column#list gap=8 effect=slideUp stagger=90>
+    <Box#r1 padding=12 radius=12 bg=surface width=full><Text>① تعريف بالوسوم</Text></Box>
+    <Box#r2 padding=12 radius=12 bg=surface width=full><Text>② @effect + معادلات</Text></Box>
+    <Box#r3 padding=12 radius=12 bg=surface width=full><Text>③ من كود Rin</Text></Box>
+  </Column>
+
+  <Box#card padding=14 radius=16 bg=primary width=full effect="swoosh" effect_tap=hop>
+    <Text color=#ffffff>اضغط: hop (مخصّص بـ keyframes)</Text>
+  </Box>
+
+  <Box#glowy padding=14 radius=16 bg=surface width=full effect="wave">
+    <Text>wave: معادلات لا نهائية + توهّج</Text>
+  </Box>
+
+  <Row#actions gap=10>
+    <Button#k onTap={kickIt()}>kick من Rin</Button>
+    <Button#al effect_tap=alarm onTap={effect(card, "rubber")}>alarm + rubber</Button>
+  </Row>
+
+  <!-- تفاعلي: ينبض كلما تغيّر الرقم -->
+  <Row#counter gap=10>
+    <Text#score size=heading text={score} effect_on_change=heartbeat />
+    <Button#plus onTap={addPoint()} effect_tap=pulse>+1</Button>
+  </Row>
+</Screen>
