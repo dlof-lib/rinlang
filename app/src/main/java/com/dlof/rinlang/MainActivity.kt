@@ -118,6 +118,8 @@ class MainActivity : RinBaseActivity() {
     // --- حالة التعديل والمهام المؤجَّلة (حفظ تلقائي / تشغيل تلقائي / معاينة حية) ---
     private val uiHandler = Handler(Looper.getMainLooper())
     private var livePreviewTask: Runnable? = null
+    /** لوحة المعاينة الحية المدمجة بجانب المحرر (تُنشأ في onCreate قبل STARTED لأنها تسجّل ActivityResult launchers). */
+    private lateinit var livePanel: IndsinLivePanel
     private var autoSaveTask: Runnable? = null
     private var autoRunTask: Runnable? = null
     private var lastAutoRunSource: String? = null
@@ -265,6 +267,11 @@ class MainActivity : RinBaseActivity() {
             AppSettings.setEditorFontSizeSp(this, newSp)
         }
         RinLogoLoadingOverlay.setProgress(0.78f)
+
+        // المعاينة الحية المدمجة: تبقى حيّة عبر تدوير الشاشة (الحالة في IndsinPreviewManager.panelVisible).
+        livePanel = IndsinLivePanel(this, findViewById(R.id.livePreviewPanel))
+        livePanel.onExpandRequested = { openLivePreviewFullscreen() }
+        livePanel.resume()
 
         // كل تعديل في المحرر يمرّ من هنا مرة واحدة: دفع للمعاينة الحية، ثم الحفظ التلقائي، ثم التشغيل التلقائي
         // (انظر onEditorTextChanged) — بدل مراقب مستقل لكل ميزة.
@@ -494,6 +501,14 @@ class MainActivity : RinBaseActivity() {
         // الإعدادات تتغيّر من شاشة الإعدادات والمحرر ما زال حيًا في المكدّس (singleTop)؛ نعيد تطبيقها هنا.
         applyStoredEditorSettings()
         editCode.invalidate()
+        // عودة من الشاشة الكاملة (أو من الخلفية): أعِد ربط اللوحة بالجلسة الحيّة — الإطار الأخير يُرسم فوراً.
+        livePanel.resume()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // لا معنى لمؤقتات الساعة/التأثيرات والمحرر خارج الشاشة؛ الجلسة نفسها تبقى حيّة.
+        livePanel.release()
     }
 
     override fun onPause() {
@@ -541,12 +556,21 @@ class MainActivity : RinBaseActivity() {
         scheduleAutoRun()
     }
 
-    /** دفع التعديلات (بعد تهدئة قصيرة) إلى جلسة المعاينة الحية إن كانت مفتوحة (IndsinPreviewManager.pushLiveEdit). */
+    /**
+     * دفع التعديلات (بعد تهدئة قصيرة) إلى جلسة المعاينة الحية إن كانت مفتوحة (IndsinPreviewManager.pushLiveEdit).
+     * لا يُدفَع نص بلا جذر واجهة (@view/@loop/<Screen>…): مثلاً ملف .rin عادي فُتح في المحرر أو جذر مسحه المستخدم
+     * أثناء التعديل — تبقى المعاينة على آخر إطار سليم بدل أن تتحوّل إلى خطأ فارغ.
+     */
     private fun scheduleLivePreviewPush() {
         if (!IndsinPreviewManager.isRunning) return
         livePreviewTask?.let { uiHandler.removeCallbacks(it) }
-        val source = editCode.text.toString()
-        val task = Runnable { IndsinPreviewManager.pushLiveEdit(source) }
+        val task = Runnable {
+            // يُقرأ النص لحظة التنفيذ لا لحظة الجدولة: أحدث ما كُتب دائماً.
+            val source = editCode.text.toString()
+            if (!IndsinViewTracer.containsView(source)) return@Runnable
+            if (livePanel.isShown) livePanel.onEditorEdit(currentProjectFile?.name)
+            IndsinPreviewManager.pushLiveEdit(source)
+        }
         livePreviewTask = task
         uiHandler.postDelayed(task, LIVE_PREVIEW_DELAY_MS)
     }
@@ -934,7 +958,8 @@ class MainActivity : RinBaseActivity() {
         val popup = darkPopupMenu(anchor)
         popup.menu.add(0, 1, 0, R.string.menu_run_run)
         popup.menu.add(0, 2, 1, R.string.menu_run_check_brackets)
-        popup.menu.add(0, 3, 2, R.string.menu_run_live_preview)
+        popup.menu.add(0, 3, 2, R.string.menu_run_live_panel)
+        popup.menu.add(0, 7, 2, R.string.menu_run_live_fullscreen)
         popup.menu.add(0, 4, 3, R.string.menu_run_check_tags)
         if (currentProject?.let { HtmlRunActivity.isHtmlProject(it) } == true) {
             popup.menu.add(0, 5, 4, R.string.menu_run_html_page)
@@ -946,6 +971,7 @@ class MainActivity : RinBaseActivity() {
                 1 -> runProgram()
                 2 -> checkBrackets()
                 3 -> openLivePreviewManually()
+                7 -> openLivePreviewFullscreenManually()
                 4 -> checkContainerTags()
                 5 -> runAsHtmlPage()
                 6 -> openOnLocalhost()
@@ -1045,8 +1071,28 @@ class MainActivity : RinBaseActivity() {
         // بينما التعديلات اللاحقة أثناء الكتابة تُحدَّث حيّاً عبر IndsinPreviewManager.pushLiveEdit
         // دون فقدان حالة Warp (كعدّاد ضُغط عليه).
         if (IndsinViewTracer.containsView(source)) {
-            openLivePreview(source)
+            showLivePanel(source)
         }
+    }
+
+    /** يُظهر المعاينة الحية بجانب المحرر ويبدأ جلسة جديدة بالكود الحالي (الكتابة بعدها تُحدّثها لحظياً). */
+    private fun showLivePanel(source: String) {
+        if (hasSaveTarget()) saveSilently()
+        livePanel.show(source, currentProjectFile?.name ?: "main.rin")
+        // أخفِ لوحة المفاتيح؟ لا — المطلوب أن يواصل المستخدم الكتابة ويرى الأثر فوراً.
+    }
+
+    /** زر «ملء الشاشة» في اللوحة: ينقل الجلسة الحيّة نفسها إلى IndsinPreviewActivity دون فقدان حالة Warp. */
+    private fun openLivePreviewFullscreen() {
+        val source = editCode.text.toString()
+        livePanel.hide(stopSession = false)
+        val intent = android.content.Intent(this, IndsinPreviewActivity::class.java)
+        intent.putExtra(IndsinPreviewActivity.EXTRA_CODE, source)
+        intent.putExtra(IndsinPreviewActivity.EXTRA_FILE_NAME, currentProjectFile?.name ?: "main.rin")
+        intent.addFlags(android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        startActivity(intent)
+        // ملاحظة: panelVisible يُعاد true كي تعود اللوحة تلقائياً عند الرجوع (انظر onResume → livePanel.resume()).
+        IndsinPreviewManager.panelVisible = true
     }
 
     /** يفتح المعاينة الحية ويبدأ/يعيد تشغيل جلستها بالكود الحالي للمحرر. */
@@ -1068,6 +1114,18 @@ class MainActivity : RinBaseActivity() {
             Toast.makeText(this, getString(R.string.indsin_no_view_toast), Toast.LENGTH_SHORT).show()
             return
         }
+        // زر الإظهار/الإخفاء: إن كانت اللوحة ظاهرة يُغلقها، وإلا يفتحها بجلسة جديدة.
+        if (livePanel.isShown) livePanel.hide() else showLivePanel(source)
+    }
+
+    /** فتح يدوي للشاشة الكاملة المنفصلة (القديمة) من قائمة التشغيل. */
+    private fun openLivePreviewFullscreenManually() {
+        val source = editCode.text.toString()
+        if (!IndsinViewTracer.containsView(source)) {
+            Toast.makeText(this, getString(R.string.indsin_no_view_toast), Toast.LENGTH_SHORT).show()
+            return
+        }
+        livePanel.hide(stopSession = false)
         openLivePreview(source)
     }
 
@@ -1302,6 +1360,7 @@ class MainActivity : RinBaseActivity() {
         showConsoleTab(RinTerminal.terminalTabSelected)
         val compact = layout == AppSettings.LAYOUT_COMPACT
         setLayoutWeight(R.id.editorSurface, if (compact) 4f else 3f)
+        setLayoutWeight(R.id.livePreviewPanel, if (compact) 4f else 3f)
         setLayoutWeight(R.id.rvJobs, if (compact) 1f else 2f)
         setLayoutWeight(R.id.rinTerminal, if (compact) 1f else 2f)
 
@@ -1469,6 +1528,7 @@ class MainActivity : RinBaseActivity() {
         rinInputDialog?.dismiss()
         rinInputDialog = null
         RinInputBridge.clearPresenter(rinInputPresenter)
+        livePanel.release()
         uiHandler.removeCallbacksAndMessages(null)
         super.onDestroy()
     }
