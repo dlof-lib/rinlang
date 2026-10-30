@@ -1,0 +1,14 @@
+🗂️ Containers.Group = Shop
+📦 container = Store
+🗂️ Containers.Group = ExtDB
+📦 container = catalog
+✅ .end/container (catalog)
+✅ .end/Containers.Group (ExtDB) [تحتوي: catalog]
+📥 @import: تم استيراد "lib/extdb.og.rin" (مكتبة: extdb 1.0.0 — 12 أجزاء)
+✅ .end/container (Store)
+✅ .end/Containers.Group (Shop) [تحتوي: Store, ExtDB]
+provider=pgrest
+seeded=2
+names=["Sara", "Omar"]
+pulled=2 kind=doc docs=["u1", "u2"]
+probe=pgrest HTTP 404: relation does not exist
