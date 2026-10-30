@@ -1,0 +1,73 @@
+// tests/verification/extdb_pro.rin — extdb 1.1: retries, cache, filter operators, batches, incr, sync,
+// @import inside a container, and the indsin-facing helpers. Needs tests/tools/extdb_mock.py on :8765.
+
+@import "extdb";
+
+@import "extdb";
+
+// ---- 2) cache ---------------------------------------------------------------------------------
+let sb = xdb_connect("pgrest", "sb", {"url": "http://127.0.0.1:8765", "key": "ANON", "cacheTtl": 60, "retryDelayMs": 10});
+xdb_put(sb, "users", "u1", {"name": "Sara", "age": 30});
+xdb_put(sb, "users", "u2", {"name": "Omar", "age": 42});
+xdb_put(sb, "users", "u3", {"name": "Lina", "age": 25});
+let a = xdb_get(sb, "users", "u1");
+let r1 = xdb_info(sb)["requests"];
+let b = xdb_get(sb, "users", "u1");
+print "cache hit=" + (xdb_info(sb)["requests"] == r1) + " hits=" + xdb_info(sb)["cacheHits"];
+b["name"] = "Mutated";
+print "cache is isolated=" + xdb_get(sb, "users", "u1")["name"];
+xdb_update(sb, "users", "u1", {"age": 31});
+print "write invalidates=" + xdb_get(sb, "users", "u1")["age"];
+
+// ---- 3) filter operators (same syntax on both providers) ----------------------------------------
+let rt = xdb_connect("rtdb", "rt", {"url": "http://127.0.0.1:8765/rt", "auth": "SECRET", "retryDelayMs": 10});
+xdb_putMany(rt, "users", {"u1": {"name": "Sara", "age": 31}, "u2": {"name": "Omar", "age": 42}, "u3": {"name": "Lina", "age": 25}});
+for (let c in [rt, sb]) {
+    print c["provider"] + " gt=" + len(xdb_list(c, "users", {"where": {"age": {"gt": 30}}}))
+        + " range=" + len(xdb_list(c, "users", {"where": {"age": {"gte": 25, "lt": 40}}}))
+        + " in=" + len(xdb_list(c, "users", {"where": {"name": {"in": ["Sara", "Lina"]}}}))
+        + " ne=" + len(xdb_list(c, "users", {"where": {"name": {"ne": "Omar"}}}))
+        + " like=" + len(xdb_list(c, "users", {"where": {"name": {"like": "S*"}}}));
+    print c["provider"] + " select=" + xdb_list(c, "users", {"select": ["name"], "order": "age", "limit": 2});
+    print c["provider"] + " findOne=" + xdb_findOne(c, "users", "name", "Omar")["_id"] + " none=" + xdb_findOne(c, "users", "name", "Nobody");
+}
+try { xdb_list(rt, "users", {"where": {"age": {"zzz": 1}}}); } catch (e) { print "caught: bad operator"; }
+
+// ---- 4) batches + incr + deleteMany ---------------------------------------------------------------
+for (let c in [rt, sb]) {
+    print c["provider"] + " putMany=" + xdb_putMany(c, "items", [{"_id": "i1", "n": 1}, {"_id": "i2", "n": 2}, {"_id": "i3", "n": 3}]);
+    print c["provider"] + " incr=" + xdb_incr(c, "items", "i1", "n", 10) + "," + xdb_incr(c, "items", "new", "n", nil);
+    print c["provider"] + " deleteMany=" + xdb_deleteMany(c, "items", ["i2", "i3"]) + " left=" + xdb_ids(c, "items");
+}
+
+// ---- 5) retries (the mock answers 503/429 twice, then succeeds) ------------------------------------------
+print "rt retry=" + xdb_all(rt, "flaky") + " retries=" + xdb_info(rt)["retries"];
+print "pg retry=" + xdb_all(sb, "flaky")[0]["_id"] + " retries=" + xdb_info(sb)["retries"];
+let strict = xdb_connect("pgrest", "strict", {"url": "http://127.0.0.1:1", "key": "ANON", "retries": 1, "retryDelayMs": 5});
+try { xdb_get(strict, "users", "u1"); } catch (e) { print "caught: unreachable after " + xdb_info(strict)["retries"] + " retry"; }
+
+// ---- 6) sync both ways ---------------------------------------------------------------------------------
+xdb_pull(sb, "users", "Local", nil);
+insertDoc("Local", "u9", {"name": "Zed", "age": 50});
+updateDoc("Local", "u2", {"age": 99});
+print "sync remote-wins=" + xdb_sync(sb, "users", "Local", nil) + " u2.age=" + findDoc("Local", "u2")["age"] + " u9 remote=" + xdb_has(sb, "users", "u9");
+updateDoc("Local", "u2", {"age": 77});
+print "sync local-wins=" + xdb_sync(sb, "users", "Local", {"prefer": "local"}) + " remote u2=" + xdb_get(sb, "users", "u2")["age"];
+print "sync again=" + xdb_sync(sb, "users", "Local", nil);
+
+// ---- 7) indsin-facing helpers (pure) ----------------------------------------------------------------------
+let rows = xdb_list(sb, "users", {"order": "age"});
+print "cell=" + xdb_cell(rows, 0, "name") + "|" + xdb_cell(rows, 99, "name") + "|" + xdb_cell(rows, 0, "zzz") + "|";
+print "page=" + len(xdb_page(rows, 1, 2)) + " len=" + xdb_len(rows) + " len(nil)=" + xdb_len(nil);
+try { xdb_get(sb, "ghost", "1"); } catch (e) { print "msg=" + xdb_msg(e); }
+let s1 = xdb_session("pgrest", {"url": "http://127.0.0.1:8765", "key": "ANON"});
+let s2 = xdb_session("pgrest", {"url": "http://127.0.0.1:8765", "key": "ANON"});
+print "session count=" + xdb_count(s1, "users") + "/" + xdb_count(s2, "users") + " registered=" + xdb_connections();
+
+// ---- 8) token provider function + closing ---------------------------------------------------------------------
+let calls = 0;
+let dyn = xdb_connect("pgrest", "dyn", {"url": "http://127.0.0.1:8765", "key": fun() { calls = calls + 1; return "ANON"; }});
+xdb_get(dyn, "users", "u1");
+xdb_get(dyn, "users", "u2");
+print "dynamic key calls=" + calls;
+print "openCount=" + ExtDB.catalog.openCount;
