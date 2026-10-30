@@ -1,0 +1,45 @@
+// extdb/core/ui.zpp — مساعدات indsin. كل معالجات الأحداث (onTap) تُنفَّذ في مفسّر جديد لكل نقرة، فلا
+// تعتمد على اتصال محفوظ بين نقرتين: افتح الاتصال داخل المعالج بـ xdb_session (غير مسجَّل) ثم اكتب النتيجة في خلايا warp.
+// دوال xdb_cell / xdb_page / xdb_len / xdb_msg نقية (بلا شبكة) فتصلح داخل قيم الخصائص `{ ... }`.
+//
+//   <Import src="extdb" />
+//   <warp rows={[]} /> <warp err={""} />
+//   <Fun#load>
+//     try { rows = xdb_all(xdb_session("pgrest", {"url": "...", "key": "..."}), "users"); err = ""; }
+//     catch (e) { err = xdb_msg(e); }
+//   </Fun>
+//   <Text#t>{xdb_cell(rows, 0, "name")}</Text>
+
+// اتصال بلا تسجيل في السجل العام (لا تصادم أسماء بين النقرات)
+fun xdb_session(provider, cfg) { return xdb__make(provider, "session", cfg); }
+
+// حقل من صف بأمان: "" إن غاب الصف أو الحقل (مناسب للنصوص في الواجهة)
+fun xdb_cell(rows, i, field) {
+    if (type(rows) != "array" or i < 0 or i >= len(rows)) { return ""; }
+    let r = rows[i];
+    if (type(r) != "map" or !has(r, field) or r[field] == nil) { return ""; }
+    return toString(r[field]);
+}
+
+fun xdb_len(rows) {
+    if (type(rows) != "array") { return 0; }
+    return len(rows);
+}
+
+// صفحة من الصفوف: xdb_page(rows, 0, 4) = أول أربعة
+fun xdb_page(rows, page, size) {
+    let out = [];
+    if (type(rows) != "array") { return out; }
+    let i = page * size;
+    while (i < len(rows) and i < (page + 1) * size) { push(out, rows[i]); i = i + 1; }
+    return out;
+}
+
+// نص الخطأ بلا بادئة «extdb: » (e قد يكون نصاً أو خريطة فيها message)
+fun xdb_msg(e) {
+    let m = e;
+    if (type(e) == "map" and has(e, "message")) { m = e["message"]; }
+    m = toString(m);
+    if (xdb__starts(m, "extdb: ")) { m = substr(m, 7, len(m) - 7); }
+    return m;
+}
