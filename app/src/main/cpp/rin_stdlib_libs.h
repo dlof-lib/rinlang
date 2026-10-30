@@ -29209,6 +29209,1761 @@ fun storeFromContainer(s, path, name, key) {
 }
 )CMPSTORE";
 
+static const char* kLib_extdb_og_rin = R"EXTDBOGRIN(
+// extdb 1.0.0 — مكتبة مقسَّمة (lib/extdb.og.rin/) مدمجة كملف واحد. لا تعدّل هنا: عدّل الأجزاء ثم شغّل tools/embed_extdb.py
+// extdb — الجزء الأساسي. اتصال بقواعد بيانات خارجية باسم «مزوّد اتصال» (connection provider):
+//
+//   @import "extdb";
+//   let fb = xdb_connect("rtdb", "shop", {"url": "https://my-app.example-rtdb.com", "auth": "<token>"});
+//   let sb = xdb_connect("pgrest", "shop", {"url": "https://xyz.example-pgrest.com", "key": "<anon-or-service-key>"});
+//   xdb_put(fb, "users", "u1", {"name": "Sara", "age": 30});
+//   print xdb_get(sb, "users", "u1");
+//   xdb_pull(sb, "users", "Users");        // ينسخ الجدول البعيد إلى حاوية container.doc محلية اسمها Users
+//   xdb_push(fb, "users", "Users");        // يرفع مستندات الحاوية المحلية إلى القاعدة البعيدة
+//
+// الاتصالات المفتوحة تُسجَّل في المجموعة ExtDB (الحاوية catalog، حقل openCount).
+
+@Containers.Group=ExtDB
+    @container=catalog
+        let version = "1.0.0";
+        let openCount = 0;
+    .end/container
+.end/Containers.Group
+
+let XDB_VERSION = "1.0.0";
+let XDB_PROVIDERS = ["rtdb", "pgrest"];
+let XDB = { conns: {} };
+
+// extdb/core/common.zpp — أدوات مشتركة بين المزوّدين.
+
+fun xdb__fail(msg) { throw "extdb: " + msg; }
+
+fun xdb__opt(o, k, d) {
+    if (o == nil) { return d; }
+    if (type(o) != "map") { return d; }
+    if (has(o, k)) { return o[k]; }
+    return d;
+}
+
+fun xdb__starts(s, p) { return len(s) >= len(p) and substr(s, 0, len(p)) == p; }
+fun xdb__ends(s, p) { return len(s) >= len(p) and substr(s, len(s) - len(p), len(p)) == p; }
+
+fun xdb__enc(v) { return net.urlEncode(toString(v)); }
+
+fun xdb__isId(v) {
+    let t = type(v);
+    return t == "string" or t == "number";
+}
+
+fun xdb__id(v) {
+    if (!xdb__isId(v) or toString(v) == "") { xdb__fail("document id must be a non-empty string or number"); }
+    return toString(v);
+}
+
+fun xdb__trimSlash(s) {
+    let out = s;
+    while (len(out) > 0 and xdb__ends(out, "/")) { out = substr(out, 0, len(out) - 1); }
+    return out;
+}
+
+fun xdb__copy(m) {
+    let out = {};
+    for (let k in keys(m)) { out[k] = m[k]; }
+    return out;
+}
+
+// نسخة من المستند بلا الحقل _id (لا يُرسَل إلى القاعدة البعيدة)
+fun xdb__strip(doc) {
+    if (type(doc) != "map") { xdb__fail("a document must be a map"); }
+    let out = {};
+    for (let k in keys(doc)) { if (k != "_id") { out[k] = doc[k]; } }
+    return out;
+}
+
+fun xdb__withId(id, doc) {
+    let out = {"_id": id};
+    for (let k in keys(doc)) { out[k] = doc[k]; }
+    return out;
+}
+
+// رسالة خطأ مقروءة من رد المزوّد (rtdb: {"error": ...} — pgrest: {"message": ..., "hint": ...})
+fun xdb__errText(r) {
+    let j = r["json"];
+    if (type(j) == "map") {
+        if (has(j, "message")) { return toString(j["message"]); }
+        if (has(j, "error")) { return toString(j["error"]); }
+    }
+    let b = toString(r["body"]);
+    if (len(b) > 200) { b = substr(b, 0, 200) + "..."; }
+    return b;
+}
+
+// يتحقق من الرد ويُرجع الجسم المفكَّك
+fun xdb__check(c, r) {
+    if (!r["ok"]) { xdb__fail(c["provider"] + " connection failed: " + toString(r["error"])); }
+    if (r["status"] >= 400) { xdb__fail(c["provider"] + " HTTP " + toString(r["status"]) + ": " + xdb__errText(r)); }
+    return r["json"];
+}
+
+fun xdb__live(c) {
+    if (type(c) != "map" or !has(c, "provider")) { xdb__fail("not a connection (use xdb_connect)"); }
+    if (!c["open"]) { xdb__fail("connection `" + c["name"] + "` is closed"); }
+}
+
+fun xdb__isRt(c) { return c["provider"] == "rtdb"; }
+
+// قيمة قد تكون دالة (مزوّد رمز يتجدد): تُستدعى في كل طلب
+fun xdb__val(v) {
+    if (type(v) == "function") { return v(); }
+    return v;
+}
+
+fun xdb__same(a, b) {
+    if (type(a) != type(b)) { return false; }
+    if (type(a) == "map") {
+        let ka = keys(a);
+        if (len(ka) != len(keys(b))) { return false; }
+        for (let k in ka) {
+            if (k == "_id") { continue; }
+            if (!has(b, k) or !xdb__same(a[k], b[k])) { return false; }
+        }
+        return true;
+    }
+    if (type(a) == "array") {
+        if (len(a) != len(b)) { return false; }
+        let i = 0;
+        while (i < len(a)) { if (!xdb__same(a[i], b[i])) { return false; } i = i + 1; }
+        return true;
+    }
+    return a == b;
+}
+
+// نسخة عميقة (عبر JSON) كي لا يعدّل المستدعي ما في الكاش
+fun xdb__clone(v) {
+    if (v == nil or type(v) == "number" or type(v) == "string" or type(v) == "bool") { return v; }
+    return jsonDecode(jsonEncode(v));
+}
+
+// ---- تصفية/ترتيب من جهة العميل (تُستعمل مع rtdb) -------------------------------------------
+// where: {حقل: قيمة} أو {حقل: {"gt": 5, "lte": 9, "ne": x, "in": [..], "like": "Sa*"}}
+fun xdb__cmp(x, y) {
+    if (type(x) == "number" and type(y) == "number") {
+        if (x < y) { return -1; }
+        if (x > y) { return 1; }
+        return 0;
+    }
+    let a = toString(x);
+    let b = toString(y);
+    if (a == b) { return 0; }
+    // Rin لا يقارن النصوص بـ < فنستعمل sort (ترتيب بايتات UTF-8)
+    if (sort([a, b])[0] == a) { return -1; }
+    return 1;
+}
+
+fun xdb__like(v, pat) {
+    let s = lower(toString(v));
+    let p = lower(toString(pat));
+    let pre = xdb__starts(p, "*");
+    let suf = xdb__ends(p, "*");
+    let core = p;
+    if (pre) { core = substr(core, 1, len(core) - 1); }
+    if (suf and len(core) > 0) { core = substr(core, 0, len(core) - 1); }
+    if (pre and suf) { return contains(s, core); }
+    if (pre) { return xdb__ends(s, core); }
+    if (suf) { return xdb__starts(s, core); }
+    return s == core;
+}
+
+fun xdb__ops() { return ["eq", "ne", "gt", "gte", "lt", "lte", "like", "ilike", "in", "is"]; }
+
+fun xdb__opOk(have, op, want) {
+    if (op == "eq") { return type(have) == type(want) and toString(have) == toString(want); }
+    if (op == "ne") { return !(type(have) == type(want) and toString(have) == toString(want)); }
+    if (op == "is") { return have == want; }
+    if (op == "in") {
+        for (let w in want) { if (type(have) == type(w) and toString(have) == toString(w)) { return true; } }
+        return false;
+    }
+    if (have == nil) { return false; }
+    if (op == "like" or op == "ilike") { return xdb__like(have, want); }
+    let c = xdb__cmp(have, want);
+    if (op == "gt") { return c > 0; }
+    if (op == "gte") { return c >= 0; }
+    if (op == "lt") { return c < 0; }
+    if (op == "lte") { return c <= 0; }
+    xdb__fail("unknown filter operator `" + toString(op) + "` (available: " + join(xdb__ops(), ", ") + ")");
+}
+
+fun xdb__matches(doc, where) {
+    for (let k in keys(where)) {
+        let have = nil;
+        if (has(doc, k)) { have = doc[k]; }
+        let spec = where[k];
+        if (type(spec) == "map") {
+            for (let op in keys(spec)) { if (!xdb__opOk(have, op, spec[op])) { return false; } }
+        } else if (spec == nil) {
+            if (have != nil) { return false; }
+        } else {
+            if (!xdb__opOk(have, "eq", spec)) { return false; }
+        }
+    }
+    return true;
+}
+
+fun xdb__project(doc, fields) {
+    if (fields == nil) { return doc; }
+    let out = {};
+    if (has(doc, "_id")) { out["_id"] = doc["_id"]; }
+    for (let f in fields) { if (has(doc, f)) { out[f] = doc[f]; } }
+    return out;
+}
+
+// opts: {"where", "select": [حقول], "order", "desc", "limit", "offset"}
+fun xdb__clientApply(docs, opts) {
+    let out = [];
+    let where = xdb__opt(opts, "where", nil);
+    for (let d in docs) {
+        if (where == nil or xdb__matches(d, where)) { push(out, d); }
+    }
+    let order = xdb__opt(opts, "order", nil);
+    if (order != nil) {
+        let i = 1;
+        while (i < len(out)) {
+            let cur = out[i];
+            let j = i - 1;
+            while (j >= 0 and xdb__after(out[j], cur, order)) {
+                out[j + 1] = out[j];
+                j = j - 1;
+            }
+            out[j + 1] = cur;
+            i = i + 1;
+        }
+        if (xdb__opt(opts, "desc", false)) {
+            let rev = [];
+            let k = len(out) - 1;
+            while (k >= 0) { push(rev, out[k]); k = k - 1; }
+            out = rev;
+        }
+    }
+    let offset = xdb__opt(opts, "offset", 0);
+    let limit = xdb__opt(opts, "limit", nil);
+    let sel = xdb__opt(opts, "select", nil);
+    if (offset > 0 or limit != nil or sel != nil) {
+        let res = [];
+        let n = 0;
+        let idx = 0;
+        for (let d in out) {
+            if (idx >= offset and (limit == nil or n < limit)) { push(res, xdb__project(d, sel)); n = n + 1; }
+            idx = idx + 1;
+        }
+        out = res;
+    }
+    return out;
+}
+
+// هل a بعد b في الترتيب التصاعدي حسب الحقل؟ (المفقود يأتي أولاً)
+fun xdb__after(a, b, field) {
+    if (!has(a, field)) { return false; }
+    if (!has(b, field)) { return true; }
+    return xdb__cmp(a[field], b[field]) > 0;
+}
+
+// extdb/core/net.zpp — إرسال الطلبات: مهلة، إعادة محاولة بتأخير مضاعَف، إحصاءات، وكاش اختياري.
+//
+// cfg (كلها اختيارية):
+//   "timeoutMs": 15000        مهلة كل طلب (httpSetTimeout)
+//   "retries": 2              عدد إعادات المحاولة (0 = بلا إعادة)
+//   "retryDelayMs": 200       التأخير الأول؛ يتضاعف في كل إعادة (حتى 5 ثوانٍ)
+//   "cacheTtl": 0             ثوانٍ؛ > 0 يفعّل كاش القراءة (get/all/ids) ويُبطَل عند أي كتابة في الجدول
+//
+// المحاولات: GET/PUT/DELETE تُعاد عند فشل الاتصال أو 429/500/502/503/504؛ POST/PATCH (غير idempotent)
+// تُعاد فقط عند 429/503 (رفض صريح من الخادم قبل التنفيذ).
+
+fun xdb__idem(method) {
+    let m = upper(method);
+    return m == "GET" or m == "PUT" or m == "DELETE" or m == "HEAD";
+}
+
+fun xdb__retryable(method, r) {
+    if (!r["ok"]) { return xdb__idem(method); }
+    let st = r["status"];
+    if (st == 429 or st == 503) { return true; }
+    if (st == 500 or st == 502 or st == 504) { return xdb__idem(method); }
+    return false;
+}
+
+// يخفي الأسرار (auth= / key=) من الرابط قبل تسجيله
+fun xdb__redact(url) {
+    let out = url;
+    for (let name in ["auth=", "key=", "access_token="]) {
+        let i = indexOf(out, name);
+        if (i >= 0) {
+            let start = i + len(name);
+            let rest = substr(out, start, len(out) - start);
+            let j = indexOf(rest, "&");
+            let tail = "";
+            if (j >= 0) { tail = substr(rest, j, len(rest) - j); }
+            out = substr(out, 0, start) + "***" + tail;
+        }
+    }
+    return out;
+}
+
+fun xdb__send(c, method, url, headers, body) {
+    let cfg = c["cfg"];
+    let tries = xdb__opt(cfg, "retries", 2);
+    let delay = xdb__opt(cfg, "retryDelayMs", 200);
+    let tmo = xdb__opt(cfg, "timeoutMs", nil);
+    if (tmo != nil) { httpSetTimeout(tmo); }
+    let attempt = 0;
+    let r = nil;
+    while (true) {
+        let t0 = time.ms();
+        r = httpRequest(method, url, headers, body);
+        c["stats"]["requests"] = c["stats"]["requests"] + 1;
+        if (c["logger"] != nil) {
+            let lg = c["logger"];
+            lg({"provider": c["provider"], "method": method, "url": xdb__redact(url), "status": r["status"], "ok": r["ok"], "ms": time.ms() - t0, "attempt": attempt + 1});
+        }
+        if (attempt >= tries or !xdb__retryable(method, r)) { break; }
+        attempt = attempt + 1;
+        c["stats"]["retries"] = c["stats"]["retries"] + 1;
+        if (delay > 0) { time.sleep(delay); }
+        delay = delay * 2;
+        if (delay > 5000) { delay = 5000; }
+    }
+    return r;
+}
+
+// ---- كاش القراءة (في ذاكرة الاتصال) -------------------------------------------------------------
+fun xdb__ttl(c) { return xdb__opt(c["cfg"], "cacheTtl", 0); }
+
+fun xdb__cget(c, key) {
+    if (xdb__ttl(c) <= 0) { return nil; }
+    let e = nil;
+    if (has(c["cache"], key)) { e = c["cache"][key]; }
+    if (e == nil) { return nil; }
+    if (time.ms() - e["at"] > xdb__ttl(c) * 1000) { remove(c["cache"], key); return nil; }
+    c["stats"]["hits"] = c["stats"]["hits"] + 1;
+    return {"v": xdb__clone(e["v"])};
+}
+
+fun xdb__cput(c, key, v) {
+    if (xdb__ttl(c) > 0) { c["cache"][key] = {"at": time.ms(), "v": xdb__clone(v)}; }
+    return v;
+}
+
+// يُبطل كل مدخلات جدول
+fun xdb__cinv(c, t) {
+    let pre = toString(t) + "|";
+    for (let k in keys(c["cache"])) { if (xdb__starts(k, pre)) { remove(c["cache"], k); } }
+}
+
+// extdb/core/auth.zpp — جلسات المستخدمين: تسجيل دخول/إنشاء حساب/تجديد/خروج، والرمز يُستعمل تلقائياً في كل طلب.
+//
+// pgrest: نقاط /auth/v1 على نفس المضيف (أو cfg.authUrl).
+// rtdb:   خدمة هوية بنمط accounts:signInWithPassword — تحتاج cfg.authUrl (جذر النقطة) و cfg.apiKey،
+//         وللتجديد cfg.refreshUrl (رابط تبديل رمز التجديد).
+// الجلسة: c["session"] = {"token", "refresh", "expires" (ms), "user"} — يُجدَّد الرمز تلقائياً قبل انتهائه بـ30 ثانية.
+
+fun xdb__sessTok(c) {
+    if (c["session"] == nil) { return nil; }
+    return c["session"]["token"];
+}
+
+fun xdb__authBase(c) {
+    let u = xdb__opt(c["cfg"], "authUrl", nil);
+    if (u != nil) { return xdb__trimSlash(u); }
+    if (c["provider"] == "pgrest") {
+        let b = c["base"];
+        return substr(b, 0, len(b) - len("/rest/v1")) + "/auth/v1";
+    }
+    xdb__fail("rtdb auth needs cfg.authUrl (identity endpoint base) and cfg.apiKey");
+}
+
+fun xdb__authHeaders(c) {
+    let h = {"Accept": "application/json", "Content-Type": "application/json"};
+    if (c["provider"] == "pgrest") { h["apikey"] = xdb__val(c["cfg"]["key"]); }
+    return h;
+}
+
+fun xdb__authPost(c, url, headers, body) {
+    return xdb__check(c, xdb__send(c, "POST", url, headers, body));
+}
+
+fun xdb__rtKeyQ(c) {
+    let k = xdb__opt(c["cfg"], "apiKey", nil);
+    if (k == nil) { xdb__fail("rtdb auth needs cfg.apiKey"); }
+    return "key=" + xdb__enc(xdb__val(k));
+}
+
+fun xdb__setSession(c, token, refresh, expiresInSec, user) {
+    let ms = 3600 * 1000;
+    if (expiresInSec != nil) { ms = toNumber(expiresInSec) * 1000; }
+    c["session"] = {"token": token, "refresh": refresh, "expires": time.ms() + ms, "user": user};
+    xdb__cinv_all(c);
+    return user;
+}
+
+fun xdb__cinv_all(c) { c["cache"] = {}; }
+
+fun xdb__userOf(c, j) {
+    if (c["provider"] == "pgrest") {
+        let u = nil;
+        if (type(j) == "map" and has(j, "user")) { u = j["user"]; }
+        if (type(u) != "map") { return {"id": nil, "email": nil}; }
+        return {"id": xdb__opt(u, "id", nil), "email": xdb__opt(u, "email", nil)};
+    }
+    return {"id": xdb__opt(j, "localId", xdb__opt(j, "user_id", nil)), "email": xdb__opt(j, "email", nil)};
+}
+
+fun xdb_signIn(c, email, password) {
+    xdb__live(c);
+    if (c["provider"] == "pgrest") {
+        let j = xdb__authPost(c, xdb__authBase(c) + "/token?grant_type=password", xdb__authHeaders(c), jsonEncode({"email": email, "password": password}));
+        return xdb__setSession(c, j["access_token"], xdb__opt(j, "refresh_token", nil), xdb__opt(j, "expires_in", nil), xdb__userOf(c, j));
+    }
+    let j = xdb__authPost(c, xdb__authBase(c) + "/accounts:signInWithPassword?" + xdb__rtKeyQ(c), xdb__authHeaders(c),
+                          jsonEncode({"email": email, "password": password, "returnSecureToken": true}));
+    return xdb__setSession(c, j["idToken"], xdb__opt(j, "refreshToken", nil), xdb__opt(j, "expiresIn", nil), xdb__userOf(c, j));
+}
+
+// يُرجع المستخدم؛ إن كان المزوّد يطلب تأكيد البريد قد لا تُفتح جلسة (xdb_isSignedIn)
+fun xdb_signUp(c, email, password) {
+    xdb__live(c);
+    if (c["provider"] == "pgrest") {
+        let j = xdb__authPost(c, xdb__authBase(c) + "/signup", xdb__authHeaders(c), jsonEncode({"email": email, "password": password}));
+        if (type(j) == "map" and has(j, "access_token")) {
+            return xdb__setSession(c, j["access_token"], xdb__opt(j, "refresh_token", nil), xdb__opt(j, "expires_in", nil), xdb__userOf(c, j));
+        }
+        return {"id": xdb__opt(j, "id", nil), "email": xdb__opt(j, "email", email)};
+    }
+    let j = xdb__authPost(c, xdb__authBase(c) + "/accounts:signUp?" + xdb__rtKeyQ(c), xdb__authHeaders(c),
+                          jsonEncode({"email": email, "password": password, "returnSecureToken": true}));
+    return xdb__setSession(c, j["idToken"], xdb__opt(j, "refreshToken", nil), xdb__opt(j, "expiresIn", nil), xdb__userOf(c, j));
+}
+
+fun xdb_refresh(c) {
+    xdb__live(c);
+    if (c["session"] == nil or c["session"]["refresh"] == nil) { xdb__fail("no session to refresh"); }
+    let rt = c["session"]["refresh"];
+    if (c["provider"] == "pgrest") {
+        let j = xdb__authPost(c, xdb__authBase(c) + "/token?grant_type=refresh_token", xdb__authHeaders(c), jsonEncode({"refresh_token": rt}));
+        return xdb__setSession(c, j["access_token"], xdb__opt(j, "refresh_token", rt), xdb__opt(j, "expires_in", nil), c["session"]["user"]);
+    }
+    let url = xdb__opt(c["cfg"], "refreshUrl", nil);
+    if (url == nil) { xdb__fail("rtdb refresh needs cfg.refreshUrl"); }
+    let h = {"Accept": "application/json", "Content-Type": "application/x-www-form-urlencoded"};
+    let j = xdb__authPost(c, url + "?" + xdb__rtKeyQ(c), h, "grant_type=refresh_token&refresh_token=" + xdb__enc(rt));
+    return xdb__setSession(c, j["id_token"], xdb__opt(j, "refresh_token", rt), xdb__opt(j, "expires_in", nil), c["session"]["user"]);
+}
+
+fun xdb_signOut(c) {
+    xdb__live(c);
+    if (c["session"] != nil and c["provider"] == "pgrest") {
+        try {
+            let h = xdb__authHeaders(c);
+            h["Authorization"] = "Bearer " + c["session"]["token"];
+            xdb__send(c, "POST", xdb__authBase(c) + "/logout", h, "");
+        } catch (e) { }
+    }
+    c["session"] = nil;
+    c["cache"] = {};
+    return true;
+}
+
+fun xdb_isSignedIn(c) { return c["session"] != nil; }
+fun xdb_user(c) {
+    if (c["session"] == nil) { return nil; }
+    return c["session"]["user"];
+}
+
+// رمز جاهز (من تسجيل دخول خارجي): بلا تجديد تلقائي إلا مع refresh
+fun xdb_setToken(c, token, refresh, expiresInSec) {
+    xdb__live(c);
+    xdb__setSession(c, token, refresh, expiresInSec, nil);
+    return true;
+}
+
+// يجدّد الرمز قبل انتهائه بـ30 ثانية (يُستدعى من كل طلب)
+fun xdb__ensureAuth(c) {
+    let s = c["session"];
+    if (s == nil or s["refresh"] == nil or c["refreshing"]) { return false; }
+    if (time.ms() < s["expires"] - 30000) { return false; }
+    c["refreshing"] = true;
+    try { xdb_refresh(c); } catch (e) { c["refreshing"] = false; throw e; }
+    c["refreshing"] = false;
+    return true;
+}
+
+// extdb/core/schema.zpp — مخطط محلي يُتحقَّق منه قبل أي كتابة (قبل خروج الطلب من الجهاز).
+//
+//   xdb_schema(c, "users", {"name": "string!", "age": "number", "tags": "array", "meta": "map", "active": "bool", "any": "any"});
+//   «!» بعد النوع = حقل إلزامي. الأنواع: string number bool map array any. الحقول غير المذكورة مسموحة.
+//   xdb_schema(c, "users", nil) يزيل المخطط.
+
+fun xdb_schema(c, t, spec) {
+    xdb__live(c);
+    if (spec == nil) {
+        if (has(c["schemas"], t)) { remove(c["schemas"], t); }
+        return true;
+    }
+    if (type(spec) != "map") { xdb__fail("schema must be a map {field: \"type\"}"); }
+    let fields = {};
+    let required = [];
+    let okTypes = ["string", "number", "bool", "map", "array", "any"];
+    for (let f in keys(spec)) {
+        let ty = toString(spec[f]);
+        if (xdb__ends(ty, "!")) { ty = substr(ty, 0, len(ty) - 1); push(required, f); }
+        if (!contains(okTypes, ty)) { xdb__fail("schema: unknown type `" + ty + "` for `" + f + "` (available: " + join(okTypes, ", ") + ")"); }
+        fields[f] = ty;
+    }
+    c["schemas"][t] = {"fields": fields, "required": required};
+    return true;
+}
+
+// partial=true (update): الإلزامية لا تُفحَص، والأنواع تُفحَص للحقول المرسلة فقط
+fun xdb__validate(c, t, doc, partial) {
+    if (!has(c["schemas"], t)) { return true; }
+    let sc = c["schemas"][t];
+    let errs = [];
+    if (!partial) {
+        for (let f in sc["required"]) {
+            if (!has(doc, f) or doc[f] == nil) { push(errs, f + " is required"); }
+        }
+    }
+    for (let f in keys(sc["fields"])) {
+        if (!has(doc, f) or doc[f] == nil) { continue; }
+        let want = sc["fields"][f];
+        if (want != "any" and type(doc[f]) != want) { push(errs, f + " must be " + want + " (got " + type(doc[f]) + ")"); }
+    }
+    if (len(errs) > 0) { xdb__fail("schema violation in `" + t + "`: " + join(errs, "; ")); }
+    return true;
+}
+
+// extdb/core/rtdb.zpp — مزوّد الاتصال «rtdb»: قاعدة مستندات شجرية (Realtime-DB) عبر REST.
+// cfg: {"url": "https://<proj>.example-rtdb.com"  (إلزامي),
+//       "auth": "<database secret أو ID token>"  (يُرسَل كـ ?auth=),
+//       "accessToken": "<OAuth2 token>"           (يُرسَل كـ Authorization: Bearer),
+//       "root": "prefix/path"                      (جذر اختياري داخل القاعدة),
+//       "serverQuery": true                        (find عبر orderBy/equalTo — يتطلب .indexOn في القواعد)}
+// الجدول = عقدة /<table>، والمستند = /<table>/<id>.
+
+fun xdb__rt_init(cfg) {
+    let url = xdb__opt(cfg, "url", nil);
+    if (type(url) != "string" or !xdb__starts(url, "https://") and !xdb__starts(url, "http://")) {
+        xdb__fail("rtdb needs cfg.url (e.g. https://my-app.example-rtdb.com)");
+    }
+    return xdb__trimSlash(url);
+}
+
+fun xdb__rt_okKey(s) {
+    if (type(s) != "string" or len(s) == 0) { return false; }
+    let bad = ".$#[]/";
+    let i = 0;
+    while (i < len(s)) {
+        if (contains(bad, substr(s, i, 1))) { return false; }
+        i = i + 1;
+    }
+    return true;
+}
+
+// مسار الجدول: يسمح بالتداخل «a/b» (كل قطعة مفتاح صالح)
+fun xdb__rt_table(c, t) {
+    if (type(t) != "string" or len(t) == 0) { xdb__fail("invalid table name"); }
+    let segs = split(t, "/");
+    for (let s in segs) {
+        if (!xdb__rt_okKey(s)) { xdb__fail("invalid rtdb path segment `" + toString(s) + "` in table `" + t + "` (no . $ # [ ] /)"); }
+    }
+    let root = xdb__opt(c["cfg"], "root", "");
+    if (root != "") { return xdb__trimSlash(root) + "/" + t; }
+    return t;
+}
+
+fun xdb__rt_doc(c, t, id) {
+    let sid = xdb__id(id);
+    if (!xdb__rt_okKey(sid)) { xdb__fail("invalid rtdb key `" + sid + "` (no . $ # [ ] /)"); }
+    return xdb__rt_table(c, t) + "/" + sid;
+}
+
+fun xdb__rt_req(c, method, path, query, body) {
+    let cfg = c["cfg"];
+    xdb__ensureAuth(c);
+    let q = [];
+    let auth = xdb__sessTok(c);
+    if (auth == nil) { auth = xdb__val(xdb__opt(cfg, "auth", nil)); }
+    if (auth != nil) { push(q, "auth=" + xdb__enc(auth)); }
+    if (query != nil and query != "") { push(q, query); }
+    let u = c["base"] + "/" + path + ".json";
+    if (len(q) > 0) { u = u + "?" + join(q, "&"); }
+    let headers = {"Accept": "application/json"};
+    let tok = xdb__val(xdb__opt(cfg, "accessToken", nil));
+    if (tok != nil) { headers["Authorization"] = "Bearer " + tok; }
+    let b = "";
+    if (body != nil) { b = jsonEncode(body); headers["Content-Type"] = "application/json"; }
+    return xdb__check(c, xdb__send(c, method, u, headers, b));
+}
+
+fun xdb__rt_exists(c, path) {
+    return xdb__rt_req(c, "GET", path, "shallow=true", nil) != nil;
+}
+
+fun xdb__rt_get(c, t, id) {
+    let v = xdb__rt_req(c, "GET", xdb__rt_doc(c, t, id), nil, nil);
+    if (v == nil) { return nil; }
+    if (type(v) == "map") { return xdb__withId(toString(id), v); }
+    return {"_id": toString(id), "value": v};
+}
+
+fun xdb__rt_put(c, t, id, doc) {
+    xdb__rt_req(c, "PUT", xdb__rt_doc(c, t, id), nil, xdb__strip(doc));
+    return true;
+}
+
+fun xdb__rt_insert(c, t, id, doc) {
+    if (xdb__rt_exists(c, xdb__rt_doc(c, t, id))) { xdb__fail("document `" + toString(id) + "` already exists in `" + t + "`"); }
+    return xdb__rt_put(c, t, id, doc);
+}
+
+fun xdb__rt_add(c, t, doc) {
+    let r = xdb__rt_req(c, "POST", xdb__rt_table(c, t), nil, xdb__strip(doc));
+    if (type(r) != "map" or !has(r, "name")) { xdb__fail("rtdb did not return a generated key"); }
+    return r["name"];
+}
+
+fun xdb__rt_update(c, t, id, patch) {
+    let p = xdb__rt_doc(c, t, id);
+    if (!xdb__rt_exists(c, p)) { return false; }
+    xdb__rt_req(c, "PATCH", p, nil, xdb__strip(patch));
+    return true;
+}
+
+fun xdb__rt_delete(c, t, id) {
+    let p = xdb__rt_doc(c, t, id);
+    if (!xdb__rt_exists(c, p)) { return false; }
+    xdb__rt_req(c, "DELETE", p, nil, nil);
+    return true;
+}
+
+fun xdb__rt_has(c, t, id) { return xdb__rt_exists(c, xdb__rt_doc(c, t, id)); }
+
+fun xdb__rt_ids(c, t) {
+    let v = xdb__rt_req(c, "GET", xdb__rt_table(c, t), "shallow=true", nil);
+    if (v == nil or type(v) != "map") { return []; }
+    return keys(v);
+}
+
+fun xdb__rt_all(c, t) {
+    let v = xdb__rt_req(c, "GET", xdb__rt_table(c, t), nil, nil);
+    let out = [];
+    if (v == nil) { return out; }
+    if (type(v) == "map") {
+        for (let k in keys(v)) {
+            if (type(v[k]) == "map") { push(out, xdb__withId(k, v[k])); }
+            else { push(out, {"_id": k, "value": v[k]}); }
+        }
+    }
+    return out;
+}
+
+fun xdb__rt_find(c, t, field, value) {
+    if (xdb__opt(c["cfg"], "serverQuery", false)) {
+        let q = "orderBy=" + xdb__enc("\"" + field + "\"") + "&equalTo=" + xdb__enc(jsonEncode(value));
+        let v = xdb__rt_req(c, "GET", xdb__rt_table(c, t), q, nil);
+        let out = [];
+        if (type(v) == "map") {
+            for (let k in keys(v)) { if (type(v[k]) == "map") { push(out, xdb__withId(k, v[k])); } }
+        }
+        return out;
+    }
+    let where = {};
+    where[field] = value;
+    return xdb__clientApply(xdb__rt_all(c, t), {"where": where});
+}
+
+fun xdb__rt_list(c, t, opts) { return xdb__clientApply(xdb__rt_all(c, t), opts); }
+
+// طلب خام: path نسبي إلى جذر القاعدة (بلا .json)؛ query نص جاهز مثل «orderBy="age"&limitToFirst=3»
+fun xdb__rt_raw(c, method, path, query, body) {
+    return xdb__rt_req(c, method, xdb__trimSlash(path), query, body);
+}
+
+fun xdb__rt_ping(c) {
+    xdb__rt_req(c, "GET", "", "shallow=true", nil);
+    return true;
+}
+
+// دفعة واحدة: PATCH على عقدة الجدول بمفاتيح متعددة (طلب واحد). docs: {id: doc}
+fun xdb__rt_putMany(c, t, docs) {
+    let body = {};
+    for (let id in keys(docs)) {
+        if (!xdb__rt_okKey(id)) { xdb__fail("invalid rtdb key `" + id + "`"); }
+        body[id] = xdb__strip(docs[id]);
+    }
+    if (len(keys(body)) == 0) { return 0; }
+    xdb__rt_req(c, "PATCH", xdb__rt_table(c, t), nil, body);
+    return len(keys(body));
+}
+
+fun xdb__rt_deleteMany(c, t, ids) {
+    let body = {};
+    for (let id in ids) {
+        let sid = xdb__id(id);
+        if (!xdb__rt_okKey(sid)) { xdb__fail("invalid rtdb key `" + sid + "`"); }
+        body[sid] = nil;
+    }
+    if (len(keys(body)) == 0) { return 0; }
+    xdb__rt_req(c, "PATCH", xdb__rt_table(c, t), nil, body);
+    return len(keys(body));
+}
+
+// extdb/core/pgrest.zpp — مزوّد الاتصال «pgrest»: PostgREST (/rest/v1) لقاعدة Postgres في pgrest.
+// cfg: {"url": "https://<ref>.example-pgrest.com"  (إلزامي),
+//       "key": "<anon أو service_role key>" (إلزامي — يُرسَل كـ apikey وكـ Bearer افتراضياً),
+//       "token": "<JWT المستخدم>"           (يحلّ محل Bearer لتفعيل RLS باسم المستخدم),
+//       "schema": "public",  "idColumn": "id",  "pageSize": 1000}
+// الجدول = جدول Postgres حقيقي (يجب إنشاؤه في pgrest)، والمستند = صف عمود معرّفه idColumn.
+// put = upsert (يدمج الأعمدة المرسلة؛ الأعمدة غير المذكورة تبقى كما هي).
+
+fun xdb__pg_init(cfg) {
+    let url = xdb__opt(cfg, "url", nil);
+    if (type(url) != "string" or !xdb__starts(url, "https://") and !xdb__starts(url, "http://")) {
+        xdb__fail("pgrest needs cfg.url (e.g. https://xyz.example-pgrest.com)");
+    }
+    let key = xdb__opt(cfg, "key", nil);
+    if ((type(key) != "string" and type(key) != "function") or key == "") { xdb__fail("pgrest needs cfg.key (anon or service_role key)"); }
+    return xdb__trimSlash(url) + "/rest/v1";
+}
+
+fun xdb__pg_validName(s) {
+    if (type(s) != "string" or len(s) == 0) { return false; }
+    let ok = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789";
+    let i = 0;
+    while (i < len(s)) {
+        if (!contains(ok, substr(s, i, 1))) { return false; }
+        i = i + 1;
+    }
+    return !contains("0123456789", substr(s, 0, 1));
+}
+
+fun xdb__pg_table(t) {
+    if (!xdb__pg_validName(t)) { xdb__fail("invalid table name `" + toString(t) + "` (letters, digits, _)"); }
+    return t;
+}
+
+fun xdb__pg_idc(c) { return xdb__opt(c["cfg"], "idColumn", "id"); }
+
+// prefer: قيمة ترويسة Prefer (مثل return=representation) أو ""
+fun xdb__pg_req(c, method, path, prefer, body) {
+    let cfg = c["cfg"];
+    xdb__ensureAuth(c);
+    let key = xdb__val(cfg["key"]);
+    let bearer = xdb__sessTok(c);
+    if (bearer == nil) { bearer = xdb__val(xdb__opt(cfg, "token", key)); }
+    let headers = {"apikey": key, "Authorization": "Bearer " + bearer, "Accept": "application/json"};
+    let schema = xdb__opt(cfg, "schema", "public");
+    if (schema != "public") { headers["Accept-Profile"] = schema; headers["Content-Profile"] = schema; }
+    if (prefer != "") { headers["Prefer"] = prefer; }
+    let b = "";
+    if (body != nil) { b = jsonEncode(body); headers["Content-Type"] = "application/json"; }
+    return xdb__check(c, xdb__send(c, method, c["base"] + "/" + path, headers, b));
+}
+
+// عامل PostgREST لقيمة: eq.x أو is.null أو is.true
+fun xdb__pg_eq(v) {
+    if (v == nil) { return "is.null"; }
+    if (type(v) == "bool") { return "is." + toString(v); }
+    return "eq." + xdb__enc(v);
+}
+
+fun xdb__pg_row(c, row) {
+    if (type(row) != "map") { return row; }
+    let out = xdb__copy(row);
+    out["_id"] = toString(row[xdb__pg_idc(c)]);
+    return out;
+}
+
+fun xdb__pg_rows(c, rows) {
+    let out = [];
+    if (type(rows) != "array") { return out; }
+    for (let r in rows) { push(out, xdb__pg_row(c, r)); }
+    return out;
+}
+
+fun xdb__pg_withKey(c, id, doc) {
+    let body = xdb__strip(doc);
+    body[xdb__pg_idc(c)] = id;
+    return body;
+}
+
+fun xdb__pg_get(c, t, id) {
+    let rows = xdb__pg_req(c, "GET", xdb__pg_table(t) + "?select=*&limit=1&" + xdb__pg_idc(c) + "=eq." + xdb__enc(xdb__id(id)), "", nil);
+    if (type(rows) != "array" or len(rows) == 0) { return nil; }
+    return xdb__pg_row(c, rows[0]);
+}
+
+fun xdb__pg_has(c, t, id) {
+    let rows = xdb__pg_req(c, "GET", xdb__pg_table(t) + "?select=" + xdb__pg_idc(c) + "&limit=1&" + xdb__pg_idc(c) + "=eq." + xdb__enc(xdb__id(id)), "", nil);
+    return type(rows) == "array" and len(rows) > 0;
+}
+
+fun xdb__pg_put(c, t, id, doc) {
+    let sid = xdb__id(id);
+    xdb__pg_req(c, "POST", xdb__pg_table(t) + "?on_conflict=" + xdb__pg_idc(c), "resolution=merge-duplicates,return=minimal", xdb__pg_withKey(c, sid, doc));
+    return true;
+}
+
+fun xdb__pg_insert(c, t, id, doc) {
+    let sid = xdb__id(id);
+    xdb__pg_req(c, "POST", xdb__pg_table(t), "return=minimal", xdb__pg_withKey(c, sid, doc));
+    return true;
+}
+
+// المعرّف يولّده Postgres (default/serial/uuid) ويُرجَع
+fun xdb__pg_add(c, t, doc) {
+    let rows = xdb__pg_req(c, "POST", xdb__pg_table(t), "return=representation", xdb__strip(doc));
+    if (type(rows) != "array" or len(rows) == 0) { xdb__fail("pgrest did not return the inserted row"); }
+    return toString(rows[0][xdb__pg_idc(c)]);
+}
+
+fun xdb__pg_update(c, t, id, patch) {
+    let rows = xdb__pg_req(c, "PATCH", xdb__pg_table(t) + "?" + xdb__pg_idc(c) + "=eq." + xdb__enc(xdb__id(id)), "return=representation", xdb__strip(patch));
+    return type(rows) == "array" and len(rows) > 0;
+}
+
+fun xdb__pg_delete(c, t, id) {
+    let rows = xdb__pg_req(c, "DELETE", xdb__pg_table(t) + "?" + xdb__pg_idc(c) + "=eq." + xdb__enc(xdb__id(id)), "return=representation", nil);
+    return type(rows) == "array" and len(rows) > 0;
+}
+
+// شروط عمود واحد: قيمة مباشرة (eq) أو خريطة عوامل {"gt": 5, "in": [..], "like": "Sa*"}
+fun xdb__pg_conds(col, spec) {
+    if (!xdb__pg_validName(col)) { xdb__fail("invalid column name `" + toString(col) + "`"); }
+    let out = [];
+    if (type(spec) != "map") { push(out, col + "=" + xdb__pg_eq(spec)); return out; }
+    for (let op in keys(spec)) {
+        let v = spec[op];
+        if (op == "eq") { push(out, col + "=" + xdb__pg_eq(v)); }
+        else if (op == "ne") { push(out, col + "=not." + xdb__pg_eq(v)); }
+        else if (op == "gt" or op == "gte" or op == "lt" or op == "lte") { push(out, col + "=" + op + "." + xdb__enc(v)); }
+        else if (op == "like" or op == "ilike") { push(out, col + "=" + op + "." + xdb__enc(v)); }
+        else if (op == "is") { push(out, col + "=" + xdb__pg_eq(v)); }
+        else if (op == "in") {
+            let parts = [];
+            for (let x in v) { push(parts, xdb__enc(x)); }
+            push(out, col + "=in.(" + join(parts, ",") + ")");
+        }
+        else { xdb__fail("unknown filter operator `" + toString(op) + "` (available: " + join(xdb__ops(), ", ") + ")"); }
+    }
+    return out;
+}
+
+// استعلام مبني: opts {"where","select":[أعمدة],"order","desc","limit","offset"} — يُنفَّذ على الخادم مع ترقيم صفحات تلقائي
+fun xdb__pg_query(c, t, opts) {
+    let sel = "*";
+    let cols = xdb__opt(opts, "select", nil);
+    if (cols != nil) {
+        for (let k in cols) { if (!xdb__pg_validName(k)) { xdb__fail("invalid column name `" + toString(k) + "`"); } }
+        let withId = [xdb__pg_idc(c)];
+        for (let k in cols) { if (k != xdb__pg_idc(c)) { push(withId, k); } }
+        sel = join(withId, ",");
+    }
+    let q = ["select=" + sel];
+    let where = xdb__opt(opts, "where", nil);
+    if (where != nil) {
+        for (let k in keys(where)) {
+            for (let cond in xdb__pg_conds(k, where[k])) { push(q, cond); }
+        }
+    }
+    let order = xdb__opt(opts, "order", nil);
+    if (order != nil) {
+        if (!xdb__pg_validName(order)) { xdb__fail("invalid column name `" + toString(order) + "`"); }
+        let dir = ".asc";
+        if (xdb__opt(opts, "desc", false)) { dir = ".desc"; }
+        push(q, "order=" + order + dir);
+    }
+    let limit = xdb__opt(opts, "limit", nil);
+    let offset = xdb__opt(opts, "offset", 0);
+    let base = xdb__pg_table(t) + "?" + join(q, "&");
+    let page = xdb__opt(c["cfg"], "pageSize", 1000);
+    let out = [];
+    let got = 0;
+    while (true) {
+        let want = page;
+        if (limit != nil and limit - got < want) { want = limit - got; }
+        if (want <= 0) { break; }
+        let rows = xdb__pg_req(c, "GET", base + "&limit=" + toString(want) + "&offset=" + toString(offset + got), "", nil);
+        if (type(rows) != "array") { break; }
+        for (let r in rows) { push(out, xdb__pg_row(c, r)); }
+        got = got + len(rows);
+        if (len(rows) < want) { break; }
+    }
+    return out;
+}
+
+fun xdb__pg_all(c, t) { return xdb__pg_query(c, t, {}); }
+
+fun xdb__pg_ids(c, t) {
+    let ic = xdb__pg_idc(c);
+    let rows = xdb__pg_req(c, "GET", xdb__pg_table(t) + "?select=" + ic + "&order=" + ic + ".asc&limit=100000", "", nil);
+    let out = [];
+    if (type(rows) == "array") { for (let r in rows) { push(out, toString(r[ic])); } }
+    return out;
+}
+
+fun xdb__pg_find(c, t, field, value) {
+    let where = {};
+    where[field] = value;
+    return xdb__pg_query(c, t, {"where": where});
+}
+
+// طلب خام: path نسبي إلى /rest/v1 (مثل «users?age=gt.25&order=age.desc»)
+fun xdb__pg_raw(c, method, path, body) {
+    return xdb__pg_req(c, method, path, "return=representation", body);
+}
+
+// استدعاء دالة Postgres: POST /rpc/<fn>
+fun xdb__pg_rpc(c, fname, args) {
+    if (!xdb__pg_validName(fname)) { xdb__fail("invalid function name `" + toString(fname) + "`"); }
+    let a = args;
+    if (a == nil) { a = {}; }
+    return xdb__pg_req(c, "POST", "rpc/" + fname, "", a);
+}
+
+fun xdb__pg_ping(c) {
+    xdb__pg_req(c, "GET", "", "", nil);
+    return true;
+}
+
+// دفعة: POST بمصفوفة (upsert جماعي في طلب واحد). docs: {id: doc}
+fun xdb__pg_putMany(c, t, docs) {
+    let rows = [];
+    for (let id in keys(docs)) { push(rows, xdb__pg_withKey(c, id, docs[id])); }
+    if (len(rows) == 0) { return 0; }
+    xdb__pg_req(c, "POST", xdb__pg_table(t) + "?on_conflict=" + xdb__pg_idc(c), "resolution=merge-duplicates,return=minimal", rows);
+    return len(rows);
+}
+
+fun xdb__pg_deleteMany(c, t, ids) {
+    let parts = [];
+    for (let id in ids) { push(parts, xdb__enc(xdb__id(id))); }
+    if (len(parts) == 0) { return 0; }
+    let rows = xdb__pg_req(c, "DELETE", xdb__pg_table(t) + "?" + xdb__pg_idc(c) + "=in.(" + join(parts, ",") + ")", "return=representation", nil);
+    if (type(rows) == "array") { return len(rows); }
+    return 0;
+}
+
+// extdb/core/api.zpp — الواجهة العامة (كل الدوال تبدأ بـ xdb_). المزوّد يُختار باسمه عند الاتصال.
+
+fun xdb_providers() { return XDB_PROVIDERS; }
+
+// اسم المزوّد غير حساس لحالة الأحرف؛ يُرجع الاسم القياسي أو يرمي خطأً
+fun xdb__provider(name) {
+    let p = lower(trim(toString(name)));
+    if (p == "rtdb" or p == "pgrest") { return p; }
+    xdb__fail("unknown connection provider `" + toString(name) + "` (available: " + join(XDB_PROVIDERS, ", ") + ")");
+}
+
+// يبني اتصالاً (بلا تسجيل)
+fun xdb__make(provider, name, cfg) {
+    let p = xdb__provider(provider);
+    if (type(cfg) != "map") { xdb__fail("cfg must be a map"); }
+    let base = "";
+    if (p == "rtdb") { base = xdb__rt_init(cfg); } else { base = xdb__pg_init(cfg); }
+    let c = {"provider": p, "name": name, "cfg": cfg, "base": base, "open": true, "cache": {},
+             "stats": {"requests": 0, "retries": 0, "hits": 0}, "session": nil, "logger": nil, "schemas": {},
+             "queue": [], "dead": [], "flushing": false, "watches": {}, "watchSeq": 0, "refreshing": false};
+    let lg = xdb__opt(cfg, "logger", nil);
+    if (lg != nil) { c["logger"] = lg; }
+    xdb__qload(c);
+    return c;
+}
+
+// ---- اتصال ---------------------------------------------------------------------------------
+// xdb_connect(provider, name, cfg) — name اسم الاتصال (فريد) يُستعمل في xdb_connections و xdb_close
+fun xdb_connect(provider, name, cfg) {
+    if (type(name) != "string" or name == "") { xdb__fail("connection name must be a non-empty string"); }
+    if (has(XDB["conns"], name)) { xdb__fail("connection `" + name + "` is already open (close it first)"); }
+    let c = xdb__make(provider, name, cfg);
+    XDB["conns"][name] = c;
+    ExtDB.catalog.openCount = len(keys(XDB["conns"]));
+    return c;
+}
+
+fun xdb_rtdb(name, cfg) { return xdb_connect("rtdb", name, cfg); }
+fun xdb_pgrest(name, cfg) { return xdb_connect("pgrest", name, cfg); }
+
+fun xdb_close(c) {
+    xdb__live(c);
+    c["open"] = false;
+    c["cache"] = {};
+    if (has(XDB["conns"], c["name"])) { remove(XDB["conns"], c["name"]); }
+    ExtDB.catalog.openCount = len(keys(XDB["conns"]));
+    return true;
+}
+
+fun xdb_connections() { return keys(XDB["conns"]); }
+
+fun xdb_info(c) {
+    xdb__live(c);
+    return {"name": c["name"], "provider": c["provider"], "url": c["base"], "open": c["open"],
+            "requests": c["stats"]["requests"], "retries": c["stats"]["retries"], "cacheHits": c["stats"]["hits"],
+            "cached": len(keys(c["cache"])), "signedIn": c["session"] != nil, "queued": len(c["queue"]),
+            "watches": len(keys(c["watches"])), "version": XDB_VERSION};
+}
+
+// يتحقق من الوصول إلى الخادم (يرمي خطأً مفهوماً عند الفشل)
+fun xdb_ping(c) {
+    xdb__live(c);
+    if (xdb__isRt(c)) { return xdb__rt_ping(c); }
+    return xdb__pg_ping(c);
+}
+
+fun xdb_clearCache(c, t) {
+    xdb__live(c);
+    if (t == nil) { c["cache"] = {}; } else { xdb__cinv(c, t); }
+    return true;
+}
+
+// ---- قراءة (مع كاش اختياري cfg.cacheTtl) ---------------------------------------------------------
+fun xdb_get(c, t, id) {
+    xdb__live(c);
+    let key = toString(t) + "|get|" + toString(id);
+    let hit = xdb__cget(c, key);
+    if (hit != nil) { return hit["v"]; }
+    let v = nil;
+    if (xdb__isRt(c)) { v = xdb__rt_get(c, t, id); } else { v = xdb__pg_get(c, t, id); }
+    return xdb__cput(c, key, v);
+}
+
+fun xdb_has(c, t, id) {
+    xdb__live(c);
+    if (xdb__isRt(c)) { return xdb__rt_has(c, t, id); }
+    return xdb__pg_has(c, t, id);
+}
+
+fun xdb_ids(c, t) {
+    xdb__live(c);
+    let key = toString(t) + "|ids";
+    let hit = xdb__cget(c, key);
+    if (hit != nil) { return hit["v"]; }
+    let v = nil;
+    if (xdb__isRt(c)) { v = xdb__rt_ids(c, t); } else { v = xdb__pg_ids(c, t); }
+    return xdb__cput(c, key, v);
+}
+
+fun xdb_count(c, t) { return len(xdb_ids(c, t)); }
+
+fun xdb_all(c, t) {
+    xdb__live(c);
+    let key = toString(t) + "|all";
+    let hit = xdb__cget(c, key);
+    if (hit != nil) { return hit["v"]; }
+    let v = nil;
+    if (xdb__isRt(c)) { v = xdb__rt_all(c, t); } else { v = xdb__pg_all(c, t); }
+    return xdb__cput(c, key, v);
+}
+
+fun xdb_find(c, t, field, value) {
+    xdb__live(c);
+    if (xdb__isRt(c)) { return xdb__rt_find(c, t, field, value); }
+    return xdb__pg_find(c, t, field, value);
+}
+
+fun xdb_findOne(c, t, field, value) {
+    let rows = xdb_find(c, t, field, value);
+    if (len(rows) == 0) { return nil; }
+    return rows[0];
+}
+
+// opts: {"where": {حقل: قيمة | {"gt":5,"in":[..],"like":"Sa*"}}, "select": [حقول], "order": حقل, "desc": true, "limit": n, "offset": n}
+fun xdb_list(c, t, opts) {
+    xdb__live(c);
+    if (xdb__isRt(c)) { return xdb__rt_list(c, t, opts); }
+    return xdb__pg_query(c, t, opts);
+}
+
+// ---- كتابة (تُبطل كاش الجدول) ---------------------------------------------------------------------
+fun xdb_put(c, t, id, doc) {
+    xdb__live(c);
+    xdb__validate(c, t, xdb__strip(doc), false);
+    xdb__cinv(c, t);
+    if (xdb__queueing(c) and !c["flushing"]) {
+        try { return xdb__put_(c, t, id, doc); }
+        catch (e) { if (xdb__isConn(e)) { return xdb__enqueue(c, {"op": "put", "t": t, "id": toString(id), "doc": xdb__strip(doc)}); } throw e; }
+    }
+    return xdb__put_(c, t, id, doc);
+}
+fun xdb__put_(c, t, id, doc) {
+    if (xdb__isRt(c)) { return xdb__rt_put(c, t, id, doc); }
+    return xdb__pg_put(c, t, id, doc);
+}
+
+fun xdb_insert(c, t, id, doc) {
+    xdb__live(c);
+    xdb__validate(c, t, xdb__strip(doc), false);
+    xdb__cinv(c, t);
+    if (xdb__isRt(c)) { return xdb__rt_insert(c, t, id, doc); }
+    return xdb__pg_insert(c, t, id, doc);
+}
+
+fun xdb_add(c, t, doc) {
+    xdb__live(c);
+    xdb__validate(c, t, xdb__strip(doc), false);
+    xdb__cinv(c, t);
+    if (xdb__isRt(c)) { return xdb__rt_add(c, t, doc); }
+    return xdb__pg_add(c, t, doc);
+}
+
+fun xdb_update(c, t, id, patch) {
+    xdb__live(c);
+    xdb__validate(c, t, xdb__strip(patch), true);
+    xdb__cinv(c, t);
+    if (xdb__queueing(c) and !c["flushing"]) {
+        try { return xdb__update_(c, t, id, patch); }
+        catch (e) { if (xdb__isConn(e)) { return xdb__enqueue(c, {"op": "update", "t": t, "id": toString(id), "doc": xdb__strip(patch)}); } throw e; }
+    }
+    return xdb__update_(c, t, id, patch);
+}
+fun xdb__update_(c, t, id, patch) {
+    if (xdb__isRt(c)) { return xdb__rt_update(c, t, id, patch); }
+    return xdb__pg_update(c, t, id, patch);
+}
+
+fun xdb_delete(c, t, id) {
+    xdb__live(c);
+    xdb__cinv(c, t);
+    if (xdb__queueing(c) and !c["flushing"]) {
+        try { return xdb__delete_(c, t, id); }
+        catch (e) { if (xdb__isConn(e)) { return xdb__enqueue(c, {"op": "delete", "t": t, "id": toString(id)}); } throw e; }
+    }
+    return xdb__delete_(c, t, id);
+}
+fun xdb__delete_(c, t, id) {
+    if (xdb__isRt(c)) { return xdb__rt_delete(c, t, id); }
+    return xdb__pg_delete(c, t, id);
+}
+
+// زيادة حقل رقمي: قراءة ثم كتابة (غير ذرّية عبر الشبكة). المستند الناقص يبدأ من 0. يُرجع القيمة الجديدة.
+fun xdb_incr(c, t, id, field, by) {
+    let d = xdb_get(c, t, id);
+    let cur = 0;
+    if (d != nil and has(d, field) and type(d[field]) == "number") { cur = d[field]; }
+    let step = by;
+    if (step == nil) { step = 1; }
+    let patch = {};
+    patch[field] = cur + step;
+    if (d == nil) { xdb_put(c, t, id, patch); } else { xdb_update(c, t, id, patch); }
+    return cur + step;
+}
+
+// ---- دفعات (طلب واحد عادةً) ------------------------------------------------------------------------
+// docs: {id: doc} أو مصفوفة مستندات يحمل كل منها _id. يُرجع العدد.
+fun xdb_putMany(c, t, docs) {
+    xdb__live(c);
+    let m = {};
+    if (type(docs) == "array") {
+        for (let d in docs) {
+            if (type(d) != "map" or !has(d, "_id")) { xdb__fail("putMany: every document in an array needs an _id"); }
+            m[toString(d["_id"])] = d;
+        }
+    } else if (type(docs) == "map") {
+        m = docs;
+    } else { xdb__fail("putMany expects a map {id: doc} or an array of documents with _id"); }
+    for (let id in keys(m)) { xdb__validate(c, t, xdb__strip(m[id]), false); }
+    xdb__cinv(c, t);
+    if (xdb__queueing(c) and !c["flushing"]) {
+        try { return xdb__putMany_(c, t, m); }
+        catch (e) { if (xdb__isConn(e)) { xdb__enqueue(c, {"op": "putMany", "t": t, "docs": m}); return "queued"; } throw e; }
+    }
+    return xdb__putMany_(c, t, m);
+}
+fun xdb__putMany_(c, t, m) {
+    if (xdb__isRt(c)) { return xdb__rt_putMany(c, t, m); }
+    return xdb__pg_putMany(c, t, m);
+}
+
+fun xdb_deleteMany(c, t, ids) {
+    xdb__live(c);
+    xdb__cinv(c, t);
+    if (xdb__queueing(c) and !c["flushing"]) {
+        try { return xdb__deleteMany_(c, t, ids); }
+        catch (e) { if (xdb__isConn(e)) { xdb__enqueue(c, {"op": "deleteMany", "t": t, "ids": ids}); return "queued"; } throw e; }
+    }
+    return xdb__deleteMany_(c, t, ids);
+}
+fun xdb__deleteMany_(c, t, ids) {
+    if (xdb__isRt(c)) { return xdb__rt_deleteMany(c, t, ids); }
+    return xdb__pg_deleteMany(c, t, ids);
+}
+
+// طلب خام بلغة المزوّد: rtdb → path نسبي لجذر القاعدة + query نص (أو nil)؛
+// pgrest → path نسبي لـ /rest/v1 (query جزء منه). لا يمرّ بالكاش (يمسح الكاش كله احتياطاً للكتابة).
+fun xdb_raw(c, method, path, query, body) {
+    xdb__live(c);
+    if (upper(method) != "GET") { c["cache"] = {}; }
+    if (xdb__isRt(c)) { return xdb__rt_raw(c, method, path, query, body); }
+    return xdb__pg_raw(c, method, path, body);
+}
+
+// pgrest فقط: استدعاء دالة Postgres
+fun xdb_rpc(c, fname, args) {
+    xdb__live(c);
+    if (xdb__isRt(c)) { xdb__fail("rpc is only available for the pgrest provider"); }
+    c["cache"] = {};
+    return xdb__pg_rpc(c, fname, args);
+}
+
+// ---- الحاويات: ربط container.doc المحلية بالجدول البعيد ---------------------------------------------
+fun xdb__ensureDoc(cname) {
+    if (hasContainer(cname)) {
+        if (container.kind(cname) != "doc") { xdb__fail("container `" + cname + "` exists but is not a container.doc"); }
+    } else {
+        spawn("doc", cname);
+    }
+}
+
+// يسحب مستندات الجدول البعيد إلى حاوية doc محلية (تُنشأ إن لم توجد). يُرجع العدد.
+// opts: {"clear": true} يفرّغ الحاوية قبل السحب · وأي مفاتيح استعلام (where/select/order/limit) تُمرَّر لـ xdb_list
+fun xdb_pull(c, t, cname, opts) {
+    xdb__live(c);
+    xdb__ensureDoc(cname);
+    if (xdb__opt(opts, "clear", false)) {
+        for (let id in docIds(cname)) { deleteDoc(cname, id); }
+    }
+    let docs = [];
+    if (xdb__opt(opts, "where", nil) != nil or xdb__opt(opts, "limit", nil) != nil or xdb__opt(opts, "order", nil) != nil) {
+        docs = xdb_list(c, t, opts);
+    } else {
+        docs = xdb_all(c, t);
+    }
+    for (let d in docs) { insertDoc(cname, d["_id"], d); }
+    return len(docs);
+}
+
+// يرفع مستندات الحاوية المحلية إلى الجدول (دفعة واحدة عبر putMany). يُرجع عدد المرفوع.
+// opts: {"prune": true} يحذف من البعيد ما ليس في الحاوية (احذر)
+fun xdb_push(c, t, cname, opts) {
+    xdb__live(c);
+    if (!hasContainer(cname)) { xdb__fail("no such container `" + cname + "`"); }
+    let ids = docIds(cname);
+    let batch = {};
+    for (let id in ids) { batch[toString(id)] = findDoc(cname, id); }
+    xdb_putMany(c, t, batch);
+    if (xdb__opt(opts, "prune", false)) {
+        let gone = [];
+        for (let rid in xdb_ids(c, t)) { if (!has(batch, rid)) { push(gone, rid); } }
+        if (len(gone) > 0) { xdb_deleteMany(c, t, gone); }
+    }
+    return len(ids);
+}
+
+// مقارنة مستندين بلا _id ولا عمود المعرّف (pgrest يعيد المعرّف كعمود أيضاً)
+fun xdb__sameDoc(c, a, b) {
+    let ic = "_id";
+    if (c["provider"] == "pgrest") { ic = xdb__pg_idc(c); }
+    let x = {};
+    let y = {};
+    for (let k in keys(a)) { if (k != ic and k != "_id") { x[k] = a[k]; } }
+    for (let k in keys(b)) { if (k != ic and k != "_id") { y[k] = b[k]; } }
+    return xdb__same(x, y);
+}
+
+// مزامنة ثنائية الاتجاه بين الجدول البعيد والحاوية المحلية.
+// opts: {"prefer": "remote" (الافتراضي) | "local"} يحسم تعارض المستند المختلف في الطرفين.
+// يُرجع {"pulled": n, "pushed": n, "conflicts": n, "same": n}
+fun xdb_sync(c, t, cname, opts) {
+    xdb__live(c);
+    xdb__ensureDoc(cname);
+    let prefer = xdb__opt(opts, "prefer", "remote");
+    if (prefer != "remote" and prefer != "local") { xdb__fail("sync: prefer must be \"remote\" or \"local\""); }
+    let remote = {};
+    for (let d in xdb_all(c, t)) { remote[d["_id"]] = d; }
+    let pulled = 0;
+    let pushed = 0;
+    let conflicts = 0;
+    let same = 0;
+    let up = {};
+    for (let rid in keys(remote)) {
+        let loc = findDoc(cname, rid);
+        if (loc == nil) { insertDoc(cname, rid, remote[rid]); pulled = pulled + 1; }
+        else if (xdb__sameDoc(c, loc, remote[rid])) { same = same + 1; }
+        else {
+            conflicts = conflicts + 1;
+            if (prefer == "remote") { insertDoc(cname, rid, remote[rid]); pulled = pulled + 1; }
+            else { up[rid] = findDoc(cname, rid); pushed = pushed + 1; }
+        }
+    }
+    for (let lid in docIds(cname)) {
+        if (!has(remote, toString(lid))) { up[toString(lid)] = findDoc(cname, lid); pushed = pushed + 1; }
+    }
+    if (len(keys(up)) > 0) { xdb_putMany(c, t, up); }
+    return {"pulled": pulled, "pushed": pushed, "conflicts": conflicts, "same": same};
+}
+
+// extdb/core/watch.zpp — تتبّع التغييرات بالاستعلام الدوري (polling) — بلا خيوط ولا اتصالات دائمة.
+//
+//   let w = xdb_watch(c, "users", fun(ev) { print ev["type"] + " " + ev["id"]; }, {"initial": false});
+//   xdb_tick(c);                 // يفحص كل المراقبات مرة ويستدعي المعالجات؛ يُرجع عدد الأحداث
+//   xdb_watchLoop(c, 2000, 30);  // 30 جولة كل ثانيتين (يحجب التنفيذ) — للسكربتات
+//   xdb_unwatch(c, w);
+// الحدث: {"type": "added"|"changed"|"removed", "table", "id", "doc", "old"}
+
+// فرق بين لقطتين {id: doc} → مصفوفة أحداث
+fun xdb_diff(oldSnap, newSnap) {
+    let ev = [];
+    for (let id in keys(newSnap)) {
+        if (!has(oldSnap, id)) { push(ev, {"type": "added", "id": id, "doc": newSnap[id], "old": nil}); }
+        else if (!xdb__same(oldSnap[id], newSnap[id])) { push(ev, {"type": "changed", "id": id, "doc": newSnap[id], "old": oldSnap[id]}); }
+    }
+    for (let id in keys(oldSnap)) {
+        if (!has(newSnap, id)) { push(ev, {"type": "removed", "id": id, "doc": nil, "old": oldSnap[id]}); }
+    }
+    return ev;
+}
+
+fun xdb__snapshot(c, t, opts) {
+    let rows = [];
+    c["cache"] = {};   // المراقبة تقرأ دائماً من الخادم
+    if (opts != nil and (xdb__opt(opts, "where", nil) != nil or xdb__opt(opts, "order", nil) != nil or xdb__opt(opts, "limit", nil) != nil)) {
+        rows = xdb_list(c, t, opts);
+    } else {
+        rows = xdb_all(c, t);
+    }
+    let snap = {};
+    for (let d in rows) { snap[toString(d["_id"])] = d; }
+    return snap;
+}
+
+fun xdb_watch(c, t, handler, opts) {
+    xdb__live(c);
+    if (type(handler) != "function") { xdb__fail("watch needs a handler function"); }
+    c["watchSeq"] = c["watchSeq"] + 1;
+    let id = "w" + toString(c["watchSeq"]);
+    c["watches"][id] = {"t": t, "handler": handler, "opts": opts, "snap": nil, "initial": xdb__opt(opts, "initial", false)};
+    return id;
+}
+
+fun xdb_unwatch(c, id) {
+    if (!has(c["watches"], id)) { return false; }
+    remove(c["watches"], id);
+    return true;
+}
+
+fun xdb_tick(c) {
+    xdb__live(c);
+    let total = 0;
+    for (let id in keys(c["watches"])) {
+        let w = c["watches"][id];
+        let now = xdb__snapshot(c, w["t"], w["opts"]);
+        let old = w["snap"];
+        if (old == nil) {
+            w["snap"] = now;
+            if (!w["initial"]) { continue; }
+            old = {};
+        }
+        let ev = xdb_diff(old, now);
+        w["snap"] = now;
+        let h = w["handler"];
+        for (let e in ev) {
+            e["table"] = w["t"];
+            h(e);
+            total = total + 1;
+        }
+    }
+    return total;
+}
+
+fun xdb_watchLoop(c, intervalMs, rounds) {
+    let total = 0;
+    let i = 0;
+    while (i < rounds) {
+        total = total + xdb_tick(c);
+        i = i + 1;
+        if (i < rounds) { time.sleep(intervalMs); }
+    }
+    return total;
+}
+
+// extdb/core/tools.zpp — أدوات متقدمة: مسجّل طلبات، طابور عمل دون اتصال، دفعة كتابة (tx)، تصدير/استيراد JSON،
+// تجميعات، تكرار على صفحات، وأخطاء مصنَّفة.
+
+// ---- مسجّل الطلبات ------------------------------------------------------------------------------
+// xdb_setLogger(c, fun(entry) { ... })  entry: {provider, method, url (بلا أسرار), status, ok, ms, attempt}
+fun xdb_setLogger(c, fn) {
+    xdb__live(c);
+    c["logger"] = fn;
+    return true;
+}
+
+// ---- أخطاء مصنَّفة -------------------------------------------------------------------------------
+// "connection" (فشل اتصال/DNS/مهلة) | "http" (ردّ ≥ 400) | "schema" | "other"
+fun xdb_errKind(e) {
+    let m = xdb_msg(e);
+    if (contains(m, "connection failed")) { return "connection"; }
+    if (contains(m, " HTTP ")) { return "http"; }
+    if (contains(m, "schema violation")) { return "schema"; }
+    return "other";
+}
+
+// رقم حالة HTTP من الخطأ (0 إن لم يكن خطأ HTTP)
+fun xdb_errStatus(e) {
+    let m = xdb_msg(e);
+    let i = indexOf(m, " HTTP ");
+    if (i < 0) { return 0; }
+    let rest = substr(m, i + 6, len(m) - i - 6);
+    let j = indexOf(rest, ":");
+    if (j < 0) { return 0; }
+    return toNumber(substr(rest, 0, j));
+}
+
+fun xdb__isConn(e) { return xdb_errKind(e) == "connection"; }
+
+// ---- صحّة الاتصال --------------------------------------------------------------------------------
+fun xdb_health(c) {
+    xdb__live(c);
+    let t0 = time.ms();
+    try { xdb_ping(c); } catch (e) { return {"ok": false, "ms": time.ms() - t0, "error": xdb_msg(e)}; }
+    return {"ok": true, "ms": time.ms() - t0, "error": ""};
+}
+
+// ---- طابور العمل دون اتصال (cfg.offlineQueue = true) ----------------------------------------------------
+// عند فشل الاتصال (لا ردود الخادم) تُحفظ put/update/delete/putMany/deleteMany بدل رمي الخطأ وتعود "queued".
+// cfg.queueFile: يحفظ الطابور في ملف JSON ويستعيده عند الاتصال. xdb_flushQueue(c) يعيد الإرسال بالترتيب.
+fun xdb__queueing(c) { return xdb__opt(c["cfg"], "offlineQueue", false); }
+
+fun xdb__qsave(c) {
+    let f = xdb__opt(c["cfg"], "queueFile", nil);
+    if (f != nil) { writeFile(f, jsonEncode(c["queue"])); }
+}
+
+fun xdb__qload(c) {
+    let f = xdb__opt(c["cfg"], "queueFile", nil);
+    if (f != nil and fileExists(f)) {
+        let v = jsonDecode(readFile(f));
+        if (type(v) == "array") { c["queue"] = v; }
+    }
+}
+
+fun xdb__enqueue(c, op) {
+    push(c["queue"], op);
+    xdb__qsave(c);
+    return "queued";
+}
+
+fun xdb__replay(c, op) {
+    let k = op["op"];
+    if (k == "put") { return xdb_put(c, op["t"], op["id"], op["doc"]); }
+    if (k == "update") { return xdb_update(c, op["t"], op["id"], op["doc"]); }
+    if (k == "delete") { return xdb_delete(c, op["t"], op["id"]); }
+    if (k == "putMany") { return xdb_putMany(c, op["t"], op["docs"]); }
+    if (k == "deleteMany") { return xdb_deleteMany(c, op["t"], op["ids"]); }
+    xdb__fail("unknown queued operation `" + toString(k) + "`");
+}
+
+fun xdb_queueSize(c) { return len(c["queue"]); }
+
+// يُرجع {"sent": n, "left": n, "failed": n}؛ يتوقف عند أول فشل اتصال، وما يرفضه الخادم يُنقل إلى c["dead"]
+fun xdb_flushQueue(c) {
+    xdb__live(c);
+    let sent = 0;
+    let failed = 0;
+    while (len(c["queue"]) > 0) {
+        let op = c["queue"][0];
+        let stop = false;
+        try {
+            c["flushing"] = true;
+            xdb__replay(c, op);
+            c["flushing"] = false;
+            sent = sent + 1;
+        } catch (e) {
+            c["flushing"] = false;
+            if (xdb__isConn(e)) { stop = true; }
+            else { push(c["dead"], {"op": op, "error": xdb_msg(e)}); failed = failed + 1; }
+        }
+        if (stop) { break; }
+        let rest = [];
+        let i = 1;
+        while (i < len(c["queue"])) { push(rest, c["queue"][i]); i = i + 1; }
+        c["queue"] = rest;
+    }
+    xdb__qsave(c);
+    return {"sent": sent, "left": len(c["queue"]), "failed": failed};
+}
+
+fun xdb_clearQueue(c) { c["queue"] = []; xdb__qsave(c); return true; }
+
+// ---- دفعة كتابة (غير ذرّية عبر الجداول) ---------------------------------------------------------------------
+// let tx = xdb_tx(c); tx.put("users","u1",{...}); tx.delete("users","u2"); tx.commit();
+// commit يدمج العمليات المتجاورة على الجدول نفسه في طلب واحد (putMany/deleteMany) ويُرجع {"ops": n, "requests": m}.
+// إن فشل أحد الطلبات يُرمى الخطأ وتبقى العمليات غير المنفَّذة في tx.pending().
+fun xdb_tx(c) {
+    let st = {"ops": []};
+    let tx = {};
+    tx["put"] = fun(t, id, doc) { xdb__validate(c, t, xdb__strip(doc), false); push(st["ops"], {"k": "put", "t": t, "id": toString(id), "doc": doc}); return len(st["ops"]); };
+    tx["delete"] = fun(t, id) { push(st["ops"], {"k": "delete", "t": t, "id": toString(id)}); return len(st["ops"]); };
+    tx["size"] = fun() { return len(st["ops"]); };
+    tx["pending"] = fun() { return st["ops"]; };
+    tx["rollback"] = fun() { st["ops"] = []; return true; };
+    tx["commit"] = fun() {
+        let total = len(st["ops"]);
+        let reqs = 0;
+        while (len(st["ops"]) > 0) {
+            let ops = st["ops"];
+            let k = ops[0]["k"];
+            let t = ops[0]["t"];
+            let docs = {};
+            let ids = [];
+            let j = 0;
+            while (j < len(ops) and ops[j]["k"] == k and ops[j]["t"] == t) {
+                if (k == "put") { docs[ops[j]["id"]] = ops[j]["doc"]; } else { push(ids, ops[j]["id"]); }
+                j = j + 1;
+            }
+            if (k == "put") { xdb_putMany(c, t, docs); } else { xdb_deleteMany(c, t, ids); }
+            reqs = reqs + 1;
+            let left = [];
+            let q = j;
+            while (q < len(ops)) { push(left, ops[q]); q = q + 1; }
+            st["ops"] = left;
+        }
+        return {"ops": total, "requests": reqs};
+    };
+    return tx;
+}
+
+// ---- تصدير / استيراد / نسخ احتياطي (ملفات JSON) -----------------------------------------------------------------
+fun xdb_export(c, t, path) {
+    let rows = xdb_all(c, t);
+    writeFile(path, jsonEncode(rows));
+    return len(rows);
+}
+
+// opts: {"chunk": 500, "idField": "_id"}  — يقرأ مصفوفة مستندات ويكتبها بدفعات putMany
+fun xdb_import(c, t, path, opts) {
+    if (!fileExists(path)) { xdb__fail("no such file `" + toString(path) + "`"); }
+    let rows = jsonDecode(readFile(path));
+    if (type(rows) != "array") { xdb__fail("import expects a JSON array of documents"); }
+    let chunk = xdb__opt(opts, "chunk", 500);
+    let idf = xdb__opt(opts, "idField", "_id");
+    let batch = {};
+    let n = 0;
+    let total = 0;
+    for (let d in rows) {
+        if (type(d) != "map" or !has(d, idf)) { xdb__fail("import: every document needs `" + idf + "`"); }
+        batch[toString(d[idf])] = d;
+        n = n + 1;
+        if (n >= chunk) { xdb_putMany(c, t, batch); total = total + n; batch = {}; n = 0; }
+    }
+    if (n > 0) { xdb_putMany(c, t, batch); total = total + n; }
+    return total;
+}
+
+// نسخة احتياطية لجداول إلى مجلد: <dir>/<table>.json — يُرجع {table: count}
+fun xdb_backup(c, tables, dir) {
+    let out = {};
+    for (let t in tables) { out[t] = xdb_export(c, t, xdb__trimSlash(dir) + "/" + toString(t) + ".json"); }
+    return out;
+}
+
+// ---- تجميعات (من جهة العميل فوق xdb_list) ------------------------------------------------------------------------
+// {"count","sum","avg","min","max"} لحقل رقمي؛ opts كما في xdb_list (where...)
+fun xdb_agg(c, t, field, opts) {
+    let o = {"select": [field]};
+    if (opts != nil) {
+        for (let k in keys(opts)) { if (k != "select") { o[k] = opts[k]; } }
+    }
+    let n = 0;
+    let sum = 0;
+    let mn = nil;
+    let mx = nil;
+    for (let d in xdb_list(c, t, o)) {
+        if (!has(d, field) or type(d[field]) != "number") { continue; }
+        let v = d[field];
+        n = n + 1;
+        sum = sum + v;
+        if (mn == nil or v < mn) { mn = v; }
+        if (mx == nil or v > mx) { mx = v; }
+    }
+    let avg = nil;
+    if (n > 0) { avg = sum / n; }
+    return {"count": n, "sum": sum, "avg": avg, "min": mn, "max": mx};
+}
+
+// يمرّ على كل المستندات صفحة صفحة ويستدعي fn(doc) لكل واحد؛ يُرجع العدد. التوقف المبكر: fn تُرجع false.
+fun xdb_each(c, t, size, fn, opts) {
+    let o = {};
+    if (opts != nil) { for (let k in keys(opts)) { o[k] = opts[k]; } }
+    if (!has(o, "order")) { o["order"] = xdb__defaultOrder(c); }
+    let off = 0;
+    let n = 0;
+    while (true) {
+        o["limit"] = size;
+        o["offset"] = off;
+        let rows = xdb_list(c, t, o);
+        for (let d in rows) {
+            n = n + 1;
+            if (fn(d) == false) { return n; }
+        }
+        if (len(rows) < size) { break; }
+        off = off + size;
+    }
+    return n;
+}
+
+fun xdb__defaultOrder(c) {
+    if (c["provider"] == "pgrest") { return xdb__pg_idc(c); }
+    return "_id";
+}
+
+// extdb/core/ui.zpp — مساعدات indsin. كل معالجات الأحداث (onTap) تُنفَّذ في مفسّر جديد لكل نقرة، فلا
+// تعتمد على اتصال محفوظ بين نقرتين: افتح الاتصال داخل المعالج بـ xdb_session (غير مسجَّل) ثم اكتب النتيجة في خلايا warp.
+// دوال xdb_cell / xdb_page / xdb_len / xdb_msg نقية (بلا شبكة) فتصلح داخل قيم الخصائص `{ ... }`.
+//
+//   <Import src="extdb" />
+//   <warp rows={[]} /> <warp err={""} />
+//   <Fun#load>
+//     try { rows = xdb_all(xdb_session("pgrest", {"url": "...", "key": "..."}), "users"); err = ""; }
+//     catch (e) { err = xdb_msg(e); }
+//   </Fun>
+//   <Text#t>{xdb_cell(rows, 0, "name")}</Text>
+
+// اتصال بلا تسجيل في السجل العام (لا تصادم أسماء بين النقرات)
+fun xdb_session(provider, cfg) { return xdb__make(provider, "session", cfg); }
+
+// حقل من صف بأمان: "" إن غاب الصف أو الحقل (مناسب للنصوص في الواجهة)
+fun xdb_cell(rows, i, field) {
+    if (type(rows) != "array" or i < 0 or i >= len(rows)) { return ""; }
+    let r = rows[i];
+    if (type(r) != "map" or !has(r, field) or r[field] == nil) { return ""; }
+    return toString(r[field]);
+}
+
+fun xdb_len(rows) {
+    if (type(rows) != "array") { return 0; }
+    return len(rows);
+}
+
+// صفحة من الصفوف: xdb_page(rows, 0, 4) = أول أربعة
+fun xdb_page(rows, page, size) {
+    let out = [];
+    if (type(rows) != "array") { return out; }
+    let i = page * size;
+    while (i < len(rows) and i < (page + 1) * size) { push(out, rows[i]); i = i + 1; }
+    return out;
+}
+
+// نص الخطأ بلا بادئة «extdb: » (e قد يكون نصاً أو خريطة فيها message)
+fun xdb_msg(e) {
+    let m = e;
+    if (type(e) == "map" and has(e, "message")) { m = e["message"]; }
+    m = toString(m);
+    if (xdb__starts(m, "extdb: ")) { m = substr(m, 7, len(m) - 7); }
+    return m;
+}
+
+// extdb/core/bind.zpp — كائنات مربوطة بالاتصال/الجدول: تُخزَّن في متغير داخل أي حاوية/مجموعة/حجم
+// وتُستدعى بلا تمرير الاتصال في كل نداء.
+//
+//   @container=app
+//       let db = xdb_open("rtdb", "shop", {"url": "https://my-app.example-rtdb.com"});
+//       let users = db.table("users");
+//       fun setup() { users.put("u1", {"name": "Sara"}); users.pull("Users"); return users.count(); }
+//   .end/container
+
+fun xdb_tableOf(c, t) {
+    return {
+        "name": t,
+        "provider": c["provider"],
+        "get": fun(id) { return xdb_get(c, t, id); },
+        "has": fun(id) { return xdb_has(c, t, id); },
+        "put": fun(id, doc) { return xdb_put(c, t, id, doc); },
+        "insert": fun(id, doc) { return xdb_insert(c, t, id, doc); },
+        "add": fun(doc) { return xdb_add(c, t, doc); },
+        "update": fun(id, patch) { return xdb_update(c, t, id, patch); },
+        "delete": fun(id) { return xdb_delete(c, t, id); },
+        "ids": fun() { return xdb_ids(c, t); },
+        "count": fun() { return xdb_count(c, t); },
+        "all": fun() { return xdb_all(c, t); },
+        "find": fun(field, value) { return xdb_find(c, t, field, value); },
+        "list": fun(opts) { return xdb_list(c, t, opts); },
+        "findOne": fun(field, value) { return xdb_findOne(c, t, field, value); },
+        "incr": fun(id, field, by) { return xdb_incr(c, t, id, field, by); },
+        "putMany": fun(docs) { return xdb_putMany(c, t, docs); },
+        "deleteMany": fun(ids) { return xdb_deleteMany(c, t, ids); },
+        "clearCache": fun() { return xdb_clearCache(c, t); },
+        "sync": fun(cname, opts) { return xdb_sync(c, t, cname, opts); },
+        "schema": fun(spec) { return xdb_schema(c, t, spec); },
+        "watch": fun(handler, opts) { return xdb_watch(c, t, handler, opts); },
+        "agg": fun(field, opts) { return xdb_agg(c, t, field, opts); },
+        "each": fun(size, fn, opts) { return xdb_each(c, t, size, fn, opts); },
+        "export": fun(path) { return xdb_export(c, t, path); },
+        "import": fun(path, opts) { return xdb_import(c, t, path, opts); },
+        "pull": fun(cname, opts) { return xdb_pull(c, t, cname, opts); },
+        "push": fun(cname, opts) { return xdb_push(c, t, cname, opts); }
+    };
+}
+
+fun xdb_bind(c) {
+    return {
+        "handle": c,
+        "name": c["name"],
+        "provider": c["provider"],
+        "table": fun(t) { return xdb_tableOf(c, t); },
+        "ping": fun() { return xdb_ping(c); },
+        "info": fun() { return xdb_info(c); },
+        "get": fun(t, id) { return xdb_get(c, t, id); },
+        "has": fun(t, id) { return xdb_has(c, t, id); },
+        "put": fun(t, id, doc) { return xdb_put(c, t, id, doc); },
+        "insert": fun(t, id, doc) { return xdb_insert(c, t, id, doc); },
+        "add": fun(t, doc) { return xdb_add(c, t, doc); },
+        "update": fun(t, id, patch) { return xdb_update(c, t, id, patch); },
+        "delete": fun(t, id) { return xdb_delete(c, t, id); },
+        "ids": fun(t) { return xdb_ids(c, t); },
+        "count": fun(t) { return xdb_count(c, t); },
+        "all": fun(t) { return xdb_all(c, t); },
+        "find": fun(t, field, value) { return xdb_find(c, t, field, value); },
+        "list": fun(t, opts) { return xdb_list(c, t, opts); },
+        "findOne": fun(t, field, value) { return xdb_findOne(c, t, field, value); },
+        "incr": fun(t, id, field, by) { return xdb_incr(c, t, id, field, by); },
+        "putMany": fun(t, docs) { return xdb_putMany(c, t, docs); },
+        "deleteMany": fun(t, ids) { return xdb_deleteMany(c, t, ids); },
+        "clearCache": fun(t) { return xdb_clearCache(c, t); },
+        "sync": fun(t, cname, opts) { return xdb_sync(c, t, cname, opts); },
+        "schema": fun(t, spec) { return xdb_schema(c, t, spec); },
+        "agg": fun(t, field, opts) { return xdb_agg(c, t, field, opts); },
+        "each": fun(t, size, fn, opts) { return xdb_each(c, t, size, fn, opts); },
+        "export": fun(t, path) { return xdb_export(c, t, path); },
+        "import": fun(t, path, opts) { return xdb_import(c, t, path, opts); },
+        "backup": fun(tables, dir) { return xdb_backup(c, tables, dir); },
+        "signIn": fun(email, password) { return xdb_signIn(c, email, password); },
+        "signUp": fun(email, password) { return xdb_signUp(c, email, password); },
+        "signOut": fun() { return xdb_signOut(c); },
+        "refresh": fun() { return xdb_refresh(c); },
+        "user": fun() { return xdb_user(c); },
+        "isSignedIn": fun() { return xdb_isSignedIn(c); },
+        "setToken": fun(token, refresh, expiresInSec) { return xdb_setToken(c, token, refresh, expiresInSec); },
+        "watch": fun(t, handler, opts) { return xdb_watch(c, t, handler, opts); },
+        "unwatch": fun(id) { return xdb_unwatch(c, id); },
+        "tick": fun() { return xdb_tick(c); },
+        "watchLoop": fun(intervalMs, rounds) { return xdb_watchLoop(c, intervalMs, rounds); },
+        "tx": fun() { return xdb_tx(c); },
+        "health": fun() { return xdb_health(c); },
+        "setLogger": fun(fn) { return xdb_setLogger(c, fn); },
+        "flushQueue": fun() { return xdb_flushQueue(c); },
+        "queueSize": fun() { return xdb_queueSize(c); },
+        "clearQueue": fun() { return xdb_clearQueue(c); },
+        "raw": fun(method, path, query, body) { return xdb_raw(c, method, path, query, body); },
+        "rpc": fun(fname, args) { return xdb_rpc(c, fname, args); },
+        "pull": fun(t, cname, opts) { return xdb_pull(c, t, cname, opts); },
+        "push": fun(t, cname, opts) { return xdb_push(c, t, cname, opts); },
+        "close": fun() { return xdb_close(c); }
+    };
+}
+
+// يفتح ويربط دفعة واحدة
+fun xdb_open(provider, name, cfg) { return xdb_bind(xdb_connect(provider, name, cfg)); }
+)EXTDBOGRIN";
+
 inline const std::unordered_map<std::string, std::string>& embeddedRinLibraries() {
     static const std::unordered_map<std::string, std::string> libs = {
         {"lib/math.og.rin", kLib_math_og_rin},
@@ -29247,6 +31002,7 @@ inline const std::unordered_map<std::string, std::string>& embeddedRinLibraries(
         {"lib/syskit.og.rin", kLib_syskit_og_rin},
         {"lib/requirekit.og.rin", kLib_requirekit_og_rin},
         {"lib/physics.og.rin", kLib_physics_og_rin},
+        {"lib/extdb.og.rin", kLib_extdb_og_rin},
         {"lib/indsinicons.og.rin", kLib_indsinicons_og_rin},
         {"lib/passkitlang.og.rin", kLib_passkitlang_og_rin},
         {"lib/passkitdb.og.rin", kLib_passkitdb_og_rin},
