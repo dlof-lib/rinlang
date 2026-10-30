@@ -109,6 +109,9 @@
 
 المثال الكامل: `examples/samples/indsin_tags_concepts.rin`.
 
+## جسر Rin `<< >>`
+ربط بيانات Rin وطباعة الناتج واستدعاء الدوال والتكرار على قوائم Rin: [indsin_bridge.md](indsin_bridge.md).
+
 ## الأخطاء
 
 `closing tag </Row> does not match <Column> opened at line 3` · `unclosed tag <Column>` ·
