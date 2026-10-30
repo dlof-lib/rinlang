@@ -7,6 +7,9 @@
   ],
   "patterns": [
     {
+      "include": "#bridge"
+    },
+    {
       "include": "#comments"
     },
     {
@@ -322,6 +325,42 @@
         },
         {
           "include": "#numbers"
+        }
+      ]
+    },
+    "bridge": {
+      "patterns": [
+        {
+          "name": "meta.bridge.block.indsin",
+          "match": "(<<)(/?)\\s*(if|else|each|let|const|warp|import)\\b",
+          "captures": {
+            "1": {
+              "name": "punctuation.definition.bridge.begin.indsin"
+            },
+            "3": {
+              "name": "keyword.control.bridge.indsin"
+            }
+          }
+        },
+        {
+          "name": "meta.bridge.value.indsin",
+          "match": "(<<)\\s*(print|run)\\b",
+          "captures": {
+            "1": {
+              "name": "punctuation.definition.bridge.begin.indsin"
+            },
+            "2": {
+              "name": "support.function.bridge.indsin"
+            }
+          }
+        },
+        {
+          "name": "punctuation.definition.bridge.begin.indsin",
+          "match": "<<(?!<|=)"
+        },
+        {
+          "name": "punctuation.definition.bridge.end.indsin",
+          "match": ">>(?!>|=)"
         }
       ]
     }
