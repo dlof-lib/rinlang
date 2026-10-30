@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="extdb">
+  <title>extdb — external databases for Rin</title>
+  <defs>
+    <linearGradient id="tile" x1="0.1" y1="0" x2="0.9" y2="1">
+      <stop offset="0" stop-color="#2B3FA0"/>
+      <stop offset="0.5" stop-color="#16246B"/>
+      <stop offset="1" stop-color="#080F33"/>
+    </linearGradient>
+    <radialGradient id="halo" cx="0.5" cy="0.48" r="0.5">
+      <stop offset="0" stop-color="#45E0D0" stop-opacity=".38"/>
+      <stop offset="0.6" stop-color="#45E0D0" stop-opacity=".08"/>
+      <stop offset="1" stop-color="#45E0D0" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity=".16"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="side" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#7DF3E4"/>
+      <stop offset="0.28" stop-color="#34D2C3"/>
+      <stop offset="0.7" stop-color="#16A3A0"/>
+      <stop offset="1" stop-color="#0B6D79"/>
+    </linearGradient>
+    <linearGradient id="sideShade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0.6" stop-color="#04323F" stop-opacity="0"/>
+      <stop offset="1" stop-color="#04323F" stop-opacity=".45"/>
+    </linearGradient>
+    <linearGradient id="lid" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F4FFFD"/>
+      <stop offset="1" stop-color="#9AF3E8"/>
+    </linearGradient>
+    <linearGradient id="amber" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFE08A"/>
+      <stop offset="1" stop-color="#F59E0B"/>
+    </linearGradient>
+    <linearGradient id="txt" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#A5F5EA"/>
+    </linearGradient>
+    <filter id="blur" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="16"/></filter>
+    <filter id="drop" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#020619" flood-opacity=".45"/>
+    </filter>
+    <clipPath id="tileClip"><rect width="512" height="512" rx="112"/></clipPath>
+  </defs>
+
+  <!-- tile -->
+  <rect width="512" height="512" rx="112" fill="url(#tile)"/>
+  <g clip-path="url(#tileClip)">
+    <g stroke="#9DB0FF" stroke-opacity=".09" stroke-width="2">
+      <path d="M64 0V512M128 0V512M192 0V512M256 0V512M320 0V512M384 0V512M448 0V512M0 64H512M0 128H512M0 192H512M0 256H512M0 320H512M0 384H512M0 448H512"/>
+    </g>
+    <rect width="512" height="512" fill="url(#halo)"/>
+    <rect width="512" height="250" fill="url(#sheen)"/>
+  </g>
+  <rect x="2" y="2" width="508" height="508" rx="110" fill="none" stroke="#FFFFFF" stroke-opacity=".14" stroke-width="3"/>
+
+  <!-- container brackets  [ ]  (the Rin container shape) -->
+  <g filter="url(#drop)" fill="none" stroke="url(#amber)" stroke-width="30" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M148 96 H96 V416 H148"/>
+    <path d="M364 96 H416 V416 H364"/>
+  </g>
+  <g fill="none" stroke="#FFFFFF" stroke-opacity=".45" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M148 88 H92 V200"/>
+    <path d="M364 88 H420 V200"/>
+  </g>
+
+
+  <!-- library name (outlined glyphs, Poppins Bold — OFL) -->
+  <path d="M175.4 259.8H140.7Q141.1 264.5 143.7 267Q146.4 269.4 150.2 269.4Q156 269.4 158.2 264.6H174.5Q173.3 269.5 170 273.5Q166.7 277.4 161.8 279.6Q156.9 281.9 150.8 281.9Q143.4 281.9 137.7 278.7Q132 275.6 128.7 269.8Q125.5 264 125.5 256.2Q125.5 248.4 128.7 242.5Q131.9 236.7 137.6 233.6Q143.3 230.4 150.8 230.4Q158 230.4 163.7 233.5Q169.3 236.5 172.5 242.2Q175.7 247.8 175.7 255.3Q175.7 257.5 175.4 259.8ZM160 251.3Q160 247.4 157.3 245Q154.6 242.7 150.6 242.7Q146.8 242.7 144.1 245Q141.5 247.2 140.8 251.3Z M213.3 281.2 203.8 267.3 195.7 281.2H179.1L195.6 255.6L178.7 231.2H195.9L205.5 245L213.5 231.2H230.1L213.3 256.3L230.5 281.2Z M264.3 268.2V281.2H256.5Q248.2 281.2 243.5 277.1Q238.9 273 238.9 263.8V243.9H232.8V231.2H238.9V219H254.2V231.2H264.2V243.9H254.2V264Q254.2 266.2 255.3 267.2Q256.4 268.2 258.9 268.2Z M291.8 230.4Q296.8 230.4 300.9 232.5Q304.9 234.6 307.3 238.1V214.8H322.6V281.2H307.3V274Q305.1 277.6 301.1 279.7Q297.1 281.9 291.8 281.9Q285.7 281.9 280.6 278.7Q275.6 275.5 272.7 269.6Q269.8 263.8 269.8 256.1Q269.8 248.4 272.7 242.5Q275.6 236.7 280.6 233.6Q285.7 230.4 291.8 230.4ZM296.3 243.8Q291.8 243.8 288.6 247.1Q285.4 250.3 285.4 256.1Q285.4 261.8 288.6 265.2Q291.8 268.5 296.3 268.5Q300.9 268.5 304.1 265.2Q307.3 261.9 307.3 256.2Q307.3 250.4 304.1 247.1Q300.9 243.8 296.3 243.8Z M364.4 230.4Q370.6 230.4 375.6 233.6Q380.7 236.7 383.6 242.5Q386.5 248.4 386.5 256.1Q386.5 263.8 383.6 269.6Q380.7 275.5 375.6 278.7Q370.6 281.9 364.4 281.9Q359.2 281.9 355.2 279.8Q351.3 277.7 349 274.2V281.2H333.7V214.8H349V238.2Q351.2 234.7 355.2 232.6Q359.2 230.4 364.4 230.4ZM359.9 243.8Q355.3 243.8 352.1 247.1Q348.9 250.4 348.9 256.2Q348.9 261.9 352.1 265.2Q355.3 268.5 359.9 268.5Q364.4 268.5 367.7 265.2Q370.9 261.8 370.9 256.1Q370.9 250.3 367.7 247.1Q364.5 243.8 359.9 243.8Z" fill="#2FD6C5" opacity=".55" filter="url(#blur)"/>
+  <g filter="url(#drop)">
+    <path d="M175.4 259.8H140.7Q141.1 264.5 143.7 267Q146.4 269.4 150.2 269.4Q156 269.4 158.2 264.6H174.5Q173.3 269.5 170 273.5Q166.7 277.4 161.8 279.6Q156.9 281.9 150.8 281.9Q143.4 281.9 137.7 278.7Q132 275.6 128.7 269.8Q125.5 264 125.5 256.2Q125.5 248.4 128.7 242.5Q131.9 236.7 137.6 233.6Q143.3 230.4 150.8 230.4Q158 230.4 163.7 233.5Q169.3 236.5 172.5 242.2Q175.7 247.8 175.7 255.3Q175.7 257.5 175.4 259.8ZM160 251.3Q160 247.4 157.3 245Q154.6 242.7 150.6 242.7Q146.8 242.7 144.1 245Q141.5 247.2 140.8 251.3Z M213.3 281.2 203.8 267.3 195.7 281.2H179.1L195.6 255.6L178.7 231.2H195.9L205.5 245L213.5 231.2H230.1L213.3 256.3L230.5 281.2Z M264.3 268.2V281.2H256.5Q248.2 281.2 243.5 277.1Q238.9 273 238.9 263.8V243.9H232.8V231.2H238.9V219H254.2V231.2H264.2V243.9H254.2V264Q254.2 266.2 255.3 267.2Q256.4 268.2 258.9 268.2Z M291.8 230.4Q296.8 230.4 300.9 232.5Q304.9 234.6 307.3 238.1V214.8H322.6V281.2H307.3V274Q305.1 277.6 301.1 279.7Q297.1 281.9 291.8 281.9Q285.7 281.9 280.6 278.7Q275.6 275.5 272.7 269.6Q269.8 263.8 269.8 256.1Q269.8 248.4 272.7 242.5Q275.6 236.7 280.6 233.6Q285.7 230.4 291.8 230.4ZM296.3 243.8Q291.8 243.8 288.6 247.1Q285.4 250.3 285.4 256.1Q285.4 261.8 288.6 265.2Q291.8 268.5 296.3 268.5Q300.9 268.5 304.1 265.2Q307.3 261.9 307.3 256.2Q307.3 250.4 304.1 247.1Q300.9 243.8 296.3 243.8Z M364.4 230.4Q370.6 230.4 375.6 233.6Q380.7 236.7 383.6 242.5Q386.5 248.4 386.5 256.1Q386.5 263.8 383.6 269.6Q380.7 275.5 375.6 278.7Q370.6 281.9 364.4 281.9Q359.2 281.9 355.2 279.8Q351.3 277.7 349 274.2V281.2H333.7V214.8H349V238.2Q351.2 234.7 355.2 232.6Q359.2 230.4 364.4 230.4ZM359.9 243.8Q355.3 243.8 352.1 247.1Q348.9 250.4 348.9 256.2Q348.9 261.9 352.1 265.2Q355.3 268.5 359.9 268.5Q364.4 268.5 367.7 265.2Q370.9 261.8 370.9 256.1Q370.9 250.3 367.7 247.1Q364.5 243.8 359.9 243.8Z" fill="url(#txt)"/>
+  </g>
+  <rect x="191" y="315" width="130" height="13" rx="6.5" fill="url(#amber)"/>
+</svg>
