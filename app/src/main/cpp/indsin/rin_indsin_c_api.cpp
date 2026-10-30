@@ -575,7 +575,10 @@ RIN_API char* rin_indsin_session_update_source(void* sessionPtr, const char* new
     std::string src = newSource ? newSource : "";
     SessionRinHost rinHost(sess);
 
-    if (!sess->state.ok) {
+    // <<each list as it>> يعتمد عدد عناصر الواجهة على بيانات Rin (let) التي لا يعيد المسار الساخن تشغيلها،
+    // فأي تعديل لمصدر فيه each يمرّ بالمسار البارد الكامل (مفسّر جديد؛ حالة warp تُبذَر من جديد).
+    const bool needCold = !sess->state.ok || indsin::tags::usesEach(src);
+    if (needCold) {
         // Never had a good Fabric to diff against -- just retry the cold pipeline outright, still
         // through the session's own persistent Interpreter (not a throwaway one) so state stays
         // consistent with whatever taps run next -- see rin_indsin_session_create's comment.
