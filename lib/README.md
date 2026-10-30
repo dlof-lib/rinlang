@@ -65,6 +65,7 @@
 | `passkitcrypt` | Encryption, signing and key generation for the Passkit family (prefix pc) | 34.4 KB |
 | `passkitdb` | Database and container layer for the Passkit family (prefix pd) | 31.4 KB |
 | `passkitlang` | interpreter of the <passkit> tag language as a library (auto-generated - do not edit by hand) | 69.8 KB |
+| `extdb` | قواعد بيانات خارجية لحاويات Rin وindsin عبر مزوّد اتصال مسمّى (rtdb / pgrest) — مكتبة مقسَّمة | 66 KB |
 | `physics` | مكتبة فيزياء متكاملة فوق stdlib الأساسية | 15.9 KB |
 | `previewkit` | PreviewKit: تشغيل ومعاينة حيّة لملفات PDF / Markdown / TypeScript | 102.5 KB |
 | `query` | Rin Query Pro — query pipeline for arrays. | 1.0 KB |
