@@ -929,8 +929,12 @@ private:
     void execLibraryBody(const std::vector<StmtPtr>& stmts, const std::vector<std::pair<size_t, std::string>>* segs, const EnvPtr& env);
     void registerNativesLibDir();   // rin_libdir.cpp — rinlib.*
     void registerNativesRintwist(); // rin_rintwist.cpp — rintwist.get / fmt / stack
+    void registerNativesCapture();  // rin_expr_host.cpp — captureOutput/capture/indsin.run: استدعاء دالة والتقاط ما تطبعه (جسر <<...>>)
+    // يستدعي دالة Rin (FUNCTION أو اسم fun/native) ويلتقط كل ما طبعته إلى captured بدل أن يبقى في ناتج البرنامج.
+    Value captureCall(const Value& callee, std::vector<Value>& args, int line, std::string& captured);
     EnvPtr globals;
     std::ostringstream output;
+    std::unordered_map<std::string, std::string> runCache_; // ذاكرة indsin.run(name, args...) — تُفرَّغ عند كل run()/callTopLevelFunction
     std::string sourceFile = "<input>"; // نظام Diagnostics — انظر setSourceFile() أعلاه
     // KEY_TERMS: vocabulary/semantic aliases declared by `.KEY_TERMS = {...};`.
     // This registry is intentionally runtime metadata; it never mutates the lexer/parser keyword table.
