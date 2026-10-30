@@ -1,0 +1,21 @@
+// tests/verification/extdb_container.rin — extdb imported INSIDE container bodies (and a group), no top-level import.
+// Needs tests/tools/extdb_mock.py on :8765.
+
+@Containers.Group=Shop
+    @container=Store
+        @import "extdb";
+        let cfg = {"url": "http://127.0.0.1:8765", "key": "ANON", "cacheTtl": 60, "retryDelayMs": 10};
+        let db = nil;
+        fun open() { db = xdb_open("pgrest", "storeconn", cfg); return db.provider; }
+        fun fill() { db.putMany("users", {"u1": {"name": "Sara", "age": 30}, "u2": {"name": "Omar", "age": 42}}); return db.count("users"); }
+        fun names() { let out = []; for (let d in db.list("users", {"order": "age"})) { push(out, d["name"]); } return out; }
+        fun probe() { try { db.get("ghost_table", "1"); } catch (e) { return xdb_msg(e); } return "no error"; }
+        fun pullAll() { return db.pull("users", "StoreUsers", nil); }
+    .end/container
+.end/Containers.Group
+
+print "provider=" + Shop.Store.open();
+print "seeded=" + Shop.Store.fill();
+print "names=" + Shop.Store.names();
+print "pulled=" + Shop.Store.pullAll() + " kind=" + container.kind("StoreUsers") + " docs=" + docIds("StoreUsers");
+print "probe=" + Shop.Store.probe();
