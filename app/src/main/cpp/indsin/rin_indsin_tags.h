@@ -30,6 +30,15 @@
 //   <> … </>                                     →  تجميع شفاف (Fragment): لا يُنتج عنصراً
 //   <!-- تعليق -->                               →  // تعليق
 //
+// جسر Rin ⇄ indsin بالأقواس المزدوجة << >> (docs/indsin_bridge.md): Rin للبيانات والمنطق، وindsin يرسم الواجهة.
+//   <Text>Hi <<user.name>>!</Text>         ربط تفاعلي بأي تعبير Rin (≡ {expr})، في النص والسمات وداخل "…<<x>>…"
+//   <<print a, b>>                         عرض قيمتين أو أكثر كما تفعل print (مفصولتين بمسافة)
+//   <<run report(n)>>                      استدعاء دالة Rin وعرض ما تطبعه (indsin.run: مُخزَّنة، وتُعاد عند تغيّر n)
+//   <<name>> (وحدها في موضع عنصر)          عنصر Text جاهز
+//   <<let x = expr>> · <<warp n = 0>> · <<import "lib">>
+//   <<if c>> … <<else if c2>> … <<else>> … <</if>>
+//   <<each items as it, i>> … <</each>>    تكرار على مصفوفة/رقم من Rin (يُقاس حجمها بتشغيل تجريبي — انظر pipeline)
+//
 // قيم السمات:
 //   "نص" أو 'نص'      سلسلة حرفية          |  {تعبير Rin}   تعبير يُقيَّم (متغيرات warp، شروط، دوال)
 //   12  120px  250ms   رقم/طول/زمن كما هو    |  #1E1E2E       لون (يُحاط بعلامتي اقتباس تلقائياً)
@@ -49,6 +58,12 @@ namespace tags {
 struct TagError {
     std::string message;
     int line;
+};
+
+// حجم قائمة <<each>> بعد التشغيل التجريبي: numeric=true إن كان التعبير رقماً (it ← k) لا مصفوفة (it ← (LIST)[k]).
+struct EachSize {
+    int count = 0;
+    bool numeric = false;
 };
 
 namespace detail {
@@ -72,6 +87,7 @@ struct Frame {
     int line;
     std::string chain;   // ما يجب نفيه في <Else> التالي (If: الشرط؛ Else-if: تراكمي)
     std::string cond;    // شرط <If>/<Else> (تعبير Rin) — يُحقَن كـ visible= في العناصر الأبناء
+    bool br = false;     // فُتح بصيغة <<if>> (يُغلَق بـ <</if>> ويقبل <<else>>)
 };
 
 struct Macro {
@@ -84,6 +100,11 @@ struct Ctx { // حالة مشتركة بين التشغيل الرئيسي وت�
     std::map<std::string, std::vector<Attr>> styles; // <Style#name …> — أنماط قابلة لإعادة الاستعمال عبر class="…"
     int autoId = 0;
     int depth = 0;
+    // ── جسر << >> ──
+    std::string tail;                         // عبارات Rin مرفوعة (<<let>> داخل عنصر) تُلحَق بآخر الناتج
+    bool probe = false;                       // تمريرة قياس: <<each>> غير الحرفية تُسجَّل ولا تُوسَّع
+    std::vector<std::string> eachExprs;       // تعابير القوائم المسجَّلة في تمريرة القياس (بترتيب أول ظهور)
+    std::map<std::string, EachSize> eachCounts; // تعبير القائمة → حجمها ونوعها (من التشغيل التجريبي)
 };
 
 class Desugarer {
@@ -107,6 +128,7 @@ public:
         }
         if (!stack.empty()) {
             const Frame& f = stack.back();
+            if (f.br) throw TagError{"unclosed <<if>> (missing <</if>>)", f.line};
             throw TagError{"unclosed tag <" + f.tagName + ">", f.line};
         }
         if (flat) for (auto& ch : out) if (ch == '\n' || ch == '\r') ch = ' ';
@@ -134,6 +156,7 @@ private:
     bool isTagStart(size_t p) const {
         if (s[p] != '<' || p + 1 >= n) return false;
         char c = s[p + 1];
+        if (c == '<') return p + 2 < n && s[p + 2] != '<' && s[p + 2] != '=';   // <<…>> جسر Rin (لا <<< ولا <<=)
         if (isIdStart(c) || c == '>') return true;
         if (c == '/') return p + 2 < n && (isIdStart(s[p + 2]) || s[p + 2] == '>');
         return s.compare(p, 4, "<!--") == 0;
@@ -169,18 +192,28 @@ private:
         return nl;
     }
 
-    std::string readQuoted() { // يقرأ "..." أو '...' ويعيد سلسلة بعلامتي " دائماً
+    std::string readQuoted() { // يقرأ "..." أو '...' ويعيد سلسلة بعلامتي " دائماً (ويدعم الاستيفاء "مرحباً <<name>>")
         char q = s[i++];
         std::string body;
+        std::vector<std::string> parts; // غير فارغة فقط عند وجود <<…>> داخل السلسلة
         while (i < n && s[i] != q) {
             if (s[i] == '\\' && i + 1 < n) { body += s[i++]; body += s[i++]; continue; }
+            if (s[i] == '<' && i + 1 < n && s[i + 1] == '<' && i + 2 < n && s[i + 2] != '<' && s[i + 2] != '=') {
+                if (!body.empty()) { parts.push_back("\"" + body + "\""); body.clear(); }
+                parts.push_back("(" + bridgeValue() + ")");
+                continue;
+            }
             if (s[i] == '\n') ++line;
             if (q == '\'' && s[i] == '"') { body += "\\\""; ++i; continue; }
             body += s[i++];
         }
         if (i >= n) fail("unterminated string in tag");
         ++i;
-        return "\"" + body + "\"";
+        if (parts.empty()) return "\"" + body + "\"";
+        if (!body.empty()) parts.push_back("\"" + body + "\"");
+        std::string r = parts[0][0] == '"' ? "" : "\"\" + ";
+        for (size_t k = 0; k < parts.size(); ++k) { if (k) r += " + "; r += parts[k]; }
+        return r;
     }
 
     std::string readBraced() { // يقرأ {…} متوازنة ويعيد المحتوى (بلا الأقواس)
@@ -226,6 +259,7 @@ private:
             if (e.empty()) fail("empty {} expression in tag attribute");
             return e;
         }
+        if (c == '<' && i + 2 < n && s[i + 1] == '<') return bridgeValue(); // سمة=<<expr>> ≡ سمة={expr}
         if (c == '#') { // لون
             size_t b = i++;
             while (i < n && std::isxdigit((unsigned char)s[i])) ++i;
@@ -286,6 +320,14 @@ private:
         bool sawSpace = false, any = false;
         while (i < n) {
             char c = s[i];
+            if (c == '<' && i + 2 < n && s[i + 1] == '<' && s[i + 2] != '<' && s[i + 2] != '=') { // <<expr>> داخل النص
+                if (!lit.empty() || sawSpace) { if (sawSpace && any) lit += ' '; }
+                sawSpace = false;
+                flushLiteral(lit, parts);
+                parts.push_back("(" + bridgeValue() + ")");
+                any = true;
+                continue;
+            }
             if (c == '<') {
                 if (i + 1 < n && s[i + 1] == '/') break;
                 i = save; line = saveLine; return false; // عنصر ابن
@@ -444,7 +486,305 @@ private:
 
     void emitNewlines(int nl) { for (int k = 0; k < nl; ++k) out += '\n'; }
 
+    // ═════════════════════ جسر Rin ⇄ indsin: << … >> ═════════════════════
+    static std::string trimWs(const std::string& x) {
+        size_t a = 0, b = x.size();
+        while (a < b && std::isspace((unsigned char)x[a])) ++a;
+        while (b > a && std::isspace((unsigned char)x[b - 1])) --b;
+        return x.substr(a, b - a);
+    }
+    static std::string firstWord(const std::string& raw) {
+        size_t k = 0;
+        while (k < raw.size() && isIdChar(raw[k])) ++k;
+        return raw.substr(0, k);
+    }
+    // يقسم e على sep خارج السلاسل والأقواس.
+    static std::vector<std::string> splitTop(const std::string& e, char sep = ',') {
+        std::vector<std::string> r;
+        std::string cur;
+        int depth = 0;
+        for (size_t k = 0; k < e.size(); ++k) {
+            char c = e[k];
+            if (c == '"' || c == '\'') {
+                char q = c; cur += c; ++k;
+                while (k < e.size() && e[k] != q) { if (e[k] == '\\' && k + 1 < e.size()) cur += e[k++]; cur += e[k++]; }
+                if (k < e.size()) cur += e[k];
+                continue;
+            }
+            if (c == '(' || c == '[' || c == '{') ++depth;
+            else if (c == ')' || c == ']' || c == '}') { if (depth > 0) --depth; }
+            if (c == sep && depth == 0) { r.push_back(cur); cur.clear(); continue; }
+            cur += c;
+        }
+        r.push_back(cur);
+        return r;
+    }
+
+    // يقرأ <<…>> عند الموضع الحالي (على أول '<') ويعيد المحتوى الخام مشذَّباً. '>>' داخل سلسلة أو (…) […] {…} لا تُنهيه.
+    std::string readBridge() {
+        const int startLine = line;
+        i += 2;
+        int depth = 0;
+        std::string body;
+        while (i < n) {
+            char c = s[i];
+            if (c == '"' || c == '\'') {
+                char q = c; body += s[i++];
+                while (i < n && s[i] != q) {
+                    if (s[i] == '\\' && i + 1 < n) body += s[i++];
+                    if (s[i] == '\n') ++line;
+                    body += s[i++];
+                }
+                if (i < n) body += s[i++];
+                continue;
+            }
+            if (c == '(' || c == '[' || c == '{') ++depth;
+            else if (c == ')' || c == ']' || c == '}') { if (depth > 0) --depth; }
+            else if (c == '>' && depth == 0 && i + 1 < n && s[i + 1] == '>') { i += 2; return trimWs(body); }
+            if (c == '\n') ++line;
+            body += c; ++i;
+        }
+        fail("unterminated '<<' (missing '>>')", startLine);
+    }
+
+    // محتوى << >> في موضع قيمة (نص ابن / سمة / داخل "…") → تعبير Rin.
+    //   <<expr>>            تعبير نقي تفاعلي
+    //   <<print a, b>>      "" + (a) + " " + (b)                  (كما تفعل print: مسافة بين القيم)
+    //   <<run f(x, y)>>     indsin.run("f", x, y)                  (استدعاء دالة وعرض ما تطبعه؛ مُخزَّن بالوسائط)
+    std::string bridgeExpr(const std::string& raw, int ln) {
+        if (raw.empty()) fail("empty <<>> bridge: put a Rin expression inside, e.g. <<user.name>>", ln);
+        if (raw[0] == '/') fail("closing '<<" + raw + ">>' without its opening block", ln);
+        std::string w = firstWord(raw);
+        if (w == "else" || w == "if" || w == "each" || w == "let" || w == "const" || w == "warp" || w == "import")
+            fail("<<" + w + " …>> is a statement: write it on its own, not inside text or an attribute value", ln);
+        const bool kw = !w.empty() && w.size() < raw.size() && std::isspace((unsigned char)raw[w.size()]);
+        if (kw && w == "print") {
+            std::string rest = trimWs(raw.substr(w.size()));
+            std::string r = "\"\"";
+            std::vector<std::string> ps = splitTop(rest);
+            for (size_t k = 0; k < ps.size(); ++k) {
+                std::string t = trim(ps[k]);
+                if (t.empty()) fail("<<print …>> has an empty value (check the commas)", ln);
+                if (k) r += " + \" \"";
+                r += " + (" + applyVars(t) + ")";
+            }
+            return r;
+        }
+        if (kw && w == "run") {
+            std::string rest = trimWs(raw.substr(w.size()));
+            size_t lp = rest.find('(');
+            std::string name = trimWs(lp == std::string::npos ? rest : rest.substr(0, lp));
+            if (name.empty()) fail("<<run …>> needs a function: <<run report(n)>>", ln);
+            for (char ch : name) if (!(isIdChar(ch) || ch == '.')) fail("<<run " + name + ">>: the function name must be a plain identifier", ln);
+            std::string args;
+            if (lp != std::string::npos) {
+                size_t rp = rest.rfind(')');
+                if (rp == std::string::npos || rp < lp || !trimWs(rest.substr(rp + 1)).empty())
+                    fail("<<run " + name + "(…)>> is malformed: expected name(args)", ln);
+                args = trim(rest.substr(lp + 1, rp - lp - 1));
+            }
+            return "indsin.run(\"" + name + "\"" + (args.empty() ? "" : ", " + applyVars(args)) + ")";
+        }
+        std::string e = applyVars(trim(raw));
+        if (e.empty()) fail("empty <<>> bridge", ln);
+        return e;
+    }
+    std::string bridgeValue() { int ln = line; std::string raw = readBridge(); return bridgeExpr(raw, ln); }
+
+    // شرط <If>/<Else> (مشترك بين <If cond=…> و <<if …>>)
+    void openCond(bool isElse, std::string c, int ln, const std::string& name, bool viaBridge) {
+        std::string chain = c;
+        if (isElse) {
+            auto it = lastIf.find((int)stack.size());
+            if (it == lastIf.end()) fail(viaBridge ? "<<else>> must directly follow an <<if>> branch" : "<Else> must directly follow an </If>", ln);
+            std::string neg = "!(" + it->second + ")";
+            chain = c.empty() ? it->second : "(" + it->second + ") or (" + c + ")";
+            c = c.empty() ? neg : neg + " and (" + c + ")";
+            lastIf.erase(it);
+        }
+        Frame fr{name, "", ln, chain, c};
+        fr.br = viaBridge;
+        stack.push_back(fr);
+    }
+
+    // آخر " as " على المستوى الأعلى في "items as it, i"
+    static size_t findTopAs(const std::string& e) {
+        size_t found = std::string::npos;
+        int depth = 0;
+        for (size_t k = 0; k < e.size(); ++k) {
+            char c = e[k];
+            if (c == '"' || c == '\'') { char q = c; ++k; while (k < e.size() && e[k] != q) { if (e[k] == '\\') ++k; ++k; } continue; }
+            if (c == '(' || c == '[' || c == '{') ++depth;
+            else if (c == ')' || c == ']' || c == '}') { if (depth > 0) --depth; }
+            else if (depth == 0 && std::isspace((unsigned char)c) && k + 3 < e.size() && e[k + 1] == 'a' && e[k + 2] == 's' && std::isspace((unsigned char)e[k + 3])) found = k;
+        }
+        return found;
+    }
+
+    // جسم <<each>> حتى <</each>> (يرفض التداخل). يترك i بعد <</each>>.
+    std::string captureEachBody(int startLine) {
+        for (size_t k = i; k + 1 < n; ++k) {
+            if (!(s[k] == '<' && s[k + 1] == '<')) continue;
+            size_t e = k + 2;
+            while (e < n && std::isspace((unsigned char)s[e])) ++e;
+            bool closing = e < n && s[e] == '/';
+            if (closing) ++e;
+            while (e < n && std::isspace((unsigned char)s[e])) ++e;
+            size_t wb = e;
+            while (e < n && isIdChar(s[e])) ++e;
+            if (lower(s.substr(wb, e - wb)) != "each") continue;
+            if (!closing) {
+                int ln = line; for (size_t q = i; q < k; ++q) if (s[q] == '\n') ++ln;
+                fail("nested <<each>> is not supported — move the inner loop into a <Define> component", ln);
+            }
+            size_t g = s.find(">>", e);
+            if (g == std::string::npos) fail("malformed <</each>> (missing '>>')", startLine);
+            std::string body = s.substr(i, k - i);
+            for (size_t q = i; q < g + 2; ++q) if (s[q] == '\n') ++line;
+            i = g + 2;
+            return body;
+        }
+        fail("unclosed <<each>> (missing <</each>>)", startLine);
+    }
+
+    void handleEach(const std::string& rest, int startLine) {
+        size_t asPos = findTopAs(rest);
+        if (asPos == std::string::npos) fail("<<each LIST as item>> needs 'as': e.g. <<each users as u, i>>", startLine);
+        std::string listText = trimWs(rest.substr(0, asPos));
+        std::vector<std::string> names = splitTop(trimWs(rest.substr(asPos + 3)));
+        if (listText.empty() || names.empty() || names.size() > 2) fail("<<each LIST as item[, index]>> is malformed", startLine);
+        std::string itName = trimWs(names[0]), idxName = names.size() > 1 ? trimWs(names[1]) : "";
+        auto okName = [](const std::string& nm) { if (nm.empty() || !isIdStart(nm[0])) return false; for (char ch : nm) if (!isIdChar(ch)) return false; return true; };
+        if (!okName(itName) || (names.size() > 1 && !okName(idxName))) fail("<<each … as item, index>>: names must be plain identifiers", startLine);
+
+        std::string body = captureEachBody(startLine);
+        std::string le = applyVars(trim(listText));
+
+        int count = -1;
+        bool numeric = false, literal = false;
+        std::vector<std::string> elems;
+        if (le.size() >= 2 && le.front() == '[' && le.back() == ']') { // مصفوفة حرفية: الحجم معروف بلا تشغيل
+            int d = 0; bool single = true;
+            for (size_t k = 0; k < le.size(); ++k) {
+                char c = le[k];
+                if (c == '"' || c == '\'') { char q = c; ++k; while (k < le.size() && le[k] != q) { if (le[k] == '\\') ++k; ++k; } continue; }
+                if (c == '[' || c == '(' || c == '{') ++d;
+                else if (c == ']' || c == ')' || c == '}') { --d; if (d == 0 && k + 1 < le.size()) { single = false; break; } }
+            }
+            if (single) {
+                literal = true;
+                std::string inner = trimWs(le.substr(1, le.size() - 2));
+                if (!inner.empty()) for (auto& e : splitTop(inner)) { std::string t = trimWs(e); if (!t.empty()) elems.push_back(t); }
+                count = (int)elems.size();
+            }
+        }
+        if (!literal && !le.empty() && le.find_first_not_of("0123456789") == std::string::npos && le.size() < 6) { numeric = true; count = std::stoi(le); }
+        if (!literal && !numeric) {
+            if (ctx.probe) {
+                bool seen = false;
+                for (auto& e : ctx.eachExprs) if (e == le) seen = true;
+                if (!seen) ctx.eachExprs.push_back(le);
+                emitNewlines(line - startLine);
+                return;
+            }
+            auto f = ctx.eachCounts.find(le);
+            if (f == ctx.eachCounts.end())
+                fail("<<each " + le + " …>> needs the Rin runtime to know the list size (use it through the indsin pipeline/preview, "
+                     "or give a literal list like [\"a\", \"b\"] or a number)", startLine);
+            count = f->second.count;
+            numeric = f->second.numeric;
+        }
+        if (count < 0) count = 0;
+        if (count > 2000) fail("<<each>> list is too long (" + std::to_string(count) + " > 2000)", startLine);
+        std::string text;
+        for (int k = 0; k < count; ++k) {
+            auto v = vars;
+            v[itName] = literal ? "(" + elems[k] + ")" : numeric ? std::to_string(k) : "(" + le + ")[" + std::to_string(k) + "]";
+            if (!idxName.empty()) v[idxName] = std::to_string(k);
+            text += expandBody(body, v, idSuffix + "_" + std::to_string(k), "each", startLine, activeCond()) + " ";
+        }
+        put(text);
+        emitNewlines(line - startLine);
+    }
+
+    // <<…>> في موضع عنصر/عبارة (بداية سطر أو بعد وسم)
+    void handleBridge() {
+        const int startLine = line;
+        std::string raw = readBridge();
+        const int consumed = line - startLine;
+        std::string w = firstWord(raw);
+        std::string rest = trimWs(raw.substr(w.size()));
+        const bool kw = !w.empty() && (w.size() == raw.size() || std::isspace((unsigned char)raw[w.size()]));
+
+        if (!raw.empty() && raw[0] == '/') { // إغلاق
+            std::string nm = lower(trimWs(raw.substr(1)));
+            if (nm == "each") fail("<</each>> without a matching <<each>>", startLine);
+            if (nm != "if") fail("unknown closing <<" + raw + ">> (only <</if>> and <</each>> exist)", startLine);
+            if (stack.empty()) fail("unexpected <</if>>", startLine);
+            Frame f = stack.back();
+            if (!f.br) fail("<</if>> does not match <" + f.tagName + "> opened at line " + std::to_string(f.line), startLine);
+            stack.pop_back();
+            lastIf[(int)stack.size()] = f.chain;
+            emitNewlines(consumed);
+            return;
+        }
+        if (kw && w == "if") {
+            if (rest.empty()) fail("<<if>> needs a condition: <<if count > 3>>", startLine);
+            openCond(false, applyVars(trim(rest)), startLine, "If", true);
+            emitNewlines(consumed);
+            return;
+        }
+        if (kw && w == "else") {
+            std::string c;
+            if (!rest.empty()) {
+                if (firstWord(rest) != "if" || trimWs(rest.substr(2)).empty()) fail("<<else>> takes no condition — write <<else if cond>>", startLine);
+                c = applyVars(trim(trimWs(rest.substr(2))));
+            }
+            if (stack.empty() || !stack.back().br) fail("<<else>> without a matching <<if>>", startLine);
+            Frame f = stack.back();
+            stack.pop_back();
+            lastIf[(int)stack.size()] = f.chain;
+            openCond(true, c, startLine, "Else", true);
+            emitNewlines(consumed);
+            return;
+        }
+        if (kw && w == "each") {
+            if (rest.empty()) fail("<<each>> needs a list: <<each items as it>>", startLine);
+            handleEach(rest, startLine);
+            return;
+        }
+        if (kw && (w == "let" || w == "const" || w == "warp")) {
+            std::string name = firstWord(rest);
+            std::string after = trimWs(rest.substr(name.size()));
+            if (name.empty() || !isIdStart(name[0]) || after.empty() || after[0] != '=' || (after.size() > 1 && after[1] == '='))
+                fail("<<" + w + " name = value>> is malformed", startLine);
+            std::string val = applyVars(trim(after.substr(1)));
+            if (val.empty()) fail("<<" + w + " " + name + " = …>> needs a value", startLine);
+            std::string stmt = w + " " + name + " = " + val + ";";
+            if (w != "warp" && (!stack.empty() || flat)) ctx.tail += stmt + " "; // داخل عنصر: يُرفع إلى آخر الملف (الواجهة تُقيَّم بعد التشغيل)
+            else put(stmt);
+            emitNewlines(consumed);
+            return;
+        }
+        if (kw && w == "import") {
+            if (rest.empty()) fail("<<import \"file\">> needs a path", startLine);
+            std::string q = (rest[0] == '"' || rest[0] == '\'') ? rest : "\"" + rest + "\"";
+            put("@import " + q + ";");
+            emitNewlines(consumed);
+            return;
+        }
+        // قيمة وحدها: عنصر Text جاهز  (<<name>> / <<print …>> / <<run f()>>)
+        std::string e = bridgeExpr(raw, startLine);
+        std::string id = "text_" + std::to_string(++ctx.autoId) + idSuffix;
+        std::string stmt = "@view.Text=" + id + " text=" + e + ";";
+        std::string cnd = activeCond();
+        if (!cnd.empty()) stmt += " visible=" + cnd + ";";
+        put(stmt + " .end/view");
+        emitNewlines(consumed);
+    }
+
     void handleTag() {
+        if (i + 1 < n && s[i] == '<' && s[i + 1] == '<') { handleBridge(); return; } // << … >>
         const int startLine = line;
         const size_t startPos = i;
 
@@ -477,6 +817,7 @@ private:
             ++i;
             if (stack.empty()) fail("unexpected closing tag </" + nm + ">", startLine);
             Frame f = stack.back();
+            if (f.br) fail("<<" + lower(f.tagName) + ">> opened at line " + std::to_string(f.line) + " is not closed: it needs <</if>> before </" + nm + ">", f.line);
             if (!nm.empty() && lower(nm) != lower(f.tagName))
                 fail("closing tag </" + nm + "> does not match <" + f.tagName + "> opened at line " + std::to_string(f.line), startLine);
             if (nm.empty() && !f.tagName.empty())
@@ -635,16 +976,7 @@ private:
                 std::string c = attrVal({"cond", "when", "test"});
                 if (tl == "if" && c.empty()) fail("<If> needs cond={expression}", startLine);
                 if (!c.empty() && c.front() == '"' && c.back() == '"') c = c.substr(1, c.size() - 2);
-                std::string chain = c;
-                if (tl == "else") {
-                    auto it = lastIf.find((int)stack.size());
-                    if (it == lastIf.end()) fail("<Else> must directly follow an </If>", startLine);
-                    std::string neg = "!(" + it->second + ")";
-                    chain = c.empty() ? it->second : "(" + it->second + ") or (" + c + ")";
-                    c = c.empty() ? neg : neg + " and (" + c + ")";
-                    lastIf.erase(it);
-                }
-                stack.push_back({tagName, "", startLine, chain, c});
+                openCond(tl == "else", c, startLine, tagName, false);
                 finish("");
                 return;
             }
@@ -930,18 +1262,53 @@ inline bool usesBuiltinComponent(const std::string& src) {
     return false;
 }
 
-inline std::string desugar(const std::string& source) {
-    detail::Ctx ctx;
+namespace detail {
+inline std::string desugarWith(const std::string& source, Ctx& ctx) {
     std::string pre;
     if (usesBuiltinComponent(source)) pre += builtinPrelude();
     if (usesStoreApi(source)) pre += storeLibPrelude();
+    std::string r;
     if (!pre.empty()) {
         std::string withPrelude = pre + source; // بلا '\n' في المقدمة: الأسطر محفوظة
-        detail::Desugarer d(withPrelude, ctx);
-        return d.run();
+        Desugarer d(withPrelude, ctx);
+        r = d.run();
+    } else {
+        Desugarer d(source, ctx);
+        r = d.run();
     }
-    detail::Desugarer d(source, ctx);
-    return d.run();
+    if (!ctx.tail.empty()) r += "\n" + ctx.tail; // عبارات <<let>> المرفوعة (بعد كل الأسطر الأصلية، فأرقام الأخطاء سليمة)
+    return r;
+}
+} // namespace detail
+
+inline std::string desugar(const std::string& source) {
+    detail::Ctx ctx;
+    return detail::desugarWith(source, ctx);
+}
+
+// ── <<each LIST as it>> على بيانات Rin: تمريرتان (انظر rin_indsin_pipeline.h → expandTagSyntax) ──
+// هل في المصدر <<each …>>؟ (فحص سريع قبل أي عمل إضافي)
+inline bool usesEach(const std::string& src) {
+    for (size_t p = src.find("<<"); p != std::string::npos; p = src.find("<<", p + 2)) {
+        size_t e = p + 2;
+        while (e < src.size() && std::isspace((unsigned char)src[e])) ++e;
+        if (src.compare(e, 4, "each") == 0 && e + 4 < src.size() && !detail::isIdChar(src[e + 4])) return true;
+    }
+    return false;
+}
+// تمريرة القياس: أجسام <<each>> غير الحرفية تُحذف (الأسطر محفوظة) وتعابير قوائمها تُعاد في exprs.
+inline std::string desugarProbe(const std::string& source, std::vector<std::string>& exprs) {
+    detail::Ctx ctx;
+    ctx.probe = true;
+    std::string r = detail::desugarWith(source, ctx);
+    exprs = ctx.eachExprs;
+    return r;
+}
+// التمريرة النهائية: counts = حجم كل قائمة (مفتاحها نص تعبير القائمة كما كُتب).
+inline std::string desugarWithCounts(const std::string& source, const std::map<std::string, EachSize>& counts) {
+    detail::Ctx ctx;
+    ctx.eachCounts = counts;
+    return detail::desugarWith(source, ctx);
 }
 
 } // namespace tags
