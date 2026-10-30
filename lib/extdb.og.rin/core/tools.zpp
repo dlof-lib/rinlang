@@ -1,0 +1,229 @@
+// extdb/core/tools.zpp — أدوات متقدمة: مسجّل طلبات، طابور عمل دون اتصال، دفعة كتابة (tx)، تصدير/استيراد JSON،
+// تجميعات، تكرار على صفحات، وأخطاء مصنَّفة.
+
+// ---- مسجّل الطلبات ------------------------------------------------------------------------------
+// xdb_setLogger(c, fun(entry) { ... })  entry: {provider, method, url (بلا أسرار), status, ok, ms, attempt}
+fun xdb_setLogger(c, fn) {
+    xdb__live(c);
+    c["logger"] = fn;
+    return true;
+}
+
+// ---- أخطاء مصنَّفة -------------------------------------------------------------------------------
+// "connection" (فشل اتصال/DNS/مهلة) | "http" (ردّ ≥ 400) | "schema" | "other"
+fun xdb_errKind(e) {
+    let m = xdb_msg(e);
+    if (contains(m, "connection failed")) { return "connection"; }
+    if (contains(m, " HTTP ")) { return "http"; }
+    if (contains(m, "schema violation")) { return "schema"; }
+    return "other";
+}
+
+// رقم حالة HTTP من الخطأ (0 إن لم يكن خطأ HTTP)
+fun xdb_errStatus(e) {
+    let m = xdb_msg(e);
+    let i = indexOf(m, " HTTP ");
+    if (i < 0) { return 0; }
+    let rest = substr(m, i + 6, len(m) - i - 6);
+    let j = indexOf(rest, ":");
+    if (j < 0) { return 0; }
+    return toNumber(substr(rest, 0, j));
+}
+
+fun xdb__isConn(e) { return xdb_errKind(e) == "connection"; }
+
+// ---- صحّة الاتصال --------------------------------------------------------------------------------
+fun xdb_health(c) {
+    xdb__live(c);
+    let t0 = time.ms();
+    try { xdb_ping(c); } catch (e) { return {"ok": false, "ms": time.ms() - t0, "error": xdb_msg(e)}; }
+    return {"ok": true, "ms": time.ms() - t0, "error": ""};
+}
+
+// ---- طابور العمل دون اتصال (cfg.offlineQueue = true) ----------------------------------------------------
+// عند فشل الاتصال (لا ردود الخادم) تُحفظ put/update/delete/putMany/deleteMany بدل رمي الخطأ وتعود "queued".
+// cfg.queueFile: يحفظ الطابور في ملف JSON ويستعيده عند الاتصال. xdb_flushQueue(c) يعيد الإرسال بالترتيب.
+fun xdb__queueing(c) { return xdb__opt(c["cfg"], "offlineQueue", false); }
+
+fun xdb__qsave(c) {
+    let f = xdb__opt(c["cfg"], "queueFile", nil);
+    if (f != nil) { writeFile(f, jsonEncode(c["queue"])); }
+}
+
+fun xdb__qload(c) {
+    let f = xdb__opt(c["cfg"], "queueFile", nil);
+    if (f != nil and fileExists(f)) {
+        let v = jsonDecode(readFile(f));
+        if (type(v) == "array") { c["queue"] = v; }
+    }
+}
+
+fun xdb__enqueue(c, op) {
+    push(c["queue"], op);
+    xdb__qsave(c);
+    return "queued";
+}
+
+fun xdb__replay(c, op) {
+    let k = op["op"];
+    if (k == "put") { return xdb_put(c, op["t"], op["id"], op["doc"]); }
+    if (k == "update") { return xdb_update(c, op["t"], op["id"], op["doc"]); }
+    if (k == "delete") { return xdb_delete(c, op["t"], op["id"]); }
+    if (k == "putMany") { return xdb_putMany(c, op["t"], op["docs"]); }
+    if (k == "deleteMany") { return xdb_deleteMany(c, op["t"], op["ids"]); }
+    xdb__fail("unknown queued operation `" + toString(k) + "`");
+}
+
+fun xdb_queueSize(c) { return len(c["queue"]); }
+
+// يُرجع {"sent": n, "left": n, "failed": n}؛ يتوقف عند أول فشل اتصال، وما يرفضه الخادم يُنقل إلى c["dead"]
+fun xdb_flushQueue(c) {
+    xdb__live(c);
+    let sent = 0;
+    let failed = 0;
+    while (len(c["queue"]) > 0) {
+        let op = c["queue"][0];
+        let stop = false;
+        try {
+            c["flushing"] = true;
+            xdb__replay(c, op);
+            c["flushing"] = false;
+            sent = sent + 1;
+        } catch (e) {
+            c["flushing"] = false;
+            if (xdb__isConn(e)) { stop = true; }
+            else { push(c["dead"], {"op": op, "error": xdb_msg(e)}); failed = failed + 1; }
+        }
+        if (stop) { break; }
+        let rest = [];
+        let i = 1;
+        while (i < len(c["queue"])) { push(rest, c["queue"][i]); i = i + 1; }
+        c["queue"] = rest;
+    }
+    xdb__qsave(c);
+    return {"sent": sent, "left": len(c["queue"]), "failed": failed};
+}
+
+fun xdb_clearQueue(c) { c["queue"] = []; xdb__qsave(c); return true; }
+
+// ---- دفعة كتابة (غير ذرّية عبر الجداول) ---------------------------------------------------------------------
+// let tx = xdb_tx(c); tx.put("users","u1",{...}); tx.delete("users","u2"); tx.commit();
+// commit يدمج العمليات المتجاورة على الجدول نفسه في طلب واحد (putMany/deleteMany) ويُرجع {"ops": n, "requests": m}.
+// إن فشل أحد الطلبات يُرمى الخطأ وتبقى العمليات غير المنفَّذة في tx.pending().
+fun xdb_tx(c) {
+    let st = {"ops": []};
+    let tx = {};
+    tx["put"] = fun(t, id, doc) { xdb__validate(c, t, xdb__strip(doc), false); push(st["ops"], {"k": "put", "t": t, "id": toString(id), "doc": doc}); return len(st["ops"]); };
+    tx["delete"] = fun(t, id) { push(st["ops"], {"k": "delete", "t": t, "id": toString(id)}); return len(st["ops"]); };
+    tx["size"] = fun() { return len(st["ops"]); };
+    tx["pending"] = fun() { return st["ops"]; };
+    tx["rollback"] = fun() { st["ops"] = []; return true; };
+    tx["commit"] = fun() {
+        let total = len(st["ops"]);
+        let reqs = 0;
+        while (len(st["ops"]) > 0) {
+            let ops = st["ops"];
+            let k = ops[0]["k"];
+            let t = ops[0]["t"];
+            let docs = {};
+            let ids = [];
+            let j = 0;
+            while (j < len(ops) and ops[j]["k"] == k and ops[j]["t"] == t) {
+                if (k == "put") { docs[ops[j]["id"]] = ops[j]["doc"]; } else { push(ids, ops[j]["id"]); }
+                j = j + 1;
+            }
+            if (k == "put") { xdb_putMany(c, t, docs); } else { xdb_deleteMany(c, t, ids); }
+            reqs = reqs + 1;
+            let left = [];
+            let q = j;
+            while (q < len(ops)) { push(left, ops[q]); q = q + 1; }
+            st["ops"] = left;
+        }
+        return {"ops": total, "requests": reqs};
+    };
+    return tx;
+}
+
+// ---- تصدير / استيراد / نسخ احتياطي (ملفات JSON) -----------------------------------------------------------------
+fun xdb_export(c, t, path) {
+    let rows = xdb_all(c, t);
+    writeFile(path, jsonEncode(rows));
+    return len(rows);
+}
+
+// opts: {"chunk": 500, "idField": "_id"}  — يقرأ مصفوفة مستندات ويكتبها بدفعات putMany
+fun xdb_import(c, t, path, opts) {
+    if (!fileExists(path)) { xdb__fail("no such file `" + toString(path) + "`"); }
+    let rows = jsonDecode(readFile(path));
+    if (type(rows) != "array") { xdb__fail("import expects a JSON array of documents"); }
+    let chunk = xdb__opt(opts, "chunk", 500);
+    let idf = xdb__opt(opts, "idField", "_id");
+    let batch = {};
+    let n = 0;
+    let total = 0;
+    for (let d in rows) {
+        if (type(d) != "map" or !has(d, idf)) { xdb__fail("import: every document needs `" + idf + "`"); }
+        batch[toString(d[idf])] = d;
+        n = n + 1;
+        if (n >= chunk) { xdb_putMany(c, t, batch); total = total + n; batch = {}; n = 0; }
+    }
+    if (n > 0) { xdb_putMany(c, t, batch); total = total + n; }
+    return total;
+}
+
+// نسخة احتياطية لجداول إلى مجلد: <dir>/<table>.json — يُرجع {table: count}
+fun xdb_backup(c, tables, dir) {
+    let out = {};
+    for (let t in tables) { out[t] = xdb_export(c, t, xdb__trimSlash(dir) + "/" + toString(t) + ".json"); }
+    return out;
+}
+
+// ---- تجميعات (من جهة العميل فوق xdb_list) ------------------------------------------------------------------------
+// {"count","sum","avg","min","max"} لحقل رقمي؛ opts كما في xdb_list (where...)
+fun xdb_agg(c, t, field, opts) {
+    let o = {"select": [field]};
+    if (opts != nil) {
+        for (let k in keys(opts)) { if (k != "select") { o[k] = opts[k]; } }
+    }
+    let n = 0;
+    let sum = 0;
+    let mn = nil;
+    let mx = nil;
+    for (let d in xdb_list(c, t, o)) {
+        if (!has(d, field) or type(d[field]) != "number") { continue; }
+        let v = d[field];
+        n = n + 1;
+        sum = sum + v;
+        if (mn == nil or v < mn) { mn = v; }
+        if (mx == nil or v > mx) { mx = v; }
+    }
+    let avg = nil;
+    if (n > 0) { avg = sum / n; }
+    return {"count": n, "sum": sum, "avg": avg, "min": mn, "max": mx};
+}
+
+// يمرّ على كل المستندات صفحة صفحة ويستدعي fn(doc) لكل واحد؛ يُرجع العدد. التوقف المبكر: fn تُرجع false.
+fun xdb_each(c, t, size, fn, opts) {
+    let o = {};
+    if (opts != nil) { for (let k in keys(opts)) { o[k] = opts[k]; } }
+    if (!has(o, "order")) { o["order"] = xdb__defaultOrder(c); }
+    let off = 0;
+    let n = 0;
+    while (true) {
+        o["limit"] = size;
+        o["offset"] = off;
+        let rows = xdb_list(c, t, o);
+        for (let d in rows) {
+            n = n + 1;
+            if (fn(d) == false) { return n; }
+        }
+        if (len(rows) < size) { break; }
+        off = off + size;
+    }
+    return n;
+}
+
+fun xdb__defaultOrder(c) {
+    if (c["provider"] == "pgrest") { return xdb__pg_idc(c); }
+    return "_id";
+}
