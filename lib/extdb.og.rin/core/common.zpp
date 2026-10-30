@@ -1,0 +1,233 @@
+// extdb/core/common.zpp — أدوات مشتركة بين المزوّدين.
+
+fun xdb__fail(msg) { throw "extdb: " + msg; }
+
+fun xdb__opt(o, k, d) {
+    if (o == nil) { return d; }
+    if (type(o) != "map") { return d; }
+    if (has(o, k)) { return o[k]; }
+    return d;
+}
+
+fun xdb__starts(s, p) { return len(s) >= len(p) and substr(s, 0, len(p)) == p; }
+fun xdb__ends(s, p) { return len(s) >= len(p) and substr(s, len(s) - len(p), len(p)) == p; }
+
+fun xdb__enc(v) { return net.urlEncode(toString(v)); }
+
+fun xdb__isId(v) {
+    let t = type(v);
+    return t == "string" or t == "number";
+}
+
+fun xdb__id(v) {
+    if (!xdb__isId(v) or toString(v) == "") { xdb__fail("document id must be a non-empty string or number"); }
+    return toString(v);
+}
+
+fun xdb__trimSlash(s) {
+    let out = s;
+    while (len(out) > 0 and xdb__ends(out, "/")) { out = substr(out, 0, len(out) - 1); }
+    return out;
+}
+
+fun xdb__copy(m) {
+    let out = {};
+    for (let k in keys(m)) { out[k] = m[k]; }
+    return out;
+}
+
+// نسخة من المستند بلا الحقل _id (لا يُرسَل إلى القاعدة البعيدة)
+fun xdb__strip(doc) {
+    if (type(doc) != "map") { xdb__fail("a document must be a map"); }
+    let out = {};
+    for (let k in keys(doc)) { if (k != "_id") { out[k] = doc[k]; } }
+    return out;
+}
+
+fun xdb__withId(id, doc) {
+    let out = {"_id": id};
+    for (let k in keys(doc)) { out[k] = doc[k]; }
+    return out;
+}
+
+// رسالة خطأ مقروءة من رد المزوّد (rtdb: {"error": ...} — pgrest: {"message": ..., "hint": ...})
+fun xdb__errText(r) {
+    let j = r["json"];
+    if (type(j) == "map") {
+        if (has(j, "message")) { return toString(j["message"]); }
+        if (has(j, "error")) { return toString(j["error"]); }
+    }
+    let b = toString(r["body"]);
+    if (len(b) > 200) { b = substr(b, 0, 200) + "..."; }
+    return b;
+}
+
+// يتحقق من الرد ويُرجع الجسم المفكَّك
+fun xdb__check(c, r) {
+    if (!r["ok"]) { xdb__fail(c["provider"] + " connection failed: " + toString(r["error"])); }
+    if (r["status"] >= 400) { xdb__fail(c["provider"] + " HTTP " + toString(r["status"]) + ": " + xdb__errText(r)); }
+    return r["json"];
+}
+
+fun xdb__live(c) {
+    if (type(c) != "map" or !has(c, "provider")) { xdb__fail("not a connection (use xdb_connect)"); }
+    if (!c["open"]) { xdb__fail("connection `" + c["name"] + "` is closed"); }
+}
+
+fun xdb__isRt(c) { return c["provider"] == "rtdb"; }
+
+// قيمة قد تكون دالة (مزوّد رمز يتجدد): تُستدعى في كل طلب
+fun xdb__val(v) {
+    if (type(v) == "function") { return v(); }
+    return v;
+}
+
+fun xdb__same(a, b) {
+    if (type(a) != type(b)) { return false; }
+    if (type(a) == "map") {
+        let ka = keys(a);
+        if (len(ka) != len(keys(b))) { return false; }
+        for (let k in ka) {
+            if (k == "_id") { continue; }
+            if (!has(b, k) or !xdb__same(a[k], b[k])) { return false; }
+        }
+        return true;
+    }
+    if (type(a) == "array") {
+        if (len(a) != len(b)) { return false; }
+        let i = 0;
+        while (i < len(a)) { if (!xdb__same(a[i], b[i])) { return false; } i = i + 1; }
+        return true;
+    }
+    return a == b;
+}
+
+// نسخة عميقة (عبر JSON) كي لا يعدّل المستدعي ما في الكاش
+fun xdb__clone(v) {
+    if (v == nil or type(v) == "number" or type(v) == "string" or type(v) == "bool") { return v; }
+    return jsonDecode(jsonEncode(v));
+}
+
+// ---- تصفية/ترتيب من جهة العميل (تُستعمل مع rtdb) -------------------------------------------
+// where: {حقل: قيمة} أو {حقل: {"gt": 5, "lte": 9, "ne": x, "in": [..], "like": "Sa*"}}
+fun xdb__cmp(x, y) {
+    if (type(x) == "number" and type(y) == "number") {
+        if (x < y) { return -1; }
+        if (x > y) { return 1; }
+        return 0;
+    }
+    let a = toString(x);
+    let b = toString(y);
+    if (a == b) { return 0; }
+    // Rin لا يقارن النصوص بـ < فنستعمل sort (ترتيب بايتات UTF-8)
+    if (sort([a, b])[0] == a) { return -1; }
+    return 1;
+}
+
+fun xdb__like(v, pat) {
+    let s = lower(toString(v));
+    let p = lower(toString(pat));
+    let pre = xdb__starts(p, "*");
+    let suf = xdb__ends(p, "*");
+    let core = p;
+    if (pre) { core = substr(core, 1, len(core) - 1); }
+    if (suf and len(core) > 0) { core = substr(core, 0, len(core) - 1); }
+    if (pre and suf) { return contains(s, core); }
+    if (pre) { return xdb__ends(s, core); }
+    if (suf) { return xdb__starts(s, core); }
+    return s == core;
+}
+
+fun xdb__ops() { return ["eq", "ne", "gt", "gte", "lt", "lte", "like", "ilike", "in", "is"]; }
+
+fun xdb__opOk(have, op, want) {
+    if (op == "eq") { return type(have) == type(want) and toString(have) == toString(want); }
+    if (op == "ne") { return !(type(have) == type(want) and toString(have) == toString(want)); }
+    if (op == "is") { return have == want; }
+    if (op == "in") {
+        for (let w in want) { if (type(have) == type(w) and toString(have) == toString(w)) { return true; } }
+        return false;
+    }
+    if (have == nil) { return false; }
+    if (op == "like" or op == "ilike") { return xdb__like(have, want); }
+    let c = xdb__cmp(have, want);
+    if (op == "gt") { return c > 0; }
+    if (op == "gte") { return c >= 0; }
+    if (op == "lt") { return c < 0; }
+    if (op == "lte") { return c <= 0; }
+    xdb__fail("unknown filter operator `" + toString(op) + "` (available: " + join(xdb__ops(), ", ") + ")");
+}
+
+fun xdb__matches(doc, where) {
+    for (let k in keys(where)) {
+        let have = nil;
+        if (has(doc, k)) { have = doc[k]; }
+        let spec = where[k];
+        if (type(spec) == "map") {
+            for (let op in keys(spec)) { if (!xdb__opOk(have, op, spec[op])) { return false; } }
+        } else if (spec == nil) {
+            if (have != nil) { return false; }
+        } else {
+            if (!xdb__opOk(have, "eq", spec)) { return false; }
+        }
+    }
+    return true;
+}
+
+fun xdb__project(doc, fields) {
+    if (fields == nil) { return doc; }
+    let out = {};
+    if (has(doc, "_id")) { out["_id"] = doc["_id"]; }
+    for (let f in fields) { if (has(doc, f)) { out[f] = doc[f]; } }
+    return out;
+}
+
+// opts: {"where", "select": [حقول], "order", "desc", "limit", "offset"}
+fun xdb__clientApply(docs, opts) {
+    let out = [];
+    let where = xdb__opt(opts, "where", nil);
+    for (let d in docs) {
+        if (where == nil or xdb__matches(d, where)) { push(out, d); }
+    }
+    let order = xdb__opt(opts, "order", nil);
+    if (order != nil) {
+        let i = 1;
+        while (i < len(out)) {
+            let cur = out[i];
+            let j = i - 1;
+            while (j >= 0 and xdb__after(out[j], cur, order)) {
+                out[j + 1] = out[j];
+                j = j - 1;
+            }
+            out[j + 1] = cur;
+            i = i + 1;
+        }
+        if (xdb__opt(opts, "desc", false)) {
+            let rev = [];
+            let k = len(out) - 1;
+            while (k >= 0) { push(rev, out[k]); k = k - 1; }
+            out = rev;
+        }
+    }
+    let offset = xdb__opt(opts, "offset", 0);
+    let limit = xdb__opt(opts, "limit", nil);
+    let sel = xdb__opt(opts, "select", nil);
+    if (offset > 0 or limit != nil or sel != nil) {
+        let res = [];
+        let n = 0;
+        let idx = 0;
+        for (let d in out) {
+            if (idx >= offset and (limit == nil or n < limit)) { push(res, xdb__project(d, sel)); n = n + 1; }
+            idx = idx + 1;
+        }
+        out = res;
+    }
+    return out;
+}
+
+// هل a بعد b في الترتيب التصاعدي حسب الحقل؟ (المفقود يأتي أولاً)
+fun xdb__after(a, b, field) {
+    if (!has(a, field)) { return false; }
+    if (!has(b, field)) { return true; }
+    return xdb__cmp(a[field], b[field]) > 0;
+}
