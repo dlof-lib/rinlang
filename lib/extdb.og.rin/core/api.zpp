@@ -1,0 +1,347 @@
+// extdb/core/api.zpp — الواجهة العامة (كل الدوال تبدأ بـ xdb_). المزوّد يُختار باسمه عند الاتصال.
+
+fun xdb_providers() { return XDB_PROVIDERS; }
+
+// اسم المزوّد غير حساس لحالة الأحرف؛ يُرجع الاسم القياسي أو يرمي خطأً
+fun xdb__provider(name) {
+    let p = lower(trim(toString(name)));
+    if (p == "rtdb" or p == "pgrest") { return p; }
+    xdb__fail("unknown connection provider `" + toString(name) + "` (available: " + join(XDB_PROVIDERS, ", ") + ")");
+}
+
+// يبني اتصالاً (بلا تسجيل)
+fun xdb__make(provider, name, cfg) {
+    let p = xdb__provider(provider);
+    if (type(cfg) != "map") { xdb__fail("cfg must be a map"); }
+    let base = "";
+    if (p == "rtdb") { base = xdb__rt_init(cfg); } else { base = xdb__pg_init(cfg); }
+    let c = {"provider": p, "name": name, "cfg": cfg, "base": base, "open": true, "cache": {},
+             "stats": {"requests": 0, "retries": 0, "hits": 0}, "session": nil, "logger": nil, "schemas": {},
+             "queue": [], "dead": [], "flushing": false, "watches": {}, "watchSeq": 0, "refreshing": false};
+    let lg = xdb__opt(cfg, "logger", nil);
+    if (lg != nil) { c["logger"] = lg; }
+    xdb__qload(c);
+    return c;
+}
+
+// ---- اتصال ---------------------------------------------------------------------------------
+// xdb_connect(provider, name, cfg) — name اسم الاتصال (فريد) يُستعمل في xdb_connections و xdb_close
+fun xdb_connect(provider, name, cfg) {
+    if (type(name) != "string" or name == "") { xdb__fail("connection name must be a non-empty string"); }
+    if (has(XDB["conns"], name)) { xdb__fail("connection `" + name + "` is already open (close it first)"); }
+    let c = xdb__make(provider, name, cfg);
+    XDB["conns"][name] = c;
+    ExtDB.catalog.openCount = len(keys(XDB["conns"]));
+    return c;
+}
+
+fun xdb_rtdb(name, cfg) { return xdb_connect("rtdb", name, cfg); }
+fun xdb_pgrest(name, cfg) { return xdb_connect("pgrest", name, cfg); }
+
+fun xdb_close(c) {
+    xdb__live(c);
+    c["open"] = false;
+    c["cache"] = {};
+    if (has(XDB["conns"], c["name"])) { remove(XDB["conns"], c["name"]); }
+    ExtDB.catalog.openCount = len(keys(XDB["conns"]));
+    return true;
+}
+
+fun xdb_connections() { return keys(XDB["conns"]); }
+
+fun xdb_info(c) {
+    xdb__live(c);
+    return {"name": c["name"], "provider": c["provider"], "url": c["base"], "open": c["open"],
+            "requests": c["stats"]["requests"], "retries": c["stats"]["retries"], "cacheHits": c["stats"]["hits"],
+            "cached": len(keys(c["cache"])), "signedIn": c["session"] != nil, "queued": len(c["queue"]),
+            "watches": len(keys(c["watches"])), "version": XDB_VERSION};
+}
+
+// يتحقق من الوصول إلى الخادم (يرمي خطأً مفهوماً عند الفشل)
+fun xdb_ping(c) {
+    xdb__live(c);
+    if (xdb__isRt(c)) { return xdb__rt_ping(c); }
+    return xdb__pg_ping(c);
+}
+
+fun xdb_clearCache(c, t) {
+    xdb__live(c);
+    if (t == nil) { c["cache"] = {}; } else { xdb__cinv(c, t); }
+    return true;
+}
+
+// ---- قراءة (مع كاش اختياري cfg.cacheTtl) ---------------------------------------------------------
+fun xdb_get(c, t, id) {
+    xdb__live(c);
+    let key = toString(t) + "|get|" + toString(id);
+    let hit = xdb__cget(c, key);
+    if (hit != nil) { return hit["v"]; }
+    let v = nil;
+    if (xdb__isRt(c)) { v = xdb__rt_get(c, t, id); } else { v = xdb__pg_get(c, t, id); }
+    return xdb__cput(c, key, v);
+}
+
+fun xdb_has(c, t, id) {
+    xdb__live(c);
+    if (xdb__isRt(c)) { return xdb__rt_has(c, t, id); }
+    return xdb__pg_has(c, t, id);
+}
+
+fun xdb_ids(c, t) {
+    xdb__live(c);
+    let key = toString(t) + "|ids";
+    let hit = xdb__cget(c, key);
+    if (hit != nil) { return hit["v"]; }
+    let v = nil;
+    if (xdb__isRt(c)) { v = xdb__rt_ids(c, t); } else { v = xdb__pg_ids(c, t); }
+    return xdb__cput(c, key, v);
+}
+
+fun xdb_count(c, t) { return len(xdb_ids(c, t)); }
+
+fun xdb_all(c, t) {
+    xdb__live(c);
+    let key = toString(t) + "|all";
+    let hit = xdb__cget(c, key);
+    if (hit != nil) { return hit["v"]; }
+    let v = nil;
+    if (xdb__isRt(c)) { v = xdb__rt_all(c, t); } else { v = xdb__pg_all(c, t); }
+    return xdb__cput(c, key, v);
+}
+
+fun xdb_find(c, t, field, value) {
+    xdb__live(c);
+    if (xdb__isRt(c)) { return xdb__rt_find(c, t, field, value); }
+    return xdb__pg_find(c, t, field, value);
+}
+
+fun xdb_findOne(c, t, field, value) {
+    let rows = xdb_find(c, t, field, value);
+    if (len(rows) == 0) { return nil; }
+    return rows[0];
+}
+
+// opts: {"where": {حقل: قيمة | {"gt":5,"in":[..],"like":"Sa*"}}, "select": [حقول], "order": حقل, "desc": true, "limit": n, "offset": n}
+fun xdb_list(c, t, opts) {
+    xdb__live(c);
+    if (xdb__isRt(c)) { return xdb__rt_list(c, t, opts); }
+    return xdb__pg_query(c, t, opts);
+}
+
+// ---- كتابة (تُبطل كاش الجدول) ---------------------------------------------------------------------
+fun xdb_put(c, t, id, doc) {
+    xdb__live(c);
+    xdb__validate(c, t, xdb__strip(doc), false);
+    xdb__cinv(c, t);
+    if (xdb__queueing(c) and !c["flushing"]) {
+        try { return xdb__put_(c, t, id, doc); }
+        catch (e) { if (xdb__isConn(e)) { return xdb__enqueue(c, {"op": "put", "t": t, "id": toString(id), "doc": xdb__strip(doc)}); } throw e; }
+    }
+    return xdb__put_(c, t, id, doc);
+}
+fun xdb__put_(c, t, id, doc) {
+    if (xdb__isRt(c)) { return xdb__rt_put(c, t, id, doc); }
+    return xdb__pg_put(c, t, id, doc);
+}
+
+fun xdb_insert(c, t, id, doc) {
+    xdb__live(c);
+    xdb__validate(c, t, xdb__strip(doc), false);
+    xdb__cinv(c, t);
+    if (xdb__isRt(c)) { return xdb__rt_insert(c, t, id, doc); }
+    return xdb__pg_insert(c, t, id, doc);
+}
+
+fun xdb_add(c, t, doc) {
+    xdb__live(c);
+    xdb__validate(c, t, xdb__strip(doc), false);
+    xdb__cinv(c, t);
+    if (xdb__isRt(c)) { return xdb__rt_add(c, t, doc); }
+    return xdb__pg_add(c, t, doc);
+}
+
+fun xdb_update(c, t, id, patch) {
+    xdb__live(c);
+    xdb__validate(c, t, xdb__strip(patch), true);
+    xdb__cinv(c, t);
+    if (xdb__queueing(c) and !c["flushing"]) {
+        try { return xdb__update_(c, t, id, patch); }
+        catch (e) { if (xdb__isConn(e)) { return xdb__enqueue(c, {"op": "update", "t": t, "id": toString(id), "doc": xdb__strip(patch)}); } throw e; }
+    }
+    return xdb__update_(c, t, id, patch);
+}
+fun xdb__update_(c, t, id, patch) {
+    if (xdb__isRt(c)) { return xdb__rt_update(c, t, id, patch); }
+    return xdb__pg_update(c, t, id, patch);
+}
+
+fun xdb_delete(c, t, id) {
+    xdb__live(c);
+    xdb__cinv(c, t);
+    if (xdb__queueing(c) and !c["flushing"]) {
+        try { return xdb__delete_(c, t, id); }
+        catch (e) { if (xdb__isConn(e)) { return xdb__enqueue(c, {"op": "delete", "t": t, "id": toString(id)}); } throw e; }
+    }
+    return xdb__delete_(c, t, id);
+}
+fun xdb__delete_(c, t, id) {
+    if (xdb__isRt(c)) { return xdb__rt_delete(c, t, id); }
+    return xdb__pg_delete(c, t, id);
+}
+
+// زيادة حقل رقمي: قراءة ثم كتابة (غير ذرّية عبر الشبكة). المستند الناقص يبدأ من 0. يُرجع القيمة الجديدة.
+fun xdb_incr(c, t, id, field, by) {
+    let d = xdb_get(c, t, id);
+    let cur = 0;
+    if (d != nil and has(d, field) and type(d[field]) == "number") { cur = d[field]; }
+    let step = by;
+    if (step == nil) { step = 1; }
+    let patch = {};
+    patch[field] = cur + step;
+    if (d == nil) { xdb_put(c, t, id, patch); } else { xdb_update(c, t, id, patch); }
+    return cur + step;
+}
+
+// ---- دفعات (طلب واحد عادةً) ------------------------------------------------------------------------
+// docs: {id: doc} أو مصفوفة مستندات يحمل كل منها _id. يُرجع العدد.
+fun xdb_putMany(c, t, docs) {
+    xdb__live(c);
+    let m = {};
+    if (type(docs) == "array") {
+        for (let d in docs) {
+            if (type(d) != "map" or !has(d, "_id")) { xdb__fail("putMany: every document in an array needs an _id"); }
+            m[toString(d["_id"])] = d;
+        }
+    } else if (type(docs) == "map") {
+        m = docs;
+    } else { xdb__fail("putMany expects a map {id: doc} or an array of documents with _id"); }
+    for (let id in keys(m)) { xdb__validate(c, t, xdb__strip(m[id]), false); }
+    xdb__cinv(c, t);
+    if (xdb__queueing(c) and !c["flushing"]) {
+        try { return xdb__putMany_(c, t, m); }
+        catch (e) { if (xdb__isConn(e)) { xdb__enqueue(c, {"op": "putMany", "t": t, "docs": m}); return "queued"; } throw e; }
+    }
+    return xdb__putMany_(c, t, m);
+}
+fun xdb__putMany_(c, t, m) {
+    if (xdb__isRt(c)) { return xdb__rt_putMany(c, t, m); }
+    return xdb__pg_putMany(c, t, m);
+}
+
+fun xdb_deleteMany(c, t, ids) {
+    xdb__live(c);
+    xdb__cinv(c, t);
+    if (xdb__queueing(c) and !c["flushing"]) {
+        try { return xdb__deleteMany_(c, t, ids); }
+        catch (e) { if (xdb__isConn(e)) { xdb__enqueue(c, {"op": "deleteMany", "t": t, "ids": ids}); return "queued"; } throw e; }
+    }
+    return xdb__deleteMany_(c, t, ids);
+}
+fun xdb__deleteMany_(c, t, ids) {
+    if (xdb__isRt(c)) { return xdb__rt_deleteMany(c, t, ids); }
+    return xdb__pg_deleteMany(c, t, ids);
+}
+
+// طلب خام بلغة المزوّد: rtdb → path نسبي لجذر القاعدة + query نص (أو nil)؛
+// pgrest → path نسبي لـ /rest/v1 (query جزء منه). لا يمرّ بالكاش (يمسح الكاش كله احتياطاً للكتابة).
+fun xdb_raw(c, method, path, query, body) {
+    xdb__live(c);
+    if (upper(method) != "GET") { c["cache"] = {}; }
+    if (xdb__isRt(c)) { return xdb__rt_raw(c, method, path, query, body); }
+    return xdb__pg_raw(c, method, path, body);
+}
+
+// pgrest فقط: استدعاء دالة Postgres
+fun xdb_rpc(c, fname, args) {
+    xdb__live(c);
+    if (xdb__isRt(c)) { xdb__fail("rpc is only available for the pgrest provider"); }
+    c["cache"] = {};
+    return xdb__pg_rpc(c, fname, args);
+}
+
+// ---- الحاويات: ربط container.doc المحلية بالجدول البعيد ---------------------------------------------
+fun xdb__ensureDoc(cname) {
+    if (hasContainer(cname)) {
+        if (container.kind(cname) != "doc") { xdb__fail("container `" + cname + "` exists but is not a container.doc"); }
+    } else {
+        spawn("doc", cname);
+    }
+}
+
+// يسحب مستندات الجدول البعيد إلى حاوية doc محلية (تُنشأ إن لم توجد). يُرجع العدد.
+// opts: {"clear": true} يفرّغ الحاوية قبل السحب · وأي مفاتيح استعلام (where/select/order/limit) تُمرَّر لـ xdb_list
+fun xdb_pull(c, t, cname, opts) {
+    xdb__live(c);
+    xdb__ensureDoc(cname);
+    if (xdb__opt(opts, "clear", false)) {
+        for (let id in docIds(cname)) { deleteDoc(cname, id); }
+    }
+    let docs = [];
+    if (xdb__opt(opts, "where", nil) != nil or xdb__opt(opts, "limit", nil) != nil or xdb__opt(opts, "order", nil) != nil) {
+        docs = xdb_list(c, t, opts);
+    } else {
+        docs = xdb_all(c, t);
+    }
+    for (let d in docs) { insertDoc(cname, d["_id"], d); }
+    return len(docs);
+}
+
+// يرفع مستندات الحاوية المحلية إلى الجدول (دفعة واحدة عبر putMany). يُرجع عدد المرفوع.
+// opts: {"prune": true} يحذف من البعيد ما ليس في الحاوية (احذر)
+fun xdb_push(c, t, cname, opts) {
+    xdb__live(c);
+    if (!hasContainer(cname)) { xdb__fail("no such container `" + cname + "`"); }
+    let ids = docIds(cname);
+    let batch = {};
+    for (let id in ids) { batch[toString(id)] = findDoc(cname, id); }
+    xdb_putMany(c, t, batch);
+    if (xdb__opt(opts, "prune", false)) {
+        let gone = [];
+        for (let rid in xdb_ids(c, t)) { if (!has(batch, rid)) { push(gone, rid); } }
+        if (len(gone) > 0) { xdb_deleteMany(c, t, gone); }
+    }
+    return len(ids);
+}
+
+// مقارنة مستندين بلا _id ولا عمود المعرّف (pgrest يعيد المعرّف كعمود أيضاً)
+fun xdb__sameDoc(c, a, b) {
+    let ic = "_id";
+    if (c["provider"] == "pgrest") { ic = xdb__pg_idc(c); }
+    let x = {};
+    let y = {};
+    for (let k in keys(a)) { if (k != ic and k != "_id") { x[k] = a[k]; } }
+    for (let k in keys(b)) { if (k != ic and k != "_id") { y[k] = b[k]; } }
+    return xdb__same(x, y);
+}
+
+// مزامنة ثنائية الاتجاه بين الجدول البعيد والحاوية المحلية.
+// opts: {"prefer": "remote" (الافتراضي) | "local"} يحسم تعارض المستند المختلف في الطرفين.
+// يُرجع {"pulled": n, "pushed": n, "conflicts": n, "same": n}
+fun xdb_sync(c, t, cname, opts) {
+    xdb__live(c);
+    xdb__ensureDoc(cname);
+    let prefer = xdb__opt(opts, "prefer", "remote");
+    if (prefer != "remote" and prefer != "local") { xdb__fail("sync: prefer must be \"remote\" or \"local\""); }
+    let remote = {};
+    for (let d in xdb_all(c, t)) { remote[d["_id"]] = d; }
+    let pulled = 0;
+    let pushed = 0;
+    let conflicts = 0;
+    let same = 0;
+    let up = {};
+    for (let rid in keys(remote)) {
+        let loc = findDoc(cname, rid);
+        if (loc == nil) { insertDoc(cname, rid, remote[rid]); pulled = pulled + 1; }
+        else if (xdb__sameDoc(c, loc, remote[rid])) { same = same + 1; }
+        else {
+            conflicts = conflicts + 1;
+            if (prefer == "remote") { insertDoc(cname, rid, remote[rid]); pulled = pulled + 1; }
+            else { up[rid] = findDoc(cname, rid); pushed = pushed + 1; }
+        }
+    }
+    for (let lid in docIds(cname)) {
+        if (!has(remote, toString(lid))) { up[toString(lid)] = findDoc(cname, lid); pushed = pushed + 1; }
+    }
+    if (len(keys(up)) > 0) { xdb_putMany(c, t, up); }
+    return {"pulled": pulled, "pushed": pushed, "conflicts": conflicts, "same": same};
+}
