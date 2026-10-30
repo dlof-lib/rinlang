@@ -1,0 +1,175 @@
+// extdb/core/rtdb.zpp — مزوّد الاتصال «rtdb»: قاعدة مستندات شجرية (Realtime-DB) عبر REST.
+// cfg: {"url": "https://<proj>.example-rtdb.com"  (إلزامي),
+//       "auth": "<database secret أو ID token>"  (يُرسَل كـ ?auth=),
+//       "accessToken": "<OAuth2 token>"           (يُرسَل كـ Authorization: Bearer),
+//       "root": "prefix/path"                      (جذر اختياري داخل القاعدة),
+//       "serverQuery": true                        (find عبر orderBy/equalTo — يتطلب .indexOn في القواعد)}
+// الجدول = عقدة /<table>، والمستند = /<table>/<id>.
+
+fun xdb__rt_init(cfg) {
+    let url = xdb__opt(cfg, "url", nil);
+    if (type(url) != "string" or !xdb__starts(url, "https://") and !xdb__starts(url, "http://")) {
+        xdb__fail("rtdb needs cfg.url (e.g. https://my-app.example-rtdb.com)");
+    }
+    return xdb__trimSlash(url);
+}
+
+fun xdb__rt_okKey(s) {
+    if (type(s) != "string" or len(s) == 0) { return false; }
+    let bad = ".$#[]/";
+    let i = 0;
+    while (i < len(s)) {
+        if (contains(bad, substr(s, i, 1))) { return false; }
+        i = i + 1;
+    }
+    return true;
+}
+
+// مسار الجدول: يسمح بالتداخل «a/b» (كل قطعة مفتاح صالح)
+fun xdb__rt_table(c, t) {
+    if (type(t) != "string" or len(t) == 0) { xdb__fail("invalid table name"); }
+    let segs = split(t, "/");
+    for (let s in segs) {
+        if (!xdb__rt_okKey(s)) { xdb__fail("invalid rtdb path segment `" + toString(s) + "` in table `" + t + "` (no . $ # [ ] /)"); }
+    }
+    let root = xdb__opt(c["cfg"], "root", "");
+    if (root != "") { return xdb__trimSlash(root) + "/" + t; }
+    return t;
+}
+
+fun xdb__rt_doc(c, t, id) {
+    let sid = xdb__id(id);
+    if (!xdb__rt_okKey(sid)) { xdb__fail("invalid rtdb key `" + sid + "` (no . $ # [ ] /)"); }
+    return xdb__rt_table(c, t) + "/" + sid;
+}
+
+fun xdb__rt_req(c, method, path, query, body) {
+    let cfg = c["cfg"];
+    xdb__ensureAuth(c);
+    let q = [];
+    let auth = xdb__sessTok(c);
+    if (auth == nil) { auth = xdb__val(xdb__opt(cfg, "auth", nil)); }
+    if (auth != nil) { push(q, "auth=" + xdb__enc(auth)); }
+    if (query != nil and query != "") { push(q, query); }
+    let u = c["base"] + "/" + path + ".json";
+    if (len(q) > 0) { u = u + "?" + join(q, "&"); }
+    let headers = {"Accept": "application/json"};
+    let tok = xdb__val(xdb__opt(cfg, "accessToken", nil));
+    if (tok != nil) { headers["Authorization"] = "Bearer " + tok; }
+    let b = "";
+    if (body != nil) { b = jsonEncode(body); headers["Content-Type"] = "application/json"; }
+    return xdb__check(c, xdb__send(c, method, u, headers, b));
+}
+
+fun xdb__rt_exists(c, path) {
+    return xdb__rt_req(c, "GET", path, "shallow=true", nil) != nil;
+}
+
+fun xdb__rt_get(c, t, id) {
+    let v = xdb__rt_req(c, "GET", xdb__rt_doc(c, t, id), nil, nil);
+    if (v == nil) { return nil; }
+    if (type(v) == "map") { return xdb__withId(toString(id), v); }
+    return {"_id": toString(id), "value": v};
+}
+
+fun xdb__rt_put(c, t, id, doc) {
+    xdb__rt_req(c, "PUT", xdb__rt_doc(c, t, id), nil, xdb__strip(doc));
+    return true;
+}
+
+fun xdb__rt_insert(c, t, id, doc) {
+    if (xdb__rt_exists(c, xdb__rt_doc(c, t, id))) { xdb__fail("document `" + toString(id) + "` already exists in `" + t + "`"); }
+    return xdb__rt_put(c, t, id, doc);
+}
+
+fun xdb__rt_add(c, t, doc) {
+    let r = xdb__rt_req(c, "POST", xdb__rt_table(c, t), nil, xdb__strip(doc));
+    if (type(r) != "map" or !has(r, "name")) { xdb__fail("rtdb did not return a generated key"); }
+    return r["name"];
+}
+
+fun xdb__rt_update(c, t, id, patch) {
+    let p = xdb__rt_doc(c, t, id);
+    if (!xdb__rt_exists(c, p)) { return false; }
+    xdb__rt_req(c, "PATCH", p, nil, xdb__strip(patch));
+    return true;
+}
+
+fun xdb__rt_delete(c, t, id) {
+    let p = xdb__rt_doc(c, t, id);
+    if (!xdb__rt_exists(c, p)) { return false; }
+    xdb__rt_req(c, "DELETE", p, nil, nil);
+    return true;
+}
+
+fun xdb__rt_has(c, t, id) { return xdb__rt_exists(c, xdb__rt_doc(c, t, id)); }
+
+fun xdb__rt_ids(c, t) {
+    let v = xdb__rt_req(c, "GET", xdb__rt_table(c, t), "shallow=true", nil);
+    if (v == nil or type(v) != "map") { return []; }
+    return keys(v);
+}
+
+fun xdb__rt_all(c, t) {
+    let v = xdb__rt_req(c, "GET", xdb__rt_table(c, t), nil, nil);
+    let out = [];
+    if (v == nil) { return out; }
+    if (type(v) == "map") {
+        for (let k in keys(v)) {
+            if (type(v[k]) == "map") { push(out, xdb__withId(k, v[k])); }
+            else { push(out, {"_id": k, "value": v[k]}); }
+        }
+    }
+    return out;
+}
+
+fun xdb__rt_find(c, t, field, value) {
+    if (xdb__opt(c["cfg"], "serverQuery", false)) {
+        let q = "orderBy=" + xdb__enc("\"" + field + "\"") + "&equalTo=" + xdb__enc(jsonEncode(value));
+        let v = xdb__rt_req(c, "GET", xdb__rt_table(c, t), q, nil);
+        let out = [];
+        if (type(v) == "map") {
+            for (let k in keys(v)) { if (type(v[k]) == "map") { push(out, xdb__withId(k, v[k])); } }
+        }
+        return out;
+    }
+    let where = {};
+    where[field] = value;
+    return xdb__clientApply(xdb__rt_all(c, t), {"where": where});
+}
+
+fun xdb__rt_list(c, t, opts) { return xdb__clientApply(xdb__rt_all(c, t), opts); }
+
+// طلب خام: path نسبي إلى جذر القاعدة (بلا .json)؛ query نص جاهز مثل «orderBy="age"&limitToFirst=3»
+fun xdb__rt_raw(c, method, path, query, body) {
+    return xdb__rt_req(c, method, xdb__trimSlash(path), query, body);
+}
+
+fun xdb__rt_ping(c) {
+    xdb__rt_req(c, "GET", "", "shallow=true", nil);
+    return true;
+}
+
+// دفعة واحدة: PATCH على عقدة الجدول بمفاتيح متعددة (طلب واحد). docs: {id: doc}
+fun xdb__rt_putMany(c, t, docs) {
+    let body = {};
+    for (let id in keys(docs)) {
+        if (!xdb__rt_okKey(id)) { xdb__fail("invalid rtdb key `" + id + "`"); }
+        body[id] = xdb__strip(docs[id]);
+    }
+    if (len(keys(body)) == 0) { return 0; }
+    xdb__rt_req(c, "PATCH", xdb__rt_table(c, t), nil, body);
+    return len(keys(body));
+}
+
+fun xdb__rt_deleteMany(c, t, ids) {
+    let body = {};
+    for (let id in ids) {
+        let sid = xdb__id(id);
+        if (!xdb__rt_okKey(sid)) { xdb__fail("invalid rtdb key `" + sid + "`"); }
+        body[sid] = nil;
+    }
+    if (len(keys(body)) == 0) { return 0; }
+    xdb__rt_req(c, "PATCH", xdb__rt_table(c, t), nil, body);
+    return len(keys(body));
+}
