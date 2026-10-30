@@ -1,0 +1,235 @@
+// extdb/core/pgrest.zpp — مزوّد الاتصال «pgrest»: PostgREST (/rest/v1) لقاعدة Postgres في pgrest.
+// cfg: {"url": "https://<ref>.example-pgrest.com"  (إلزامي),
+//       "key": "<anon أو service_role key>" (إلزامي — يُرسَل كـ apikey وكـ Bearer افتراضياً),
+//       "token": "<JWT المستخدم>"           (يحلّ محل Bearer لتفعيل RLS باسم المستخدم),
+//       "schema": "public",  "idColumn": "id",  "pageSize": 1000}
+// الجدول = جدول Postgres حقيقي (يجب إنشاؤه في pgrest)، والمستند = صف عمود معرّفه idColumn.
+// put = upsert (يدمج الأعمدة المرسلة؛ الأعمدة غير المذكورة تبقى كما هي).
+
+fun xdb__pg_init(cfg) {
+    let url = xdb__opt(cfg, "url", nil);
+    if (type(url) != "string" or !xdb__starts(url, "https://") and !xdb__starts(url, "http://")) {
+        xdb__fail("pgrest needs cfg.url (e.g. https://xyz.example-pgrest.com)");
+    }
+    let key = xdb__opt(cfg, "key", nil);
+    if ((type(key) != "string" and type(key) != "function") or key == "") { xdb__fail("pgrest needs cfg.key (anon or service_role key)"); }
+    return xdb__trimSlash(url) + "/rest/v1";
+}
+
+fun xdb__pg_validName(s) {
+    if (type(s) != "string" or len(s) == 0) { return false; }
+    let ok = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789";
+    let i = 0;
+    while (i < len(s)) {
+        if (!contains(ok, substr(s, i, 1))) { return false; }
+        i = i + 1;
+    }
+    return !contains("0123456789", substr(s, 0, 1));
+}
+
+fun xdb__pg_table(t) {
+    if (!xdb__pg_validName(t)) { xdb__fail("invalid table name `" + toString(t) + "` (letters, digits, _)"); }
+    return t;
+}
+
+fun xdb__pg_idc(c) { return xdb__opt(c["cfg"], "idColumn", "id"); }
+
+// prefer: قيمة ترويسة Prefer (مثل return=representation) أو ""
+fun xdb__pg_req(c, method, path, prefer, body) {
+    let cfg = c["cfg"];
+    xdb__ensureAuth(c);
+    let key = xdb__val(cfg["key"]);
+    let bearer = xdb__sessTok(c);
+    if (bearer == nil) { bearer = xdb__val(xdb__opt(cfg, "token", key)); }
+    let headers = {"apikey": key, "Authorization": "Bearer " + bearer, "Accept": "application/json"};
+    let schema = xdb__opt(cfg, "schema", "public");
+    if (schema != "public") { headers["Accept-Profile"] = schema; headers["Content-Profile"] = schema; }
+    if (prefer != "") { headers["Prefer"] = prefer; }
+    let b = "";
+    if (body != nil) { b = jsonEncode(body); headers["Content-Type"] = "application/json"; }
+    return xdb__check(c, xdb__send(c, method, c["base"] + "/" + path, headers, b));
+}
+
+// عامل PostgREST لقيمة: eq.x أو is.null أو is.true
+fun xdb__pg_eq(v) {
+    if (v == nil) { return "is.null"; }
+    if (type(v) == "bool") { return "is." + toString(v); }
+    return "eq." + xdb__enc(v);
+}
+
+fun xdb__pg_row(c, row) {
+    if (type(row) != "map") { return row; }
+    let out = xdb__copy(row);
+    out["_id"] = toString(row[xdb__pg_idc(c)]);
+    return out;
+}
+
+fun xdb__pg_rows(c, rows) {
+    let out = [];
+    if (type(rows) != "array") { return out; }
+    for (let r in rows) { push(out, xdb__pg_row(c, r)); }
+    return out;
+}
+
+fun xdb__pg_withKey(c, id, doc) {
+    let body = xdb__strip(doc);
+    body[xdb__pg_idc(c)] = id;
+    return body;
+}
+
+fun xdb__pg_get(c, t, id) {
+    let rows = xdb__pg_req(c, "GET", xdb__pg_table(t) + "?select=*&limit=1&" + xdb__pg_idc(c) + "=eq." + xdb__enc(xdb__id(id)), "", nil);
+    if (type(rows) != "array" or len(rows) == 0) { return nil; }
+    return xdb__pg_row(c, rows[0]);
+}
+
+fun xdb__pg_has(c, t, id) {
+    let rows = xdb__pg_req(c, "GET", xdb__pg_table(t) + "?select=" + xdb__pg_idc(c) + "&limit=1&" + xdb__pg_idc(c) + "=eq." + xdb__enc(xdb__id(id)), "", nil);
+    return type(rows) == "array" and len(rows) > 0;
+}
+
+fun xdb__pg_put(c, t, id, doc) {
+    let sid = xdb__id(id);
+    xdb__pg_req(c, "POST", xdb__pg_table(t) + "?on_conflict=" + xdb__pg_idc(c), "resolution=merge-duplicates,return=minimal", xdb__pg_withKey(c, sid, doc));
+    return true;
+}
+
+fun xdb__pg_insert(c, t, id, doc) {
+    let sid = xdb__id(id);
+    xdb__pg_req(c, "POST", xdb__pg_table(t), "return=minimal", xdb__pg_withKey(c, sid, doc));
+    return true;
+}
+
+// المعرّف يولّده Postgres (default/serial/uuid) ويُرجَع
+fun xdb__pg_add(c, t, doc) {
+    let rows = xdb__pg_req(c, "POST", xdb__pg_table(t), "return=representation", xdb__strip(doc));
+    if (type(rows) != "array" or len(rows) == 0) { xdb__fail("pgrest did not return the inserted row"); }
+    return toString(rows[0][xdb__pg_idc(c)]);
+}
+
+fun xdb__pg_update(c, t, id, patch) {
+    let rows = xdb__pg_req(c, "PATCH", xdb__pg_table(t) + "?" + xdb__pg_idc(c) + "=eq." + xdb__enc(xdb__id(id)), "return=representation", xdb__strip(patch));
+    return type(rows) == "array" and len(rows) > 0;
+}
+
+fun xdb__pg_delete(c, t, id) {
+    let rows = xdb__pg_req(c, "DELETE", xdb__pg_table(t) + "?" + xdb__pg_idc(c) + "=eq." + xdb__enc(xdb__id(id)), "return=representation", nil);
+    return type(rows) == "array" and len(rows) > 0;
+}
+
+// شروط عمود واحد: قيمة مباشرة (eq) أو خريطة عوامل {"gt": 5, "in": [..], "like": "Sa*"}
+fun xdb__pg_conds(col, spec) {
+    if (!xdb__pg_validName(col)) { xdb__fail("invalid column name `" + toString(col) + "`"); }
+    let out = [];
+    if (type(spec) != "map") { push(out, col + "=" + xdb__pg_eq(spec)); return out; }
+    for (let op in keys(spec)) {
+        let v = spec[op];
+        if (op == "eq") { push(out, col + "=" + xdb__pg_eq(v)); }
+        else if (op == "ne") { push(out, col + "=not." + xdb__pg_eq(v)); }
+        else if (op == "gt" or op == "gte" or op == "lt" or op == "lte") { push(out, col + "=" + op + "." + xdb__enc(v)); }
+        else if (op == "like" or op == "ilike") { push(out, col + "=" + op + "." + xdb__enc(v)); }
+        else if (op == "is") { push(out, col + "=" + xdb__pg_eq(v)); }
+        else if (op == "in") {
+            let parts = [];
+            for (let x in v) { push(parts, xdb__enc(x)); }
+            push(out, col + "=in.(" + join(parts, ",") + ")");
+        }
+        else { xdb__fail("unknown filter operator `" + toString(op) + "` (available: " + join(xdb__ops(), ", ") + ")"); }
+    }
+    return out;
+}
+
+// استعلام مبني: opts {"where","select":[أعمدة],"order","desc","limit","offset"} — يُنفَّذ على الخادم مع ترقيم صفحات تلقائي
+fun xdb__pg_query(c, t, opts) {
+    let sel = "*";
+    let cols = xdb__opt(opts, "select", nil);
+    if (cols != nil) {
+        for (let k in cols) { if (!xdb__pg_validName(k)) { xdb__fail("invalid column name `" + toString(k) + "`"); } }
+        let withId = [xdb__pg_idc(c)];
+        for (let k in cols) { if (k != xdb__pg_idc(c)) { push(withId, k); } }
+        sel = join(withId, ",");
+    }
+    let q = ["select=" + sel];
+    let where = xdb__opt(opts, "where", nil);
+    if (where != nil) {
+        for (let k in keys(where)) {
+            for (let cond in xdb__pg_conds(k, where[k])) { push(q, cond); }
+        }
+    }
+    let order = xdb__opt(opts, "order", nil);
+    if (order != nil) {
+        if (!xdb__pg_validName(order)) { xdb__fail("invalid column name `" + toString(order) + "`"); }
+        let dir = ".asc";
+        if (xdb__opt(opts, "desc", false)) { dir = ".desc"; }
+        push(q, "order=" + order + dir);
+    }
+    let limit = xdb__opt(opts, "limit", nil);
+    let offset = xdb__opt(opts, "offset", 0);
+    let base = xdb__pg_table(t) + "?" + join(q, "&");
+    let page = xdb__opt(c["cfg"], "pageSize", 1000);
+    let out = [];
+    let got = 0;
+    while (true) {
+        let want = page;
+        if (limit != nil and limit - got < want) { want = limit - got; }
+        if (want <= 0) { break; }
+        let rows = xdb__pg_req(c, "GET", base + "&limit=" + toString(want) + "&offset=" + toString(offset + got), "", nil);
+        if (type(rows) != "array") { break; }
+        for (let r in rows) { push(out, xdb__pg_row(c, r)); }
+        got = got + len(rows);
+        if (len(rows) < want) { break; }
+    }
+    return out;
+}
+
+fun xdb__pg_all(c, t) { return xdb__pg_query(c, t, {}); }
+
+fun xdb__pg_ids(c, t) {
+    let ic = xdb__pg_idc(c);
+    let rows = xdb__pg_req(c, "GET", xdb__pg_table(t) + "?select=" + ic + "&order=" + ic + ".asc&limit=100000", "", nil);
+    let out = [];
+    if (type(rows) == "array") { for (let r in rows) { push(out, toString(r[ic])); } }
+    return out;
+}
+
+fun xdb__pg_find(c, t, field, value) {
+    let where = {};
+    where[field] = value;
+    return xdb__pg_query(c, t, {"where": where});
+}
+
+// طلب خام: path نسبي إلى /rest/v1 (مثل «users?age=gt.25&order=age.desc»)
+fun xdb__pg_raw(c, method, path, body) {
+    return xdb__pg_req(c, method, path, "return=representation", body);
+}
+
+// استدعاء دالة Postgres: POST /rpc/<fn>
+fun xdb__pg_rpc(c, fname, args) {
+    if (!xdb__pg_validName(fname)) { xdb__fail("invalid function name `" + toString(fname) + "`"); }
+    let a = args;
+    if (a == nil) { a = {}; }
+    return xdb__pg_req(c, "POST", "rpc/" + fname, "", a);
+}
+
+fun xdb__pg_ping(c) {
+    xdb__pg_req(c, "GET", "", "", nil);
+    return true;
+}
+
+// دفعة: POST بمصفوفة (upsert جماعي في طلب واحد). docs: {id: doc}
+fun xdb__pg_putMany(c, t, docs) {
+    let rows = [];
+    for (let id in keys(docs)) { push(rows, xdb__pg_withKey(c, id, docs[id])); }
+    if (len(rows) == 0) { return 0; }
+    xdb__pg_req(c, "POST", xdb__pg_table(t) + "?on_conflict=" + xdb__pg_idc(c), "resolution=merge-duplicates,return=minimal", rows);
+    return len(rows);
+}
+
+fun xdb__pg_deleteMany(c, t, ids) {
+    let parts = [];
+    for (let id in ids) { push(parts, xdb__enc(xdb__id(id))); }
+    if (len(parts) == 0) { return 0; }
+    let rows = xdb__pg_req(c, "DELETE", xdb__pg_table(t) + "?" + xdb__pg_idc(c) + "=in.(" + join(parts, ",") + ")", "return=representation", nil);
+    if (type(rows) == "array") { return len(rows); }
+    return 0;
+}
