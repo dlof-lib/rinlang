@@ -7132,6 +7132,7 @@ for(auto& kv:maskParents) if(maskResolve4(kv.second)==parent && !maskResolve4(kv
     registerNativesExtra11(); // مفهوم algo: algo* (rin_extra_natives11.cpp، docs/ALGO.md)
     registerNativesRintwist(); // RINTWIST: rintwist.get/fmt/stack (rin_rintwist.cpp، docs/rintwist.md)
     registerNativesLibDir(); // مكتبات Rin المقسَّمة: rinlib.* (rin_libdir.cpp، docs/split-libraries.md)
+    registerNativesCapture(); // captureOutput/capture/indsin.run — التقاط ناتج الطباعة لجسر <<...>> (rin_expr_host.cpp، docs/indsin_bridge.md)
     registerNativesExtra9(); // مفهوم number: دوال الأرقام العملية (rin_extra_natives9.cpp، docs/NUMBER.md)
     registerNativesOop(); // Rin 1.0: oop.* — استبطان الأصناف والكائنات + أدوات OOP (rin_oop_natives.cpp)
     registerNativesInput(); // Rin 1.0: نماذج الإدخال (معاملة/تداخل/مُدقِّق النموذج) فوق input() — بعد oop.* لأنها تستدعيها (rin_input.cpp)
@@ -8411,6 +8412,7 @@ bool Interpreter::callTopLevelFunction(const std::vector<StmtPtr>& program,
                                         const std::vector<std::string>& paramAliases,
                                         std::unordered_map<std::string, Value>& globalsInOut,
                                         std::string& errorOut) {
+    runCache_.clear(); // ما بعد معالج حدث قد تغيّرت الحالة: نتائج indsin.run المخزّنة قديمة
     CurrentInterpGuard interpGuard(this); // Rin 1.0
     callDepth = 0;
 
@@ -8504,6 +8506,7 @@ std::string Interpreter::run(const std::vector<StmtPtr>& statements) {
     if (!vmEnabled_) { const char* eng = std::getenv("RIN_ENGINE"); if (eng && std::string(eng) == "vm") vmEnabled_ = true; } // RinVM
     g_diagFile = sourceFile; // مزامنة نظام Diagnostics: الدوال الحرة/lambdas تستخدم g_diagFile
     loadInstalledIndex(); // يحمّل أسماء أي تثبيتات فعلية سابقة على نفس basePath (استمرارية عبر التشغيلات)
+    runCache_.clear(); // ذاكرة indsin.run لا تعبر من تشغيل إلى آخر
     importedPaths.clear(); // كل تشغيل جديد يبدأ بسجل @import نظيف (لا يرث استيرادات تشغيل سابق)
     callDepth = 0; // كل تشغيل جديد يبدأ بعدّاد عمق استدعاء نظيف (احتياطاً عند إعادة استخدام نفس الكائن)
     // حالة الفشل خاصة بكل run(): كانت تبقى «عالقة» من تشغيل فاشل سابق على نفس الكائن، فيُبلَغ كل تشغيل
