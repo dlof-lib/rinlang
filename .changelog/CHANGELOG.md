@@ -5,6 +5,7 @@
 ## الفهرس
 
 - [GENERAL](#general)
+- [INDSIN BRIDGE](#indsin-bridge)
 - [ANDROID16](#android16)
 - [BASE ACCEPT](#base-accept)
 - [CHANNEL47](#channel47)
@@ -70,6 +71,15 @@
 - [MANIFEST CHANGES](#manifest-changes)
 
 ---
+
+## INDSIN BRIDGE — جسر Rin ⇄ indsin بالأقواس << >>
+
+<sub>المصدر: `docs/indsin_bridge.md`</sub>
+
+- صيغة `<<…>>` في indsin: ربط تفاعلي `<<expr>>` (نص/سمة/داخل سلسلة/عنصر Text)، `<<print a, b>>`، `<<run f(x)>>` (استدعاء دالة Rin وعرض ما تطبعه)، `<<let/warp/import>>`، `<<if/else if/else>>`، `<<each list as it, i>>` فوق بيانات Rin (تمريرتان في `expandTagSyntax`).
+- Rin: `captureOutput(fn, …)` و`capture(fn, …)` و`indsin.run(name, …)` (مُخزَّنة بالوسائط، آمنة داخل الخصائص).
+- الجلسة الحيّة: تعديل مصدر فيه `each` يعيد التحميل الكامل. تلوين `<<…>>` ومقتطفات في إضافة VS Code.
+- توافق: ناتج المترجم لكل ملفات `.rin` في المستودع مطابق حرفياً لما قبل.
 
 ## LIVE PREVIEW ALL PLATFORMS — معاينة حية حقيقية لكل المنصات
 
