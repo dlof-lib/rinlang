@@ -1,0 +1,136 @@
+// extdb/core/auth.zpp — جلسات المستخدمين: تسجيل دخول/إنشاء حساب/تجديد/خروج، والرمز يُستعمل تلقائياً في كل طلب.
+//
+// pgrest: نقاط /auth/v1 على نفس المضيف (أو cfg.authUrl).
+// rtdb:   خدمة هوية بنمط accounts:signInWithPassword — تحتاج cfg.authUrl (جذر النقطة) و cfg.apiKey،
+//         وللتجديد cfg.refreshUrl (رابط تبديل رمز التجديد).
+// الجلسة: c["session"] = {"token", "refresh", "expires" (ms), "user"} — يُجدَّد الرمز تلقائياً قبل انتهائه بـ30 ثانية.
+
+fun xdb__sessTok(c) {
+    if (c["session"] == nil) { return nil; }
+    return c["session"]["token"];
+}
+
+fun xdb__authBase(c) {
+    let u = xdb__opt(c["cfg"], "authUrl", nil);
+    if (u != nil) { return xdb__trimSlash(u); }
+    if (c["provider"] == "pgrest") {
+        let b = c["base"];
+        return substr(b, 0, len(b) - len("/rest/v1")) + "/auth/v1";
+    }
+    xdb__fail("rtdb auth needs cfg.authUrl (identity endpoint base) and cfg.apiKey");
+}
+
+fun xdb__authHeaders(c) {
+    let h = {"Accept": "application/json", "Content-Type": "application/json"};
+    if (c["provider"] == "pgrest") { h["apikey"] = xdb__val(c["cfg"]["key"]); }
+    return h;
+}
+
+fun xdb__authPost(c, url, headers, body) {
+    return xdb__check(c, xdb__send(c, "POST", url, headers, body));
+}
+
+fun xdb__rtKeyQ(c) {
+    let k = xdb__opt(c["cfg"], "apiKey", nil);
+    if (k == nil) { xdb__fail("rtdb auth needs cfg.apiKey"); }
+    return "key=" + xdb__enc(xdb__val(k));
+}
+
+fun xdb__setSession(c, token, refresh, expiresInSec, user) {
+    let ms = 3600 * 1000;
+    if (expiresInSec != nil) { ms = toNumber(expiresInSec) * 1000; }
+    c["session"] = {"token": token, "refresh": refresh, "expires": time.ms() + ms, "user": user};
+    xdb__cinv_all(c);
+    return user;
+}
+
+fun xdb__cinv_all(c) { c["cache"] = {}; }
+
+fun xdb__userOf(c, j) {
+    if (c["provider"] == "pgrest") {
+        let u = nil;
+        if (type(j) == "map" and has(j, "user")) { u = j["user"]; }
+        if (type(u) != "map") { return {"id": nil, "email": nil}; }
+        return {"id": xdb__opt(u, "id", nil), "email": xdb__opt(u, "email", nil)};
+    }
+    return {"id": xdb__opt(j, "localId", xdb__opt(j, "user_id", nil)), "email": xdb__opt(j, "email", nil)};
+}
+
+fun xdb_signIn(c, email, password) {
+    xdb__live(c);
+    if (c["provider"] == "pgrest") {
+        let j = xdb__authPost(c, xdb__authBase(c) + "/token?grant_type=password", xdb__authHeaders(c), jsonEncode({"email": email, "password": password}));
+        return xdb__setSession(c, j["access_token"], xdb__opt(j, "refresh_token", nil), xdb__opt(j, "expires_in", nil), xdb__userOf(c, j));
+    }
+    let j = xdb__authPost(c, xdb__authBase(c) + "/accounts:signInWithPassword?" + xdb__rtKeyQ(c), xdb__authHeaders(c),
+                          jsonEncode({"email": email, "password": password, "returnSecureToken": true}));
+    return xdb__setSession(c, j["idToken"], xdb__opt(j, "refreshToken", nil), xdb__opt(j, "expiresIn", nil), xdb__userOf(c, j));
+}
+
+// يُرجع المستخدم؛ إن كان المزوّد يطلب تأكيد البريد قد لا تُفتح جلسة (xdb_isSignedIn)
+fun xdb_signUp(c, email, password) {
+    xdb__live(c);
+    if (c["provider"] == "pgrest") {
+        let j = xdb__authPost(c, xdb__authBase(c) + "/signup", xdb__authHeaders(c), jsonEncode({"email": email, "password": password}));
+        if (type(j) == "map" and has(j, "access_token")) {
+            return xdb__setSession(c, j["access_token"], xdb__opt(j, "refresh_token", nil), xdb__opt(j, "expires_in", nil), xdb__userOf(c, j));
+        }
+        return {"id": xdb__opt(j, "id", nil), "email": xdb__opt(j, "email", email)};
+    }
+    let j = xdb__authPost(c, xdb__authBase(c) + "/accounts:signUp?" + xdb__rtKeyQ(c), xdb__authHeaders(c),
+                          jsonEncode({"email": email, "password": password, "returnSecureToken": true}));
+    return xdb__setSession(c, j["idToken"], xdb__opt(j, "refreshToken", nil), xdb__opt(j, "expiresIn", nil), xdb__userOf(c, j));
+}
+
+fun xdb_refresh(c) {
+    xdb__live(c);
+    if (c["session"] == nil or c["session"]["refresh"] == nil) { xdb__fail("no session to refresh"); }
+    let rt = c["session"]["refresh"];
+    if (c["provider"] == "pgrest") {
+        let j = xdb__authPost(c, xdb__authBase(c) + "/token?grant_type=refresh_token", xdb__authHeaders(c), jsonEncode({"refresh_token": rt}));
+        return xdb__setSession(c, j["access_token"], xdb__opt(j, "refresh_token", rt), xdb__opt(j, "expires_in", nil), c["session"]["user"]);
+    }
+    let url = xdb__opt(c["cfg"], "refreshUrl", nil);
+    if (url == nil) { xdb__fail("rtdb refresh needs cfg.refreshUrl"); }
+    let h = {"Accept": "application/json", "Content-Type": "application/x-www-form-urlencoded"};
+    let j = xdb__authPost(c, url + "?" + xdb__rtKeyQ(c), h, "grant_type=refresh_token&refresh_token=" + xdb__enc(rt));
+    return xdb__setSession(c, j["id_token"], xdb__opt(j, "refresh_token", rt), xdb__opt(j, "expires_in", nil), c["session"]["user"]);
+}
+
+fun xdb_signOut(c) {
+    xdb__live(c);
+    if (c["session"] != nil and c["provider"] == "pgrest") {
+        try {
+            let h = xdb__authHeaders(c);
+            h["Authorization"] = "Bearer " + c["session"]["token"];
+            xdb__send(c, "POST", xdb__authBase(c) + "/logout", h, "");
+        } catch (e) { }
+    }
+    c["session"] = nil;
+    c["cache"] = {};
+    return true;
+}
+
+fun xdb_isSignedIn(c) { return c["session"] != nil; }
+fun xdb_user(c) {
+    if (c["session"] == nil) { return nil; }
+    return c["session"]["user"];
+}
+
+// رمز جاهز (من تسجيل دخول خارجي): بلا تجديد تلقائي إلا مع refresh
+fun xdb_setToken(c, token, refresh, expiresInSec) {
+    xdb__live(c);
+    xdb__setSession(c, token, refresh, expiresInSec, nil);
+    return true;
+}
+
+// يجدّد الرمز قبل انتهائه بـ30 ثانية (يُستدعى من كل طلب)
+fun xdb__ensureAuth(c) {
+    let s = c["session"];
+    if (s == nil or s["refresh"] == nil or c["refreshing"]) { return false; }
+    if (time.ms() < s["expires"] - 30000) { return false; }
+    c["refreshing"] = true;
+    try { xdb_refresh(c); } catch (e) { c["refreshing"] = false; throw e; }
+    c["refreshing"] = false;
+    return true;
+}
