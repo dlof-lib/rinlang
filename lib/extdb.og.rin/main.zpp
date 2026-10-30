@@ -1,0 +1,22 @@
+// extdb — الجزء الأساسي. اتصال بقواعد بيانات خارجية باسم «مزوّد اتصال» (connection provider):
+//
+//   @import "extdb";
+//   let fb = xdb_connect("rtdb", "shop", {"url": "https://my-app.example-rtdb.com", "auth": "<token>"});
+//   let sb = xdb_connect("pgrest", "shop", {"url": "https://xyz.example-pgrest.com", "key": "<anon-or-service-key>"});
+//   xdb_put(fb, "users", "u1", {"name": "Sara", "age": 30});
+//   print xdb_get(sb, "users", "u1");
+//   xdb_pull(sb, "users", "Users");        // ينسخ الجدول البعيد إلى حاوية container.doc محلية اسمها Users
+//   xdb_push(fb, "users", "Users");        // يرفع مستندات الحاوية المحلية إلى القاعدة البعيدة
+//
+// الاتصالات المفتوحة تُسجَّل في المجموعة ExtDB (الحاوية catalog، حقل openCount).
+
+@Containers.Group=ExtDB
+    @container=catalog
+        let version = "1.0.0";
+        let openCount = 0;
+    .end/container
+.end/Containers.Group
+
+let XDB_VERSION = "1.0.0";
+let XDB_PROVIDERS = ["rtdb", "pgrest"];
+let XDB = { conns: {} };
