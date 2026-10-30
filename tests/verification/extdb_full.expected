@@ -1,0 +1,57 @@
+🗂️ Containers.Group = ExtDB
+📦 container = catalog
+✅ .end/container (catalog)
+✅ .end/Containers.Group (ExtDB) [تحتوي: catalog]
+📥 @import: تم استيراد "lib/extdb.og.rin" (مكتبة: extdb 1.0.0 — 12 أجزاء)
+pg signedIn before=false
+pg user={"id": "uid1", "email": "sara@example.com"} signedIn=true
+pg bearer=Bearer JWT_sara@example.com
+caught: pg bad password -> http 400
+pg after auto-refresh=Bearer JWT_refreshed1
+pg signUp=new@example.com
+pg bearer after signOut=Bearer ANON signedIn=false
+rt user={"id": "uid1", "email": "sara@example.com"} auth=IDT_sara@example.com
+rt after auto-refresh=IDT_refreshed2
+rt auth after signOut=SECRET
+caught: rtdb auth needs config
+rtdb caught: schema violation in `people`: name is required [schema]
+rtdb caught: schema violation in `people`: age must be number (got string)
+rtdb caught partial: schema violation in `people`: tags must be array (got number)
+rtdb valid put ok=true update ok=true
+pgrest caught: schema violation in `people`: name is required [schema]
+pgrest caught: schema violation in `people`: age must be number (got string)
+pgrest caught partial: schema violation in `people`: tags must be array (got number)
+pgrest valid put ok=true update ok=true
+queued=queued,queued,queued,queued
+queue size=4 file=true
+flush while offline={"sent": 0, "left": 4, "failed": 0}
+restored from file=4
+flush online={"sent": 4, "left": 0, "failed": 0} o1=11 o2=false
+server rejections are not queued: 401 queue=0
+rtdb baseline events=0
+rtdb tick events=3 ["changed:a", "added:c", "removed:b"]
+rtdb quiet tick=0 unwatch=true/false
+pgrest baseline events=0
+pgrest tick events=3 ["changed:a", "added:c", "removed:b"]
+pgrest quiet tick=0 unwatch=true/false
+diff=[{"type": "changed", "id": "y", "doc": {"a": 3}, "old": {"a": 2}}, {"type": "added", "id": "z", "doc": {"a": 4}, "old": nil}, {"type": "removed", "id": "x", "doc": nil, "old": {"a": 1}}]
+rtdb tx size=5 commit={"ops": 5, "requests": 3} left=["l1", "l3"] pending=0
+rtdb rollback size=0
+pgrest tx size=5 commit={"ops": 5, "requests": 3} left=["l1", "l3"] pending=0
+pgrest rollback size=0
+rtdb agg={"count": 3, "sum": 24, "avg": 8, "min": 4, "max": 12} filtered={"count": 2, "sum": 20, "avg": 10, "min": 8, "max": 12}
+rtdb each=4 ["k1", "k2", "k3", "k4"]
+rtdb each stop=1
+rtdb export=4
+rtdb after delete=0 import=4 count=4
+pgrest agg={"count": 3, "sum": 24, "avg": 8, "min": 4, "max": 12} filtered={"count": 2, "sum": 20, "avg": 10, "min": 8, "max": 12}
+pgrest each=4 ["k1", "k2", "k3", "k4"]
+pgrest each stop=1
+pgrest export=4
+pgrest after delete=0 import=4 count=4
+backup={"nums": 4, "notes": 1}
+log=["GET http://127.0.0.1:8765/rt/people/p1.json?auth=*** -> 200"]
+health ok=true dead=false
+info version=1.0.0 provider=pgrest queued=0
+bound user={"id": "uid1", "email": "sara@example.com"} agg={"count": 1, "sum": 32, "avg": 32, "min": 32, "max": 32} health=true
+connections=["rt", "pg", "noauth", "off", "off2", "bad", "dead", "bound"]
