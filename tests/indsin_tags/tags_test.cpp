@@ -55,6 +55,29 @@ int main(int argc, char** argv) {
     err("text twice", "<Text text=\"a\">b</Text>", 1, "both");
     err("warp not self-closed", "<warp a={1}>", 1, "self-closing");
 
+    // ── جسر << >> (docs/indsin_bridge.md) ──
+    eq("bridge text", "<Text#t>Hi <<user.name>>!</Text>", "@view.Text=t text=\"Hi \" + (user.name) + \"!\"; .end/view");
+    eq("bridge attr", "<Button#b label=<<title>> />", "@view.Button=b label=title; .end/view");
+    eq("bridge quoted", "<Text#t text=\"a <<x>> b\" />", "@view.Text=t text=\"a \" + (x) + \" b\"; .end/view");
+    eq("bridge print", "<Text#t><<print a, b + 1>></Text>", "@view.Text=t text=\"\" + (\"\" + (a) + \" \" + (b + 1)); .end/view");
+    eq("bridge run", "<Text#t><<run report(n, 2)>></Text>", "@view.Text=t text=\"\" + (indsin.run(\"report\", n, 2)); .end/view");
+    eq("bridge '>>' in parens/strings", "<Text#t><<(a >> 1) + \">>\">></Text>", "@view.Text=t text=\"\" + ((a >> 1) + \">>\"); .end/view");
+    eq("bridge element", "<Column#c>\n<<n * 2>>\n</Column>", "@view.Column=c\n@view.Text=text_1 text=n * 2; .end/view\n.end/view");
+    eq("bridge let/warp/import", "<<let a = 1>><<warp b = 2>><<import \"x\">>", "let a = 1; warp b = 2; @import \"x\";");
+    { ++runs; // <<let>> داخل عنصر يُرفع إلى آخر الملف (سطر إضافي بعد كل الأسطر الأصلية)
+      std::string got = indsin::tags::desugar("<Column#c>\n<<let q = 5>>\n</Column>");
+      if (got != "@view.Column=c\n\n.end/view\nlet q = 5; ") { ++fails; std::cerr << "FAIL bridge let hoisted: " << got << "\n"; } }
+    eq("bridge each literal", "<<each [\"a\", \"b\"] as w, i>>\n<Text#t><<i>>=<<w>></Text>\n<</each>>",
+       " @view.Text=t_0 text=\"\" + (0) + \"=\" + (((\"a\"))); .end/view   @view.Text=t_1 text=\"\" + (1) + \"=\" + (((\"b\"))); .end/view  \n\n");
+    err("bridge unterminated", "<Text>a <<x</Text>", 1, "unterminated");
+    err("bridge empty", "<Text><<>></Text>", 1, "empty");
+    err("bridge stray else", "<<else>>", 1, "without a matching");
+    err("bridge if unclosed", "<Column#c>\n<<if a>>\n</Column>", 2, "<</if>>");
+    err("bridge let in text", "<Text><<let a = 1>></Text>", 1, "statement");
+    err("bridge each needs runtime", "<<each xs as x>>\n<</each>>", 1, "Rin runtime");
+    err("bridge nested each", "<<each [1] as a>>\n<<each [2] as b>>\n<</each>>\n<</each>>", 2, "nested");
+    eq("bridge shift untouched", "let x = 1 << 2;\n", "let x = 1 << 2;\n");
+
     // ── حرية التصميم: Screen / Theme / Palette + قيم نسبية ──
     eq("screen", "<Screen#app size=phone bg=#0B1020 width=300 height=500>\n</Screen>",
        "@view.Column=app screen=\"phone\"; canvas=\"#0B1020\"; canvas_width=300; canvas_height=500;\n.end/view");
