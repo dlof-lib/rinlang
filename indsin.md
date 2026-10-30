@@ -124,3 +124,9 @@ rin_indsin_preview file.rin --width 390 --png out.png --html out.html --tap 60,1
 تأثيرات مخصّصة بـ keyframes ومعادلات رياضية وألوان وتوهّج، تُعرَّف بـ `<Effect>` / `@effect` / `indsin.defineEffect()` وتُشغَّل
 بالدخول والإيماءات وتغيّر القيم ومن Rin — وتُطبَّق على الرسم دون تعديل الـFabric (إصلاح انجراف الإزاحة القديم). راجع
 [docs/indsin_effects.md](docs/indsin_effects.md) والمثال `examples/samples/indsin_effects.rin`.
+
+---
+## جسر Rin ⇄ indsin بالأقواس `<< >>` (جديد)
+`<<user.name>>` ربط بيانات Rin، `<<print a, b>>` طباعة، `<<run report(n)>>` استدعاء دالة Rin وعرض ما تطبعه، و`<<if>>` / `<<each list as it>>`
+لشروط وقوائم من بيانات Rin؛ وindsin يرسم الواجهة. دوال Rin الجديدة `captureOutput` / `capture` / `indsin.run`. راجع
+[docs/indsin_bridge.md](docs/indsin_bridge.md) والمثال `examples/samples/indsin_bridge.rin`.
