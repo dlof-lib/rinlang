@@ -1,0 +1,15 @@
+<!-- extdb مستورَدة داخل <Container> في indsin، وتُستدعى من معالج onTap عبر Shop.countUsers() — يتطلب محاكي tests/tools/extdb_mock.py على المنفذ 8765 -->
+<Container#Shop>
+  <Import src="extdb" />
+  <Rin>
+  fun countUsers() { let db = xdb_session("pgrest", {"url": "http://127.0.0.1:8765", "key": "ANON"}); return xdb_count(db, "users"); }
+  </Rin>
+</Container>
+<warp n={0} />
+<Fun#go>
+  n = Shop.countUsers();
+</Fun>
+<Screen#app size=phone padding=20>
+  <Text#t>Count: {n}</Text>
+  <Button#b onTap={go()}>Go</Button>
+</Screen>
