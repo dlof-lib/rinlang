@@ -16,6 +16,7 @@
 #include "rin_indsin_object.h"
 #include "rin_indsin_media.h"          // pickMedia()/uploadMedia(): زرع خلايا الوسائط
 #include "rin_indsin_components_ext.h" // UI/UX Library Expansion: Tag/Breadcrumb/Pagination/Steps conveniences
+#include <map>
 #include <stdexcept>
 #include <unordered_set>
 
@@ -146,11 +147,51 @@ inline void sanitizeElements(std::shared_ptr<rin::ViewStmt>& node) {
     for (auto& c: node->children) sanitizeElements(c);
 }
 
-// صيغة الوسوم بالأقواس <> تُحوَّل إلى لهجة @view قبل الـ Lexer (عدد الأسطر محفوظ؛ المصدر بلا وسوم
-// يعود كما هو حرفياً). انظر rin_indsin_tags.h.
-inline std::string expandTagSyntax(const std::string& source) {
+// صيغة الوسوم بالأقواس <> (و<< >> جسر Rin) تُحوَّل إلى لهجة @view قبل الـ Lexer (عدد الأسطر محفوظ؛ المصدر
+// بلا وسوم يعود كما هو حرفياً). انظر rin_indsin_tags.h.
+//
+// <<each LIST as it>> على بيانات Rin (لا قائمة حرفية): حجم القائمة غير معروف نصّياً، فتُنفَّذ تمريرتان:
+//   1) تمريرة قياس: المصدر يُترجَم مع حذف أجسام each، ويُشغَّل على مفسّر مؤقّت ثم يُقاس كل تعبير قائمة
+//      (let __indsin_each_N = LIST;) — مصفوفة → حجمها، رقم → قيمته، nil → 0.
+//   2) المصدر يُترجَم من جديد وكل each يُوسَّع بحجمه الحقيقي (`it` ← (LIST)[k]، و`i` ← k).
+// المفسّر المؤقّت منفصل تماماً عن مفسّر الجلسة، وبلا أي <<each>> يكون الكلفة صفراً (المسار القديم نفسه).
+inline std::string expandTagSyntax(const std::string& source, long long instructionBudget = 1000000) {
     try {
-        return indsin::tags::desugar(source);
+        if (!indsin::tags::usesEach(source)) return indsin::tags::desugar(source);
+        std::vector<std::string> exprs;
+        std::string probeSrc = indsin::tags::desugarProbe(source, exprs);
+        if (exprs.empty()) return indsin::tags::desugar(source); // كل القوائم حرفية: لا حاجة للتشغيل
+        std::string measured = probeSrc + "\n";
+        for (size_t k = 0; k < exprs.size(); ++k)
+            measured += "let __indsin_each_" + std::to_string(k) + " = " + exprs[k] + ";\n";
+        std::map<std::string, indsin::tags::EachSize> counts;
+        {
+            rin::Interpreter probe;
+            registerIndsinRinLib(probe);
+            probe.setExecutionBudget(instructionBudget);
+            rin::Lexer lexer(measured);
+            auto tokens = lexer.scanTokens();
+            rin::Parser parser(tokens);
+            auto program = parser.parse();
+            probe.run(program);
+            if (probe.hadError()) {
+                if (probe.lastDiagnostic()) throw rin::RinError(*probe.lastDiagnostic());
+                throw rin::RinError(probe.lastErrorMessage().value_or("runtime error"), probe.lastErrorLine());
+            }
+            for (size_t k = 0; k < exprs.size(); ++k) {
+                rin::Value v;
+                if (!probe.lookupGlobal("__indsin_each_" + std::to_string(k), v))
+                    throw rin::RinError("<<each " + exprs[k] + " …>>: could not evaluate the list", 1);
+                int cnt = 0;
+                bool numeric = false;
+                if (v.type == rin::Value::Type::ARRAY && v.array) cnt = (int)v.array->size();
+                else if (v.type == rin::Value::Type::NUMBER) { cnt = v.number < 0 ? 0 : (int)v.number; numeric = true; }
+                else if (v.type == rin::Value::Type::NIL) cnt = 0;
+                else throw rin::RinError("<<each " + exprs[k] + " …>>: expected an array or a number, found `" + v.typeName() + "`", 1);
+                counts[exprs[k]] = indsin::tags::EachSize{cnt, numeric};
+            }
+        }
+        return indsin::tags::desugarWithCounts(source, counts);
     } catch (const indsin::tags::TagError& e) {
         throw rin::RinError(e.message, e.line);
     }
@@ -160,7 +201,7 @@ inline PipelineResult runColdPipelineWithRuntime(const std::string& source, rin:
                                                   long long instructionBudget = 1000000) {
     PipelineResult result;
     try {
-        rin::Lexer lexer(expandTagSyntax(source));
+        rin::Lexer lexer(expandTagSyntax(source, instructionBudget));
         auto tokens = lexer.scanTokens();
         rin::Parser parser(tokens);
         auto program = parser.parse();
@@ -310,7 +351,7 @@ inline PipelineResult runColdPipelineForContainerWithRuntime(const std::string& 
                                                               long long instructionBudget = 1000000) {
     PipelineResult result;
     try {
-        rin::Lexer lexer(expandTagSyntax(source));
+        rin::Lexer lexer(expandTagSyntax(source, instructionBudget));
         auto tokens = lexer.scanTokens();
         rin::Parser parser(tokens);
         auto program = parser.parse();
