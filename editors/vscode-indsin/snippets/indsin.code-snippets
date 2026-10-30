@@ -456,18 +456,63 @@
   "indsin effect attribute": {
     "prefix": "fx",
     "description": "Enter effect on an element",
-    "body": ["effect=${1|fade,fadeUp,slideUp,zoomIn,pop,drop,rise,heartbeat,glow,float|} duration=${2:400} delay=${3:0}"]
+    "body": [
+      "effect=${1|fade,fadeUp,slideUp,zoomIn,pop,drop,rise,heartbeat,glow,float|} duration=${2:400} delay=${3:0}"
+    ]
   },
   "indsin effect on tap": {
     "prefix": "fxtap",
     "description": "Play an effect when tapped / changed",
-    "body": ["effect_tap=${1|shake,pulse,rubber,jelly,bounce,ping,highlight|}"]
+    "body": [
+      "effect_tap=${1|shake,pulse,rubber,jelly,bounce,ping,highlight|}"
+    ]
   },
   "indsin Rin defineEffect": {
     "prefix": "defineEffect",
     "description": "Define an effect from Rin code",
     "body": [
       "indsin.defineEffect(\"${1:kick}\", \"0%{x:0} 50%{x:${2:40}} 100%{x:0}\", {\"duration\": ${3:400}, \"easing\": \"${4:easeOut}\"});"
+    ]
+  },
+  "bridge-bind": {
+    "prefix": "<<",
+    "description": "Rin bridge: bind a Rin expression",
+    "body": [
+      "<<${1:expr}>>"
+    ]
+  },
+  "bridge-print": {
+    "prefix": "<<print",
+    "description": "Rin bridge: print values",
+    "body": [
+      "<<print ${1:a}, ${2:b}>>"
+    ]
+  },
+  "bridge-run": {
+    "prefix": "<<run",
+    "description": "Rin bridge: call a Rin function, show what it prints",
+    "body": [
+      "<<run ${1:report}(${2:arg})>>"
+    ]
+  },
+  "bridge-if": {
+    "prefix": "<<if",
+    "description": "Rin bridge: conditional block",
+    "body": [
+      "<<if ${1:cond}>>",
+      "\t$2",
+      "<<else>>",
+      "\t$0",
+      "<</if>>"
+    ]
+  },
+  "bridge-each": {
+    "prefix": "<<each",
+    "description": "Rin bridge: repeat for each item of a Rin list",
+    "body": [
+      "<<each ${1:items} as ${2:it}, ${3:i}>>",
+      "\t$0",
+      "<</each>>"
     ]
   }
 }
