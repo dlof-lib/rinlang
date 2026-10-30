@@ -47,7 +47,7 @@ enum class LibCategory(val labelRes: Int) {
 
 /**
  * سجل مرجعي (يطابق `embeddedRinLibraries()` في rin_stdlib_libs.h) بالمكتبات القياسية
- * الاثنتين والعشرين المدمجة داخل المفسّر نفسه، وتعمل @import عليها فوراً على أي جهاز دون رفعها.
+ * المدمجة داخل المفسّر نفسه، وتعمل @import عليها فوراً على أي جهاز دون رفعها.
  * هذا السجل نصي فقط (للعرض والإدراج السريع في المحرر)، ولا يكرر شيفرة المكتبات نفسها.
  */
 object BuiltinLibraries {
@@ -219,6 +219,12 @@ object BuiltinLibraries {
             "أقنعة متحركة فوق الحاويات والحلقات: فيزياء وحركة (seek/patrol/orbit/سرب/تشكيلات)، آلة حالات، تسلسل JSON، فهرسة مكانية، مؤقتات، FPS وخطوة زمنية ثابتة، أحجام شاشة متجاوبة، أنواع شريط تحميل، لمس وسلاسة حركة، عملات ونقاط، عصا تحكّم وأزرار افتراضية، وقناع منزلق فوق مصفوفات وشبكات، مع تكامل اختياري مع Indsin",
             "mm_new • mm_spawn • mm_tick • mm_flockStep • mm_fsmFire • mm_serialize • mm_setViewport • mm_progressTick • mm_smoothFollow • mm_collectCoinsNear • mm_joystickUpdate • mm_buttonPress",
             iconRes = R.drawable.ic_lib_movingmask
+        ),
+        BuiltinLibraryInfo(
+            "lib/extdb.og.rin", "extdb",
+            "قواعد بيانات خارجية لحاويات Rin وindsin عبر «مزوّد اتصال» مسمّى (rtdb أو pgrest): CRUD ودفعات واستعلامات بعوامل (gt/in/like...)، جلسات مستخدمين مع تجديد تلقائي، كاش وإعادة محاولة وطابور دون اتصال، مخطط محلي، مراقبة تغييرات، مزامنة حاويات doc، تصدير/استيراد JSON",
+            "xdb_connect • xdb_open • xdb_get • xdb_put • xdb_list • xdb_putMany • xdb_sync • xdb_pull • xdb_push • xdb_signIn • xdb_schema • xdb_watch • xdb_tx • xdb_flushQueue • xdb_session",
+            iconRes = R.drawable.ic_lib_extdb
         ),
         BuiltinLibraryInfo(
             "lib/syskit.og.rin", "syskit",
