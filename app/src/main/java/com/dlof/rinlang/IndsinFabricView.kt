@@ -523,10 +523,7 @@ class IndsinFabricView @JvmOverloads constructor(
     override fun onDetachedFromWindow() {
         pendingAutoNavigate?.let { navHandler.removeCallbacks(it) }
         mainHandler.removeCallbacks(spinnerTicker)
-        remoteMediaViews.values.forEach { v ->
-            if (v is VideoView) v.stopPlayback()
-            if (v is WebView) v.stopLoading()
-        }
+        remoteMediaViews.values.forEach { releaseMedia(it) }
         remoteMediaViews.clear()
         htmlAssistViews.values.forEach { it.stopLoading(); it.destroy() }
         htmlAssistViews.clear()
@@ -1990,64 +1987,337 @@ class IndsinFabricView @JvmOverloads constructor(
     private fun isRemoteUrl(value: String): Boolean =
         value.startsWith("https://", true) || value.startsWith("http://", true)
 
-    private fun isVideoPageUrl(value: String): Boolean {
-        val u = value.lowercase()
-        return u.contains("youtube.com/watch") || u.contains("youtu.be/") ||
-            u.contains("youtube.com/shorts/") || u.contains("youtube-nocookie.com/embed/")
+    // ---- مشغّل الفيديو من الإنترنت: YouTube · Vimeo · Dailymotion (تضمين WebView) · ملفات مباشرة/HLS (VideoView) ·
+    //      أي صفحة تضمين (WebView). خيارات الوسم: autoplay loop muted controls(=true) start(ثوانٍ). يطابق rin_indsin_video.h. ----
+    private fun videoProviderOf(value: String): String {
+        val u = value.trim()
+        val l = u.lowercase()
+        if (!l.startsWith("http://") && !l.startsWith("https://")) return "none"
+        Regex("(?:youtube(?:-nocookie)?\\.com/(?:watch\\?(?:.*&)?v=|embed/|shorts/|live/|v/)|youtu\\.be/)([A-Za-z0-9_-]{6,15})", RegexOption.IGNORE_CASE).find(u)?.let { return "youtube" }
+        if (Regex("vimeo\\.com/(?:video/|channels/[^/]+/|groups/[^/]+/videos/)?[0-9]{5,12}", RegexOption.IGNORE_CASE).containsMatchIn(u)) return "vimeo"
+        if (Regex("(?:dailymotion\\.com/(?:embed/)?video/|dai\\.ly/)[A-Za-z0-9]+", RegexOption.IGNORE_CASE).containsMatchIn(u)) return "dailymotion"
+        val path = l.substringBefore('?').substringBefore('#')
+        if (listOf(".mp4", ".m4v", ".mov", ".webm", ".mkv", ".3gp", ".avi", ".ogv", ".m3u8", ".mpd", ".ts").any { path.endsWith(it) }) return "direct"
+        return "page"
     }
 
-    private fun videoEmbedUrl(value: String): String {
-        val id = Regex("(?:v=|youtu\\.be/|shorts/)([A-Za-z0-9_-]{6,})").find(value)?.groupValues?.getOrNull(1)
-        return if (id != null) "https://www.youtube-nocookie.com/embed/$id?autoplay=0&rel=0" else value
+    private fun videoStartSeconds(url: String, attrs: JSONObject): Int {
+        attrs.optString("start").toDoubleOrNull()?.let { if (it > 0) return it.toInt() }
+        val raw = Regex("[?&#](?:t|start)=([0-9hms]+)").find(url)?.groupValues?.get(1) ?: return 0
+        if (raw.all { it.isDigit() }) return raw.toInt()
+        var total = 0; var cur = 0
+        for (c in raw) when {
+            c.isDigit() -> cur = cur * 10 + (c - '0')
+            c == 'h' -> { total += cur * 3600; cur = 0 }
+            c == 'm' -> { total += cur * 60; cur = 0 }
+            c == 's' -> { total += cur; cur = 0 }
+        }
+        return total
+    }
+
+    private fun mediaFlag(attrs: JSONObject, key: String, default: Boolean): Boolean {
+        val v = attrs.optString(key).lowercase()
+        return if (v.isEmpty()) default else !(v == "false" || v == "0" || v == "no")
+    }
+
+    private fun videoEmbedUrl(url: String, attrs: JSONObject): String {
+        val autoplay = mediaFlag(attrs, "autoplay", false); val loop = mediaFlag(attrs, "loop", false)
+        val muted = mediaFlag(attrs, "muted", false) || (autoplay && !mediaFlag(attrs, "_gesture", false)); val controls = mediaFlag(attrs, "controls", true)
+        val start = videoStartSeconds(url, attrs)
+        fun b(v: Boolean) = if (v) "1" else "0"
+        return when (videoProviderOf(url)) {
+            "youtube" -> {
+                val id = Regex("(?:v=|youtu\\.be/|shorts/|embed/|live/|v/)([A-Za-z0-9_-]{6,15})").find(url)?.groupValues?.get(1) ?: return url
+                "https://www.youtube-nocookie.com/embed/$id?rel=0&playsinline=1&controls=${b(controls)}" +
+                    (if (autoplay) "&autoplay=1" else "") + (if (muted) "&mute=1" else "") +
+                    (if (loop) "&loop=1&playlist=$id" else "") + (if (start > 0) "&start=$start" else "")
+            }
+            "vimeo" -> {
+                val id = Regex("([0-9]{5,12})").find(url.substringAfter("vimeo.com"))?.groupValues?.get(1) ?: return url
+                "https://player.vimeo.com/video/$id?playsinline=1&controls=${b(controls)}" +
+                    (if (autoplay) "&autoplay=1" else "") + (if (muted) "&muted=1" else "") + (if (loop) "&loop=1" else "") +
+                    (if (start > 0) "#t=${start}s" else "")
+            }
+            "dailymotion" -> {
+                val id = Regex("(?:video/|dai\\.ly/)([A-Za-z0-9]+)").find(url)?.groupValues?.get(1) ?: return url
+                "https://www.dailymotion.com/embed/video/$id?controls=$controls" +
+                    (if (autoplay) "&autoplay=1" else "") + (if (muted) "&mute=1" else "") + (if (start > 0) "&start=$start" else "")
+            }
+            else -> url
+        }
+    }
+
+    private fun videoAutoThumb(url: String): String = when (videoProviderOf(url)) {
+        "youtube" -> Regex("(?:v=|youtu\\.be/|shorts/|embed/|live/|v/)([A-Za-z0-9_-]{6,15})").find(url)?.groupValues?.get(1)?.let { "https://img.youtube.com/vi/$it/hqdefault.jpg" } ?: ""
+        "dailymotion" -> Regex("(?:video/|dai\\.ly/)([A-Za-z0-9]+)").find(url)?.groupValues?.get(1)?.let { "https://www.dailymotion.com/thumbnail/video/$it" } ?: ""
+        else -> ""
+    }
+
+    private fun mediaOptionsKey(attrs: JSONObject) =
+        listOf("autoplay", "loop", "muted", "controls", "start", "facade", "poster", "thumbnail", "animated", "preview", "title").joinToString(",") { attrs.optString(it) }
+
+    // ---- مصغّرات الفيديو: صورة ثابتة (poster=/thumbnail= أو تلقائية)، ومصغّرة متحركة (animated=true أو preview=…) ----
+    private val thumbCache = object : android.util.LruCache<String, android.graphics.Bitmap>(24) {}
+    private val thumbExecutor = java.util.concurrent.Executors.newFixedThreadPool(2)
+
+    private fun fetchBitmap(url: String, maxW: Int = 640): android.graphics.Bitmap? {
+        thumbCache.get(url)?.let { return it }
+        return try {
+            val c = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+            c.connectTimeout = 8000; c.readTimeout = 8000
+            val bytes = c.inputStream.use { it.readBytes() }
+            val o = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, o)
+            var sample = 1; while (o.outWidth / (sample * 2) >= maxW) sample *= 2
+            val bmp = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size,
+                android.graphics.BitmapFactory.Options().apply { inSampleSize = sample })
+            bmp?.also { thumbCache.put(url, it) }
+        } catch (_: Throwable) { null }
+    }
+
+    /** لقطات من الفيديو نفسه (ملف مباشر): 4 مواضع موزّعة على مدّته. */
+    private fun retrieveFrames(url: String): List<android.graphics.Bitmap> {
+        val out = mutableListOf<android.graphics.Bitmap>()
+        val r = android.media.MediaMetadataRetriever()
+        try {
+            r.setDataSource(url, HashMap())
+            val durMs = r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+            for (f in listOf(0.05, 0.3, 0.55, 0.8)) {
+                val bmp = r.getFrameAtTime((durMs * f * 1000).toLong(), android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC) ?: continue
+                val w = 480; val h = (bmp.height * (w.toFloat() / bmp.width)).toInt().coerceAtLeast(1)
+                out += android.graphics.Bitmap.createScaledBitmap(bmp, w, h, true)
+            }
+        } catch (_: Throwable) {} finally { try { r.release() } catch (_: Throwable) {} }
+        return out
+    }
+
+    /** حاوية مشغّل واحدة: واجهة المصغّرة (facade) ثم الوسيط (VideoView/WebView) + مؤشّر تحميل + رسالة خطأ بإعادة محاولة. */
+    private inner class RemoteMediaBox(ctx: Context, val url: String, val attrs: JSONObject) : FrameLayout(ctx) {
+        private var media: View? = null
+        private var released = false
+        private val provider = videoProviderOf(url)
+        private val ui = android.os.Handler(android.os.Looper.getMainLooper())
+        private val spinner = android.widget.ProgressBar(ctx).apply { isIndeterminate = true; visibility = View.GONE }
+        private val errorView = android.widget.TextView(ctx).apply {
+            setTextColor(Color.WHITE); textSize = 13f; gravity = android.view.Gravity.CENTER
+            visibility = View.GONE
+        }
+        private var facade: FrameLayout? = null
+        private var facadeImage: android.widget.ImageView? = null
+        private var previewVideo: VideoView? = null
+        private var frames: List<android.graphics.Bitmap> = emptyList()
+        private var frameIdx = 0
+        private val cycler = object : Runnable {
+            override fun run() {
+                if (released || facade == null || frames.size < 2) return
+                frameIdx = (frameIdx + 1) % frames.size
+                facadeImage?.let { iv ->
+                    iv.animate().alpha(0.55f).setDuration(120).withEndAction {
+                        iv.setImageBitmap(frames[frameIdx]); iv.animate().alpha(1f).setDuration(180).start()
+                    }.start()
+                }
+                ui.postDelayed(this, 1000)
+            }
+        }
+        private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+
+        init {
+            setBackgroundColor(Color.BLACK)
+            addView(spinner, LayoutParams(dp(36), dp(36), android.view.Gravity.CENTER))
+            addView(errorView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, android.view.Gravity.CENTER))
+            errorView.setOnClickListener { play() }
+            if (mediaFlag(attrs, "facade", true) && !mediaFlag(attrs, "autoplay", false)) showFacade() else play()
+        }
+
+        private fun fail(msg: String) {
+            spinner.visibility = View.GONE
+            errorView.text = "$msg\n(tap to retry)"
+            errorView.visibility = View.VISIBLE
+        }
+
+        // ---------- المصغّرة ----------
+        private fun showFacade() {
+            val f = FrameLayout(context).apply { setBackgroundColor(Color.BLACK) }
+            val img = android.widget.ImageView(context).apply { scaleType = android.widget.ImageView.ScaleType.CENTER_CROP }
+            f.addView(img, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+            val dim = View(context).apply { setBackgroundColor(Color.argb(60, 0, 0, 0)) }
+            f.addView(dim, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+            val play = android.widget.TextView(context).apply {
+                text = "▶"; setTextColor(Color.rgb(30, 31, 40)); textSize = 22f; gravity = android.view.Gravity.CENTER
+                background = android.graphics.drawable.GradientDrawable().apply { shape = android.graphics.drawable.GradientDrawable.OVAL; setColor(Color.argb(220, 255, 255, 255)) }
+            }
+            f.addView(play, LayoutParams(dp(56), dp(56), android.view.Gravity.CENTER))
+            val label = when (provider) { "youtube" -> "YouTube"; "vimeo" -> "Vimeo"; "dailymotion" -> "Dailymotion"; "direct" -> if (url.substringBefore('?').endsWith(".m3u8")) "HLS" else "Video"; else -> "" }
+            if (label.isNotEmpty()) f.addView(android.widget.TextView(context).apply {
+                text = label; setTextColor(Color.WHITE); textSize = 11f; setPadding(dp(8), dp(2), dp(8), dp(2))
+                background = android.graphics.drawable.GradientDrawable().apply { cornerRadius = dp(10).toFloat(); setColor(Color.argb(150, 0, 0, 0)) }
+            }, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT, android.view.Gravity.TOP or android.view.Gravity.START).apply { setMargins(dp(8), dp(8), 0, 0) })
+            val title = attrs.optString("title")
+            if (title.isNotEmpty()) f.addView(android.widget.TextView(context).apply {
+                text = title; setTextColor(Color.WHITE); textSize = 13f; maxLines = 1; ellipsize = TextUtils.TruncateAt.END
+                setBackgroundColor(Color.argb(140, 0, 0, 0)); setPadding(dp(10), dp(5), dp(10), dp(5))
+            }, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, android.view.Gravity.BOTTOM))
+            f.setOnClickListener { play() }
+            facade = f; facadeImage = img
+            addView(f, 0, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+            loadThumbnails(img)
+        }
+
+        private fun loadThumbnails(img: android.widget.ImageView) {
+            val poster = attrs.optString("poster").ifBlank { attrs.optString("thumbnail") }.ifBlank { videoAutoThumb(url) }
+            val preview = attrs.optString("preview").trim()
+            val animated = mediaFlag(attrs, "animated", false) || preview.isNotEmpty()
+            val pl = preview.lowercase().substringBefore('?')
+            // 1) معاينة بصورة متحركة (gif/webp) أو مقطع قصير صامت
+            if (preview.isNotEmpty() && (pl.endsWith(".gif") || pl.endsWith(".webp")) && android.os.Build.VERSION.SDK_INT >= 28) {
+                thumbExecutor.execute {
+                    try {
+                        val c = java.net.URL(preview).openConnection() as java.net.HttpURLConnection
+                        val bytes = c.inputStream.use { it.readBytes() }
+                        val d = android.graphics.ImageDecoder.decodeDrawable(android.graphics.ImageDecoder.createSource(java.nio.ByteBuffer.wrap(bytes)))
+                        ui.post { if (!released && facade != null) { img.setImageDrawable(d); (d as? android.graphics.drawable.AnimatedImageDrawable)?.also { it.repeatCount = android.graphics.drawable.AnimatedImageDrawable.REPEAT_INFINITE; it.start() } } }
+                    } catch (_: Throwable) { ui.post { staticOrFrames(img, poster, false) } }
+                }
+                return
+            }
+            if (preview.isNotEmpty() && (pl.endsWith(".mp4") || pl.endsWith(".webm") || pl.endsWith(".m3u8"))) {
+                staticOrFrames(img, poster, false)   // الصورة الثابتة تظهر حتى يجهز المقطع
+                previewVideo = VideoView(context).apply {
+                    setVideoURI(Uri.parse(preview))
+                    setOnPreparedListener { mp -> mp.isLooping = true; mp.setVolume(0f, 0f); start(); img.visibility = View.INVISIBLE }
+                    setOnErrorListener { _, _, _ -> img.visibility = View.VISIBLE; true }
+                }
+                facade?.addView(previewVideo, 1, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT, android.view.Gravity.CENTER))
+                return
+            }
+            staticOrFrames(img, poster, animated)
+        }
+
+        /** صورة ثابتة؛ ومع animated تتناوب لقطات (يوتيوب 1/2/3.jpg أو لقطات من الملف المباشر). */
+        private fun staticOrFrames(img: android.widget.ImageView, poster: String, animated: Boolean) {
+            thumbExecutor.execute {
+                val list = mutableListOf<android.graphics.Bitmap>()
+                if (animated) {
+                    when (provider) {
+                        "youtube" -> {
+                            val id = Regex("(?:v=|youtu\\.be/|shorts/|embed/|live/|v/)([A-Za-z0-9_-]{6,15})").find(url)?.groupValues?.get(1)
+                            if (id != null) for (i in 1..3) fetchBitmap("https://img.youtube.com/vi/$id/$i.jpg")?.let { list += it }
+                        }
+                        "direct" -> list += retrieveFrames(url)
+                    }
+                }
+                val first = if (poster.isNotBlank()) fetchBitmap(poster) else null
+                if (first != null) list.add(0, first)
+                ui.post {
+                    if (released || facade == null || list.isEmpty()) return@post
+                    frames = list; frameIdx = 0
+                    img.setImageBitmap(list[0])
+                    if (list.size > 1) ui.postDelayed(cycler, 1000)
+                }
+            }
+        }
+
+        // ---------- التشغيل ----------
+        /** يبدأ المشغّل الحقيقي (بعد لمس المصغّرة يُعدّ تفاعلاً يسمح بالتشغيل بصوت). */
+        fun play() {
+            val fromFacade = facade != null
+            dropFacade()
+            val a = if (fromFacade) JSONObject(attrs.toString()).put("autoplay", "true").put("_gesture", "true") else attrs
+            load(a)
+        }
+
+        private fun dropFacade() {
+            ui.removeCallbacks(cycler)
+            previewVideo?.stopPlayback(); previewVideo = null
+            facade?.let { removeView(it) }
+            facade = null; facadeImage = null
+        }
+
+        private fun load(a: JSONObject) {
+            releaseMediaOnly()
+            errorView.visibility = View.GONE; spinner.visibility = View.VISIBLE
+            val autoplay = mediaFlag(a, "autoplay", false)
+            val view: View = if (provider == "direct") {
+                VideoView(context).apply {
+                    if (mediaFlag(a, "controls", true)) {
+                        val controller = MediaController(context); controller.setAnchorView(this); setMediaController(controller)
+                    }
+                    setVideoURI(Uri.parse(url))
+                    setOnPreparedListener { mp ->
+                        spinner.visibility = View.GONE
+                        mp.isLooping = mediaFlag(a, "loop", false)
+                        if (mediaFlag(a, "muted", false)) mp.setVolume(0f, 0f)
+                        val st = videoStartSeconds(url, a); if (st > 0) seekTo(st * 1000)
+                        if (autoplay) start()
+                    }
+                    setOnErrorListener { _, _, _ -> fail("Video unavailable"); true }
+                }
+            } else {
+                WebView(context).apply {
+                    settings.javaScriptEnabled = true
+                    settings.domStorageEnabled = true
+                    settings.mediaPlaybackRequiresUserGesture = !autoplay
+                    settings.loadWithOverviewMode = true
+                    webChromeClient = android.webkit.WebChromeClient()
+                    webViewClient = object : WebViewClient() {
+                        override fun onPageFinished(view: WebView?, u: String?) { spinner.visibility = View.GONE }
+                        override fun onReceivedError(view: WebView?, request: android.webkit.WebResourceRequest?, error: android.webkit.WebResourceError?) {
+                            if (request?.isForMainFrame == true) fail("Video unavailable")
+                        }
+                    }
+                    setBackgroundColor(Color.BLACK)
+                    loadUrl(videoEmbedUrl(url, a))
+                }
+            }
+            media = view
+            addView(view, 0, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+        }
+
+        private fun releaseMediaOnly() {
+            media?.let { m ->
+                if (m is VideoView) m.stopPlayback()
+                if (m is WebView) { m.stopLoading(); m.destroy() }
+                removeView(m)
+            }
+            media = null
+        }
+
+        fun release() {
+            released = true
+            ui.removeCallbacksAndMessages(null)
+            dropFacade()
+            releaseMediaOnly()
+        }
+    }
+
+    private fun releaseMedia(v: View) {
+        when (v) {
+            is RemoteMediaBox -> v.release()
+            is VideoView -> v.stopPlayback()
+            is WebView -> v.destroy()
+        }
     }
 
     /**
-     * Real playback for `video_url=`. Direct media URLs use Android VideoView; page-style video
-     * URLs are rendered in an isolated WebView embed. The source language stays provider-neutral:
-     * authors only write `video_url="..."`.
+     * Real playback for `video_url=`. See the provider note above; the source language stays
+     * provider-neutral: authors only write `video_url="..."` (or `<VideoPlayer src=...>`).
      */
     private fun syncRemoteMediaOverlays(root: JSONObject?) {
         if (root == null) return
         val found = mutableListOf<Triple<String, JSONObject, String>>()
         collectVideoUrlNodes(root, found)
-        val signature = found.joinToString("|") { "${it.first}:${it.third}" }
+        val signature = found.joinToString("|") { "${it.first}:${it.third}:${mediaOptionsKey(it.second.optJSONObject("attrs") ?: JSONObject())}" }
         if (signature == lastRemoteMediaSignature) {
             mainHandler.post { updateRemoteMediaLayout(found) }
             return
         }
         lastRemoteMediaSignature = signature
-        remoteMediaViews.values.forEach { v ->
-            if (v is VideoView) v.stopPlayback()
-            if (v is WebView) v.destroy()
-            removeView(v)
-        }
+        remoteMediaViews.values.forEach { v -> releaseMedia(v); removeView(v) }
         remoteMediaViews.clear()
 
-        found.forEach { (name, _, url) ->
+        found.forEach { (name, node, url) ->
             if (!isRemoteUrl(url)) return@forEach
-            val view: View = if (isVideoPageUrl(url)) {
-                WebView(context).apply {
-                    settings.javaScriptEnabled = true
-                    settings.domStorageEnabled = true
-                    settings.mediaPlaybackRequiresUserGesture = true
-                    webViewClient = WebViewClient()
-                    setBackgroundColor(Color.BLACK)
-                    loadUrl(videoEmbedUrl(url))
-                }
-            } else {
-                VideoView(context).apply {
-                    setBackgroundColor(Color.BLACK)
-                    val controller = MediaController(context)
-                    controller.setAnchorView(this)
-                    setMediaController(controller)
-                    setVideoURI(Uri.parse(url))
-                    setOnPreparedListener { it.isLooping = false }
-                    setOnErrorListener { _, _, _ -> visibility = View.GONE; true }
-                    setOnCompletionListener { visibility = View.VISIBLE }
-                    visibility = View.VISIBLE
-                    start()
-                }
-            }
+            val view = RemoteMediaBox(context, url, node.optJSONObject("attrs") ?: JSONObject())
             remoteMediaViews[name] = view
             addView(view, FrameLayout.LayoutParams(1, 1))
         }
@@ -2314,7 +2584,22 @@ class IndsinFabricView @JvmOverloads constructor(
         if (rect.width() <= 0f || rect.height() <= 0f) return
         val src = mediaSource(attrs)
         val thumb = if (src.isNotBlank()) loadVideoThumbnail(src, rect.width().toInt(), rect.height().toInt()) else null
-        if (thumb == null) { drawMediaPlaceholder(canvas, rect, attrs, "▶", src); return }
+        if (thumb == null) {
+            // poster= (أو مصغّرة يوتيوب/Dailymotion تلقائياً) تُرسم كصورة تحت زر التشغيل؛ تغطيها واجهة المشغّل الحقيقية عند التحميل.
+            val poster = attrs.optString("poster").ifBlank { videoAutoThumb(src) }
+            if (poster.isNotBlank()) {
+                try { drawImage(canvas, rect, JSONObject(attrs.toString()).put("src", poster)) } catch (_: Throwable) {}
+                fillPaint.shader = null; fillPaint.color = Color.argb(70, 0, 0, 0); canvas.drawRect(rect, fillPaint)
+                val kr = min(rect.width(), rect.height()) * 0.16f
+                fillPaint.color = Color.argb(210, 255, 255, 255); canvas.drawCircle(rect.centerX(), rect.centerY(), kr, fillPaint)
+                fillPaint.color = Color.rgb(30, 31, 40)
+                val tri = android.graphics.Path().apply {
+                    moveTo(rect.centerX() - kr * 0.3f, rect.centerY() - kr * 0.5f); lineTo(rect.centerX() - kr * 0.3f, rect.centerY() + kr * 0.5f)
+                    lineTo(rect.centerX() + kr * 0.5f, rect.centerY()); close() }
+                canvas.drawPath(tri, fillPaint)
+            } else drawMediaPlaceholder(canvas, rect, attrs, "▶", src)
+            return
+        }
 
         val radius = attrs.optString("radius").toFloatOrNull() ?: 8f
         canvas.save()
