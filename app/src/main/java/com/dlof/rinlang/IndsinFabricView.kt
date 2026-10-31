@@ -801,6 +801,70 @@ class IndsinFabricView @JvmOverloads constructor(
      */
     /** `opacity=` (0..1 or N%): the whole node subtree is composited at that alpha (mirrors indsin::applyBoxStyling). */
     private fun drawNode(canvas: Canvas, node: JSONObject, skipOverlays: Boolean = true) {
+        val wa = node.optJSONObject("attrs")
+        // Web Layout Concepts: display=none/hidden/visibility=hidden/_collision_hidden لا يُرسم (الهندسة محسوبة أصلاً في المحرك).
+        if (wa != null && webHidden(wa)) return
+        val tf = if (wa != null) webTransform(wa, node) else null
+        val clipAxes = if (wa != null) webClipAxes(wa) else 0
+        if (tf == null && clipAxes == 0) { drawNodeOpacity(canvas, node, skipOverlays); return }
+        val save = canvas.save()
+        try {
+            val x = node.optDouble("x", 0.0).toFloat(); val y = node.optDouble("y", 0.0).toFloat()
+            val w = node.optDouble("w", 0.0).toFloat(); val h = node.optDouble("h", 0.0).toFloat()
+            if (tf != null) { // الإزاحة تُطبَّق في المحرك؛ هنا التدوير والتحجيم حول المركز فقط
+                val cx = x + w / 2f; val cy = y + h / 2f
+                if (tf[2] != 0f) canvas.rotate(tf[2], cx, cy)
+                if (tf[0] != 1f || tf[1] != 1f) canvas.scale(tf[0], tf[1], cx, cy)
+            }
+            if (clipAxes != 0) {
+                val inf = 1e6f
+                val l = if (clipAxes and 1 != 0) x else -inf; val r = if (clipAxes and 1 != 0) x + w else inf
+                val t = if (clipAxes and 2 != 0) y else -inf; val b = if (clipAxes and 2 != 0) y + h else inf
+                canvas.clipRect(l, t, r, b)
+            }
+            drawNodeOpacity(canvas, node, skipOverlays)
+        } finally { canvas.restoreToCount(save) }
+    }
+
+    /** Web Layout Concepts helpers — mirror indsin::webCollapsed/webInvisible/webReadTransform/webClipAxes (rin_indsin_webcore.h). */
+    private fun attrTruthy(v: String?): Boolean { val t = v?.trim()?.lowercase() ?: return false; return t == "true" || t == "1" || t == "yes" || t == "on" }
+    private fun webHidden(a: JSONObject): Boolean {
+        if (a.optString("display").trim().lowercase() == "none") return true
+        if (attrTruthy(a.optString("hidden")) || attrTruthy(a.optString("_collision_hidden"))) return true
+        val vis = a.optString("visibility").trim().lowercase()
+        return vis == "hidden" || vis == "collapse"
+    }
+    private fun webClipAxes(a: JSONObject): Int {
+        fun clips(k: String): Boolean { val t = a.optString(k).trim().lowercase(); return t == "hidden" || t == "clip" || t == "scroll" || t == "auto" || t == "scroll-x" || t == "scroll-both" }
+        fun scrolls(k: String): Boolean { val t = a.optString(k).trim().lowercase(); return attrTruthy(t) || t == "scroll" || t == "auto" }
+        val all = clips("overflow") || attrTruthy(a.optString("clip")) || attrTruthy(a.optString("scroll_container"))
+        var r = 0
+        if (all || clips("overflow_x") || scrolls("scroll_x")) r = r or 1
+        if (all || clips("overflow_y") || scrolls("scroll_y") || scrolls("overflow")) r = r or 2
+        return r
+    }
+    /** [scaleX, scaleY, rotateDeg] أو null إن لم يوجد تدوير/تحجيم (translate يطبّقه المحرك على الهندسة). */
+    private fun webTransform(a: JSONObject, node: JSONObject): FloatArray? {
+        var sx = 1f; var sy = 1f; var rot = 0f
+        fun num(t: String): Float? = t.trim().lowercase().removeSuffix("deg").removeSuffix("px").toFloatOrNull()
+        val src = a.optString("transform").lowercase()
+        if (src.isNotBlank()) Regex("([a-z-]+)\\(([^)]*)\\)").findAll(src).forEach { m ->
+            val args = m.groupValues[2].split(",").map { it.trim() }
+            when (m.groupValues[1]) {
+                "rotate" -> num(args.getOrElse(0) { "" })?.let { rot += it }
+                "scale" -> num(args.getOrElse(0) { "" })?.let { v -> sx *= v; sy *= (num(args.getOrElse(1) { "" }) ?: v) }
+                "scalex", "scale-x" -> num(args.getOrElse(0) { "" })?.let { sx *= it }
+                "scaley", "scale-y" -> num(args.getOrElse(0) { "" })?.let { sy *= it }
+            }
+        }
+        a.optString("rotate").takeIf { it.isNotBlank() }?.let { num(it)?.let { v -> rot += v } }
+        a.optString("scale").takeIf { it.isNotBlank() }?.let { num(it)?.let { v -> sx *= v; sy *= v } }
+        a.optString("scale_x").takeIf { it.isNotBlank() }?.let { num(it)?.let { v -> sx *= v } }
+        a.optString("scale_y").takeIf { it.isNotBlank() }?.let { num(it)?.let { v -> sy *= v } }
+        return if (sx == 1f && sy == 1f && rot == 0f) null else floatArrayOf(sx, sy, rot)
+    }
+
+    private fun drawNodeOpacity(canvas: Canvas, node: JSONObject, skipOverlays: Boolean = true) {
         val op = fraction(node.optJSONObject("attrs")?.optString("opacity"))
         if (op != null && op < 0.999f) {
             val x = node.optDouble("x", 0.0).toFloat(); val y = node.optDouble("y", 0.0).toFloat()
@@ -1010,9 +1074,36 @@ class IndsinFabricView @JvmOverloads constructor(
 
         val children = node.optJSONArray("children")
         if (children != null) {
-            for (i in 0 until children.length()) {
-                drawNode(canvas, children.optJSONObject(i) ?: continue, skipOverlays)
+            // ZIndex/Layer: ترتيب رسم ثابت تصاعدي حسب z (الهندسة لا تتأثر)
+            val order = (0 until children.length()).toMutableList()
+            fun zOf(i: Int): Int {
+                val a = children.optJSONObject(i)?.optJSONObject("attrs") ?: return 0
+                val raw = a.optString("z").ifBlank { a.optString("layer") }.trim().lowercase()
+                return raw.toDoubleOrNull()?.toInt() ?: when (raw) {
+                    "raised" -> 10; "dropdown" -> 100; "sticky" -> 200; "drawer" -> 300; "dialog" -> 400; "toast" -> 500; "tooltip" -> 600; else -> 0 }
             }
+            if (order.any { zOf(it) != 0 }) order.sortBy { zOf(it) } // sortBy ثابت (stable)
+            for (i in order) drawNode(canvas, children.optJSONObject(i) ?: continue, skipOverlays)
+        }
+        drawScrollBars(canvas, rect, attrs, node)
+    }
+
+    /** ScrollBar: مؤشر رفيع عندما يتجاوز المحتوى نافذة حاوية التمرير (يكتب المحرك scrollContent*/scrollOff* في JSON). */
+    private fun drawScrollBars(canvas: Canvas, rect: RectF, attrs: JSONObject, node: JSONObject) {
+        val bar = attrs.optString("scroll_bar", "auto").trim().lowercase()
+        if (bar == "hidden" || bar == "none" || bar == "false") return
+        val ch = node.optDouble("scrollContentH", 0.0).toFloat(); val cw = node.optDouble("scrollContentW", 0.0).toFloat()
+        val th = if (bar == "thick") 6f else 3f
+        fillPaint.shader = null; fillPaint.clearShadowLayer(); fillPaint.color = Color.argb(140, 160, 160, 175)
+        if (ch > rect.height() + 0.5f && rect.height() > 0f) {
+            val maxOff = ch - rect.height(); val thumb = maxOf(16f, rect.height() * rect.height() / ch)
+            val y = rect.top + (rect.height() - thumb) * (node.optDouble("scrollOffY", 0.0).toFloat() / maxOff)
+            canvas.drawRoundRect(rect.right - th - 2f, y, rect.right - 2f, y + thumb, th / 2f, th / 2f, fillPaint)
+        }
+        if (cw > rect.width() + 0.5f && rect.width() > 0f) {
+            val maxOff = cw - rect.width(); val thumb = maxOf(16f, rect.width() * rect.width() / cw)
+            val x = rect.left + (rect.width() - thumb) * (node.optDouble("scrollOffX", 0.0).toFloat() / maxOff)
+            canvas.drawRoundRect(x, rect.bottom - th - 2f, x + thumb, rect.bottom - 2f, th / 2f, th / 2f, fillPaint)
         }
     }
 
