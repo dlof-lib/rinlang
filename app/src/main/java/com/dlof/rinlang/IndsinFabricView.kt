@@ -7,7 +7,17 @@ import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Shader
+import android.text.Editable
+import android.text.InputFilter
+import android.text.InputType
+import android.text.Spanned
+import android.text.SpannableStringBuilder
 import android.text.TextPaint
+import android.view.KeyEvent
+import android.view.inputmethod.BaseInputConnection
+import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputConnection
+import android.view.inputmethod.InputMethodManager
 import android.text.TextUtils
 import android.util.AttributeSet
 import android.view.GestureDetector
@@ -463,6 +473,7 @@ class IndsinFabricView @JvmOverloads constructor(
      */
     fun setFabric(node: JSONObject?, rootW: Int, rootH: Int, overlays: org.json.JSONArray? = null, canvasInfo: JSONObject? = null) {
         fabric = node
+        trackEditRect(node)
         // Design canvas (engine envelope "canvas": {width,height,background,source}): the screen background
         // behind the Fabric — the root's `<Screen bg>`, else the host default, else the theme background.
         canvasColor = canvasInfo?.optString("background")?.takeIf { it.length == 7 && it[0] == '#' }
@@ -556,6 +567,161 @@ class IndsinFabricView @JvmOverloads constructor(
 
         setMeasuredDimension(finalWidth, finalHeight)
     }
+
+    // ---- كتابة مباشرة داخل الحقل (بدون نافذة منبثقة) ------------------------------------------------------
+    // يصير هذا الـ View محرّر نص حقيقياً (onCreateInputConnection) فتظهر لوحة المفاتيح وتُكتب القيمة في الحقل المرسوم نفسه
+    // مع مؤشّر الكتابة. كل تغيير يُرسَل فوراً عبر [onInlineEdit] إلى set_input (الذي ينقّي ويحدّث الخلية المرتبطة).
+    // التنقية المحلية أدناه تطابق rin_indsin_validate.h فلا حاجة لإعادة مزامنة النص أثناء الكتابة.
+    /** يُستدعى بعد كل تعديل: (اسم الخلية المرتبطة, النص الجديد). */
+    var onInlineEdit: ((bind: String, text: String) -> Unit)? = null
+    /** يُستدعى عند انتهاء الكتابة (Done / Back / لمس خارج الحقل). */
+    var onInlineEditEnded: (() -> Unit)? = null
+    private var editFocus: JSONObject? = null
+    private var editBind = ""
+    private var editName = ""
+    private val editRect = RectF()
+    private var editMultiline = false
+    private val editBuf = SpannableStringBuilder()
+    val isInlineEditing: Boolean get() = editFocus != null
+
+    private fun fieldFilter(type: String, maxLen: Int) = InputFilter { source, start, end, dest, dstart, dend ->
+        val sb = StringBuilder()
+        for (i in start until end) {
+            val c = source[i]
+            val ok = when (type) {
+                "number" -> c.isDigit() || ((c == '-' || c == '+') && dstart == 0 && sb.isEmpty()) ||
+                    (c == '.' && !dest.contains('.') && !sb.contains('.'))
+                "tel" -> c.isDigit() || c == ' ' || c == '-' || c == '(' || c == ')' || (c == '+' && dstart == 0 && sb.isEmpty())
+                "email", "url" -> !c.isWhitespace()
+                else -> true
+            }
+            if (ok) sb.append(c)
+        }
+        var out = sb.toString()
+        if (maxLen > 0) {
+            val room = maxLen - (dest.length - (dend - dstart))
+            out = if (room <= 0) "" else if (out.length > room) out.substring(0, room) else out
+        }
+        if (out.length == end - start && out == source.subSequence(start, end).toString()) null else out
+    }
+
+    /** يبدأ الكتابة المباشرة في الحقل الموصوف بـ [focus] (JSON "focus" القادم من tap). */
+    fun beginInlineEdit(focus: JSONObject) {
+        val bind = focus.optString("bind")
+        if (bind.isEmpty()) return
+        val r = focus.optJSONArray("rect")
+        val same = editFocus != null && editBind == bind
+        editFocus = focus; editBind = bind; editName = focus.optString("name")
+        editMultiline = focus.optBoolean("multiline")
+        if (r != null && r.length() == 4) editRect.set(r.optDouble(0).toFloat(), r.optDouble(1).toFloat(),
+            (r.optDouble(0) + r.optDouble(2)).toFloat(), (r.optDouble(1) + r.optDouble(3)).toFloat())
+        if (!same) {
+            editBuf.setFilters(arrayOf(fieldFilter(focus.optString("inputType"), focus.optInt("maxLength", 0))))
+            editBuf.replace(0, editBuf.length, "")
+            editBuf.append(focus.optString("value"))
+        }
+        isFocusable = true; isFocusableInTouchMode = true
+        requestFocus()
+        val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        imm.restartInput(this)
+        imm.showSoftInput(this, InputMethodManager.SHOW_IMPLICIT)
+        scrollEditIntoView()
+        invalidate()
+    }
+
+    fun endInlineEdit() {
+        if (editFocus == null) return
+        editFocus = null
+        val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        imm.hideSoftInputFromWindow(windowToken, 0)
+        clearFocus()
+        onInlineEditEnded?.invoke()
+        invalidate()
+    }
+
+    private fun scrollEditIntoView() {
+        val s = previewScale()
+        val pad = (24 * resources.displayMetrics.density).toInt()
+        postDelayed({
+            if (editFocus != null) requestRectangleOnScreen(android.graphics.Rect(
+                (editRect.left * s).toInt(), (editRect.top * s).toInt() - pad,
+                (editRect.right * s).toInt(), (editRect.bottom * s).toInt() + pad), true)
+        }, 250)
+    }
+
+    private fun pushEdit() {
+        onInlineEdit?.invoke(editBind, editBuf.toString())
+        invalidate()
+    }
+
+    override fun onCheckIsTextEditor(): Boolean = editFocus != null
+
+    override fun onCreateInputConnection(outAttrs: EditorInfo): InputConnection? {
+        val f = editFocus ?: return null
+        val type = f.optString("inputType")
+        outAttrs.inputType = when {
+            f.optBoolean("secure") -> InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            editMultiline -> InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            type == "email" -> InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+            type == "number" -> InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL or InputType.TYPE_NUMBER_FLAG_SIGNED
+            type == "tel" -> InputType.TYPE_CLASS_PHONE
+            type == "url" -> InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+            else -> InputType.TYPE_CLASS_TEXT
+        }
+        outAttrs.imeOptions = if (editMultiline) EditorInfo.IME_FLAG_NO_FULLSCREEN
+            else (if (type == "search") EditorInfo.IME_ACTION_SEARCH else EditorInfo.IME_ACTION_DONE) or EditorInfo.IME_FLAG_NO_FULLSCREEN
+        outAttrs.initialSelStart = editBuf.length; outAttrs.initialSelEnd = editBuf.length
+        android.text.Selection.setSelection(editBuf, editBuf.length)
+        return object : BaseInputConnection(this, true) {
+            override fun getEditable(): Editable = editBuf
+            override fun commitText(text: CharSequence?, newCursorPosition: Int): Boolean =
+                super.commitText(text, newCursorPosition).also { pushEdit() }
+            override fun setComposingText(text: CharSequence?, newCursorPosition: Int): Boolean =
+                super.setComposingText(text, newCursorPosition).also { pushEdit() }
+            override fun finishComposingText(): Boolean = super.finishComposingText().also { pushEdit() }
+            override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean =
+                super.deleteSurroundingText(beforeLength, afterLength).also { pushEdit() }
+            override fun setSelection(start: Int, end: Int): Boolean = super.setSelection(start, end).also { invalidate() }
+            override fun performEditorAction(actionCode: Int): Boolean { endInlineEdit(); return true }
+            override fun sendKeyEvent(event: KeyEvent): Boolean {
+                if (event.action != KeyEvent.ACTION_DOWN) return true
+                when (event.keyCode) {
+                    KeyEvent.KEYCODE_DEL -> {
+                        val a = android.text.Selection.getSelectionStart(editBuf).coerceAtLeast(0)
+                        val b = android.text.Selection.getSelectionEnd(editBuf).coerceAtLeast(0)
+                        if (a != b) editBuf.delete(min(a, b), max(a, b))
+                        else if (a > 0) editBuf.delete(a - 1, a)
+                        pushEdit()
+                    }
+                    KeyEvent.KEYCODE_ENTER -> if (editMultiline) { commitText("\n", 1) } else endInlineEdit()
+                    else -> { val ch = event.unicodeChar; if (ch != 0) commitText(String(Character.toChars(ch)), 1) }
+                }
+                return true
+            }
+        }
+    }
+
+    override fun onKeyPreIme(keyCode: Int, event: KeyEvent): Boolean {
+        if (editFocus != null && keyCode == KeyEvent.KEYCODE_BACK && event.action == KeyEvent.ACTION_UP) { endInlineEdit(); return true }
+        return super.onKeyPreIme(keyCode, event)
+    }
+
+    /** بعد كل fabric جديد: تتبّع الحقل إن تحرّك (نفس الاسم، الأقرب إلى المستطيل السابق). */
+    private fun trackEditRect(root: JSONObject?) {
+        if (editFocus == null || root == null) return
+        var best: JSONObject? = null; var bestD = Float.MAX_VALUE
+        fun walk(n: JSONObject) {
+            if (n.optString("name") == editName) {
+                val d = Math.abs(n.optDouble("x").toFloat() - editRect.left) + Math.abs(n.optDouble("y").toFloat() - editRect.top)
+                if (d < bestD) { bestD = d; best = n }
+            }
+            n.optJSONArray("children")?.let { for (i in 0 until it.length()) it.optJSONObject(i)?.let(::walk) }
+        }
+        walk(root)
+        best?.let { editRect.set(it.optDouble("x").toFloat(), it.optDouble("y").toFloat(),
+            (it.optDouble("x") + it.optDouble("w")).toFloat(), (it.optDouble("y") + it.optDouble("h")).toFloat()) }
+    }
+    private fun isEditingNode(rect: RectF) = editFocus != null && Math.abs(rect.left - editRect.left) < 1f && Math.abs(rect.top - editRect.top) < 1f
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
@@ -789,7 +955,9 @@ class IndsinFabricView @JvmOverloads constructor(
             Kind.LINK -> drawLink(canvas, rect, attrs, resolved)
             Kind.RADIO -> drawRadio(canvas, rect, attrs, resolved)
             Kind.SLIDER -> drawSlider(canvas, rect, attrs, resolved)
-            Kind.SEARCH, Kind.SELECT, Kind.DATE, Kind.TIME -> drawField(canvas, rect, attrs, singleLine = true, monospace = false)
+            Kind.DATE -> drawField(canvas, rect, attrs, singleLine = true, monospace = false, kindType = "date")
+            Kind.TIME -> drawField(canvas, rect, attrs, singleLine = true, monospace = false, kindType = "time")
+            Kind.SEARCH, Kind.SELECT -> drawField(canvas, rect, attrs, singleLine = true, monospace = false)
             Kind.FILE -> drawField(canvas, rect, attrs, singleLine = true, monospace = false,
                 emptyPlaceholder = "لم يتم اختيار ملف")
             Kind.CODE_EDITOR -> drawField(canvas, rect, attrs, singleLine = false, monospace = true)
@@ -1084,23 +1252,68 @@ class IndsinFabricView @JvmOverloads constructor(
      * [drawBox]/[drawText] already have to indsin::paintBox()/paintText().
      */
 
+    private val codeKeywords = setOf("if","else","elif","while","for","in","return","fn","function","let","var","const","warp","print","import",
+        "class","true","false","nil","null","and","or","not","break","continue","def","end","then","do","switch","case","struct","enum","new",
+        "try","catch","async","await","pub","use")
+
+    /** CodeEditor: عمود أرقام أسطر + تلوين مبسّط (كلمات مفتاحية/نصوص/أرقام/تعليقات) — يطابق paintCode في المحرك. */
+    private fun drawCodeHighlight(canvas: Canvas, rect: RectF, attrs: JSONObject, code: String) {
+        val lang = attrs.optString("language").ifBlank { attrs.optString("lang") }
+        val hashC = lang.isEmpty() || lang == "rin" || lang == "py" || lang == "python" || lang == "sh" || lang == "bash" || lang == "yaml"
+        val slashC = !(lang == "py" || lang == "python" || lang == "sh" || lang == "bash" || lang == "yaml")
+        val saved = textPaint.typeface
+        textPaint.typeface = android.graphics.Typeface.MONOSPACE
+        textPaint.textSize = 13f; textPaint.isFakeBoldText = false; textPaint.textAlign = Paint.Align.LEFT
+        val adv = textPaint.measureText("M"); val lh = 18f; val gut = 30f
+        fillPaint.shader = null; fillPaint.color = Color.argb(30, 255, 255, 255)
+        canvas.drawRect(rect.left + 1f, rect.top + 1f, rect.left + gut, rect.bottom - 1f, fillPaint)
+        canvas.save(); canvas.clipRect(rect)
+        val numColor = defaultPlaceholder
+        code.split("\n").forEachIndexed { li, line ->
+            val base = rect.top + 6f + li * lh + 13f
+            if (base - 13f > rect.bottom) return@forEachIndexed
+            textPaint.color = numColor; textPaint.textAlign = Paint.Align.RIGHT
+            canvas.drawText((li + 1).toString(), rect.left + gut - 6f, base, textPaint)
+            textPaint.textAlign = Paint.Align.LEFT
+            var i = 0
+            while (i < line.length) {
+                val st = i; val c = line[i]
+                var color = defaultText
+                when {
+                    (slashC && line.startsWith("//", i)) || (hashC && c == '#') -> { i = line.length; color = defaultPlaceholder }
+                    c == '"' || c == '\'' -> { i++; while (i < line.length && line[i] != c) { if (line[i] == '\\') i++; i++ }; if (i < line.length) i++; color = 0xFF2E9E5B.toInt() }
+                    c.isDigit() -> { while (i < line.length && (line[i].isDigit() || line[i] == '.')) i++; color = 0xFFD4A72C.toInt() }
+                    c.isLetter() || c == '_' -> { while (i < line.length && (line[i].isLetterOrDigit() || line[i] == '_')) i++
+                        if (line.substring(st, i) in codeKeywords) color = defaultButton }
+                    else -> i++
+                }
+                textPaint.color = color
+                canvas.drawText(line, st, minOf(i, line.length), rect.left + gut + 6f + st * adv, base, textPaint)
+            }
+        }
+        canvas.restore()
+        textPaint.typeface = saved
+    }
+
     /** Input/TextArea/Search/Select/File/Date/Time/CodeEditor: a bordered field box (paintField's
      * native look) with left-aligned value= text, or a dimmer placeholder= when value is empty.
      * [emptyPlaceholder] lets File supply "لم يتم اختيار ملف" as its own convention when the
      * author left placeholder= unset, matching docs/RIN_ELEMENTS.md's description of it. */
     private fun drawField(
         canvas: Canvas, rect: RectF, attrs: JSONObject,
-        singleLine: Boolean, monospace: Boolean, emptyPlaceholder: String = ""
+        singleLine: Boolean, monospace: Boolean, emptyPlaceholder: String = "", kindType: String = ""
     ) {
         if (rect.width() <= 0f || rect.height() <= 0f) return
         drawBox(canvas, rect, attrs, defaultFieldBg, defaultRadius = 8f)
         val err = attrs.optString("error")
-        val fType = attrs.optString("type").lowercase().let { if (it == "phone") "tel" else it }
+        val fType = attrs.optString("type").lowercase().ifEmpty { kindType }.let { if (it == "phone") "tel" else it }
         val rawValue = attrs.optString("value")
         // نفس قواعد rin_indsin_validate.h: حدّ خطر تلقائي للقيم غير الصالحة (validate=false يعطّله)
         val autoInvalid = rawValue.isNotEmpty() && attrs.optString("validate") != "false" && when (fType) {
             "email" -> !Regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]{2,}$").matches(rawValue)
-            "tel" -> rawValue.count { it.isDigit() } < 5 || rawValue.any { !(it.isDigit() || it in "+()- ") }
+            "tel" -> rawValue.count { it.isDigit() } !in 7..15 || rawValue.withIndex().any { (i, ch) -> !(ch.isDigit() || ch in "()- " || (ch == '+' && i == 0)) }
+            "date" -> !Regex("^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$").matches(rawValue)
+            "time" -> !Regex("^([01]\\d|2[0-3]):[0-5]\\d(:[0-5]\\d)?$").matches(rawValue)
             "url" -> !Regex("^https?://\\S+\\.\\S+$", RegexOption.IGNORE_CASE).matches(rawValue)
             "number" -> rawValue.toDoubleOrNull().let { n ->
                 n == null ||
@@ -1115,13 +1328,24 @@ class IndsinFabricView @JvmOverloads constructor(
             attrs.optString("valid") == "true" -> 0xFF2E9E5B.toInt()
             else -> defaultFieldBorder
         }
-        strokePaint.strokeWidth = if (hasError) 2f else 1f
+        val editing = isEditingNode(rect)
+        if (editing) strokePaint.color = defaultButton
+        strokePaint.strokeWidth = if (hasError || editing) 2f else 1f
         canvas.drawRoundRect(rect, 8f, 8f, strokePaint)
 
-        var value = attrs.optString("value")
+        var value = if (editing) editBuf.toString() else attrs.optString("value")
+        if (editing) {   // مؤشّر الكتابة عند موضع التحديد
+            val sel = android.text.Selection.getSelectionEnd(editBuf).coerceIn(0, value.length)
+            val shown = if (attrs.optString("secure") == "true" || fType == "password") "\u2022".repeat(value.length) else value
+            val withCaret = shown.substring(0, sel) + "|" + shown.substring(sel)
+            if (monospace) drawCodeHighlight(canvas, rect, attrs, withCaret)
+            else drawText(canvas, rect, attrs, withCaret, defaultText, singleLine = singleLine)
+            return
+        }
+        if (monospace && value.isNotEmpty()) { drawCodeHighlight(canvas, rect, attrs, value); return }
         if (value.isNotEmpty() && (attrs.optString("secure") == "true" || fType == "password") && attrs.optString("reveal") != "true")
             value = "\u2022".repeat(value.codePointCount(0, value.length))
-        val placeholder = attrs.optString("placeholder").ifBlank { emptyPlaceholder }
+        val placeholder = attrs.optString("placeholder").ifBlank { emptyPlaceholder }.ifBlank { if (fType == "date") "YYYY-MM-DD" else if (fType == "time") "HH:MM" else "" }
         if (value.isNotEmpty()) value = attrs.optString("prefix") + value + attrs.optString("suffix")
         val (text, color) = if (value.isNotEmpty()) value to defaultText else placeholder to defaultPlaceholder
         if (text.isEmpty()) return
