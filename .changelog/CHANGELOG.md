@@ -5,7 +5,6 @@
 ## الفهرس
 
 - [GENERAL](#general)
-- [INDSIN BRIDGE](#indsin-bridge)
 - [ANDROID16](#android16)
 - [BASE ACCEPT](#base-accept)
 - [CHANNEL47](#channel47)
@@ -71,15 +70,6 @@
 - [MANIFEST CHANGES](#manifest-changes)
 
 ---
-
-## INDSIN BRIDGE — جسر Rin ⇄ indsin بالأقواس << >>
-
-<sub>المصدر: `docs/indsin_bridge.md`</sub>
-
-- صيغة `<<…>>` في indsin: ربط تفاعلي `<<expr>>` (نص/سمة/داخل سلسلة/عنصر Text)، `<<print a, b>>`، `<<run f(x)>>` (استدعاء دالة Rin وعرض ما تطبعه)، `<<let/warp/import>>`، `<<if/else if/else>>`، `<<each list as it, i>>` فوق بيانات Rin (تمريرتان في `expandTagSyntax`).
-- Rin: `captureOutput(fn, …)` و`capture(fn, …)` و`indsin.run(name, …)` (مُخزَّنة بالوسائط، آمنة داخل الخصائص).
-- الجلسة الحيّة: تعديل مصدر فيه `each` يعيد التحميل الكامل. تلوين `<<…>>` ومقتطفات في إضافة VS Code.
-- توافق: ناتج المترجم لكل ملفات `.rin` في المستودع مطابق حرفياً لما قبل.
 
 ## LIVE PREVIEW ALL PLATFORMS — معاينة حية حقيقية لكل المنصات
 
@@ -2303,3 +2293,8 @@ Official AGP compatibility: AGP 8.13 requires Gradle 8.13 and JDK 17.
 - مكوّنات جاهزة: TextField, TextAreaField, PasswordField, NumberField, EmailField, SearchField, PhoneField.
 - `rin_indsin_validate.h`، تنقية `set_input` حسب النوع/maxlength، تحقق تلقائي، `indsin.isNumber/fieldError`.
 - أندرويد: IndsinFabricView.drawField (كلمة المرور/prefix/suffix/التحقق) وحوار الإدخال حسب النوع.
+
+## indsin — حقول إضافية وكتابة مباشرة
+- مكوّنات: UrlField, DateField, TimeField, MultilineField, ReadOnlyField, AutocompleteField, CodeField, RichTextField, HiddenField, ValidatedField.
+- تحقق date/time، `indsin.validate/suggest`، تلوين صياغة CodeEditor، `readonly` مظلّل.
+- أندرويد: كتابة مباشرة داخل الحقل (InputConnection) مع زر تبديل للنافذة، منتقيات تاريخ/وقت، تلوين الكود.
