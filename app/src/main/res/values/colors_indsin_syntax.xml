@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ألوان تلوين مستندات indsin (النهاري).
+     لكل دور لون مميّز: المسافة اللونية CIEDE2000 بين أي دورين >= 14، والتباين مع الخلفية >= 4.5.
+     الأدوار معرَّفة في cpp/editor/rin_indsin_highlight.h -->
+<resources>
+
+    <!-- ===== البنية — الأقواس والتوجيه ===== -->
+    <!-- أقواس الوسم < </ > /> -->
+    <color name="ix_bracket">#826A5F</color>
+    <!-- @view و .end/view ووسوم التوجيه (Define, If, Fun, Rin…) -->
+    <color name="ix_struct">#624B8D</color>
+    <!-- حدّا التعبير { } و << >> -->
+    <color name="ix_brace">#9E009A</color>
+
+    <!-- ===== الأسماء — المكوّنات والمعرّفات ===== -->
+    <!-- مكوّن معروف (Column, Button…) -->
+    <color name="ix_tag">#006762</color>
+    <!-- مكوّن مخصّص (من Define) -->
+    <color name="ix_tag_custom">#E32935</color>
+    <!-- #id / اسم العنصر -->
+    <color name="ix_id">#7A4D13</color>
+
+    <!-- ===== السمات ===== -->
+    <!-- اسم سمة -->
+    <color name="ix_attr">#008298</color>
+    <!-- معالج حدث onTap… -->
+    <color name="ix_event">#545E00</color>
+
+    <!-- ===== القيم ===== -->
+    <!-- قيمة نظام التصميم (primary, pill…) -->
+    <color name="ix_token">#A02F10</color>
+    <!-- لون #RRGGBB -->
+    <color name="ix_color">#A55D95</color>
+    <!-- رقم/طول/زمن (16, 120px, 250ms) -->
+    <color name="ix_length">#9455DE</color>
+
+    <!-- ===== الحالة ===== -->
+    <!-- خلية warp (حالة حيّة) في أي موضع تُقرأ فيه -->
+    <color name="ix_state">#458600</color>
+</resources>
