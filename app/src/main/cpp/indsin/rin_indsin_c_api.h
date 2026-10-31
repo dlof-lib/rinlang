@@ -178,6 +178,12 @@ RIN_API char* rin_indsin_tokens_json(void);                   // every token sca
 RIN_API char* rin_indsin_catalog_json(void);                  // component taxonomy
 RIN_API char* rin_indsin_palette_json(const char* seedColor); // tonal palette 50..900
 RIN_API char* rin_indsin_theme_from_seed_json(const char* seedColor, int dark); // theme + WCAG report
+// ---- Web Layout Concepts (docs/indsin_web_layout.md) ----
+RIN_API char* rin_indsin_query_selector_json(void* session, const char* selector);  // Selector: [{name,kind,x,y,w,h}...] | {"error":...}
+RIN_API char* rin_indsin_collisions_json(void* session);                         // CollisionDetection: أزواج الإخوة المتداخلة
+RIN_API char* rin_indsin_space_report_json(void* session, const char* name);     // Inner/Outer/Occupied/Empty/AvailableSpace
+RIN_API int   rin_indsin_scroll_to(void* session, const char* name, double x, double y); // ScrollTo + إعادة تخطيط (1 = تم)
+RIN_API void  rin_indsin_set_scroll_window(void* session, double scrollX, double scrollY); // يحدّث fixed/sticky لإزاحة تمرير الصفحة
 RIN_API char* rin_indsin_validate_theme_json(const char* themeName);            // WCAG report for a theme
 
 #ifdef __cplusplus
