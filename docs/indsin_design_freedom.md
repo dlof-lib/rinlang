@@ -344,3 +344,25 @@ rin_indsin_preview examples/samples/indsin_design_freedom.rin --bg "#223344" --c
 - **focus**: غلاف `tap` يحمل `inputType` و`maxLength` و`multiline` و`min`/`max` ليختار تطبيق الأندرويد لوحة المفاتيح المناسبة.
 - **Rin**: `indsin.isNumber(s)` و`indsin.fieldError(kind, value[, min, max])` (email/password/phone/tel/url/number/required).
 - مثال كامل: `examples/samples/indsin_fields.rin`.
+
+### أنواع إضافية
+
+| المكوّن | ما يفعله |
+|---|---|
+| `<UrlField>` | رابط، يتحقق من `http(s)://` تلقائياً |
+| `<DateField>` / `<TimeField>` | تاريخ `YYYY-MM-DD` / وقت `HH:MM` مع أيقونة؛ على أندرويد يفتح منتقياً أصلياً |
+| `<MultilineField>` | نص طويل (TextArea بعدّاد `maxlength`) |
+| `<ReadOnlyField>` | عرض قيمة مظلّلة لا تقبل التعديل (`readonly=true` على أي حقل) |
+| `<AutocompleteField options="a,b,c">` | حتى 4 اقتراحات أثناء الكتابة؛ اللمس يملأ الحقل (`indsin.suggest`) |
+| `<CodeField language=rin height=180>` | `<CodeEditor>` بأرقام أسطر وتلوين الصياغة (كلمات مفتاحية/نصوص/أرقام/تعليقات) |
+| `<RichTextField>` | شريط تنسيق (B / I / U / H / List / Link) يضيف رموز Markdown؛ ليس WYSIWYG |
+| `<HiddenField name value>` | قيمة غير ظاهرة تبقى في الـ fabric (الخلية نفسها هي التخزين) |
+| `<ValidatedField rule=…>` | `rule`: required · email · url · phone · number · date · time · length (`min`/`max` أطوال) · pattern (`pattern` regex + `message`) |
+
+دوال Rin: `indsin.validate(rule, value[, min, max, pattern, message])` و`indsin.suggest(value, "a,b,c", i)`، و`indsin.fieldError` تقبل أيضاً `date` و`time`.
+
+### الكتابة داخل الحقل (أندرويد)
+- الافتراضي: لمس حقل نصي يجعله محرراً حقيقياً في مكانه (لوحة المفاتيح + مؤشر كتابة) بلا نافذة منبثقة. التنقية و`maxlength` تُطبَّق أثناء الكتابة بنفس قواعد المحرك.
+- زر لوحة المفاتيح في شريط المعاينة يبدّل إلى النافذة المنبثقة (الاختيار يُحفظ). Done/Back ينهيان الكتابة، ولمس خارج الحقل أيضاً.
+- حقول التاريخ والوقت تستعمل دائماً المنتقي الأصلي.
+- غلاف `focus` صار يحمل `rect` و`language` و`kind` (`code`).
