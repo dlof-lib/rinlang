@@ -1,0 +1,13 @@
+// make_download_basic.rin — تحقق make.api.download بلا شبكة (حتميّ)
+print make.api.download("file:///etc/passwd", "o.bin").error;
+print make.api.download("ftp://x/y", "o.bin").ok;
+print make.api.download("http://x", "").error;
+print make.api.download("http://x", "o.bin", {"headers": {"Bad\nName": "v"}}).error;
+print make.api.download("http://x", "o.bin", {"auth": 5}).error;
+print make.api.download("http://127.0.0.1:1/x", "o.bin", {"timeout": 3000}).ok;
+print fileExists("o.bin"), fileExists("o.bin.part");
+print make.image.text("http://127.0.0.1:1/x.png").ok;
+fun thrown(runner) { try { runner(); return "no error"; } catch (e) { return e.code; } }
+print thrown(fun() { make.api.download("http://x"); });
+print thrown(fun() { make.api.download("http://x", 5); });
+print type(make.media.tools().tools["yt-dlp"]);
