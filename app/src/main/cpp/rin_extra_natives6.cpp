@@ -42,9 +42,14 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstring>
 #include <fstream>
+#include <functional>
 #include <thread>
 #include <unordered_map>
+#ifdef RIN_MEDIA_POSIX
+#  include <dirent.h>
+#endif
 
 namespace rin {
 namespace extra6 {
@@ -167,6 +172,7 @@ struct TempDir {
 
 using Argv = md::Argv;
 using Resolver = std::function<std::string(const std::string&, int)>;
+static std::string fetchToTemp(const std::string& url, const std::string& tmpFile, std::string& error);   // تُعرَّف قرب make.api.download
 
 static std::string trimStr6(const std::string& s) {
     size_t a = 0, b = s.size();
@@ -600,8 +606,16 @@ static Value removeBgImpl(const Resolver& resolve, const EnsureDir& ensureDir, A
     }
     if (outRaw.empty()) outRaw = optS(opts, "out");
 
-    if (md::isHttpUrl(srcRaw)) return fail6("make.image.removeBg: نزّل الصورة أولاً بـ make.api.download ثم مرّر المسار المحلي");
-    std::string src = resolve(srcRaw, line);
+    TempDir srcTmp;                       // رابط بدل مسار: يُنزَّل لملف مؤقت بنفس نواة make.api.download ثم يُعالَج كأي ملف محلي
+    std::string src;
+    if (md::isHttpUrl(srcRaw)) {
+        if (outRaw.empty()) return fail6("make.image.removeBg: مع رابط مصدر يجب تحديد مسار الخرج (الوسيط الثاني)");
+        if (!md::safeArg(srcRaw)) return fail6("رابط غير صالح — المسموح http:// أو https:// فقط");
+        if (!srcTmp.ok()) return fail6("تعذّر إنشاء مجلد مؤقت لتنزيل الصورة");
+        std::string derr;
+        src = fetchToTemp(srcRaw, srcTmp.file("src.img"), derr);
+        if (src.empty()) return fail6("make.image.removeBg: " + derr);
+    } else src = resolve(srcRaw, line);
     if (outRaw.empty()) outRaw = dirOf(srcRaw) + stemOf(srcRaw) + ".nobg.png";
     std::string out = resolve(outRaw, line);
 
@@ -744,8 +758,15 @@ static Value ocrImpl(const Resolver& resolve, Args& a, int line, const char* fn)
     std::string srcRaw = needStr(a[0], fn, "المصدر", line);
     Value opts = a.size() > 1 ? a[1] : Value::nil();
     needOpts(opts, fn, line);
-    if (md::isHttpUrl(srcRaw)) return fail6(std::string(fn) + ": نزّل الصورة أولاً بـ make.api.download ثم مرّر المسار المحلي");
-    std::string src = resolve(srcRaw, line);
+    TempDir srcTmp;                       // رابط بدل مسار: يُنزَّل لملف مؤقت بنفس نواة make.api.download
+    std::string src;
+    if (md::isHttpUrl(srcRaw)) {
+        if (!md::safeArg(srcRaw)) return fail6("رابط غير صالح — المسموح http:// أو https:// فقط");
+        if (!srcTmp.ok()) return fail6(std::string(fn) + ": تعذّر إنشاء مجلد مؤقت لتنزيل الصورة");
+        std::string derr;
+        src = fetchToTemp(srcRaw, srcTmp.file("src.img"), derr);
+        if (src.empty()) return fail6(std::string(fn) + ": " + derr);
+    } else src = resolve(srcRaw, line);
 
     int psm = static_cast<int>(clampD(optN(opts, "psm", 3), 0, 13));
     double minConf = clampD(optN(opts, "minConfidence", 0), 0, 100);
@@ -940,6 +961,569 @@ static double nowSec() {
 }
 static double nowMs6() { return nowSec() * 1000.0; }
 
+// ============================================================================
+//  تنزيل الروابط (make.api.download) — الصور/الفيديو/الصوت/المستندات وأي ملف
+// ----------------------------------------------------------------------------
+//  دالة واحدة موجودة أصلاً (make.api.download) بنفس توقيعها (url, path[, opts])، وكل ما تغيّر أنها
+//  صارت تفهم أنواع الروابط الشائعة بدل حفظ أي رد كما هو:
+//    * ملف مباشر (صورة/فيديو/صوت/PDF/...) : يُكتب مباشرة إلى القرص بالتدفق (لا ذاكرة) + استئناف.
+//    * path ينتهي بـ "/" أو مجلد موجود    : الاسم من Content-Disposition أو الرابط، والامتداد من
+//                                          البايتات (لا من الامتداد المزيَّف: image.php → .jpg).
+//    * قائمة بث HLS (.m3u8)               : تُجمَّع إلى ملف فيديو واحد عبر ffmpeg (موجود أصلاً في الجرد).
+//    * صفحة فيديو (يوتيوب وغيره)          : عبر yt-dlp إن وُجد؛ وإلا خطأ واضح بدل حفظ HTML كأنه فيديو.
+//  لا مفاهيم جديدة: خيارات إضافية اختيارية فقط (resume, quality) والنتيجة خريطة ok/error كبقية make.*
+// ============================================================================
+struct Sniff { std::string kind, ext, mime; };
+
+static Sniff sniffFile(const std::string& path) {
+    Sniff s{"file", "", ""};
+    std::ifstream f(path, std::ios::binary);
+    unsigned char h[1024];
+    size_t n = 0;
+    if (f) { f.read(reinterpret_cast<char*>(h), sizeof h); n = static_cast<size_t>(f.gcount()); }
+    if (n == 0) { s.kind = "empty"; return s; }
+    auto is = [&](size_t off, const char* m) { size_t L = std::strlen(m); return n >= off + L && std::memcmp(h + off, m, L) == 0; };
+    auto set = [&](const char* k, const char* e, const char* m) { s.kind = k; s.ext = e; s.mime = m; return s; };
+
+    // صور (نفس تعريف md::sniffImage + المزيد)
+    if (n >= 4 && h[0] == 0x89 && is(1, "PNG")) return set("image", "png", "image/png");
+    if (n >= 3 && h[0] == 0xFF && h[1] == 0xD8 && h[2] == 0xFF) return set("image", "jpg", "image/jpeg");
+    if (is(0, "RIFF") && is(8, "WEBP")) return set("image", "webp", "image/webp");
+    if (is(0, "GIF8")) return set("image", "gif", "image/gif");
+    if (n >= 2 && h[0] == 'B' && h[1] == 'M' && n > 14) return set("image", "bmp", "image/bmp");
+    if (n >= 4 && ((h[0] == 'I' && h[1] == 'I' && h[2] == 42 && h[3] == 0) || (h[0] == 'M' && h[1] == 'M' && h[2] == 0 && h[3] == 42)))
+        return set("image", "tiff", "image/tiff");
+    if (n >= 4 && h[0] == 0 && h[1] == 0 && h[2] == 1 && h[3] == 0) return set("image", "ico", "image/x-icon");
+    // حاوية ISO-BMFF (mp4/mov/m4a/heic/avif)
+    if (n >= 12 && is(4, "ftyp")) {
+        std::string b(reinterpret_cast<char*>(h) + 8, 4);
+        if (b == "M4A " || b == "M4B ") return set("audio", "m4a", "audio/mp4");
+        if (b == "qt  ") return set("video", "mov", "video/quicktime");
+        if (b == "avif" || b == "avis") return set("image", "avif", "image/avif");
+        if (b == "heic" || b == "heix" || b == "hevc" || b == "hevx" || b == "mif1" || b == "msf1") return set("image", "heic", "image/heic");
+        if (b.compare(0, 3, "3gp") == 0) return set("video", "3gp", "video/3gpp");
+        return set("video", "mp4", "video/mp4");
+    }
+    if (n >= 4 && h[0] == 0x1A && h[1] == 0x45 && h[2] == 0xDF && h[3] == 0xA3) {
+        std::string head(reinterpret_cast<char*>(h), std::min<size_t>(n, 64));
+        return head.find("webm") != std::string::npos ? set("video", "webm", "video/webm") : set("video", "mkv", "video/x-matroska");
+    }
+    if (is(0, "RIFF") && is(8, "AVI ")) return set("video", "avi", "video/x-msvideo");
+    if (is(0, "RIFF") && is(8, "WAVE")) return set("audio", "wav", "audio/wav");
+    if (is(0, "FLV") && n >= 4 && h[3] == 1) return set("video", "flv", "video/x-flv");
+    if (is(0, "OggS")) return set("audio", "ogg", "audio/ogg");
+    if (is(0, "fLaC")) return set("audio", "flac", "audio/flac");
+    if (is(0, "#!AMR")) return set("audio", "amr", "audio/amr");
+    if (is(0, "ID3") || (n >= 2 && h[0] == 0xFF && (h[1] & 0xE0) == 0xE0 && ((h[1] >> 1) & 3) != 0 && ((h[1] >> 3) & 3) != 1))
+        return set("audio", "mp3", "audio/mpeg");
+    if (n >= 377 && h[0] == 0x47 && h[188] == 0x47 && h[376] == 0x47) return set("video", "ts", "video/mp2t");
+    // مستندات وأرشيفات
+    if (is(0, "%PDF-")) return set("document", "pdf", "application/pdf");
+    if (is(0, "PK\x03\x04")) return set("archive", "zip", "application/zip");
+    if (n >= 2 && h[0] == 0x1F && h[1] == 0x8B) return set("archive", "gz", "application/gzip");
+    if (is(0, "7z\xBC\xAF\x27\x1C")) return set("archive", "7z", "application/x-7z-compressed");
+    if (is(0, "Rar!\x1A\x07")) return set("archive", "rar", "application/vnd.rar");
+    if (is(0, "BZh")) return set("archive", "bz2", "application/x-bzip2");
+    if (is(0, "\xFD" "7zXZ")) return set("archive", "xz", "application/x-xz");
+    // نصوص: قائمة بث / صفحة ويب / SVG / نص عادي
+    size_t i0 = 0;
+    if (n >= 3 && h[0] == 0xEF && h[1] == 0xBB && h[2] == 0xBF) i0 = 3;
+    while (i0 < n && std::isspace(h[i0])) ++i0;
+    std::string head(reinterpret_cast<char*>(h) + i0, n - i0);
+    std::string lh = md::lower(head);
+    if (lh.compare(0, 7, "#extm3u") == 0) return set("playlist", "m3u8", "application/vnd.apple.mpegurl");
+    if (lh.find("<svg") != std::string::npos && (lh.compare(0, 4, "<svg") == 0 || lh.compare(0, 5, "<?xml") == 0 || lh.compare(0, 9, "<!doctype") == 0))
+        return set("image", "svg", "image/svg+xml");
+    if (lh.compare(0, 9, "<!doctype") == 0 || lh.compare(0, 5, "<html") == 0 || lh.find("<html") != std::string::npos || lh.find("<head") != std::string::npos)
+        return set("page", "html", "text/html");
+    bool text = true;
+    for (size_t i = 0; i < n; ++i) { unsigned char c = h[i]; if (c == 0 || (c < 9) || (c > 13 && c < 32 && c != 27)) { text = false; break; } }
+    if (text) {
+        if (!lh.empty() && (lh[0] == '{' || lh[0] == '[')) return set("text", "json", "application/json");
+        return set("text", "txt", "text/plain");
+    }
+    s.ext = "bin"; s.mime = "application/octet-stream";
+    return s;
+}
+
+static std::string extFromMime(const std::string& mimeIn) {
+    static const std::unordered_map<std::string, std::string> m = {
+        {"image/jpeg", "jpg"}, {"image/png", "png"}, {"image/gif", "gif"}, {"image/webp", "webp"}, {"image/svg+xml", "svg"},
+        {"image/bmp", "bmp"}, {"image/avif", "avif"}, {"image/heic", "heic"}, {"image/x-icon", "ico"}, {"image/tiff", "tiff"},
+        {"video/mp4", "mp4"}, {"video/webm", "webm"}, {"video/x-matroska", "mkv"}, {"video/quicktime", "mov"}, {"video/mp2t", "ts"},
+        {"video/x-msvideo", "avi"}, {"video/3gpp", "3gp"}, {"audio/mpeg", "mp3"}, {"audio/mp4", "m4a"}, {"audio/aac", "aac"},
+        {"audio/ogg", "ogg"}, {"audio/wav", "wav"}, {"audio/x-wav", "wav"}, {"audio/flac", "flac"}, {"audio/opus", "opus"},
+        {"application/pdf", "pdf"}, {"application/zip", "zip"}, {"application/gzip", "gz"}, {"application/json", "json"},
+        {"application/vnd.apple.mpegurl", "m3u8"}, {"application/x-mpegurl", "m3u8"}, {"text/plain", "txt"}, {"text/csv", "csv"},
+        {"text/html", "html"}, {"text/css", "css"}, {"application/javascript", "js"}, {"text/javascript", "js"}, {"application/xml", "xml"}};
+    auto it = m.find(md::lower(mimeIn));
+    return it == m.end() ? std::string() : it->second;
+}
+
+static bool isMediaExt(const std::string& e) {
+    static const char* k[] = {"jpg", "jpeg", "png", "gif", "webp", "bmp", "tif", "tiff", "ico", "svg", "avif", "heic",
+                              "mp4", "m4v", "mkv", "webm", "mov", "avi", "flv", "ts", "3gp", "wmv",
+                              "mp3", "m4a", "aac", "ogg", "opus", "wav", "flac", "amr",
+                              "pdf", "zip", "gz", "7z", "rar", "xz", "bz2"};
+    for (const char* x : k) if (e == x) return true;
+    return false;
+}
+static bool isVideoExt(const std::string& e) { return e == "mp4" || e == "m4v" || e == "mkv" || e == "webm" || e == "mov" || e == "ts"; }
+static bool isAudioExt(const std::string& e) { return e == "mp3" || e == "m4a" || e == "aac" || e == "ogg" || e == "opus" || e == "wav" || e == "flac"; }
+
+static std::string pctDecode(const std::string& s) {
+    std::string o;
+    for (size_t i = 0; i < s.size(); ++i) {
+        if (s[i] == '%' && i + 2 < s.size() + 0 && std::isxdigit(static_cast<unsigned char>(s[i + 1])) && std::isxdigit(static_cast<unsigned char>(s[i + 2]))) {
+            o += static_cast<char>(std::strtol(s.substr(i + 1, 2).c_str(), nullptr, 16));
+            i += 2;
+        } else o += s[i];
+    }
+    return o;
+}
+
+// اسم ملف آمن: بلا مسار ولا محارف تحكّم ولا محارف ممنوعة على الأنظمة، وبطول معقول (بلا قطع UTF-8 من المنتصف).
+static std::string sanitizeName(std::string n) {
+    size_t sl = n.find_last_of("/\\");
+    if (sl != std::string::npos) n = n.substr(sl + 1);
+    std::string o;
+    for (unsigned char c : n) {
+        if (c < 32 || c == 127) continue;
+        if (std::strchr("<>:\"|?*", c)) { o += '_'; continue; }
+        o += static_cast<char>(c);
+    }
+    size_t a = 0, b = o.size();
+    while (a < b && (o[a] == ' ' || o[a] == '.')) ++a;
+    while (b > a && (o[b - 1] == ' ' || o[b - 1] == '.')) --b;
+    o = o.substr(a, b - a);
+    if (o.size() > 120) {
+        size_t cut = 120;
+        while (cut > 0 && (static_cast<unsigned char>(o[cut]) & 0xC0) == 0x80) --cut;
+        std::string e = extOf(o);
+        o = o.substr(0, cut);
+        if (!e.empty() && e.size() <= 6 && o.find('.') == std::string::npos) o += "." + e;
+    }
+    return o.empty() ? std::string("download") : o;
+}
+
+// filename*=UTF-8''... أو filename="..." من Content-Disposition (بلا تحليل كامل لـ RFC 6266، يكفي الشائع).
+static std::string nameFromDisposition(const std::string& cd) {
+    if (cd.empty()) return "";
+    std::string l = md::lower(cd);
+    size_t p = l.find("filename*=");
+    if (p != std::string::npos) {
+        std::string v = cd.substr(p + 10);
+        size_t semi = v.find(';'); if (semi != std::string::npos) v.erase(semi);
+        size_t q = v.find("''");
+        if (q != std::string::npos) v = v.substr(q + 2);
+        return sanitizeName(pctDecode(trimStr6(v)));
+    }
+    p = l.find("filename=");
+    if (p == std::string::npos) return "";
+    std::string v = trimStr6(cd.substr(p + 9));
+    if (!v.empty() && v[0] == '"') {
+        size_t e = v.find('"', 1);
+        v = v.substr(1, e == std::string::npos ? std::string::npos : e - 1);
+    } else {
+        size_t semi = v.find(';'); if (semi != std::string::npos) v.erase(semi);
+        v = trimStr6(v);
+    }
+    return sanitizeName(v);
+}
+
+static std::string nameFromUrl(const std::string& url) {
+    size_t s = url.find("://");
+    std::string rest = s == std::string::npos ? url : url.substr(s + 3);
+    size_t slash = rest.find('/');
+    if (slash == std::string::npos) return "";
+    std::string path = rest.substr(slash);
+    size_t cut = path.find_first_of("?#");
+    if (cut != std::string::npos) path.erase(cut);
+    while (!path.empty() && path.back() == '/') path.pop_back();
+    size_t ls = path.find_last_of('/');
+    std::string seg = ls == std::string::npos ? path : path.substr(ls + 1);
+    return seg.empty() ? "" : sanitizeName(pctDecode(seg));
+}
+
+// يكمّل/يصحّح الامتداد من النوع الفعلي للبايتات: بلا امتداد، أو امتداد ديناميكي (php/asp/...) لا يدل على المحتوى.
+static std::string fixExtension(std::string name, const std::string& wantExt) {
+    if (wantExt.empty()) return name;
+    static const char* dyn[] = {"php", "php3", "php4", "php5", "php7", "phtml", "asp", "aspx", "ashx", "axd", "jsp", "jspx", "cgi", "do",
+                                "action", "bin", "dat", "tmp", "download", "image", "file", "img"};
+    std::string e = extOf(name);
+    bool need = e.empty() || e.size() > 6;
+    for (const char* d : dyn) if (e == d) need = true;
+    if (!need) return name;
+    if (!e.empty() && e.size() <= 6) name = name.substr(0, name.size() - e.size() - 1);
+    return name + "." + wantExt;
+}
+
+static std::string urlStem(const std::string& url) {
+    std::string n = nameFromUrl(url);
+    std::string st = n.empty() ? "" : stemOf(n);
+    std::string l = md::lower(st);
+    if (st.empty() || l == "index" || l == "master" || l == "playlist" || l == "manifest" || l == "stream" || l == "chunklist" || l == "prog_index")
+        return "video";
+    return st;
+}
+
+static bool pathIsDir(const std::string& p) {
+#ifdef RIN_MEDIA_POSIX
+    struct stat st; return stat(p.c_str(), &st) == 0 && S_ISDIR(st.st_mode);
+#else
+    (void)p; return false;
+#endif
+}
+
+static std::string uniqueName(const std::string& dir, const std::string& name) {
+    if (!md::fileExists(dir + name)) return name;
+    std::string st = stemOf(name), e = extOf(name);
+    for (int i = 1; i < 1000; ++i) {
+        std::string cand = st + " (" + std::to_string(i) + ")" + (e.empty() ? "" : "." + e);
+        if (!md::fileExists(dir + cand)) return cand;
+    }
+    return name;
+}
+
+struct DlParams {
+    std::string url;
+    std::string outAbs;              // مسار الملف الكامل (وضع الملف) أو المجلد (وضع المجلد، ينتهي بـ "/")
+    std::string outRaw;              // كما كتبه المستخدم (لبناء path في النتيجة)
+    bool dirMode = false;
+    bool overwrite = true;
+    bool overwriteExplicit = false;
+    bool resume = false;
+    long long maxBytes = 2048LL * 1024 * 1024;
+    bool maxBytesExplicit = false;
+    int idleMs = 30000;
+    int totalMs = 0;                 // 0 = السقف الافتراضي (6 ساعات)
+    int quality = 0;                 // أقصى ارتفاع فيديو (yt-dlp)؛ 0 = الأفضل
+    http::HeaderList headers;
+    EnsureDir ensureDir;
+};
+
+struct DlOutcome {
+    bool ok = false;
+    std::string error;
+    std::string path;                // المسار النهائي كما يُعاد للمستخدم
+    std::string abs;                 // المسار الكامل على القرص
+    long long bytes = 0;
+    long status = 0;
+    std::string contentType, kind, ext, via = "curl", finalUrl;
+    bool resumed = false;
+    std::vector<std::pair<std::string, Value>> extra;
+};
+
+static DlOutcome dlFail(const std::string& e, long status = 0) { DlOutcome o; o.error = e; o.status = status; return o; }
+
+static std::string joinOutRaw(const std::string& raw, bool dirMode, const std::string& name) {
+    if (!dirMode) return raw;
+    return raw + (raw.empty() || raw.back() == '/' ? "" : "/") + name;
+}
+
+// تحرير الملف المؤقت وإعطاء الاسم النهائي (وضع المجلد: من الترويسة/الرابط/البايتات).
+static DlOutcome dlFinalize(const DlParams& p, const std::string& part, const Sniff& sn, const std::string& cdHeader,
+                            const std::string& mime, const std::string& finalUrl, long status, bool resumed, const std::string& via) {
+    DlOutcome o;
+    std::string wantExt = sn.ext;
+    if ((wantExt.empty() || wantExt == "bin" || wantExt == "txt") && !mime.empty()) {
+        std::string me = extFromMime(mime);
+        if (!me.empty()) wantExt = me;
+    }
+    std::string name, finalAbs;
+    if (p.dirMode) {
+        name = nameFromDisposition(cdHeader);
+        if (name.empty()) name = nameFromUrl(finalUrl.empty() ? p.url : finalUrl);
+        if (name.empty()) name = nameFromUrl(p.url);
+        if (name.empty()) name = "download";
+        name = fixExtension(name, (sn.kind == "text" || sn.kind == "file") ? wantExt : sn.ext.empty() ? wantExt : sn.ext);
+        if (p.overwriteExplicit) {
+            if (!p.overwrite && md::fileExists(p.outAbs + name)) { std::remove(part.c_str()); return dlFail("الملف موجود مسبقاً — مرّر overwrite: true للاستبدال"); }
+        } else name = uniqueName(p.outAbs, name);
+        finalAbs = p.outAbs + name;
+    } else {
+        finalAbs = p.outAbs;
+        name = finalAbs.substr(finalAbs.find_last_of('/') == std::string::npos ? 0 : finalAbs.find_last_of('/') + 1);
+    }
+    if (std::rename(part.c_str(), finalAbs.c_str()) != 0) {
+        if (!copyFile6(part, finalAbs)) { std::remove(part.c_str()); return dlFail("تعذّر حفظ الملف النهائي: " + name); }
+        std::remove(part.c_str());
+    }
+    o.ok = true; o.abs = finalAbs; o.path = joinOutRaw(p.outRaw, p.dirMode, name);
+    o.bytes = md::fileSize(finalAbs); o.status = status; o.contentType = mime; o.kind = sn.kind; o.ext = extOf(name);
+    if (o.ext.empty()) o.ext = sn.ext;
+    o.via = via; o.finalUrl = finalUrl.empty() ? p.url : finalUrl; o.resumed = resumed;
+    if (o.kind == "empty") o.kind = "file";
+    return o;
+}
+
+#ifdef RIN_MEDIA_POSIX
+// ---- بث HLS (.m3u8) عبر ffmpeg ------------------------------------------------------------
+static DlOutcome dlViaFfmpeg(const DlParams& p, const std::string& streamUrl) {
+    if (md::which("ffmpeg").empty())
+        return dlFail("رابط بث HLS (.m3u8) يحتاج ffmpeg — ثبّته: sudo apt install ffmpeg");
+    std::string finalAbs, name;
+    if (p.dirMode) {
+        name = urlStem(streamUrl) + ".mp4";
+        if (p.overwriteExplicit) { if (!p.overwrite && md::fileExists(p.outAbs + name)) return dlFail("الملف موجود مسبقاً — مرّر overwrite: true للاستبدال"); }
+        else name = uniqueName(p.outAbs, name);
+        finalAbs = p.outAbs + name;
+    } else {
+        finalAbs = p.outAbs;
+        std::string e = extOf(finalAbs);
+        if (e.empty()) finalAbs += ".mp4";
+        else if (!isVideoExt(e) && !isAudioExt(e)) return dlFail("ملف الخرج لبث HLS يجب أن يكون .mp4 أو .mkv أو .ts (وُجد: ." + e + ")");
+        name = finalAbs.substr(finalAbs.find_last_of('/') == std::string::npos ? 0 : finalAbs.find_last_of('/') + 1);
+    }
+    std::string e = extOf(finalAbs);
+    std::string fmt = e == "mkv" ? "matroska" : e == "ts" ? "mpegts" : e == "webm" ? "webm" : e == "mov" ? "mov"
+                      : (e == "mp3") ? "mp3" : (e == "m4a") ? "ipod" : (e == "ogg" || e == "opus") ? "ogg" : (e == "flac") ? "flac" : (e == "wav") ? "wav" : (e == "aac") ? "adts" : "mp4";
+    if (!p.overwrite && !p.dirMode && md::fileExists(finalAbs)) return dlFail("الملف موجود مسبقاً — مرّر overwrite: true للاستبدال");
+    p.ensureDir(finalAbs);
+    std::string part = finalAbs + ".part";
+    std::remove(part.c_str());
+
+    md::Argv av = {"ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-y"};
+    if (!p.headers.empty()) {
+        std::string hs;
+        for (auto& h : p.headers) hs += h.first + ": " + h.second + "\r\n";
+        av.push_back("-headers"); av.push_back(hs);
+    }
+    av.push_back("-rw_timeout"); av.push_back(std::to_string(static_cast<long long>(p.idleMs) * 1000));
+    // بلا "file": قائمة بعيدة لا يجوز أن تُحيل إلى ملفات محلية (ثغرة قراءة ملفات عبر HLS)
+    av.push_back("-protocol_whitelist"); av.push_back("http,https,tcp,tls,crypto");
+    av.push_back("-i"); av.push_back(streamUrl);
+    if (!isAudioExt(e) || e == "m4a" || e == "aac") { av.push_back("-c"); av.push_back("copy"); }
+    if (e == "mp4" || e == "mov" || e == "m4a") { av.push_back("-bsf:a"); av.push_back("aac_adtstoasc"); }
+    if (p.maxBytes > 0) { av.push_back("-fs"); av.push_back(std::to_string(p.maxBytes)); }
+    av.push_back("-f"); av.push_back(fmt);
+    av.push_back(part);
+
+    int total = p.totalMs > 0 ? p.totalMs : 21600000;
+    md::ProcResult r = md::run(av, total, 1u << 20);
+    if (!r.started) return dlFail(r.error);
+    if (r.timedOut) { std::remove(part.c_str()); return dlFail("انتهت مهلة تجميع البث"); }
+    long long sz = md::fileSize(part);
+    if (r.exitCode != 0 || sz <= 0) {
+        std::remove(part.c_str());
+        std::string msg = firstLine(r.err);
+        auto ls = splitLines(trimStr6(r.err));
+        if (!ls.empty()) msg = ls.back();
+        return dlFail("فشل ffmpeg في تنزيل البث: " + (msg.empty() ? "رمز الخروج " + std::to_string(r.exitCode) : msg));
+    }
+    if (p.maxBytes > 0 && sz >= p.maxBytes) { std::remove(part.c_str()); return dlFail("حجم الملف يتجاوز maxBytes"); }
+    if (std::rename(part.c_str(), finalAbs.c_str()) != 0) {
+        if (!copyFile6(part, finalAbs)) { std::remove(part.c_str()); return dlFail("تعذّر حفظ الملف النهائي"); }
+        std::remove(part.c_str());
+    }
+    DlOutcome o;
+    o.ok = true; o.abs = finalAbs; o.path = p.dirMode ? joinOutRaw(p.outRaw, true, name) : (p.outRaw + (extOf(p.outRaw).empty() ? ".mp4" : ""));
+    o.bytes = sz; o.status = 200; o.kind = isAudioExt(e) ? "audio" : "video"; o.ext = e; o.via = "ffmpeg"; o.finalUrl = streamUrl;
+    o.contentType = e == "mkv" ? "video/x-matroska" : e == "ts" ? "video/mp2t" : e == "webm" ? "video/webm" : isAudioExt(e) ? "audio/" + e : "video/mp4";
+    return o;
+}
+
+// ---- صفحات الفيديو (يوتيوب وغيره) عبر yt-dlp ------------------------------------------------
+static std::vector<std::string> listFiles(const std::string& dir) {
+    std::vector<std::string> v;
+    if (DIR* d = opendir(dir.c_str())) {
+        while (dirent* e = readdir(d)) {
+            std::string n = e->d_name;
+            if (n == "." || n == "..") continue;
+            v.push_back(n);
+        }
+        closedir(d);
+    }
+    return v;
+}
+
+static DlOutcome dlViaYtDlp(const DlParams& p, const std::string& pageUrl) {
+    if (md::which("yt-dlp").empty())
+        return dlFail("الرابط صفحة ويب وليس ملفاً مباشراً. لتنزيل الفيديو من الصفحات (يوتيوب وغيره) ثبّت yt-dlp: pip install yt-dlp");
+    std::string base = p.dirMode ? p.outAbs : p.outAbs.substr(0, p.outAbs.find_last_of('/') == std::string::npos ? 0 : p.outAbs.find_last_of('/') + 1);
+    if (base.empty()) base = "./";
+    p.ensureDir(base + "x");
+    std::string tmpl = base + ".rin-yt-XXXXXX";
+    std::vector<char> tb(tmpl.begin(), tmpl.end()); tb.push_back('\0');
+    if (!mkdtemp(tb.data())) return dlFail("تعذّر إنشاء مجلد مؤقت للتنزيل");
+    std::string tdir = tb.data();
+    auto cleanup = [&]() {
+        for (auto& f : listFiles(tdir)) std::remove((tdir + "/" + f).c_str());
+        rmdir(tdir.c_str());
+    };
+
+    std::string want = p.dirMode ? "" : extOf(p.outAbs);
+    md::Argv av = {"yt-dlp", "--ignore-config", "--no-playlist", "--quiet", "--no-warnings", "--no-progress",
+                   "--socket-timeout", std::to_string(std::max(5, p.idleMs / 1000)), "-P", tdir, "-o", "%(title).120B.%(ext)s"};
+    if (p.maxBytes > 0) { av.push_back("--max-filesize"); av.push_back(std::to_string(p.maxBytes)); }
+    for (auto& h : p.headers) { av.push_back("--add-header"); av.push_back(h.first + ":" + h.second); }
+    if (isAudioExt(want)) {
+        av.push_back("-x"); av.push_back("--audio-format"); av.push_back(want);
+    } else {
+        std::string q = p.quality > 0 ? "[height<=" + std::to_string(p.quality) + "]" : "";
+        av.push_back("-f"); av.push_back("bv*" + q + "+ba/b" + q + "/bv*+ba/b");
+        if (want == "mp4" || want == "mkv" || want == "webm" || want == "mov") { av.push_back("--merge-output-format"); av.push_back(want); }
+    }
+    av.push_back("--"); av.push_back(pageUrl);
+
+    md::ProcResult r = md::run(av, p.totalMs > 0 ? p.totalMs : 21600000, 1u << 20);
+    if (!r.started) { cleanup(); return dlFail(r.error); }
+    if (r.timedOut) { cleanup(); return dlFail("انتهت مهلة yt-dlp"); }
+    std::string got; long long best = -1;
+    for (auto& f : listFiles(tdir)) {
+        std::string e = extOf(f);
+        if (e == "part" || e == "ytdl" || e == "temp") continue;
+        long long sz = md::fileSize(tdir + "/" + f);
+        if (sz > best) { best = sz; got = f; }
+    }
+    if (r.exitCode != 0 || got.empty()) {
+        cleanup();
+        auto ls = splitLines(trimStr6(r.err));
+        std::string msg = ls.empty() ? "" : ls.back();
+        return dlFail("فشل yt-dlp: " + (msg.empty() ? "رمز الخروج " + std::to_string(r.exitCode) : msg));
+    }
+    std::string finalAbs, name;
+    std::string gotExt = extOf(got);
+    if (p.dirMode) {
+        name = sanitizeName(got);
+        if (p.overwriteExplicit) { if (!p.overwrite && md::fileExists(p.outAbs + name)) { cleanup(); return dlFail("الملف موجود مسبقاً — مرّر overwrite: true للاستبدال"); } }
+        else name = uniqueName(p.outAbs, name);
+        finalAbs = p.outAbs + name;
+    } else {
+        finalAbs = p.outAbs;
+        if (extOf(finalAbs).empty()) finalAbs += "." + gotExt;
+        if (!p.overwrite && md::fileExists(finalAbs)) { cleanup(); return dlFail("الملف موجود مسبقاً — مرّر overwrite: true للاستبدال"); }
+        name = finalAbs.substr(finalAbs.find_last_of('/') == std::string::npos ? 0 : finalAbs.find_last_of('/') + 1);
+    }
+    std::string src = tdir + "/" + got;
+    if (std::rename(src.c_str(), finalAbs.c_str()) != 0) {
+        if (!copyFile6(src, finalAbs)) { cleanup(); return dlFail("تعذّر حفظ الملف النهائي"); }
+    }
+    cleanup();
+    Sniff sn = sniffFile(finalAbs);
+    DlOutcome o;
+    o.ok = true; o.abs = finalAbs; o.bytes = md::fileSize(finalAbs); o.status = 200; o.via = "yt-dlp"; o.finalUrl = pageUrl;
+    o.path = p.dirMode ? joinOutRaw(p.outRaw, true, name) : (p.outRaw + (extOf(p.outRaw).empty() ? "." + gotExt : ""));
+    o.kind = sn.kind == "file" || sn.kind == "empty" ? (isAudioExt(extOf(name)) ? "audio" : "video") : sn.kind;
+    o.ext = extOf(name); o.contentType = sn.mime;
+    return o;
+}
+#endif // RIN_MEDIA_POSIX
+
+// ---- النواة: مباشر ← (HLS | صفحة) ← ملف نهائي --------------------------------------------------
+static DlOutcome downloadCore(const DlParams& p) {
+    bool urlIsPlaylist = false;
+    {   // .m3u8 في مسار الرابط (قبل أي شبكة)
+        std::string path = p.url.substr(p.url.find("://") + 3);
+        size_t cut = path.find_first_of("?#"); if (cut != std::string::npos) path.erase(cut);
+        std::string l = md::lower(path);
+        urlIsPlaylist = l.size() > 5 && l.compare(l.size() - 5, 5, ".m3u8") == 0;
+    }
+    if (p.dirMode) p.ensureDir(p.outAbs + "x");
+#ifdef RIN_MEDIA_POSIX
+    if (urlIsPlaylist) return dlViaFfmpeg(p, p.url);
+#else
+    if (urlIsPlaylist) return dlFail("تنزيل بث HLS غير مدعوم على هذه المنصة");
+#endif
+
+    std::string part;
+    if (p.dirMode) {
+        char hx[24]; std::snprintf(hx, sizeof hx, "%016zx", std::hash<std::string>{}(p.url));
+        part = p.outAbs + ".rin-" + hx + ".part";
+    } else {
+        if (!p.overwrite && md::fileExists(p.outAbs)) return dlFail("الملف موجود مسبقاً — مرّر overwrite: true للاستبدال");
+        p.ensureDir(p.outAbs);
+        part = p.outAbs + ".part";
+    }
+    if (!p.resume) std::remove(part.c_str());
+
+    http::DownloadRequest rq;
+    rq.url = p.url; rq.destPath = part; rq.headers = p.headers; rq.idleTimeoutMs = p.idleMs; rq.totalTimeoutMs = p.totalMs;
+    rq.maxBytes = p.maxBytes; rq.resume = p.resume;
+    bool haveUa = false;
+    for (auto& h : rq.headers) if (md::lower(h.first) == "user-agent") haveUa = true;
+    if (!haveUa) rq.headers.push_back({"User-Agent", "Mozilla/5.0 (compatible; Rin; +https://github.com/dlof-lib/rinlang)"});
+
+    http::DownloadResult r = http::performDownload(rq);
+    std::string cdHeader = r.contentDisposition, mime = r.contentType, finalUrl = r.finalUrl;
+    long status = r.status; bool resumed = r.resumed; std::string via = "curl";
+
+    if (!r.handled) {
+        // منصة بلا تنزيل متدفق (أندرويد بجسر قديم): الجسم كاملاً في الذاكرة — محدود بـ maxBytes (256MB افتراضياً هنا)
+        if (!p.headers.empty()) return dlFail("ترويسات/مصادقة التنزيل الثنائي غير مدعومة على أندرويد بعد");
+        http::HttpResult hr = http::performBinaryGet(p.url, p.totalMs > 0 ? p.totalMs : 120000);
+        if (!hr.ok) return dlFail(hr.error.empty() ? "فشل الاتصال" : hr.error, hr.status);
+        if (hr.status < 200 || hr.status >= 300) return dlFail("الخادوم أعاد الحالة " + std::to_string(hr.status), hr.status);
+        double cap = p.maxBytesExplicit ? static_cast<double>(p.maxBytes) : 256.0 * 1024 * 1024;
+        if (static_cast<double>(hr.body.size()) > cap) return dlFail("حجم الملف يتجاوز maxBytes");
+        std::ofstream f(part, std::ios::binary | std::ios::trunc);
+        if (!f) return dlFail("تعذّر فتح ملف الحفظ للكتابة");
+        f.write(hr.body.data(), static_cast<std::streamsize>(hr.body.size()));
+        f.close();
+        if (!f) { std::remove(part.c_str()); return dlFail("فشلت كتابة الملف"); }
+        status = hr.status; via = "android";
+        for (auto& h : hr.headers) if (md::lower(h.first) == "content-type") mime = md::lower(h.second.substr(0, h.second.find(';')));
+    } else if (!r.ok) {
+        std::string err = r.error;
+        if (r.status >= 400) err = "الخادوم أعاد الحالة " + std::to_string(r.status);
+        if (err.empty()) err = "فشل الاتصال";
+        bool keep = p.resume && r.status < 400 && md::fileSize(part) > 0;   // انقطاع شبكة: أبقِ الجزء للاستئناف لاحقاً
+        if (!keep) std::remove(part.c_str());
+        DlOutcome o = dlFail(err, r.status);
+        if (keep) o.extra.push_back({"partial", S6(part.substr(part.find_last_of('/') == std::string::npos ? 0 : part.find_last_of('/') + 1))});
+        return o;
+    }
+
+    Sniff sn = sniffFile(part);
+    if (sn.kind == "playlist") {          // قائمة بث بلا امتداد واضح في الرابط
+        std::remove(part.c_str());
+#ifdef RIN_MEDIA_POSIX
+        return dlViaFfmpeg(p, finalUrl.empty() ? p.url : finalUrl);
+#else
+        return dlFail("تنزيل بث HLS غير مدعوم على هذه المنصة");
+#endif
+    }
+    if (sn.kind == "page") {
+        std::string e = p.dirMode ? "" : extOf(p.outAbs);
+        bool wantsMedia = p.dirMode || e.empty() || isMediaExt(e);
+        if (wantsMedia) {
+            std::remove(part.c_str());
+#ifdef RIN_MEDIA_POSIX
+            return dlViaYtDlp(p, finalUrl.empty() ? p.url : finalUrl);
+#else
+            return dlFail("الرابط صفحة ويب وليس ملفاً مباشراً");
+#endif
+        }
+    }
+    if (sn.kind == "empty") { std::remove(part.c_str()); return dlFail("الخادوم أعاد ملفاً فارغاً"); }
+    return dlFinalize(p, part, sn, cdHeader, mime, finalUrl, status, resumed, via);
+}
+
+// يحوّل نتيجة النواة إلى خريطة make.* القياسية.
+static Value dlToValue(const DlOutcome& o) {
+    if (!o.ok) {
+        std::vector<std::pair<std::string, Value>> ex = o.extra;
+        if (o.status > 0) ex.push_back({"status", N6(static_cast<double>(o.status))});
+        return fail6(o.error, std::move(ex));
+    }
+    std::string name = o.path.substr(o.path.find_last_of('/') == std::string::npos ? 0 : o.path.find_last_of('/') + 1);
+    return M6({{"ok", B6(true)}, {"path", S6(o.path)}, {"name", S6(name)}, {"bytes", N6(static_cast<double>(o.bytes))},
+               {"status", N6(static_cast<double>(o.status))}, {"contentType", S6(o.contentType)}, {"kind", S6(o.kind)},
+               {"ext", S6(o.ext)}, {"via", S6(o.via)}, {"resumed", B6(o.resumed)}, {"url", S6(o.finalUrl)}});
+}
+
+// ينزّل رابطاً إلى ملف مؤقت (لـ make.image.removeBg / make.image.text عند تمرير رابط بدل مسار).
+static std::string fetchToTemp(const std::string& url, const std::string& tmpFile, std::string& error) {
+    DlParams p;
+    p.url = url; p.outAbs = tmpFile; p.outRaw = tmpFile; p.overwrite = true;
+    p.maxBytes = 64LL * 1024 * 1024; p.maxBytesExplicit = true; p.idleMs = 30000; p.totalMs = 120000;
+    p.ensureDir = [](const std::string&) {};
+    DlOutcome o = downloadCore(p);
+    if (!o.ok) { error = o.error; return ""; }
+    if (o.kind != "image") { std::remove(o.abs.c_str()); error = "الرابط لا يشير إلى صورة (النوع الفعلي: " + o.kind + ")"; return ""; }
+    return o.abs;
+}
+
 } // namespace extra6
 
 // ============================================================================
@@ -955,7 +1539,7 @@ void Interpreter::registerNativesExtra6() {
     natives["make.media.tools"] = [](Args& a, int line) -> Value {
         argc6("make.media.tools", a, 0, 0, line);
         std::vector<std::pair<std::string, Value>> tools;
-        for (const char* t : {"ffmpeg", "ffprobe", "ffplay", "mpv", "vlc", "magick", "convert", "tesseract", "rembg", "curl", "xdg-open"})
+        for (const char* t : {"ffmpeg", "ffprobe", "ffplay", "mpv", "vlc", "magick", "convert", "tesseract", "rembg", "curl", "yt-dlp", "xdg-open"})
             tools.push_back({t, B6(!md::which(t).empty())});
         std::vector<std::string> vp, ap, langs = tesseractLangs();
         if (md::hasBridge()) {      // أندرويد: اللغات المتاحة تأتي من الجسر (ملفات tessdata) + "latin" من ML Kit
@@ -1205,55 +1789,45 @@ void Interpreter::registerNativesExtra6() {
         Value opts = a.size() > 2 ? a[2] : Value::nil();
         needOpts(opts, "make.api.download", line);
         if (!md::isHttpUrl(url) || !md::safeArg(url)) return fail6("رابط غير صالح — المسموح http:// أو https:// فقط");
-        std::string out = resolve(outRaw, line);
-        if (out.empty() || out.back() == '/') return fail6("مسار الحفظ يجب أن يكون اسم ملف");
-        bool overwrite = optB(opts, "overwrite", true);
-        if (!overwrite && md::fileExists(out)) return fail6("الملف موجود مسبقاً — مرّر overwrite: true للاستبدال", {{"path", S6(outRaw)}});
-        int timeout = static_cast<int>(clampD(optN(opts, "timeout", 60000), 1000, 600000));
-        double maxBytes = clampD(optN(opts, "maxBytes", 256.0 * 1024 * 1024), 1, 4096.0 * 1024 * 1024);
+        if (outRaw.empty()) return fail6("مسار الحفظ فارغ");
 
-        http::HttpResult r;
-        bool custom = optHas(opts, "headers") || optHas(opts, "auth");
-#ifndef __ANDROID__
-        custom = true;   // على سطح المكتب: performRequest دائماً (curl آمن للبايتات) لأنه يعيد ترويسات الرد (Content-Type)
-#endif
-        if (custom) {
-#ifdef __ANDROID__
-            return fail6("ترويسات/مصادقة التنزيل الثنائي غير مدعومة على أندرويد بعد");
-#else
-            http::HeaderList hl;
-            if (const Value* h = opt6(opts, "headers")) if (h->type == Value::Type::MAP && h->map)
-                for (auto& kv : *h->map) {
-                    std::string k = kv.first.toDisplayString(), v = kv.second.toDisplayString();
-                    if (!headerSafe(k, v)) return fail6("ترويسة غير صالحة: '" + k + "'");
-                    hl.push_back({k, v});
-                }
-            if (const Value* au = opt6(opts, "auth")) {
-                if (au->type == Value::Type::STRING) hl.push_back({"Authorization", "Bearer " + au->str});
-                else if (au->type == Value::Type::MAP && optHas(*au, "bearer")) hl.push_back({"Authorization", "Bearer " + optS(*au, "bearer")});
-                else if (au->type == Value::Type::MAP && optHas(*au, "basic")) hl.push_back({"Authorization", "Basic " + b64Encode(optS(*au, "basic"))});
-                else if (au->type == Value::Type::MAP && optHas(*au, "key")) hl.push_back({optS(*au, "header", "X-API-Key"), optS(*au, "key")});
-                else return fail6("auth: المفاتيح المدعومة bearer | basic | key(+header)");
-            }
-            hl.push_back({"X-Rin-Capture-Headers", "1"});
-            r = http::performRequest("GET", url, hl, "", timeout);
-#endif
-        } else {
-            r = http::performBinaryGet(url, timeout);
+        DlParams p;
+        p.url = url; p.outRaw = outRaw; p.ensureDir = ensureDir;
+        // مجلد: ينتهي بـ "/" أو مجلد موجود فعلاً → الاسم يُستنتج (Content-Disposition ← الرابط ← نوع الملف)
+        bool slash = outRaw.back() == '/';
+        std::string probe = slash ? (outRaw.size() > 1 ? outRaw.substr(0, outRaw.size() - 1) : std::string(".")) : outRaw;
+        std::string abs = resolve(probe, line);
+        p.dirMode = slash || pathIsDir(abs);
+        if (p.dirMode) { if (!abs.empty() && abs.back() != '/') abs += '/'; if (!slash && outRaw.back() != '/') p.outRaw = outRaw + "/"; }
+        p.outAbs = abs;
+        if (!p.dirMode && (abs.empty() || abs.back() == '/')) return fail6("مسار الحفظ يجب أن يكون اسم ملف أو مجلداً ينتهي بـ /");
+
+        p.overwriteExplicit = optHas(opts, "overwrite");
+        p.overwrite = optB(opts, "overwrite", true);
+        p.resume = optB(opts, "resume", false);
+        p.maxBytesExplicit = optHas(opts, "maxBytes");
+        p.maxBytes = static_cast<long long>(clampD(optN(opts, "maxBytes", 2048.0 * 1024 * 1024), 1, 16384.0 * 1024 * 1024));
+        // timeout الصريح = سقف كلي (كما كان)؛ غيابه = مهلة جمود 30ث + سقف 6 ساعات (فيديو كبير لا يُقطع لأنه بطيء)
+        if (optHas(opts, "timeout")) {
+            p.totalMs = static_cast<int>(clampD(optN(opts, "timeout", 60000), 1000, 21600000));
+            p.idleMs = std::min(p.totalMs, 30000);
         }
-        if (!r.ok) return fail6(r.error.empty() ? "فشل الاتصال" : r.error, {{"status", N6(static_cast<double>(r.status))}});
-        if (r.status < 200 || r.status >= 300) return fail6("الخادوم أعاد الحالة " + std::to_string(r.status), {{"status", N6(static_cast<double>(r.status))}});
-        if (static_cast<double>(r.body.size()) > maxBytes) return fail6("حجم الملف يتجاوز maxBytes");
-        ensureDir(out);
-        std::ofstream f(out, std::ios::binary | std::ios::trunc);
-        if (!f) return fail6("تعذّر فتح ملف الحفظ للكتابة: " + outRaw);
-        f.write(r.body.data(), static_cast<std::streamsize>(r.body.size()));
-        f.close();
-        if (!f) return fail6("فشلت كتابة الملف");
-        std::string ctype;
-        for (auto& h : r.headers) if (md::lower(h.first) == "content-type") ctype = h.second;
-        return M6({{"ok", B6(true)}, {"path", S6(outRaw)}, {"bytes", N6(static_cast<double>(r.body.size()))},
-                   {"status", N6(static_cast<double>(r.status))}, {"contentType", S6(ctype)}});
+        p.quality = static_cast<int>(clampD(optN(opts, "quality", 0), 0, 4320));
+
+        if (const Value* h = opt6(opts, "headers")) if (h->type == Value::Type::MAP && h->map)
+            for (auto& kv : *h->map) {
+                std::string k = kv.first.toDisplayString(), v = kv.second.toDisplayString();
+                if (!headerSafe(k, v)) return fail6("ترويسة غير صالحة: '" + k + "'");
+                p.headers.push_back({k, v});
+            }
+        if (const Value* au = opt6(opts, "auth")) {
+            if (au->type == Value::Type::STRING) p.headers.push_back({"Authorization", "Bearer " + au->str});
+            else if (au->type == Value::Type::MAP && optHas(*au, "bearer")) p.headers.push_back({"Authorization", "Bearer " + optS(*au, "bearer")});
+            else if (au->type == Value::Type::MAP && optHas(*au, "basic")) p.headers.push_back({"Authorization", "Basic " + b64Encode(optS(*au, "basic"))});
+            else if (au->type == Value::Type::MAP && optHas(*au, "key")) p.headers.push_back({optS(*au, "header", "X-API-Key"), optS(*au, "key")});
+            else return fail6("auth: المفاتيح المدعومة bearer | basic | key(+header)");
+        }
+        return dlToValue(downloadCore(p));
     };
 }
 
