@@ -2298,3 +2298,11 @@ Official AGP compatibility: AGP 8.13 requires Gradle 8.13 and JDK 17.
 - مكوّنات: UrlField, DateField, TimeField, MultilineField, ReadOnlyField, AutocompleteField, CodeField, RichTextField, HiddenField, ValidatedField.
 - تحقق date/time، `indsin.validate/suggest`، تلوين صياغة CodeEditor، `readonly` مظلّل.
 - أندرويد: كتابة مباشرة داخل الحقل (InputConnection) مع زر تبديل للنافذة، منتقيات تاريخ/وقت، تلوين الكود.
+
+## indsin — فيديو من الإنترنت
+- `rin_indsin_video.h`: تحليل روابط YouTube/Vimeo/Dailymotion/مباشر/HLS/صفحة + استخراج الرابط من API؛ دوال `indsin.videoInfo/videoProvider/videoThumb/isVideoUrl/videoUrl`.
+- مكوّن `<VideoPlayer>`، رسم Video بشارة المزوّد، وخيارات autoplay/loop/muted/controls/start/poster.
+- أندرويد: مشغّل بحاوية (مؤشّر تحميل، خطأ + إعادة محاولة)، تضمين Vimeo/Dailymotion، HLS، مصغّرة تلقائية.
+
+## indsin — مصغّرات الفيديو
+- مصغّرة ثابتة + مصغّرة متحركة (animated / preview gif·webp·mp4) مع زر تشغيل يبدأ المشغّل، `indsin.videoThumbs`.
