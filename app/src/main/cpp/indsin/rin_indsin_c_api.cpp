@@ -743,6 +743,52 @@ RIN_API char* rin_indsin_theme_from_seed_json(const char* seedLiteral, int dark)
     return dupToC(os.str());
 }
 // WCAG report for a REGISTERED theme by name (built-in or @theme-declared).
+// ---- Web Layout Concepts ----
+RIN_API char* rin_indsin_query_selector_json(void* sessionPtr, const char* selector) {
+    auto* sess = static_cast<IndsinSession*>(sessionPtr);
+    if (!sess || !sess->state.ok) return dupToC(sessionErrorJson(sess));
+    std::vector<indsin::StrandPtr> hits;
+    if (!selector || !indsin::webQuery(sess->state.fabric, selector, hits)) return dupToC("{\"error\":\"invalid selector\"}");
+    std::ostringstream os; os << "[";
+    for (size_t i = 0; i < hits.size(); i++) {
+        const auto& h = hits[i];
+        os << (i ? "," : "") << "{\"name\":\"" << indsin::jsonEscape(h->name) << "\",\"kind\":\"" << indsin::strandKindName(h->kind)
+           << "\",\"x\":" << h->geometry.x << ",\"y\":" << h->geometry.y << ",\"w\":" << h->geometry.w << ",\"h\":" << h->geometry.h << "}";
+    }
+    os << "]";
+    return dupToC(os.str());
+}
+RIN_API char* rin_indsin_collisions_json(void* sessionPtr) {
+    auto* sess = static_cast<IndsinSession*>(sessionPtr);
+    if (!sess || !sess->state.ok) return dupToC(sessionErrorJson(sess));
+    std::vector<indsin::WebCollision> cs;
+    indsin::webDetectCollisions(sess->state.fabric, cs, true);
+    std::ostringstream os; os << "[";
+    for (size_t i = 0; i < cs.size(); i++)
+        os << (i ? "," : "") << "{\"a\":\"" << indsin::jsonEscape(cs[i].nameA) << "\",\"b\":\"" << indsin::jsonEscape(cs[i].nameB)
+           << "\",\"x\":" << cs[i].overlap.x << ",\"y\":" << cs[i].overlap.y << ",\"w\":" << cs[i].overlap.w << ",\"h\":" << cs[i].overlap.h << "}";
+    os << "]";
+    return dupToC(os.str());
+}
+RIN_API char* rin_indsin_space_report_json(void* sessionPtr, const char* name) {
+    auto* sess = static_cast<IndsinSession*>(sessionPtr);
+    if (!sess || !sess->state.ok) return dupToC(sessionErrorJson(sess));
+    indsin::StrandPtr n = (name && *name) ? indsin::findAny(sess->state.fabric, [&](const indsin::StrandPtr& s) { return s->name == name; }) : sess->state.fabric;
+    if (!n) return dupToC("{\"error\":\"not found\"}");
+    return dupToC(indsin::webSpaceReportJson(*n));
+}
+RIN_API int rin_indsin_scroll_to(void* sessionPtr, const char* name, double x, double y) {
+    auto* sess = static_cast<IndsinSession*>(sessionPtr);
+    if (!sess || !sess->state.ok || !name) return 0;
+    if (!indsin::webSetScroll(sess->state.fabric, name, x, y)) return 0;
+    relayout(sess);
+    return 1;
+}
+RIN_API void rin_indsin_set_scroll_window(void* sessionPtr, double scrollX, double scrollY) {
+    auto* sess = static_cast<IndsinSession*>(sessionPtr);
+    if (!sess || !sess->state.ok) return;
+    indsin::webPostLayout(sess->indsinEngine, sess->state.fabric, scrollX, scrollY);
+}
 RIN_API char* rin_indsin_validate_theme_json(const char* themeName) {
     auto& reg = indsin::themeRegistry();
     auto it = reg.themes.find(themeName ? themeName : "");
