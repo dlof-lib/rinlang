@@ -36,12 +36,19 @@
 #pragma once
 #include "rin_indsin_strand.h"
 #include "rin_indsin_tokens.h"
+#include "rin_indsin_webcore.h" // مفاهيم تخطيط الويب (position/order/gap/media/...)
 #include <algorithm>
 #include <sstream>
 
 namespace indsin {
 
 enum class Axis { X, Y };
+
+// Web Layout Concepts (rin_indsin_webconcepts.h, يُضمَّن في آخر هذا الملف): المرور اللاحق للتخطيط
+// (absolute/fixed/sticky/collision/bounds) وقياس min-content. معرَّفتان هنا لأن Indsin::layout() تستدعيهما.
+struct Indsin;
+inline void webPostLayout(Indsin& ix, const StrandPtr& root, double scrollX = 0, double scrollY = 0);
+inline double webMinContentWidth(const Strand& s);
 
 // left/top => 0, center => centered, right/bottom => pushed to far edge, stretch => fills (0 offset,
 // caller is expected to have already sized the child to `available` in that case).
@@ -69,6 +76,9 @@ inline bool isOverlayStrand(const Strand& s) {
     if (s.kind == StrandKind::TOOLTIP) return !s.attrStr("anchor", "").empty() && s.attrStr("open", "true") == "true";
     return false;
 }
+// خارج التدفق العادي لحاوية خطية/مكدّسة: نافذة/تلميح مفتوح (Overlay Engine)، أو position=absolute|fixed،
+// أو عنصر مطوي (display=none / hidden / media غير مطابق). لا يحجز مساحة ولا فجوة.
+inline bool isOutOfFlowStrand(const Strand& s) { return isOverlayStrand(s) || webOutOfFlow(s) || webCollapsed(s); }
 
 inline std::vector<std::string> splitCsv(const std::string& s) {
     std::vector<std::string> out;
@@ -162,6 +172,7 @@ struct IndsinStats { int strandsMeasured = 0; int cacheHits = 0; };
 
 struct Indsin {
     IndsinStats stats;
+    std::vector<const Strand*> intrinsicProbing; // عناصر قيد القياس الاستكشافي (منع التكرار الذاتي)
 
     Rect layout(StrandPtr s, Constraints cIncoming, double originXIncoming, double originYIncoming) {
         bool sameConstraints = s->hasLastConstraints &&
@@ -172,6 +183,7 @@ struct Indsin {
             stats.cacheHits++;
             double dx = originXIncoming - s->geometryOuter.x, dy = originYIncoming - s->geometryOuter.y;
             if (dx != 0.0 || dy != 0.0) { translate(s, dx, dy); s->geometryOuter.x += dx; s->geometryOuter.y += dy; }
+            if (s->screenRoot) webPostLayout(*this, s);
             return s->geometryOuter;
         }
         stats.strandsMeasured++;
@@ -180,10 +192,23 @@ struct Indsin {
 
         // visible=false (عام لكل العناصر — يعتمد عليه <If>/<Else> في صيغة الوسوم): يُطوى إلى حجم صفر فلا يشغل
         // مساحة ولا يُرسم (انظر Dye::paintInto). Banner/Tag/Drawer لهم قاعدتهم الخاصة أدناه.
-        if (s->kind != StrandKind::BANNER && s->kind != StrandKind::TAG && s->attrStr("visible", "true") == "false") {
+        if (webCollapsed(*s) || (s->kind != StrandKind::BANNER && s->kind != StrandKind::TAG && s->attrStr("visible", "true") == "false")) {
             s->geometry = {originXIncoming, originYIncoming, 0, 0};
             s->geometryOuter = s->geometry;
             return s->geometryOuter;
+        }
+
+        // Web Layout Concepts: order=<n> يعيد ترتيب الأبناء (مستقراً)، و<Flex> يُحسم نوعه الفعلي (Row/Column/Wrap)
+        // من flex_direction / flow / flex_wrap — آمن للتكرار (العكس يتم مرة واحدة عبر _reversed).
+        webApplyOrder(*s);
+        if (s->sourceTag == "Flex" || s->sourceTag == "flex") {
+            WebFlex wf = webReadFlex(*s);
+            s->kind = wf.wrap ? StrandKind::WRAP : (wf.column ? StrandKind::COLUMN : StrandKind::ROW);
+            if (wf.reverse && !s->attr("_reversed")) {
+                if (wf.column || wf.wrap) std::reverse(s->children.begin(), s->children.end());
+                else s->attrs.push_back({"direction", nullptr, Value::txt("rtl")}); // row-reverse = RTL mirror (ترتيب المصفوفة ثابت)
+                s->attrs.push_back({"_reversed", nullptr, Value::txt("1")});
+            }
         }
 
         // ---- Margin box model (new: style/screen/spacing/width/height feature pass) -----------
@@ -227,8 +252,36 @@ struct Indsin {
         // Both accept a percentage ("50%"), resolved against the parent's own available extent on
         // that axis, in addition to the original plain-number form.
         Constraints c2 = c;
-        if (s->attr("width"))  { double w = std::max(0.0, std::min(resolveSizeAttr(*s, "width", c.maxW, c.maxW), c.maxW));  c2.minW = w; c2.maxW = w; }
-        if (s->attr("height")) { double h = std::max(0.0, std::min(resolveSizeAttr(*s, "height", c.maxH, c.maxH), c.maxH)); c2.minH = h; c2.maxH = h; }
+        // Web Layout Concepts: width/height="min-content|max-content|fit-content" (IntrinsicSize) تُقاس من المحتوى
+        // لا من الأب؛ box_sizing="content-box" يجعل width/height للمحتوى فقط (يُضاف إليه padding+border).
+        int kwW = webIntrinsicKeyword(s->attr("width")), kwH = webIntrinsicKeyword(s->attr("height"));
+        double bsExtra = (webLower(s->attrStr("box_sizing", "border-box")) == "content-box")
+                         ? 2.0 * (resolveSpacing(*s, "padding", 0) + s->attrNum("border", 0)) : 0.0;
+        if (s->attr("width") && !kwW)  { double w = std::max(0.0, std::min(resolveSizeAttr(*s, "width", c.maxW, c.maxW) + bsExtra, c.maxW));  c2.minW = w; c2.maxW = w; }
+        if (s->attr("height") && !kwH) { double h = std::max(0.0, std::min(resolveSizeAttr(*s, "height", c.maxH, c.maxH) + bsExtra, c.maxH)); c2.minH = h; c2.maxH = h; }
+        if (kwW && std::find(intrinsicProbing.begin(), intrinsicProbing.end(), s.get()) == intrinsicProbing.end()) {
+            intrinsicProbing.push_back(s.get());
+            layout(s, Constraints{0, 1e9, 0, 1e9}, 0, 0);          // قياس طبيعي (max-content) بلا قيد
+            intrinsicProbing.pop_back();
+            double maxContent = s->geometry.w;
+            double target = (kwW == 1) ? webMinContentWidth(*s) : (kwW == 2 ? maxContent : std::min(maxContent, c.maxW));
+            target = std::max(0.0, std::min(target, c.maxW));
+            c2.minW = target; c2.maxW = target;
+            s->lastConstraints = cIncoming; s->hasLastConstraints = true;   // أعد ختم الكاش بعد القياس الاستكشافي
+            s->lastContentHash = s->contentHash; s->hasLastContentHash = true;
+        }
+        // intrinsic_size="160x90" | 120: حجم افتراضي لعنصر بلا محتوى ذاتي (صورة/فيديو/صندوق فارغ) ولا width/height.
+        if (const Value* isz = s->attr("intrinsic_size")) {
+            if (!s->attr("width") && !s->attr("height") && s->children.empty() &&
+                (s->kind == StrandKind::IMAGE || s->kind == StrandKind::VIDEO || s->kind == StrandKind::WEBVIEW ||
+                 s->kind == StrandKind::BOX || s->kind == StrandKind::CUSTOM)) {
+                double iw = 0, ih = 0; std::string t = webLower(isz->asString());
+                size_t x = t.find('x');
+                try { if (x == std::string::npos) { iw = ih = std::stod(t); } else { iw = std::stod(t.substr(0, x)); ih = std::stod(t.substr(x + 1)); } } catch (...) {}
+                if (iw > 0) { double w = std::min(iw, c.maxW); c2.minW = w; c2.maxW = w; }
+                if (ih > 0) { double h = std::min(ih, c.maxH); c2.minH = h; c2.maxH = h; }
+            }
+        }
 
         // aspect="16:9" (new, any strand): height follows a *definite* width (explicit width= or a width
         // forced by the parent, e.g. fill/stretch). An explicit height= always wins.
@@ -265,7 +318,29 @@ struct Indsin {
             { c2.minH = c2.maxH = c.maxH; }
 
         Rect size;
-        switch (s->kind) {
+        // Web Layout Concepts — Scroll: حاوية التمرير تقيس أبناءها بلا قيد على محور التمرير ثم تُقصّ إلى نافذتها.
+        const bool scrollY = webScrollsY(*s), scrollX = webScrollsX(*s);
+        const Constraints cView = c2;
+        if (scrollY && c2.maxH < 1e8) c2.maxH = 1e9;
+        if (scrollX && c2.maxW < 1e8) c2.maxW = 1e9;
+        // Web Layout Concepts — LayoutEngine: layout="row|column|stack|grid|wrap|flex|block" يختار خوارزمية التخطيط
+        // لأي حاوية عامة (Box/Column/Row/Stack/Grid/Wrap) دون تغيير وسمها.
+        bool modeHandled = false;
+        if (s->kind == StrandKind::BOX || s->kind == StrandKind::COLUMN || s->kind == StrandKind::ROW ||
+            s->kind == StrandKind::STACK || s->kind == StrandKind::GRID || s->kind == StrandKind::WRAP) {
+            std::string lm = webLower(s->attrStr("layout", ""));
+            if (!lm.empty()) {
+                modeHandled = true;
+                if (lm == "flex") { WebFlex wf = webReadFlex(*s); lm = wf.wrap ? "wrap" : (wf.column ? "column" : "row"); }
+                if (lm == "row" || lm == "horizontal") size = layoutLinear(s, c2, Axis::X, originX, originY);
+                else if (lm == "column" || lm == "vertical" || lm == "block") size = layoutLinear(s, c2, Axis::Y, originX, originY);
+                else if (lm == "stack" || lm == "layered") size = layoutStack(s, c2, originX, originY);
+                else if (lm == "grid") size = layoutGrid(s, c2, originX, originY);
+                else if (lm == "wrap" || lm == "flow") size = layoutWrap(s, c2, originX, originY);
+                else modeHandled = false;
+            }
+        }
+        if (!modeHandled) switch (s->kind) {
             case StrandKind::TEXT:    size = measureText(s, c2); break;
             case StrandKind::IMAGE:   size = measureImage(s, c2); break;
             case StrandKind::BUTTON:  size = measureButton(s, c2); break;
@@ -356,9 +431,13 @@ struct Indsin {
             case StrandKind::BOX:
                 // Box flex mode: any of direction/gap/justify/align/valign turns the Box into a Row/Column with the full
                 // linear-layout feature set (gap, alignment, Spacer/fill flex, justify). Plain Box keeps the old stacking.
-                if (s->attr("direction") || s->attr("gap") || s->attr("justify") || s->attr("align") || s->attr("valign")) {
+                if (s->attr("direction") || s->attr("gap") || s->attr("justify") || s->attr("align") || s->attr("valign") ||
+                    s->attr("flex_direction") || s->attr("flow") || s->attr("align_items") || s->attr("row_gap") ||
+                    s->attr("column_gap") || s->attr("place") || s->attr("space_allocation") || s->attr("auto_space")) {
                     std::string dir = s->attrStr("direction", "column");
-                    size = layoutLinear(s, c2, (dir == "row" || dir == "horizontal") ? Axis::X : Axis::Y, originX, originY);
+                    bool horiz = (dir == "row" || dir == "horizontal");
+                    if (s->attr("flex_direction") || s->attr("flow")) horiz = !webReadFlex(*s).column;
+                    size = layoutLinear(s, c2, horiz ? Axis::X : Axis::Y, originX, originY);
                 } else {
                     size = layoutSingleChildBox(s, c2, resolveSpacing(*s, "padding", 0) + s->attrNum("border", 0), originX, originY);
                 }
@@ -547,8 +626,35 @@ struct Indsin {
         bool wantsFill = sizing == SizingMode::FILL || sizing == SizingMode::EXPAND;
         if (!(fixedControl && !wantsFill && !s->attr("width")))  size.w = std::max(size.w, c2.minW);
         if (!(fixedControl && !wantsFill && !s->attr("height"))) size.h = std::max(size.h, c2.minH);
+        if (scrollY || scrollX) {
+            s->scrollContentW = size.w; s->scrollContentH = size.h;
+            if (scrollY && cView.maxH < 1e8) size.h = std::max(cView.minH, std::min(size.h, cView.maxH));
+            if (scrollX && cView.maxW < 1e8) size.w = std::max(cView.minW, std::min(size.w, cView.maxW));
+        } else { s->scrollContentW = s->scrollContentH = 0; }
         size.x = originX; size.y = originY;
         s->geometry = size; // true, margin-EXCLUDED box: what paint.h and hit-testing use.
+        s->scrollOffX = s->scrollOffY = 0; s->stickyDx = s->stickyDy = 0;
+        if (scrollY || scrollX) {
+            double maxX = std::max(0.0, s->scrollContentW - size.w), maxY = std::max(0.0, s->scrollContentH - size.h);
+            double sx = scrollX ? std::min(std::max(0.0, webReadScroll(*s, 'x')), maxX) : 0.0;
+            double sy = scrollY ? std::min(std::max(0.0, webReadScroll(*s, 'y')), maxY) : 0.0;
+            if (scrollY) sy = std::min(maxY, std::max(0.0, webSnapScroll(*s, 'y', sy)));
+            if (scrollX) sx = std::min(maxX, std::max(0.0, webSnapScroll(*s, 'x', sx)));
+            if (sx != 0.0 || sy != 0.0) for (auto& ch : s->children) translate(ch, -sx, -sy);
+            s->scrollOffX = sx; s->scrollOffY = sy;
+        }
+        // position=relative/sticky + offset / translate: إزاحة بصرية للصندوق وأحفاده (المساحة الأصلية محفوظة).
+        if (!webOutOfFlow(*s)) {
+            WebOffsets wo = webReadOffsets(*s, cIncoming.maxW < 1e8 ? cIncoming.maxW : 0.0, cIncoming.maxH < 1e8 ? cIncoming.maxH : 0.0);
+            double sdx = wo.dx, sdy = wo.dy;
+            if (webPosition(*s) == WebPosition::RELATIVE) {
+                sdx += wo.hasL ? wo.l : (wo.hasR ? -wo.r : 0.0);
+                sdy += wo.hasT ? wo.t : (wo.hasB ? -wo.b : 0.0);
+            }
+            WebTransform wt = webReadTransform(*s, size.w, size.h);
+            sdx += wt.tx; sdy += wt.ty;
+            if (sdx != 0.0 || sdy != 0.0) translate(s, sdx, sdy);
+        }
 
         // Outer (margin-inclusive) box: what the CALLER of layout() gets back, so a parent
         // (layoutLinear/layoutStack/layoutGrid/layoutWrap) reserves the right amount of cursor
@@ -560,6 +666,7 @@ struct Indsin {
         outer.w = size.w + marginL + marginR;
         outer.h = size.h + marginT + marginB;
         s->geometryOuter = outer;
+        if (s->screenRoot) webPostLayout(*this, s);
         return outer;
     }
 
@@ -620,6 +727,7 @@ struct Indsin {
         double innerMaxW = std::max(0.0, c.maxW - pad*2), innerMaxH = std::max(0.0, c.maxH - pad*2);
         double contentW=0, contentH=0;
         for (auto& child : s->children) {
+            if (isOutOfFlowStrand(*child)) { layout(child, {0, innerMaxW, 0, innerMaxH}, originX + pad, originY + pad); continue; }
             // A Card that its parent stretched (c.minW > 0, e.g. Column align=stretch / screen root) hands that
             // width on: its children fill the inner box instead of shrink-wrapping inside a wide card.
             double childMinW = (c.minW > 0 && innerMaxW < 1e8) ? std::max(0.0, std::min(innerMaxW, c.minW - pad*2)) : 0.0;
@@ -643,7 +751,9 @@ struct Indsin {
     }
 
     Rect layoutLinear(StrandPtr s, Constraints c, Axis axis, double originX, double originY) {
-        double gap = resolveSpacing(*s, "gap", 0), padding = resolveSpacing(*s, "padding", 0) + s->attrNum("border", 0);
+        // RowGap/ColumnGap: فجوة المحور الرئيسي (Column -> row_gap، Row -> column_gap) وإلا gap.
+        double gap = resolveSpacing(*s, axis == Axis::Y ? "row_gap" : "column_gap", resolveSpacing(*s, "gap", 0));
+        double padding = resolveSpacing(*s, "padding", 0) + s->attrNum("border", 0);
         double crossMax=0, cursorMain=padding;
         double innerMaxW = std::max(0.0, c.maxW - padding*2), innerMaxH = std::max(0.0, c.maxH - padding*2);
         double innerMain = (axis == Axis::Y) ? innerMaxH : innerMaxW;
@@ -655,7 +765,16 @@ struct Indsin {
         // Cross-axis alignment: Column (axis=Y) aligns children horizontally via `align`;
         // Row (axis=X) aligns children vertically via `valign`. Default is left/top (offset 0),
         // matching the previous unaligned behavior exactly, so existing .rin files don't move.
-        std::string crossMode = (axis == Axis::Y) ? s->attrStr("align", s->screenRoot ? "stretch" : "left") : s->attrStr("valign", "top");
+        std::string placeV, placeH;
+        const bool hasPlace = webReadPlace(*s, placeV, placeH);
+        std::string crossMode = (axis == Axis::Y) ? (s->screenRoot ? "stretch" : "left") : "top";
+        { const char* ck = (axis == Axis::Y) ? "align" : "valign";
+          if (s->attr(ck)) crossMode = webAlignWord(s->attrStr(ck));
+          else if (s->attr("align_items")) crossMode = webAlignWord(s->attrStr("align_items"));
+          else if (hasPlace) crossMode = webAlignWord(axis == Axis::Y ? placeH : placeV); }
+        // AlignSelf: محاذاة العمود/الصف الفرعي الخاصة به (تتفوق على align_items).
+        auto modeOf = [&](const StrandPtr& ch) -> std::string {
+            const Value* v = ch->attr("align_self"); return v ? webAlignWord(v->asString()) : crossMode; };
         double innerCross = (axis == Axis::Y) ? innerMaxW : innerMaxH;
 
         // Two-pass flex distribution (needed for Spacer/fill children to share the main axis
@@ -680,6 +799,8 @@ struct Indsin {
         // just fall back to measuring their own natural size this pass, exactly like non-flexible
         // children already do.
         bool unboundedMain = innerMain >= 1e8;
+        const std::string allocation = webLower(s->attrStr("space_allocation", ""));
+        double sumWeight = 0;
         std::vector<bool> flexible(s->children.size());
         std::vector<double> mainSizeOf(s->children.size(), 0.0);
         double fixedMainUsed = 0; int flexCount = 0; size_t flowChildren = 0;
@@ -693,16 +814,19 @@ struct Indsin {
             // against a probe constraint, the way ordinary fixed-size children are, is exactly
             // what previously corrupted its own box (a stale note in isOverlayStrand's own comment
             // above explains why that approach was abandoned).
-            if (isOverlayStrand(*s->children[i])) { flexible[i] = false; mainSizeOf[i] = 0; continue; }
+            if (isOutOfFlowStrand(*s->children[i])) { flexible[i] = false; mainSizeOf[i] = 0; continue; }
             flowChildren++;
             flexible[i] = !unboundedMain && isMainAxisFlexible(s->children[i], axis);
-            if (flexible[i]) { flexCount++; continue; }
+            // SpaceAllocation: equal | proportional يجعلان كل ابن بلا مقاس رئيسي صريح مرناً (proportional يستعمل weight=).
+            if (!flexible[i] && !unboundedMain && (allocation == "equal" || allocation == "proportional") &&
+                !s->children[i]->attr(axis == Axis::Y ? "height" : "width")) flexible[i] = true;
+            if (flexible[i]) { flexCount++; sumWeight += (allocation == "equal") ? 1.0 : std::max(0.0, s->children[i]->attrNum("weight", 1.0)); continue; }
             Constraints probeC = (axis==Axis::Y) ? Constraints{0, innerMaxW, 0, 1e9} : Constraints{0, 1e9, 0, innerMaxH};
             // Relative widths ("50%", half, 30vw...) inside a Row resolve against the Row's content box, not the
             // unbounded probe axis (which made "50%" mean "50% of 1e9" -> clamped to the full row).
             if (axis==Axis::X && innerMain < 1e8 && isRelativeSize(s->children[i]->attr("width"))) probeC.maxW = innerMain;
             // align/valign="stretch": the child claims the container's full (bounded) cross extent.
-            if (crossMode == "stretch" && !s->children[i]->attr(axis==Axis::Y ? "width" : "height")) {
+            if (modeOf(s->children[i]) == "stretch" && !s->children[i]->attr(axis==Axis::Y ? "width" : "height")) {
                 if (axis==Axis::Y && innerMaxW < 1e8) probeC.minW = innerMaxW;
                 if (axis==Axis::X && innerMaxH < 1e8) probeC.minH = innerMaxH;
             }
@@ -713,6 +837,7 @@ struct Indsin {
         double gapsTotal = flowChildren == 0 ? 0 : gap * (flowChildren - 1);
         double leftover = std::max(0.0, innerMain - fixedMainUsed - gapsTotal);
         double perFlex = flexCount > 0 ? leftover / flexCount : 0.0;
+        if (sumWeight <= 0) sumWeight = (double)std::max(1, flexCount);
 
         struct Placed { StrandPtr child; double crossSize; double localX; double mainSize; };
         std::vector<Placed> placed;
@@ -720,7 +845,7 @@ struct Indsin {
 
         for (size_t i = 0; i < s->children.size(); i++) {
             auto& child = s->children[i];
-            if (isOverlayStrand(*child)) {
+            if (isOutOfFlowStrand(*child)) {
                 // Out of flow: measured against the container's own full inner box (not a
                 // cursor-derived budget -- there is no "space left for it" question, it doesn't
                 // share the axis with its siblings at all), so its real content size is correct
@@ -729,7 +854,9 @@ struct Indsin {
                 layout(child, {0, innerMaxW, 0, innerMaxH}, originX + padding, originY + padding);
                 continue;
             }
-            double mainBudget = flexible[i] ? perFlex : mainSizeOf[i];
+            double childWeight = (allocation == "equal") ? 1.0 : std::max(0.0, child->attrNum("weight", 1.0));
+            double mainBudget = flexible[i] ? (flexCount > 0 ? leftover * childWeight / sumWeight : 0.0) : mainSizeOf[i];
+            (void)perFlex;
             double childMaxW = (axis==Axis::Y) ? innerMaxW : mainBudget;
             double childMaxH = (axis==Axis::Y) ? mainBudget : innerMaxH;
             // An implicit-default Spacer (no explicit sizing= from the .rin source) is only meant
@@ -746,14 +873,14 @@ struct Indsin {
             // below. Explicit valign="stretch" / align="stretch" on the container still stretches
             // it on purpose, same as before.
             bool implicitSpacerExpand = (child->kind == StrandKind::SPACER && !child->attr("sizing"));
-            if (flexible[i] && implicitSpacerExpand && crossMode != "stretch") {
+            if (flexible[i] && implicitSpacerExpand && modeOf(child) != "stretch") {
                 if (axis == Axis::Y) childMaxW = 0; else childMaxH = 0;
             }
             if (axis==Axis::X && innerMain < 1e8 && !flexible[i] && isRelativeSize(child->attr("width"))) childMaxW = innerMain;
             Constraints cc = flexible[i]
                 ? Constraints{(axis==Axis::Y)?0:mainBudget, childMaxW, (axis==Axis::Y)?mainBudget:0, childMaxH} // flexible: min==max==its share
                 : Constraints{0, childMaxW, 0, childMaxH};
-            if (crossMode == "stretch" && !implicitSpacerExpand && !child->attr(axis==Axis::Y ? "width" : "height")) {
+            if (modeOf(child) == "stretch" && !implicitSpacerExpand && !child->attr(axis==Axis::Y ? "width" : "height")) {
                 if (axis==Axis::Y && innerMaxW < 1e8) cc.minW = innerMaxW;
                 if (axis==Axis::X && innerMaxH < 1e8) cc.minH = innerMaxH;
             }
@@ -769,7 +896,10 @@ struct Indsin {
         // justify= (Row / Column / flex Box): distributes the box's spare main-axis space when nothing flexes.
         //   start (default) | center | end | between | around | evenly
         {
-            std::string jm = s->attrStr("justify", "start");
+            std::string jm = "start";
+            if (s->attr("justify")) jm = webJustifyWord(s->attrStr("justify"));
+            else if (s->attr("auto_space")) { const Value* av = s->attr("auto_space"); jm = webTruthy(av) ? "between" : webJustifyWord(av->asString()); }
+            else if (hasPlace) jm = webJustifyWord(axis == Axis::Y ? placeV : placeH);
             double minMain = (axis == Axis::Y) ? c.minH : c.minW;
             if (jm != "start" && flexCount == 0 && !placed.empty() && minMain > 0 && minMain < 1e8) {
                 double free = minMain - padding * 2 - mainUsed;
@@ -810,9 +940,11 @@ struct Indsin {
         // Second pass: nudge each child along the cross axis now that innerCross is finalized.
         // (Doesn't touch main-axis position, so gap/order above is untouched — only left/top vs
         // center/right/bottom shifts.) Skipped when mode is "stretch" or default (offset stays 0).
-        if (crossMode != "left" && crossMode != "top" && crossMode != "stretch" && !placed.empty()) {
+        bool anySelf = false;
+        for (auto& p : placed) if (p.child->attr("align_self")) { anySelf = true; break; }
+        if ((anySelf || (crossMode != "left" && crossMode != "top" && crossMode != "stretch")) && !placed.empty()) {
             for (auto& p : placed) {
-                double off = alignOffset(innerCross, p.crossSize, crossMode);
+                double off = alignOffset(innerCross, p.crossSize, modeOf(p.child));
                 if (off <= 0.0) continue;
                 if (axis == Axis::Y) translate(p.child, off, 0); else translate(p.child, 0, off);
             }
@@ -826,7 +958,9 @@ struct Indsin {
         // align (horizontal) / valign (vertical) position each child within the Stack's full
         // bounds — e.g. align="right" valign="bottom" pins a child to the bottom-right corner,
         // useful for badges/FABs over a Card, or a Splash logo centered with align=center valign=center.
-        std::string ha = s->attrStr("align", "left"), va = s->attrStr("valign", "top");
+        std::string ha = webAlignWord(s->attrStr("align", "left")), va = webAlignWord(s->attrStr("valign", "top"));
+        { std::string pv, ph;
+          if (!s->attr("align") && !s->attr("valign") && webReadPlace(*s, pv, ph)) { va = webAlignWord(pv); ha = webAlignWord(ph); } }
         double w=0,h=0;
         std::vector<Rect> rects; rects.reserve(s->children.size());
         for (auto& child : s->children) {
@@ -838,14 +972,22 @@ struct Indsin {
             // to be re-homed onto the viewport by the overlay pass, and it's excluded from the
             // alignment loop just below for the same reason: its final position is the overlay
             // pass's job now, not this Stack's align=/valign=.
-            if (isOverlayStrand(*child)) continue;
+            if (isOutOfFlowStrand(*child)) continue;
             w = std::max(w, r.w); h = std::max(h, r.h);
         }
-        if ((ha != "left" && ha != "stretch") || (va != "top" && va != "stretch")) {
+        // justify_self (أفقي) / align_self (عمودي) لكل ابن؛ center=true / middle=true على الابن تتفوّقان.
+        bool anySelf = false;
+        for (auto& ch : s->children) if (ch->attr("justify_self") || ch->attr("align_self") || ch->attr("center") || ch->attr("middle")) { anySelf = true; break; }
+        if (anySelf || (ha != "left" && ha != "stretch") || (va != "top" && va != "stretch")) {
             for (size_t i = 0; i < s->children.size(); i++) {
-                if (isOverlayStrand(*s->children[i])) continue;
-                double dx = alignOffset(w, rects[i].w, ha);
-                double dy = alignOffset(h, rects[i].h, va);
+                if (isOutOfFlowStrand(*s->children[i])) continue;
+                auto& ch = *s->children[i];
+                std::string hi = ch.attr("justify_self") ? webAlignWord(ch.attrStr("justify_self")) : ha;
+                std::string vi = ch.attr("align_self") ? webAlignWord(ch.attrStr("align_self")) : va;
+                if (webTruthy(ch.attr("center"))) hi = vi = "center";
+                if (webTruthy(ch.attr("middle"))) vi = "center";
+                double dx = alignOffset(w, rects[i].w, hi);
+                double dy = alignOffset(h, rects[i].h, vi);
                 if (dx != 0.0 || dy != 0.0) translate(s->children[i], dx, dy);
             }
         }
@@ -971,29 +1113,142 @@ struct Indsin {
     // row-major placement, `gap=` between both rows and columns (a single spacing token/number
     // for both axes, matching the level of detail Row/Column's own `gap=` already offers — a
     // split row_gap=/column_gap= is easy future work if a real .rin author needs it).
+    // "2" | "2 / 4" | "2 / span 3" | "span 2" -> (start 0-based or -1 auto, span)
+    static void parseGridLine(const Value* v, int& start, int& span) {
+        start = -1; span = 1;
+        if (!v) return;
+        if (v->kind == Value::Kind::NUMBER) { start = std::max(0, (int)v->number - 1); return; }
+        std::string t = webLower(v->str);
+        size_t sl = t.find('/');
+        std::string a = sl == std::string::npos ? t : t.substr(0, sl), b = sl == std::string::npos ? "" : t.substr(sl + 1);
+        auto trim = [](std::string x) { while (!x.empty() && x.front() == ' ') x.erase(x.begin()); while (!x.empty() && x.back() == ' ') x.pop_back(); return x; };
+        a = trim(a); b = trim(b);
+        try {
+            if (a.rfind("span", 0) == 0) span = std::max(1, std::stoi(trim(a.substr(4))));
+            else if (!a.empty() && a != "auto") start = std::max(0, std::stoi(a) - 1);
+            if (b.rfind("span", 0) == 0) span = std::max(1, std::stoi(trim(b.substr(4))));
+            else if (!b.empty() && start >= 0) span = std::max(1, std::stoi(b) - 1 - start);
+        } catch (...) {}
+    }
+
+    // Grid: columns=N | "auto-fit" | "auto-fill" (+ min_column_width=), gap/row_gap/column_gap، وضع مُتقدّم عند
+    // grid_column/grid_row (تموضع ومدى)، justify_items/align_items/justify_self/align_self. بلا أي من هذه تبقى
+    // الخوارزمية القديمة حرفياً (صف بصف، خلايا بعرض كامل).
     Rect layoutGrid(StrandPtr s, Constraints c, double originX, double originY) {
         double padding = resolveSpacing(*s, "padding", 0), gap = resolveSpacing(*s, "gap", 0);
-        int columns = std::max(1, (int)s->attrNum("columns", 2));
+        double colGap = resolveSpacing(*s, "column_gap", gap), rowGap = resolveSpacing(*s, "row_gap", gap);
         double innerMaxW = std::max(0.0, c.maxW - padding*2);
-        double cellW = std::max(0.0, (innerMaxW - gap*(columns-1)) / columns);
-
-        double cursorY = padding;
-        double usedW = 0;
-        for (size_t i = 0; i < s->children.size(); i += columns) {
-            double rowH = 0;
-            size_t rowEnd = std::min(s->children.size(), i + (size_t)columns);
-            for (size_t j = i; j < rowEnd; j++) {
-                int col = (int)(j - i);
-                double localX = padding + col * (cellW + gap);
-                Rect r = layout(s->children[j], {cellW, cellW, 0, 1e9}, originX + localX, originY + cursorY);
-                rowH = std::max(rowH, r.h);
-                usedW = std::max(usedW, localX + r.w);
-            }
-            cursorY += rowH + gap;
+        std::vector<StrandPtr> flow;
+        for (auto& ch : s->children) {
+            if (isOutOfFlowStrand(*ch)) { layout(ch, {0, innerMaxW, 0, 1e9}, originX + padding, originY + padding); continue; }
+            flow.push_back(ch);
         }
-        if (!s->children.empty()) cursorY -= gap;
-        double totalH = cursorY + padding*2;
-        double totalW = innerMaxW + padding*2; // Grid always claims its full offered width, like Row/Column do
+        // أعمدة: رقم | auto-fit | auto-fill
+        int columns = 2; bool autoFit = false, autoFill = false;
+        std::string colSpec = webLower(s->attrStr("columns", ""));
+        if (colSpec == "auto-fit" || colSpec == "autofit") autoFit = true;
+        else if (colSpec == "auto-fill" || colSpec == "autofill") autoFill = true;
+        else if (s->attr("auto_fit"))  autoFit = true;
+        else if (s->attr("auto_fill")) autoFill = true;
+        else columns = std::max(1, (int)s->attrNum("columns", 2));
+        if (autoFit || autoFill) {
+            double minW = 160;
+            for (const char* k : {"min_column_width", "column_width"}) if (s->attr(k)) { minW = std::max(1.0, resolveSpacing(*s, k, 160, innerMaxW)); break; }
+            const Value* af = s->attr(autoFit ? "auto_fit" : "auto_fill");
+            if (af && af->kind == Value::Kind::NUMBER && af->number > 1) minW = af->number;
+            columns = std::max(1, (int)std::floor((innerMaxW + colGap) / (minW + colGap)));
+            if (autoFit) columns = std::max(1, std::min(columns, (int)flow.size())); // المسارات الفارغة تنطوي فتتمدد الخلايا
+        }
+        double cellW = std::max(0.0, (innerMaxW - colGap*(columns-1)) / columns);
+
+        bool advanced = autoFit || autoFill || s->attr("align_items") || s->attr("justify_items");
+        for (auto& ch : flow) if (ch->attr("grid_column") || ch->attr("grid_row") || ch->attr("align_self") || ch->attr("justify_self")) { advanced = true; break; }
+
+        if (!advanced) {
+            double cursorY = padding;
+            for (size_t i = 0; i < flow.size(); i += columns) {
+                double rowH = 0;
+                size_t rowEnd = std::min(flow.size(), i + (size_t)columns);
+                for (size_t j = i; j < rowEnd; j++) {
+                    int col = (int)(j - i);
+                    double localX = padding + col * (cellW + colGap);
+                    Rect r = layout(flow[j], {cellW, cellW, 0, 1e9}, originX + localX, originY + cursorY);
+                    rowH = std::max(rowH, r.h);
+                }
+                cursorY += rowH + rowGap;
+            }
+            if (!flow.empty()) cursorY -= rowGap;
+            double totalH = cursorY + padding*2;
+            double totalW = innerMaxW + padding*2;
+            return {0,0, std::min(totalW,c.maxW), std::max(std::min(totalH,c.maxH), c.minH)};
+        }
+
+        // ---- الوضع المتقدّم: تموضع صريح + مدى + محاذاة الخلايا ----
+        struct Item { StrandPtr ch; int col, row, cs, rs; double h = 0; };
+        std::vector<Item> items; std::vector<std::vector<char>> occ;
+        auto fits = [&](int r, int cc, int rs, int cs) {
+            if (cc + cs > columns) return false;
+            for (int y = r; y < r + rs; y++) for (int x = cc; x < cc + cs; x++) if (y < (int)occ.size() && occ[y][x]) return false;
+            return true; };
+        auto mark = [&](int r, int cc, int rs, int cs) {
+            while ((int)occ.size() < r + rs) occ.emplace_back(columns, 0);
+            for (int y = r; y < r + rs; y++) for (int x = cc; x < cc + cs; x++) occ[y][x] = 1; };
+        int cursorR = 0, cursorC = 0;
+        for (auto& ch : flow) {                       // 1) العناصر المثبّتة صراحةً أولاً
+            Item it{ch, -1, -1, 1, 1};
+            parseGridLine(ch->attr("grid_column"), it.col, it.cs); parseGridLine(ch->attr("grid_row"), it.row, it.rs);
+            it.cs = std::min(it.cs, columns);
+            if (it.col >= 0) it.col = std::min(it.col, columns - it.cs);
+            items.push_back(it);
+        }
+        for (auto& it : items) if (it.col >= 0 && it.row >= 0) mark(it.row, it.col, it.rs, it.cs);
+        for (auto& it : items) {                      // 2) الباقي: تدفّق تلقائي بالترتيب
+            if (it.col >= 0 && it.row >= 0) continue;
+            if (it.col >= 0) { int r = 0; while (!fits(r, it.col, it.rs, it.cs)) r++; it.row = r; mark(it.row, it.col, it.rs, it.cs); continue; }
+            int r = it.row >= 0 ? it.row : cursorR, cc = it.row >= 0 ? 0 : cursorC;
+            for (;; ) {
+                if (fits(r, cc, it.rs, it.cs)) break;
+                if (++cc + it.cs > columns) { cc = 0; r++; }
+            }
+            it.row = r; it.col = cc; mark(r, cc, it.rs, it.cs);
+            cursorR = r; cursorC = cc + it.cs; if (cursorC >= columns) { cursorC = 0; cursorR++; }
+        }
+        int rows = (int)occ.size();
+        std::string gJust = webLower(s->attrStr("justify_items", "stretch")), gAlign = webAlignWord(s->attrStr("align_items", "start"));
+        gJust = webAlignWord(gJust);
+        auto cellWidth = [&](const Item& it) { return cellW * it.cs + colGap * (it.cs - 1); };
+        // قياس الارتفاعات
+        std::vector<double> rowH(rows, 0.0);
+        for (auto& it : items) {
+            double w = cellWidth(it);
+            std::string ji = it.ch->attr("justify_self") ? webAlignWord(it.ch->attrStr("justify_self")) : gJust;
+            Constraints pc = (ji == "stretch") ? Constraints{w, w, 0, 1e9} : Constraints{0, w, 0, 1e9};
+            Rect r = layout(it.ch, pc, 0, 0); it.h = r.h;
+            if (it.rs == 1) rowH[it.row] = std::max(rowH[it.row], r.h);
+        }
+        for (auto& it : items) if (it.rs > 1) {       // مدى متعدد الصفوف: العجز يُضاف لآخر صف في المدى
+            double have = rowGap * (it.rs - 1);
+            for (int y = it.row; y < it.row + it.rs && y < rows; y++) have += rowH[y];
+            if (it.h > have) rowH[std::min(rows - 1, it.row + it.rs - 1)] += it.h - have;
+        }
+        std::vector<double> rowY(rows + 1, padding);
+        for (int y = 0; y < rows; y++) rowY[y + 1] = rowY[y] + rowH[y] + rowGap;
+        for (auto& it : items) {
+            double w = cellWidth(it), x = padding + it.col * (cellW + colGap), y = rowY[it.row];
+            double spanH = 0; for (int k = it.row; k < it.row + it.rs && k < rows; k++) spanH += rowH[k];
+            spanH += rowGap * (it.rs - 1);
+            std::string ji = it.ch->attr("justify_self") ? webAlignWord(it.ch->attrStr("justify_self")) : gJust;
+            std::string ai = it.ch->attr("align_self") ? webAlignWord(it.ch->attrStr("align_self")) : gAlign;
+            Constraints cc2 = (ji == "stretch") ? Constraints{w, w, 0, 1e9} : Constraints{0, w, 0, 1e9};
+            if (ai == "stretch") cc2.minH = spanH;
+            Rect r = layout(it.ch, cc2, originX + x, originY + y);
+            double dx = (ji == "center" || ji == "end" || ji == "right") ? alignOffset(w, r.w, ji) : 0.0;
+            double dy = (ai == "center" || ai == "end" || ai == "bottom") ? alignOffset(spanH, r.h, ai) : 0.0;
+            if (dx != 0.0 || dy != 0.0) translate(it.ch, dx, dy);
+        }
+        double totalH = (rows > 0 ? rowY[rows] - rowGap : 0.0) + padding;   // rowY[0] == padding
+        totalH += padding;
+        double totalW = innerMaxW + padding*2;
         return {0,0, std::min(totalW,c.maxW), std::max(std::min(totalH,c.maxH), c.minH)};
     }
 
@@ -1003,20 +1258,22 @@ struct Indsin {
     // space between items on a line and the vertical space between lines.
     Rect layoutWrap(StrandPtr s, Constraints c, double originX, double originY) {
         double padding = resolveSpacing(*s, "padding", 0), gap = resolveSpacing(*s, "gap", 0);
+        double colGap = resolveSpacing(*s, "column_gap", gap), rowGap = resolveSpacing(*s, "row_gap", gap);
         double innerMaxW = std::max(0.0, c.maxW - padding*2);
 
         double cursorX = 0, cursorY = 0, lineH = 0, usedW = 0;
         bool lineHasItem = false;
         for (auto& child : s->children) {
+            if (isOutOfFlowStrand(*child)) { layout(child, {0, innerMaxW, 0, 1e9}, originX + padding, originY + padding); continue; }
             // Probe the child's natural width first (unbounded height) so we know whether it
             // fits on the current line before committing to a final position for it.
             Rect probe = layout(child, {0, innerMaxW, 0, 1e9}, 0, 0);
             if (lineHasItem && cursorX + probe.w > innerMaxW) {
-                cursorY += lineH + gap; cursorX = 0; lineH = 0; lineHasItem = false;
+                cursorY += lineH + rowGap; cursorX = 0; lineH = 0; lineHasItem = false;
             }
             Rect r = layout(child, {0, innerMaxW, 0, 1e9}, originX + padding + cursorX, originY + padding + cursorY);
-            cursorX += r.w + gap; lineH = std::max(lineH, r.h); lineHasItem = true;
-            usedW = std::max(usedW, originX + padding + cursorX - gap - originX);
+            cursorX += r.w + colGap; lineH = std::max(lineH, r.h); lineHasItem = true;
+            usedW = std::max(usedW, originX + padding + cursorX - colGap - originX);
         }
         double totalH = cursorY + lineH + padding*2;
         double totalW = innerMaxW + padding*2; // Wrap claims the full offered width, same as Row
@@ -1152,3 +1409,5 @@ struct Indsin {
 };
 
 } // namespace indsin
+
+#include "rin_indsin_webconcepts.h" // تعريفات webPostLayout / webMinContentWidth (بعد تعريف Indsin)
