@@ -5,6 +5,7 @@
 ## الفهرس
 
 - [GENERAL](#general)
+- [INDSIN BRIDGE](#indsin-bridge)
 - [ANDROID16](#android16)
 - [BASE ACCEPT](#base-accept)
 - [CHANNEL47](#channel47)
@@ -71,6 +72,15 @@
 
 ---
 
+## INDSIN BRIDGE — جسر Rin ⇄ indsin بالأقواس << >>
+
+<sub>المصدر: `docs/indsin_bridge.md`</sub>
+
+- صيغة `<<…>>` في indsin: ربط تفاعلي `<<expr>>` (نص/سمة/داخل سلسلة/عنصر Text)، `<<print a, b>>`، `<<run f(x)>>` (استدعاء دالة Rin وعرض ما تطبعه)، `<<let/warp/import>>`، `<<if/else if/else>>`، `<<each list as it, i>>` فوق بيانات Rin (تمريرتان في `expandTagSyntax`).
+- Rin: `captureOutput(fn, …)` و`capture(fn, …)` و`indsin.run(name, …)` (مُخزَّنة بالوسائط، آمنة داخل الخصائص).
+- الجلسة الحيّة: تعديل مصدر فيه `each` يعيد التحميل الكامل. تلوين `<<…>>` ومقتطفات في إضافة VS Code.
+- توافق: ناتج المترجم لكل ملفات `.rin` في المستودع مطابق حرفياً لما قبل.
+
 ## LIVE PREVIEW ALL PLATFORMS — معاينة حية حقيقية لكل المنصات
 
 <sub>المصدر: `tools/indsin-live/`</sub>
@@ -135,6 +145,13 @@
 - جديد: `rin_libdir.h` (JSON/XML/semver/اكتشاف الأجزاء/مولِّد)، `rin_libdir.cpp` (التكامل + `rinlib.*` + أغلفة C++ التلقائية)، `rin lib new|check|info|list|run`، وتشغيل `.rinz` مباشرة. التفاصيل: `docs/split-libraries.md`.
 
 ## GENERAL
+
+### تنزيل الروابط (make.api.download) — فيديو/صور/أي ملف
+- نفس الدالة القديمة بتوقيعها نفسه، بلا دوال أو متغيرات جديدة: تنزيل **متدفّق** إلى القرص (لا ذاكرة)، استئناف `resume`، حدّ `maxBytes` فعلي، ومهلة جمود بدل مهلة كلية قصيرة.
+- `path` ينتهي بـ `/` ⇒ الاسم من `Content-Disposition`/الرابط والامتداد من بايتات الملف؛ بث HLS (`.m3u8`) عبر ffmpeg؛ صفحات الفيديو عبر yt-dlp؛ صفحة HTML مكان فيديو/صورة ⇒ خطأ بدل حفظها.
+- أمان: التحويلات http/https فقط، وبلا `file` في بروتوكولات HLS (منع قراءة ملفات محلية).
+- `make.image.removeBg` و`make.image.text` تقبلان رابط صورة. أندرويد: `RinHttpBridge.downloadToFile` (اختياري؛ غيابه يرجع للمسار القديم).
+- إصلاح بناء: `rin_indsin_pipeline.h` و`rin_indsin_tags.h` يجب أن يُحدَّثا معاً (خطأ `usesEach/desugarProbe/EachSize` في CI).
 
 <sub>المصدر الأصلي: `CHANGES.md`</sub>
 
@@ -2293,16 +2310,3 @@ Official AGP compatibility: AGP 8.13 requires Gradle 8.13 and JDK 17.
 - مكوّنات جاهزة: TextField, TextAreaField, PasswordField, NumberField, EmailField, SearchField, PhoneField.
 - `rin_indsin_validate.h`، تنقية `set_input` حسب النوع/maxlength، تحقق تلقائي، `indsin.isNumber/fieldError`.
 - أندرويد: IndsinFabricView.drawField (كلمة المرور/prefix/suffix/التحقق) وحوار الإدخال حسب النوع.
-
-## indsin — حقول إضافية وكتابة مباشرة
-- مكوّنات: UrlField, DateField, TimeField, MultilineField, ReadOnlyField, AutocompleteField, CodeField, RichTextField, HiddenField, ValidatedField.
-- تحقق date/time، `indsin.validate/suggest`، تلوين صياغة CodeEditor، `readonly` مظلّل.
-- أندرويد: كتابة مباشرة داخل الحقل (InputConnection) مع زر تبديل للنافذة، منتقيات تاريخ/وقت، تلوين الكود.
-
-## indsin — فيديو من الإنترنت
-- `rin_indsin_video.h`: تحليل روابط YouTube/Vimeo/Dailymotion/مباشر/HLS/صفحة + استخراج الرابط من API؛ دوال `indsin.videoInfo/videoProvider/videoThumb/isVideoUrl/videoUrl`.
-- مكوّن `<VideoPlayer>`، رسم Video بشارة المزوّد، وخيارات autoplay/loop/muted/controls/start/poster.
-- أندرويد: مشغّل بحاوية (مؤشّر تحميل، خطأ + إعادة محاولة)، تضمين Vimeo/Dailymotion، HLS، مصغّرة تلقائية.
-
-## indsin — مصغّرات الفيديو
-- مصغّرة ثابتة + مصغّرة متحركة (animated / preview gif·webp·mp4) مع زر تشغيل يبدأ المشغّل، `indsin.videoThumbs`.
