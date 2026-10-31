@@ -17,7 +17,8 @@
 //   indsin.isEmail(s) · indsin.isPhone(s) · indsin.isUrl(s) · indsin.isNumber(s) · indsin.passwordScore(s) (0..4)
 //   indsin.passwordLabel(s) ("empty|weak|fair|good|strong") · indsin.passwordTone(s) (دور ثيم: danger|warning|info|success)
 //   indsin.maskEmail(s) · indsin.initials(name) · indsin.slug(s) · indsin.fieldError(kind, value) -> "" أو رسالة
-//     kind: email | password | phone | url | required
+//     kind: email | password | phone | url | number | date | time | required
+//   indsin.validate(rule, value[, min, max, pattern, message]) · indsin.suggest(value, "a,b,c", i)
 // التعديل (للبرنامج فقط؛ ممنوعة داخل الخصائص):
 //   indsin.useTheme(name) -> bool · indsin.defineTheme(name, seed[, dark]) -> score
 // التأثيرات (Effects Studio — rin_indsin_effects.h):
@@ -281,12 +282,25 @@ inline void registerIndsinRinLib(rin::Interpreter& interp) {
         if (k == "required") return Value::string(v.empty() ? "Required" : "");
         if (v.empty()) return Value::string("");   // لا خطأ قبل الكتابة (استعمل required للإلزام)
         if (k == "password") return Value::string(v.size() >= 6 ? "" : "At least 6 characters");
-        if (k == "email" || k == "phone" || k == "tel" || k == "url" || k == "number") {
+        if (k == "email" || k == "phone" || k == "tel" || k == "url" || k == "number" || k == "date" || k == "time") {
             double lo = a.size() > 2 && a[2].type == rin::Value::Type::NUMBER ? a[2].number : NAN;
             double hi = a.size() > 3 && a[3].type == rin::Value::Type::NUMBER ? a[3].number : NAN;
             return Value::string(fieldValidationMessage(k, v, lo, hi));
         }
         fail(line, "'indsin.fieldError': unknown kind `" + k + "` (email, password, phone, tel, url, number, required)");
+    });
+    // indsin.validate(rule, value[, min, max, pattern, message]) -> "" أو رسالة (ValidatedField)
+    reg("validate", [](Args& a, int line) {
+        needArgs("indsin.validate", a, 2, 6, line);
+        auto num = [&](size_t i) { return a.size() > i && a[i].type == rin::Value::Type::NUMBER ? a[i].number : (double)NAN; };
+        auto str = [&](size_t i) { return a.size() > i && a[i].type == rin::Value::Type::STRING ? a[i].str : std::string(); };
+        return Value::string(validateRule(needStr("indsin.validate", a, 0, line), needStr("indsin.validate", a, 1, line), num(2), num(3), str(4), str(5)));
+    });
+    // indsin.suggest(value, "a,b,c", i) -> الاقتراح رقم i أو "" (AutocompleteField)
+    reg("suggest", [](Args& a, int line) {
+        needArgs("indsin.suggest", a, 3, 3, line);
+        if (a[2].type != rin::Value::Type::NUMBER) fail(line, "'indsin.suggest' expects argument 3 to be a number");
+        return Value::string(suggestAt(needStr("indsin.suggest", a, 0, line), needStr("indsin.suggest", a, 1, line), (int)a[2].number));
     });
     // ---- تعديل (للبرنامج فقط) ----
     reg("useTheme", [](Args& a, int line) {
