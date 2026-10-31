@@ -537,6 +537,47 @@ int main() {
         CHECK(px("<CodeEditor#c width=full height=80 value=\"if x then\" />") != px("<CodeEditor#c width=full height=80 value=\"\" />"), "code editor paints highlighted code");
         CHECK(px("<Input#i width=full value=\"a\" readonly=true />") != px("<Input#i width=full value=\"a\" />"), "read-only field looks dimmed");
     }
+    // 22) فيديو: تحليل الروابط، استخراج الرابط من API، VideoPlayer، رسم الشارة
+    {
+        char* o = rin_run(
+            "print indsin.videoProvider(\"https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=1m5s\");"
+            "print indsin.videoInfo(\"https://youtu.be/dQw4w9WgXcQ?t=90\")[\"start\"];"
+            "print indsin.videoInfo(\"https://www.youtube.com/shorts/abcdefghijk\")[\"id\"];"
+            "print indsin.videoProvider(\"https://vimeo.com/76979871\");"
+            "print indsin.videoProvider(\"https://dai.ly/x7tgad0\");"
+            "print indsin.videoProvider(\"https://cdn.x.com/a/b.m3u8?token=1\");"
+            "print indsin.videoProvider(\"https://example.com/page\");"
+            "print indsin.videoProvider(\"not a url\");"
+            "print indsin.videoThumb(\"https://youtu.be/dQw4w9WgXcQ\");"
+            "print indsin.videoInfo(\"https://youtu.be/dQw4w9WgXcQ\")[\"embed\"];"
+            "let d = json.parse(\"{\\\"data\\\":{\\\"items\\\":[{\\\"video\\\":{\\\"url\\\":\\\"https://a.com/x.mp4\\\"}}]}}\");"
+            "print indsin.videoUrl(d, \"data.items[0].video.url\");"
+            "print indsin.videoUrl(d);"
+            "print indsin.videoUrl(\"https://vimeo.com/76979871\");", ".");
+        std::string out = o ? o : ""; rin_free_string(o);
+        CHECK(has(out, "youtube") && has(out, "vimeo") && has(out, "dailymotion") && has(out, "direct") && has(out, "page") && has(out, "none"), "videoProvider recognises providers");
+        CHECK(has(out, "65") || has(out, "90"), "start time parsed (t=1m5s / t=90)");
+        CHECK(has(out, "abcdefghijk"), "YouTube Shorts id");
+        CHECK(has(out, "img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg") && has(out, "youtube-nocookie.com/embed/dQw4w9WgXcQ"), "thumbnail + embed url");
+        CHECK(has(out, "https://a.com/x.mp4") && has(out, "https://vimeo.com/76979871"), "videoUrl from API data (path / auto / string)");
+        const char* head = "<Theme#Dark active /><Screen#a size=\"300x300\" bg=#000000 padding=10 gap=10>";
+        auto px = [&](const std::string& body) { void* x = rin_indsin_session_create((std::string(head) + body + "</Screen>").c_str(), 300);
+            int w, h; unsigned char* b = rin_indsin_session_render_rgb(x, &w, &h); std::string r((char*)b, (size_t)w * h * 3); rin_indsin_free_buffer(b); rin_indsin_session_free(x); return r; };
+        CHECK(px("<Video#v width=full video_url=\"https://youtu.be/dQw4w9WgXcQ\" />") != px("<Video#v width=full video_url=\"https://x.com/a.mp4\" />"), "provider badge differs per source");
+        CHECK(px("<Video#v width=full video_url=\"https://x.com/a.mp4\" />") != px("<Video#v width=full video_url=\"https://x.com/a.mp4\" error=\"Video unavailable\" />"), "error replaces the play button");
+        void* s = rin_indsin_session_create((std::string("<warp u={\"https://youtu.be/dQw4w9WgXcQ\"} />") + head + "<VideoPlayer src={u} title=\"T\" autoplay=true loop=true start=30 /></Screen>").c_str(), 300);
+        std::string j = take(rin_indsin_session_render_json(s));
+        CHECK(has(j, "video_url") && has(j, "dQw4w9WgXcQ") && has(j, "\"autoplay\":\"true\"") , "VideoPlayer forwards video_url and options");
+        rin_indsin_session_free(s);
+        char* o2 = rin_run("let t = indsin.videoThumbs(\"https://youtu.be/dQw4w9WgXcQ\"); print len(t); print t[2]; print len(indsin.videoThumbs(\"https://x.com/a.mp4\"));", ".");
+        std::string out2 = o2 ? o2 : ""; rin_free_string(o2);
+        CHECK(has(out2, "4") && has(out2, "vi/dQw4w9WgXcQ/2.jpg") && has(out2, "0"), "videoThumbs: youtube main + 3 frames, none for mp4");
+        CHECK(px("<Video#v width=full video_url=\"https://x.com/a.mp4\" />") != px("<Video#v width=full video_url=\"https://x.com/a.mp4\" animated=true />"), "animated=true draws the Preview badge");
+        s = rin_indsin_session_create((std::string(head) + "<VideoPlayer src=\"https://x.com/a.mp4\" thumbnail=\"https://x.com/t.jpg\" animated=true preview=\"https://x.com/p.gif\" facade=false /></Screen>").c_str(), 300);
+        j = take(rin_indsin_session_render_json(s));
+        CHECK(has(j, "t.jpg") && has(j, "p.gif") && has(j, "\"facade\":\"false\""), "VideoPlayer forwards thumbnail / preview / facade");
+        rin_indsin_session_free(s);
+    }
     std::printf(failures ? "%d FAILURE(S)\n" : "ALL OK\n", failures);
     return failures ? 1 : 0;
 }
