@@ -1,0 +1,12 @@
+// تنزيل الروابط بدالة اللغة الموجودة make.api.download — صورة، فيديو مباشر، بث HLS، صفحة فيديو.
+let img = make.api.download("https://example.com/photo", "downloads/");        // مجلد: الاسم والامتداد يُستنتجان
+print img.ok, img.path, img.kind, img.bytes;
+
+let vid = make.api.download("https://example.com/clip.mp4", "downloads/clip.mp4", {"resume": true});
+if (!vid.ok) { print "فشل:", vid.error; }
+
+let live = make.api.download("https://example.com/stream/index.m3u8", "downloads/", {"maxBytes": 500 * 1024 * 1024});
+print live.via;                                                                // ffmpeg
+
+let page = make.api.download("https://www.youtube.com/watch?v=ID", "downloads/", {"quality": 720});
+print page.ok, page.error;                                                     // يحتاج yt-dlp
