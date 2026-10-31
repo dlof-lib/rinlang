@@ -60,5 +60,38 @@ void setAndroidBinaryGetBridge(std::function<HttpResult(const std::string& url, 
 // pipe/subprocess حقيقي هناك أصلاً آمن للبايتات الثنائية، فلا حاجة لمسار منفصل).
 HttpResult performBinaryGet(const std::string& url, int timeoutMs = 0);
 
+// ---------------------------------------------------------------------------------------------
+// تنزيل متدفّق إلى ملف (فيديو/صور/أي ملف كبير) — لا يمر الجسم عبر الذاكرة إطلاقاً.
+//   * سطح المكتب/CLI: curl يكتب مباشرة إلى destPath (-o) مع مهلة جمود (--speed-time) بدل مهلة كلية
+//     قصيرة، واستئناف (-C -)، وحدّ حجم، ومنع التحويل إلى غير http/https. بلا shell (argv مباشرة).
+//   * أندرويد: يُسجَّل جسر Kotlin (RinHttpBridge.downloadToFile) عبر setAndroidDownloadBridge؛ إن لم
+//     يُسجَّل يعود handled=false ويرجع المستدعي إلى performBinaryGet (يقرأ الجسم كاملاً في الذاكرة).
+// ---------------------------------------------------------------------------------------------
+struct DownloadRequest {
+    std::string url;
+    std::string destPath;          // الملف الذي يُكتب فيه الجسم فعلياً (يمرّر المستدعي مسار .part)
+    HeaderList headers;
+    int idleTimeoutMs = 30000;     // أقصى انتظار بلا أي بايت جديد (جمود)
+    int totalTimeoutMs = 0;        // <= 0: السقف الافتراضي (6 ساعات)
+    long long maxBytes = 0;        // <= 0: بلا حدّ
+    bool resume = false;           // أكمل من حجم destPath الحالي إن دعم الخادوم Range
+};
+
+struct DownloadResult {
+    bool handled = true;           // false = المنصة لا تدعم التنزيل المتدفق (جرّب performBinaryGet)
+    bool ok = false;               // الملف نزل كاملاً وبحالة 2xx
+    long status = 0;
+    std::string error;
+    long long bytes = 0;           // حجم destPath بعد الانتهاء
+    bool resumed = false;          // هل أُكمل تنزيل سابق فعلاً
+    std::string contentType;       // Content-Type النهائي (بلا بارامترات charset)
+    std::string contentDisposition;
+    std::string finalUrl;          // بعد كل التحويلات
+};
+
+DownloadResult performDownload(const DownloadRequest& req);
+
+void setAndroidDownloadBridge(std::function<DownloadResult(const DownloadRequest&)> bridge);
+
 } // namespace http
 } // namespace rin
