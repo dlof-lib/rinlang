@@ -6,6 +6,7 @@
 #include "../diagnostics/diagnostic.h"
 #include "../diagnostics/diagnostic_engine.h"
 #include "rin_passkit_highlight.h"
+#include "rin_indsin_highlight.h"
 #include "rin_editor_tools.h"
 #include <algorithm>
 #include <chrono>
@@ -44,6 +45,7 @@ void EditorEngine::setLanguage(const std::string& extension) {
     if (!ext.empty() && ext[0] == '.') ext.erase(0, 1);
     for (auto& c : ext) c = (char)std::tolower((unsigned char)c);
     language_ = (ext == "passkit") ? EditorLanguage::Passkit : EditorLanguage::Rin;
+    indsinExt_ = (ext == "indsin");
 }
 
 void EditorEngine::setText(const std::string& text) {
@@ -558,6 +560,7 @@ void EditorEngine::unindentSelection() {
 int EditorEngine::checkBracketBalance() const {
     // في passkit تظهر الأقواس والتنصيص داخل النصوص والتعليقات بحرية؛ فحص الأقواس على طريقة Rin مضلِّل.
     if (language_ != EditorLanguage::Rin) return -1;
+    if (looksLikeIndsinTags(lines_)) return -1; // الوسوم ونصوص الأبناء تحوي أقواساً حرّة
     struct Open { char ch; int line; };
     std::vector<Open> stack;
     for (int i = 0; i < (int)lines_.size(); ++i) {
@@ -713,6 +716,9 @@ static std::vector<HighlightSpan> computeCommentGaps(
 
 std::vector<HighlightSpan> EditorEngine::computeHighlights() const {
     if (language_ == EditorLanguage::Passkit) return computePasskitHighlights(lines_);
+    // indsin: ملفات .indsin دائماً، وملفات .rin التي كُتبت بصياغة الوسوم (<Column#id …>) — Lexer لغة Rin
+    // لا يفهمها فكان يُلوِّنها بلا تمييز. أي ملف .rin عادي يبقى على مسار Rin الأصلي بلا أي تغيير.
+    if (indsinExt_ || looksLikeIndsinTags(lines_)) return computeIndsinHighlights(lines_);
     std::vector<HighlightSpan> out;
     std::string source = getText();
     try {
@@ -885,6 +891,8 @@ std::vector<EditorDiagnostic> EditorEngine::computeDiagnostics() const {
     std::vector<EditorDiagnostic> out;
     // ملف passkit ليس Rin: تشغيل rin::Parser عليه يُنتج أخطاء حمراء كاذبة على كل وسم.
     if (language_ != EditorLanguage::Rin) return out;
+    // صياغة الوسوم ليست Rin خاماً (تُترجَم قبل التحليل): تشغيل rin::Parser عليها يُنتج أخطاء حمراء كاذبة.
+    if (looksLikeIndsinTags(lines_)) return out;
     std::string source = getText();
     std::vector<rin::Token> tokens;
     try {
