@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="indsin_inline_toggle">Inline typing</string>
+    <string name="indsin_inline_on">Typing inside the field</string>
+    <string name="indsin_inline_off">Typing in a dialog</string>
+</resources>
