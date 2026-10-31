@@ -8,6 +8,7 @@
 #include "rin_indsin_icons.h"   // IconRegistry -- §18
 #include "rin_indsin_validate.h"  // field type validation (email/number/tel/url)
 #include <cctype>
+#include "rin_indsin_video.h"
 #include <fstream>
 #include <sstream>
 #include <algorithm>
@@ -501,6 +502,7 @@ struct Dye {
 
         if (s->kind == StrandKind::BADGE)  { paintBadge(s, list, r); return; } // no children — Badge is a leaf
         if (s->kind == StrandKind::PROGRESS) { paintProgress(s, list, r); return; }
+        if (s->kind == StrandKind::VIDEO)    { paintVideo(s, list, r); return; }
         if (s->kind == StrandKind::CHECKBOX) { paintCheckbox(s, list, r); return; }
         if (s->kind == StrandKind::SWITCH)   { paintSwitch(s, list); return; }
         if (s->kind == StrandKind::AVATAR)   { paintAvatar(s, list, r); return; }
@@ -1040,6 +1042,48 @@ struct Dye {
                             std::to_string(utf8CharCount(raw)) + "/" + std::to_string((long long)maxLen), s->id, 0, 0};
             cnt.fontSize = 11; cnt.align = 2; cnt.singleLine = true;
             list.push_back(cnt);
+        }
+    }
+
+    // Video: صندوق داكن + زر تشغيل + شارة المزوّد (YouTube/Vimeo/…) + العنوان. التشغيل الفعلي في تطبيق الأندرويد
+    // (`video_url=` أو `src=`)؛ `title=` يُكتب أسفل الصندوق، و`error=` يستبدل زر التشغيل برسالة.
+    void paintVideo(const StrandPtr& s, DrawList& list, double radius) {
+        const Theme& th = themeRegistry().active();
+        Rect g = s->geometry;
+        std::string url = s->attrStr("video_url", s->attrStr("src", ""));
+        auto src = video::parse(url);
+        list.push_back({DrawOp::FILL_RECT, g, Color{14, 16, 22}, "", s->id, radius, 0});
+        std::string err = s->attrStr("error", "");
+        double cx = g.x + g.w / 2, cy = g.y + g.h / 2, R = std::max(8.0, std::min(g.w, g.h) * 0.16);
+        if (!err.empty() && err != "false") {
+            DrawCommand t{DrawOp::TEXT_RUN, Rect{g.x + 10, cy - 10, g.w - 20, 20}, th.danger, err, s->id, 0, 0};
+            t.fontSize = 13; t.align = 1; t.singleLine = true; list.push_back(t);
+        } else {
+            list.push_back({DrawOp::FILL_RECT, Rect{cx - R, cy - R, 2 * R, 2 * R}, Color{255, 255, 255, 215}, "", s->id, R, 0});
+            double tw = R * 0.8, x0 = cx - tw / 3;   // مثلث تشغيل بشرائح عمودية
+            for (int i = 0; i < (int)tw; i++) {
+                double hh = tw * 1.1 * (1.0 - (double)i / tw);
+                list.push_back({DrawOp::FILL_RECT, Rect{x0 + i, cy - hh / 2, 1.2, hh}, Color{30, 31, 40}, "", s->id, 0, 0});
+            }
+        }
+        std::string label = video::providerLabel(src);
+        if (!label.empty() && g.w > 90) {
+            double bw = 12 + 7.0 * label.size();
+            list.push_back({DrawOp::FILL_RECT, Rect{g.x + 8, g.y + 8, bw, 20}, Color{0, 0, 0, 150}, "", s->id, 10, 0});
+            DrawCommand t{DrawOp::TEXT_RUN, Rect{g.x + 8, g.y + 8, bw, 20}, Color{255, 255, 255}, label, s->id, 0, 0};
+            t.fontSize = 11; t.align = 1; t.singleLine = true; list.push_back(t);
+        }
+        bool animated = attrTrue(*s, "animated") || !s->attrStr("preview", "").empty();
+        if (animated && g.w > 140) {   // شارة «معاينة متحركة» أعلى اليمين
+            list.push_back({DrawOp::FILL_RECT, Rect{g.x + g.w - 88, g.y + 8, 80, 20}, Color{0, 0, 0, 150}, "", s->id, 10, 0});
+            DrawCommand t{DrawOp::TEXT_RUN, Rect{g.x + g.w - 88, g.y + 8, 80, 20}, Color{255, 255, 255}, "Preview", s->id, 0, 0};
+            t.fontSize = 11; t.align = 1; t.singleLine = true; list.push_back(t);
+        }
+        std::string title = s->attrStr("title", "");
+        if (!title.empty() && g.h > 60) {
+            list.push_back({DrawOp::FILL_RECT, Rect{g.x, g.y + g.h - 30, g.w, 30}, Color{0, 0, 0, 140}, "", s->id, 0, 0});
+            DrawCommand t{DrawOp::TEXT_RUN, Rect{g.x + 10, g.y + g.h - 28, g.w - 20, 26}, Color{255, 255, 255}, title, s->id, 0, 0};
+            t.fontSize = 13; t.singleLine = true; list.push_back(t);
         }
     }
 
