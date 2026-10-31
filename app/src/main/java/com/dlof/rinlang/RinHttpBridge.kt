@@ -1,6 +1,8 @@
 package com.dlof.rinlang
 
 import java.io.ByteArrayOutputStream
+import java.io.File
+import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -152,5 +154,119 @@ object RinHttpBridge {
         } finally {
             connection?.disconnect()
         }
+    }
+
+    /**
+     * تنزيل متدفّق إلى ملف (فيديو/صور/أي ملف كبير): الجسم يُكتب مباشرة إلى [destPath] على دفعات 64KB فلا
+     * يمرّ عبر ذاكرة JVM ولا JNI (نظير rin::http::performDownload على سطح المكتب — انظر rin_http.h).
+     * يُستدعى من jni_bridge.cpp عبر rin::http::setAndroidDownloadBridge.
+     *
+     *  - التحويلات تُتبَّع يدوياً (حتى 10) وبـ http/https فقط؛ ترويسة Authorization لا تُرسَل لمضيف مختلف.
+     *  - [resume]: إن كان الملف موجوداً بحجم > 0 نطلب Range؛ 206 = إكمال (append)، 200 = الخادوم تجاهل Range
+     *    فنبدأ من الصفر، 416 = الجزء قديم/كامل فنبدأ من الصفر مرة واحدة.
+     *  - [idleTimeoutMs] مهلة قراءة بلا بايتات (جمود)، [totalTimeoutMs] سقف كلي (<= 0 = 6 ساعات)،
+     *    [maxBytes] حدّ حجم الملف (<= 0 = بلا حدّ) يُفرَض أثناء الكتابة.
+     *
+     * القيمة المُعادة (String[8] بترتيب ثابت يقرأه C++):
+     *  [0] "1" إن اكتمل التنزيل بحالة 2xx  [1] رمز الحالة  [2] رسالة خطأ (فارغة عند النجاح؛ فارغة أيضاً عند 4xx/5xx
+     *  فالطرف C++ يصيغ الرسالة)  [3] حجم الملف النهائي بالبايت  [4] "1" إن كان إكمالاً فعلياً  [5] Content-Type (بلا
+     *  بارامترات، حروف صغيرة)  [6] Content-Disposition  [7] الرابط النهائي بعد التحويلات
+     */
+    @JvmStatic
+    fun downloadToFile(
+        url: String,
+        destPath: String,
+        headerKeys: Array<String>,
+        headerValues: Array<String>,
+        idleTimeoutMs: Int,
+        totalTimeoutMs: Int,
+        maxBytes: Long,
+        resume: Boolean
+    ): Array<String> {
+        val dest = File(destPath)
+        val idle = if (idleTimeoutMs > 0) idleTimeoutMs else 30_000
+        val totalNs = (if (totalTimeoutMs > 0) totalTimeoutMs.toLong() else 21_600_000L) * 1_000_000L
+        val t0 = System.nanoTime()
+        var wantResume = resume && dest.exists() && dest.length() > 0
+        var attempt = 0
+        while (attempt < 2) {
+            attempt++
+            var conn: HttpURLConnection? = null
+            try {
+                var current = url
+                var hops = 0
+                val origHost = URL(url).host
+                var respConn: HttpURLConnection? = null
+                while (true) {
+                    val u = URL(current)
+                    if (u.protocol != "http" && u.protocol != "https")
+                        return arrayOf("0", "0", "بروتوكول غير مدعوم — المسموح http:// أو https:// فقط", "0", "0", "", "", current)
+                    val c = u.openConnection() as HttpURLConnection
+                    conn = c
+                    c.requestMethod = "GET"
+                    c.connectTimeout = minOf(idle, 20_000)
+                    c.readTimeout = idle
+                    c.instanceFollowRedirects = false
+                    c.doInput = true
+                    val n = minOf(headerKeys.size, headerValues.size)
+                    for (i in 0 until n) {
+                        if (headerKeys[i].equals("Authorization", ignoreCase = true) && !u.host.equals(origHost, ignoreCase = true)) continue
+                        c.setRequestProperty(headerKeys[i], headerValues[i])
+                    }
+                    if (wantResume) c.setRequestProperty("Range", "bytes=${dest.length()}-")
+                    val st = c.responseCode
+                    if (st in 300..399 && st != 304) {
+                        val loc = c.getHeaderField("Location")
+                        c.disconnect()
+                        if (loc.isNullOrBlank() || ++hops > 10)
+                            return arrayOf("0", st.toString(), "تحويلات كثيرة جداً أو بلا وجهة", "0", "0", "", "", current)
+                        current = URL(u, loc).toString()
+                        continue
+                    }
+                    respConn = c
+                    break
+                }
+                val response = respConn ?: return arrayOf("0", "0", "فشل الاتصال", "0", "0", "", "", url)
+                val status = response.responseCode
+                val ctype = response.contentType?.substringBefore(';')?.trim()?.lowercase() ?: ""
+                val disp = response.getHeaderField("Content-Disposition") ?: ""
+                if (status == 416 && wantResume) { dest.delete(); wantResume = false; continue }
+                if (status !in 200..299) {
+                    return arrayOf("0", status.toString(), "", "0", "0", ctype, disp, current)
+                }
+                val append = wantResume && status == 206
+                var written = if (append) dest.length() else 0L
+                if (maxBytes > 0) {
+                    val declared = response.contentLengthLong
+                    if (declared > 0 && written + declared > maxBytes)
+                        return arrayOf("0", status.toString(), "حجم الملف يتجاوز maxBytes", "0", "0", ctype, disp, current)
+                }
+                dest.parentFile?.mkdirs()
+                response.inputStream.use { input ->
+                    FileOutputStream(dest, append).use { out ->
+                        val buf = ByteArray(64 * 1024)
+                        while (true) {
+                            val r = input.read(buf)
+                            if (r < 0) break
+                            out.write(buf, 0, r)
+                            written += r
+                            if (maxBytes > 0 && written > maxBytes) {
+                                return arrayOf("0", status.toString(), "حجم الملف يتجاوز maxBytes", written.toString(), "0", ctype, disp, current)
+                            }
+                            if (System.nanoTime() - t0 > totalNs) {
+                                return arrayOf("0", status.toString(), "انتهت المهلة الكلية للتنزيل", written.toString(), "0", ctype, disp, current)
+                            }
+                        }
+                    }
+                }
+                return arrayOf("1", status.toString(), "", written.toString(), if (append) "1" else "0", ctype, disp, current)
+            } catch (t: Throwable) {
+                val size = if (dest.exists()) dest.length().toString() else "0"
+                return arrayOf("0", "0", t.message ?: t.toString(), size, "0", "", "", url)
+            } finally {
+                conn?.disconnect()
+            }
+        }
+        return arrayOf("0", "416", "تعذّر استئناف التنزيل", "0", "0", "", "", url)
     }
 }
