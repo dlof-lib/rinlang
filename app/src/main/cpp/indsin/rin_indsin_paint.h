@@ -7,6 +7,7 @@
 #include "rin_indsin_overlay.h" // OverlayLayer -- see paintWithOverlay() below
 #include "rin_indsin_icons.h"   // IconRegistry -- §18
 #include "rin_indsin_validate.h"  // field type validation (email/number/tel/url)
+#include <cctype>
 #include <fstream>
 #include <sstream>
 #include <algorithm>
@@ -941,8 +942,43 @@ struct Dye {
     // and a search field draws a magnifier. `disabled`/`readonly` dim it.
     static std::string fieldType(const Strand& s) {
         std::string t = s.attrStr("type", "");
-        if (t.empty()) t = s.kind == StrandKind::SEARCH ? "search" : "text";
+        if (t.empty()) t = s.kind == StrandKind::SEARCH ? "search" : s.kind == StrandKind::DATE ? "date"
+                         : s.kind == StrandKind::TIME ? "time" : s.kind == StrandKind::CODE_EDITOR ? "code" : "text";
         return t == "phone" ? "tel" : t;
+    }
+    // CodeEditor: تلوين صياغة مبسّط (كلمات مفتاحية/نصوص/أرقام/تعليقات) + عمود أرقام الأسطر. خطّ ثابت العرض.
+    void paintCode(const StrandPtr& s, DrawList& list, const Theme& th, const std::string& code, bool dim) {
+        static const char* kw[] = {"if","else","elif","while","for","in","return","fn","function","let","var","const","warp","print","import","class",
+            "true","false","nil","null","and","or","not","break","continue","def","end","then","do","switch","case","struct","enum","new","try","catch","async","await","pub","use"};
+        const std::string lang = s->attrStr("language", s->attrStr("lang", ""));
+        const bool slashC = !(lang == "py" || lang == "python" || lang == "sh" || lang == "bash" || lang == "yaml");
+        const bool hashC = lang.empty() || lang == "rin" || lang == "py" || lang == "python" || lang == "sh" || lang == "bash" || lang == "yaml";
+        const double fs = 13, adv = 6.0 * (fs * 0.72 / 7.0), lh = 18, gut = 30;
+        const Rect g = s->geometry;
+        const double x0 = g.x + gut + 6, maxCols = std::max(0.0, (g.w - gut - 12) / adv);
+        std::vector<std::string> lines; { std::string cur; for (char c : code) { if (c == '\n') { lines.push_back(cur); cur.clear(); } else cur += c; } lines.push_back(cur); }
+        list.push_back({DrawOp::FILL_RECT, Rect{g.x + 1, g.y + 1, gut, g.h - 2}, dimTowardBackground(th.surface, 0.12), "", s->id, 0, 0});
+        auto run = [&](double x, double y, double w, const std::string& t, Color c) {
+            DrawCommand d{DrawOp::TEXT_RUN, Rect{x, y, w, lh}, c, t, s->id, 0, 0};
+            d.fontSize = fs; d.singleLine = true; list.push_back(d); };
+        for (size_t li = 0; li < lines.size(); li++) {
+            double y = g.y + 6 + li * lh; if (y + lh > g.y + g.h - 2) break;
+            { DrawCommand d{DrawOp::TEXT_RUN, Rect{g.x + 2, y, gut - 8, lh}, th.text_muted, std::to_string(li + 1), s->id, 0, 0}; d.fontSize = fs; d.align = 2; d.singleLine = true; list.push_back(d); }
+            const std::string& L = lines[li]; size_t i = 0;
+            while (i < L.size() && (double)i < maxCols) {
+                size_t st = i; Color col = dim ? th.text_muted : th.text; unsigned char c = L[i];
+                if ((slashC && L.compare(i, 2, "//") == 0) || (hashC && c == '#')) { i = L.size(); col = th.text_muted; }
+                else if (c == '"' || c == '\'') { char q = (char)c; i++; while (i < L.size() && L[i] != q) { if (L[i] == '\\') i++; i++; } if (i < L.size()) i++; col = th.success; }
+                else if (std::isdigit(c)) { while (i < L.size() && (std::isdigit((unsigned char)L[i]) || L[i] == '.')) i++; col = th.warning; }
+                else if (std::isalpha(c) || c == '_') {
+                    while (i < L.size() && (std::isalnum((unsigned char)L[i]) || L[i] == '_')) i++;
+                    std::string w = L.substr(st, i - st); for (auto k : kw) if (w == k) { col = th.primary; break; }
+                } else if (c == ' ') { while (i < L.size() && L[i] == ' ') i++; continue; }
+                else i++;
+                size_t end = std::min(i, (size_t)maxCols);
+                if (end > st) run(x0 + st * adv, y, (end - st + 2) * adv, L.substr(st, end - st), col);
+            }
+        }
     }
     void paintField(const StrandPtr& s, DrawList& list, double radius) {
         const Theme& th = themeRegistry().active();
@@ -957,10 +993,12 @@ struct Dye {
         }
         bool valid = attrTrue(*s, "valid");
         bool disabled = attrTrue(*s, "disabled") || state == StrandState::DISABLED;
+        const bool readonly = attrTrue(*s, "readonly");
         Color border = (state == StrandState::FOCUSED) ? th.primary : th.border;
         if (valid) border = th.success;
         if (hasError) border = th.danger;
         Color fill = th.surface;
+        if (readonly) fill = dimTowardBackground(fill, 0.18);
         if (disabled) { border = dimTowardBackground(border, 0.5); fill = dimTowardBackground(fill, 0.4); }
         list.push_back({DrawOp::FILL_RECT, s->geometry, fill, "", s->id, radius, 0});
         list.push_back({DrawOp::STROKE_RECT, s->geometry, border, "", s->id, radius, (state == StrandState::FOCUSED || hasError) ? 2.0 : 1.0});
@@ -969,6 +1007,22 @@ struct Dye {
         if (!showingPlaceholder && (attrTrue(*s, "secure") || type == "password") && !attrTrue(*s, "reveal")) value = maskText(value);
         if (!showingPlaceholder) value = s->attrStr("prefix", "") + value + s->attrStr("suffix", "");
         Rect tb = s->geometry;
+        if (s->kind == StrandKind::CODE_EDITOR && !showingPlaceholder) { paintCode(s, list, th, raw, disabled || readonly); return; }
+        std::string ph = s->attrStr("placeholder", "");
+        if (ph.empty() && type == "date") ph = "YYYY-MM-DD";
+        if (ph.empty() && type == "time") ph = "HH:MM";
+        if (type == "date" || type == "time") {   // أيقونة تقويم/ساعة على اليمين
+            double cx = tb.x + tb.w - 22, cy = tb.y + tb.h / 2; Color ic = th.text_muted;
+            if (type == "date") {
+                list.push_back({DrawOp::STROKE_RECT, Rect{cx - 7, cy - 6, 14, 13}, ic, "", s->id, 2, 1.4});
+                list.push_back({DrawOp::FILL_RECT, Rect{cx - 7, cy - 6, 14, 4}, ic, "", s->id, 0, 0});
+            } else {
+                list.push_back({DrawOp::STROKE_RECT, Rect{cx - 7, cy - 7, 14, 14}, ic, "", s->id, 7, 1.4});
+                list.push_back({DrawOp::FILL_RECT, Rect{cx - 0.7, cy - 4, 1.6, 5}, ic, "", s->id, 0, 0});
+                list.push_back({DrawOp::FILL_RECT, Rect{cx - 0.7, cy, 4, 1.6}, ic, "", s->id, 0, 0});
+            }
+            tb.w = std::max(0.0, tb.w - 30);
+        }
         if (type == "search") {   // magnifier glyph: ring + handle, text shifted right
             double cx = tb.x + 16, cy = tb.y + tb.h / 2 - 1, r = 6;
             list.push_back({DrawOp::STROKE_RECT, Rect{cx - r, cy - r, 2 * r, 2 * r}, th.text_muted, "", s->id, r, 1.6});
@@ -977,7 +1031,7 @@ struct Dye {
         }
         list.push_back({DrawOp::TEXT_RUN, tb,
                          showingPlaceholder ? th.text_muted : (disabled ? th.text_muted : th.text),
-                         showingPlaceholder ? s->attrStr("placeholder", "") : value, s->id, 0, 0});
+                         showingPlaceholder ? ph : value, s->id, 0, 0});
         // character counter "n/max" (TextArea by default, or counter=true on any field with maxlength=)
         double maxLen = s->attrNum("maxlength", 0);
         if (maxLen > 0 && (s->kind == StrandKind::TEXTAREA ? s->attrStr("counter", "true") != "false" : attrTrue(*s, "counter"))) {
