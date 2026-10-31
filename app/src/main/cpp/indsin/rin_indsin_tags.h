@@ -851,8 +851,10 @@ private:
             if (s[i] == '/' && i + 1 < n && s[i + 1] == '>') { i += 2; selfClose = true; break; }
             if (!isIdStart(s[i])) fail(std::string("unexpected '") + s[i] + "' in tag <" + tagName + ">");
             size_t kb = i;
-            while (i < n && isIdChar(s[i])) ++i;
+            // kebab-case مسموح في أسماء الخصائص (min-width / row-gap / flex-direction) ويُحوَّل إلى snake_case.
+            while (i < n && (isIdChar(s[i]) || (s[i] == '-' && i + 1 < n && isIdChar(s[i + 1])))) ++i;
             Attr a; a.key = s.substr(kb, i - kb);
+            for (auto& ch : a.key) if (ch == '-') ch = '_';
             size_t save = i; int saveLine = line;
             nlInside += skipWs();
             if (i < n && s[i] == '=') {
