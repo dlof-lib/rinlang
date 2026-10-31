@@ -18,6 +18,7 @@
 //   indsin.passwordLabel(s) ("empty|weak|fair|good|strong") · indsin.passwordTone(s) (دور ثيم: danger|warning|info|success)
 //   indsin.maskEmail(s) · indsin.initials(name) · indsin.slug(s) · indsin.fieldError(kind, value) -> "" أو رسالة
 //     kind: email | password | phone | url | number | date | time | required
+//   indsin.videoInfo(url) · videoProvider(url) · videoThumb(url) · videoThumbs(url) · isVideoUrl(url) · videoUrl(apiData[, "data.items[0].url"])
 //   indsin.validate(rule, value[, min, max, pattern, message]) · indsin.suggest(value, "a,b,c", i)
 // التعديل (للبرنامج فقط؛ ممنوعة داخل الخصائص):
 //   indsin.useTheme(name) -> bool · indsin.defineTheme(name, seed[, dark]) -> score
@@ -29,6 +30,7 @@
 #pragma once
 #include "rin_indsin_system.h"
 #include "rin_indsin_validate.h"
+#include "rin_indsin_video.h"
 #include "rin_indsin_effects.h" // Effects Studio: indsin.defineEffect/playEffect…
 #include "../rin_interpreter.h"
 #include <algorithm>
@@ -301,6 +303,24 @@ inline void registerIndsinRinLib(rin::Interpreter& interp) {
         needArgs("indsin.suggest", a, 3, 3, line);
         if (a[2].type != rin::Value::Type::NUMBER) fail(line, "'indsin.suggest' expects argument 3 to be a number");
         return Value::string(suggestAt(needStr("indsin.suggest", a, 0, line), needStr("indsin.suggest", a, 1, line), (int)a[2].number));
+    });
+    // ---- الفيديو: indsin.videoInfo(url) -> {provider,id,embed,thumbnail,direct,start,valid,label} · videoProvider · videoThumb · isVideoUrl
+    //      indsin.videoUrl(data[, path]) يستخرج رابط الفيديو من استجابة API (قاموس/مصفوفة r.json) ----
+    reg("videoInfo", [](Args& a, int line) {
+        needArgs("indsin.videoInfo", a, 1, 1, line);
+        auto s = video::parse(needStr("indsin.videoInfo", a, 0, line));
+        return mapOf({{"provider", Value::string(s.provider)}, {"id", Value::string(s.id)}, {"embed", Value::string(s.valid() ? video::embedUrl(s) : "")},
+                      {"thumbnail", Value::string(video::thumbnailUrl(s))}, {"direct", Value::boolean_(s.isDirect())},
+                      {"start", Value::num(s.start)}, {"valid", Value::boolean_(s.valid())}, {"label", Value::string(video::providerLabel(s))}});
+    });
+    reg("videoProvider", [](Args& a, int line) { needArgs("indsin.videoProvider", a, 1, 1, line); return Value::string(video::parse(needStr("indsin.videoProvider", a, 0, line)).provider); });
+    reg("videoThumb", [](Args& a, int line) { needArgs("indsin.videoThumb", a, 1, 1, line); return Value::string(video::thumbnailUrl(video::parse(needStr("indsin.videoThumb", a, 0, line)))); });
+    reg("videoThumbs", [](Args& a, int line) { needArgs("indsin.videoThumbs", a, 1, 1, line); return arrayOfStrings(video::thumbnailFrames(video::parse(needStr("indsin.videoThumbs", a, 0, line)))); });
+    reg("isVideoUrl", [](Args& a, int line) { needArgs("indsin.isVideoUrl", a, 1, 1, line); auto p = video::parse(needStr("indsin.isVideoUrl", a, 0, line)).provider; return Value::boolean_(p != "none" && p != "page"); });
+    reg("videoUrl", [](Args& a, int line) {
+        needArgs("indsin.videoUrl", a, 1, 2, line);
+        std::string path = a.size() > 1 && a[1].type == rin::Value::Type::STRING ? a[1].str : "";
+        return Value::string(video::fromData(a[0], path));
     });
     // ---- تعديل (للبرنامج فقط) ----
     reg("useTheme", [](Args& a, int line) {
