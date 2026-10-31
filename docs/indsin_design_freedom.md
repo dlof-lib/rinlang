@@ -366,3 +366,20 @@ rin_indsin_preview examples/samples/indsin_design_freedom.rin --bg "#223344" --c
 - زر لوحة المفاتيح في شريط المعاينة يبدّل إلى النافذة المنبثقة (الاختيار يُحفظ). Done/Back ينهيان الكتابة، ولمس خارج الحقل أيضاً.
 - حقول التاريخ والوقت تستعمل دائماً المنتقي الأصلي.
 - غلاف `focus` صار يحمل `rect` و`language` و`kind` (`code`).
+
+## فيديو من الإنترنت (رابط أو API)
+
+```
+<VideoPlayer src={cell} title="…" autoplay=false loop=false muted=false controls=true start=0 poster="…" caption="…" />
+<Video video_url="https://…" ratio=1.7778 />
+```
+- **المصادر المدعومة**: YouTube (`watch` · `youtu.be` · `shorts` · `embed` · `live`، مع `t=`/`start=`) · Vimeo · Dailymotion (تضمين) · ملفات `mp4/webm/mov/mkv/3gp` و HLS `.m3u8` (تشغيل مباشر) · أي صفحة تضمين أخرى (WebView).
+- **خيارات**: `autoplay` · `loop` · `muted` · `controls` · `start` (ثوانٍ) · `poster` (وإلا مصغّرة YouTube/Dailymotion) · `title` · `error`. يظهر مؤشّر تحميل، وعند الفشل رسالة تُعيد المحاولة باللمس.
+- **من API**: `src` خلية عادية، فاجلبها بـ Rin: `let r = httpGet(url); src = indsin.videoUrl(r.json, "data.items[0].video.url");` — بلا مسار يبحث تلقائياً في `video_url · stream_url · hls · mp4 · embed_url · url · src …`.
+- **دوال Rin**: `indsin.videoInfo(url)` → `{provider,id,embed,thumbnail,direct,start,valid,label}` · `indsin.videoProvider(url)` · `indsin.videoThumb(url)` · `indsin.isVideoUrl(url)` · `indsin.videoUrl(data[, path])`.
+- المعاينة في المحرك ترسم شارة المزوّد وزر التشغيل؛ التشغيل الفعلي على أندرويد. مثال: `examples/samples/indsin_video.rin`.
+
+### المصغّرات (ثابتة ومتحركة)
+- **ثابتة**: `poster="…"` أو `thumbnail="…"`، وإلا تُستعمل مصغّرة YouTube/Dailymotion تلقائياً. تظهر مع زر تشغيل وشارة المزوّد وعنوان، واللمس يبدأ المشغّل (بصوت). `facade=false` أو `autoplay=true` يحمّل المشغّل فوراً.
+- **متحركة**: `animated=true` تتناوب لقطات (YouTube: الرئيسية + 1/2/3.jpg؛ الملف المباشر: 4 لقطات تُستخرج من الفيديو نفسه)، أو `preview="…"` صورة متحركة `gif/webp` أو مقطع قصير صامت `mp4/webm` يُعاد تشغيله.
+- دوال Rin: `indsin.videoThumb(url)` · `indsin.videoThumbs(url)` (مصفوفة اللقطات). المعاينة في المحرك تضع شارة «Preview» عند التحريك.
