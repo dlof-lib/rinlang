@@ -3,6 +3,7 @@
 // duplicate AST, unlike a standalone prototype would use.
 #pragma once
 #include "rin_indsin_eval.h"
+#include "rin_indsin_webkeys.h" // مفاهيم تخطيط الويب: مرادفات أسماء الخصائص والوسوم الهيكلية
 #include <memory>
 #include <vector>
 #include <unordered_map>
@@ -177,6 +178,14 @@ inline StrandKind strandKindFromTag(const std::string& tag) {
     if (tag == "DonutChart" || tag == "donutchart" || tag == "PieChart" || tag == "piechart" ||
         tag == "Donut" || tag == "donut") return StrandKind::DONUT_CHART;
 
+    // Web Layout Concepts (rin_indsin_webkeys.h): Body/Page/Main/Article/Aside/Wrapper/Flex/... -> existing kinds.
+    if (const char* wk = webTagKind(tag)) {
+        std::string k = wk;
+        if (k == "COLUMN") return StrandKind::COLUMN;
+        if (k == "ROW") return StrandKind::ROW;
+        if (k == "BOX") return StrandKind::BOX;
+    }
+
     return StrandKind::CUSTOM; // resolved via Bolt (plugin) registry — see architecture doc §18
 }
 inline std::string strandKindName(StrandKind k) {
@@ -283,6 +292,9 @@ struct Strand {
     // paints. Defaults identical to `geometry` (zero margin) for any Strand that never sets
     // margin=/margin_left=/etc., so nothing changes for existing .rin programs.
     Rect geometryOuter;
+    // Web Layout Concepts — Scroll: حجم المحتوى الكامل وإزاحة التمرير المطبّقة (تكتبها Indsin::layout لحاوية التمرير).
+    double scrollContentW = 0, scrollContentH = 0, scrollOffX = 0, scrollOffY = 0;
+    double stickyDx = 0, stickyDy = 0; // إزاحة position=sticky المطبّقة حالياً (تُصفَّر عند إعادة التخطيط)
     Constraints lastConstraints; bool hasLastConstraints=false;
     uint64_t contentHash=0, lastContentHash=0; bool hasLastContentHash=false;
 
@@ -330,7 +342,7 @@ inline StrandPtr buildFabric(const std::shared_ptr<rin::ViewStmt>& node, WarpSco
         std::vector<std::string> reads;
         Value v = evalAttrExprKeyed(a.key, a.value, warp, &reads);
         for (auto& w : reads) subs.record(w, s->id);
-        s->attrs.push_back({a.key, a.value, v});
+        s->attrs.push_back({webCanonicalKey(a.key), a.value, v}); // MinWidth/min-width -> min_width (القيمة وربط Warp كما هما)
         if (a.key == "mask") s->mask = v.asString();
         attrHash = fnv1a(a.key + "=" + v.asString(), attrHash);
     }
