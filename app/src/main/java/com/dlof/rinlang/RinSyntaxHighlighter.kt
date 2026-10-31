@@ -229,6 +229,9 @@ object RinSyntaxHighlighter {
         "Link", "Radio", "Slider", "Select", "List", "ListItem", "File", "Date",
         "Time", "CodeEditor", "Calculator", "Search", "Tag", "Kbd", "Rating", "Skeleton",
         "Spinner", "Steps", "StepItem", "Timeline", "TimelineItem", "Breadcrumb", "Pagination", "DonutChart",
+        // Web Layout Concepts: وسوم هيكلية (مرادفات لأنواع قائمة)
+        "Body", "Page", "Main", "Content", "Article", "Aside", "Group", "Navigation", "Nav", "Flex",
+        "Wrapper", "Widget", "Component", "Child",
         "Custom", "breadcrumbs", "chip", "container", "datepicker", "donut", "dropdown", "element",
         "filepicker", "frame", "key", "loader", "modal", "pager", "panel", "piechart",
         "popup", "range", "searchbar", "sidebar", "step", "stepper", "textfield", "timelineevent",
@@ -253,7 +256,17 @@ object RinSyntaxHighlighter {
         "sizing", "source", "sourceTag", "src", "stagger", "state", "step", "subtitle",
         "text", "textAlign", "textColor", "text_align", "theme", "thickness", "title", "tone",
         "total", "trend", "type", "underline", "url", "valign", "value", "variant",
-        "vertical", "visible", "visited", "weight", "width"
+        "vertical", "visible", "visited", "weight", "width",
+        // Web Layout Concepts (docs/indsin_web_layout.md)
+        "position", "top", "left", "right", "bottom", "inset", "inset_x", "inset_y", "offset", "offset_x", "offset_y",
+        "top_left", "top_right", "bottom_left", "bottom_right", "center", "middle", "anchor", "anchor_side", "anchor_align",
+        "z", "z_index", "isolation", "order", "display", "hidden", "visibility", "overflow", "overflow_x", "overflow_y", "clip",
+        "row_gap", "column_gap", "flex_direction", "flex_wrap", "flow", "place", "align_items", "align_content", "align_self",
+        "justify", "justify_items", "justify_self", "grid_row", "grid_column", "auto_fit", "auto_fill", "min_column_width",
+        "box_sizing", "aspect", "intrinsic_size", "resize", "space_allocation", "space_distribution", "auto_space", "weight",
+        "priority", "collision_policy", "collision_detection", "collision_axis", "collision_gap", "avoid", "overlap", "bounds", "constraints",
+        "media", "device_size", "layout", "transform", "rotate", "scale", "translate_x", "translate_y",
+        "scroll_x", "scroll_y", "scroll_top", "scroll_left", "scroll_bar", "scroll_behavior", "scroll_snap", "scroll_container"
     )
     // Design-token / enum values highlighted when they are the whole content of a string.
     private val indsinTokenValues = listOf(
