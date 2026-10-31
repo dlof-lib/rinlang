@@ -173,6 +173,8 @@ class RinCodeEditorView @JvmOverloads constructor(
         HighlightKind.CONTROL, HighlightKind.TYPE, HighlightKind.CLASS -> fontBold
         HighlightKind.FUNCTION_DEF, HighlightKind.TEMPLATE_KW -> fontExtraBold
         HighlightKind.KEYWORD, HighlightKind.CONSTANT, HighlightKind.AT, HighlightKind.PREPROCESSOR -> fontSemiBold
+        HighlightKind.IX_TAG, HighlightKind.IX_TAG_CUSTOM, HighlightKind.IX_STRUCT, HighlightKind.IX_STATE, HighlightKind.IX_ID -> fontSemiBold
+        HighlightKind.IX_EVENT, HighlightKind.IX_BRACE, HighlightKind.IX_COLOR, HighlightKind.IX_LENGTH -> fontMedium
         HighlightKind.CALL, HighlightKind.NUMBER, HighlightKind.ERROR -> fontMedium
         HighlightKind.MODIFIER -> fontItalic
         HighlightKind.PARAMETER -> fontMediumItalic
@@ -403,6 +405,19 @@ class RinCodeEditorView @JvmOverloads constructor(
     private val colorPkVariable = ContextCompat.getColor(context, R.color.passkit_variable)
     private val colorPkString = ContextCompat.getColor(context, R.color.passkit_string)
     private val colorPkComment = ContextCompat.getColor(context, R.color.passkit_comment)
+    // ألوان مستندات indsin (36..47) — انظر rin_indsin_highlight.h؛ تتبدّل تلقائياً مع الوضع الليلي.
+    private val colorIxBracket = ContextCompat.getColor(context, R.color.ix_bracket)
+    private val colorIxTag = ContextCompat.getColor(context, R.color.ix_tag)
+    private val colorIxTagCustom = ContextCompat.getColor(context, R.color.ix_tag_custom)
+    private val colorIxId = ContextCompat.getColor(context, R.color.ix_id)
+    private val colorIxAttr = ContextCompat.getColor(context, R.color.ix_attr)
+    private val colorIxEvent = ContextCompat.getColor(context, R.color.ix_event)
+    private val colorIxToken = ContextCompat.getColor(context, R.color.ix_token)
+    private val colorIxColor = ContextCompat.getColor(context, R.color.ix_color)
+    private val colorIxLength = ContextCompat.getColor(context, R.color.ix_length)
+    private val colorIxState = ContextCompat.getColor(context, R.color.ix_state)
+    private val colorIxBrace = ContextCompat.getColor(context, R.color.ix_brace)
+    private val colorIxStruct = ContextCompat.getColor(context, R.color.ix_struct)
     // أحمر — خارج المنظومة الست عمداً: حالة تنبيه (خطأ نحوي) لا مفهوم لغوي، ويجب أن يبقى
     // قابلاً للتمييز الفوري عن الستة جميعاً بلا التباس.
     private val colorError = ContextCompat.getColor(context, R.color.syntax_error)
@@ -1260,7 +1275,8 @@ class RinCodeEditorView @JvmOverloads constructor(
         val italic: Boolean
         when (kind) {
             HighlightKind.KEYWORD, HighlightKind.CONTROL, HighlightKind.TYPE, HighlightKind.CLASS,
-            HighlightKind.FUNCTION_DEF, HighlightKind.AT, HighlightKind.PREPROCESSOR -> { bold = true; italic = false }
+            HighlightKind.FUNCTION_DEF, HighlightKind.AT, HighlightKind.PREPROCESSOR,
+            HighlightKind.IX_TAG, HighlightKind.IX_TAG_CUSTOM, HighlightKind.IX_STRUCT, HighlightKind.IX_STATE -> { bold = true; italic = false }
             HighlightKind.LABEL, HighlightKind.TEMPLATE -> { bold = true; italic = true }
             HighlightKind.TEMPLATE_KW -> { bold = true; italic = false }
             HighlightKind.PARAMETER -> { bold = false; italic = true }
@@ -1310,6 +1326,18 @@ class RinCodeEditorView @JvmOverloads constructor(
         HighlightKind.PK_VARIABLE -> colorPkVariable
         HighlightKind.PK_STRING -> colorPkString
         HighlightKind.PK_COMMENT -> colorPkComment
+        HighlightKind.IX_BRACKET -> colorIxBracket
+        HighlightKind.IX_TAG -> colorIxTag
+        HighlightKind.IX_TAG_CUSTOM -> colorIxTagCustom
+        HighlightKind.IX_ID -> colorIxId
+        HighlightKind.IX_ATTR -> colorIxAttr
+        HighlightKind.IX_EVENT -> colorIxEvent
+        HighlightKind.IX_TOKEN -> colorIxToken
+        HighlightKind.IX_COLOR -> colorIxColor
+        HighlightKind.IX_LENGTH -> colorIxLength
+        HighlightKind.IX_STATE -> colorIxState
+        HighlightKind.IX_BRACE -> colorIxBrace
+        HighlightKind.IX_STRUCT -> colorIxStruct
         else -> colorDefault
     }
 
