@@ -504,6 +504,39 @@ int main() {
         CHECK(!has(cj, "Enter a valid email") && !has(cj, "Must be at most 99"), "errors clear when the value becomes valid");
         rin_indsin_session_free(s);
     }
+    // 21) أنواع إضافية: date/time/code/readonly/autocomplete/validate/hidden
+    {
+        const char* head = "<Theme#Dark active /><Screen#a size=\"300x400\" bg=#000000 padding=10 gap=10>";
+        void* s = rin_indsin_session_create(
+            (std::string("<warp d={\"\"} /><warp t={\"\"} /><warp c={\"\"} /><warp r={\"locked\"} /><warp city={\"be\"} /><warp code={\"zz\"} /><warp tok={\"abc\"} />") + head +
+             "<Date#d width=full value={d} /><Time#t width=full value={t} /><CodeEditor#c width=full height=80 value={c} language=rin />"
+             "<Input#r width=full value={r} readonly=true />"
+             "<AutocompleteField value={city} options=\"Beirut,Berlin,Bern,Madrid\" />"
+             "<ValidatedField value={code} rule=pattern pattern=\"[A-Z]{2}-[0-9]{2}\" message=\"Use AA-00\" />"
+             "<HiddenField name=\"session\" value={tok} /></Screen>").c_str(), 300);
+        std::string j = take(rin_indsin_session_render_json(s));
+        CHECK(has(j, "Beirut") && has(j, "Berlin") && has(j, "Bern") && !has(j, "Madrid"), "autocomplete lists matching suggestions");
+        CHECK(has(j, "Use AA-00"), "ValidatedField pattern error");
+        CHECK(has(j, "\"name\":\"hdf\"") || has(j, "session"), "HiddenField keeps its value in the fabric");
+        take(rin_indsin_session_set_input(s, "d", "2026-1x2-0y5"));
+        CHECK(has(take(rin_indsin_session_render_json(s)), "\"value\":\"2026-12-05\""), "date field keeps digits and dashes");
+        take(rin_indsin_session_set_input(s, "t", "09:3a0"));
+        CHECK(has(take(rin_indsin_session_render_json(s)), "\"value\":\"09:30\""), "time field keeps digits and colons");
+        std::string fd = take(rin_indsin_session_tap(s, 150, 30));
+        CHECK(has(fd, "\"inputType\":\"date\"") && has(fd, "\"rect\":["), "focus reports date type and rect");
+        std::string fc = take(rin_indsin_session_tap(s, 150, 160));
+        CHECK(has(fc, "\"kind\":\"code\"") && has(fc, "\"multiline\":true"), "focus reports the code editor");
+        std::string fr = take(rin_indsin_session_tap(s, 150, 235));
+        CHECK(!has(fr, "\"focus\""), "read-only field never takes focus");
+        rin_indsin_session_free(s);
+        char* o = rin_run("print indsin.fieldError(\"date\", \"2026-02-30\"); print indsin.fieldError(\"time\", \"25:00\"); print indsin.validate(\"required\", \"\"); print indsin.validate(\"length\", \"ab\", 3, 9); print indsin.suggest(\"b\", \"Beirut,Bern\", 1);", ".");
+        std::string out = o ? o : ""; rin_free_string(o);
+        CHECK(has(out, "valid date") && has(out, "valid time") && has(out, "required") && has(out, "At least 3") && has(out, "Bern"), "indsin.validate / suggest / date+time errors");
+        auto px = [&](const std::string& body) { void* x = rin_indsin_session_create((std::string(head) + body + "</Screen>").c_str(), 300);
+            int w, h; unsigned char* b = rin_indsin_session_render_rgb(x, &w, &h); std::string r((char*)b, (size_t)w * h * 3); rin_indsin_free_buffer(b); rin_indsin_session_free(x); return r; };
+        CHECK(px("<CodeEditor#c width=full height=80 value=\"if x then\" />") != px("<CodeEditor#c width=full height=80 value=\"\" />"), "code editor paints highlighted code");
+        CHECK(px("<Input#i width=full value=\"a\" readonly=true />") != px("<Input#i width=full value=\"a\" />"), "read-only field looks dimmed");
+    }
     std::printf(failures ? "%d FAILURE(S)\n" : "ALL OK\n", failures);
     return failures ? 1 : 0;
 }
