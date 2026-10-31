@@ -3,6 +3,11 @@
 #include <cstdio>
 #include <cstring>
 #include <algorithm>
+#include <chrono>
+#include <thread>
+#include <fstream>
+#include <cerrno>
+#include <cstdlib>
 
 #if defined(__ANDROID__)
     // لا حاجة لأي رؤوس نظام هنا؛ التنفيذ الفعلي يمر بالكامل عبر androidBridge أدناه.
@@ -13,6 +18,7 @@
     #include <sys/wait.h>
     #include <fcntl.h>
     #include <signal.h>
+    #include <sys/stat.h>
 #endif
 
 namespace rin {
@@ -27,6 +33,12 @@ void setAndroidBridge(std::function<HttpResult(const std::string&, const std::st
 
 void setAndroidBinaryGetBridge(std::function<HttpResult(const std::string&, int)> bridge) {
     g_androidBinaryGetBridge = std::move(bridge);
+}
+
+static std::function<DownloadResult(const DownloadRequest&)> g_androidDownloadBridge;
+
+void setAndroidDownloadBridge(std::function<DownloadResult(const DownloadRequest&)> bridge) {
+    g_androidDownloadBridge = std::move(bridge);
 }
 
 
@@ -235,6 +247,214 @@ HttpResult performBinaryGet(const std::string& url, int timeoutMs) {
 #endif
     return performRequest("GET", url, {}, "", timeoutMs);
 }
+
+// ================================================================================================
+// performDownload — تنزيل متدفّق إلى ملف (انظر rin_http.h). الجسم لا يمرّ عبر الذاكرة.
+// ================================================================================================
+static long long dlFileSize(const std::string& path) {
+    std::ifstream f(path, std::ios::binary | std::ios::ate);
+    return f.good() ? static_cast<long long>(f.tellg()) : -1;
+}
+
+static std::string dlReadAll(const std::string& path) {
+    std::ifstream f(path, std::ios::binary);
+    std::string out;
+    if (!f) return out;
+    char buf[4096];
+    while (f.read(buf, sizeof(buf)) || f.gcount() > 0) out.append(buf, static_cast<size_t>(f.gcount()));
+    return out;
+}
+
+// يملأ حقول الترويسات من ملف -D (كتلة لكل تحويل redirect؛ الأخيرة هي النهائية).
+static void dlFillFromHeaderFile(const std::string& hdrPath, DownloadResult& r) {
+    std::string raw = dlReadAll(hdrPath);
+    std::remove(hdrPath.c_str());
+    HeaderList hl;
+    parseHeaderBlocks(raw, hl);
+    for (auto& h : hl) {
+        std::string k = h.first;
+        for (auto& c : k) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        if (k == "content-type") {
+            std::string v = h.second;
+            size_t sc = v.find(';');
+            if (sc != std::string::npos) v.erase(sc);
+            while (!v.empty() && (v.back() == ' ' || v.back() == '\t')) v.pop_back();
+            for (auto& c : v) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            r.contentType = v;
+        } else if (k == "content-disposition") {
+            r.contentDisposition = h.second;
+        }
+    }
+}
+
+// "status|finalUrl" المطبوعة عبر -w (الفاصل | بلا أي backslash ليبقى الاقتباس على ويندوز سليماً).
+static void dlParseWriteOut(const std::string& out, DownloadResult& r) {
+    size_t bar = out.find('|');
+    std::string st = out.substr(0, bar);
+    try { r.status = std::stol(st); } catch (...) { r.status = 0; }
+    if (bar != std::string::npos) {
+        r.finalUrl = out.substr(bar + 1);
+        while (!r.finalUrl.empty() && (r.finalUrl.back() == '\n' || r.finalUrl.back() == '\r')) r.finalUrl.pop_back();
+    }
+}
+
+static std::string dlCurlExitMessage(int code) {
+    switch (code) {
+        case 3:  return "رابط غير صالح";
+        case 6:  return "تعذّر حلّ اسم الخادوم (DNS) — تحقق من الرابط والشبكة";
+        case 7:  return "رفض الخادوم الاتصال أو لا يمكن الوصول إليه";
+        case 22: return "";                     // حالة HTTP >= 400: تُشرح من status
+        case 23: return "تعذّرت الكتابة على القرص (المساحة أو الصلاحيات)";
+        case 28: return "انتهت المهلة";
+        case 35: case 51: case 58: case 60: case 77: case 83:
+                 return "فشل اتصال TLS/الشهادة";
+        case 47: return "تحويلات كثيرة جداً";
+        case 56: return "انقطع الاتصال أثناء التنزيل";
+        case 63: return "حجم الملف يتجاوز maxBytes";
+        case 1: case 2: return "بروتوكول غير مدعوم — المسموح http:// أو https:// فقط";
+        default: return "فشل التنزيل (curl خرج برمز " + std::to_string(code) + ")";
+    }
+}
+
+#if defined(__ANDROID__)
+
+DownloadResult performDownload(const DownloadRequest& req) {
+    if (!g_androidDownloadBridge) {
+        DownloadResult r; r.handled = false;
+        r.error = "جسر التنزيل المتدفق غير مُهيَّأ (RinHttpBridge.downloadToFile غير موجود في هذا البناء)";
+        return r;
+    }
+    return g_androidDownloadBridge(req);
+}
+
+#elif defined(_WIN32)
+
+DownloadResult performDownload(const DownloadRequest& req) {
+    DownloadResult r;
+    const std::string hdrPath = req.destPath + ".hdr";
+    bool resume = req.resume && dlFileSize(req.destPath) > 0;
+    for (int attempt = 0; attempt < 2; ++attempt) {
+        std::ostringstream cmd;
+        cmd << "curl -s -S -L --fail --proto " << winQuote("=http,https") << " --proto-redir " << winQuote("=http,https")
+            << " --max-redirs 10 --connect-timeout 20";
+        int idleSec = std::max(1, (req.idleTimeoutMs + 999) / 1000);
+        cmd << " --speed-limit 1 --speed-time " << idleSec;
+        int totalSec = req.totalTimeoutMs > 0 ? (req.totalTimeoutMs + 999) / 1000 : 21600;
+        cmd << " --max-time " << totalSec;
+        if (req.maxBytes > 0) cmd << " --max-filesize " << req.maxBytes;
+        if (resume) cmd << " -C -";
+        cmd << " -D " << winQuote(hdrPath) << " -o " << winQuote(req.destPath);
+        for (auto& h : req.headers) cmd << " -H " << winQuote(h.first + ": " + h.second);
+        cmd << " -w " << winQuote("%{http_code}|%{url_effective}");
+        cmd << " -- " << winQuote(req.url);
+
+        FILE* pipe = _popen(cmd.str().c_str(), "rb");
+        if (!pipe) { r.error = "تعذّر تشغيل curl (تأكد من وجوده في PATH)"; return r; }
+        std::string out; char buf[1024]; size_t n;
+        while ((n = fread(buf, 1, sizeof(buf), pipe)) > 0) out.append(buf, n);
+        int rc = _pclose(pipe);
+
+        r = DownloadResult();
+        dlParseWriteOut(out, r);
+        dlFillFromHeaderFile(hdrPath, r);
+        r.bytes = std::max(0LL, dlFileSize(req.destPath));
+        if (resume && (r.status == 416 || rc == 33)) {   // استئناف غير ممكن: ابدأ من الصفر
+            std::remove(req.destPath.c_str());
+            resume = false;
+            continue;
+        }
+        r.resumed = resume && r.status == 206;
+        r.ok = (rc == 0) && r.status >= 200 && r.status < 300;
+        if (!r.ok) r.error = r.status >= 400 ? "" : dlCurlExitMessage(rc);
+        if (r.ok && req.maxBytes > 0 && r.bytes > req.maxBytes) { r.ok = false; r.error = "حجم الملف يتجاوز maxBytes"; }
+        return r;
+    }
+    return r;
+}
+
+#else // POSIX (لينكس/macOS): fork/exec مباشر لـ curl بلا shell
+
+DownloadResult performDownload(const DownloadRequest& req) {
+    DownloadResult r;
+    const std::string hdrPath = req.destPath + ".hdr";
+    bool resume = req.resume && dlFileSize(req.destPath) > 0;
+
+    for (int attempt = 0; attempt < 2; ++attempt) {
+        std::vector<std::string> args = {"curl", "-s", "-S", "-L", "--fail",
+                                         "--proto", "=http,https", "--proto-redir", "=http,https",
+                                         "--max-redirs", "10", "--connect-timeout", "20"};
+        int idleSec = std::max(1, (req.idleTimeoutMs + 999) / 1000);
+        args.push_back("--speed-limit"); args.push_back("1");
+        args.push_back("--speed-time"); args.push_back(std::to_string(idleSec));
+        int totalSec = req.totalTimeoutMs > 0 ? (req.totalTimeoutMs + 999) / 1000 : 21600;
+        args.push_back("--max-time"); args.push_back(std::to_string(totalSec));
+        if (req.maxBytes > 0) { args.push_back("--max-filesize"); args.push_back(std::to_string(req.maxBytes)); }
+        if (resume) { args.push_back("-C"); args.push_back("-"); }
+        args.push_back("-D"); args.push_back(hdrPath);
+        args.push_back("-o"); args.push_back(req.destPath);
+        for (auto& h : req.headers) { args.push_back("-H"); args.push_back(h.first + ": " + h.second); }
+        args.push_back("-w"); args.push_back("%{http_code}|%{url_effective}");
+        args.push_back("--"); args.push_back(req.url);
+
+        int outPipe[2];
+        if (pipe(outPipe) != 0) { r.error = "تعذّر إنشاء pipe لتشغيل curl"; return r; }
+        pid_t pid = fork();
+        if (pid < 0) { close(outPipe[0]); close(outPipe[1]); r.error = "فشل fork() لتشغيل curl"; return r; }
+        if (pid == 0) {
+            close(outPipe[0]);
+            dup2(outPipe[1], STDOUT_FILENO);
+            int devNull = open("/dev/null", O_RDWR);
+            if (devNull >= 0) { dup2(devNull, STDERR_FILENO); dup2(devNull, STDIN_FILENO); close(devNull); }
+            close(outPipe[1]);
+            std::vector<char*> argv;
+            for (auto& a : args) argv.push_back(const_cast<char*>(a.c_str()));
+            argv.push_back(nullptr);
+            execvp("curl", argv.data());
+            _exit(127);
+        }
+        close(outPipe[1]);
+
+        // انتظار مع مراقبة حجم الملف (لحدّ maxBytes حين لا يعلن الخادوم Content-Length) وسقف زمني.
+        auto t0 = std::chrono::steady_clock::now();
+        int st = 0;
+        bool killedForSize = false, killedForTime = false;
+        while (true) {
+            pid_t w = waitpid(pid, &st, WNOHANG);
+            if (w == pid || (w < 0 && errno != EINTR)) break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            if (req.maxBytes > 0 && dlFileSize(req.destPath) > req.maxBytes) {
+                kill(pid, SIGKILL); waitpid(pid, &st, 0); killedForSize = true; break;
+            }
+            auto el = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - t0).count();
+            if (el > totalSec + 10) { kill(pid, SIGKILL); waitpid(pid, &st, 0); killedForTime = true; break; }
+        }
+        std::string out; char buf[1024]; ssize_t n;
+        while ((n = read(outPipe[0], buf, sizeof(buf))) > 0) out.append(buf, static_cast<size_t>(n));
+        close(outPipe[0]);
+
+        int code = WIFEXITED(st) ? WEXITSTATUS(st) : -1;
+        r = DownloadResult();
+        dlParseWriteOut(out, r);
+        dlFillFromHeaderFile(hdrPath, r);
+        r.bytes = std::max(0LL, dlFileSize(req.destPath));
+
+        if (code == 127) { r.error = "أداة curl غير موجودة على هذا الجهاز (مطلوبة لتنزيل الملفات)"; return r; }
+        if (resume && (r.status == 416 || code == 33)) {   // الخادوم لا يدعم الاستئناف أو الجزء قديم: ابدأ من الصفر
+            std::remove(req.destPath.c_str());
+            resume = false;
+            continue;
+        }
+        r.resumed = resume && r.status == 206;
+        if (killedForSize) { r.error = "حجم الملف يتجاوز maxBytes"; return r; }
+        if (killedForTime) { r.error = "انتهت المهلة الكلية للتنزيل"; return r; }
+        r.ok = (code == 0) && r.status >= 200 && r.status < 300;
+        if (!r.ok) r.error = (r.status >= 400) ? "" : dlCurlExitMessage(code);
+        return r;
+    }
+    return r;
+}
+
+#endif
 
 } // namespace http
 } // namespace rin
