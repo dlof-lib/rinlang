@@ -3,6 +3,7 @@
 #include "rin_indsin_font.h"
 #include "rin_indsin_strand.h"
 #include "rin_indsin_tokens.h"
+#include "rin_indsin_webconcepts.h" // مفاهيم تخطيط الويب: z/overflow/visibility/scroll في الرسم
 #include "rin_indsin_layout.h" // splitCsv() -- reused here for DonutChart's data=/colors= parsing, same as Breadcrumb/Pagination already reuse it via rin_indsin_components_ext.h
 #include "rin_indsin_overlay.h" // OverlayLayer -- see paintWithOverlay() below
 #include "rin_indsin_icons.h"   // IconRegistry -- §18
@@ -445,8 +446,16 @@ struct Dye {
     }
     // Post-pass wrapper: every TEXT_RUN a strand emits gets the strand's real text style so no backend
     // (native rasterizer, HTML export) has to guess font size / alignment / weight from the box height.
+    // ZIndex/Layer: الأبناء يُرسمون بترتيب z تصاعدي (ثابت)، لا بترتيب المصدر فقط. لا يغيّر التخطيط.
+    void paintChildren(const StrandPtr& s, DrawList& list) {
+        bool re = false;
+        std::vector<size_t> ord = webPaintOrder(*s, &re);
+        if (!re) { for (auto& c : s->children) paintInto(c, list); return; }
+        for (size_t i : ord) paintInto(s->children[i], list);
+    }
     void paintInto(const StrandPtr& s, DrawList& list) {
         if (s->kind != StrandKind::BANNER && s->kind != StrandKind::TAG && s->attrStr("visible", "true") == "false") return; // مخفي
+        if (webCollapsed(*s) || webInvisible(*s)) return; // display=none / hidden / visibility=hidden / media / collision hide
         size_t first = list.size();
         paintIntoImpl(s, list);
         // Shadow (elevation=/shadow=/shadowColor=): attached to this strand's own box fill, drawn right under it.
@@ -487,18 +496,40 @@ struct Dye {
             d.bold = centered || wt == "bold" || wt == "700" || wt == "600" || s->attrStr("bold", "") == "true";
             d.singleLine = single;
         }
+        // Overflow/Clip: قصّ ما رسمه الأحفاد خارج صندوق هذا العنصر (هندسياً — انظر webClipDrawList).
+        if (int axes = webClipAxes(*s)) webClipDrawList(list, first, *s, axes, DrawOp::TEXT_RUN);
+        paintScrollBars(s, list);
+    }
+    // ScrollBar: مؤشر رفيع للحاويات القابلة للتمرير عند تجاوز المحتوى (scroll_bar=hidden يخفيه).
+    void paintScrollBars(const StrandPtr& s, DrawList& list) {
+        if (!(webScrollsX(*s) || webScrollsY(*s))) return;
+        std::string bar = webLower(s->attrStr("scroll_bar", "auto"));
+        if (bar == "hidden" || bar == "none" || bar == "false") return;
+        const Rect& g = s->geometry;
+        Color col = themeRegistry().active().text_muted; col.a = 140;
+        double th = (bar == "thick") ? 6 : 3;
+        if (webScrollsY(*s) && s->scrollContentH > g.h + 0.5 && g.h > 0) {
+            double maxOff = s->scrollContentH - g.h, thumb = std::max(16.0, g.h * g.h / s->scrollContentH);
+            double y = g.y + (g.h - thumb) * (maxOff > 0 ? s->scrollOffY / maxOff : 0.0);
+            list.push_back({DrawOp::FILL_RECT, Rect{g.x + g.w - th - 2, y, th, thumb}, col, "", s->id, th / 2, 0});
+        }
+        if (webScrollsX(*s) && s->scrollContentW > g.w + 0.5 && g.w > 0) {
+            double maxOff = s->scrollContentW - g.w, thumb = std::max(16.0, g.w * g.w / s->scrollContentW);
+            double x = g.x + (g.w - thumb) * (maxOff > 0 ? s->scrollOffX / maxOff : 0.0);
+            list.push_back({DrawOp::FILL_RECT, Rect{x, g.y + g.h - th - 2, thumb, th}, col, "", s->id, th / 2, 0});
+        }
     }
     void paintIntoImpl(const StrandPtr& s, DrawList& list) {
         double r = std::min(resolveRadius(*s, 0), std::min(s->geometry.w, s->geometry.h) / 2.0);
 
-        if (s->kind == StrandKind::BUTTON || s->kind == StrandKind::TABITEM) { paintButton(s, list, r); for (auto& c : s->children) paintInto(c, list); return; }
-        if (s->kind == StrandKind::ICONBUTTON) { paintButton(s, list, r); for (auto& c : s->children) paintInto(c, list); return; }
+        if (s->kind == StrandKind::BUTTON || s->kind == StrandKind::TABITEM) { paintButton(s, list, r); paintChildren(s, list); return; }
+        if (s->kind == StrandKind::ICONBUTTON) { paintButton(s, list, r); paintChildren(s, list); return; }
         if (s->kind == StrandKind::ICON) { paintIcon(s, list); return; }
 
         // Missing-components pass: Spacer never draws anything (it's pure layout space) — same
         // "skip the generic FILL_RECT" carve-out TEXT already gets below, just with no TEXT_RUN
         // to replace it with either.
-        if (s->kind == StrandKind::SPACER) { for (auto& c : s->children) paintInto(c, list); return; }
+        if (s->kind == StrandKind::SPACER) { paintChildren(s, list); return; }
 
         if (s->kind == StrandKind::BADGE)  { paintBadge(s, list, r); return; } // no children — Badge is a leaf
         if (s->kind == StrandKind::PROGRESS) { paintProgress(s, list, r); return; }
@@ -534,7 +565,7 @@ struct Dye {
                 underlineRect.h = 1.5;
                 list.push_back({DrawOp::FILL_RECT, underlineRect, linkColor, "", s->id, 0, 0});
             }
-            for (auto& c : s->children) paintInto(c, list);
+            paintChildren(s, list);
             return;
         }
 
@@ -545,7 +576,7 @@ struct Dye {
         if (s->kind == StrandKind::TAG) {
             double pillRadius = std::min(resolveRadius(*s, 999.0), s->geometry.h / 2.0);
             list.push_back({DrawOp::FILL_RECT, s->geometry, resolveColor(s), "", s->id, pillRadius, 0});
-            for (auto& c : s->children) paintInto(c, list);
+            paintChildren(s, list);
             return;
         }
         if (s->kind == StrandKind::KBD) { paintKbd(s, list); return; }
@@ -556,13 +587,13 @@ struct Dye {
         if (s->kind == StrandKind::STEPITEM) { paintStepItem(s, list); return; }
         if (s->kind == StrandKind::STEPS) {
             paintStepsConnector(s, list);
-            for (auto& c : s->children) paintInto(c, list);
+            paintChildren(s, list);
             return;
         }
         if (s->kind == StrandKind::TIMELINEITEM) { paintTimelineItem(s, list); return; }
         if (s->kind == StrandKind::TIMELINE) {
             paintTimelineConnector(s, list);
-            for (auto& c : s->children) paintInto(c, list);
+            paintChildren(s, list);
             return;
         }
         // Breadcrumb/Pagination: both are just Rows of synthesized Text/Button children (see
@@ -612,7 +643,7 @@ struct Dye {
                                  th.text_muted, subtitle, s->id, 0, 0});
             }
 
-            for (auto& c : s->children) paintInto(c, list);
+            paintChildren(s, list);
             return;
         }
 
@@ -640,7 +671,7 @@ struct Dye {
             list.push_back({DrawOp::TEXT_RUN, s->geometry, resolveColor(s), s->attrStr("text"), s->id, 0, 0});
         if (s->kind == StrandKind::TOOLTIP)
             list.push_back({DrawOp::TEXT_RUN, s->geometry, themeRegistry().active().background, s->attrStr("text"), s->id, 0, 0});
-        for (auto& c : s->children) paintInto(c, list);
+        paintChildren(s, list);
     }
 
     // ---- Missing-components pass: paint functions for the new leaf-ish StrandKinds. Each
@@ -1474,6 +1505,8 @@ inline void fabricToJson(const StrandPtr& s, std::ostringstream& os) {
        << ",\"line\":" << s->sourceLine
        << ",\"x\":" << s->geometry.x << ",\"y\":" << s->geometry.y
        << ",\"w\":" << s->geometry.w << ",\"h\":" << s->geometry.h
+       << ",\"scrollContentW\":" << s->scrollContentW << ",\"scrollContentH\":" << s->scrollContentH
+       << ",\"scrollOffX\":" << s->scrollOffX << ",\"scrollOffY\":" << s->scrollOffY
        // The engine's own resolved paint color for this Strand -- tone=/color=<role>/the active
        // @theme= already baked in, exactly as Dye::paintInto() would paint it. See colorToHex()
        // above for why this is needed at all. resolvedAlpha (0..1) is a separate field rather
