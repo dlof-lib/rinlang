@@ -73,8 +73,31 @@ print r.ok; print r.data; print r.attempts; print r.cached;
 النتيجة: `ok, status, statusText, data, json, body, headers, error, attempts, cached, ms, url`.
 الافتراضي: `retries = 2` لـ GET و`0` لغيره (تجنباً لتكرار POST).
 
-`make.api.download(url, path, opts?)` — تنزيل ثنائي سليم بايت ببايت: `overwrite` (true), `maxBytes`, `timeout`, `headers`, `auth`.
-النتيجة: `ok, path, bytes, status, contentType`. `make.api.clearCache()` يفرّغ الكاش.
+`make.api.download(url, path, opts?)` — تنزيل أي رابط إلى ملف (صور، فيديو، صوت، PDF، أرشيفات...). دالة واحدة بنفس التوقيع القديم؛ لا دوال ولا متغيرات جديدة.
+
+| الرابط / المسار | ما يحدث |
+|---|---|
+| ملف مباشر + `path` اسم ملف | يُكتب مباشرة إلى القرص **بالتدفق** (لا ذاكرة: فيديو بالجيجابايت لا يُشكّل مشكلة) في `path.part` ثم يُعاد تسميته عند الاكتمال |
+| `path` ينتهي بـ `/` (أو مجلد موجود) | الاسم يُستنتج: `Content-Disposition` ← آخر جزء من الرابط ← نوع الملف؛ والامتداد يُصحَّح من **بايتات الملف** (`image.php` المُرجِع JPEG يُحفظ `.jpg`). الاسم المتكرر يصير `name (1).ext` ما لم تمرّر `overwrite` |
+| قائمة بث HLS (`.m3u8`) | تُجمَّع إلى ملف فيديو واحد عبر `ffmpeg` (`.mp4` افتراضياً، أو `.mkv`/`.ts` حسب `path`) |
+| صفحة فيديو (يوتيوب وغيره) | عبر `yt-dlp` إن وُجد؛ وإلا خطأ واضح. لا يُحفظ HTML على أنه فيديو أبداً (إلا إن كان `path` نفسه `.html`) |
+| تحويلات (redirect) | تُتبَّع، لكن فقط إلى `http`/`https` (التحويل إلى `file://` يُرفض) |
+
+الخيارات: `overwrite` (true؛ في وضع المجلد بلا تمريرها = اسم فريد), `maxBytes` (2GB؛ يُفرَض أثناء التنزيل حتى لو لم يعلن الخادوم الحجم), `timeout`, `headers`, `auth`, `resume` (false: أكمل `path.part` من حيث توقّف عبر `Range`؛ عند الفشل الشبكي يبقى الجزء لإعادة المحاولة)، `quality` (أقصى ارتفاع للفيديو من الصفحات، مثل `720`).
+`timeout` الصريح سقف كلّي كما كان؛ غيابه = مهلة جمود 30 ثانية (بلا بايتات جديدة) وسقف 6 ساعات، فالفيديو الكبير لا يُقطع لمجرد أنه بطيء.
+النتيجة: `ok, path, name, bytes, status, contentType, kind, ext, via, resumed, url` — `kind`: `image | video | audio | document | archive | page | text | file`، و`via`: `curl | ffmpeg | yt-dlp | android`.
+
+```rin
+let r = make.api.download("https://example.com/photo", "pics/");     // pics/photo.jpg (الامتداد من البايتات)
+print r.kind, r.path, r.bytes;
+make.api.download("https://cdn.example.com/live/index.m3u8", "videos/", {"maxBytes": 500 * 1024 * 1024});
+make.api.download("https://example.com/big.mp4", "big.mp4", {"resume": true});   // أعد التشغيل ليكمل
+make.api.download("https://www.youtube.com/watch?v=ID", "videos/", {"quality": 720});   // يحتاج yt-dlp
+```
+
+وتقبل `make.image.removeBg` و`make.image.text` رابط صورة مباشرة كمصدر (تنزَّل إلى ملف مؤقت بالنواة نفسها ثم تُعالَج).
+أدوات اختيارية يكشفها `make.media.tools()`: `curl` (سطح المكتب)، `ffmpeg` (HLS)، `yt-dlp` (صفحات الفيديو). على أندرويد التنزيل متدفّق عبر `RinHttpBridge.downloadToFile`؛ أما HLS وصفحات الفيديو فتحتاجان الأدوات أعلاه (غير متاحة على أندرويد).
+`make.api.clearCache()` يفرّغ الكاش.
 
 ## make.image.removeBg(src, out?, opts?)
 الإخراج `.png` أو `.webp` (شفافية). الطرق (`method`):
