@@ -118,6 +118,16 @@ class IndsinPreviewActivity : RinBaseActivity(), IndsinPreviewManager.Listener {
         }
 
         fabricView.onTap = { x, y -> IndsinPreviewManager.tap(x, y) }
+        fabricView.onInlineEdit = { bind, text -> IndsinPreviewManager.setInput(bind, text) }
+        val btnInline: ImageButton = findViewById(R.id.btnIndsinInline)
+        fun paintInline() { btnInline.alpha = if (inlineInputEnabled()) 1f else 0.55f }
+        paintInline()
+        btnInline.setOnClickListener {
+            val on = !inlineInputEnabled()
+            getSharedPreferences("indsin_prefs", MODE_PRIVATE).edit().putBoolean("inline_input", on).apply()
+            fabricView.endInlineEdit(); paintInline()
+            android.widget.Toast.makeText(this, if (on) R.string.indsin_inline_on else R.string.indsin_inline_off, android.widget.Toast.LENGTH_SHORT).show()
+        }
         fabricView.onInspect = { node -> showInspector(node) }
         // Events (spec §events): onLongPress=/onDoubleTap=/onHoverEnter=/onHoverExit= handlers --
         // same fire-and-forget pattern as onTap above, just against the matching gesture endpoint.
@@ -320,7 +330,12 @@ class IndsinPreviewActivity : RinBaseActivity(), IndsinPreviewManager.Listener {
         // pickMedia()/uploadMedia() تُخرج طلباً في حقل "media" — المضيف وحده يفتح المنتقي/الشبكة.
         try { JSONObject(resultJson).optJSONObject("media")?.let { mediaHost.handle(it) } } catch (_: Throwable) {}
         // حقل نصّي تحت اللمسة ("focus"): نافذة تحرير ثم set_input يكتب في الخلية المرتبطة.
-        try { JSONObject(resultJson).optJSONObject("focus")?.let { showInputDialog(it) } } catch (_: Throwable) {}
+        try {
+            val env = JSONObject(resultJson)
+            val focus = env.optJSONObject("focus")
+            if (focus != null) handleFocus(focus)
+            else if (env.has("targetId")) fabricView.endInlineEdit() // لمسة خارج أي حقل: أنهِ الكتابة المباشرة
+        } catch (_: Throwable) {}
         // Effects (spec §effects): every result envelope carries "animating" (see
         // rin_indsin_session_tick's doc comment) -- true means at least one Strand's effect=
         // transition is still short of its duration=, so schedule another per-frame tick; false
@@ -330,6 +345,36 @@ class IndsinPreviewActivity : RinBaseActivity(), IndsinPreviewManager.Listener {
         // ساعة time الحيّة (docs/TIME.md): "ticking":true يعني أن المصدر يعرّف `warp clock` فنكرّر tick كل ثانية.
         val ticking = try { JSONObject(resultJson).optBoolean("ticking", false) } catch (t: Throwable) { false }
         if (ticking && !animating) scheduleClockTick() else cancelClockTick()
+    }
+
+    /** الكتابة المباشرة داخل الحقل (افتراضي) أو النافذة المنبثقة (اختياري) — يُحفظ الاختيار بين الجلسات. */
+    private fun inlineInputEnabled() = getSharedPreferences("indsin_prefs", MODE_PRIVATE).getBoolean("inline_input", true)
+
+    private fun handleFocus(focus: JSONObject) {
+        when (focus.optString("inputType")) {
+            "date" -> { fabricView.endInlineEdit(); showDatePicker(focus); return }
+            "time" -> { fabricView.endInlineEdit(); showTimePicker(focus); return }
+        }
+        if (inlineInputEnabled()) fabricView.beginInlineEdit(focus) else showInputDialog(focus)
+    }
+
+    private fun showDatePicker(focus: JSONObject) {
+        val bind = focus.optString("bind"); if (bind.isEmpty()) return
+        val cal = java.util.Calendar.getInstance()
+        Regex("^(\\d{4})-(\\d{2})-(\\d{2})$").find(focus.optString("value"))?.let {
+            cal.set(it.groupValues[1].toInt(), it.groupValues[2].toInt() - 1, it.groupValues[3].toInt()) }
+        android.app.DatePickerDialog(this, { _, y, m, d ->
+            IndsinPreviewManager.setInput(bind, String.format(java.util.Locale.US, "%04d-%02d-%02d", y, m + 1, d))
+        }, cal.get(java.util.Calendar.YEAR), cal.get(java.util.Calendar.MONTH), cal.get(java.util.Calendar.DAY_OF_MONTH)).show()
+    }
+
+    private fun showTimePicker(focus: JSONObject) {
+        val bind = focus.optString("bind"); if (bind.isEmpty()) return
+        var h = 9; var m = 0
+        Regex("^(\\d{2}):(\\d{2})").find(focus.optString("value"))?.let { h = it.groupValues[1].toInt(); m = it.groupValues[2].toInt() }
+        android.app.TimePickerDialog(this, { _, hh, mm ->
+            IndsinPreviewManager.setInput(bind, String.format(java.util.Locale.US, "%02d:%02d", hh, mm))
+        }, h, m, true).show()
     }
 
     /** يحرّر Input/TextArea مرتبطاً بخلية: password → نقاط، multiline → أسطر متعددة. */
