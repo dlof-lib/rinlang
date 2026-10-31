@@ -1,0 +1,40 @@
+<!-- عرض فيديو من الإنترنت: من رابط مباشر أو من استجابة API.
+     <VideoPlayer src={cell} …> أو <Video video_url="…"> يدعم: YouTube (watch/shorts/youtu.be/embed/live) · Vimeo · Dailymotion ·
+     ملفات mp4/webm/mov/mkv · HLS (.m3u8) · أي صفحة تضمين. خيارات: autoplay loop muted controls start poster title.
+     من API: let r = httpGet("https://api.example.com/videos/1"); src = indsin.videoUrl(r.json, "data.video.url");
+     المصغّرة: تظهر صورة ثابتة (poster=/thumbnail= أو تلقائية لـ YouTube/Dailymotion) وزر تشغيل، واللمس يبدأ التشغيل (facade=false يحمّل المشغّل فوراً).
+     مصغّرة متحركة: animated=true (لقطات YouTube 1/2/3 أو لقطات من الملف المباشر) أو preview="https://…/p.gif|webp|mp4" مقطع قصير صامت.
+     (بلا path يبحث تلقائياً في المفاتيح المعروفة: video_url, stream_url, hls, mp4, embed_url, url …) -->
+<Palette seed=#E17055 dark />
+
+<warp src={"https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=43"} />
+<warp provider={"youtube"} />
+<warp note={""} />
+
+<Fun#useYoutube>   src = "https://youtu.be/aqz-KE-bpKQ"; provider = indsin.videoProvider(src); note = ""; </Fun>
+<Fun#useVimeo>     src = "https://vimeo.com/76979871"; provider = indsin.videoProvider(src); note = ""; </Fun>
+<Fun#useDirect>    src = "https://example.com/media/clip.mp4"; provider = indsin.videoProvider(src); note = ""; </Fun>
+<Fun#useHls>       src = "https://example.com/live/stream.m3u8"; provider = indsin.videoProvider(src); note = ""; </Fun>
+<Fun#useApi>
+  // استجابة API (محاكاة هنا؛ الحقيقي: httpGet(url).json)
+  let data = json.parse("{\"data\":{\"items\":[{\"title\":\"Demo\",\"video\":{\"url\":\"https://vimeo.com/76979871\"}}]}}");
+  src = indsin.videoUrl(data, "data.items[0].video.url");
+  provider = indsin.videoProvider(src);
+  note = "Loaded from API: " + indsin.videoInfo(src)["label"];
+</Fun>
+
+<Screen#app size=phone padding=16 gap=10>
+  <Header title="Video" subtitle="From a link or an API" />
+  <VideoPlayer src={src} title="Now playing" caption={note} animated=true />
+  <Text size=small color=text_muted>Provider: {provider}</Text>
+  <Row gap=6 width=full>
+    <Button#b1 variant=outline onTap={useYoutube}>YouTube</Button>
+    <Button#b2 variant=outline onTap={useVimeo}>Vimeo</Button>
+    <Button#b3 variant=outline onTap={useDirect}>MP4</Button>
+  </Row>
+  <Row gap=6 width=full>
+    <Button#b4 variant=outline onTap={useHls}>HLS</Button>
+    <Button#b5 onTap={useApi}>From API</Button>
+  </Row>
+  <Input#u width=full value={src} placeholder="Paste a video URL" type=url />
+</Screen>
