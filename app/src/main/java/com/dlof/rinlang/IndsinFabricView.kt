@@ -2237,6 +2237,7 @@ class IndsinFabricView @JvmOverloads constructor(
             releaseMediaOnly()
             errorView.visibility = View.GONE; spinner.visibility = View.VISIBLE
             val autoplay = mediaFlag(a, "autoplay", false)
+            val mediaUrl: String = url
             val view: View = if (provider == "direct") {
                 VideoView(context).apply {
                     if (mediaFlag(a, "controls", true)) {
@@ -2266,7 +2267,7 @@ class IndsinFabricView @JvmOverloads constructor(
                         }
                     }
                     setBackgroundColor(Color.BLACK)
-                    loadUrl(videoEmbedUrl(url, a))
+                    loadUrl(videoEmbedUrl(mediaUrl, a))
                 }
             }
             media = view
