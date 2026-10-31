@@ -323,11 +323,13 @@ RIN_API char* rin_indsin_session_render_json(void* sessionPtr) {
 // Effective `type=` of an Input-like strand (search kind => "search", "phone" => "tel", default "text").
 static std::string fieldTypeOf(const indsin::StrandPtr& s) {
     std::string t = s->attrStr("type", "");
-    if (t.empty()) t = s->kind == indsin::StrandKind::SEARCH ? "search" : "text";
+    if (t.empty()) t = s->kind == indsin::StrandKind::SEARCH ? "search" : s->kind == indsin::StrandKind::DATE ? "date"
+                     : s->kind == indsin::StrandKind::TIME ? "time" : s->kind == indsin::StrandKind::CODE_EDITOR ? "code" : "text";
     return t == "phone" ? "tel" : t;
 }
 static bool isFieldKind(const indsin::StrandPtr& s) {
-    return s->kind == indsin::StrandKind::INPUT || s->kind == indsin::StrandKind::TEXTAREA || s->kind == indsin::StrandKind::SEARCH;
+    return s->kind == indsin::StrandKind::INPUT || s->kind == indsin::StrandKind::TEXTAREA || s->kind == indsin::StrandKind::SEARCH ||
+           s->kind == indsin::StrandKind::DATE || s->kind == indsin::StrandKind::TIME || s->kind == indsin::StrandKind::CODE_EDITOR;
 }
 static std::string boundCellOf(const indsin::StrandPtr& s) {
     for (auto& a : s->attrs)
@@ -355,14 +357,16 @@ static std::string focusInfoAt(IndsinSession* sess, double x, double y) {
     auto b = [&](bool v) { return v ? "true" : "false"; };
     std::ostringstream o;
     o << "{\"id\":" << s->id << ",\"name\":\"" << indsin::jsonEscape(s->name) << "\""
-      << ",\"kind\":\"" << (s->kind == indsin::StrandKind::TEXTAREA ? "textarea" : "input") << "\""
+      << ",\"kind\":\"" << (s->kind == indsin::StrandKind::TEXTAREA ? "textarea" : s->kind == indsin::StrandKind::CODE_EDITOR ? "code" : "input") << "\""
       << ",\"bind\":\"" << indsin::jsonEscape(boundCellOf(s)) << "\""
       << ",\"value\":\"" << indsin::jsonEscape(s->attrStr("value", "")) << "\""
       << ",\"placeholder\":\"" << indsin::jsonEscape(s->attrStr("placeholder", "")) << "\""
       << ",\"inputType\":\"" << indsin::jsonEscape(type) << "\""
       << ",\"maxLength\":" << (int)s->attrNum("maxlength", 0)
       << ",\"secure\":" << b(s->attrStr("secure", "") == "true" || type == "password")
-      << ",\"multiline\":" << b(s->kind == indsin::StrandKind::TEXTAREA);
+      << ",\"multiline\":" << b(s->kind == indsin::StrandKind::TEXTAREA || s->kind == indsin::StrandKind::CODE_EDITOR)
+      << ",\"language\":\"" << indsin::jsonEscape(s->attrStr("language", s->attrStr("lang", ""))) << "\"";
+    o << ",\"rect\":[" << s->geometry.x << "," << s->geometry.y << "," << s->geometry.w << "," << s->geometry.h << "]";
     if (s->attr("min")) o << ",\"min\":" << s->attrNum("min", 0);
     if (s->attr("max")) o << ",\"max\":" << s->attrNum("max", 0);
     o << "}";
@@ -575,10 +579,7 @@ RIN_API char* rin_indsin_session_update_source(void* sessionPtr, const char* new
     std::string src = newSource ? newSource : "";
     SessionRinHost rinHost(sess);
 
-    // <<each list as it>> يعتمد عدد عناصر الواجهة على بيانات Rin (let) التي لا يعيد المسار الساخن تشغيلها،
-    // فأي تعديل لمصدر فيه each يمرّ بالمسار البارد الكامل (مفسّر جديد؛ حالة warp تُبذَر من جديد).
-    const bool needCold = !sess->state.ok || indsin::tags::usesEach(src);
-    if (needCold) {
+    if (!sess->state.ok) {
         // Never had a good Fabric to diff against -- just retry the cold pipeline outright, still
         // through the session's own persistent Interpreter (not a throwaway one) so state stays
         // consistent with whatever taps run next -- see rin_indsin_session_create's comment.
