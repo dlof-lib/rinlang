@@ -846,6 +846,7 @@ JavaVM* g_javaVm = nullptr;
 jclass g_httpBridgeClass = nullptr;          // global ref لصف Kotlin com.dlof.rinlang.RinHttpBridge
 jmethodID g_httpBridgeRequestMethod = nullptr; // MethodID لـ RinHttpBridge.request(...) الثابتة (static)
 jmethodID g_httpBridgeRequestBinaryGetMethod = nullptr; // MethodID لـ RinHttpBridge.requestBinaryGet(...) (fetchImage/fetchIcon)
+jmethodID g_httpBridgeDownloadMethod = nullptr;         // MethodID لـ RinHttpBridge.downloadToFile(...) (make.api.download المتدفق)
 JNIEnv* attachEnv(bool* didAttach);
 std::string jstringToStd(JNIEnv* env, jstring s);
 jobjectArray buildStringArray(JNIEnv* env, const std::vector<std::string>& items);
@@ -955,6 +956,13 @@ bool ensureHttpBridgeAttached(JNIEnv* env) {
     g_httpBridgeRequestBinaryGetMethod = env->GetStaticMethodID(
         g_httpBridgeClass, "requestBinaryGet", "(Ljava/lang/String;I)[Ljava/lang/Object;");
     if (g_httpBridgeRequestBinaryGetMethod == nullptr) env->ExceptionClear();
+
+    // downloadToFile(...) اختياري أيضاً (make.api.download للملفات الكبيرة): غيابه يعني أن RinHttpBridge.kt أقدم،
+    // فيعود make.api.download إلى performBinaryGet (الجسم كاملاً في الذاكرة) بدل أي انهيار.
+    g_httpBridgeDownloadMethod = env->GetStaticMethodID(
+        g_httpBridgeClass, "downloadToFile",
+        "(Ljava/lang/String;Ljava/lang/String;[Ljava/lang/String;[Ljava/lang/String;IIJZ)[Ljava/lang/String;");
+    if (g_httpBridgeDownloadMethod == nullptr) env->ExceptionClear();
     return true;
 }
 
@@ -1129,6 +1137,63 @@ rin::http::HttpResult callKotlinHttpBridgeBinaryGet(const std::string& url, int 
     if (jResult) env->DeleteLocalRef(jResult);
     env->DeleteLocalRef(jUrl);
 
+    if (didAttach) g_javaVm->DetachCurrentThread();
+    return result;
+}
+
+// تنزيل متدفّق إلى ملف: يستدعي RinHttpBridge.downloadToFile(...) في Kotlin (الجسم يُكتب هناك مباشرة إلى القرص)،
+// ويحوّل String[8] المُعادة إلى rin::http::DownloadResult (ترتيب الحقول موثَّق في RinHttpBridge.kt).
+rin::http::DownloadResult callKotlinHttpBridgeDownload(const rin::http::DownloadRequest& req) {
+    rin::http::DownloadResult result;
+    if (g_httpBridgeClass == nullptr || g_httpBridgeDownloadMethod == nullptr) {
+        result.handled = false;
+        result.error = "RinHttpBridge.downloadToFile غير موجود في هذا البناء";
+        return result;
+    }
+    bool didAttach = false;
+    JNIEnv* env = attachEnv(&didAttach);
+    if (env == nullptr) {
+        result.error = "تعذّر الوصول إلى JNIEnv لتنفيذ التنزيل";
+        return result;
+    }
+    std::vector<std::string> keys, values;
+    for (auto& h : req.headers) { keys.push_back(h.first); values.push_back(h.second); }
+    jstring jUrl = rin_jni::newJString(env, req.url);
+    jstring jDest = rin_jni::newJString(env, req.destPath);
+    jobjectArray jKeys = buildStringArray(env, keys);
+    jobjectArray jValues = buildStringArray(env, values);
+
+    auto jResult = static_cast<jobjectArray>(env->CallStaticObjectMethod(
+        g_httpBridgeClass, g_httpBridgeDownloadMethod, jUrl, jDest, jKeys, jValues,
+        (jint)req.idleTimeoutMs, (jint)req.totalTimeoutMs, (jlong)req.maxBytes, (jboolean)(req.resume ? JNI_TRUE : JNI_FALSE)));
+
+    if (env->ExceptionCheck()) {
+        env->ExceptionDescribe();
+        env->ExceptionClear();
+        result.error = "استثناء غير متوقَّع في RinHttpBridge.downloadToFile (انظر logcat)";
+    } else if (jResult == nullptr || env->GetArrayLength(jResult) < 8) {
+        result.error = "رد غير صالح من RinHttpBridge.downloadToFile";
+    } else {
+        auto at = [&](jsize i) {
+            auto js = (jstring)env->GetObjectArrayElement(jResult, i);
+            std::string v = jstringToStd(env, js);
+            if (js) env->DeleteLocalRef(js);
+            return v;
+        };
+        result.ok = (at(0) == "1");
+        try { result.status = std::stol(at(1)); } catch (...) { result.status = 0; }
+        result.error = at(2);
+        try { result.bytes = std::stoll(at(3)); } catch (...) { result.bytes = 0; }
+        result.resumed = (at(4) == "1");
+        result.contentType = at(5);
+        result.contentDisposition = at(6);
+        result.finalUrl = at(7);
+    }
+    if (jResult) env->DeleteLocalRef(jResult);
+    env->DeleteLocalRef(jUrl);
+    env->DeleteLocalRef(jDest);
+    env->DeleteLocalRef(jKeys);
+    env->DeleteLocalRef(jValues);
     if (didAttach) g_javaVm->DetachCurrentThread();
     return result;
 }
@@ -1443,6 +1508,9 @@ extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* /* reserved */) {
         rin::http::setAndroidBridge(callKotlinHttpBridge);
         if (g_httpBridgeRequestBinaryGetMethod != nullptr) {
             rin::http::setAndroidBinaryGetBridge(callKotlinHttpBridgeBinaryGet);
+        }
+        if (g_httpBridgeDownloadMethod != nullptr) {
+            rin::http::setAndroidDownloadBridge(callKotlinHttpBridgeDownload);
         }
     }
     if (ensureArtifactBridgeAttached(env)) {
