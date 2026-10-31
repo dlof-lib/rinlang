@@ -83,6 +83,17 @@
             android:textSize="12sp" />
 
         <ImageButton
+            android:id="@+id/btnIndsinInline"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:layout_marginStart="4dp"
+            android:background="@drawable/bg_toolbar_btn_ghost"
+            android:src="@drawable/ic_keyboard"
+            android:scaleType="center"
+            android:contentDescription="@string/indsin_inline_toggle"
+            android:padding="8dp" />
+
+        <ImageButton
             android:id="@+id/btnIndsinGrid"
             android:layout_width="34dp"
             android:layout_height="34dp"
