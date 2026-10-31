@@ -269,6 +269,25 @@ class IndsinLivePanel(
     private fun showInputDialog(focus: JSONObject) {
         val bind = focus.optString("bind")
         if (bind.isEmpty()) return
+        when (focus.optString("inputType")) {
+            "date" -> {
+                val cal = java.util.Calendar.getInstance()
+                Regex("^(\\d{4})-(\\d{2})-(\\d{2})$").find(focus.optString("value"))?.let {
+                    cal.set(it.groupValues[1].toInt(), it.groupValues[2].toInt() - 1, it.groupValues[3].toInt()) }
+                android.app.DatePickerDialog(activity, { _, y, m, d ->
+                    IndsinPreviewManager.setInput(bind, String.format(java.util.Locale.US, "%04d-%02d-%02d", y, m + 1, d))
+                }, cal.get(java.util.Calendar.YEAR), cal.get(java.util.Calendar.MONTH), cal.get(java.util.Calendar.DAY_OF_MONTH)).show()
+                return
+            }
+            "time" -> {
+                var h = 9; var mi = 0
+                Regex("^(\\d{2}):(\\d{2})").find(focus.optString("value"))?.let { h = it.groupValues[1].toInt(); mi = it.groupValues[2].toInt() }
+                android.app.TimePickerDialog(activity, { _, hh, mm ->
+                    IndsinPreviewManager.setInput(bind, String.format(java.util.Locale.US, "%02d:%02d", hh, mm))
+                }, h, mi, true).show()
+                return
+            }
+        }
         val edit = android.widget.EditText(activity)
         val secure = focus.optBoolean("secure")
         val multiline = focus.optBoolean("multiline")
@@ -278,9 +297,14 @@ class IndsinLivePanel(
             secure -> android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
             multiline -> android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
             focus.optString("inputType") == "email" -> android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
-            focus.optString("inputType") == "number" -> android.text.InputType.TYPE_CLASS_NUMBER
+            focus.optString("inputType") == "number" ->
+                android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL or android.text.InputType.TYPE_NUMBER_FLAG_SIGNED
+            focus.optString("inputType") == "tel" -> android.text.InputType.TYPE_CLASS_PHONE
+            focus.optString("inputType") == "url" -> android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
             else -> android.text.InputType.TYPE_CLASS_TEXT
         }
+        val maxLen = focus.optInt("maxLength", 0)
+        if (maxLen > 0) edit.filters = arrayOf<android.text.InputFilter>(android.text.InputFilter.LengthFilter(maxLen))
         edit.setSelection(edit.text.length)
         AlertDialog.Builder(activity)
             .setView(edit)
