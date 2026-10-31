@@ -72,6 +72,19 @@ enum class HighlightKind {
     Bracket0 = 33,     // أقواس ( ) [ ] { } بالتناوب حسب العمق (3 ألوان) — المستوى 0 و3 و6..
     Bracket1 = 34,     // المستوى 1 و4..
     Bracket2 = 35,     // المستوى 2 و5..
+    // --- مستندات indsin (36..47) — تطابق HighlightKind في RinSyntax.kt حرفياً (انظر rin_indsin_highlight.h) ---
+    IxBracket = 36,    // < </ > />
+    IxTag = 37,        // مكوّن معروف: Column Button Text …
+    IxTagCustom = 38,  // مكوّن مخصّص/غير معروف
+    IxId = 39,         // #id بعد اسم الوسم، واسم العنصر في @view.Kind=name
+    IxAttr = 40,       // اسم سمة
+    IxEvent = 41,      // معالج حدث onTap/onLongPress/…
+    IxToken = 42,      // قيمة نظام التصميم: primary spacious pill …
+    IxColor = 43,      // #RRGGBB
+    IxLength = 44,     // 16 / 120px / 250ms / 50%
+    IxState = 45,      // خلية warp في أي موضع
+    IxBrace = 46,      // { } و << >> حدّا التعبير المضمَّن
+    IxStruct = 47,     // @view .end/view ووسوم التوجيه Define/Slot/If/Fun/Rin …
 };
 
 // لغة التلوين/التشخيص للمستند الحالي. الافتراضي Rin (السلوك القديم لكل الامتدادات)؛ فقط
@@ -228,6 +241,7 @@ public:
 
 private:
     EditorLanguage language_ = EditorLanguage::Rin;
+    bool indsinExt_ = false; // الملف بامتداد .indsin: يُلوَّن بمُلوِّن indsin (rin_indsin_highlight.h)
     std::vector<std::string> lines_;
     Position cursor_;
     Position selAnchor_;
