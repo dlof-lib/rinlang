@@ -44,6 +44,19 @@ object HighlightKind {
     const val BRACKET0 = 33      // أقواس بالتناوب حسب العمق
     const val BRACKET1 = 34
     const val BRACKET2 = 35
+    // --- مستندات indsin (36..47) — تطابق rinedit::HighlightKind في rin_editor_engine.h حرفياً ---
+    const val IX_BRACKET = 36    // < </ > />
+    const val IX_TAG = 37        // مكوّن معروف: Column Button Text …
+    const val IX_TAG_CUSTOM = 38 // مكوّن مخصّص / غير معروف
+    const val IX_ID = 39         // #id واسم العنصر في @view.Kind=name
+    const val IX_ATTR = 40       // اسم سمة
+    const val IX_EVENT = 41      // معالج حدث onTap/onLongPress/…
+    const val IX_TOKEN = 42      // قيمة نظام التصميم: primary spacious pill …
+    const val IX_COLOR = 43      // #RRGGBB
+    const val IX_LENGTH = 44     // 16 / 120px / 250ms / 50%
+    const val IX_STATE = 45      // خلية warp في أي موضع تُقرأ فيه
+    const val IX_BRACE = 46      // { } و << >>
+    const val IX_STRUCT = 47     // @view .end/view ووسوم التوجيه Define/Slot/If/Fun/Rin
 }
 
 enum class SyntaxLanguage {
