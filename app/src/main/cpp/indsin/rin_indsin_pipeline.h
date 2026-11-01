@@ -271,6 +271,7 @@ inline PipelineResult runColdPipelineWithRuntime(const std::string& source, rin:
         applyBannerConveniences(result.fabric, result.warp, result.subs);
         applyObjectConveniences(result.fabric); // §21: source= -> title + field rows
         applyExtendedUiConveniences(result.fabric, result.warp, result.subs); // UI/UX Library Expansion: Tag/Breadcrumb/Pagination/Steps
+        applyImageSourceConveniences(result.fabric); // Image Sources: src/srcset/base64/dataUri/... -> one renderable src
         result.ok = true;
     } catch (rin::RinError& e) {
         result.ok = false; result.errorMessage = e.message; result.errorLine = e.line;
@@ -417,6 +418,7 @@ inline PipelineResult runColdPipelineForContainerWithRuntime(const std::string& 
         applyBannerConveniences(result.fabric, result.warp, result.subs);
         applyObjectConveniences(result.fabric); // §21: source= -> title + field rows
         applyExtendedUiConveniences(result.fabric, result.warp, result.subs); // UI/UX Library Expansion: Tag/Breadcrumb/Pagination/Steps
+        applyImageSourceConveniences(result.fabric); // Image Sources: src/srcset/base64/dataUri/... -> one renderable src
         result.ok = true;
     } catch (rin::RinError& e) {
         result.ok = false; result.errorMessage = e.message; result.errorLine = e.line;
