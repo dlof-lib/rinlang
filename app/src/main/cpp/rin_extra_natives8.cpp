@@ -58,7 +58,7 @@ static const std::vector<TokenType>& allTypes8() {
         TokenType::END, TokenType::PIPE_KW,
         TokenType::PLUS, TokenType::MINUS, TokenType::STAR, TokenType::SLASH, TokenType::PERCENT,
         TokenType::EQUAL, TokenType::EQUAL_EQUAL, TokenType::BANG, TokenType::BANG_EQUAL,
-        TokenType::NOT_SAME, TokenType::COPY_OF,
+        TokenType::NOT_SAME, TokenType::COPY_OF, TokenType::SAME_SHAPE,
         TokenType::LESS, TokenType::LESS_EQUAL, TokenType::GREATER, TokenType::GREATER_EQUAL,
         TokenType::LPAREN, TokenType::RPAREN, TokenType::LBRACE, TokenType::RBRACE,
         TokenType::LBRACKET, TokenType::RBRACKET, TokenType::COLON, TokenType::COMMA, TokenType::SEMICOLON,
@@ -76,7 +76,7 @@ static const char* categoryOf8(TokenType t) {
             return "identifier";
         case TokenType::PLUS: case TokenType::MINUS: case TokenType::STAR: case TokenType::SLASH:
         case TokenType::PERCENT: case TokenType::EQUAL: case TokenType::EQUAL_EQUAL: case TokenType::BANG:
-        case TokenType::BANG_EQUAL: case TokenType::NOT_SAME: case TokenType::COPY_OF: case TokenType::LESS:
+        case TokenType::BANG_EQUAL: case TokenType::NOT_SAME: case TokenType::COPY_OF: case TokenType::SAME_SHAPE: case TokenType::LESS:
         case TokenType::LESS_EQUAL: case TokenType::GREATER: case TokenType::GREATER_EQUAL:
         case TokenType::PIPE: case TokenType::QUESTION:
             return "operator";
