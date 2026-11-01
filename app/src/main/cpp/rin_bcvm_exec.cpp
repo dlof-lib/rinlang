@@ -242,6 +242,7 @@ Value Interpreter::vmBinary(int opi, Value& left, Value& right, int line) {
         return Value::boolean_(!valuesEqual(left, right));
     case Op::NotSame: return Value::boolean_(!sameReference(left, right));
     case Op::CopyOf:  return Value::boolean_(valuesEqual(left, right) && !sameReference(left, right));
+    case Op::SameShape: return Value::boolean_(sameShape(left, right));
     default: break;
     }
     return Value::nil();
@@ -545,7 +546,7 @@ Interpreter::Flow Interpreter::vmLoop(vm::RunState& rs, Value& ret) {
             stack.pop_back(); stack.back() = std::move(res);
             break;
         }
-        case Op::Div: case Op::Mod: case Op::NotSame: case Op::CopyOf: {
+        case Op::Div: case Op::Mod: case Op::NotSame: case Op::CopyOf: case Op::SameShape: {
             f->pc = pc;
             Value& r = stack[stack.size() - 1]; Value& l = stack[stack.size() - 2];
             Value res = vmBinary(static_cast<int>(in.op), l, r, in.a);
