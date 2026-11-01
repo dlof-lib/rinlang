@@ -113,6 +113,13 @@ class IndsinFabricView @JvmOverloads constructor(
         const val TIMELINE = "Timeline"; const val TIMELINEITEM = "TimelineItem"
         const val BREADCRUMB = "Breadcrumb"; const val PAGINATION = "Pagination"
         const val DONUT_CHART = "DonutChart"
+        // Collapsible lists (rin_indsin_collapsible.h): structural containers whose Row/Column/Text
+        // children are synthesized natively, so they draw like plain Columns (transparent, border only
+        // when the source asked for one) and their children draw themselves.
+        const val ACCORDION = "Accordion"; const val ACCORDION_ITEM = "AccordionItem"
+        const val EXPANDABLE_LIST = "ExpandableList"; const val TREE_VIEW = "TreeView"
+        const val TREE_NODE = "TreeNode"; const val NESTED_LIST = "NestedList"; const val NESTED_ITEM = "NestedItem"
+        val COLLAPSIBLE = setOf(ACCORDION, ACCORDION_ITEM, EXPANDABLE_LIST, TREE_VIEW, TREE_NODE, NESTED_LIST, NESTED_ITEM)
     }
 
     private val defaultBar = Color.rgb(30, 31, 40)
@@ -1061,7 +1068,7 @@ class IndsinFabricView @JvmOverloads constructor(
             else -> {
                 // Plain layout containers are transparent unless given an explicit fill (mirrors
                 // indsin::Dye::paintIntoImpl) so the canvas color shows through; old engines (no canvas info) keep the fill.
-                val plain = kind == Kind.COLUMN || kind == Kind.ROW || kind == Kind.STACK
+                val plain = kind == Kind.COLUMN || kind == Kind.ROW || kind == Kind.STACK || kind in Kind.COLLAPSIBLE
                 val explicitFill = attrs.has("bg") || attrs.has("color") || attrs.has("background") || attrs.has("tone")
                 val fill = if (plain && !explicitFill && canvasColor != null) Color.TRANSPARENT else (resolved ?: defaultContainer)
                 drawBox(canvas, rect, attrs, fill, defaultRadius = 0f, borderColorFallback = resolvedBorderColor(node) ?: Color.WHITE) // Column/Row/Stack/Box/Grid/Wrap/Custom
@@ -2601,6 +2608,23 @@ class IndsinFabricView @JvmOverloads constructor(
         val cacheKey = "$src|$targetW|$targetH"
         bitmapCache.get(cacheKey)?.let { return it }
         if (cacheKey in missingSrc) return null
+
+        // Image Sources: data:image/…;base64,… (also what base64= is normalized to by the engine) decodes in memory.
+        if (src.startsWith("data:", ignoreCase = true)) {
+            return try {
+                val comma = src.indexOf(',')
+                if (comma < 0 || !src.substring(0, comma).contains(";base64", ignoreCase = true)) { missingSrc.add(cacheKey); return null }
+                val bytes = android.util.Base64.decode(src.substring(comma + 1), android.util.Base64.DEFAULT)
+                val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+                var sample = 1
+                while (bounds.outWidth / (sample * 2) >= targetW && bounds.outHeight / (sample * 2) >= targetH) sample *= 2
+                val bmp = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size,
+                    android.graphics.BitmapFactory.Options().apply { inSampleSize = sample })
+                if (bmp != null) bitmapCache.put(cacheKey, bmp) else missingSrc.add(cacheKey)
+                bmp
+            } catch (t: Throwable) { missingSrc.add(cacheKey); null }
+        }
 
         val file: java.io.File?
         if (isRemoteUrl(src)) {
