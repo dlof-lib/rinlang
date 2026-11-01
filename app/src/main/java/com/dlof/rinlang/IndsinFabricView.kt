@@ -1095,7 +1095,7 @@ class IndsinFabricView @JvmOverloads constructor(
         drawScrollBars(canvas, rect, attrs, node)
     }
 
-    /** ScrollBar: مؤشر رفيع عندما يتجاوز المحتوى نافذة حاوية التمرير (يكتب المحرك scrollContent*/scrollOff* في JSON). */
+    /** ScrollBar: مؤشر رفيع عندما يتجاوز المحتوى نافذة حاوية التمرير (يكتب المحرك الحقول scrollContentW وscrollContentH وscrollOffX وscrollOffY في JSON). */
     private fun drawScrollBars(canvas: Canvas, rect: RectF, attrs: JSONObject, node: JSONObject) {
         val bar = attrs.optString("scroll_bar", "auto").trim().lowercase()
         if (bar == "hidden" || bar == "none" || bar == "false") return
@@ -2959,3 +2959,4 @@ class IndsinFabricView @JvmOverloads constructor(
         return try { Color.parseColor(hex) } catch (t: Throwable) { null }
     }
 }
+
