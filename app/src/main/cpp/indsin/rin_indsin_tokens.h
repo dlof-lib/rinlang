@@ -617,7 +617,19 @@ inline std::string accessibleName(const Strand& s) {
         std::string v = s.attrStr("value", "");
         return !v.empty() ? v : s.attrStr("placeholder", "");
     }
-    return s.attrStr("text", ""); // covers Link (text=) and every plain leaf as before
+    // AltText: صور/أيقونات/أفاتار/فيديو تُسمّى بـ alt= (decorative=true => بلا اسم). sr_text= نص للقارئات فقط.
+    if (s.kind == StrandKind::IMAGE || s.kind == StrandKind::ICON || s.kind == StrandKind::AVATAR || s.kind == StrandKind::VIDEO) {
+        if (s.attrStr("decorative", "false") == "true") return "";
+        std::string alt = s.attrStr("alt", "");
+        if (!alt.empty()) return alt;
+        std::string t = s.attrStr("text", "");
+        if (!t.empty()) return t;
+        std::string sr = s.attrStr("sr_text", "");
+        return !sr.empty() ? sr : s.attrStr("title", "");
+    }
+    std::string t = s.attrStr("text", ""); // covers Link (text=) and every plain leaf as before
+    if (t.empty()) { t = s.attrStr("sr_text", ""); if (t.empty()) t = s.attrStr("title", ""); }
+    return t;
 }
 
 // ---- Sizing modes (§5/§6): semantic replacements for scattering width=/height= everywhere --
