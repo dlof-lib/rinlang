@@ -132,6 +132,7 @@ private:
             case TokenType::BANG_EQUAL: return Op::Ne;
             case TokenType::NOT_SAME: return Op::NotSame;
             case TokenType::COPY_OF: return Op::CopyOf;
+            case TokenType::SAME_SHAPE: return Op::SameShape;
             default: ok = false; return Op::Nop;
         }
     }
