@@ -9,6 +9,8 @@
 #include "rin_indsin_system.h"     // Design System v2: tokens/themes/palette
 #include "rin_indsin_query.h"      // Fabric introspection (stats/outline/catalog)
 #include "rin_indsin_audit.h"      // accessibility + layout audit
+#include "rin_indsin_textfx.h"     // TextAnimation/TypeWriter/TextReveal/…
+#include "rin_indsin_a11y.h"       // AriaLabel/AltText/ScreenReader/ReadingOrder/…
 #include "rin_indsin_responsive.h" // <key>_<breakpoint> attribute overrides
 #include <cstring>
 #include <cstdlib>
@@ -56,6 +58,8 @@ struct IndsinSession {
     // (it only ever compares two of its own readings), so there's no wall-clock/timezone concern.
     std::chrono::steady_clock::time_point clockStart = std::chrono::steady_clock::now();
     indsin::EffectRuntime effectRuntime;
+    indsin::TextFxRuntime textFxRuntime;          // حركة النص (rin_indsin_textfx.h)
+    indsin::a11y::LiveRegionTracker liveTracker;  // إعلانات aria_live عند تغيّر النص
     bool animating = false; // set by relayout() below; read back into every JSON envelope
 };
 
@@ -82,6 +86,7 @@ indsin::DrawList paintSessionFrame(IndsinSession* sess, int& W, int& H) {
     if (H < sess->canvasMinH) H = sess->canvasMinH;
     indsin::Dye dye;
     indsin::DrawList list = dye.paintFrame(sess->state.fabric, sess->overlayLayer, (double)W, (double)H, sess->hostBg);
+    indsin::applyTextFxToDrawList(list, sess->textFxRuntime);  // حركة النص أولاً (فتحمل التأثيرات العامة النص معها)
     indsin::applyEffectsToDrawList(list, sess->effectRuntime); // غير مدمِّر: الإطار الحالي من relayout()
     return list;
 }
@@ -136,6 +141,7 @@ void relayout(IndsinSession* sess) {
     const double now = nowMsFor(sess);
     sess->effectRuntime.processPending(sess->state.fabric, now); // أوامر Rin: indsin.playEffect / effect()
     sess->animating = sess->effectRuntime.update(sess->state.fabric, now);
+    if (sess->textFxRuntime.update(sess->state.fabric, now)) sess->animating = true; // TextFx: ما زال نص يتحرّك
 }
 void rebuildIndex(IndsinSession* sess) {
     sess->index.clear();
@@ -557,6 +563,84 @@ RIN_API int rin_indsin_effect_define(const char* name, const char* frames, const
 RIN_API char* rin_indsin_effects_json(void) {
     return dupToC("{\"effects\":" + indsin::fx::effectsJson() + ",\"error\":\"" + indsin::fx::jsonStr(indsin::effectLibrary().lastError) + "\"}");
 }
+
+// ---- Fonts / Text animation / Accessibility ----------------------------------------------------------------
+RIN_API int rin_indsin_font_load(const char* family, const char* src, const char* options) {
+    indsin::typo::FontKV kv; std::string fam = family ? family : "";
+    if (src && *src) kv.push_back({"src", src});
+    std::string o = options ? options : "", cur;
+    for (char c : o + ";") {
+        if (c == ';') {
+            size_t e = cur.find('=');
+            if (e != std::string::npos) kv.push_back({indsin::typo::trim(cur.substr(0, e)), indsin::typo::trim(cur.substr(e + 1))});
+            cur.clear();
+        } else cur += c;
+    }
+    std::string err;
+    auto& reg = indsin::typo::fontRegistry();
+    if (!reg.declare(fam, kv, err)) { reg.lastError = err; return 0; }
+    reg.lastError = err;
+    return 1;
+}
+RIN_API int rin_indsin_font_set_status(const char* family, const char* status, const char* error) {
+    return indsin::typo::fontRegistry().setStatus(family ? family : "", status ? status : "", error ? error : "") ? 1 : 0;
+}
+RIN_API char* rin_indsin_fonts_json(void) {
+    using namespace indsin::typo;
+    std::ostringstream os; os << "{\"fonts\":[";
+    bool first = true;
+    fontRegistry().each([&](const FontFace& f) {
+        os << (first ? "" : ",") << "{\"family\":\"" << jsonEsc(f.family) << "\",\"src\":[";
+        for (size_t i = 0; i < f.src.size(); i++) os << (i ? "," : "") << "{\"url\":\"" << jsonEsc(f.src[i].url) << "\",\"format\":\"" << f.src[i].format << "\",\"local\":" << (f.src[i].local ? "true" : "false") << "}";
+        os << "],\"weight\":[" << f.weightMin << "," << f.weightMax << "],\"style\":\"" << f.style << "\",\"display\":\"" << f.display
+           << "\",\"variable\":" << (f.variable ? "true" : "false") << ",\"preload\":" << (f.preload ? "true" : "false") << ",\"axes\":[";
+        for (size_t i = 0; i < f.axes.size(); i++) os << (i ? "," : "") << "{\"tag\":\"" << f.axes[i].tag << "\",\"min\":" << f.axes[i].min << ",\"max\":" << f.axes[i].max << ",\"default\":" << f.axes[i].def << "}";
+        os << "],\"fallback\":[";
+        for (size_t i = 0; i < f.fallback.size(); i++) os << (i ? "," : "") << "\"" << jsonEsc(f.fallback[i]) << "\"";
+        os << "],\"status\":\"" << statusName(f.status) << "\"";
+        if (!f.error.empty()) os << ",\"error\":\"" << jsonEsc(f.error) << "\"";
+        os << ",\"css\":\"" << jsonEsc(fontFaceCss(f)) << "\"}";
+        first = false;
+    });
+    os << "],\"generic\":[";
+    for (size_t i = 0; i < genericFonts().size(); i++) os << (i ? "," : "") << "{\"name\":\"" << genericFonts()[i].name << "\",\"stack\":\"" << jsonEsc(genericFonts()[i].stack) << "\",\"android\":\"" << genericFonts()[i].android << "\"}";
+    os << "],\"error\":\"" << jsonEsc(fontRegistry().lastError) << "\"}";
+    return dupToC(os.str());
+}
+RIN_API char* rin_indsin_session_play_text(void* sessionPtr, const char* target) {
+    auto* sess = static_cast<IndsinSession*>(sessionPtr);
+    if (!sess || !sess->state.ok) return dupToC(sessionErrorJson(sess));
+    const std::string t = target ? target : "";
+    indsin::walkFabric(sess->state.fabric, [&](const indsin::StrandPtr& s, int, const indsin::Strand*) {
+        if (t.empty() || s->name == t) sess->textFxRuntime.restart(s->id, nowMsFor(sess));
+    });
+    relayout(sess);
+    return dupToC(fabricEnvelope(sess, ",\"handled\":true"));
+}
+RIN_API void rin_indsin_session_set_reduce_motion(void* sessionPtr, int on) {
+    auto* sess = static_cast<IndsinSession*>(sessionPtr);
+    if (!sess) return;
+    sess->textFxRuntime.reduceMotion = on != 0;
+    relayout(sess);
+}
+RIN_API char* rin_indsin_session_a11y_json(void* sessionPtr) {
+    auto* sess = static_cast<IndsinSession*>(sessionPtr);
+    if (!sess || !sess->state.ok || !sess->state.fabric) return dupToC(sessionErrorJson(sess));
+    return dupToC(indsin::a11y::treeToJson(sess->state.fabric, indsin::a11y::rootLangOf(sess->state.fabric)));
+}
+RIN_API char* rin_indsin_session_screenreader(void* sessionPtr) {
+    auto* sess = static_cast<IndsinSession*>(sessionPtr);
+    if (!sess || !sess->state.ok || !sess->state.fabric) return dupToC(sessionErrorJson(sess));
+    return dupToC(indsin::a11y::screenReaderTranscript(sess->state.fabric));
+}
+RIN_API char* rin_indsin_session_announcements_json(void* sessionPtr) {
+    auto* sess = static_cast<IndsinSession*>(sessionPtr);
+    if (!sess || !sess->state.ok || !sess->state.fabric) return dupToC(sessionErrorJson(sess));
+    auto v = sess->liveTracker.update(sess->state.fabric);
+    std::ostringstream os; os << "[";
+    for (size_t i = 0; i < v.size(); i++) os << (i ? "," : "") << "{\"id\":" << v[i].id << ",\"text\":\"" << indsin::typo::jsonEsc(v[i].text) << "\",\"politeness\":\"" << v[i].politeness << "\"}";
+    os << "]"; return dupToC(os.str());
+}
 RIN_API char* rin_indsin_session_play_effect(void* sessionPtr, const char* target, const char* effect) {
     auto* sess = static_cast<IndsinSession*>(sessionPtr);
     if (!sess || !sess->state.ok) return dupToC(sessionErrorJson(sess));
@@ -652,7 +736,12 @@ RIN_API char* rin_indsin_session_export_html(void* sessionPtr) {
     int W = 0, H = 0;
     auto draw = paintSessionFrame(sess, W, H);
     indsin::CanvasInfo ci = indsin::resolveCanvas(sess->state.fabric, sess->hostBg);
-    return dupToC(indsin::drawListToHtml(draw, W, H, "indsin preview", ci.color));
+    indsin::HtmlOptions ho;
+    ho.lang = indsin::a11y::rootLangOf(sess->state.fabric);
+    if (!ho.lang.empty() && indsin::typo::isRtlLang(ho.lang)) ho.dir = "rtl";
+    ho.a11yOutline = indsin::a11y::outlineHtml(sess->state.fabric);   // مرآة دلالية للقارئات (الرسم نفسه aria-hidden)
+    ho.reduceMotion = sess->textFxRuntime.reduceMotion;
+    return dupToC(indsin::drawListToHtml(draw, W, H, "indsin preview", ci.color, &ho));
 }
 
 // Default background (host setting). "" / NULL clears it (back to the theme's `background`). Any color literal
