@@ -485,6 +485,9 @@ void Lexer::scanToken() {
         case '=':
             if (match('=')) {
                 addToken(TokenType::EQUAL_EQUAL);
+            } else if (peek() == ':' && peekNext() == ':' && (current + 2 < src.size() && src[current + 2] == '=')) {
+                advance(); advance(); advance();
+                addToken(TokenType::SAME_SHAPE); // =::=  (نفس الشكل)
             } else if (peek() == '/' && peekNext() == '=') {
                 advance(); advance();
                 addToken(TokenType::NOT_SAME);   // =/=
