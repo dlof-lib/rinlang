@@ -588,6 +588,13 @@ struct Indsin {
             // total= -> real Text/Button children -- see rin_indsin_components_ext.h), so plain
             // layoutLinear(Axis::X) already does the right thing once those children exist.
             case StrandKind::BREADCRUMB: size = layoutLinear(s, c2, Axis::X, originX, originY); break;
+            // Collapsible lists (rin_indsin_collapsible.h): every one is a plain vertical stack of the
+            // real Row/Column children the convenience pass synthesized; collapsed bodies already
+            // collapse themselves through visible=<cell>.
+            case StrandKind::ACCORDION: case StrandKind::ACCORDION_ITEM: case StrandKind::EXPANDABLE_LIST:
+            case StrandKind::TREE_VIEW: case StrandKind::TREE_NODE: case StrandKind::NESTED_LIST:
+            case StrandKind::NESTED_ITEM:
+                size = layoutLinear(s, c2, Axis::Y, originX, originY); break;
             case StrandKind::PAGINATION: size = layoutLinear(s, c2, Axis::X, originX, originY); break;
             case StrandKind::DONUT_CHART: {
                 // Square, like Spinner/Avatar -- size= (token or number), default 120 (bigger than
