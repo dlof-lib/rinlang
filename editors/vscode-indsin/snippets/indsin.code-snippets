@@ -514,5 +514,37 @@
       "\t$0",
       "<</each>>"
     ]
+  },
+  "accordion": {
+    "prefix": "<Accordion",
+    "description": "Accordion with collapsible sections",
+    "body": [
+      "<Accordion#${1:faq}>",
+      "\t<AccordionItem#${2:q1} title=\"${3:Question}\" open=true>",
+      "\t\t$0",
+      "\t</AccordionItem>",
+      "</Accordion>"
+    ]
+  },
+  "treeview": {
+    "prefix": "<TreeView",
+    "description": "Tree view from paths",
+    "body": [
+      "<TreeView#${1:files} paths=\"${2:src/main.rin, src/lib/math.rin, README.md}\" sort=true />"
+    ]
+  },
+  "nestedlist": {
+    "prefix": "<NestedList",
+    "description": "Nested list (each leading - is one level)",
+    "body": [
+      "<NestedList#${1:plan} items=\"${2:One, -Child, --Grandchild, Two}\" marker=${3|bullet,number,alpha,dash,none|} />"
+    ]
+  },
+  "expandablelist": {
+    "prefix": "<ExpandableList",
+    "description": "List that folds away or previews N rows",
+    "body": [
+      "<ExpandableList#${1:feed} title=\"${2:Title}\" items=\"${3:a;b;c;d}\" limit=${4:2} />"
+    ]
   }
 }
