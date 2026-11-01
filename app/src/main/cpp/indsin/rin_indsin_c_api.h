@@ -118,6 +118,29 @@ RIN_API char* rin_indsin_effects_json(void);
 RIN_API char* rin_indsin_session_play_effect(void* session, const char* target, const char* effect);
 RIN_API char* rin_indsin_session_stop_effect(void* session, const char* target);
 
+// ---- Fonts: CustomFont / FontLoad / FontDisplay (rin_indsin_typography.h) ----
+// تسجيل خط من المضيف: family = اسم العائلة، src = "fonts/a.woff2" أو "url(a.woff2) format(woff2), local(Arial)"،
+// options = "weight=100 900;display=swap;axes=wght 100 900;load=lazy|eager|preload;fallback=Tahoma,system".
+// يبدأ التحميل (idle → loading) ما لم يكن load=lazy. يعيد 1/0 (الخطأ في rin_indsin_fonts_json).
+RIN_API int rin_indsin_font_load(const char* family, const char* src, const char* options);
+// المضيف يبلّغ بنتيجة التحميل: status = loaded | error | loading | idle (error اختياري). يعيد 1 إن وُجد الخط.
+RIN_API int rin_indsin_font_set_status(const char* family, const char* status, const char* error);
+// {"fonts":[{family,src[],weight:[min,max],style,display,variable,axes[],status,preload,fallback[]}],"generic":[…],"error":""}
+RIN_API char* rin_indsin_fonts_json(void);
+
+// ---- Text animation / Accessibility ----
+// يعيد تشغيل حركة النص لكل عنصر باسم target من البداية، ويعيد الغلاف المعتاد.
+RIN_API char* rin_indsin_session_play_text(void* session, const char* target);
+// ReduceMotion: 1 يلغي حركة النص (يظهر النص النهائي الثابت). يبقى الإعداد حتى تغييره.
+RIN_API void  rin_indsin_session_set_reduce_motion(void* session, int on);
+// شجرة الوصول الكاملة (role/name/description/lang/dir/level/state/aria + transcript) — free بـ rin_free_string.
+RIN_API char* rin_indsin_session_a11y_json(void* session);
+// ما يقوله قارئ الشاشة بالترتيب (سطر لكل عنصر) كنص عادي.
+RIN_API char* rin_indsin_session_screenreader(void* session);
+// إعلانات المناطق الحيّة (aria_live) التي تغيّرت منذ النداء السابق: [{"id","text","politeness"}].
+RIN_API char* rin_indsin_session_announcements_json(void* session);
+
+
 // Re-parses `newSource` and diffs it against the session's existing Fabric in place (Shuttle),
 // keeping all current Warp values (so state like a tapped counter survives editing elsewhere in
 // the file). On a parse error the previous Fabric is left completely untouched (Snag containment)
