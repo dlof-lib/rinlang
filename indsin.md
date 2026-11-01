@@ -130,3 +130,12 @@ rin_indsin_preview file.rin --width 390 --png out.png --html out.html --tap 60,1
 `<<user.name>>` ربط بيانات Rin، `<<print a, b>>` طباعة، `<<run report(n)>>` استدعاء دالة Rin وعرض ما تطبعه، و`<<if>>` / `<<each list as it>>`
 لشروط وقوائم من بيانات Rin؛ وindsin يرسم الواجهة. دوال Rin الجديدة `captureOutput` / `capture` / `indsin.run`. راجع
 [docs/indsin_bridge.md](docs/indsin_bridge.md) والمثال `examples/samples/indsin_bridge.rin`.
+
+---
+## القوائم القابلة للفتح والإغلاق (جديد)
+`Accordion` و`ExpandableList` و`TreeView` و`NestedList` — تتوسّع إلى عناصر حقيقية مرتبطة بخلايا warp، مع `accordion()/expandAll()/collapseAll()`. راجع
+[docs/indsin_collapsible.md](docs/indsin_collapsible.md) والمثال `examples/samples/indsin_collapsible.rin`.
+
+---
+## مصادر الصور (جديد)
+`src`/`srcset`/URL/RemotePath/LocalPath/Base64/DataURI/Blob + `uploadImage()`/`downloadImage()` — راجع [docs/indsin_image_sources.md](docs/indsin_image_sources.md).
