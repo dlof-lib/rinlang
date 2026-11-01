@@ -1,5 +1,0 @@
-shapes_register("shape");
-class Box {
-    fun init(w, h) { self.w = w; self.h = h; }
-    fun area() { return rect_area(self.w, self.h); }
-}

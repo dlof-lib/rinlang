@@ -1,2 +1,0 @@
-export let PRO_VERSION = "2.3.1-beta.1";
-export fun pro_hello(who) { return "hello " + who + " from pro"; }

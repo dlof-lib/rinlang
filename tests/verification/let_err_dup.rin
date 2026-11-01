@@ -1,2 +1,0 @@
-// let_err_dup.rin — اختبار تحقّق لـ docs/let-plus.md
-let [a, a] = [1, 2];

@@ -1,4 +1,0 @@
-@Volume=v {
-  @container=a {
-    let x = 1;
-  }

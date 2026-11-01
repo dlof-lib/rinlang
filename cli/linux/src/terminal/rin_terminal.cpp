@@ -24,6 +24,7 @@
 #include <chrono>
 #include <cmath>
 #include <csignal>
+#include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -1680,6 +1681,42 @@ bool parseIndsinArgs(const std::vector<std::string>& args, IndsinArgs& o, std::s
     return true;
 }
 
+// هل المصدر واجهة indsin؟ يدعم الصيغتين: `@view.X=name` والوسوم `<Column#root>…</Column>`.
+// (كان الكشف يبحث عن "@view" فقط، فكانت ملفات الوسوم تُمرَّر إلى lexer لغة Rin العادي
+//  فيفشل عند أول `<!--` أو `<Tag>` بخطأ E0011 unexpected character.)
+bool looksLikeIndsinSource(const std::string& src) {
+    if (src.find("@view") != std::string::npos) return true;
+    size_t i = 0, n = src.size();
+    int tags = 0;
+    while (i < n) {
+        if (src.compare(i, 4, "<!--") == 0) {                       // تعليق HTML: تخطَّه كلّه
+            size_t e = src.find("-->", i + 4);
+            if (e == std::string::npos) break;
+            i = e + 3; continue;
+        }
+        if (src[i] == '<' && i + 1 < n) {
+            // الوسم الحقيقي يبدأ سطره (بعد مسافات فقط) — يتجنّب الالتباس مع `a <Max` أو نصوص داخل سلاسل.
+            size_t b = i;
+            while (b > 0 && (src[b - 1] == ' ' || src[b - 1] == '\t')) --b;
+            if (b > 0 && src[b - 1] != '\n') { ++i; continue; }
+            unsigned char c = (unsigned char)src[i + 1];
+            if (c >= 'A' && c <= 'Z') {                              // <Screen / <Column#root / <Text …
+                size_t j = i + 1;
+                while (j < n && (std::isalnum((unsigned char)src[j]) || src[j] == '_')) ++j;
+                std::string name = src.substr(i + 1, j - i - 1);
+                if (name == "Screen" || name == "Column" || name == "Row" || name == "Card" ||
+                    name == "Text" || name == "Button" || name == "Palette" || name == "Stack" ||
+                    name == "Section" || name == "Accordion" || name == "TreeView") ++tags;
+                if (tags >= 1) return true;
+            } else if (src.compare(i, 6, "<warp ") == 0 || src.compare(i, 5, "<Rin>") == 0) {
+                return true;
+            }
+        }
+        ++i;
+    }
+    return false;
+}
+
 long long fileMtimeNs(const std::string& p) {
     struct stat st;
     if (::stat(p.c_str(), &st) != 0) return 0;
@@ -1717,10 +1754,15 @@ int runIndsin(const IndsinArgs& a, const Style& st, bool utf8) {
     void* sess = rin_indsin_session_create(src.c_str(), W);
     if (!sess) { std::fprintf(stderr, "indsin: session create failed\n"); return 1; }
     auto fail = [&](const std::string& json) -> bool {
-        if (json.compare(0, 9, "{\"error\":") != 0) return false;
-        size_t q = json.find('"', 9);
-        size_t e = q == std::string::npos ? q : json.find('"', q + 1);
-        std::string msg = (q != std::string::npos && e != std::string::npos) ? json.substr(q + 1, e - q - 1) : json;
+        // المُصدِّر (sessionErrorJson) يكتب {"ok":false,"error":"..","line":N} — كان الفحص القديم يقبل
+        // {"error":..} فقط فيُبتلع الخطأ الحقيقي وتظهر رسالة مضلِّلة "لا جذر @view".
+        size_t k = json.find("\"error\":\"");
+        if (k == std::string::npos || json.compare(0, 1, "{") != 0) return false;
+        if (json.compare(0, 11, "{\"ok\":true,") == 0) return false;
+        size_t q = k + 8;   // موضع علامة الاقتباس الافتتاحية لقيمة error
+        size_t e = q;
+        for (++e; e < json.size() && json[e] != '"'; ++e) if (json[e] == '\\') ++e;
+        std::string msg = e < json.size() ? json.substr(q + 1, e - q - 1) : json.substr(q + 1);
         size_t l = json.find("\"line\":");
         std::fprintf(stderr, "indsin: %s%s\n", msg.c_str(), l != std::string::npos ? (std::string("  (line ") + std::to_string(std::atoi(json.c_str() + l + 7)) + ")").c_str() : "");
         return true;
@@ -3185,7 +3227,7 @@ private:
         };
         std::string mainSrc;
         bool hasMain = readFileAll(root + "/src/main.rin", mainSrc);
-        bool isIndsin = hasMain && mainSrc.find("@view") != std::string::npos;
+        bool isIndsin = hasMain && looksLikeIndsinSource(mainSrc);
         println(std::string("  ") + tr("المشروع: ", "project: ") + style_.bold() + getv("name") + style_.reset() + "  v" + getv("version"));
         println(std::string("  ") + tr("الجذر:   ", "root:    ") + root);
         println(std::string("  ") + tr("النوع:   ", "kind:    ") + (isIndsin ? "indsin (UI)" : (getv("kind").empty() ? "console" : getv("kind"))));
@@ -3200,7 +3242,7 @@ private:
         if (root.empty()) { err(tr("لست داخل مشروع. استخدم :load <ملف> أو :new <اسم>", "not inside a project. use :load <file> or :new <name>")); lastOk_ = false; return; }
         std::string mainPath = root + "/src/main.rin", content;
         if (!readFileAll(mainPath, content)) { err(tr("لا يوجد src/main.rin", "no src/main.rin")); lastOk_ = false; return; }
-        if (content.find("@view") != std::string::npos) { info(tr("مشروع واجهة → تشغيل indsin", "UI project → running indsin")); cmdIndsin(mainPath); return; }
+        if (looksLikeIndsinSource(content)) { info(tr("مشروع واجهة → تشغيل indsin", "UI project → running indsin")); cmdIndsin(mainPath); return; }
         bool r = loadFile(mainPath, rin::loaderui::Task::Run); lastOk_ = r; if (!r) failures_++;
     }
 
@@ -3740,6 +3782,10 @@ bool parseArgs(const std::vector<std::string>& args, Options& opt, std::string& 
         else opt.preload.push_back(a);
     }
     return true;
+}
+
+bool isIndsinTagSource(const std::string& source) {
+    return source.find("@view") == std::string::npos && looksLikeIndsinSource(source);
 }
 
 int runIndsinCommand(const std::vector<std::string>& args) {

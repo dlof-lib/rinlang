@@ -1,3 +1,0 @@
-export let TW_PART = RINTWIST;
-export let TW_STACK = rintwist.stack();
-export let TW_FMT = rintwist.fmt("{lib.name}@{lib.version}:{file.stem}");

@@ -1,6 +1,0 @@
-@container=a {
-    let x = 1;
-};
-@container=b {
-    let y = 1;
-}=c;

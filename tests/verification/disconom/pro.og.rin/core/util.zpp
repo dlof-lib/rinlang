@@ -1,1 +1,0 @@
-export fun pro_double(x) { return x * 2; }

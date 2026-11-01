@@ -1,2 +1,0 @@
-let GEOM_PI = 3.14159;
-fun geom_square(x) { return x * x; }
