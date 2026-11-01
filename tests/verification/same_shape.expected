@@ -1,0 +1,18 @@
+true false true true true false
+true false true false
+true true false
+true false false false
+true false
+true false
+true true true
+true
+{a:[string],b:number}
+[number,string,nil,bool]
+3
+$.user.tags[1] type mismatch
+$.ok missing key
+$.extra unexpected key
+bool (absent)
+0 1
+true false
+false true
