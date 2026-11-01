@@ -119,6 +119,15 @@ inline Value evalAttrExpr(const rin::ExprPtr& e, const WarpScope& warp, std::vec
                              bin->op == rin::TokenType::STAR || bin->op == rin::TokenType::SLASH;
         if (!basicOp) { // مقارنات/== !=/% ...: كانت تُلصَق كنص خطأً؛ الآن بدلالات Rin الحقيقية
             if (auto* host = currentRinHost()) { Value out; if (host->eval(e, warp, readNames, out, nullptr)) return out; }
+            // بلا مضيف: == و != تعمل أصلاً (أرقام بالقيمة، غيرها بالنص) بدل لصق الطرفين كنص.
+            if (bin->op == rin::TokenType::EQUAL_EQUAL || bin->op == rin::TokenType::BANG_EQUAL) {
+                Value l = evalAttrExpr(bin->left, warp, readNames);
+                Value r = evalAttrExpr(bin->right, warp, readNames);
+                bool same = (l.kind == Value::Kind::NUMBER && r.kind == Value::Kind::NUMBER)
+                                ? l.number == r.number : l.asString() == r.asString();
+                if (bin->op == rin::TokenType::BANG_EQUAL) same = !same;
+                return Value::txt(same ? "true" : "false");
+            }
         }
         Value l = evalAttrExpr(bin->left, warp, readNames);
         Value r = evalAttrExpr(bin->right, warp, readNames);
