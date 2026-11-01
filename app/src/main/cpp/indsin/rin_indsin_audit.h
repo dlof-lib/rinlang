@@ -12,6 +12,16 @@
 //   STRUCT-001 warning  اسمان متطابقان بين الإخوة (يُنتجان نفس الـ StrandId ويفسدان hot-reload)
 //   STRUCT-002 warning  Text فارغ بلا أبناء
 //   STRUCT-003 warning  عمق تداخل أكبر من 12
+//   A11Y-006  warning  وسم لغة غير صالح (lang=) — يجب أن يكون BCP-47 مثل ar أو en-US أو zh-Hans-CN
+//   A11Y-007  warning  لا لغة معلنة في الشاشة رغم وجود نص (أضف lang= على الجذر)
+//   A11Y-008  warning  ترتيب القراءة يخالف الترتيب البصري (order=/row-reverse) — أضف reading_order=
+//   A11Y-009  warning  قفزة في مستويات العناوين (h1 ثم h3)
+//   A11Y-010  error    aria_labelledby/aria_describedby يشير إلى اسم عنصر غير موجود
+//   A11Y-011  error    عنصر تفاعلي مع aria_hidden=true (يختفي عن القارئ وهو قابل للتركيز)
+//   A11Y-012  warning  قيمة aria_live غير صالحة (off|polite|assertive)
+//   TYPO-001  warning  خط مخصّص فشل تحميله (يُستعمل الاحتياطي)
+//   TYPO-002  warning  خاصية طباعية غير صالحة (font_feature/font_variation/font_variant/text_shadow/…)
+//   TXTFX-001 warning  مسبق/تأثير حركة نص غير معروف
 //   LAYOUT-001 warning عنصر يتجاوز عرض الشاشة أفقياً (عدا الطبقات المنبثقة)
 //
 // الدرجة (score): 100 - 10*errors - 3*warnings (حدّها الأدنى 0).
@@ -19,6 +29,9 @@
 #include "rin_indsin_paint.h"
 #include "rin_indsin_query.h"
 #include "rin_indsin_system.h"
+#include "rin_indsin_a11y.h"
+#include "rin_indsin_typography.h"
+#include "rin_indsin_textfx.h"
 #include <set>
 #include <sstream>
 #include <string>
@@ -108,6 +121,10 @@ inline AuditReport auditFabric(const StrandPtr& root, const AuditOptions& opt = 
     AuditReport r;
     if (!root) return r;
     double screenW = opt.screenWidth > 0 ? opt.screenWidth : root->geometry.w;
+    int lastHeading = 0; bool anyText = false;
+    walkFabric(root, [&](const StrandPtr& sp, int, const Strand*) { if (sp->kind == StrandKind::TEXT && !sp->attrStr("text", "").empty()) anyText = true; });
+    if (anyText && a11y::rootLangOf(root).empty())
+        add(r, root, *root, "A11Y-007", "warning", "no language declared (lang=)", "set lang=\"ar\" (or en, …) on the root so screen readers pick the right voice");
 
     walkFabric(root, [&](const StrandPtr& sp, int depth, const Strand* parent) {
         const Strand& s = *sp;
@@ -115,7 +132,7 @@ inline AuditReport auditFabric(const StrandPtr& root, const AuditOptions& opt = 
         bool decorative = s.attrStr("decorative", "false") == "true";
 
         // A11Y-001: الاسم المُتاح
-        if (isInteractiveKind(s.kind) && !decorative && accessibleName(s).empty()) {
+        if (isInteractiveKind(s.kind) && !decorative && a11y::nameOf(root, s).empty()) {
             add(r, root, s, "A11Y-001", "error",
                 std::string(strandKindName(s.kind)) + " has no accessible name",
                 "add label=/text=/placeholder= (or a11y_label=) so screen readers can announce it");
@@ -156,7 +173,7 @@ inline AuditReport auditFabric(const StrandPtr& root, const AuditOptions& opt = 
                 "add title=\"...\" so assistive tech can announce the dialog");
         }
         // STRUCT-002
-        if (s.kind == StrandKind::TEXT && s.children.empty() && s.attrStr("text", "").empty()) {
+        if (s.kind == StrandKind::TEXT && s.children.empty() && s.attrStr("text", "").empty() && !s.attr("text_rotator")) {
             add(r, root, s, "STRUCT-002", "warning", "Text is empty", "set text=\"...\" or remove the element");
         }
         // STRUCT-003 (مرة واحدة عند أول تجاوز لكل فرع)
@@ -172,6 +189,43 @@ inline AuditReport auditFabric(const StrandPtr& root, const AuditOptions& opt = 
                           s.geometry.x + s.geometry.w - screenW, screenW);
             add(r, root, s, "LAYOUT-001", "warning", buf, "use sizing=\"fill\", a Wrap, or responsive width_<bp>= overrides");
         }
+        // A11Y-006: وسم اللغة
+        for (const char* lk : {"lang", "locale", "language_tag"}) {
+            if (s.kind == StrandKind::CODE_EDITOR) break;
+            std::string lv = typo::trim(s.attrStr(lk, ""));
+            if (!lv.empty() && typo::normalizeLangTag(typo::unquote(lv)).empty())
+                add(r, root, s, "A11Y-006", "warning", "invalid language tag '" + lv + "'", "use a BCP-47 tag such as ar, en-US or zh-Hans-CN");
+        }
+        // A11Y-008: ترتيب القراءة مقابل البصري
+        if (a11y::visualOrderDiffers(s) && s.attrStr("reading_order", "").empty()) {
+            bool reordered = false; for (auto& c : s.children) if (c->attr("order")) reordered = true;
+            std::string fl = webLower(s.attrStr("flex_direction", s.attrStr("flow", "")));
+            if (reordered || fl.find("reverse") != std::string::npos)
+                add(r, root, s, "A11Y-008", "warning", "visual order differs from reading (source) order",
+                    "add reading_order=\"visual\" on this container or reading_order=N on its children");
+        }
+        // A11Y-009: مستويات العناوين
+        { a11y::Semantic sm = a11y::semanticOf(s);
+          if (sm.level > 0) {
+              if (lastHeading > 0 && sm.level > lastHeading + 1)
+                  add(r, root, s, "A11Y-009", "warning", "heading level jumps from " + std::to_string(lastHeading) + " to " + std::to_string(sm.level), "do not skip heading levels");
+              lastHeading = sm.level;
+          } }
+        // A11Y-010/011/012: ARIA
+        for (const char* rk : {"aria_labelledby", "aria_describedby"})
+            for (auto& ref : a11y::idRefs(s, rk))
+                if (!a11y::byName(root, ref)) add(r, root, s, "A11Y-010", "error", std::string(rk) + " references missing element '" + ref + "'", "give the target an id: <Text#" + ref + ">");
+        if (isInteractiveKind(s.kind) && webTruthy(s.attr("aria_hidden")))
+            add(r, root, s, "A11Y-011", "error", std::string(strandKindName(s.kind)) + " is aria_hidden but interactive", "remove aria_hidden or disable the control");
+        if (const Value* lv = s.attr("aria_live")) { std::string t = webLower(lv->asString()); if (t != "off" && t != "polite" && t != "assertive") add(r, root, s, "A11Y-012", "warning", "aria_live must be off|polite|assertive", "use polite for status updates"); }
+        // TYPO-001/002: الخطوط والطباعة (بلا وراثة: يُفحص ما كُتب على العنصر نفسه)
+        { typo::AttrScope sc; sc.self = &s; typo::TextTypography tp = typo::resolveTypography(sc);
+          if (tp.custom && tp.status == "error") add(r, root, s, "TYPO-001", "warning", "custom font '" + tp.customFamily + "' failed to load", "check src= of <Font#" + tp.customFamily + ">; the fallback font is used");
+          for (auto& w : tp.warnings) add(r, root, s, "TYPO-002", "warning", w, "see docs/indsin_typography_motion_a11y.md"); }
+        // TXTFX-001: مسبقات حركة النص
+        if (const Value* av = s.attr("text_animation"))
+            for (auto& w : typo::words(av->asString()))
+                if (!textfx::findPreset(w)) add(r, root, s, "TXTFX-001", "warning", "unknown text_animation preset '" + w + "'", "see docs/indsin_typography_motion_a11y.md for the list");
         // STRUCT-001: أسماء الإخوة
         if (!s.children.empty()) {
             std::set<std::string> seen;
