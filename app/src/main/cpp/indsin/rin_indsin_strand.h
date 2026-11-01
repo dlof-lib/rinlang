@@ -85,6 +85,13 @@ enum class StrandKind {
     STEPS, STEPITEM, TIMELINE, TIMELINEITEM,
     BREADCRUMB, PAGINATION, DONUT_CHART,
 
+    // ---- Collapsible lists (docs/indsin_collapsible.md): Accordion / ExpandableList / TreeView /
+    // NestedList. All seven are *structural* kinds: rin_indsin_components_ext.h desugars them into
+    // real Row/Column/Text/Divider/Button children bound to auto-created Warp cells (the same
+    // "convenience synthesis" Tag/Pagination use), so layout/paint need nothing but the plain
+    // vertical-Column path and every host (Android, desktop, CLI, HTML export) renders them as-is.
+    ACCORDION, ACCORDION_ITEM, EXPANDABLE_LIST, TREE_VIEW, TREE_NODE, NESTED_LIST, NESTED_ITEM,
+
     CUSTOM
 };
 inline StrandKind strandKindFromTag(const std::string& tag) {
@@ -178,6 +185,23 @@ inline StrandKind strandKindFromTag(const std::string& tag) {
     if (tag == "DonutChart" || tag == "donutchart" || tag == "PieChart" || tag == "piechart" ||
         tag == "Donut" || tag == "donut") return StrandKind::DONUT_CHART;
 
+    // ---- Collapsible lists ----
+    if (tag == "Accordion" || tag == "accordion") return StrandKind::ACCORDION;
+    if (tag == "AccordionItem" || tag == "accordionitem" || tag == "accordionItem" ||
+        tag == "AccordionSection" || tag == "Collapsible" || tag == "collapsible" ||
+        tag == "Collapse" || tag == "collapse" || tag == "Disclosure" || tag == "disclosure" ||
+        tag == "Details" || tag == "details") return StrandKind::ACCORDION_ITEM;
+    if (tag == "ExpandableList" || tag == "expandablelist" || tag == "expandableList" ||
+        tag == "Expandable" || tag == "expandable") return StrandKind::EXPANDABLE_LIST;
+    if (tag == "TreeView" || tag == "treeview" || tag == "treeView" || tag == "Tree" || tag == "tree")
+        return StrandKind::TREE_VIEW;
+    if (tag == "TreeNode" || tag == "treenode" || tag == "treeNode" || tag == "TreeItem" ||
+        tag == "treeitem" || tag == "treeItem") return StrandKind::TREE_NODE;
+    if (tag == "NestedList" || tag == "nestedlist" || tag == "nestedList" || tag == "Outline" || tag == "outline")
+        return StrandKind::NESTED_LIST;
+    if (tag == "NestedItem" || tag == "nesteditem" || tag == "nestedItem" || tag == "SubList" || tag == "sublist")
+        return StrandKind::NESTED_ITEM;
+
     // Web Layout Concepts (rin_indsin_webkeys.h): Body/Page/Main/Article/Aside/Wrapper/Flex/... -> existing kinds.
     if (const char* wk = webTagKind(tag)) {
         std::string k = wk;
@@ -255,6 +279,14 @@ inline std::string strandKindName(StrandKind k) {
         case StrandKind::BREADCRUMB: return "Breadcrumb";
         case StrandKind::PAGINATION: return "Pagination";
         case StrandKind::DONUT_CHART: return "DonutChart";
+
+        case StrandKind::ACCORDION: return "Accordion";
+        case StrandKind::ACCORDION_ITEM: return "AccordionItem";
+        case StrandKind::EXPANDABLE_LIST: return "ExpandableList";
+        case StrandKind::TREE_VIEW: return "TreeView";
+        case StrandKind::TREE_NODE: return "TreeNode";
+        case StrandKind::NESTED_LIST: return "NestedList";
+        case StrandKind::NESTED_ITEM: return "NestedItem";
 
         default: return "Custom";
     }
