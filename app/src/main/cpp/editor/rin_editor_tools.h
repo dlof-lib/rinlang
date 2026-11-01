@@ -430,7 +430,7 @@ inline void classifyPunctuation(const std::vector<rin::Token>& t, std::vector<Hi
     for (size_t i = 0; i < n; ++i) {
         switch (t[i].type) {
             case TT::EQUAL_EQUAL: case TT::BANG_EQUAL: case TT::LESS: case TT::LESS_EQUAL:
-            case TT::GREATER: case TT::GREATER_EQUAL: case TT::NOT_SAME: case TT::COPY_OF: case TT::BANG:
+            case TT::GREATER: case TT::GREATER_EQUAL: case TT::NOT_SAME: case TT::COPY_OF: case TT::SAME_SHAPE: case TT::BANG:
                 kinds[i] = HighlightKind::Compare; break;
             case TT::AND: case TT::OR:
                 kinds[i] = HighlightKind::Compare; break;
