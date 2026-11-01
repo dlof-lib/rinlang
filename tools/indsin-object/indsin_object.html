@@ -255,6 +255,8 @@
     ['Tag','feedback','c'], ['Kbd','content',''], ['Rating','feedback',''], ['Skeleton','feedback',''], ['Spinner','feedback',''],
     ['Steps','navigation','c'], ['StepItem','navigation',''], ['Timeline','data','c'], ['TimelineItem','data',''],
     ['Breadcrumb','navigation','c'], ['Pagination','navigation','c'], ['DonutChart','data',''],
+    ['Accordion','navigation','c'], ['AccordionItem','navigation','c'], ['ExpandableList','data','c'], ['TreeView','navigation','c'],
+    ['TreeNode','navigation','c'], ['NestedList','data','c'], ['NestedItem','data','c'],
     ['Custom','custom','c']
   ];
   var KINDS = {}, KIND_LIST = [];
@@ -267,7 +269,9 @@
     container: 'box', panel: 'box', frame: 'box', element: 'box', textfield: 'input', modal: 'dialog', popup: 'dialog',
     range: 'slider', dropdown: 'select', filepicker: 'file', datepicker: 'date', timepicker: 'time', searchbar: 'search',
     sidebar: 'drawer', chip: 'tag', key: 'kbd', loader: 'spinner', stepper: 'steps', step: 'stepitem',
-    timelineevent: 'timelineitem', breadcrumbs: 'breadcrumb', pager: 'pagination', donut: 'donutchart', piechart: 'donutchart'
+    timelineevent: 'timelineitem', breadcrumbs: 'breadcrumb', pager: 'pagination', donut: 'donutchart', piechart: 'donutchart',
+    collapsible: 'accordionitem', collapse: 'accordionitem', disclosure: 'accordionitem', details: 'accordionitem', accordionsection: 'accordionitem',
+    expandable: 'expandablelist', tree: 'treeview', treeitem: 'treenode', outline: 'nestedlist', sublist: 'nesteditem'
   };
   function resolveKind(k) {
     var n = normKind(k);
@@ -819,12 +823,33 @@
     var cls = 'ix-link' + (bool(a.get('visited')) ? ' ix-visited' : '') + (a.has('underline') && !bool(a.get('underline')) ? ' ix-nou' : '');
     return D('a', cls, st, at, esc(labelOf(a)) + c.kids());
   };
+  // Image Sources (rin_indsin_imagesrc.h): the engine normally hands over one resolved `src`; frames that
+  // still carry raw url= / dataUri= / base64=[mime=] / srcset= are understood here too, under the same
+  // safeUrl policy (http(s), blob:, image data: only).
+  function imageSrc(a, c) {
+    var s = safeUrl(a.get('src'), 'image', c.ctx) || safeUrl(a.get('url'), 'image', c.ctx) || safeUrl(a.get('dataUri'), 'image', c.ctx) || safeUrl(a.get('blob'), 'image', c.ctx);
+    if (!s && a.has('base64')) {
+      var b = String(a.get('base64')).replace(/\s+/g, ''), m = a.str('mime');
+      if (!m) m = /^iVBOR/.test(b) ? 'image/png' : /^\/9j\//.test(b) ? 'image/jpeg' : /^R0lGOD/.test(b) ? 'image/gif' : /^UklGR/.test(b) ? 'image/webp' : /^PHN2Zy|^PD94bW/.test(b) ? 'image/svg+xml' : /^Qk/.test(b) ? 'image/bmp' : '';
+      if (/^[A-Za-z0-9+\/_-]+={0,2}$/.test(b) && /^image\/(png|jpe?g|gif|webp|avif|bmp|svg\+xml)$/i.test(m)) s = 'data:' + m + ';base64,' + b;
+    }
+    return s;
+  }
+  function imageSrcSet(a, c) {
+    if (!a.has('srcset')) return null;
+    var out = [];
+    String(a.get('srcset')).split(/,\s+/).forEach(function (part) {
+      var t = part.trim().split(/\s+/), u = safeUrl(t[0], 'image', c.ctx);
+      if (u && !/[\s,]/.test(u)) out.push(u + (t[1] && /^\d+(\.\d+)?[wx]$/i.test(t[1]) ? ' ' + t[1] : ''));
+    });
+    return out.length ? out.join(', ') : null;
+  }
   R.image = function (a, c) {
-    var st = boxCss(a, c, { noFill: true, radius: 10 }), src = safeUrl(a.get('src'), 'image', c.ctx), alt = a.str('alt');
+    var st = boxCss(a, c, { noFill: true, radius: 10 }), src = imageSrc(a, c), alt = a.str('alt'), srcset = imageSrcSet(a, c);
     var fit = String(a.get('fit') || ''); if (fit === 'contain' || fit === 'fill' || fit === 'none' || fit === 'scale-down') st.push('object-fit:' + fit);
     var ratio = String(a.get('ratio') || ''); var rm = /^(\d+(?:\.\d+)?)\s*[:\/]\s*(\d+(?:\.\d+)?)$/.exec(ratio);
     if (rm) st.push('aspect-ratio:' + rm[1] + '/' + rm[2]); else if (num(ratio, 0) > 0) st.push('aspect-ratio:' + num(ratio, 0));
-    if (src) return D('img', 'ix-img', st, { src: src, alt: alt, loading: 'lazy', decoding: 'async', draggable: 'false' });
+    if (src || srcset) return D('img', 'ix-img', st, { src: src, srcset: srcset, sizes: a.str('sizes') || null, alt: alt, loading: 'lazy', decoding: 'async', draggable: 'false' });
     return D('div', 'ix-img ix-ph', st, { role: 'img', 'aria-label': alt || null }, '\uD83D\uDDBC');
   };
   R.avatar = function (a, c) {
@@ -1156,6 +1181,24 @@
     }
     return D('nav', 'ix-crumb', boxCss(a, c, { soft: true }), { 'aria-label': 'Breadcrumb' }, h + c.kids());
   };
+  // Collapsible lists (rin_indsin_collapsible.h): the engine already desugared them into real
+  // Row/Column/Text children bound to warp cells (headers carry onTap, collapsed bodies arrive with
+  // visible=false), so each is a plain column container here, plus the ARIA role of its pattern.
+  function collapsibleBox(role, extra) {
+    return function (a, c) {
+      var at = { role: role }, k;
+      if (extra) for (k in extra) at[k] = extra[k];
+      if (a.has('expanded')) at['aria-expanded'] = bool(a.get('expanded')) ? 'true' : 'false';
+      return D('div', 'ix-lay ix-col', flexAxis(a, c, 'col').concat(boxCss(a, c, { soft: true }), padGap(a, c, 0, 0)), at, c.kids());
+    };
+  }
+  R.accordion = collapsibleBox('group');
+  R.accordionitem = collapsibleBox('group');
+  R.expandablelist = collapsibleBox('list');
+  R.treeview = collapsibleBox('tree');
+  R.treenode = collapsibleBox('treeitem');
+  R.nestedlist = collapsibleBox('list');
+  R.nesteditem = collapsibleBox('listitem');
   function pagerHtml(cur, tot, esc) {
     var h = '', i, add = function (l, p, dis, on) { h += '<button type="button" class="ix-pg' + (on ? ' ix-on' : '') + '" data-ix-page="' + p + '"' + (dis ? ' disabled' : '') + (on ? ' aria-current="page"' : '') + (/^\d+$/.test(l) ? ' aria-label="Page ' + l + '"' : ' aria-label="' + (p < cur ? 'Previous' : 'Next') + ' page"') + '>' + esc(l) + '</button>'; };
     add('\u2039', cur - 1, cur <= 1, false);
@@ -1648,6 +1691,10 @@
       g_('Timeline', {}, [g_('TimelineItem', { date: '2026', title: 'Launch', desc: 'First release' }), g_('TimelineItem', { date: '2027', title: 'Next' })]),
       g_('Breadcrumb', { items: 'Home,Libraries,Rin' }), g_('Pagination', { current: 2, total: 9 }),
       g_('DonutChart', { data: 'C++:60,Kotlin:30,Rin:10', centerLabel: '100%' }),
+      g_('Accordion', {}, [g_('AccordionItem', { title: 'Section', expanded: 'true' }, [tx_('Body')])]),
+      g_('ExpandableList', {}, [tx_('Row 1'), tx_('Row 2')]),
+      g_('TreeView', {}, [g_('TreeNode', { label: 'src', expanded: 'true' }, [g_('TreeNode', { label: 'main.rin' })])]),
+      g_('NestedList', {}, [g_('NestedItem', { label: 'One' }, [g_('NestedItem', { label: 'Sub' })])]),
       g_('Table', {}, [g_('TableRow', { header: 'true' }, [tx_('Name'), tx_('Value')]), g_('TableRow', {}, [tx_('A'), tx_('1')])]),
       g_('List', {}, [g_('ListItem', { text: 'Item 1' }), g_('ListItem', { text: 'Item 2' })]),
       g_('Grid', { columns: 2, gap: 8 }, [g_('Skeleton'), g_('Skeleton')]),
@@ -1718,7 +1765,7 @@
   'use strict';
 
   /*LEX:BEGIN*/
-  var LEX = {"version":"4.0.0","kinds":["Text","Image","Button","Card","Column","Row","Stack","Divider","Header","TopBar","BottomBar","Drawer","Menu","MenuItem","Table","TableRow","Video","Audio","WebView","Scaffold","Splash","Banner","Box","Grid","Wrap","Spacer","Badge","Progress","Checkbox","Switch","Avatar","Input","TextArea","Dialog","Tabs","TabItem","Tooltip","Icon","IconButton","Object","Link","Radio","Slider","Select","List","ListItem","File","Date","Time","CodeEditor","Calculator","Search","Tag","Kbd","Rating","Skeleton","Spinner","Steps","StepItem","Timeline","TimelineItem","Breadcrumb","Pagination","DonutChart","Custom"],"aliases":["breadcrumbs","chip","container","datepicker","donut","dropdown","element","filepicker","frame","key","loader","modal","pager","panel","piechart","popup","range","searchbar","sidebar","step","stepper","textfield","timelineevent","timepicker"],"attributes":["a11yLabel","a11y_hint","a11y_label","accept","active","align","alt","anchor","ariaLabel","autoplay","background","badge","bg","bold","border","borderColor","centerLabel","checked","closable","color","colors","columns","controls","copyText","count","current","data","date","decorative","delay","desc","description","dir","direction","disabled","dismissible","duration","easing","effect","elevation","fit","font","fontWeight","format","gap","glyph","gradient","group","header","height","href","icon","indeterminate","index","initials","italic","items","kind","label","labelSize","lang","layer","letterSpacing","lineHeight","loading","loop","margin","markerSize","max","maxHeight","maxLength","maxLines","maxWidth","max_height","max_width","message","min","minHeight","minWidth","min_height","min_width","modal","mono","multiple","muted","name","onChange","onClose","onDoubleTap","onHoverEnter","onHoverExit","onLongPress","onSelect","onSubmit","onTap","opacity","open","options","padding","placeholder","placement","poster","radius","ratio","readonly","removable","rows","scrim","selected","separator","shadow","size","sizing","source","sourceTag","src","stagger","state","step","subtitle","text","textAlign","textColor","text_align","theme","thickness","title","tone","total","trend","type","underline","url","valign","value","variant","vertical","visible","visited","weight","width"],"tokenValues":["action","auto","back","background","body","bold","bottom","bounce","bounceout","caption","center","code","comfortable","compact","contain","cover","cubicin","cubicinout","cubicout","custom","danger","dark","display","ease","easein","easeinout","easeout","elastic","elevated","end","error","fade","fast","fill","filled","forest","ghost","glass","gradient","grow","heading","headline","highcontrastdark","highcontrastlight","info","instant","italic","label","large","left","lg","light","linear","link","ltr","md","medium","midnight","neutral","none","normal","ocean","outline","outlined","pill","primary","progress","pulse","right","rose","round","rtl","secondary","sepia","shake","sharp","sine","slate","slideDown","slideLeft","slideRight","slideUp","slow","slower","sm","small","soft","spacious","spring","start","stretch","subtitle","success","sunset","surface","title","tonal","top","underline","warning","xl","xs"]};
+  var LEX = {"version":"4.0.0","kinds":["Text","Image","Button","Card","Column","Row","Stack","Divider","Header","TopBar","BottomBar","Drawer","Menu","MenuItem","Table","TableRow","Video","Audio","WebView","Scaffold","Splash","Banner","Box","Grid","Wrap","Spacer","Badge","Progress","Checkbox","Switch","Avatar","Input","TextArea","Dialog","Tabs","TabItem","Tooltip","Icon","IconButton","Object","Link","Radio","Slider","Select","List","ListItem","File","Date","Time","CodeEditor","Calculator","Search","Tag","Kbd","Rating","Skeleton","Spinner","Steps","StepItem","Timeline","TimelineItem","Breadcrumb","Pagination","DonutChart","Accordion","AccordionItem","ExpandableList","TreeView","TreeNode","NestedList","NestedItem","Custom"],"aliases":["accordionsection","breadcrumbs","chip","collapse","collapsible","container","datepicker","details","disclosure","donut","dropdown","element","expandable","filepicker","frame","key","loader","modal","outline","pager","panel","piechart","popup","range","searchbar","sidebar","step","stepper","sublist","textfield","timelineevent","timepicker","tree","treeitem"],"attributes":["a11yLabel","a11y_hint","a11y_label","accept","active","align","alt","anchor","ariaLabel","autoplay","background","badge","base64","bg","blob","bold","border","borderColor","centerLabel","checked","closable","color","colors","columns","controls","copyText","count","current","data","dataUri","date","decorative","delay","desc","description","dir","direction","disabled","dismissible","duration","easing","effect","elevation","expanded","fit","font","fontWeight","format","gap","glyph","gradient","group","header","height","href","icon","indeterminate","index","initials","italic","items","kind","label","labelSize","lang","layer","letterSpacing","lineHeight","loading","loop","margin","markerSize","max","maxHeight","maxLength","maxLines","maxWidth","max_height","max_width","message","mime","min","minHeight","minWidth","min_height","min_width","modal","mono","multiple","muted","name","onChange","onClose","onDoubleTap","onHoverEnter","onHoverExit","onLongPress","onSelect","onSubmit","onTap","opacity","open","options","padding","placeholder","placement","poster","radius","ratio","readonly","removable","rows","scrim","selected","separator","shadow","size","sizes","sizing","source","sourceTag","src","srcset","stagger","state","step","subtitle","text","textAlign","textColor","text_align","theme","thickness","title","tone","total","trend","type","underline","url","valign","value","variant","vertical","visible","visited","weight","width"],"tokenValues":["action","auto","back","background","body","bold","bottom","bounce","bounceout","caption","center","code","comfortable","compact","contain","cover","cubicin","cubicinout","cubicout","custom","danger","dark","display","ease","easein","easeinout","easeout","elastic","elevated","end","error","fade","fast","fill","filled","forest","ghost","glass","gradient","grow","heading","headline","highcontrastdark","highcontrastlight","info","instant","italic","label","large","left","lg","light","linear","link","ltr","md","medium","midnight","neutral","none","normal","ocean","outline","outlined","pill","primary","progress","pulse","right","rose","round","rtl","secondary","sepia","shake","sharp","sine","slate","slideDown","slideLeft","slideRight","slideUp","slow","slower","sm","small","soft","spacious","spring","start","stretch","subtitle","success","sunset","surface","title","tonal","top","underline","warning","xl","xs"]};
   /*LEX:END*/
 
   var KEYWORDS = ('let print show rinopen if else while for fun return break continue true false nil and or reckon where ' +
