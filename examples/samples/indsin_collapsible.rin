@@ -1,0 +1,44 @@
+<!-- القوائم القابلة للفتح والإغلاق: Accordion · ExpandableList · TreeView · NestedList
+     الدليل: docs/indsin_collapsible.md · التشغيل: ./indsinc samples/indsin_collapsible.rin -->
+
+<Column#root gap=16 padding=comfortable>
+  <Text#title size=heading>Collapsible lists</Text>
+
+  <!-- Accordion: قسم واحد مفتوح في كل مرة (multiple=true لعدّة أقسام، controls=true لأزرار فتح/إغلاق الكل) -->
+  <Accordion#faq>
+    <AccordionItem#q1 title="What is Rin?" subtitle="The basics" open=true>
+      <Text#a1 size=small>A small, readable language: one C++23 engine for CLI, phone and browser.</Text>
+    </AccordionItem>
+    <AccordionItem#q2 title="Where does it run?" badge="3">
+      <Text#a2 size=small>Command line, the Android IDE and WebAssembly.</Text>
+    </AccordionItem>
+    <AccordionItem#q3 title="Can I nest them?">
+      <Accordion#inner variant=flush chevron=plus multiple=true>
+        <AccordionItem#n1 title="Inner one"><Text#i1 size=small>Yes, to any depth.</Text></AccordionItem>
+        <AccordionItem#n2 title="Inner two"><Text#i2 size=small>Each owns its own state.</Text></AccordionItem>
+      </Accordion>
+    </AccordionItem>
+  </Accordion>
+
+  <!-- ExpandableList: عنوان قابل للطي، أو معاينة limit= مع زر "Show more" -->
+  <ExpandableList#inbox title="Inbox" items="Welcome to Rin, Your build finished, New release 1.0" marker=number />
+  <ExpandableList#feed title="Recent activity" items="Pushed v1.0; Fixed #42; Added TreeView; Merged PR #7; Closed #3" limit=2 />
+
+  <!-- TreeView: عقد متداخلة أو paths= ؛ النقر على الصف يحدّد، والسهم يفتح/يغلق فقط -->
+  <Text#h2 size=title>Project</Text>
+  <TreeView#files controls=true paths="src/main.rin, src/lib/math.rin, src/lib/ui.rin, docs/guide.md, README.md" sort=true selected="src/main.rin" />
+  <Text#picked size=small color=text_muted>Selected: {files_selected}</Text>
+
+  <!-- NestedList: items= بمستويات (كل - مستوى) ، marker=bullet|number|alpha|dash|none ، collapsible=true للطي -->
+  <NestedList#plan items="Design, -Wireframes, -Tokens, --Colors, --Spacing, Build, -Engine, -Android, Ship" marker=number />
+  <NestedList#toc collapsible=true open=false marker=bullet>
+    <NestedItem#c1 label="Getting started">
+      <NestedItem#s11 label="Install" />
+      <NestedItem#s12 label="First program" />
+    </NestedItem>
+    <NestedItem#c2 label="Language reference">
+      <NestedItem#s21 label="Types" />
+    </NestedItem>
+    <NestedItem#c3 label="Appendix" />
+  </NestedList>
+</Column>
