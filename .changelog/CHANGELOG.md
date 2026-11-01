@@ -2,6 +2,18 @@
 
 > مجمَّع آلياً من ملفات `CHANGES_*.md` المتفرّقة (انظر `cleanup-project.yml`). أضف الجديد هنا مباشرةً.
 
+
+## IMAGE SOURCES
+
+- **مصادر الصور**: `Src` · `SrcSet` · `URL` · `RemotePath` · `LocalPath` · `Base64` · `DataURI` · `Blob` · `Upload` · `Download` (`rin_indsin_imagesrc.h`): تصنيف/تحقق/توحيد المصدر إلى `src` واحدة + `src_kind/src_from/src_mime/src_bytes/src_error`، اكتشاف MIME من البايتات، اختيار `srcset` بالعرض والكثافة، رفض `javascript:`/`..`/`data:` غير الصور. الأوامر `downloadImage()` و`uploadImage()`. إعادة تصنيف تلقائية عند تغيّر `src=<cell>`. الدليل: [`docs/indsin_image_sources.md`](../docs/indsin_image_sources.md).
+
+## COLLAPSIBLE LISTS
+
+- **Accordion / ExpandableList / TreeView / NestedList**: سبعة أنواع Strand جديدة (`Accordion`, `AccordionItem`, `ExpandableList`, `TreeView`, `TreeNode`, `NestedList`, `NestedItem`) تتوسّع وقت البناء إلى عناصر حقيقية مرتبطة بخلايا warp (`rin_indsin_collapsible.h`) — تعمل في كل المضيفين بلا تعديل في القياس/الرسم. الدليل: [`docs/indsin_collapsible.md`](../docs/indsin_collapsible.md).
+- أوامر Action جديدة: `accordion(cell, others…)` و`expandAll(cells…)` و`collapseAll(cells…)`.
+- مقيِّم الخصائص يدعم `==` و`!=` أصلاً حتى بلا مضيف Rin.
+- مُصيِّرات JS/Kotlin والمُلوِّنات (lexicon/tmLanguage/snippets) محدَّثة؛ اختبار: `tests/tools/test_indsin_collapsible.cpp`، مثال: `examples/samples/indsin_collapsible.rin`.
+
 ## الفهرس
 
 - [GENERAL](#general)
