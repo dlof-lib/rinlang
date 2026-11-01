@@ -393,8 +393,22 @@ class IndsinFabricView @JvmOverloads constructor(
     private var inspectedNode: JSONObject? = null
 
     init {
+        // FrameLayout is a ViewGroup: Android skips onDraw() entirely for a ViewGroup unless
+        // willNotDraw is false (or a background is set). The XML layouts happened to set
+        // android:background, but views created in code (e.g. PackageDetailActivity's live preview)
+        // had none, so the Fabric was never painted -> blank preview.
+        setWillNotDraw(false)
         // setShadowLayer() (used for Card `shadow=` attrs) requires a software layer.
         setLayerType(LAYER_TYPE_SOFTWARE, null)
+    }
+
+    /** A software layer allocates a full-size bitmap; a tall page at high zoom can exceed the
+     * canvas bitmap limit ("trying to draw too large bitmap") and crash or draw nothing. Above the
+     * budget we fall back to the normal hardware path (shadows degrade, content still shows). */
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        val wanted = if (w.toLong() * h.toLong() * 4L > 48L * 1024L * 1024L) LAYER_TYPE_NONE else LAYER_TYPE_SOFTWARE
+        if (layerType != wanted) setLayerType(wanted, null)
     }
 
     private val gestureDetector = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
@@ -513,8 +527,12 @@ class IndsinFabricView @JvmOverloads constructor(
         }
 
         requestLayout()
-        syncRemoteMediaOverlays(node)
-        syncHtmlAssistOverlays(node)
+        try { syncRemoteMediaOverlays(node) } catch (t: Throwable) {
+            android.util.Log.e("IndsinFabricView", "remote media overlay failed", t)
+        }
+        try { syncHtmlAssistOverlays(node) } catch (t: Throwable) {
+            android.util.Log.e("IndsinFabricView", "html overlay failed (WebView unavailable?)", t)
+        }
         invalidate()
         // UI/UX Library Expansion: (re)start the Spinner rotation ticker if this fabric has one --
         // mainHandler.postDelayed dedupes naturally here since a stale in-flight tick just
@@ -530,10 +548,12 @@ class IndsinFabricView @JvmOverloads constructor(
     override fun onDetachedFromWindow() {
         pendingAutoNavigate?.let { navHandler.removeCallbacks(it) }
         mainHandler.removeCallbacks(spinnerTicker)
-        remoteMediaViews.values.forEach { releaseMedia(it) }
+        remoteMediaViews.values.forEach { removeView(it); releaseMedia(it) }
         remoteMediaViews.clear()
-        htmlAssistViews.values.forEach { it.stopLoading(); it.destroy() }
+        htmlAssistViews.values.forEach { removeView(it); it.stopLoading(); it.destroy() }
         htmlAssistViews.clear()
+        lastRemoteMediaSignature = ""
+        lastHtmlAssistSignature = ""
         super.onDetachedFromWindow()
     }
 
@@ -807,7 +827,25 @@ class IndsinFabricView @JvmOverloads constructor(
      * function to actually draw that overlay's own subtree.
      */
     /** `opacity=` (0..1 or N%): the whole node subtree is composited at that alpha (mirrors indsin::applyBoxStyling). */
+    private val reportedDrawErrors = HashSet<String>()
+
     private fun drawNode(canvas: Canvas, node: JSONObject, skipOverlays: Boolean = true) {
+        val saved = canvas.save()
+        try {
+            drawNodeGuarded(canvas, node, skipOverlays)
+        } catch (t: Throwable) {
+            // An exception thrown from onDraw kills the whole app; isolate it to this node (its
+            // subtree is skipped) and log once per distinct failure instead of every frame.
+            val key = "${node.optString("kind")}:${t.javaClass.simpleName}:${t.message}"
+            if (reportedDrawErrors.size < 64 && reportedDrawErrors.add(key)) {
+                android.util.Log.e("IndsinFabricView", "draw failed for ${node.optString("kind")} '${node.optString("name")}' (line ${node.optInt("line", 0)})", t)
+            }
+        } finally {
+            canvas.restoreToCount(saved)
+        }
+    }
+
+    private fun drawNodeGuarded(canvas: Canvas, node: JSONObject, skipOverlays: Boolean = true) {
         val wa = node.optJSONObject("attrs")
         // Web Layout Concepts: display=none/hidden/visibility=hidden/_collision_hidden لا يُرسم (الهندسة محسوبة أصلاً في المحرك).
         if (wa != null && webHidden(wa)) return
@@ -1487,8 +1525,11 @@ class IndsinFabricView @JvmOverloads constructor(
     private fun progressFraction(attrs: JSONObject): Float {
         val minV = attrs.optString("min").toFloatOrNull() ?: 0f
         val maxV = attrs.optString("max").toFloatOrNull() ?: 100f
-        val value = (attrs.optString("value").toFloatOrNull() ?: minV).coerceIn(minV, maxV)
-        return if (maxV > minV) (value - minV) / (maxV - minV) else 0f
+        // coerceIn(minV, maxV) throws IllegalArgumentException when min > max (or NaN) -> crash in onDraw.
+        if (!(maxV > minV) || minV.isInfinite() || maxV.isInfinite()) return 0f
+        val raw = attrs.optString("value").toFloatOrNull() ?: minV
+        val value = if (raw.isNaN()) minV else raw.coerceIn(minV, maxV)
+        return (value - minV) / (maxV - minV)
     }
 
     // ---- UI/UX Library Expansion --------------------------------------------------------------
@@ -2411,7 +2452,7 @@ class IndsinFabricView @JvmOverloads constructor(
             return
         }
         lastRemoteMediaSignature = signature
-        remoteMediaViews.values.forEach { v -> releaseMedia(v); removeView(v) }
+        remoteMediaViews.values.forEach { v -> removeView(v); releaseMedia(v) }
         remoteMediaViews.clear()
 
         found.forEach { (name, node, url) ->
@@ -2447,7 +2488,9 @@ class IndsinFabricView @JvmOverloads constructor(
             v.layoutParams = lp
             v.visibility = View.VISIBLE
         }
-        remoteMediaViews.entries.removeIf { (name, _) -> found.none { it.first == name } }
+        remoteMediaViews.keys.filter { n -> found.none { it.first == n } }.forEach { n ->
+            remoteMediaViews.remove(n)?.let { removeView(it); releaseMedia(it) }
+        }
     }
 
     /**
@@ -2471,7 +2514,9 @@ class IndsinFabricView @JvmOverloads constructor(
         }
         lastHtmlAssistSignature = signature
 
-        htmlAssistViews.values.forEach { it.stopLoading(); it.destroy() }
+        // Previously these WebViews were destroyed but never removed from this FrameLayout, so stale
+        // ghost views kept covering the preview after the page/signature changed.
+        htmlAssistViews.values.forEach { removeView(it); it.stopLoading(); it.destroy() }
         htmlAssistViews.clear()
 
         found.forEach { (name, attrsNode, payload) ->
@@ -2543,7 +2588,9 @@ class IndsinFabricView @JvmOverloads constructor(
             v.layoutParams = lp
             v.visibility = View.VISIBLE
         }
-        htmlAssistViews.entries.removeIf { (name, _) -> found.none { it.first == name } }
+        htmlAssistViews.keys.filter { n -> found.none { it.first == n } }.forEach { n ->
+            htmlAssistViews.remove(n)?.let { removeView(it); it.stopLoading(); it.destroy() }
+        }
     }
 
     /** Resolves `src=` to a real file: relative paths are relative to the current project's root
@@ -2605,7 +2652,9 @@ class IndsinFabricView @JvmOverloads constructor(
      * that download lands this returns null so the placeholder shows, same as any unresolved src. */
     private fun loadBitmapForRect(src: String, targetW: Int, targetH: Int): android.graphics.Bitmap? {
         if (src.isBlank() || targetW <= 0 || targetH <= 0) return null
-        val cacheKey = "$src|$targetW|$targetH"
+        // data: URIs can be megabytes; String.hashCode() is cached per instance, so key on that
+        // instead of building (and hashing) a multi-MB composite string on every frame.
+        val cacheKey = if (src.length > 256) "L${src.length}:${src.hashCode()}|$targetW|$targetH" else "$src|$targetW|$targetH"
         bitmapCache.get(cacheKey)?.let { return it }
         if (cacheKey in missingSrc) return null
 
@@ -2805,7 +2854,13 @@ class IndsinFabricView @JvmOverloads constructor(
             canvas.drawPath(path, strokePaint)
         }
 
-        val label = attrs.optString("src").ifBlank { null }
+        val rawSrc = attrs.optString("src")
+        val label = when {
+            rawSrc.isBlank() -> null
+            rawSrc.startsWith("data:", ignoreCase = true) -> rawSrc.substringBefore(',').take(40) + "…"
+            rawSrc.length > 80 -> rawSrc.take(77) + "…"
+            else -> rawSrc
+        }
         if (label != null) drawText(canvas, RectF(rect.left, rect.bottom - 16f, rect.right, rect.bottom), attrs, label, Color.argb(210, 255, 255, 255), singleLine = true)
     }
 
@@ -2959,4 +3014,3 @@ class IndsinFabricView @JvmOverloads constructor(
         return try { Color.parseColor(hex) } catch (t: Throwable) { null }
     }
 }
-
