@@ -22,6 +22,7 @@
 #include <memory>
 #include <variant>
 #include <functional>
+#include <array>
 #include <vector>
 #include <tuple>
 #include <utility>
@@ -170,6 +171,9 @@ struct InstanceData {
 
 // مقارنة تركيبية (structural) بين قيمتين، تُستخدم في == != وفهرسة القواميس بالمفتاح.
 bool valuesEqual(const Value& a, const Value& b);
+bool sameShape(const Value& a, const Value& b); // =::= (تطابق الشكل)
+std::string shapeOf(const Value& v);              // shapeOf(v)
+std::vector<std::array<std::string, 4>> shapeDiff(const Value& value, const Value& model); // shapeDiff(value, model)
 
 // ---- Set: عمليات مجموعات حرّة (تُعرَّف في rin_set.cpp) تستعملها valuesEqual/المعاملات/التكرار ----
 namespace setops {
