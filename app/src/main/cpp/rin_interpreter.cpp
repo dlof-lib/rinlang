@@ -236,6 +236,132 @@ bool valuesEqual(const Value& a, const Value& b) {
     return false;
 }
 
+// =::= — تطابق الشكل (البنية والأنواع، القيم الورقية تُتجاهل):
+//   • نفس نوع القيمة؛ nil يطابق nil فقط. العدد/النص/المنطقي: يكفي النوع.
+//   • الدالة المعرَّفة في Rin: نفس عدد المعاملات (الدوال الأصلية: النوع يكفي).
+//   • المصفوفة: نفس الطول وكل عنصر بنفس شكل نظيره. القاموس: نفس المفاتيح (بالقيمة وبلا ترتيب) وكل قيمة بنفس شكلها.
+//   • الكائن: نفس الصنف ونفس أسماء الحقول وأشكال قيمها. المجموعة: نفس العدد ولكل عنصر نظير بنفس الشكل (بلا ترتيب).
+//   • محمي من الدوران الذاتي (عمق أقصى 64).
+// نفس المسار يخدم shapeDiff(value, model): يجمع كل المخالفات مع مساراتها بدل الوقوف عند أولاها.
+struct ShapeIssue { std::string path, reason, expected, actual; };
+
+static std::string shapeKeyText(const Value& k) { return k.type == Value::Type::STRING ? k.str : k.toDisplayString(); }
+static std::string shapeStr(const Value& v, int depth) {
+    if (depth > 8) return "...";
+    switch (v.type) {
+        case Value::Type::ARRAY: {
+            std::string o = "[";
+            if (v.array) for (size_t i = 0; i < v.array->size(); i++) {
+                if (i) o += ",";
+                if (i >= 32) { o += "..."; break; }
+                o += shapeStr((*v.array)[i], depth + 1);
+            }
+            return o + "]";
+        }
+        case Value::Type::MAP: {
+            std::vector<std::pair<std::string, std::string>> kv;
+            if (v.map) for (auto& e : *v.map) kv.push_back({shapeKeyText(e.first), shapeStr(e.second, depth + 1)});
+            std::sort(kv.begin(), kv.end());
+            std::string o = "{";
+            for (size_t i = 0; i < kv.size(); i++) { if (i) o += ","; if (i >= 32) { o += "..."; break; } o += kv[i].first + ":" + kv[i].second; }
+            return o + "}";
+        }
+        case Value::Type::SET: return "set(" + std::to_string(v.set ? v.set->size() : 0) + ")";
+        case Value::Type::INSTANCE: {
+            if (!v.instance) return "instance";
+            std::vector<std::pair<std::string, std::string>> kv;
+            for (auto& e : v.instance->fields) kv.push_back({e.first, shapeStr(e.second, depth + 1)});
+            std::sort(kv.begin(), kv.end());
+            std::string o = v.instance->className + "{";
+            for (size_t i = 0; i < kv.size(); i++) { if (i) o += ","; o += kv[i].first + ":" + kv[i].second; }
+            return o + "}";
+        }
+        case Value::Type::FUNCTION:
+            return v.function && v.function->declaration ? "function/" + std::to_string(v.function->declaration->params.size()) : "function";
+        default: return v.typeName();
+    }
+}
+static bool shapeRec(const Value& a, const Value& b, const std::string& path, std::vector<ShapeIssue>* out, int depth) {
+    auto fail = [&](const std::string& reason) {
+        if (out) out->push_back({path, reason, shapeStr(b, 7), shapeStr(a, 7)});
+        return false;
+    };
+    if (a.type != b.type) return fail("type mismatch");
+    if (depth > 64) return true;
+    switch (a.type) {
+        case Value::Type::ARRAY: {
+            if (a.array == b.array) return true;
+            if (!a.array || !b.array) return fail("empty reference");
+            bool ok = true;
+            if (a.array->size() != b.array->size()) { ok = fail("length " + std::to_string(a.array->size()) + " != " + std::to_string(b.array->size())); if (!out) return false; }
+            size_t n = std::min(a.array->size(), b.array->size());
+            for (size_t i = 0; i < n; i++)
+                if (!shapeRec((*a.array)[i], (*b.array)[i], path + "[" + std::to_string(i) + "]", out, depth + 1)) { ok = false; if (!out) return false; }
+            return ok;
+        }
+        case Value::Type::MAP: {
+            if (a.map == b.map) return true;
+            if (!a.map || !b.map) return fail("empty reference");
+            bool ok = true;
+            if (!out && a.map->size() != b.map->size()) return false;
+            for (auto& kv : *b.map) {   // المفاتيح التي يتطلّبها النموذج
+                const Value* av = nullptr;
+                for (auto& kv2 : *a.map) if (valuesEqual(kv.first, kv2.first)) { av = &kv2.second; break; }
+                std::string kp = path + (kv.first.type == Value::Type::STRING ? "." + kv.first.str : "[" + kv.first.toDisplayString() + "]");
+                if (!av) { ok = false; if (!out) return false; out->push_back({kp, "missing key", shapeStr(kv.second, 7), "(absent)"}); continue; }
+                if (!shapeRec(*av, kv.second, kp, out, depth + 1)) { ok = false; if (!out) return false; }
+            }
+            if (out) for (auto& kv : *a.map) {   // مفاتيح زائدة
+                bool found = false;
+                for (auto& kv2 : *b.map) if (valuesEqual(kv.first, kv2.first)) { found = true; break; }
+                if (!found) { ok = false; out->push_back({path + (kv.first.type == Value::Type::STRING ? "." + kv.first.str : "[" + kv.first.toDisplayString() + "]"), "unexpected key", "(absent)", shapeStr(kv.second, 7)}); }
+            }
+            return ok;
+        }
+        case Value::Type::SET: {
+            if (a.set == b.set) return true;
+            if (!a.set || !b.set) return fail("empty reference");
+            if (a.set->size() != b.set->size()) return fail("size " + std::to_string(a.set->size()) + " != " + std::to_string(b.set->size()));
+            auto covered = [&](const SetData& x, const SetData& y) {
+                for (auto& xe : x.items) { bool f = false; for (auto& ye : y.items) if (shapeRec(xe, ye, path, nullptr, depth + 1)) { f = true; break; } if (!f) return false; }
+                return true;
+            };
+            if (!covered(*a.set, *b.set) || !covered(*b.set, *a.set)) return fail("element shapes differ");
+            return true;
+        }
+        case Value::Type::INSTANCE: {
+            if (a.instance == b.instance) return true;
+            if (!a.instance || !b.instance) return fail("empty reference");
+            if (a.instance->className != b.instance->className) return fail("class " + a.instance->className + " != " + b.instance->className);
+            bool ok = true;
+            for (auto& kv : b.instance->fields) {
+                auto it = a.instance->fields.find(kv.first);
+                if (it == a.instance->fields.end()) { ok = false; if (!out) return false; out->push_back({path + "." + kv.first, "missing field", shapeStr(kv.second, 7), "(absent)"}); continue; }
+                if (!shapeRec(it->second, kv.second, path + "." + kv.first, out, depth + 1)) { ok = false; if (!out) return false; }
+            }
+            if (a.instance->fields.size() != b.instance->fields.size()) {
+                ok = false; if (!out) return false;
+                for (auto& kv : a.instance->fields) if (!b.instance->fields.count(kv.first)) out->push_back({path + "." + kv.first, "unexpected field", "(absent)", shapeStr(kv.second, 7)});
+            }
+            return ok;
+        }
+        case Value::Type::FUNCTION: {
+            auto da = a.function ? a.function->declaration : nullptr, db = b.function ? b.function->declaration : nullptr;
+            if (da && db && da->params.size() != db->params.size()) return fail("arity " + std::to_string(da->params.size()) + " != " + std::to_string(db->params.size()));
+            return true;
+        }
+        default: return true; // nil/number/string/bool: النوع نفسه يكفي
+    }
+}
+bool sameShape(const Value& a, const Value& b) { return shapeRec(a, b, "$", nullptr, 0); }
+std::string shapeOf(const Value& v) { return shapeStr(v, 0); }
+std::vector<std::array<std::string, 4>> shapeDiff(const Value& value, const Value& model) {
+    std::vector<ShapeIssue> out; shapeRec(value, model, "$", &out, 0);
+    std::vector<std::array<std::string, 4>> r;
+    for (auto& i : out) r.push_back({i.path, i.reason, i.expected, i.actual});
+    return r;
+}
+
 // هوية مرجعية: للأنواع المرجعية (ARRAY/MAP/SET/INSTANCE/FUNCTION) نفس المؤشّر بالذات؛
 // للأنواع القيمية (nil/number/string/bool) تساوي القيمة نفسها (لا معنى لـ"كائن آخر" لها).
 static bool sameReference(const Value& a, const Value& b) {
@@ -462,6 +588,7 @@ static std::string tokenTypeName(TokenType t) {
         case TokenType::BANG_EQUAL: return "BANG_EQUAL";
         case TokenType::NOT_SAME: return "NOT_SAME";
         case TokenType::COPY_OF: return "COPY_OF";
+        case TokenType::SAME_SHAPE: return "SAME_SHAPE";
         case TokenType::LESS: return "LESS";
         case TokenType::LESS_EQUAL: return "LESS_EQUAL";
         case TokenType::GREATER: return "GREATER";
@@ -6625,6 +6752,26 @@ for(auto& kv:maskParents) if(maskResolve4(kv.second)==parent && !maskResolve4(kv
         }
         return Value::makeArray(arr);
     };
+    // shapeOf(v) -> وصف شكل القيمة كنص (مفاتيح القاموس مرتبة): shapeOf({"b": 1, "a": ["x"]}) = "{a:[string],b:number}"
+    natives["shapeOf"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("shapeOf", a, 1, line);
+        return Value::string(shapeOf(a[0]));
+    };
+    // shapeDiff(value, model) -> قائمة مخالفات الشكل (فارغة = متطابقان، أي value =::= model).
+    // كل عنصر قاموس: path ("$.user.tags[1]") · reason · expected (شكل النموذج) · actual (شكل القيمة).
+    natives["shapeDiff"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("shapeDiff", a, 2, line);
+        auto arr = std::make_shared<ArrayData>();
+        for (auto& d : shapeDiff(a[0], a[1])) {
+            auto m = std::make_shared<MapData>();
+            m->push_back({Value::string("path"), Value::string(d[0])});
+            m->push_back({Value::string("reason"), Value::string(d[1])});
+            m->push_back({Value::string("expected"), Value::string(d[2])});
+            m->push_back({Value::string("actual"), Value::string(d[3])});
+            arr->push_back(Value::makeMap(m));
+        }
+        return Value::makeArray(arr);
+    };
     // tokenType(source) -> نوع أول token فقط (نص)، اختصار مريح عند فحص رمز واحد بدل مصفوفة كاملة
     // مثلاً: tokenType("let") == "LET"، tokenType("foo") == "IDENT"، tokenType("==") == "EQUAL_EQUAL"
     natives["tokenType"] = [](std::vector<Value>& a, int line) -> Value {
@@ -11824,6 +11971,8 @@ Value Interpreter::evaluateTree(const ExprPtr& expr, const EnvPtr& env) {
                 return Value::boolean_(!sameReference(left, right));
             case TokenType::COPY_OF:    // =/   متساويان بالقيمة لكنهما كائنان مختلفان (نسخة)
                 return Value::boolean_(valuesEqual(left, right) && !sameReference(left, right));
+            case TokenType::SAME_SHAPE: // =::= متطابقان في الشكل (البنية والأنواع) مهما اختلفت القيم
+                return Value::boolean_(sameShape(left, right));
             default: break;
         }
     }
