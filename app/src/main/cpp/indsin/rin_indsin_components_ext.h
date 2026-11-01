@@ -17,6 +17,7 @@
 // take (fabric, warp, subs) exactly like applyBannerConveniences does.
 #pragma once
 #include "rin_indsin_strand.h"
+#include "rin_indsin_collapsible.h" // Accordion / ExpandableList / TreeView / NestedList
 #include "../rin_ast.h"
 #include <sstream>
 #include <string>
@@ -212,6 +213,7 @@ inline void applyExtendedUiConveniences(const StrandPtr& fabric, WarpScope& warp
     applyBreadcrumbConveniences(fabric);
     applyPaginationConveniences(fabric, warp, subs);
     applyStepsConveniences(fabric);
+    applyCollapsibleConveniences(fabric, warp, subs); // Accordion / ExpandableList / TreeView / NestedList
 }
 
 } // namespace indsin
