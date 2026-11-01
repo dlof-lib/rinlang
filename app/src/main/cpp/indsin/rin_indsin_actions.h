@@ -287,6 +287,41 @@ inline void ActionRegistry::registerBuiltins() {
     // `onTap: seq(set(progress,50), show(banner), navigate("next.rin"));` as ordinary, already-
     // parseable Rin. Each argument must itself be a call to a registered action name; anything
     // else in the list is a hard error (not silently skipped), so a typo doesn't fail invisibly.
+    // ---- Collapsible lists (rin_indsin_collapsible.h) -----------------------------------------
+    // accordion(cell, others...): flips `cell`; when it ends up open, every cell in `others` is closed
+    // (single-open Accordion). Only cells that actually changed are reported.
+    registerAction("accordion", [](const std::vector<rin::ExprPtr>& a, WarpScope& w) -> ActionOutcome {
+        ActionOutcome out;
+        std::string cell = actionCellArg(a, 0, w);
+        if (cell.empty()) { out.error = "accordion() needs accordion(cell, otherCells...)"; return out; }
+        out.recognized = true;
+        bool nowOpen = w.get(cell).asString() != "true";
+        w.set(cell, Value::txt(nowOpen ? "true" : "false"));
+        out.changedWarpNames.push_back(cell);
+        if (nowOpen) for (size_t i = 1; i < a.size(); ++i) {
+            std::string other = actionCellArg(a, i, w);
+            if (other.empty() || other == cell || w.get(other).asString() == "false") continue;
+            w.set(other, Value::txt("false"));
+            out.changedWarpNames.push_back(other);
+        }
+        return out;
+    });
+    // expandAll(cells...) / collapseAll(cells...): force every listed open-cell to true / false.
+    for (bool openIt : {true, false}) {
+        registerAction(openIt ? "expandAll" : "collapseAll", [openIt](const std::vector<rin::ExprPtr>& a, WarpScope& w) -> ActionOutcome {
+            ActionOutcome out;
+            out.recognized = true;
+            for (size_t i = 0; i < a.size(); ++i) {
+                std::string cell = actionCellArg(a, i, w);
+                if (cell.empty()) continue;
+                std::string want = openIt ? "true" : "false";
+                if (w.get(cell).asString() == want) continue;
+                w.set(cell, Value::txt(want));
+                out.changedWarpNames.push_back(cell);
+            }
+            return out;
+        });
+    }
     registerAction("seq", [](const std::vector<rin::ExprPtr>& a, WarpScope& w) -> ActionOutcome {
         ActionOutcome out;
         out.recognized = true;
