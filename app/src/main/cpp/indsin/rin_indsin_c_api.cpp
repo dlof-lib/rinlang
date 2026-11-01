@@ -188,6 +188,7 @@ std::string fabricEnvelope(IndsinSession* sess, const std::string& extraFields) 
 std::string mediaExtraJson(const indsin::TapResult& t) {
     if (t.mediaPick)   return ",\"media\":" + indsin::media::pickRequestJson(t.pick);
     if (t.mediaUpload) return ",\"media\":" + indsin::media::uploadRequestJson(t.upload);
+    if (t.imageDownload) return ",\"media\":" + indsin::imagesrc::downloadRequestJson(t.download);
     if (t.mediaCancel) return ",\"media\":" + indsin::media::cancelRequestJson(t.cancelCell);
     return "";
 }
