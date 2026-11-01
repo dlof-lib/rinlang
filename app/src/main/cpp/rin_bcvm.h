@@ -49,7 +49,7 @@ namespace rin::vm {
     X(PopScope)     /* a=عدد */ \
     /* حساب ومقارنة (a=سطر)  l r → ناتج */ \
     X(Add) X(Sub) X(Mul) X(Div) X(Mod) \
-    X(Lt) X(Le) X(Gt) X(Ge) X(Eq) X(Ne) X(NotSame) X(CopyOf) \
+    X(Lt) X(Le) X(Gt) X(Ge) X(Eq) X(Ne) X(NotSame) X(CopyOf) X(SameShape) \
     X(Neg)          /* a=سطر */ \
     X(Not) \
     /* قفز */ \
