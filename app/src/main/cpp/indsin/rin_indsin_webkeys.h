@@ -60,11 +60,33 @@ inline std::string webCanonicalKey(const std::string& key) {
         {"mediaquery", "media"}, {"devicesize", "device_size"},
         // المحرك
         {"layoutengine", "layout"}, {"layoutmode", "layout"},
+        // الخطوط والطباعة (rin_indsin_typography.h) — `weight`/`fontWeight` القديمتان تبقيان كما هما
+        {"fontfamily", "font_family"}, {"fontstyle", "font_style"}, {"fontvariant", "font_variant"},
+        {"fontfeature", "font_feature"}, {"fontfeatures", "font_feature"}, {"fontfeaturesettings", "font_feature"},
+        {"fontvariation", "font_variation"}, {"fontvariationsettings", "font_variation"}, {"variablefont", "font_variation"},
+        {"fontstretch", "font_stretch"}, {"fontdisplay", "font_display"}, {"fontkerning", "font_kerning"},
+        {"fontopticalsizing", "font_optical_sizing"}, {"opticalsize", "optical_size"}, {"systemfont", "font"}, {"customfont", "font"},
+        {"texttransform", "text_transform"}, {"textshadow", "text_shadow"}, {"unicoderange", "unicode_range"},
+        // حركة النص (rin_indsin_textfx.h)
+        {"textanimation", "text_animation"}, {"typewriter", "typewriter"}, {"fadetext", "fade_text"}, {"texttransition", "text_transition"},
+        {"textreveal", "text_reveal"}, {"textrotate", "text_rotate"}, {"textrotator", "text_rotator"}, {"textrotateto", "text_rotate_to"},
+        {"textshadowanimation", "text_shadow_animation"}, {"textshadowto", "text_shadow_to"}, {"textshadowcolor", "text_shadow_color"},
+        {"textkey", "text_key"}, {"textrestart", "text_restart"}, {"textduration", "text_duration"}, {"textdelay", "text_delay"},
+        {"textiterations", "text_iterations"}, {"texteasing", "text_easing"}, {"textstagger", "text_stagger"},
+        // إمكانية الوصول (rin_indsin_a11y.h): AriaLabel/AltText/AccessibleName/ScreenReader/SemanticText/LanguageTag/ReadingOrder
+        {"arialabel", "a11y_label"}, {"accessiblename", "a11y_label"}, {"accessiblelabel", "a11y_label"},
+        {"alttext", "alt"}, {"alttextlong", "alt_long"}, {"accessibledescription", "a11y_description"}, {"ariadescription", "a11y_description"},
+        {"screenreaderonly", "sr_only"}, {"visuallyhidden", "sr_only"}, {"srtext", "sr_text"}, {"screenreadertext", "sr_text"},
+        {"semantictext", "semantic"}, {"headinglevel", "heading_level"}, {"languagetag", "lang"}, {"locale", "lang"},
+        {"readingorder", "reading_order"}, {"reducemotion", "reduce_motion"},
     };
     std::string base = key, suffix;
     size_t us = key.rfind('_');
     if (us != std::string::npos && us > 0 && isBreakpointSuffix(key.substr(us + 1))) { base = key.substr(0, us); suffix = key.substr(us); }
-    auto it = table.find(squash(base));
+    std::string sq = squash(base);
+    if (sq.size() > 4 && sq.compare(0, 4, "aria") == 0 && sq != "arialabel" && sq != "ariadescription" && table.find(sq) == table.end())
+        return "aria_" + sq.substr(4) + suffix;                      // ARIA: أسماء الخصائص بلا فواصل (aria_labelledby)
+    auto it = table.find(sq);
     if (it == table.end()) return key;
     return it->second + suffix;
 }
