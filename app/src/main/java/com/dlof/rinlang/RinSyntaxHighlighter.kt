@@ -229,6 +229,7 @@ object RinSyntaxHighlighter {
         "Link", "Radio", "Slider", "Select", "List", "ListItem", "File", "Date",
         "Time", "CodeEditor", "Calculator", "Search", "Tag", "Kbd", "Rating", "Skeleton",
         "Spinner", "Steps", "StepItem", "Timeline", "TimelineItem", "Breadcrumb", "Pagination", "DonutChart",
+        "Accordion", "AccordionItem", "ExpandableList", "TreeView", "TreeNode", "NestedList", "NestedItem",
         // Web Layout Concepts: وسوم هيكلية (مرادفات لأنواع قائمة)
         "Body", "Page", "Main", "Content", "Article", "Aside", "Group", "Navigation", "Nav", "Flex",
         "Wrapper", "Widget", "Component", "Child",
