@@ -20,9 +20,12 @@
 // حلقة for + make تُنشئ حاويات ديناميكية إضافية وقت التشغيل — والنتيجتان
 // تُقرآن حيّاً في warp cells يعرضهما شريط الإحصاءات أدناه (بطاقة رابعة).
 //
-// خريطة الأقسام: topbar · drawer · hero · stats · features · tour (جولة في
-// اللغة، أمثلة كود حقيقية) · thisPage (هذه الصفحة نفسها) · rinhtml ·
-// quickstart · ecosystem · compare · academy · exercises · projects · errors · glossary · reference · faq · finalCta · footer
+// خريطة الأقسام: topbar · drawer · hero · stats · features · tour · thisPage ·
+// rinhtml · quickstart · ecosystem · compare · academy (منهج كامل من الصفر) ·
+// exercises · projects · errors · glossary · reference · faq · finalCta · footer
+//
+// المنهج التعليمي (Rin Academy) موسّع بالكامل: 12 درساً من الصفر تغطي اللغة
+// الأساسية + Indsin + الحاويات + المكتبات + الويب + مسار التطبيق الحقيقي.
 // =============================================================================
 
 // ---- برمجة حقيقية قبل أي @view: حاوية NoSQL تُعدّ أقسام هذه الصفحة نفسها ----
@@ -113,7 +116,7 @@ warp copyHtml   = "false";
       @view.MenuItem=dm0  label="📚 مكتبات Rin";      url="?view=libraries"; onTap=toggle(navOpen); color="#22c55e"; .end/view
       @view.MenuItem=dm1  label="لماذا Rin";        url="#features";   onTap=toggle(navOpen); color="#f4f6f3"; .end/view
       @view.MenuItem=dm2  label="جولة في اللغة";     url="#tour";       onTap=toggle(navOpen); color="#f4f6f3"; .end/view
-       @view.MenuItem=dmLearn label="🎓 تعلم Rin";       url="#learn";       onTap=toggle(navOpen); color="#22c55e"; .end/view
+       @view.MenuItem=dmLearn label="🎓 تعلّم من الصفر (منهج كامل)"; url="#learn"; onTap=toggle(navOpen); color="#22c55e"; .end/view
        @view.MenuItem=dmExercises label="🧪 التمارين"; url="#exercises"; onTap=toggle(navOpen); color="#f4f6f3"; .end/view
        @view.MenuItem=dmProjects label="🧩 المشاريع"; url="#projects"; onTap=toggle(navOpen); color="#f4f6f3"; .end/view
        @view.MenuItem=dmErrors label="🛠 تشخيص الأخطاء"; url="#errors"; onTap=toggle(navOpen); color="#f4f6f3"; .end/view
@@ -178,8 +181,13 @@ warp copyHtml   = "false";
           url="?view=libraries";
           bg="#22c55e"; color="#0a0c0a"; weight="800";
         .end/view
+        @view.Button=ctaAcademy
+          label="🎓 تعلّم من الصفر";
+          url="#learn";
+          bg="#22c55e"; color="#0a0c0a"; weight="800";
+        .end/view
         @view.Button=ctaQuickstart
-          label="ابدأ الآن ↓";
+          label="البدء السريع ↓";
           url="#quickstart";
           bg="#141a15"; color="#f4f6f3"; weight="700";
         .end/view
@@ -499,7 +507,7 @@ warp copyHtml   = "false";
           @view.Text=s2t text="2 — ابنِ المفسّر الرسمي"; size=15; weight="700"; color="#f4f6f3"; .end/view
           @view.Text=s2d text="بناء واحد بسيط باستخدام g++ لتفعيل rin_run."; size=13; color="#9aa39c"; .end/view
           @view.Text=s2code mono="true"; size=12; color="#4ade80";
-            text="g++ -O2 -std=c++17 -o rin_run tools/rin_run.cpp \\\n  app/src/main/cpp/rin_lexer.cpp \\\n  app/src/main/cpp/rin_parser.cpp \\\n  app/src/main/cpp/rin_interpreter.cpp \\\n  -I app/src/main/cpp";
+            text="g++ -O2 -std=c++17 -o rin_run tools/rin_run.cpp \\n  app/src/main/cpp/rin_lexer.cpp \\n  app/src/main/cpp/rin_parser.cpp \\n  app/src/main/cpp/rin_interpreter.cpp \\n  -I app/src/main/cpp";
           .end/view
         .end/view
       .end/view
@@ -674,169 +682,294 @@ warp copyHtml   = "false";
       shadow="true";
 
       @view.Text=learnEyebrow text="التعليم الرسمي · Rin Academy"; size=12; color="#22c55e"; weight="800"; .end/view
-      @view.Text=learnTitle text="تعلّم Rin من الصفر إلى كتابة برامج حقيقية"; size=25; weight="900"; color="#f4f6f3"; .end/view
-      @view.Text=learnIntro text="مسار واحد مرتب: الأساسيات ← البيانات ← التحكم ← الدوال والكائنات ← الحاويات ← التنفيذ والمكتبات ← الويب. استخدم كل درس بالترتيب، ثم افتح المرجع الرسمي للتفاصيل الأوسع."; size=14; color="#9aa39c"; .end/view
+      @view.Text=learnTitle text="تعلّم Rin و Indsin من الصفر — منهج كامل"; size=25; weight="900"; color="#f4f6f3"; .end/view
+      @view.Text=learnIntro text="هذا المنهج مكتوب ليأخذك من الصفر تماماً: من أول print إلى بناء واجهات Indsin وتشغيل برامج حقيقية على CLI وأندرويد والمتصفح. كل درس يحتوي شرحاً، أمثلة جاهزة للنسخ، ونصائح عملية. اتبع الترتيب ولا تتخطَّ الدروس الأولى."; size=14; color="#9aa39c"; .end/view
 
       @view.Row=learnActions
         gap=10;
-        @view.Button=learnStart label="ابدأ الدرس 1"; url="#learn-1"; bg="#22c55e"; color="#0a0c0a"; weight="800"; .end/view
+        @view.Button=learnStart label="ابدأ الدرس 1 — من الصفر"; url="#learn-1"; bg="#22c55e"; color="#0a0c0a"; weight="800"; .end/view
+        @view.Button=learnIndsin label="مسار Indsin"; url="#learn-6"; bg="#141a15"; color="#f4f6f3"; .end/view
         @view.Button=learnRef label="المرجع الكامل"; url="https://github.com/dlof-lib/rinlang/tree/main/docs"; bg="#141a15"; color="#f4f6f3"; .end/view
       .end/view
 
       @view.Column=lessonLinks gap=10; padding=14; bg="#0f140f"; radius=14;
-        @view.Text=lessonLinksTitle text="روابط مباشرة للدروس"; size=15; weight="850"; color="#f4f6f3"; .end/view
+        @view.Text=lessonLinksTitle text="خريطة المنهج الكامل (من الصفر)"; size=15; weight="850"; color="#f4f6f3"; .end/view
         @view.Wrap=lessonLinksWrap gap=7;
-          @view.Button=lessonLink1 label="01 البداية"; url="#learn-1"; bg="#141a15"; color="#f4f6f3"; .end/view
-          @view.Button=lessonLink2 label="02 الصياغة"; url="#learn-2"; bg="#141a15"; color="#f4f6f3"; .end/view
-          @view.Button=lessonLink3 label="03 البيانات"; url="#learn-3"; bg="#141a15"; color="#f4f6f3"; .end/view
-          @view.Button=lessonLink4 label="04 التحكم"; url="#learn-4"; bg="#141a15"; color="#f4f6f3"; .end/view
+          @view.Button=lessonLink1 label="01 البداية المطلقة"; url="#learn-1"; bg="#141a15"; color="#f4f6f3"; .end/view
+          @view.Button=lessonLink2 label="02 المتغيرات والأنواع"; url="#learn-2"; bg="#141a15"; color="#f4f6f3"; .end/view
+          @view.Button=lessonLink3 label="03 الشروط"; url="#learn-3"; bg="#141a15"; color="#f4f6f3"; .end/view
+          @view.Button=lessonLink4 label="04 الحلقات"; url="#learn-4"; bg="#141a15"; color="#f4f6f3"; .end/view
           @view.Button=lessonLink5 label="05 الدوال"; url="#learn-5"; bg="#141a15"; color="#f4f6f3"; .end/view
-          @view.Button=lessonLink6 label="06 الواجهة"; url="#learn-6"; bg="#141a15"; color="#f4f6f3"; .end/view
-          @view.Button=lessonLink7 label="07 البيانات والتدفق"; url="#learn-7"; bg="#141a15"; color="#f4f6f3"; .end/view
+          @view.Button=lessonLink6 label="06 Indsin واجهات"; url="#learn-6"; bg="#141a15"; color="#f4f6f3"; .end/view
+          @view.Button=lessonLink7 label="07 الحاويات NoSQL"; url="#learn-7"; bg="#141a15"; color="#f4f6f3"; .end/view
           @view.Button=lessonLink8 label="08 المكتبات"; url="#learn-8"; bg="#141a15"; color="#f4f6f3"; .end/view
           @view.Button=lessonLink9 label="09 الأخطاء"; url="#learn-9"; bg="#141a15"; color="#f4f6f3"; .end/view
-          @view.Button=lessonLink10 label="10 المشاريع"; url="#learn-10"; bg="#141a15"; color="#f4f6f3"; .end/view
-          @view.Button=lessonLink11 label="11 المتصفح"; url="#learn-11"; bg="#141a15"; color="#f4f6f3"; .end/view
-          @view.Button=lessonLink12 label="12 التطبيق"; url="#learn-12"; bg="#141a15"; color="#f4f6f3"; .end/view
+          @view.Button=lessonLink10 label="10 مشاريع"; url="#learn-10"; bg="#141a15"; color="#f4f6f3"; .end/view
+          @view.Button=lessonLink11 label="11 الويب و WASM"; url="#learn-11"; bg="#141a15"; color="#f4f6f3"; .end/view
+          @view.Button=lessonLink12 label="12 التطبيق الكامل"; url="#learn-12"; bg="#141a15"; color="#f4f6f3"; .end/view
         .end/view
       .end/view
 
       @view.Card=learnMap padding=14; bg="#101510"; radius=14; shadow="true";
         @view.Column=learnMapCol gap=5;
-          @view.Text=learnMapTitle text="خريطة المنهج"; size=14; weight="800"; color="#f4f6f3"; .end/view
-          @view.Text=learnMapText text="01 الأساسيات  ·  02 البيانات  ·  03 التحكم  ·  04 الدوال  ·  05 الأنواع والكائنات  ·  06 الحاويات والواجهة  ·  07 البيانات والتنفيذ  ·  08 المكتبات والملفات  ·  09 الأخطاء والاختبار  ·  10 الويب والمشاريع"; size=13; color="#9aa39c"; .end/view
+          @view.Text=learnMapTitle text="لماذا هذا المنهج؟"; size=14; weight="800"; color="#f4f6f3"; .end/view
+          @view.Text=learnMapText text="Rin لغة واحدة تعمل على سطر الأوامر + أندرويد + المتصفح بنفس المحرك. تتعلم مرة واحدة وتكتب برامج حقيقية. Indsin هو محرك الواجهات الأصلي للغة — نفس الصياغة التي تبني هذه الصفحة نفسها."; size=13; color="#9aa39c"; .end/view
         .end/view
       .end/view
 
       // ------------------------------ الدرس 1 ------------------------------
-      @view.Card=learn1 id="learn-1"; padding=16; bg="#10130f"; radius=16; shadow="true";
-        @view.Column=learn1c gap=8;
-          @view.Text=learn1n text="01 — أول برنامج"; size=17; weight="850"; color="#f4f6f3"; .end/view
-          @view.Text=learn1d text="تعلم نقطة البداية: كل عبارة تنتهي بـ ;، وprint تطبع قيمة. شغّل الملف بالمفسر الرسمي."; size=13; color="#9aa39c"; .end/view
-          @view.Text=learn1code mono="true"; size=12.5; color="#cfd6cf"; text="print \"Hello, Rin!\";\nlet x = 5;\nprint x * 2;"; .end/view
-          @view.Text=learn1run mono="true"; size=12; color="#79d99a"; text="rin run hello.rin"; .end/view
-          @view.Button=learn1more label="شرح البداية"; url="https://github.com/dlof-lib/rinlang/blob/main/docs/getting-started.md"; bg="#141a15"; color="#f4f6f3"; .end/view
+      @view.Card=learn1 id="learn-1"; padding=18; bg="#10130f"; radius=16; shadow="true";
+        @view.Column=learn1c gap=10;
+          @view.Text=learn1n text="01 — البداية المطلقة: أول برنامج Rin"; size=18; weight="900"; color="#f4f6f3"; .end/view
+          @view.Text=learn1why text="لماذا هذا الدرس؟"; size=14; weight="700"; color="#22c55e"; .end/view
+          @view.Text=learn1whyT text="قبل أي شيء متقدم، تحتاج أن تفهم كيف تكتب جملة واحدة وتشغّلها. كل برنامج Rin يبدأ من هنا."; size=13; color="#9aa39c"; .end/view
+
+          @view.Text=learn1exTitle text="القاعدة الأولى"; size=14; weight="700"; color="#f4f6f3"; .end/view
+          @view.Text=learn1exT text="كل عبارة تنتهي بفاصلة منقوطة ;  ·  print تطبع أي قيمة  ·  let يعرّف متغيّراً جديداً  ·  التعليقات تبدأ بـ //"; size=13; color="#9aa39c"; .end/view
+
+          @view.Text=learn1codeTitle text="مثال كامل جاهز للنسخ"; size=14; weight="700"; color="#f4f6f3"; .end/view
+          @view.Text=learn1code mono="true"; size=13; color="#cfd6cf";
+            text="// أول برنامج Rin\nprint \"مرحباً يا عالم!\";\n\nlet name = \"Rin\";\nlet year = 2026;\n\nprint \"اللغة: \" + name;\nprint \"السنة: \" + year;\nprint 3 + 4 * 2;   // أولوية العمليات";
+          .end/view
+
+          @view.Text=learn1runTitle text="كيف تشغّله؟"; size=14; weight="700"; color="#f4f6f3"; .end/view
+          @view.Text=learn1run mono="true"; size=12.5; color="#79d99a";
+            text="# احفظ الكود في ملف hello.rin ثم:\nrin run hello.rin\n\n# أو من داخل مجلد المشروع:\n./rin-linux-x64/rin run hello.rin";
+          .end/view
+
+          @view.Text=learn1tipsTitle text="نصائح مهمة للمبتدئين"; size=14; weight="700"; color="#f4f6f3"; .end/view
+          @view.Text=learn1tips text="• النصوص بين علامتي اقتباس مزدوجة \"...\"\n• الأرقام بدون اقتباس\n• + يربط النصوص أو يجمع الأرقام حسب السياق\n• الخطأ الشائع: نسيان الفاصلة المنقوطة في نهاية السطر"; size=13; color="#9aa39c"; .end/view
+
+          @view.Row=learn1btns gap=8;
+            @view.Button=learn1more label="دليل البداية الرسمي"; url="https://github.com/dlof-lib/rinlang/blob/main/docs/getting-started.md"; bg="#141a15"; color="#f4f6f3"; .end/view
+            @view.Button=learn1next label="الدرس التالي →"; url="#learn-2"; bg="#22c55e"; color="#0a0c0a"; weight="700"; .end/view
+          .end/view
         .end/view
       .end/view
 
-      // ------------------------------ الدرس 2 ------------------------------
-      @view.Card=learn2 id="learn-2"; padding=16; bg="#10130f"; radius=16; shadow="true";
-        @view.Column=learn2c gap=8;
-          @view.Text=learn2n text="02 — قواعد اللغة والتعابير"; size=17; weight="850"; color="#f4f6f3"; .end/view
-          @view.Text=learn2d text="الأرقام والنصوص والمنطق وnil والمصفوفات والقواميس. العوامل الحسابية والمقارنة والمنطقية تستخدم لبناء التعابير."; size=13; color="#9aa39c"; .end/view
-          @view.Text=learn2code mono="true"; size=12.5; color="#cfd6cf"; text="let n = 10;\nlet ok = n >= 5 and n < 20;\nlet names = [\"A\", \"B\"];\nlet user = {\"name\": \"Rin\"};\nprint ok;"; .end/view
-          @view.Button=learn2more label="تعلم الصياغة"; url="https://github.com/dlof-lib/rinlang/blob/main/docs/syntax.md"; bg="#141a15"; color="#f4f6f3"; .end/view
+// ------------------------------ الدرس 2 ------------------------------
+      @view.Card=learn2 id="learn-2"; padding=18; bg="#10130f"; radius=16; shadow="true";
+        @view.Column=learn2c gap=10;
+          @view.Text=learn2n text="02 — المتغيرات والأنواع والقيم"; size=18; weight="900"; color="#f4f6f3"; .end/view
+          @view.Text=learn2why text="لماذا؟"; size=14; weight="700"; color="#22c55e"; .end/view
+          @view.Text=learn2whyT text="كل برنامج يحتاج تخزين قيم. في Rin المتغير يُعرَّف بـ let فقط. الأنواع اختيارية لكنها مفيدة للقراءة."; size=13; color="#9aa39c"; .end/view
+
+          @view.Text=learn2codeTitle text="أمثلة أساسية"; size=14; weight="700"; color="#f4f6f3"; .end/view
+          @view.Text=learn2code mono="true"; size=13; color="#cfd6cf";
+            text="let x = 10;                    // رقم\nlet name = \"Rin\";              // نص\nlet ok = true;                 // منطقي\nlet empty = nil;               // قيمة فارغة\n\nlet score: Number = 95;        // نوع معلَن اختياري\nlet items = [1, 2, 3];         // مصفوفة\nlet user = {\"id\": 1, \"name\": \"Ali\"};  // قاموس\n\nprint type(x);                 // number\nprint len(items);              // 3\nprint user[\"name\"];";
+          .end/view
+
+          @view.Text=learn2tips text="• let يعرّف متغيّراً جديداً في النطاق الحالي\n• يمكن إعادة الإسناد لاحقاً: x = x + 1;\n• المصفوفات والقواميس قابلة للتعديل بالفهرسة\n• type() يُرجع اسم النوع وقت التشغيل بحروف صغيرة"; size=13; color="#9aa39c"; .end/view
+
+          @view.Row=learn2btns gap=8;
+            @view.Button=learn2more label="توثيق المتغيرات"; url="https://github.com/dlof-lib/rinlang/blob/main/docs/variables.md"; bg="#141a15"; color="#f4f6f3"; .end/view
+            @view.Button=learn2next label="الدرس التالي →"; url="#learn-3"; bg="#22c55e"; color="#0a0c0a"; weight="700"; .end/view
+          .end/view
         .end/view
       .end/view
 
-      // ------------------------------ الدرس 3 ------------------------------
-      @view.Card=learn3 id="learn-3"; padding=16; bg="#10130f"; radius=16; shadow="true";
-        @view.Column=learn3c gap=8;
-          @view.Text=learn3n text="03 — المتغيرات والبيانات"; size=17; weight="850"; color="#f4f6f3"; .end/view
-          @view.Text=learn3d text="let هو تعريف المتغير. يمكن استخدام نوع معلَن اختياريًا مثل Number وString وBool وArray وMap، مع فهرسة المصفوفات والقواميس."; size=13; color="#9aa39c"; .end/view
-          @view.Text=learn3code mono="true"; size=12.5; color="#cfd6cf"; text="let score: Number = 10;\nlet items = [1, 2, 3];\nitems[0] = 9;\nlet profile = {\"name\": \"Rin\"};\nprint profile[\"name\"];"; .end/view
-          @view.Button=learn3more label="تعلم المتغيرات"; url="https://github.com/dlof-lib/rinlang/blob/main/docs/variables.md"; bg="#141a15"; color="#f4f6f3"; .end/view
+// ------------------------------ الدرس 3 ------------------------------
+      @view.Card=learn3 id="learn-3"; padding=18; bg="#10130f"; radius=16; shadow="true";
+        @view.Column=learn3c gap=10;
+          @view.Text=learn3n text="03 — الشروط: if و when"; size=18; weight="900"; color="#f4f6f3"; .end/view
+          @view.Text=learn3why text="لماذا؟"; size=14; weight="700"; color="#22c55e"; .end/view
+          @view.Text=learn3whyT text="البرامج تحتاج قرارات. Rin توفر if/else الكلاسيكية وwhen/otherwise بصياغة إنجليزية طبيعية — نفس المعنى تماماً."; size=13; color="#9aa39c"; .end/view
+
+          @view.Text=learn3codeTitle text="مثالان متكافئان"; size=14; weight="700"; color="#f4f6f3"; .end/view
+          @view.Text=learn3code mono="true"; size=13; color="#cfd6cf";
+            text="let score = 87;\n\n// الطريقة الكلاسيكية\nif (score >= 90) {\n    print \"ممتاز\";\n} else if (score >= 70) {\n    print \"جيد\";\n} else {\n    print \"يحتاج تحسين\";\n}\n\n// الطريقة الإنجليزية الطبيعية\nwhen (score >= 90) {\n    print \"ممتاز\";\n} otherwise {\n    print \"ليس ممتازاً بعد\";\n}";
+          .end/view
+
+          @view.Text=learn3tips text="• الأقواس حول الشرط إلزامية في if و when\n• else if و otherwise تعملان بشكل طبيعي\n• يمكن استخدام and / or / not داخل الشروط\n• صيغ مختصرة مثل =if=(cond) { ... } موجودة أيضاً"; size=13; color="#9aa39c"; .end/view
+
+          @view.Row=learn3btns gap=8;
+            @view.Button=learn3more label="توثيق التحكم"; url="https://github.com/dlof-lib/rinlang/blob/main/docs/control-flow.md"; bg="#141a15"; color="#f4f6f3"; .end/view
+            @view.Button=learn3next label="الدرس التالي →"; url="#learn-4"; bg="#22c55e"; color="#0a0c0a"; weight="700"; .end/view
+          .end/view
         .end/view
       .end/view
 
-      // ------------------------------ الدرس 4 ------------------------------
-      @view.Card=learn4 id="learn-4"; padding=16; bg="#10130f"; radius=16; shadow="true";
-        @view.Column=learn4c gap=8;
-          @view.Text=learn4n text="04 — الشروط والحلقات"; size=17; weight="850"; color="#f4f6f3"; .end/view
-          @view.Text=learn4d text="استخدم if/else أو when/otherwise، ثم while وfor وfor...in. break وcontinue للتحكم في الحلقة، وmatch/case لمطابقة الحالات."; size=13; color="#9aa39c"; .end/view
-          @view.Text=learn4code mono="true"; size=12.5; color="#cfd6cf"; text="let i = 0;\nwhile (i < 3) {\n    if (i == 1) { i = i + 1; continue; }\n    print i;\n    i = i + 1;\n}"; .end/view
-          @view.Button=learn4more label="تعلم التحكم"; url="https://github.com/dlof-lib/rinlang/blob/main/docs/control-flow.md"; bg="#141a15"; color="#f4f6f3"; .end/view
+// ------------------------------ الدرس 4 ------------------------------
+      @view.Card=learn4 id="learn-4"; padding=18; bg="#10130f"; radius=16; shadow="true";
+        @view.Column=learn4c gap=10;
+          @view.Text=learn4n text="04 — الحلقات: for و while"; size=18; weight="900"; color="#f4f6f3"; .end/view
+          @view.Text=learn4why text="لماذا؟"; size=14; weight="700"; color="#22c55e"; .end/view
+          @view.Text=learn4whyT text="تكرار العمل هو أساس معظم البرامج. Rin تدعم for التقليدية و for...in على المصفوفات والقواميس و while."; size=13; color="#9aa39c"; .end/view
+
+          @view.Text=learn4codeTitle text="أمثلة عملية"; size=14; weight="700"; color="#f4f6f3"; .end/view
+          @view.Text=learn4code mono="true"; size=13; color="#cfd6cf";
+            text="// for تقليدية\nfor (let i = 0; i < 5; i = i + 1) {\n    print i;\n}\n\n// for...in على مصفوفة\nlet names = [\"أحمد\", \"سارة\", \"علي\"];\nfor (let n in names) {\n    print \"مرحباً \" + n;\n}\n\n// while\nlet x = 3;\nwhile (x > 0) {\n    print x;\n    x = x - 1;\n}";
+          .end/view
+
+          @view.Text=learn4tips text="• break يخرج من الحلقة فوراً\n• continue يتخطى باقي الدورة الحالية\n• for...in يعمل على المصفوفات والقواميس\n• تجنّب الحلقات اللانهائية بتغيير شرط واضح"; size=13; color="#9aa39c"; .end/view
+
+          @view.Row=learn4btns gap=8;
+            @view.Button=learn4more label="توثيق التحكم"; url="https://github.com/dlof-lib/rinlang/blob/main/docs/control-flow.md"; bg="#141a15"; color="#f4f6f3"; .end/view
+            @view.Button=learn4next label="الدرس التالي →"; url="#learn-5"; bg="#22c55e"; color="#0a0c0a"; weight="700"; .end/view
+          .end/view
         .end/view
       .end/view
 
-      // ------------------------------ الدرس 5 ------------------------------
-      @view.Card=learn5 id="learn-5"; padding=16; bg="#10130f"; radius=16; shadow="true";
-        @view.Column=learn5c gap=8;
-          @view.Text=learn5n text="05 — الدوال والأنواع"; size=17; weight="850"; color="#f4f6f3"; .end/view
-          @view.Text=learn5d text="fun لتعريف الدوال، return للإرجاع، ويمكن للدالة أن تكون قيمة أو تستدعي نفسها. بعد الأساسيات انتقل إلى enum وclass وstruct والطرق."; size=13; color="#9aa39c"; .end/view
-          @view.Text=learn5code mono="true"; size=12.5; color="#cfd6cf"; text="fun add(a, b) {\n    return a + b;\n}\nprint add(2, 3);\n\nfun fact(n) {\n    if (n <= 1) { return 1; }\n    return n * fact(n - 1);\n}"; .end/view
-          @view.Button=learn5more label="تعلم الدوال"; url="https://github.com/dlof-lib/rinlang/blob/main/docs/functions.md"; bg="#141a15"; color="#f4f6f3"; .end/view
-          @view.Button=learn5objects label="الأنواع والكائنات"; url="https://github.com/dlof-lib/rinlang/blob/main/docs/objects.md"; bg="#141a15"; color="#f4f6f3"; .end/view
+// ------------------------------ الدرس 5 ------------------------------
+      @view.Card=learn5 id="learn-5"; padding=18; bg="#10130f"; radius=16; shadow="true";
+        @view.Column=learn5c gap=10;
+          @view.Text=learn5n text="05 — الدوال: fun وإعادة الاستخدام"; size=18; weight="900"; color="#f4f6f3"; .end/view
+          @view.Text=learn5why text="لماذا؟"; size=14; weight="700"; color="#22c55e"; .end/view
+          @view.Text=learn5whyT text="الدوال تحوّل التكرار إلى أدوات قابلة للاستدعاء. في Rin الدوال قيم من الدرجة الأولى ويمكن تمريرها وتخزينها."; size=13; color="#9aa39c"; .end/view
+
+          @view.Text=learn5codeTitle text="تعريف واستدعاء"; size=14; weight="700"; color="#f4f6f3"; .end/view
+          @view.Text=learn5code mono="true"; size=13; color="#cfd6cf";
+            text="fun greet(name) {\n    return \"مرحباً، \" + name + \"!\";\n}\n\nprint greet(\"Rin\");\n\n// دالة بدون return تُرجع nil\nfun log(msg) {\n    print \"[LOG] \" + msg;\n}\n\n// دوال كقيم (lambda)\nlet square = fun(x) { return x * x; };\nprint square(5);   // 25\n\n// تكرار ذاتي\nfun fact(n) {\n    if (n <= 1) { return 1; }\n    return n * fact(n - 1);\n}\nprint fact(5);     // 120";
+          .end/view
+
+          @view.Text=learn5tips text="• return يخرج من الدالة ويعيد قيمة\n• بدون return القيمة تكون nil\n• الأنواع الاختيارية: fun add(a: Number, b: Number): Number { ... }\n• يمكن تعريف دوال داخل class كطرق (methods)"; size=13; color="#9aa39c"; .end/view
+
+          @view.Row=learn5btns gap=8;
+            @view.Button=learn5more label="توثيق الدوال"; url="https://github.com/dlof-lib/rinlang/blob/main/docs/functions.md"; bg="#141a15"; color="#f4f6f3"; .end/view
+            @view.Button=learn5next label="الدرس التالي →"; url="#learn-6"; bg="#22c55e"; color="#0a0c0a"; weight="700"; .end/view
+          .end/view
         .end/view
       .end/view
 
-      // ------------------------------ الدرس 6 ------------------------------
-      @view.Card=learn6 id="learn-6"; padding=16; bg="#10130f"; radius=16; shadow="true";
-        @view.Column=learn6c gap=8;
-          @view.Text=learn6n text="06 — الحاويات والواجهة"; size=17; weight="850"; color="#f4f6f3"; .end/view
-          @view.Text=learn6d text="طبقة Rin الممتدة تفصل السلوك والبيانات عن شكل الواجهة: @container للسلوك، @loop للتنظيم/التنسيق، و@element للعناصر البصرية. اقرأ التعريفات قبل بناء واجهة كبيرة."; size=13; color="#9aa39c"; .end/view
-          @view.Text=learn6code mono="true"; size=12.5; color="#cfd6cf"; text="@container=App\n  print \"logic\";\n.end/container\n\n@element.Text=title\n  text=\"Hello\";\n.end/element"; .end/view
-          @view.Button=learn6more label="تعلم الحاويات"; url="https://github.com/dlof-lib/rinlang/blob/main/docs/containers.md"; bg="#141a15"; color="#f4f6f3"; .end/view
-          @view.Button=learn6elements label="كتالوج عناصر الواجهة"; url="https://github.com/dlof-lib/rinlang/blob/main/docs/RIN_ELEMENTS.md"; bg="#141a15"; color="#f4f6f3"; .end/view
+// ------------------------------ الدرس 6 ------------------------------
+      @view.Card=learn6 id="learn-6"; padding=18; bg="#10130f"; radius=16; shadow="true";
+        @view.Column=learn6c gap=10;
+          @view.Text=learn6n text="06 — Indsin: بناء واجهات من داخل Rin"; size=18; weight="900"; color="#f4f6f3"; .end/view
+          @view.Text=learn6why text="هذا هو جوهر القوة"; size=14; weight="700"; color="#22c55e"; .end/view
+          @view.Text=learn6whyT text="Indsin محرك واجهات أصلي للغة Rin. نفس الملف .rin يبني شجرة عناصر (Strand) تُقاس وتُرسم على أندرويد وسطح المكتب والمتصفح. هذه الصفحة نفسها مكتوبة بـ site.rin عبر Indsin."; size=13; color="#9aa39c"; .end/view
+
+          @view.Text=learn6codeTitle text="أول شاشة Indsin"; size=14; weight="700"; color="#f4f6f3"; .end/view
+          @view.Text=learn6code mono="true"; size=13; color="#cfd6cf";
+            text="@view.Column=Root\n  gap=12; padding=20; bg=\"#0b0f0c\";\n  @view.Text=title text=\"مرحباً من Indsin\"; size=22; weight=\"800\"; color=\"#f4f6f3\"; .end/view\n  @view.Text=desc text=\"هذا عنصر نص حقيقي\"; size=14; color=\"#9aa39c\"; .end/view\n  @view.Button=btn label=\"اضغطني\"; bg=\"#22c55e\"; color=\"#0a0c0a\"; .end/view\n.end/view";
+          .end/view
+
+          @view.Text=learn6explain text="شرح سريع:\n• @view.Kind=name يبدأ عنصراً من نوع Kind (Column, Text, Button, Card, Row...)\n• السمات مثل gap= و padding= و bg= و color= تُكتب مباشرة\n• .end/view يغلق العنصر\n• يمكن التعشيش بحرية (Column داخل Card داخل Scaffold)\n• المحرك يحسب المواضع تلقائياً (layout) ثم يرسم (paint)"; size=13; color="#9aa39c"; .end/view
+
+          @view.Text=learn6moreTitle text="مفاهيم أساسية في Indsin"; size=14; weight="700"; color="#f4f6f3"; .end/view
+          @view.Text=learn6concepts text="• Scaffold / TopBar / Drawer للهيكل العام\n• @element.* لعناصر وظيفية إضافية\n• onTap= و url= للتفاعل والروابط\n• mono=\"true\" للنصوص أحادية المسافة (كود)\n• نفس المحرك يعمل على Android (JNI) و Desktop و WASM"; size=13; color="#9aa39c"; .end/view
+
+          @view.Row=learn6btns gap=8;
+            @view.Button=learn6more label="معمارية Indsin"; url="https://github.com/dlof-lib/rinlang/blob/main/indsin.md"; bg="#141a15"; color="#f4f6f3"; .end/view
+            @view.Button=learn6docs label="توثيق العناصر"; url="https://github.com/dlof-lib/rinlang/blob/main/docs/RIN_ELEMENTS.md"; bg="#141a15"; color="#f4f6f3"; .end/view
+            @view.Button=learn6next label="الدرس التالي →"; url="#learn-7"; bg="#22c55e"; color="#0a0c0a"; weight="700"; .end/view
+          .end/view
         .end/view
       .end/view
 
-      // ------------------------------ الدرس 7 ------------------------------
-      @view.Card=learn7 id="learn-7"; padding=16; bg="#10130f"; radius=16; shadow="true";
-        @view.Column=learn7c gap=8;
-          @view.Text=learn7n text="07 — البيانات، الأنابيب، وRinFlow"; size=17; weight="850"; color="#f4f6f3"; .end/view
-          @view.Text=learn7d text="|> يبني سلسلة تحويل واضحة. reckon للحسابات الإحصائية، وRinFlow طبقة اختيارية للرؤية والتحكم في تدفق التنفيذ دون تغيير النتيجة."; size=13; color="#9aa39c"; .end/view
-          @view.Text=learn7code mono="true"; size=12.5; color="#cfd6cf"; text="let data = [10, 20, 30];\nlet result = data |> normalize() |> mean();\nprint result;"; .end/view
-          @view.Button=learn7more label="الأنابيب"; url="https://github.com/dlof-lib/rinlang/blob/main/docs/pipelines.md"; bg="#141a15"; color="#f4f6f3"; .end/view
-          @view.Button=learn7flow label="RinFlow"; url="https://github.com/dlof-lib/rinlang/blob/main/docs/rinflow.md"; bg="#141a15"; color="#f4f6f3"; .end/view
+// ------------------------------ الدرس 7 ------------------------------
+      @view.Card=learn7 id="learn-7"; padding=18; bg="#10130f"; radius=16; shadow="true";
+        @view.Column=learn7c gap=10;
+          @view.Text=learn7n text="07 — الحاويات NoSQL المدمجة"; size=18; weight="900"; color="#f4f6f3"; .end/view
+          @view.Text=learn7why text="لماذا؟"; size=14; weight="700"; color="#22c55e"; .end/view
+          @view.Text=learn7whyT text="Rin تحتوي محرك بيانات NoSQL أصلي (@container). يمكنك تخزين وثائق، البحث، التحديث، دون قاعدة بيانات خارجية."; size=13; color="#9aa39c"; .end/view
+
+          @view.Text=learn7codeTitle text="مثال حي"; size=14; weight="700"; color="#f4f6f3"; .end/view
+          @view.Text=learn7code mono="true"; size=13; color="#cfd6cf";
+            text="@container.users=AppUsers\n  document id=\"u1\" fields={ name: \"أحمد\", age: 25 };\n  document id=\"u2\" fields={ name: \"سارة\", age: 30 };\n\n// القراءة والكتابة وقت التشغيل\nlet names = containerNames();\nprint names;\n\n// make لإنشاء حاويات ديناميكية\nmake kind = \"temp\";\nmake name = \"t1\";\ncreate(kind, name);\nsetField(name, \"value\", 42);\nprint getField(\"t1\", \"value\");";
+          .end/view
+
+          @view.Text=learn7tips text="• @container.name=ID يعرّف حاوية\n• document يضيف وثيقة بحقول\n• setField / getField للتعامل الحي\n• هذه الصفحة نفسها تستخدم @container.doc لعدّ أقسامها"; size=13; color="#9aa39c"; .end/view
+
+          @view.Row=learn7btns gap=8;
+            @view.Button=learn7more label="توثيق الحاويات"; url="https://github.com/dlof-lib/rinlang/blob/main/docs/containers.md"; bg="#141a15"; color="#f4f6f3"; .end/view
+            @view.Button=learn7next label="الدرس التالي →"; url="#learn-8"; bg="#22c55e"; color="#0a0c0a"; weight="700"; .end/view
+          .end/view
         .end/view
       .end/view
 
-      // ------------------------------ الدرس 8 ------------------------------
-      @view.Card=learn8 id="learn-8"; padding=16; bg="#10130f"; radius=16; shadow="true";
-        @view.Column=learn8c gap=8;
-          @view.Text=learn8n text="08 — المكتبات والملفات"; size=17; weight="850"; color="#f4f6f3"; .end/view
-          @view.Text=learn8d text="المكتبات القياسية في lib/ تُستورد عبر @import. تعلّم أيضًا فصل الحاويات بين الملفات، ثم storage وhttp عندما يحتاج البرنامج إلى ملفات أو اتصال خارجي."; size=13; color="#9aa39c"; .end/view
-          @view.Text=learn8code mono="true"; size=12.5; color="#cfd6cf"; text="@import \"lib/math.og.rin\";\n\nlet value = 16;\nprint sqrt(value);"; .end/view
-          @view.Button=learn8std label="المكتبة القياسية"; url="https://github.com/dlof-lib/rinlang/blob/main/docs/standard-library.md"; bg="#141a15"; color="#f4f6f3"; .end/view
-          @view.Button=learn8storage label="Storage"; url="https://github.com/dlof-lib/rinlang/blob/main/docs/storage.md"; bg="#141a15"; color="#f4f6f3"; .end/view
-          @view.Button=learn8http label="HTTP"; url="https://github.com/dlof-lib/rinlang/blob/main/docs/http.md"; bg="#141a15"; color="#f4f6f3"; .end/view
+// ------------------------------ الدرس 8 ------------------------------
+      @view.Card=learn8 id="learn-8"; padding=18; bg="#10130f"; radius=16; shadow="true";
+        @view.Column=learn8c gap=10;
+          @view.Text=learn8n text="08 — المكتبات والاستيراد"; size=18; weight="900"; color="#f4f6f3"; .end/view
+          @view.Text=learn8whyT text="Rin تأتي مع مكتبات رسمية (إحصاء، رسوم، قواعد بيانات، وسائط...). استوردها بـ @import ثم استخدم دوالها مباشرة."; size=13; color="#9aa39c"; .end/view
+
+          @view.Text=learn8code mono="true"; size=13; color="#cfd6cf";
+            text="@import \"lib/math.og.rin\";\n@import \"lib/stats.og.rin\";\n\nlet nums = [3, 1, 4, 1, 5, 9];\nprint mean(nums);\nprint std(nums);";
+          .end/view
+
+          @view.Text=learn8tips text="المكتبات موجودة في مجلد lib/ و content-packs/. يمكنك كتابة مكتباتك الخاصة بنفس الصياغة."; size=13; color="#9aa39c"; .end/view
+
+          @view.Row=learn8btns gap=8;
+            @view.Button=learn8more label="استكشف المكتبات"; url="https://github.com/dlof-lib/rinlang/tree/main/lib"; bg="#141a15"; color="#f4f6f3"; .end/view
+            @view.Button=learn8next label="الدرس التالي →"; url="#learn-9"; bg="#22c55e"; color="#0a0c0a"; weight="700"; .end/view
+          .end/view
         .end/view
       .end/view
 
-      // ------------------------------ الدرس 9 ------------------------------
-      @view.Card=learn9 id="learn-9"; padding=16; bg="#10130f"; radius=16; shadow="true";
-        @view.Column=learn9c gap=8;
-          @view.Text=learn9n text="09 — الأخطاء والفحص"; size=17; weight="850"; color="#f4f6f3"; .end/view
-          @view.Text=learn9d text="افصل بين الخطأ النحوي، خطأ الاسم/النوع، وخطأ التشغيل. استخدم rin check للفحص دون تشغيل، وtry/catch/throw عندما تحتاج معالجة أخطاء وقت التشغيل."; size=13; color="#9aa39c"; .end/view
-          @view.Text=learn9code mono="true"; size=12.5; color="#cfd6cf"; text="rin check hello.rin\nrin fmt hello.rin --write\nrin test tests"; .end/view
-          @view.Button=learn9errors label="نظام الأخطاء"; url="https://github.com/dlof-lib/rinlang/blob/main/docs/errors.md"; bg="#141a15"; color="#f4f6f3"; .end/view
-          @view.Button=learn9diag label="مرجع رموز الأخطاء"; url="https://github.com/dlof-lib/rinlang/blob/main/docs/ERROR_SYSTEM.md"; bg="#141a15"; color="#f4f6f3"; .end/view
+// ------------------------------ الدرس 9 ------------------------------
+      @view.Card=learn9 id="learn-9"; padding=18; bg="#10130f"; radius=16; shadow="true";
+        @view.Column=learn9c gap=10;
+          @view.Text=learn9n text="09 — تشخيص الأخطاء ونظام diagnostics"; size=18; weight="900"; color="#f4f6f3"; .end/view
+          @view.Text=learn9whyT text="Rin تملك نظام تشخيصات دقيقاً (رموز أخطاء + مواقع أسطر). استخدم rin check قبل التشغيل."; size=13; color="#9aa39c"; .end/view
+
+          @view.Text=learn9code mono="true"; size=13; color="#cfd6cf";
+            text="# فحص ملف بدون تشغيل\nrin check myfile.rin\n\n# تشغيل مع رسائل واضحة\nrin run myfile.rin";
+          .end/view
+
+          @view.Text=learn9tips text="الأخطاء الشائعة للمبتدئين:\n• نسيان ; في نهاية العبارة\n• استخدام اسم متغير قبل let\n• خطأ في عدد الأقواس أو .end/view\n• نوع معلَن خاطئ (String وليس Text)"; size=13; color="#9aa39c"; .end/view
+
+          @view.Row=learn9btns gap=8;
+            @view.Button=learn9more label="نظام الأخطاء"; url="https://github.com/dlof-lib/rinlang/blob/main/docs/ERROR_SYSTEM.md"; bg="#141a15"; color="#f4f6f3"; .end/view
+            @view.Button=learn9next label="الدرس التالي →"; url="#learn-10"; bg="#22c55e"; color="#0a0c0a"; weight="700"; .end/view
+          .end/view
         .end/view
       .end/view
 
-      // ------------------------------ الدرس 10 ------------------------------
-      @view.Card=learn10 id="learn-10"; padding=16; bg="#10130f"; radius=16; shadow="true";
-        @view.Column=learn10c gap=8;
-          @view.Text=learn10n text="10 — تشغيل، بناء، ومشاريع"; size=17; weight="850"; color="#f4f6f3"; .end/view
-          @view.Text=learn10d text="rin run هو المسار الكامل لتشغيل اللغة في هذا التوزيع. rin build عبر rinc يدعم مجموعة فرعية من اللغة حاليًا؛ لا تفترض أن كل ميزات المفسر قابلة للبناء الأصلي."; size=13; color="#9aa39c"; .end/view
-          @view.Text=learn10code mono="true"; size=12.5; color="#cfd6cf"; text="rin new myproj --template console\ncd myproj\nrin check src/main.rin\nrin run src/main.rin"; .end/view
-          @view.Button=learn10more label="البداية والمشاريع"; url="https://github.com/dlof-lib/rinlang/blob/main/docs/getting-started.md"; bg="#141a15"; color="#f4f6f3"; .end/view
+// ------------------------------ الدرس 10 ------------------------------
+      @view.Card=learn10 id="learn-10"; padding=18; bg="#10130f"; radius=16; shadow="true";
+        @view.Column=learn10c gap=10;
+          @view.Text=learn10n text="10 — مشاريع عملية من الصفر"; size=18; weight="900"; color="#f4f6f3"; .end/view
+          @view.Text=learn10whyT text="أفضل طريقة للتعلم هي البناء. ابدأ بمشاريع صغيرة ثم زِد التعقيد."; size=13; color="#9aa39c"; .end/view
+
+          @view.Text=learn10projects text="مقترحات مرتبة:\n1. حاسبة بسيطة (دوال + شروط)\n2. قائمة مهام مع @container\n3. بطاقة تعريف شخصية بـ Indsin\n4. لوحة إحصاءات بسيطة (مكتبة stats)\n5. صفحة ويب صغيرة مثل هذه الصفحة (site.rin)\n6. تطبيق أندرويد مصغّر عبر RinStudio"; size=13; color="#cfd6cf"; .end/view
+
+          @view.Text=learn10path text="المسار الموصى به: فكرة → ملفات → بيانات → دوال → تحكم → اختبار → واجهة → مكتبات → فحص → تشغيل"; size=13; color="#79d99a"; weight="700"; .end/view
+
+          @view.Row=learn10btns gap=8;
+            @view.Button=learn10ex label="أمثلة المستودع"; url="https://github.com/dlof-lib/rinlang/tree/main/examples"; bg="#141a15"; color="#f4f6f3"; .end/view
+            @view.Button=learn10next label="الدرس التالي →"; url="#learn-11"; bg="#22c55e"; color="#0a0c0a"; weight="700"; .end/view
+          .end/view
         .end/view
       .end/view
 
-      // ------------------------------ الدرس 11 ------------------------------
-      @view.Card=learn11 id="learn-11"; padding=16; bg="#10130f"; radius=16; shadow="true";
-        @view.Column=learn11c gap=8;
-          @view.Text=learn11n text="11 — Rin في المتصفح"; size=17; weight="850"; color="#f4f6f3"; .end/view
-          @view.Text=learn11d text="RinHTML يربط ملف Rin بعناصر HTML عبر سمات مثل rin-click وrin-text. أما الموقع الرسمي نفسه فيمرر site.rin إلى محرك Rin/Indsintime ثم يرسم شجرة الواجهة."; size=13; color="#9aa39c"; .end/view
-          @view.Text=learn11code mono="true"; size=12.5; color="#cfd6cf"; text="<rin-app src=\"main.rin\" allow=\"dom\"></rin-app>\n\n<button rin-click=\"add()\">+1</button>\n<div rin-text=\"count\"></div>"; .end/view
-          @view.Button=learn11more label="تعلم RinHTML"; url="https://github.com/dlof-lib/rinlang/tree/main/web/rinhtml-demo"; bg="#141a15"; color="#f4f6f3"; .end/view
-          @view.Button=learn11web label="معمارية المحرك"; url="https://github.com/dlof-lib/rinlang/blob/main/indsin.md"; bg="#141a15"; color="#f4f6f3"; .end/view
+// ------------------------------ الدرس 11 ------------------------------
+      @view.Card=learn11 id="learn-11"; padding=18; bg="#10130f"; radius=16; shadow="true";
+        @view.Column=learn11c gap=10;
+          @view.Text=learn11n text="11 — Rin في المتصفح (WebAssembly + RinHTML)"; size=18; weight="900"; color="#f4f6f3"; .end/view
+          @view.Text=learn11whyT text="نفس محرك C++ يُصرَّف إلى WASM فيعمل داخل المتصفح. هذه الصفحة دليل حي: site.rin → محرك Indsin → DOM."; size=13; color="#9aa39c"; .end/view
+
+          @view.Text=learn11code mono="true"; size=13; color="#cfd6cf";
+            text="// RinHTML: طريقة أخرى لربط Rin بـ HTML\n// انظر مجلد web/rinhtml-demo للأمثلة\n\n// المحرك الرسمي في هذه الصفحة:\n// index.html يحمّل WASM ثم يمرّر site.rin\n// إلى rin_indsin_session_create()";
+          .end/view
+
+          @view.Text=learn11tips text="• لا تحتاج معرفة WASM لتستخدمه\n• RinHTML يتيح عناصر مثل <rin-app> و rin-click=\n• للتجربة السريعة: افتح هذه الصفحة نفسها كمرجع"; size=13; color="#9aa39c"; .end/view
+
+          @view.Row=learn11btns gap=8;
+            @view.Button=learn11demo label="عروض RinHTML"; url="https://github.com/dlof-lib/rinlang/tree/main/web/rinhtml-demo"; bg="#141a15"; color="#f4f6f3"; .end/view
+            @view.Button=learn11arch label="معمارية المحرك"; url="https://github.com/dlof-lib/rinlang/blob/main/indsin.md"; bg="#141a15"; color="#f4f6f3"; .end/view
+            @view.Button=learn11next label="الدرس الأخير →"; url="#learn-12"; bg="#22c55e"; color="#0a0c0a"; weight="700"; .end/view
+          .end/view
         .end/view
       .end/view
 
-      // ------------------------------ الدرس 12 ------------------------------
-      @view.Card=learn12 id="learn-12"; padding=16; bg="#10130f"; radius=16; shadow="true";
-        @view.Column=learn12c gap=8;
-          @view.Text=learn12n text="12 — مسار التطبيق الحقيقي"; size=17; weight="850"; color="#f4f6f3"; .end/view
-          @view.Text=learn12d text="بعد إتقان الأساسيات: صمّم البيانات، افصل المنطق في دوال، أضف الحاويات عند الحاجة، استورد المكتبات، افحص البرنامج، ثم اختبره وشغّله. لا تبدأ بالمزايا الكبيرة قبل تثبيت الأساس."; size=13; color="#9aa39c"; .end/view
-          @view.Text=learn12steps text="فكرة → ملفات المشروع → بيانات → دوال → تحكم → اختبارات → حاويات/واجهة → مكتبات → فحص → تشغيل"; size=13; color="#79d99a"; weight="700"; .end/view
-          @view.Button=learn12ref label="خريطة المرجع الشامل"; url="https://github.com/dlof-lib/rinlang/blob/main/docs/language-reference.md"; bg="#141a15"; color="#f4f6f3"; .end/view
+// ------------------------------ الدرس 12 ------------------------------
+      @view.Card=learn12 id="learn-12"; padding=18; bg="#10130f"; radius=16; shadow="true";
+        @view.Column=learn12c gap=10;
+          @view.Text=learn12n text="12 — من الصفر إلى تطبيق حقيقي"; size=18; weight="900"; color="#f4f6f3"; .end/view
+          @view.Text=learn12whyT text="الآن لديك الأدوات. الخطوة التالية هي بناء شيء مفيد لك أو لمجتمعك."; size=13; color="#9aa39c"; .end/view
+
+          @view.Text=learn12steps text="الخطة العملية:\n1. حدّد فكرة صغيرة واضحة\n2. اكتب المنطق أولاً (دوال + بيانات) بدون واجهة\n3. اختبر بـ rin check و rin run\n4. أضف @container إذا احتجت تخزيناً\n5. ابنِ الواجهة بـ Indsin (@view)\n6. انشر على أندرويد أو كصفحة ويب\n7. اقرأ المزيد من docs/ عند الحاجة"; size=13; color="#cfd6cf"; .end/view
+
+          @view.Text=learn12final text="هذه الصفحة (site.rin) هي أفضل مثال حي: برنامج Rin حقيقي يبني موقعاً كاملاً. افتح الملف وادرسه سطراً بسطر."; size=13; color="#79d99a"; weight="700"; .end/view
+
+          @view.Row=learn12btns gap=8;
+            @view.Button=learn12ref label="خريطة المرجع الشامل"; url="https://github.com/dlof-lib/rinlang/blob/main/docs/language-reference.md"; bg="#141a15"; color="#f4f6f3"; .end/view
+            @view.Button=learn12repo label="المستودع الكامل"; url="https://github.com/dlof-lib/rinlang"; bg="#22c55e"; color="#0a0c0a"; weight="800"; .end/view
+          .end/view
         .end/view
       .end/view
 
-      // ------------------------------ ورقة الغش ------------------------------
+// ------------------------------ ورقة الغش ------------------------------
       @view.Card=learnCheat padding=16; bg="#0f1410"; radius=16; shadow="true";
         @view.Column=learnCheatCol gap=8;
           @view.Text=learnCheatTitle text="ورقة مرجعية سريعة"; size=16; weight="850"; color="#f4f6f3"; .end/view
