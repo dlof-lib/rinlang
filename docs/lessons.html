@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>دروس Rin — من الصفر إلى الحاويات والأنابيب</title>
+<meta name="description" content="سلسلة دروس مرتّبة لتعلّم Rin: المتغيّرات والدوال، المصفوفات والقواميس، الأصناف، الإغلاقات، حاويات @container، قاعدة بيانات NoSQL المدمجة، وأنابيب |>. كل درس بمثال تجربه فوراً في المحرّر."/>
+<link rel="icon" href="assets/brand/favicon.ico" sizes="any"/>
+<link rel="icon" type="image/png" sizes="32x32" href="assets/brand/icon-32.png"/>
+<link rel="icon" type="image/png" sizes="16x16" href="assets/brand/icon-16.png"/>
+<link rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png"/>
+<link rel="manifest" href="assets/site.webmanifest"/>
+<meta name="theme-color" content="#12101C"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="assets/style.css"/>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap">
+    <a class="brand" href="index.html">
+      <img class="mark" src="assets/brand/icon-32.png" width="26" height="26" alt="شعار Rin"/>
+      Rin
+    </a>
+    <button class="nav-burger" aria-label="فتح القائمة" aria-expanded="false">☰</button>
+    <div class="nav-links">
+      <a href="index.html">الرئيسية</a>
+      <a href="language.html">اللغة</a>
+      <a href="lessons.html" class="is-active">دروس</a>
+      <a href="playground.html">المحرّر</a>
+      <a href="get-started.html">دليل البدء</a>
+      <a class="nav-cta" href="https://github.com/dlof-lib/rinlang" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<header class="page-head">
+  <div class="wrap">
+    <div class="eyebrow">سلسلة دروس</div>
+    <h1>تعلّم Rin خطوة بخطوة</h1>
+    <p class="lede">
+      ثمانية دروس مرتّبة من الأساسيات إلى ميزات Rin المميّزة — الحاويات، قاعدة
+      بيانات NoSQL، والأنابيب. كل درس مثال قابل للتشغيل فوراً في
+      <a href="playground.html" style="color:var(--accent-ink)">المحرّر</a>.
+    </p>
+    <nav class="lesson-toc" aria-label="فهرس الدروس">
+      <a href="#l1"><span>01</span> المتغيّرات والدوال</a>
+      <a href="#l2"><span>02</span> المصفوفات والقواميس</a>
+      <a href="#l3"><span>03</span> الأصناف والوراثة</a>
+      <a href="#l4"><span>04</span> الإغلاقات</a>
+      <a href="#l5"><span>05</span> for..in</a>
+      <a href="#l6"><span>06</span> الحاويات @container</a>
+      <a href="#l7"><span>07</span> NoSQL المدمجة</a>
+      <a href="#l8"><span>08</span> الأنابيب |&gt;</a>
+    </nav>
+  </div>
+</header>
+
+<section class="lesson" id="l1">
+  <div class="wrap">
+    <div class="lesson-head"><span class="num">01</span><h2>المتغيّرات والدوال</h2></div>
+    <p class="lede">
+      <code>let</code> لتعريف متغيّر، <code>fun</code> لتعريف دالة، وصياغة أقواس
+      قريبة من C/JavaScript — بلا فاصلة منقوطة إلزامية في كل موضع.
+    </p>
+    <div class="code-panel">
+      <div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="name">basics.rin</span></div>
+<pre class="code"><span class="kw">let</span> x = <span class="num">10</span>;
+<span class="kw">let</span> name = <span class="str">"Rin"</span>;
+print <span class="str">"Hello, "</span> + name + <span class="str">"!"</span>;
+
+<span class="kw">if</span> (x &gt; <span class="num">5</span>) {
+    print <span class="str">"big"</span>;
+} <span class="kw">else</span> {
+    print <span class="str">"small"</span>;
+}
+
+<span class="kw">fun</span> fib(n) {
+    <span class="kw">if</span> (n &lt; <span class="num">2</span>) { <span class="kw">return</span> n; }
+    <span class="kw">return</span> fib(n - <span class="num">1</span>) + fib(n - <span class="num">2</span>);
+}
+print fib(<span class="num">10</span>);</pre>
+      <div class="code-out"><span class="muted">→</span> Hello, Rin!<br/><span class="muted">→</span> big<br/><span class="muted">→</span> 55</div>
+    </div>
+    <div class="try-row"><a href="playground.html?ex=fib" target="_blank" rel="noopener">▶ جرّب هذا المثال في المحرّر</a></div>
+    <div class="exercise">
+      <h4>تمرين</h4>
+      <p>عدِّل <code>fib(10)</code> إلى <code>fib(15)</code> وتوقّع الناتج قبل تشغيله. ثم اكتب دالة <code>factorial(n)</code> بنفس أسلوب الاستدعاء الذاتي (recursion).</p>
+    </div>
+  </div>
+</section>
+
+<section class="lesson" id="l2">
+  <div class="wrap">
+    <div class="lesson-head"><span class="num">02</span><h2>المصفوفات والقواميس</h2></div>
+    <p class="lede">مدمجة في اللغة مباشرة بدوال قياسية عامة: <code>push</code> / <code>pop</code> / <code>sort</code> / <code>keys</code>.</p>
+    <div class="code-panel">
+      <div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="name">collections.rin</span></div>
+<pre class="code"><span class="kw">let</span> arr = [<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>];
+<span class="fn">push</span>(arr, <span class="num">4</span>);
+print <span class="fn">pop</span>(arr);
+print <span class="fn">sort</span>([<span class="num">3</span>, <span class="num">1</span>, <span class="num">2</span>]);
+
+<span class="kw">let</span> m = {name: <span class="str">"Rin"</span>, age: <span class="num">2</span>};
+print m[<span class="str">"name"</span>];
+print <span class="fn">keys</span>(m);</pre>
+      <div class="code-out"><span class="muted">→</span> 4<br/><span class="muted">→</span> [1, 2, 3]<br/><span class="muted">→</span> Rin<br/><span class="muted">→</span> [name, age]</div>
+    </div>
+    <div class="try-row"><a href="playground.html?ex=collections" target="_blank" rel="noopener">▶ جرّب هذا المثال في المحرّر</a></div>
+    <div class="exercise">
+      <h4>تمرين</h4>
+      <p>أنشئ قاموساً <code>person</code> بحقلَي <code>name</code> و<code>city</code>، ثم اطبع كل قيمة بسطر عبر التكرار على <code>keys(person)</code> (سنغطّي <code>for..in</code> في الدرس 05 كطريقة أقصر).</p>
+    </div>
+  </div>
+</section>
+
+<section class="lesson" id="l3">
+  <div class="wrap">
+    <div class="lesson-head"><span class="num">03</span><h2>الأصناف والوراثة</h2></div>
+    <p class="lede">
+      <code>class</code> و<code>extends</code> و<code>super</code> بالمعنى المعتاد؛ استدعاء
+      <code>كائن.دالة()</code> يعمل تماماً كما تتوقّع.
+    </p>
+    <div class="code-panel">
+      <div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="name">classes.rin</span></div>
+<pre class="code"><span class="kw">class</span> Animal {
+    <span class="kw">fun</span> speak() { <span class="kw">return</span> <span class="str">"..."</span>; }
+}
+<span class="kw">class</span> Dog <span class="kw">extends</span> Animal {
+    <span class="kw">fun</span> speak() { <span class="kw">return</span> <span class="str">"Woof "</span> + <span class="kw">super</span>.speak(); }
+}
+<span class="kw">let</span> a = Dog();
+print a.speak();</pre>
+      <div class="code-out"><span class="muted">→</span> Woof ...</div>
+    </div>
+    <div class="exercise">
+      <h4>تمرين</h4>
+      <p>أضف صنفاً ثالثاً <code>Cat extends Animal</code> بصوت مختلف، وأنشئ مصفوفة من <code>Dog()</code> و<code>Cat()</code> واطبع صوت كل عنصر.</p>
+    </div>
+  </div>
+</section>
+
+<section class="lesson" id="l4">
+  <div class="wrap">
+    <div class="lesson-head"><span class="num">04</span><h2>الدوال المجهولة والإغلاقات</h2></div>
+    <p class="lede">
+      <code>fun(params) { body }</code> كتعبير، قابل للإسناد أو التمرير أو النداء
+      الفوري — ولكل تكرارة حلقة إغلاقها الخاص، لا متغيّراً مشتركاً.
+    </p>
+    <div class="code-panel">
+      <div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="name">closures.rin</span></div>
+<pre class="code"><span class="kw">let</span> fns = [];
+<span class="kw">for</span> (<span class="kw">let</span> i = <span class="num">0</span>; i &lt; <span class="num">3</span>; i = i + <span class="num">1</span>) {
+    fns[<span class="fn">len</span>(fns)] = <span class="kw">fun</span>() { <span class="kw">return</span> i; };
+}
+print fns[<span class="num">0</span>]();
+print fns[<span class="num">1</span>]();
+print fns[<span class="num">2</span>]();
+
+<span class="kw">fun</span> makeAdder(n) { <span class="kw">return</span> <span class="kw">fun</span>(x) { <span class="kw">return</span> x + n; }; }
+print makeAdder(<span class="num">3</span>)(<span class="num">4</span>);</pre>
+      <div class="code-out"><span class="muted">→</span> 0<br/><span class="muted">→</span> 1<br/><span class="muted">→</span> 2<br/><span class="muted">→</span> 7</div>
+    </div>
+    <div class="try-row"><a href="playground.html?ex=closures" target="_blank" rel="noopener">▶ جرّب هذا المثال في المحرّر</a></div>
+    <div class="callout">
+      <b>لماذا هذا مهم:</b> قبل إصلاح مسجَّل في <a href="index.html#recent">آخر ما وصل إلى المحرّك</a>،
+      كانت كل الدوال المجهولة الثلاث تشترك في نفس المتغيّر <code>i</code> فتطبع
+      <code>3 3 3</code>. الآن لكل تكرارة بيئتها الخاصة.
+    </div>
+  </div>
+</section>
+
+<section class="lesson" id="l5">
+  <div class="wrap">
+    <div class="lesson-head"><span class="num">05</span><h2>التكرار <code>for ... in</code></h2></div>
+    <p class="lede">على مصفوفة (كل عنصر)، قاموس (كل مفتاح)، أو نص (كل حرف) — بلا فهرس عددي يدوي.</p>
+    <div class="code-panel">
+      <div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="name">forin.rin</span></div>
+<pre class="code"><span class="kw">for</span> (<span class="kw">let</span> x <span class="kw">in</span> [<span class="num">10</span>, <span class="num">20</span>, <span class="num">30</span>]) { print x; }
+
+<span class="kw">let</span> m = {<span class="str">"a"</span>: <span class="num">1</span>, <span class="str">"b"</span>: <span class="num">2</span>};
+<span class="kw">for</span> (<span class="kw">let</span> k <span class="kw">in</span> m) { print k + <span class="str">"="</span> + m[k]; }
+
+<span class="kw">for</span> (<span class="kw">let</span> c <span class="kw">in</span> <span class="str">"abc"</span>) { print c; }</pre>
+      <div class="code-out"><span class="muted">→</span> 10 20 30<br/><span class="muted">→</span> a=1 b=2<br/><span class="muted">→</span> a b c</div>
+    </div>
+    <div class="try-row"><a href="playground.html?ex=forin" target="_blank" rel="noopener">▶ جرّب هذا المثال في المحرّر</a></div>
+    <div class="exercise">
+      <h4>تمرين</h4>
+      <p>عُد إلى قاموس <code>person</code> من الدرس 02 واطبع كل مفتاح وقيمته بسطر عبر <code>for (let k in person)</code>.</p>
+    </div>
+  </div>
+</section>
+
+<section class="lesson" id="l6">
+  <div class="wrap">
+    <div class="lesson-head"><span class="num">06</span><h2>الحاويات <code>@container</code></h2></div>
+    <p class="lede">
+      وحدة تنظيمية تُجمِّع بيانات ومنطقاً مرتبطين ببعضهما داخل حدود واضحة، بدل
+      تفريقها بين متغيّرات ودوال متناثرة. قابلة للتجميع داخل
+      <code>@Containers.Group</code>.
+    </p>
+    <div class="code-panel">
+      <div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="name">container.rin</span></div>
+<pre class="code"><span class="tag">@container</span>=my_data
+    text title = <span class="str">"بيانات رين"</span>;
+    print title;
+
+    Section=numbers
+        <span class="kw">let</span> a = <span class="num">10</span>;
+        <span class="kw">let</span> b = <span class="num">4</span>;
+        print <span class="fn">Addition</span>(a, b);
+    <span class="tag">.end/Section</span>
+<span class="tag">.end/container</span></pre>
+      <div class="code-out"><span class="muted">→</span> بيانات رين<br/><span class="muted">→</span> 14</div>
+    </div>
+    <div class="try-row"><a href="playground.html?ex=container" target="_blank" rel="noopener">▶ جرّب هذا المثال في المحرّر</a></div>
+    <p class="note">
+      الأسلوب المبسّط: <code>container("Home")</code> تُعيد وصفاً مختصراً
+      للحاوية، و<code>container("Home", "title")</code> تقرأ حقلاً منها مباشرة
+      (تُعيد <code>nil</code> بدل الانهيار إن لم يوجد). التفاصيل في
+      <code>docs/simple-style.md</code> من المستودع.
+    </p>
+    <div class="exercise">
+      <h4>تمرين</h4>
+      <p>أضف قسماً ثانياً <code>Section=greeting</code> داخل نفس الحاوية يطبع تحية باستخدام <code>title</code> من القسم الأول.</p>
+    </div>
+  </div>
+</section>
+
+<section class="lesson" id="l7">
+  <div class="wrap">
+    <div class="lesson-head"><span class="num">07</span><h2>قاعدة بيانات NoSQL المدمجة</h2></div>
+    <p class="lede">
+      مخزن وثائق (documents) بلا أي اتصال خارجي أو استيراد إضافي — أنشئ حاوية
+      وثائق بـ <code>@container.doc</code>، ثم أدرج/استعلم عنها مباشرة بدوال
+      اللغة الأساسية نفسها.
+    </p>
+    <div class="code-panel">
+      <div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="name">users.rin</span></div>
+<pre class="code"><span class="tag">@container.doc</span>=users
+    document id=<span class="str">"u1"</span> fields={ name: <span class="str">"سارة"</span>, age: <span class="num">28</span> };
+<span class="tag">.end/container.doc</span>
+
+<span class="fn">insertDoc</span>(<span class="str">"users"</span>, <span class="str">"u3"</span>, { name: <span class="str">"منى"</span> });
+print <span class="fn">queryDocs</span>(<span class="str">"users"</span>, <span class="str">"city"</span>, <span class="str">"الرياض"</span>);</pre>
+    </div>
+    <div class="try-row"><a href="playground.html?ex=nosql" target="_blank" rel="noopener">▶ جرّب هذا المثال في المحرّر</a></div>
+    <div class="exercise">
+      <h4>تمرين</h4>
+      <p>أضف حقل <code>city</code> إلى وثيقة <code>u1</code>، ثم أعد تشغيل <code>queryDocs</code> بنفس القيمة وقارن الناتج.</p>
+    </div>
+  </div>
+</section>
+
+<section class="lesson" id="l8">
+  <div class="wrap">
+    <div class="lesson-head"><span class="num">08</span><h2>أنابيب <code>|&gt;</code></h2></div>
+    <p class="lede">
+      بدل تعشيش الاستدعاءات <code>f(g(h(x)))</code>، الأنبوب يمرّر ناتج كل خطوة
+      إلى التي تليها بترتيب القراءة الطبيعي — داخل حاويات
+      <code>@container.pipe</code> المخصَّصة لهذا الغرض.
+    </p>
+    <div class="code-panel">
+      <div class="code-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="name">pipe.rin</span></div>
+<pre class="code"><span class="tag">@container.pipe</span>=sales_pipeline
+    <span class="kw">let</span> raw = [<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>, <span class="num">4</span>, <span class="num">5</span>];
+    <span class="kw">let</span> result = raw <span class="pipe">|&gt;</span> <span class="fn">normalize</span>() <span class="pipe">|&gt;</span> <span class="fn">mean</span>();
+    print result;
+<span class="tag">.end/container.pipe</span></pre>
+    </div>
+    <div class="try-row"><a href="playground.html?ex=pipe" target="_blank" rel="noopener">▶ جرّب هذا المثال في المحرّر</a></div>
+    <div class="exercise">
+      <h4>تمرين</h4>
+      <p>أضف خطوة ثالثة إلى الأنبوب (مثلاً دالة تُقرِّب الناتج)، والاحظ كيف يبقى الترتيب مقروءاً من اليمين لليسار بلا تعشيش أقواس.</p>
+    </div>
+    <div class="callout ok" style="margin-top:32px;">
+      <b>أكملت السلسلة 🎉</b> — الخطوة التالية: <a href="get-started.html" style="color:var(--ink)">دليل البدء</a>
+      لتشغيل نفس هذه الأمثلة على هاتفك أو حاسوبك، أو استمرّ في التجربة في
+      <a href="playground.html" style="color:var(--ink)">المحرّر</a>.
+    </div>
+  </div>
+</section>
+
+<footer class="footer">
+  <div class="wrap">
+    <div class="footer-links">
+      <a href="index.html">الرئيسية</a>
+      <a href="language.html">اللغة</a>
+      <a href="lessons.html">دروس</a>
+      <a href="playground.html">المحرّر</a>
+      <a href="get-started.html">دليل البدء</a>
+      <a href="license.html">الترخيص</a>
+      <a href="credits.html">شكر وتقدير</a>
+      <a href="https://github.com/dlof-lib/rinlang" target="_blank" rel="noopener">GitHub</a>
+    </div>
+    <div class="footer-meta">
+      <div>Rin — الإصدار 1.0.0 — رخصة MIT</div>
+      <div>هذا الموقع جزء من مستودع rinlang، ويُنشَر عبر GitHub Pages من مجلد docs/</div>
+    </div>
+  </div>
+</footer>
+
+<script src="assets/site.js"></script>
+</body>
+</html>

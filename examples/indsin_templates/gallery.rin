@@ -1,0 +1,27 @@
+// indsin/main.indsin — قالب "معرض صور" جاهز (محرّك indsin، @view.*)
+// استبدل قيم src= بروابط/أسماء ملفات صورك الفعلية داخل مجلد المشروع.
+
+warp selected = "photo1.jpg";
+
+fun selectImage(src) { selected = src; }
+
+@view.Column=root
+    padding=16;
+    gap=12;
+
+    @view.Text=heading text="معرض الصور"; size="title"; .end/view
+
+    @view.Card=preview
+        padding=8;
+        @view.Image=big src=selected; width=340; height=220; .end/view
+    .end/view
+
+    @view.Wrap=grid gap=8;
+        @view.Image=t1 src="photo1.jpg"; width=100; height=100; onTap=selectImage("photo1.jpg"); .end/view
+        @view.Image=t2 src="photo2.jpg"; width=100; height=100; onTap=selectImage("photo2.jpg"); .end/view
+        @view.Image=t3 src="photo3.jpg"; width=100; height=100; onTap=selectImage("photo3.jpg"); .end/view
+        @view.Image=t4 src="photo4.jpg"; width=100; height=100; onTap=selectImage("photo4.jpg"); .end/view
+        @view.Image=t5 src="photo5.jpg"; width=100; height=100; onTap=selectImage("photo5.jpg"); .end/view
+        @view.Image=t6 src="photo6.jpg"; width=100; height=100; onTap=selectImage("photo6.jpg"); .end/view
+    .end/view
+.end/view

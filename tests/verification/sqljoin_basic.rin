@@ -1,0 +1,21 @@
+// tests/verification/sqljoin_basic.rin — RCSQL join:to / join:left بين حاويتين (بدون أي دالة جديدة)
+@container.datalist=users
+    document fields={"name": "Sara", "city": "Cairo"};
+    document fields={"name": "Omar", "city": "Riyadh"};
+.end/container.datalist
+@container.datalist=orders
+    document fields={"user": "1", "total": 50};
+    document fields={"user": "1", "total": 20};
+    document fields={"user": "2", "total": 70};
+    document fields={"user": "9", "total": 5};
+.end/container.datalist
+
+print "inner:";
+print sql("orders&join:to(users/user/_id)&order:asc(total)");
+print "left rows=" + sqlCount("orders&join:left(users/user/_id)") + " inner rows=" + sqlCount("orders&join:to(users/user/_id)");
+print "where on joined field: " + sqlCount("orders&join:to(users/user/_id)&users_city:eq(Cairo)");
+print sql("orders&join:to(users/user/_id)&group:by(users_name)&agg:sum(total)&order:asc(users_name)");
+print sql("users&join:to(orders/_id/user)&group:by(name)&agg:sum(orders_total)&agg:count(orders_total)&order:asc(name)");
+try { sql("orders&join:to(users/user)"); } catch (e) { print "caught: join needs 3 parts"; }
+try { sql("orders&join:to(nothing/user/_id)"); } catch (e) { print "caught: unknown container"; }
+try { sql("orders&total:to(1)"); } catch (e) { print "caught: modifier-only op"; }

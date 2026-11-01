@@ -1,0 +1,12 @@
+channel47 1.0
+kind    = "tool"
+name    = "rin-fmt"
+version = "2.0.1"
+bin     = "bin/rin-fmt"
+rin     = ">=1.0.0"
+
+table commands(name: text, summary: text, aliases: text[] = [], since: date?)
+  "format", "تنسيق ملف",       ["fmt", "f"], 2026-01-10
+  "check",  "فحص بلا تعديل",   _,            _
+  "watch",  "مراقبة المجلد",   ["w"]
+end

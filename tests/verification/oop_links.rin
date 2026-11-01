@@ -1,0 +1,179 @@
+// اختبار Rin 1.0 — ربط كائنات OOP بالحاويات وبخلايا Warp (Indsin)
+fun fails(f) { try { f(); } catch (e) { return true; } return false; }
+
+@container=Store
+    state counter = 0;
+    state title = "t";
+    let plain = 1;
+    let trace = [];
+    on update(prev) { push(trace, "u"); }
+.end/container
+
+class Model {
+    let n = 0;
+    let name = "a";
+    private let secret = 5;
+    fun init() {}
+}
+
+// ---------- push: كائن -> حاوية (state => يُطلَق on update) ----------
+let m = Model();
+let id1 = oop.bindContainer(m, "n", "Store", "counter");
+assertEq(getField("Store", "counter"), 0, "initial sync object -> container");
+let before = len(getField("Store", "trace"));
+m.n = 3;
+assertEq(getField("Store", "counter"), 3, "push on write");
+assertEq(len(getField("Store", "trace")), before + 1, "state hook fired by the binding");
+m.n = 3;
+assertEq(len(getField("Store", "trace")), before + 1, "no change => no write");
+assertEq(len(oop.observers(m)), 1, "listed in observers");
+assertEq(oop.observers(m)[0].kind, "container", "link kind");
+assert(oop.unobserve(id1), "unbind");
+m.n = 9;
+assertEq(getField("Store", "counter"), 3, "unbound: no more pushes");
+
+// ---------- pull: حاوية -> كائن ----------
+let m2 = Model();
+oop.bindContainerFrom(m2, "n", "Store", "counter");
+assertEq(m2.n, 3, "initial sync target -> object");
+setState("Store", "counter", 10);
+assertEq(m2.n, 10, "pull via setState");
+setField("Store", "counter", 11);
+assertEq(m2.n, 11, "pull via setField");
+m2.n = 99;
+assertEq(getField("Store", "counter"), 11, "pull-only: object does not push back");
+oop.unobserveAll(m2);
+
+// ---------- two-way ----------
+let a = Model();
+oop.bindContainerTwoWay(a, "n", "Store", "counter");
+assertEq(a.n, 0, "two-way init: object wins (keeps its own value)");
+assertEq(getField("Store", "counter"), 0, "two-way init pushed object value to container");
+a.n = 5;
+assertEq(getField("Store", "counter"), 5, "two-way: object -> container");
+setState("Store", "counter", 7);
+assertEq(a.n, 7, "two-way: container -> object");
+let hooks = len(getField("Store", "trace"));
+a.n = 8;
+assertEq(len(getField("Store", "trace")), hooks + 1, "two-way terminates: exactly one state update, no echo loop");
+assertEq(a.n, 8, "two-way settled");
+oop.unobserveAll(a);
+
+// ---------- init: "target" و "none" ----------
+setField("Store", "counter", 42);
+let t1 = Model();
+oop.bindContainerTwoWay(t1, "n", "Store", "counter", {init: "target"});
+assertEq(t1.n, 42, "init target: object takes container value");
+let t2 = Model(); t2.n = 1;
+oop.bindContainerTwoWay(t2, "n", "Store", "counter", {init: "none"});
+assertEq(getField("Store", "counter"), 42, "init none: container untouched");
+assertEq(t2.n, 1, "init none: object untouched");
+oop.unobserveAll(t1); oop.unobserveAll(t2);
+
+// ---------- transform (اتجاه واحد) ----------
+let tr = Model(); tr.name = "ali";
+oop.bindContainer(tr, "name", "Store", "title", {transform: fun(v) { return "Hi " + v; }});
+assertEq(getField("Store", "title"), "Hi ali", "transform on init");
+tr.name = "sara";
+assertEq(getField("Store", "title"), "Hi sara", "transform on write");
+oop.unobserveAll(tr);
+let tf = Model();
+oop.bindContainerFrom(tf, "n", "Store", "counter", {transform: fun(v) { return v * 2; }});
+setState("Store", "counter", 10);
+assertEq(tf.n, 20, "pull transform");
+oop.unobserveAll(tf);
+assert(fails(fun() { oop.bindContainerTwoWay(Model(), "n", "Store", "counter", {transform: fun(v) { return v; }}); }), "two-way + transform rejected");
+assert(fails(fun() { oop.bindContainer(Model(), "n", "Store", "counter", {bogus: 1}); }), "unknown option rejected");
+assert(fails(fun() { oop.bindContainer(Model(), "n", "Store", "counter", {init: "x"}); }), "bad init rejected");
+
+// ---------- أخطاء ----------
+assert(fails(fun() { oop.bindContainer(Model(), "n", "NoSuch", "k"); }), "unknown container");
+assert(fails(fun() { oop.bindContainer(Model(), "nope", "Store", "k"); }), "unknown field");
+assert(fails(fun() { oop.bindContainer(5, "n", "Store", "k"); }), "non-object");
+
+// ---------- حقل private يُربَط (سياق صنف الكائن) ----------
+let pv = Model();
+oop.bindContainerTwoWay(pv, "secret", "Store", "plain");
+assertEq(getField("Store", "plain"), 5, "private field readable by binding");
+setField("Store", "plain", 77);
+assertEq(oop.peek(pv, "secret"), 77, "private field writable by binding");
+oop.unobserveAll(pv);
+
+// ---------- frozen: السحب إليه يُرفَض ----------
+let fz = Model();
+oop.bindContainerFrom(fz, "n", "Store", "counter");
+oop.freeze(fz);
+assert(fails(fun() { setState("Store", "counter", 1234); }), "pull into frozen object rejected");
+oop.unobserveAll(fz);
+
+// ---------- watchContainer ----------
+let seen = [];
+let wid = oop.watchContainer("Store", "counter", fun(nv, ov, key, c) { push(seen, c + "." + key + ":" + str(ov) + ">" + str(nv)); });
+setState("Store", "counter", 1);
+setState("Store", "counter", 1);
+setState("Store", "counter", 2);
+assertEq(seen, ["Store.counter:1234>1", "Store.counter:1>2"], "watch fires only on change, with old/new");
+let all = [];
+oop.watchContainer("Store", "*", fun(nv, ov, key) { push(all, key); });
+setField("Store", "plain", 5); setState("Store", "title", "z");
+assertEq(all, ["plain", "title"], "wildcard watch");
+assert(oop.unobserve(wid), "unwatch");
+setState("Store", "counter", 50);
+assertEq(len(seen), 2, "watch removed");
+
+// ---------- toContainer / fromContainer ----------
+@container=Snap
+.end/container
+class P { let x = 1; let y = "k"; private let hidden = 9; let f = nil; fun init() {} }
+let pp = P();
+assertEq(oop.toContainer(pp, "Snap"), 3, "toContainer copies public fields only (x,y,f)");
+assertEq(getField("Snap", "x"), 1, "x copied");
+assertEq(getField("Snap", "hidden"), nil, "private not copied");
+setField("Snap", "x", 100); setField("Snap", "y", "new");
+assertEq(oop.fromContainer(pp, "Snap"), 3, "fromContainer copies matching fields (x,y,f)");
+assertEq(pp.x, 100, "x pulled"); assertEq(pp.y, "new", "y pulled");
+assertEq(oop.toContainer(pp, "Snap", ["x"]), 1, "explicit field list");
+
+// ---------- Warp (خلايا Indsin = متغيّرات عامة) ----------
+warp count = 0;
+warp label = "idle";
+warp on = false;
+class Counter { let n = 0; let msg = ""; let flag = false; fun init() {} }
+let c = Counter();
+oop.bindWarpTwoWay(c, "n", "count");
+oop.bindWarp(c, "msg", "label");
+oop.bindWarpFrom(c, "flag", "on", {init: "target"});
+assertEq(count, 0, "warp init: object -> cell");
+c.n = 4;
+assertEq(count, 4, "object -> cell");
+c.msg = "busy";
+assertEq(label, "busy", "push-only warp");
+count = 10;                      // كما يفعل Indsin عند tap (يكتب الخلية) ثم يستدعي المعالج
+assertEq(oop.syncLinks() >= 1, true, "syncLinks reports pulled links");
+assertEq(c.n, 10, "cell -> object (two-way)");
+assertEq(count, 10, "no echo");
+on = true;
+oop.syncLinks();
+assertEq(c.flag, true, "pull-only boolean cell");
+label = "changed-by-ui";
+oop.syncLinks();
+assertEq(c.msg, "busy", "push-only does not pull");
+assertEq(oop.syncLinks(), 0, "nothing left to sync");
+
+// ---------- bindView ----------
+warp ui_title = "T";
+warp ui_size = 3;
+class Form { let title = ""; let size = 0; let other = 1; fun init() {} }
+let fm = Form();
+let bound = oop.bindView(fm, "ui_");
+assertEq(bound, ["title", "size"], "prefix mode binds only existing cells");
+assertEq(ui_size, 0, "bindView init: object -> cell");
+fm.title = "Hello";
+assertEq(ui_title, "Hello", "bindView push");
+ui_size = 7; oop.syncLinks();
+assertEq(fm.size, 7, "bindView pull");
+let fm2 = Form();
+assertEq(oop.bindView(fm2, {title: "ui_title"}), ["title"], "map mode");
+assertEq(ui_title, "", "map mode: object value wins on init");
+
+print "OOP LINKS OK";

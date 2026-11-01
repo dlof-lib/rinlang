@@ -1,0 +1,58 @@
+// behaviorkit_demo.rin — عرض حي لِـ Behavior Kit عبر مفسّر Rin الحقيقي
+// شغّله بـ: rin_run behaviorkit_demo.rin
+@import "lib/math.og.rin";
+@import "lib/movingmask.og.rin";
+@import "lib/behaviorkit.og.rin";
+
+let world = mm_new();
+mm_spawn(world, "btn", 100, 200);
+mm_setMeta(world, "btn", "color", "#3498db");
+
+print "1) الحالة الابتدائية:";
+print bh_state(world, "btn");
+
+print "2) ضغط الزر (bh_press) — يصغر ويغمق مؤقتاً:";
+bh_press(world, "btn", nil, nil);
+print bh_state(world, "btn");
+
+print "3) تحرير الضغط (bh_release) — يعود لحجمه الطبيعي:";
+bh_release(world, "btn", nil);
+print bh_state(world, "btn");
+
+print "4) سحب (bh_dragStart/Move/End) من (100,200) إلى (140,260):";
+bh_dragStart(world, "btn", 100, 200);
+bh_dragMove(world, "btn", 120, 230);
+let gesture = bh_dragEnd(world, "btn");
+print gesture;
+print bh_state(world, "btn");
+
+print "5) لمس سلس (bh_smoothTouch) نحو هدف (300,300) عبر 4 دورات:";
+let i = 0;
+while (i < 4) {
+    bh_smoothTouch(world, "btn", 300, 300, 1, 0.4);
+    print mm_position(world, "btn");
+    i = i + 1;
+}
+
+print "6) تكبير سلس (bh_zoomTo -> 1.6):";
+print bh_zoomTo(world, "btn", 1.6, 5, easeOutQuad);
+print "   تصغير سلس (bh_zoomTo -> 1.0):";
+print bh_zoomTo(world, "btn", 1.0, 5, easeInQuad);
+
+print "7) تغيير لون سلس (bh_colorTo -> أحمر):";
+print bh_colorTo(world, "btn", "#e74c3c", 5, easeInOutQuad);
+
+print "8) اختفاء سلس (bh_fadeOut):";
+print bh_fadeOut(world, "btn", 4, easeInQuad);
+print bh_state(world, "btn");
+
+print "9) ظهور سلس (bh_fadeIn):";
+print bh_fadeIn(world, "btn", 4, easeOutQuad);
+print bh_state(world, "btn");
+
+print "10) تبديل عام (bh_toggle) على علم selected:";
+print bh_toggle(world, "btn", "selected");
+print bh_toggle(world, "btn", "selected");
+
+print "11) الحالة النهائية الكاملة:";
+print bh_state(world, "btn");

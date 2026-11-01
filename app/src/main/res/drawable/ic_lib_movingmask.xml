@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- أيقونة مكتبة movingmask: قناع (نافذة) منزلق فوق صف حاويات/شبكة، مع أثر حركة خلفه —
+     يجمع بصرياً بين معنيَي "Moving Mask": القناع المتحرك عبر الزمن، والنافذة المنزلقة فوق
+     مصفوفة/شبكة (convolution). بنفس أسلوب خط الرسم البسيط (stroke-only) لبقية أيقونات
+     شاشة "المكتبات" في RinStudio. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!-- صف الحاوية/الشبكة التي ينزلق فوقها القناع -->
+    <path
+        android:strokeColor="#AEB4BD"
+        android:strokeWidth="1.4"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M2,16.5 H8 V22 H2 Z M9,16.5 H15 V22 H9 Z M16,16.5 H22 V22 H16 Z" />
+
+    <!-- أثر الحركة (trail) خلف القناع: ثلاث خطوط متلاشية تدريجياً -->
+    <path
+        android:strokeColor="#7C5CFF"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:strokeAlpha="0.28"
+        android:pathData="M1.5,7 H4.5" />
+    <path
+        android:strokeColor="#7C5CFF"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:strokeAlpha="0.55"
+        android:pathData="M6.5,7 H9.5" />
+    <path
+        android:strokeColor="#7C5CFF"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:strokeAlpha="0.85"
+        android:pathData="M11.5,7 H13.5" />
+
+    <!-- القناع المتحرك نفسه: إطار بارز بلون التمييز -->
+    <path
+        android:strokeColor="#7C5CFF"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M15,2 H22 V12 H15 Z" />
+
+    <!-- رأس سهم صغير يوضّح اتجاه الانزلاق -->
+    <path
+        android:fillColor="#7C5CFF"
+        android:pathData="M22,5.3 L24,7 L22,8.7 Z" />
+</vector>

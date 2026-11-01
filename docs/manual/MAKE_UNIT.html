@@ -1,0 +1,142 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>@make.(name)`: وحدة بسياسة قدرات صريحة — Rin</title>
+<meta name="description" content="توثيق لغة البرمجة Rin"><link rel="icon" href="../assets/brand/icon-32.png">
+<link rel="stylesheet" href="assets/style.css"></head><body>
+<header><button id="mn" aria-label="القائمة">☰</button><a class="logo" href="index.html"><img src="../assets/brand/icon-48.png" alt="" width="26">Rin</a>
+<input id="q" type="search" placeholder="ابحث في التوثيق…" autocomplete="off"><button id="th" aria-label="الوضع">◐</button>
+<a class="gh" href="https://github.com/dlof-lib/rinlang">GitHub</a><div id="res"></div></header>
+<div class="wrap"><nav id="sb"><details ><summary>ابدأ هنا</summary><a href="getting-started.html">البداية</a><a href="syntax.html">القواعد النحوية العامة</a><a href="variables.html">let`، مصفوفات، قواميس، نطاق</a><a href="template-strings.html">النصوص القالبية (متغيّرات داخل النص)</a><a href="input.html">إدخال المستخدم (Input)</a><a href="control-flow.html">الشروط، الحلقات، `goal`/`achieve</a><a href="loops.html">حلقات Rin — Loops v2</a><a href="functions.html">fun`/`return`، التكرار الذاتي</a><a href="enums.html">enum`: قوائم اختيار مغلقة</a></details><details ><summary>اللغة</summary><a href="language-reference.html">المرجع الشامل وخريطة ترابط المفاهيم</a><a href="objects.html">class`/`struct`، `.object()`، `@Object`، `document</a><a href="oop.html">البرمجة الكائنية الموسَّعة (Rin 1.0)</a><a href="containers.html">دليل `@container` / `@element` / `@loop</a><a href="table.html">الجدول (`@table` / `@container.table`) ودوال اللغة عليه</a><a href="set.html">Set`: نوع المجموعة الأساسي</a><a href="pipelines.html">عامل الأنابيب `|&gt;</a><a href="RECKON.html">reckon`: مفهوم حسابي بسطرين</a><a href="let-plus.html">let` المطوَّر</a><a href="living-variables.html">المتغيرات الحيّة (Living Variables)</a><a href="label-define.html">label` و`define` (تسمية وتعريف)</a><a href="block-frames.html">بداية الكتل ونهايتها (Block Frames)</a><a href="compare_ops.html">معاملات المقارنة `/=` و `=/=` و `=/</a><a href="max_min.html">max / min family</a><a href="scope-guarantees.html">ضمانات النطاق: `finally` · `defer` · `catch … when` · `rethrow</a><a href="key_terms_and_builtins.html">Rin KEY_TERMS and Built-in Conditions</a><a href="number_builtins.html">Rin Number Built-ins</a></details><details ><summary>الواجهات (Indsin)</summary><a href="indsin.html">Indsin — Interface Design</a><a href="indsin_rin.html">indsin يعتمد على لغة Rin</a><a href="indsin_expansion.html">Indsin — التوسعة الاحترافية (Design System v2)</a><a href="indsin_object.html">indsin-object — API reference</a><a href="indsin_media.html">Indsin Media — اختيار الوسائط ورفعها</a><a href="indsin_icons.html">مكتبة أيقونات indsin (متجهية)</a><a href="indsin_tooling.html">indsin tooling — icon, file association, syntax highlighting</a><a href="indsinweb.html">IndsinWeb — مكتبة WebView والروابط لـ indsin</a><a href="RIN_ELEMENTS.html">دليل `@element.*` الكامل</a><a href="events-effects.html">الأحداث والتأثيرات (Events &amp; Effects) — محرك Indsin UI</a><a href="banner.html">Banner: إشعار شريطي</a><a href="simple-style.html">Rin Simple Style</a></details><details open><summary>بيئة التشغيل</summary><a href="runtime.html">وقت تشغيل Rin (Rin Runtime) · المرجع الرسمي</a><a href="standard-library.html">المكتبة القياسية (`lib/*.og.rin`)</a><a href="errors.html">نظام الأخطاء: أكواد، `try`/`catch`/`throw</a><a href="ERROR_SYSTEM.html">نظام التشخيص: البنية الداخلية + جدول الأكواد الكامل</a><a href="storage.html">تخزين دائم</a><a href="http.html">شبكات</a><a href="env.html">ربط Rin بملف `.env</a><a href="terminal.html">الطرفية التفاعلية — `rin terminal</a><a href="vm.html">RinVM — آلة Rin الافتراضية (بايتكود)</a><a href="rinflow.html">RinFlow: طبقة تنفيذ التدفّق المهيكل</a><a href="MAKE_UNIT.html" class=on>@make.(name)`: وحدة بسياسة قدرات صريحة</a><a href="MAKE_MEDIA.html">فيديو · صوت · API · إزالة الخلفية · قراءة النص من الصور</a><a href="TIME.html">مفهوم `time`: الزمن كقيمة من الدرجة الأولى</a><a href="native-additions.html">دوال Rin الأصلية الجديدة (Rin 1.0)</a></details><details ><summary>الحاويات وقواعد البيانات</summary><a href="container_advanced.html">Rin Container Advanced Built-ins</a><a href="container_pro.html">Rin Container Pro</a><a href="container_sql.html">RIN CONTAINER SQL (RCSQL)</a><a href="cross-file-containers.html">استدعاء إعلانات من ملف آخر</a></details><details ><summary>الحزم والتكامل</summary><a href="api.html">واجهة C المسطَّحة (Embedding API)</a><a href="android.html">استضافة Rin على أندرويد</a><a href="packages-and-interop.html">Rin 1.0 — المكتبات والحزم وجسر C++ وJSON واختبارات rintest</a><a href="rinpak-format.html">RinPak — حزمة مشروع Rin (`.rinpak`)</a><a href="html-projects.html">مشاريع HTML في Rin — الربط بين index.html وملف الحاوية</a><a href="project-og-urin.html">project.og.urin` — البيانات الوصفية لمشروع Rin</a><a href="CONTENT_PACKS.html">حزم المحتوى القابلة للتنزيل (Content Packs)</a><a href="previewkit.html">previewkit — معاينة حيّة لملفات PDF / Markdown / TypeScript</a></details><details ><summary>المكتبات المتخصصة</summary><a href="rinml.html">RinML / RinDF / RinAI — الذكاء الاصطناعي وتحليل البيانات في Rin</a><a href="STATS.html">RinStat — التحليل الإحصائي (`lib/rinstat.og.rin`)</a><a href="STATS_ADV.html">RinStat المتقدّم + RinAuto</a><a href="LINALG.html">الجبر الخطي للمهندسين — `mat*` و`vec*</a><a href="PLOT.html">RinPlot — الرسوم البيانية الإحصائية (`lib/rinplot.og.rin`)</a><a href="ALGO.html">تطوير الخوارزميات والحساب العددي — `algo*</a><a href="NUMBER.html">مفهوم `number` في Rin</a><a href="boat.html">&quot;Boat&quot;: مفاهيم أساسية مجمَّعة</a><a href="passkit.html">passkit — passwords, encryption, databases and a tag language</a><a href="passkit-crypto-db.html">Passkit feature catalog: encryption, databases and container linking</a><a href="hash-family.html">عائلة `#` — مفاهيم ودوال جديدة تبدأ بعلامة `#</a><a href="image-draw.html">إنشاء الصور في Rin — رسم وحفظ PNG وlog كصورة</a><a href="image-terminal.html">طباعة الصور في الـ terminal — `printImage` / `imageAnsi` / `imageInfo</a></details><details ><summary>المشروع</summary><a href="CONTRIBUTING.html">المساهمة في Rin</a><a href="CODE_OF_CONDUCT.html">قواعد السلوك</a><a href="SECURITY.html">سياسة الأمان</a><a href="SUPPORT.html">الحصول على المساعدة</a><a href="TRADEMARKS.html">سياسة العلامة التجارية — Trademark Policy</a><a href="THIRD_PARTY_NOTICES.html">إشعارات المكوّنات الخارجية — Third-Party Notices</a></details><details ><summary>مراجع إضافية</summary><a href="ANDROID_VERSIONS.html">حزم RinStudio لكل إصدار أندرويد</a><a href="TOKEN.html">مفهوم `token` في Rin</a><a href="TOOLCHAIN.html">Rin Professional Language Toolchain</a><a href="TOOLCHAIN_UPGRADE.html">Toolchain Upgrade — 2026-09</a><a href="architecture.html">المعمارية وبنية المستودع</a><a href="base-accept.html">base` و`accept`: متغيّران يخدمان `if</a><a href="channel47.html">channel47 — لغة وصف البيانات والإعدادات</a><a href="ci.html">CI وأدوات المستودع</a><a href="loop-templates.html">قوالب الحلقات `@tmpl</a><a href="pre-post.html">pre` و`post` (ما قبل / ما بعد): عقد انتقال حول الإسناد</a><a href="print-fonts.html">خطوط `print` — bold / italic / underline وغيرها</a><a href="print-image-terminal.html">طباعة الصور كنص في الطرفية</a><a href="print-templates.html">قوالب الطباعة `@tmpl ... print` — قوالب نصية خطية وتنسيقية</a><a href="rdoc.html">rdoc — Documentation Container</a><a href="rdoc-reference.html">وثيقة rdoc الشاملة — Documentation Container</a><a href="screenshots.html">لقطات من RinStudio</a></details></nav>
+<main><article><h1 id="make_unitmd-makename">MAKE_UNIT.md — <code>@make.(name)</code>: وحدة بسياسة قدرات صريحة<a class="headerlink" href="#make_unitmd-makename" title="Permanent link">#</a></h1>
+<p><code>@make.(name) ... .end/make=name</code> حاوية عادية (<code>ContainerStmt</code>/<code>MakeStmt</code> في
+<code>rin_ast.h</code>) بإضافتين: كلمة <code>kind</code> لتصنيفها، وحقول إدخال/إخراج/عام/خاص
+(<code>input</code>/<code>output</code>/<code>public</code>/<code>private</code>) خاصة بها فقط دون أنواع الحاويات الأخرى.</p>
+<h2 id="_1">الصياغة الأساسية (مُتحقَّق منها فعليًا — تعمل)<a class="headerlink" href="#_1" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">@make.(calc)
+    kind app;
+    use io;
+    strict;
+
+    let result = 2 + 2;
+    show result;
+.end/make=calc
+</code></pre>
+<pre><code>🛠️ make.app = calc
+4
+✅ .end/make.app (calc)
+</code></pre>
+<ul>
+<li><code>kind &lt;word&gt;;</code> تصنيف حر (أي معرِّف — <code>app</code> هو الافتراضي إن غاب <code>kind</code> أصلاً).</li>
+<li>الإغلاق يكتب اسم الوحدة بعد <code>=</code>: <code>.end/make=&lt;name&gt;</code> (وليس <code>.end/make</code> وحدها).</li>
+</ul>
+<h2 id="_2">حقول الوحدة<a class="headerlink" href="#_2" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الكلمة</th>
+<th>الغرض</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>input &lt;name&gt;;</code></td>
+<td>اسم مُدخَل مُعلَن (تعريفي/توثيقي).</td>
+</tr>
+<tr>
+<td><code>output &lt;name&gt;;</code></td>
+<td>اسم مُخرَج مُعلَن.</td>
+</tr>
+<tr>
+<td><code>public &lt;name&gt;;</code></td>
+<td>اسم عنصر معلَن كعام.</td>
+</tr>
+<tr>
+<td><code>private &lt;name&gt;;</code></td>
+<td>اسم عنصر معلَن كخاص.</td>
+</tr>
+<tr>
+<td><code>version "..."</code></td>
+<td>نص إصدار حر.</td>
+</tr>
+<tr>
+<td><code>description "..."</code></td>
+<td>نص وصف حر.</td>
+</tr>
+</tbody>
+</table></div>
+<p>كل هذه الكلمات تُكتب بصيغة المفرد (<code>input</code>، لا <code>inputs</code>) وتُكرَّر سطرًا لكل اسم إن
+احتجت أكثر من واحد.</p>
+<h2 id="policy-rcs-10-313">سياسة القدرات (Policy — RCS-1.0 §3.13)<a class="headerlink" href="#policy-rcs-10-313" title="Permanent link">#</a></h2>
+<p>نفس الكلمات الأربع المُعمَّمة الآن لأي <code>@container</code> (انظر
+<a href="containers.html#container"><code>containers.md</code></a>) لكنها ظهرت أول مرة هنا تحديدًا في
+Make Unit:</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الكلمة</th>
+<th>الغرض</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>use &lt;capability&gt;;</code></td>
+<td>يصرِّح بأن هذه القدرة <strong>متاحة</strong> للاستخدام داخل الوحدة.</td>
+</tr>
+<tr>
+<td><code>need &lt;capability&gt;;</code></td>
+<td>يصرِّح بأن هذه القدرة <strong>مطلوبة فعليًا</strong> — التحقّق (<code>validateMakeUnit</code> في <code>rin_make.cpp</code>) يرفض الوحدة إن لم تُستوفَ (رأيتُ فعليًا خطأ <code>requires capabilities not used: math</code> عند التصريح بـ<code>need math;</code> بلا استيفائها، حتى مع استدعاء دالة إحصائية فعليًا في الجسم — آلية المطابقة الدقيقة بين اسم القدرة واستخدامها الفعلي في الكود مصدرها الوحيد الموثوق هو <code>validateMakeUnit()</code> نفسها، لم أُعِد بناءها هنا تخمينًا).</td>
+</tr>
+<tr>
+<td><code>allow &lt;capability&gt;;</code></td>
+<td>يسمح صراحة بقدرة (دون اشتراطها).</td>
+</tr>
+<tr>
+<td><code>deny &lt;capability&gt;;</code></td>
+<td>يمنع صراحة قدرة معيَّنة حتى لو ظهرت ضمنيًا.</td>
+</tr>
+<tr>
+<td><code>strict;</code></td>
+<td>يُفعِّل التحقّق الصارم: أي قدرة تُستخدَم بالجسم (مثل <code>io</code> لـ<code>print</code>/<code>show</code>) يجب أن تكون معلَنة صراحة بـ<code>use</code>، وإلا خطأ فوري (رأيتُه فعليًا: <code>is strict: capability 'io' must be declared with 'use io;'</code>). بلا <code>strict;</code>، الوحدة تسلك بشكل متساهل (permissive) بلا أي تحقّق إضافي — تمامًا كحاوية عادية.</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="reckon-examplesreckon_demorin">مثال حقيقي مدمج مع <code>reckon</code> (من <code>examples/reckon_demo.rin</code>)<a class="headerlink" href="#reckon-examplesreckon_demorin" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">@make.(reportCard)
+    kind data;
+    use reckon;
+    use io;
+    need reckon;
+    strict;
+
+    reckon topAverage(grades)
+        where item &gt;= 60 |&gt; mean();
+
+    show topAverage;
+.end/make=reportCard
+</code></pre>
+<h2 id="video-audio-api-image-ocr">قدرات الوسائط (<code>video</code> <code>audio</code> <code>api</code> <code>image</code> <code>ocr</code>)<a class="headerlink" href="#video-audio-api-image-ocr" title="Permanent link">#</a></h2>
+<p>استدعاء <code>make.video*</code> / <code>make.audio*</code> / <code>make.api*</code> / <code>make.image.removeBg</code> / <code>make.ocr</code> داخل أي تعبير يُسجَّل
+كقدرة، ويخضع لنفس <code>use/need/allow/deny/strict</code>. التفاصيل والأنواع المسموحة افتراضياً: <a href="MAKE_MEDIA.html"><code>MAKE_MEDIA.md</code></a>.</p>
+<h2 id="_3">انظر أيضًا<a class="headerlink" href="#_3" title="Permanent link">#</a></h2>
+<ul>
+<li><a href="MAKE_MEDIA.html"><code>MAKE_MEDIA.md</code></a> — دوال <code>make.video/audio/api/image/ocr</code>.</li>
+<li><a href="containers.html"><code>containers.md</code></a> — <code>@container</code> بكل أنواعه، وكيف تُعمَّم نفس
+  كلمات السياسة الأربع لأي حاوية عادية، لا فقط Make Unit.</li>
+<li><a href="RECKON.html"><code>RECKON.md</code></a> — <code>reckon</code> يعمل بلا أي فرق داخل <code>@make.(name)</code>.</li>
+<li><code>app/src/main/cpp/rin_make.cpp</code> — <code>validateMakeUnit()</code>، المصدر الوحيد الموثوق
+  لآلية المطابقة الدقيقة بين اسم كل قدرة (<code>math</code>, <code>io</code>, <code>reckon</code>, ...) وكشفها الفعلي
+  داخل جسم الوحدة.</li>
+</ul></article>
+<div class="pnav"><a class="pn" href="rinflow.html">→ RinFlow: طبقة تنفيذ التدفّق المهيكل</a><a class="pn" href="MAKE_MEDIA.html">فيديو · صوت · API · إزالة الخلفية · قراءة النص من الصور ←</a></div><p class="edit"><a href="https://github.com/dlof-lib/rinlang/edit/main/docs/MAKE_UNIT.md">✎ عدّل هذه الصفحة على GitHub</a></p>
+<footer>Rin 1.0.0 · رخصة MIT</footer></main>
+<aside id="toc"><b>في هذه الصفحة</b><div class="toc">
+<ul>
+<li><a href="#_1">الصياغة الأساسية (مُتحقَّق منها فعليًا — تعمل)</a></li>
+<li><a href="#_2">حقول الوحدة</a></li>
+<li><a href="#policy-rcs-10-313">سياسة القدرات (Policy — RCS-1.0 §3.13)</a></li>
+<li><a href="#reckon-examplesreckon_demorin">مثال حقيقي مدمج مع reckon (من examples/reckon_demo.rin)</a></li>
+<li><a href="#video-audio-api-image-ocr">قدرات الوسائط (video audio api image ocr)</a></li>
+<li><a href="#_3">انظر أيضًا</a></li>
+</ul>
+</div>
+</aside></div>
+<script src="assets/app.js"></script></body></html>

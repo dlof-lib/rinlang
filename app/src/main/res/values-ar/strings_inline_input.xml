@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="indsin_inline_toggle">الكتابة داخل الحقل</string>
+    <string name="indsin_inline_on">الكتابة مباشرة داخل الحقل</string>
+    <string name="indsin_inline_off">الكتابة عبر نافذة</string>
+</resources>

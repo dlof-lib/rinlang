@@ -1,0 +1,18 @@
+// لوحة إحصائية كاملة: بيانات اصطناعية ← اختبارات ← رسوم
+@import "lib/rinplot.og.rin";
+seed(5);
+fun rn() { let s = 0; let i = 0; while (i < 12) { s = s + random(); i = i + 1; } return s - 6; }
+let recs = []; let i = 0;
+while (i < 90) {
+    let g = "A"; if (i % 3 == 1) { g = "B"; } if (i % 3 == 2) { g = "C"; }
+    let x = rn(); let shift = 0; if (g == "B") { shift = 1; } if (g == "C") { shift = 2; }
+    push(recs, {"g": g, "x": x, "y": 2 * x + shift + rn() * 0.5, "z": rn()});
+    i = i + 1;
+}
+let df = df_from_records(recs);
+st_print(st_compare(df, "g", "y"));
+pl_save(pl_compare_groups(df, "g", "y"), "stats_groups.svg");
+pl_save(pl_pairplot(df, ["x", "y", "z"], "g"), "stats_pairs.svg");
+pl_save(pl_dist_report(df_col(df, "y"), "توزيع y"), "stats_dist.svg");
+pl_save(pl_pca_report(df, ["x", "y", "z"], "PCA"), "stats_pca.png");
+print "تم: stats_*.svg / stats_pca.png";

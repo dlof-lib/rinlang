@@ -1,0 +1,56 @@
+// living_scope.rin — الكلمات السياقية تبقى أسماء عادية، + نطاق/ظل/إغلاقات/دوال/حلقات مع المتغيرات الحيّة
+// contextual words stay ordinary identifiers
+let tape = 5; print tape;
+let fuse = 1; fuse = 2; print fuse;
+fun lens(x) { return x * 2; } print lens(3);
+let bell = "b"; print bell;
+let stone = 9; print stone + 1;
+let gauge = [1,2]; print len(gauge);
+let trial = 1; print trial;
+let abort = 3; print abort;
+fun undo(x) { return "u" + x; } print undo("z");
+// declarations inside blocks / functions / loops
+fun make() {
+  gauge mana = 3 within 0 to 5;
+  bell mana (o, n) { print "mana " + o + "->" + n; }
+  mana = mana + 10;
+  return mana;
+}
+print make();
+let k = 0;
+while (k < 2) {
+  k = k + 1;
+  stone local = k * 10;
+  print local;
+}
+if (true) { tape tt = 1; tt = 2; undo tt; print tt; }
+// shadowing
+gauge hp = 5 within 0 to 10;
+{ let hp = 500; hp = 600; print hp; }
+print hp;
+// closure over living var
+fun heal(n) { hp = hp + n; }
+heal(100); print hp;
+// lens inside function scope sees locals
+fun area(w, h) { lens a = w * h; w = w + 1; return a; }
+print area(2, 3);
+// redeclaration in same scope ends living
+stone s = 1;
+let s = 2; s = 3; print s;
+// bell on plain let, then lens reading it
+let temp = 20;
+lens hot = temp > 30;
+bell temp (o, n) { print "temp now " + n + " hot=" + hot; }
+temp = 35;
+// array tape
+tape list = [1];
+list = [1, 2]; list = [1, 2, 3];
+undo list; print list;
+// for loop with gauge
+gauge c = 0 within 0 to 3;
+for (let i = 0; i < 6; i = i + 1) { c = c + 1; }
+print c; print c.full;
+// strings in tape
+tape msg = "hi"; msg = msg + "!"; print msg.past;
+// reading kind of plain var with bell
+print temp.kind; print temp.vitals;

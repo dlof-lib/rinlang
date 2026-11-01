@@ -1,0 +1,45 @@
+// make_media_demo.rin — فيديو · صوت · API · إزالة الخلفية · OCR (انظر docs/MAKE_MEDIA.md)
+// كل دالة تُرجع {ok, ...}: الفشل البيئي (أداة/شبكة/ملف) لا يوقف البرنامج.
+
+// 0) ما المتاح فعلاً على هذا الجهاز؟
+let t = make.media.tools();
+print "platform: " + t.platform + " | removeBg: " + t.removeBg + " | ocr: " + t.ocr;
+print "video players: " + jsonEncode(t.videoPlayers);
+
+// 1) وحدة make بسياسة قدرات صريحة: صور فقط، ممنوع الشبكة والصوت
+@make.(photoTask)
+    kind task;
+    use image; use ocr; use io; use condition;
+    need image;
+    deny api;
+    deny audio;
+    strict;
+
+    // إزالة الخلفية (تُنشئ شفافية). المصدر والخرج داخل مجلد المشروع.
+    let cut = make.image.removeBg("photo.png", "photo.nobg.png", {"tolerance": 12, "trim": true});
+    if (cut.ok) { print "removed " + cut.removedPercent + "% -> " + cut.path; }
+    else { print "removeBg: " + cut.error; }
+
+    // قراءة النص من الصورة
+    let o = make.ocr("scan.png", {"lang": "eng", "enhance": true});
+    if (o.ok) { print o.text; print "confidence " + o.confidence; }
+    else { print "ocr: " + o.error; }
+.end/make=photoTask
+
+// 2) API: إعادة محاولة + كاش + استخراج مسار
+let r = make.api("https://api.github.com/repos/torvalds/linux", {
+    "headers": {"User-Agent": "rin"},
+    "path": "stargazers_count",
+    "retries": 2,
+    "cache": 60
+});
+if (r.ok) { print "stars: " + r.data + " (attempts " + r.attempts + ")"; }
+else { print "api: " + r.error; }
+
+// 3) فيديو وصوت: dryRun يعرض الأمر فقط (يعمل بلا شاشة/جهاز صوت)
+let vi = make.video.info("clip.mp4");
+if (vi.ok) { print "video " + vi.width + "x" + vi.height + " " + vi.duration + "s"; }
+let plan = make.video("clip.mp4", {"dryRun": true, "fullscreen": true});
+if (plan.ok) { print jsonEncode(plan.command); } else { print plan.error; }
+make.audio("sound.mp3", {"volume": 70});
+make.audio.stop();

@@ -1,0 +1,54 @@
+container.ensure("table", "Acc");
+container.ensure("table", "Log");
+container.set("Acc", "balance", 100);
+container.set("Acc", "owner", "Ali");
+
+// نجاح: يعيد قيمة fn ويُبقي التعديلات
+let r = container.transaction("Acc", fun() { container.set("Acc", "balance", 150); return "ok"; });
+assertEq(r, "ok");
+assertEq(container.get("Acc", "balance"), 150);
+
+// فشل: تراجع كامل (تعديل + إضافة + حذف) ثم إعادة رمي الخطأ
+let caught = "";
+try {
+    container.transaction("Acc", fun() {
+        container.set("Acc", "balance", 0);
+        container.set("Acc", "extra", 1);
+        container.deleteField("Acc", "owner");
+        throw "boom";
+    });
+} catch (e) { caught = e["message"]; }
+assertEq(caught, "boom");
+assertEq(container.get("Acc", "balance"), 150);
+assertEq(container.has("Acc", "extra"), false);
+assertEq(container.get("Acc", "owner"), "Ali");
+
+// عدة حاويات دفعة واحدة
+container.set("Log", "n", 1);
+try {
+    container.transaction(["Acc", "Log"], fun() {
+        container.set("Acc", "balance", 1);
+        container.set("Log", "n", 2);
+        throw "x";
+    });
+} catch (e) { }
+assertEq(container.get("Acc", "balance"), 150);
+assertEq(container.get("Log", "n"), 1);
+
+// حاوية غائبة: خطأ قبل أي تنفيذ
+let missing = false;
+try { container.transaction(["Acc", "Nope"], fun() { container.set("Acc", "balance", 5); }); } catch (e) { missing = true; }
+assertEq(missing, true);
+assertEq(container.get("Acc", "balance"), 150);
+print "container.transaction OK";
+
+// ---- container.attempt: بلا try/catch ----
+let ok1 = container.attempt("Acc", fun() { container.set("Acc", "balance", 160); return 7; });
+assertEq(ok1["ok"], true); assertEq(ok1["value"], 7); assertEq(ok1["error"], nil);
+assertEq(container.get("Acc", "balance"), 160);
+let bad = container.attempt(["Acc", "Log"], fun() { container.set("Acc", "balance", 0); container.set("Log", "n", 9); throw "nope"; });
+assertEq(bad["ok"], false); assertEq(bad["error"]["message"], "nope");
+assertEq(container.get("Acc", "balance"), 160); assertEq(container.get("Log", "n"), 1);
+let bad2 = container.attempt("Acc", fun() { container.set("Acc", "balance", 0); return 1 / 0; });
+assertEq(container.get("Acc", "balance"), 160);
+print "container.attempt OK";

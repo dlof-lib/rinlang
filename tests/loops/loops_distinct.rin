@@ -1,0 +1,9 @@
+each n in [3, 1, 3, 2, 1] distinct { print "u" + n; }
+each n in [1, "1", 1, "1"] distinct { print "t" + n; }
+each n in [1, 2, 3, 2, 1, 4] distinct take 3 { print "dt" + n; }
+each n in [5, 5, 6, 7, 7] where n > 5 distinct { print "dw" + n; }
+each w in ["apple", "avocado", "banana", "blueberry", "cherry"] distinct on (w[0]) { print w; }
+each [a, b] in [[1, 2], [1, 3], [2, 4]] distinct on (a) { print a + ":" + b; }
+print [each n in [4, 4, 5] distinct yield n * 2];
+each x, i in ["a", "b", "a"] distinct { print i + x; }
+each n in [9, 9, 8] distinct { if (n == 9) { continue; } print "c" + n; }

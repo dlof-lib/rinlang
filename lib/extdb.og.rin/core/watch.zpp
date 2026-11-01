@@ -1,0 +1,83 @@
+// extdb/core/watch.zpp — تتبّع التغييرات بالاستعلام الدوري (polling) — بلا خيوط ولا اتصالات دائمة.
+//
+//   let w = xdb_watch(c, "users", fun(ev) { print ev["type"] + " " + ev["id"]; }, {"initial": false});
+//   xdb_tick(c);                 // يفحص كل المراقبات مرة ويستدعي المعالجات؛ يُرجع عدد الأحداث
+//   xdb_watchLoop(c, 2000, 30);  // 30 جولة كل ثانيتين (يحجب التنفيذ) — للسكربتات
+//   xdb_unwatch(c, w);
+// الحدث: {"type": "added"|"changed"|"removed", "table", "id", "doc", "old"}
+
+// فرق بين لقطتين {id: doc} → مصفوفة أحداث
+fun xdb_diff(oldSnap, newSnap) {
+    let ev = [];
+    for (let id in keys(newSnap)) {
+        if (!has(oldSnap, id)) { push(ev, {"type": "added", "id": id, "doc": newSnap[id], "old": nil}); }
+        else if (!xdb__same(oldSnap[id], newSnap[id])) { push(ev, {"type": "changed", "id": id, "doc": newSnap[id], "old": oldSnap[id]}); }
+    }
+    for (let id in keys(oldSnap)) {
+        if (!has(newSnap, id)) { push(ev, {"type": "removed", "id": id, "doc": nil, "old": oldSnap[id]}); }
+    }
+    return ev;
+}
+
+fun xdb__snapshot(c, t, opts) {
+    let rows = [];
+    c["cache"] = {};   // المراقبة تقرأ دائماً من الخادم
+    if (opts != nil and (xdb__opt(opts, "where", nil) != nil or xdb__opt(opts, "order", nil) != nil or xdb__opt(opts, "limit", nil) != nil)) {
+        rows = xdb_list(c, t, opts);
+    } else {
+        rows = xdb_all(c, t);
+    }
+    let snap = {};
+    for (let d in rows) { snap[toString(d["_id"])] = d; }
+    return snap;
+}
+
+fun xdb_watch(c, t, handler, opts) {
+    xdb__live(c);
+    if (type(handler) != "function") { xdb__fail("watch needs a handler function"); }
+    c["watchSeq"] = c["watchSeq"] + 1;
+    let id = "w" + toString(c["watchSeq"]);
+    c["watches"][id] = {"t": t, "handler": handler, "opts": opts, "snap": nil, "initial": xdb__opt(opts, "initial", false)};
+    return id;
+}
+
+fun xdb_unwatch(c, id) {
+    if (!has(c["watches"], id)) { return false; }
+    remove(c["watches"], id);
+    return true;
+}
+
+fun xdb_tick(c) {
+    xdb__live(c);
+    let total = 0;
+    for (let id in keys(c["watches"])) {
+        let w = c["watches"][id];
+        let now = xdb__snapshot(c, w["t"], w["opts"]);
+        let old = w["snap"];
+        if (old == nil) {
+            w["snap"] = now;
+            if (!w["initial"]) { continue; }
+            old = {};
+        }
+        let ev = xdb_diff(old, now);
+        w["snap"] = now;
+        let h = w["handler"];
+        for (let e in ev) {
+            e["table"] = w["t"];
+            h(e);
+            total = total + 1;
+        }
+    }
+    return total;
+}
+
+fun xdb_watchLoop(c, intervalMs, rounds) {
+    let total = 0;
+    let i = 0;
+    while (i < rounds) {
+        total = total + xdb_tick(c);
+        i = i + 1;
+        if (i < rounds) { time.sleep(intervalMs); }
+    }
+    return total;
+}

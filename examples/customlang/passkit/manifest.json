@@ -1,0 +1,23 @@
+{
+  "id": "passkit",
+  "name": "Passkit",
+  "version": "1.0.0",
+  "developer": "you",
+  "fileExtension": "passkit",
+  "description": "A simple <> tag language for email, passwords, links, API keys, API calls, encryption and databases, linked with Rin SQL (RCSQL) and Rin containers.",
+  "entry": {
+    "lexer": "Lexer.rin",
+    "parser": "Parser.rin",
+    "interpreter": "Interpreter.rin",
+    "codegen": "CodeGen.rin",
+    "run": "run.rin"
+  },
+  "syntax": "syntax.rinsyntax.json",
+  "official": true,
+  "createdWithRinLangVersion": "langkit-1.0",
+  "icon": {
+    "svg": "assets/branding/passkit_icon.svg",
+    "png": "assets/branding/passkit_icon.png",
+    "fileIcon": "app/src/main/res/drawable/ic_passkit_file.xml"
+  }
+}

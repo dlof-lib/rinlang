@@ -1,0 +1,13 @@
+# Rin
+
+> Rin is a small programming language: one C++17 engine (Lexer, Parser, Interpreter) that runs from the command line, in the Android IDE (RinStudio) and in the browser via WebAssembly. Site language: Arabic (with English).
+
+## Main pages
+- [Rin home](https://dlof-lib.github.io/rinlang/): overview of the language, tour, quick start, FAQ
+- [Rin Libraries](https://dlof-lib.github.io/rinlang/?view=libraries): official libraries, community packages and extensions
+
+## URL format
+- Library: https://dlof-lib.github.io/rinlang/@USER/NAME.og.rin (official libraries use @rin)
+- Extension: https://dlof-lib.github.io/rinlang/@USER/NAME.rinex
+- Publisher profile: https://dlof-lib.github.io/rinlang/@USER
+- Full list: https://dlof-lib.github.io/rinlang/sitemap.xml

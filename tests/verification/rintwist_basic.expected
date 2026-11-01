@@ -1,0 +1,15 @@
+📥 @import: تم استيراد "tests/verification/libsplit/twist.og.rin" (مكتبة: twist 0.3.0 — 2 أجزاء)
+📥 @import: تم استيراد "tests/verification/libsplit/twist_token.og.rin" (من القرص)
+main
+false
+rin 1.0.0
+true
+25
+true
+true
+library-part library twist 0.3.0 main.zpp
+extra.zpp extra.zpp zpp
+tool-token tool-token twist_token twist_token.og.rin
+1
+[E0035] `RINTWIST` is read-only (RINTWIST is a built-in snapshot of the running context (file / server / date / app / lib))
+map

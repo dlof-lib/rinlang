@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    نمط الزر "الأساسي" (Primary) — جزء من نظام أنماط الأزرار الموحّد لإعادة الاستخدام بأي شاشة:
+    bg_btn_primary / bg_btn_secondary / bg_btn_outline / bg_btn_outline_danger / bg_btn_danger /
+    bg_btn_success. استخدمه لإجراء الشاشة الأهم (حفظ/تأكيد/تشغيل) — نفس دور bg_toolbar_btn_primary
+    القديم لكن باسم عام غير مربوط بالشريط العلوي فقط. لون النص المناسب: @color/btn_text_on_filled.
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_enabled="false">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/rin_btn_disabled_bg" />
+            <corners android:radius="12dp" />
+        </shape>
+    </item>
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/rin_accent_pressed" />
+            <corners android:radius="12dp" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/rin_accent" />
+            <corners android:radius="12dp" />
+        </shape>
+    </item>
+</selector>

@@ -1,0 +1,9 @@
+// Rin HTTPKit Pro — URL/request normalization around native HTTP functions.
+fun http_url(s){return trim(s);}
+fun http_isSecure(s){return startsWith(trim(s),"https://");}
+fun http_isWeb(s){let x=trim(s);return startsWith(x,"http://") or startsWith(x,"https://");}
+fun http_joinUrl(base,path){if(endsWith(base,"/") and startsWith(path,"/")){return substr(base,0,len(base)-1)+path;}if(!endsWith(base,"/") and !startsWith(path,"/")){return base+"/"+path;}return base+path;}
+fun http_get(url){return httpGet(url);}
+fun http_post(url,body){return httpPost(url,body);}
+fun http_jsonGet(url){return jsonDecode(httpGet(url));}
+fun http_okResponse(s){return s!=nil;}

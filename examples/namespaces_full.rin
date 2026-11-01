@@ -1,0 +1,115 @@
+// ============================================================================
+//  namespaces_full.rin — container / Containers.Group / Volume كفضاءات أسماء
+//  container هو الأساس ويعمل وحده؛ Group و Volume اختياريان.
+// ============================================================================
+
+// ---- 1) container وحده = فضاء أسماء ----------------------------------------
+@container=counter
+    state value = 0;
+    let step = 1;
+    fun inc() { value = value + step; return value; }
+    fun reset() { value = 0; }
+    on update(prev) { print "  [update] " + prev["value"] + " -> " + value; }
+.end/container
+
+print "== 1) container وحده";
+print counter.inc();
+print counter.inc();
+counter.step = 10;
+print counter.inc();
+counter.reset();
+print "value=" + counter.value;
+
+// ---- 2) Volume > Group > container: نفس الأسماء بلا تعارض ---------------------
+@Volume=Store
+    let owner = "Sara";
+
+    @Containers.Group=Inventory
+        @container=items
+            let count = 3;
+            fun add(n) { count = count + n; return count; }
+        .end/container
+    .end/Containers.Group
+
+    @Containers.Group=Archive
+        @container=items
+            let count = 100;
+        .end/container
+    .end/Containers.Group
+.end/Volume
+
+print "== 2) Volume > Group > container";
+print "owner = " + Store.owner;
+print "Inventory.items.count = " + Store.Inventory.items.count;
+print "Archive.items.count   = " + Store.Archive.items.count;
+print "add(4) -> " + Store.Inventory.items.add(4);
+Store.Archive.items.count = 0;
+print "بعد التعديل: " + Store.Inventory.items.count + " / " + Store.Archive.items.count;
+
+// ---- 3) Group بدون Volume، وcontainer متداخلة --------------------------------
+@Containers.Group=Net
+    let region = "eu";
+    @container=api
+        let port = 8080;
+        @container=tls
+            let enabled = true;
+        .end/container
+    .end/container
+.end/Containers.Group
+
+print "== 3) Group وحدها + تعشيش";
+print Net.region + ":" + Net.api.port + " tls=" + Net.api.tls.enabled;
+
+// ---- 4) حل نسبي: الأشقاء بأسمائهم المجرّدة -----------------------------------
+@Containers.Group=Shop
+    @container=prices
+        let apple = 2;
+    .end/container
+    @container=cart
+        fun total(n) { return prices.apple * n; }
+    .end/container
+.end/Containers.Group
+
+print "== 4) حل نسبي";
+print "total = " + Shop.cart.total(5);
+
+// ---- 5) الاستعلام الديناميكي ns.* ---------------------------------------------
+print "== 5) ns.*";
+print ns.paths();
+print ns.kind("Store") + " / " + ns.kind("Store.Inventory") + " / " + ns.kind("Store.Inventory.items");
+print ns.members("Store");
+print ns.fields("Store.Inventory.items");
+print ns.get("Store.Inventory.items", "count");
+ns.set("Store.Inventory.items", "count", 1);
+print ns.call("Store.Inventory.items", "add", [10]);
+print ns.snapshot("Net");
+
+// ---- 6) الأخطاء ---------------------------------------------------------------
+print "== 6) أخطاء";
+try { print counter.vaule; } catch (e) { print "خطأ: " + e["message"]; }
+
+// ---- 7) الفروقات: container هو الأقوى -----------------------------------------
+//  Volume = قراءة فقط | Group = قراءة + كتابة | container = قراءة + كتابة + دوال + state + معاملات
+@Volume=Cfg
+    let mode = "prod";
+    @Containers.Group=Shared
+        let hits = 0;
+        @container=svc
+            let n = 1;
+            fun bump() { n = n + 1; return n; }
+        .end/container
+    .end/Containers.Group
+.end/Volume
+
+print "== 7) الفروقات";
+print Cfg.mode;
+try { Cfg.mode = "dev"; } catch (e) { print "Volume: الكتابة مرفوضة " + e["code"]; }
+Cfg.Shared.hits = 5;
+print "Group: الكتابة مسموحة، hits=" + Cfg.Shared.hits;
+print "container: استدعاء دالة، bump=" + Cfg.Shared.svc.bump();
+print ns.capabilities("Cfg");
+print ns.capabilities("Cfg.Shared");
+print ns.capabilities("Cfg.Shared.svc");
+try {
+    ns.transaction("Cfg.Shared.svc", fun() { Cfg.Shared.svc.n = 99; throw "boom"; });
+} catch (e) { print "تراجع ذرّي: n=" + Cfg.Shared.svc.n; }

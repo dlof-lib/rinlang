@@ -1,0 +1,10 @@
+// Rin CSV Pro — CSV utilities for ordinary text data.
+fun csv_escape(s){let x=str(s);if(contains(x,",") or contains(x,"\"") or contains(x,"\n")){x=replace(x,"\"","\"\"");return "\""+x+"\"";}return x;}
+fun csv_row(arr){let out=[];let i=0;while(i<len(arr)){push(out,csv_escape(arr[i]));i=i+1;}return join(out,",");}
+fun csv_parseRow(s){return split(s,",");}
+fun csv_rows(lines){let out=[];let i=0;while(i<len(lines)){push(out,csv_parseRow(lines[i]));i=i+1;}return out;}
+fun csv_column(rows,index){let out=[];let i=0;while(i<len(rows)){if(index<len(rows[i])){push(out,rows[i][index]);}i=i+1;}return out;}
+fun csv_width(row){return len(row);}
+fun csv_maxWidth(rows){let m=0;let i=0;while(i<len(rows)){if(len(rows[i])>m){m=len(rows[i]);}i=i+1;}return m;}
+fun csv_headerMap(header){let m={};let i=0;while(i<len(header)){m[header[i]]=i;i=i+1;}return m;}
+fun csv_toObjects(rows){let out=[];if(len(rows)==0){return out;}let h=rows[0];let i=1;while(i<len(rows)){let o={};let j=0;while(j<len(h) and j<len(rows[i])){o[h[j]]=rows[i][j];j=j+1;}push(out,o);i=i+1;}return out;}

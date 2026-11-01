@@ -1,0 +1,47 @@
+🗂️ Containers.Group = ExtDB
+📦 container = catalog
+✅ .end/container (catalog)
+✅ .end/Containers.Group (ExtDB) [تحتوي: catalog]
+📥 @import: تم استيراد "lib/extdb.og.rin" (مكتبة: extdb 1.0.0 — 12 أجزاء)
+providers=["rtdb", "pgrest"]
+caught: unknown provider
+caught: rtdb needs url
+caught: pgrest needs key
+fb provider=rtdb ping=true
+fb get={"_id": "u1", "name": "Sara", "age": 30}
+fb has=true/false missing=nil
+fb update=true/false
+fb after update={"_id": "u1", "name": "Sara", "age": 31}
+fb add key ok=true name=Lina
+fb count=3
+fb find=u2
+fb list=[{"_id": "u2", "name": "Omar", "age": 41}, {"_id": "u1", "name": "Sara", "age": 31}]
+caught: fb duplicate
+fb delete=true/false
+caught: fb bad path
+caught: fb permission extdb: rtdb HTTP 401: Permission denied
+sb provider=pgrest ping=true
+sb get seed={"id": "u1", "name": "Sara", "age": 30, "_id": "u1"}
+sb upsert={"name": "Omar", "age": 42, "id": "u2", "_id": "u2"}
+sb has=true/false
+sb update=true/false
+sb add id ok=true
+sb count=3 ids=["102", "u1", "u2"]
+sb find=u2
+sb list=[{"name": "Omar", "age": 42, "id": "u2", "_id": "u2"}, {"id": "u1", "name": "Sara", "age": 31, "_id": "u1"}]
+caught: sb duplicate
+sb delete=true/false
+caught: sb no table
+caught: sb bad name
+sb rpc={"fn": "hello", "args": {"x": 1}}
+caught: rpc only pgrest
+pull fb=2 kind=doc
+pull sb=2 docs=["u1", "u2"]
+push fb=3 has u3=true
+push sb as new table=2 count=2
+fb after prune=["u1", "u3"]
+📦 container = app
+✅ .end/container (app)
+bound provider=pgrest names=["Sara", "Omar"]
+connections=["fbdb", "sbdb", "sbbound"] openCount=3
+caught: closed

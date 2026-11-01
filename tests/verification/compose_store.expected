@@ -1,0 +1,21 @@
+📦 @import: تم استيراد "lib/compose.og.rin" (مكتبة مدمجة)
+↺ @import: "lib/compose.og.rin" مستورَدة مسبقاً بالفعل (تم تجاهل التكرار)
+📦 @import: تم استيراد "lib/compose_path.og.rin" (مكتبة مدمجة)
+📦 @import: تم استيراد "lib/compose_store.og.rin" (مكتبة مدمجة)
+📦 container = box
+✅ .end/container (box)
+["count 0->1", "count 1->2", "name b"]
+2
+4
+20
+true
+4
+["count 0->1", "count 1->2", "name b", "count 2->10", "name z"]
+200
+true
+100
+11
+100
+{"name": "z", "age": 3}
+55
+77

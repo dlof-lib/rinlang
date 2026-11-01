@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- أيقونة كتاب/مكتبة كبيرة باهتة لتوضيح حالة "لا توجد مكتبات بعد" -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="52dp"
+    android:height="52dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:strokeColor="#3A3E48"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M4,4 H10 V20 H4 Z M14,4 H20 V20 H14 Z M10,7 H14 M10,11 H14 M10,15 H14" />
+</vector>

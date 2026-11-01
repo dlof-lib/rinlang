@@ -1,0 +1,17 @@
+{
+  "language": "Passkit",
+  "fileExtension": "passkit",
+  "lineComment": "",
+  "blockComment": { "start": "<!--", "end": "-->" },
+  "keywords": ["passkit", "set", "print", "if", "else", "for", "assert", "email", "password", "apikey", "link", "api", "sql", "input", "return", "import", "run", "call", "crypt", "token", "otp", "db", "container"],
+  "operators": ["<", ">", "/", "=", "</", "/>"],
+  "rules": [
+    { "name": "comment", "pattern": "<!--[\\s\\S]*?-->", "color": "#6A9955" },
+    { "name": "string", "pattern": "\"[^\"]*\"", "color": "#CE9178" },
+    { "name": "tag", "pattern": "</?(?:passkit|set|print|if|else|for|assert|email|password|apikey|link|api|sql|input|return|import|run|call|crypt|token|otp|db|container)\\b", "color": "#4EC9B0" },
+    { "name": "attribute", "pattern": "\\b[A-Za-z_][A-Za-z0-9_.:-]*(?==)", "color": "#9CDCFE" },
+    { "name": "variable", "pattern": "\\$[A-Za-z_][A-Za-z0-9_.]*", "color": "#DCDCAA" },
+    { "name": "operator", "pattern": "/?>|<", "color": "#808080" }
+  ],
+  "note": "read by the Rin IDE editor (CustomLanguageSyntaxLoader.kt) to highlight .passkit files."
+}

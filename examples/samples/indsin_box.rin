@@ -1,0 +1,27 @@
+<!-- Box / Container: صندوق مرن قابل للتخصيص بالكامل.
+     تخطيط: direction=row|column · gap · justify=start|center|end|between|around|evenly · align / valign · width/height/aspect
+     مظهر: bg · gradient · radius · shape=circle|pill · border + borderColor + border_style=dashed|dotted
+           border_top|right|bottom|left="3 #FF7675" · outline/outline_color/outline_offset
+           elevation/shadow/shadowColor · opacity · bg_opacity · pattern=stripes|vstripes|dots|grid|checker -->
+<Palette seed=#6C5CE7 dark />
+<Screen#app size=phone padding=14 gap=12 bg=#12131A>
+
+  <Box#row direction=row gap=8 justify=between padding=10 bg=surface radius=14 width=full>
+    <Box#a width=60 height=40 bg=primary radius=10 />
+    <Box#b width=60 height=40 bg=success radius=10 />
+    <Box#c width=60 height=40 bg=danger radius=10 />
+  </Box>
+
+  <Box#centered direction=row justify=center gap=10 padding=10 bg=surface radius=14 width=full>
+    <Box#d shape=circle width=44 bg=#FDCB6E />
+    <Box#e shape=pill width=90 height=36 bg=#74B9FF />
+  </Box>
+
+  <Box#dash padding=14 border=2 borderColor=primary border_style=dashed radius=12 width=full><Text>dashed border</Text></Box>
+  <Box#dots padding=14 border=3 borderColor=#FD79A8 border_style=dotted radius=12 width=full><Text>dotted border</Text></Box>
+  <Box#sides padding=14 bg=surface width=full border_left="5 #00B894" border_bottom="2 #FDCB6E"><Text>one-sided borders</Text></Box>
+  <Box#ring padding=14 bg=surface radius=12 outline=3 outline_color=#FF7675 outline_offset=3 width=90%><Text>outline ring</Text></Box>
+  <Box#pat padding=18 radius=14 bg=surface pattern=stripes pattern_color=#6C5CE733 pattern_size=8 width=full><Text>stripes pattern</Text></Box>
+  <Box#fade padding=14 bg=primary radius=12 opacity=0.45 width=full><Text>opacity 45%</Text></Box>
+  <Box#glass padding=14 bg=#FFFFFF bg_opacity=0.12 radius=12 elevation=md width=full><Text>bg_opacity</Text></Box>
+</Screen>

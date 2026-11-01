@@ -1,0 +1,53 @@
+// template_concepts.rin — القوالب `...${}` داخل مفاهيم اللغة (أحداث، ترجمات، نصوص ثابتة)
+//   rin run tests/template_concepts.rin
+@import "rintest";
+
+let got = [];
+
+@container=Parent
+    on.event `chat:${1 + 1}` (msg) { push(got, "dyn:" + msg); }
+    on.event `plain-template` (msg) { push(got, "plain:" + msg); }
+    on.event "classic" (msg) { push(got, "classic:" + msg); }
+    @container=Child
+        let room = 2;
+        fun go() {
+            emit `chat:${room}`, "A";        // اسم حدث ديناميكي
+            emit "chat:2", "B";               // اسم ثابت يطابق الديناميكي
+            emit `plain-template`, "C";       // قالب بلا ${} = نص ثابت
+            emit "classic", "D";
+        }
+        go();
+    .end/container
+.end/container
+
+rt_describe("template strings داخل المفاهيم", fun() {
+    rt_test("emit / on.event بأسماء قالبية", fun() {
+        rt_expect(got).toEqual(["dyn:A", "dyn:B", "plain:C", "classic:D"]);
+    });
+    rt_test("دالة عادية باسم emit لا تتأثر", fun() {
+        fun emit(x) { return x + 1; }
+        rt_expect(emit(1)).toBe(2);
+    });
+    rt_test("خصائص @view بقالب لا ترمي خطأً", fun() {
+        // لا يرمي خطأً ويُقيَّم التعبير كأي تعبير عادي
+        warp n = 3;
+        @view.Column=root
+            @view.Text=t text=`العدد ${n}`; .end/view
+        .end/view
+        rt_expect(true).toBeTrue();
+    });
+});
+
+@container=T
+    let user = "ريم";
+    Translations
+        translation lang=`en` text=`Hello ${user}`;
+        translation lang="ar" text=`مرحباً ${user}`;
+    .end/Translations
+.end/container
+
+rt_describe("translation بقوالب", fun() {
+    rt_test("translation بقالب لا ترمي خطأً (القيمة المُقيَّمة تظهر في ناتج التشغيل أعلاه)", fun() { rt_expect(true).toBeTrue(); });
+});
+
+rt_done();

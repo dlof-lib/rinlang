@@ -1,0 +1,169 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>pre` و`post` (ما قبل / ما بعد): عقد انتقال حول الإسناد — Rin</title>
+<meta name="description" content="توثيق لغة البرمجة Rin"><link rel="icon" href="../assets/brand/icon-32.png">
+<link rel="stylesheet" href="assets/style.css"></head><body>
+<header><button id="mn" aria-label="القائمة">☰</button><a class="logo" href="index.html"><img src="../assets/brand/icon-48.png" alt="" width="26">Rin</a>
+<input id="q" type="search" placeholder="ابحث في التوثيق…" autocomplete="off"><button id="th" aria-label="الوضع">◐</button>
+<a class="gh" href="https://github.com/dlof-lib/rinlang">GitHub</a><div id="res"></div></header>
+<div class="wrap"><nav id="sb"><details ><summary>ابدأ هنا</summary><a href="getting-started.html">البداية</a><a href="syntax.html">القواعد النحوية العامة</a><a href="variables.html">let`، مصفوفات، قواميس، نطاق</a><a href="template-strings.html">النصوص القالبية (متغيّرات داخل النص)</a><a href="input.html">إدخال المستخدم (Input)</a><a href="control-flow.html">الشروط، الحلقات، `goal`/`achieve</a><a href="loops.html">حلقات Rin — Loops v2</a><a href="functions.html">fun`/`return`، التكرار الذاتي</a><a href="enums.html">enum`: قوائم اختيار مغلقة</a></details><details ><summary>اللغة</summary><a href="language-reference.html">المرجع الشامل وخريطة ترابط المفاهيم</a><a href="objects.html">class`/`struct`، `.object()`، `@Object`، `document</a><a href="oop.html">البرمجة الكائنية الموسَّعة (Rin 1.0)</a><a href="containers.html">دليل `@container` / `@element` / `@loop</a><a href="table.html">الجدول (`@table` / `@container.table`) ودوال اللغة عليه</a><a href="set.html">Set`: نوع المجموعة الأساسي</a><a href="pipelines.html">عامل الأنابيب `|&gt;</a><a href="RECKON.html">reckon`: مفهوم حسابي بسطرين</a><a href="let-plus.html">let` المطوَّر</a><a href="living-variables.html">المتغيرات الحيّة (Living Variables)</a><a href="label-define.html">label` و`define` (تسمية وتعريف)</a><a href="block-frames.html">بداية الكتل ونهايتها (Block Frames)</a><a href="compare_ops.html">معاملات المقارنة `/=` و `=/=` و `=/</a><a href="max_min.html">max / min family</a><a href="scope-guarantees.html">ضمانات النطاق: `finally` · `defer` · `catch … when` · `rethrow</a><a href="key_terms_and_builtins.html">Rin KEY_TERMS and Built-in Conditions</a><a href="number_builtins.html">Rin Number Built-ins</a></details><details ><summary>الواجهات (Indsin)</summary><a href="indsin.html">Indsin — Interface Design</a><a href="indsin_rin.html">indsin يعتمد على لغة Rin</a><a href="indsin_expansion.html">Indsin — التوسعة الاحترافية (Design System v2)</a><a href="indsin_object.html">indsin-object — API reference</a><a href="indsin_media.html">Indsin Media — اختيار الوسائط ورفعها</a><a href="indsin_icons.html">مكتبة أيقونات indsin (متجهية)</a><a href="indsin_tooling.html">indsin tooling — icon, file association, syntax highlighting</a><a href="indsinweb.html">IndsinWeb — مكتبة WebView والروابط لـ indsin</a><a href="RIN_ELEMENTS.html">دليل `@element.*` الكامل</a><a href="events-effects.html">الأحداث والتأثيرات (Events &amp; Effects) — محرك Indsin UI</a><a href="banner.html">Banner: إشعار شريطي</a><a href="simple-style.html">Rin Simple Style</a></details><details ><summary>بيئة التشغيل</summary><a href="runtime.html">وقت تشغيل Rin (Rin Runtime) · المرجع الرسمي</a><a href="standard-library.html">المكتبة القياسية (`lib/*.og.rin`)</a><a href="errors.html">نظام الأخطاء: أكواد، `try`/`catch`/`throw</a><a href="ERROR_SYSTEM.html">نظام التشخيص: البنية الداخلية + جدول الأكواد الكامل</a><a href="storage.html">تخزين دائم</a><a href="http.html">شبكات</a><a href="env.html">ربط Rin بملف `.env</a><a href="terminal.html">الطرفية التفاعلية — `rin terminal</a><a href="vm.html">RinVM — آلة Rin الافتراضية (بايتكود)</a><a href="rinflow.html">RinFlow: طبقة تنفيذ التدفّق المهيكل</a><a href="MAKE_UNIT.html">@make.(name)`: وحدة بسياسة قدرات صريحة</a><a href="MAKE_MEDIA.html">فيديو · صوت · API · إزالة الخلفية · قراءة النص من الصور</a><a href="TIME.html">مفهوم `time`: الزمن كقيمة من الدرجة الأولى</a><a href="native-additions.html">دوال Rin الأصلية الجديدة (Rin 1.0)</a></details><details ><summary>الحاويات وقواعد البيانات</summary><a href="container_advanced.html">Rin Container Advanced Built-ins</a><a href="container_pro.html">Rin Container Pro</a><a href="container_sql.html">RIN CONTAINER SQL (RCSQL)</a><a href="cross-file-containers.html">استدعاء إعلانات من ملف آخر</a></details><details ><summary>الحزم والتكامل</summary><a href="api.html">واجهة C المسطَّحة (Embedding API)</a><a href="android.html">استضافة Rin على أندرويد</a><a href="packages-and-interop.html">Rin 1.0 — المكتبات والحزم وجسر C++ وJSON واختبارات rintest</a><a href="rinpak-format.html">RinPak — حزمة مشروع Rin (`.rinpak`)</a><a href="html-projects.html">مشاريع HTML في Rin — الربط بين index.html وملف الحاوية</a><a href="project-og-urin.html">project.og.urin` — البيانات الوصفية لمشروع Rin</a><a href="CONTENT_PACKS.html">حزم المحتوى القابلة للتنزيل (Content Packs)</a><a href="previewkit.html">previewkit — معاينة حيّة لملفات PDF / Markdown / TypeScript</a></details><details ><summary>المكتبات المتخصصة</summary><a href="rinml.html">RinML / RinDF / RinAI — الذكاء الاصطناعي وتحليل البيانات في Rin</a><a href="STATS.html">RinStat — التحليل الإحصائي (`lib/rinstat.og.rin`)</a><a href="STATS_ADV.html">RinStat المتقدّم + RinAuto</a><a href="LINALG.html">الجبر الخطي للمهندسين — `mat*` و`vec*</a><a href="PLOT.html">RinPlot — الرسوم البيانية الإحصائية (`lib/rinplot.og.rin`)</a><a href="ALGO.html">تطوير الخوارزميات والحساب العددي — `algo*</a><a href="NUMBER.html">مفهوم `number` في Rin</a><a href="boat.html">&quot;Boat&quot;: مفاهيم أساسية مجمَّعة</a><a href="passkit.html">passkit — passwords, encryption, databases and a tag language</a><a href="passkit-crypto-db.html">Passkit feature catalog: encryption, databases and container linking</a><a href="hash-family.html">عائلة `#` — مفاهيم ودوال جديدة تبدأ بعلامة `#</a><a href="image-draw.html">إنشاء الصور في Rin — رسم وحفظ PNG وlog كصورة</a><a href="image-terminal.html">طباعة الصور في الـ terminal — `printImage` / `imageAnsi` / `imageInfo</a></details><details ><summary>المشروع</summary><a href="CONTRIBUTING.html">المساهمة في Rin</a><a href="CODE_OF_CONDUCT.html">قواعد السلوك</a><a href="SECURITY.html">سياسة الأمان</a><a href="SUPPORT.html">الحصول على المساعدة</a><a href="TRADEMARKS.html">سياسة العلامة التجارية — Trademark Policy</a><a href="THIRD_PARTY_NOTICES.html">إشعارات المكوّنات الخارجية — Third-Party Notices</a></details><details open><summary>مراجع إضافية</summary><a href="ANDROID_VERSIONS.html">حزم RinStudio لكل إصدار أندرويد</a><a href="TOKEN.html">مفهوم `token` في Rin</a><a href="TOOLCHAIN.html">Rin Professional Language Toolchain</a><a href="TOOLCHAIN_UPGRADE.html">Toolchain Upgrade — 2026-09</a><a href="architecture.html">المعمارية وبنية المستودع</a><a href="base-accept.html">base` و`accept`: متغيّران يخدمان `if</a><a href="channel47.html">channel47 — لغة وصف البيانات والإعدادات</a><a href="ci.html">CI وأدوات المستودع</a><a href="loop-templates.html">قوالب الحلقات `@tmpl</a><a href="pre-post.html" class=on>pre` و`post` (ما قبل / ما بعد): عقد انتقال حول الإسناد</a><a href="print-fonts.html">خطوط `print` — bold / italic / underline وغيرها</a><a href="print-image-terminal.html">طباعة الصور كنص في الطرفية</a><a href="print-templates.html">قوالب الطباعة `@tmpl ... print` — قوالب نصية خطية وتنسيقية</a><a href="rdoc.html">rdoc — Documentation Container</a><a href="rdoc-reference.html">وثيقة rdoc الشاملة — Documentation Container</a><a href="screenshots.html">لقطات من RinStudio</a></details></nav>
+<main><article><h1 id="pre-postmd-pre-post">pre-post.md — <code>pre</code> و<code>post</code> (ما قبل / ما بعد): عقد انتقال حول الإسناد<a class="headerlink" href="#pre-postmd-pre-post" title="Permanent link">#</a></h1>
+<blockquote>
+<p>كل مثال هنا جُرِّب فعليًا عبر المفسِّر (انظر <code>tests/verification/pre_post_basic.rin</code> و<code>examples/pre_post_demo.rin</code>).</p>
+</blockquote>
+<p><code>accept</code> يسأل عن <strong>القيمة الجديدة وحدها</strong>. لكن كثيرًا من القواعد تتعلّق بـ <strong>الانتقال</strong> نفسه: من أين أخرج؟ وإلى أين وصلت؟ وكم قفزت؟
+هذان النوعان يسألان عن الانتقال من جهتَيه:</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الكلمة</th>
+<th>متى تسأل؟</th>
+<th>ماذا يرى الشرط؟</th>
+<th>إن كُذِّب الشرط</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pre</code>  (ما قبل)</td>
+<td><strong>قبل</strong> الكتابة، والعالم ما زال على القيمة القديمة</td>
+<td>اسم المتغيّر = القيمة <strong>القديمة</strong></td>
+<td>لا تُكتب شيئًا</td>
+</tr>
+<tr>
+<td><code>post</code> (ما بعد)</td>
+<td><strong>بعد</strong> الكتابة، والعالم يحمل القيمة الجديدة فعلًا</td>
+<td>اسم المتغيّر = القيمة <strong>الجديدة</strong></td>
+<td>تُلغى الكتابة ويُعاد ما كان</td>
+</tr>
+</tbody>
+</table></div>
+<p>في <strong>كلا الشرطين</strong> يتوفّر الاسمان <code>old</code> (القيمة السابقة) و<code>new</code> (القيمة المكتوبة)، فلا تحتاج إلى حفظ القديمة بنفسك.
+كلاهما من عائلة المتغيرات الحيّة (<a href="living-variables.html"><code>living-variables.md</code></a>): <strong>كلمتان سياقيتان غير محجوزتان</strong>؛ <code>let pre = 1;</code>
+و<code>fun f(post){...}</code> ما زالا صالحين تمامًا، وبرنامج لا يستعملهما لا يدفع أي كلفة.</p>
+<h2 id="_1">الصيغة<a class="headerlink" href="#_1" title="Permanent link">#</a></h2>
+<pre><code>pre  x = v if RULE [post RULE2] [strict];
+post x = v if RULE [pre  RULE2] [strict];
+</code></pre>
+<ul>
+<li><code>if</code> يكتب شرط نوع المتغيّر (<code>pre</code> ← قبل، <code>post</code> ← بعد). الشرط الآخر اختياري ويُكتب بالكلمة المقابلة: <code>pre lvl = 1 if old &lt; 5 post new &lt;= old + 1;</code></li>
+<li>الافتراضي <strong>صامت</strong>: الكتابة الملغاة تُتجاهل و<code>x.ok</code> تصير <code>false</code>. و<code>strict</code> يحوّلها إلى خطأ <code>E0051</code>.</li>
+<li>القيمة الابتدائية ليست «انتقالًا»: لا تُسأل عنها <code>pre</code>. أما <code>post</code> فتُسأل عنها (حيث <code>old</code> و<code>new</code> نفس القيمة) فيفشل التصريح بـ <code>E0051</code> إن خالفت قاعدتها.</li>
+</ul>
+<h2 id="pre"><code>pre</code> — هل يجوز أن أخرج من الحالة الحالية؟<a class="headerlink" href="#pre" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">pre door = &quot;closed&quot; if old != &quot;locked&quot;;
+door = &quot;open&quot;;    print door;     // open
+door = &quot;locked&quot;;  print door;     // locked
+door = &quot;open&quot;;    print door;     // locked  ← محجوب: القيمة القديمة locked
+print door.ok;                    // false
+</code></pre>
+<p>مناسب لآلات الحالات: «لا تغادر <code>done</code>»، «لا تعدّل الطلب بعد <code>shipped</code>».</p>
+<h2 id="post"><code>post</code> — هل الحالة التي وصلتُ إليها مقبولة؟<a class="headerlink" href="#post" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">post stock = 10 if new &gt;= 0 and new &lt;= old + 100;     // لا سالب، ولا قفزة فوق 100
+stock = 50;   print stock;        // 50
+stock = -5;   print stock;        // 50   ← تراجع
+stock = 500;  print stock;        // 50   ← القفزة أكبر من 100
+</code></pre>
+<p><code>post</code> يرى الحالة بعد الكتابة، فيصلح للقواعد النسبية (<code>new &gt;= old</code> عدّاد لا ينقص، <code>new &lt;= old + 100</code> حدّ للقفزة) ولما يعتمد على متغيرات أخرى.</p>
+<h2 id="_2">الاثنان معًا<a class="headerlink" href="#_2" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">pre lvl = 1 if old &lt; 5 post new &lt;= old + 1;   // لا خروج بعد 5، ولا قفزة أكثر من 1
+lvl = 2; lvl = 4;  print lvl;     // 2   (post: 2→4 قفزة 2)
+inc lvl; inc lvl; inc lvl;        // 3, 4, 5
+inc lvl; print lvl;               // 5   (pre: القديمة 5 ليست &lt; 5)
+</code></pre>
+<h2 id="_3">الخصائص (للقراءة فقط)<a class="headerlink" href="#_3" title="Permanent link">#</a></h2>
+<p>آخر <strong>محاولة</strong> كتابة تُوصَف بزوج <code>(pre → post)</code>:</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الخاصية</th>
+<th>المعنى</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>x.pre</code></td>
+<td>القيمة قبل آخر محاولة (<code>nil</code> قبل أول محاولة)</td>
+</tr>
+<tr>
+<td><code>x.post</code></td>
+<td>القيمة التي حاولت آخر كتابة وضعها (ابتدائيًا: القيمة الأولى)</td>
+</tr>
+<tr>
+<td><code>x.ok</code></td>
+<td>هل نجحت آخر محاولة؟</td>
+</tr>
+<tr>
+<td><code>x.accepted</code> / <code>x.rejected</code></td>
+<td>عدّادا النجاح والرفض (المحاولات فقط، لا القيمة الابتدائية)</td>
+</tr>
+<tr>
+<td><code>x.refused</code></td>
+<td>آخر قيمة رُفضت</td>
+</tr>
+<tr>
+<td><code>x.kind</code></td>
+<td><code>"pre"</code> أو <code>"post"</code> (بحسب كلمة التصريح) · <code>x.vitals</code> خريطة بكل شيء</td>
+</tr>
+</tbody>
+</table></div>
+<p>نجحت المحاولة ⇒ <code>x.post == x</code>. رُفضت ⇒ <code>x.pre == x</code> و<code>x.post</code> هي القيمة المرفوضة. ولخدمة <code>if</code>:</p>
+<pre><code class="language-kotlin">stock = 500;
+if (!stock.ok) { print &quot;refused &quot; + str(stock.post) + &quot;, kept &quot; + str(stock.pre); }   // refused 500, kept 50
+</code></pre>
+<p>(حقل بيانات حقيقي بنفس الاسم، كمفتاح <code>pre</code> في قاموس، يغلب الخاصية.)</p>
+<h2 id="_4">يعمل مع بقية اللغة<a class="headerlink" href="#_4" title="Permanent link">#</a></h2>
+<ul>
+<li><code>inc</code>/<code>dec</code> تمرّان من الشرطين.</li>
+<li><code>bell x { ... }</code> يرنّ فقط عند <strong>النجاح</strong> الفعلي؛ الكتابة الملغاة لا ترنّ ولا تسجَّل في تاريخ <code>tape</code> ولا في <code>x.writes</code>.</li>
+<li><code>trial { ... abort; }</code> يعيد قيمة المتغيّر <strong>وعدّاداته</strong> إلى حالها.</li>
+<li>النوعان محليّان للنطاق؛ والشرط يُقيَّم في نطاق التصريح فيرى متغيراته.</li>
+<li>النوع واحد لكل متغيّر: لا يُجمع <code>pre</code>/<code>post</code> مع <code>gauge</code>/<code>tape</code>/<code>accept</code> (الجمع بين شرطَي قبل وبعد يتمّ بالصيغة أعلاه).</li>
+</ul>
+<h2 id="_5">الأخطاء<a class="headerlink" href="#_5" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الكود</th>
+<th>متى</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>E0051</code></td>
+<td>رفض في <code>strict</code> (قبل أو بعد) · قيمة ابتدائية تخالف شرط <code>post</code></td>
+</tr>
+<tr>
+<td><code>E0012</code></td>
+<td><code>pre</code>/<code>post</code> بلا <code>if</code></td>
+</tr>
+<tr>
+<td><code>E0013</code></td>
+<td>شرط مكرّر، أو مُعدِّل في غير مكانه (مثل <code>else</code> أو <code>post</code> بعد <code>post</code>)</td>
+</tr>
+<tr>
+<td><code>E0046</code></td>
+<td>خاصية لا تخص هذا النوع (مثل <code>x.pre</code> على متغيّر عادي له جرس فقط)</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="_6">حدود معروفة<a class="headerlink" href="#_6" title="Permanent link">#</a></h2>
+<p><code>old</code>/<code>new</code> تحجبان أي متغيّر بنفس الاسم داخل الشرط فقط · الشرط يُقيَّم عند كل إسناد (كلفته كلفة تعبيره) ·
+كتابة <code>post</code> المؤقتة خام (لا تُطلق خطّافات <code>state</code> ولا الروابط إلا عند النجاح) · مترجم <code>rinc</code> (Rin → C) لا يدعم هذه الصيغ بعد (مثل بقية المتغيرات الحيّة).</p>
+<h2 id="_7">انظر أيضًا<a class="headerlink" href="#_7" title="Permanent link">#</a></h2>
+<p><a href="base-accept.html"><code>base-accept.md</code></a> · <a href="living-variables.html"><code>living-variables.md</code></a> · <a href="variables.html"><code>variables.md</code></a> · <a href="ERROR_SYSTEM.html"><code>ERROR_SYSTEM.md</code></a></p></article>
+<div class="pnav"><a class="pn" href="loop-templates.html">→ قوالب الحلقات `@tmpl</a><a class="pn" href="print-fonts.html">خطوط `print` — bold / italic / underline وغيرها ←</a></div><p class="edit"><a href="https://github.com/dlof-lib/rinlang/edit/main/docs/pre-post.md">✎ عدّل هذه الصفحة على GitHub</a></p>
+<footer>Rin 1.0.0 · رخصة MIT</footer></main>
+<aside id="toc"><b>في هذه الصفحة</b><div class="toc">
+<ul>
+<li><a href="#_1">الصيغة</a></li>
+<li><a href="#pre">pre — هل يجوز أن أخرج من الحالة الحالية؟</a></li>
+<li><a href="#post">post — هل الحالة التي وصلتُ إليها مقبولة؟</a></li>
+<li><a href="#_2">الاثنان معًا</a></li>
+<li><a href="#_3">الخصائص (للقراءة فقط)</a></li>
+<li><a href="#_4">يعمل مع بقية اللغة</a></li>
+<li><a href="#_5">الأخطاء</a></li>
+<li><a href="#_6">حدود معروفة</a></li>
+<li><a href="#_7">انظر أيضًا</a></li>
+</ul>
+</div>
+</aside></div>
+<script src="assets/app.js"></script></body></html>

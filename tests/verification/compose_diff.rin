@@ -1,0 +1,13 @@
+@import "compose_diff";
+let a = {"n": 1, "keep": true, "o": {"x": 1, "y": [1, 2, 3]}, "gone": 5};
+let b = {"n": 2, "keep": true, "o": {"x": 1, "y": [1, 9]}, "new": "hi"};
+let d = diffDeep(a, b);
+print d; print describeChanges(d); print changedPaths(a, b);
+print patchDeep(a, d) == b;
+print patchDeep(b, invertChanges(d)) == a;
+print diffDeep([1, 2], [1, 2, 3]); print diffDeep(Set([1]), Set([2]));
+let base = {"a": 1, "b": 2, "c": 3};
+let m3 = merge3(base, {"a": 10, "b": 2, "c": 3}, {"a": 1, "b": 20, "c": 33});
+print m3;
+print merge3(base, {"a": 5, "b": 2, "c": 3}, {"a": 6, "b": 2, "c": 3});
+print diffDeep(5, 5); print diffDeep({"k": 1}, {"k": 1});

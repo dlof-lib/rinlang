@@ -1,0 +1,273 @@
+// rin_editor_engine.h
+//
+// محرك محرر أكواد كامل بلغة C++ (بلا أي اعتماد على Android EditText) خاص بلغة Rin.
+// يحتفظ بالنص كسطور UTF-8، ويوفر: إدراج/حذف، تراجع/إعادة (undo/redo) حقيقي مبني على
+// سجلّ تعديلات دقيق (وليس نسخ نص كاملة)، مسافة بادئة تلقائية + إغلاق أقواس/علامات تنصيص
+// تلقائي + إزاحة ذكية عند `}`، أوامر مستوى-السطر (تكرار/حذف/نقل/تعليق/إزاحة)، فحص توازن
+// الأقواس، بحث عن كل التطابقات، وتلوين نحوي حقيقي مبني على rin::Lexer الفعلي (وليس Regex).
+//
+// كل الإحداثيات (line, col) هي: line = فهرس سطر صفري (0-based)، col = إزاحة بايت UTF-8
+// صفرية داخل السطر (0-based) — نفس اصطلاح Token.col/endCol في rin_lexer.h (بعد طرح 1).
+#pragma once
+
+#include <string>
+#include <vector>
+#include <deque>
+#include <utility>
+#include <cstdint>
+#include "rin_intellisense.h"
+
+// تصريح أمامي فقط (بلا #include لملف diagnostic.h كامل) حتى يبقى هذا الرأس خفيفًا ومستقلاً عن
+// تفاصيل نظام Diagnostics؛ التعريف الكامل يُستخدَم فقط داخل rin_editor_engine.cpp.
+namespace rin::diag { struct Diagnostic; }
+
+namespace rinedit {
+
+enum class HighlightKind {
+    Default = 0,
+    Keyword = 1,
+    String = 2,
+    Number = 3,
+    Ident = 4,
+    Operator = 5,
+    Bracket = 6,
+    At = 7,
+    Error = 8,
+    Call = 9, // معرِّف متبوع مباشرة بـ '(' — نمط استدعاء دالة (لتلوين مميّز كما في المحررات الاحترافية)
+    // Comment = 10: يطابق HighlightKind.COMMENT في Kotlin حرفياً (nativeGetHighlightSpansFlat
+    // يمرّر ترتيب enum الخام كعدد صحيح مباشرة). rin::Lexer نفسه لا يُصدر رمزاً للتعليقات
+    // (يُسقطها بصمت أثناء المسح — انظر case '/' في rin_lexer.cpp)، لذا لا يمكن الحصول على
+    // مواضعها من tokens مباشرة. الحل: EditorEngine::computeHighlights() يستنتج فجوات
+    // التعليقات بنفسه من "الفراغات" غير المُغطّاة بأي token على كل سطر (انظر
+    // computeCommentGaps في rin_editor_engine.cpp) بدل تعديل rin::Lexer/rin::Parser
+    // الأساسيَّين (تعديلهما ليُصدرا رمز تعليق يتطلّب تحديث كل مستهلكي التوكنز في المحلّل
+    // النحوي وغير آمن لمجرد إضافة تلوين في المحرر).
+    Comment = 10,
+    Type = 11, // كلمات لغة الحاويات/الأنواع (container/table/Section/Group/link/save/file/...)
+    // --- أنواع خاصة بلغة passkit (13..19) — تطابق HighlightKind في Kotlin حرفياً ---
+    Preprocessor = 12, // <?...?> و <!DOCTYPE ...>
+    PkBracket = 13,    // < </ > />
+    PkTagName = 14,    // وسم passkit معروف
+    PkAttr = 15,       // اسم سمة
+    PkVariable = 16,   // $var و {var}
+    PkCustomTag = 17,  // وسم غير معروف (قد يُسجَّل عبر passkitRegister)
+    PkString = 18,     // قيمة سمة
+    PkComment = 19,    // <!-- ... -->
+    // --- مفاهيم لغة Rin الدلالية (20..26) — تطابق HighlightKind في RinSyntax.kt حرفياً ---
+    Constant = 20,     // true/false/nil وثوابت MAX_SIZE بأحرف كبيرة
+    FunctionDef = 21,  // اسم الدالة بعد fun
+    Control = 22,      // if/else/while/for/return/break/continue/each/repeat/loop/retry/try/catch/throw/nobreak
+    Modifier = 23,     // معدِّلات الحلقات: where/yield/by/window/skip/take/sorted/... و when/unless وعوامل sum/count..
+    Label = 24,        // تسمية حلقة outer: و break outer
+    Class = 25,        // أسماء الأصناف (class X) وكل استخدام لها، و Set/Env
+    Property = 26,     // عضو بعد النقطة: obj.name (بلا نداء)
+    // --- قوالب الحلقات @tmpl (27..29) — تطابق HighlightKind في RinSyntax.kt حرفياً ---
+    Template = 27,     // اسم القالب في التعريف `@tmpl name(` وكل استعمال `@name(` (مع علامة @)
+    TemplateKw = 28,   // `@tmpl` و `@body`
+    Parameter = 29,    // معاملات القالب وأسماء `as` وكل ظهور لها داخل جسم القالب
+    // --- الرموز (30..35) — تطابق HighlightKind في RinSyntax.kt حرفياً ---
+    Compare = 30,      // == != < > <= >= =/= =/ ! وكلمتا and/or: مقارنة ومنطق
+    Punct = 31,        // , ; : .  — فواصل خافتة
+    Flow = 32,         // |> (الأنابيب) و ? (الشرط الثلاثي)
+    Bracket0 = 33,     // أقواس ( ) [ ] { } بالتناوب حسب العمق (3 ألوان) — المستوى 0 و3 و6..
+    Bracket1 = 34,     // المستوى 1 و4..
+    Bracket2 = 35,     // المستوى 2 و5..
+    // --- مستندات indsin (36..47) — تطابق HighlightKind في RinSyntax.kt حرفياً (انظر rin_indsin_highlight.h) ---
+    IxBracket = 36,    // < </ > />
+    IxTag = 37,        // مكوّن معروف: Column Button Text …
+    IxTagCustom = 38,  // مكوّن مخصّص/غير معروف
+    IxId = 39,         // #id بعد اسم الوسم، واسم العنصر في @view.Kind=name
+    IxAttr = 40,       // اسم سمة
+    IxEvent = 41,      // معالج حدث onTap/onLongPress/…
+    IxToken = 42,      // قيمة نظام التصميم: primary spacious pill …
+    IxColor = 43,      // #RRGGBB
+    IxLength = 44,     // 16 / 120px / 250ms / 50%
+    IxState = 45,      // خلية warp في أي موضع
+    IxBrace = 46,      // { } و << >> حدّا التعبير المضمَّن
+    IxStruct = 47,     // @view .end/view ووسوم التوجيه Define/Slot/If/Fun/Rin …
+};
+
+// لغة التلوين/التشخيص للمستند الحالي. الافتراضي Rin (السلوك القديم لكل الامتدادات)؛ فقط
+// امتداد "passkit" يغيّر السلوك. أي امتداد آخر يبقى Rin كما كان تماماً.
+enum class EditorLanguage { Rin = 0, Passkit = 1 };
+
+struct HighlightSpan {
+    int line;
+    int startCol;
+    int endCol;
+    HighlightKind kind;
+};
+
+struct Position {
+    int line = 0;
+    int col = 0;
+};
+
+struct Match {
+    int line;
+    int startCol;
+    int endCol;
+};
+
+// شدّة تشخيص واحد، تطابق rin::diag::Severity حرفيًا بنفس ترتيب enum (انظر diagnostic.h) حتى
+// يمكن لـ Kotlin تفسير القيمة الخام مباشرة دون جدول تحويل منفصل قد ينحرف عنه.
+enum class DiagnosticSeverity { Error = 0, Warning = 1, Note = 2, Help = 3 };
+
+// تشخيص واحد (خطأ/تحذير نحوي) بموقع صفري القاعدة (line/col) جاهز للرسم مباشرة في المحرر —
+// مصدره rin::Lexer + rin::Parser (طبقة النحو فقط، وليس المُفسِّر/فاحص الأنواع؛ تشغيل المُفسِّر
+// عند كل ضغطة مفتاح غير آمن وقد ينفّذ كودًا جانبيًا، فيبقى نطاق هذا التشخيص الحي: أخطاء الصياغة
+// فقط — قوس/فاصلة منقوطة ناقصة، رمز غير متوقّع، تعبير غير صالح... إلخ).
+struct EditorDiagnostic {
+    int line;      // 0-based
+    int startCol;  // 0-based
+    int endCol;    // 0-based، حصري النهاية (لا يقل عن startCol+1)
+    DiagnosticSeverity severity;
+    std::string code;    // "E0011" مثلاً
+    std::string message; // نص الرسالة الكامل (يضمّ reason: إن وُجد)
+};
+
+// سجلّ تعديل واحد قابل للتراجع/الإعادة. النطاق [startLine,startCol) هو النقطة المشتركة؛
+// (origEndLine,origEndCol) هو نهاية النص *قبل* التعديل (حيث كان removedText)،
+// (newEndLine,newEndCol) هو نهاية النص *بعد* التعديل (حيث أصبح insertedText).
+struct EditRecord {
+    int startLine = 0, startCol = 0;
+    int origEndLine = 0, origEndCol = 0;
+    int newEndLine = 0, newEndCol = 0;
+    std::string removedText;
+    std::string insertedText;
+    Position cursorBefore;
+    Position cursorAfter;
+    int64_t timestampMs = 0;
+    bool coalescable = false; // true لكتابة حرف واحد/حذف حرف واحد فقط (تُجمَّع مع سابقتها)
+};
+
+class EditorEngine {
+public:
+    EditorEngine();
+
+    // --- لغة المستند ---
+    // يقبل امتداد الملف (مع/بلا نقطة، أي حالة أحرف). غير معروف => Rin.
+    void setLanguage(const std::string& extension);
+    EditorLanguage language() const { return language_; }
+
+    // --- نص كامل ---
+    void setText(const std::string& text);
+    std::string getText() const;
+    int lineCount() const { return static_cast<int>(lines_.size()); }
+    std::string getLine(int line) const;
+
+    // --- مؤشر/تحديد ---
+    Position getCursor() const { return cursor_; }
+    bool hasSelection() const { return hasSel_; }
+    // يُرجع دومًا مُطبَّعة (start <= end)
+    void getSelection(int* sl, int* sc, int* el, int* ec) const;
+    void setCursor(int line, int col, bool extendSelection);
+    void setSelection(int aLine, int aCol, int bLine, int bCol);
+    void collapseSelectionToCursor();
+
+    // --- تحرير أساسي ---
+    // يُدرج نصًا عند المؤشر (يستبدل التحديد إن وُجد). smart=true يفعّل الإزاحة التلقائية
+    // بعد Enter، وإغلاق الأقواس/التنصيص التلقائي، والتخطي فوق القوس المغلق، للحرف الواحد فقط.
+    void insertText(const std::string& utf8Text, bool smart);
+    // مكافئ لزر Backspace: يحذف حرفًا واحدًا (أو زوج قوس/تنصيص تلقائي بالكامل، أو التحديد إن وُجد)
+    void deleteBackward();
+    // مكافئ لزر Delete: يحذف حرفًا واحدًا للأمام (أو التحديد إن وُجد)
+    void deleteForward();
+    void deleteSelectionIfAny();
+    void replaceRange(int sl, int sc, int el, int ec, const std::string& text);
+
+    // --- تراجع/إعادة ---
+    bool undo();
+    bool redo();
+
+    // --- أوامر مستوى-السطر ---
+    void duplicateCurrentLine();
+    void deleteCurrentLine();
+    void moveLineUp();
+    void moveLineDown();
+    void toggleLineComment();
+    void indentSelection();
+    void unindentSelection();
+
+    // --- فحص/بحث ---
+    // -1 = متوازن، وإلا رقم أول سطر فيه خلل (1-based)
+    int checkBracketBalance() const;
+    std::vector<Match> findAll(const std::string& query, bool caseSensitive) const;
+    // بداية السطر رقم oneBasedLine (مُقيَّد ضمن الحدود)
+    Position lineStartPosition(int oneBasedLine) const;
+
+    // --- تلوين نحوي حقيقي (rin::Lexer) ---
+    std::vector<HighlightSpan> computeHighlights() const;
+
+    // --- إكمال تلقائي (autocomplete) حقيقي ---
+    // يُرجع حتى maxResults اقتراحًا يبدأ بـ prefix (غير حسّاس لحالة الأحرف)، مبنية على: كل
+    // الكلمات المحجوزة الفعلية في لغة Rin (rin::keywordList()) + كل المعرِّفات (IDENT) الفريدة
+    // الظاهرة فعلاً في المستند الحالي (متغيرات/دوال عرَّفها المستخدم) — الكلمات المحجوزة أولاً
+    // ثم المعرِّفات، وكلٌّ منها مُرتَّب أبجديًا؛ لا يقترح prefix نفسه إن كان مطابقًا تمامًا لوحده.
+    std::vector<std::string> collectSuggestions(const std::string& prefix, int maxResults) const;
+
+    // --- IntelliSense احترافي (انظر rin_intellisense.h) ---
+    // إكمال سياقي عند المؤشر: أعضاء، @tags، #words، وحدات @import، متغيرات النطاق، دوال/أصناف المستخدم،
+    // الدوال المدمجة، قوالب، كلمات المستند — بترتيب ضبابي ذكي. فارغ إن كان هناك تحديد أو داخل تعليق/نص.
+    // [explicitInvoke] = Ctrl+Space (يسمح ببادئة فارغة). في passkit يلفّ collectSuggestions القديم.
+    intel::CompletionResult complete(bool explicitInvoke, int maxResults) const;
+    // توقيع الدالة التي يقف المؤشر داخل استدعائها + المعامل النشط.
+    intel::SignatureHelp signatureHelp() const;
+    // توثيق الرمز عند (line, col) — للـ hover/quick-doc.
+    intel::SymbolInfo describeAt(int line, int col) const;
+    // يسجّل قبول اقتراح (الأكثر قبولاً يصعد في الترتيب لاحقاً).
+    static void recordCompletionUse(const std::string& label);
+
+    // --- تشخيص أخطاء حي (live diagnostics) ---
+    // يشغِّل rin::Lexer ثم rin::Parser::parseCollectingDiagnostics() على النص الحالي ويُرجع كل
+    // أخطاء/تحذيرات الصياغة الملتقَطة (بدل التوقف عند أول خطأ)، لرسم خط أحمر متعرّج تحتها في
+    // المحرر أثناء الكتابة. لا يُشغِّل المُفسِّر (interpreter) إطلاقًا — انظر تعليق EditorDiagnostic.
+    std::vector<EditorDiagnostic> computeDiagnostics() const;
+
+    // --- أدوات احترافية (انظر rin_editor_tools.h) ---
+    // نطاقات الطيّ: {startLine, endLine} صفرية؛ endLine شاملة ولا تشمل سطر القوس الختامي.
+    std::vector<std::pair<int, int>> computeFoldRanges() const;
+    // هيكل الملف: دوال/أصناف/متغيرات علوية/تسميات حلقات. kind: 0 دالة، 1 صنف، 2 متغير، 3 تسمية.
+    struct OutlineItem { int line; int col; int kind; std::string name; };
+    std::vector<OutlineItem> computeOutline() const;
+    // إعادة محاذاة المستند كاملاً حسب عمق الأقواس (أمر تراجع واحد). يُرجع true إن تغيّر النص.
+    bool reindentDocument(int indentWidth);
+    // يوسّع قالباً (snippet) إذا كانت الكلمة المنتهية عند المؤشر تطابق اسم قالب. يُرجع true عند التوسيع.
+    bool expandSnippetAtCursor();
+    // هل [word] اسم قالب؟ (لتمييز الاقتراحات في الواجهة)
+    static bool isSnippetTrigger(const std::string& word);
+    // عنوان وصفي للقالب (فارغ إن لم يوجد)
+    static std::string snippetTitle(const std::string& word);
+
+private:
+    EditorLanguage language_ = EditorLanguage::Rin;
+    bool indsinExt_ = false; // الملف بامتداد .indsin: يُلوَّن بمُلوِّن indsin (rin_indsin_highlight.h)
+    std::vector<std::string> lines_;
+    Position cursor_;
+    Position selAnchor_;
+    bool hasSel_ = false;
+
+    std::deque<EditRecord> undoStack_;
+    std::deque<EditRecord> redoStack_;
+    static constexpr size_t kMaxHistory = 500;
+    static constexpr int64_t kCoalesceWindowMs = 800;
+
+    int clampLine(int line) const;
+    int clampCol(int line, int col) const;
+    void clampCursor();
+    std::string textOfRange(int sl, int sc, int el, int ec) const;
+    // ينفّذ الاستبدال الخام فعليًا على lines_، ويكتب نهاية النص الجديد في outEnd إن لم تكن null.
+    void applyRawReplace(int sl, int sc, int el, int ec, const std::string& text, Position* outEnd);
+    void pushUndo(EditRecord rec);
+    void applyReplaceTracked(int sl, int sc, int el, int ec, const std::string& text, bool coalescable);
+
+    void applySmartDedentForClosingBrace();
+    static std::string leadingWhitespace(const std::string& s);
+    static std::string rtrim(const std::string& s);
+
+    // انظر التعريف في .cpp: يحوّل rin::diag::Diagnostic واحد إلى EditorDiagnostic صفري القاعدة
+    // ويضيفه إلى out (يتجاهله بصمت إن كان الموقع غير صالح).
+    void appendEditorDiagnostic_(std::vector<EditorDiagnostic>& out, const rin::diag::Diagnostic& d) const;
+};
+
+} // namespace rinedit

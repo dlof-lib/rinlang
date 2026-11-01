@@ -1,0 +1,7 @@
+print(chr(65));
+print(chr(97));
+print(ord("A"));
+print(ord("a"));
+print(crc32("123456789"));
+print(adler32("Wikipedia"));
+print(bytesFromArray([72,101,108,108,111]));

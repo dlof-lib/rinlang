@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<CodeSnippets xmlns="http://schemas.microsoft.com/VisualStudio/2005/CodeSnippet">
+  <CodeSnippet Format="1.0.0">
+    <Header>
+      <Title>When / Otherwise (easy English)</Title>
+      <Shortcut>when</Shortcut>
+      <Description>جملة شرطية بصياغة إنجليزية مبسّطة سهلة التعلّم؛ مطابقة تماماً لـ if/else</Description>
+      <SnippetTypes>
+        <SnippetType>Expansion</SnippetType>
+      </SnippetTypes>
+    </Header>
+    <Snippet>
+      <Declarations>
+        <Literal>
+          <ID>p1</ID>
+          <ToolTip>p1</ToolTip>
+          <Default>condition</Default>
+        </Literal>
+        <Literal>
+          <ID>p2</ID>
+          <ToolTip>p2</ToolTip>
+          <Default></Default>
+        </Literal>
+      </Declarations>
+      <Code Language="Rin"><![CDATA[when ($p1$) {
+	$p2$
+} otherwise {
+	$end$
+}]]></Code>
+    </Snippet>
+  </CodeSnippet>
+</CodeSnippets>

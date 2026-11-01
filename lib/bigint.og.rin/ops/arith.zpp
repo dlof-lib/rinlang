@@ -1,0 +1,73 @@
+// الحساب الأساسي بإشارة
+export fun big_sign(a) { return big(a).s; }
+export fun big_isZero(a) { return big(a).s == 0; }
+export fun big_neg(a) { let x = big(a); return {s: -x.s, d: slice(x.d, 0, len(x.d))}; }
+export fun big_abs(a) { let x = big(a); return {s: x.s == 0 ? 0 : 1, d: slice(x.d, 0, len(x.d))}; }
+export fun big_cmp(a, b) {
+    let x = big(a); let y = big(b);
+    if (x.s != y.s) { return x.s < y.s ? -1 : 1; }
+    if (x.s == 0) { return 0; }
+    let c = mag_cmp(x.d, y.d);
+    return x.s < 0 ? -c : c;
+}
+export fun big_cmpAbs(a, b) { return mag_cmp(big(a).d, big(b).d); }
+export fun big_eq(a, b) { return big_cmp(a, b) == 0; }
+export fun big_lt(a, b) { return big_cmp(a, b) < 0; }
+export fun big_lte(a, b) { return big_cmp(a, b) <= 0; }
+export fun big_gt(a, b) { return big_cmp(a, b) > 0; }
+export fun big_gte(a, b) { return big_cmp(a, b) >= 0; }
+export fun big_min(a, b) { return big_cmp(a, b) <= 0 ? big(a) : big(b); }
+export fun big_max(a, b) { return big_cmp(a, b) >= 0 ? big(a) : big(b); }
+export fun big_add(a, b) {
+    let x = big(a); let y = big(b);
+    if (x.s == 0) { return y; }
+    if (y.s == 0) { return x; }
+    if (x.s == y.s) { return bi_make(x.s, mag_add(x.d, y.d)); }
+    let c = mag_cmp(x.d, y.d);
+    if (c == 0) { return {s: 0, d: []}; }
+    if (c > 0) { return bi_make(x.s, mag_sub(x.d, y.d)); }
+    return bi_make(y.s, mag_sub(y.d, x.d));
+}
+export fun big_sub(a, b) { return big_add(a, big_neg(b)); }
+export fun big_mul(a, b) {
+    let x = big(a); let y = big(b);
+    if (x.s == 0 or y.s == 0) { return {s: 0, d: []}; }
+    return bi_make(x.s * y.s, mag_mul(x.d, y.d));
+}
+// قسمة مقتطَعة نحو الصفر (مثل C): a = q*b + r وإشارة r كإشارة a → [q, r]
+export fun big_divmod(a, b) {
+    let x = big(a); let y = big(b);
+    if (y.s == 0) { bi_fail("division by zero"); }
+    if (x.s == 0) { return [{s: 0, d: []}, {s: 0, d: []}]; }
+    let r = mag_divmod(x.d, y.d);
+    return [bi_make(x.s * y.s, r[0]), bi_make(x.s, r[1])];
+}
+export fun big_div(a, b) { return big_divmod(a, b)[0]; }
+// الباقي الإقليدي: دائماً 0 <= r < |m|
+export fun big_mod(a, m) {
+    let r = big_divmod(a, m)[1];
+    if (r.s < 0) { return big_add(r, big_abs(m)); }
+    return r;
+}
+export fun big_isEven(a) { let x = big(a); return x.s == 0 or x.d[0] % 2 == 0; }
+export fun big_isOdd(a) { return !big_isEven(a); }
+export fun big_pow(a, n) {
+    if (type(n) != "number" or n < 0 or n != floor(n)) { bi_fail("big_pow(): the exponent must be a non-negative integer number"); }
+    let result = big(1); let base = big(a); let e = n;
+    while (e > 0) {
+        if (e % 2 == 1) { result = big_mul(result, base); }
+        e = floor(e / 2);
+        if (e > 0) { base = big_mul(base, base); }
+    }
+    return result;
+}
+export fun big_sum(items) {
+    let t = big(0); let i = 0;
+    while (i < len(items)) { t = big_add(t, items[i]); i = i + 1; }
+    return t;
+}
+export fun big_prod(items) {
+    let t = big(1); let i = 0;
+    while (i < len(items)) { t = big_mul(t, items[i]); i = i + 1; }
+    return t;
+}

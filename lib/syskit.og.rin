@@ -1,0 +1,311 @@
+// ============================================================================
+//  lib/syskit.og.rin — عدّة نظام (System Kit): معلومات المحرّك + مسارات +
+//                       ملفات آمنة + إعدادات دائمة (JSON) + سجلّ + فحوصات
+//  استيراد:
+//    @import "lib/syskit.og.rin";
+//    @import "lib/syskit.og.rin" as sys;
+//
+//  مكتبة Rin خالصة فوق natives الأساسية الموجودة فعلاً في المفسّر
+//  (readFile/writeFile/appendFile/deleteFile/fileExists/rinVersion/rinEdition/
+//   jsonEncode/jsonDecode/split/join/trim/substr/indexOf/has/keys...) — بلا أي
+//  تعديل على محرّك C++. الهدف: كل ما يحتاجه سكربت "نظامي" (يقرأ/يكتب ملفات،
+//  يحفظ إعداداته، يسجّل أحداثه، ويتحقّق من حالته) بأسلوب {ok:true/value:...}
+//  أو {ok:false/error:...} بدل توقّف مفاجئ بخطأ، بنفس اتفاقية opskit/envkit.
+//
+//  ملاحظة لغوية: لا تملك Rin عامل نفي "!" ولا كلمة "not"؛ النفي دائماً
+//  بمقارنة صريحة x == false (كبقية مكتبات lib/*.og.rin).
+//
+//  مثال سريع:
+//    let info = sysInfo();                         // {version:"...", edition:"..."}
+//    let cfg  = sysConfigLoad("app.cfg.json", {theme:"dark"});
+//    cfg = sysConfigSet(cfg, "lang", "ar");
+//    sysConfigSave("app.cfg.json", cfg);
+//    sysLogInfo("app.log", "بدأ التطبيق");
+// ============================================================================
+
+// ---- 1) معلومات النظام/المحرّك (Engine / system info) -----------------------
+
+// {version: rinVersion(), edition: rinEdition()} — لعرضها في واجهة سكربتك
+fun sysInfo() {
+    return { version: rinVersion(), edition: rinEdition() };
+}
+
+// نص جاهز للعرض: "Rin v<version> (<edition>)"
+fun sysVersionString() {
+    return "Rin v" + rinVersion() + " (" + rinEdition() + ")";
+}
+
+// تحقّق بسيط: هل إصدار المحرّك الحالي يساوي النص expected بالضبط؟
+fun sysIsVersion(expected) {
+    return rinVersion() == expected;
+}
+
+// ---- 2) مسارات الملفات (Path utilities) — نصوص خالصة، بلا لمس القرص --------
+
+// يدمج جزأي مسار بفاصل "/" واحد بالضبط بينهما (يتعامل مع "/" الزائدة في a أو الناقصة)
+fun pathJoin(a, b) {
+    if (a == "") { return b; }
+    if (b == "") { return a; }
+    let left = a;
+    if (substr(left, len(left) - 1, 1) == "/") {
+        left = substr(left, 0, len(left) - 1);
+    }
+    let right = b;
+    if (substr(right, 0, 1) == "/") {
+        right = substr(right, 1, len(right) - 1);
+    }
+    return left + "/" + right;
+}
+
+// يدمج عدّة أجزاء دفعة واحدة: pathJoinAll(["a", "b", "c.txt"]) -> "a/b/c.txt"
+fun pathJoinAll(parts) {
+    if (len(parts) == 0) { return ""; }
+    let result = parts[0];
+    let i = 1;
+    while (i < len(parts)) {
+        result = pathJoin(result, parts[i]);
+        i = i + 1;
+    }
+    return result;
+}
+
+// آخر جزء في المسار (اسم الملف أو المجلد الأخير): "a/b/c.txt" -> "c.txt"
+fun pathBaseName(p) {
+    let idx = lastIndexOfChar(p, "/");
+    if (idx == -1) { return p; }
+    return substr(p, idx + 1, len(p) - idx - 1);
+}
+
+// كل ما قبل آخر "/": "a/b/c.txt" -> "a/b"، وإن لم يوجد "/" يُعيد "."
+fun pathDirName(p) {
+    let idx = lastIndexOfChar(p, "/");
+    if (idx == -1) { return "."; }
+    if (idx == 0) { return "/"; }
+    return substr(p, 0, idx);
+}
+
+// الامتداد بلا نقطة: "a/b/c.txt" -> "txt"، وبلا امتداد -> ""
+fun pathExtension(p) {
+    let base = pathBaseName(p);
+    let idx = lastIndexOfChar(base, ".");
+    if (idx == -1) { return ""; }
+    if (idx == 0) { return ""; }
+    return substr(base, idx + 1, len(base) - idx - 1);
+}
+
+// اسم الملف بلا امتداد: "a/b/c.txt" -> "c"
+fun pathStem(p) {
+    let base = pathBaseName(p);
+    let idx = lastIndexOfChar(base, ".");
+    if (idx <= 0) { return base; }
+    return substr(base, 0, idx);
+}
+
+// هل المسار مطلق (يبدأ بـ "/")؟
+fun pathIsAbsolute(p) {
+    return substr(p, 0, 1) == "/";
+}
+
+// يبسّط مساراً: يحذف الأجزاء الفارغة و"." ويُنفّذ ".." (صعود مجلد) نصّياً بحت
+// (بلا لمس القرص فعلياً)، ويحافظ على "/" الأولى إن كان المسار مطلقاً
+fun pathNormalize(p) {
+    let absolute = pathIsAbsolute(p);
+    let rawParts = split(p, "/");
+    let stack = [];
+    let i = 0;
+    while (i < len(rawParts)) {
+        let part = rawParts[i];
+        if (part != "" and part != ".") {
+            if (part == ".." and len(stack) > 0 and stack[len(stack) - 1] != "..") {
+                pop(stack);
+            } else {
+                push(stack, part);
+            }
+        }
+        i = i + 1;
+    }
+    let joined = join(stack, "/");
+    if (absolute) { return "/" + joined; }
+    if (joined == "") { return "."; }
+    return joined;
+}
+
+// موقع آخر ظهور لمحرف ch داخل s (مساعد داخلي لدوال المسارات أعلاه)، -1 إن لم يوجد
+fun lastIndexOfChar(s, ch) {
+    let last = -1;
+    let i = 0;
+    while (i < len(s)) {
+        if (substr(s, i, 1) == ch) { last = i; }
+        i = i + 1;
+    }
+    return last;
+}
+
+// ---- 3) ملفات آمنة (Safe file ops) — لا تتوقّف بخطأ عند غياب الملف --------
+
+// قراءة آمنة: {ok:true, value:"..."} أو {ok:false, error:"..."} بدل توقّف readFile الخام
+fun fileRead(path) {
+    if (fileExists(path) == false) {
+        return { ok: false, error: "fileRead: الملف غير موجود: " + path };
+    }
+    return { ok: true, value: readFile(path) };
+}
+
+// كتابة آمنة (تنشئ الملف أو تستبدل محتواه بالكامل)
+fun fileWrite(path, content) {
+    writeFile(path, content);
+    return { ok: true, path: path };
+}
+
+// إلحاق نص بنهاية ملف (يُنشئه إن لم يكن موجوداً)
+fun fileAppend(path, content) {
+    appendFile(path, content);
+    return { ok: true, path: path };
+}
+
+// حذف آمن: لا يفشل إن كان الملف غير موجود أصلاً
+fun fileDelete(path) {
+    if (fileExists(path) == false) {
+        return { ok: true, path: path, existed: false };
+    }
+    deleteFile(path);
+    return { ok: true, path: path, existed: true };
+}
+
+// يضمن وجود الملف: ينشئه بمحتوى defaultContent إن لم يكن موجوداً، ولا يلمسه إن كان موجوداً
+fun fileEnsure(path, defaultContent) {
+    if (fileExists(path)) {
+        return { ok: true, created: false };
+    }
+    writeFile(path, defaultContent);
+    return { ok: true, created: true };
+}
+
+// نسخ ملف كامل (نصّي) من src إلى dest
+fun sysCopyFile(src, dest) {
+    if (fileExists(src) == false) {
+        return { ok: false, error: "sysCopyFile: الملف غير موجود: " + src };
+    }
+    writeFile(dest, readFile(src));
+    return { ok: true, from: src, to: dest };
+}
+
+// يقرأ ملفاً كمصفوفة أسطر (يقبل نهايات "\n" أو "\r\n")
+fun fileReadLines(path) {
+    let res = fileRead(path);
+    if (res["ok"] == false) { return res; }
+    let normalized = replace(res["value"], "\r\n", "\n");
+    if (normalized == "") { return { ok: true, value: [] }; }
+    return { ok: true, value: split(normalized, "\n") };
+}
+
+// يكتب مصفوفة أسطر كملف واحد مفصول بـ "\n"
+fun fileWriteLines(path, lines) {
+    return fileWrite(path, join(lines, "\n"));
+}
+
+// يلحق سطراً واحداً (مع "\n" تلقائياً) بنهاية ملف
+fun fileAppendLine(path, line) {
+    return fileAppend(path, line + "\n");
+}
+
+// حجم محتوى الملف بعدد المحارف (تقريبي بحسب len على النص المقروء)
+fun fileSizeChars(path) {
+    let res = fileRead(path);
+    if (res["ok"] == false) { return res; }
+    return { ok: true, value: len(res["value"]) };
+}
+
+// ---- 4) إعدادات نظام دائمة (Persistent JSON-backed system config) ---------
+
+// يحمّل إعدادات من ملف JSON؛ إن لم يكن الملف موجوداً أو كان تالفاً يُعيد defaults كما هي
+fun sysConfigLoad(path, defaults) {
+    if (fileExists(path) == false) { return defaults; }
+    let parsed = jsonDecode(readFile(path));
+    if (parsed == nil) { return defaults; }
+    return parsed;
+}
+
+// يحفظ خريطة إعدادات كاملة إلى ملف JSON
+fun sysConfigSave(path, cfg) {
+    writeFile(path, jsonEncode(cfg));
+    return { ok: true, path: path };
+}
+
+// قراءة مفتاح من خريطة إعدادات في الذاكرة، بقيمة افتراضية عند غيابه
+fun sysConfigGet(cfg, key, fallback) {
+    if (has(cfg, key) == false) { return fallback; }
+    return cfg[key];
+}
+
+// تعديل مفتاح في خريطة إعدادات في الذاكرة (لا يكتب للقرص، فقط يُعيد الخريطة المعدَّلة)
+fun sysConfigSet(cfg, key, value) {
+    cfg[key] = value;
+    return cfg;
+}
+
+// دورة كاملة: تحميل من القرص -> تعديل مفتاح واحد -> حفظ فوري -> إعادة الخريطة الناتجة
+fun sysConfigUpdate(path, key, value, defaults) {
+    let cfg = sysConfigLoad(path, defaults);
+    cfg = sysConfigSet(cfg, key, value);
+    sysConfigSave(path, cfg);
+    return cfg;
+}
+
+// ---- 5) سجلّ نظام بسيط (Simple system log) ---------------------------------
+
+// يلحق سطر سجلّ منسّق "[LEVEL] message" بملف السجلّ (يُنشئه إن لم يوجد)
+fun sysLog(path, level, message) {
+    return fileAppendLine(path, "[" + level + "] " + message);
+}
+
+fun sysLogInfo(path, message) {
+    return sysLog(path, "INFO", message);
+}
+
+fun sysLogWarn(path, message) {
+    return sysLog(path, "WARN", message);
+}
+
+fun sysLogError(path, message) {
+    return sysLog(path, "ERROR", message);
+}
+
+// يفرّغ ملف السجلّ (أو يُنشئه فارغاً إن لم يكن موجوداً)
+fun sysLogClear(path) {
+    return fileWrite(path, "");
+}
+
+// يقرأ كل أسطر السجلّ كمصفوفة نصوص؛ مصفوفة فارغة إن لم يوجد الملف أو كان فارغاً
+fun sysLogRead(path) {
+    if (fileExists(path) == false) { return []; }
+    let res = fileReadLines(path);
+    if (res["ok"] == false) { return []; }
+    return res["value"];
+}
+
+// ---- 6) فحوصات وحراسات نظام (System guards) --------------------------------
+// كلها بأسلوب {ok:.., error:..} الموحَّد بدل رمي أخطاء غامضة منتصف سكربت طويل.
+
+// تحقّق عام: يُعيد {ok:true} إن كان cond صحيحاً، وإلا {ok:false, error:message}
+fun sysAssert(cond, message) {
+    if (cond) { return { ok: true }; }
+    return { ok: false, error: message };
+}
+
+// يتحقّق أن ملفاً موجوداً فعلاً قبل استخدامه
+fun sysRequireFile(path) {
+    if (fileExists(path)) { return { ok: true, path: path }; }
+    return { ok: false, error: "sysRequireFile: الملف غير موجود: " + path };
+}
+
+// يشغّل قائمة فحوصات (مصفوفة نتائج بصيغة {ok,...} كالتي تُعيدها الدوال أعلاه)
+// ويُعيد أول فحص فاشل، أو {ok:true} إن نجحت كلها
+fun sysCheckAll(checks) {
+    let i = 0;
+    while (i < len(checks)) {
+        if (checks[i]["ok"] == false) { return checks[i]; }
+        i = i + 1;
+    }
+    return { ok: true };
+}

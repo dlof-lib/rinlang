@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dlof-lib.github.io/rinlang/schemas/channel47-manifest.schema.json",
+  "title": "channel47 manifest (JSON export of a .ch47 library/package/tool)",
+  "type": "object",
+  "required": ["kind", "name", "version"],
+  "properties": {
+    "kind": { "enum": ["library", "package", "tool"] },
+    "name": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$" },
+    "version": { "type": "string", "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?$" },
+    "description": { "type": "string" },
+    "license": { "type": "string" },
+    "homepage": { "type": "string" },
+    "rin": { "type": "string" },
+    "stable": { "type": "boolean" },
+    "released": { "type": "string", "format": "date" },
+    "authors": { "type": "array", "items": { "type": "string" } },
+    "keywords": { "type": "array", "items": { "type": "string" } },
+    "permissions": { "type": "array", "items": { "type": "string" } },
+    "entry": { "type": "string" },
+    "bin": { "type": "string" },
+    "exports": { "type": "array", "items": { "type": "string" } },
+    "files": { "type": "array", "items": { "type": "string" } },
+    "deps": { "type": "array", "items": { "type": "object", "required": ["name", "version"], "properties": { "name": { "type": "string" }, "version": { "type": "string" }, "optional": { "type": "boolean" } } } },
+    "commands": { "type": "array", "items": { "type": "object", "required": ["name", "summary"], "properties": { "name": { "type": "string" }, "summary": { "type": "string" }, "aliases": { "type": "array", "items": { "type": "string" } } } } }
+  },
+  "allOf": [
+    { "if": { "properties": { "kind": { "const": "library" } } }, "then": { "required": ["entry"] } },
+    { "if": { "properties": { "kind": { "const": "tool" } } }, "then": { "required": ["bin"] } }
+  ]
+}

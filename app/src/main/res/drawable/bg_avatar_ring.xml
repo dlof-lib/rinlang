@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- إطار (ring) حول الصورة الرمزية بلون خلفية البطاقة، ليفصلها بصرياً عن خلفية الخلايا
+     السداسية خلفها ويجعلها تبدو "فوق" الخلفية وليست مندمجة بها -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <solid android:color="@color/rin_accent" />
+    <stroke
+        android:width="3dp"
+        android:color="@color/rin_job_card_bg" />
+</shape>

@@ -1,0 +1,161 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>بداية الكتل ونهايتها (Block Frames) — Rin</title>
+<meta name="description" content="توثيق لغة البرمجة Rin"><link rel="icon" href="../assets/brand/icon-32.png">
+<link rel="stylesheet" href="assets/style.css"></head><body>
+<header><button id="mn" aria-label="القائمة">☰</button><a class="logo" href="index.html"><img src="../assets/brand/icon-48.png" alt="" width="26">Rin</a>
+<input id="q" type="search" placeholder="ابحث في التوثيق…" autocomplete="off"><button id="th" aria-label="الوضع">◐</button>
+<a class="gh" href="https://github.com/dlof-lib/rinlang">GitHub</a><div id="res"></div></header>
+<div class="wrap"><nav id="sb"><details ><summary>ابدأ هنا</summary><a href="getting-started.html">البداية</a><a href="syntax.html">القواعد النحوية العامة</a><a href="variables.html">let`، مصفوفات، قواميس، نطاق</a><a href="template-strings.html">النصوص القالبية (متغيّرات داخل النص)</a><a href="input.html">إدخال المستخدم (Input)</a><a href="control-flow.html">الشروط، الحلقات، `goal`/`achieve</a><a href="loops.html">حلقات Rin — Loops v2</a><a href="functions.html">fun`/`return`، التكرار الذاتي</a><a href="enums.html">enum`: قوائم اختيار مغلقة</a></details><details open><summary>اللغة</summary><a href="language-reference.html">المرجع الشامل وخريطة ترابط المفاهيم</a><a href="objects.html">class`/`struct`، `.object()`، `@Object`، `document</a><a href="oop.html">البرمجة الكائنية الموسَّعة (Rin 1.0)</a><a href="containers.html">دليل `@container` / `@element` / `@loop</a><a href="table.html">الجدول (`@table` / `@container.table`) ودوال اللغة عليه</a><a href="set.html">Set`: نوع المجموعة الأساسي</a><a href="pipelines.html">عامل الأنابيب `|&gt;</a><a href="RECKON.html">reckon`: مفهوم حسابي بسطرين</a><a href="let-plus.html">let` المطوَّر</a><a href="living-variables.html">المتغيرات الحيّة (Living Variables)</a><a href="label-define.html">label` و`define` (تسمية وتعريف)</a><a href="block-frames.html" class=on>بداية الكتل ونهايتها (Block Frames)</a><a href="compare_ops.html">معاملات المقارنة `/=` و `=/=` و `=/</a><a href="max_min.html">max / min family</a><a href="scope-guarantees.html">ضمانات النطاق: `finally` · `defer` · `catch … when` · `rethrow</a><a href="key_terms_and_builtins.html">Rin KEY_TERMS and Built-in Conditions</a><a href="number_builtins.html">Rin Number Built-ins</a></details><details ><summary>الواجهات (Indsin)</summary><a href="indsin.html">Indsin — Interface Design</a><a href="indsin_rin.html">indsin يعتمد على لغة Rin</a><a href="indsin_expansion.html">Indsin — التوسعة الاحترافية (Design System v2)</a><a href="indsin_object.html">indsin-object — API reference</a><a href="indsin_media.html">Indsin Media — اختيار الوسائط ورفعها</a><a href="indsin_icons.html">مكتبة أيقونات indsin (متجهية)</a><a href="indsin_tooling.html">indsin tooling — icon, file association, syntax highlighting</a><a href="indsinweb.html">IndsinWeb — مكتبة WebView والروابط لـ indsin</a><a href="RIN_ELEMENTS.html">دليل `@element.*` الكامل</a><a href="events-effects.html">الأحداث والتأثيرات (Events &amp; Effects) — محرك Indsin UI</a><a href="banner.html">Banner: إشعار شريطي</a><a href="simple-style.html">Rin Simple Style</a></details><details ><summary>بيئة التشغيل</summary><a href="runtime.html">وقت تشغيل Rin (Rin Runtime) · المرجع الرسمي</a><a href="standard-library.html">المكتبة القياسية (`lib/*.og.rin`)</a><a href="errors.html">نظام الأخطاء: أكواد، `try`/`catch`/`throw</a><a href="ERROR_SYSTEM.html">نظام التشخيص: البنية الداخلية + جدول الأكواد الكامل</a><a href="storage.html">تخزين دائم</a><a href="http.html">شبكات</a><a href="env.html">ربط Rin بملف `.env</a><a href="terminal.html">الطرفية التفاعلية — `rin terminal</a><a href="vm.html">RinVM — آلة Rin الافتراضية (بايتكود)</a><a href="rinflow.html">RinFlow: طبقة تنفيذ التدفّق المهيكل</a><a href="MAKE_UNIT.html">@make.(name)`: وحدة بسياسة قدرات صريحة</a><a href="MAKE_MEDIA.html">فيديو · صوت · API · إزالة الخلفية · قراءة النص من الصور</a><a href="TIME.html">مفهوم `time`: الزمن كقيمة من الدرجة الأولى</a><a href="native-additions.html">دوال Rin الأصلية الجديدة (Rin 1.0)</a></details><details ><summary>الحاويات وقواعد البيانات</summary><a href="container_advanced.html">Rin Container Advanced Built-ins</a><a href="container_pro.html">Rin Container Pro</a><a href="container_sql.html">RIN CONTAINER SQL (RCSQL)</a><a href="cross-file-containers.html">استدعاء إعلانات من ملف آخر</a></details><details ><summary>الحزم والتكامل</summary><a href="api.html">واجهة C المسطَّحة (Embedding API)</a><a href="android.html">استضافة Rin على أندرويد</a><a href="packages-and-interop.html">Rin 1.0 — المكتبات والحزم وجسر C++ وJSON واختبارات rintest</a><a href="rinpak-format.html">RinPak — حزمة مشروع Rin (`.rinpak`)</a><a href="html-projects.html">مشاريع HTML في Rin — الربط بين index.html وملف الحاوية</a><a href="project-og-urin.html">project.og.urin` — البيانات الوصفية لمشروع Rin</a><a href="CONTENT_PACKS.html">حزم المحتوى القابلة للتنزيل (Content Packs)</a><a href="previewkit.html">previewkit — معاينة حيّة لملفات PDF / Markdown / TypeScript</a></details><details ><summary>المكتبات المتخصصة</summary><a href="rinml.html">RinML / RinDF / RinAI — الذكاء الاصطناعي وتحليل البيانات في Rin</a><a href="STATS.html">RinStat — التحليل الإحصائي (`lib/rinstat.og.rin`)</a><a href="STATS_ADV.html">RinStat المتقدّم + RinAuto</a><a href="LINALG.html">الجبر الخطي للمهندسين — `mat*` و`vec*</a><a href="PLOT.html">RinPlot — الرسوم البيانية الإحصائية (`lib/rinplot.og.rin`)</a><a href="ALGO.html">تطوير الخوارزميات والحساب العددي — `algo*</a><a href="NUMBER.html">مفهوم `number` في Rin</a><a href="boat.html">&quot;Boat&quot;: مفاهيم أساسية مجمَّعة</a><a href="passkit.html">passkit — passwords, encryption, databases and a tag language</a><a href="passkit-crypto-db.html">Passkit feature catalog: encryption, databases and container linking</a><a href="hash-family.html">عائلة `#` — مفاهيم ودوال جديدة تبدأ بعلامة `#</a><a href="image-draw.html">إنشاء الصور في Rin — رسم وحفظ PNG وlog كصورة</a><a href="image-terminal.html">طباعة الصور في الـ terminal — `printImage` / `imageAnsi` / `imageInfo</a></details><details ><summary>المشروع</summary><a href="CONTRIBUTING.html">المساهمة في Rin</a><a href="CODE_OF_CONDUCT.html">قواعد السلوك</a><a href="SECURITY.html">سياسة الأمان</a><a href="SUPPORT.html">الحصول على المساعدة</a><a href="TRADEMARKS.html">سياسة العلامة التجارية — Trademark Policy</a><a href="THIRD_PARTY_NOTICES.html">إشعارات المكوّنات الخارجية — Third-Party Notices</a></details><details ><summary>مراجع إضافية</summary><a href="ANDROID_VERSIONS.html">حزم RinStudio لكل إصدار أندرويد</a><a href="TOKEN.html">مفهوم `token` في Rin</a><a href="TOOLCHAIN.html">Rin Professional Language Toolchain</a><a href="TOOLCHAIN_UPGRADE.html">Toolchain Upgrade — 2026-09</a><a href="architecture.html">المعمارية وبنية المستودع</a><a href="base-accept.html">base` و`accept`: متغيّران يخدمان `if</a><a href="channel47.html">channel47 — لغة وصف البيانات والإعدادات</a><a href="ci.html">CI وأدوات المستودع</a><a href="loop-templates.html">قوالب الحلقات `@tmpl</a><a href="pre-post.html">pre` و`post` (ما قبل / ما بعد): عقد انتقال حول الإسناد</a><a href="print-fonts.html">خطوط `print` — bold / italic / underline وغيرها</a><a href="print-image-terminal.html">طباعة الصور كنص في الطرفية</a><a href="print-templates.html">قوالب الطباعة `@tmpl ... print` — قوالب نصية خطية وتنسيقية</a><a href="rdoc.html">rdoc — Documentation Container</a><a href="rdoc-reference.html">وثيقة rdoc الشاملة — Documentation Container</a><a href="screenshots.html">لقطات من RinStudio</a></details></nav>
+<main><article><h1 id="block-framesmd-block-frames">block-frames.md — بداية الكتل ونهايتها (Block Frames)<a class="headerlink" href="#block-framesmd-block-frames" title="Permanent link">#</a></h1>
+<blockquote>
+<p>كل ما في هذه الصفحة جُرِّب على المحلِّل الحقيقي (<code>rin_parser.cpp</code>). الاختبارات:
+<code>tests/verification/block_braces.rin</code> و<code>tests/diagnostics/block_frames/</code>.</p>
+</blockquote>
+<h2 id="_1">الفكرة<a class="headerlink" href="#_1" title="Permanent link">#</a></h2>
+<p>كل كتلة بيانات في Rin (<code>@container</code> · <code>@Volume</code> · <code>@Containers.Group</code> · <code>@element</code> · <code>@loop</code> ·
+<code>@view</code> · <code>@theme</code> · <code>@make</code> · <code>Section</code> · <code>Translations</code> · <code>.object("id")</code>) لها <strong>إطار (Frame)</strong>
+واحد يحدّد بدايتها ونهايتها. للإطار شكلان فقط، ويُحسم الشكل <strong>عند الفتح</strong> ولا يتغيّر:</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الشكل</th>
+<th>الفتح</th>
+<th>الإغلاق</th>
+<th>الإغلاق المسمّى (اختياري)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>أقواس على طريقة C++</strong> (الموصى به)</td>
+<td><code>@kind[.sub][=name] {</code> على نفس السطر</td>
+<td><code>};</code> (وتُقبل <code>}</code> وحدها)</td>
+<td><code>}=name;</code></td>
+</tr>
+<tr>
+<td><strong>وسم</strong> (القديم، ما زال يعمل)</td>
+<td><code>@kind[.sub][=name]</code></td>
+<td><code>.end/kind</code> أو <code>.end;</code></td>
+<td><code>.end/kind=name</code></td>
+</tr>
+</tbody>
+</table></div>
+<pre><code class="language-kotlin">@Volume=shop {
+    @container=cart {
+        state total = 0;
+        fun add(n) { total = total + n; return total; }
+
+        @element.button=buy {
+            text = &quot;Buy&quot;;
+        };
+
+        on.buy.click = add(5);
+    };
+};                                  // مثل: class Shop { ... };  في C++
+</code></pre>
+<h2 id="ebnf">الصياغة النحوية (EBNF)<a class="headerlink" href="#ebnf" title="Permanent link">#</a></h2>
+<pre><code class="language-ebnf">block        = header , ( brace_body | tag_body ) ;
+header       = &quot;@&quot; , kind , [ &quot;=&quot; , name ] ;          (* أو .object(&quot;id&quot;) *)
+brace_body   = &quot;{&quot; , { statement } , &quot;}&quot; , [ &quot;=&quot; , name ] , [ &quot;;&quot; ] ;   (* &quot;{&quot; على نفس سطر الترويسة؛ &quot;;&quot; على نفس سطر &quot;}&quot; *)
+tag_body     = { statement } , &quot;.end&quot; , ( &quot;;&quot; | &quot;/&quot; , kind , [ &quot;=&quot; , name ] ) ;
+</code></pre>
+<h2 id="_2">قواعد منع التعارض<a class="headerlink" href="#_2" title="Permanent link">#</a></h2>
+<ol>
+<li><strong><code>{</code> تفتح الكتلة فقط إن كانت على نفس سطر الترويسة.</strong> <code>{</code> على سطر جديد تبقى عبارة عادية
+   (كتلة محلية) داخل الشكل القديم، فلا يتغيّر معنى أي كود كُتب قبل هذه الميزة.</li>
+<li><strong>لا خلط داخل كتلة واحدة.</strong> كتلة فُتحت بـ <code>{</code> لا يغلقها <code>.end/…</code>، والعكس صحيح — يُرفض
+   بخطأ <code>E0011</code> يذكر سطر الفتح والإغلاق الصحيح.</li>
+<li><strong>التعشيش حرّ بين الشكلين:</strong> كتلة أقواس داخل كتلة وسوم وبالعكس، لأن لكل كتلة إطارها المستقل
+   (مكدّس RAII في المحلِّل، يُسحب حتى عند الخطأ فلا يبقى إطار يتيم بعد الاسترداد).</li>
+<li><strong><code>{ }</code> الخاصة بالدوال والشروط والحلقات لا علاقة لها بالإطار</strong> — لها محلِّل كتل منفصل، فلا يمكن
+   لـ <code>}</code> نهاية دالة أن تُغلق كتلة <code>@container</code> بالخطأ.</li>
+<li><strong>ذيل <code>;</code> على طريقة C++:</strong> <code>};</code> هو الإغلاق القياسي (كما في <code>class</code>/<code>struct</code>/<code>enum</code>)، و<code>;</code> اختيارية
+   وتُستهلك فقط إن وقعت على نفس سطر <code>}</code>.</li>
+<li><strong>الاسم في الإغلاق اختياري ومُتحقَّق منه:</strong> <code>}=name;</code> يجب أن يطابق <code>@kind=name</code>، ويُرفض إن
+   كانت الكتلة بلا اسم. مفيد في الملفات الكبيرة المتعشّشة (يلعب دور <code>} // namespace X</code>، لكن يُفحص فعلاً).</li>
+<li><strong>نهاية الملف تغلق الملف فقط، لا الكتل.</strong> ملف ينتهي وكتلة مفتوحة يُرفض برسالة تذكر سطر الفتح.</li>
+</ol>
+<h2 id="_3">جدول البنى<a class="headerlink" href="#_3" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>البنية</th>
+<th>أين تُغلق</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>كل <code>@…</code> أعلاه و<code>.object("id")</code></td>
+<td>إطار كتلة (أقواس أو وسم)</td>
+</tr>
+<tr>
+<td><code>fun</code> · <code>if</code> · <code>when/otherwise</code> · <code>while</code> · <code>for</code> · <code>match</code> · <code>class</code> · <code>enum</code> · <code>on init() {…}</code> · <code>goal {…}</code></td>
+<td><code>}</code> فقط — كتل لغة عادية</td>
+</tr>
+<tr>
+<td><code>[ … ]</code> · <code>{"k": v}</code> · <code>( … )</code></td>
+<td>حرفيات وتعابير، ليست كتلاً</td>
+</tr>
+<tr>
+<td>عبارة بسيطة</td>
+<td><code>;</code></td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="_4">رسائل الخطأ<a class="headerlink" href="#_4" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الحالة</th>
+<th>الرمز</th>
+<th>المثال</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>فُتحت بـ <code>{</code> وأُغلقت بـ <code>.end</code></td>
+<td><code>E0011</code></td>
+<td><code>@container opened with { at line 1 must be closed with }</code></td>
+</tr>
+<tr>
+<td>فُتحت بلا <code>{</code> وأُغلقت بـ <code>}</code></td>
+<td><code>E0011</code></td>
+<td><code>… without { must be closed with .end/container (or .end;)</code></td>
+</tr>
+<tr>
+<td>اسم الإغلاق لا يطابق</td>
+<td><code>E0011</code></td>
+<td><code>closing }=b does not match the opening name a</code></td>
+</tr>
+<tr>
+<td>انتهى الملف والكتلة مفتوحة</td>
+<td><code>E0012</code></td>
+<td><code>@Volume opened with { at line 1 was never closed</code></td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="_5">الترحيل<a class="headerlink" href="#_5" title="Permanent link">#</a></h2>
+<p>لا حاجة له: الشكل القديم يعمل كما هو. لتحويل كتلة: ضع <code>{</code> في نهاية سطر الترويسة، وبدّل
+<code>.end/kind</code> بـ <code>};</code>. النتائج متطابقة سلوكياً (جرى التحقق بمقارنة مخرجات 59 اختبار تحقّق قبل/بعد).</p>
+<h2 id="_6">حدود هذا الإصدار<a class="headerlink" href="#_6" title="Permanent link">#</a></h2>
+<ul>
+<li>مفسِّر <code>rin</code> (المحرّك الكامل) يدعم الشكلين. أمّا <code>rinc</code> (المترجم الأصلي لمجموعة فرعية)
+  فمحلِّله منفصل (<code>rinc.cpp</code>) ويقبل الوسوم فقط حتى الآن.</li>
+<li>تلوين المحرّرات (<code>syntaxes/</code>, <code>editors/</code>, VS) لم يُحدَّث ليميّز <code>}=name</code>.</li>
+<li>رسالة التتبّع وقت التشغيل ما زالت تطبع <code>✅ .end/container (name)</code> بصرف النظر عن شكل الإغلاق
+  (حفاظاً على ملفات <code>.expected</code> القائمة).</li>
+</ul></article>
+<div class="pnav"><a class="pn" href="label-define.html">→ label` و`define` (تسمية وتعريف)</a><a class="pn" href="compare_ops.html">معاملات المقارنة `/=` و `=/=` و `=/ ←</a></div><p class="edit"><a href="https://github.com/dlof-lib/rinlang/edit/main/docs/block-frames.md">✎ عدّل هذه الصفحة على GitHub</a></p>
+<footer>Rin 1.0.0 · رخصة MIT</footer></main>
+<aside id="toc"><b>في هذه الصفحة</b><div class="toc">
+<ul>
+<li><a href="#_1">الفكرة</a></li>
+<li><a href="#ebnf">الصياغة النحوية (EBNF)</a></li>
+<li><a href="#_2">قواعد منع التعارض</a></li>
+<li><a href="#_3">جدول البنى</a></li>
+<li><a href="#_4">رسائل الخطأ</a></li>
+<li><a href="#_5">الترحيل</a></li>
+<li><a href="#_6">حدود هذا الإصدار</a></li>
+</ul>
+</div>
+</aside></div>
+<script src="assets/app.js"></script></body></html>

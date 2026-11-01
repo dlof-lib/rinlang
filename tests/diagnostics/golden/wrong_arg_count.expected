@@ -1,0 +1,16 @@
+
+error[E0007]: invalid number of arguments for `add`
+  --> wrong_arg_count.rin:4:1
+
+ 4 | add(1);
+   | ^
+
+reason:
+  function `add` expects 2 parameter(s)
+
+found:
+  1 argument(s)
+
+expected:
+  2 argument(s)
+

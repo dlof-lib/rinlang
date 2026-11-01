@@ -1,0 +1,83 @@
+// ============================================================================
+//  examples/opskit_containers_demo.rin
+//  يستخدم كل دالة من lib/opskit.og.rin من *داخل* حاويات Rin حقيقية:
+//  @container.open/object و @Containers.Group و @container.doc.
+// ============================================================================
+@import "lib/opskit.og.rin";
+
+// ---- الملفات: نسخ / دمج / ZIP / تنزيل، منفَّذة داخل حاوية OOP ---------------
+@container.open/object=FilesDemo
+    text status = "";
+
+    writeFile("demo_src.txt", "محتوى تجريبي من Rin");
+    let copyResult = copyFile("demo_src.txt", "demo_dst.txt");
+    print copyResult;
+
+    let merged = mergeArrays([1, 2, 3], [4, 5]);
+    print merged;
+
+    let mergedMap = mergeMaps({ a: 1, b: 2 }, { b: 9, c: 3 });
+    print mergedMap;
+
+    let zipResult = createZip(
+        [{ name: "a.txt", content: "AAA" }, { name: "b.txt", content: "BBBB" }],
+        "demo_out.zip"
+    );
+    print zipResult;
+
+    status = "done";
+.end/container.open/object
+
+// ---- التصويت داخل حاوية -------------------------------------------------------
+@container.open/object=VoteDemo
+    let result = vote(["A", "B", "A", "C", "A", "B"]);
+    print result;
+.end/container.open/object
+
+// ---- الاستعادة: Snapshots حاوية @container.doc حقيقية (من داخل المكتبة) -----
+@container.open/object=RestoreDemo
+    print snapshot("game", { score: 10 });
+    print snapshot("game", { score: 20 });
+    print restore("game");
+.end/container.open/object
+
+// ---- الفرق -------------------------------------------------------------------
+@container.open/object=DiffDemo
+    print difference([1, 2, 3, 4], [2, 4]);
+.end/container.open/object
+
+// ---- المجموعات A/B/C: تصنيف حيّ + بنية Containers.Group الرسمية --------------
+fun scoreOf(x) { return x; }
+
+@container.open/object=GroupsDemo
+    let groups = classifyIntoGroups([5, 55, 95, 20, 70, 100], scoreOf, 40, 80);
+    print groups;
+.end/container.open/object
+
+// الصيغة التصريحية الرسمية لمجموعات اللغة نفسها (GroupA/GroupB/GroupC كحاويات)
+@Containers.Group=Classification
+    @container=GroupA
+        text label = "المجموعة أ (أقل من 40)";
+    .end/container
+    @container=GroupB
+        text label = "المجموعة ب (40-79)";
+    .end/container
+    @container=GroupC
+        text label = "المجموعة ج (80 فأكثر)";
+    .end/container
+.end/Containers.Group
+
+print groupContainers("Classification");
+print groupMembers("Classification");
+
+// ---- كتلة الأرقام --------------------------------------------------------------
+@container.open/object=NumbersDemo
+    print numberBlocks([1, 2, 3, 4, 5, 6, 7], 3);
+    print numberBlockText(1234567);
+.end/container.open/object
+
+// ---- الفقاعة وترتيب تنيل -------------------------------------------------------
+@container.open/object=SortDemo
+    print bubble([5, 3, 8, 1, 9, 2]);
+    print tenilOrder([5, 3, 8, 1, 9, 2], identityKey);
+.end/container.open/object

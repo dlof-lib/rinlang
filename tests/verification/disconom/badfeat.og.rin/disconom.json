@@ -1,0 +1,5 @@
+{ "disconom": 1, "name": "badfeat", "version": "1.0.0", "rin": ">=1.0.0", "license": "MIT", "description": "x",
+  "scripts": { "bad name!": "echo hi", "empty": "  " },
+  "features": { "a": ["b"], "b": ["a"], "c": ["nothing_here"], "default": ["zzz"] },
+  "peerDependencies": { "base": "^9.0.0" },
+  "files": ["../escape"] }

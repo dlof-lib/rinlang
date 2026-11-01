@@ -1,0 +1,147 @@
+# standard-library.md — المكتبة القياسية (`lib/*.og.rin`)
+
+## النطاق
+هذا الملف يغطّي تحديدًا الـ 61 وحدة الجاهزة في مجلد `lib/` بامتداد `.og.rin`
+(مكتوبة بلغة Rin نفسها، فوق الدوال الأصلية). **الدوال الأصلية المدمجة في المفسِّر
+مباشرة** (بلا حاجة `@import` — مثل `len`, `print`, `sum`, `mean`, `push`, `sort`,
+`upper`, `type`, ...، أكثر من 300 دالة إجمالًا عبر كل الأنظمة الفرعية) موثَّقة
+بشكل موزَّع حسب موضوعها: الإحصائية في [`RECKON.md`](./RECKON.md#جدول-الدوال-الإحصائيةالتحويلية-الجاهزة)،
+والأساسية في [`variables.md`](./variables.md)/[`control-flow.md`](./control-flow.md) —
+المرجع الشامل الوحيد الموثوق لكل الـ 300+ دالة الأصلية هو `registerNatives()` في
+`app/src/main/cpp/rin_interpreter.cpp` نفسه، لم أُعِد كتابتها كاملة هنا.
+
+## `@import` — استيراد وحدة
+```kotlin
+@import "lib/strings.og.rin";
+print capitalize("rin"); // Rin -- الدوال تُدمَج مباشرة في النطاق العام
+```
+```
+📦 @import: تم استيراد "lib/strings.og.rin" (مكتبة مدمجة)
+Rin
+```
+الصياغة تقبل أيضًا `@import "lib/x.og.rin" as alias;` — تحقّقتُ أن الاستيراد نفسه
+ينجح ويطبع تأكيدًا يذكر الاسم المستعار، **لكن** لم أتمكّن من تأكيد أن `alias.fn(...)`
+هي صيغة الوصول الصحيحة (فشلت في تجربتي المباشرة) — إن احتجت هذا الشكل تحديدًا، تحقّق
+من `executeImportStmt` في `rin_interpreter.cpp` قبل الاعتماد عليه؛ الاستيراد
+العادي بلا `as` هو الشكل المؤكَّد فعليًا 100%.
+
+## فهرس الوحدات الـ 61 (مُصنَّفة حسب الموضوع)
+
+### نصوص وتحليل لغوي
+| الوحدة | الوصف |
+|---|---|
+| `strings.og.rin` | امتدادات نصوص (`upper`/`lower`/`trim`/`substr`/`split`/`join`...) فوق الأصلية. |
+| `format.og.rin` | تنسيق نصوص/أرقام (حشو بالأصفار وغيره). |
+| `csv.og.rin` | ترميز/إفلات حقول CSV. |
+| `nlpkit.og.rin` | معالجة نصوص متقدمة: NLP بدائي + تحليل ملفات/لغات. |
+| `lexkit.og.rin` | لبنات محرّك Lexer عام قابل لإعادة الاستخدام. |
+| `parsekit.og.rin` | لبنات محلِّل (Parser) بأسلوب أسبقية العمليات. |
+| `astwalk.og.rin` | طواف/زيارة شجرة AST (visitor pattern). |
+| `langkit.og.rin` | عدّة صناعة اللغات (Language Toolkit) فوق Rin. |
+| `oglang.og.rin` | أداة صناعة الحزم واللغات المصغّرة فوق Rin. |
+| `runkit.og.rin` | تشغيل ملفات/أسطر لغتك المخصّصة + تقرير REPL موحّد. |
+
+### ترميز خفيف / معاينة
+| الوحدة | الوصف |
+|---|---|
+| `bob.og.rin` | "Bob": ترميز خفيف بأسطر بادئة (Markdown-lite) يُصيَّر HTML أو نص. |
+| `ringo.og.rin` | "Ringo": ترميز خفيف بوسوم `[tag]` يُصيَّر HTML أو نص. |
+| `rinxg.og.rin` | "RinXG": لغة تصريحية لتصميم واجهات الويب فوق Rin. |
+| `relyRIN.og.rin` | جسر Markdown/وسائط/معاينة حيّة بلغة Rin. |
+| `previewkit.og.rin` | معاينة حيّة لـ PDF / Markdown / TypeScript / JavaScript / JSON وكود عام (انظر `previewkit.md`). |
+| `indsinweb.og.rin` | WebView والروابط لـ indsin: روابط آمنة، تضمين يوتيوب/Vimeo، `html=` آمن، مولّد عنصر `WebView` (انظر [`indsinweb.md`](./indsinweb.md)). |
+
+### بيانات وبِنى
+| الوحدة | الوصف |
+|---|---|
+| `data.og.rin` | أدوات مصفوفات/قواميس فوق الأصلية. |
+| `collections.og.rin` | دوال ترتيبية على مجموعات (`col_map`...). |
+| `functional.og.rin` | دوال رتبة عليا (higher-order) على المصفوفات. |
+| `iterkit.og.rin` | مكرِّرات بنمط `hasNext`/`next`. |
+| `seqkit.og.rin` | توليد متتاليات جاهزة كمدخلات لحلقات `for`/`while`. |
+| `sortkit.og.rin` | ترتيب. |
+| `search.og.rin` | بحث خطي. |
+| `query.og.rin` | استعلامات بسيطة على مصفوفة (`first`...). |
+| `stack.og.rin` | مكدّس (Stack). |
+| `queue.og.rin` | طابور (Queue). |
+| `tree.og.rin` | شجرة عامة. |
+| `graph.og.rin` | رسم بياني (Graph). |
+| `matrix.og.rin` | مصفوفات ثنائية الأبعاد. |
+| `gridkit.og.rin` | حلقات متداخلة على شبكات 2D. |
+| `objectkit.og.rin` | أدوات كائنات عامة (قواميس). |
+| `jsonkit.og.rin` | مساعدات JSON فوق `jsonEncode`/`jsonDecode` الأصليتين. |
+
+### رياضيات وفيزياء
+| الوحدة | الوصف |
+|---|---|
+| `math.og.rin` | مكتبة رياضية متكاملة (نظرية أعداد، مثلثات بسلاسل تايلور، أسّية/لوغاريتمات) فوق الأصلية. |
+| `numbers.og.rin` | مساعدات أرقام بسيطة (`isEven`...). |
+| `extdb.og.rin` | قواعد بيانات خارجية للحاويات و indsin (مزوّد اتصال rtdb / pgrest): CRUD، جلسات، كاش، طابور دون اتصال، مراقبة، مزامنة — انظر [EXTDB.md](./EXTDB.md). |
+| `physics.og.rin` | مكتبة فيزياء متكاملة فوق الأصلية. |
+| `geometry.og.rin` | هندسة (مسافة إقليدية...). |
+| `units.og.rin` | تحويل وحدات (متر↔سم...). |
+| `stats_plus.og.rin` | إحصاء إضافي فوق دوال RECKON الأصلية. |
+
+### نظام وتشغيل
+| الوحدة | الوصف |
+|---|---|
+| `syskit.og.rin` | معلومات المحرّك + مسارات + أدوات نظام. |
+| `envkit.og.rin` | بيئة تنفيذ / نطاقات متداخلة. |
+| `config.og.rin` | إدارة إعدادات (قاموس مفاتيح/قيم). |
+| `cachekit.og.rin` | ذاكرة تخزين مؤقت بسيطة. |
+| `logger.og.rin` | تسجيل رسائل (`log_info`...). |
+| `queue.og.rin` | (انظر أعلاه، بيانات وبِنى). |
+| `loopkit.og.rin` | تحكّم عام بالحلقات فوق `while`/`for`. |
+| `loopstats.og.rin` | تجميع إحصاءات/تقدّم تدريجيًا أثناء حلقة. |
+| `rinstat.og.rin` | تحليل إحصائي: توزيعات، اختبارات، انحدار، PCA، bootstrap ([STATS.md](STATS.md)). |
+| `rinplot.og.rin` | رسوم SVG/PNG إحصائية معقّدة ([PLOT.md](PLOT.md)). |
+| `rinstat_adv.og.rin` | انحدار لوجستي وROC ولامعلمية وسلاسل زمنية وبقاء وقوة ([STATS_ADV.md](STATS_ADV.md)). |
+| `rinplot_adv.og.rin` | ROC وKM وACF وforest وكثافة ثنائية وridgeline وتقارير متخصصة. |
+| `rinauto.og.rin` | تحليل آلي كامل → تقرير HTML (عربي/إنجليزي) مع تصحيح FDR. |
+| `events.og.rin` | نظام أحداث بسيط (اشتراك/إطلاق). |
+| `behaviorkit.og.rin` | مفهوم موحّد لبرمجة سلوك التفاعل. |
+| `movingmask.og.rin` | أقنعة متحركة فوق الحاويات والحلقات. |
+| `maskkit.og.rin` | أدوات تحقّق أقنعة (`mask_isValid`...). |
+| `passkit.og.rin` | Password kit: policies, strength/entropy, secure generation, salted hashing, lockout, reset tokens, redaction (see [`passkit.md`](./passkit.md)). |
+| `passkitcrypt.og.rin` | Encryption and signing: authenticated Seal/Open, HKDF/PBKDF2, keyrings, envelopes, signed tokens/URLs/requests, TOTP, Shamir. |
+| `passkitdb.og.rin` | Database and container layer over RCSQL: CRUD, transactions, encrypted fields, users, sessions, API keys, audit log, container linking. |
+| `passkitlang.og.rin` | The `<passkit>` tag language (`.passkit` files) as a library; links Rin, `.passkit` files and containers. |
+| `requirekit.og.rin` | عدّة الحقول/الاشتراطات الإلزامية. |
+| `validate.og.rin` | دوال تحقّق شائعة. |
+| `validate_plus.og.rin` | تحقّق إضافي. |
+
+### شبكات وملفات وضغط
+| الوحدة | الوصف |
+|---|---|
+| `httpkit.og.rin` | مساعدات حول طلبات HTTP (انظر [`http.md`](./http.md) للدوال الأصلية الكاملة). |
+| `gorinkit.og.rin` | جسر إلى بوابة **gorin** (طبقة Go فوق المحرك): `gorin_hash`/`gorin_hmac`/`gorin_base64Encode`/`gorin_uuid`/`gorin_regex*`/`gorin_fetch`/`gorin_run`… ترمي `throw` برسالة تبدأ بـ `gorin:` عند الفشل. انظر `gorin/README.md`. |
+| `urlkit.og.rin` | تحليل روابط (`scheme`...). |
+| `router.og.rin` | مطابقة مسارات بسيطة. |
+| `archivekit.og.rin` | إنشاء ملفات أرشيف/ضغط حقيقية بلغة Rin خالصة. |
+| `rinzip.og.rin` | أرشيفات ZIP حقيقية بضغط DEFLATE فعلي (zlib). |
+| `opskit.og.rin` | عدّة عمليات عامة (ملفات/تجميع/تصويت/فرز/مجموعات). |
+
+### واجهة/عرض
+| الوحدة | الوصف |
+|---|---|
+| `colors.og.rin` | مساعدات ألوان فوق الدوال الأصلية المشتركة مع راسم indsin. |
+| `animation.og.rin` | دوال تسهيل حركة (easing، `anim_linear`...). |
+| `layout.og.rin` | حسابات تخطيط بسيطة (توسيط...). |
+| `pagination.og.rin` | حساب عدد الصفحات. |
+
+### أخرى
+| الوحدة | الوصف |
+|---|---|
+| `compose.og.rin` | **مكتبة أساسية**: تركيب ودمج وتفاعل كل المفاهيم (دوال، map، array، Set، كائنات، حاويات، سجلات). انظر [`compose.md`](./compose.md). |
+| `compose_seq` `compose_path` `compose_flow` `compose_schema` `compose_diff` `compose_store` | **مساعدة compose** (كل واحدة تستورد `compose` تلقائيًا): تسلسلات، مسارات، تدفّق ونتائج، مخططات تحقّق، فروق ودمج ثلاثي، مخزن حالة. انظر [`compose-helpers.md`](./compose-helpers.md). |
+| `boat.og.rin` | "Boat": مفاهيم أساسية مجمَّعة (دوال، قيم منطقية، حاويات بيانات). انظر `examples/boat_demo.rin`. |
+
+## انظر أيضًا
+- [`RECKON.md`](./RECKON.md) — الدوال الإحصائية/التحويلية الأصلية الكاملة (بلا حاجة `@import`).
+- [`http.md`](./http.md) — دوال الشبكات الأصلية الكاملة.
+- [`storage.md`](./storage.md) — التخزين الدائم.
+- `app/src/main/cpp/rin_interpreter.cpp` (`registerNatives()`) — القائمة الكاملة
+  الموثوقة لكل دالة أصلية مدمجة في المفسِّر.
+
+## الذكاء الاصطناعي وتحليل البيانات (RinML / RinDF / RinAI)
+`lib/rindf.og.rin` (إطار بيانات) · `lib/rinml.og.rin` (تعلّم آلة وشبكات عصبية) · `lib/rinai.og.rin` (مساحات عمل داخل الحاويات وAutoML). التفاصيل في [rinml.md](rinml.md).

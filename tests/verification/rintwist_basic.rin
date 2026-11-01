@@ -1,0 +1,17 @@
+// RINTWIST: متغيّر السياق المضمَّن (ملف / خادم / تاريخ / تطبيق / مكتبة)
+@import "tests/verification/libsplit/twist.og.rin";
+@import "tests/verification/libsplit/twist_token.og.rin";
+print RINTWIST.file.kind;
+print RINTWIST.lib.active;
+print RINTWIST.app.name + " " + RINTWIST.app.version;
+print RINTWIST.date.year >= 2024;
+print len(RINTWIST.date.iso);
+print RINTWIST.name == RINTWIST.file.name;
+print len(RINTWIST.server.host) > 0;
+print TW_MAIN.file.kind + " " + TW_MAIN.lib.kind + " " + TW_MAIN.lib.name + " " + TW_MAIN.lib.version + " " + TW_MAIN.file.part;
+print TW_PART.file.part + " " + TW_PART.file.name + " " + TW_PART.file.ext;
+print TW_TOKEN.file.kind + " " + TW_TOKEN.lib.kind + " " + TW_TOKEN.lib.name + " " + TW_TOKEN.file.name;
+print TW_MAIN.file.depth;
+try { RINTWIST = 1; } catch (e) { print e.message; }
+let ctx = RINTWIST;
+print type(ctx);

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- بلوك رمادي بحواف دائرية يمثّل نص/عنصر لم يُحمَّل بعد، يُستخدم داخل ShimmerLayout -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/rin_skeleton_base" />
+    <corners android:radius="6dp" />
+</shape>

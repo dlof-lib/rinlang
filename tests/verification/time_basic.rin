@@ -1,0 +1,99 @@
+// time_basic.rin — مفهوم time: كل المدخلات بتوقيت UTC صريح فالمخرجات حتميّة على أي جهاز
+time.config({lang: "en", digits: "latin", weekStart: "mon", weekend: ["sat", "sun"]});
+
+// ---- اللحظة وحقولها
+let t = time.utc("2026-10-11T14:30:45.123Z");
+print t.iso;
+print t.year; print t.month; print t.day; print t.hour; print t.minute; print t.second; print t.ms;
+print t.weekdayName; print t.dayOfYear; print t.week; print t.quarter; print t.tz;
+
+// ---- التنسيق
+print time.format(t, "YYYY-MM-DD HH:mm:ss");
+print time.format(t, "dddd, D MMMM YYYY, hh:mm A");
+print time.format(t, "[Q]Q [W]W [x]x");
+print time.format(t, "long", {lang: "ar", digits: "arabic"});
+print time.format(t, "rfc");
+print time.format(t, "compact");
+print time(t, "DD/MM/YYYY");
+
+// ---- الحساب (الأشهر تثبّت اليوم عند آخر الشهر)
+print time.add(t, 3, "days").date;
+print time.add(t, {months: 1, days: 20}).date;
+print time.add(time.utc("2026-01-31T00:00:00Z"), 1, "month").date;
+print time.add(time.utc("2028-02-29T10:00:00Z"), 1, "year").date;
+print time.add(t, "1h30m").time;
+print time.sub(t, 2, "hours").time;
+
+// ---- الفروق
+print time.diff(time.add(t, 3, "days"), t, "days");
+print time.diff(time.add(t, 3, "days"), t).text;
+print time.diff("2026-03-01T00:00:00Z", "2026-01-31T00:00:00Z", "months");
+print time.diff("2026-01-31T00:00:00Z", "2026-03-01T00:00:00Z", "months");
+
+// ---- بداية/نهاية
+print time.startOf(t, "month").iso;
+print time.endOf(t, "day").iso;
+print time.startOf(t, "week").date;
+print time.startOf(t, "quarter").date;
+
+// ---- التحليل
+print time.parse("11/10/2026 9:15 pm", {tz: "UTC"}).iso;
+print time.parse("11 أكتوبر 2026", {tz: "UTC"}).date;
+print time.parse("October 11, 2026", {tz: "UTC"}).date;
+print time.parse("2026-10-11T14:30:00+05:30").iso;
+print time.parse("٢٠٢٦-١٠-١١ ١٤:٣٠", {tz: "UTC"}).iso;
+print time.parse("14/03/2026 08:05", "DD/MM/YYYY HH:mm").date;
+print time.parse("بطيخ");
+print time.valid("2026-02-30");
+print time.valid("2026-02-28");
+
+// ---- المناطق
+print time.zone(t, "+03:00").iso;
+print time.zone(t, "Riyadh").time;
+print time.of(2026, 10, 11, 14, 30, {tz: "+03:00"}).iso;
+
+// ---- المدد
+print time.span("1h30m").text;
+print time.span(3725000).long;
+print time.span({hours: 2, minutes: 15}).totalMinutes;
+print time.span(90, "s").text;
+
+// ---- نصوص نسبية (محدّدة بمرجع now)
+print time.ago("2026-10-10T00:00:00Z", {now: "2026-10-11T00:00:00Z"});
+print time.ago("2026-10-14T00:00:00Z", {now: "2026-10-11T00:00:00Z"});
+print time.ago("2026-10-10T22:00:00Z", {now: "2026-10-11T00:00:00Z", lang: "ar"});
+print time.ago("2026-10-22T00:00:00Z", {now: "2026-10-11T00:00:00Z", lang: "ar"});
+
+// ---- المقارنة
+print time.same("2026-10-11T01:00:00Z", "2026-10-11T23:00:00Z", "day");
+print time.between("2026-10-11", "2026-10-01", "2026-10-31");
+print time.max("2026-01-01", "2027-01-01", "2025-01-01").year;
+print time.is("2020-02-02", "leap");
+print time.is("2026-10-11", "weekend");
+
+// ---- الهجري (حسابي)
+print time.hijri("2026-02-18").iso;
+print time.hijri(t).text;
+print time.hijri(t, {lang: "ar", digits: "arabic"}).text;
+
+// ---- التقويم
+print time.isLeap(2028); print time.isLeap(2026); print time.daysIn(2026, 2); print time.daysIn(2028, 2);
+print len(time.range("2026-10-01", "2026-10-05"));
+print len(time.range("2026-01-31", "2026-05-31", "1 month"));
+print time.range("2026-01-31", "2026-05-31", "1 month")[1].date;
+
+// ---- الأرقام والأعداد التلقائية: ثوانٍ أو ميلي ثانية
+print time.utc(0).iso;
+print time.utc(1760193045).iso;
+print time.utc(1760193045123).iso;
+
+// ---- ساعة الجهاز (بلا طباعة القيم)
+print time().year >= 2026;
+print time.diff(time.parse("in 3 days"), time(), "days") > 2.9;
+print time.parse("next friday").weekdayName;
+print time.parse("tomorrow 14:30").hour;
+let sw = time.stopwatch();
+time.sleep(20);
+print time.elapsed(sw) >= 15;
+print time.measure(fun() { return 42; }).result;
+

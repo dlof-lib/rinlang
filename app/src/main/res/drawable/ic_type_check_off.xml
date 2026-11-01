@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- مؤشر «غير محدَّد»: حلقة رمادية خفيفة. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="22dp"
+    android:height="22dp"
+    android:viewportWidth="22"
+    android:viewportHeight="22">
+    <path
+        android:strokeColor="#80808A"
+        android:strokeWidth="1.6"
+        android:pathData="M11,2 A9,9 0 1,0 11,20 A9,9 0 1,0 11,2 Z" />
+</vector>

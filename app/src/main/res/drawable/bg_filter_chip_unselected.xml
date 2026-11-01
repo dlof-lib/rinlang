@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- خلفية شريحة فلترة غير مُختارة داخل تبويب Events (لوحة Run Queue): نفس شكل bg_category_chip
+     لكن بلون محايد بدل البنفسجي، حتى تتمايز الشريحة "المختارة" بصريًا عن البقية. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/rin_chip_bg" />
+    <corners android:radius="20dp" />
+</shape>

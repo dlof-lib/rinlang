@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- شريط لوني صغير مستدير الحواف يسبق عنوان كل قسم "خيارات" داخل حوار "مشروع جديد"
+     (انظر OptionsSectionAccent في styles.xml). اللون الفعلي يُضبط لكل قسم عبر
+     android:backgroundTint حسب لون هوية نوع المشروع (project_type_*_color). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@android:color/white" />
+    <corners android:radius="2dp" />
+</shape>

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- خلفية دائرية بلون التمييز، تُستخدم كصورة افتراضية للملف الشخصي قبل رفع صورة -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
+    <solid android:color="@color/rin_accent" />
+</shape>

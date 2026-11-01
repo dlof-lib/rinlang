@@ -1,0 +1,2 @@
+// let_err_noname.rin — اختبار تحقّق لـ docs/let-plus.md
+let [w, ...] = [1];

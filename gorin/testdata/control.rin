@@ -1,0 +1,16 @@
+fun a(n) { let i = 0; while (true) { i = i + 1; if (i == n) { return i * 10; } } }
+print a(4);
+fun b() { for (let i = 0; i < 10; i = i + 1) { if (i == 3) { continue; } if (i == 6) { break; } print i; } return "done"; }
+print b();
+fun c() { for (let x in [1,2,3,4]) { if (x == 2) { continue; } if (x == 4) { return "ret" + x; } print x; } return "end"; }
+print c();
+fun e() { try { throw "x"; } catch (e) { return "caught " + e; } return "no"; }
+print e();
+let sq = fun(x) { return x * x; };
+print sq(4);
+let name = "Rin";
+print `hello ${name} ${1 + 2}`;
+print [1, "a", true, nil];
+print {"k": 1};
+print 10 % 3; print 7 / 2; print !true; print true and false; print true or false;
+try { print 1 / 0; } catch (err) { print err; }

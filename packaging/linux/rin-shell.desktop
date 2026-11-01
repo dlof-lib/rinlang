@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Rin Shell
+GenericName=Terminal
+Comment=The interactive terminal of the Rin language (Rin Toolbox: 600+ built-in commands)
+Comment[ar]=الطرفية التفاعلية للغة Rin (Rin Toolbox: أكثر من 600 أمر مدمج)
+Exec=rin terminal
+Icon=rin-shell
+Terminal=true
+Categories=Development;TerminalEmulator;ConsoleOnly;
+Keywords=rin;shell;terminal;repl;

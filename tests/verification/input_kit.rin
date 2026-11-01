@@ -1,0 +1,6 @@
+// input_kit.rin — أصناف inputkit كمُدقِّقات مباشرة (رسالة مخصّصة، طول عربي، Every)
+@import "lib/inputkit.og.rin";
+let n = inputNumber("age? ", Every([Integer(), Range(1, 120).withMessage("غير معقول")]));
+print n;
+print input("mail? ", Email());
+print input("nm? ", Length(2, 4));

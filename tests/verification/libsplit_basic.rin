@@ -1,0 +1,12 @@
+@import "tests/verification/libsplit/shapes.og.rin";
+print shapes_version();
+print circle_area(2);
+let b = Box(3, 4);
+print b.area();
+print SHAPES_LOADED;
+print rinlib.json("tests/verification/libsplit/shapes.og.rin", "data/colors.json").palette;
+let x = rinlib.xml("tests/verification/libsplit/shapes.og.rin", "data/meta.xml");
+print x.attrs.kind + " " + x.children[1].text;
+print rinlib.info("shapes").parts;
+print rinlib.info("shapes").dependencies;
+print rinlib.check("tests/verification/libsplit/shapes.og.rin").ok;

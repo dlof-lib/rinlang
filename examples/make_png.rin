@@ -1,0 +1,57 @@
+// make_png.rin — يبني PNG صالح 100% من الصفر باستخدام chr/ord/crc32/adler32 فقط.
+// لا شيء هنا مدمج في C++ خصيصاً لـ PNG — كل هذا منطق Rin بحت فوق الدوال الأولية الجديدة.
+
+fun u32be(n) {
+    // يحوّل رقماً إلى 4 بايتات Big-Endian (الترتيب الذي يطلبه PNG)
+    let b0 = floor(n / 16777216) - floor(floor(n / 16777216) / 256) * 256;
+    let b1 = floor(n / 65536) - floor(floor(n / 65536) / 256) * 256;
+    let b2 = floor(n / 256) - floor(floor(n / 256) / 256) * 256;
+    let b3 = n - floor(n / 256) * 256;
+    return chr(b0) + chr(b1) + chr(b2) + chr(b3);
+}
+
+fun u16le(n) {
+    let lo = n - floor(n / 256) * 256;
+    let hi = floor(n / 256);
+    return chr(lo) + chr(hi);
+}
+
+fun chunk(type, data) {
+    let crc = crc32(type + data);
+    return u32be(len(data)) + type + data + u32be(crc);
+}
+
+// ---- صورة 4×4 بكسل: مربع أحمر خالص، RGB 8-بت ----
+let width = 4;
+let height = 4;
+
+let scanlines = "";
+let y = 0;
+while (y < height) {
+    scanlines = scanlines + chr(0); // فلتر = بلا فلتر
+    let x = 0;
+    while (x < width) {
+        scanlines = scanlines + chr(220) + chr(20) + chr(20); // أحمر
+        x = x + 1;
+    }
+    y = y + 1;
+}
+
+// ---- تغليف zlib بكتلة deflate "مخزّنة" (بدون ضغط فعلي، لكنها صالحة تماماً) ----
+let zlibHeader = chr(120) + chr(1); // CMF=0x78, FLG=0x01 (يحقق شرط %31==0)
+let blockHeader = chr(1);           // BFINAL=1, BTYPE=00 (stored)
+let dataLen = len(scanlines);
+let idatPayload = zlibHeader + blockHeader + u16le(dataLen) + u16le(65535 - dataLen) + scanlines + u32be(adler32(scanlines));
+
+// ---- تجميع الملف ----
+let signature = chr(137) + chr(80) + chr(78) + chr(71) + chr(13) + chr(10) + chr(26) + chr(10);
+
+let ihdrData = u32be(width) + u32be(height) + chr(8) + chr(2) + chr(0) + chr(0) + chr(0);
+
+let png = signature
+    + chunk("IHDR", ihdrData)
+    + chunk("IDAT", idatPayload)
+    + chunk("IEND", "");
+
+writeFile("out.png", png);
+print("تم إنشاء الملف: " + len(png) + " بايت");

@@ -1,0 +1,68 @@
+// indsin_system_demo.rin — Indsin Design System v2: ثيم جديد + تصميم متجاوب + حركات متتابعة + actions جديدة.
+// Run: ./indsinc samples/indsin_system_demo.rin
+//
+// - الثيم Sepia مدمج (راجع docs/indsin_expansion.md §3) ويُفعَّل بنفس صيغة @theme المعتادة.
+// - columns / columns_md / columns_lg: عمود واحد على الهاتف، عمودان من 600px، ثلاثة من 840px.
+// - effect + duration="fast" + stagger: الأبناء يظهرون متتابعين بفارق 80ms.
+// - cycle()/clamp()/append()/backspace(): actions جديدة لتحويل بيانات الـ Warp.
+
+@theme=Sepia
+  active=true;
+.end/theme
+
+warp mode = "list";
+warp qty = 1;
+warp note = "";
+
+@view.Column=root
+  gap=normal; padding=comfortable;
+
+  @view.Text=heading
+    text="Indsin Design System v2"; size=heading;
+  .end/view
+
+  @view.Grid=cards
+    columns=1; columns_md=2; columns_lg=3;
+    gap=normal; gap_lg=24;
+    effect="grow"; easing="spring"; duration="slow"; stagger=80;
+
+    @view.Card=cardA
+      padding=comfortable; radius=round; elevation=2;
+      @view.Text=ta
+        text="Tonal palette"; size=title;
+      .end/view
+    .end/view
+    @view.Card=cardB
+      padding=comfortable; radius=round; elevation=2;
+      @view.Text=tb
+        text="WCAG audit"; size=title;
+      .end/view
+    .end/view
+    @view.Card=cardC
+      padding=comfortable; radius=round; elevation=2;
+      @view.Text=tc
+        text="Responsive attrs"; size=title;
+      .end/view
+    .end/view
+  .end/view
+
+  @view.Row=controls
+    gap=compact;
+    @view.Button=modebtn
+      label="Mode"; tone=primary; height=48; onTap=cycle(mode,"list","grid","table");
+    .end/view
+    @view.Button=plus
+      label="+"; tone=success; width=48; height=48; onTap=seq(increment(qty,1),clamp(qty,1,10));
+    .end/view
+    @view.Button=dot
+      label="."; tone=neutral; width=48; height=48; onTap=append(note,"x");
+    .end/view
+    @view.Button=del
+      label="Del"; tone=danger; height=48; onTap=backspace(note);
+    .end/view
+  .end/view
+
+  @view.Text=status
+    text=mode; size=body;
+  .end/view
+.end/view

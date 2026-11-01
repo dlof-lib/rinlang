@@ -1,0 +1,208 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>حلقات Rin — Loops v2 — Rin</title>
+<meta name="description" content="توثيق لغة البرمجة Rin"><link rel="icon" href="../assets/brand/icon-32.png">
+<link rel="stylesheet" href="assets/style.css"></head><body>
+<header><button id="mn" aria-label="القائمة">☰</button><a class="logo" href="index.html"><img src="../assets/brand/icon-48.png" alt="" width="26">Rin</a>
+<input id="q" type="search" placeholder="ابحث في التوثيق…" autocomplete="off"><button id="th" aria-label="الوضع">◐</button>
+<a class="gh" href="https://github.com/dlof-lib/rinlang">GitHub</a><div id="res"></div></header>
+<div class="wrap"><nav id="sb"><details open><summary>ابدأ هنا</summary><a href="getting-started.html">البداية</a><a href="syntax.html">القواعد النحوية العامة</a><a href="variables.html">let`، مصفوفات، قواميس، نطاق</a><a href="template-strings.html">النصوص القالبية (متغيّرات داخل النص)</a><a href="input.html">إدخال المستخدم (Input)</a><a href="control-flow.html">الشروط، الحلقات، `goal`/`achieve</a><a href="loops.html" class=on>حلقات Rin — Loops v2</a><a href="functions.html">fun`/`return`، التكرار الذاتي</a><a href="enums.html">enum`: قوائم اختيار مغلقة</a></details><details ><summary>اللغة</summary><a href="language-reference.html">المرجع الشامل وخريطة ترابط المفاهيم</a><a href="objects.html">class`/`struct`، `.object()`، `@Object`، `document</a><a href="oop.html">البرمجة الكائنية الموسَّعة (Rin 1.0)</a><a href="containers.html">دليل `@container` / `@element` / `@loop</a><a href="table.html">الجدول (`@table` / `@container.table`) ودوال اللغة عليه</a><a href="set.html">Set`: نوع المجموعة الأساسي</a><a href="pipelines.html">عامل الأنابيب `|&gt;</a><a href="RECKON.html">reckon`: مفهوم حسابي بسطرين</a><a href="let-plus.html">let` المطوَّر</a><a href="living-variables.html">المتغيرات الحيّة (Living Variables)</a><a href="label-define.html">label` و`define` (تسمية وتعريف)</a><a href="block-frames.html">بداية الكتل ونهايتها (Block Frames)</a><a href="compare_ops.html">معاملات المقارنة `/=` و `=/=` و `=/</a><a href="max_min.html">max / min family</a><a href="scope-guarantees.html">ضمانات النطاق: `finally` · `defer` · `catch … when` · `rethrow</a><a href="key_terms_and_builtins.html">Rin KEY_TERMS and Built-in Conditions</a><a href="number_builtins.html">Rin Number Built-ins</a></details><details ><summary>الواجهات (Indsin)</summary><a href="indsin.html">Indsin — Interface Design</a><a href="indsin_rin.html">indsin يعتمد على لغة Rin</a><a href="indsin_expansion.html">Indsin — التوسعة الاحترافية (Design System v2)</a><a href="indsin_object.html">indsin-object — API reference</a><a href="indsin_media.html">Indsin Media — اختيار الوسائط ورفعها</a><a href="indsin_icons.html">مكتبة أيقونات indsin (متجهية)</a><a href="indsin_tooling.html">indsin tooling — icon, file association, syntax highlighting</a><a href="indsinweb.html">IndsinWeb — مكتبة WebView والروابط لـ indsin</a><a href="RIN_ELEMENTS.html">دليل `@element.*` الكامل</a><a href="events-effects.html">الأحداث والتأثيرات (Events &amp; Effects) — محرك Indsin UI</a><a href="banner.html">Banner: إشعار شريطي</a><a href="simple-style.html">Rin Simple Style</a></details><details ><summary>بيئة التشغيل</summary><a href="runtime.html">وقت تشغيل Rin (Rin Runtime) · المرجع الرسمي</a><a href="standard-library.html">المكتبة القياسية (`lib/*.og.rin`)</a><a href="errors.html">نظام الأخطاء: أكواد، `try`/`catch`/`throw</a><a href="ERROR_SYSTEM.html">نظام التشخيص: البنية الداخلية + جدول الأكواد الكامل</a><a href="storage.html">تخزين دائم</a><a href="http.html">شبكات</a><a href="env.html">ربط Rin بملف `.env</a><a href="terminal.html">الطرفية التفاعلية — `rin terminal</a><a href="vm.html">RinVM — آلة Rin الافتراضية (بايتكود)</a><a href="rinflow.html">RinFlow: طبقة تنفيذ التدفّق المهيكل</a><a href="MAKE_UNIT.html">@make.(name)`: وحدة بسياسة قدرات صريحة</a><a href="MAKE_MEDIA.html">فيديو · صوت · API · إزالة الخلفية · قراءة النص من الصور</a><a href="TIME.html">مفهوم `time`: الزمن كقيمة من الدرجة الأولى</a><a href="native-additions.html">دوال Rin الأصلية الجديدة (Rin 1.0)</a></details><details ><summary>الحاويات وقواعد البيانات</summary><a href="container_advanced.html">Rin Container Advanced Built-ins</a><a href="container_pro.html">Rin Container Pro</a><a href="container_sql.html">RIN CONTAINER SQL (RCSQL)</a><a href="cross-file-containers.html">استدعاء إعلانات من ملف آخر</a></details><details ><summary>الحزم والتكامل</summary><a href="api.html">واجهة C المسطَّحة (Embedding API)</a><a href="android.html">استضافة Rin على أندرويد</a><a href="packages-and-interop.html">Rin 1.0 — المكتبات والحزم وجسر C++ وJSON واختبارات rintest</a><a href="rinpak-format.html">RinPak — حزمة مشروع Rin (`.rinpak`)</a><a href="html-projects.html">مشاريع HTML في Rin — الربط بين index.html وملف الحاوية</a><a href="project-og-urin.html">project.og.urin` — البيانات الوصفية لمشروع Rin</a><a href="CONTENT_PACKS.html">حزم المحتوى القابلة للتنزيل (Content Packs)</a><a href="previewkit.html">previewkit — معاينة حيّة لملفات PDF / Markdown / TypeScript</a></details><details ><summary>المكتبات المتخصصة</summary><a href="rinml.html">RinML / RinDF / RinAI — الذكاء الاصطناعي وتحليل البيانات في Rin</a><a href="STATS.html">RinStat — التحليل الإحصائي (`lib/rinstat.og.rin`)</a><a href="STATS_ADV.html">RinStat المتقدّم + RinAuto</a><a href="LINALG.html">الجبر الخطي للمهندسين — `mat*` و`vec*</a><a href="PLOT.html">RinPlot — الرسوم البيانية الإحصائية (`lib/rinplot.og.rin`)</a><a href="ALGO.html">تطوير الخوارزميات والحساب العددي — `algo*</a><a href="NUMBER.html">مفهوم `number` في Rin</a><a href="boat.html">&quot;Boat&quot;: مفاهيم أساسية مجمَّعة</a><a href="passkit.html">passkit — passwords, encryption, databases and a tag language</a><a href="passkit-crypto-db.html">Passkit feature catalog: encryption, databases and container linking</a><a href="hash-family.html">عائلة `#` — مفاهيم ودوال جديدة تبدأ بعلامة `#</a><a href="image-draw.html">إنشاء الصور في Rin — رسم وحفظ PNG وlog كصورة</a><a href="image-terminal.html">طباعة الصور في الـ terminal — `printImage` / `imageAnsi` / `imageInfo</a></details><details ><summary>المشروع</summary><a href="CONTRIBUTING.html">المساهمة في Rin</a><a href="CODE_OF_CONDUCT.html">قواعد السلوك</a><a href="SECURITY.html">سياسة الأمان</a><a href="SUPPORT.html">الحصول على المساعدة</a><a href="TRADEMARKS.html">سياسة العلامة التجارية — Trademark Policy</a><a href="THIRD_PARTY_NOTICES.html">إشعارات المكوّنات الخارجية — Third-Party Notices</a></details><details ><summary>مراجع إضافية</summary><a href="ANDROID_VERSIONS.html">حزم RinStudio لكل إصدار أندرويد</a><a href="TOKEN.html">مفهوم `token` في Rin</a><a href="TOOLCHAIN.html">Rin Professional Language Toolchain</a><a href="TOOLCHAIN_UPGRADE.html">Toolchain Upgrade — 2026-09</a><a href="architecture.html">المعمارية وبنية المستودع</a><a href="base-accept.html">base` و`accept`: متغيّران يخدمان `if</a><a href="channel47.html">channel47 — لغة وصف البيانات والإعدادات</a><a href="ci.html">CI وأدوات المستودع</a><a href="loop-templates.html">قوالب الحلقات `@tmpl</a><a href="pre-post.html">pre` و`post` (ما قبل / ما بعد): عقد انتقال حول الإسناد</a><a href="print-fonts.html">خطوط `print` — bold / italic / underline وغيرها</a><a href="print-image-terminal.html">طباعة الصور كنص في الطرفية</a><a href="print-templates.html">قوالب الطباعة `@tmpl ... print` — قوالب نصية خطية وتنسيقية</a><a href="rdoc.html">rdoc — Documentation Container</a><a href="rdoc-reference.html">وثيقة rdoc الشاملة — Documentation Container</a><a href="screenshots.html">لقطات من RinStudio</a></details></nav>
+<main><article><h1 id="rin-loops-v2">حلقات Rin — Loops v2<a class="headerlink" href="#rin-loops-v2" title="Permanent link">#</a></h1>
+<p>حلقات Rin القديمة (<code>while</code> و<code>for</code> و<code>for..in</code> و<code>#do/#while</code> و<code>#done</code>) باقية كما هي. هذا الإصدار يضيف
+عائلة حلقات جديدة <strong>تعمل على المفسّر الشجري وRinVM وأندرويد والويب</strong> لأنها تُفكَّك في المحلل النحوي إلى
+عُقد موجودة أصلاً (لا تغيير في المفسّر ولا في الآلة الافتراضية).</p>
+<h2 id="each"><code>each</code> — التكرار على أي شيء<a class="headerlink" href="#each" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">each x in [10, 20, 30] { print x; }                 // عناصر
+each ch in &quot;hey&quot; { print ch; }                       // حروف
+each x, i in [&quot;a&quot;, &quot;b&quot;] { print i + &quot;:&quot; + x; }       // (عنصر، فهرس)
+each k, v in {&quot;p&quot;: 1, &quot;q&quot;: 2} { print k + &quot;=&quot; + v; } // قاموس: (مفتاح، قيمة)
+each [a, b] in [[1, 2], [3, 4]] { print a + b; }     // تفكيك
+each i in 1 to 10 step 3 { print i; }                // مدى
+each n in nums where n % 2 == 0 { print n; }         // مرشّح مدمج
+each n in nums reversed { print n; }                 // عكسي (بلا نسخ يدوي)
+each n in nums where n &gt; 1 reversed { print n; }     // بأي ترتيب
+</code></pre>
+<p>كل تكرار له نطاقه الخاص (الإغلاقات تلتقط قيمة تلك الدورة). <code>break</code>/<code>continue</code>/<code>#done { }</code> تعمل كالمعتاد.</p>
+<h3 id="each-for">أنماط التكرار المتقدمة (على <code>each</code> و<code>for</code> بلا أقواس)<a class="headerlink" href="#each-for" title="Permanent link">#</a></h3>
+<pre><code class="language-kotlin">each c in [1, 2, 3, 4, 5] by 2 { print c; }          // مجموعات: [1,2] [3,4] [5]
+each c, n in &quot;abcdef&quot; by 3 { print n + &quot;:&quot; + c; }     // n = رقم المجموعة
+each w in [1, 2, 3, 4] window 2 { print w; }          // نوافذ متحركة: [1,2] [2,3] [3,4]
+each x, i in letters every 2 { print i + x; }         // كل عنصر ثانٍ (i = الفهرس الحقيقي)
+each a, b in xs zip ys { print a + b; }               // تكرار متوازٍ (ينتهي بأقصر قائمة)
+each w in xs window 2 where w[0] &gt; 0 { ... }          // تُجمَع مع where / reversed / limit
+let sums = [each w in xs window 2 yield w[0] + w[1]]; // وفي التجميع أيضاً
+</code></pre>
+<p>تعمل على المصفوفات والنصوص (غيرها = خطأ واضح)، والرقم يجب أن يكون عدداً صحيحاً موجباً.</p>
+<h3 id="for"><code>for</code> بلا أقواس<a class="headerlink" href="#for" title="Permanent link">#</a></h3>
+<pre><code class="language-kotlin">for x in [7, 8] { ... }      for i in 1 to 10 { ... }      for k, v in map { ... }
+</code></pre>
+<p>مرادف كامل لـ <code>each</code>؛ الشكل القديم <code>for (let x in xs)</code> و<code>for (;;)</code> باقيان كما هما.</p>
+<h2 id="repeat"><code>repeat</code> — عدد ثابت من التنفيذ<a class="headerlink" href="#repeat" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">repeat 3 { print &quot;hi&quot;; }
+repeat 5 as i { print i; }          // فهرس من 0
+repeat n times as k { ... }         // 'times' اختيارية
+repeat (a + b) { ... }
+</code></pre>
+<p>العدد يُقيَّم مرة واحدة ويجب أن يكون عدداً صحيحاً غير سالب (خطأ نحوي للقيمة الحرفية، وخطأ وقت التشغيل للمتغيّر).</p>
+<h2 id="i-as-i"><code>i</code> الضمني — بلا <code>as i</code><a class="headerlink" href="#i-as-i" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">repeat 3 { print i; }                       // 0 1 2
+each x in [&quot;a&quot;, &quot;b&quot;] { print i + &quot;:&quot; + x; } // 0:a 1:b   (يعمل مع القواميس وby/window/zip... أيضاً)
+</code></pre>
+<p>في <code>repeat</code> و<code>each</code> (عبارة) إن لم تسمِّ فهرساً وذكر الجسم <code>i</code>، تُكشف <code>i</code> = رقم الدورة المنفَّذة من 0 (بعد <code>where</code>/<code>skip</code>). لكل دورة <code>i</code> خاصة بها فتلتقطها الإغلاقات.
+لا يتغيّر شيء للشيفرة القديمة: لا يُفعَّل <code>i</code> الضمني إن كان <code>i</code> معرَّفاً قبل الحلقة في نطاق مرئي (<code>let i</code> · <code>for (let i..)</code> · <code>as i</code> · <code>each x, i</code> · معامل دالة <code>fun f(i)</code>)،
+ولا إن عرّفه الجسم أو أسنده (<code>let i</code> · <code>i = ..</code> · <code>i++</code> · <code>+=</code>). أي سمِّ الفهرس صراحةً (<code>as k</code>) متى أردت اسماً آخر. لا يشمل تعابير <code>[each ... yield ...]</code> بعد.</p>
+<h3 id="y"><code>y</code> الضمني — القيمة السابقة<a class="headerlink" href="#y" title="Permanent link">#</a></h3>
+<pre><code class="language-kotlin">each x in [1, 4, 9, 16] { if (y != nil) { print x - y; } }          // فروق: 3 5 7
+let d = [each x in xs yield (y == nil ? 0 : x - y)];                // يعمل في التجميع
+print sum each x in xs yield (i &gt; 0 ? x - y : 0);                   // وفي الاختزال
+</code></pre>
+<p><code>y</code> = قيمة متغيّر الحلقة في الدورة السابقة (<code>nil</code> في الأولى؛ للقواميس المفتاح السابق). يعمل في <code>each</code> و<code>for x in</code> بلا أقواس وتعابير <code>[each ... yield ...]</code> و<code>{each ... yield k : v}</code> واختزالات <code>sum/count/max/...</code>،
+وكذلك <code>i</code> (رقم الدورة) في كلها. يتتبّع الدورات المنفَّذة فقط ولا يكسره <code>continue</code>.
+نفس قواعد <code>i</code> تماماً: لا يُفعَّل إن عُرِّف <code>y</code> قبل الحلقة أو في ترويستها أو جسمها. يمكن استعمال <code>i</code> و<code>y</code> معاً.
+حدّ: يُقرآن في الجسم/تعبير <code>yield</code> فقط — لا في شروط الترويسة (<code>where</code>/<code>skip</code>/<code>take</code>...) لأنها تُقيَّم قبل الدورة.</p>
+<h2 id="loop"><code>loop</code> — الحلقة الأبسط<a class="headerlink" href="#loop" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">loop { ...; break when (done); }         // لا نهائية حتى break
+loop (cond) { ... }                      // مثل while
+loop until (cond) { ... }                // حتى يتحقق الشرط
+</code></pre>
+<h2 id="break-name-continue-name">التسميات: <code>break name</code> و<code>continue name</code><a class="headerlink" href="#break-name-continue-name" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">outer: for (let i = 0; i &lt; 3; i = i + 1) {
+    each j in 1 to 3 {
+        if (j == 2) { continue outer; }   // الدورة التالية من الحلقة الخارجية
+        if (i == 2) { break outer; }      // الخروج من الحلقتين
+    }
+}
+</code></pre>
+<p>تعمل مع كل أنواع الحلقات وعبر أي عمق، مع <code>when</code>/<code>unless</code> (<code>break outer when (x);</code>). التسمية لا تعبر حدود الدالة.
+تسمية غير موجودة = خطأ نحوي واضح.</p>
+<h2 id="limit-n"><code>limit N</code> — سقف أمان ضد الحلقات الجامحة<a class="headerlink" href="#limit-n" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">while (cond) limit 1000000 { ... }
+each x in items limit 10000 { ... }
+loop limit 50 { ... }
+</code></pre>
+<p>عند تجاوز N دورة يُرمى الخطأ: <code>loop limit exceeded: more than N iterations</code> (قابل للالتقاط بـ <code>try/catch</code>).
+مفيد للشيفرة التي تعتمد على شرط خارجي (شبكة، إدخال مستخدم، حسابات تقاربية).</p>
+<h2 id="retry"><code>retry</code> — حلقة إعادة المحاولة<a class="headerlink" href="#retry" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">retry 5 as attempt {
+    callFlakyService();       // أي throw يعيد المحاولة
+}
+</code></pre>
+<p>يعيد تنفيذ الجسم حتى ينجح (بلا throw). بعد N محاولة يُعاد رمي الخطأ الأخير كما هو. <code>attempt</code> رقم المحاولة (يبدأ من 1).</p>
+<h2 id="each-yield">تجميع النتائج: <code>[each ... yield ...]</code><a class="headerlink" href="#each-yield" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">let squares = [each x in nums where x % 2 == 0 yield x * x];
+let table   = [each a in [1, 2] yield [each b in [10, 20] yield a * b]];
+</code></pre>
+<p>تعبير (لا عبارة)، يدعم كل مزايا <code>each</code> (فهرس، <code>where</code>، <code>reversed</code>، تفكيك).</p>
+<h2 id="_1">ملاحظات<a class="headerlink" href="#_1" title="Permanent link">#</a></h2>
+<ul>
+<li><code>each</code>/<code>repeat</code>/<code>loop</code>/<code>retry</code>/<code>limit</code>/<code>where</code>/<code>reversed</code>/<code>yield</code> كلمات <strong>سياقية</strong>: تبقى أسماء متغيرات ودوال عادية
+  (<code>let loop = 1;</code> و<code>repeat("ab", 2)</code> يعملان).</li>
+<li>مع <code>each x, i</code> الشكل القاموس يعطي (مفتاح، قيمة) وغيره (عنصر، فهرس).</li>
+<li>الاختبارات: <code>tests/loops/*.rin</code> (+ <code>.expected</code>)، وتمر على المحرّكين: <code>rin run</code> و<code>rin --vm</code>.</li>
+</ul>
+<hr />
+<h1 id="loops-v3-python">Loops v3 — حلقات بقوة Python وأكثر<a class="headerlink" href="#loops-v3-python" title="Permanent link">#</a></h1>
+<p>كلها additive وتُفكَّك في المحلل (تعمل على المفسّر الشجري وRinVM وأندرويد والويب). اختبارات: <code>tests/loops/loops_v3_*.rin</code>.</p>
+<h2 id="where">مرشّحات التيار (بالترتيب المكتوب، وتُجمَع مع <code>where</code>)<a class="headerlink" href="#where" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">each x in xs skip 1 take 3 { ... }          // تخطَّ 1 ثم خذ 3
+each x in xs where x % 2 == 0 take 2 { }    // أول عنصرين زوجيين
+each x in xs until x &gt; 7 { ... }            // توقّف عند أول عنصر يحقق الشرط
+each x in xs while x &lt; 8 { ... }            // استمر ما دام الشرط صحيحاً
+</code></pre>
+<p><code>take</code>/<code>until</code>/<code>while</code> توقف الحلقة بـ <code>break</code> (فلا يُنفَّذ <code>nobreak</code> بعدها). <code>skip</code>/<code>take</code> يجب أن يكونا عدداً صحيحاً غير سالب.</p>
+<h2 id="_2">تحويل المصدر<a class="headerlink" href="#_2" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">each x in xs sorted { }                      // تصاعدي (على نسخة؛ الأصل لا يتغير)
+each x in xs sorted desc { }                 // تنازلي
+each p in people sorted by p[&quot;age&quot;] desc { } // بمفتاح (متغيّر واحد عادي)
+each x in xs unique { }                      // حذف التكرار بترتيب أول ظهور
+each x in nested flat { }                    // فرد مستوى واحد
+each x in a chain b chain c { }              // وصل عدة مصفوفات
+each i in 10 downto 1 step 3 { }             // عدّ تنازلي (فارغ إن كان الأول أصغر)
+</code></pre>
+<p><code>sorted</code> يتطلب عناصر/مفاتيح كلها أرقام أو كلها نصوص. تعمل على المصفوفات والنصوص والقواميس (مفاتيح) والمجموعات.</p>
+<h2 id="bywindoweveryzip">أنماط جديدة (واحد فقط في الحلقة، مع by/window/every/zip)<a class="headerlink" href="#bywindoweveryzip" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">each a, b in xs cross ys { }     // ضرب ديكارتي في حلقة واحدة (break يخرج من الكل)
+each a, b in xs pairs { }        // (xs[0],xs[1]) (xs[1],xs[2]) ...
+each x, i in xs from 1 { }       // الفهرس يبدأ من 1
+</code></pre>
+<h2 id="nobreak-forelse"><code>nobreak { }</code> — مثل for..else<a class="headerlink" href="#nobreak-forelse" title="Permanent link">#</a></h2>
+<p>اسم مقروء لـ <code>#done { }</code>: يُنفَّذ فقط إن انتهت الحلقة دون <code>break</code>. يعمل مع كل أنواع الحلقات.</p>
+<pre><code class="language-kotlin">each n in nums { if (n % 2 == 1) { break; } } nobreak { print &quot;كلها زوجية&quot;; }
+</code></pre>
+<h2 id="_3">تعابير الاختزال<a class="headerlink" href="#_3" title="Permanent link">#</a></h2>
+<p><code>sum</code> <code>product</code> <code>count</code> <code>avg</code> <code>min</code> <code>max</code> <code>any</code> <code>all</code> <code>first</code> <code>last</code> ثم <code>each ... [where ..] [yield e]</code>:</p>
+<pre><code class="language-kotlin">sum each x in xs where x &gt; 1 yield x * x
+count each x in xs where x == 1            // yield اختياري
+max each w in words yield len(w)
+any each x in xs where x &gt; 4               // يتوقف عند أول تحقق
+all each x in xs yield x &gt; 0               // yield إلزامي
+first each x in xs where x &gt; 3             // nil إن لم يوجد
+avg each x in [] yield x                   // nil إن كانت فارغة
+</code></pre>
+<p><code>yield</code> اختياري حيث يكون العنصر نفسه هو القيمة (مع متغيّر واحد). كلمات سياقية: تبقى أسماء عادية.</p>
+<h2 id="_4">قاموس مفهوم<a class="headerlink" href="#_4" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">let lens = {each w in words yield w : len(w)};
+let odd  = {each i in 1 to 6 where i % 2 == 1 yield i : &quot;odd&quot;};
+</code></pre>
+<hr />
+<h1 id="loops-distinct">إضافات من تحديث Loops (distinct وضرب ديكارتي متعدد المصادر)<a class="headerlink" href="#loops-distinct" title="Permanent link">#</a></h1>
+<pre><code class="language-kotlin">each n in [3, 1, 3, 2, 1] distinct { print n; }            // أول ظهور لكل قيمة (1 و&quot;1&quot; مختلفان)
+each w in words distinct on (w[0]) { print w; }             // بمفتاح؛ إلزامي مع أنماط التفكيك
+each n in xs where n &gt; 5 distinct take 3 { ... }            // بالترتيب المكتوب مع where/skip/take
+print [each n in [4, 4, 5] distinct yield n * 2];           // يعمل في التجميع أيضاً
+each x in [1, 2], y in [&quot;a&quot;, &quot;b&quot;] { print x + y; }          // ضرب ديكارتي لأي عدد مصادر بحلقة واحدة
+each a in &quot;ab&quot;, b in &quot;cd&quot;, c in [1, 2] where c &gt; 1 { ... }  // break/continue/where تعمل كالمعتاد
+</code></pre>
+<p><code>distinct</code> مرحلة تيار مثل <code>skip/take/where</code> تُنفَّذ بترتيب كتابتها. الضرب المتعدد يقبل أسماء عادية فقط
+(لا فهرس ولا أنماط ولا <code>from</code> ولا by/window/every/zip/cross/pairs) والمصادر مصفوفات أو نصوص.
+الاختبارات: <code>tests/loops/loops_distinct.rin</code> و<code>loops_pro.rin</code>.</p>
+<h2 id="rin-for-for-rin">Rin For+ — حلقة <code>for</code> على طراز Rin<a class="headerlink" href="#rin-for-for-rin" title="Permanent link">#</a></h2>
+<p>حلقة <code>for</code> القياسية بقيت كما هي، وأُضيف إليها:</p>
+<pre><code class="language-kotlin">for (let i = 0; i &lt; 10; i++) { ... }              // i++  /  i--
+for (let i = 10; i &gt; 0; i -= 3) { ... }           // += -= *= %=  (الكتابة ملتصقة: ‎+= لا ‎+ =)
+for let i = 0; i &lt; n; i++ { ... }                 // بلا أقواس (الجسم كتلة { })
+for (let i = 0, j = 9; i &lt; j; i++, j--) { ... }   // عدّة متغيرات وعدّة خطوات تزايد (تُنفَّذ بالترتيب)
+for (let i = 0; i &lt; n; i++) limit 1000 { ... }    // سقف أمان، و nobreak { } / #done { } كالمعتاد
+</code></pre>
+<p><code>i++</code> و<code>x += e</code> عامّتان في اللغة (تعبير): تُحلّان في المحلل إلى <code>x = x + e</code>، وتعملان على <code>arr[i]</code> و<code>obj.field</code> أيضاً
+بشرط أن يكون الهدف بسيطاً بلا استدعاءات (لأنه يُقيَّم مرتين)؛ غير ذلك خطأ واضح E0003.</p>
+<blockquote>
+<p><code>/=</code> غير مستعملة للقسمة: في Rin هي مرادف <code>!=</code> أصلاً، فاكتب <code>x = x / 3</code>. و<code>a - -b</code> تبقى طرحاً عادياً.</p>
+</blockquote>
+<p><strong>الأداء:</strong> يكتشف المحلل أن جسم الحلقة بلا closures (<code>fun</code>/<code>bell</code>/hooks...) فيُنفَّذ مباشرة في بيئة الحلقة بلا نسخ بيئة لكل دورة
+(<code>ForStmt::freshIterScope</code>). عند وجود closure يبقى السلوك الآمن القديم (كل دورة تلتقط قيمتها). قياس: ≈ 15% أسرع في حلقة حسابية بسيطة.</p>
+<hr />
+<h2 id="tmpl">قوالب الحلقات <code>@tmpl</code><a class="headerlink" href="#tmpl" title="Permanent link">#</a></h2>
+<p>عرّف حلقة مرة واحدة وأعد استخدامها مع مجموعات مختلفة: <code>@tmpl evens(xs) each x in xs where x % 2 == 0;</code> ثم <code>@evens(nums) { print x; }</code>.
+التفاصيل الكاملة في <a href="loop-templates.html">loop-templates.md</a>.</p></article>
+<div class="pnav"><a class="pn" href="control-flow.html">→ الشروط، الحلقات، `goal`/`achieve</a><a class="pn" href="functions.html">fun`/`return`، التكرار الذاتي ←</a></div><p class="edit"><a href="https://github.com/dlof-lib/rinlang/edit/main/docs/loops.md">✎ عدّل هذه الصفحة على GitHub</a></p>
+<footer>Rin 1.0.0 · رخصة MIT</footer></main>
+<aside id="toc"><b>في هذه الصفحة</b><div class="toc">
+<ul>
+<li><a href="#each">each — التكرار على أي شيء</a><ul>
+<li><a href="#each-for">أنماط التكرار المتقدمة (على each وfor بلا أقواس)</a></li>
+<li><a href="#for">for بلا أقواس</a></li>
+</ul>
+</li>
+<li><a href="#repeat">repeat — عدد ثابت من التنفيذ</a></li>
+<li><a href="#i-as-i">i الضمني — بلا as i</a><ul>
+<li><a href="#y">y الضمني — القيمة السابقة</a></li>
+</ul>
+</li>
+<li><a href="#loop">loop — الحلقة الأبسط</a></li>
+<li><a href="#break-name-continue-name">التسميات: break name وcontinue name</a></li>
+<li><a href="#limit-n">limit N — سقف أمان ضد الحلقات الجامحة</a></li>
+<li><a href="#retry">retry — حلقة إعادة المحاولة</a></li>
+<li><a href="#each-yield">تجميع النتائج: [each ... yield ...]</a></li>
+<li><a href="#_1">ملاحظات</a></li>
+<li><a href="#where">مرشّحات التيار (بالترتيب المكتوب، وتُجمَع مع where)</a></li>
+<li><a href="#_2">تحويل المصدر</a></li>
+<li><a href="#bywindoweveryzip">أنماط جديدة (واحد فقط في الحلقة، مع by/window/every/zip)</a></li>
+<li><a href="#nobreak-forelse">nobreak { } — مثل for..else</a></li>
+<li><a href="#_3">تعابير الاختزال</a></li>
+<li><a href="#_4">قاموس مفهوم</a></li>
+<li><a href="#rin-for-for-rin">Rin For+ — حلقة for على طراز Rin</a></li>
+<li><a href="#tmpl">قوالب الحلقات @tmpl</a></li>
+</ul>
+</div>
+</aside></div>
+<script src="assets/app.js"></script></body></html>

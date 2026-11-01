@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- محرر ملف داخل حزمة: يستخدم نفس محرر الكود الأصلي (RinCodeEditorView) بنفس تغليف التمرير
+     المستعمل في الشاشة الرئيسية، مع شريط أدوات (تراجع/إعادة/حفظ) وعرض صورة للملفات الصورية. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/rin_background">
+
+    <include layout="@layout/toolbar_app" />
+
+    <LinearLayout
+        android:id="@+id/rowFileEditorActions"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="8dp">
+
+        <ImageButton
+            android:id="@+id/btnFileEditorUndo"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:padding="9dp"
+            android:src="@drawable/ic_undo"
+            android:background="@drawable/bg_toolbar_btn_ghost"
+            android:contentDescription="@string/edit_package_undo" />
+
+        <ImageButton
+            android:id="@+id/btnFileEditorRedo"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="6dp"
+            android:padding="9dp"
+            android:src="@drawable/ic_redo"
+            android:background="@drawable/bg_toolbar_btn_ghost"
+            android:contentDescription="@string/edit_package_redo" />
+
+        <TextView
+            android:id="@+id/txtFileEditorStatus"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginHorizontal="10dp"
+            android:textSize="11.5sp"
+            android:textColor="@color/rin_editor_hint"
+            android:singleLine="true"
+            android:ellipsize="middle" />
+
+        <Button
+            android:id="@+id/btnFileEditorSave"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:paddingHorizontal="18dp"
+            android:background="@drawable/bg_btn_primary"
+            android:text="@string/action_save"
+            android:textAllCaps="false"
+            android:textColor="@android:color/white"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <ScrollView
+        android:id="@+id/scrollFileEditor"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:scrollbars="vertical"
+        android:overScrollMode="never">
+
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layoutDirection="ltr"
+            android:scrollbars="horizontal"
+            android:overScrollMode="never">
+
+            <com.dlof.rinlang.RinCodeEditorView
+                android:id="@+id/editPackageFile"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layoutDirection="ltr"
+                android:background="@android:color/transparent"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:paddingTop="10dp"
+                android:paddingBottom="10dp" />
+        </HorizontalScrollView>
+    </ScrollView>
+
+    <ImageView
+        android:id="@+id/imgFilePreview"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:padding="16dp"
+        android:scaleType="fitCenter"
+        android:visibility="gone"
+        android:contentDescription="@null" />
+
+    <TextView
+        android:id="@+id/txtFileNotEditable"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:gravity="center"
+        android:padding="24dp"
+        android:textColor="@color/rin_editor_hint"
+        android:textSize="13sp"
+        android:visibility="gone" />
+</LinearLayout>

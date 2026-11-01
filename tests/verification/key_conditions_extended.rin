@@ -1,0 +1,51 @@
+// Extended key conditions + condition helpers (docs/key_terms_and_builtins.md)
+let score = 85;
+let name = "";
+let items = [1, 2, 3];
+let missing = nil;
+
+// --- =unless= alias, =elif= chains, =else= tails ---
+=ifnot=(score < 80) { print "ifnot:ok"; }
+=if=(score > 95) { print "A+"; }
+=elif=(score > 80) { print "chain:B"; }
+=elif=(score > 60) { print "chain:C"; }
+else { print "chain:F"; }
+
+=if=(score < 10) { print "no"; }
+=elseif=(score < 20) { print "no"; }
+=else= { print "chain:else"; }
+
+// --- loops ---
+let i = 0;
+=while=(i < 3) { i = i + 1; }
+print "while:" + i;
+=until=(i == 0) { i = i - 1; }
+print "until:" + i;
+
+// --- multi-condition forms ---
+=all=(score > 80, len(items) == 3, true) { print "all:ok"; }
+=all=(score > 80, false) { print "all:BAD"; } else { print "all:else"; }
+=any=(false, nil, score == 85) { print "any:ok"; }
+=none=(false, nil, 0) { print "none:ok"; }
+
+// --- value tests ---
+=nil=(missing) { print "nil:ok"; }
+=notnil=(score) { print "notnil:ok"; }
+=empty=(name) { print "empty:ok"; }
+=present=(items) { print "present:ok"; }
+=present=("   ") { print "present:BAD"; } else { print "present:blank"; }
+
+// --- helpers ---
+print notNil(1), notNil(nil);
+print present("x"), present("  "), present([]), blank(nil), blank("  ");
+print isTrue(true), isTrue(1), isFalse(false), isFalse(nil);
+print xor(true, false), xor(true, true), implies(true, false), implies(false, false);
+print oneOf(2, 1, 2, 3), oneOf(2, [5, 6]), noneOf("a", "b", "c");
+print exactly([true, 0, "x"], 2), atLeast([true, true, false], 2), atMost([true, true, false], 1);
+print lengthIs("abc", 3), lengthIs([1], 2), lengthIs({"a": 1}, 1);
+print outside(11, 0, 10), outside(10, 0, 10), outside(-1, 0, 10);
+print isInt(3), isInt(3.5), isInt("3");
+print isZero(0), isZero(1);
+print closeTo(0.1 + 0.2, 0.3), closeTo(1, 2), closeTo(1, 2, 1);
+print matches("abc123", "[a-z]+[0-9]+"), matches("abc", "[0-9]+");
+print empty(Set()), key_conditions()["until"];

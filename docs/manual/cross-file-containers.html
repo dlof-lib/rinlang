@@ -1,0 +1,82 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>استدعاء إعلانات من ملف آخر — Rin</title>
+<meta name="description" content="توثيق لغة البرمجة Rin"><link rel="icon" href="../assets/brand/icon-32.png">
+<link rel="stylesheet" href="assets/style.css"></head><body>
+<header><button id="mn" aria-label="القائمة">☰</button><a class="logo" href="index.html"><img src="../assets/brand/icon-48.png" alt="" width="26">Rin</a>
+<input id="q" type="search" placeholder="ابحث في التوثيق…" autocomplete="off"><button id="th" aria-label="الوضع">◐</button>
+<a class="gh" href="https://github.com/dlof-lib/rinlang">GitHub</a><div id="res"></div></header>
+<div class="wrap"><nav id="sb"><details ><summary>ابدأ هنا</summary><a href="getting-started.html">البداية</a><a href="syntax.html">القواعد النحوية العامة</a><a href="variables.html">let`، مصفوفات، قواميس، نطاق</a><a href="template-strings.html">النصوص القالبية (متغيّرات داخل النص)</a><a href="input.html">إدخال المستخدم (Input)</a><a href="control-flow.html">الشروط، الحلقات، `goal`/`achieve</a><a href="loops.html">حلقات Rin — Loops v2</a><a href="functions.html">fun`/`return`، التكرار الذاتي</a><a href="enums.html">enum`: قوائم اختيار مغلقة</a></details><details ><summary>اللغة</summary><a href="language-reference.html">المرجع الشامل وخريطة ترابط المفاهيم</a><a href="objects.html">class`/`struct`، `.object()`، `@Object`، `document</a><a href="oop.html">البرمجة الكائنية الموسَّعة (Rin 1.0)</a><a href="containers.html">دليل `@container` / `@element` / `@loop</a><a href="table.html">الجدول (`@table` / `@container.table`) ودوال اللغة عليه</a><a href="set.html">Set`: نوع المجموعة الأساسي</a><a href="pipelines.html">عامل الأنابيب `|&gt;</a><a href="RECKON.html">reckon`: مفهوم حسابي بسطرين</a><a href="let-plus.html">let` المطوَّر</a><a href="living-variables.html">المتغيرات الحيّة (Living Variables)</a><a href="label-define.html">label` و`define` (تسمية وتعريف)</a><a href="block-frames.html">بداية الكتل ونهايتها (Block Frames)</a><a href="compare_ops.html">معاملات المقارنة `/=` و `=/=` و `=/</a><a href="max_min.html">max / min family</a><a href="scope-guarantees.html">ضمانات النطاق: `finally` · `defer` · `catch … when` · `rethrow</a><a href="key_terms_and_builtins.html">Rin KEY_TERMS and Built-in Conditions</a><a href="number_builtins.html">Rin Number Built-ins</a></details><details ><summary>الواجهات (Indsin)</summary><a href="indsin.html">Indsin — Interface Design</a><a href="indsin_rin.html">indsin يعتمد على لغة Rin</a><a href="indsin_expansion.html">Indsin — التوسعة الاحترافية (Design System v2)</a><a href="indsin_object.html">indsin-object — API reference</a><a href="indsin_media.html">Indsin Media — اختيار الوسائط ورفعها</a><a href="indsin_icons.html">مكتبة أيقونات indsin (متجهية)</a><a href="indsin_tooling.html">indsin tooling — icon, file association, syntax highlighting</a><a href="indsinweb.html">IndsinWeb — مكتبة WebView والروابط لـ indsin</a><a href="RIN_ELEMENTS.html">دليل `@element.*` الكامل</a><a href="events-effects.html">الأحداث والتأثيرات (Events &amp; Effects) — محرك Indsin UI</a><a href="banner.html">Banner: إشعار شريطي</a><a href="simple-style.html">Rin Simple Style</a></details><details ><summary>بيئة التشغيل</summary><a href="runtime.html">وقت تشغيل Rin (Rin Runtime) · المرجع الرسمي</a><a href="standard-library.html">المكتبة القياسية (`lib/*.og.rin`)</a><a href="errors.html">نظام الأخطاء: أكواد، `try`/`catch`/`throw</a><a href="ERROR_SYSTEM.html">نظام التشخيص: البنية الداخلية + جدول الأكواد الكامل</a><a href="storage.html">تخزين دائم</a><a href="http.html">شبكات</a><a href="env.html">ربط Rin بملف `.env</a><a href="terminal.html">الطرفية التفاعلية — `rin terminal</a><a href="vm.html">RinVM — آلة Rin الافتراضية (بايتكود)</a><a href="rinflow.html">RinFlow: طبقة تنفيذ التدفّق المهيكل</a><a href="MAKE_UNIT.html">@make.(name)`: وحدة بسياسة قدرات صريحة</a><a href="MAKE_MEDIA.html">فيديو · صوت · API · إزالة الخلفية · قراءة النص من الصور</a><a href="TIME.html">مفهوم `time`: الزمن كقيمة من الدرجة الأولى</a><a href="native-additions.html">دوال Rin الأصلية الجديدة (Rin 1.0)</a></details><details open><summary>الحاويات وقواعد البيانات</summary><a href="container_advanced.html">Rin Container Advanced Built-ins</a><a href="container_pro.html">Rin Container Pro</a><a href="container_sql.html">RIN CONTAINER SQL (RCSQL)</a><a href="cross-file-containers.html" class=on>استدعاء إعلانات من ملف آخر</a></details><details ><summary>الحزم والتكامل</summary><a href="api.html">واجهة C المسطَّحة (Embedding API)</a><a href="android.html">استضافة Rin على أندرويد</a><a href="packages-and-interop.html">Rin 1.0 — المكتبات والحزم وجسر C++ وJSON واختبارات rintest</a><a href="rinpak-format.html">RinPak — حزمة مشروع Rin (`.rinpak`)</a><a href="html-projects.html">مشاريع HTML في Rin — الربط بين index.html وملف الحاوية</a><a href="project-og-urin.html">project.og.urin` — البيانات الوصفية لمشروع Rin</a><a href="CONTENT_PACKS.html">حزم المحتوى القابلة للتنزيل (Content Packs)</a><a href="previewkit.html">previewkit — معاينة حيّة لملفات PDF / Markdown / TypeScript</a></details><details ><summary>المكتبات المتخصصة</summary><a href="rinml.html">RinML / RinDF / RinAI — الذكاء الاصطناعي وتحليل البيانات في Rin</a><a href="STATS.html">RinStat — التحليل الإحصائي (`lib/rinstat.og.rin`)</a><a href="STATS_ADV.html">RinStat المتقدّم + RinAuto</a><a href="LINALG.html">الجبر الخطي للمهندسين — `mat*` و`vec*</a><a href="PLOT.html">RinPlot — الرسوم البيانية الإحصائية (`lib/rinplot.og.rin`)</a><a href="ALGO.html">تطوير الخوارزميات والحساب العددي — `algo*</a><a href="NUMBER.html">مفهوم `number` في Rin</a><a href="boat.html">&quot;Boat&quot;: مفاهيم أساسية مجمَّعة</a><a href="passkit.html">passkit — passwords, encryption, databases and a tag language</a><a href="passkit-crypto-db.html">Passkit feature catalog: encryption, databases and container linking</a><a href="hash-family.html">عائلة `#` — مفاهيم ودوال جديدة تبدأ بعلامة `#</a><a href="image-draw.html">إنشاء الصور في Rin — رسم وحفظ PNG وlog كصورة</a><a href="image-terminal.html">طباعة الصور في الـ terminal — `printImage` / `imageAnsi` / `imageInfo</a></details><details ><summary>المشروع</summary><a href="CONTRIBUTING.html">المساهمة في Rin</a><a href="CODE_OF_CONDUCT.html">قواعد السلوك</a><a href="SECURITY.html">سياسة الأمان</a><a href="SUPPORT.html">الحصول على المساعدة</a><a href="TRADEMARKS.html">سياسة العلامة التجارية — Trademark Policy</a><a href="THIRD_PARTY_NOTICES.html">إشعارات المكوّنات الخارجية — Third-Party Notices</a></details><details ><summary>مراجع إضافية</summary><a href="ANDROID_VERSIONS.html">حزم RinStudio لكل إصدار أندرويد</a><a href="TOKEN.html">مفهوم `token` في Rin</a><a href="TOOLCHAIN.html">Rin Professional Language Toolchain</a><a href="TOOLCHAIN_UPGRADE.html">Toolchain Upgrade — 2026-09</a><a href="architecture.html">المعمارية وبنية المستودع</a><a href="base-accept.html">base` و`accept`: متغيّران يخدمان `if</a><a href="channel47.html">channel47 — لغة وصف البيانات والإعدادات</a><a href="ci.html">CI وأدوات المستودع</a><a href="loop-templates.html">قوالب الحلقات `@tmpl</a><a href="pre-post.html">pre` و`post` (ما قبل / ما بعد): عقد انتقال حول الإسناد</a><a href="print-fonts.html">خطوط `print` — bold / italic / underline وغيرها</a><a href="print-image-terminal.html">طباعة الصور كنص في الطرفية</a><a href="print-templates.html">قوالب الطباعة `@tmpl ... print` — قوالب نصية خطية وتنسيقية</a><a href="rdoc.html">rdoc — Documentation Container</a><a href="rdoc-reference.html">وثيقة rdoc الشاملة — Documentation Container</a><a href="screenshots.html">لقطات من RinStudio</a></details></nav>
+<main><article><h1 id="cross-file-containersmd">cross-file-containers.md — استدعاء إعلانات من ملف آخر<a class="headerlink" href="#cross-file-containersmd" title="Permanent link">#</a></h1>
+<h2 id="_1">ملاحظة أمانة صريحة (نتيجة تحقّق فعلي، ليست افتراضًا)<a class="headerlink" href="#_1" title="Permanent link">#</a></h2>
+<p>اسم هذا الملف والمثال المرافق له في المستودع (<code>examples/use_from_demo/</code>) كانا
+يفترضان عبارة استيراد مخصَّصة <code>use A, B from "file.rin";</code> لاستدعاء عنصر واجهة
+أو حاوية بيانات مُعرَّفة في ملف آخر <strong>بالاسم مباشرة كأنه مكوّن قابل لإعادة
+الاستخدام</strong>. جرّبتُ هذا فعليًا عبر المفسِّر الحقيقي، والنتيجة:
+- <code>use A, B from "file.rin";</code> — <strong>خطأ تحليل نحوي حقيقي فوري</strong> (<code>E0012</code>، <code>use</code> غير
+  معروفة كعبارة مستقلة على مستوى الملف — هي محجوزة فقط داخل سياسة
+  <code>@container</code>/<code>@make.(name)</code>، انظر <a href="MAKE_UNIT.html"><code>MAKE_UNIT.md</code></a>).
+- استدعاء <code>@view</code>/<code>@container</code> معرَّفة سابقًا <strong>بالاسم المجرَّد كوسم</strong> (<code>Sidebar
+  role="sidebar";</code> كأنها مكوّن) داخل <code>@view</code> أخرى — <strong>خطأ تحليل نحوي حقيقي</strong> أيضًا
+  (المحلِّل يقبل فقط <code>attribute=value;</code>، تعشيشًا حقيقيًا لـ<code>@view...</code> جديدة، أو
+  <code>.end/view</code> — لا هوية مجرَّدة).
+- اسم <code>@container</code> نفسه <strong>لا</strong> يُعرَّف تلقائيًا كمتغيّر قابل للقراءة المباشرة بعد
+  <code>.end/container</code> (نفس النتيجة الموثَّقة في <a href="objects.html#Object%3Dname--endObject"><code>objects.md</code></a> لـ<code>@Object</code>).</p>
+<p>بكلمة أخرى: <strong>إعادة استخدام مكوّن واجهة أو حاوية عبر عدّة ملفات بأسلوب "استيراد
+مُسمَّى" ليس مدعومًا في هذا الإصدار من اللغة</strong>، رغم أنه كان مخطَّطًا له. الآلية
+الوحيدة التي <strong>تحقّقتُ أنها تعمل فعليًا</strong> لمشاركة كود بين ملفات هي <code>@import</code>
+(الموثَّقة أصلًا في <a href="standard-library.html#import--استيراد-وحدة"><code>standard-library.md</code></a>
+لاستيراد وحدات <code>lib/</code>، لكنها تعمل بنفس الآلية لأي ملف <code>.rin</code> عادي أيضًا).</p>
+<h2 id="import"><code>@import</code> — الآلية الفعلية الوحيدة<a class="headerlink" href="#import" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">// examples/use_from_demo/sidebar.rin
+fun sidebarGreeting() {
+    return &quot;Hello from sidebar.rin&quot;;
+}
+@container=SidebarState
+    let open = true;
+.end/container
+</code></pre>
+<pre><code class="language-kotlin">// examples/use_from_demo/main.rin -- شغّله من جذر المستودع:
+//   ./run_rin examples/use_from_demo/main.rin
+@import &quot;examples/use_from_demo/sidebar.rin&quot;;
+print sidebarGreeting(); // Hello from sidebar.rin
+</code></pre>
+<pre><code>📦 container = SidebarState
+✅ .end/container (SidebarState)
+📥 @import: تم استيراد &quot;examples/use_from_demo/sidebar.rin&quot; (من القرص)
+Hello from sidebar.rin
+</code></pre>
+<p><code>@import</code> ينفِّذ الملف المستورَد بالكامل داخل نفس البرنامج (كل <code>fun</code>/<code>@container</code>/
+<code>@view</code> بداخله يُعرَّف على نفس المستوى، تمامًا كأنك نسخت محتواه ولصقته في بداية
+الملف الحالي) — <strong>لا</strong> إعادة استخدام انتقائي بالاسم، ولا مساحة اسم (namespace)
+منفصلة.</p>
+<h3 id="_2">تنبيه دقيق: كيف يُحلَّل المسار<a class="headerlink" href="#_2" title="Permanent link">#</a></h3>
+<p>المسار الممرَّر لـ<code>@import</code> <strong>لا</strong> يُحلَّل نسبةً إلى موقع الملف المستورِد نفسه، بل
+نسبةً إلى مجلد عمل العملية (working directory) وقت التشغيل، مع قواعد بحث مختلفة
+حسب شكل النص:
+- مسار يحتوي <code>/</code> (مثل <code>"examples/use_from_demo/sidebar.rin"</code>) → يُعامَل كمسار قرص
+  حرفي نسبةً لمجلد العمل مباشرة.
+- اسم مجرَّد بلا <code>/</code> (مثل <code>"sidebar.rin"</code>) → يُعامَل كـ<strong>اسم مكتبة</strong>: يبحث عن
+  <code>lib/sidebar.rin.og.rin</code> (يُضيف <code>.og.rin</code> تلقائيًا!) ضمن المكتبات المدمجة، مجلد
+  <code>lib/</code> الخاص بالمشروع، وحزم RinPM المثبَّتة — وليس كمسار قرص حرفي إطلاقًا.
+  تحقّقتُ من هذا فعليًا: <code>@import "sidebar.rin";</code> من نفس مجلد الملف المستورِد
+  فشل بخطأ <code>E0029: module not found</code> يذكر صراحة أنه بحث عن <code>lib/sidebar.rin.og.rin</code>.</p>
+<h2 id="_3">انظر أيضًا<a class="headerlink" href="#_3" title="Permanent link">#</a></h2>
+<ul>
+<li><a href="standard-library.html"><code>standard-library.md</code></a> — <code>@import</code> لوحدات <code>lib/*.og.rin</code>.</li>
+<li><a href="objects.html"><code>objects.md</code></a> — لماذا لا يُقرَأ اسم <code>@Object</code>/<code>@container</code> كمتغيّر مباشرة.</li>
+<li><a href="containers.html"><code>containers.md</code></a> — <code>@container</code> وأنواعه.</li>
+</ul></article>
+<div class="pnav"><a class="pn" href="container_sql.html">→ RIN CONTAINER SQL (RCSQL)</a><a class="pn" href="api.html">واجهة C المسطَّحة (Embedding API) ←</a></div><p class="edit"><a href="https://github.com/dlof-lib/rinlang/edit/main/docs/cross-file-containers.md">✎ عدّل هذه الصفحة على GitHub</a></p>
+<footer>Rin 1.0.0 · رخصة MIT</footer></main>
+<aside id="toc"><b>في هذه الصفحة</b><div class="toc">
+<ul>
+<li><a href="#_1">ملاحظة أمانة صريحة (نتيجة تحقّق فعلي، ليست افتراضًا)</a></li>
+<li><a href="#import">@import — الآلية الفعلية الوحيدة</a><ul>
+<li><a href="#_2">تنبيه دقيق: كيف يُحلَّل المسار</a></li>
+</ul>
+</li>
+<li><a href="#_3">انظر أيضًا</a></li>
+</ul>
+</div>
+</aside></div>
+<script src="assets/app.js"></script></body></html>

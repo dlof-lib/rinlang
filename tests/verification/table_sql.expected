@@ -1,0 +1,31 @@
+📊 container.table = staff
+▦ row -> ["name", "dept", "score"]
+▦ row -> ["sara", "dev", 95]
+▦ row -> ["yusuf", "ops", 88]
+▦ row -> ["omar", "dev", 70]
+▦ row -> ["huda", "ops", 99]
+✅ .end/container.table (staff)
+["name", "dept", "score"]
+4
+{"name": "huda", "dept": "ops", "score": 99}
+5
+2
+{"_id": "4", "name": "huda", "dept": "ops", "score": 99}
+187
+[{"key": "dev", "count": 2, "ids": ["1", "3"]}, {"key": "ops", "count": 2, "ids": ["2", "4"]}]
+[{"_id": "4", "name": "huda"}, {"_id": "1", "name": "sara"}]
+1
+["omar", "dev", 75]
+2
+[["name", "dept", "score"], ["sara", "dev", 95], ["omar", "dev", 75]]
+E0035
+[["id", "tag"], [1, "a"], [2, nil]]
+["ID", "TAG"]
+E0004
+E0004
+📊 container.table = nums
+▦ row -> [1, 2]
+▦ row -> [3, 4]
+✅ .end/container.table (nums)
+6
+10

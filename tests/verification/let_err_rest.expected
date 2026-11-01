@@ -1,0 +1,1 @@
+خطأ في tests/verification/let_err_rest.rin عند السطر 2: [E0013] '...rest' must be the last item of a pattern (the rest collects everything that is left, so nothing can come after it)

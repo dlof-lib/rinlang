@@ -1,0 +1,271 @@
+// wesscode_tests.rin — اختبارات مساعد إنشاء المكتبات wesscode
+//   rin tests/wesscode_tests.rin            (أو مع --allow-native لاختبار جسر C++ المولَّد)
+@import "rintest";
+@import "wesscode";
+
+rt_describe("wesscode: بناء المواصفة", fun() {
+    rt_test("wc_new يتحقق من الاسم والإصدار", fun() {
+        rt_expectThrows(fun() { wc_new("Bad Name", "1.0.0", "x"); }, "invalid library name");
+        rt_expectThrows(fun() { wc_new("okname", "1.0", "x"); }, "invalid version");
+    });
+    rt_test("أسماء محجوزة ومدمجة تُرفض", fun() {
+        let l = wc_new("lib-a", "1.0.0", "x");
+        rt_expectThrows(fun() { wc_fn(l, "text", [], "return 1;", ""); }, "reserved");
+        rt_expectThrows(fun() { wc_fn(l, "len", [], "return 1;", ""); }, "built-in");
+        rt_expectThrows(fun() { wc_fn(l, "f", ["merge"], "return 1;", ""); }, "parameter");
+    });
+    rt_test("wc_fn يستبدل نفس الاسم ولا يكرره", fun() {
+        let l = wc_new("lib-a", "1.0.0", "x");
+        wc_fn(l, "f1", [], "return 1;", "d");
+        wc_fn(l, "f1", [], "return 2;", "d");
+        rt_expect(len(l["funcs"])).toBe(1);
+    });
+    rt_test("wc_dep يتحقق من القيد", fun() {
+        let l = wc_new("lib-a", "1.0.0", "x");
+        rt_expectThrows(fun() { wc_dep(l, "other", "??"); }, "invalid constraint");
+        wc_dep(l, "other", "^1.2");
+        rt_expect(l["deps"]["other"]).toBe("^1.2");
+    });
+});
+
+rt_describe("wesscode: التوليد والفحص", fun() {
+    rt_test("wc_lit يولّد مصدراً صالحاً", fun() {
+        rt_expect(wc_lit("a\"b")).toBe("\"a\\\"b\"");
+        rt_expect(wc_lit([1, "x", true, nil])).toBe("[1, \"x\", true, nil]");
+        rt_expect(wc_lit({k: 2})).toBe("{\"k\": 2}");
+    });
+    rt_test("المصدر المولَّد يمرّ على المحلّل", fun() {
+        let l = wc_template("strings", "strx");
+        rt_expect(lang.check(wc_render(l))["ok"]).toBeTrue();
+        rt_expect(lang.check(wc_renderTests(l))["ok"]).toBeTrue();
+    });
+    rt_test("wc_check يكشف كوداً فاسداً ومكرراً", fun() {
+        let l = wc_new("badlib", "1.0.0", "x");
+        wc_fn(l, "broken", ["a"], "return a +;", "d");
+        let r = wc_check(l);
+        rt_expect(r["ok"]).toBeFalse();
+        rt_expect(r["errors"][0]).toContain("broken");
+    });
+    rt_test("مكتبة فارغة تحذير لا خطأ", fun() {
+        let r = wc_check(wc_new("emptylib", "1.0.0", "x"));
+        rt_expect(r["ok"]).toBeTrue();
+        rt_expect(len(r["warnings"]) > 0).toBeTrue();
+    });
+    rt_test("المانيفست المولَّد صالح", fun() {
+        let l = wc_new("manifest-t", "2.1.0", "وصف");
+        wc_meta(l, "Jo", "MIT");
+        wc_dep(l, "base", "^1.0.0");
+        let m = pkg.parseManifest(wc_manifest(l));
+        rt_expect(pkg.validateManifest(m)["valid"]).toBeTrue();
+        rt_expect(m["dependencies"]["base"]).toBe("^1.0.0");
+    });
+    rt_test("wc_bump + wc_stats", fun() {
+        let l = wc_template("math", "stat-t");
+        wc_bump(l, "minor");
+        rt_expect(l["version"]).toBe("0.2.0");
+        rt_expect(wc_stats(l)["functions"]).toBe(5);
+    });
+});
+
+rt_describe("wesscode: القوالب كلها تُنتج مكتبات تعمل", fun() {
+    for (let k in wc_templates()) {
+        rt_test("قالب " + k + " صالح", fun() {
+            let l = wc_template(k, "tpl-" + k);
+            let c = wc_check(l);
+            rt_expect(c["ok"]).toBeTrue();
+        });
+    }
+    rt_test("قالب مجهول يرمي", fun() {
+        rt_expectThrows(fun() { wc_template("nope", "zzz-lib"); }, "unknown kind");
+    });
+});
+
+rt_describe("wesscode: الكتابة على القرص", fun() {
+    rt_test("wc_write ينشئ حزمة كاملة", fun() {
+        let l = wc_template("collections", "wc-disk-t");
+        let r = wc_write(l, "build/wesscode_test/wc-disk-t");
+        rt_expect(r["ok"]).toBeTrue();
+        rt_expect(fileExists("build/wesscode_test/wc-disk-t/rin.toml")).toBeTrue();
+        rt_expect(fileExists("build/wesscode_test/wc-disk-t/src/lib.rin")).toBeTrue();
+        rt_expect(fileExists("build/wesscode_test/wc-disk-t/tests/wc_disk_t_test.rin")).toBeTrue();
+        rt_expect(fileExists("build/wesscode_test/wc-disk-t/docs/API.md")).toBeTrue();
+    });
+    rt_test("wc_write يرفض مواصفة فاسدة ولا يكتب", fun() {
+        let l = wc_new("badwrite", "1.0.0", "x");
+        wc_fn(l, "broken", [], "return +;", "d");
+        let r = wc_write(l, "build/wesscode_test/badwrite");
+        rt_expect(r["ok"]).toBeFalse();
+        rt_expect(fileExists("build/wesscode_test/badwrite/rin.toml")).toBeFalse();
+    });
+    rt_test("wc_writeOg يكتب lib/<name>.og.rin", fun() {
+        let l = wc_template("math", "wc-og-t");
+        let r = wc_writeOg(l, "build/wesscode_test/proj");
+        rt_expect(r["ok"]).toBeTrue();
+        rt_expect(fileExists("build/wesscode_test/proj/lib/wc-og-t.og.rin")).toBeTrue();
+    });
+});
+
+rt_describe("wesscode: صنف وثابت وجسر C++", fun() {
+    let build = fun() {
+        let c = wc_new("shapes-t", "1.0.0", "أشكال");
+        wc_class(c, "Rect", {w: "0", h: "0"}, "مستطيل");
+        wc_method(c, "Rect", "init", ["w", "h"], "self.w = w;\nself.h = h;");
+        wc_method(c, "Rect", "area", [], "return self.w * self.h;");
+        wc_const(c, "UNIT", "1", "وحدة");
+        wc_fn(c, "sq", ["s"], "return Rect(s, s);", "مربع");
+        wc_test(c, "area", "sq(3).area()", 9);
+        wc_cpp(c, "fast_sum", "double t=0;\nfor(auto&v:args.arr) t+=v.num;\nreturn rin::Json::number(t);");
+        wc_testNative(c, "native", "fast_sum([1,2,3.5])", 6.5);
+        return c;
+    };
+    rt_test("المواصفة تمرّ الفحص كاملة", fun() { rt_expect(wc_check(build())["ok"]).toBeTrue(); });
+    rt_test("المصدر يحوي صنفاً وجسراً", fun() {
+        let src = wc_render(build());
+        rt_expect(src).toContain("class Rect");
+        rt_expect(src).toContain("cpp.lib(");
+        rt_expect(wc_cppSource(build())).toContain("RIN_FN(fast_sum)");
+    });
+    rt_test("الاختبار الأصلي يُتخطّى بدون --allow-native", fun() {
+        rt_expect(wc_renderTests(build())).toContain("cpp.enabled()");
+    });
+});
+
+// ============================================================ التحويلتان: جزء / قسم
+let __CV_SRC = "// Header\n\n@import \"rintest\";\n\nlet K = 5;\n/// trims\nfun str_trim(s) { return trim(s); }\nfun str_up(s) { return upper(s); }\nfun mathSum(a, b) { return a + b; }\nfun mathTwice(a) { return mathSum(a, a); }\nclass Box { let v = 1; fun get() { return self.v; } }\nfun other() { return K; }\n";
+
+rt_describe("lang.split", fun() {
+    rt_test("يقسّم إلى تصريحات مع الأنواع والأسماء", fun() {
+        let r = lang.split(__CV_SRC);
+        rt_expect(r["ok"]).toBeTrue();
+        rt_expect(r["header"]).toBe("// Header");
+        rt_expect(len(r["chunks"])).toBe(8);
+        rt_expect(r["chunks"][0]["kind"]).toBe("import");
+        rt_expect(r["chunks"][2]["lead"]).toBe("/// trims");
+        rt_expect(r["chunks"][6]["kind"]).toBe("class");
+    });
+    rt_test("الأقواس داخل النصوص والتعليقات لا تُربك التقسيم", fun() {
+        let r = lang.split("fun a() { let s = \"}{;\"; // } brace\n return s; }\nlet z = 1;");
+        rt_expect(len(r["chunks"])).toBe(2);
+        rt_expect(r["chunks"][1]["name"]).toBe("z");
+    });
+    rt_test("else/catch تبقى مع تعليمتها", fun() {
+        let r = lang.split("if (1) { print 1; } else { print 2; }\ntry { fail(\"x\"); } catch (e) { print e; }");
+        rt_expect(len(r["chunks"])).toBe(2);
+    });
+    rt_test("مصدر ناقص يُبلَّغ عنه", fun() {
+        rt_expect(lang.split("fun a( {")["ok"]).toBeFalse();
+        rt_expect(lang.split("let s = \"abc;")["ok"]).toBeFalse();
+    });
+});
+
+rt_describe("wesscode: تحويلة جزء (wc_toParts)", fun() {
+    rt_test("تجميع بالبادئة", fun() {
+        let p = wc_toParts(__CV_SRC, "demo", "prefix", nil);
+        rt_expect(p["ok"]).toBeTrue();
+        rt_expect(p["order"]).toEqual(["parts/core.rin", "parts/str.rin", "parts/math.rin", "parts/box.rin"]);
+        rt_expect(p["entry"]).toContain("@import \"parts/str.rin\";");
+        rt_expect(p["parts"]["parts/str.rin"]).toContain("fun str_up");
+        rt_expect(p["warnings"]).toEqual([]);
+    });
+    rt_test("كل ملف ناتج يمرّ على المحلّل", fun() {
+        let p = wc_toParts(__CV_SRC, "demo", "kind", nil);
+        rt_expect(lang.check(p["entry"])["ok"]).toBeTrue();
+        for (let k in p["order"]) { rt_expect(lang.check(p["parts"][k])["ok"]).toBeTrue(); }
+    });
+    rt_test("عكسها wc_mergeParts يعيد نفس التصريحات", fun() {
+        let p = wc_toParts(__CV_SRC, "demo", "prefix", nil);
+        rt_expect(wc_equivalent(__CV_SRC, wc_mergeParts(p["entry"], p["parts"]))).toBeTrue();
+    });
+    rt_test("importBase يغيّر مسارات الاستيراد ويبقى الدمج سليماً", fun() {
+        let p = wc_toParts(__CV_SRC, "demo", "kind", {importBase: "src/"});
+        rt_expect(p["entry"]).toContain("@import \"src/parts/functions.rin\";");
+        rt_expect(wc_equivalent(__CV_SRC, wc_mergeParts(p["entry"], p["parts"]))).toBeTrue();
+    });
+    rt_test("size: تصريحات متساوية لكل جزء", fun() {
+        let p = wc_toParts(__CV_SRC, "demo", "size", {size: 3});
+        rt_expect(p["stats"]["parts"]).toBe(3);
+    });
+    rt_test("map: توزيع صريح بالأسماء", fun() {
+        let p = wc_toParts(__CV_SRC, "demo", "map", {map: {words: ["str_trim", "str_up"], calc: ["mathSum", "mathTwice"]}});
+        rt_expect(p["ok"]).toBeTrue();
+        rt_expect(p["parts"]["parts/words.rin"]).toContain("str_trim");
+        rt_expect(p["parts"]["parts/calc.rin"]).toContain("mathTwice");
+    });
+    rt_test("تحذير عند تغيّر ترتيب تصريح فوري التنفيذ", fun() {
+        let src = "let A = 1;\nclass C { let v = 0; }\nlet B = 2;\n";
+        let p = wc_toParts(src, "ord", "kind", nil);
+        rt_expect(len(p["warnings"]) > 0).toBeTrue();
+        rt_expect(p["warnings"][0]).toContain("ترتيب");
+    });
+    rt_test("تعليمات المستوى الأعلى تبقى في الملف الرئيسي مع تنبيه", fun() {
+        let p = wc_toParts("fun a() { return 1; }\nprint a();\n", "st", "kind", nil);
+        rt_expect(p["entry"]).toContain("print a();");
+        rt_expect(p["stats"]["statements"]).toBe(1);
+    });
+    rt_test("مصدر فاسد وإستراتيجية مجهولة", fun() {
+        rt_expect(wc_toParts("fun a( {", "bad", "kind", nil)["ok"]).toBeFalse();
+        rt_expectThrows(fun() { wc_toParts(__CV_SRC, "x", "nope", nil); }, "unknown strategy");
+    });
+});
+
+rt_describe("wesscode: تحويلة قسم (wc_toSections)", fun() {
+    rt_test("أقسام #region وفهرس", fun() {
+        let s = wc_toSections(__CV_SRC, "demo", "kind", nil);
+        rt_expect(s["ok"]).toBeTrue();
+        rt_expect(s["source"]).toContain("// #toc");
+        rt_expect(s["source"]).toContain("// #region functions");
+        rt_expect(len(s["sections"])).toBe(3);
+        rt_expect(len(wc_sectionsOf(s["source"]))).toBe(3);
+    });
+    rt_test("المصدر الناتج صالح وقابل للعكس", fun() {
+        let s = wc_toSections(__CV_SRC, "demo", "prefix", nil);
+        rt_expect(lang.check(s["source"])["ok"]).toBeTrue();
+        rt_expect(wc_equivalent(__CV_SRC, wc_fromSections(s["source"]))).toBeTrue();
+        rt_expect(wc_fromSections(s["source"])).toBe(wc_fromSections(wc_toSections(wc_fromSections(s["source"]), "demo", "prefix", nil)["source"]));
+    });
+    rt_test("wc_convert يوزّع على الأوضاع الثلاثة", fun() {
+        rt_expect(wc_convert(__CV_SRC, "d", "parts", "kind", nil)["ok"]).toBeTrue();
+        rt_expect(wc_convert(__CV_SRC, "d", "sections", "kind", nil)["ok"]).toBeTrue();
+        rt_expect(wc_convert(__CV_SRC, "d", "single", "kind", nil)["ok"]).toBeTrue();
+        rt_expectThrows(fun() { wc_convert(__CV_SRC, "d", "zzz", "kind", nil); }, "unknown mode");
+    });
+});
+
+rt_describe("wesscode: تخطيط المكتبة وتحويل الملفات", fun() {
+    rt_test("wc_suggest يقترح التخطيط", fun() {
+        let g = wc_suggest(__CV_SRC);
+        rt_expect(g["functions"]).toBe(5);
+        rt_expect(g["mode"]).toBe("single");
+        rt_expect(g["docCoverage"] > 0).toBeTrue();
+    });
+    rt_test("مكتبة بتخطيط parts تُكتب وتعمل اختباراتها", fun() {
+        let l = wc_template("strings", "lay-parts");
+        wc_layout(l, "parts", "prefix", nil);
+        rt_expect(wc_check(l)["ok"]).toBeTrue();
+        let r = wc_write(l, "build/wesscode_test/lay-parts");
+        rt_expect(r["ok"]).toBeTrue();
+        rt_expect(fileExists("build/wesscode_test/lay-parts/src/parts/str.rin") or fileExists("build/wesscode_test/lay-parts/src/parts/core.rin")).toBeTrue();
+        rt_expect(readFile("build/wesscode_test/lay-parts/src/lib.rin")).toContain("@import \"src/parts/");
+    });
+    rt_test("مكتبة بتخطيط sections", fun() {
+        let l = wc_template("math", "lay-sec");
+        wc_layout(l, "sections", "kind", nil);
+        let r = wc_write(l, "build/wesscode_test/lay-sec");
+        rt_expect(r["ok"]).toBeTrue();
+        rt_expect(readFile("build/wesscode_test/lay-sec/src/lib.rin")).toContain("// #region functions");
+    });
+    rt_test("wc_layout يتحقق من الوضع", fun() {
+        rt_expectThrows(fun() { wc_layout(wc_new("lay-bad", "1.0.0", "x"), "zzz", "kind", nil); }, "mode must be");
+    });
+    rt_test("wc_convertFile + wc_fromFile", fun() {
+        writeFile("build/wesscode_test/in/src.rin", __CV_SRC);
+        let r = wc_convertFile("build/wesscode_test/in/src.rin", "build/wesscode_test/out", "parts", "prefix", nil);
+        rt_expect(r["ok"]).toBeTrue();
+        rt_expect(fileExists("build/wesscode_test/out/src.rin")).toBeTrue();
+        let l = wc_fromFile("from-file", "1.0.0", "x", "build/wesscode_test/in/src.rin");
+        rt_expect(len(l["raw"])).toBe(1);
+        rt_expectThrows(fun() { wc_fromFile("nofile", "1.0.0", "x", "build/nope.rin"); }, "not found");
+    });
+});
+
+rt_done();

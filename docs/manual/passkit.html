@@ -1,0 +1,132 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>passkit — passwords, encryption, databases and a tag language — Rin</title>
+<meta name="description" content="توثيق لغة البرمجة Rin"><link rel="icon" href="../assets/brand/icon-32.png">
+<link rel="stylesheet" href="assets/style.css"></head><body>
+<header><button id="mn" aria-label="القائمة">☰</button><a class="logo" href="index.html"><img src="../assets/brand/icon-48.png" alt="" width="26">Rin</a>
+<input id="q" type="search" placeholder="ابحث في التوثيق…" autocomplete="off"><button id="th" aria-label="الوضع">◐</button>
+<a class="gh" href="https://github.com/dlof-lib/rinlang">GitHub</a><div id="res"></div></header>
+<div class="wrap"><nav id="sb"><details ><summary>ابدأ هنا</summary><a href="getting-started.html">البداية</a><a href="syntax.html">القواعد النحوية العامة</a><a href="variables.html">let`، مصفوفات، قواميس، نطاق</a><a href="template-strings.html">النصوص القالبية (متغيّرات داخل النص)</a><a href="input.html">إدخال المستخدم (Input)</a><a href="control-flow.html">الشروط، الحلقات، `goal`/`achieve</a><a href="loops.html">حلقات Rin — Loops v2</a><a href="functions.html">fun`/`return`، التكرار الذاتي</a><a href="enums.html">enum`: قوائم اختيار مغلقة</a></details><details ><summary>اللغة</summary><a href="language-reference.html">المرجع الشامل وخريطة ترابط المفاهيم</a><a href="objects.html">class`/`struct`، `.object()`، `@Object`، `document</a><a href="oop.html">البرمجة الكائنية الموسَّعة (Rin 1.0)</a><a href="containers.html">دليل `@container` / `@element` / `@loop</a><a href="table.html">الجدول (`@table` / `@container.table`) ودوال اللغة عليه</a><a href="set.html">Set`: نوع المجموعة الأساسي</a><a href="pipelines.html">عامل الأنابيب `|&gt;</a><a href="RECKON.html">reckon`: مفهوم حسابي بسطرين</a><a href="let-plus.html">let` المطوَّر</a><a href="living-variables.html">المتغيرات الحيّة (Living Variables)</a><a href="label-define.html">label` و`define` (تسمية وتعريف)</a><a href="block-frames.html">بداية الكتل ونهايتها (Block Frames)</a><a href="compare_ops.html">معاملات المقارنة `/=` و `=/=` و `=/</a><a href="max_min.html">max / min family</a><a href="scope-guarantees.html">ضمانات النطاق: `finally` · `defer` · `catch … when` · `rethrow</a><a href="key_terms_and_builtins.html">Rin KEY_TERMS and Built-in Conditions</a><a href="number_builtins.html">Rin Number Built-ins</a></details><details ><summary>الواجهات (Indsin)</summary><a href="indsin.html">Indsin — Interface Design</a><a href="indsin_rin.html">indsin يعتمد على لغة Rin</a><a href="indsin_expansion.html">Indsin — التوسعة الاحترافية (Design System v2)</a><a href="indsin_object.html">indsin-object — API reference</a><a href="indsin_media.html">Indsin Media — اختيار الوسائط ورفعها</a><a href="indsin_icons.html">مكتبة أيقونات indsin (متجهية)</a><a href="indsin_tooling.html">indsin tooling — icon, file association, syntax highlighting</a><a href="indsinweb.html">IndsinWeb — مكتبة WebView والروابط لـ indsin</a><a href="RIN_ELEMENTS.html">دليل `@element.*` الكامل</a><a href="events-effects.html">الأحداث والتأثيرات (Events &amp; Effects) — محرك Indsin UI</a><a href="banner.html">Banner: إشعار شريطي</a><a href="simple-style.html">Rin Simple Style</a></details><details ><summary>بيئة التشغيل</summary><a href="runtime.html">وقت تشغيل Rin (Rin Runtime) · المرجع الرسمي</a><a href="standard-library.html">المكتبة القياسية (`lib/*.og.rin`)</a><a href="errors.html">نظام الأخطاء: أكواد، `try`/`catch`/`throw</a><a href="ERROR_SYSTEM.html">نظام التشخيص: البنية الداخلية + جدول الأكواد الكامل</a><a href="storage.html">تخزين دائم</a><a href="http.html">شبكات</a><a href="env.html">ربط Rin بملف `.env</a><a href="terminal.html">الطرفية التفاعلية — `rin terminal</a><a href="vm.html">RinVM — آلة Rin الافتراضية (بايتكود)</a><a href="rinflow.html">RinFlow: طبقة تنفيذ التدفّق المهيكل</a><a href="MAKE_UNIT.html">@make.(name)`: وحدة بسياسة قدرات صريحة</a><a href="MAKE_MEDIA.html">فيديو · صوت · API · إزالة الخلفية · قراءة النص من الصور</a><a href="TIME.html">مفهوم `time`: الزمن كقيمة من الدرجة الأولى</a><a href="native-additions.html">دوال Rin الأصلية الجديدة (Rin 1.0)</a></details><details ><summary>الحاويات وقواعد البيانات</summary><a href="container_advanced.html">Rin Container Advanced Built-ins</a><a href="container_pro.html">Rin Container Pro</a><a href="container_sql.html">RIN CONTAINER SQL (RCSQL)</a><a href="cross-file-containers.html">استدعاء إعلانات من ملف آخر</a></details><details ><summary>الحزم والتكامل</summary><a href="api.html">واجهة C المسطَّحة (Embedding API)</a><a href="android.html">استضافة Rin على أندرويد</a><a href="packages-and-interop.html">Rin 1.0 — المكتبات والحزم وجسر C++ وJSON واختبارات rintest</a><a href="rinpak-format.html">RinPak — حزمة مشروع Rin (`.rinpak`)</a><a href="html-projects.html">مشاريع HTML في Rin — الربط بين index.html وملف الحاوية</a><a href="project-og-urin.html">project.og.urin` — البيانات الوصفية لمشروع Rin</a><a href="CONTENT_PACKS.html">حزم المحتوى القابلة للتنزيل (Content Packs)</a><a href="previewkit.html">previewkit — معاينة حيّة لملفات PDF / Markdown / TypeScript</a></details><details open><summary>المكتبات المتخصصة</summary><a href="rinml.html">RinML / RinDF / RinAI — الذكاء الاصطناعي وتحليل البيانات في Rin</a><a href="STATS.html">RinStat — التحليل الإحصائي (`lib/rinstat.og.rin`)</a><a href="STATS_ADV.html">RinStat المتقدّم + RinAuto</a><a href="LINALG.html">الجبر الخطي للمهندسين — `mat*` و`vec*</a><a href="PLOT.html">RinPlot — الرسوم البيانية الإحصائية (`lib/rinplot.og.rin`)</a><a href="ALGO.html">تطوير الخوارزميات والحساب العددي — `algo*</a><a href="NUMBER.html">مفهوم `number` في Rin</a><a href="boat.html">&quot;Boat&quot;: مفاهيم أساسية مجمَّعة</a><a href="passkit.html" class=on>passkit — passwords, encryption, databases and a tag language</a><a href="passkit-crypto-db.html">Passkit feature catalog: encryption, databases and container linking</a><a href="hash-family.html">عائلة `#` — مفاهيم ودوال جديدة تبدأ بعلامة `#</a><a href="image-draw.html">إنشاء الصور في Rin — رسم وحفظ PNG وlog كصورة</a><a href="image-terminal.html">طباعة الصور في الـ terminal — `printImage` / `imageAnsi` / `imageInfo</a></details><details ><summary>المشروع</summary><a href="CONTRIBUTING.html">المساهمة في Rin</a><a href="CODE_OF_CONDUCT.html">قواعد السلوك</a><a href="SECURITY.html">سياسة الأمان</a><a href="SUPPORT.html">الحصول على المساعدة</a><a href="TRADEMARKS.html">سياسة العلامة التجارية — Trademark Policy</a><a href="THIRD_PARTY_NOTICES.html">إشعارات المكوّنات الخارجية — Third-Party Notices</a></details><details ><summary>مراجع إضافية</summary><a href="ANDROID_VERSIONS.html">حزم RinStudio لكل إصدار أندرويد</a><a href="TOKEN.html">مفهوم `token` في Rin</a><a href="TOOLCHAIN.html">Rin Professional Language Toolchain</a><a href="TOOLCHAIN_UPGRADE.html">Toolchain Upgrade — 2026-09</a><a href="architecture.html">المعمارية وبنية المستودع</a><a href="base-accept.html">base` و`accept`: متغيّران يخدمان `if</a><a href="channel47.html">channel47 — لغة وصف البيانات والإعدادات</a><a href="ci.html">CI وأدوات المستودع</a><a href="loop-templates.html">قوالب الحلقات `@tmpl</a><a href="pre-post.html">pre` و`post` (ما قبل / ما بعد): عقد انتقال حول الإسناد</a><a href="print-fonts.html">خطوط `print` — bold / italic / underline وغيرها</a><a href="print-image-terminal.html">طباعة الصور كنص في الطرفية</a><a href="print-templates.html">قوالب الطباعة `@tmpl ... print` — قوالب نصية خطية وتنسيقية</a><a href="rdoc.html">rdoc — Documentation Container</a><a href="rdoc-reference.html">وثيقة rdoc الشاملة — Documentation Container</a><a href="screenshots.html">لقطات من RinStudio</a></details></nav>
+<main><article><h1 id="passkit-passwords-encryption-databases-and-a-tag-language">passkit — passwords, encryption, databases and a tag language<a class="headerlink" href="#passkit-passwords-encryption-databases-and-a-tag-language" title="Permanent link">#</a></h1>
+<p><img alt="passkit icon" src="../assets/branding/passkit_icon.png" /></p>
+<p>Official icon: <code>assets/branding/passkit_icon.svg</code> / <code>.png</code> (512×512). The 24dp file-list icon is <code>app/src/main/res/drawable/ic_passkit_file.xml</code>.</p>
+<p>A family of pure-Rin libraries (no engine changes) built on natives that already exist
+(<code>sec.hmacSha256</code>, <code>sec.sha256</code>, <code>sec.randomToken</code>, <code>sec.constantTimeEqual</code>, <code>sec.xorCipher</code>, doc containers + RCSQL).
+All are embedded, so imports work even without a <code>lib/</code> folder.</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>Library</th>
+<th>Prefix</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>lib/passkit.og.rin</code></td>
+<td><code>pk</code></td>
+<td>password policy, strength, generation, salted hashing, lockout, lifecycle, redaction</td>
+</tr>
+<tr>
+<td><code>lib/passkitcrypt.og.rin</code></td>
+<td><code>pc</code></td>
+<td>authenticated encryption, KDFs, keyrings, envelopes, tokens, signed URLs/requests, TOTP, Shamir</td>
+</tr>
+<tr>
+<td><code>lib/passkitdb.og.rin</code></td>
+<td><code>pd</code></td>
+<td>database layer over RCSQL doc containers, encrypted fields, security models, container linking</td>
+</tr>
+<tr>
+<td><code>lib/passkitlang.og.rin</code></td>
+<td><code>passkit*</code></td>
+<td>the <code>&lt;passkit&gt;</code> tag language as a library (generated from <code>examples/customlang/passkit/</code>)</td>
+</tr>
+</tbody>
+</table></div>
+<pre><code class="language-kotlin">@import &quot;lib/passkit.og.rin&quot;;        // pk*
+@import &quot;lib/passkitcrypt.og.rin&quot;;   // pc*
+@import &quot;lib/passkitdb.og.rin&quot;;      // pd*
+@import &quot;lib/passkitlang.og.rin&quot;;    // passkitRun, passkitRegister, ...
+</code></pre>
+<p>Every function returns <code>{ok:true,...}</code> or <code>{ok:false,error}</code> and never crashes on bad input.
+Rin has no wall clock, so time-based functions take an explicit <code>nowSec</code>.</p>
+<h2 id="what-is-standard">What is standard<a class="headerlink" href="#what-is-standard" title="Permanent link">#</a></h2>
+<p>The engine now ships real primitives in C++ (<code>app/src/main/cpp/rin_crypto_aead.h</code>, no external dependency), checked against
+official vectors by <code>tools/test_crypto_aead.cpp</code> and by <code>tests/verification/passkit_features.rin</code>:</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>Primitive</th>
+<th>Native</th>
+<th>Vectors</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>AES-128/192/256 + <strong>GCM</strong></td>
+<td><code>sec.aesGcmSeal</code> / <code>sec.aesGcmOpen</code></td>
+<td>FIPS 197, NIST SP 800-38D</td>
+</tr>
+<tr>
+<td><strong>PBKDF2-HMAC-SHA256</strong></td>
+<td><code>sec.pbkdf2Sha256</code></td>
+<td>RFC 7914</td>
+</tr>
+<tr>
+<td><strong>OS CSPRNG</strong> (<code>/dev/urandom</code>)</td>
+<td><code>sec.randomToken</code></td>
+<td>— (replaced the old seeded Mersenne Twister)</td>
+</tr>
+<tr>
+<td>HMAC / HKDF / TOTP / Base32</td>
+<td>Rin on top of <code>sec.hmacSha256</code></td>
+<td>RFC 4231 / 5869 / 6238 / 4648</td>
+</tr>
+</tbody>
+</table></div>
+<ul>
+<li><code>pcSeal</code> / <code>pcOpen</code> are <strong>AES-256-GCM</strong> (format <code>pc2</code>). Old <code>pc1</code> data (HMAC-CTR) still opens, so nothing already stored breaks.</li>
+<li><code>pkHash</code> is <strong>PBKDF2-HMAC-SHA256</strong> with 600,000 iterations (format <code>pk2</code>). Old <code>pk1</code> hashes still verify and <code>pkNeedsRehash</code> flags them.</li>
+</ul>
+<p>Honest limits: AES uses lookup tables (not hardened against cache-timing attacks by a co-located attacker); keep one key
+under about 2^32 messages (rotate with the keyring); PBKDF2 is NIST-approved but not memory-hard, so for a high-risk server
+prefer bcrypt/scrypt/argon2; this code has not had an independent security audit.</p>
+<h2 id="the-185-feature-catalog">The 185-feature catalog<a class="headerlink" href="#the-185-feature-catalog" title="Permanent link">#</a></h2>
+<p><a href="passkit-crypto-db.html"><code>docs/passkit-crypto-db.md</code></a> lists every feature (F001 to F185) with the function or tag it
+belongs to. It is generated from <code>tests/verification/passkit_features.rin</code>, where each line is a real check run on the
+real interpreter, so the count and the descriptions cannot drift from reality. Regenerate it with
+<code>python3 tools/gen_features_doc.py</code>.</p>
+<h2 id="the-tag-language">The tag language<a class="headerlink" href="#the-tag-language" title="Permanent link">#</a></h2>
+<p><code>examples/customlang/passkit/</code> holds a complete language (Lexer, Parser, Interpreter, CodeGen, syntax file, example, tests).
+Tags: <code>&lt;email&gt;</code> <code>&lt;password&gt;</code> <code>&lt;apikey&gt;</code> <code>&lt;link&gt;</code> <code>&lt;api&gt;</code> <code>&lt;sql&gt;</code> <code>&lt;crypt&gt;</code> <code>&lt;token&gt;</code> <code>&lt;otp&gt;</code> <code>&lt;db&gt;</code> <code>&lt;container&gt;</code> plus
+<code>&lt;set&gt;</code> <code>&lt;print&gt;</code> <code>&lt;if&gt;</code> <code>&lt;for&gt;</code> <code>&lt;assert&gt;</code> <code>&lt;input&gt;</code> <code>&lt;return&gt;</code> <code>&lt;import&gt;</code> <code>&lt;run&gt;</code> <code>&lt;call&gt;</code>. See that folder's README.</p>
+<p>From Rin: <code>passkitRun</code>, <code>passkitRunSource</code>, <code>passkitGet</code>, <code>passkitRegister</code>, <code>passkitHandlers</code>, <code>passkitUnregister</code>,
+<code>passkitClearHandlers</code>, <code>passkitHandlerNames</code>, <code>passkitFromContainer</code>, <code>passkitToContainer</code>, <code>passkitRunContainer</code>,
+<code>passkitRunLinked</code>.</p>
+<h2 id="notes-learned-along-the-way">Notes learned along the way<a class="headerlink" href="#notes-learned-along-the-way" title="Permanent link">#</a></h2>
+<ul>
+<li><code>len</code> and <code>charAt</code> in Rin work on <strong>bytes</strong>, so the library counts real characters with <code>pkChars</code>/<code>pkLen</code> (via <code>slice</code>).</li>
+<li><code>toNumber</code> throws on non-numeric text; validate digits first.</li>
+<li>Words that cannot be used as identifiers or map keys: <code>file</code>, <code>text</code>, <code>fn</code>, <code>return</code>, <code>row</code>.</li>
+<li>Nested <code>@import "./x.rin"</code> resolves relative to the main script's folder.</li>
+<li>Raw string delimiters in <code>rin_stdlib_libs.h</code> must be 16 characters or fewer.</li>
+<li>After editing any <code>lib/passkit*.og.rin</code> or the language files, run
+  <code>python3 tools/gen_passkitlang.py &amp;&amp; python3 tools/embed_libs.py</code>.</li>
+</ul>
+<h2 id="tests">Tests<a class="headerlink" href="#tests" title="Permanent link">#</a></h2>
+<p><code>tests/verification/passkit.rin</code> (policy/strength/hashing), <code>tests/verification/passkit_features.rin</code> (185 features),
+<code>tests/verification/passkitlang.rin</code> (the library form of the language) and <code>examples/customlang/passkit/test.rin</code>
+(language + file linking).</p></article>
+<div class="pnav"><a class="pn" href="boat.html">→ &quot;Boat&quot;: مفاهيم أساسية مجمَّعة</a><a class="pn" href="passkit-crypto-db.html">Passkit feature catalog: encryption, databases and container linking ←</a></div><p class="edit"><a href="https://github.com/dlof-lib/rinlang/edit/main/docs/passkit.md">✎ عدّل هذه الصفحة على GitHub</a></p>
+<footer>Rin 1.0.0 · رخصة MIT</footer></main>
+<aside id="toc"><b>في هذه الصفحة</b><div class="toc">
+<ul>
+<li><a href="#what-is-standard">What is standard</a></li>
+<li><a href="#the-185-feature-catalog">The 185-feature catalog</a></li>
+<li><a href="#the-tag-language">The tag language</a></li>
+<li><a href="#notes-learned-along-the-way">Notes learned along the way</a></li>
+<li><a href="#tests">Tests</a></li>
+</ul>
+</div>
+</aside></div>
+<script src="assets/app.js"></script></body></html>

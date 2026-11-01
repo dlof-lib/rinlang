@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  محتوى شاشة انقطاع الاتصال، تُنفَخ داخل NoConnectionOverlayView وتُضاف كطبقة تغطي
+  الشاشة كاملة فوق أي Activity ترث BaseConnectivityActivity.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <LinearLayout
+        android:id="@+id/cardNoConnection"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:orientation="vertical"
+        android:gravity="center_horizontal"
+        android:paddingStart="36dp"
+        android:paddingEnd="36dp"
+        android:paddingTop="28dp"
+        android:paddingBottom="28dp">
+
+        <FrameLayout
+            android:layout_width="92dp"
+            android:layout_height="92dp"
+            android:background="@drawable/bg_icon_badge_no_connection">
+
+            <ImageView
+                android:layout_width="46dp"
+                android:layout_height="46dp"
+                android:layout_gravity="center"
+                android:src="@drawable/ic_no_connection"
+                android:contentDescription="@null" />
+        </FrameLayout>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="22dp"
+            android:text="@string/no_connection_title"
+            android:textColor="@color/rin_on_toolbar"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:gravity="center" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/no_connection_message"
+            android:textColor="@color/rin_on_toolbar_dim"
+            android:textSize="13.5sp"
+            android:gravity="center"
+            android:lineSpacingExtra="3dp" />
+
+        <Button
+            android:id="@+id/btnNoConnectionRetry"
+            android:layout_width="wrap_content"
+            android:layout_height="46dp"
+            android:layout_marginTop="26dp"
+            android:minWidth="170dp"
+            android:minHeight="0dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:paddingStart="24dp"
+            android:paddingEnd="24dp"
+            android:background="@drawable/bg_run_button_premium"
+            android:text="@string/action_retry"
+            android:textAllCaps="false"
+            android:textColor="@android:color/white"
+            android:textStyle="bold"
+            android:textSize="14sp" />
+
+    </LinearLayout>
+</FrameLayout>

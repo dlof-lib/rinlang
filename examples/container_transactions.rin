@@ -1,0 +1,24 @@
+// تحويل مالي وسلة شراء بتراجع تلقائي — container.transaction / container.attempt
+container.ensure("table", "Alice");
+container.ensure("table", "Bob");
+container.ensure("table", "Ledger");
+container.set("Alice", "balance", 100);
+container.set("Bob", "balance", 20);
+container.set("Ledger", "entries", 0);
+
+// دالة تحويل: إما أن تنجح كلها أو لا يتغيّر شيء
+fun transfer(from, to, amount) {
+    return container.attempt([from, to, "Ledger"], fun() {
+        container.set(from, "balance", container.get(from, "balance") - amount);
+        container.set(to, "balance", container.get(to, "balance") + amount);
+        container.incr("Ledger", "entries");
+        if (container.get(from, "balance") < 0) { throw "insufficient funds"; }
+        return amount;
+    });
+}
+
+let r1 = transfer("Alice", "Bob", 30);
+print "ok=" + r1["ok"] + " moved=" + r1["value"];
+let r2 = transfer("Alice", "Bob", 500);          // يفشل ويتراجع
+print "ok=" + r2["ok"] + " error=" + r2["error"]["message"];
+print "Alice=" + container.get("Alice", "balance") + " Bob=" + container.get("Bob", "balance") + " entries=" + container.get("Ledger", "entries");

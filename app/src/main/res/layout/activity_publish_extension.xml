@@ -1,0 +1,233 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- شاشة "انشر إضافتك": يملأ أي مستخدم مسجَّل دخوله بيانات إضافته وينشرها مباشرة في
+     Rin Extensions Marketplace، بنفس هوية activity_publish_package.xml. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/rin_background">
+
+    <include layout="@layout/toolbar_app" />
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="20dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/ext_publish_subtitle"
+                android:textColor="@color/rin_editor_hint"
+                android:textSize="12.5sp"
+                android:layout_marginBottom="16dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/ext_publish_hint_name"
+                android:textColor="@color/rin_on_toolbar"
+                android:textSize="12sp"
+                android:layout_marginBottom="4dp" />
+
+            <EditText
+                android:id="@+id/edtExtPublishName"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:background="@drawable/bg_input_field"
+                android:paddingHorizontal="16dp"
+                android:textColor="@color/rin_editor_text"
+                android:textColorHint="@color/rin_editor_hint"
+                android:textSize="14sp"
+                android:singleLine="true" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:text="@string/ext_publish_hint_version"
+                android:textColor="@color/rin_on_toolbar"
+                android:textSize="12sp"
+                android:layout_marginBottom="4dp" />
+
+            <EditText
+                android:id="@+id/edtExtPublishVersion"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:background="@drawable/bg_input_field"
+                android:paddingHorizontal="16dp"
+                android:textColor="@color/rin_editor_text"
+                android:textColorHint="@color/rin_editor_hint"
+                android:textSize="14sp"
+                android:singleLine="true" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:text="@string/ext_publish_hint_description"
+                android:textColor="@color/rin_on_toolbar"
+                android:textSize="12sp"
+                android:layout_marginBottom="4dp" />
+
+            <EditText
+                android:id="@+id/edtExtPublishDescription"
+                android:layout_width="match_parent"
+                android:layout_height="100dp"
+                android:background="@drawable/bg_input_field"
+                android:padding="16dp"
+                android:gravity="top|start"
+                android:inputType="textMultiLine"
+                android:textColor="@color/rin_editor_text"
+                android:textColorHint="@color/rin_editor_hint"
+                android:textSize="14sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:text="@string/ext_publish_hint_languages"
+                android:textColor="@color/rin_on_toolbar"
+                android:textSize="12sp"
+                android:layout_marginBottom="4dp" />
+
+            <EditText
+                android:id="@+id/edtExtPublishLanguages"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:background="@drawable/bg_input_field"
+                android:paddingHorizontal="16dp"
+                android:hint="@string/ext_publish_languages_example"
+                android:textColor="@color/rin_editor_text"
+                android:textColorHint="@color/rin_editor_hint"
+                android:textSize="13.5sp"
+                android:singleLine="true" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:text="@string/ext_publish_hint_type"
+                android:textColor="@color/rin_on_toolbar"
+                android:textSize="12sp"
+                android:layout_marginBottom="6dp" />
+
+            <com.google.android.material.chip.ChipGroup
+                android:id="@+id/chipGroupExtPublishType"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:singleSelection="true"
+                app:chipSpacingHorizontal="6dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="18dp"
+                android:text="@string/ext_publish_hint_permissions"
+                android:textColor="@color/rin_on_toolbar"
+                android:textSize="12sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:text="@string/ext_publish_hint_permissions_note"
+                android:textColor="@color/rin_editor_hint"
+                android:textSize="11.5sp" />
+
+            <LinearLayout
+                android:id="@+id/containerExtPublishPermissions"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="@drawable/bg_store_section_card"
+                android:padding="12dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="18dp"
+                android:text="@string/ext_publish_hint_content_files"
+                android:textColor="@color/rin_on_toolbar"
+                android:textSize="12sp"
+                android:layout_marginBottom="4dp" />
+
+            <Button
+                android:id="@+id/btnPickExtContentFiles"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:background="@drawable/bg_toolbar_btn_ghost"
+                android:text="@string/ext_publish_action_pick_files"
+                android:textAllCaps="false"
+                android:textColor="@color/rin_on_toolbar"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/txtExtPublishFilesSelected"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:gravity="center"
+                android:textColor="@color/rin_accent"
+                android:textSize="12sp"
+                android:visibility="gone" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="@string/ext_publish_hint_screenshots"
+                android:textColor="@color/rin_editor_hint"
+                android:textSize="11.5sp" />
+
+            <Button
+                android:id="@+id/btnPickExtScreenshots"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_toolbar_btn_ghost"
+                android:text="@string/ext_publish_action_pick_screenshots"
+                android:textAllCaps="false"
+                android:textColor="@color/rin_on_toolbar"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/txtExtPublishScreenshotsSelected"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:gravity="center"
+                android:textColor="@color/rin_accent"
+                android:textSize="12sp"
+                android:visibility="gone" />
+
+            <Button
+                android:id="@+id/btnPublishExtension"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:layout_marginTop="22dp"
+                android:background="@drawable/bg_run_button_premium"
+                android:text="@string/ext_publish_action_submit"
+                android:textAllCaps="false"
+                android:textColor="@android:color/white"
+                android:textStyle="bold"
+                android:elevation="0dp" />
+
+            <ProgressBar
+                android:id="@+id/progressPublishExtension"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_marginTop="16dp"
+                android:layout_gravity="center"
+                android:visibility="gone" />
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</LinearLayout>

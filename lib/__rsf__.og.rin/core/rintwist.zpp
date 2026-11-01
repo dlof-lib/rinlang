@@ -1,0 +1,37 @@
+// core/rintwist.zpp — الربط بين RINTWIST و Disconom.
+//   RINTWIST.stack  → سلسلة الاستيراد الجارية (من الملف الرئيسي إلى الحزمة الجارية)
+//   RINTWIST.lib    → المكتبة الجارية والمكتبات المحمَّلة
+//   rinlib.graph    → رسم تبعيات Disconom (دورات، عدم توافق إصدارات)
+
+// سلسلة الاستيراد الآن: {chain: [أسماء], duplicates: [...], cycle: bool}
+// المحرّك يرفض دورة الاستيراد عند محاولتها؛ هذه الدالة تفحص اللقطة الحالية وتقدّم تقريراً قابلاً للقراءة.
+export fun rsf_importStack() {
+    let chain = [];
+    for (let f in rintwist.stack()) { push(chain, f["kind"] == "main" ? f["name"] : f["name"] + "@" + f["version"]); }
+    let dups = rsf_duplicates(chain);
+    return {chain: chain, duplicates: dups, cycle: len(dups) > 0};
+}
+
+// أسماء مكتبات محمَّلة بتكرار (يجب ألا يحدث): تُرجع المكرَّر
+export fun rsf_loadedDuplicates() {
+    return rsf_duplicates(rintwist.get("lib.loaded", []));
+}
+
+// رسم تبعيات مكتبة عبر Disconom، مع إزالة المكرَّر تلقائياً: {ok, order, cycles, problems, missing}
+export fun rsf_libGraph(name) {
+    if (type(name) != "string" or name == "") { throw "__rsf__: rsf_libGraph expects a library name"; }
+    let g = rinlib.graph(name);
+    return {ok: g["ok"], order: rsf_dedupe(g["order"]), cycles: rsf_dedupe(g["cycles"]),
+            problems: rsf_dedupe(g["problems"]), missing: rsf_dedupe(g["missing"])};
+}
+
+// فحص ذاتي لسياق التشغيل الحالي: المكتبة الجارية (من RINTWIST.lib.name) + سلسلة الاستيراد + المحمَّلة.
+//   ok = لا دورة تبعيات في Disconom، ولا تكرار في سلسلة الاستيراد، ولا مكتبة محمَّلة مرتين.
+export fun rsf_selfCheck() {
+    let lib = rintwist.get("lib.active", false) ? rintwist.get("lib.name", "") : "";
+    let st = rsf_importStack();
+    let ld = rsf_loadedDuplicates();
+    let gr = lib == "" ? nil : rsf_libGraph(lib);
+    let ok = !st["cycle"] and len(ld) == 0 and (gr == nil or gr["ok"]);
+    return {ok: ok, lib: lib, importStack: st, loadedDuplicates: ld, graph: gr};
+}

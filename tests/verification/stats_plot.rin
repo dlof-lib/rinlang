@@ -1,0 +1,28 @@
+// RinStat + RinPlot — قيم محقَّقة مقابل SciPy 1.17 (ثلاث خانات عشرية) + بنية المشهد
+@import "lib/rinplot.og.rin";
+fun f(x) { return numberFormat(x, {"decimals": 4}); }
+print f(st_norm_cdf(1.96,0,1)), f(st_norm_ppf(0.975,0,1));
+print f(st_t_cdf(2.0,10)), f(st_t_ppf(0.975,10)), f(st_t_p2(3.5,12));
+print f(st_chi2_cdf(3.841459,1)), f(st_chi2_ppf(0.95,4)), f(st_chi2_sf(10,3));
+print f(st_f_cdf(3.0,4,20)), f(st_f_ppf(0.95,3,30));
+print f(st_lgamma(5.5)), f(st_erf(0.5)), f(st_betainc(2,3,0.4)), f(st_gammainc(2.5,3));
+let a=[5.1,4.9,6.2,5.8,6.0,5.5,5.3,6.1,4.8,5.9];
+let b=[6.3,6.8,5.9,7.1,6.6,7.0,6.4,6.9,7.2,6.1];
+let w=st_ttest_welch(a,b); print f(w["stat"]), f(w["df"]), f(w["p"]);
+let r=st_ttest_paired(a,b); print f(r["stat"]), f(r["p"]);
+let an=st_anova([a,b,[8.1,7.9,8.4,8.8,7.7]]); print f(an["stat"]), f(an["eta2"]);
+let c=st_corr_test(a,b); print f(c["r"]), f(c["p"]);
+let sp=st_spearman(a,b); print f(sp["rho"]), f(sp["p"]);
+let mw=st_mannwhitney(a,b); print f(mw["stat"]), f(mw["p"]);
+let g=st_chi2_gof([18,22,20,40],[25,25,25,25]); print f(g["stat"]), f(g["p"]);
+let ci=st_chi2_indep([[20,15],[10,30]]); print f(ci["stat"]), f(ci["p"]);
+print st_p_adjust([0.01,0.04,0.03,0.2],"holm"), st_p_adjust([0.01,0.04,0.03,0.2],"bh");
+let lr=st_linreg(a,b); print f(lr["slope"]), f(lr["intercept"]), f(lr["r2"]), f(lr["coefs"][1]["se"]);
+print f(st_skew(a)), f(st_kurtosis(a)), f(st_sem(a));
+print st_rank([3,1,2,2,5]);
+let fig=pl_figure(800,500,1,2,"t");
+let a1=pl_axes(fig,0,0); pl_scatter(a1,a,b,{}); pl_regplot(pl_axes(fig,0,1),a,b,{});
+let sc=pl_build(fig);
+print len(sc["items"]) > 100, sc["w"], sc["h"];
+let svg=pl_svg(fig);
+print substr(svg,0,4), len(svg) > 1000;

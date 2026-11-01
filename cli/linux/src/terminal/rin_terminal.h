@@ -47,10 +47,6 @@ void printUsage();
 // `rin indsin <ملف.rin> [--width N] [--dump|--plain]`: يشغّل واجهة indsin داخل الطرفية مباشرة.
 int runIndsinCommand(const std::vector<std::string>& args);
 
-// هل المصدر واجهة indsin بصيغة الوسوم (`<Column#root>` …) وليس `@view`؟ يستعمله `rin run`/`rin file.rin`
-// لتحويل الملف إلى مسار indsin بدل lexer لغة Rin العادي (الذي يفشل عند `<!--` بخطأ E0011).
-bool isIndsinTagSource(const std::string& source);
-
 // `rin img <صورة> [--width N] [--mode half|braille|shade|ascii] [--plain] [--invert]`: يعرض صورة بحروف Unicode
 // (نصف-كتل ملوّنة أو نقاط براي أو ظلال) عبر ImageMagick. يعيد 0 نجاحاً؛ 1 فشل؛ 2 وسائط خاطئة.
 int runImgCommand(const std::vector<std::string>& args);

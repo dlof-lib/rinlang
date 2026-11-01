@@ -1,0 +1,1 @@
+خطأ في tests/verification/let_err_class.rin عند السطر 2: [E0013] a class field takes exactly one plain `let name = value;` (destructuring patterns, several names in one `let`, and `let ... else` apply to code, not to field declarations)

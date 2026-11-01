@@ -1,0 +1,25 @@
+<!-- حرية التصميم: حجم الشاشة، لون الخلفية الافتراضي، ثيم من لون واحد، وأحجام نسبية.
+     docs/indsin_design_freedom.md -->
+
+<!-- ثيم كامل (primary/surface/text/border…) من لون واحد، متحقَّق بـ WCAG؛ dark أو light -->
+<Palette seed=#6C5CE7 dark />
+
+<warp count={0} />
+
+<!-- size: phone|tablet|desktop|watch|…|"390x844" (+ _landscape) · bg: لون الخلفية خلف كل شيء -->
+<Screen#app size=phone bg=#0B1020 padding=20 gap=14>
+  <Text#title size=heading>Design freedom</Text>
+
+  <!-- أحجام نسبية: half / third / full / "60vw" / "10vh" -->
+  <Row#bars gap=8>
+    <Card#a width=half height=48 bg=primary />
+    <Card#b width=third height=48 bg=#00CEC9 />
+  </Row>
+
+  <!-- نسبة أبعاد لأي عنصر: ارتفاعه يتبع عرضه -->
+  <Card#hero width=full aspect="16:9" bg=#FD79A8 radius=16>
+    <Text#t color=#ffffff>16:9</Text>
+  </Card>
+
+  <Button#inc width=60vw onTap={count = count + 1}>Count: {count}</Button>
+</Screen>

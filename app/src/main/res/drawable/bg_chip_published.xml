@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- حبّة خضراء خفيفة لشارة "منشورة" فوق كل صف في قسم "حزمي المنشورة" بشاشة الحساب، تؤكّد
+     بصرياً أنّ هذه الحزمة مرئية للجميع في متجر Rin الآن، لا مجرد مكتبة محلية. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/rin_accent_green_dim" />
+    <corners android:radius="20dp" />
+</shape>

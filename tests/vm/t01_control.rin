@@ -1,0 +1,43 @@
+// break/continue متداخلة وdone
+let out = [];
+for (let i = 0; i < 4; i = i + 1) {
+  for (let j = 0; j < 4; j = j + 1) {
+    if (j == 2) { continue; }
+    if (i == 2) { break; }
+    push(out, i * 10 + j);
+  }
+}
+print out;
+let k = 0;
+while (k < 10) { k = k + 1; if (k == 3) { continue; } if (k == 6) { break; } }
+print "k", k;
+for (let x in [1,2,3,4]) { if (x == 2) { continue; } if (x == 4) { break; } print "x", x; }
+for (let ch in "abc") { print ch; }
+for (let key in {a: 1, b: 2}) { print key; }
+let n = 0;
+while (n < 2) { n = n + 1; } #done { print "while done"; }
+for (let q = 0; q < 2; q = q + 1) { } #done { print "for done"; }
+for (let z in [1]) { break; } #done { print "NO"; }
+// closures per iteration
+let fs = [];
+for (let i = 0; i < 3; i = i + 1) { push(fs, fun() { return i; }); }
+print fs[0](), fs[1](), fs[2]();
+let gs = [];
+for (let v in [10, 20]) { push(gs, fun() { return v; }); }
+print gs[0](), gs[1]();
+// loop var mutation in body
+for (let i = 0; i < 6; i = i + 1) { i = i + 1; print "i", i; }
+// match with guard & multi values
+fun cls(n) { match (n) { case 1, 2 { return "low"; } case 3 when (n > 5) { return "never"; } case 3 { return "three"; } else { return "other"; } } }
+print cls(1), cls(2), cls(3), cls(9);
+// plus.condition
+plus.condition (1 < 2) { print "T"; } / { print "F"; }
+// ternary-ish / logical
+print (nil or "d"), (0 and 1), (1 and 2), (false or false);
+// goal/achieve
+let g = goal { let a = 5; if (a > 3) { achieve a * 2; } 99; };
+print "goal", g;
+let g2 = goal { 1; };
+print "goal2", g2;
+fun ff() { for (let i = 0; i < 5; i = i + 1) { if (i == 3) { return i; } } return -1; }
+print ff();

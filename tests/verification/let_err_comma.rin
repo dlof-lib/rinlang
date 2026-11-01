@@ -1,0 +1,2 @@
+// let_err_comma.rin — اختبار تحقّق لـ docs/let-plus.md
+let e = 1,;

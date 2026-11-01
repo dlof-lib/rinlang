@@ -20,22 +20,6 @@ object IndsinViewTracer {
         """(?m)^[ \t]*<(?:Screen|Column|Row|Stack|Card|Grid|Scroll|Wrap|Text|Button|Input|Hero|Section|LoginForm|Field|PasswordField|Tabs|Stepper|ProfileCard|ConfirmCard|Stat|Alert|ListTile|EmptyState)(?:#[A-Za-z_][A-Za-z0-9_]*)?(?=[\s/>])"""
     )
 
-    /**
-     * ملف وسوم يبدأ بإعدادات لا بوسم عرض: `<warp x={0} />` أو `<Rin> … </Rin>` أو `<Palette …>` أو أحد
-     * مكوّنات القوائم القابلة للطي/الصفحات (Accordion/TreeView/ExpandableList/NestedList/Footer…).
-     */
-    private val tagPreambleRegex = Regex(
-        """(?m)^[ \t]*<(?:warp|Rin|Palette|Accordion|ExpandableList|TreeView|NestedList|Footer|Navbar|Banner|Pagination|Steps)(?=[\s/>#])"""
-    )
-
     /** True if [source] declares a Indsin root: @view... / @loop... or a tag-syntax root (`<Screen>`, `<Column>`…). */
-    fun containsView(source: String): Boolean = rootRegex.containsMatchIn(source) || isTagSyntax(source)
-
-    /**
-     * True إذا كان [source] واجهة بصيغة الوسوم (`<Column#root>` …) وليس `@view`/`@loop`.
-     * هذه الملفات لا يفهمها lexer لغة Rin العادي (يفشل عند أول `<Tag>` أو حرف عربي داخله بـ E0011)،
-     * فيجب ألّا تُرسَل إلى مفسّر Rin العادي بل تُعرَض عبر المعاينة (مسار indsin الذي يوسّع الوسوم أولاً).
-     */
-    fun isTagSyntax(source: String): Boolean =
-        !rootRegex.containsMatchIn(source) && (tagRootRegex.containsMatchIn(source) || tagPreambleRegex.containsMatchIn(source))
+    fun containsView(source: String): Boolean = rootRegex.containsMatchIn(source) || tagRootRegex.containsMatchIn(source)
 }

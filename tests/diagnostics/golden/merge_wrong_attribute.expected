@@ -1,0 +1,13 @@
+error[E0016]: invalid attribute `from`
+  --> merge_wrong_attribute.rin:1:7
+
+ 1 | merge from=app;
+   |       ^^^^
+
+reason:
+  `merge` expects the attribute `with`
+
+help:
+  replace `from` with `with`
+
+1 error emitted

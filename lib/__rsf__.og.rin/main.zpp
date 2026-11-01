@@ -1,0 +1,8 @@
+// __rsf__ — الجزء الأساسي. الاستدعاء من RINTWIST:
+//
+//   let R = rintwist.rsf();                       // يحمّل المكتبة عند الطلب ويُرجع الواجهة RSF
+//   print rintwist.rsf("dedupe", [3, 1, 3, 2]);   // [3, 1, 2]
+//   print rintwist.rsf("cycles", {a: ["b"], b: ["a"]});   // [["a","b","a"]]
+//
+// أو استيراد مباشر:  @import "__rsf__";  ثم rsf_dedupe(...) أو RSF.dedupe(...)
+export let RSF_VERSION = "1.0.0";

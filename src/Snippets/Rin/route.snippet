@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<CodeSnippets xmlns="http://schemas.microsoft.com/VisualStudio/2005/CodeSnippet">
+  <CodeSnippet Format="1.0.0">
+    <Header>
+      <Title>route</Title>
+      <Shortcut>route</Shortcut>
+      <Description>تعريف مسار API داخلي</Description>
+      <SnippetTypes>
+        <SnippetType>Expansion</SnippetType>
+      </SnippetTypes>
+    </Header>
+    <Snippet>
+      <Declarations>
+        <Literal>
+          <ID>p1</ID>
+          <ToolTip>p1</ToolTip>
+          <Default>GET</Default>
+        </Literal>
+        <Literal>
+          <ID>p2</ID>
+          <ToolTip>p2</ToolTip>
+          <Default>/example</Default>
+        </Literal>
+        <Literal>
+          <ID>p3</ID>
+          <ToolTip>p3</ToolTip>
+          <Default>200</Default>
+        </Literal>
+        <Literal>
+          <ID>p4</ID>
+          <ToolTip>p4</ToolTip>
+          <Default>value</Default>
+        </Literal>
+      </Declarations>
+      <Code Language="Rin"><![CDATA[route method="$p1$" path="$p2$" status=$p3$ body={ $end$: $p4$ };]]></Code>
+    </Snippet>
+  </CodeSnippet>
+</CodeSnippets>

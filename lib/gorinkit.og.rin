@@ -1,0 +1,60 @@
+// Rin GorinKit — جسر Rin إلى بوابة gorin (طبقة Go فوق المحرك). انظر gorin/README.md
+// الاستعمال:
+//   @import "lib/gorinkit.og.rin";
+//   gorin_connect("http://127.0.0.1:8787", "TOKEN");   // اختياري: الافتراضي 127.0.0.1:8787 بلا توكن
+//   print gorin_hash("sha256", "abc");
+// أي فشل (اتصال/توكن/مدخل خاطئ/مضيف غير مسموح) يرمي throw برسالة واضحة تبدأ بـ "gorin:".
+let gorin_name = "gorin";
+let gorin_ready = false;
+
+fun gorin_connect(url, token) {
+  apiRegister(gorin_name, url);
+  if (token != nil and token != "") { apiHeader(gorin_name, "Authorization", "Bearer " + token); }
+  gorin_ready = true;
+  return true;
+}
+
+fun gorin_call(path, body) {
+  if (!gorin_ready) { gorin_connect("http://127.0.0.1:8787", nil); }
+  let r = apiPost(gorin_name, path, body);
+  if (!r.ok) { throw "gorin: " + r.error; }
+  let j = r.json;
+  if (type(j) != "map") { throw "gorin: unexpected response (HTTP " + r.status + ")"; }
+  if (!j["ok"]) { throw "gorin: " + j["error"]; }
+  return j["result"];
+}
+
+fun gorin_hash(algo, data) { return gorin_call("/svc/hash", {"algo": algo, "data": data}); }
+fun gorin_hmac(algo, key, data) { return gorin_call("/svc/hmac", {"algo": algo, "key": key, "data": data}); }
+fun gorin_base64Encode(data) { return gorin_call("/svc/base64", {"op": "encode", "data": data}); }
+fun gorin_base64Decode(data) { return gorin_call("/svc/base64", {"op": "decode", "data": data}); }
+fun gorin_uuid() { return gorin_call("/svc/uuid", {}); }
+fun gorin_random(n) { return gorin_call("/svc/random", {"n": n}); }
+fun gorin_jsonPretty(src) { return gorin_call("/svc/json", {"op": "pretty", "data": src}); }
+fun gorin_jsonMinify(src) { return gorin_call("/svc/json", {"op": "minify", "data": src}); }
+fun gorin_regexMatch(pattern, src) { return gorin_call("/svc/regex", {"op": "match", "pattern": pattern, "text": src}); }
+fun gorin_regexFind(pattern, src) { return gorin_call("/svc/regex", {"op": "find", "pattern": pattern, "text": src}); }
+fun gorin_regexFindAll(pattern, src) { return gorin_call("/svc/regex", {"op": "findall", "pattern": pattern, "text": src}); }
+fun gorin_regexReplace(pattern, src, repl) { return gorin_call("/svc/regex", {"op": "replace", "pattern": pattern, "text": src, "repl": repl}); }
+fun gorin_regexSplit(pattern, src) { return gorin_call("/svc/regex", {"op": "split", "pattern": pattern, "text": src}); }
+fun gorin_time() { return gorin_call("/svc/time", {}); }
+
+// جلب HTTP عبر البوابة (يتطلب أن تكون البوابة مشغَّلة بـ --allow-host للمضيف). يرجع {status, headers, body}.
+fun gorin_fetch(method, url, headers, body) {
+  return gorin_call("/svc/fetch", {"method": method, "url": url, "headers": headers, "body": body});
+}
+
+// تشغيل كود Rin عبر البوابة (عملية rin معزولة بمهلة وحدود). يرجع {ok, stdout, stderr, exit_code, ...}.
+fun gorin_run(code, maxDepth, budget, timeoutMs) {
+  if (!gorin_ready) { gorin_connect("http://127.0.0.1:8787", nil); }
+  let r = apiPost(gorin_name, "/run", {"code": code, "max_depth": maxDepth, "budget": budget, "timeout_ms": timeoutMs});
+  if (!r.ok) { throw "gorin: " + r.error; }
+  return r.json;
+}
+
+fun gorin_health() {
+  if (!gorin_ready) { gorin_connect("http://127.0.0.1:8787", nil); }
+  let r = apiGet(gorin_name, "/health");
+  if (!r.ok) { throw "gorin: " + r.error; }
+  return r.json;
+}

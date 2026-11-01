@@ -1,0 +1,1321 @@
+// ============================================================================
+//  lib/math.og.rin — مكتبة رياضية احترافية متكاملة فوق stdlib الأساسية
+//  (stdlib الأساسية توفر: abs/sqrt/pow/floor/ceil/round/min/max/random/len/
+//   sum/mean/median/mode/variance/stddev/geometricMean/harmonicMean/rms/
+//   percentile/iqr/weightedMean/zscore/range/clamp(مصفوفة)/normalize/scale
+//   minOf/maxOf/count/product/PI — هذا الملف لا يكرّرها بل يبني فوقها)
+//
+//  الأقسام:
+//    1) ثوابت
+//    2) نظرية أعداد وتوافيقيات (number theory & combinatorics)
+//    3) دوال مساعدة عامة (utility)
+//    4) مثلثات (trigonometry) — sin/cos/tan وما يتفرّع عنها، بلا دعم فطري
+//       من المفسّر، لذا مبنية هنا بسلاسل تايلور مع اختزال المجال (range
+//       reduction) لدقة كاملة عملياً على مدى double
+//    5) أسّية ولوغاريتمات (exp/ln) — نفس المبدأ (سلاسل + اختزال مجال)
+//    6) دوال زائدية (hyperbolic)
+//    7) متجهات ثنائية/ثلاثية الأبعاد (vec2/vec3) كمصفوفات [x,y]/[x,y,z]
+//    8) دوال Easing (لمنحنيات الحركة في واجهات Indsin أو محرك الألعاب)
+//    9) إحصاء إضافي (عيّنة/تباين مشترك/ارتباط بيرسون)
+//    10) عشوائية مساعدة (فوق random() الفطرية)
+//
+//  استيراد:
+//    @import "lib/math.og.rin";              // دمج مباشر في النطاق الحالي
+//    @import "lib/math.og.rin" as mathx;      // كحاوية باسم مستعار
+// ============================================================================
+
+// ---------------------------------------------------------------------------
+// 1) ثوابت
+// ---------------------------------------------------------------------------
+let E       = 2.71828182845904523536;   // أساس اللوغاريتم الطبيعي
+let TAU     = 6.28318530717958647692;   // 2*PI
+let PHI     = 1.61803398874989484820;   // النسبة الذهبية
+let SQRT2   = 1.41421356237309504880;
+let SQRT3   = 1.73205080756887729353;
+let LN2     = 0.69314718055994530942;
+let LN10    = 2.30258509299404568402;
+let EPSILON = 0.0000001;                // فرق افتراضي لمقارنة الأعداد العشرية
+
+// ---------------------------------------------------------------------------
+// 2) نظرية أعداد وتوافيقيات
+// ---------------------------------------------------------------------------
+
+// n! — المضروب (0! = 1)
+fun factorial(n) {
+    if (n < 0) { print "factorial: n يجب أن يكون >= 0"; return nil; }
+    if (n < 2) { return 1; }
+    return n * factorial(n - 1);
+}
+
+// القاسم المشترك الأكبر (خوارزمية إقليدس)
+fun gcd(a, b) {
+    if (a < 0) { a = -a; }
+    if (b < 0) { b = -b; }
+    while (b != 0) {
+        let t = b;
+        b = a % b;
+        a = t;
+    }
+    return a;
+}
+
+// المضاعف المشترك الأصغر
+fun lcm(a, b) {
+    let g = gcd(a, b);
+    if (g == 0) { return 0; }
+    let result = (a / g) * b;
+    if (result < 0) { result = -result; }
+    return result;
+}
+
+// خوارزمية إقليدس الموسّعة: تُعيد [g, x, y] بحيث a*x + b*y = g = gcd(a,b)
+fun extendedGcd(a, b) {
+    if (b == 0) { return [a, 1, 0]; }
+    let r = extendedGcd(b, a % b);
+    let g = r[0];
+    let x1 = r[1];
+    let y1 = r[2];
+    return [g, y1, x1 - floor(a / b) * y1];
+}
+
+// هل a و b أوّليان فيما بينهما (coprime)؟
+fun isCoprime(a, b) {
+    return gcd(a, b) == 1;
+}
+
+// هل n عدد أوّلي؟
+fun isPrime(n) {
+    if (n < 2) { return false; }
+    if (n < 4) { return true; }
+    if (n % 2 == 0) { return false; }
+    let i = 3;
+    while (i * i <= n) {
+        if (n % i == 0) { return false; }
+        i = i + 2;
+    }
+    return true;
+}
+
+// أصغر عدد أوّلي أكبر تماماً من n
+fun nextPrime(n) {
+    let v = floor(n) + 1;
+    while (!isPrime(v)) {
+        v = v + 1;
+    }
+    return v;
+}
+
+// تحليل n إلى عوامله الأوّلية (مصفوفة مرتّبة تصاعدياً، مع التكرار)
+fun primeFactors(n) {
+    let result = [];
+    let v = n;
+    if (v < 0) { v = -v; }
+    let d = 2;
+    while (d * d <= v) {
+        while (v % d == 0) {
+            push(result, d);
+            v = v / d;
+        }
+        d = d + 1;
+    }
+    if (v > 1) { push(result, v); }
+    return result;
+}
+
+// كل قواسم |n| الموجبة (مرتّبة تصاعدياً)
+fun divisors(n) {
+    let result = [];
+    let v = n;
+    if (v < 0) { v = -v; }
+    if (v == 0) { return result; }
+    let i = 1;
+    while (i * i <= v) {
+        if (v % i == 0) {
+            push(result, i);
+            let other = v / i;
+            if (other != i) { push(result, other); }
+        }
+        i = i + 1;
+    }
+    return sort(result);
+}
+
+// هل n مربّع كامل؟
+fun isPerfectSquare(n) {
+    if (n < 0) { return false; }
+    let r = round(sqrt(n));
+    return r * r == n;
+}
+
+// هل n مكعّب كامل؟
+fun isPerfectCube(n) {
+    let v = n;
+    if (v < 0) { v = -v; }
+    let r = round(pow(v, 1 / 3));
+    let cubed = r * r * r;
+    if (n < 0) { return -cubed == n; }
+    return cubed == n;
+}
+
+// أُس معياري: (base^exp) mod m — بدون تجاوز سعة الأعداد الكبيرة
+fun modPow(base, exp, m) {
+    if (m == 1) { return 0; }
+    let result = 1;
+    let b = base % m;
+    if (b < 0) { b = b + m; }
+    let e = exp;
+    while (e > 0) {
+        if (e % 2 == 1) {
+            result = (result * b) % m;
+        }
+        e = floor(e / 2);
+        b = (b * b) % m;
+    }
+    return result;
+}
+
+// مجموع أرقام |n| (بالنظام العشري)
+fun digitSum(n) {
+    let v = n;
+    if (v < 0) { v = -v; }
+    v = floor(v);
+    let total = 0;
+    while (v > 0) {
+        total = total + (v % 10);
+        v = floor(v / 10);
+    }
+    return total;
+}
+
+// عكس ترتيب أرقام n (يحافظ على الإشارة)
+fun reverseDigits(n) {
+    let neg = n < 0;
+    let v = n;
+    if (neg) { v = -v; }
+    v = floor(v);
+    let result = 0;
+    while (v > 0) {
+        result = result * 10 + (v % 10);
+        v = floor(v / 10);
+    }
+    if (neg) { return -result; }
+    return result;
+}
+
+// هل n (غير سالب) مطابق لنفسه عند عكس أرقامه؟
+fun isPalindromeNumber(n) {
+    if (n < 0) { return false; }
+    return n == reverseDigits(n);
+}
+
+// الحد رقم n من متتالية فيبوناتشي (تكراري، بلا استدعاء ذاتي بطيء)
+fun fibonacci(n) {
+    let a = 0;
+    let b = 1;
+    let i = 0;
+    while (i < n) {
+        let next = a + b;
+        a = b;
+        b = next;
+        i = i + 1;
+    }
+    return a;
+}
+
+// عدد التبديلات (permutations) لاختيار r من أصل n مرتَّبة: nPr
+fun permutationsCount(n, r) {
+    if (r < 0 or r > n) { return 0; }
+    let result = 1;
+    let i = 0;
+    while (i < r) {
+        result = result * (n - i);
+        i = i + 1;
+    }
+    return result;
+}
+
+// عدد التوافيق (combinations) لاختيار r من أصل n: nCr
+fun combinationsCount(n, r) {
+    if (r < 0 or r > n) { return 0; }
+    if (r > n - r) { r = n - r; }
+    let result = 1;
+    let i = 0;
+    while (i < r) {
+        result = (result * (n - i)) / (i + 1);
+        i = i + 1;
+    }
+    return round(result);
+}
+
+// مرادف عرفي لـ combinationsCount
+fun binomialCoefficient(n, r) {
+    return combinationsCount(n, r);
+}
+
+// عدد كاتالان رقم n (0-indexed)
+fun catalanNumber(n) {
+    return combinationsCount(2 * n, n) / (n + 1);
+}
+
+// ---------------------------------------------------------------------------
+// 3) دوال مساعدة عامة
+// ---------------------------------------------------------------------------
+
+// يحصر x بين lo و hi (نسخة عددية؛ clamp الفطرية تعمل على مصفوفة كاملة)
+fun clampNum(x, lo, hi) {
+    if (x < lo) { return lo; }
+    if (x > hi) { return hi; }
+    return x;
+}
+
+// ملاحظة: lerp(a, b, t) بات الآن دالة أساسية مدمجة في المفسّر (RMF §6/§28) متاحة دوماً بلا حتى
+// @import "math" — أُزيل تعريفها المكرَّر من هنا (كان بنفس الصيغة بالضبط: a + (b - a) * t).
+
+// عكس lerp: عند أي نسبة t تقع القيمة v بين a و b؟
+fun invLerp(a, b, v) {
+    if (a == b) { return 0; }
+    return (v - a) / (b - a);
+}
+
+// يعيد ترسيم value من مجال [inMin, inMax] إلى مجال [outMin, outMax]
+fun remap(value, inMin, inMax, outMin, outMax) {
+    return lerp(outMin, outMax, invLerp(inMin, inMax, value));
+}
+
+// يلفّ x ضمن المجال [lo, hi) (مفيد لتدوير القيم الدورية كالزوايا)
+fun wrap(x, lo, hi) {
+    let span = hi - lo;
+    if (span == 0) { return lo; }
+    let v = x - lo;
+    v = v - span * floor(v / span);
+    return lo + v;
+}
+
+// يلفّ زاوية بالراديان إلى المجال (-PI, PI]
+fun wrapAngle(angle) {
+    return wrap(angle, -PI, PI);
+}
+
+// يحرّك current نحو target بخطوة أقصاها maxDelta (لا يتجاوز target)
+fun moveToward(current, target, maxDelta) {
+    let diff = target - current;
+    if (abs(diff) <= maxDelta) { return target; }
+    return current + sign(diff) * maxDelta;
+}
+
+// إشارة الرقم: 1 موجب، -1 سالب، 0 صفر
+
+// يقصّ الجزء العشري من x نحو الصفر (بخلاف floor الذي يتجه لأسفل دوماً)
+
+// الجزء الكسري من x (دوماً >= 0)
+fun fract(x) {
+    return x - floor(x);
+}
+
+// قسمة آمنة: تعيد fallback بدل الانهيار عند b == 0
+fun safeDiv(a, b, fallback) {
+    if (b == 0) { return fallback; }
+    return a / b;
+}
+
+// تساوٍ تقريبي باستخدام EPSILON الافتراضي
+fun approxEqual(a, b) {
+    return abs(a - b) < EPSILON;
+}
+
+// تساوٍ تقريبي بفارق eps مخصّص
+fun approxEqualEps(a, b, eps) {
+    return abs(a - b) < eps;
+}
+
+// تقريب x إلى عدد محدد من الخانات العشرية
+fun roundTo(x, decimals) {
+    let factor = pow(10, decimals);
+    return round(x * factor) / factor;
+}
+
+// هل x بين lo و hi ضمناً (inclusive)؟
+fun inRange(x, lo, hi) {
+    return x >= lo and x <= hi;
+}
+
+// النسبة المئوية لـ part من total
+fun percentOf(part, total) {
+    if (total == 0) { return 0; }
+    return (part / total) * 100;
+}
+
+// متوسط مصفوفة أرقام (اسم بديل مريح لـ mean الفطرية)
+fun average(arr) {
+    return mean(arr);
+}
+
+// القاسم المشترك الأكبر لعناصر مصفوفة كاملة (0 إن كانت فارغة)
+fun gcdArr(arr) {
+    if (len(arr) == 0) { return 0; }
+    let result = arr[0];
+    let i = 1;
+    while (i < len(arr)) {
+        result = gcd(result, arr[i]);
+        i = i + 1;
+    }
+    return result;
+}
+
+// المضاعف المشترك الأصغر لعناصر مصفوفة كاملة (0 إن كانت فارغة)
+fun lcmArr(arr) {
+    if (len(arr) == 0) { return 0; }
+    let result = arr[0];
+    let i = 1;
+    while (i < len(arr)) {
+        result = lcm(result, arr[i]);
+        i = i + 1;
+    }
+    return result;
+}
+
+// مجموع مربعات عناصر مصفوفة أرقام
+fun sumOfSquares(arr) {
+    let total = 0;
+    let i = 0;
+    while (i < len(arr)) {
+        total = total + arr[i] * arr[i];
+        i = i + 1;
+    }
+    return total;
+}
+
+// طول الوتر لمثلث قائم بضلعين a وb: sqrt(a^2 + b^2)
+fun hypot(a, b) {
+    return sqrt(a * a + b * b);
+}
+
+// يحوّل زاوية من درجات إلى راديان
+fun degToRad(deg) {
+    return deg * (PI / 180);
+}
+
+// يحوّل زاوية من راديان إلى درجات
+fun radToDeg(rad) {
+    return rad * (180 / PI);
+}
+
+// ---------------------------------------------------------------------------
+// 4) مثلثات — بلا دعم فطري من المفسّر: سلاسل تايلور مع اختزال مجال (range
+//    reduction) لضمان دقّة عملية كاملة (double) على أي مدخل معقول
+// ---------------------------------------------------------------------------
+
+// يلفّ زاوية إلى المجال (-PI, PI] استعداداً لسلسلة تايلور (تقارب أسرع وأدق)
+fun _reduceAngle(x) {
+    return x - TAU * floor((x + PI) / TAU);
+}
+
+
+
+fun cot(x) { return cos(x) / sin(x); }
+fun sec(x) { return 1 / cos(x); }
+fun csc(x) { return 1 / sin(x); }
+
+// نسخ مريحة تأخذ زاوية بالدرجات
+fun sinDeg(deg) { return sin(degToRad(deg)); }
+fun cosDeg(deg) { return cos(degToRad(deg)); }
+fun tanDeg(deg) { return tan(degToRad(deg)); }
+
+// سلسلة تايلور لـ atan تفترض |x| صغيرة (تُستخدم داخلياً بعد اختزال المجال)
+fun _atanTaylor(x) {
+    let x2 = x * x;
+    let term = x;
+    let total = x;
+    let i = 1;
+    while (i <= 12) {
+        term = term * (-x2);
+        total = total + term / (2 * i + 1);
+        i = i + 1;
+    }
+    return total;
+}
+
+// atan(x) عبر اختزال نصف-الزاوية المتكرر: atan(x) = 2*atan(x/(1+sqrt(1+x^2)))
+// حتى تصغر القيمة كفاية لتقارب سريع لسلسلة تايلور
+
+
+
+// atan2(y, x): زاوية النقطة (x, y) مع مراعاة الربع الصحيح
+
+// ---------------------------------------------------------------------------
+// 5) أسّية ولوغاريتمات — نفس منهج القسم السابق (سلاسل + اختزال مجال)
+// ---------------------------------------------------------------------------
+
+// سلسلة تايلور لـ exp تفترض |x| <= 0.5 (تُستخدم داخلياً بعد اختزال المجال)
+fun _expTaylor(x) {
+    let term = 1;
+    let total = 1;
+    let i = 1;
+    while (i <= 25) {
+        term = term * x / i;
+        total = total + term;
+        i = i + 1;
+    }
+    return total;
+}
+
+// exp(x) عبر اختزال المجال: نقسم x على 2 حتى تصغر ثم نربّع النتيجة بالعدد
+// نفسه من المرّات (exp(x) = exp(x/2^k)^(2^k))
+
+// اللوغاريتم الطبيعي: نختزل x إلى [1,2) عبر تتبّع الأس e (x = m * 2^e) ثم
+// نستخدم سلسلة atanh السريعة التقارب: ln(m) = 2*atanh((m-1)/(m+1))
+
+fun log2(x) { return ln(x) / LN2; }
+fun logBase(x, base) { return ln(x) / ln(base); }
+
+// ---------------------------------------------------------------------------
+// 6) دوال زائدية (hyperbolic)
+// ---------------------------------------------------------------------------
+fun sinh(x) { return (exp(x) - exp(-x)) / 2; }
+fun cosh(x) { return (exp(x) + exp(-x)) / 2; }
+fun tanh(x) { return sinh(x) / cosh(x); }
+
+// ---------------------------------------------------------------------------
+// 7) متجهات ثنائية/ثلاثية الأبعاد — كمصفوفات [x,y] / [x,y,z]
+// ---------------------------------------------------------------------------
+fun vec2(x, y) { return [x, y]; }
+fun vec2Add(a, b) { return [a[0] + b[0], a[1] + b[1]]; }
+fun vec2Sub(a, b) { return [a[0] - b[0], a[1] - b[1]]; }
+fun vec2Scale(a, s) { return [a[0] * s, a[1] * s]; }
+fun vec2Dot(a, b) { return a[0] * b[0] + a[1] * b[1]; }
+fun vec2LengthSq(a) { return a[0] * a[0] + a[1] * a[1]; }
+fun vec2Length(a) { return sqrt(vec2LengthSq(a)); }
+fun vec2Normalize(a) {
+    let l = vec2Length(a);
+    if (l == 0) { return [0, 0]; }
+    return [a[0] / l, a[1] / l];
+}
+fun vec2Distance(a, b) { return vec2Length(vec2Sub(b, a)); }
+fun vec2Lerp(a, b, t) { return [lerp(a[0], b[0], t), lerp(a[1], b[1], t)]; }
+fun vec2Angle(a) { return atan2(a[1], a[0]); }
+
+fun vec3(x, y, z) { return [x, y, z]; }
+fun vec3Add(a, b) { return [a[0] + b[0], a[1] + b[1], a[2] + b[2]]; }
+fun vec3Sub(a, b) { return [a[0] - b[0], a[1] - b[1], a[2] - b[2]]; }
+fun vec3Scale(a, s) { return [a[0] * s, a[1] * s, a[2] * s]; }
+fun vec3Dot(a, b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
+fun vec3Cross(a, b) {
+    return [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0]
+    ];
+}
+fun vec3LengthSq(a) { return a[0] * a[0] + a[1] * a[1] + a[2] * a[2]; }
+fun vec3Length(a) { return sqrt(vec3LengthSq(a)); }
+fun vec3Normalize(a) {
+    let l = vec3Length(a);
+    if (l == 0) { return [0, 0, 0]; }
+    return [a[0] / l, a[1] / l, a[2] / l];
+}
+fun vec3Distance(a, b) { return vec3Length(vec3Sub(b, a)); }
+fun vec3Lerp(a, b, t) {
+    return [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
+}
+
+// ---------------------------------------------------------------------------
+// 8) دوال Easing — منحنيات حركة قياسية لواجهات Indsin أو محرك الألعاب (t في [0,1])
+// ---------------------------------------------------------------------------
+fun smoothstep(t) {
+    let c = clampNum(t, 0, 1);
+    return c * c * (3 - 2 * c);
+}
+fun smootherstep(t) {
+    let c = clampNum(t, 0, 1);
+    return c * c * c * (c * (c * 6 - 15) + 10);
+}
+fun easeInQuad(t) { return t * t; }
+fun easeOutQuad(t) { return 1 - (1 - t) * (1 - t); }
+fun easeInOutQuad(t) {
+    if (t < 0.5) { return 2 * t * t; }
+    return 1 - pow(-2 * t + 2, 2) / 2;
+}
+fun easeInCubic(t) { return t * t * t; }
+fun easeOutCubic(t) { return 1 - pow(1 - t, 3); }
+fun easeInOutCubic(t) {
+    if (t < 0.5) { return 4 * t * t * t; }
+    return 1 - pow(-2 * t + 2, 3) / 2;
+}
+fun easeInSine(t) { return 1 - cos((t * PI) / 2); }
+fun easeOutSine(t) { return sin((t * PI) / 2); }
+fun easeInOutSine(t) { return -(cos(PI * t) - 1) / 2; }
+fun easeOutBounce(t) {
+    let n1 = 7.5625;
+    let d1 = 2.75;
+    let x = t;
+    if (x < 1 / d1) { return n1 * x * x; }
+    if (x < 2 / d1) {
+        x = x - 1.5 / d1;
+        return n1 * x * x + 0.75;
+    }
+    if (x < 2.5 / d1) {
+        x = x - 2.25 / d1;
+        return n1 * x * x + 0.9375;
+    }
+    x = x - 2.625 / d1;
+    return n1 * x * x + 0.984375;
+}
+fun easeInBounce(t) { return 1 - easeOutBounce(1 - t); }
+
+// ---------------------------------------------------------------------------
+// 9) إحصاء إضافي فوق stdlib (عيّنة/تباين مشترك/ارتباط بيرسون)
+// ---------------------------------------------------------------------------
+
+// تباين العيّنة (يقسم على n-1 بخلاف variance الفطرية التي تقسم على n)
+fun sampleVariance(arr) {
+    let n = len(arr);
+    if (n < 2) { return 0; }
+    let m = mean(arr);
+    let total = 0;
+    let i = 0;
+    while (i < n) {
+        let diff = arr[i] - m;
+        total = total + diff * diff;
+        i = i + 1;
+    }
+    return total / (n - 1);
+}
+fun sampleStdDev(arr) { return sqrt(sampleVariance(arr)); }
+
+// التباين المشترك (population covariance) بين مصفوفتين متساويتي الطول
+fun covariance(xs, ys) {
+    let n = len(xs);
+    if (n == 0 or n != len(ys)) { return 0; }
+    let mx = mean(xs);
+    let my = mean(ys);
+    let total = 0;
+    let i = 0;
+    while (i < n) {
+        total = total + (xs[i] - mx) * (ys[i] - my);
+        i = i + 1;
+    }
+    return total / n;
+}
+
+// معامل ارتباط بيرسون (Pearson correlation) بين -1 و 1
+fun correlation(xs, ys) {
+    let sx = stddev(xs);
+    let sy = stddev(ys);
+    if (sx == 0 or sy == 0) { return 0; }
+    return covariance(xs, ys) / (sx * sy);
+}
+
+// ---------------------------------------------------------------------------
+// 10) عشوائية مساعدة — فوق random() الفطرية التي تعيد رقماً في [0,1)
+// ---------------------------------------------------------------------------
+fun randomRange(lo, hi) { return lo + random() * (hi - lo); }
+fun randomInt(lo, hi) { return floor(lo + random() * (hi - lo + 1)); }
+fun randomBool(p) { return random() < p; }
+fun randomSign() {
+    if (random() < 0.5) { return -1; }
+    return 1;
+}
+fun randomChoice(arr) {
+    let n = len(arr);
+    if (n == 0) { return nil; }
+    let i = floor(random() * n);
+    if (i >= n) { i = n - 1; }
+    return arr[i];
+}
+// خلط مصفوفة في مكانها (Fisher–Yates) وتُعيدها أيضاً
+fun shuffle(arr) {
+    let i = len(arr) - 1;
+    while (i > 0) {
+        let j = floor(random() * (i + 1));
+        let tmp = arr[i];
+        arr[i] = arr[j];
+        arr[j] = tmp;
+        i = i - 1;
+    }
+    return arr;
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// RMF (Rin Math Fabric) Phase 1 §7 — Vector2 / Vector3
+// بُنيت فوق struct + Operator Overloading (__add__/__sub__/__mul__/__div__/__neg__، انظر
+// tryOperatorOverload في rin_interpreter.cpp) بدل أي دعم خاص داخل المفسّر لكل نوع رياضي على حدة —
+// هذا بالضبط ما يجعل RMF قابلاً للتوسّع (§41) بأنواع رياضية إضافية (Matrix/Complex/Fraction/Unit
+// لاحقاً) بنفس الأسلوب، بلا أي حاجة لتعديل C++ إضافي لكل نوع جديد. struct (لا class): دلالة قيمة
+// (تُنسَخ عند الإسناد/تمرير كوسيط) هي الأنسب لكيان رياضي كالمتجه، تماماً كـ int/float.
+// ════════════════════════════════════════════════════════════════════════
+
+struct Vector2 {
+    let x = 0;
+    let y = 0;
+
+    fun init(x, y) {
+        self.x = x;
+        self.y = y;
+    }
+
+    fun __add__(o) { return Vector2(self.x + o.x, self.y + o.y); }
+    fun __sub__(o) { return Vector2(self.x - o.x, self.y - o.y); }
+    fun __mul__(k) { return Vector2(self.x * k, self.y * k); }
+    fun __div__(k) { return Vector2(self.x / k, self.y / k); }
+    fun __neg__() { return Vector2(-self.x, -self.y); }
+
+    fun lengthSquared() { return self.x * self.x + self.y * self.y; }
+    fun length() { return sqrt(self.lengthSquared()); }
+
+    fun normalize() {
+        let len = self.length();
+        if (len == 0) { return Vector2(0, 0); }
+        return Vector2(self.x / len, self.y / len);
+    }
+
+    fun dot(o) { return self.x * o.x + self.y * o.y; }
+    fun distance(o) { return (self - o).length(); }
+    fun angle() { return atan2(self.y, self.x); }
+
+    fun lerp(o, t) {
+        return Vector2(self.x + (o.x - self.x) * t, self.y + (o.y - self.y) * t);
+    }
+
+    fun toStr() { return "Vector2(" + self.x + ", " + self.y + ")"; }
+}
+
+struct Vector3 {
+    let x = 0;
+    let y = 0;
+    let z = 0;
+
+    fun init(x, y, z) {
+        self.x = x;
+        self.y = y;
+        self.z = z;
+    }
+
+    fun __add__(o) { return Vector3(self.x + o.x, self.y + o.y, self.z + o.z); }
+    fun __sub__(o) { return Vector3(self.x - o.x, self.y - o.y, self.z - o.z); }
+    fun __mul__(k) { return Vector3(self.x * k, self.y * k, self.z * k); }
+    fun __div__(k) { return Vector3(self.x / k, self.y / k, self.z / k); }
+    fun __neg__() { return Vector3(-self.x, -self.y, -self.z); }
+
+    fun lengthSquared() { return self.x * self.x + self.y * self.y + self.z * self.z; }
+    fun length() { return sqrt(self.lengthSquared()); }
+
+    fun normalize() {
+        let len = self.length();
+        if (len == 0) { return Vector3(0, 0, 0); }
+        return Vector3(self.x / len, self.y / len, self.z / len);
+    }
+
+    fun dot(o) { return self.x * o.x + self.y * o.y + self.z * o.z; }
+
+    fun cross(o) {
+        return Vector3(
+            self.y * o.z - self.z * o.y,
+            self.z * o.x - self.x * o.z,
+            self.x * o.y - self.y * o.x
+        );
+    }
+
+    fun distance(o) { return (self - o).length(); }
+
+    fun lerp(o, t) {
+        return Vector3(
+            self.x + (o.x - self.x) * t,
+            self.y + (o.y - self.y) * t,
+            self.z + (o.z - self.z) * t
+        );
+    }
+
+    fun toStr() { return "Vector3(" + self.x + ", " + self.y + ", " + self.z + ")"; }
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// RMF (Rin Math Fabric) Phase 2 §8 — Matrix (مصفوفة عامة بأي حجم rows×cols)
+// نفس أسلوب Vector2/Vector3 أعلاه بالضبط (struct + __add__/__sub__/__mul__/__neg__)، مع فرق واحد:
+// __mul__ يحتاج التمييز بين ثلاث حالات (Matrix*Matrix، Matrix*Vector، Matrix*رقم) -- هنا بالضبط
+// تظهر فائدة type() الجديدة (انظر natives["type"] في rin_interpreter.cpp): بدل ثلاث دوال منفصلة
+// (mulScalar/mulVector/mulMatrix)، دالة سحرية واحدة تفحص type(other) وتتصرف بما يناسب -- هذا هو
+// "الحساب الذكي" (§3) عملياً.
+// ════════════════════════════════════════════════════════════════════════
+
+struct Matrix {
+    let rows = 0;
+    let cols = 0;
+    let data = [];
+
+    fun init(rows, cols) {
+        self.rows = rows;
+        self.cols = cols;
+        let d = [];
+        let i = 0;
+        while (i < rows) {
+            let row = [];
+            let j = 0;
+            while (j < cols) {
+                push(row, 0);
+                j = j + 1;
+            }
+            push(d, row);
+            i = i + 1;
+        }
+        self.data = d;
+    }
+
+    fun get(i, j) { return self.data[i][j]; }
+    fun set(i, j, v) { self.data[i][j] = v; }
+
+    fun __add__(o) {
+        let m = Matrix(self.rows, self.cols);
+        let i = 0;
+        while (i < self.rows) {
+            let j = 0;
+            while (j < self.cols) {
+                m.set(i, j, self.get(i, j) + o.get(i, j));
+                j = j + 1;
+            }
+            i = i + 1;
+        }
+        return m;
+    }
+
+    fun __sub__(o) {
+        let m = Matrix(self.rows, self.cols);
+        let i = 0;
+        while (i < self.rows) {
+            let j = 0;
+            while (j < self.cols) {
+                m.set(i, j, self.get(i, j) - o.get(i, j));
+                j = j + 1;
+            }
+            i = i + 1;
+        }
+        return m;
+    }
+
+    fun __neg__() {
+        let m = Matrix(self.rows, self.cols);
+        let i = 0;
+        while (i < self.rows) {
+            let j = 0;
+            while (j < self.cols) {
+                m.set(i, j, -self.get(i, j));
+                j = j + 1;
+            }
+            i = i + 1;
+        }
+        return m;
+    }
+
+    fun __mul__(o) {
+        let t = type(o);
+        if (t == "number") {
+            let m = Matrix(self.rows, self.cols);
+            let i = 0;
+            while (i < self.rows) {
+                let j = 0;
+                while (j < self.cols) {
+                    m.set(i, j, self.get(i, j) * o);
+                    j = j + 1;
+                }
+                i = i + 1;
+            }
+            return m;
+        }
+        if (t == "Vector2" or t == "Vector3") {
+            let vals = [o.x, o.y];
+            if (t == "Vector3") { vals = [o.x, o.y, o.z]; }
+            if (len(vals) != self.cols) {
+                print "Matrix * Vector: dimension mismatch";
+                return nil;
+            }
+            let out = [];
+            let i = 0;
+            while (i < self.rows) {
+                let total = 0;
+                let j = 0;
+                while (j < self.cols) {
+                    total = total + self.get(i, j) * vals[j];
+                    j = j + 1;
+                }
+                push(out, total);
+                i = i + 1;
+            }
+            if (t == "Vector2") { return Vector2(out[0], out[1]); }
+            return Vector3(out[0], out[1], out[2]);
+        }
+        // Matrix * Matrix
+        if (self.cols != o.rows) {
+            print "Matrix multiplication: dimension mismatch";
+            return nil;
+        }
+        let m = Matrix(self.rows, o.cols);
+        let i = 0;
+        while (i < self.rows) {
+            let j = 0;
+            while (j < o.cols) {
+                let total = 0;
+                let k = 0;
+                while (k < self.cols) {
+                    total = total + self.get(i, k) * o.get(k, j);
+                    k = k + 1;
+                }
+                m.set(i, j, total);
+                j = j + 1;
+            }
+            i = i + 1;
+        }
+        return m;
+    }
+
+    fun transpose() {
+        let m = Matrix(self.cols, self.rows);
+        let i = 0;
+        while (i < self.rows) {
+            let j = 0;
+            while (j < self.cols) {
+                m.set(j, i, self.get(i, j));
+                j = j + 1;
+            }
+            i = i + 1;
+        }
+        return m;
+    }
+
+    // محدد (determinant) — صيغة مباشرة لـ 1×1/2×2، وتوسيع بالإشارات المتعاقبة (cofactor expansion)
+    // لأي حجم أكبر عبر _minor أدناه -- أبسط تطبيق ممكن (O(n!))، كافٍ عملياً للأحجام الشائعة
+    // (رسوميات/فيزياء نادراً ما تتجاوز 4×4).
+    fun determinant() {
+        if (self.rows != self.cols) {
+            print "determinant: matrix must be square";
+            return nil;
+        }
+        let n = self.rows;
+        if (n == 1) { return self.get(0, 0); }
+        if (n == 2) {
+            return self.get(0,0) * self.get(1,1) - self.get(0,1) * self.get(1,0);
+        }
+        let total = 0;
+        let j = 0;
+        let sign = 1;
+        while (j < n) {
+            let sub = self._minor(0, j);
+            total = total + sign * self.get(0, j) * sub.determinant();
+            sign = -sign;
+            j = j + 1;
+        }
+        return total;
+    }
+
+    // المصفوفة الفرعية بعد حذف الصف skipRow والعمود skipCol (تُستخدم داخلياً في determinant فقط)
+    fun _minor(skipRow, skipCol) {
+        let m = Matrix(self.rows - 1, self.cols - 1);
+        let ri = 0;
+        let i = 0;
+        while (i < self.rows) {
+            if (i != skipRow) {
+                let rj = 0;
+                let j = 0;
+                while (j < self.cols) {
+                    if (j != skipCol) {
+                        m.set(ri, rj, self.get(i, j));
+                        rj = rj + 1;
+                    }
+                    j = j + 1;
+                }
+                ri = ri + 1;
+            }
+            i = i + 1;
+        }
+        return m;
+    }
+
+    fun toStr() {
+        let s = "";
+        let i = 0;
+        while (i < self.rows) {
+            let rowStr = "[";
+            let j = 0;
+            while (j < self.cols) {
+                rowStr = rowStr + self.get(i, j);
+                if (j < self.cols - 1) { rowStr = rowStr + ", "; }
+                j = j + 1;
+            }
+            rowStr = rowStr + "]";
+            s = s + rowStr;
+            if (i < self.rows - 1) { s = s + "\n"; }
+            i = i + 1;
+        }
+        return s;
+    }
+}
+
+// مصفوفة الوحدة (identity) بحجم n×n — دالة حرة بدل static method (غير مدعومة على الأصناف حالياً)
+fun matrixIdentity(n) {
+    let m = Matrix(n, n);
+    let i = 0;
+    while (i < n) {
+        m.set(i, i, 1);
+        i = i + 1;
+    }
+    return m;
+}
+
+// يبني Matrix من مصفوفة صفوف عادية (array of arrays)، مثال: matrixFrom([[1,2],[3,4]])
+fun matrixFrom(rowsData) {
+    let r = len(rowsData);
+    let c = 0;
+    if (r > 0) { c = len(rowsData[0]); }
+    let m = Matrix(r, c);
+    let i = 0;
+    while (i < r) {
+        let j = 0;
+        while (j < c) {
+            m.set(i, j, rowsData[i][j]);
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return m;
+}
+
+
+// ════════════════════════════════════════════════════════════════════════
+// RMF (Rin Math Fabric) Phase 3 §13/§14 — Fraction / Complex
+// نفس أسلوب Vector/Matrix أعلاه بالضبط: struct + دوال سحرية (__add__/__sub__/__mul__/__div__/
+// __neg__). Fraction تبسّط نفسها تلقائياً لأبسط صورة (عبر gcd) في كل init() -- هذا يجعل مقارنة
+// == بين كسرين متكافئين (1/2 و2/4 مثلاً) تعمل صحيحة مجاناً عبر المساواة التركيبية العادية لـ
+// struct (نفس الحقول = متساويان، انظر valuesEqual في rin_interpreter.cpp)، بلا أي كود مقارنة
+// إضافي مطلوب هنا.
+// ════════════════════════════════════════════════════════════════════════
+
+struct Fraction {
+    let num = 0;
+    let den = 1;
+
+    fun init(num, den) {
+        if (den == 0) {
+            print "Fraction: denominator cannot be 0";
+            den = 1;
+        }
+        if (den < 0) {
+            num = -num;
+            den = -den;
+        }
+        let g = gcd(abs(num), abs(den));
+        if (g == 0) { g = 1; }
+        self.num = num / g;
+        self.den = den / g;
+    }
+
+    fun __add__(o) { return Fraction(self.num * o.den + o.num * self.den, self.den * o.den); }
+    fun __sub__(o) { return Fraction(self.num * o.den - o.num * self.den, self.den * o.den); }
+    fun __mul__(o) { return Fraction(self.num * o.num, self.den * o.den); }
+    fun __div__(o) { return Fraction(self.num * o.den, self.den * o.num); }
+    fun __neg__() { return Fraction(-self.num, self.den); }
+
+    fun toNumber() { return self.num / self.den; }
+    fun toStr() { return self.num + "/" + self.den; }
+}
+
+struct Complex {
+    let re = 0;
+    let im = 0;
+
+    fun init(re, im) {
+        self.re = re;
+        self.im = im;
+    }
+
+    fun __add__(o) { return Complex(self.re + o.re, self.im + o.im); }
+    fun __sub__(o) { return Complex(self.re - o.re, self.im - o.im); }
+
+    fun __mul__(o) {
+        if (type(o) == "number") { return Complex(self.re * o, self.im * o); }
+        return Complex(self.re * o.re - self.im * o.im, self.re * o.im + self.im * o.re);
+    }
+
+    fun __div__(o) {
+        if (type(o) == "number") { return Complex(self.re / o, self.im / o); }
+        let denom = o.re * o.re + o.im * o.im;
+        return Complex((self.re * o.re + self.im * o.im) / denom, (self.im * o.re - self.re * o.im) / denom);
+    }
+
+    fun __neg__() { return Complex(-self.re, -self.im); }
+
+    fun magnitude() { return sqrt(self.re * self.re + self.im * self.im); }
+    fun phase() { return atan2(self.im, self.re); }
+    fun conjugate() { return Complex(self.re, -self.im); }
+
+    fun toStr() {
+        if (self.im >= 0) { return self.re + " + " + self.im + "i"; }
+        return self.re + " - " + (-self.im) + "i";
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// RMF (Rin Math Fabric) Phase 4 §19 — Geometry: Circle / Rectangle
+// مبنية فوق Vector2 (نفس فلسفة كل RMF: كل طبقة تُبنى فوق طبقة أدنى منطقياً، §41) --
+// Circle.contains تستخدم Vector2.distance مباشرة بدل إعادة كتابة حساب المسافة من الصفر.
+// ════════════════════════════════════════════════════════════════════════
+
+struct Circle {
+    let center = nil;
+    let radius = 0;
+
+    fun init(center, radius) {
+        self.center = center;
+        self.radius = radius;
+    }
+
+    fun area() { return PI * self.radius * self.radius; }
+    fun circumference() { return TAU * self.radius; }
+
+    fun contains(point) { return self.center.distance(point) <= self.radius; }
+
+    fun intersects(other) { return self.center.distance(other.center) <= (self.radius + other.radius); }
+
+    fun toStr() { return "Circle(center=" + self.center.toStr() + ", radius=" + self.radius + ")"; }
+}
+
+struct Rectangle {
+    let x = 0;
+    let y = 0;
+    let width = 0;
+    let height = 0;
+
+    fun init(x, y, width, height) {
+        self.x = x;
+        self.y = y;
+        self.width = width;
+        self.height = height;
+    }
+
+    fun area() { return self.width * self.height; }
+    fun perimeter() { return 2 * (self.width + self.height); }
+
+    fun contains(point) {
+        if (point.x < self.x) { return false; }
+        if (point.x > self.x + self.width) { return false; }
+        if (point.y < self.y) { return false; }
+        if (point.y > self.y + self.height) { return false; }
+        return true;
+    }
+
+    fun intersects(other) {
+        if (self.x >= other.x + other.width) { return false; }
+        if (self.x + self.width <= other.x) { return false; }
+        if (self.y >= other.y + other.height) { return false; }
+        if (self.y + self.height <= other.y) { return false; }
+        return true;
+    }
+
+    fun centerPoint() { return Vector2(self.x + self.width / 2, self.y + self.height / 2); }
+
+    fun toStr() { return "Rectangle(x=" + self.x + ", y=" + self.y + ", w=" + self.width + ", h=" + self.height + ")"; }
+}
+
+// مساحة مثلث برؤوس ثلاث نقاط Vector2 (صيغة shoelace/المحدد)
+fun triangleArea(a, b, c) {
+    return abs((b.x - a.x) * (c.y - a.y) - (c.x - a.x) * (b.y - a.y)) / 2;
+}
+
+// محيط مثلث برؤوس ثلاث نقاط Vector2
+fun trianglePerimeter(a, b, c) {
+    return a.distance(b) + b.distance(c) + c.distance(a);
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// RMF (Rin Math Fabric) Phase 5 §28 — Interpolation إضافية
+// lerp/invLerp/remap موجودة أصلاً (lerp أصبحت أصلية في المفسّر منذ Phase 1). smoothstep/
+// smootherstep إضافتان قياسيتان في الرسوميات (منحنى-S بدل خط مستقيم)، مبنيتان فوق clamp الأصلية.
+// ════════════════════════════════════════════════════════════════════════
+
+fun smoothstep(edge0, edge1, x) {
+    let t = clamp((x - edge0) / (edge1 - edge0), 0, 1);
+    return t * t * (3 - 2 * t);
+}
+
+fun smootherstep(edge0, edge1, x) {
+    let t = clamp((x - edge0) / (edge1 - edge0), 0, 1);
+    return t * t * t * (t * (t * 6 - 15) + 10);
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// RMF Phase 5 §20 — Calculus (عددي/numerical فقط -- لا اشتقاق/تكامل رمزي، انظر تعليق solve أدناه
+// لشرح لماذا). f هنا قيمة دالة عادية من Rin (fun أو تعبير lambda مُمرَّر كوسيط) تُستدعى مباشرة
+// داخل هذه الدوال كـ f(x) -- ممكنة بفضل كون الدوال قيماً من الدرجة الأولى (first-class) في Rin.
+// ════════════════════════════════════════════════════════════════════════
+
+// مشتقة عددية عند نقطة x (الفرق المركزي/central difference -- أدق من الفرق الأمامي البسيط)
+fun differentiate(f, x) {
+    let h = 0.0001;
+    return (f(x + h) - f(x - h)) / (2 * h);
+}
+
+// تكامل عددي محدَّد من a إلى b (قاعدة سيمبسون/Simpson's rule بـ 1000 فترة -- دقيقة وسريعة عملياً)
+fun integrate(f, a, b) {
+    let n = 1000;
+    let h = (b - a) / n;
+    let total = f(a) + f(b);
+    let i = 1;
+    while (i < n) {
+        let x = a + i * h;
+        if (i % 2 == 0) {
+            total = total + 2 * f(x);
+        } else {
+            total = total + 4 * f(x);
+        }
+        i = i + 1;
+    }
+    return total * h / 3;
+}
+
+// نهاية f عند x تقريبياً (تقترب من كلا الجانبين وتأخذ المتوسط -- تقريب عددي، ليس إثباتاً رمزياً
+// لوجود النهاية). direction اختيارية: "left"/"right"/بلا شيء (الافتراضي، من الجهتين).
+fun limitAt(f, x, direction) {
+    let h = 0.00001;
+    if (direction == "left") { return f(x - h); }
+    if (direction == "right") { return f(x + h); }
+    return (f(x - h) + f(x + h)) / 2;
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// RMF Phase 5 §4/§5 — حل المعادلات (numerical/عددي مباشر، وليس جبراً رمزياً كاملاً)
+// بناء نظام جبر رمزي حقيقي (تمثيل تعبير كشجرة، simplify/expand/factor لأي تعبير عام) مشروع بحثي
+// ضخم بذاته (محرك CAS كامل) يتجاوز نطاق أي إضافة واحدة معقولة. هنا الجزء العملي الأهم من §4/§5
+// تحديداً: حل معادلات خطية/تربيعية فعلياً بمعاملاتها الرقمية (solveLinear/solveQuadratic) --
+// يغطي "لا حل / حل واحد / حلين / حلول تقريبية" المطلوبة صراحة، ويُعيد جذوراً من نوع Complex
+// (Phase 3) بدل تجاهلها أو الفشل عندما يكون المميّز سالباً، فيغطي أيضاً "حلول رمزية عند الإمكان".
+// ════════════════════════════════════════════════════════════════════════
+
+// حل ax + b = 0. يُعيد رقماً (الحل الوحيد)، أو النص "none" (لا حل)، أو "infinite" (كل رقم حل).
+fun solveLinear(a, b) {
+    if (a == 0) {
+        if (b == 0) { return "infinite"; }
+        return "none";
+    }
+    return -b / a;
+}
+
+// حل ax^2 + bx + c = 0. يُعيد array بالحلول: عنصر واحد (جذر مضاعف)، عنصران (Number أو Complex
+// حسب إشارة المميّز)، أو -- إن كانت a=0 فعلياً معادلة خطية -- يُفوّض لـ solveLinear (وقد يُعيد نصاً
+// بدل array في تلك الحالة الحدّية، فتحقّق من type() قبل الافتراض أنها array دائماً).
+fun solveQuadratic(a, b, c) {
+    if (a == 0) { return solveLinear(b, c); }
+    let disc = b * b - 4 * a * c;
+    if (disc > 0) {
+        let sq = sqrt(disc);
+        return [(-b + sq) / (2 * a), (-b - sq) / (2 * a)];
+    }
+    if (disc == 0) {
+        return [-b / (2 * a)];
+    }
+    let sq = sqrt(-disc);
+    let re = -b / (2 * a);
+    let im = sq / (2 * a);
+    return [Complex(re, im), Complex(re, -im)];
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// RMF Phase 5 §10/§11 — Units & Dimensions
+// أبسط تصميم ممكن: كل Unit يحمل (value, name). جدول واحد (_unitInfo) يربط كل اسم وحدة بِـ
+// [البُعد، معامل التحويل إلى وحدة القياس الأساسية لذلك البُعد]. الجمع/الطرح يتطلبان نفس البُعد
+// (وإلا: خطأ رياضي واضح -- meter + second مرفوضة صراحة، تماماً كما طُلب). القسمة/الضرب بعدد عادي
+// تُغيّر value فقط. قسمة وحدتين من نفس البُعد تُوحَّدان لنفس وحدة القياس الأساسية أولاً ثم تُعطيان
+// نسبة رقمية عادية (بلا وحدة). ضرب/قسمة بين بُعدين مختلفين (مثل distance/time) تُنتج Unit بوحدة
+// مركَّبة باسمها ("m/s") -- بلا اشتقاق نظام أبعاد كامل (Velocity/Force كأنواع منفصلة)؛ القيمة
+// والوحدة المركَّبة كافيتان عملياً لنتيجة "صحيحة الأبعاد" كما طُلب صراحة في المثال (distance/time).
+// ════════════════════════════════════════════════════════════════════════
+
+fun _unitInfo(name) {
+    if (name == "m") { return ["Length", 1]; }
+    if (name == "km") { return ["Length", 1000]; }
+    if (name == "cm") { return ["Length", 0.01]; }
+    if (name == "mm") { return ["Length", 0.001]; }
+    if (name == "s") { return ["Time", 1]; }
+    if (name == "ms") { return ["Time", 0.001]; }
+    if (name == "min") { return ["Time", 60]; }
+    if (name == "hr") { return ["Time", 3600]; }
+    if (name == "kg") { return ["Mass", 1]; }
+    if (name == "g") { return ["Mass", 0.001]; }
+    if (name == "deg") { return ["Angle", 1]; }
+    if (name == "rad") { return ["Angle", 57.29577951308232]; }
+    return nil;
+}
+
+struct Unit {
+    let value = 0;
+    let name = "";
+
+    fun init(value, name) {
+        self.value = value;
+        self.name = name;
+        // لا تُحذِّر لو كانت الوحدة مركَّبة (تحتوي '*' أو '/') -- هذه تُنتَج داخلياً تلقائياً من
+        // __mul__/__div__ نفسها (مثل "km/hr")، وليست خطأ مبرمج؛ التحذير مخصَّص فقط لاسم وحدة
+        // أساسي غير معروف كتبه المبرمج مباشرة (خطأ إملائي مثلاً).
+        if (_unitInfo(name) == nil and !contains(name, "*") and !contains(name, "/")) {
+            print "Unit: unknown unit '" + name + "'";
+        }
+    }
+
+    fun dimension() {
+        let info = _unitInfo(self.name);
+        if (info == nil) { return "Unknown"; }
+        return info[0];
+    }
+
+    fun _factor() {
+        let info = _unitInfo(self.name);
+        if (info == nil) { return 1; }
+        return info[1];
+    }
+
+    fun _baseValue() { return self.value * self._factor(); }
+
+    fun __add__(o) {
+        if (self.dimension() != o.dimension()) {
+            print "InvalidUnitOperation: cannot add '" + self.name + "' and '" + o.name + "' (dimensions: " + self.dimension() + " vs " + o.dimension() + ")";
+            return nil;
+        }
+        return Unit((self._baseValue() + o._baseValue()) / self._factor(), self.name);
+    }
+
+    fun __sub__(o) {
+        if (self.dimension() != o.dimension()) {
+            print "InvalidUnitOperation: cannot subtract '" + self.name + "' and '" + o.name + "' (dimensions: " + self.dimension() + " vs " + o.dimension() + ")";
+            return nil;
+        }
+        return Unit((self._baseValue() - o._baseValue()) / self._factor(), self.name);
+    }
+
+    fun __neg__() { return Unit(-self.value, self.name); }
+
+    fun __mul__(o) {
+        if (type(o) == "number") { return Unit(self.value * o, self.name); }
+        return Unit(self.value * o.value, self.name + "*" + o.name);
+    }
+
+    fun __div__(o) {
+        if (type(o) == "number") { return Unit(self.value / o, self.name); }
+        if (self.dimension() == o.dimension()) {
+            if (self.dimension() != "Unknown") {
+                return self._baseValue() / o._baseValue();
+            }
+        }
+        return Unit(self.value / o.value, self.name + "/" + o.name);
+    }
+
+    fun convertTo(targetName) {
+        let info = _unitInfo(targetName);
+        if (info == nil) {
+            print "Unit.convertTo: unknown unit '" + targetName + "'";
+            return nil;
+        }
+        if (info[0] != self.dimension()) {
+            print "InvalidUnitOperation: cannot convert '" + self.name + "' to '" + targetName + "' (different dimensions)";
+            return nil;
+        }
+        return Unit(self._baseValue() / info[1], targetName);
+    }
+
+    fun toStr() { return self.value + self.name; }
+}

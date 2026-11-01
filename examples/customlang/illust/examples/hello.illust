@@ -1,0 +1,61 @@
+// hello.illust — يعرض كل ميزات v0.2: ellipse/polygon/path/group/rotate/fun+return
+
+canvas(320, 240);
+
+fill("#eaf6ff");
+stroke(none);
+rect(0, 0, 320, 240);
+
+// وجه بيضاوي بدل الدائرة السابقة
+fill("#ffcc66");
+stroke("#8a5a00", 3);
+ellipse(160, 120, 70, 55);
+
+group(160, 120) {
+    fill("#222222");
+    stroke(none);
+
+    let i = 0;
+    while (i < 2) {
+        let ex = 0 - 22 + i * 44;
+        circle(ex, -10, 6);
+        i = i + 1;
+    }
+
+    stroke("#222222", 4);
+    fill(none);
+    path("M -18 25 Q 0 40 18 25");
+}
+
+// دالة قابلة لإعادة الاستخدام: نجمة بسيطة عبر polygon، تُستدعى وتُدار بـ rotate
+fun star(cx, cy, r) {
+    fill("#ff5566");
+    stroke(none);
+    let pts = [
+        cx,      cy - r,
+        cx + r/4, cy - r/4,
+        cx + r,  cy,
+        cx + r/4, cy + r/4,
+        cx,      cy + r,
+        cx - r/4, cy + r/4,
+        cx - r,  cy,
+        cx - r/4, cy - r/4
+    ];
+    polygon(pts);
+    return 0;
+}
+
+group(60, 60) {
+    rotate(15) {
+        star(0, 0, 24);
+    }
+}
+
+group(260, 60) {
+    rotate(-15) {
+        star(0, 0, 24);
+    }
+}
+
+text(95, 225, "Illust v0.2");
+print("تم بناء الرسمة الموسّعة");

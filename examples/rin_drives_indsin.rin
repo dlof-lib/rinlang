@@ -1,0 +1,49 @@
+// Rin يقود indsin: برنامج Rin عادي يركّب شاشة indsin، يكتب في حقولها، يضغط أزرارها بالنص، يقرأ النتيجة،
+// ويصدّرها PNG/HTML — أي اختبارات واجهة وتقارير وأتمتة بلغة Rin نفسها.
+//   indsin.mount(src[,w]) · input · set/get · tap · tapText · find · texts · png · html · json · free
+// التشغيل من جذر المستودع (يقرأ examples/samples/indsin_accounts.rin ويستعمل حاويته + ملف JSON).
+
+let passed = 0;
+let failed = 0;
+fun check(ok, label) {
+    if (ok) { passed = passed + 1; } else { failed = failed + 1; print "FAIL: " + label; }
+}
+fun hasText(h, s) {
+    for (let t in indsin.texts(h)) { if (contains(t, s)) { return true; } }
+    return false;
+}
+
+deleteFile("indsin_users.json");
+let src = readFile("examples/samples/indsin_accounts.rin");
+let h = indsin.mount(src, 390);
+check(hasText(h, "Accounts (0)"), "starts empty");
+
+indsin.input(h, "email", "lina@mail.com");
+indsin.input(h, "password", "Str0ng!pass");
+let r = indsin.tapText(h, "Create account");
+check(r["handled"], "Create account handled");
+check(hasText(h, "Account created"), "success message shown");
+check(hasText(h, "Accounts (1)"), "counter updated");
+check(indsin.get(h, "total") == 1, "warp total == 1");
+
+indsin.tapText(h, "Create account");
+check(hasText(h, "already registered"), "duplicate rejected");
+indsin.free(h);
+
+// جلسة جديدة: الحساب يُستعاد من ملف JSON الذي كتبته الحاوية
+let h2 = indsin.mount(src, 390);
+check(hasText(h2, "Accounts (1)"), "restored from disk");
+indsin.input(h2, "email", "lina@mail.com");
+indsin.input(h2, "password", "wrong");
+indsin.tapText(h2, "Sign in");
+check(hasText(h2, "Wrong password"), "wrong password");
+indsin.input(h2, "password", "Str0ng!pass");
+indsin.tapText(h2, "Sign in");
+check(hasText(h2, "Welcome back"), "sign in ok");
+check(indsin.png(h2, "rin_drives_indsin.png"), "png exported");
+check(len(indsin.html(h2)) > 200, "html exported");
+indsin.free(h2);
+deleteFile("indsin_users.json");
+deleteFile("rin_drives_indsin.png");
+
+print "passed " + passed + " failed " + failed;

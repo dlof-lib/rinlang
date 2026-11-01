@@ -1,0 +1,22 @@
+// Set: الإنشاء، التفرّد، الطباعة، النوع
+let s = Set([1, 2, 2, 3, 3, 3]);
+print s;
+print len(s), type(s), s.size();
+print Set();
+print Set(1, 2, 2);
+print Set.of([1, 2]);
+print Set("ab");
+print Set.from("abc");
+print Set({"x": 1, "y": 2});
+print Set([1, "1", true, nil, 1.0]);
+print Set([[1, 2], [1, 2], {"a": 1}, {"a": 1}]);
+let t: Set = Set([5]);
+print t;
+try { let bad: Set = [1]; } catch (e) { print e.code; }
+print s == Set([3, 2, 1]), s != Set([1, 2]);
+print Set([0]) == Set([-0]);
+print empty(Set()), empty(s), contains(s, 2), has(s, 9);
+print jsonEncode(s);
+print s.toArray();
+for (let x in Set([10, 20, 30])) { print x; }
+print "s=" + Set([1]);

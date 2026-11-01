@@ -1,0 +1,319 @@
+// ============================================================================
+//  lib/compose_flow.og.rin — مُركِّبات تدفّق التحكم والنتائج (مساعدة لـ compose)
+//
+//    وسطاء    : applyArgs  spread  curry2  curry3  curryN  partialN  rpartial1
+//    ذاكرة    : memoize1  memoizeWith  once  lazy
+//    تكرار    : times  retry  iterate  until
+//    ذكاء     : cond  matchKind  juxtMap  converge  firstNonNil  defaultTo  guard
+//    نتائج    : okResult  failResult  isOkResult  tryResult  mapOk  thenResult
+//               resultOr  safeChain  collectResults  traceChain  timed
+//
+//  "Result" هو map عادية: {"ok": true, "value": v} أو {"ok": false, "error": e}،
+//  فتمرّ بلا أي نوع جديد وتُطبع وتُدمج وتُخزَّن كأي map.
+//
+//  استيراد:  @import "lib/compose_flow.og.rin";   (تستورد compose تلقائياً)
+// ============================================================================
+@import "compose";
+
+// ───────────────────────── وسطاء ─────────────────────────
+
+// applyArgs(f, [a, b, c]) == f(a, b, c)
+fun applyArgs(f, args) { return callFn(f, args); }
+
+// spread(f)(arr) == f(arr[0], arr[1], ...)
+fun spread(f) { return fun(arr) { return callFn(f, arr); }; }
+
+// curry2(f)(a)(b) == f(a, b)
+fun curry2(f) {
+    return fun(a) { return fun(b) { return f(a, b); }; };
+}
+
+fun curry3(f) {
+    return fun(a) { return fun(b) { return fun(c) { return f(a, b, c); }; }; };
+}
+
+// curryN(f, n): كاري لأي عدد وسطاء — يُستدعى بوسيط واحد كل مرة حتى يكتمل العدد n
+fun curryN(f, n) {
+    return _curryCollect(f, n, []);
+}
+
+fun _curryCollect(f, n, got) {
+    return fun(x) {
+        let next = concat(got, [x]);
+        if (len(next) >= n) { return callFn(f, next); }
+        return _curryCollect(f, n, next);
+    };
+}
+
+// partialN(f, [a, b])(c, d) == f(a, b, c, d) — تُستدعى بمصفوفة وسطاء متبقية: partialN(f, pre)(rest)
+fun partialN(f, pre) {
+    return fun(rest) { return callFn(f, concat(pre, asArray(rest))); };
+}
+
+// rpartial1(f, b)(a) == f(a, b)  — تثبيت آخر وسيط
+fun rpartial1(f, b) { return fun(a) { return f(a, b); }; }
+
+// ───────────────────────── ذاكرة ─────────────────────────
+
+// memoizeWith(f, keyFn): يخزّن نتيجة f لكل مفتاح keyFn(x). memoize1 تستعمل str(x) كمفتاح.
+fun memoizeWith(f, keyFn) {
+    let kf = asFn(keyFn);
+    let cache = {};
+    return fun(x) {
+        let k = str(kf(x));
+        if (has(cache, k)) { return cache[k]; }
+        let v = f(x);
+        cache[k] = v;
+        return v;
+    };
+}
+
+fun memoize1(f) { return memoizeWith(f, identity); }
+
+// once(f): تنفَّذ مرة واحدة فقط وتُعاد نتيجتها في كل نداء لاحق
+fun once(f) {
+    let state = {"done": false, "value": nil};
+    return fun(x) {
+        if (!state["done"]) { state["value"] = f(x); state["done"] = true; }
+        return state["value"];
+    };
+}
+
+// lazy(f): قيمة كسولة — lazy(f)() تحسب f() أول مرة فقط
+fun lazy(f) {
+    let state = {"done": false, "value": nil};
+    return fun() {
+        if (!state["done"]) { state["value"] = f(); state["done"] = true; }
+        return state["value"];
+    };
+}
+
+// ───────────────────────── تكرار ─────────────────────────
+
+// times(n, f) -> [f(0), f(1), ..., f(n-1)]
+fun times(n, f) {
+    let g = asFn(f);
+    let out = [];
+    let i = 0;
+    while (i < n) { push(out, g(i)); i = i + 1; }
+    return out;
+}
+
+// retry(f, attempts)(x): يعيد المحاولة عند الخطأ حتى attempts مرة ثم يرمي آخر خطأ
+fun retry(f, attempts) {
+    let g = asFn(f);
+    return fun(x) {
+        let lastErr = nil;
+        let i = 0;
+        while (i < attempts) {
+            let out = nil;
+            let failed = false;
+            try { out = g(x); } catch (e) { failed = true; lastErr = e; }
+            if (!failed) { return out; }
+            i = i + 1;
+        }
+        throw lastErr;
+    };
+}
+
+// iterate(f, x, n) -> [x, f(x), f(f(x)), ...] بطول n+1
+fun iterate(f, x, n) {
+    let g = asFn(f);
+    let out = [x];
+    let v = x;
+    let i = 0;
+    while (i < n) { v = g(v); push(out, v); i = i + 1; }
+    return out;
+}
+
+// until(pred, f)(x): كرّر f حتى يتحقق pred (حد أقصى 100000 خطوة للأمان)
+fun until(pred, f) {
+    let p = asFn(pred);
+    let g = asFn(f);
+    return fun(x) {
+        let v = x;
+        let guardCount = 0;
+        while (!p(v) and guardCount < 100000) { v = g(v); guardCount = guardCount + 1; }
+        return v;
+    };
+}
+
+// ───────────────────────── ذكاء ─────────────────────────
+
+// cond([[pred, f], ...])(x): أول شرط يتحقق تُنفَّذ دالته؛ لا شرط -> nil.  استعمل constant(true) كـ"وإلا".
+fun cond(pairs) {
+    let ps = [];
+    let fs = [];
+    let i = 0;
+    while (i < len(pairs)) {
+        push(ps, asFn(pairs[i][0]));
+        push(fs, asFn(pairs[i][1]));
+        i = i + 1;
+    }
+    return fun(x) {
+        let j = 0;
+        while (j < len(ps)) { if (ps[j](x)) { return fs[j](x); } j = j + 1; }
+        return nil;
+    };
+}
+
+// matchKind(handlers)(x): يوجّه حسب valueKind(x). المفاتيح: "array" "map" "set" "number" "string"
+// "bool" "nil" "function" "instance" وأخيراً "default" (اختياري).
+fun matchKind(handlers) {
+    return fun(x) {
+        let k = valueKind(x);
+        if (has(handlers, k)) { return asFn(handlers[k])(x); }
+        if (has(handlers, "default")) { return asFn(handlers["default"])(x); }
+        return nil;
+    };
+}
+
+// juxtMap({"sum": f, "n": g})(x) -> {"sum": f(x), "n": g(x)}
+fun juxtMap(fnsByName) {
+    return fun(x) {
+        let out = {};
+        let ks = keys(fnsByName);
+        let i = 0;
+        while (i < len(ks)) { out[ks[i]] = asFn(fnsByName[ks[i]])(x); i = i + 1; }
+        return out;
+    };
+}
+
+// converge(f, [g, h])(x) == f(g(x), h(x))
+fun converge(f, branches) {
+    let bs = [];
+    let i = 0;
+    while (i < len(branches)) { push(bs, asFn(branches[i])); i = i + 1; }
+    return fun(x) {
+        let args = [];
+        let j = 0;
+        while (j < len(bs)) { push(args, bs[j](x)); j = j + 1; }
+        return callFn(f, args);
+    };
+}
+
+// firstNonNil([a, b, c]): أول قيمة ليست nil
+fun firstNonNil(values) {
+    let i = 0;
+    while (i < len(values)) { if (values[i] != nil) { return values[i]; } i = i + 1; }
+    return nil;
+}
+
+// defaultTo(v)(x): x إن لم تكن nil وإلا v
+fun defaultTo(v) {
+    return fun(x) { if (x == nil) { return v; } return x; };
+}
+
+// guard(pred, message)(x): يمرّر x إن حقق الشرط وإلا يرمي message
+fun guard(pred, message) {
+    let p = asFn(pred);
+    return fun(x) {
+        if (!p(x)) { throw message; }
+        return x;
+    };
+}
+
+// ───────────────────────── نتائج ─────────────────────────
+
+fun okResult(v) { return {"ok": true, "value": v}; }
+fun failResult(e) { return {"ok": false, "error": e}; }
+fun isOkResult(r) { return type(r) == "map" and has(r, "ok") and r["ok"] == true; }
+
+// نص الخطأ من قيمة catch (map فيها message) أو من أي قيمة
+fun _errorText(e) {
+    if (type(e) == "map" and has(e, "message")) { return e["message"]; }
+    return e;
+}
+
+// tryResult(f)(x): ينفّذ f(x) ويُرجع Result بدل رمي الخطأ
+fun tryResult(f) {
+    let g = asFn(f);
+    return fun(x) {
+        let out = nil;
+        let failed = false;
+        let why = nil;
+        try { out = g(x); } catch (e) { failed = true; why = e; }
+        if (failed) { return failResult(_errorText(why)); }
+        return okResult(out);
+    };
+}
+
+// mapOk(r, f): يطبّق f على value إن نجحت النتيجة (الفشل يمرّ كما هو)
+fun mapOk(r, f) {
+    if (!isOkResult(r)) { return r; }
+    return tryResult(f)(r["value"]);
+}
+
+// thenResult(r, f): f تُرجع Result بنفسها (للتسلسل)
+fun thenResult(r, f) {
+    if (!isOkResult(r)) { return r; }
+    return asFn(f)(r["value"]);
+}
+
+fun resultOr(r, fallback) {
+    if (isOkResult(r)) { return r["value"]; }
+    return fallback;
+}
+
+// safeChain(stages)(x): chain يتوقف عند أول خطأ ويُرجع Result
+fun safeChain(stages) {
+    let fns = [];
+    let i = 0;
+    while (i < len(stages)) { push(fns, tryResult(stages[i])); i = i + 1; }
+    return fun(x) {
+        let r = okResult(x);
+        let j = 0;
+        while (j < len(fns) and isOkResult(r)) { r = fns[j](r["value"]); j = j + 1; }
+        return r;
+    };
+}
+
+// collectResults([r1, r2]): كلها نجحت -> ok(قائمة القيم) وإلا أول فشل
+fun collectResults(results) {
+    let vals = [];
+    let i = 0;
+    while (i < len(results)) {
+        if (!isOkResult(results[i])) { return results[i]; }
+        push(vals, results[i]["value"]);
+        i = i + 1;
+    }
+    return okResult(vals);
+}
+
+// traceChain(stages)(x) -> {"result": Result, "steps": [{"stage": i, "in": v, "out": w}]}
+// للتتبّع: يسجّل دخل وخرج كل مرحلة ويتوقف عند الخطأ.
+fun traceChain(stages) {
+    let fns = [];
+    let i = 0;
+    while (i < len(stages)) { push(fns, asFn(stages[i])); i = i + 1; }
+    return fun(x) {
+        let steps = [];
+        let v = x;
+        let j = 0;
+        while (j < len(fns)) {
+            let out = nil;
+            let failed = false;
+            let why = nil;
+            try { out = fns[j](v); } catch (e) { failed = true; why = e; }
+            if (failed) {
+                push(steps, {"stage": j, "in": v, "error": _errorText(why)});
+                return {"result": failResult(_errorText(why)), "steps": steps};
+            }
+            push(steps, {"stage": j, "in": v, "out": out});
+            v = out;
+            j = j + 1;
+        }
+        return {"result": okResult(v), "steps": steps};
+    };
+}
+
+// timed(f)(x) -> {"value": f(x), "ms": الزمن بالميلي ثانية}
+fun timed(f) {
+    let g = asFn(f);
+    return fun(x) {
+        let t0 = time.now()["epoch"];
+        let v = g(x);
+        let t1 = time.now()["epoch"];
+        return {"value": v, "ms": t1 - t0};
+    };
+}

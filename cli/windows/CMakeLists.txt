@@ -1,0 +1,70 @@
+# cli/windows/CMakeLists.txt
+# ============================================================================
+# يبني rin.exe (مُفسِّر Rin كسطر أوامر) على ويندوز — بلا Android/NDK أو JNI
+# إطلاقاً. يُستخدَم مباشرة عبر CMake (MSVC أو MinGW)؛ راجع README.md المرافق
+# أو شغّل build.bat لبناء تلقائي.
+#
+# نفس ملفات المحرّك الأصلية بالضبط (app/src/main/cpp/rin_lexer|parser|interpreter)
+# تُبنى هنا كملف تنفيذي مستقل — أي تعديل لاحق على اللغة نفسها في تلك الملفات
+# ينعكس هنا تلقائياً دون الحاجة لنسخ أي كود.
+# ============================================================================
+cmake_minimum_required(VERSION 3.20)
+project(rin_cli CXX)
+
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+if (MSVC)
+    # /utf-8: يجبر MSVC على قراءة ملفات المصدر (وفيها نصوص عربية داخل رسائل
+    # الأخطاء والمكتبة القياسية) كـ UTF-8 دوماً، بصرف النظر عن Locale النظام —
+    # بدونها قد تتحوّل الأحرف العربية داخل الملف التنفيذي إلى رموز تالفة.
+    add_compile_options(/utf-8 /W3)
+else()
+    add_compile_options(-Wall -O2)
+endif()
+
+
+# مطلوبة لـ zlibDeflateRaw/zlibInflateRaw في rin_interpreter.cpp (ضغط ZIP حقيقي).
+# على ويندوز: ثبّت zlib عبر vcpkg (vcpkg install zlib) ثم مرّر
+# -DCMAKE_TOOLCHAIN_FILE=<vcpkg>/scripts/buildsystems/vcpkg.cmake عند تشغيل cmake.
+find_package(ZLIB REQUIRED)
+
+set(RIN_CORE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../app/src/main/cpp)
+
+add_executable(rin
+    src/main.cpp
+    ${RIN_CORE_DIR}/rin_lexer.cpp
+    ${RIN_CORE_DIR}/rin_parser.cpp
+    # rin_make.cpp: validateMakeUnit/validateContainerPolicy — يستدعيهما execute() في
+    # rin_interpreter.cpp أدناه لكل @make/@container، فيفشل الربط (undefined reference) بدونه.
+    ${RIN_CORE_DIR}/rin_make.cpp
+    ${RIN_CORE_DIR}/rin_container_sql.cpp
+    ${RIN_CORE_DIR}/rin_artifact.cpp
+    ${RIN_CORE_DIR}/rin_interpreter.cpp
+    ${RIN_CORE_DIR}/binfmt/elf_format.cpp
+    ${RIN_CORE_DIR}/binfmt/ar_format.cpp
+    ${RIN_CORE_DIR}/binfmt/pe_format.cpp
+    ${RIN_CORE_DIR}/binfmt/macho_format.cpp
+    ${RIN_CORE_DIR}/binfmt/coff_obj.cpp
+    ${RIN_CORE_DIR}/loader_ui/library_loader_ui.cpp
+    ${RIN_CORE_DIR}/rin_http.cpp
+    ${RIN_CORE_DIR}/diagnostics/diagnostic.cpp
+    ${RIN_CORE_DIR}/diagnostics/source_manager.cpp
+    ${RIN_CORE_DIR}/diagnostics/diagnostic_engine.cpp
+    ${RIN_CORE_DIR}/diagnostics/diagnostic_renderer.cpp
+    # clc/ — مكتبة CLC (Rin Compact Library Container، .rcl): rin_interpreter.cpp يستدعي
+    # clc::readContainerInfo/readContainerInfoFromMemory/packDirectory/extractOneFileToMemory
+    # مباشرة ضمن registerNatives()/executeLibraryContainerBytes()، فيفشل الربط بدونها.
+    ${RIN_CORE_DIR}/clc/clc_container.cpp
+    ${RIN_CORE_DIR}/clc/clc_compress.cpp
+    ${RIN_CORE_DIR}/clc/clc_security.cpp
+    ${RIN_CORE_DIR}/clc/clc_rin_opt.cpp
+    ${RIN_CORE_DIR}/clc/clc_zip_import.cpp
+    ${RIN_CORE_DIR}/clc/sha256.cpp
+)
+
+target_include_directories(rin PRIVATE ${RIN_CORE_DIR})
+find_package(Threads REQUIRED)  # خيط تحريك مؤشر التقدّم (loader_ui::ProgressBar)
+target_link_libraries(rin PRIVATE Threads::Threads ZLIB::ZLIB)
+
+set_target_properties(rin PROPERTIES OUTPUT_NAME "rin")

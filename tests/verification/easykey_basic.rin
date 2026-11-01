@@ -1,0 +1,40 @@
+// tests/verification/easykey_basic.rin — Easy_key: مفتاح افتراضي لكل حاوية + مفتاح مكتوب (easy_key = "...";)
+// يحل تعارض الأسماء: حاويتان بنفس الاسم في مسارين مختلفين لا تتدافعان في الجداول الداخلية.
+
+@Containers.Group=A
+    @container.datalist=items
+        document fields={"n": 1};
+        document fields={"n": 2};
+    .end/container.datalist
+    @container=app
+        let v = "from A";
+    .end/container
+.end/Containers.Group
+
+@Containers.Group=B
+    @container.datalist=items
+        document fields={"n": 10};
+    .end/container.datalist
+    @container=app
+        let v = "from B";
+        easy_key = "bee";
+    .end/container
+.end/Containers.Group
+
+// المسار الكامل يعمل دائماً
+print A.app.v + " / " + B.app.v;
+// المفتاح الافتراضي: الأول يحتفظ باسمه، والثاني (تعارض اسم) مفتاحه = مساره الكامل
+print "keys: " + container.info("app")["key"] + " | " + container.info("B.app")["key"] + " | path=" + container.info("B.app")["path"];
+print "A.items=" + docIds("items") + " B.items=" + docIds("B.items");
+print "sql: " + sqlCount("items&n:gte(1)") + " / " + sqlCount("B.items&n:gte(1)");
+// المفتاح المكتوب يحل محل الاسم في دوال container.*
+print "bee=" + container.get("bee", "v") + " exists=" + hasContainer("bee") + " exists(B.app)=" + container.exists("B.app");
+print "get by name=" + container.get("app", "v") + " by path=" + container.get("B.app", "v");
+
+// حاوية بمفتاح مكتوب فقط (بلا تعارض)
+@container=settings
+    let theme = "dark";
+    easy_key = "cfg";
+.end/container
+print "cfg=" + container.get("cfg", "theme") + " key=" + container.info("settings")["key"];
+print "no key => default: " + container.info("A.items")["key"];

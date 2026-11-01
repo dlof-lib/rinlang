@@ -1,0 +1,13 @@
+// let_livemix.rin — اختبار تحقّق لـ docs/let-plus.md
+gauge hp = 50 within 0 to 100;
+tape pos = 0;
+[hp, pos] = [500, 3];
+print hp; print pos; print pos.past;
+stone K = 1;
+try { [K, pos] = [2, 4]; } catch (e) { print e.code; }
+let [u, v] = [1, 2];
+bell u (o, n) { print "u " + o + "->" + n; }
+[u, v] = [9, 8];
+trial { [u, v] = [0, 0]; abort; }
+print u; print v;
+export let m = 1, n = 2;

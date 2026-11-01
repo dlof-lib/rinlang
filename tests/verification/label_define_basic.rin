@@ -1,0 +1,24 @@
+// label / define: تسمية وتعريف (docs/label-define.md)
+label temp = 21 as "درجة الحرارة" about "قراءة المستشعر الداخلي" unit "°C";
+print temp.label;            // درجة الحرارة
+print temp.id;               // temp
+print temp.about;            // قراءة المستشعر الداخلي
+print temp.unit;             // °C
+temp = temp + 4;  print temp;   // 25  (الإسناد عادي)
+
+define speed = 0 as "سرعة المركبة" unit "km/h";
+print speed.about;           // سرعة المركبة
+print speed.label;           // speed  (الافتراضي: المعرّف)
+print speed.unit;            // km/h
+define speed2 = 9 as "desc" label "Speed 2";
+print speed2.label + " | " + speed2.about;   // Speed 2 | desc
+print speed2.info;
+
+let plain = 1; print plain + 1;               // 2
+define bare = 1 as "x"; print bare.unit;      // nil
+// أسماء عادية تبقى صالحة
+let label = "L"; let define = "D"; print label + define;   // LD
+// يعمل مع bell و inc
+bell temp (o, n) { print "temp " + str(o) + "->" + str(n); }
+inc temp;
+print temp.info["value"];                     // 26

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- محتوى حوار "بنية الملف": RecyclerView مطوّق بحدّ أقصى للارتفاع (انظر MaxHeightFrameLayout)
+     كي لا تتجاوز القوائم الطويلة الشاشة، مُمرَّر عبر AlertDialog.Builder().setView(...) بدل
+     setItems() المسطّحة السابقة — يرث الحوار نفسه بطاقة bg_dialog_card الموحَّدة من
+     Theme.RinLang.AlertDialog تلقائياً. -->
+<com.dlof.rinlang.MaxHeightFrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content">
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/outlineRecyclerView"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:clipToPadding="false"
+        android:overScrollMode="ifContentScrolls"
+        android:paddingTop="4dp"
+        android:paddingBottom="4dp" />
+
+</com.dlof.rinlang.MaxHeightFrameLayout>

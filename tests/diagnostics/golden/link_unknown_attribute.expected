@@ -1,0 +1,13 @@
+error[E0016]: unknown attribute `link.namex`
+  --> link_unknown_attribute.rin:1:6
+
+ 1 | link.namex="target";
+   |      ^^^^^
+
+did you mean:
+  `id`
+
+help:
+  did you mean `link.id=`?
+
+1 error emitted

@@ -1,0 +1,72 @@
+📦 container = app
+✅ .end/container (app)
+title=Rin
+[update] was 0
+counter=5
+[update] was 5
+inc=6
+counter=6
+title=Rin 2
+📚 Volume = Store
+🗂️ Containers.Group = Inventory
+📦 container = items
+✅ .end/container (items)
+✅ .end/Containers.Group (Inventory) [تحتوي: items]
+🗂️ Containers.Group = Archive
+📦 container = items
+✅ .end/container (items)
+✅ .end/Containers.Group (Archive) [تحتوي: items]
+✅ .end/Volume (Store) [تحتوي: Inventory, Archive]
+owner=Sara
+inv=3
+arc=100
+add=7
+inv=7
+arc=100
+arc=0
+🗂️ Containers.Group = Net
+📦 container = api
+✅ .end/container (api)
+✅ .end/Containers.Group (Net) [تحتوي: api]
+net=eu:8080
+📦 container = outer
+📦 container = inner
+✅ .end/container (inner)
+✅ .end/container (outer)
+OI
+🗂️ Containers.Group = Shop
+📦 container = prices
+✅ .end/container (prices)
+📦 container = cart
+✅ .end/container (cart)
+✅ .end/Containers.Group (Shop) [تحتوي: prices, cart]
+total=10
+shadow
+true
+false
+volume
+group
+container
+Store.Inventory
+["Inventory", "Archive"]
+["add", "count"]
+7
+11
+{"region": "eu", "api": {"port": 8080}}
+📚 Volume = Cfg
+🗂️ Containers.Group = Shared
+📦 container = svc
+✅ .end/container (svc)
+✅ .end/Containers.Group (Shared) [تحتوي: svc]
+✅ .end/Volume (Cfg) [تحتوي: Shared]
+prod
+volume write: E0035
+group write: 5
+group call: E0035
+container call: 2
+{"kind": "volume", "read": true, "write": false, "call": false, "state": false, "transaction": false, "nest": true}
+{"kind": "group", "read": true, "write": true, "call": false, "state": false, "transaction": false, "nest": true}
+{"kind": "container", "read": true, "write": true, "call": true, "state": true, "transaction": true, "nest": true}
+rolled back, n=2
+ok n=7
+group tx: E0035

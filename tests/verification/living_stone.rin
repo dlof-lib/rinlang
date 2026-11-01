@@ -1,0 +1,11 @@
+// living_stone.rin — اختبار تحقّق لـ docs/living-variables.md
+stone PI = 3.14159;
+print PI;
+let r = 2;
+print PI * r * r;
+try { PI = 3; } catch (e) { print "caught: " + e.message; print e.code; }
+stone cfg = {"mode": "dark", "n": 1};
+try { cfg["mode"] = "light"; } catch (e) { print "caught2: " + e.message; }
+try { cfg.n = 5; } catch (e) { print "caught3: " + e.code; }
+print cfg["mode"];
+print PI.kind;

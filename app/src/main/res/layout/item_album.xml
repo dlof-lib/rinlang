@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="wrap_content"
+    android:orientation="vertical" android:padding="7dp">
+    <FrameLayout android:layout_width="match_parent" android:layout_height="190dp">
+        <View android:id="@+id/albumCoverBack" android:layout_width="match_parent" android:layout_height="178dp" android:layout_marginStart="7dp" android:layout_marginTop="9dp" />
+        <LinearLayout android:id="@+id/albumCover" android:layout_width="match_parent" android:layout_height="178dp"
+            android:orientation="vertical" android:padding="16dp" android:layout_gravity="top|start" android:elevation="4dp">
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="RIN • ALBUM"
+                android:textColor="#CCFFFFFF" android:textSize="9sp" android:textStyle="bold" />
+            <Space android:layout_width="1dp" android:layout_height="0dp" android:layout_weight="1" />
+            <TextView android:id="@+id/txtAlbumName" android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:textColor="@android:color/white" android:textSize="19sp" android:textStyle="bold" android:maxLines="2" android:ellipsize="end" />
+            <TextView android:id="@+id/txtAlbumMeta" android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginTop="5dp" android:textColor="#DDFFFFFF" android:textSize="10.5sp" />
+        </LinearLayout>
+        <ImageButton android:id="@+id/btnDeleteAlbum" android:layout_width="36dp" android:layout_height="36dp" android:layout_gravity="top|end"
+            android:layout_margin="8dp" android:background="@drawable/bg_album_delete" android:src="@drawable/ic_trash_red"
+            android:padding="9dp" android:contentDescription="@string/delete" />
+    </FrameLayout>
+</LinearLayout>

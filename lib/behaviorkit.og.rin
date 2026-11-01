@@ -1,0 +1,209 @@
+// ============================================================================
+//  lib/behaviorkit.og.rin  —  Behavior Kit: مفهوم موحّد لبرمجة سلوك التفاعل
+// ============================================================================
+//  استيراد:
+//    @import "lib/math.og.rin";         // (اختياري) لدوال Easing: easeOutQuad...
+//    @import "lib/movingmask.og.rin";   // الأساس: قناع متحرك بموضع/meta لكل عنصر
+//    @import "lib/behaviorkit.og.rin";  // هذه المكتبة: طبقة سلوك فوقه
+//
+//  ملاحظة: كل دالة هنا تقبل easingFn كوسيط صريح (مرّر nil لحركة خطية بلا تنعيم)،
+//  فاستيراد lib/math.og.rin اختياري فعلياً — لازم فقط إن أردت تمرير إحدى دوال
+//  Easing الجاهزة (easeInQuad/easeOutQuad/easeInOutCubic/easeOutBounce/...)
+//  بدل تمرير nil أو دالتك الخاصة.
+//
+//  الفكرة (المفهوم):
+//  ---------------------------------------------------------------------------
+//  المطلوب كان: "لمس سلس، ضغط زر، سحب، تكبير/تصغير، تغيير لون، اختفاء/إظهار،
+//  تبديل، انتقال... يبرمج السلوك — دوال مدمجة." كل هذه الأفعال، رغم اختلاف
+//  ظاهرها، هي في الجوهر نفس الشيء: "قيمة تنتقل من حالة إلى أخرى، فورياً أو
+//  تدريجياً عبر خطوات مُنعَّمة (easing)". لذلك هذه المكتبة مبنية حول محرّك
+//  انتقال واحد فقط (bh_transitionValue)، وكل سلوك آخر (تكبير/تلاشي/لون) هو
+//  استدعاء له باسم دلالي واضح — تماماً بنفس روح mm_animateTo الموجودة أصلاً
+//  في lib/movingmask.og.rin، لكن معمَّمة لأي خاصية (meta) وليس فقط للموضع.
+//
+//  لا تُضاف هنا أي حالة عامة أو تعديل على المفسّر: كل شيء دوال صريحة فوق
+//  mm_setMeta/mm_getMeta (meta حرّة لكل قناع) + colorMix/colorLighten/
+//  colorDarken (دوال الألوان الفطرية في المفسّر) + دوال Easing الجاهزة
+//  (easeInQuad, easeOutQuad, easeInOutQuad, easeOutBounce, ...).
+//
+//  الخصائص القياسية التي تديرها هذه المكتبة على meta كل قناع:
+//    scale    (رقم، افتراضي 1)         — حجم العنصر، تكبير/تصغير
+//    opacity  (رقم بين 0 و1، افتراضي 1) — الشفافية، تلاشي/ظهور
+//    color    (نص "#RRGGBB"، افتراضي "#000000") — اللون الحالي
+//    visible  (منطقي، افتراضي true)    — هل العنصر ظاهر فعلاً
+//    pressed  (منطقي، افتراضي false)   — هل الزر مضغوط الآن
+//
+//  مثال سريع:
+//    let world = mm_new();
+//    mm_spawn(world, "btn", 100, 200);
+//    bh_press(world, "btn");                          // تغذية راجعة لحظة الضغط
+//    bh_zoomTo(world, "btn", 1.5, 8, easeOutQuad);     // تكبير سلس
+//    bh_colorTo(world, "btn", "#e74c3c", 6, nil);      // تغيير لون تدريجي
+// ============================================================================
+
+
+// ---- 1) محرّك الانتقال العام (قلب المفهوم) ---------------------------------
+
+// ينقل خاصية meta رقمية باسم key من fromValue إلى toValue عبر steps دورة، مستخدماً
+// دالة تسهيل easingFn (t في [0,1] -> t مُنعَّم؛ مرّر nil لحركة خطية بلا تنعيم).
+// يكتب القيمة عند كل خطوة (حتى تستطيع طبقة رسم/واجهة قراءتها تباعاً كأنها إطارات
+// حركة حقيقية)، ويُعيد مصفوفة كل القيم الوسيطة، ويترك القيمة النهائية عند
+// toValue تماماً بلا انجراف عددي — بنفس فكرة mm_animateTo تماماً لكن لأي meta.
+fun bh_transitionValue(mm, name, key, fromValue, toValue, steps, easingFn) {
+    let result = [];
+    if (mm_exists(mm, name) == false) { return result; }
+    if (steps < 1) { steps = 1; }
+    let i = 1;
+    while (i <= steps) {
+        let t = i / steps;
+        if (easingFn != nil) { t = easingFn(t); }
+        let v = mm_lerp(fromValue, toValue, t);
+        mm_setMeta(mm, name, key, v);
+        push(result, v);
+        i = i + 1;
+    }
+    mm_setMeta(mm, name, key, toValue);
+    return result;
+}
+
+// نفس الفكرة لكن للألوان (نص "#RRGGBB" وليس رقماً) — تستخدم colorMix الفطرية
+// بدل mm_lerp، لأن اللون ليس رقماً واحداً بل ثلاث قنوات؛ colorMix تتولى ذلك.
+fun bh_transitionColor(mm, name, key, fromColor, toColor, steps, easingFn) {
+    let result = [];
+    if (mm_exists(mm, name) == false) { return result; }
+    if (steps < 1) { steps = 1; }
+    let i = 1;
+    while (i <= steps) {
+        let t = i / steps;
+        if (easingFn != nil) { t = easingFn(t); }
+        let c = colorMix(fromColor, toColor, t);
+        mm_setMeta(mm, name, key, c);
+        push(result, c);
+        i = i + 1;
+    }
+    mm_setMeta(mm, name, key, toColor);
+    return result;
+}
+
+
+// ---- 2) تكبير/تصغير (Zoom) -------------------------------------------------
+
+// حجم القناع الحالي (1 = الحجم الطبيعي) — meta "scale" بفولباك 1 إن لم يُضبط بعد
+fun bh_scale(mm, name) { return mm_getMeta(mm, name, "scale", 1); }
+
+// يُكبِّر/يُصغِّر القناع سلساً حتى قيمة مطلقة toScale عبر steps خطوة
+fun bh_zoomTo(mm, name, toScale, steps, easingFn) {
+    return bh_transitionValue(mm, name, "scale", bh_scale(mm, name), toScale, steps, easingFn);
+}
+
+// يُكبِّر/يُصغِّر نسبةً لحجمه الحالي (factor=1.2 يعني +20%، factor=0.8 يعني -20%)
+fun bh_zoomBy(mm, name, factor, steps, easingFn) {
+    return bh_zoomTo(mm, name, bh_scale(mm, name) * factor, steps, easingFn);
+}
+
+
+// ---- 3) تغيير اللون (Color) ------------------------------------------------
+
+// لون القناع الحالي — meta "color" بفولباك أسود إن لم يُضبط بعد
+fun bh_color(mm, name) { return mm_getMeta(mm, name, "color", "#000000"); }
+
+// يُغيِّر لون القناع سلساً (تدرّجاً حقيقياً بين اللونين، لا قفزة فجائية) حتى toColor
+fun bh_colorTo(mm, name, toColor, steps, easingFn) {
+    return bh_transitionColor(mm, name, "color", bh_color(mm, name), toColor, steps, easingFn);
+}
+
+
+// ---- 4) الظهور/الاختفاء (Fade / Show / Hide) -------------------------------
+
+// شفافية القناع الحالية (1 = ظاهر تماماً، 0 = مختفٍ تماماً)
+fun bh_opacity(mm, name) { return mm_getMeta(mm, name, "opacity", 1); }
+
+// يُظهر القناع تدريجياً (تلاشي دخول) حتى شفافية كاملة، ثم يضبط visible=true
+fun bh_fadeIn(mm, name, steps, easingFn) {
+    let trace = bh_transitionValue(mm, name, "opacity", bh_opacity(mm, name), 1, steps, easingFn);
+    mm_setMeta(mm, name, "visible", true);
+    return trace;
+}
+
+// يُخفي القناع تدريجياً (تلاشي خروج) حتى شفافية صفر، ثم يضبط visible=false
+fun bh_fadeOut(mm, name, steps, easingFn) {
+    let trace = bh_transitionValue(mm, name, "opacity", bh_opacity(mm, name), 0, steps, easingFn);
+    mm_setMeta(mm, name, "visible", false);
+    return trace;
+}
+
+// إظهار/إخفاء فوريان (بلا انتقال) — لحالات تحتاج قفزة مباشرة بدل حركة
+fun bh_show(mm, name) { mm_setMeta(mm, name, "opacity", 1); return mm_setMeta(mm, name, "visible", true); }
+fun bh_hide(mm, name) { mm_setMeta(mm, name, "opacity", 0); return mm_setMeta(mm, name, "visible", false); }
+
+// هل القناع ظاهر حالياً؟
+fun bh_isVisible(mm, name) { return mm_getMeta(mm, name, "visible", true); }
+
+
+// ---- 5) التبديل العام (Toggle) ---------------------------------------------
+
+// يعكس قيمة أي علم منطقي (key) على القناع: true<->false — يعمل لأي حالة ثنائية
+// (visible/pressed/selected/open/dark...)، بلا حاجة لدالة toggle مختلفة لكل واحدة
+fun bh_toggle(mm, name, key) {
+    let cur = mm_getMeta(mm, name, key, false);
+    let next = (cur == false);
+    mm_setMeta(mm, name, key, next);
+    return next;
+}
+
+
+// ---- 6) ضغط الزر (Press) — تغذية راجعة لحظية عند اللمس ---------------------
+
+// يُسجِّل بداية ضغط: يضبط pressed=true، ويصغِّر العنصر قليلاً ويُغمِّق لونه سلساً
+// (نفس أسلوب أزرار الجوال الحقيقية: استجابة بصرية فورية تؤكّد "تم استقبال اللمسة")
+fun bh_press(mm, name, pressScale, steps) {
+    if (pressScale == nil) { pressScale = 0.96; }
+    if (steps == nil) { steps = 3; }
+    mm_setMeta(mm, name, "pressed", true);
+    bh_zoomTo(mm, name, pressScale, steps, easeOutQuad);
+    return colorDarken(bh_color(mm, name), 12);
+}
+
+// يُنهي الضغط: يعيد الحجم الطبيعي وpressed=false — تُستدعى عند رفع الإصبع
+fun bh_release(mm, name, steps) {
+    if (steps == nil) { steps = 4; }
+    mm_setMeta(mm, name, "pressed", false);
+    return bh_zoomTo(mm, name, 1, steps, easeOutBounce);
+}
+
+
+// ---- 7) السحب (Drag) — تحريك 1:1 خلف الإصبع --------------------------------
+//  غلاف دلالي رقيق فوق mm_touchBegin/mm_touchDrag/mm_touchEnd الجاهزة أصلاً في
+//  movingmask، بأسماء بادرات اللمس الشائعة، لِتجمع "اللمس" و"الحركة" في واجهة
+//  واحدة متّسقة مع بقية هذه المكتبة (bh_*) بدل التنقّل بين اسمين مختلفين.
+
+fun bh_dragStart(mm, name, x, y) { return mm_touchBegin(mm, name, x, y); }
+fun bh_dragMove(mm, name, x, y) { return mm_touchDrag(mm, name, x, y); }
+// يُنهي السحب ويُصنِّف البادرة (tap أو swipe) — راجع mm_touchEnd للتفاصيل
+fun bh_dragEnd(mm, name) { return mm_touchEnd(mm, name); }
+
+
+// ---- 8) اللمس السلس (Smooth Touch) — اقتفاء هدف بنعومة بدل قفزة مباشرة -----
+//  خلافاً لـbh_dragMove (نقل فوري لنفس نقطة اللمسة)، هذه تُقرِّب القناع تدريجياً
+//  من هدف متحرك كل استدعاء (كل "إطار")، فتبدو الحركة زلقة/سلسة (كتتبّع بنعومة
+//  بدل التصاق حرفي بالإصبع) — غلاف دلالي فوق mm_smoothFollow الجاهزة.
+//  remainPerSecond بين 0 و1: كلما قلّ كانت الملاحقة أسرع/ألصق بالهدف.
+fun bh_smoothTouch(mm, name, targetX, targetY, dt, remainPerSecond) {
+    if (remainPerSecond == nil) { remainPerSecond = 0.15; }
+    return mm_smoothFollow(mm, name, targetX, targetY, remainPerSecond, dt);
+}
+
+
+// ---- 9) لقطة الحالة الكاملة (لعرض/تصحيح الحالة الحالية دفعة واحدة) ---------
+
+fun bh_state(mm, name) {
+    let pos = mm_position(mm, name);
+    return {
+        x: pos["x"], y: pos["y"],
+        scale: bh_scale(mm, name),
+        opacity: bh_opacity(mm, name),
+        color: bh_color(mm, name),
+        visible: bh_isVisible(mm, name),
+        pressed: mm_getMeta(mm, name, "pressed", false)
+    };
+}

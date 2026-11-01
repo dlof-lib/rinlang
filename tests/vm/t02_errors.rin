@@ -1,0 +1,27 @@
+fun thrower(x) { if (x > 1) { throw "big " + x; } return x; }
+try { thrower(5); } catch (e) { print "c1", e.message, e.value; }
+try { let z = 1 / 0; } catch (e) { print "c2", e.message; }
+try { undefinedVar + 1; } catch (e) { print "c3", e.message; }
+try { let a = [1]; print a[5]; } catch (e) { print "c4", e.message; }
+fun deep() { try { throw "inner"; } catch (e) { throw "re:" + e.message; } }
+try { deep(); } catch (e) { print "c5", e.message; }
+let r = 0;
+for (let i = 0; i < 5; i = i + 1) { try { if (i == 2) { throw "x"; } r = r + 1; } catch (e) { r = r + 100; continue; } }
+print "r", r;
+fun f2() { try { return 1; } catch (e) { return 2; } }
+print f2();
+fun f3() { for (let i = 0; i < 3; i = i + 1) { try { if (i == 1) { return "ret" + i; } } catch (e) { } } }
+print f3();
+fun apply(arr, f) { let r = []; for (let x in arr) { push(r, f(x)); } return r; }
+print apply([1,2,3], fun(x) { return x * x; });
+try { apply([1,2], fun(x) { throw "cb"; }); } catch (e) { print "c6", e.message; }
+fun rec(n) { return rec(n + 1); }
+try { rec(0); } catch (e) { print "depth", e.message; }
+try { nofunc(1); } catch (e) { print "c7", e.message; }
+try { fib2(1,2,3); } catch (e) { print "c8"; }
+fun two(a, b) { return a + b; }
+try { two(1); } catch (e) { print "c9", e.message; }
+let m = {f: fun(x) { return x + 1; }};
+print m.f(1);
+print "end";
+throw "uncaught";

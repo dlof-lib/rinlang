@@ -1,0 +1,23 @@
+// base_basic.rin — اختبار تحقّق لـ docs/base-accept.md (base: خط أساس يخدم if)
+base temp = 20 to 30 step 2;
+print temp.base; print temp.goal; print temp.step; print temp.same; print temp.kind;
+inc temp; inc temp by 3;
+print temp; print temp.delta; print temp.up; print temp.down; print temp.changed;
+if (temp.up) { print "warmer than base"; }
+print temp.progress; print temp.togo; print temp.reached;
+inc temp 5; print temp; print temp.reached;
+dec temp by 10; print temp; print temp.down;
+rebase temp; print temp.base; print temp.same;
+inc temp; rewind temp; print temp; print temp.same;
+base s = "hi"; print s.same; s = "yo"; print s.changed;
+try { print s.delta; } catch (e) { print e.code; }
+base down = 100 to 0 step 25;
+dec down; dec down; print down; print down.progress; print down.reached; dec down; dec down; print down.reached;
+let p = 1;
+try { rebase p; } catch (e) { print e.code; }
+let w = "text";
+try { inc w; } catch (e) { print e.code; }
+try { base z = 1 step 0; } catch (e) { print e.code; }
+let base = 5; fun inc(x) { return x + 1; }
+print base; print inc(base);
+print temp.vitals;

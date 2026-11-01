@@ -1,0 +1,16 @@
+channel47 1.0
+# إعدادات تطبيق (طبقة تُدمج فوق الافتراضية)
+[ui]
+theme     = "dark"
+font.size = 14
+font.name = "Noto Naskh Arabic"
+quiet_from = 22:30
+[net]
+timeout   = 30.5
+retries   = 3
+proxy     = nil
+hosts     = [
+  "a.example.com",   # الأول
+  "b.example.com",
+]
+limits    = { rpm = 60, burst = 10 }

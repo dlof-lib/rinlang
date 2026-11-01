@@ -1,0 +1,220 @@
+// previewkit_tests.rin — اختبارات مكتبة previewkit (PDF / Markdown / TypeScript + المعاينة الحيّة)
+//   rin tests/previewkit_tests.rin
+// كل مدخلات PDF تُبنى هنا برمجياً (بلا ملفات خارجية): PDF صغير غير مضغوط، وآخر مضغوط بـ zlib حقيقي
+// (zlibDeflateRaw + ترويسة zlib + adler32) لاختبار native zlibInflate، وآخر مع ToUnicode عربي.
+@import "rintest";
+@import "previewkit";
+
+// عدد صحيح 32-بت كأربعة بايتات big-endian (تذييل adler32 في zlib)
+fun t_be32(n) {
+    return chr(floor(n / 16777216) % 256) + chr(floor(n / 65536) % 256) + chr(floor(n / 256) % 256) + chr(n % 256);
+}
+
+// تدفّق zlib كامل: 78 9C + deflate خام + adler32
+fun t_zlib(s) {
+    return chr(120) + chr(156) + zlibDeflateRaw(s) + t_be32(adler32(s));
+}
+
+// يبني PDF بسيطاً بصفحة واحدة؛ content = تدفّق المحتوى، fontDict = قاموس الخط، extraObjs = نص أجسام إضافية
+fun t_pdf(content, filter, fontDict, extraObjs) {
+    let body = content;
+    let flt = "";
+    if (filter == "flate") { body = t_zlib(content); flt = " /Filter /FlateDecode"; }
+    return "%PDF-1.4\n" +
+        "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n" +
+        "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n" +
+        "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj\n" +
+        "4 0 obj\n<< /Length " + toString(len(body)) + flt + " >>\nstream\n" + body + "\nendstream\nendobj\n" +
+        "5 0 obj\n" + fontDict + "\nendobj\n" + extraObjs +
+        "trailer\n<< /Root 1 0 R /Size 8 >>\n%%EOF\n";
+}
+
+let T_FONT = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>";
+let T_TEXT = "BT /F1 12 Tf 72 780 Td (Hello \\(Rin\\) PDF) Tj 0 -16 Td [(Wor) -300 (ld)] TJ 0 -60 Td (Far line) Tj ET";
+
+rt_describe("zlibInflate (native جديد)", fun() {
+    rt_test("يفك تدفّق zlib دون معرفة الحجم", fun() {
+        let s = "hello hello hello hello rin rin rin";
+        rt_expect(zlibInflate(t_zlib(s))).toBe(s);
+    });
+    rt_test("يُرجع nil للبيانات التالفة", fun() {
+        rt_expect(zlibInflate("not zlib data")).toBeNil();
+    });
+    rt_test("سقف الحجم يمنع قنابل الضغط", fun() {
+        let big = repeat("A", 5000);
+        rt_expect(zlibInflate(t_zlib(big), 100)).toBeNil();
+        rt_expect(len(zlibInflate(t_zlib(big), 6000))).toBe(5000);
+    });
+});
+
+rt_describe("previewkit: الكشف", fun() {
+    rt_test("النوع من الامتداد", fun() {
+        rt_expect(pvDetect("a/b/readme.MD", nil)).toBe("markdown");
+        rt_expect(pvDetect("x.tsx", nil)).toBe("typescript");
+        rt_expect(pvDetect("x.mjs", nil)).toBe("javascript");
+        rt_expect(pvDetect("x.json", nil)).toBe("json");
+        rt_expect(pvDetect("x.rin", nil)).toBe("code");
+    });
+    rt_test("توقيع %PDF- يغلب الامتداد", fun() {
+        rt_expect(pvDetect("noext", "%PDF-1.7 ...")).toBe("pdf");
+    });
+});
+
+rt_describe("previewkit: PDF", fun() {
+    rt_test("نص PDF غير مضغوط مع هروب الأقواس ومسافة TJ", fun() {
+        writeFile("pk_t1.pdf", t_pdf(T_TEXT, "", T_FONT, ""));
+        let txt = pvPdfText("pk_t1.pdf");
+        rt_expect(txt).toContain("Hello (Rin) PDF");
+        rt_expect(txt).toContain("Wor ld");
+        rt_expect(txt).toContain("Far line");
+        deleteFile("pk_t1.pdf");
+    });
+    rt_test("تدفّق FlateDecode حقيقي", fun() {
+        writeFile("pk_t2.pdf", t_pdf(T_TEXT, "flate", T_FONT, ""));
+        rt_expect(pvPdfText("pk_t2.pdf")).toContain("Hello (Rin) PDF");
+        deleteFile("pk_t2.pdf");
+    });
+    rt_test("فاصل فقرة عند قفزة عمودية كبيرة", fun() {
+        writeFile("pk_t3.pdf", t_pdf(T_TEXT, "", T_FONT, ""));
+        let info = pvPdfInfo("pk_t3.pdf");
+        rt_expect(info["pageCount"]).toBe(1);
+        let a = pvPdfAnalyze(readFile("pk_t3.pdf"));
+        rt_expect(a["pages"][0]["lines"]).toContain("");
+        deleteFile("pk_t3.pdf");
+    });
+    rt_test("ToUnicode عربي (Type0) مع ترتيب منطقي", fun() {
+        // خط Type0 رمزه 2 بايت؛ <0001>=م <0002>=ر <0003>=ح ... ويُرسم بصرياً (يسار->يمين) = "حرم" معكوس "مرح"
+        let cmap = "/CIDInit /ProcSet findresource begin 12 dict begin begincmap\n" +
+            "1 begincodespacerange <0000> <FFFF> endcodespacerange\n" +
+            "3 beginbfchar <0001> <0645> <0002> <0631> <0003> <062D> endbfchar\nendcmap";
+        let font = "<< /Type /Font /Subtype /Type0 /BaseFont /X /Encoding /Identity-H /ToUnicode 6 0 R /DescendantFonts [7 0 R] >>";
+        let extra = "6 0 obj\n<< /Length " + toString(len(cmap)) + " >>\nstream\n" + cmap + "\nendstream\nendobj\n" +
+            "7 0 obj\n<< /Type /Font /Subtype /CIDFontType2 /DW 600 >>\nendobj\n";
+        // الترتيب البصري: ح ر م  (يُقرأ منطقياً م ر ح)
+        let content = "BT /F1 12 Tf 72 700 Td <000300020001> Tj ET";
+        writeFile("pk_t4.pdf", t_pdf(content, "", font, extra));
+        rt_expect(pvPdfText("pk_t4.pdf")).toBe("مرح");
+        deleteFile("pk_t4.pdf");
+    });
+    rt_test("ملف غير PDF يعيد خطأً لا استثناءً", fun() {
+        let a = pvPdfAnalyze("hello");
+        rt_expect(a["ok"]).toBeFalse();
+    });
+    rt_test("الصفحة المولّدة تتضمن النص وبيانات الوثيقة", fun() {
+        writeFile("pk_t5.pdf", t_pdf(T_TEXT, "", T_FONT, ""));
+        let r = pvRender("pk_t5.pdf", {"lang": "en"});
+        rt_expect(r["kind"]).toBe("pdf");
+        rt_expect(r["html"]).toContain("Hello (Rin) PDF");
+        rt_expect(r["pageCount"]).toBe(1);
+        deleteFile("pk_t5.pdf");
+    });
+    rt_test("embedSrc يضيف تبويب الأصل", fun() {
+        writeFile("pk_t6.pdf", t_pdf(T_TEXT, "", T_FONT, ""));
+        let r = pvRender("pk_t6.pdf", {"embedSrc": "pk_t6.pdf"});
+        rt_expect(r["html"]).toContain("application/pdf");
+        deleteFile("pk_t6.pdf");
+    });
+});
+
+rt_describe("previewkit: Markdown", fun() {
+    rt_test("عناوين وفهرس وإحصاءات", fun() {
+        let md = "# Title\n\nSome **bold** text.\n\n## Part [link](http://x.y)\n\n```\n# not a heading\n```\n";
+        let r = pvRenderText("markdown", md, {"lang": "en"});
+        rt_expect(r["headings"]).toBe(2);
+        rt_expect(r["html"]).toContain("id=\"pv-h1\"");
+        rt_expect(r["html"]).toContain("href=\"#pv-h2\"");
+        rt_expect(r["html"]).toContain("Part link");
+    });
+});
+
+rt_describe("previewkit: TypeScript", fun() {
+    let src = "import { A } from \"./a\";\n" +
+        "export interface User { id: number; name?: string; }\n" +
+        "export type Id = string | number;\n" +
+        "enum Color { Red, Green }\n" +
+        "export abstract class Svc extends Base {\n" +
+        "  private cache: Map<string, User> = new Map();\n" +
+        "  constructor(private http: Http) { super(); }\n" +
+        "  async load(id: Id): Promise<User> { return fetch(`/x/${id}`); }\n" +
+        "}\n" +
+        "export const add = (a: number, b: number): number => a + b;\n" +
+        "export function* gen() { yield 1; }\n" +
+        "const re = /[\"']+/g; // regex with quotes\n";
+    rt_test("الهيكل: أصناف وأنواع ودوال وأعضاء", fun() {
+        let an = pvTsOutline(src, "ts");
+        let names = [];
+        for (let o in an["outline"]) { push(names, o["kind"] + ":" + o["name"]); }
+        rt_expect(names).toContain("interface:User");
+        rt_expect(names).toContain("type:Id");
+        rt_expect(names).toContain("enum:Color");
+        rt_expect(names).toContain("class:Svc");
+        rt_expect(names).toContain("method:constructor");
+        rt_expect(names).toContain("method:load");
+        rt_expect(names).toContain("property:cache");
+        rt_expect(names).toContain("function:add");
+        rt_expect(names).toContain("function:gen");
+        rt_expect(an["imports"]).toContain("./a");
+    });
+    rt_test("regex literal بداخله علامات اقتباس لا يُنتج مشاكل", fun() {
+        rt_expect(len(pvTsOutline(src, "ts")["problems"])).toBe(0);
+    });
+    rt_test("يكشف النص غير المغلق والأقواس غير المتوازنة", fun() {
+        let bad = pvTsOutline("const s = \"abc;\nfunction f( { }\n", "ts");
+        let msgs = [];
+        for (let p in bad["problems"]) { push(msgs, p["msg"]); }
+        rt_expect(join(msgs, "|")).toContain("Unterminated string");
+        rt_expect(join(msgs, "|")).toContain("Unclosed '('");
+    });
+    rt_test("التلوين يهرّب HTML ويصنّف الرموز", fun() {
+        let r = pvRenderText("typescript", "const a: number = 1 < 2; // <b>x</b>\n", {});
+        rt_expect(r["html"]).toContain("tk-k");
+        rt_expect(r["html"]).toContain("&lt;b&gt;");
+        rt_expect(r["html"]).toContain("tk-t");
+    });
+    rt_test("نص يونيكود لا ينكسر بين الأوسمة", fun() {
+        let r = pvRenderText("typescript", "const s = 'مرحبا'; let مرحبا = 1;\n", {});
+        rt_expect(r["html"]).toContain("مرحبا");
+    });
+    rt_test("JSON غير صالح يُبلَّغ عنه", fun() {
+        let bad = pvRenderText("json", "{\"a\": }", {"lang": "en"});
+        rt_expect(bad["problems"]).toBeGreaterThan(0);
+        let ok = pvRenderText("json", "{\"a\": [1,2]}", {"lang": "en"});
+        rt_expect(ok["problems"]).toBe(0);
+    });
+});
+
+rt_describe("previewkit: المعاينة الحيّة", fun() {
+    rt_test("pvPreview يكتب الصفحة وpvPollOnce يكتشف التعديل", fun() {
+        writeFile("pk_live.md", "# One\n");
+        let r = pvPreview("pk_live.md", "pk_live.html", {"live": true, "lang": "en"});
+        rt_expect(r["ok"]).toBeTrue();
+        rt_expect(readFile("pk_live.html")).toContain("http-equiv=\"refresh\"");
+        let st = pvPollOnce("pk_live.md", "pk_live.html", {}, nil);
+        rt_expect(st["changed"]).toBeTrue();
+        let st2 = pvPollOnce("pk_live.md", "pk_live.html", {}, st["state"]);
+        rt_expect(st2["changed"]).toBeFalse();
+        writeFile("pk_live.md", "# Two changed\n");
+        let st3 = pvPollOnce("pk_live.md", "pk_live.html", {}, st2["state"]);
+        rt_expect(st3["changed"]).toBeTrue();
+        rt_expect(readFile("pk_live.html")).toContain("Two changed");
+        deleteFile("pk_live.md");
+        deleteFile("pk_live.html");
+    });
+    rt_test("pvLive يعيد التوليد مع callback وينتهي عند maxTicks", fun() {
+        writeFile("pk_live2.md", "# A\n");
+        let seen = [];
+        let res = pvLive("pk_live2.md", "pk_live2.html", {"intervalMs": 50, "maxTicks": 3, "onUpdate": fun(r) { push(seen, r["kind"]); }});
+        rt_expect(res["ticks"]).toBe(3);
+        rt_expect(res["runs"]).toBe(1);
+        rt_expect(len(seen)).toBe(1);
+        deleteFile("pk_live2.md");
+        deleteFile("pk_live2.html");
+    });
+    rt_test("ملف مفقود يعيد صفحة خطأ", fun() {
+        let r = pvRender("pk_missing_file.md", {"lang": "en"});
+        rt_expect(r["ok"]).toBeFalse();
+        rt_expect(r["html"]).toContain("File not found");
+    });
+});
+
+rt_done();

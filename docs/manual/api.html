@@ -1,0 +1,85 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>واجهة C المسطَّحة (Embedding API) — Rin</title>
+<meta name="description" content="توثيق لغة البرمجة Rin"><link rel="icon" href="../assets/brand/icon-32.png">
+<link rel="stylesheet" href="assets/style.css"></head><body>
+<header><button id="mn" aria-label="القائمة">☰</button><a class="logo" href="index.html"><img src="../assets/brand/icon-48.png" alt="" width="26">Rin</a>
+<input id="q" type="search" placeholder="ابحث في التوثيق…" autocomplete="off"><button id="th" aria-label="الوضع">◐</button>
+<a class="gh" href="https://github.com/dlof-lib/rinlang">GitHub</a><div id="res"></div></header>
+<div class="wrap"><nav id="sb"><details ><summary>ابدأ هنا</summary><a href="getting-started.html">البداية</a><a href="syntax.html">القواعد النحوية العامة</a><a href="variables.html">let`، مصفوفات، قواميس، نطاق</a><a href="template-strings.html">النصوص القالبية (متغيّرات داخل النص)</a><a href="input.html">إدخال المستخدم (Input)</a><a href="control-flow.html">الشروط، الحلقات، `goal`/`achieve</a><a href="loops.html">حلقات Rin — Loops v2</a><a href="functions.html">fun`/`return`، التكرار الذاتي</a><a href="enums.html">enum`: قوائم اختيار مغلقة</a></details><details ><summary>اللغة</summary><a href="language-reference.html">المرجع الشامل وخريطة ترابط المفاهيم</a><a href="objects.html">class`/`struct`، `.object()`، `@Object`، `document</a><a href="oop.html">البرمجة الكائنية الموسَّعة (Rin 1.0)</a><a href="containers.html">دليل `@container` / `@element` / `@loop</a><a href="table.html">الجدول (`@table` / `@container.table`) ودوال اللغة عليه</a><a href="set.html">Set`: نوع المجموعة الأساسي</a><a href="pipelines.html">عامل الأنابيب `|&gt;</a><a href="RECKON.html">reckon`: مفهوم حسابي بسطرين</a><a href="let-plus.html">let` المطوَّر</a><a href="living-variables.html">المتغيرات الحيّة (Living Variables)</a><a href="label-define.html">label` و`define` (تسمية وتعريف)</a><a href="block-frames.html">بداية الكتل ونهايتها (Block Frames)</a><a href="compare_ops.html">معاملات المقارنة `/=` و `=/=` و `=/</a><a href="max_min.html">max / min family</a><a href="scope-guarantees.html">ضمانات النطاق: `finally` · `defer` · `catch … when` · `rethrow</a><a href="key_terms_and_builtins.html">Rin KEY_TERMS and Built-in Conditions</a><a href="number_builtins.html">Rin Number Built-ins</a></details><details ><summary>الواجهات (Indsin)</summary><a href="indsin.html">Indsin — Interface Design</a><a href="indsin_rin.html">indsin يعتمد على لغة Rin</a><a href="indsin_expansion.html">Indsin — التوسعة الاحترافية (Design System v2)</a><a href="indsin_object.html">indsin-object — API reference</a><a href="indsin_media.html">Indsin Media — اختيار الوسائط ورفعها</a><a href="indsin_icons.html">مكتبة أيقونات indsin (متجهية)</a><a href="indsin_tooling.html">indsin tooling — icon, file association, syntax highlighting</a><a href="indsinweb.html">IndsinWeb — مكتبة WebView والروابط لـ indsin</a><a href="RIN_ELEMENTS.html">دليل `@element.*` الكامل</a><a href="events-effects.html">الأحداث والتأثيرات (Events &amp; Effects) — محرك Indsin UI</a><a href="banner.html">Banner: إشعار شريطي</a><a href="simple-style.html">Rin Simple Style</a></details><details ><summary>بيئة التشغيل</summary><a href="runtime.html">وقت تشغيل Rin (Rin Runtime) · المرجع الرسمي</a><a href="standard-library.html">المكتبة القياسية (`lib/*.og.rin`)</a><a href="errors.html">نظام الأخطاء: أكواد، `try`/`catch`/`throw</a><a href="ERROR_SYSTEM.html">نظام التشخيص: البنية الداخلية + جدول الأكواد الكامل</a><a href="storage.html">تخزين دائم</a><a href="http.html">شبكات</a><a href="env.html">ربط Rin بملف `.env</a><a href="terminal.html">الطرفية التفاعلية — `rin terminal</a><a href="vm.html">RinVM — آلة Rin الافتراضية (بايتكود)</a><a href="rinflow.html">RinFlow: طبقة تنفيذ التدفّق المهيكل</a><a href="MAKE_UNIT.html">@make.(name)`: وحدة بسياسة قدرات صريحة</a><a href="MAKE_MEDIA.html">فيديو · صوت · API · إزالة الخلفية · قراءة النص من الصور</a><a href="TIME.html">مفهوم `time`: الزمن كقيمة من الدرجة الأولى</a><a href="native-additions.html">دوال Rin الأصلية الجديدة (Rin 1.0)</a></details><details ><summary>الحاويات وقواعد البيانات</summary><a href="container_advanced.html">Rin Container Advanced Built-ins</a><a href="container_pro.html">Rin Container Pro</a><a href="container_sql.html">RIN CONTAINER SQL (RCSQL)</a><a href="cross-file-containers.html">استدعاء إعلانات من ملف آخر</a></details><details open><summary>الحزم والتكامل</summary><a href="api.html" class=on>واجهة C المسطَّحة (Embedding API)</a><a href="android.html">استضافة Rin على أندرويد</a><a href="packages-and-interop.html">Rin 1.0 — المكتبات والحزم وجسر C++ وJSON واختبارات rintest</a><a href="rinpak-format.html">RinPak — حزمة مشروع Rin (`.rinpak`)</a><a href="html-projects.html">مشاريع HTML في Rin — الربط بين index.html وملف الحاوية</a><a href="project-og-urin.html">project.og.urin` — البيانات الوصفية لمشروع Rin</a><a href="CONTENT_PACKS.html">حزم المحتوى القابلة للتنزيل (Content Packs)</a><a href="previewkit.html">previewkit — معاينة حيّة لملفات PDF / Markdown / TypeScript</a></details><details ><summary>المكتبات المتخصصة</summary><a href="rinml.html">RinML / RinDF / RinAI — الذكاء الاصطناعي وتحليل البيانات في Rin</a><a href="STATS.html">RinStat — التحليل الإحصائي (`lib/rinstat.og.rin`)</a><a href="STATS_ADV.html">RinStat المتقدّم + RinAuto</a><a href="LINALG.html">الجبر الخطي للمهندسين — `mat*` و`vec*</a><a href="PLOT.html">RinPlot — الرسوم البيانية الإحصائية (`lib/rinplot.og.rin`)</a><a href="ALGO.html">تطوير الخوارزميات والحساب العددي — `algo*</a><a href="NUMBER.html">مفهوم `number` في Rin</a><a href="boat.html">&quot;Boat&quot;: مفاهيم أساسية مجمَّعة</a><a href="passkit.html">passkit — passwords, encryption, databases and a tag language</a><a href="passkit-crypto-db.html">Passkit feature catalog: encryption, databases and container linking</a><a href="hash-family.html">عائلة `#` — مفاهيم ودوال جديدة تبدأ بعلامة `#</a><a href="image-draw.html">إنشاء الصور في Rin — رسم وحفظ PNG وlog كصورة</a><a href="image-terminal.html">طباعة الصور في الـ terminal — `printImage` / `imageAnsi` / `imageInfo</a></details><details ><summary>المشروع</summary><a href="CONTRIBUTING.html">المساهمة في Rin</a><a href="CODE_OF_CONDUCT.html">قواعد السلوك</a><a href="SECURITY.html">سياسة الأمان</a><a href="SUPPORT.html">الحصول على المساعدة</a><a href="TRADEMARKS.html">سياسة العلامة التجارية — Trademark Policy</a><a href="THIRD_PARTY_NOTICES.html">إشعارات المكوّنات الخارجية — Third-Party Notices</a></details><details ><summary>مراجع إضافية</summary><a href="ANDROID_VERSIONS.html">حزم RinStudio لكل إصدار أندرويد</a><a href="TOKEN.html">مفهوم `token` في Rin</a><a href="TOOLCHAIN.html">Rin Professional Language Toolchain</a><a href="TOOLCHAIN_UPGRADE.html">Toolchain Upgrade — 2026-09</a><a href="architecture.html">المعمارية وبنية المستودع</a><a href="base-accept.html">base` و`accept`: متغيّران يخدمان `if</a><a href="channel47.html">channel47 — لغة وصف البيانات والإعدادات</a><a href="ci.html">CI وأدوات المستودع</a><a href="loop-templates.html">قوالب الحلقات `@tmpl</a><a href="pre-post.html">pre` و`post` (ما قبل / ما بعد): عقد انتقال حول الإسناد</a><a href="print-fonts.html">خطوط `print` — bold / italic / underline وغيرها</a><a href="print-image-terminal.html">طباعة الصور كنص في الطرفية</a><a href="print-templates.html">قوالب الطباعة `@tmpl ... print` — قوالب نصية خطية وتنسيقية</a><a href="rdoc.html">rdoc — Documentation Container</a><a href="rdoc-reference.html">وثيقة rdoc الشاملة — Documentation Container</a><a href="screenshots.html">لقطات من RinStudio</a></details></nav>
+<main><article><h1 id="apimd-c-embedding-api">api.md — واجهة C المسطَّحة (Embedding API)<a class="headerlink" href="#apimd-c-embedding-api" title="Permanent link">#</a></h1>
+<p>طبقة C خالصة (<code>extern "C"</code>) لتضمين محرّك Rin في أي تطبيق مضيف (أندرويد عبر JNI —
+انظر <a href="android.html"><code>android.md</code></a> — أو أي تطبيق C/C++ آخر مباشرة). كل نتيجة نصيّة
+مُخصَّصة بـ<code>malloc</code>، تُحرَّر دائمًا عبر <code>rin_free_string()</code>.</p>
+<h2 id="rin_c_apih"><code>rin_c_api.h</code> — تنفيذ عام (بلا واجهة)<a class="headerlink" href="#rin_c_apih" title="Permanent link">#</a></h2>
+<pre><code class="language-c">char* rin_run(const char* source, const char* basePath);
+void  rin_free_string(char* s);
+const char* rin_engine_version(void);
+
+RinSession* rin_session_create(const char* basePath);
+char*       rin_session_run(RinSession* session, const char* source);
+void        rin_session_free(RinSession* session);
+</code></pre>
+<p><code>rin_run</code> تشغيل لمرة واحدة يُرجع كل مخرجات <code>print</code>/<code>show</code> كنص واحد (basePath
+يُستخدَم لحلّ مسارات <code>@import</code> النسبية، انظر
+<a href="cross-file-containers.html#تنبيه-دقيق-كيف-يُحلَّل-المسار"><code>cross-file-containers.md</code></a>).
+<code>rin_session_*</code> نسخة تحتفظ بحالة المفسِّر بين استدعاءات متعددة على نفس الجلسة
+(مفيد لـREPL تفاعلي).</p>
+<h2 id="rin_indsin_c_apih"><code>rin_indsin_c_api.h</code> — عرض الواجهة الحيّة<a class="headerlink" href="#rin_indsin_c_apih" title="Permanent link">#</a></h2>
+<p>يبني فوق <code>rin_c_api.h</code> بنفس القاعدة (<code>malloc</code>/<code>rin_free_string</code>):</p>
+<pre><code class="language-c">// عرض بلا حالة (stateless) لمرة واحدة:
+char* rin_indsin_render_json(const char* source, int rootWidth);
+char* rin_indsin_render_container_json(const char* source, const char* containerName, int rootWidth);
+
+// جلسة حيّة (تحتفظ بحالة Fabric+Warp بين الاستدعاءات، فيُصبح onTap قادرًا فعلاً
+// على تغيير الحالة عبر Needle بدل إعادة بناء المعاينة كاملة من الصفر):
+void* rin_indsin_session_create(const char* source, int rootWidth);
+void* rin_indsin_session_create_for_container(const char* source, const char* containerName, int rootWidth);
+void  rin_indsin_session_set_viewport(void* session, int viewportHeight); // افتراضي 844px
+char* rin_indsin_session_render_json(void* session);
+char* rin_indsin_session_tap(void* session, double x, double y);
+char* rin_indsin_session_long_press(void* session, double x, double y);
+char* rin_indsin_session_double_tap(void* session, double x, double y);
+char* rin_indsin_session_hover(void* session, double x, double y, int entering);
+char* rin_indsin_session_tick(void* session);
+char* rin_indsin_session_update_source(void* session, const char* newSource); // Hot Reload
+void  rin_indsin_session_free(void* session);
+
+// عرض نقطي (raster) بدل JSON -- مفيد لتصدير معاينة كصورة فعلية بلا مضيف يرسم بنفسه:
+unsigned char* rin_indsin_session_render_rgb(void* session, int* outW, int* outH);
+void           rin_indsin_free_buffer(unsigned char* buf);
+int            rin_indsin_session_export_png(void* session, const char* path);
+</code></pre>
+<h3 id="rin_indsin_render_jsonrin_indsin_session_render_json">شكل نتيجة <code>rin_indsin_render_json</code>/<code>rin_indsin_session_render_json</code><a class="headerlink" href="#rin_indsin_render_jsonrin_indsin_session_render_json" title="Permanent link">#</a></h3>
+<p>شجرة Fabric كاملة (<code>kind</code>/<code>name</code>/<code>line</code>/الهندسة/كل السمات المحلولة، بشكل
+تكراري) — أو <code>{"error": "...", "line": N}</code> إن فشل التحليل أو لم يوجد جذر
+<code>@view</code>/<code>@element</code>/<code>@loop</code> (انظر قسم "دمج @element بـindsin" في
+<a href="indsin.html"><code>../indsin.md</code></a>). نسخة الجلسة تضيف أيضًا خطة الرسم الفعلية
+(<code>paint</code>، نفس مصفوفة <code>DrawCommand</code> من محرّك Dye — انظر
+<a href="rinflow.html"><code>rinflow.md</code></a> لمفهوم مشابه في سياق مختلف).</p>
+<h3 id="rin_indsin_session_taplong_pressdouble_taphover">شكل نتيجة <code>rin_indsin_session_tap</code>/<code>...long_press</code>/<code>...double_tap</code>/<code>...hover</code><a class="headerlink" href="#rin_indsin_session_taplong_pressdouble_taphover" title="Permanent link">#</a></h3>
+<pre><code class="language-json">{&quot;ok&quot;: true, &quot;handled&quot;: true, &quot;targetId&quot;: 7, &quot;changed&quot;: [&quot;counter&quot;], &quot;fabric&quot;: { ... }}
+</code></pre>
+<p><code>handled</code> يعني وُجد <code>onTap=</code> على العنصر المستهدَف فعلًا؛ <code>changed</code> أسماء كل
+Warp cell تغيّرت نتيجة تشغيله؛ <code>error</code> يظهر فقط إن وُجد المعالج لكنه فشل وقت
+التشغيل (وسائط خاطئة مثلًا).</p>
+<h2 id="_1">انظر أيضًا<a class="headerlink" href="#_1" title="Permanent link">#</a></h2>
+<ul>
+<li><a href="android.html"><code>android.md</code></a> — <code>RinEngine.kt</code>، الجسر عبر JNI فوق هذه الواجهة بالضبط.</li>
+<li><a href="indsin.html"><code>indsin.md</code></a> — المحرّك الذي تُشغِّله كل دوال <code>rin_indsin_*</code>.</li>
+<li><a href="rinflow.html"><code>rinflow.md</code></a> — طبقة Flow (لم تُعرَض هنا عبر C API مباشرة، فقط عبر <code>Interpreter::runProgramAsFlow</code> بلغة C++، ثم <code>RinEngine.kt</code> في Kotlin).</li>
+</ul></article>
+<div class="pnav"><a class="pn" href="cross-file-containers.html">→ استدعاء إعلانات من ملف آخر</a><a class="pn" href="android.html">استضافة Rin على أندرويد ←</a></div><p class="edit"><a href="https://github.com/dlof-lib/rinlang/edit/main/docs/api.md">✎ عدّل هذه الصفحة على GitHub</a></p>
+<footer>Rin 1.0.0 · رخصة MIT</footer></main>
+<aside id="toc"><b>في هذه الصفحة</b><div class="toc">
+<ul>
+<li><a href="#rin_c_apih">rin_c_api.h — تنفيذ عام (بلا واجهة)</a></li>
+<li><a href="#rin_indsin_c_apih">rin_indsin_c_api.h — عرض الواجهة الحيّة</a><ul>
+<li><a href="#rin_indsin_render_jsonrin_indsin_session_render_json">شكل نتيجة rin_indsin_render_json/rin_indsin_session_render_json</a></li>
+<li><a href="#rin_indsin_session_taplong_pressdouble_taphover">شكل نتيجة rin_indsin_session_tap/...long_press/...double_tap/...hover</a></li>
+</ul>
+</li>
+<li><a href="#_1">انظر أيضًا</a></li>
+</ul>
+</div>
+</aside></div>
+<script src="assets/app.js"></script></body></html>

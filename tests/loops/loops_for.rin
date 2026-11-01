@@ -1,0 +1,29 @@
+// Rin For+ : i++ / i-- / op= ، for بلا أقواس، عدّة خطوات تزايد، ومسار سريع بلا closures
+for (let i = 0; i < 3; i++) { print i; }
+for (let i = 10; i > 0; i -= 4) { print i; }
+for (let i = 1; i < 20; i *= 3) { print i; }
+for (let i = 0, j = 5; i < j; i++, j--) { print i + "," + j; }
+for let i = 0; i < 2; i++ { print "pl" + i; }
+let k = 0;
+for ; k < 2; k++ { print "k" + k; }
+let a = [1, 2, 3]; a[1] += 10; print a;
+let o = {"n": 1}; o["n"] *= 5; print o["n"];
+let c = 7; c %= 4; print c; c *= 2; print c;
+let x = 5; x--; print x; x++; x++; print x;
+let m = 5; let n = 2; print m - -n;
+// closures ما زالت تلتقط قيمة كل دورة
+let fs = [];
+for (let i = 0; i < 3; i++) { push(fs, fun() { return i; }); }
+print fs[0]() + fs[1]() + fs[2]();
+// break / continue / nobreak
+for (let i = 0; i < 5; i++) { if (i == 1) { continue; } if (i == 3) { break; } print "b" + i; }
+for (let i = 0; i < 2; i++) { } nobreak { print "nb"; }
+// تعديل متغيّر الحلقة من داخل الجسم
+for (let i = 0; i < 6; i++) { if (i % 2 == 0) { i++; } print "m" + i; }
+// تسمية + حدّ أمان
+outer: for (let i = 0; i < 3; i++) { for (let j = 0; j < 3; j++) { if (j == 1) { continue outer; } print i + "" + j; } }
+try { for (let i = 0; i < 100; i++) limit 3 { } } catch (e) { print e["message"]; }
+// كائن: حقل
+let p = {"v": 1}; for (let i = 0; i < 3; i++) { p["v"] += i; } print p["v"];
+// المتغيّر بعد الحلقة غير مرئي، والخارجي سليم
+let total = 0; for (let i = 1; i <= 4; i++) { total += i; } print total;

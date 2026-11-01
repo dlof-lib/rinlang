@@ -1,0 +1,1 @@
+fun optfeat_ok() { return true; }

@@ -1,0 +1,481 @@
+// ============================================================================
+//  lib/compose_seq.og.rin — خوارزميات التسلسلات فوق أي مفهوم (مساعدة لـ compose)
+//
+//  كل الدوال تقبل array أو Set أو map أو كائن أو نص (عبر seqItems) وتُرجع array
+//  ما لم يُذكر غير ذلك. لا تُعدِّل مدخلاتها أبداً.
+//
+//    ترتيب    : cmpValues  sortWith  sortBy  sortDesc  minOver  maxOver  isSorted
+//    تجميع    : groupOver  indexBy  countBy  partitionOver  uniqBy  tally
+//    تقطيع    : takeOver  dropOver  takeWhileOver  dropWhileOver  chunkOver
+//               windowOver  sliceOver  rangeOf  repeatOver
+//    ضمّ      : zipWith  zipAll  unzipPairs  flatMapOver  flattenDeep  intersperse
+//    بحث/عدّ  : findOver  findIndexOver  anyOver  allOver  noneOver  countOver
+//               sumBy  scan  firstOf  lastOf
+//
+//  استيراد:  @import "lib/compose_seq.og.rin";   (تستورد compose تلقائياً)
+// ============================================================================
+@import "compose";
+
+// عناصر أي مفهوم كمصفوفة (نص -> أحرفه)
+fun seqItems(x) {
+    if (valueKind(x) == "string") {
+        let out = [];
+        let i = 0;
+        while (i < len(x)) { push(out, substr(x, i, 1)); i = i + 1; }
+        return out;
+    }
+    return asArray(x);
+}
+
+// ───────────────────────── ترتيب ─────────────────────────
+
+fun _kindRank(k) {
+    if (k == "nil") { return 0; }
+    if (k == "bool") { return 1; }
+    if (k == "number") { return 2; }
+    if (k == "string") { return 3; }
+    return 4;
+}
+
+// مقارنة نصين حرفاً حرفاً بكود الحرف (Rin لا تدعم < على النصوص)
+fun _cmpStrings(a, b) {
+    let n = len(a);
+    if (len(b) < n) { n = len(b); }
+    let i = 0;
+    while (i < n) {
+        let x = ord(substr(a, i, 1));
+        let y = ord(substr(b, i, 1));
+        if (x < y) { return -1; }
+        if (x > y) { return 1; }
+        i = i + 1;
+    }
+    if (len(a) < len(b)) { return -1; }
+    if (len(a) > len(b)) { return 1; }
+    return 0;
+}
+
+// مقارنة عامة لأي قيمتين: -1 / 0 / 1.
+// الترتيب بين الأنواع: nil < bool < number < string < غيرها. المصفوفات تُقارن عنصراً عنصراً.
+fun cmpValues(a, b) {
+    let ka = valueKind(a);
+    let kb = valueKind(b);
+    if (ka != kb) {
+        let ra = _kindRank(ka);
+        let rb = _kindRank(kb);
+        if (ra < rb) { return -1; }
+        if (ra > rb) { return 1; }
+        return 0;
+    }
+    if (ka == "number") {
+        if (a < b) { return -1; }
+        if (a > b) { return 1; }
+        return 0;
+    }
+    if (ka == "string") { return _cmpStrings(a, b); }
+    if (ka == "bool") {
+        if (a == b) { return 0; }
+        if (a) { return 1; }
+        return -1;
+    }
+    if (ka == "array") {
+        let n = len(a);
+        if (len(b) < n) { n = len(b); }
+        let i = 0;
+        while (i < n) {
+            let c = cmpValues(a[i], b[i]);
+            if (c != 0) { return c; }
+            i = i + 1;
+        }
+        if (len(a) < len(b)) { return -1; }
+        if (len(a) > len(b)) { return 1; }
+        return 0;
+    }
+    return 0;
+}
+
+fun _mergeSorted(left, right, cmp) {
+    let out = [];
+    let i = 0;
+    let j = 0;
+    while (i < len(left) and j < len(right)) {
+        if (cmp(left[i], right[j]) <= 0) { push(out, left[i]); i = i + 1; }
+        else { push(out, right[j]); j = j + 1; }
+    }
+    while (i < len(left)) { push(out, left[i]); i = i + 1; }
+    while (j < len(right)) { push(out, right[j]); j = j + 1; }
+    return out;
+}
+
+// ترتيب مستقر (merge sort) بدالة مقارنة cmp(a, b) -> رقم سالب/صفر/موجب
+fun sortWith(x, cmp) {
+    let items = seqItems(x);
+    if (len(items) < 2) { return concat([], items); }
+    let mid = floor(len(items) / 2);
+    let left = [];
+    let right = [];
+    let i = 0;
+    while (i < len(items)) {
+        if (i < mid) { push(left, items[i]); } else { push(right, items[i]); }
+        i = i + 1;
+    }
+    return _mergeSorted(sortWith(left, cmp), sortWith(right, cmp), cmp);
+}
+
+// ترتيب بمفتاح: keyFn أي مفهوم قابل للاستدعاء (دالة، اسم حقل عبر map، ...)
+fun sortBy(x, keyFn) {
+    let kf = asFn(keyFn);
+    return sortWith(x, fun(a, b) { return cmpValues(kf(a), kf(b)); });
+}
+
+fun sortAsc(x) { return sortWith(x, cmpValues); }
+fun sortDesc(x) { return sortWith(x, fun(a, b) { return cmpValues(b, a); }); }
+
+fun isSorted(x) {
+    let items = seqItems(x);
+    let i = 1;
+    while (i < len(items)) {
+        if (cmpValues(items[i - 1], items[i]) > 0) { return false; }
+        i = i + 1;
+    }
+    return true;
+}
+
+fun minOver(x, keyFn) {
+    let kf = asFn(keyFn);
+    let items = seqItems(x);
+    if (len(items) == 0) { return nil; }
+    let best = items[0];
+    let bk = kf(best);
+    let i = 1;
+    while (i < len(items)) {
+        let k = kf(items[i]);
+        if (cmpValues(k, bk) < 0) { best = items[i]; bk = k; }
+        i = i + 1;
+    }
+    return best;
+}
+
+fun maxOver(x, keyFn) {
+    let kf = asFn(keyFn);
+    let items = seqItems(x);
+    if (len(items) == 0) { return nil; }
+    let best = items[0];
+    let bk = kf(best);
+    let i = 1;
+    while (i < len(items)) {
+        let k = kf(items[i]);
+        if (cmpValues(k, bk) > 0) { best = items[i]; bk = k; }
+        i = i + 1;
+    }
+    return best;
+}
+
+// ───────────────────────── تجميع ─────────────────────────
+
+fun _keyText(k) { return str(k); }
+
+// groupOver(x, keyFn) -> {مفتاح: [عناصر]}  (المفتاح يتحوّل لنص)
+fun groupOver(x, keyFn) {
+    let kf = asFn(keyFn);
+    let items = seqItems(x);
+    let out = {};
+    let i = 0;
+    while (i < len(items)) {
+        let k = _keyText(kf(items[i]));
+        if (!has(out, k)) { out[k] = []; }
+        push(out[k], items[i]);
+        i = i + 1;
+    }
+    return out;
+}
+
+// indexBy(x, keyFn) -> {مفتاح: عنصر}  (الأخير يفوز عند التكرار)
+fun indexBy(x, keyFn) {
+    let kf = asFn(keyFn);
+    let items = seqItems(x);
+    let out = {};
+    let i = 0;
+    while (i < len(items)) { out[_keyText(kf(items[i]))] = items[i]; i = i + 1; }
+    return out;
+}
+
+// countBy(x, keyFn) -> {مفتاح: عدد}
+fun countBy(x, keyFn) {
+    let kf = asFn(keyFn);
+    let items = seqItems(x);
+    let out = {};
+    let i = 0;
+    while (i < len(items)) {
+        let k = _keyText(kf(items[i]));
+        if (!has(out, k)) { out[k] = 0; }
+        out[k] = out[k] + 1;
+        i = i + 1;
+    }
+    return out;
+}
+
+// tally(x) -> {قيمة: تكرارها}
+fun tally(x) { return countBy(x, identity); }
+
+// partitionOver(x, pred) -> [المطابقة, غير المطابقة]
+fun partitionOver(x, pred) {
+    let p = asFn(pred);
+    let items = seqItems(x);
+    let yes = [];
+    let no = [];
+    let i = 0;
+    while (i < len(items)) {
+        if (p(items[i])) { push(yes, items[i]); } else { push(no, items[i]); }
+        i = i + 1;
+    }
+    return [yes, no];
+}
+
+// إزالة التكرار حسب مفتاح (يُبقي أول ظهور)
+fun uniqBy(x, keyFn) {
+    let kf = asFn(keyFn);
+    let items = seqItems(x);
+    let seen = Set();
+    let out = [];
+    let i = 0;
+    while (i < len(items)) {
+        let k = str(kf(items[i]));
+        if (!seen.has(k)) { seen.add(k); push(out, items[i]); }
+        i = i + 1;
+    }
+    return out;
+}
+
+fun uniqOver(x) { return uniqBy(x, identity); }
+
+// ───────────────────────── تقطيع ─────────────────────────
+
+fun takeOver(x, n) {
+    let items = seqItems(x);
+    let out = [];
+    let i = 0;
+    while (i < len(items) and i < n) { push(out, items[i]); i = i + 1; }
+    return out;
+}
+
+fun dropOver(x, n) {
+    let items = seqItems(x);
+    let out = [];
+    let i = n < 0 ? 0 : n;
+    while (i < len(items)) { push(out, items[i]); i = i + 1; }
+    return out;
+}
+
+fun sliceOver(x, from, to) {
+    let items = seqItems(x);
+    let out = [];
+    let i = from < 0 ? 0 : from;
+    while (i < len(items) and i < to) { push(out, items[i]); i = i + 1; }
+    return out;
+}
+
+fun takeWhileOver(x, pred) {
+    let p = asFn(pred);
+    let items = seqItems(x);
+    let out = [];
+    let i = 0;
+    while (i < len(items) and p(items[i])) { push(out, items[i]); i = i + 1; }
+    return out;
+}
+
+fun dropWhileOver(x, pred) {
+    let p = asFn(pred);
+    let items = seqItems(x);
+    let i = 0;
+    while (i < len(items) and p(items[i])) { i = i + 1; }
+    let out = [];
+    while (i < len(items)) { push(out, items[i]); i = i + 1; }
+    return out;
+}
+
+fun chunkOver(x, size) {
+    let items = seqItems(x);
+    let out = [];
+    if (size <= 0) { return out; }
+    let i = 0;
+    while (i < len(items)) {
+        let g = [];
+        let j = i;
+        while (j < len(items) and j < i + size) { push(g, items[j]); j = j + 1; }
+        push(out, g);
+        i = i + size;
+    }
+    return out;
+}
+
+// نوافذ منزلقة بطول size: windowOver([1,2,3,4], 2) -> [[1,2],[2,3],[3,4]]
+fun windowOver(x, size) {
+    let items = seqItems(x);
+    let out = [];
+    if (size <= 0) { return out; }
+    let i = 0;
+    while (i + size <= len(items)) {
+        let g = [];
+        let j = i;
+        while (j < i + size) { push(g, items[j]); j = j + 1; }
+        push(out, g);
+        i = i + 1;
+    }
+    return out;
+}
+
+// rangeOf(from, to, step): من from (شاملة) إلى to (غير شاملة). step موجبة أو سالبة.
+fun rangeOf(from, to, step) {
+    let out = [];
+    if (step == 0) { return out; }
+    let v = from;
+    if (step > 0) { while (v < to) { push(out, v); v = v + step; } }
+    else { while (v > to) { push(out, v); v = v + step; } }
+    return out;
+}
+
+fun repeatOver(v, n) {
+    let out = [];
+    let i = 0;
+    while (i < n) { push(out, v); i = i + 1; }
+    return out;
+}
+
+// ───────────────────────── ضمّ ─────────────────────────
+
+// zipWith(a, b, f): f(x, y) لكل زوج (بأقصر الطولين)
+fun zipWith(a, b, f) {
+    let g = asFn(f);
+    let xs = seqItems(a);
+    let ys = seqItems(b);
+    let out = [];
+    let n = len(xs);
+    if (len(ys) < n) { n = len(ys); }
+    let i = 0;
+    while (i < n) { push(out, g(xs[i], ys[i])); i = i + 1; }
+    return out;
+}
+
+fun zipAll(a, b) { return zipWith(a, b, fun(x, y) { return [x, y]; }); }
+
+fun unzipPairs(pairs) {
+    let l = [];
+    let r = [];
+    let i = 0;
+    while (i < len(pairs)) { push(l, pairs[i][0]); push(r, pairs[i][1]); i = i + 1; }
+    return [l, r];
+}
+
+fun flatMapOver(x, f) {
+    let g = asFn(f);
+    let items = seqItems(x);
+    let out = [];
+    let i = 0;
+    while (i < len(items)) {
+        let r = g(items[i]);
+        if (valueKind(r) == "array") {
+            let j = 0;
+            while (j < len(r)) { push(out, r[j]); j = j + 1; }
+        } else { push(out, r); }
+        i = i + 1;
+    }
+    return out;
+}
+
+// تسطيح كل مستويات المصفوفات المتداخلة
+fun flattenDeep(x) {
+    let out = [];
+    let items = seqItems(x);
+    let i = 0;
+    while (i < len(items)) {
+        if (valueKind(items[i]) == "array") {
+            let inner = flattenDeep(items[i]);
+            let j = 0;
+            while (j < len(inner)) { push(out, inner[j]); j = j + 1; }
+        } else { push(out, items[i]); }
+        i = i + 1;
+    }
+    return out;
+}
+
+fun intersperse(x, sep) {
+    let items = seqItems(x);
+    let out = [];
+    let i = 0;
+    while (i < len(items)) {
+        if (i > 0) { push(out, sep); }
+        push(out, items[i]);
+        i = i + 1;
+    }
+    return out;
+}
+
+// ───────────────────────── بحث وعدّ ─────────────────────────
+
+fun findOver(x, pred) {
+    let p = asFn(pred);
+    let items = seqItems(x);
+    let i = 0;
+    while (i < len(items)) { if (p(items[i])) { return items[i]; } i = i + 1; }
+    return nil;
+}
+
+fun findIndexOver(x, pred) {
+    let p = asFn(pred);
+    let items = seqItems(x);
+    let i = 0;
+    while (i < len(items)) { if (p(items[i])) { return i; } i = i + 1; }
+    return -1;
+}
+
+fun anyOver(x, pred) { return findIndexOver(x, pred) >= 0; }
+
+fun allOver(x, pred) {
+    let p = asFn(pred);
+    let items = seqItems(x);
+    let i = 0;
+    while (i < len(items)) { if (!p(items[i])) { return false; } i = i + 1; }
+    return true;
+}
+
+fun noneOver(x, pred) { return !anyOver(x, pred); }
+
+fun countOver(x, pred) {
+    let p = asFn(pred);
+    let items = seqItems(x);
+    let n = 0;
+    let i = 0;
+    while (i < len(items)) { if (p(items[i])) { n = n + 1; } i = i + 1; }
+    return n;
+}
+
+fun sumBy(x, f) {
+    let g = asFn(f);
+    let items = seqItems(x);
+    let total = 0;
+    let i = 0;
+    while (i < len(items)) { total = total + g(items[i]); i = i + 1; }
+    return total;
+}
+
+// scan(x, f, init): كل القيم الوسيطة للاختزال (تبدأ بـ init)
+fun scan(x, f, init) {
+    let items = seqItems(x);
+    let acc = init;
+    let out = [init];
+    let i = 0;
+    while (i < len(items)) { acc = f(acc, items[i]); push(out, acc); i = i + 1; }
+    return out;
+}
+
+fun firstOf(x, fallback) {
+    let items = seqItems(x);
+    if (len(items) == 0) { return fallback; }
+    return items[0];
+}
+
+fun lastOf(x, fallback) {
+    let items = seqItems(x);
+    if (len(items) == 0) { return fallback; }
+    return items[len(items) - 1];
+}

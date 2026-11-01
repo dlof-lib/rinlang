@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta name="robots" content="noindex"/>
+<title>Rin Libraries — مكتبات وإضافات وحسابات Rin</title>
+<meta name="description" content="افتح المكتبة أو الإضافة أو الحساب على موقع Rin، أو في تطبيق Rin على أندرويد: تصفّح، انسخ الكود، حمّل وشارك."/>
+<meta name="keywords" content="Rin, مكتبات Rin, Rin libraries, إضافات Rin, Rin extensions, RinStudio, RinPM, لغة Rin"/>
+<meta name="theme-color" content="#060807"/>
+<meta property="og:type" content="website"/>
+<meta property="og:site_name" content="Rin"/>
+<meta property="og:title" content="Rin Libraries — مكتبات وإضافات وحسابات Rin"/>
+<meta property="og:description" content="افتح المكتبة أو الإضافة أو الحساب على موقع Rin، أو في تطبيق Rin على أندرويد: تصفّح، انسخ الكود، حمّل وشارك."/>
+<meta property="og:image" content="https://dlof-lib.github.io/rinlang/og-store.png"/>
+<meta property="og:image:type" content="image/png"/>
+<meta property="og:image:width" content="1200"/>
+<meta property="og:image:height" content="630"/>
+<meta property="og:image:alt" content="Rin Libraries — مكتبات وإضافات Rin"/>
+<meta property="og:locale" content="ar_AR"/>
+<meta property="og:locale:alternate" content="en_US"/>
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:title" content="Rin Libraries — مكتبات وإضافات وحسابات Rin"/>
+<meta name="twitter:description" content="افتح المكتبة أو الإضافة أو الحساب على موقع Rin، أو في تطبيق Rin على أندرويد: تصفّح، انسخ الكود، حمّل وشارك."/>
+<meta name="twitter:image" content="https://dlof-lib.github.io/rinlang/og-store.png"/>
+<meta property="og:url" content="https://dlof-lib.github.io/rinlang/"/>
+<link rel="icon" href="https://dlof-lib.github.io/rinlang/favicon.ico" sizes="any"/>
+<link rel="icon" type="image/png" sizes="32x32" href="https://dlof-lib.github.io/rinlang/favicon-32.png"/>
+<link rel="apple-touch-icon" href="https://dlof-lib.github.io/rinlang/apple-touch-icon.png"/>
+<link rel="manifest" href="https://dlof-lib.github.io/rinlang/manifest.webmanifest"/>
+<!--
+  GitHub Pages لا يملك «rewrite»؛ أي مسار غير موجود يُخدَّم بهذا الملف. هذه ليست صفحة مكتبة:
+  هي محوِّل واحد فقط يحوّل  /rinlang/@user/library.og.rin  إلى  /rinlang/?@user/library.og.rin
+  ثم يعيد libraries.js كتابة العنوان في شريط المتصفح إلى المسار الجميل (history.replaceState).
+  التطبيق الوحيد يبقى index.html — لا HTML لكل مكتبة.
+-->
+<style>
+  html,body{height:100%;margin:0;background:#060807;color:#f4f6f3;font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif}
+  body{display:flex;align-items:center;justify-content:center;text-align:center;padding:24px}
+  a{color:#22c55e;font-weight:700}
+</style>
+</head>
+<body>
+<div><p id="msg">…</p><p><a id="home" href="./">Rin</a></p></div>
+<script>
+(function () {
+  var segs = location.pathname.split('/');
+  var at = -1;
+  for (var i = 1; i < segs.length; i++) { if (segs[i].charAt(0) === '@' || segs[i].slice(0, 3).toLowerCase() === '%40') { at = i; break; } }
+  // القاعدة = ما قبل أول جزء يبدأ بـ @ ؛ وإلا (مسار غير معروف) نعود لجذر المشروع: أول جزء على github.io
+  var base;
+  if (at > 0) base = segs.slice(0, at).join('/') + '/';
+  else base = /\.github\.io$/i.test(location.hostname) && segs.length > 1 && segs[1] ? '/' + segs[1] + '/' : '/';
+  base = base.replace(/^\/+/, '/');                       // يمنع //evil.com (open redirect)
+  document.getElementById('home').setAttribute('href', base);
+  if (at > 0) {
+    var rest = segs.slice(at).join('/').replace(/\/+$/, '');
+    location.replace(base + '?' + rest + location.hash);
+  } else {
+    document.getElementById('msg').textContent = 'الصفحة غير موجودة / Page not found';
+  }
+})();
+</script>
+</body>
+</html>

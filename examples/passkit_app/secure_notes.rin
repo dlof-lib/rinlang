@@ -1,0 +1,10 @@
+// secure_notes.rin — runs secure_notes.passkit and prints everything it printed.
+// Run from the project root:   rin examples/passkit_app/secure_notes.rin
+@import "lib/passkitlang.og.rin";
+
+let r = passkitRun("examples/passkit_app/secure_notes.passkit", { now: 5000 });
+if (r["ok"] == false) {
+    print "FAILED: " + r["message"];
+} else {
+    for (let line in r["output"]) { print line; }
+}

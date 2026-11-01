@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<CodeSnippets xmlns="http://schemas.microsoft.com/VisualStudio/2005/CodeSnippet">
+  <CodeSnippet Format="1.0.0">
+    <Header>
+      <Title>Object</Title>
+      <Shortcut>Object</Shortcut>
+      <Description>كائن تنسيق/ستايل بحقول حرة (name/color/...)</Description>
+      <SnippetTypes>
+        <SnippetType>Expansion</SnippetType>
+      </SnippetTypes>
+    </Header>
+    <Snippet>
+      <Declarations>
+        <Literal>
+          <ID>p1</ID>
+          <ToolTip>p1</ToolTip>
+          <Default>name</Default>
+        </Literal>
+        <Literal>
+          <ID>p2</ID>
+          <ToolTip>p2</ToolTip>
+          <Default>Title</Default>
+        </Literal>
+        <Literal>
+          <ID>p3</ID>
+          <ToolTip>p3</ToolTip>
+          <Default>#3498db</Default>
+        </Literal>
+      </Declarations>
+      <Code Language="Rin"><![CDATA[@Object=$p1$
+	text name = "$p2$";
+	text color = "$p3$";
+	$end$
+.end/Object]]></Code>
+    </Snippet>
+  </CodeSnippet>
+</CodeSnippets>

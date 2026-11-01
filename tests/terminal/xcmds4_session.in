@@ -1,0 +1,72 @@
+:sh printf '@view.Column=root\n  @view.Text=t1 text="Hi"; .end/view\n  @view.Text=t1 text="Dup"\n.end/view\n' > a.rin
+:sh printf 'name,age,city\nAnn,30,Rome\nBob,25,"New, York"\n' > p.csv; printf '{"a":{"b":[1,2]},"c":"x"}' > j.json; printf '[main]\nk=v\n' > c.ini
+:sh printf 'a\r\nb\r\n' > crlf.txt; printf 'one\ntwo\none\n' > f.txt
+$ km2mi 100
+$ convert 5 kg lb
+$ c2f 100
+$ camel hello big world
+$ snake HelloBigWorld
+$ slugify Hello, World!
+$ roman 1994
+$ levenshtein kitten sitting
+$ sha512 abc
+$ sha224 abc
+$ crc16 123456789
+$ murmur3 hello
+$ base32 hello
+$ base58 hello
+$ luhn 4539578763621486
+$ hex2rgb #ff8800
+$ contrast #000000 #ffffff
+$ cidr 192.168.1.10/24
+$ sqrt 2 16
+$ sqrt -1
+$ fact 25
+$ isprime 97 100
+$ comb 52 5
+$ stdev 2 4 4 4 5 5 7 9
+$ percentile 90 1 2 3 4 5 6 7 8 9 10
+$ loan 200000 5 30
+$ solve2 1 -3 2
+$ det 1 2 3 4 5 6 7 8 10
+$ rpn 3 4 + 2 *
+$ modinv 3 11
+$ tobase 255 16
+$ frombase ff 16
+$ hijri 2024-03-11
+$ fromhijri 1446-09-01
+$ easter 2025
+$ dayofweek 2024-02-29
+$ weekno 2021-01-03
+$ addmonths 2024-01-31 1
+$ parsedur 1d 2h 30m
+$ datefmt 2024-03-11 %A %d %B %Y
+$ dice d1
+$ lottery 3 3
+$ tree
+$ eol crlf.txt f.txt
+$ fixeol crlf.txt
+$ eol crlf.txt
+$ magic a.rin j.json
+$ countin one f.txt
+$ lines 1,3 f.txt
+$ linefreq f.txt
+$ rinlint a.rin
+$ rinblocks a.rin
+$ rinelements a.rin
+$ rinids a.rin
+$ rinstrings a.rin
+$ rindepth a.rin
+$ csvcol 1,3 p.csv
+$ csvsort -n -k age p.csv
+$ csv2json p.csv
+$ csv2md p.csv
+$ jsonkeys j.json
+$ iniget c.ini main k
+$ columns a bb ccc
+$ spark 1 5 3 8
+$ barchart a 3 b 6
+:toolbox
+:toolbox hash
+:toolbox dat
+:toolbox nope

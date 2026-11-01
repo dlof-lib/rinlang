@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- حبّة رقم السطر داخل صفوف "بنية الملف": نسخة من فكرة bg_chip_meta لكن بلون
+     rin_outline_chip_bg المتكيّف مع الوضع الليلي أيضاً (bg_chip_meta الأصلية رمادية فاتحة
+     ثابتة غير مناسبة فوق بطاقة الحوار الداكنة bg_dialog_card في الوضع الليلي). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/rin_outline_chip_bg" />
+    <corners android:radius="20dp" />
+</shape>

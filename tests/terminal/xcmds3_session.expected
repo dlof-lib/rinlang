@@ -1,0 +1,63 @@
+31B x 2  4293d57cf2e2
+  ./a.rin
+  ./b.rin
+1 groups, 2 files, 31B reclaimable
+dir   ./emptyd
+dir   ./sub
+file  ./zero.txt
+3 empty entries
+./a.rin:1: let a = 1; // TODO: x
+./b.rin:1: let a = 1; // TODO: x
+2 marker(s)
+ext          files     lines      code     blank      size
+.rin             2         4         4         0       62B
+.csv             1         3         3         0       32B
+.txt             3         2         2         0       82B
+.json            1         1         1         0       41B
+TOTAL            7        10        10         0      217B
+count    5
+sum      14
+min      1
+max      5
+mean     2.8
+median   3
+p25      1
+p75      4
+p95      4.8
+stddev   1.788854382
+  1 | let a = 1; // TODO: x
+> 2 | print a;
+"bob"
+{"u":[{"n":"ann"},{"n":"bob"}],"ok":true}
+valid JSON
+┌─────────────┬─────┐
+│ name        │ qty │
+├─────────────┼─────┤
+│ fig         │   7 │
+│ pear, green │  10 │
+└─────────────┴─────┘
+2 rows, 2 columns
+a.rin: OK
+1 OK, 0 FAILED, 0 missing
+a.rin  ->  a_v2.rin
+b.rin  ->  b_v2.rin
+2 would be renamed (dry run)
+b.rin  ->  b_v2.rin
+1 renamed
+a.rin     b_v2.rin  d.json    emptyd/   n.txt     sub/      sums.txt  t.csv
+zero.txt
+would copy a.rin
+would copy b_v2.rin
+would copy d.json
+would copy n.txt
+would copy sums.txt
+would copy t.csv
+would copy zero.txt
+dry run: 7 to copy (217B), 0 up to date
+7 to copy (217B), 0 up to date
+0 to copy (0B), 7 up to date
+n.txt  ->  <TMP>/home/bk/n.txt.bak-STAMP
+trashed zero.txt  ->  ID-zero.txt
+a.rin     b_v2.rin  d.json    emptyd/   n.txt     sub/      sums.txt  t.csv
+trash: this permanently deletes everything in the trash; run $ trash -e -y
+json: cannot read 'nope.json': No such file or directory

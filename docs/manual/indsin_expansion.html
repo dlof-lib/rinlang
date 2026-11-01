@@ -1,0 +1,296 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Indsin — التوسعة الاحترافية (Design System v2) — Rin</title>
+<meta name="description" content="توثيق لغة البرمجة Rin"><link rel="icon" href="../assets/brand/icon-32.png">
+<link rel="stylesheet" href="assets/style.css"></head><body>
+<header><button id="mn" aria-label="القائمة">☰</button><a class="logo" href="index.html"><img src="../assets/brand/icon-48.png" alt="" width="26">Rin</a>
+<input id="q" type="search" placeholder="ابحث في التوثيق…" autocomplete="off"><button id="th" aria-label="الوضع">◐</button>
+<a class="gh" href="https://github.com/dlof-lib/rinlang">GitHub</a><div id="res"></div></header>
+<div class="wrap"><nav id="sb"><details ><summary>ابدأ هنا</summary><a href="getting-started.html">البداية</a><a href="syntax.html">القواعد النحوية العامة</a><a href="variables.html">let`، مصفوفات، قواميس، نطاق</a><a href="template-strings.html">النصوص القالبية (متغيّرات داخل النص)</a><a href="input.html">إدخال المستخدم (Input)</a><a href="control-flow.html">الشروط، الحلقات، `goal`/`achieve</a><a href="loops.html">حلقات Rin — Loops v2</a><a href="functions.html">fun`/`return`، التكرار الذاتي</a><a href="enums.html">enum`: قوائم اختيار مغلقة</a></details><details ><summary>اللغة</summary><a href="language-reference.html">المرجع الشامل وخريطة ترابط المفاهيم</a><a href="objects.html">class`/`struct`، `.object()`، `@Object`، `document</a><a href="oop.html">البرمجة الكائنية الموسَّعة (Rin 1.0)</a><a href="containers.html">دليل `@container` / `@element` / `@loop</a><a href="table.html">الجدول (`@table` / `@container.table`) ودوال اللغة عليه</a><a href="set.html">Set`: نوع المجموعة الأساسي</a><a href="pipelines.html">عامل الأنابيب `|&gt;</a><a href="RECKON.html">reckon`: مفهوم حسابي بسطرين</a><a href="let-plus.html">let` المطوَّر</a><a href="living-variables.html">المتغيرات الحيّة (Living Variables)</a><a href="label-define.html">label` و`define` (تسمية وتعريف)</a><a href="block-frames.html">بداية الكتل ونهايتها (Block Frames)</a><a href="compare_ops.html">معاملات المقارنة `/=` و `=/=` و `=/</a><a href="max_min.html">max / min family</a><a href="scope-guarantees.html">ضمانات النطاق: `finally` · `defer` · `catch … when` · `rethrow</a><a href="key_terms_and_builtins.html">Rin KEY_TERMS and Built-in Conditions</a><a href="number_builtins.html">Rin Number Built-ins</a></details><details open><summary>الواجهات (Indsin)</summary><a href="indsin.html">Indsin — Interface Design</a><a href="indsin_rin.html">indsin يعتمد على لغة Rin</a><a href="indsin_expansion.html" class=on>Indsin — التوسعة الاحترافية (Design System v2)</a><a href="indsin_object.html">indsin-object — API reference</a><a href="indsin_media.html">Indsin Media — اختيار الوسائط ورفعها</a><a href="indsin_icons.html">مكتبة أيقونات indsin (متجهية)</a><a href="indsin_tooling.html">indsin tooling — icon, file association, syntax highlighting</a><a href="indsinweb.html">IndsinWeb — مكتبة WebView والروابط لـ indsin</a><a href="RIN_ELEMENTS.html">دليل `@element.*` الكامل</a><a href="events-effects.html">الأحداث والتأثيرات (Events &amp; Effects) — محرك Indsin UI</a><a href="banner.html">Banner: إشعار شريطي</a><a href="simple-style.html">Rin Simple Style</a></details><details ><summary>بيئة التشغيل</summary><a href="runtime.html">وقت تشغيل Rin (Rin Runtime) · المرجع الرسمي</a><a href="standard-library.html">المكتبة القياسية (`lib/*.og.rin`)</a><a href="errors.html">نظام الأخطاء: أكواد، `try`/`catch`/`throw</a><a href="ERROR_SYSTEM.html">نظام التشخيص: البنية الداخلية + جدول الأكواد الكامل</a><a href="storage.html">تخزين دائم</a><a href="http.html">شبكات</a><a href="env.html">ربط Rin بملف `.env</a><a href="terminal.html">الطرفية التفاعلية — `rin terminal</a><a href="vm.html">RinVM — آلة Rin الافتراضية (بايتكود)</a><a href="rinflow.html">RinFlow: طبقة تنفيذ التدفّق المهيكل</a><a href="MAKE_UNIT.html">@make.(name)`: وحدة بسياسة قدرات صريحة</a><a href="MAKE_MEDIA.html">فيديو · صوت · API · إزالة الخلفية · قراءة النص من الصور</a><a href="TIME.html">مفهوم `time`: الزمن كقيمة من الدرجة الأولى</a><a href="native-additions.html">دوال Rin الأصلية الجديدة (Rin 1.0)</a></details><details ><summary>الحاويات وقواعد البيانات</summary><a href="container_advanced.html">Rin Container Advanced Built-ins</a><a href="container_pro.html">Rin Container Pro</a><a href="container_sql.html">RIN CONTAINER SQL (RCSQL)</a><a href="cross-file-containers.html">استدعاء إعلانات من ملف آخر</a></details><details ><summary>الحزم والتكامل</summary><a href="api.html">واجهة C المسطَّحة (Embedding API)</a><a href="android.html">استضافة Rin على أندرويد</a><a href="packages-and-interop.html">Rin 1.0 — المكتبات والحزم وجسر C++ وJSON واختبارات rintest</a><a href="rinpak-format.html">RinPak — حزمة مشروع Rin (`.rinpak`)</a><a href="html-projects.html">مشاريع HTML في Rin — الربط بين index.html وملف الحاوية</a><a href="project-og-urin.html">project.og.urin` — البيانات الوصفية لمشروع Rin</a><a href="CONTENT_PACKS.html">حزم المحتوى القابلة للتنزيل (Content Packs)</a><a href="previewkit.html">previewkit — معاينة حيّة لملفات PDF / Markdown / TypeScript</a></details><details ><summary>المكتبات المتخصصة</summary><a href="rinml.html">RinML / RinDF / RinAI — الذكاء الاصطناعي وتحليل البيانات في Rin</a><a href="STATS.html">RinStat — التحليل الإحصائي (`lib/rinstat.og.rin`)</a><a href="STATS_ADV.html">RinStat المتقدّم + RinAuto</a><a href="LINALG.html">الجبر الخطي للمهندسين — `mat*` و`vec*</a><a href="PLOT.html">RinPlot — الرسوم البيانية الإحصائية (`lib/rinplot.og.rin`)</a><a href="ALGO.html">تطوير الخوارزميات والحساب العددي — `algo*</a><a href="NUMBER.html">مفهوم `number` في Rin</a><a href="boat.html">&quot;Boat&quot;: مفاهيم أساسية مجمَّعة</a><a href="passkit.html">passkit — passwords, encryption, databases and a tag language</a><a href="passkit-crypto-db.html">Passkit feature catalog: encryption, databases and container linking</a><a href="hash-family.html">عائلة `#` — مفاهيم ودوال جديدة تبدأ بعلامة `#</a><a href="image-draw.html">إنشاء الصور في Rin — رسم وحفظ PNG وlog كصورة</a><a href="image-terminal.html">طباعة الصور في الـ terminal — `printImage` / `imageAnsi` / `imageInfo</a></details><details ><summary>المشروع</summary><a href="CONTRIBUTING.html">المساهمة في Rin</a><a href="CODE_OF_CONDUCT.html">قواعد السلوك</a><a href="SECURITY.html">سياسة الأمان</a><a href="SUPPORT.html">الحصول على المساعدة</a><a href="TRADEMARKS.html">سياسة العلامة التجارية — Trademark Policy</a><a href="THIRD_PARTY_NOTICES.html">إشعارات المكوّنات الخارجية — Third-Party Notices</a></details><details ><summary>مراجع إضافية</summary><a href="ANDROID_VERSIONS.html">حزم RinStudio لكل إصدار أندرويد</a><a href="TOKEN.html">مفهوم `token` في Rin</a><a href="TOOLCHAIN.html">Rin Professional Language Toolchain</a><a href="TOOLCHAIN_UPGRADE.html">Toolchain Upgrade — 2026-09</a><a href="architecture.html">المعمارية وبنية المستودع</a><a href="base-accept.html">base` و`accept`: متغيّران يخدمان `if</a><a href="channel47.html">channel47 — لغة وصف البيانات والإعدادات</a><a href="ci.html">CI وأدوات المستودع</a><a href="loop-templates.html">قوالب الحلقات `@tmpl</a><a href="pre-post.html">pre` و`post` (ما قبل / ما بعد): عقد انتقال حول الإسناد</a><a href="print-fonts.html">خطوط `print` — bold / italic / underline وغيرها</a><a href="print-image-terminal.html">طباعة الصور كنص في الطرفية</a><a href="print-templates.html">قوالب الطباعة `@tmpl ... print` — قوالب نصية خطية وتنسيقية</a><a href="rdoc.html">rdoc — Documentation Container</a><a href="rdoc-reference.html">وثيقة rdoc الشاملة — Documentation Container</a><a href="screenshots.html">لقطات من RinStudio</a></details></nav>
+<main><article><h1 id="indsin-design-system-v2">Indsin — التوسعة الاحترافية (Design System v2)<a class="headerlink" href="#indsin-design-system-v2" title="Permanent link">#</a></h1>
+<p>توسعة <strong>إضافية بحتة</strong> لمحرّك Indsin: لا تُغيّر معنى أي خاصية أو token أو action موجود، وكل ما هنا
+اختياري. الاختبارات: <code>tests/tools/test_indsin_system.cpp</code> (168 فحصاً). مثال حيّ:
+<code>examples/samples/indsin_system_demo.rin</code>.</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الملف</th>
+<th>المحتوى</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>indsin/rin_indsin_system.h</code></td>
+<td>توكنز موسَّعة، أدوات ألوان، مولّد ثيمات، فحص ثيم، تصدير JSON</td>
+</tr>
+<tr>
+<td><code>indsin/rin_indsin_query.h</code></td>
+<td>بحث/مسارات/إحصاءات/outline/كتالوج مكوّنات مصنَّف</td>
+</tr>
+<tr>
+<td><code>indsin/rin_indsin_audit.h</code></td>
+<td>مدقّق إمكانية الوصول والتخطيط</td>
+</tr>
+<tr>
+<td><code>indsin/rin_indsin_responsive.h</code></td>
+<td>تجاوزات <code>&lt;key&gt;_&lt;breakpoint&gt;</code></td>
+</tr>
+<tr>
+<td><code>indsin/rin_indsin_tokens.h</code></td>
+<td>+5 ثيمات مدمجة، <code>resolveDurationToken</code></td>
+</tr>
+<tr>
+<td><code>indsin/rin_indsin_effects.h</code></td>
+<td>easings وحركات جديدة، <code>stagger=</code>، <code>duration="fast"</code></td>
+</tr>
+<tr>
+<td><code>indsin/rin_indsin_actions.h</code></td>
+<td>8 actions جديدة</td>
+</tr>
+<tr>
+<td><code>indsin/rin_indsin_c_api.h/.cpp</code></td>
+<td>8 دوال مصدَّرة + ربط التجاوب داخل <code>relayout</code></td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="1">1) التوكنز الموسَّعة<a class="headerlink" href="#1" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الفئة</th>
+<th>القيم</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>elevation (<code>elevation=</code>)</td>
+<td><code>none/xs/sm/md/lg/xl</code> أو <code>0..5</code>؛ كل مستوى: blur/offsetY/spread/opacity. في الثيمات الداكنة <code>elevatedSurface()</code> يُفتّح السطح بدل الظل</td>
+</tr>
+<tr>
+<td>z (<code>layer=</code> / <code>z=</code>)</td>
+<td><code>base 0 · raised 10 · dropdown 100 · sticky 200 · drawer 300 · dialog 400 · toast 500 · tooltip 600</code></td>
+</tr>
+<tr>
+<td>breakpoint</td>
+<td><code>xs &lt;360 · sm ≥360 · md ≥600 · lg ≥840 · xl ≥1200</code> ؛ <code>windowSizeClass</code>: compact/medium/expanded</td>
+</tr>
+<tr>
+<td>duration</td>
+<td><code>instant 0 · fast 120 · normal 250 · slow 400 · slower 600</code> (ms)</td>
+</tr>
+<tr>
+<td>opacity</td>
+<td><code>invisible 0 · faint .08 · subtle .16 · disabled .38 · medium .6 · strong .87 · opaque 1</code></td>
+</tr>
+<tr>
+<td>border</td>
+<td><code>none 0 · hairline 1 · thin 1 · medium 2 · thick 4</code></td>
+</tr>
+<tr>
+<td>icon</td>
+<td><code>xs 12 · sm 16 · md 20 · lg 24 · xl 32 · xxl 48</code></td>
+</tr>
+<tr>
+<td>touch target</td>
+<td>حدّ أدنى 44px، موصى به 48px</td>
+</tr>
+</tbody>
+</table></div>
+<p><code>resolveToken(category, name, out)</code> يستعلم أي فئة بالاسم (spacing/radius/typography تشمل القديمة).</p>
+<h2 id="2">2) أدوات الألوان<a class="headerlink" href="#2" title="Permanent link">#</a></h2>
+<ul>
+<li><code>tonalPalette(seed)</code> — سلّم 50..900؛ الخطوة 500 = البذرة تماماً، والإضاءة تتناقص رتيباً.</li>
+<li><code>ensureContrast(fg, bg, min=4.5)</code> — أقل تعديل ممكن (بحث ثنائي) ليبلغ التباين الحدّ؛ يتجه نحو الأبيض أو الأسود حسب الخلفية.</li>
+<li><code>onColor(bg)</code> — لون النص المناسب فوق خلفية.</li>
+<li><code>harmonyColors(seed, kind)</code> — complementary / analogous / triadic / split / tetradic.</li>
+</ul>
+<h2 id="3">3) الثيمات<a class="headerlink" href="#3" title="Permanent link">#</a></h2>
+<p>مدمجة جديدة (تُفعَّل بـ <code>@theme=&lt;Name&gt; active=true;</code>): <strong>HighContrastDark</strong>, <strong>HighContrastLight</strong>
+(نص/خلفية ≥ 7:1 — AAA)، <strong>Sepia</strong>، <strong>Forest</strong>، <strong>Rose</strong>.</p>
+<ul>
+<li><code>themeFromSeed(name, seed, dark)</code> — ثيم كامل (12 دوراً) من لون واحد، مضمون ألا يفشل فحص التباين.</li>
+<li><code>deriveTheme(base, name, overrides)</code> — وراثة مع تجاوز أدوار محددة؛ الأدوار المجهولة تُعاد في <code>unknownRoles</code>.</li>
+<li><code>validateTheme(theme)</code> — تقرير WCAG: <code>THEME-TEXT-BG</code>، <code>THEME-TEXT-SURFACE</code>، <code>THEME-MUTED-*</code>،
+  <code>THEME-PRIMARY-BG</code>، <code>THEME-ON-PRIMARY</code> (أخطاء)، وألوان الحالة والحدّ (تحذيرات). <code>score()</code> من 0 إلى 100.</li>
+</ul>
+<h2 id="4">4) الحركات<a class="headerlink" href="#4" title="Permanent link">#</a></h2>
+<ul>
+<li>Easings جديدة: <code>cubicIn/cubicOut/cubicInOut</code>, <code>sine</code>, <code>back</code>, <code>bounce</code>, <code>elastic</code>, <code>spring</code>
+  (القديمة بقيت بقيمها). back/elastic/spring تتجاوز 1.0 عمداً؛ الـ opacity مقصوصة في <code>[0,1]</code>.</li>
+<li>حركات جديدة: <code>pulse</code> (نبضة تكبير)، <code>shake</code> (اهتزاز أفقي متلاشٍ)، <code>bounce</code> (قفزة رأسية)، <code>grow</code>/<code>pop</code> (شفافية + تكبير من 0).</li>
+<li><code>duration="fast"</code> (توكن) أو رقم بالميلي ثانية.</li>
+<li><code>stagger=&lt;ms&gt;</code> على <strong>الحاوية</strong>: أبناؤها المباشرون يبدؤون متتابعين بفارق i×stagger (لا يُورَّث للأحفاد).</li>
+</ul>
+<h2 id="5-actions-ontap-seq">5) Actions جديدة (في <code>onTap=</code> وداخل <code>seq()</code>)<a class="headerlink" href="#5-actions-ontap-seq" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الدالة</th>
+<th>الأثر</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>copy(dst, src)</code></td>
+<td><code>dst := src</code></td>
+</tr>
+<tr>
+<td><code>swap(a, b)</code></td>
+<td>تبديل قيمتين</td>
+</tr>
+<tr>
+<td><code>cycle(cell, v1, v2, ...)</code></td>
+<td>الانتقال للقيمة التالية بدورة؛ القيمة المجهولة → الأولى</td>
+</tr>
+<tr>
+<td><code>clamp(cell, min, max)</code></td>
+<td>حصر الرقم في المدى (يتسامح مع حدود مقلوبة)</td>
+</tr>
+<tr>
+<td><code>multiply(cell[, k=2])</code> / <code>negate(cell)</code></td>
+<td>ضرب / عكس إشارة</td>
+</tr>
+<tr>
+<td><code>append(cell, text)</code></td>
+<td>إلحاق نص</td>
+</tr>
+<tr>
+<td><code>backspace(cell)</code></td>
+<td>حذف آخر <strong>حرف</strong> (UTF-8: العربية والإيموجي لا تتقطّع)</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="6">6) تصميم متجاوب<a class="headerlink" href="#6" title="Permanent link">#</a></h2>
+<pre><code>@view.Grid=cards
+  columns=1; columns_md=2; columns_lg=3; columns_xl=4;
+  gap=8; gap_lg=24;
+.end/view
+</code></pre>
+<p>أي خاصية + لاحقة <code>_sm/_md/_lg/_xl</code>. التطبيق mobile-first (الأكبر الأقرب للعرض يفوز)، قبل التخطيط، وفي
+كل <code>relayout</code>. آمن للتكرار (idempotent) وقابل للتراجع: تُحفظ القيمة الأصلية في <code>_base_&lt;key&gt;</code>
+(بما فيها ربط Warp) وتُستعاد عند العودة لشاشة أصغر؛ والخاصية التي لا أساس لها تُزال.
+<code>applyResponsiveAttrs(fabric, width)</code> تعيد عدد الخصائص التي تغيّرت.</p>
+<h2 id="7-audit">7) المدقّق (Audit)<a class="headerlink" href="#7-audit" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الكود</th>
+<th>الشدّة</th>
+<th>القاعدة</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A11Y-001</td>
+<td>error</td>
+<td>عنصر تفاعلي بلا اسم (<code>label/text/placeholder/a11y_label</code>)</td>
+</tr>
+<tr>
+<td>A11Y-002</td>
+<td>error</td>
+<td><code>Image</code> بلا <code>alt</code> (إلا <code>decorative=true</code>)</td>
+</tr>
+<tr>
+<td>A11Y-003</td>
+<td>warning</td>
+<td>هدف لمس أصغر من 44px</td>
+</tr>
+<tr>
+<td>A11Y-004</td>
+<td>error</td>
+<td>تباين نص &lt; 4.5:1 (3:1 للنص الكبير) — مع اقتراح لون مقبول</td>
+</tr>
+<tr>
+<td>A11Y-005</td>
+<td>warning</td>
+<td><code>Dialog</code> بلا عنوان</td>
+</tr>
+<tr>
+<td>STRUCT-001</td>
+<td>warning</td>
+<td>اسمان متطابقان بين الإخوة</td>
+</tr>
+<tr>
+<td>STRUCT-002</td>
+<td>warning</td>
+<td><code>Text</code> فارغ</td>
+</tr>
+<tr>
+<td>STRUCT-003</td>
+<td>warning</td>
+<td>عمق &gt; 12</td>
+</tr>
+<tr>
+<td>LAYOUT-001</td>
+<td>warning</td>
+<td>عنصر يتجاوز عرض الشاشة (عدا الطبقات المنبثقة)</td>
+</tr>
+</tbody>
+</table></div>
+<p>الدرجة = <code>100 − 10×errors − 3×warnings</code>. الخلفية الفعلية تُحسب من أقرب سلف (<code>tone</code>/<code>bg</code>/Card...)
+وإلا خلفية الثيم النشط، فلا إنذارات كاذبة في الثيمات الداكنة.</p>
+<h2 id="8-c-json-rin_free_string">8) واجهة C (تُعيد JSON/نص؛ حرّرها بـ <code>rin_free_string</code>)<a class="headerlink" href="#8-c-json-rin_free_string" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الدالة</th>
+<th>الناتج</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>rin_indsin_session_audit_json(session)</code></td>
+<td>تقرير المدقّق للشجرة الحالية</td>
+</tr>
+<tr>
+<td><code>rin_indsin_session_stats_json(session)</code></td>
+<td>عقد/عمق/أنواع/تصنيفات</td>
+</tr>
+<tr>
+<td><code>rin_indsin_session_outline(session)</code></td>
+<td>مخطط نصي مُزاح</td>
+</tr>
+<tr>
+<td><code>rin_indsin_tokens_json()</code></td>
+<td>كل مقاييس التوكنز + الثيم النشط + أسماء الثيمات</td>
+</tr>
+<tr>
+<td><code>rin_indsin_catalog_json()</code></td>
+<td>تصنيف المكوّنات (kind/category/role/interactive/overlay)</td>
+</tr>
+<tr>
+<td><code>rin_indsin_palette_json(seed)</code></td>
+<td>سلّم 50..900</td>
+</tr>
+<tr>
+<td><code>rin_indsin_theme_from_seed_json(seed, dark)</code></td>
+<td><code>{theme, report}</code></td>
+</tr>
+<tr>
+<td><code>rin_indsin_validate_theme_json(name)</code></td>
+<td>تقرير WCAG لثيم مسجَّل</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="_1">ملاحظات<a class="headerlink" href="#_1" title="Permanent link">#</a></h2>
+<ul>
+<li>اسم <code>save</code> محجوز في المحلّل فلا يصلح اسماً لعنصر (<code>@view.Button=save</code> يفشل)؛ استخدم اسماً آخر.</li>
+<li>في صيغة <code>.rin</code> يُكتب اسم العنصر أولاً ثم كل خاصية تنتهي بـ <code>;</code> (<code>@view.Text=t</code> ثم <code>text="x";</code>).</li>
+<li>لم يُبنَ بعدُ لأندرويد/WASM ولا رُبطت دوال C الجديدة من Kotlin (<code>RinEngine.kt</code>/<code>jni_bridge.cpp</code>).</li>
+</ul></article>
+<div class="pnav"><a class="pn" href="indsin_rin.html">→ indsin يعتمد على لغة Rin</a><a class="pn" href="indsin_object.html">indsin-object — API reference ←</a></div><p class="edit"><a href="https://github.com/dlof-lib/rinlang/edit/main/docs/indsin_expansion.md">✎ عدّل هذه الصفحة على GitHub</a></p>
+<footer>Rin 1.0.0 · رخصة MIT</footer></main>
+<aside id="toc"><b>في هذه الصفحة</b><div class="toc">
+<ul>
+<li><a href="#1">1) التوكنز الموسَّعة</a></li>
+<li><a href="#2">2) أدوات الألوان</a></li>
+<li><a href="#3">3) الثيمات</a></li>
+<li><a href="#4">4) الحركات</a></li>
+<li><a href="#5-actions-ontap-seq">5) Actions جديدة (في onTap= وداخل seq())</a></li>
+<li><a href="#6">6) تصميم متجاوب</a></li>
+<li><a href="#7-audit">7) المدقّق (Audit)</a></li>
+<li><a href="#8-c-json-rin_free_string">8) واجهة C (تُعيد JSON/نص؛ حرّرها بـ rin_free_string)</a></li>
+<li><a href="#_1">ملاحظات</a></li>
+</ul>
+</div>
+</aside></div>
+<script src="assets/app.js"></script></body></html>

@@ -599,7 +599,6 @@ class MainActivity : RinBaseActivity() {
         // أقواس/وسوم غير متوازنة = كود ما زال قيد الكتابة؛ تشغيله يملأ الكونسول بأخطاء لا فائدة منها.
         if (editorController.checkBracketBalance() != null || editorController.checkTagBalance() != null) return
         lastAutoRunSource = source
-        if (IndsinViewTracer.isTagSyntax(source)) return // واجهة وسوم: تُحدَّث عبر المعاينة الحية لا بمفسّر Rin العادي
         if (AppSettings.isClearConsoleOnRun(this)) { RinJobScheduler.clear(); RinTerminal.clear() }
         RinJobScheduler.submit(source) // الطابور ممتلئ → يُتجاهَل بصمت (هذا تشغيل لم يطلبه المستخدم صراحةً)
     }
@@ -1048,13 +1047,6 @@ class MainActivity : RinBaseActivity() {
         if (openFilePreviewIfApplicable()) return
         if (runHtmlProjectIfApplicable()) return
         val source = editCode.text.toString()
-        // واجهة بصيغة الوسوم (<Column#root> …): لا تُشغَّل بمفسّر Rin العادي (كان يفشل بـ E0011 unexpected
-        // character عند أول وسم/حرف عربي) — تُعرَض مباشرة في المعاينة الحية التي توسّع الوسوم ثم تشغّل Rin.
-        if (IndsinViewTracer.isTagSyntax(source)) {
-            if (AppSettings.isClearConsoleOnRun(this)) { RinJobScheduler.clear(); RinTerminal.clear() }
-            showLivePanel(source)
-            return
-        }
         if (AppSettings.isClearConsoleOnRun(this)) { RinJobScheduler.clear(); RinTerminal.clear() }
         val job = RinJobScheduler.submit(source)
         if (job == null) {

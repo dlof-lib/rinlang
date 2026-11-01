@@ -1,0 +1,68 @@
+// @tmpl — قوالب الحلقات: تُعرَّف مرة وتُستعمل مع مجموعات مختلفة
+
+// 1) قالب ترويسة
+@tmpl evens(xs) each x in xs where x % 2 == 0;
+@evens([1, 2, 3, 4, 5, 6]) { print x; }
+@evens(1 to 10) as n { print "n=" + n; }
+
+// 2) معاملات متعددة + قيمة افتراضية + مرشّحات إضافية بعد الاستعمال
+@tmpl top(xs, k = 2) each v in xs sorted desc take k;
+@top([5, 9, 1, 7]) { print "top " + v; }
+@top([5, 9, 1, 7], 3) as s { print "top3 " + s; }
+
+// 3) جسم افتراضي: يُستعمل بلا { }
+@tmpl show(xs) each item in xs { print "item " + item; }
+@show(["a", "b"]);
+
+// 4) متغيّران (عنصر، فهرس) و as للتسمية
+@tmpl numbered(xs) each x, i in xs from 1;
+@numbered(["p", "q"]) as e, idx { print idx + ":" + e; }
+
+// 5) قوالب لأنواع حلقات أخرى
+@tmpl times(n) repeat n as i;
+@times(3) { print "t" + i; }
+@tmpl attempts(n) retry n as a;
+let tries = 0;
+@attempts(4) as k { tries = tries + 1; if (tries < 3) { throw "no"; } }
+print "tries " + tries;
+
+// 6) تعبيرات التجميع والاختزال
+print [@evens([1, 2, 3, 4]) yield x * x];
+print sum @evens([1, 2, 3, 4, 5, 6]) yield x;
+print count @evens(1 to 9);
+let m = {@show([]) yield "k" : 1};
+
+// 7) قالب كتلة مع @body
+@tmpl grid(r, c) as i, j { each i in 1 to r { each j in 1 to c { @body } } }
+@grid(2, 3) { print i + "," + j; }
+@grid(2, 2) as a, b { if (a == b) { print "diag " + a; } }
+
+// 8) تعابير كوسيط (تُغلَّف بأقواس تلقائياً) وتسميات الحلقات وbreak
+let base = [3, 4, 5];
+@evens([each q in base yield q + 1]) { print "e" + x; }
+outer: @evens([2, 4, 6]) { each y in 1 to 3 { if (y == 2) { continue outer; } print x + "/" + y; } }
+@tmpl all(xs) each x in xs;
+@all([1, 2, 3, 4]) { if (x == 3) { break; } print "b" + x; } nobreak { print "never"; }
+
+// 9) قالب يستعمل قالباً آخر
+@tmpl evenSquares(xs) @evens(xs) take 2;
+@evenSquares([2, 4, 6, 8]) { print x * x; }
+
+// 10) داخل دالة
+fun total(xs) { let s = 0; @evens(xs) { s = s + x; } return s; }
+print total([1, 2, 3, 4, 5, 6]);
+
+// 11) distinct / for+ / while+limit / مصادر متعددة / داخل صنف / قالب نصي
+@tmpl uniq(xs) each x in xs distinct;
+@uniq([1,1,2,3,3]) { print x; }
+@tmpl cnt(n) for (let i = 0; i < n; i++) limit 100;
+@cnt(3) { print "c" + i; }
+@tmpl spin(n) while (n > 0) limit 5;
+let n = 3;
+@spin(n) { n = n - 1; print "w" + n; }
+class A { fun go(xs) { @uniq(xs) { print "A" + x; } } }
+A().go([7,7,8]);
+@tmpl pair(a, b) each x in a, y in b;
+@pair([1,2],["u","v"]) as p, q { print p + q; }
+@tmpl tstr(xs) each v in xs;
+@tstr(["z"]) { print `v=${v}`; }

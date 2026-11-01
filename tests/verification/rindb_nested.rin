@@ -1,0 +1,31 @@
+// tests/verification/rindb_nested.rin — معاملات متداخلة في rindb (savepoints)
+@import "rindb";
+let db = rdb_open("nest", nil);
+rdb_createTable(db, "t");
+rdb_begin(db);
+rdb_put(db, "t", "a", {"v": 1});
+print "depth=" + rdb_depth(db);
+rdb_begin(db);
+rdb_put(db, "t", "b", {"v": 2});
+print "depth=" + rdb_depth(db) + " count=" + rdb_count(db, "t");
+rdb_rollback(db);
+print "inner rolled back: depth=" + rdb_depth(db) + " count=" + rdb_count(db, "t") + " b=" + rdb_has(db, "t", "b");
+rdb_begin(db);
+rdb_put(db, "t", "c", {"v": 3});
+rdb_commit(db);
+rdb_commit(db);
+print "after commits: " + rdb_ids(db, "t") + " depth=" + rdb_depth(db);
+try { rdb_transaction(db, fun() { rdb_put(db, "t", "d", {"v": 4}); rdb_transaction(db, fun() { rdb_put(db, "t", "e", {"v": 5}); throw "inner fails"; }); }); } catch (e) { print "outer rolled back too: " + e["message"]; }
+print "final: " + rdb_ids(db, "t");
+rdb_close(db);
+
+// الدائم: الدفعة الخارجية تُكتب كسطر واحد وتُسترجع
+let path = "rindb_nested_test.rdb";
+try { deleteFile(path); } catch (e) { }
+let p = rdb_open("nestp", path);
+rdb_createTable(p, "t");
+rdb_transaction(p, fun() { rdb_put(p, "t", "x", {"v": 1}); rdb_transaction(p, fun() { rdb_put(p, "t", "y", {"v": 2}); }); });
+rdb_close(p);
+let q = rdb_open("nestp", path);
+print "reopened: " + rdb_ids(q, "t");
+rdb_dropDatabase(q, true);

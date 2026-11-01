@@ -1,0 +1,53 @@
+// input_engine_check.rin — مُدقِّق النموذج كله (cross-field): input(prompt, validator, target[, schema])، وفحص مسبق قبل أي سؤال
+class Match {
+    let a = ""; let b = "";
+    fun init(a, b) { self.a = a; self.b = b; }
+    fun __call__(s) {
+        let x = getField("Signup", self.a);
+        let y = getField("Signup", self.b);
+        if (x != y) { return "كلمتا المرور مختلفتان"; }
+        return true;
+    }
+}
+@container=Signup
+    let pw = "";
+    let pw2 = "";
+.end/container
+let r = input("S> ", Match("pw", "pw2"), "Signup");
+print r.pw + "|" + r.pw2;
+
+// المُدقِّق يستلم كائناً (OOP) ويعمل مع المخطّط أيضاً
+class Trip { let from = 1; let to = 5; }
+fun ordered(t) { if (t.from > t.to) { return "البداية بعد النهاية"; } return true; }
+let t = Trip();
+input("T> ", ordered, t, {"from": "number", "to": "number"});
+print t.from + ".." + t.to;
+
+// استنفاد الجولات: خطأ ثم رجوع الحاوية كما كانت
+@container=Never
+    let a = "x";
+.end/container
+fun never(s) { return "مرفوض دائماً"; }
+let failed = false;
+try { input("N> ", never, "Never"); } catch (e) { failed = true; }
+print "";
+print failed + "|" + getField("Never", "a");
+
+// فحص مسبق: حاوية مقفلة تُرفض قبل أي سؤال (لا يظهر أي سؤال N2)
+@container=Locked
+    let a = "x";
+.end/container
+container.lock("Locked");
+let lockedFail = false;
+try { input("N2> ", "Locked"); } catch (e) { lockedFail = true; }
+print "locked: " + lockedFail;
+
+// كائن مجمَّد داخل شجرة متداخلة يُرفض قبل أي سؤال
+class Box { let w = 1; }
+class Crate { let name = "c"; let box = nil; }
+let c = Crate();
+c.box = Box();
+oop.freeze(c.box);
+let frozenFail = false;
+try { input("N3> ", c, {"box": c.box}); } catch (e) { frozenFail = true; }
+print "frozen: " + frozenFail + "|" + c.name;

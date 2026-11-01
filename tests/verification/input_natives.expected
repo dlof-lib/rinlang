@@ -1,0 +1,14 @@
+name? n? neg? yes? no? pick
+1) a
+2) b
+3) cpick by text
+1) a
+2) b
+3) c[Droy]
+42
+-2.5
+true
+false
+b
+c
+[]

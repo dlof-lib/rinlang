@@ -1,0 +1,27 @@
+// samples/ringo_demo.rin — مثال على Ringo: لغة الترميز الخفيفة بوسوم [tag] في lib/ringo.og.rin.
+// يبني مصدر Ringo واحداً، ثم يصيّره مرتين: مرة HTML جاهز للعرض، ومرة نص عادي بلا وسوم.
+
+@import "ringo";
+
+let article =
+    "[h1]مرحباً بلغة Ringo[/h1]\n" +
+    "[b]Ringo[/b] لغة ترميز [i]خفيفة[/i] بوسوم على طراز BBCode، " +
+    "تعمل عبر مكتبة مدمجة (embedded) واحدة: [color=#7C5CFF]lib/ringo.og.rin[/color].\n" +
+    "\n" +
+    "أبرز الوسوم المدعومة:\n" +
+    "[list]" +
+    "[*]نص عريض/مائل/مسطّر/مشطوب: [b]b[/b] [i]i[/i] [u]u[/u] [s]s[/s]" +
+    "[*]كود واقتباس: [code]code[/code] و [quote]quote[/quote]" +
+    "[*]روابط وألوان: [link=...]link[/link] و [color=...]color[/color]" +
+    "[/list]\n" +
+    "[hr]\n" +
+    "التفاصيل الكاملة في [link=https://example.com/ringo]README.md[/link].";
+
+print "=== ringoToHtml(article) ===";
+print ringoToHtml(article);
+
+print "\n=== ringoToPlain(article) ===";
+print ringoToPlain(article);
+
+print "\n=== ringoInfo() ===";
+print ringoInfo();

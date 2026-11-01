@@ -1,0 +1,223 @@
+cmake_minimum_required(VERSION 3.22.1)
+project("rinengine")
+
+# مجلد مصدر طرفية Linux نسبةً إلى app/src/main/cpp (جذر المستودع أربع مستويات فوقه).
+set(RIN_LINUX_TERMINAL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../cli/linux/src/terminal")
+
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Desktop QR backend. Android uses the Kotlin/ZXing bridge instead.
+if(NOT ANDROID)
+    find_library(RIN_QRENCODE_LIB NAMES qrencode)
+endif()
+
+add_library(
+        rinengine
+        SHARED
+        jni_bridge.cpp
+        # Native Rin Code Editor — C++17 engine + JNI bridge; uses the real Rin Lexer for highlighting.
+        editor/rin_editor_engine.cpp
+        editor/rin_editor_jni.cpp
+        rin_lexer.cpp
+        rin_parser.cpp
+        rin_make.cpp
+        rin_container_sql.cpp
+        rin_artifact.cpp
+        rin_interpreter.cpp
+        binfmt/elf_format.cpp
+        binfmt/ar_format.cpp
+        binfmt/pe_format.cpp
+        binfmt/macho_format.cpp
+        binfmt/coff_obj.cpp
+        # loader_ui/: Library Loader UI — اختياري تماماً وغير مفعَّل افتراضياً من rin_interpreter.cpp
+        # (انظر setImportUISink/setImportUIMode في rin_interpreter.h)، مستقلة كلياً عن باقي المحرّك.
+        loader_ui/library_loader_ui.cpp
+        # diagnostics/: نظام Compiler Diagnostics الموحّد (E-codes/W-codes، rendering، suggestion
+        # engine) المستخدَم من rin_lexer.cpp/rin_parser.cpp/rin_interpreter.cpp أعلاه — انظر
+        # docs/ERROR_SYSTEM.md لتوثيق كامل.
+        diagnostics/diagnostic.cpp
+        diagnostics/source_manager.cpp
+        diagnostics/diagnostic_engine.cpp
+        diagnostics/diagnostic_renderer.cpp
+        # rin_http.cpp: عميل HTTP حقيقي (natives httpGet/apiCall/...، انظر registerNatives() في
+        # rin_interpreter.cpp). على أندرويد تنفيذها الفعلي داخل هذا الملف يمرّ بالكامل عبر
+        # rin::http::setAndroidBridge (يُسجَّله jni_bridge.cpp من JNI_OnLoad) الذي يستدعي فعلياً
+        # RinHttpBridge.kt عبر JNI؛ لا حاجة لأي مكتبة TLS/curl إضافية هنا على أندرويد تحديداً.
+        # rin_json.h مستخدَم داخل rin_interpreter.cpp مباشرة (header-only) فلا يحتاج سطراً هنا.
+        rin_http.cpp
+        # rin_c_api.cpp + indsin/: محرّك العرض Indsintime (rendering engine) — إضافي بحت فوق
+        # مفسّر اللغة أعلاه؛ يحوّل جذور @view.<Kind>=name إلى Fabric (شجرة عرض) مُخطَّطة
+        # ومرسومة عبر Indsin/Dye، ويُعرَّض إلى Kotlin عبر jni_bridge.cpp -> RinEngine.kt.
+        rin_c_api.cpp
+        indsin/rin_indsin_c_api.cpp
+        # clc/: مكتبة CLC (Rin Compact Library Container، .rcl) — مستقلة تماماً عن باقي المحرّك،
+        # مربوطة فقط عبر natives خام في rin_interpreter.cpp (container.open/close، library.import/
+        # export؛ انظر registerNatives()/invokeCallee() هناك وdocs/RIN_INTEGRATION.md في مستودع
+        # rin-clc الأصلي لتفاصيل صيغة .rcl والتصميم).
+        clc/clc_container.cpp
+        clc/clc_compress.cpp
+        clc/clc_security.cpp
+        clc/clc_rin_opt.cpp
+        clc/clc_zip_import.cpp
+        clc/sha256.cpp
+        # المحرر الأصلي هنا C++17 ومربوط عبر JNI، ويستخدم rin::Lexer الحقيقي من نفس مصدر اللغة
+        # لتلوين Rin وإكمالها، بحيث لا توجد نسخة ثانية من قواعد اللغة داخل واجهة Android.
+        # طرفية Linux (rin terminal) مُضمَّنة في المحرّر: نفس Session المستعملة في `rin terminal` على لينكس
+        # (cli/linux/src/terminal/rin_terminal.cpp) مبنيّة بالعلم RIN_TERMINAL_EMBED (بدون :pkg) + جسر JNI.
+        ${RIN_LINUX_TERMINAL_DIR}/rin_terminal.cpp
+        terminal/rin_terminal_jni.cpp
+)
+
+# ملاحظة: أدوات سطر الأوامر (rinc/rincheck/indsinc/pitokc) لا تُحزَم داخل APK، وبناؤها لكل ABI على الأندرويد
+# كان يعيد ترجمة rin_interpreter.cpp وغيره 4 مرات لكل معمارية فيستنزف runner GitHub (يصل إليه shutdown signal).
+# لذلك تُبنى فقط خارج الأندرويد (سطح المكتب/CI للـ CLI).
+if(NOT ANDROID)
+    # rinc: مترجم Rin الأصلي (native compiler) — هدف مستقل تماماً عن مكتبة rinengine
+    # أعلاه. لا يُستخدَم من التطبيق نفسه (يستدعي مترجم C عبر system() على جهاز
+    # البناء)، لذا لا يُربط بـ rinengine ولا يُحزَم داخل APK؛ يُبنى فقط كأداة سطر
+    # أوامر مستقلة (مفيدة عند البناء على جهاز تطوير عادي: يُنتج ./rinc قابلاً
+    # لتحويل ملفات .rin إلى ملفات تنفيذية أصلية).
+    add_executable(
+            rinc
+            rinc.cpp
+    )
+
+    # rincheck: أداة `rin check <file> [--format=plain|short|json|lsp]` — تحليل الملف فقط (lex+parse،
+    # بدون تنفيذ) مع طباعة كل Diagnostics بالتنسيق المطلوب. هدف مستقل عن rinengine/rinc، انظر
+    # tools/rin_check.cpp و docs/ERROR_SYSTEM.md (القسم 26/27).
+    add_executable(
+            rincheck
+            ../../../../tools/rin_check.cpp
+            rin_lexer.cpp
+            rin_parser.cpp
+            rin_make.cpp
+            rin_container_sql.cpp
+            rin_artifact.cpp
+            rin_interpreter.cpp
+            binfmt/elf_format.cpp
+            binfmt/ar_format.cpp
+            binfmt/pe_format.cpp
+            binfmt/macho_format.cpp
+            binfmt/coff_obj.cpp
+            loader_ui/library_loader_ui.cpp
+            rin_http.cpp
+            diagnostics/diagnostic.cpp
+            diagnostics/source_manager.cpp
+            diagnostics/diagnostic_engine.cpp
+            diagnostics/diagnostic_renderer.cpp
+            # rin_interpreter.cpp أعلاه يتضمّن clc/clc_container.h (natives library.import/export)،
+            # فيحتاج rincheck نفس مصادر clc/ لتُبنى/تُربَط، رغم أن rincheck لا يُنفِّذ فعلياً (lex+parse فقط).
+            clc/clc_container.cpp
+            clc/clc_compress.cpp
+            clc/clc_security.cpp
+            clc/clc_rin_opt.cpp
+            clc/clc_zip_import.cpp
+            clc/sha256.cpp
+    )
+
+    # rincheck sources live under tools/, while Rin headers (rin_lexer.h,
+    # rin_parser.h, etc.) live under this CMake directory.  Clang does not
+    # automatically search the target source directories for quoted includes,
+    # so explicitly expose the Rin C++ source root (and diagnostics headers).
+    target_include_directories(
+            rincheck
+            PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}
+            ${CMAKE_CURRENT_SOURCE_DIR}/diagnostics
+    )
+
+    # indsinc: أداة سطر أوامر مستقلة لمحرّك العرض Indsintime — نفس فلسفة rinc أعلاه تماماً:
+    # هدف مستقل، لا يُربط بـ rinengine ولا يُحزَم داخل APK، للاختبار على جهاز تطوير عادي فقط.
+    #
+    # ملاحظة: indsin/indsinc.cpp يتضمّن rin_indsin_pipeline.h، وهذا الأخير يشغّل rin::Interpreter حقيقياً
+    # (runColdPipelineWithRuntime/runColdPipeline كلاهما ينشئ/يشغّل rin::Interpreter فعلياً، انظر
+    # تعليقاته الخاصة) وليس مجرّد lex+parse مثل rincheck، لذا يحتاج نفس مصادر وقت التشغيل التي
+    # يحتاجها rincheck أدناه (rin_interpreter.cpp وكل ما يعتمد عليه) وإلا فشل الربط (linker) بأخطاء
+    # "undefined symbol" لـ rin::Interpreter::Interpreter()/run() و rin::Value::toDisplayString().
+    add_executable(
+            indsinc
+            indsin/indsinc.cpp
+            rin_lexer.cpp
+            rin_parser.cpp
+            rin_make.cpp
+            rin_container_sql.cpp
+            rin_artifact.cpp
+            rin_interpreter.cpp
+            binfmt/elf_format.cpp
+            binfmt/ar_format.cpp
+            binfmt/pe_format.cpp
+            binfmt/macho_format.cpp
+            binfmt/coff_obj.cpp
+            loader_ui/library_loader_ui.cpp
+            rin_http.cpp
+            diagnostics/diagnostic.cpp
+            diagnostics/source_manager.cpp
+            diagnostics/diagnostic_engine.cpp
+            diagnostics/diagnostic_renderer.cpp
+            clc/clc_container.cpp
+            clc/clc_compress.cpp
+            clc/clc_security.cpp
+            clc/clc_rin_opt.cpp
+            clc/clc_zip_import.cpp
+            clc/sha256.cpp
+    )
+endif()
+
+target_compile_definitions(rinengine PRIVATE RIN_TERMINAL_EMBED=1)
+target_include_directories(rinengine PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${RIN_LINUX_TERMINAL_DIR})
+
+find_library(log-lib log)
+# libz.so + zlib.h جزء أصيل من NDK sysroot على كل ABI (لا حاجة لتحميل/توريد أي مصدر خارجي) —
+# يُستخدَم من natives zlibDeflateRaw/zlibInflateRaw في rin_interpreter.cpp لضغط ZIP الحقيقي.
+find_library(z-lib z)
+
+target_link_libraries(
+        rinengine
+        ${log-lib}
+        ${z-lib}
+)
+
+if(NOT ANDROID)
+    target_link_libraries(
+            rincheck
+            ${z-lib}
+    )
+
+    target_link_libraries(
+            indsinc
+            ${z-lib}
+    )
+endif()
+
+if(NOT ANDROID)
+    # pitokc: أداة سطر أوامر مستقلة لـ PITOK -- لغة الواجهات المفصولة عن Rin العام (انظر
+    # pitok/README.md). نفس فلسفة rinc/rincheck/indsinc أعلاه تمامًا: هدف مستقل، لا يُربط بـ
+    # rinengine ولا يُحزَم داخل APK. الفرق الجوهري عن indsinc: هذا الهدف لا يحتاج ولا يربط أيًا من
+    # rin_lexer.cpp/rin_parser.cpp/rin_interpreter.cpp إطلاقًا -- المسار الكامل هنا هو
+    # pitok::Lexer -> pitok::Parser -> pitok_bridge (indsin/pitok_indsin_bridge.h) -> نفس
+    # rin_indsin_layout.h/rin_indsin_paint.h اللذين يستخدمهما indsinc، بلا أي تعديل عليهما. هذا الهدف هو
+    # الإثبات الحيّ في نظام البناء نفسه (وليس فقط في اختبارات pitok/Makefile اليدوية) أن واجهات
+    # @view/@loop/@container/@element يمكن تحليلها ورسمها دون المرور بمُحلِّل Rin العام.
+    add_executable(
+            pitokc
+            ${CMAKE_CURRENT_SOURCE_DIR}/../../../../pitok/tools/pitokc.cpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/../../../../pitok/src/pitok_lexer.cpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/../../../../pitok/src/pitok_parser.cpp
+    )
+    target_include_directories(
+            pitokc
+            PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}
+            ${CMAKE_CURRENT_SOURCE_DIR}/../../../../pitok/include
+    )
+endif()
+
+# Link the native desktop QR backend when available.
+if(NOT ANDROID AND RIN_QRENCODE_LIB)
+    foreach(_rin_target rinengine rincheck indsinc)
+        if(TARGET ${_rin_target})
+            target_link_libraries(${_rin_target} PRIVATE ${RIN_QRENCODE_LIB})
+        endif()
+    endforeach()
+endif()

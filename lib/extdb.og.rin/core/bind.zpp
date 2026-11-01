@@ -1,0 +1,101 @@
+// extdb/core/bind.zpp — كائنات مربوطة بالاتصال/الجدول: تُخزَّن في متغير داخل أي حاوية/مجموعة/حجم
+// وتُستدعى بلا تمرير الاتصال في كل نداء.
+//
+//   @container=app
+//       let db = xdb_open("rtdb", "shop", {"url": "https://my-app.example-rtdb.com"});
+//       let users = db.table("users");
+//       fun setup() { users.put("u1", {"name": "Sara"}); users.pull("Users"); return users.count(); }
+//   .end/container
+
+fun xdb_tableOf(c, t) {
+    return {
+        "name": t,
+        "provider": c["provider"],
+        "get": fun(id) { return xdb_get(c, t, id); },
+        "has": fun(id) { return xdb_has(c, t, id); },
+        "put": fun(id, doc) { return xdb_put(c, t, id, doc); },
+        "insert": fun(id, doc) { return xdb_insert(c, t, id, doc); },
+        "add": fun(doc) { return xdb_add(c, t, doc); },
+        "update": fun(id, patch) { return xdb_update(c, t, id, patch); },
+        "delete": fun(id) { return xdb_delete(c, t, id); },
+        "ids": fun() { return xdb_ids(c, t); },
+        "count": fun() { return xdb_count(c, t); },
+        "all": fun() { return xdb_all(c, t); },
+        "find": fun(field, value) { return xdb_find(c, t, field, value); },
+        "list": fun(opts) { return xdb_list(c, t, opts); },
+        "findOne": fun(field, value) { return xdb_findOne(c, t, field, value); },
+        "incr": fun(id, field, by) { return xdb_incr(c, t, id, field, by); },
+        "putMany": fun(docs) { return xdb_putMany(c, t, docs); },
+        "deleteMany": fun(ids) { return xdb_deleteMany(c, t, ids); },
+        "clearCache": fun() { return xdb_clearCache(c, t); },
+        "sync": fun(cname, opts) { return xdb_sync(c, t, cname, opts); },
+        "schema": fun(spec) { return xdb_schema(c, t, spec); },
+        "watch": fun(handler, opts) { return xdb_watch(c, t, handler, opts); },
+        "agg": fun(field, opts) { return xdb_agg(c, t, field, opts); },
+        "each": fun(size, fn, opts) { return xdb_each(c, t, size, fn, opts); },
+        "export": fun(path) { return xdb_export(c, t, path); },
+        "import": fun(path, opts) { return xdb_import(c, t, path, opts); },
+        "pull": fun(cname, opts) { return xdb_pull(c, t, cname, opts); },
+        "push": fun(cname, opts) { return xdb_push(c, t, cname, opts); }
+    };
+}
+
+fun xdb_bind(c) {
+    return {
+        "handle": c,
+        "name": c["name"],
+        "provider": c["provider"],
+        "table": fun(t) { return xdb_tableOf(c, t); },
+        "ping": fun() { return xdb_ping(c); },
+        "info": fun() { return xdb_info(c); },
+        "get": fun(t, id) { return xdb_get(c, t, id); },
+        "has": fun(t, id) { return xdb_has(c, t, id); },
+        "put": fun(t, id, doc) { return xdb_put(c, t, id, doc); },
+        "insert": fun(t, id, doc) { return xdb_insert(c, t, id, doc); },
+        "add": fun(t, doc) { return xdb_add(c, t, doc); },
+        "update": fun(t, id, patch) { return xdb_update(c, t, id, patch); },
+        "delete": fun(t, id) { return xdb_delete(c, t, id); },
+        "ids": fun(t) { return xdb_ids(c, t); },
+        "count": fun(t) { return xdb_count(c, t); },
+        "all": fun(t) { return xdb_all(c, t); },
+        "find": fun(t, field, value) { return xdb_find(c, t, field, value); },
+        "list": fun(t, opts) { return xdb_list(c, t, opts); },
+        "findOne": fun(t, field, value) { return xdb_findOne(c, t, field, value); },
+        "incr": fun(t, id, field, by) { return xdb_incr(c, t, id, field, by); },
+        "putMany": fun(t, docs) { return xdb_putMany(c, t, docs); },
+        "deleteMany": fun(t, ids) { return xdb_deleteMany(c, t, ids); },
+        "clearCache": fun(t) { return xdb_clearCache(c, t); },
+        "sync": fun(t, cname, opts) { return xdb_sync(c, t, cname, opts); },
+        "schema": fun(t, spec) { return xdb_schema(c, t, spec); },
+        "agg": fun(t, field, opts) { return xdb_agg(c, t, field, opts); },
+        "each": fun(t, size, fn, opts) { return xdb_each(c, t, size, fn, opts); },
+        "export": fun(t, path) { return xdb_export(c, t, path); },
+        "import": fun(t, path, opts) { return xdb_import(c, t, path, opts); },
+        "backup": fun(tables, dir) { return xdb_backup(c, tables, dir); },
+        "signIn": fun(email, password) { return xdb_signIn(c, email, password); },
+        "signUp": fun(email, password) { return xdb_signUp(c, email, password); },
+        "signOut": fun() { return xdb_signOut(c); },
+        "refresh": fun() { return xdb_refresh(c); },
+        "user": fun() { return xdb_user(c); },
+        "isSignedIn": fun() { return xdb_isSignedIn(c); },
+        "setToken": fun(token, refresh, expiresInSec) { return xdb_setToken(c, token, refresh, expiresInSec); },
+        "watch": fun(t, handler, opts) { return xdb_watch(c, t, handler, opts); },
+        "unwatch": fun(id) { return xdb_unwatch(c, id); },
+        "tick": fun() { return xdb_tick(c); },
+        "watchLoop": fun(intervalMs, rounds) { return xdb_watchLoop(c, intervalMs, rounds); },
+        "tx": fun() { return xdb_tx(c); },
+        "health": fun() { return xdb_health(c); },
+        "setLogger": fun(fn) { return xdb_setLogger(c, fn); },
+        "flushQueue": fun() { return xdb_flushQueue(c); },
+        "queueSize": fun() { return xdb_queueSize(c); },
+        "clearQueue": fun() { return xdb_clearQueue(c); },
+        "raw": fun(method, path, query, body) { return xdb_raw(c, method, path, query, body); },
+        "rpc": fun(fname, args) { return xdb_rpc(c, fname, args); },
+        "pull": fun(t, cname, opts) { return xdb_pull(c, t, cname, opts); },
+        "push": fun(t, cname, opts) { return xdb_push(c, t, cname, opts); },
+        "close": fun() { return xdb_close(c); }
+    };
+}
+
+// يفتح ويربط دفعة واحدة
+fun xdb_open(provider, name, cfg) { return xdb_bind(xdb_connect(provider, name, cfg)); }

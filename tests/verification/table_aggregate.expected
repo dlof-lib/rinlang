@@ -1,0 +1,40 @@
+📊 container.table = staff
+▦ row -> ["name", "dept", "score"]
+▦ row -> ["sara", "dev", 95]
+▦ row -> ["yusuf", "ops", 88]
+▦ row -> ["huda", "dev", 99]
+▦ row -> ["omar", "ops", nil]
+✅ .end/container.table (staff)
+282
+94
+88
+99
+nil
+["sara", "yusuf", "huda", "omar"]
+["dev", "ops"]
+{"dev": 2, "ops": 2}
+{"dev": ["1", "3"], "ops": ["2", "4"]}
+["2", "1", "3", "4"]
+["3", "1", "2", "4"]
+["3", "1"]
+{"items": [{"_id": "4", "name": "omar", "dept": "ops", "score": nil}], "page": 2, "size": 3, "total": 4, "pages": 2}
+["2", "4"]
+["3"]
+["1"]
+{"count": 4, "fields": {"name": {"count": 4, "numeric": false}, "dept": {"count": 4, "numeric": false}, "score": {"count": 3, "numeric": true, "min": 88, "max": 99, "sum": 282, "avg": 94}}}
+[{"_id": "1", "name": "sara", "score": 95}, {"_id": "2", "name": "yusuf", "score": 88}, {"_id": "3", "name": "huda", "score": 99}, {"_id": "4", "name": "omar", "score": nil}]
+E0007
+📊 container.table = a
+▦ row -> ["k", "v"]
+▦ row -> ["x", 1]
+✅ .end/container.table (a)
+📊 container.table = b
+▦ row -> ["k", "w"]
+▦ row -> ["y", 2]
+✅ .end/container.table (b)
+false
+{"same": false, "added": [{"k": "y", "w": 2}], "removed": [{"k": "x", "v": 1}]}
+1
+[["k", "v", "w"], ["x", 1, nil], ["y", nil, 2]]
+true
+64

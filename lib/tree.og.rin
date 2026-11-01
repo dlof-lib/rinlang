@@ -1,0 +1,10 @@
+// Rin Tree Pro — general-purpose tree values.
+fun tree_node(value){return {value:value,children:[]};}
+fun tree_add(parent,child){push(parent["children"],child);return parent;}
+fun tree_value(node){return node["value"];}
+fun tree_children(node){return node["children"];}
+fun tree_childCount(node){return len(node["children"]);}
+fun tree_isLeaf(node){return len(node["children"])==0;}
+fun tree_find(node,value){if(node["value"]==value){return node;}let i=0;while(i<len(node["children"])){let f=tree_find(node["children"][i],value);if(f!=nil){return f;}i=i+1;}return nil;}
+fun tree_depth(node){if(len(node["children"])==0){return 0;}let m=0;let i=0;while(i<len(node["children"])){let d=tree_depth(node["children"][i])+1;if(d>m){m=d;}i=i+1;}return m;}
+fun tree_values(node){let out=[node["value"]];let i=0;while(i<len(node["children"])){let x=tree_values(node["children"][i]);let j=0;while(j<len(x)){push(out,x[j]);j=j+1;}i=i+1;}return out;}

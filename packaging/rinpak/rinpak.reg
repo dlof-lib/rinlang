@@ -1,0 +1,15 @@
+Windows Registry Editor Version 5.00
+; ربط .rinpak بـ Rin على ويندوز (عدّل المسارات إلى مكان التثبيت).
+
+[HKEY_CURRENT_USER\Software\Classes\.rinpak]
+@="Rin.Project.Pak"
+"Content Type"="application/vnd.rin.pak"
+
+[HKEY_CURRENT_USER\Software\Classes\Rin.Project.Pak]
+@="Rin Project Package"
+
+[HKEY_CURRENT_USER\Software\Classes\Rin.Project.Pak\DefaultIcon]
+@="C:\\Program Files\\Rin\\rinpak_file.ico"
+
+[HKEY_CURRENT_USER\Software\Classes\Rin.Project.Pak\shell\open\command]
+@="\"C:\\Program Files\\Rin\\rin.exe\" pak open \"%1\""

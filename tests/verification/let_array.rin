@@ -1,0 +1,19 @@
+// let_array.rin — اختبار تحقّق لـ docs/let-plus.md
+let [a, b] = [1, 2];
+print a + b;
+let [x, y, z] = [10, 20];
+print z;                       // nil: الخانة المفقودة
+let [p, q = 5, r = 7] = [1, nil];
+print p; print q; print r;     // 1 5 7 : الافتراضي عند الغياب أو nil
+let [first, ...others] = [1, 2, 3, 4];
+print first; print others;
+let [h, , t] = ["a", "b", "c"];
+print h + t;
+let [_, second] = ["skip", "keep"];
+print second;
+let [m, [n, o]] = [1, [2, 3]];
+print m + n + o;
+let [d1, d2 = d1 * 2] = [4];
+print d2;                      // الافتراضي يرى ما قبله
+let [e1, ...none] = [9];
+print none;

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- نمط الزر "الشبحي" (Ghost) — شفاف تماماً بلا إطار، ripple خفيف بس عند اللمس. لإجراء أدنى
+     أهمية (زي "تجاهل"/رابط نصي). نفس تصميم bg_toolbar_btn_ghost القديم، بس باسم عام يوصل نيته
+     بوضوح بأي شاشة بدل الاعتماد على اسم مرتبط بالشريط العلوي تحديداً. -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="@color/rin_ghost_ripple">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@android:color/transparent" />
+            <corners android:radius="10dp" />
+        </shape>
+    </item>
+</ripple>

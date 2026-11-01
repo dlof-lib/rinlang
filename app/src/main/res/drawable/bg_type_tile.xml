@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- بلاطة أيقونة النوع: مربع دائري الزوايا أبيض يُلوَّن بـ backgroundTint (لون النوع بشفافية). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#FFFFFF" />
+    <corners android:radius="12dp" />
+</shape>

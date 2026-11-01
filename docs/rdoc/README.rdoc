@@ -1,0 +1,243 @@
+؛؛؛ rdoc
+title: مكتبة المثال
+version: 1.0.0
+author: @example
+؛؛؛
+
+؛؛ هذا تعليق: لا يظهر في العرض أبداً.
+
+؛؛؛ صفحة
+background: #0F1115,#1C1E25
+bg-dir: diag
+theme: dark
+heading-color: #FFFFFF
+link-color: #9C85FF
+font-size: lg
+line-height: 1.7
+padding: 20 16
+radius: 24
+border: #7C5CFF 1
+max-width: 720
+align: start
+direction: rtl
+؛؛؛
+
+؛؛؛ مراجع
+docs = https://dlof-lib.github.io/rinlang/ | التوثيق الرسمي
+issues = https://github.com/dlof-lib/rinlang/issues | تتبّع المشاكل
+؛؛؛
+
+= {{title}}
+
+ملف **rdoc** — ليس Markdown. الترويسة في أعلاه تفعّل اللهجة، والعناوين بـ `=` بدل `#`. [version: {{version}}] [tag: rin] [status: stable] [progress: 80|اكتمال التوثيق]
+
+؛؛؛ شارات
+الإصدار: {{version}} | green
+المنصة: Android
+الترخيص: MIT | #7C5CFF
+؛؛؛
+
+::: فهرس
+:::
+
+::: نصيحة ابدأ من هنا
+راجع *"docs"* أو أبلغ عن مشكلة عبر *"issues|صفحة المشاكل|button"*.
+:::
+
+== حقائق سريعة
+
+؛؛؛ حقائق المكتبة
+الناشر: [user: example]
+آخر تحديث: [date: 2026-09-29]
+التقييم: [rating: 4.5]
+؛؛؛
+
+؛؛؛ روابط
+التوثيق = docs | docs
+المشاكل = issues
+المتجر = https://dlof-lib.github.io/rinlang/?view=libraries | install
+؛؛؛
+
+== التثبيت
+
+::: خطوات
+- شغّل [cmd: rin install example]
+- أضف `@import "lib/example.og.rin";` إلى مشروعك
+- اضغط [key: Ctrl] + [key: S] ثم شغّل
+:::
+
+[*تثبيت من المتجر/link=(https://dlof-lib.github.io/rinlang/?view=libraries)/id=(install)/icon=(install)*]
+
+استدعِ الزر لاحقاً: *"install"* — أو بنص مخصّص: *"install|افتح المتجر"* — أو مكتبة مباشرة: *"@example/example-lib"* — أو [link: https://example.org|رابط سريع] — أو [download: https://example.org/file.zip|نزّل الملف].
+
+== شاهد
+
+:;video https://youtu.be/abcDEF12345|عرض توضيحي قصير|height=(220);:
+
+:;web https://dlof-lib.github.io/rinlang/|الموقع الرسمي;:
+
+== سجل التغييرات
+
+::: تغييرات
+## {{version}}
++ دعم لهجة rdoc
++ أزرار الدفع والتبرع
+~ تحسين عرض الجداول
+! إصلاح الروابط المرجعية
+- إزالة الأزرار القديمة
+:::
+
+::: جدول-زمني
+2026-06: أول نسخة
+2026-09: إطلاق rdoc
+v2 | التوسع القادم
+:::
+
+::: أسئلة
+س: هل تعمل rdoc خارج التطبيق؟
+ج: تُعرض كنص عادي مع الترويسة، وتعمل كاملة داخل RinStudio.
+س: كيف أتحقق من ملفي؟
+ج: استدعِ `DocumentationContainer.validate()`.
+:::
+
+== حاويات متداخلة
+
+::::: مهم
+خارجية.
+
+::: تحذير
+داخلية — الحد الأقصى للتعشيش 4 مستويات.
+:::
+
+::: مخفي تفاصيل إضافية
+تظهر عند الضغط فقط.
+:::
+:::::
+
+== ادعم المشروع
+
+؛؛؛ دعم
+paypal|example|5 USD|تبرّع عبر باي بال
+patreon|example|كن داعماً
+btc|bc1qexampleaddress0000000000000000|عنوان بيتكوين
+؛؛؛
+
+[*ادعمنا/؛:kofi|example|قهوة:؛*] [pay: url|https://buy.stripe.com/test_placeholder|اشترِ الآن|type=(pay)]
+
+::: خطر
+كل رابط دفع يعرض مضيفه الحقيقي ويطلب تأكيداً قبل الفتح، وعناوين النسخ لا تفتح شبكة.
+:::
+
+## أنواع الأقواس `[نوع: قيمة]`
+
+[badge: build|passing|green] [badge: الإصدار|1.0.0|#7C5CFF] [status: ok|يعمل] [ok: مستقر] [warn: تجريبي] [new: ميزة جديدة]
+
+[lang: rin] [platform: android|linux|web] [license: MIT] [size: 2 MB] [time: 5 دقائق] [count: 15420|تنزيلات]
+
+[rating: 4.5|التقييم] [progress: 70|الإنجاز] [color: #22C88E] [icon: rocket|انطلق] [key: Ctrl+Shift+P]
+
+[copy: rin install example|انسخ الأمر] [link: https://dlof-lib.github.io/rinlang/|الموقع] [email: hello@example.com] [phone: +966 50 000 0000]
+
+## ستايل الأقواس
+
+الحجم: [tag: rin|size=(xs)] [tag: rin|size=(sm)] [tag: rin|size=(lg)] [tag: rin|size=(xl)] [tag: rin|size=(150%)]
+
+النمط: [tag: rin|style=(outline)] [tag: rin|style=(solid)|color=(#7C5CFF)] [tag: rin|style=(ghost)] [tag: rin|color=(#22C88E)]
+
+الشكل والأيقونة: [tag: rin|shape=(square)] [tag: rin|shape=(pill)|icon=(star)] [tag: rin|icon=(star)|pos=(end)]
+
+## أماكن وقياسات
+
+[place: الرياض|24.7136,46.6753] [place: 21.4225,39.8262] [flag: SA|السعودية] [zone: Asia/Riyadh] [address: شارع الملك فهد، الرياض]
+
+[dim: 1920x1080 px] [distance: 5 km] [weight: 2 kg] [temp: 25°C] [percent: 80%] [size: 2 MB|size=(lg)] [hash: 9fceb02d0ae598e9]
+
+## إعدادات الصفحة
+
+هذا المستند نفسه يستخدم بلوك `؛؛؛ صفحة` في أعلاه: خلفية متدرّجة قطرية، سمة داكنة، حجم خط كبير، تباعد أسطر 1.7، مساحة 20×16، زوايا 24، إطار بنفسجي، وأقصى عرض 720dp.
+
+## شريط متحرك
+
+::: شريط speed=(60) style=(solid) color=(#7C5CFF) icon=(star)
+إصدار جديد 1.0.0 متاح الآن
+دعم أكثر من 10 منصات
+تحديثات أسبوعية
+:::
+
+::: شريط dir=(right) style=(outline) color=(#22C88E) link=(repo) sep=(★)
+اضغط لفتح المستودع
+تابع آخر التحديثات
+:::
+
+[marquee: عرض خاص — اطلب الآن|خبر ثانٍ|speed=(45)|style=(soft)|color=(#FFC94D)]
+
+### شريط رأسي
+
+::: شريط dir=(up) height=(72) style=(solid) color=(#7C5CFF)
+خبر عاجل أول
+خبر ثانٍ
+خبر ثالث
+:::
+
+::: شريط dir=(down) mode=(step) hold=(2) style=(outline) color=(#22C88E)
+عرض اليوم
+خصم 20%
+تحديث جديد
+:::
+
+[marquee: نص 1|نص 2|نص 3|dir=(up)|height=(60)|style=(soft)|color=(#FFC94D)]
+
+## حزمة وتوثيق
+
+؛؛؛ حزمة
+name: example-lib
+version: 1.0.0
+description: مكتبة مثال لتوضيح ميزات الحزم في rdoc.
+author: @example
+license: MIT
+requires: rin>=1.0
+platforms: android, linux, web
+keywords: media, embed, rin
+repo: https://github.com/dlof-lib/rinlang
+؛؛؛
+
+؛؛؛ تبعيات
+@example/core = ^1.2 | النواة
+json-utils = >=1.0
+؛؛؛
+
+::: تثبيت
+:::
+
+::: دالة example_open(url, title)
+تفتح رابط وسائط وتعيد صفحة HTML جاهزة.
+
+@param url (نص): رابط الوسائط
+@param title: عنوان الصفحة
+@return: نص HTML كامل
+@throws: unsupported إن لم تُدعم المنصة
+@since: 1.0
+@example
+```rin
+warp page = example_open(link, "عرض");
+```
+:::
+
+::: دالة example_close(handle)
+@param handle: مقبض الصفحة
+@deprecated: استخدم example_open
+:::
+
+::: فهرس-الدوال
+:::
+
+الإصدار الحالي {{version}} من {{name}}: [since: 1.0] [requires: rin>=1.0] [dep: @example/core@^1.2] [install: example-lib]
+
+## يوتيوب احترافي
+
+:;video https://youtu.be/dQw4w9WgXcQ?t=1m30s|عرض توضيحي|thumb=(true)|captions=(true)|lang=(ar)|end=(2:30);:
+
+:;video https://www.youtube.com/shorts/abcDEF12345|مقطع قصير;:
+
+فتح سريع من الفقرة: :;video https://youtu.be/dQw4w9WgXcQ?t=45|النسخة التجريبية;:
+

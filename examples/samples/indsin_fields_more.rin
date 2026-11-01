@@ -1,0 +1,27 @@
+<!-- أنواع حقول إضافية: Url · Date · Time · Multiline · Read-only · Autocomplete · Code · Rich text · Hidden · Validated.
+     كل حقل مرتبط بخلية warp. HiddenField يخزّن قيمة غير ظاهرة (الخلية نفسها تبقى متاحة لبرنامج Rin). -->
+<Palette seed=#0984E3 dark />
+
+<warp site={"example"} />
+<warp day={"2026-02-30"} />
+<warp at={"09:30"} />
+<warp note={""} />
+<warp ro={"ID-48213"} />
+<warp city={"be"} />
+<warp src={"warp n = 3\nif n > 2 then\n  print(\"big\") // note\nend"} />
+<warp rich={"**Hello** _world_"} />
+<warp token={"abc123"} />
+<warp code={"AB-12"} />
+
+<Screen#app size=phone padding=16 gap=8>
+  <Header title="More inputs" subtitle="Url · Date · Time · Code · Rich …" />
+  <UrlField label="URL field" value={site} />
+  <Row gap=8 width=full><Column width=48%><DateField label="Date" value={day} /></Column><Column width=48%><TimeField label="Time" value={at} /></Column></Row>
+  <MultilineField label="Multiline" value={note} placeholder="Long text…" height=80 maxlength=200 />
+  <ReadOnlyField label="Read-only" value={ro} helper="Cannot be edited" />
+  <AutocompleteField label="Autocomplete" value={city} options="Beirut,Berlin,Bern,Brussels,Bucharest,Madrid" placeholder="City" />
+  <CodeField label="Code editor" value={src} height=110 />
+  <RichTextField label="Rich text" value={rich} height=70 />
+  <HiddenField name="session" value={token} />
+  <ValidatedField label="Validated (pattern)" value={code} rule=pattern pattern="[A-Z]{2}-[0-9]{2}" message="Use format AA-00" />
+</Screen>

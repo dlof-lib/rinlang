@@ -1,0 +1,539 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>النصوص القالبية (متغيّرات داخل النص) — Rin</title>
+<meta name="description" content="توثيق لغة البرمجة Rin"><link rel="icon" href="../assets/brand/icon-32.png">
+<link rel="stylesheet" href="assets/style.css"></head><body>
+<header><button id="mn" aria-label="القائمة">☰</button><a class="logo" href="index.html"><img src="../assets/brand/icon-48.png" alt="" width="26">Rin</a>
+<input id="q" type="search" placeholder="ابحث في التوثيق…" autocomplete="off"><button id="th" aria-label="الوضع">◐</button>
+<a class="gh" href="https://github.com/dlof-lib/rinlang">GitHub</a><div id="res"></div></header>
+<div class="wrap"><nav id="sb"><details open><summary>ابدأ هنا</summary><a href="getting-started.html">البداية</a><a href="syntax.html">القواعد النحوية العامة</a><a href="variables.html">let`، مصفوفات، قواميس، نطاق</a><a href="template-strings.html" class=on>النصوص القالبية (متغيّرات داخل النص)</a><a href="input.html">إدخال المستخدم (Input)</a><a href="control-flow.html">الشروط، الحلقات، `goal`/`achieve</a><a href="loops.html">حلقات Rin — Loops v2</a><a href="functions.html">fun`/`return`، التكرار الذاتي</a><a href="enums.html">enum`: قوائم اختيار مغلقة</a></details><details ><summary>اللغة</summary><a href="language-reference.html">المرجع الشامل وخريطة ترابط المفاهيم</a><a href="objects.html">class`/`struct`، `.object()`، `@Object`، `document</a><a href="oop.html">البرمجة الكائنية الموسَّعة (Rin 1.0)</a><a href="containers.html">دليل `@container` / `@element` / `@loop</a><a href="table.html">الجدول (`@table` / `@container.table`) ودوال اللغة عليه</a><a href="set.html">Set`: نوع المجموعة الأساسي</a><a href="pipelines.html">عامل الأنابيب `|&gt;</a><a href="RECKON.html">reckon`: مفهوم حسابي بسطرين</a><a href="let-plus.html">let` المطوَّر</a><a href="living-variables.html">المتغيرات الحيّة (Living Variables)</a><a href="label-define.html">label` و`define` (تسمية وتعريف)</a><a href="block-frames.html">بداية الكتل ونهايتها (Block Frames)</a><a href="compare_ops.html">معاملات المقارنة `/=` و `=/=` و `=/</a><a href="max_min.html">max / min family</a><a href="scope-guarantees.html">ضمانات النطاق: `finally` · `defer` · `catch … when` · `rethrow</a><a href="key_terms_and_builtins.html">Rin KEY_TERMS and Built-in Conditions</a><a href="number_builtins.html">Rin Number Built-ins</a></details><details ><summary>الواجهات (Indsin)</summary><a href="indsin.html">Indsin — Interface Design</a><a href="indsin_rin.html">indsin يعتمد على لغة Rin</a><a href="indsin_expansion.html">Indsin — التوسعة الاحترافية (Design System v2)</a><a href="indsin_object.html">indsin-object — API reference</a><a href="indsin_media.html">Indsin Media — اختيار الوسائط ورفعها</a><a href="indsin_icons.html">مكتبة أيقونات indsin (متجهية)</a><a href="indsin_tooling.html">indsin tooling — icon, file association, syntax highlighting</a><a href="indsinweb.html">IndsinWeb — مكتبة WebView والروابط لـ indsin</a><a href="RIN_ELEMENTS.html">دليل `@element.*` الكامل</a><a href="events-effects.html">الأحداث والتأثيرات (Events &amp; Effects) — محرك Indsin UI</a><a href="banner.html">Banner: إشعار شريطي</a><a href="simple-style.html">Rin Simple Style</a></details><details ><summary>بيئة التشغيل</summary><a href="runtime.html">وقت تشغيل Rin (Rin Runtime) · المرجع الرسمي</a><a href="standard-library.html">المكتبة القياسية (`lib/*.og.rin`)</a><a href="errors.html">نظام الأخطاء: أكواد، `try`/`catch`/`throw</a><a href="ERROR_SYSTEM.html">نظام التشخيص: البنية الداخلية + جدول الأكواد الكامل</a><a href="storage.html">تخزين دائم</a><a href="http.html">شبكات</a><a href="env.html">ربط Rin بملف `.env</a><a href="terminal.html">الطرفية التفاعلية — `rin terminal</a><a href="vm.html">RinVM — آلة Rin الافتراضية (بايتكود)</a><a href="rinflow.html">RinFlow: طبقة تنفيذ التدفّق المهيكل</a><a href="MAKE_UNIT.html">@make.(name)`: وحدة بسياسة قدرات صريحة</a><a href="MAKE_MEDIA.html">فيديو · صوت · API · إزالة الخلفية · قراءة النص من الصور</a><a href="TIME.html">مفهوم `time`: الزمن كقيمة من الدرجة الأولى</a><a href="native-additions.html">دوال Rin الأصلية الجديدة (Rin 1.0)</a></details><details ><summary>الحاويات وقواعد البيانات</summary><a href="container_advanced.html">Rin Container Advanced Built-ins</a><a href="container_pro.html">Rin Container Pro</a><a href="container_sql.html">RIN CONTAINER SQL (RCSQL)</a><a href="cross-file-containers.html">استدعاء إعلانات من ملف آخر</a></details><details ><summary>الحزم والتكامل</summary><a href="api.html">واجهة C المسطَّحة (Embedding API)</a><a href="android.html">استضافة Rin على أندرويد</a><a href="packages-and-interop.html">Rin 1.0 — المكتبات والحزم وجسر C++ وJSON واختبارات rintest</a><a href="rinpak-format.html">RinPak — حزمة مشروع Rin (`.rinpak`)</a><a href="html-projects.html">مشاريع HTML في Rin — الربط بين index.html وملف الحاوية</a><a href="project-og-urin.html">project.og.urin` — البيانات الوصفية لمشروع Rin</a><a href="CONTENT_PACKS.html">حزم المحتوى القابلة للتنزيل (Content Packs)</a><a href="previewkit.html">previewkit — معاينة حيّة لملفات PDF / Markdown / TypeScript</a></details><details ><summary>المكتبات المتخصصة</summary><a href="rinml.html">RinML / RinDF / RinAI — الذكاء الاصطناعي وتحليل البيانات في Rin</a><a href="STATS.html">RinStat — التحليل الإحصائي (`lib/rinstat.og.rin`)</a><a href="STATS_ADV.html">RinStat المتقدّم + RinAuto</a><a href="LINALG.html">الجبر الخطي للمهندسين — `mat*` و`vec*</a><a href="PLOT.html">RinPlot — الرسوم البيانية الإحصائية (`lib/rinplot.og.rin`)</a><a href="ALGO.html">تطوير الخوارزميات والحساب العددي — `algo*</a><a href="NUMBER.html">مفهوم `number` في Rin</a><a href="boat.html">&quot;Boat&quot;: مفاهيم أساسية مجمَّعة</a><a href="passkit.html">passkit — passwords, encryption, databases and a tag language</a><a href="passkit-crypto-db.html">Passkit feature catalog: encryption, databases and container linking</a><a href="hash-family.html">عائلة `#` — مفاهيم ودوال جديدة تبدأ بعلامة `#</a><a href="image-draw.html">إنشاء الصور في Rin — رسم وحفظ PNG وlog كصورة</a><a href="image-terminal.html">طباعة الصور في الـ terminal — `printImage` / `imageAnsi` / `imageInfo</a></details><details ><summary>المشروع</summary><a href="CONTRIBUTING.html">المساهمة في Rin</a><a href="CODE_OF_CONDUCT.html">قواعد السلوك</a><a href="SECURITY.html">سياسة الأمان</a><a href="SUPPORT.html">الحصول على المساعدة</a><a href="TRADEMARKS.html">سياسة العلامة التجارية — Trademark Policy</a><a href="THIRD_PARTY_NOTICES.html">إشعارات المكوّنات الخارجية — Third-Party Notices</a></details><details ><summary>مراجع إضافية</summary><a href="ANDROID_VERSIONS.html">حزم RinStudio لكل إصدار أندرويد</a><a href="TOKEN.html">مفهوم `token` في Rin</a><a href="TOOLCHAIN.html">Rin Professional Language Toolchain</a><a href="TOOLCHAIN_UPGRADE.html">Toolchain Upgrade — 2026-09</a><a href="architecture.html">المعمارية وبنية المستودع</a><a href="base-accept.html">base` و`accept`: متغيّران يخدمان `if</a><a href="channel47.html">channel47 — لغة وصف البيانات والإعدادات</a><a href="ci.html">CI وأدوات المستودع</a><a href="loop-templates.html">قوالب الحلقات `@tmpl</a><a href="pre-post.html">pre` و`post` (ما قبل / ما بعد): عقد انتقال حول الإسناد</a><a href="print-fonts.html">خطوط `print` — bold / italic / underline وغيرها</a><a href="print-image-terminal.html">طباعة الصور كنص في الطرفية</a><a href="print-templates.html">قوالب الطباعة `@tmpl ... print` — قوالب نصية خطية وتنسيقية</a><a href="rdoc.html">rdoc — Documentation Container</a><a href="rdoc-reference.html">وثيقة rdoc الشاملة — Documentation Container</a><a href="screenshots.html">لقطات من RinStudio</a></details></nav>
+<main><article><h1 id="template-stringsmd">template-strings.md — النصوص القالبية (متغيّرات داخل النص)<a class="headerlink" href="#template-stringsmd" title="Permanent link">#</a></h1>
+<blockquote>
+<p>كل مثال هنا جُرِّب فعلياً بمفسِّر Rin. مثال كامل قابل للتشغيل:
+<a href="https://github.com/dlof-lib/rinlang/blob/main/examples/template_strings_demo.rin"><code>examples/template_strings_demo.rin</code></a>.</p>
+</blockquote>
+<h2 id="_1">الفكرة في ثلاث ثوانٍ<a class="headerlink" href="#_1" title="Permanent link">#</a></h2>
+<p>بدل أن تكتب:</p>
+<pre><code class="language-kotlin">print &quot;مرحباً &quot; + name + &quot;، عمرك &quot; + age + &quot; سنة&quot;;
+</code></pre>
+<p>اكتب:</p>
+<pre><code class="language-kotlin">print `مرحباً ${name}، عمرك ${age} سنة`;
+</code></pre>
+<p><strong>القاعدتان الوحيدتان:</strong>
+1. النص بين علامتَي <code>`</code> (backtick) بدل <code>" "</code>.
+2. أي شيء تريد عرض قيمته يوضع داخل <code>${ ... }</code>.</p>
+<h2 id="_2">ماذا أكتب داخل <code>${ }</code>؟<a class="headerlink" href="#_2" title="Permanent link">#</a></h2>
+<p>أي تعبير Rin صحيح:</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>ما تكتبه</th>
+<th>مثال</th>
+<th>الناتج (إن كان <code>age = 20</code>)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>متغيّر</td>
+<td><code>`${name}`</code></td>
+<td><code>ريم</code></td>
+</tr>
+<tr>
+<td>عملية حسابية</td>
+<td><code>`${age + 1}`</code></td>
+<td><code>21</code></td>
+</tr>
+<tr>
+<td>استدعاء دالة</td>
+<td><code>`${double(age)}`</code></td>
+<td><code>40</code></td>
+</tr>
+<tr>
+<td>عنصر مصفوفة</td>
+<td><code>`${items[0]}`</code></td>
+<td>أول عنصر</td>
+</tr>
+<tr>
+<td>حقل قاموس</td>
+<td><code>`${user["city"]}`</code></td>
+<td><code>بيروت</code></td>
+</tr>
+<tr>
+<td>مقارنة</td>
+<td><code>`${age &gt; 18}`</code></td>
+<td><code>true</code></td>
+</tr>
+<tr>
+<td>شرط ثلاثي</td>
+<td><code>`${age &gt;= 18 ? "بالغ" : "قاصر"}`</code></td>
+<td><code>بالغ</code></td>
+</tr>
+<tr>
+<td>قالب داخل قالب</td>
+<td><code>`أ ${`ب ${name}`}`</code></td>
+<td><code>أ ب ريم</code></td>
+</tr>
+</tbody>
+</table></div>
+<p>كل القيم (أرقام، منطقي، مصفوفات، <code>nil</code>...) تُحوَّل تلقائياً إلى نص بنفس طريقة <code>toString</code>،
+فلا حاجة لتحويلها بنفسك.</p>
+<h2 id="_3">أين تُستعمل القوالب في مفاهيم اللغة؟<a class="headerlink" href="#_3" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>المفهوم</th>
+<th>يقبل <code>${}</code>؟</th>
+<th>مثال</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>print</code> / <code>show</code> / <code>let</code> / <code>text x = ...</code></td>
+<td>نعم</td>
+<td><code>print `مرحباً ${name}`;</code></td>
+</tr>
+<tr>
+<td>وسائط الدوال والتعبيرات عموماً</td>
+<td>نعم</td>
+<td><code>log(`خطأ في ${#file}:${#line}`)</code></td>
+</tr>
+<tr>
+<td>خصائص <code>@view</code> / <code>@element</code></td>
+<td>نعم</td>
+<td><code>@view.Text=t text=`تم الضغط ${n} مرة`; .end/view</code></td>
+</tr>
+<tr>
+<td><code>translation lang=… text=…</code></td>
+<td>نعم</td>
+<td><code>translation lang="ar" text=`مرحباً ${user}`;</code></td>
+</tr>
+<tr>
+<td><code>emit</code></td>
+<td>نعم (اسم الحدث)</td>
+<td><code>emit `chat:${room}`, msg;</code></td>
+</tr>
+<tr>
+<td><code>on.event</code></td>
+<td>نعم (اسم الحدث)</td>
+<td><code>on.event `chat:${room}` (m) { ... }</code></td>
+</tr>
+<tr>
+<td><code>@import</code> · <code>link.id</code> · <code>link id=</code> · <code>.object("id")</code> · <code>version/description</code> في make</td>
+<td><strong>لا</strong> (نص ثابت فقط)</td>
+<td>يُقرأ هذا الموضع أثناء تحليل الملف، قبل وجود أي متغيّر</td>
+</tr>
+</tbody>
+</table></div>
+<ul>
+<li>في المواضع الثابتة يُسمح بقالب <strong>بلا <code>${}</code></strong> (مفيد لنصوص متعددة الأسطر أو فيها علامة <code>"</code> بلا تهريب):
+  <code>@import `lib/math.og.rin`;</code> · <code>translation lang="fr" text=`Salut "ami"`;</code></li>
+<li>إن كتبت <code>${}</code> في موضع ثابت تظهر رسالة واضحة: <code>`${}` interpolation is not allowed here</code>
+  مع اقتراح حساب القيمة في متغيّر واستعماله حيث تُقبل التعبيرات.</li>
+<li>الدالة العادية المسمّاة <code>emit(...)</code> لا تتأثر: الأحداث تُميَّز فقط بوجود نص (أو قالب) مباشرة بعد <code>emit</code>.</li>
+</ul>
+<h3 id="_4">أحداث بأسماء ديناميكية<a class="headerlink" href="#_4" title="Permanent link">#</a></h3>
+<pre><code class="language-kotlin">@container=Parent
+    let room = &quot;general&quot;;
+    on.event `chat:${room}` (msg) { print `[${room}] ${msg}`; }
+
+    @container=Child
+        fun send(msg) { emit `chat:general`, msg; }
+        send(&quot;أهلاً&quot;);          // [general] أهلاً
+    .end/container
+.end/container
+</code></pre>
+<h2 id="_5">تنسيق القيم: <code>${القيمة:التنسيق}</code><a class="headerlink" href="#_5" title="Permanent link">#</a></h2>
+<p>اكتب <code>:</code> ثم التنسيق بعد القيمة مباشرة:</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>التنسيق</th>
+<th>مثال</th>
+<th>الناتج</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>.2f</code> خانتان عشريتان</td>
+<td><code>`${1234.5:.2f}`</code></td>
+<td><code>1234.50</code></td>
+</tr>
+<tr>
+<td><code>,</code> فاصل آلاف</td>
+<td><code>`${1234567:,d}`</code></td>
+<td><code>1,234,567</code></td>
+</tr>
+<tr>
+<td><code>,.2f</code> الاثنان معاً</td>
+<td><code>`${1234.5:,.2f}`</code></td>
+<td><code>1,234.50</code></td>
+</tr>
+<tr>
+<td><code>05</code> أصفار بادئة (عرض 5)</td>
+<td><code>`${7:05}`</code></td>
+<td><code>00007</code></td>
+</tr>
+<tr>
+<td><code>.1%</code> نسبة مئوية</td>
+<td><code>`${0.256:.1%}`</code></td>
+<td><code>25.6%</code></td>
+</tr>
+<tr>
+<td><code>d</code> رقم صحيح (تقريب)</td>
+<td><code>`${2.7:d}`</code></td>
+<td><code>3</code></td>
+</tr>
+<tr>
+<td><code>&gt;8</code> محاذاة يمين بعرض 8</td>
+<td><code>`[${"ريم":&gt;8}]`</code></td>
+<td><code>[     ريم]</code></td>
+</tr>
+<tr>
+<td><code>&lt;8</code> محاذاة يسار</td>
+<td><code>`[${"ريم":&lt;8}]`</code></td>
+<td><code>[ريم     ]</code></td>
+</tr>
+<tr>
+<td><code>^8</code> توسيط</td>
+<td><code>`[${"ريم":^8}]`</code></td>
+<td><code>[  ريم   ]</code></td>
+</tr>
+<tr>
+<td><code>upper</code> / <code>lower</code></td>
+<td><code>`${"hi":upper}`</code></td>
+<td><code>HI</code></td>
+</tr>
+<tr>
+<td><code>trim</code> حذف المسافات من الطرفين</td>
+<td><code>`[${"  x ":trim}]`</code></td>
+<td><code>[x]</code></td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>ترتيب أجزاء التنسيق الرقمي:</strong> <code>[محاذاة][0][عرض][,][.دقة][نوع]</code> — كلها اختيارية.
+الأرقام تُحاذى لليمين افتراضياً، والنصوص لليسار. العرض يُحسب بعدد الحروف (العربية تعمل بشكل صحيح).</p>
+<blockquote>
+<p>الشرط الثلاثي لا يتعارض مع التنسيق: <code>`${age &gt; 18 ? "بالغ" : "قاصر":&gt;6}`</code> —
+أول <code>:</code> تابعة للشرط، والأخيرة هي التنسيق.</p>
+</blockquote>
+<h2 id="_6">قيمة افتراضية: <code>${متغيّر ?? بديل}</code><a class="headerlink" href="#_6" title="Permanent link">#</a></h2>
+<p>تعرض البديل فقط إذا كانت القيمة <code>nil</code>:</p>
+<pre><code class="language-kotlin">let nick = nil;
+print `أهلاً ${nick ?? &quot;زائر&quot;}`;   // أهلاً زائر
+</code></pre>
+<p>يمكن جمعها مع التنسيق: <code>`${price ?? 0:.2f}`</code>.
+(المتغيّر يجب أن يكون معرَّفاً؛ يكفي أن تكون قيمته <code>nil</code>. وإن كان داخل شرط ثلاثي استعمل أقواساً.)</p>
+<h2 id="_7">قيم جاهزة: <code>${#اسم}</code><a class="headerlink" href="#_7" title="Permanent link">#</a></h2>
+<p>قيم تأتي من النظام بلا تعريف. تبدأ بـ <code>#</code> حتى لا تتعارض مع متغيّراتك (فلو عندك متغيّر اسمه <code>date</code> يبقى <code>${date}</code> هو متغيّرك):</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>القيمة</th>
+<th>تعطي</th>
+<th>مثال</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>#date</code></td>
+<td>تاريخ اليوم</td>
+<td><code>2026-10-05</code></td>
+</tr>
+<tr>
+<td><code>#time</code></td>
+<td>الوقت الآن</td>
+<td><code>23:42:38</code></td>
+</tr>
+<tr>
+<td><code>#datetime</code></td>
+<td>التاريخ والوقت</td>
+<td><code>2026-10-05 23:42:38</code></td>
+</tr>
+<tr>
+<td><code>#year</code> <code>#month</code> <code>#day</code></td>
+<td>أرقام</td>
+<td><code>2026</code> <code>10</code> <code>5</code></td>
+</tr>
+<tr>
+<td><code>#hour</code> <code>#minute</code> <code>#second</code></td>
+<td>أرقام</td>
+<td><code>23</code> <code>42</code> <code>38</code></td>
+</tr>
+<tr>
+<td><code>#weekday</code></td>
+<td>رقم اليوم (0 = الأحد)</td>
+<td><code>1</code></td>
+</tr>
+<tr>
+<td><code>#version</code></td>
+<td>إصدار Rin</td>
+<td><code>1.0.0</code></td>
+</tr>
+<tr>
+<td><code>#line</code></td>
+<td>رقم السطر الحالي</td>
+<td><code>27</code></td>
+</tr>
+<tr>
+<td><code>#file</code></td>
+<td>اسم الملف الحالي</td>
+<td><code>main.rin</code></td>
+</tr>
+</tbody>
+</table></div>
+<p>يمكن تنسيقها أيضاً: <code>`${#month:02}`</code> ← <code>10</code>.</p>
+<h2 id="_8">تنسيق متقدّم<a class="headerlink" href="#_8" title="Permanent link">#</a></h2>
+<p>الصيغة الكاملة لمرحلة التنسيق (كل الأجزاء اختيارية):</p>
+<pre><code>[حشو][محاذاة][إشارة][0][عرض][, أو _][.دقة][نوع]
+</code></pre>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الجزء</th>
+<th>القيم</th>
+<th>مثال → ناتج</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>محاذاة</td>
+<td><code>&lt;</code> يسار · <code>&gt;</code> يمين · <code>^</code> وسط</td>
+<td><code>`${42:^6}`</code> → <code>42</code></td>
+</tr>
+<tr>
+<td>حشو (أي حرف قبل المحاذاة)</td>
+<td><code>*</code> <code>-</code> <code>★</code> ...</td>
+<td><code>`${42:*^10}`</code> → <code>****42****</code></td>
+</tr>
+<tr>
+<td>إشارة</td>
+<td><code>+</code> أو مسافة</td>
+<td><code>`${42:+d}`</code> → <code>+42</code></td>
+</tr>
+<tr>
+<td>فاصل آلاف</td>
+<td><code>,</code> أو <code>_</code></td>
+<td><code>`${1000000:_d}`</code> → <code>1_000_000</code></td>
+</tr>
+<tr>
+<td>دقة <code>.N</code></td>
+<td>للأرقام: خانات عشرية · للنصوص: قصّ</td>
+<td><code>`${"abcdef":.3}`</code> → <code>abc</code></td>
+</tr>
+<tr>
+<td>نوع</td>
+<td><code>f</code> <code>d</code> <code>%</code> <code>e</code> <code>x</code> <code>X</code> <code>b</code> <code>o</code> <code>s</code></td>
+<td><code>`${255:x}`</code> → <code>ff</code> · <code>`${5:b}`</code> → <code>101</code> · <code>`${12345.678:.2e}`</code> → <code>1.23e+04</code></td>
+</tr>
+<tr>
+<td>كلمات</td>
+<td><code>upper</code> <code>lower</code> <code>title</code> <code>cap</code> <code>trim</code> <code>ar</code></td>
+<td><code>`${"hello world":title}`</code> → <code>Hello World</code></td>
+</tr>
+</tbody>
+</table></div>
+<p><strong><code>ar</code></strong> يحوّل الأرقام إلى العربية-الهندية: <code>`${1234.5:,.2f|ar}`</code> → <code>١٬٢٣٤٫٥٠</code>.</p>
+<h3 id="_9">تتابع المراحل بـ <code>|</code><a class="headerlink" href="#_9" title="Permanent link">#</a></h3>
+<p>كل مرحلة تُنفَّذ على ناتج التي قبلها:</p>
+<pre><code class="language-kotlin">print `[${&quot;  hi &quot;:trim|upper|&gt;6}]`;   // [    HI]
+</code></pre>
+<h3 id="_10">تنسيق ديناميكي (قالب داخل التنسيق)<a class="headerlink" href="#_10" title="Permanent link">#</a></h3>
+<p>التنسيق نفسه يقبل <code>${ }</code>، فيمكن أن تأتي الدقة أو العرض من متغيّر:</p>
+<pre><code class="language-kotlin">let digits = 3;
+let width = 10;
+print `${3.14159265:.${digits}f}`;     // 3.142
+print `[${name:&gt;${width}}]`;           // [       ريم]
+</code></pre>
+<h2 id="x">وضع التصحيح: <code>${x=}</code><a class="headerlink" href="#x" title="Permanent link">#</a></h2>
+<p>ضع <code>=</code> في آخر التعبير ليُطبع النص نفسه ثم قيمته — مفيد جداً أثناء التطوير:</p>
+<pre><code class="language-kotlin">let x = 42;
+print `${x=}`;        // x=42
+print `${x + 1=}`;    // x + 1=43
+print `${pi=:.2f}`;   // pi=3.14
+</code></pre>
+<h2 id="u">حروف يونيكود: <code>\u{...}</code><a class="headerlink" href="#u" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">print `\u{1F600}`;                       // 😀
+print `\u{0645}\u{0631}\u{062D}\u{0628}\u{0627}`;   // مرحبا
+</code></pre>
+<h2 id="_11">مع عامل الأنبوب <code>|&gt;</code><a class="headerlink" href="#_11" title="Permanent link">#</a></h2>
+<p><code>${ }</code> تقبل أي تعبير، بما فيه الأنابيب:</p>
+<pre><code class="language-kotlin">print `الطول: ${[1, 2, 3] |&gt; len}`;     // الطول: 3
+</code></pre>
+<h2 id="render">قوالب وقت التشغيل: <code>render(نص, بيانات)</code><a class="headerlink" href="#render" title="Permanent link">#</a></h2>
+<p>القوالب بـ backtick تُكتب في الكود. أمّا إذا جاء القالب من <strong>ملف أو مستخدم أو ترجمة</strong>،
+فاستعمل <code>render</code> — تملأ فراغات <code>${...}</code> من قاموس بيانات:</p>
+<pre><code class="language-kotlin">let data = {&quot;user&quot;: {&quot;name&quot;: &quot;ريم&quot;, &quot;tags&quot;: [&quot;a&quot;, &quot;b&quot;]}, &quot;total&quot;: 1234.5};
+let tpl = &quot;مرحباً ${user.name}! مجموعك ${total:,.2f} — وسمك ${user.tags.1}&quot;;
+print render(tpl, data);
+// مرحباً ريم! مجموعك 1,234.50 — وسمك b
+</code></pre>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الصيغة</th>
+<th>المعنى</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>${user.name}</code></td>
+<td>مسار داخل البيانات؛ الأرقام فهارس للمصفوفات (<code>items.0.name</code>)</td>
+</tr>
+<tr>
+<td><code>{{user.name}}</code></td>
+<td>نفس الشيء بأقواس مزدوجة</td>
+</tr>
+<tr>
+<td><code>${age ?? 18}</code></td>
+<td>قيمة افتراضية إن كان المسار ناقصاً أو <code>nil</code> (<code>"نص"</code> أو رقم أو <code>true</code>/<code>false</code>)</td>
+</tr>
+<tr>
+<td><code>${total:,.2f}</code></td>
+<td>نفس تنسيقات القوالب أعلاه (بما فيها <code>\|</code>)</td>
+</tr>
+<tr>
+<td><code>$${raw}</code></td>
+<td>تُطبع <code>${raw}</code> حرفياً</td>
+</tr>
+</tbody>
+</table></div>
+<ul>
+<li><strong>آمن:</strong> لا يُنفَّذ أي كود Rin داخل القالب، فقط بحث عن مسارات — مناسب لقوالب قادمة من مصادر خارجية.</li>
+<li>مسار ناقص بلا <code>??</code> يعطي خطأً واضحاً: <code>render: no value for `nope`</code>.</li>
+</ul>
+<h2 id="_12">عدة أسطر<a class="headerlink" href="#_12" title="Permanent link">#</a></h2>
+<p>يمكن للقالب أن يمتد على أكثر من سطر، وتبقى الأسطر كما كتبتها:</p>
+<pre><code class="language-kotlin">print `السطر الأول
+السطر الثاني: ${name}`;
+</code></pre>
+<h2 id="_13">كتابة <code>$</code> أو <code>`</code> حرفياً (التهريب)<a class="headerlink" href="#_13" title="Permanent link">#</a></h2>
+<p>ضع <code>\</code> قبل الحرف:</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>تكتب</th>
+<th>يظهر</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>\${name}</code></td>
+<td><code>${name}</code> (لا يُستبدل)</td>
+</tr>
+<tr>
+<td><code>\`</code></td>
+<td><code>`</code></td>
+</tr>
+<tr>
+<td><code>\\</code></td>
+<td><code>\</code></td>
+</tr>
+<tr>
+<td><code>\n</code> <code>\t</code> <code>\r</code></td>
+<td>سطر جديد / Tab / رجوع</td>
+</tr>
+<tr>
+<td><code>\u{1F600}</code></td>
+<td>حرف يونيكود بالـ hex</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="_14">النص العادي لا يتغيّر<a class="headerlink" href="#_14" title="Permanent link">#</a></h2>
+<p>النصوص المكتوبة بـ <code>" "</code> تبقى <strong>حرفية تماماً</strong> — لا يُفسَّر فيها <code>${}</code> ولا <code>{}</code>.
+لذلك لن يتأثر أي كود قديم (JSON، HTML، قوالب <code>{{name}}</code>...):</p>
+<pre><code class="language-kotlin">let name = &quot;ريم&quot;;
+print &quot;${name}&quot;;   // ${name}
+print `${name}`;   // ريم
+</code></pre>
+<h2 id="_15">الأخطاء الشائعة<a class="headerlink" href="#_15" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الخطأ</th>
+<th>الرسالة</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>نسيان إغلاق القالب بـ <code>`</code></td>
+<td><code>unterminated template string</code></td>
+</tr>
+<tr>
+<td><code>${}</code> فارغة</td>
+<td><code>empty `${}` in template string</code></td>
+</tr>
+<tr>
+<td>متغيّر غير معرَّف</td>
+<td><code>undefined variable</code> (مع اسم المتغيّر)</td>
+</tr>
+<tr>
+<td><code>${x:}</code> بلا تنسيق</td>
+<td><code>invalid format</code> (مرحلة فارغة)</td>
+</tr>
+<tr>
+<td><code>${x:.2f</code> ناقصة <code>}</code></td>
+<td><code>unterminated format in template string</code></td>
+</tr>
+<tr>
+<td>تنسيق غير معروف</td>
+<td><code>invalid format ":zz"</code> مع أمثلة صحيحة</td>
+</tr>
+<tr>
+<td>تنسيق رقمي على نص</td>
+<td><code>this format needs a number</code></td>
+</tr>
+<tr>
+<td><code>${#xyz}</code> غير موجودة</td>
+<td><code>undefined variable</code></td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="_16">كيف تعمل داخلياً؟ (اختياري)<a class="headerlink" href="#_16" title="Permanent link">#</a></h2>
+<p>يحوّل الـ Lexer كل قالب إلى دمج نصوص عادي قبل أن يصل إلى المحلل النحوي:</p>
+<pre><code>`مرحباً ${name}!`   ⟶   (&quot;مرحباً &quot; + #str(name) + &quot;!&quot;)
+</code></pre>
+<ul>
+<li>مع التنسيق: <code>${x:.2f}</code> ⟶ <code>#fmt(x, ".2f")</code>، ومع الافتراضي: <code>${a ?? b}</code> ⟶ <code>#default(a, b)</code>،
+  ومع القيم الجاهزة: <code>${#date}</code> ⟶ <code>#now("date")</code>.</li>
+<li>التنسيق المتداخل: <code>${x:.${n}f}</code> ⟶ <code>#fmt(x, ("." + #str(n) + "f"))</code>، ووضع التصحيح <code>${x=}</code> ⟶ <code>"x=" + #str(x)</code>.</li>
+<li><code>#str</code> هي نفس <code>toString</code> لكن باسم لا يمكن لمتغيّراتك حجبه (حتى لو سمّيت متغيّراً <code>str</code>).</li>
+<li>لا تغيير في المحلل أو المفسِّر، لذا تعمل الميزة تلقائياً في CLI وRinStudio وWebAssembly.</li>
+<li>يبدأ التعبير دائماً بنص (ولو فارغ) فتكون <code>+</code> دمجاً للنصوص وليست جمعاً للأرقام:
+  <code>`${1}${2}`</code> تعطي <code>"12"</code> وليس <code>3</code>.</li>
+</ul>
+<h2 id="_17">انظر أيضًا<a class="headerlink" href="#_17" title="Permanent link">#</a></h2>
+<ul>
+<li><a href="syntax.html"><code>syntax.md</code></a> — القواعد النحوية العامة.</li>
+<li><a href="variables.html"><code>variables.md</code></a> — المتغيّرات.</li>
+</ul></article>
+<div class="pnav"><a class="pn" href="variables.html">→ let`، مصفوفات، قواميس، نطاق</a><a class="pn" href="input.html">إدخال المستخدم (Input) ←</a></div><p class="edit"><a href="https://github.com/dlof-lib/rinlang/edit/main/docs/template-strings.md">✎ عدّل هذه الصفحة على GitHub</a></p>
+<footer>Rin 1.0.0 · رخصة MIT</footer></main>
+<aside id="toc"><b>في هذه الصفحة</b><div class="toc">
+<ul>
+<li><a href="#_1">الفكرة في ثلاث ثوانٍ</a></li>
+<li><a href="#_2">ماذا أكتب داخل ${ }؟</a></li>
+<li><a href="#_3">أين تُستعمل القوالب في مفاهيم اللغة؟</a><ul>
+<li><a href="#_4">أحداث بأسماء ديناميكية</a></li>
+</ul>
+</li>
+<li><a href="#_5">تنسيق القيم: ${القيمة:التنسيق}</a></li>
+<li><a href="#_6">قيمة افتراضية: ${متغيّر ?? بديل}</a></li>
+<li><a href="#_7">قيم جاهزة: ${#اسم}</a></li>
+<li><a href="#_8">تنسيق متقدّم</a><ul>
+<li><a href="#_9">تتابع المراحل بـ |</a></li>
+<li><a href="#_10">تنسيق ديناميكي (قالب داخل التنسيق)</a></li>
+</ul>
+</li>
+<li><a href="#x">وضع التصحيح: ${x=}</a></li>
+<li><a href="#u">حروف يونيكود: \u{...}</a></li>
+<li><a href="#_11">مع عامل الأنبوب |&gt;</a></li>
+<li><a href="#render">قوالب وقت التشغيل: render(نص, بيانات)</a></li>
+<li><a href="#_12">عدة أسطر</a></li>
+<li><a href="#_13">كتابة $ أو ` حرفياً (التهريب)</a></li>
+<li><a href="#_14">النص العادي لا يتغيّر</a></li>
+<li><a href="#_15">الأخطاء الشائعة</a></li>
+<li><a href="#_16">كيف تعمل داخلياً؟ (اختياري)</a></li>
+<li><a href="#_17">انظر أيضًا</a></li>
+</ul>
+</div>
+</aside></div>
+<script src="assets/app.js"></script></body></html>

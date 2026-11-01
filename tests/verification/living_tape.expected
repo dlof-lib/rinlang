@@ -1,0 +1,15 @@
+40
+[10, 20, 30]
+true
+false
+30
+10
+[40, 30, 20]
+20
+false
+[10, 20]
+10
+nil
+a
+E0046 [E0046] `undo plain` needs a tape, but `plain` is a plain variable
+false

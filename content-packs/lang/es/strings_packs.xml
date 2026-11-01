@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Cadenas de la interfaz de paquetes descargables -->
+<resources>
+    <string name="packs_title">Paquetes y descargas</string>
+    <string name="packs_subtitle">Descarga idiomas y recursos solo cuando los necesites para mantener la app ligera</string>
+    <string name="packs_section_languages">Paquetes de idioma</string>
+    <string name="packs_section_assets">Paquetes de recursos</string>
+    <string name="packs_storage_used_format">Espacio usado por los paquetes instalados: %1$s</string>
+    <string name="packs_builtin">Incluido en la app</string>
+    <string name="packs_installed">Instalado</string>
+    <string name="packs_update_available">Actualización disponible</string>
+    <string name="packs_action_download">Descargar (%1$s)</string>
+    <string name="packs_action_update">Actualizar (%1$s)</string>
+    <string name="packs_action_delete">Eliminar</string>
+    <string name="packs_action_cancel">Cancelar</string>
+    <string name="packs_action_retry">Reintentar</string>
+    <string name="packs_downloading_format">Descargando… %1$d%%</string>
+    <string name="packs_verifying">Verificando la integridad del archivo…</string>
+    <string name="packs_installing">Instalando…</string>
+    <string name="packs_done_toast">\"%1$s\" instalado</string>
+    <string name="packs_deleted_toast">\"%1$s\" eliminado</string>
+    <string name="packs_cancelled">Descarga cancelada</string>
+    <string name="packs_error_format">Error de descarga: %1$s</string>
+    <string name="packs_error_offline">Sin conexión a internet</string>
+    <string name="packs_error_hash">Falló la verificación del archivo, inténtalo de nuevo</string>
+    <string name="packs_error_unknown_pack">Este paquete no está en el catálogo</string>
+    <string name="packs_catalog_failed">No se pudo cargar la lista de paquetes. Solo se muestran los instalados.</string>
+    <string name="packs_empty">No hay paquetes disponibles ahora</string>
+    <string name="packs_refresh">Actualizar lista</string>
+    <string name="packs_delete_title">Eliminar paquete</string>
+    <string name="packs_delete_message_format">\"%1$s\" se eliminará de este dispositivo. Puedes descargarlo de nuevo más tarde.</string>
+    <string name="packs_need_title">Paquete necesario</string>
+    <string name="packs_need_message_format">\"%1$s\" no está incluido en la app para mantenerla ligera. ¿Descargarlo ahora (%2$s)?</string>
+    <string name="packs_dialog_title_format">Descargando \"%1$s\"</string>
+    <string name="packs_language_pending_toast">Descarga primero el paquete de idioma para aplicarlo</string>
+    <string name="settings_packs_title">Paquetes y descargas</string>
+    <string name="settings_packs_hint">Gestiona idiomas y recursos descargables y su tamaño en este dispositivo</string>
+</resources>

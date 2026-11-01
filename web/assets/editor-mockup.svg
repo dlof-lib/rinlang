@@ -1,0 +1,59 @@
+<svg viewBox="0 0 760 460" xmlns="http://www.w3.org/2000/svg" font-family="'JetBrains Mono', ui-monospace, Consolas, monospace">
+  <rect width="760" height="460" rx="18" fill="#0b0f0c"/>
+  <!-- toolbar -->
+  <rect x="0" y="0" width="760" height="42" rx="18" fill="#101510"/>
+  <rect x="0" y="24" width="760" height="18" fill="#101510"/>
+  <circle cx="24" cy="21" r="6" fill="#ef5350"/>
+  <circle cx="46" cy="21" r="6" fill="#f4c95d"/>
+  <circle cx="68" cy="21" r="6" fill="#4ade80"/>
+  <text x="380" y="26" text-anchor="middle" fill="#9aa39c" font-size="13">hello.rin — محرر Rin</text>
+  <rect x="676" y="9" width="66" height="24" rx="7" fill="#22c55e"/>
+  <text x="709" y="25" text-anchor="middle" fill="#0a0c0a" font-size="12" font-weight="700">تشغيل</text>
+
+  <!-- gutter -->
+  <rect x="0" y="42" width="46" height="418" fill="#0d110e"/>
+  <g fill="#586158" font-size="13">
+    <text x="30" y="70" text-anchor="end">1</text>
+    <text x="30" y="96" text-anchor="end">2</text>
+    <text x="30" y="122" text-anchor="end">3</text>
+    <text x="30" y="148" text-anchor="end">4</text>
+    <text x="30" y="174" text-anchor="end">5</text>
+    <text x="30" y="200" text-anchor="end">6</text>
+    <text x="30" y="226" text-anchor="end">7</text>
+    <text x="30" y="252" text-anchor="end">8</text>
+    <text x="30" y="278" text-anchor="end">9</text>
+  </g>
+  <rect x="46" y="112" width="714" height="24" fill="#141a15"/>
+
+  <!-- code lines -->
+  <g font-size="14">
+    <text x="60" y="70"><tspan fill="#c586c0">@container</tspan><tspan fill="#cfd6cf">=</tspan><tspan fill="#4fc1ff">App</tspan></text>
+    <text x="76" y="96"><tspan fill="#c586c0">state</tspan><tspan fill="#cfd6cf"> count = </tspan><tspan fill="#d19a66">0</tspan><tspan fill="#cfd6cf">;</tspan></text>
+    <text x="76" y="122"><tspan fill="#cfd6cf">on init() { </tspan><tspan fill="#c586c0">print</tspan><tspan fill="#ce9178"> "جاهز";</tspan><tspan fill="#cfd6cf"> }</tspan></text>
+    <text x="76" y="148"><tspan fill="#cfd6cf">fun inc() { count = count + </tspan><tspan fill="#d19a66">1</tspan><tspan fill="#cfd6cf">; }</tspan></text>
+    <text x="60" y="174"><tspan fill="#cfd6cf">.end/container</tspan></text>
+    <text x="60" y="226"><tspan fill="#c586c0">@element.button</tspan><tspan fill="#cfd6cf">=inc</tspan></text>
+    <text x="76" y="252"><tspan fill="#cfd6cf">text = </tspan><tspan fill="#ce9178">"زيادة +1"</tspan><tspan fill="#cfd6cf">;</tspan></text>
+    <text x="60" y="278"><tspan fill="#cfd6cf">.end/element</tspan></text>
+  </g>
+  <rect x="182" y="106" width="2" height="20" fill="#4ade80"/>
+
+  <!-- Rin keyword panel row -->
+  <rect x="46" y="402" width="714" height="58" fill="#0f140f"/>
+  <g font-size="12" font-weight="700">
+    <rect x="60" y="416" width="58" height="30" rx="8" fill="#182014"/>
+    <text x="89" y="435" text-anchor="middle" fill="#8fd39a">container</text>
+    <rect x="126" y="416" width="42" height="30" rx="8" fill="#182014"/>
+    <text x="147" y="435" text-anchor="middle" fill="#8fd39a">fun</text>
+    <rect x="176" y="416" width="52" height="30" rx="8" fill="#182014"/>
+    <text x="202" y="435" text-anchor="middle" fill="#8fd39a">while</text>
+    <rect x="236" y="416" width="42" height="30" rx="8" fill="#182014"/>
+    <text x="257" y="435" text-anchor="middle" fill="#8fd39a">let</text>
+    <rect x="286" y="416" width="56" height="30" rx="8" fill="#182014"/>
+    <text x="314" y="435" text-anchor="middle" fill="#8fd39a">reckon</text>
+    <rect x="350" y="416" width="34" height="30" rx="8" fill="#20261f"/>
+    <text x="367" y="435" text-anchor="middle" fill="#cfd6cf">{ }</text>
+    <rect x="392" y="416" width="34" height="30" rx="8" fill="#20261f"/>
+    <text x="409" y="435" text-anchor="middle" fill="#cfd6cf">;</text>
+  </g>
+</svg>

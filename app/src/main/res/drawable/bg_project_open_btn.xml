@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- خلفية زر "فتح المشروع" الجديد أسفل بطاقة المشروع: نفس هوية زر التشغيل الأساسي
+     (bg_toolbar_btn_primary) بلون rin_accent، لكن بحواف كبسولية كاملة لتناسب حجمها
+     الصغير داخل البطاقة. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/rin_accent_pressed" />
+            <corners android:radius="18dp" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/rin_accent" />
+            <corners android:radius="18dp" />
+        </shape>
+    </item>
+</selector>

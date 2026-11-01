@@ -1,0 +1,8 @@
+{
+  "disconom": 1,
+  "name": "geomcore",
+  "version": "1.2.0",
+  "description": "ثوابت وأدوات هندسية أساسية",
+  "rin": ">=1.0.0",
+  "license": "MIT"
+}

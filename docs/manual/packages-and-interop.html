@@ -1,0 +1,235 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Rin 1.0 — المكتبات والحزم وجسر C++ وJSON واختبارات rintest — Rin</title>
+<meta name="description" content="توثيق لغة البرمجة Rin"><link rel="icon" href="../assets/brand/icon-32.png">
+<link rel="stylesheet" href="assets/style.css"></head><body>
+<header><button id="mn" aria-label="القائمة">☰</button><a class="logo" href="index.html"><img src="../assets/brand/icon-48.png" alt="" width="26">Rin</a>
+<input id="q" type="search" placeholder="ابحث في التوثيق…" autocomplete="off"><button id="th" aria-label="الوضع">◐</button>
+<a class="gh" href="https://github.com/dlof-lib/rinlang">GitHub</a><div id="res"></div></header>
+<div class="wrap"><nav id="sb"><details ><summary>ابدأ هنا</summary><a href="getting-started.html">البداية</a><a href="syntax.html">القواعد النحوية العامة</a><a href="variables.html">let`، مصفوفات، قواميس، نطاق</a><a href="template-strings.html">النصوص القالبية (متغيّرات داخل النص)</a><a href="input.html">إدخال المستخدم (Input)</a><a href="control-flow.html">الشروط، الحلقات، `goal`/`achieve</a><a href="loops.html">حلقات Rin — Loops v2</a><a href="functions.html">fun`/`return`، التكرار الذاتي</a><a href="enums.html">enum`: قوائم اختيار مغلقة</a></details><details ><summary>اللغة</summary><a href="language-reference.html">المرجع الشامل وخريطة ترابط المفاهيم</a><a href="objects.html">class`/`struct`، `.object()`، `@Object`، `document</a><a href="oop.html">البرمجة الكائنية الموسَّعة (Rin 1.0)</a><a href="containers.html">دليل `@container` / `@element` / `@loop</a><a href="table.html">الجدول (`@table` / `@container.table`) ودوال اللغة عليه</a><a href="set.html">Set`: نوع المجموعة الأساسي</a><a href="pipelines.html">عامل الأنابيب `|&gt;</a><a href="RECKON.html">reckon`: مفهوم حسابي بسطرين</a><a href="let-plus.html">let` المطوَّر</a><a href="living-variables.html">المتغيرات الحيّة (Living Variables)</a><a href="label-define.html">label` و`define` (تسمية وتعريف)</a><a href="block-frames.html">بداية الكتل ونهايتها (Block Frames)</a><a href="compare_ops.html">معاملات المقارنة `/=` و `=/=` و `=/</a><a href="max_min.html">max / min family</a><a href="scope-guarantees.html">ضمانات النطاق: `finally` · `defer` · `catch … when` · `rethrow</a><a href="key_terms_and_builtins.html">Rin KEY_TERMS and Built-in Conditions</a><a href="number_builtins.html">Rin Number Built-ins</a></details><details ><summary>الواجهات (Indsin)</summary><a href="indsin.html">Indsin — Interface Design</a><a href="indsin_rin.html">indsin يعتمد على لغة Rin</a><a href="indsin_expansion.html">Indsin — التوسعة الاحترافية (Design System v2)</a><a href="indsin_object.html">indsin-object — API reference</a><a href="indsin_media.html">Indsin Media — اختيار الوسائط ورفعها</a><a href="indsin_icons.html">مكتبة أيقونات indsin (متجهية)</a><a href="indsin_tooling.html">indsin tooling — icon, file association, syntax highlighting</a><a href="indsinweb.html">IndsinWeb — مكتبة WebView والروابط لـ indsin</a><a href="RIN_ELEMENTS.html">دليل `@element.*` الكامل</a><a href="events-effects.html">الأحداث والتأثيرات (Events &amp; Effects) — محرك Indsin UI</a><a href="banner.html">Banner: إشعار شريطي</a><a href="simple-style.html">Rin Simple Style</a></details><details ><summary>بيئة التشغيل</summary><a href="runtime.html">وقت تشغيل Rin (Rin Runtime) · المرجع الرسمي</a><a href="standard-library.html">المكتبة القياسية (`lib/*.og.rin`)</a><a href="errors.html">نظام الأخطاء: أكواد، `try`/`catch`/`throw</a><a href="ERROR_SYSTEM.html">نظام التشخيص: البنية الداخلية + جدول الأكواد الكامل</a><a href="storage.html">تخزين دائم</a><a href="http.html">شبكات</a><a href="env.html">ربط Rin بملف `.env</a><a href="terminal.html">الطرفية التفاعلية — `rin terminal</a><a href="vm.html">RinVM — آلة Rin الافتراضية (بايتكود)</a><a href="rinflow.html">RinFlow: طبقة تنفيذ التدفّق المهيكل</a><a href="MAKE_UNIT.html">@make.(name)`: وحدة بسياسة قدرات صريحة</a><a href="MAKE_MEDIA.html">فيديو · صوت · API · إزالة الخلفية · قراءة النص من الصور</a><a href="TIME.html">مفهوم `time`: الزمن كقيمة من الدرجة الأولى</a><a href="native-additions.html">دوال Rin الأصلية الجديدة (Rin 1.0)</a></details><details ><summary>الحاويات وقواعد البيانات</summary><a href="container_advanced.html">Rin Container Advanced Built-ins</a><a href="container_pro.html">Rin Container Pro</a><a href="container_sql.html">RIN CONTAINER SQL (RCSQL)</a><a href="cross-file-containers.html">استدعاء إعلانات من ملف آخر</a></details><details open><summary>الحزم والتكامل</summary><a href="api.html">واجهة C المسطَّحة (Embedding API)</a><a href="android.html">استضافة Rin على أندرويد</a><a href="packages-and-interop.html" class=on>Rin 1.0 — المكتبات والحزم وجسر C++ وJSON واختبارات rintest</a><a href="rinpak-format.html">RinPak — حزمة مشروع Rin (`.rinpak`)</a><a href="html-projects.html">مشاريع HTML في Rin — الربط بين index.html وملف الحاوية</a><a href="project-og-urin.html">project.og.urin` — البيانات الوصفية لمشروع Rin</a><a href="CONTENT_PACKS.html">حزم المحتوى القابلة للتنزيل (Content Packs)</a><a href="previewkit.html">previewkit — معاينة حيّة لملفات PDF / Markdown / TypeScript</a></details><details ><summary>المكتبات المتخصصة</summary><a href="rinml.html">RinML / RinDF / RinAI — الذكاء الاصطناعي وتحليل البيانات في Rin</a><a href="STATS.html">RinStat — التحليل الإحصائي (`lib/rinstat.og.rin`)</a><a href="STATS_ADV.html">RinStat المتقدّم + RinAuto</a><a href="LINALG.html">الجبر الخطي للمهندسين — `mat*` و`vec*</a><a href="PLOT.html">RinPlot — الرسوم البيانية الإحصائية (`lib/rinplot.og.rin`)</a><a href="ALGO.html">تطوير الخوارزميات والحساب العددي — `algo*</a><a href="NUMBER.html">مفهوم `number` في Rin</a><a href="boat.html">&quot;Boat&quot;: مفاهيم أساسية مجمَّعة</a><a href="passkit.html">passkit — passwords, encryption, databases and a tag language</a><a href="passkit-crypto-db.html">Passkit feature catalog: encryption, databases and container linking</a><a href="hash-family.html">عائلة `#` — مفاهيم ودوال جديدة تبدأ بعلامة `#</a><a href="image-draw.html">إنشاء الصور في Rin — رسم وحفظ PNG وlog كصورة</a><a href="image-terminal.html">طباعة الصور في الـ terminal — `printImage` / `imageAnsi` / `imageInfo</a></details><details ><summary>المشروع</summary><a href="CONTRIBUTING.html">المساهمة في Rin</a><a href="CODE_OF_CONDUCT.html">قواعد السلوك</a><a href="SECURITY.html">سياسة الأمان</a><a href="SUPPORT.html">الحصول على المساعدة</a><a href="TRADEMARKS.html">سياسة العلامة التجارية — Trademark Policy</a><a href="THIRD_PARTY_NOTICES.html">إشعارات المكوّنات الخارجية — Third-Party Notices</a></details><details ><summary>مراجع إضافية</summary><a href="ANDROID_VERSIONS.html">حزم RinStudio لكل إصدار أندرويد</a><a href="TOKEN.html">مفهوم `token` في Rin</a><a href="TOOLCHAIN.html">Rin Professional Language Toolchain</a><a href="TOOLCHAIN_UPGRADE.html">Toolchain Upgrade — 2026-09</a><a href="architecture.html">المعمارية وبنية المستودع</a><a href="base-accept.html">base` و`accept`: متغيّران يخدمان `if</a><a href="channel47.html">channel47 — لغة وصف البيانات والإعدادات</a><a href="ci.html">CI وأدوات المستودع</a><a href="loop-templates.html">قوالب الحلقات `@tmpl</a><a href="pre-post.html">pre` و`post` (ما قبل / ما بعد): عقد انتقال حول الإسناد</a><a href="print-fonts.html">خطوط `print` — bold / italic / underline وغيرها</a><a href="print-image-terminal.html">طباعة الصور كنص في الطرفية</a><a href="print-templates.html">قوالب الطباعة `@tmpl ... print` — قوالب نصية خطية وتنسيقية</a><a href="rdoc.html">rdoc — Documentation Container</a><a href="rdoc-reference.html">وثيقة rdoc الشاملة — Documentation Container</a><a href="screenshots.html">لقطات من RinStudio</a></details></nav>
+<main><article><h1 id="rin-10-c-json-rintest">Rin 1.0 — المكتبات والحزم وجسر C++ وJSON واختبارات rintest<a class="headerlink" href="#rin-10-c-json-rintest" title="Permanent link">#</a></h1>
+<blockquote>
+<p>ملف المصدر: <code>app/src/main/cpp/rin_extra_natives4.cpp</code> (مُضمَّن تلقائياً في <code>rin_interpreter.cpp</code>).
+الاختبار الشامل: <code>rin tests/rintests.rin</code> → <code>ALL PASSED</code>.</p>
+<p><strong>قاعدة مهمة:</strong> دوال Rin تتطلب عدداً مطابقاً تماماً من الوسائط، فمرّر <code>nil</code> للوسيط الاختياري
+(مثل <code>cpp.eval("1+1", nil)</code>). كلمة <code>merge</code> محجوزة لذلك اسمها <code>json.mergeDeep</code>.</p>
+</blockquote>
+<h2 id="json"><code>json.*</code><a class="headerlink" href="#json" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الدالة</th>
+<th>الوصف</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>parse(s)</code> / <code>tryParse(s)</code> / <code>valid(s)</code></td>
+<td>تحليل صارم (يرمي) / <code>{ok,value,error}</code> / فحص</td>
+</tr>
+<tr>
+<td><code>stringify(v, indent, sortKeys)</code> / <code>pretty(v, indent)</code> / <code>minify(s)</code> / <code>canonical(v)</code></td>
+<td>تنسيق؛ <code>canonical</code> = مفاتيح مرتبة بلا فراغات (للتجزئة)</td>
+</tr>
+<tr>
+<td><code>get(v, path, default)</code> / <code>query(v, path)</code> / <code>has</code></td>
+<td>مسارات <code>a.b[0].c</code> و<code>items[*].name</code></td>
+</tr>
+<tr>
+<td><code>set(v, path, x)</code> / <code>remove(v, path)</code></td>
+<td>تُرجع نسخة جديدة ولا تعدّل الأصل</td>
+</tr>
+<tr>
+<td><code>mergeDeep(a, b, ...)</code> / <code>flatten(v, sep)</code> / <code>unflatten(m, sep)</code></td>
+<td>دمج عميق وتسطيح</td>
+</tr>
+<tr>
+<td><code>diff(a, b)</code> / <code>patch(v, ops)</code></td>
+<td>عمليات RFC 6902 (<code>add/remove/replace</code>)</td>
+</tr>
+<tr>
+<td><code>validate(v, schema)</code></td>
+<td><code>{valid, errors:[{path,message}]}</code>: type/required/properties/items/enum/const/min/max/pattern/uniqueItems/additionalProperties</td>
+</tr>
+<tr>
+<td><code>type(v)</code> / <code>equals(a,b)</code> / <code>readFile(p)</code> / <code>writeFile(p, v, indent)</code></td>
+<td>مساعدات</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="semver"><code>semver.*</code><a class="headerlink" href="#semver" title="Permanent link">#</a></h2>
+<p><code>parse valid compare gt lt eq diff sort(list, desc) bump(v, major|minor|patch|prerelease, id) satisfies(v, range) maxSatisfying(list, range) validRange</code>
+— النطاقات: <code>^ ~ &gt;= &lt;= &gt; &lt; =</code> و<code>1.2.x</code> و<code>*</code> و<code>||</code> والمسافات.</p>
+<h2 id="pkg"><code>pkg.*</code> — أدوات بناء الحزم<a class="headerlink" href="#pkg" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الدالة</th>
+<th>الوصف</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>parseManifest(toml)</code> / <code>readManifest(path)</code> / <code>manifest(map)</code></td>
+<td>قراءة/كتابة <code>rin.toml</code></td>
+</tr>
+<tr>
+<td><code>validateManifest(m)</code></td>
+<td><code>{valid, errors, warnings}</code></td>
+</tr>
+<tr>
+<td><code>depOrder(graph)</code></td>
+<td>ترتيب تحميل (تبعيات أولاً) + كشف الدورات والمفقود</td>
+</tr>
+<tr>
+<td><code>api(src)</code> / <code>apiFile(path)</code></td>
+<td>استخراج الدوال/الأصناف مع تعليقات <code>///</code></td>
+</tr>
+<tr>
+<td><code>checksum(dir)</code></td>
+<td>بصمة SHA-256 ثابتة لمجلد الحزمة</td>
+</tr>
+<tr>
+<td><code>scaffold(dir, name, {kind:"lib"\|"app", cpp:true, ...})</code></td>
+<td>ينشئ مشروع حزمة كاملاً (rin.toml, src, tests, README)</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="packkit-import-packkit">مكتبة <code>packkit</code> (<code>@import "packkit";</code>)<a class="headerlink" href="#packkit-import-packkit" title="Permanent link">#</a></h2>
+<p>نظام حزم داخل اللغة: <code>pk_define(name, version, {deps, exports, config, init})</code>، <code>pk_use(name)</code> /
+<code>pk_require(name, range)</code> (يحمّل التبعيات مرة واحدة ويكشف الدورات ويختار أحدث إصدار متوافق)،
+<code>pk_loadAll</code>, <code>pk_order</code>, <code>pk_list</code>, <code>pk_info</code>, <code>pk_setConfig</code>, إضافات: <code>pk_on/pk_off/pk_emit</code>، وأدوات
+<code>pk_memoize</code> و<code>pk_deprecated</code> و<code>pk_implements</code> و<code>pk_defineFromManifest</code>.</p>
+<h2 id="c-cpp">جسر C++ — <code>cpp.*</code><a class="headerlink" href="#c-cpp" title="Permanent link">#</a></h2>
+<p><strong>مقفل افتراضياً.</strong> يُفعَّل بـ <code>rin --allow-native file.rin</code> أو <code>RIN_ALLOW_NATIVE=1</code> (قرار من يشغّل البرنامج، لا يستطيع كود مستورَد تفعيله).
+لينكس/macOS فقط؛ على أندرويد/ويندوز/WASM تُرجع <code>{ok:false,error}</code>.</p>
+<pre><code class="language-kotlin">let l = cpp.lib(&quot;#include \&quot;rin_abi.h\&quot;\nRIN_FN(sumAll){double t=0;for(auto&amp;v:args.arr)t+=v.num;return rin::Json::number(t);}&quot;, nil);
+print cpp.call(l.handle, &quot;sumAll&quot;, [1, 2, 3.5]).value;     // 6.5
+print cpp.callNum(l.handle, &quot;hyp&quot;, [3, 4], &quot;double&quot;).value; // دالة extern &quot;C&quot; رقمية
+print cpp.eval(&quot;std::sqrt(2.0)&quot;, nil).value;
+</code></pre>
+<p><code>info() header() enabled() compile(src,opts) run(src,{stdin,args,timeout}) eval(expr,opts) lib load has call callNum unload exec(src,fn,args,opts)</code>
+— خيارات: <code>compiler std opt flags includes libs timeout force</code>. النتائج تُخزَّن مؤقتاً بحسب بصمة المصدر.</p>
+<h2 id="rintest-import-rintest"><code>rintest</code> (<code>@import "rintest";</code>)<a class="headerlink" href="#rintest-import-rintest" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">rt_describe(&quot;حساب&quot;, fun() {
+    rt_test(&quot;جمع&quot;, fun() { rt_expect(1 + 1).toBe(2); });
+    rt_each(&quot;جدول&quot;, [[1,2,3],[2,2,4]], fun(a, b, c) { rt_expect(a + b).toBe(c); });
+});
+rt_done();   // ملخص + يفشل الملف عند وجود إخفاق (يعمل مع `rin test`)
+</code></pre>
+<p>Matchers: <code>toBe toEqual toBeTrue toBeFalse toBeNil toBeTruthy toBeFalsy toContain toHaveLength toBeGreaterThan toBeLessThan toBeCloseTo(x,eps) toMatch toHaveKey toBeType toThrow(fragment|nil) toThrowAny</code>.
+العكس: <code>rt_expectNot(x)</code>. أخرى: <code>rt_expectThrows rt_skip rt_beforeEach rt_afterEach rt_bench rt_quiet rt_reset rt_stats</code>.</p>
+<h2 id="lang"><code>lang.*</code> — فحص المصدر<a class="headerlink" href="#lang" title="Permanent link">#</a></h2>
+<ul>
+<li><code>lang.check(src)</code> → <code>{ok, line, message}</code>: يمرّر المصدر على نفس Lexer/Parser الحقيقيين <strong>دون تنفيذه</strong>.</li>
+<li><code>lang.split(src)</code> → <code>{ok, header, chunks:[{kind,name,lead,text,line,endLine,exported}], tail, error}</code>: يقسّم المصدر إلى تصريحات المستوى الأعلى (يفهم النصوص والتعليقات و<code>else/catch</code>).</li>
+<li><code>lang.isBuiltin(name)</code> → هل الاسم دالة مدمجة في المحرك (تعريف <code>fun</code> بنفس اسمها يُرفض بالخطأ E0002، مثل <code>lerp</code> و<code>mean</code> و<code>clamp</code>).</li>
+</ul>
+<h2 id="wesscode-import-wesscode"><code>wesscode</code> — مساعد إنشاء المكتبات (<code>@import "wesscode";</code>)<a class="headerlink" href="#wesscode-import-wesscode" title="Permanent link">#</a></h2>
+<p>يبني مكتبة/حزمة Rin كاملة من الكود، يفحصها بالمحلّل الحقيقي قبل أي كتابة، ثم يكتبها على القرص.</p>
+<pre><code class="language-kotlin">let lib = wc_new(&quot;mathx&quot;, &quot;0.1.0&quot;, &quot;دوال رياضية&quot;);
+wc_fn(lib, &quot;twice&quot;, [&quot;x&quot;], &quot;return x * 2;&quot;, &quot;يضاعف الرقم&quot;);
+wc_const(lib, &quot;TAU&quot;, &quot;6.283185307179586&quot;, &quot;ضعف باي&quot;);
+wc_class(lib, &quot;Box&quot;, {v: &quot;0&quot;}, &quot;صندوق&quot;);
+wc_method(lib, &quot;Box&quot;, &quot;get&quot;, [], &quot;return self.v;&quot;);
+wc_dep(lib, &quot;other&quot;, &quot;^1.0.0&quot;);
+wc_test(lib, &quot;twice يضاعف&quot;, &quot;twice(21)&quot;, 42);
+wc_cpp(lib, &quot;fast_sum&quot;, &quot;double t=0; for(auto&amp;v:args.arr) t+=v.num; return rin::Json::number(t);&quot;);
+wc_testNative(lib, &quot;native&quot;, &quot;fast_sum([1,2,3.5])&quot;, 6.5);   // يُتخطّى تلقائياً بدون --allow-native
+print wc_check(lib);                    // {ok, errors, warnings}
+wc_write(lib, &quot;out/mathx&quot;);             // rin.toml + src/lib.rin + tests + docs/API.md + README + native/*.cpp
+wc_writeOg(lib, &quot;.&quot;);                   // ./lib/mathx.og.rin ليعمل @import &quot;mathx&quot;
+</code></pre>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الفئة</th>
+<th>الدوال</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>بناء</td>
+<td><code>wc_new wc_meta wc_dep wc_fn wc_const wc_class wc_method wc_test wc_testNative wc_raw wc_cpp wc_fromSource</code></td>
+</tr>
+<tr>
+<td>توليد</td>
+<td><code>wc_render wc_renderTests wc_manifest wc_docs wc_cppSource wc_lit</code></td>
+</tr>
+<tr>
+<td>فحص</td>
+<td><code>wc_check wc_validIdent wc_validFnName wc_validName</code> (يكشف الكلمات المحجوزة والتعارض مع المدمجة والكود الفاسد)</td>
+</tr>
+<tr>
+<td>إخراج</td>
+<td><code>wc_write wc_writeOg</code></td>
+</tr>
+<tr>
+<td>تطوير</td>
+<td><code>wc_bump wc_stats wc_apiOf</code></td>
+</tr>
+<tr>
+<td>قوالب</td>
+<td><code>wc_template(kind, name)</code> مع <code>math strings collections validate</code>، و<code>wc_templates()</code></td>
+</tr>
+</tbody>
+</table></div>
+<p>الاختبار: <code>rin tests/wesscode_tests.rin</code> (42 اختباراً).</p>
+<h3 id="_1">التحويلتان: جزء وقسم<a class="headerlink" href="#_1" title="Permanent link">#</a></h3>
+<p>تحوّلان مصدر Rin موجوداً (أو ناتج <code>wc_render</code>) إلى بنية أنظف، وتفحصان كل ناتج بالمحلّل الحقيقي.</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>التحويلة</th>
+<th>الدالة</th>
+<th>الناتج</th>
+<th>العكس</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>جزء</strong> (Parts)</td>
+<td><code>wc_toParts(src, name, strategy, opts)</code></td>
+<td>ملف رئيسي <code>lib.rin</code> + <code>parts/*.rin</code> تُستورد بـ <code>@import</code></td>
+<td><code>wc_mergeParts(entry, parts)</code></td>
+</tr>
+<tr>
+<td><strong>قسم</strong> (Sections)</td>
+<td><code>wc_toSections(src, name, strategy, opts)</code></td>
+<td>ملف واحد بأقسام <code>// #region</code> وفهرس <code>// #toc</code></td>
+<td><code>wc_fromSections(src)</code> وقائمة <code>wc_sectionsOf(src)</code></td>
+</tr>
+</tbody>
+</table></div>
+<ul>
+<li><strong>الاستراتيجيات:</strong> <code>"kind"</code> (ثوابت/دوال/أنواع)، <code>"prefix"</code> (بادئة الاسم <code>str_trim</code> أو <code>strTrim</code> ← <code>str</code>، وكل صنف في جزء باسمه)، <code>"size"</code> (<code>opts.size</code> تصريحاً لكل جزء)، <code>"map"</code> (<code>opts.map = {اسم_الجزء: ["اسم1", ...]}</code>).</li>
+<li><strong>ما يبقى في الملف الرئيسي:</strong> ترويسة الملف والـ <code>@import</code> والتعليمات التنفيذية على المستوى الأعلى (مع تنبيه).</li>
+<li><strong>تحذير الترتيب:</strong> إن غيّر التجميع ترتيب تصريحات فورية التنفيذ (<code>let</code> وأصناف) يُرجع <code>warnings</code> بذلك.</li>
+<li><strong>مسارات الاستيراد:</strong> <code>@import</code> المتداخل في Rin يُحلّ نسبةً إلى <strong>مجلد التشغيل</strong> لا إلى ملف المستورِد، لذلك يكتب <code>wc_write</code> مسارات مثل <code>src/parts/str.rin</code> (شغّل <code>rin tests/...</code> من جذر المشروع). لمجلدات أخرى مرّر <code>{importBase: "المسار/"}</code>.</li>
+<li><strong>أدوات:</strong> <code>wc_convert(src, name, mode, strategy, opts)</code> (<code>parts|sections|single</code>)، <code>wc_equivalent(a, b)</code> (تكافؤ التصريحات)، <code>wc_suggest(src)</code> (يقترح التخطيط حسب الحجم وتغطية التوثيق)، <code>wc_convertFile(path, outDir, mode, strategy, opts)</code>، <code>wc_fromFile(name, version, desc, path)</code>.</li>
+<li><strong>تخطيط مكتبة كاملة:</strong> <code>wc_layout(lib, "parts"|"sections"|"single", strategy, opts)</code> ثم <code>wc_write(lib, dir)</code> يكتب <code>src/lib.rin</code> و<code>src/parts/*.rin</code> ويعمل <code>wc_check</code> على التخطيط.</li>
+</ul>
+<pre><code class="language-kotlin">let lib = wc_template(&quot;strings&quot;, &quot;textx&quot;);
+wc_layout(lib, &quot;parts&quot;, &quot;prefix&quot;, nil);
+wc_write(lib, &quot;out/textx&quot;);                       // src/lib.rin + src/parts/*.rin
+let p = wc_toParts(readFile(&quot;big.rin&quot;), &quot;big&quot;, &quot;prefix&quot;, nil);   // تقسيم ملف موجود
+let s = wc_toSections(readFile(&quot;big.rin&quot;), &quot;big&quot;, &quot;kind&quot;, nil);  // أقسام داخل ملف واحد
+</code></pre></article>
+<div class="pnav"><a class="pn" href="android.html">→ استضافة Rin على أندرويد</a><a class="pn" href="rinpak-format.html">RinPak — حزمة مشروع Rin (`.rinpak`) ←</a></div><p class="edit"><a href="https://github.com/dlof-lib/rinlang/edit/main/docs/packages-and-interop.md">✎ عدّل هذه الصفحة على GitHub</a></p>
+<footer>Rin 1.0.0 · رخصة MIT</footer></main>
+<aside id="toc"><b>في هذه الصفحة</b><div class="toc">
+<ul>
+<li><a href="#json">json.*</a></li>
+<li><a href="#semver">semver.*</a></li>
+<li><a href="#pkg">pkg.* — أدوات بناء الحزم</a></li>
+<li><a href="#packkit-import-packkit">مكتبة packkit (@import "packkit";)</a></li>
+<li><a href="#c-cpp">جسر C++ — cpp.*</a></li>
+<li><a href="#rintest-import-rintest">rintest (@import "rintest";)</a></li>
+<li><a href="#lang">lang.* — فحص المصدر</a></li>
+<li><a href="#wesscode-import-wesscode">wesscode — مساعد إنشاء المكتبات (@import "wesscode";)</a><ul>
+<li><a href="#_1">التحويلتان: جزء وقسم</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</aside></div>
+<script src="assets/app.js"></script></body></html>

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SQL — الشعار/الرمز المعروف بلون هويته؛ المسارات من Simple Icons (CC0) أو Material Design Icons / Font Awesome Free. محلي بلا شبكة. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <group
+        android:scaleX="0.83333"
+        android:scaleY="0.83333"
+        android:translateX="2.000"
+        android:translateY="2.000">
+        <path android:fillColor="#4A90C2"
+            android:pathData="M12 3C7.58 3 4 4.79 4 7s3.58 4 8 4 8-1.79 8-4-3.58-4-8-4M4 9v3c0 2.21 3.58 4 8 4s8-1.79 8-4V9c0 2.21-3.58 4-8 4s-8-1.79-8-4m0 5v3c0 2.21 3.58 4 8 4s8-1.79 8-4v-3c0 2.21-3.58 4-8 4s-8-1.79-8-4" />
+    </group>
+</vector>

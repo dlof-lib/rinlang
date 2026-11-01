@@ -1,0 +1,85 @@
+// ============================================================================
+//  examples/compose_advanced.rin — المكتبات المساعدة لـ compose معاً في برنامج واحد
+//  السيناريو: طلبات متجر تصل كـ JSON-like بيانات غير نظيفة -> تحقّق وتطبيع (schema) ->
+//  ترتيب وتجميع (seq) -> قراءة بالمسارات (path) -> خط معالجة آمن (flow) ->
+//  مخزن تفاعلي بتراجع (store) -> مقارنة حالتين ودمج ثلاثي (diff).
+//  التشغيل:  rin run examples/compose_advanced.rin
+// ============================================================================
+@import "compose_seq";
+@import "compose_path";
+@import "compose_flow";
+@import "compose_schema";
+@import "compose_diff";
+@import "compose_store";
+
+// ── 1) بيانات قادمة من مصدر غير نظيف: الأرقام نصوص، وبعض الحقول ناقصة ──
+let orderSchema = {
+    "type": "map",
+    "fields": {
+        "id":     {"type": "number", "coerce": true},
+        "buyer":  {"type": "string", "min": 2},
+        "qty":    {"type": "number", "coerce": true, "min": 1},
+        "status": {"enum": Set(["new", "paid"]), "default": "new"},
+        "tags":   {"type": "array", "default": []}
+    }
+};
+let raw = [
+    {"id": "1", "buyer": "Lina",  "qty": "3", "status": "paid"},
+    {"id": "2", "buyer": "Omar",  "qty": "1"},
+    {"id": "3", "buyer": "X",     "qty": "2"},
+    {"id": "4", "buyer": "Sara",  "qty": "0"}
+];
+
+let good = [];
+let i = 0;
+while (i < len(raw)) {
+    let r = schemaConform(orderSchema, raw[i]);
+    if (r["ok"]) { push(good, r["value"]); }
+    else { print "rejected #" + str(raw[i]["id"]) + ": " + join(schemaErrors(r), "; "); }
+    i = i + 1;
+}
+print "accepted: " + str(len(good));
+
+// ── 2) ترتيب وتجميع ──
+let byQty = sortBy(good, fun(o) { return o["qty"]; });
+print "sorted ids: " + str(mapOver(byQty, fun(o) { return o["id"]; }));
+print "by status: " + str(mapOver(groupOver(good, fun(o) { return o["status"]; }), fun(list) { return len(list); }));
+
+// ── 3) قراءة بالمسارات وتعديل غير مُعدِّل ──
+let report = {"meta": {"count": len(good)}, "orders": good};
+print "first buyer: " + getIn(report, "orders.0.buyer", "?");
+let renamed = setIn(report, "orders.0.buyer", "Lina K.");
+print "original kept: " + getIn(report, "orders.0.buyer", "?") + " / new: " + getIn(renamed, "orders.0.buyer", "?");
+print "flat keys: " + str(keys(flattenKeys(report["meta"], ".")));
+
+// ── 4) خط معالجة آمن بـ Result ──
+fun parseQty(o) { return o["qty"]; }
+fun mustBePositive(n) { if (n <= 0) { throw "qty must be positive"; } return n; }
+fun total(n) { return n * 10; }
+let price = safeChain([parseQty, mustBePositive, total]);
+print "price of first: " + str(resultOr(price(good[0]), -1));
+print "price of bad:   " + str(price({"qty": 0}));
+
+// ── 5) مخزن تفاعلي مع اشتراك وتراجع ──
+let shop = storeNew({"cart": {"items": [], "total": 0}});
+storeSubscribe(shop, "cart.total", fun(n, o, p) { print "total changed: " + str(o) + " -> " + str(n); });
+storeComputed(shop, "isEmpty", fun(st) { return len(st["cart"]["items"]) == 0; });
+print "empty at start: " + str(storeRead(shop, "isEmpty"));
+storeBatch(shop, fun(s) {
+    storeUpdate(s, "cart.items", fun(list) { return concat(list, ["tea"]); });
+    storeSet(s, "cart.total", 25);
+});
+print "empty now: " + str(storeRead(shop, "isEmpty"));
+let before = storeState(shop);
+storeSet(shop, "cart.total", 40);
+storeUndo(shop);
+print "after undo: " + str(storeGet(shop, "cart.total"));
+
+// ── 6) مقارنة ودمج ثلاثي ──
+let after = storeState(shop);
+let base = {"title": "Order", "note": "", "qty": 1};
+let mine = {"title": "Order", "note": "gift", "qty": 1};
+let theirs = {"title": "Order #7", "note": "", "qty": 2};
+print describeChanges(diffDeep(base, theirs));
+let merged = merge3(base, mine, theirs);
+print "merged: " + str(merged["value"]) + " conflicts: " + str(len(merged["conflicts"]));

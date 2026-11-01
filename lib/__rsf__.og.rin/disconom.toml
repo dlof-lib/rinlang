@@ -1,0 +1,17 @@
+# __rsf__ — «مرشّح الرؤية»: منع التكرار تلقائياً + كشف الدورات. يُستدعى من RINTWIST (rintwist.rsf)،
+# ويأخذ إعداداته من سياق RINTWIST، ويفحص تبعيات المكتبات عبر Disconom (rinlib.graph).
+disconom = 2
+name = "__rsf__"
+version = "1.0.0"
+description = "منع التكرار تلقائياً (مجموعات رؤية، dedupe، memo) وكشف الدورات (تتابعات، رسوم، تبعيات Disconom، سلسلة استيراد RINTWIST)"
+authors = ["Rin"]
+license = "MIT"
+keywords = ["dedupe", "cycle", "rintwist", "disconom", "تكرار", "دورات"]
+categories = ["language", "utilities"]
+rin = ">=1.0.0"
+main = "main.zpp"
+parts = ["main.zpp", "core/context.zpp", "core/keys.zpp", "core/dedupe.zpp", "core/cycles.zpp", "core/graph.zpp", "core/rintwist.zpp", "core/facade.zpp"]
+
+[scripts]
+test = "cd ../.. && rin tests/verification/rsf_basic.rin"
+check = "rin lib check ."

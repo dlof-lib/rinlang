@@ -1,0 +1,20 @@
+// input_forms.rin — وضع النموذج لكائن class وstruct وقاموس (set المعرّفة في الصنف تُحترم، والتجميد يفشل قبل السؤال)
+class Person {
+    let name = "Ali";
+    let age = 30;
+    let active = false;
+    let nick = nil;
+    set age(v) { }
+}
+struct Pt { let x = 1; let y = 2; }
+let p = Person();
+let back = input("P> ", p);
+print p.name + "," + p.age + "," + p.active + "," + (back == p);
+let pt = Pt();
+input("Pt> ", pt);
+print pt.x + pt.y;
+let cfg = {"host": "localhost", "port": 80, "tls": false};
+let c2 = input("cfg> ", cfg);
+print c2.host + ":" + c2.port + ":" + c2.tls;
+oop.freeze(p);
+input("again> ", p);

@@ -1,0 +1,157 @@
+// test.rin — Test of the <passkit> tag language on the real interpreter
+@import "./Interpreter.rin";
+@import "./CodeGen.rin";
+
+let fails = 0;
+fun check(cond, label) {
+    if (cond) { print "PASS  " + label; } else { print "FAIL  " + label; fails = fails + 1; }
+}
+fun out0(src) { let r = runSource(src); if (r["ok"] and len(r["output"]) > 0) { return r["output"][0]; } return nil; }
+
+// ---- email ----
+check(out0("<passkit><email name=\"e\" address=\"A.B@Example.com\"/><print value=\"{e.address}|{e.ok}\"/></passkit>") == "a.b@example.com|true", "email normalized + valid");
+check(out0("<email name=\"e\" address=\"bad@\"/><print value=\"{e.ok}\"/>") == "false", "email invalid (no domain)");
+check(out0("<email name=\"e\" address=\"a@@b.com\"/><print value=\"{e.ok}\"/>") == "false", "email invalid (double @)");
+check(out0("<email name=\"e\" address=\"a..b@x.com\"/><print value=\"{e.ok}\"/>") == "false", "email invalid (double dot)");
+check(out0("<email name=\"m\" mailto=\"a@b.com\" subject=\"héllo wörld\" body=\"x y\"/><print value=\"{m.url}\"/>") == "mailto:a@b.com?subject=h%C3%A9llo%20w%C3%B6rld&body=x%20y", "mailto url-encodes non-latin + spaces");
+
+// ---- passwords ----
+check(out0("<password name=\"p\" generate length=\"20\"/><print value=\"{p.length}\"/>") == "20", "generate length (unquoted attr)");
+check(out0("<password name=\"c\" check=\"abc\" policy=\"standard\"/><print value=\"{c.ok}\"/>") == "false", "weak password fails policy");
+check(out0("<password name=\"c\" check=\"Zt7!mQ4pLw\"/><print value=\"{c.ok}\"/>") == "true", "good password passes");
+check(out0("<password name=\"h\" hash=\"secret\"/><password name=\"v\" verify=\"secret\" against=\"$h.hash\"/><print value=\"{v.ok}\"/>") == "true", "hash then verify");
+check(out0("<password name=\"h\" hash=\"secret\"/><password name=\"v\" verify=\"wrong\" against=\"$h.hash\"/><print value=\"{v.ok}\"/>") == "false", "verify wrong password");
+check(out0("<password name=\"m\" mask=\"word\"/><print value=\"{m.masked}\"/>") == "••••", "mask non-latin by characters");
+
+// ---- API keys ----
+check(out0("<apikey name=\"k\" generate prefix=\"sk\"/><print value=\"{k.prefix}\"/>") == "sk", "apikey generate");
+check(out0("<apikey name=\"k\" generate/><apikey name=\"v\" verify=\"$k.key\" against=\"$k.hash\"/><print value=\"{v.ok}\"/>") == "true", "apikey verify with stored hash");
+check(out0("<apikey name=\"k\" generate/><apikey name=\"v\" verify=\"nope\" against=\"$k.hash\"/><print value=\"{v.ok}\"/>") == "false", "apikey verify wrong key");
+check(out0("<apikey name=\"k\" generate prefix=\"pk\"/><apikey name=\"c\" check=\"$k.key\" prefix=\"pk\"/><print value=\"{c.ok}\"/>") == "true", "apikey format check ok");
+check(out0("<apikey name=\"c\" check=\"short\"/><print value=\"{c.ok}\"/>") == "false", "apikey format check rejects short");
+
+// ---- links ----
+check(out0("<link name=\"l\" url=\"https://Ex.com:8080/a/b?x=1&y=hello%20w#top\"/><print value=\"{l.host}|{l.port}|{l.path}|{l.query.y}|{l.fragment}|{l.secure}\"/>") == "ex.com|8080|/a/b|hello w|top|true", "link parse all parts");
+check(out0("<link name=\"l\" url=\"ftp://x.com\"/><print value=\"{l.ok}\"/>") == "false", "link rejects ftp");
+check(out0("<link name=\"l\" url=\"http://x.com\" https/><print value=\"{l.ok}\"/>") == "false", "link https flag rejects http");
+check(out0("<link name=\"l\" build base=\"https://x.com/\" path=\"v1\" query.q=\"a b&c\"/><print value=\"{l.url}\"/>") == "https://x.com/v1?q=a%20b%26c", "link build encodes query");
+
+// ---- API (dry) — security ----
+let apiOut = out0("<apikey name=\"k\" generate prefix=\"pk_live\"/><api name=\"r\" url=\"https://x.com/a\" key=\"$k.key\" dry/><print value=\"{r.request.headers.Authorization}\"/>");
+check(apiOut != nil and indexOf(apiOut, "Bearer pk_live") == 0 and contains(apiOut, "…"), "api request shows masked key only");
+check(out0("<api name=\"r\" url=\"http://x.com\" dry/><print value=\"{r.ok}\"/>") == "false", "api refuses plain http");
+check(out0("<api name=\"r\" url=\"http://x.com\" insecure dry/><print value=\"{r.ok}\"/>") == "true", "api http allowed only with insecure");
+let qOut = out0("<api name=\"r\" url=\"https://x.com/a\" key=\"abcdefghijklmnop\" auth=\"query\" dry/><print value=\"{r.request.url}\"/>");
+check(qOut != nil and contains(qOut, "abcdefghijklmnop") == false, "query-auth key redacted in shown url");
+
+// ---- SQL ----
+check(out0("<sql table=\"pk_t1\" insert id=\"a\" role=\"admin\" age=\"30\"/><sql table=\"pk_t1\" insert id=\"b\" role=\"user\"/><sql table=\"pk_t1\" count name=\"n\"/><print value=\"{n}\"/>") == "2", "sql insert + count");
+check(out0("<sql table=\"pk_t1\" select where=\"role:eq(admin)\" name=\"r\"/><print value=\"{r.0._id}\"/>") == "a", "sql select where");
+check(out0("<sql table=\"pk_t1\" find field=\"role\" equals=\"user\" name=\"f\"/><print value=\"{f.found}\"/>") == "true", "sql find");
+check(out0("<sql table=\"pk_t1\" update id=\"b\" role=\"owner\"/><sql table=\"pk_t1\" find field=\"role\" equals=\"owner\" name=\"f\"/><print value=\"{f.found}\"/>") == "true", "sql update");
+check(out0("<sql table=\"pk_t1\" select where=\"role:zzz(x)\" name=\"r\"/><print value=\"{r.ok}\"/>") == "false", "sql invalid RCSQL reported, no crash");
+check(out0("<sql table=\"nope_t\" count name=\"n\"/><print value=\"{n}\"/>") == "0", "missing table => 0 silently");
+let rawPw = runSource("<sql table=\"pk_t2\" insert id=\"x\" password=\"hunter2\"/>");
+check(rawPw["ok"] == false and contains(rawPw["error"]["message"], "raw text"), "sql REFUSES raw password field");
+check(runSource("<sql table=\"pk_t2\" insert id=\"x\" password=\"pk1$10$aa$bb\"/>")["ok"] == true, "sql accepts hashed password field");
+check(runSource("<sql table=\"pk_t1\" delete/>")["ok"] == false, "sql delete without where refused");
+check(out0("<sql table=\"pk_t1\" delete where=\"role:eq(owner)\" name=\"d\"/><print value=\"{d.deleted}\"/>") == "1", "sql delete with where");
+
+// ---- control flow ----
+check(out0("<set name=\"x\" value=\"5\"/><if var=\"$x\" gt=\"3\"><print value=\"big\"/><else/><print value=\"small\"/></if>") == "big", "if/gt");
+check(out0("<set name=\"x\" value=\"1\"/><if var=\"$x\" gt=\"3\"><print value=\"big\"/><else/><print value=\"small\"/></if>") == "small", "else branch");
+let loop = runSource("<sql table=\"pk_t1\" select name=\"r\"/><for each=\"u\" in=\"$r\"><print value=\"{u._id}\"/></for>");
+check(loop["ok"] and len(loop["output"]) == 1, "for loop over rows");
+check(runSource("<assert var=\"$nothing\" message=\"boom\"/>")["ok"] == false, "assert fails on undefined var");
+
+// ---- syntax errors (clear messages, no crashes) ----
+check(runSource("<bogus/>")["ok"] == false and contains(runSource("<bogus/>")["error"]["message"], "unknown tag"), "unknown tag reported");
+check(contains(runSource("<passkit><email name=\"e\" address=\"a@b.com\"/>")["error"]["message"], "not closed"), "unclosed tag reported");
+check(contains(runSource("<if var=\"1\"></set>")["error"]["message"], "does not match"), "mismatched close tag reported");
+check(runSource("hello")["ok"] == false, "stray text outside tags rejected");
+check(runSource("<!-- c --><passkit/>")["ok"] == true, "comments + empty passkit ok");
+check(runSource("<password name=\"p\"/>")["ok"] == false, "password without action reported");
+
+// ---- CodeGen ----
+let src = "<passkit><set name=\"x\" value=\"hi\"/><print value=\"{x}\"/></passkit>";
+let formatted = cgFormat(parse(lex(src)));
+check(contains(formatted, "<set name=\"x\" value=\"hi\" />"), "formatter emits canonical tags");
+check(out0(formatted) == "hi", "formatted source runs identically");
+check(contains(generate(parse(lex(src))), "runSource(SOURCE)"), "generate emits standalone rin script");
+
+// ============================================================================
+//  File linking: Rin <-> .passkit  and  .passkit <-> .passkit
+// ============================================================================
+fun wf(name, content) { writeFile(name, content); }
+
+wf("_lk_main.passkit", "<passkit><input name=\"who\" default=\"world\"/><input name=\"n\" required/><email name=\"e\" address=\"X@Y.com\"/><print value=\"hi {who} {n}\"/><return value=\"$e.address\"/><print value=\"NEVER\"/></passkit>");
+wf("_lk_inc.passkit", "<set name=\"shared\" value=\"from-inc\"/><print value=\"inc ran\"/><return value=\"x\"/><print value=\"inc-never\"/>");
+wf("_lk_parent.passkit", "<set name=\"mine\" value=\"p\"/><import file=\"_lk_inc.passkit\"/><print value=\"{shared}\"/><run file=\"_lk_child.passkit\" name=\"c\" in.a=\"7\"/><print value=\"child={c.value} ok={c.ok} sees_mine={c.vars.leak}\"/>");
+wf("_lk_child.passkit", "<input name=\"a\" required/><print value=\"child a={a}\"/><set name=\"leak\" value=\"{mine}\"/><return value=\"$a\"/>");
+wf("_lk_cycle.passkit", "<import file=\"_lk_cycle.passkit\"/>");
+wf("_lk_cycA.passkit", "<run file=\"_lk_cycB.passkit\" name=\"r\"/>");
+wf("_lk_cycB.passkit", "<run file=\"_lk_cycA.passkit\" name=\"r\" strict/>");
+wf("_lk_bad.passkit", "<bogus/>");
+
+// ---- Rin -> passkit ----
+let r1 = passkitRun("_lk_main.passkit", { n: "5" });
+check(r1["ok"] and r1["output"][0] == "hi world 5", "passkitRun passes inputs + default");
+check(r1["value"] == "x@y.com", "<return> value returned to Rin");
+check(len(r1["output"]) == 1, "<return> stops execution (no NEVER line)");
+check(passkitGet(r1, "e.domain") == "y.com", "passkitGet dotted path into result vars");
+check(passkitRun("_lk_main.passkit", {})["ok"] == false and contains(passkitRun("_lk_main.passkit", {})["message"], "required"), "<input required> missing => clear error");
+check(passkitRun("_lk_nope.passkit", {})["ok"] == false, "missing file => ok:false, no crash");
+check(passkitRun("_lk_bad.passkit", {})["ok"] == false and contains(passkitRun("_lk_bad.passkit", {})["message"], "unknown tag"), "bad .passkit file => parser error returned");
+check(passkitRunSource("<set name=\"z\" value=\"{q}\"/><return value=\"$z\"/>", { q: "inline" })["value"] == "inline", "passkitRunSource with inputs");
+
+// ---- passkit -> passkit ----
+let r2 = passkitRun("_lk_parent.passkit", {});
+check(r2["ok"], "parent with import + run succeeds");
+check(r2["output"][0] == "inc ran" and r2["output"][1] == "from-inc", "<import> shares scope (shared var visible)");
+check(contains(r2["output"][len(r2["output"]) - 1], "child=7 ok=true"), "<run> returns value + ok to parent");
+check(contains(r2["output"][len(r2["output"]) - 1], "sees_mine=") and contains(r2["output"][len(r2["output"]) - 2], "child a=7"), "<run> child output merged, input passed");
+check(passkitGet(r2, "mine") == "p" and passkitGet(r2, "leak") == nil, "<run> is isolated (child vars do not leak to parent)");
+check(contains(r2["output"], "inc-never") == false, "<return> inside import ends only that file");
+check(passkitRun("_lk_cycle.passkit", {})["ok"] == false and contains(passkitRun("_lk_cycle.passkit", {})["message"], "cycle"), "import cycle detected");
+let cyc = passkitRun("_lk_cycA.passkit", {});
+check(cyc["ok"] == true and passkitGet(cyc, "r.ok") == false and contains(passkitGet(cyc, "r.message"), "cycle"), "mutual run cycle detected; failure reported as value (non-strict)");
+
+// ---- path safety ----
+check(runSource("<import file=\"../x.passkit\"/>")["ok"] == false, "import refuses ..");
+check(runSource("<import file=\"/etc/passwd\"/>")["ok"] == false, "import refuses absolute path");
+check(runSource("<run file=\"C:x\" name=\"r\"/>")["ok"] == false, "run refuses scheme/drive path");
+
+// ---- passkit -> Rin ----
+fun hDouble(x) { return psNum(x, 0) * 2; }
+fun hGreet(name, greeting) { return greeting + " " + name; }
+fun hSum(a, b) { return psNum(a, 0) + psNum(b, 0); }
+check(passkitHandlers({ double: hDouble, greet: hGreet }) == 2, "passkitHandlers registers many");
+check(passkitRegister("sum", hSum) == true and passkitRegister("bad", 5) == false, "register accepts functions only");
+check(contains(passkitHandlerNames(), "double"), "handler names listed");
+check(out0("<call fn=\"double\" arg0=\"21\" name=\"r\"/><print value=\"{r}\"/>") == "42", "<call> invokes Rin function");
+check(out0("<call fn=\"greet\" arg0=\"Rima\" arg1=\"hello\" name=\"r\"/><print value=\"{r}\"/>") == "hello Rima", "<call> multiple args in order");
+check(out0("<set name=\"x\" value=\"3\"/><call fn=\"double\" arg0=\"$x\" name=\"r\"/><print value=\"{r}\"/>") == "6", "<call> resolves $vars as args");
+let sumOut = runSource("<password name=\"p\" generate/><call fn=\"sum\" arg0=\"2\" arg1=\"3\" name=\"s\"/><print value=\"{s}\"/>");
+check(sumOut["ok"] and sumOut["output"][0] == "5", "<call> works alongside other tags");
+check(runSource("<call fn=\"ghost\" name=\"r\"/>")["ok"] == false and contains(runSource("<call fn=\"ghost\" name=\"r\"/>")["message"], "not registered"), "<call> unregistered handler => clear error");
+check(out0("<call fn=\"ghost\" optional name=\"r\"/><print value=\"{r.ok}\"/>") == "false", "<call optional> unregistered => ok:false value");
+check(passkitUnregister("double") and runSource("<call fn=\"double\" arg0=\"1\"/>")["ok"] == false, "unregister removes handler");
+
+// ---- nesting: passkit -> Rin -> passkit (re-entry with protected state) ----
+fun hNested(v) {
+    let inner = passkitRunSource("<set name=\"v\" value=\"inner-{v}\"/><return value=\"$v\"/>", { v: v });
+    return inner["value"];
+}
+passkitRegister("nested", hNested);
+let nest = runSource("<set name=\"v\" value=\"outer\"/><call fn=\"nested\" arg0=\"A\" name=\"r\"/><print value=\"{v}|{r}\"/>");
+check(nest["ok"] and nest["output"][0] == "outer|inner-A", "re-entrant Rin->passkit inside passkit keeps outer state intact");
+fun hFirst(row) { return row["_id"]; }
+passkitRegister("first", hFirst);
+let argsArr = runSource("<sql table=\"pk_lk\" insert id=\"a\" n=\"1\"/><sql table=\"pk_lk\" select name=\"rows\"/><call fn=\"first\" args=\"$rows\" name=\"s\"/><print value=\"{s}\"/>");
+check(argsArr["ok"] and argsArr["output"][0] == "a", "args=$array spreads array elements as arguments");
+
+deleteFile("_lk_main.passkit"); deleteFile("_lk_inc.passkit"); deleteFile("_lk_parent.passkit"); deleteFile("_lk_child.passkit");
+deleteFile("_lk_cycle.passkit"); deleteFile("_lk_cycA.passkit"); deleteFile("_lk_cycB.passkit"); deleteFile("_lk_bad.passkit");
+
+print "";
+if (fails == 0) { print "ALL PASSED"; } else { print "FAILURES: " + toString(fails); }

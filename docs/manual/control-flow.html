@@ -1,0 +1,158 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>الشروط، الحلقات، `goal`/`achieve — Rin</title>
+<meta name="description" content="توثيق لغة البرمجة Rin"><link rel="icon" href="../assets/brand/icon-32.png">
+<link rel="stylesheet" href="assets/style.css"></head><body>
+<header><button id="mn" aria-label="القائمة">☰</button><a class="logo" href="index.html"><img src="../assets/brand/icon-48.png" alt="" width="26">Rin</a>
+<input id="q" type="search" placeholder="ابحث في التوثيق…" autocomplete="off"><button id="th" aria-label="الوضع">◐</button>
+<a class="gh" href="https://github.com/dlof-lib/rinlang">GitHub</a><div id="res"></div></header>
+<div class="wrap"><nav id="sb"><details open><summary>ابدأ هنا</summary><a href="getting-started.html">البداية</a><a href="syntax.html">القواعد النحوية العامة</a><a href="variables.html">let`، مصفوفات، قواميس، نطاق</a><a href="template-strings.html">النصوص القالبية (متغيّرات داخل النص)</a><a href="input.html">إدخال المستخدم (Input)</a><a href="control-flow.html" class=on>الشروط، الحلقات، `goal`/`achieve</a><a href="loops.html">حلقات Rin — Loops v2</a><a href="functions.html">fun`/`return`، التكرار الذاتي</a><a href="enums.html">enum`: قوائم اختيار مغلقة</a></details><details ><summary>اللغة</summary><a href="language-reference.html">المرجع الشامل وخريطة ترابط المفاهيم</a><a href="objects.html">class`/`struct`، `.object()`، `@Object`، `document</a><a href="oop.html">البرمجة الكائنية الموسَّعة (Rin 1.0)</a><a href="containers.html">دليل `@container` / `@element` / `@loop</a><a href="table.html">الجدول (`@table` / `@container.table`) ودوال اللغة عليه</a><a href="set.html">Set`: نوع المجموعة الأساسي</a><a href="pipelines.html">عامل الأنابيب `|&gt;</a><a href="RECKON.html">reckon`: مفهوم حسابي بسطرين</a><a href="let-plus.html">let` المطوَّر</a><a href="living-variables.html">المتغيرات الحيّة (Living Variables)</a><a href="label-define.html">label` و`define` (تسمية وتعريف)</a><a href="block-frames.html">بداية الكتل ونهايتها (Block Frames)</a><a href="compare_ops.html">معاملات المقارنة `/=` و `=/=` و `=/</a><a href="max_min.html">max / min family</a><a href="scope-guarantees.html">ضمانات النطاق: `finally` · `defer` · `catch … when` · `rethrow</a><a href="key_terms_and_builtins.html">Rin KEY_TERMS and Built-in Conditions</a><a href="number_builtins.html">Rin Number Built-ins</a></details><details ><summary>الواجهات (Indsin)</summary><a href="indsin.html">Indsin — Interface Design</a><a href="indsin_rin.html">indsin يعتمد على لغة Rin</a><a href="indsin_expansion.html">Indsin — التوسعة الاحترافية (Design System v2)</a><a href="indsin_object.html">indsin-object — API reference</a><a href="indsin_media.html">Indsin Media — اختيار الوسائط ورفعها</a><a href="indsin_icons.html">مكتبة أيقونات indsin (متجهية)</a><a href="indsin_tooling.html">indsin tooling — icon, file association, syntax highlighting</a><a href="indsinweb.html">IndsinWeb — مكتبة WebView والروابط لـ indsin</a><a href="RIN_ELEMENTS.html">دليل `@element.*` الكامل</a><a href="events-effects.html">الأحداث والتأثيرات (Events &amp; Effects) — محرك Indsin UI</a><a href="banner.html">Banner: إشعار شريطي</a><a href="simple-style.html">Rin Simple Style</a></details><details ><summary>بيئة التشغيل</summary><a href="runtime.html">وقت تشغيل Rin (Rin Runtime) · المرجع الرسمي</a><a href="standard-library.html">المكتبة القياسية (`lib/*.og.rin`)</a><a href="errors.html">نظام الأخطاء: أكواد، `try`/`catch`/`throw</a><a href="ERROR_SYSTEM.html">نظام التشخيص: البنية الداخلية + جدول الأكواد الكامل</a><a href="storage.html">تخزين دائم</a><a href="http.html">شبكات</a><a href="env.html">ربط Rin بملف `.env</a><a href="terminal.html">الطرفية التفاعلية — `rin terminal</a><a href="vm.html">RinVM — آلة Rin الافتراضية (بايتكود)</a><a href="rinflow.html">RinFlow: طبقة تنفيذ التدفّق المهيكل</a><a href="MAKE_UNIT.html">@make.(name)`: وحدة بسياسة قدرات صريحة</a><a href="MAKE_MEDIA.html">فيديو · صوت · API · إزالة الخلفية · قراءة النص من الصور</a><a href="TIME.html">مفهوم `time`: الزمن كقيمة من الدرجة الأولى</a><a href="native-additions.html">دوال Rin الأصلية الجديدة (Rin 1.0)</a></details><details ><summary>الحاويات وقواعد البيانات</summary><a href="container_advanced.html">Rin Container Advanced Built-ins</a><a href="container_pro.html">Rin Container Pro</a><a href="container_sql.html">RIN CONTAINER SQL (RCSQL)</a><a href="cross-file-containers.html">استدعاء إعلانات من ملف آخر</a></details><details ><summary>الحزم والتكامل</summary><a href="api.html">واجهة C المسطَّحة (Embedding API)</a><a href="android.html">استضافة Rin على أندرويد</a><a href="packages-and-interop.html">Rin 1.0 — المكتبات والحزم وجسر C++ وJSON واختبارات rintest</a><a href="rinpak-format.html">RinPak — حزمة مشروع Rin (`.rinpak`)</a><a href="html-projects.html">مشاريع HTML في Rin — الربط بين index.html وملف الحاوية</a><a href="project-og-urin.html">project.og.urin` — البيانات الوصفية لمشروع Rin</a><a href="CONTENT_PACKS.html">حزم المحتوى القابلة للتنزيل (Content Packs)</a><a href="previewkit.html">previewkit — معاينة حيّة لملفات PDF / Markdown / TypeScript</a></details><details ><summary>المكتبات المتخصصة</summary><a href="rinml.html">RinML / RinDF / RinAI — الذكاء الاصطناعي وتحليل البيانات في Rin</a><a href="STATS.html">RinStat — التحليل الإحصائي (`lib/rinstat.og.rin`)</a><a href="STATS_ADV.html">RinStat المتقدّم + RinAuto</a><a href="LINALG.html">الجبر الخطي للمهندسين — `mat*` و`vec*</a><a href="PLOT.html">RinPlot — الرسوم البيانية الإحصائية (`lib/rinplot.og.rin`)</a><a href="ALGO.html">تطوير الخوارزميات والحساب العددي — `algo*</a><a href="NUMBER.html">مفهوم `number` في Rin</a><a href="boat.html">&quot;Boat&quot;: مفاهيم أساسية مجمَّعة</a><a href="passkit.html">passkit — passwords, encryption, databases and a tag language</a><a href="passkit-crypto-db.html">Passkit feature catalog: encryption, databases and container linking</a><a href="hash-family.html">عائلة `#` — مفاهيم ودوال جديدة تبدأ بعلامة `#</a><a href="image-draw.html">إنشاء الصور في Rin — رسم وحفظ PNG وlog كصورة</a><a href="image-terminal.html">طباعة الصور في الـ terminal — `printImage` / `imageAnsi` / `imageInfo</a></details><details ><summary>المشروع</summary><a href="CONTRIBUTING.html">المساهمة في Rin</a><a href="CODE_OF_CONDUCT.html">قواعد السلوك</a><a href="SECURITY.html">سياسة الأمان</a><a href="SUPPORT.html">الحصول على المساعدة</a><a href="TRADEMARKS.html">سياسة العلامة التجارية — Trademark Policy</a><a href="THIRD_PARTY_NOTICES.html">إشعارات المكوّنات الخارجية — Third-Party Notices</a></details><details ><summary>مراجع إضافية</summary><a href="ANDROID_VERSIONS.html">حزم RinStudio لكل إصدار أندرويد</a><a href="TOKEN.html">مفهوم `token` في Rin</a><a href="TOOLCHAIN.html">Rin Professional Language Toolchain</a><a href="TOOLCHAIN_UPGRADE.html">Toolchain Upgrade — 2026-09</a><a href="architecture.html">المعمارية وبنية المستودع</a><a href="base-accept.html">base` و`accept`: متغيّران يخدمان `if</a><a href="channel47.html">channel47 — لغة وصف البيانات والإعدادات</a><a href="ci.html">CI وأدوات المستودع</a><a href="loop-templates.html">قوالب الحلقات `@tmpl</a><a href="pre-post.html">pre` و`post` (ما قبل / ما بعد): عقد انتقال حول الإسناد</a><a href="print-fonts.html">خطوط `print` — bold / italic / underline وغيرها</a><a href="print-image-terminal.html">طباعة الصور كنص في الطرفية</a><a href="print-templates.html">قوالب الطباعة `@tmpl ... print` — قوالب نصية خطية وتنسيقية</a><a href="rdoc.html">rdoc — Documentation Container</a><a href="rdoc-reference.html">وثيقة rdoc الشاملة — Documentation Container</a><a href="screenshots.html">لقطات من RinStudio</a></details></nav>
+<main><article><h1 id="control-flowmd-goalachieve">control-flow.md — الشروط، الحلقات، <code>goal</code>/<code>achieve</code><a class="headerlink" href="#control-flowmd-goalachieve" title="Permanent link">#</a></h1>
+<h2 id="if-else"><code>if</code> / <code>else</code><a class="headerlink" href="#if-else" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">if (a &gt; 3) {
+    print &quot;big&quot;;
+} else {
+    print &quot;small&quot;;
+}
+</code></pre>
+<p><code>else</code> اختيارية. <code>else if</code> تعمل بشكل طبيعي (سلسلة <code>if</code> متداخلة عاديًا).</p>
+<h2 id="when-otherwise"><code>when</code> / <code>otherwise</code><a class="headerlink" href="#when-otherwise" title="Permanent link">#</a></h2>
+<p>صياغة إنجليزية مبسَّطة مرادفة كاملة لـ <code>if</code>/<code>else</code> (بلا أي فرق في السلوك):</p>
+<pre><code class="language-kotlin">when (len([1, 2, 3]) == 3) {
+    print &quot;when/otherwise يعمل&quot;;
+} otherwise {
+    print &quot;لن يظهر هذا&quot;;
+}
+</code></pre>
+<h2 id="pluscondition"><code>plus.condition</code> — شرط ثلاثي على مستوى العبارات<a class="headerlink" href="#pluscondition" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">plus.condition (5 &gt; 3) {
+    print &quot;yes branch&quot;;
+} / {
+    print &quot;no branch&quot;;
+}
+</code></pre>
+<p>بخلاف <code>if</code>/<code>else</code>، الكتلتان هنا <strong>إلزاميتان دائمًا</strong> (لا يوجد شكل بلا الفرع الثاني)،
+فهي "ثلاثية" فعليًا على مستوى العبارة، لا التعبير. الفاصل بين الكتلتين هو <code>/</code> فقط —
+يظهر حصرًا بين <code>}</code> الأولى و<code>{</code> الثانية.</p>
+<h2 id="term">صيغ الشروط المختصرة <code>=term=</code><a class="headerlink" href="#term" title="Permanent link">#</a></h2>
+<p>صيغ مختصرة هي سكّر نحوي فوق <code>if</code>/<code>while</code> (نفس الدلالة بالضبط):</p>
+<pre><code class="language-kotlin">=if=(score &gt; 95) { print &quot;A+&quot;; }
+=elif=(score &gt; 80) { print &quot;B&quot;; }
+=else= { print &quot;C&quot;; }
+
+=all=(age &gt;= 18, present(token)) { print &quot;مسموح&quot;; }   // a and b (short-circuit)
+=any=(isNil(a), isNil(b)) { print &quot;ناقص&quot;; }            // a or b
+=none=(failed, timedOut) { print &quot;نظيف&quot;; }             // !(a or b)
+=nil=(x) { print &quot;فارغ&quot;; }   =notnil=(x) { ... }       // x == nil / x != nil
+=while=(i &lt; 3) { i = i + 1; }   =until=(i == 0) { i = i - 1; }
+</code></pre>
+<p>القائمة الكاملة ودوال الشروط الموسّعة (<code>present</code>، <code>oneOf</code>، <code>matches</code>، ...) في
+<a href="key_terms_and_builtins.html"><code>key_terms_and_builtins.md</code></a>.</p>
+<h2 id="while"><code>while</code><a class="headerlink" href="#while" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">let i = 0;
+while (i &lt; 3) {
+    print &quot;w&quot; + i;
+    i = i + 1;
+}
+</code></pre>
+<h2 id="for-c"><code>for</code> (على طراز C)<a class="headerlink" href="#for-c" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">for (let j = 0; j &lt; 3; j = j + 1) {
+    print &quot;c&quot; + j;
+}
+</code></pre>
+<p>الأجزاء الثلاثة (التهيئة، الشرط، الزيادة) اختيارية تمامًا كما في C — تركها كلها فارغة
+ينتج حلقة لا نهائية إلا بـ <code>break</code>.</p>
+<h2 id="for-in"><code>for ... in</code> — تكرار حقيقي<a class="headerlink" href="#for-in" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">let arr = [1, 2, 3];
+for (let x in arr) { print x; }       // كل عنصر بدوره
+
+let m = {&quot;a&quot;: 1, &quot;b&quot;: 2};
+for (let key in m) { print key; }     // كل مفتاح بدوره (نفس ترتيب keys(m))
+
+for (let ch in &quot;abc&quot;) { print ch; }   // كل حرف كنص من محرف واحد
+</code></pre>
+<h2 id="break-continue"><code>break</code> / <code>continue</code><a class="headerlink" href="#break-continue" title="Permanent link">#</a></h2>
+<p>تعملان داخل <code>while</code>/<code>for</code>/<code>for ... in</code> بنفس المعنى المعتاد:</p>
+<pre><code class="language-kotlin">let i = 0;
+while (i &lt; 5) {
+    i = i + 1;
+    if (i == 3) { continue; }
+    if (i == 5) { break; }
+    print i; // 1, 2, 4
+}
+</code></pre>
+<h2 id="match-case"><code>match</code> / <code>case</code><a class="headerlink" href="#match-case" title="Permanent link">#</a></h2>
+<p>مطابقة أنماط، غالبًا على قيمة <code>enum</code> (انظر <a href="enums.html"><code>enums.md</code></a>):</p>
+<pre><code class="language-kotlin">enum Status { Active, Paused, Done }
+let current = Status.Paused;
+
+match (current) {
+    case Status.Active {
+        print &quot;الحالة: نشط&quot;;
+    }
+    case Status.Paused, Status.Done {  // أكثر من قيمة بفاصلة لنفس case
+        print &quot;الحالة: متوقف&quot;;
+    }
+    else {
+        print &quot;الحالة: غير معروفة&quot;;
+    }
+}
+</code></pre>
+<h3 id="match-returnbreakcontinue">حرّاس الشروط في <code>match</code> و<code>return</code>/<code>break</code>/<code>continue</code><a class="headerlink" href="#match-returnbreakcontinue" title="Permanent link">#</a></h3>
+<pre><code class="language-kotlin">match (level) {
+    case Level.High when (vip) { print &quot;vip&quot;; }   // حارس إضافي على case
+    else { print &quot;عادي&quot;; }
+}
+match {                                           // بلا موضوع: أول شرط صحيح يُنفَّذ
+    case (score &gt;= 90) { print &quot;A&quot;; }
+    else { print &quot;F&quot;; }
+}
+break when (i &gt; 10);   continue unless (ok);   return x when (x &gt; 0);
+</code></pre>
+<h2 id="goal-achieve"><code>goal</code> / <code>achieve</code> — خروج مبكر بقيمة<a class="headerlink" href="#goal-achieve" title="Permanent link">#</a></h2>
+<p><code>goal { ... }</code> تعبير يُقيَّم إلى قيمة: إن نُفِّذ <code>achieve &lt;expr&gt;;</code> بداخله يتوقف فورًا
+بتلك القيمة؛ إن لم يُنفَّذ أي <code>achieve</code> تكون القيمة النهائية <code>nil</code>. مفيد لخروج مبكر
+من منطق متعدد الخطوات بلا الحاجة لدالة منفصلة كاملة فقط لأجل <code>return</code>:</p>
+<pre><code class="language-kotlin">fun findFirstEven(arr) {
+    let result = goal {
+        let i = 0;
+        while (i &lt; len(arr)) {
+            if (arr[i] % 2 == 0) {
+                achieve arr[i]; // يوقف goal فورًا بهذه القيمة
+            }
+            i = i + 1;
+        }
+        // لا achieve هنا =&gt; النتيجة nil
+    };
+    return result;
+}
+print findFirstEven([1, 3, 5, 8, 9]); // 8
+print findFirstEven([1, 3, 5]);       // nil
+</code></pre>
+<h2 id="_1">انظر أيضًا<a class="headerlink" href="#_1" title="Permanent link">#</a></h2>
+<ul>
+<li><a href="enums.html"><code>enums.md</code></a> — تعريف <code>enum</code> المستخدَم مع <code>match</code>.</li>
+<li><a href="functions.html"><code>functions.md</code></a> — <code>fun</code>/<code>return</code>.</li>
+<li><a href="syntax.html"><code>syntax.md</code></a> — العوامل المنطقية (<code>and</code>/<code>or</code>/<code>!</code>، <strong>ليست</strong> <code>&amp;&amp;</code>/<code>||</code>).</li>
+</ul></article>
+<div class="pnav"><a class="pn" href="input.html">→ إدخال المستخدم (Input)</a><a class="pn" href="loops.html">حلقات Rin — Loops v2 ←</a></div><p class="edit"><a href="https://github.com/dlof-lib/rinlang/edit/main/docs/control-flow.md">✎ عدّل هذه الصفحة على GitHub</a></p>
+<footer>Rin 1.0.0 · رخصة MIT</footer></main>
+<aside id="toc"><b>في هذه الصفحة</b><div class="toc">
+<ul>
+<li><a href="#if-else">if / else</a></li>
+<li><a href="#when-otherwise">when / otherwise</a></li>
+<li><a href="#pluscondition">plus.condition — شرط ثلاثي على مستوى العبارات</a></li>
+<li><a href="#term">صيغ الشروط المختصرة =term=</a></li>
+<li><a href="#while">while</a></li>
+<li><a href="#for-c">for (على طراز C)</a></li>
+<li><a href="#for-in">for ... in — تكرار حقيقي</a></li>
+<li><a href="#break-continue">break / continue</a></li>
+<li><a href="#match-case">match / case</a><ul>
+<li><a href="#match-returnbreakcontinue">حرّاس الشروط في match وreturn/break/continue</a></li>
+</ul>
+</li>
+<li><a href="#goal-achieve">goal / achieve — خروج مبكر بقيمة</a></li>
+<li><a href="#_1">انظر أيضًا</a></li>
+</ul>
+</div>
+</aside></div>
+<script src="assets/app.js"></script></body></html>

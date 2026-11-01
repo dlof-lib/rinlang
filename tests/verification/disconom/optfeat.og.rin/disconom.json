@@ -1,0 +1,3 @@
+{ "disconom": 2, "name": "optfeat", "version": "1.0.0", "rin": ">=1.0.0", "license": "MIT", "description": "ميزة اختيارية",
+  "optionalDependencies": { "extra": "^1.0.0" },
+  "features": { "default": [], "gpu": ["dep:extra"] } }

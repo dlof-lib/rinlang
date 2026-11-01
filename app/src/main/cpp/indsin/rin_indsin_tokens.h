@@ -1,0 +1,656 @@
+// indsin/rin_indsin_tokens.h — Design Tokens + Color Engine ("Dye" foundation) + Pattern Book
+// (Theme Engine) for Rin Indsin.
+//
+// This is the first slice of Rin Indsin (see @theme in rin_ast.h / rin_parser.cpp, and the
+// "Rin Indsin" naming decided alongside the pre-existing Indsintime engine — Indsin *is* Indsintime's
+// design-system layer, not a parallel system). It is purely additive: nothing here changes the
+// meaning of any existing token, attribute, or StrandKind. Two things are deliberately NOT CSS:
+//   1. Colors are named by role (primary/success/danger/surface/text/...), resolved through an
+//      active Theme (a "Pattern Book"), not looked up by selector/cascade.
+//   2. Spacing/radius are named scale steps (compact/normal/comfortable/spacious,
+//      sharp/soft/round/pill), not raw pixel literals sprinkled through source — though a raw
+//      number is still accepted anywhere a token name is, for cases with no good semantic fit.
+//
+// Known, deliberate scope limit for this slice: the active Theme is process-wide state (a
+// function-local static registry below), not threaded explicitly through every call in the
+// existing Dye/Indsin/Needle call chain. Rin Indsin currently runs one Fabric per process (see
+// rin_indsin_pipeline.h / rin_indsin_c_api.cpp), so this doesn't lose anything today; if/when a
+// process ever hosts multiple concurrent Fabrics with different active themes, this should
+// become an explicit field on PipelineResult threaded through Dye::paint(...) instead.
+#pragma once
+#include "rin_indsin_eval.h"
+#include "../rin_color.h" // rincolor:: — the shared Color Engine (parsing/math/HSL/WCAG), used
+                           // here for literal color values and by rin_interpreter.cpp's color
+                           // natives for the language side. See that header's own doc comment.
+#include <string>
+#include <unordered_map>
+#include <cmath>
+#include <cstring>
+#include <algorithm>
+
+namespace indsin {
+
+// ---- Color -----------------------------------------------------------------------------------
+// indsin::Color IS rincolor::Color (byte r/g/b/a, a defaulting to fully opaque) -- Indsin doesn't
+// duplicate the color engine, it just aliases the shared one so every existing `Color{r,g,b}`
+// aggregate-init in this file keeps compiling unchanged (a is value-initialized to 255) while
+// gaining a real alpha channel everywhere for free.
+using Color = rincolor::Color;
+
+// Parses any literal color syntax the engine understands (#hex3/4/6/8, rgb()/rgba(),
+// hsl()/hsla(), the 148 named CSS colors, "transparent") -- NOT semantic role names
+// ("primary"/"danger"/...), which stay Theme lookups via resolveSemanticColor() below.
+// Kept under its old name (parseHexColor) since every call site already expects "parse a
+// literal color string, falling back to `fallback` on anything that isn't one" -- only the
+// set of strings it accepts grew.
+inline Color parseHexColor(const std::string& literal, Color fallback) {
+    return rincolor::parseColor(literal, fallback);
+}
+// Old name kept for compatibility; now covers every literal form above, not just #rrggbb --
+// this is what resolveColor() below uses to decide "is `color=`/`tone=`'s value a raw literal
+// (parse it) or a semantic role name (look it up in the Theme)".
+inline bool looksLikeHexColor(const std::string& s) { return rincolor::looksLikeColorLiteral(s); }
+
+// ---- Theme (Pattern Book): semantic color slots -----------------------------------------------
+// These are the ten roles §8/§9 of the spec asks for. A Strand never says "#6C5CE7"; it says
+// tone="primary" (or color="primary" for the handful of Strand kinds that used a raw color=
+// attribute before Indsin existed — both are accepted so old .rin sources keep working).
+struct Theme {
+    std::string name;
+    Color primary, secondary, success, danger, warning, info, neutral;
+    Color surface, background, text, text_muted, border;
+
+    const Color* slot(const std::string& roleName) const {
+        static const std::unordered_map<std::string, const Color Theme::*> table = {
+            {"primary", &Theme::primary}, {"secondary", &Theme::secondary},
+            {"success", &Theme::success}, {"danger", &Theme::danger},
+            {"warning", &Theme::warning}, {"info", &Theme::info},
+            {"neutral", &Theme::neutral}, {"surface", &Theme::surface},
+            {"background", &Theme::background}, {"text", &Theme::text},
+            {"text_muted", &Theme::text_muted}, {"border", &Theme::border},
+        };
+        auto it = table.find(roleName);
+        if (it == table.end()) return nullptr;
+        return &(this->*(it->second));
+    }
+    void setSlot(const std::string& roleName, Color c) {
+        static const std::unordered_map<std::string, Color Theme::*> table = {
+            {"primary", &Theme::primary}, {"secondary", &Theme::secondary},
+            {"success", &Theme::success}, {"danger", &Theme::danger},
+            {"warning", &Theme::warning}, {"info", &Theme::info},
+            {"neutral", &Theme::neutral}, {"surface", &Theme::surface},
+            {"background", &Theme::background}, {"text", &Theme::text},
+            {"text_muted", &Theme::text_muted}, {"border", &Theme::border},
+        };
+        auto it = table.find(roleName);
+        if (it != table.end()) this->*(it->second) = c;
+    }
+};
+
+inline Theme builtinDarkTheme() {
+    Theme t; t.name = "Dark";
+    t.primary   = {124, 92, 255}; t.secondary = {90, 200, 250};
+    t.success   = {46, 160, 67};  t.danger    = {209, 69, 69};
+    t.warning   = {212, 167, 44}; t.info      = {58, 110, 196};
+    t.neutral   = {120, 120, 135};
+    t.surface   = {40, 42, 54};   t.background= {24, 25, 32};
+    t.text      = {230, 230, 240};t.text_muted= {139, 137, 156};
+    t.border    = {51, 51, 63};
+    return t;
+}
+inline Theme builtinLightTheme() {
+    Theme t; t.name = "Light";
+    t.primary   = {108, 78, 245}; t.secondary = {24, 144, 200};
+    t.success   = {31, 128, 55};  t.danger     = {186, 46, 46};
+    t.warning   = {166, 120, 15}; t.info       = {40, 90, 168};
+    t.neutral   = {110, 110, 120};
+    t.surface   = {255, 255, 255};t.background = {245, 245, 248};
+    t.text      = {26, 26, 32};   t.text_muted = {110, 108, 122};
+    t.border    = {224, 224, 232};
+    return t;
+}
+
+// ---- Additional built-in themes ----------------------------------------------------------------
+// Four more ready-made Pattern Books alongside Dark/Light, so a project can switch its whole
+// palette to one of these with a plain `@theme=Midnight active=true; .end/theme` (no color
+// overrides needed -- see registerThemesFromProgram() below for why that now works) instead of
+// hand-rolling twelve role colors from scratch. Each still fills every Theme role (not just
+// primary/secondary) so every existing colorForKind()/resolveColor() default keeps working
+// unchanged no matter which one is active.
+inline Theme builtinMidnightTheme() {
+    Theme t; t.name = "Midnight";
+    t.primary   = {94, 106, 255}; t.secondary = {56, 189, 248};
+    t.success   = {52, 211, 153}; t.danger    = {248, 113, 113};
+    t.warning   = {251, 191, 36}; t.info      = {96, 165, 250};
+    t.neutral   = {100, 105, 130};
+    t.surface   = {24, 26, 42};   t.background= {13, 14, 24};
+    t.text      = {236, 238, 250};t.text_muted= {148, 152, 176};
+    t.border    = {40, 43, 66};
+    return t;
+}
+inline Theme builtinOceanTheme() {
+    Theme t; t.name = "Ocean";
+    t.primary   = {14, 165, 233}; t.secondary = {45, 212, 191};
+    t.success   = {34, 197, 145}; t.danger    = {248, 113, 113};
+    t.warning   = {250, 204, 21}; t.info      = {56, 189, 248};
+    t.neutral   = {100, 116, 130};
+    t.surface   = {15, 35, 48};   t.background= {8, 22, 32};
+    t.text      = {224, 242, 246};t.text_muted= {138, 164, 176};
+    t.border    = {26, 58, 74};
+    return t;
+}
+inline Theme builtinSunsetTheme() {
+    Theme t; t.name = "Sunset";
+    t.primary   = {251, 113, 133}; t.secondary = {251, 146, 60};
+    t.success   = {74, 222, 128};  t.danger    = {239, 68, 68};
+    t.warning   = {250, 204, 21};  t.info      = {192, 132, 252};
+    t.neutral   = {130, 116, 120};
+    t.surface   = {42, 27, 38};    t.background= {26, 16, 26};
+    t.text      = {250, 235, 232}; t.text_muted= {186, 154, 160};
+    t.border    = {68, 42, 54};
+    return t;
+}
+// The one light theme of the extra four -- a clean, low-saturation "corporate" palette for
+// projects that want a professional light UI without reusing the built-in Light theme's more
+// generic purple/cyan pairing.
+inline Theme builtinSlateTheme() {
+    Theme t; t.name = "Slate";
+    t.primary   = {59, 82, 222};  t.secondary = {13, 148, 136};
+    t.success   = {22, 163, 74};  t.danger    = {220, 38, 38};
+    t.warning   = {180, 130, 10}; t.info      = {37, 99, 235};
+    t.neutral   = {100, 105, 120};
+    t.surface   = {255, 255, 255};t.background= {241, 244, 249};
+    t.text      = {23, 27, 38};   t.text_muted= {100, 107, 125};
+    t.border    = {223, 227, 236};
+    return t;
+}
+
+// ---- Extended built-in themes (Design System v2, see rin_indsin_system.h + docs/indsin_expansion.md) ----
+// Five more ready-made Pattern Books: two WCAG-AAA high-contrast themes for accessibility (every
+// text/background pair >= 7:1), a warm "paper" Sepia reading theme, a dark Forest theme and a
+// light Rose theme. Each fills every Theme role exactly like Dark/Light do, so any existing
+// colorForKind()/resolveColor() default keeps working unchanged under them. They are selected the
+// same way as the older themes: `@theme=Sepia active=true; .end/theme`.
+inline Theme builtinHighContrastDarkTheme() {
+    Theme t; t.name = "HighContrastDark";
+    t.primary   = {255, 221, 0};  t.secondary = {0, 229, 255};
+    t.success   = {0, 230, 118};  t.danger    = {255, 110, 110};
+    t.warning   = {255, 193, 7};  t.info      = {130, 190, 255};
+    t.neutral   = {189, 189, 189};
+    t.surface   = {10, 10, 10};   t.background= {0, 0, 0};
+    t.text      = {255, 255, 255};t.text_muted= {220, 220, 220};
+    t.border    = {255, 255, 255};
+    return t;
+}
+inline Theme builtinHighContrastLightTheme() {
+    Theme t; t.name = "HighContrastLight";
+    t.primary   = {0, 0, 204};    t.secondary = {0, 90, 100};
+    t.success   = {0, 100, 0};    t.danger    = {176, 0, 0};
+    t.warning   = {122, 74, 0};   t.info      = {0, 64, 160};
+    t.neutral   = {64, 64, 64};
+    t.surface   = {255, 255, 255};t.background= {255, 255, 255};
+    t.text      = {0, 0, 0};      t.text_muted= {51, 51, 51};
+    t.border    = {0, 0, 0};
+    return t;
+}
+inline Theme builtinSepiaTheme() {
+    Theme t; t.name = "Sepia";
+    t.primary   = {140, 82, 40};  t.secondary = {70, 105, 85};
+    t.success   = {62, 100, 42};  t.danger    = {165, 45, 35};
+    t.warning   = {140, 92, 10};  t.info      = {50, 90, 130};
+    t.neutral   = {120, 108, 92};
+    t.surface   = {251, 245, 230};t.background= {244, 236, 216};
+    t.text      = {59, 47, 35};   t.text_muted= {105, 89, 70};
+    t.border    = {222, 210, 184};
+    return t;
+}
+inline Theme builtinForestTheme() {
+    Theme t; t.name = "Forest";
+    t.primary   = {74, 222, 128}; t.secondary = {45, 212, 191};
+    t.success   = {52, 211, 120}; t.danger    = {248, 113, 113};
+    t.warning   = {250, 204, 21}; t.info      = {96, 165, 250};
+    t.neutral   = {110, 130, 118};
+    t.surface   = {22, 34, 28};   t.background= {14, 22, 18};
+    t.text      = {226, 240, 230};t.text_muted= {150, 176, 160};
+    t.border    = {38, 58, 48};
+    return t;
+}
+inline Theme builtinRoseTheme() {
+    Theme t; t.name = "Rose";
+    t.primary   = {205, 30, 105}; t.secondary = {126, 34, 206};
+    t.success   = {21, 128, 61};  t.danger    = {200, 30, 30};
+    t.warning   = {180, 83, 9};   t.info      = {29, 78, 216};
+    t.neutral   = {120, 100, 108};
+    t.surface   = {255, 255, 255};t.background= {255, 247, 249};
+    t.text      = {42, 20, 28};   t.text_muted= {118, 86, 98};
+    t.border    = {245, 218, 228};
+    return t;
+}
+
+// ---- Pattern Book: the registry of themes + which one is active -------------------------------
+struct ThemeRegistry {
+    std::unordered_map<std::string, Theme> themes;
+    std::string activeName = "Dark";
+
+    ThemeRegistry() {
+        themes["Dark"] = builtinDarkTheme();
+        themes["Light"] = builtinLightTheme();
+        themes["Midnight"] = builtinMidnightTheme();
+        themes["Ocean"] = builtinOceanTheme();
+        themes["Sunset"] = builtinSunsetTheme();
+        themes["Slate"] = builtinSlateTheme();
+        themes["HighContrastDark"] = builtinHighContrastDarkTheme();
+        themes["HighContrastLight"] = builtinHighContrastLightTheme();
+        themes["Sepia"] = builtinSepiaTheme();
+        themes["Forest"] = builtinForestTheme();
+        themes["Rose"] = builtinRoseTheme();
+    }
+    void registerTheme(Theme t) { std::string n = t.name; themes[n] = std::move(t); }
+    void setActive(const std::string& n) { if (themes.count(n)) activeName = n; }
+    const Theme& active() const {
+        auto it = themes.find(activeName);
+        return it != themes.end() ? it->second : themes.at("Dark");
+    }
+};
+// Process-wide Pattern Book (see the scope note at the top of this file).
+inline ThemeRegistry& themeRegistry() { static ThemeRegistry reg; return reg; }
+
+// Resolves a semantic color name ("primary", "danger", ...) against the active Theme.
+// Returns false (leaving `out` untouched) if `name` isn't a known role, so callers can fall
+// through to a hex parse or a per-kind default.
+inline bool resolveSemanticColor(const std::string& name, Color& out) {
+    const Color* slot = themeRegistry().active().slot(name);
+    if (!slot) return false;
+    out = *slot;
+    return true;
+}
+
+// ---- Spacing tokens (§10/§11) ------------------------------------------------------------------
+inline bool resolveSpacingToken(const std::string& name, double& out) {
+    if (name == "compact")     { out = 8;  return true; }
+    if (name == "normal")      { out = 12; return true; }
+    if (name == "comfortable") { out = 16; return true; }
+    if (name == "spacious")    { out = 24; return true; }
+    return false;
+}
+// Reads a spacing-family attribute (padding/gap/...): numeric literal used as-is; string token
+// name resolved via the spacing scale; anything else (or attribute absent) falls back to `def`.
+inline double resolveSpacing(const Strand& s, const std::string& key, double def) {
+    const Value* v = s.attr(key);
+    if (!v) return def;
+    if (v->kind == Value::Kind::NUMBER) return v->number;
+    double t;
+    if (resolveSpacingToken(v->str, t)) return t;
+    return v->asNumber(def); // numeric string ("17") still works, matching old attrNum behavior
+}
+
+// ---- Percentage-aware sizing/spacing (new: style/screen/spacing/width/height feature pass) ----
+// A raw numeric attrNum()/asNumber() read silently falls back to `def` for a string like "50%"
+// (std::stod's consumed length won't match the whole string), so percentages were effectively
+// ignored everywhere before this. These helpers add opt-in, purely additive percentage support
+// on top of the existing numeric/token forms above — no existing .rin program's numeric or
+// token-string attribute values change meaning.
+inline bool isPercentValue(const Value* v, double& pct) {
+    if (!v || v->kind != Value::Kind::STRING || v->str.empty() || v->str.back() != '%') return false;
+    try { size_t idx = 0; pct = std::stod(v->str.substr(0, v->str.size() - 1), &idx); return idx == v->str.size() - 1; }
+    catch (...) { return false; }
+}
+// Spacing family (padding/gap/margin/...) with a percentage resolved against `base` — matching
+// the CSS convention that percentage padding/margin/gap always resolves against the *width* of
+// the containing box, even for a vertical (top/bottom) value. Falls through to the existing
+// 3-arg resolveSpacing() (numeric literal / spacing token / def) for anything not a percentage.
+inline double resolveSpacing(const Strand& s, const std::string& key, double def, double base) {
+    double pct;
+    if (isPercentValue(s.attr(key), pct)) return base * pct / 100.0;
+    return resolveSpacing(s, key, def);
+}
+// width/height/min_width/max_width/min_height/max_height with percentage support: "50%" resolves
+// against `base` (the relevant axis of the parent's own available box). Non-percentage values
+// behave exactly as the old direct s->attrNum(key, def) call they replace.
+// ---- Viewport context for vw/vh units (set by the host session on every relayout) ---------------
+// 0 = unknown: vw/vh then resolve against the parent's own extent, like a plain percentage.
+inline double& viewportWidthPx()  { static double v = 0; return v; }
+inline double& viewportHeightPx() { static double v = 0; return v; }
+
+// Size *keywords* and viewport units for width/height/min_*/max_*: the "design freedom" layer.
+//   full | fill -> 100%      half -> 50%     third -> 33.33%   two-thirds -> 66.67%   quarter -> 25%
+//   "60vw" / "50vh" / "100vmin" / "100vmax"  -> a share of the screen (the session's viewport)
+// Returns true and sets `out` when `v` is one of these forms (plain numbers and "%" stay with the
+// callers below, so existing sources resolve exactly as before).
+inline bool resolveSizeKeyword(const Value* v, double base, double& out) {
+    if (!v || v->kind != Value::Kind::STRING || v->str.empty()) return false;
+    const std::string& t = v->str;
+    if (t == "full" || t == "fill") { out = base; return true; }
+    if (t == "half")        { out = base * 0.5;       return true; }
+    if (t == "third")       { out = base / 3.0;       return true; }
+    if (t == "two-thirds")  { out = base * 2.0 / 3.0; return true; }
+    if (t == "quarter")     { out = base * 0.25;      return true; }
+    static const char* units[] = {"vmin", "vmax", "vw", "vh"};
+    for (const char* u : units) {
+        size_t ul = std::strlen(u);
+        if (t.size() <= ul || t.compare(t.size() - ul, ul, u) != 0) continue;
+        try {
+            size_t idx = 0; double n = std::stod(t.substr(0, t.size() - ul), &idx);
+            if (idx != t.size() - ul) return false;
+            double vw = viewportWidthPx() > 0 ? viewportWidthPx() : base;
+            double vh = viewportHeightPx() > 0 ? viewportHeightPx() : base;
+            double ref = std::string(u) == "vw" ? vw : std::string(u) == "vh" ? vh
+                       : std::string(u) == "vmin" ? std::min(vw, vh) : std::max(vw, vh);
+            out = ref * n / 100.0; return true;
+        } catch (...) { return false; }
+    }
+    return false;
+}
+inline double resolveSizeAttr(const Strand& s, const std::string& key, double base, double def) {
+    double pct;
+    const Value* v = s.attr(key);
+    if (isPercentValue(v, pct)) return base * pct / 100.0;
+    double kw; if (resolveSizeKeyword(v, base, kw)) return kw;
+    return v ? v->asNumber(def) : def;
+}
+
+// True for width/height values that are relative to the parent/screen ("50%", half, 30vw, ...).
+inline bool isRelativeSize(const Value* v) {
+    double d; 
+    return isPercentValue(v, d) || resolveSizeKeyword(v, 1.0, d);
+}
+
+// `aspect="16:9"` | "1.5" | 1.5 -> width/height ratio (true when valid and > 0).
+inline bool parseAspectRatio(const Value* v, double& out) {
+    if (!v) return false;
+    if (v->kind == Value::Kind::NUMBER) { out = v->number; return out > 0; }
+    if (v->kind != Value::Kind::STRING || v->str.empty()) return false;
+    try {
+        size_t c = v->str.find(':');
+        if (c == std::string::npos) { size_t i = 0; out = std::stod(v->str, &i); return i == v->str.size() && out > 0; }
+        double a = std::stod(v->str.substr(0, c)), b = std::stod(v->str.substr(c + 1));
+        if (a <= 0 || b <= 0) return false; out = a / b; return true;
+    } catch (...) { return false; }
+}
+
+// ---- Margin (new: external spacing outside a Strand's own painted box) ------------------------
+// Margin is reserved space a Strand keeps around itself that neither it nor its own
+// background/border/content ever paints into (see rin_indsin_layout.h's outer-box handling in
+// layout() — s->geometry always stays the true, margin-EXCLUDED box used for painting/hit-testing,
+// only the value layout() *returns* to its caller for cursor/bookkeeping purposes includes it).
+// `margin=` sets all four sides at once; `margin_left/top/right/bottom=` override one side.
+// Same dual numeric-or-percentage form as padding/gap above (percentages resolve against
+// `parentWidth`).
+inline void resolveMargin(const Strand& s, double parentWidth,
+                           double& left, double& top, double& right, double& bottom) {
+    double all = resolveSpacing(s, "margin", 0.0, parentWidth);
+    left = top = right = bottom = all;
+    if (s.attr("margin_left"))   left   = resolveSpacing(s, "margin_left",   left,   parentWidth);
+    if (s.attr("margin_top"))    top    = resolveSpacing(s, "margin_top",    top,    parentWidth);
+    if (s.attr("margin_right"))  right  = resolveSpacing(s, "margin_right",  right,  parentWidth);
+    if (s.attr("margin_bottom")) bottom = resolveSpacing(s, "margin_bottom", bottom, parentWidth);
+}
+
+// ---- Screen size presets (new: "screen=" convenience for @loop) --------------------------------
+// A named device-class shortcut so `@loop=app screen="phone"; ...` gets a realistic default
+// canvas size without spelling out width=/height= by hand. Explicit width=/height= on the same
+// Loop always take priority — the call site in layout() only applies a preset value for whichever
+// of the two axes has no explicit attribute at all.
+inline bool resolveScreenPreset(const std::string& nameIn, double& w, double& h) {
+    std::string name = nameIn;
+    bool landscape = false;
+    static const std::string suf = "_landscape";
+    if (name.size() > suf.size() && name.compare(name.size() - suf.size(), suf.size(), suf) == 0) {
+        landscape = true; name.resize(name.size() - suf.size());
+    }
+    bool ok = true;
+    if      (name == "watch")        { w = 184;  h = 224;  }
+    else if (name == "phone_small")  { w = 360;  h = 640;  }
+    else if (name == "phone")        { w = 390;  h = 844;  } // common modern phone viewport
+    else if (name == "phone_large")  { w = 430;  h = 932;  }
+    else if (name == "foldable")     { w = 673;  h = 841;  }
+    else if (name == "square")       { w = 600;  h = 600;  }
+    else if (name == "tablet")       { w = 768;  h = 1024; }
+    else if (name == "tablet_large") { w = 1024; h = 1366; }
+    else if (name == "laptop")       { w = 1280; h = 720;  }
+    else if (name == "desktop")      { w = 1280; h = 800;  }
+    else if (name == "desktop_wide") { w = 1440; h = 900;  }
+    else if (name == "tv")           { w = 1920; h = 1080; }
+    else {
+        // custom "WxH" (390x844) — either side may be 0/auto ("390x0" = fixed width, natural height)
+        size_t x = name.find_first_of("xX");
+        ok = false;
+        if (x != std::string::npos && x > 0 && x + 1 < name.size()) {
+            try {
+                size_t i1 = 0, i2 = 0;
+                double a = std::stod(name.substr(0, x), &i1), b = std::stod(name.substr(x + 1), &i2);
+                if (i1 == x && i2 == name.size() - x - 1 && a >= 0 && b >= 0) { w = a; h = b; ok = true; }
+            } catch (...) {}
+        }
+    }
+    if (ok && landscape) std::swap(w, h);
+    return ok;
+}
+
+// The design canvas a ROOT strand asks for (new: "design freedom" for screen size):
+//   screen="phone|tablet|desktop|watch|...|390x844|phone_landscape"   preset or custom WxH
+//   canvas_width= / canvas_height=   numbers, "%" of the host width, or "vw/vh" — override the preset per axis
+// `height` is a *minimum*: content taller than it still grows the canvas (it is a scrollable design
+// canvas, see Strand::screenRoot). 0 on an axis means "unspecified" (host width / natural height).
+inline bool resolveCanvasSize(const Strand& root, double hostW, double& w, double& h) {
+    w = 0; h = 0; bool any = false;
+    if (root.attr("screen")) { any = resolveScreenPreset(root.attrStr("screen", ""), w, h); }
+    if (root.attr("canvas_width"))  { w = resolveSizeAttr(root, "canvas_width",  hostW, w); any = true; }
+    if (root.attr("canvas_height")) { h = resolveSizeAttr(root, "canvas_height", hostW, h); any = true; }
+    return any;
+}
+
+// ---- Radius tokens (§10) -------------------------------------------------------------------
+inline bool resolveRadiusToken(const std::string& name, double& out) {
+    if (name == "sharp") { out = 0;  return true; }
+    if (name == "soft")  { out = 6;  return true; }
+    if (name == "round") { out = 12; return true; }
+    if (name == "pill")  { out = 9999; return true; } // clamped to half the strand's own size at paint time
+    return false;
+}
+inline double resolveRadius(const Strand& s, double def = 0) {
+    const Value* v = s.attr("radius");
+    if (!v) return def;
+    if (v->kind == Value::Kind::NUMBER) return v->number;
+    double t;
+    if (resolveRadiusToken(v->str, t)) return t;
+    return v->asNumber(def);
+}
+
+// ---- Motion duration tokens (Design System v2) -------------------------------------------------
+// instant/fast/normal/slow/slower => 0/120/250/400/600 ms. Lives here (not in rin_indsin_system.h)
+// so the Effects Engine can accept `duration="fast"` without depending on the larger system header.
+inline bool resolveDurationToken(const std::string& name, double& out) {
+    if (name == "instant") { out = 0;   return true; }
+    if (name == "fast")    { out = 120; return true; }
+    if (name == "normal")  { out = 250; return true; }
+    if (name == "slow")    { out = 400; return true; }
+    if (name == "slower")  { out = 600; return true; }
+    return false;
+}
+
+// ---- Typography tokens (§12) -----------------------------------------------------------------
+struct TypographyPreset { double size; std::string weight; };
+inline bool resolveTypographyToken(const std::string& name, TypographyPreset& out) {
+    if (name == "caption")  { out = {12, "regular"};  return true; }
+    if (name == "body")     { out = {14, "regular"};  return true; }
+    if (name == "label")    { out = {13, "medium"};   return true; }
+    if (name == "subtitle") { out = {16, "medium"};   return true; }
+    if (name == "title")    { out = {20, "semibold"}; return true; }
+    if (name == "heading")  { out = {28, "bold"};     return true; }
+    if (name == "code")     { out = {13, "regular"};  return true; }
+    return false;
+}
+// A Text/Button strand's `size` attribute may be a token name ("title") instead of a number,
+// same dual-form convention as padding/gap/radius above.
+inline double resolveFontSize(const Strand& s, const std::string& key, double def) {
+    const Value* v = s.attr(key);
+    if (!v) return def;
+    if (v->kind == Value::Kind::NUMBER) return v->number;
+    TypographyPreset p;
+    if (resolveTypographyToken(v->str, p)) return p.size;
+    return v->asNumber(def);
+}
+
+// ---- Button size scale (§4) --------------------------------------------------------------
+// xs/small/medium/large/xl, each a {height, horizontal padding, font size} preset. `medium`
+// intentionally matches the pre-Indsin hardcoded Button defaults (44/16/16) so existing .rin
+// sources with no size= attribute at all render pixel-identical to before this file existed.
+struct ButtonSizePreset { double height, hPadding, fontSize; };
+inline bool resolveButtonSizeToken(const std::string& name, ButtonSizePreset& out) {
+    if (name == "xs")     { out = {28, 10, 12}; return true; }
+    if (name == "small")  { out = {34, 12, 13}; return true; }
+    if (name == "medium") { out = {44, 16, 16}; return true; }
+    if (name == "large")  { out = {52, 20, 18}; return true; }
+    if (name == "xl")     { out = {60, 26, 20}; return true; }
+    return false;
+}
+inline ButtonSizePreset resolveButtonSize(const Strand& s) {
+    ButtonSizePreset def; resolveButtonSizeToken("medium", def);
+    const Value* v = s.attr("size");
+    if (!v || v->kind != Value::Kind::STRING) return def;
+    ButtonSizePreset p;
+    return resolveButtonSizeToken(v->str, p) ? p : def;
+}
+
+// ---- Button variant (§4) -------------------------------------------------------------------
+// The 7 tone variants (primary/secondary/success/danger/warning/info/neutral) are just tone=
+// role names and need no special handling here -- they already resolve through resolveColor().
+// These 5 are *treatments*, not colors: how the tone gets applied to the button's box.
+enum class ButtonTreatment { FILL, OUTLINE, GHOST, LINK, GLASS, GRADIENT };
+inline ButtonTreatment resolveButtonTreatment(const Strand& s) {
+    std::string v = s.attrStr("variant", "fill");
+    if (v == "outline")  return ButtonTreatment::OUTLINE;
+    if (v == "ghost")    return ButtonTreatment::GHOST;
+    if (v == "link")     return ButtonTreatment::LINK;
+    if (v == "glass")    return ButtonTreatment::GLASS;
+    if (v == "gradient") return ButtonTreatment::GRADIENT;
+    return ButtonTreatment::FILL;
+}
+
+// ---- Button state (§4/§16) -----------------------------------------------------------------
+// A real Strand-level state machine (not a CSS pseudo-selector): `state=` is one attribute like
+// any other, read the same way tone=/size=/variant= are. `disabled`/`loading` also gate real
+// runtime behavior (Needle refuses to dispatch onTap for a disabled button — see
+// rin_indsin_needle.h) rather than being paint-only flags.
+enum class StrandState { NORMAL, HOVER, PRESSED, FOCUSED, DISABLED, LOADING, SELECTED };
+inline StrandState resolveState(const Strand& s) {
+    if (s.attrStr("disabled", "false") == "true") return StrandState::DISABLED;
+    if (s.attrStr("loading", "false") == "true")  return StrandState::LOADING;
+    std::string v = s.attrStr("state", "normal");
+    if (v == "hover")    return StrandState::HOVER;
+    if (v == "pressed")  return StrandState::PRESSED;
+    if (v == "focused")  return StrandState::FOCUSED;
+    if (v == "disabled") return StrandState::DISABLED;
+    if (v == "loading")  return StrandState::LOADING;
+    if (v == "selected") return StrandState::SELECTED;
+    return StrandState::NORMAL;
+}
+inline const char* stateName(StrandState st) {
+    switch (st) {
+        case StrandState::HOVER: return "hover"; case StrandState::PRESSED: return "pressed";
+        case StrandState::FOCUSED: return "focused"; case StrandState::DISABLED: return "disabled";
+        case StrandState::LOADING: return "loading"; case StrandState::SELECTED: return "selected";
+        default: return "normal";
+    }
+}
+// Dims a color toward the active theme's background — used for disabled/loading, matching the
+// "reduced but still legible" look every native toolkit uses instead of literally graying to 0.
+inline Color dimTowardBackground(Color c, double amount /* 0..1 */) {
+    const Color& bg = themeRegistry().active().background;
+    auto mix = [&](unsigned char a, unsigned char b) { return (unsigned char)(a + (b - a) * amount); };
+    return {mix(c.r, bg.r), mix(c.g, bg.g), mix(c.b, bg.b), c.a}; // preserve caller's alpha
+}
+
+// ---- Accessibility (§20) --------------------------------------------------------------------
+// Minimal, additive accessibility metadata: a semantic `role` per StrandKind (screen-reader
+// element type) and an accessible name. The accessible name defaults to the Strand's own visible
+// text (label=/text=), the same default every native a11y framework uses, and can be overridden
+// with a dedicated `a11y_label=` attribute *without* redefining what `label=` already means on
+// Button (its visible text) — Indsintime already used that name before Indsin's tokens existed, and
+// silently repurposing it would break every existing Button in source.
+inline std::string accessibleRole(StrandKind k) {
+    switch (k) {
+        case StrandKind::BUTTON:   return "button";
+        case StrandKind::MENUITEM: return "menuitem";
+        case StrandKind::MENU:     return "menu";
+        case StrandKind::BANNER:   return "alert";
+        case StrandKind::IMAGE:    return "image";
+        case StrandKind::TEXT:     return "text";
+        case StrandKind::TABLE:    return "table";
+        case StrandKind::WEBVIEW:  return "webview";
+        case StrandKind::CHECKBOX: return "checkbox";
+        case StrandKind::SWITCH:   return "switch";
+        case StrandKind::PROGRESS: return "progressbar";
+        case StrandKind::INPUT:    return "textbox";
+        case StrandKind::TEXTAREA: return "textbox";
+        case StrandKind::DIALOG:   return "dialog";
+        case StrandKind::TABS:     return "tablist";
+        case StrandKind::TABITEM:  return "tab";
+        case StrandKind::AVATAR:   return "image";
+        case StrandKind::BADGE:    return "status";
+        case StrandKind::TOOLTIP:  return "tooltip";
+        // Ready-elements expansion:
+        case StrandKind::LINK:     return "link";
+        case StrandKind::RADIO:    return "radio";
+        case StrandKind::SLIDER:   return "slider";
+        case StrandKind::SEARCH:   return "searchbox";
+        case StrandKind::SELECT:   return "combobox";
+        case StrandKind::FILE:     return "button"; // a file field is a tap target, not free-text entry
+        case StrandKind::DATE:     return "textbox";
+        case StrandKind::TIME:     return "textbox";
+        case StrandKind::CODE_EDITOR: return "textbox";
+        case StrandKind::LIST:     return "list";
+        case StrandKind::LISTITEM: return "listitem";
+        default: return "";
+    }
+}
+inline std::string accessibleName(const Strand& s) {
+    std::string explicitLabel = s.attrStr("a11y_label", "");
+    if (!explicitLabel.empty()) return explicitLabel;
+    if (s.kind == StrandKind::BUTTON || s.kind == StrandKind::MENUITEM || s.kind == StrandKind::TABITEM ||
+        s.kind == StrandKind::CHECKBOX || s.kind == StrandKind::SWITCH || s.kind == StrandKind::RADIO)
+        return s.attrStr("label", "");
+    if (s.kind == StrandKind::INPUT || s.kind == StrandKind::TEXTAREA || s.kind == StrandKind::SEARCH ||
+        s.kind == StrandKind::SELECT || s.kind == StrandKind::FILE || s.kind == StrandKind::DATE ||
+        s.kind == StrandKind::TIME || s.kind == StrandKind::CODE_EDITOR) {
+        std::string v = s.attrStr("value", "");
+        return !v.empty() ? v : s.attrStr("placeholder", "");
+    }
+    // AltText: صور/أيقونات/أفاتار/فيديو تُسمّى بـ alt= (decorative=true => بلا اسم). sr_text= نص للقارئات فقط.
+    if (s.kind == StrandKind::IMAGE || s.kind == StrandKind::ICON || s.kind == StrandKind::AVATAR || s.kind == StrandKind::VIDEO) {
+        if (s.attrStr("decorative", "false") == "true") return "";
+        std::string alt = s.attrStr("alt", "");
+        if (!alt.empty()) return alt;
+        std::string t = s.attrStr("text", "");
+        if (!t.empty()) return t;
+        std::string sr = s.attrStr("sr_text", "");
+        return !sr.empty() ? sr : s.attrStr("title", "");
+    }
+    std::string t = s.attrStr("text", ""); // covers Link (text=) and every plain leaf as before
+    if (t.empty()) { t = s.attrStr("sr_text", ""); if (t.empty()) t = s.attrStr("title", ""); }
+    return t;
+}
+
+// ---- Sizing modes (§5/§6): semantic replacements for scattering width=/height= everywhere --
+// `sizing=` is generic -- it applies to any StrandKind, not just a dedicated "Container" one
+// (see docs/indsintime/RIN_INDSIN_TOKENS.md's open naming-collision note on why there's no new
+// "Container" StrandKind yet). Scope note: only WIDTH is affected by fill/expand today, because
+// the root constraint chain in this engine bounds width from the very first `indsinc.cpp` call
+// (`{0, rootWidth, 0, 1e9}`) but deliberately leaves height unbounded (1e9) almost everywhere,
+// so "fill height" has no finite parent extent to fill against in most real layouts. A Strand
+// that DOES have a bounded height available (inside something that set an explicit height=)
+// still benefits: fill/expand there fills height too. hug/fit/auto are unaffected either way --
+// they're what every StrandKind's own measure function already does by default.
+enum class SizingMode { AUTO, FIT, HUG, FILL, EXPAND, FIXED };
+inline SizingMode resolveSizingMode(const Strand& s) {
+    std::string v = s.attrStr("sizing", "auto");
+    if (v == "fit")    return SizingMode::FIT;
+    if (v == "hug")    return SizingMode::HUG;
+    if (v == "fill")   return SizingMode::FILL;
+    if (v == "expand") return SizingMode::EXPAND;
+    if (v == "fixed")  return SizingMode::FIXED;
+    return SizingMode::AUTO;
+}
+
+} // namespace indsin

@@ -1,0 +1,1 @@
+خطأ في tests/verification/let_err_dup.rin عند السطر 2: [E0002] `a` appears twice in the same pattern (each name in a pattern becomes one variable, so it can only be used once)

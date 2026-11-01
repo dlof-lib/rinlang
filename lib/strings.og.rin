@@ -1,0 +1,199 @@
+// ============================================================================
+//  lib/strings.og.rin — امتدادات نصوص فوق stdlib الأساسية (upper/lower/trim/substr/split/join...)
+//  استيراد:
+//    @import "lib/strings.og.rin";
+//    @import "lib/strings.og.rin" as strx;
+// ============================================================================
+
+// يجعل أول حرف كبيراً وبقية النص كما هو: "rin" -> "Rin"
+fun capitalize(s) {
+    if (len(s) == 0) { return s; }
+    return upper(charAt(s, 0)) + substr(s, 1);
+}
+
+// يعكس ترتيب أحرف النص: "abc" -> "cba"
+fun reverseStr(s) {
+    let result = "";
+    let i = len(s) - 1;
+    while (i >= 0) {
+        result = result + charAt(s, i);
+        i = i - 1;
+    }
+    return result;
+}
+
+// هل s يبدأ بـ prefix؟
+fun startsWith(s, prefix) {
+    if (len(prefix) > len(s)) { return false; }
+    return substr(s, 0, len(prefix)) == prefix;
+}
+
+// هل s ينتهي بـ suffix؟
+fun endsWith(s, suffix) {
+    let sl = len(s);
+    let pl = len(suffix);
+    if (pl > sl) { return false; }
+    return substr(s, sl - pl, pl) == suffix;
+}
+
+// يكمل النص من اليسار حتى يصل طوله إلى width باستخدام حرف الحشو ch
+fun padLeft(s, width, ch) {
+    let result = s;
+    while (len(result) < width) {
+        result = ch + result;
+    }
+    return result;
+}
+
+// يكمل النص من اليمين حتى يصل طوله إلى width باستخدام حرف الحشو ch
+fun padRight(s, width, ch) {
+    let result = s;
+    while (len(result) < width) {
+        result = result + ch;
+    }
+    return result;
+}
+
+// يكرر النص s عدد n من المرات
+fun repeatStr(s, n) {
+    let result = "";
+    let i = 0;
+    while (i < n) {
+        result = result + s;
+        i = i + 1;
+    }
+    return result;
+}
+
+// يجعل أول حرف من كل كلمة كبيراً: "hello rin lang" -> "Hello Rin Lang"
+fun titleCase(s) {
+    let words = split(s, " ");
+    let result = [];
+    let i = 0;
+    while (i < len(words)) {
+        push(result, capitalize(words[i]));
+        i = i + 1;
+    }
+    return join(result, " ");
+}
+
+// هل النص فارغ أو يحتوي على مسافات فقط؟
+fun isBlank(s) {
+    return trim(s) == "";
+}
+
+// يحسب عدد مرات ظهور sub داخل s (بلا تداخل بين المطابقات)
+fun countOccurrences(s, sub) {
+    if (len(sub) == 0) { return 0; }
+    let count = 0;
+    let rest = s;
+    let idx = indexOf(rest, sub);
+    while (idx != -1) {
+        count = count + 1;
+        rest = substr(rest, idx + len(sub));
+        idx = indexOf(rest, sub);
+    }
+    return count;
+}
+
+// يزيل جميع الفراغات (المسافات) من النص
+fun stripSpaces(s) {
+    return replace(s, " ", "");
+}
+
+// يحوّل نص فاصل مثل "a-b-c" إلى مصفوفة عبر separator، بعد تقليم الفراغات من كل عنصر
+fun splitTrim(s, separator) {
+    let parts = split(s, separator);
+    let result = [];
+    let i = 0;
+    while (i < len(parts)) {
+        push(result, trim(parts[i]));
+        i = i + 1;
+    }
+    return result;
+}
+
+// يقتطع s إلى maxLen حرفاً كحد أقصى مضيفاً suffix (مثل "...") عند الاقتطاع الفعلي؛
+// إن كان s أقصر من أو يساوي maxLen يُعاد كما هو دون أي إضافة
+fun truncate(s, maxLen, suffix) {
+    if (len(s) <= maxLen) { return s; }
+    let cut = maxLen - len(suffix);
+    if (cut < 0) { cut = 0; }
+    return substr(s, 0, cut) + suffix;
+}
+
+// عدد الكلمات في s (مفصولة بمسافات، بعد تجاهل الفراغات الزائدة في البداية/النهاية)
+fun wordCount(s) {
+    let t = trim(s);
+    if (t == "") { return 0; }
+    let words = split(t, " ");
+    let count = 0;
+    let i = 0;
+    while (i < len(words)) {
+        if (trim(words[i]) != "") { count = count + 1; }
+        i = i + 1;
+    }
+    return count;
+}
+
+// يحوّل نصاً إلى شكل "slug" مناسب لروابط URL: أحرف صغيرة، الفراغات والفواصل
+// السفلية تتحول إلى "-"، وتُزال أي أحرف ليست حروفاً/أرقاماً/"-"
+fun slugify(s) {
+    let lowered = lower(trim(s));
+    let allowed = "abcdefghijklmnopqrstuvwxyz0123456789-";
+    let result = "";
+    let i = 0;
+    let lastWasDash = false;
+    while (i < len(lowered)) {
+        let c = charAt(lowered, i);
+        if (c == " " or c == "_") { c = "-"; }
+        if (contains(allowed, c)) {
+            if (c == "-") {
+                if (lastWasDash == false and result != "") {
+                    result = result + c;
+                    lastWasDash = true;
+                }
+            } else {
+                result = result + c;
+                lastWasDash = false;
+            }
+        }
+        i = i + 1;
+    }
+    while (endsWith(result, "-")) {
+        result = substr(result, 0, len(result) - 1);
+    }
+    return result;
+}
+
+// هل s يقرأ نفسه بنفس الطريقة من الجهتين (متناظر/palindrome)؟ يتجاهل حالة الأحرف
+fun isPalindrome(s) {
+    let normalized = lower(s);
+    return normalized == reverseStr(normalized);
+}
+
+// يزيل prefix من بداية s إن وُجد فعلاً في البداية، وإلا يُعيد s كما هو
+fun removePrefix(s, prefix) {
+    if (startsWith(s, prefix)) { return substr(s, len(prefix)); }
+    return s;
+}
+
+// يزيل suffix من نهاية s إن وُجد فعلاً في النهاية، وإلا يُعيد s كما هو
+fun removeSuffix(s, suffix) {
+    if (endsWith(s, suffix)) { return substr(s, 0, len(s) - len(suffix)); }
+    return s;
+}
+
+// يحشو s من الجهتين بحرف ch حتى يصل طوله إلى width (الحشو الزائد يوضع يميناً عند العدد الفردي)
+fun center(s, width, ch) {
+    let total = width - len(s);
+    if (total <= 0) { return s; }
+    let leftPad = total / 2;
+    if (leftPad < 0) { leftPad = 0; }
+    let leftCount = floor(leftPad);
+    let result = s;
+    let i = 0;
+    while (i < leftCount) { result = ch + result; i = i + 1; }
+    while (len(result) < width) { result = result + ch; }
+    return result;
+}

@@ -1,0 +1,44 @@
+// table_aggregate.rin — دوال container.* الموجودة تقبل اسم جدول وعموداً (بدل نوع وحقل)
+@table=staff
+    row cells=["name", "dept", "score"];
+    row cells=["sara", "dev", 95];
+    row cells=["yusuf", "ops", 88];
+    row cells=["huda", "dev", 99];
+    row cells=["omar", "ops", nil];
+.end/table
+
+print container.sum("staff", "score");
+print container.avg("staff", "score");
+print container.min("staff", "score");
+print container.max("staff", "score");
+print container.avg("staff", "name");
+print container.pluck("staff", "name");
+print container.distinct("staff", "dept");
+print container.countBy("staff", "dept");
+print container.groupBy("staff", "dept");
+print container.sortBy("staff", "score");
+print container.sortBy("staff", "score", true);
+print container.top("staff", "score", 2);
+print container.paginate("staff", 2, 3);
+print container.query("staff", {"dept": "ops"});
+print container.query("staff", {"score": {"gte": 90}}, {"sortBy": "score", "desc": true, "limit": 1});
+print container.search("SAR", "staff");
+print container.stats("staff");
+print container.toRows("staff", ["name", "score"]);
+try { container.sum("staff", "nope"); } catch (e) { print e.code; }
+
+// مقارنة · دمج · بصمة
+@table=a
+    row cells=["k", "v"];
+    row cells=["x", 1];
+.end/table
+@table=b
+    row cells=["k", "w"];
+    row cells=["y", 2];
+.end/table
+print container.equals("a", "b");
+print container.diff("a", "b");
+print container.mergeFrom("a", "b");
+print getField("a", "rows");
+print container.equals("a", "a");
+print len(container.checksum("a"));

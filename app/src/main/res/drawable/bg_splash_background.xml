@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- خلفية شاشة البداية: صورة الخلفية التقنية (خلايا سداسية + أرقام ثنائية) رقم 2،
+     مغطّاة بتدرّج داكن شفاف يحافظ على وضوح الشعار والنص فوقها دون أن تختفي الصورة كلياً. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <bitmap
+            android:src="@drawable/img_splash_bg"
+            android:gravity="fill" />
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:type="radial"
+                android:gradientRadius="480dp"
+                android:centerX="0.5"
+                android:centerY="0.42"
+                android:startColor="#B02A2140"
+                android:centerColor="#CC1A1B20"
+                android:endColor="#F0131417" />
+        </shape>
+    </item>
+</layer-list>

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_theme_section_title">المظهر</string>
+    <string name="theme_system">النظام</string>
+    <string name="theme_dark">داكن</string>
+    <string name="theme_light">فاتح</string>
+    <string name="settings_layout_section_title">تخطيط المحرر</string>
+    <string name="layout_standard">قياسي</string>
+    <string name="layout_focus">تركيز</string>
+    <string name="layout_compact">مضغوط</string>
+    <string name="settings_projects_section_title">المشاريع</string>
+    <string name="sort_recent">الأحدث</string>
+    <string name="sort_name">الاسم</string>
+    <string name="sort_type">النوع</string>
+    <string name="settings_show_console">إظهار الطرفية</string>
+    <string name="settings_show_console_hint">إظهار لوحة الطرفية داخل المحرر</string>
+    <string name="settings_show_toolbar">إظهار شريط الأدوات</string>
+    <string name="settings_show_toolbar_hint">إظهار شريط أدوات المحرر</string>
+</resources>

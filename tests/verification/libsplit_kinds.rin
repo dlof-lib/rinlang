@@ -1,0 +1,26 @@
+// توكن الأداة OG (ملف واحد) مقابل المكتبة (مجلد) — rinlib.kind / resolve / tokens / packages / graph / fingerprint
+let D = "tests/verification/libsplit";
+print rinlib.kind(D + "/shapes.og.rin");
+print rinlib.kind(D + "/legacy_token.og.rin");
+print rinlib.kind("math");
+print rinlib.kind("no_such_package_zz");
+let r = rinlib.resolve(D + "/legacy_token.og.rin");
+print r.kind + " " + r.source + " " + r.name;
+let m = rinlib.resolve("math");
+print m.kind + " " + m.source;
+print rinlib.tokens(D)[0].name;
+let names = [];
+for (let p in rinlib.packages(D)) { push(names, p.name + ":" + p.kind); }
+print names;
+let g = rinlib.graph(D + "/shapes.og.rin");
+print g.ok;
+print g.order;
+let c = rinlib.graph(D + "/cyca.og.rin");
+print c.ok;
+print c.cycles;
+let fp = rinlib.fingerprint(D + "/shapes.og.rin");
+print rinlib.verify(D + "/shapes.og.rin", fp);
+print rinlib.verify(D + "/shapes.og.rin", "00");
+let tc = rinlib.check(D + "/legacy_token.og.rin");
+print tc.kind + " " + tc.ok;
+print rinlib.check(D + "/cyca.og.rin").ok;

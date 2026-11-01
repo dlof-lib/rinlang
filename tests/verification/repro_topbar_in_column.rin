@@ -1,0 +1,15 @@
+@view.Column=root
+  gap="normal"; padding="none";
+
+  @view.TopBar=bar
+    @view.Text=t text="شريط علوي"; .end/view
+  .end/view
+
+  @view.Button=btn text="زر"; .end/view
+
+  @view.Row=r
+    gap="small";
+    @view.Card=a sizing="fill"; @view.Text=at text="A"; .end/view .end/view
+    @view.Card=b sizing="fill"; @view.Text=bt text="B"; .end/view .end/view
+  .end/view
+.end/view

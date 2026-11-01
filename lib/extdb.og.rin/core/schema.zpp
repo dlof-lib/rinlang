@@ -1,0 +1,44 @@
+// extdb/core/schema.zpp — مخطط محلي يُتحقَّق منه قبل أي كتابة (قبل خروج الطلب من الجهاز).
+//
+//   xdb_schema(c, "users", {"name": "string!", "age": "number", "tags": "array", "meta": "map", "active": "bool", "any": "any"});
+//   «!» بعد النوع = حقل إلزامي. الأنواع: string number bool map array any. الحقول غير المذكورة مسموحة.
+//   xdb_schema(c, "users", nil) يزيل المخطط.
+
+fun xdb_schema(c, t, spec) {
+    xdb__live(c);
+    if (spec == nil) {
+        if (has(c["schemas"], t)) { remove(c["schemas"], t); }
+        return true;
+    }
+    if (type(spec) != "map") { xdb__fail("schema must be a map {field: \"type\"}"); }
+    let fields = {};
+    let required = [];
+    let okTypes = ["string", "number", "bool", "map", "array", "any"];
+    for (let f in keys(spec)) {
+        let ty = toString(spec[f]);
+        if (xdb__ends(ty, "!")) { ty = substr(ty, 0, len(ty) - 1); push(required, f); }
+        if (!contains(okTypes, ty)) { xdb__fail("schema: unknown type `" + ty + "` for `" + f + "` (available: " + join(okTypes, ", ") + ")"); }
+        fields[f] = ty;
+    }
+    c["schemas"][t] = {"fields": fields, "required": required};
+    return true;
+}
+
+// partial=true (update): الإلزامية لا تُفحَص، والأنواع تُفحَص للحقول المرسلة فقط
+fun xdb__validate(c, t, doc, partial) {
+    if (!has(c["schemas"], t)) { return true; }
+    let sc = c["schemas"][t];
+    let errs = [];
+    if (!partial) {
+        for (let f in sc["required"]) {
+            if (!has(doc, f) or doc[f] == nil) { push(errs, f + " is required"); }
+        }
+    }
+    for (let f in keys(sc["fields"])) {
+        if (!has(doc, f) or doc[f] == nil) { continue; }
+        let want = sc["fields"][f];
+        if (want != "any" and type(doc[f]) != want) { push(errs, f + " must be " + want + " (got " + type(doc[f]) + ")"); }
+    }
+    if (len(errs) > 0) { xdb__fail("schema violation in `" + t + "`: " + join(errs, "; ")); }
+    return true;
+}

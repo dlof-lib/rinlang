@@ -1,0 +1,90 @@
+// extdb/core/net.zpp — إرسال الطلبات: مهلة، إعادة محاولة بتأخير مضاعَف، إحصاءات، وكاش اختياري.
+//
+// cfg (كلها اختيارية):
+//   "timeoutMs": 15000        مهلة كل طلب (httpSetTimeout)
+//   "retries": 2              عدد إعادات المحاولة (0 = بلا إعادة)
+//   "retryDelayMs": 200       التأخير الأول؛ يتضاعف في كل إعادة (حتى 5 ثوانٍ)
+//   "cacheTtl": 0             ثوانٍ؛ > 0 يفعّل كاش القراءة (get/all/ids) ويُبطَل عند أي كتابة في الجدول
+//
+// المحاولات: GET/PUT/DELETE تُعاد عند فشل الاتصال أو 429/500/502/503/504؛ POST/PATCH (غير idempotent)
+// تُعاد فقط عند 429/503 (رفض صريح من الخادم قبل التنفيذ).
+
+fun xdb__idem(method) {
+    let m = upper(method);
+    return m == "GET" or m == "PUT" or m == "DELETE" or m == "HEAD";
+}
+
+fun xdb__retryable(method, r) {
+    if (!r["ok"]) { return xdb__idem(method); }
+    let st = r["status"];
+    if (st == 429 or st == 503) { return true; }
+    if (st == 500 or st == 502 or st == 504) { return xdb__idem(method); }
+    return false;
+}
+
+// يخفي الأسرار (auth= / key=) من الرابط قبل تسجيله
+fun xdb__redact(url) {
+    let out = url;
+    for (let name in ["auth=", "key=", "access_token="]) {
+        let i = indexOf(out, name);
+        if (i >= 0) {
+            let start = i + len(name);
+            let rest = substr(out, start, len(out) - start);
+            let j = indexOf(rest, "&");
+            let tail = "";
+            if (j >= 0) { tail = substr(rest, j, len(rest) - j); }
+            out = substr(out, 0, start) + "***" + tail;
+        }
+    }
+    return out;
+}
+
+fun xdb__send(c, method, url, headers, body) {
+    let cfg = c["cfg"];
+    let tries = xdb__opt(cfg, "retries", 2);
+    let delay = xdb__opt(cfg, "retryDelayMs", 200);
+    let tmo = xdb__opt(cfg, "timeoutMs", nil);
+    if (tmo != nil) { httpSetTimeout(tmo); }
+    let attempt = 0;
+    let r = nil;
+    while (true) {
+        let t0 = time.ms();
+        r = httpRequest(method, url, headers, body);
+        c["stats"]["requests"] = c["stats"]["requests"] + 1;
+        if (c["logger"] != nil) {
+            let lg = c["logger"];
+            lg({"provider": c["provider"], "method": method, "url": xdb__redact(url), "status": r["status"], "ok": r["ok"], "ms": time.ms() - t0, "attempt": attempt + 1});
+        }
+        if (attempt >= tries or !xdb__retryable(method, r)) { break; }
+        attempt = attempt + 1;
+        c["stats"]["retries"] = c["stats"]["retries"] + 1;
+        if (delay > 0) { time.sleep(delay); }
+        delay = delay * 2;
+        if (delay > 5000) { delay = 5000; }
+    }
+    return r;
+}
+
+// ---- كاش القراءة (في ذاكرة الاتصال) -------------------------------------------------------------
+fun xdb__ttl(c) { return xdb__opt(c["cfg"], "cacheTtl", 0); }
+
+fun xdb__cget(c, key) {
+    if (xdb__ttl(c) <= 0) { return nil; }
+    let e = nil;
+    if (has(c["cache"], key)) { e = c["cache"][key]; }
+    if (e == nil) { return nil; }
+    if (time.ms() - e["at"] > xdb__ttl(c) * 1000) { remove(c["cache"], key); return nil; }
+    c["stats"]["hits"] = c["stats"]["hits"] + 1;
+    return {"v": xdb__clone(e["v"])};
+}
+
+fun xdb__cput(c, key, v) {
+    if (xdb__ttl(c) > 0) { c["cache"][key] = {"at": time.ms(), "v": xdb__clone(v)}; }
+    return v;
+}
+
+// يُبطل كل مدخلات جدول
+fun xdb__cinv(c, t) {
+    let pre = toString(t) + "|";
+    for (let k in keys(c["cache"])) { if (xdb__starts(k, pre)) { remove(c["cache"], k); } }
+}

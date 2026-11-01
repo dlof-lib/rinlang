@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12+ (API 31+): قواعد النسخ الاحتياطي ونقل الجهاز. لا نُصدّر الكاش ولا ملفات التصدير المؤقتة. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="cache" />
+        <exclude domain="no_backup" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="cache" />
+        <exclude domain="no_backup" />
+    </device-transfer>
+</data-extraction-rules>

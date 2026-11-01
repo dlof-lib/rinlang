@@ -1,0 +1,98 @@
+// ============================================================
+//  مثال كامل: مختبر المهندس — الجبر الخطي وتطوير الخوارزميات
+//  تشغيل:  rin run examples/engineer_workbench.rin
+// ============================================================
+fun title(t) { print ""; print "=== " + t + " ==="; }
+fun fmtV(v, d) { return matFormat([v], {decimals: d}); }
+
+// ---------- 1) دارة كهربائية: تحليل العقد (جملة خطية) ----------
+title("1) دارة: تحليل العقد");
+// G·V = I  (موصليات سيمنز، تيارات أمبير)
+let G = [[ 0.7, -0.2, -0.5],
+         [-0.2,  0.5, -0.3],
+         [-0.5, -0.3,  0.9]];
+let I = [5, 0, 0];
+let V = matSolve(G, I);
+print "الجهود (V): " + fmtV(V, 4);
+print "البواقي ≈ 0 ؟ " + matApprox(matMul(G, V), I);
+print "رقم الشرطية: " + numberFormat(matCond(G), {decimals: 2});
+print "G متناظرة موجبة التحديد؟ " + matIs(G, "positive-definite");
+let it = matSolveIter(G, I, {method: "cg"});
+print "CG: " + it.iterations + " تكرارات، تقارب=" + it.converged;
+
+// ---------- 2) توفيق بيانات تجريبية: أقل المربعات ----------
+title("2) توفيق بيانات (خط مستقيم + قطع مكافئ)");
+let xs = [0, 1, 2, 3, 4, 5];
+let ys = [1.1, 2.9, 5.2, 7.1, 8.8, 11.2];
+let line = algoPolyFit(xs, ys, 1);
+print "y = " + numberFormat(line.coeffs[0], {decimals: 3}) + " + " + numberFormat(line.coeffs[1], {decimals: 3}) + "·x   R²=" + numberFormat(line.r2, {decimals: 4});
+let quad = algoPolyFit(xs, ys, 2);
+print "قطع مكافئ: " + fmtV(quad.coeffs, 4) + "  rmse=" + numberFormat(quad.rmse, {decimals: 4});
+print "التنبؤ عند x=6: " + numberFormat(algoPolyEval(line.coeffs, 6), {decimals: 3});
+
+// ---------- 3) استقرار نظام: قيم ذاتية ----------
+title("3) استقرار نظام ديناميكي");
+let Asys = [[0, 1], [-4, -0.5]];       // x'' + 0.5x' + 4x = 0
+let poles = matEigvals(Asys);
+for p in poles { print "قطب: " + numberFormat(p.re, {decimals: 4}) + " + " + numberFormat(p.im, {decimals: 4}) + "i"; }
+print "مستقر؟ " + (poles[0].re < 0);
+
+// ---------- 4) محاكاة: معادلة تفاضلية ----------
+title("4) محاكاة الاهتزاز (RK45)");
+fun osc(t, y) { return [y[1], -4 * y[0] - 0.5 * y[1]]; }
+let sim = algoOde(osc, [1, 0], 0, 10);
+let last = sim.y[len(sim.y) - 1];
+print "خطوات: " + sim.steps + " (مرفوضة " + sim.rejected + ")";
+print "الحالة عند t=10: " + fmtV(last, 5);
+
+// ---------- 5) تحسين وحلّ معادلات غير خطية ----------
+title("5) تحسين وجذور");
+fun cost(v) { return (v[0] - 3) * (v[0] - 3) + 2 * (v[1] + 1) * (v[1] + 1) + 5; }
+let opt = algoMinimize(cost, [0, 0]);
+print "الأدنى عند " + fmtV(opt.x, 4) + " بقيمة " + numberFormat(opt.fx, {decimals: 4});
+fun beam(x) { return x * x * x - 2 * x - 5; }
+let r = algoRoot(beam, 2, 3);
+print "جذر x³-2x-5 = " + numberFormat(r.root, {decimals: 8}) + " في " + r.iterations + " تكرارات";
+fun sysF(v) { return [v[0] * v[0] + v[1] * v[1] - 25, v[0] - 2 * v[1] + 2]; }
+let nl = algoNewton(sysF, [3, 3]);
+print "جملة غير خطية: " + fmtV(nl.x, 5) + " تقارب=" + nl.converged;
+
+// ---------- 6) تكامل وإشارات ----------
+title("6) تكامل وFFT");
+fun gauss(x) { return exp(-x * x); }
+let area = algoIntegrate(gauss, 0, number("inf", {special: true}));
+print "∫ e^(-x²) = " + numberFormat(area.value, {decimals: 8}) + "  (√π/2 = " + numberFormat(sqrt(3.141592653589793) / 2, {decimals: 8}) + ")";
+let n = 64;
+let sig = [];
+for i in 0 to 63 { push(sig, sin(2 * 3.141592653589793 * 5 * i / n) + 0.5 * sin(2 * 3.141592653589793 * 12 * i / n)); }
+let F = algoFFT(sig);
+let peaks = [];
+for k in 0 to 31 { let mag = sqrt(F.re[k] * F.re[k] + F.im[k] * F.im[k]) / (n / 2); if (mag > 0.1) { push(peaks, k + " Hz (" + numberFormat(mag, {decimals: 2}) + ")"); } }
+print "ترددات مكتشفة: " + peaks;
+
+// ---------- 7) مخطط: أقصر مسار ----------
+title("7) شبكة: أقصر مسار");
+let W = algoGraphMatrix([[0, 1, 4], [0, 2, 1], [2, 1, 2], [1, 3, 1], [2, 3, 6]], 4);
+let dj = algoDijkstra(W, 0, 3);
+print "المسافة 0→3 = " + dj.dist[3] + "   المسار: " + dj.path;
+
+// ---------- 8) تطوير خوارزمية: صحة وسرعة ورتبة نمو ----------
+title("8) خوارزميتي: فرز بالإدراج");
+fun insertionSort(a) {
+  let i = 1;
+  while (i < len(a)) {
+    let key = a[i]; let j = i - 1;
+    while (j >= 0 and a[j] > key) { a[j + 1] = a[j]; j = j - 1; }
+    a[j + 1] = key; i = i + 1;
+  }
+  return a;
+}
+fun refSort(a) { return sort(a); }
+let tests = [];
+for i in 1 to 40 { push(tests, algoRandom(i, {seed: i, int: true, max: 30})); }
+let chk = algoCheck(insertionSort, refSort, tests);
+print "صحيحة على " + chk.tested + " مدخلاً؟ " + chk.ok;
+let cx = algoComplexity(insertionSort, [200, 400, 800, 1600], {runs: 2});
+print "رتبة النمو التقديرية: " + cx.best + "  (الأُسّ ≈ " + numberFormat(cx.exponent, {decimals: 2}) + ")";
+let cmp = algoCompare({insertion: insertionSort, builtin: refSort}, {args: [algoRandom(500, {seed: 9})], runs: 5});
+print "الأسرع: " + cmp[0].name + "  (الآخر أبطأ بـ " + numberFormat(cmp[1].ratio, {decimals: 1}) + "×)";

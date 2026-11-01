@@ -1,0 +1,43 @@
+// indsin/main.indsin — قالب "مدونة" جاهز (محرّك indsin، @view.*)
+
+warp post1Open = false;
+warp post2Open = false;
+warp post3Open = false;
+
+fun toggle1() { post1Open = !post1Open; }
+fun toggle2() { post2Open = !post2Open; }
+fun toggle3() { post3Open = !post3Open; }
+
+@view.Column=root
+    padding=16;
+    gap=14;
+
+    @view.Text=heading text="مدونة Demo"; size="title"; .end/view
+
+    @view.Card=post1
+        padding=16;
+        @view.Text=p1title text="كيف تبدأ رحلتك في تعلّم البرمجة"; size=18; .end/view
+        @view.Text=p1meta text="12 سبتمبر · 4 دقائق قراءة"; size=12; .end/view
+        @view.Text=p1excerpt text="نصائح عملية لأي شخص يريد الانطلاق في عالم البرمجة من الصفر..."; size=14; .end/view
+        @view.Text=p1full text="ابدأ بمشروع صغير، لا تنتظر إتقان كل شيء أولاً، اكتب كوداً كل يوم ولو لخمس دقائق، وشارك ما تتعلّمه مع الآخرين."; size=14; visible=post1Open; .end/view
+        @view.Button=p1btn label="اقرأ المزيد"; onTap=toggle1(); .end/view
+    .end/view
+
+    @view.Card=post2
+        padding=16;
+        @view.Text=p2title text="جولة سريعة في محرّك indsin"; size=18; .end/view
+        @view.Text=p2meta text="18 سبتمبر · 6 دقائق قراءة"; size=12; .end/view
+        @view.Text=p2excerpt text="كيف يحوّل indsin وصف @view.* إلى شاشة فعلية عبر القياس والرسم..."; size=14; .end/view
+        @view.Text=p2full text="المحرّك يبني شجرة عناصر مقاسة (Fabric) من مصدر @view/@element/@loop، ثم ينتج عمليات رسم (paint ops) يرسمها كل مضيف (أندرويد/سطح المكتب/CLI) بنفس المسار تماماً."; size=14; visible=post2Open; .end/view
+        @view.Button=p2btn label="اقرأ المزيد"; onTap=toggle2(); .end/view
+    .end/view
+
+    @view.Card=post3
+        padding=16;
+        @view.Text=p3title text="5 نصائح لكتابة كود Rin أنظف"; size=18; .end/view
+        @view.Text=p3meta text="22 سبتمبر · 3 دقائق قراءة"; size=12; .end/view
+        @view.Text=p3excerpt text="من تسمية المتغيرات إلى تقسيم الدوال — عادات صغيرة بفرق كبير..."; size=14; .end/view
+        @view.Text=p3full text="سمِّ الدوال بأفعال والمتغيرات بأسماء واضحة، اجعل كل دالة تفعل شيئاً واحداً، واستخدم warp فقط لما يحتاج فعلاً إعادة رسم."; size=14; visible=post3Open; .end/view
+        @view.Button=p3btn label="اقرأ المزيد"; onTap=toggle3(); .end/view
+    .end/view
+.end/view

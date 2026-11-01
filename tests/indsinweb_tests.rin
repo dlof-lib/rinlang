@@ -1,0 +1,377 @@
+// indsinweb_tests.rin — اختبارات مكتبة lib/indsinweb.og.rin
+//   rin tests/indsinweb_tests.rin
+@import "lib/indsinweb.og.rin";
+
+let __pass = 0;
+let __fail = 0;
+fun eq(name, got, want) {
+    if (got == want) { __pass = __pass + 1; }
+    else { __fail = __fail + 1; print("FAIL " + name + "\n   got : " + toString(got) + "\n   want: " + toString(want)); }
+}
+
+// ---- ترميز
+eq("escape", iwEscape("<a href=\"x\">&'"), "&lt;a href=&quot;x&quot;&gt;&amp;&#39;");
+eq("encode space", iwUrlEncode("a b&c"), "a%20b%26c");
+eq("encode arabic", iwUrlEncode("عر"), "%D8%B9%D8%B1");
+eq("decode arabic", iwUrlDecode("%D8%B9%D8%B1"), "عر");
+eq("decode plus", iwUrlDecodeEx("a+b%21", true), "a b!");
+eq("decode bad pct", iwUrlDecode("100%"), "100%");
+eq("roundtrip", iwUrlDecode(iwUrlEncode("مرحبا world/?=")), "مرحبا world/?=");
+
+// ---- تحليل
+let p = iwParseUrl("HTTPS://User@Example.COM:8443/a/b?x=1&y=2#top");
+eq("p.scheme", p["scheme"], "https");
+eq("p.host", p["host"], "example.com");
+eq("p.port", p["port"], "8443");
+eq("p.path", p["path"], "/a/b");
+eq("p.query", p["query"], "x=1&y=2");
+eq("p.frag", p["fragment"], "top");
+eq("p.userinfo", p["userinfo"], "User");
+eq("parse empty", iwParseUrl("")["ok"], false);
+eq("parse mailto", iwParseUrl("mailto:a@b.co")["scheme"], "mailto");
+eq("parse badport", iwParseUrl("https://x.com:99999x/")["ok"], false);
+eq("origin", iwOrigin("https://Example.com:443/x"), "https://example.com");
+eq("origin port", iwOrigin("http://a.com:8080/x"), "http://a.com:8080");
+eq("origin mailto", iwOrigin("mailto:a@b.co"), "");
+
+eq("norm bare", iwNormalize("example.com/path"), "https://example.com/path");
+eq("norm host only", iwNormalize("Example.com"), "https://example.com/");
+eq("norm default port", iwNormalize("http://a.com:80/x"), "http://a.com/x");
+eq("norm proto-rel", iwNormalize("//a.com/x"), "https://a.com/x");
+eq("norm junk", iwNormalize("not a url"), "");
+eq("norm localhost", iwNormalize("localhost:8080/x"), "https://localhost:8080/x");
+
+eq("join rel", iwJoin("https://a.com/x/y/z.html", "../w.html"), "https://a.com/x/w.html");
+eq("join abs", iwJoin("https://a.com/x/y", "/q?a=1"), "https://a.com/q?a=1");
+eq("join same dir", iwJoin("https://a.com/x/y", "z"), "https://a.com/x/z");
+eq("join full", iwJoin("https://a.com/x", "http://b.com/"), "http://b.com/");
+eq("join proto", iwJoin("https://a.com/x", "//b.com/y"), "https://b.com/y");
+eq("join query", iwJoin("https://a.com/x?old=1", "?n=2"), "https://a.com/x?n=2");
+eq("join frag", iwJoin("https://a.com/x?o=1", "#s"), "https://a.com/x?o=1#s");
+eq("display", iwDisplay("https://www.example.com/a/"), "example.com/a/");
+eq("shorten", iwShorten("abcdefghij", 5), "abcd…");
+
+// ---- أمان
+eq("safe https", iwIsSafe("https://a.com"), true);
+eq("safe js", iwIsSafe("javascript:alert(1)"), false);
+eq("safe JS case", iwIsSafe("JaVaScRiPt:alert(1)"), false);
+eq("safe js ctrl", iwIsSafe("java\nscript:alert(1)"), false);
+eq("safe data", iwIsSafe("data:text/html,<script>"), false);
+eq("safe file", iwIsSafe("file:///etc/passwd"), false);
+eq("safe userinfo", iwIsSafe("https://google.com@evil.com/"), false);
+eq("safe nohost", iwIsSafe("https:///x"), false);
+eq("safe rel", iwIsSafe("/x/y"), false);
+eq("https only", iwIsHttps("http://a.com"), false);
+eq("ex mailto", iwIsSafeEx("mailto:a@b.co", ["mailto"], false), true);
+eq("host allow", iwHostAllowed("https://www.youtube.com/x", ["youtube.com"]), true);
+eq("host allow evil", iwHostAllowed("https://notyoutube.com/x", ["youtube.com"]), false);
+eq("host allow wildcard", iwHostAllowed("https://a.b.com", ["*.b.com"]), true);
+eq("host wildcard root", iwHostAllowed("https://b.com", ["*.b.com"]), false);
+eq("same origin", iwSameOrigin("https://a.com/x", "https://a.com:443/y"), true);
+eq("diff origin", iwSameOrigin("https://a.com/x", "http://a.com/y"), false);
+
+let dirty = "<p onclick=\"x()\">hi<script>alert(1)</script><a href=\"javascript:bad()\">l</a><iframe src=x></iframe><img src=a onerror=z()></p>";
+let clean = iwSanitizeHtml(dirty);
+eq("san no script", contains(lower(clean), "<script"), false);
+eq("san no onclick", contains(lower(clean), "onclick"), false);
+eq("san no onerror", contains(lower(clean), "onerror"), false);
+eq("san no javascript", contains(lower(clean), "javascript:"), false);
+eq("san no iframe", contains(lower(clean), "<iframe"), false);
+eq("san keeps text", contains(clean, "hi"), true);
+
+// ---- استعلام
+eq("query", iwQuery({"q": "a b", "n": 2, "e": ""}), "q=a%20b&n=2");
+let pq = iwParseQuery("?a=1&b=x%20y&c&d=%D8%B9");
+eq("pq a", pq["a"], "1");
+eq("pq b", pq["b"], "x y");
+eq("pq c", pq["c"], "");
+eq("pq d", pq["d"], "ع");
+eq("withParams", iwWithParams("https://a.com/p?x=1#f", {"y": "2", "x": "9"}), "https://a.com/p?x=9&y=2#f");
+eq("getParam", iwGetParam("https://a.com/?t=5", "t", "0"), "5");
+eq("getParam default", iwGetParam("https://a.com/", "t", "0"), "0");
+eq("removeParam", iwRemoveParam("https://a.com/?x=1&y=2", "x"), "https://a.com/?y=2");
+
+// ---- روابط
+eq("kind web", iwLinkKind("https://a.com"), "web");
+eq("kind mail", iwLinkKind("mailto:a@b.co"), "mail");
+eq("kind tel", iwLinkKind("tel:+961"), "tel");
+eq("kind wa", iwLinkKind("https://wa.me/961"), "whatsapp");
+eq("kind tg", iwLinkKind("https://t.me/abcde"), "telegram");
+eq("kind rin", iwLinkKind("https://dlof-lib.github.io/rinlang/@a/b.og.rin"), "rin");
+eq("kind script", iwLinkKind("javascript:1"), "script");
+eq("kind anchor", iwLinkKind("#top"), "anchor");
+eq("kind rel", iwLinkKind("a/b"), "relative");
+eq("kind none", iwLinkKind("  "), "none");
+eq("kind market", iwLinkKind("market://details?id=a.b"), "market");
+
+eq("mailto", iwMailto("a@b.co", {"subject": "Hi there", "body": "x&y"}), "mailto:a@b.co?subject=Hi%20there&body=x%26y");
+eq("mailto bad", iwMailto("nope", {}), "");
+eq("tel", iwTel("+961 (3) 123-456"), "tel:+9613123456");
+eq("tel bad", iwTel("12"), "");
+eq("sms", iwSms("0123456789", "hi you"), "sms:0123456789?body=hi%20you");
+eq("geo", iwGeo(33.89, 35.5, "Beirut"), "geo:33.89,35.5?q=33.89,35.5(Beirut)");
+eq("geo bad", iwGeo(100, 0, ""), "");
+eq("maps text", iwMapsUrl("بيروت"), "https://www.google.com/maps/search/?api=1&query=%D8%A8%D9%8A%D8%B1%D9%88%D8%AA");
+eq("maps coords", iwMapsUrl([33.5, 35.5]), "https://www.google.com/maps/search/?api=1&query=33.5%2C35.5");
+eq("whatsapp", iwWhatsApp("+961 3 123 456", "مرحبا"), "https://wa.me/9613123456?text=%D9%85%D8%B1%D8%AD%D8%A8%D8%A7");
+eq("telegram", iwTelegram("@rinlang"), "https://t.me/rinlang");
+eq("telegram bad", iwTelegram("a"), "");
+eq("playstore", iwPlayStore("com.dlof.rinlang"), "market://details?id=com.dlof.rinlang");
+eq("playstore bad", iwPlayStore("bad pkg"), "");
+eq("intent", iwAndroidIntent("a.com", "/x", "https", "com.a.b", "https://a.com/x"), "intent://a.com/x#Intent;scheme=https;package=com.a.b;S.browser_fallback_url=https%3A%2F%2Fa.com%2Fx;end");
+eq("deeplink", iwDeepLink("myapp", "open", "item/5", {"ref": "a b"}), "myapp://open/item/5?ref=a%20b");
+
+// ---- Rin
+eq("rin profile", iwRinProfile("@majd"), "https://dlof-lib.github.io/rinlang/@majd");
+eq("rin lib", iwRinLibrary("majd", "my lib"), "https://dlof-lib.github.io/rinlang/@majd/my-lib.og.rin");
+eq("rin lib once", iwRinLibrary("majd", "math.og.rin"), "https://dlof-lib.github.io/rinlang/@majd/math.og.rin");
+let rl = iwParseRinLink("https://dlof-lib.github.io/rinlang/@majd/math.og.rin");
+eq("rin parse ok", rl["ok"], true);
+eq("rin parse user", rl["user"], "majd");
+eq("rin parse lib", rl["library"], "math");
+let rl2 = iwParseRinLink("https://dlof-lib.github.io/rinlang/?@majd/math.og.rin");
+eq("rin legacy", rl2["library"], "math");
+eq("rin profile parse", iwParseRinLink("https://dlof-lib.github.io/rinlang/@majd")["library"], "");
+eq("rin other", iwParseRinLink("https://example.com/")["ok"], false);
+
+// ---- فيديو
+let yid = "dQw4w9WgXcQ";
+eq("yt watch", iwYoutubeId("https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=1"), yid);
+eq("yt short", iwYoutubeId("https://youtu.be/dQw4w9WgXcQ?t=5"), yid);
+eq("yt embed", iwYoutubeId("https://www.youtube.com/embed/dQw4w9WgXcQ"), yid);
+eq("yt shorts", iwYoutubeId("https://youtube.com/shorts/dQw4w9WgXcQ"), yid);
+eq("yt mobile", iwYoutubeId("https://m.youtube.com/watch?v=dQw4w9WgXcQ"), yid);
+eq("yt fake host", iwYoutubeId("https://evilyoutube.com/watch?v=dQw4w9WgXcQ"), "");
+eq("yt bad id", iwYoutubeId("https://youtu.be/short"), "");
+eq("yt embed url", iwYoutubeEmbedUrl("https://youtu.be/dQw4w9WgXcQ", {"start": 30, "autoplay": true}), "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?rel=0&playsinline=1&start=30&autoplay=1");
+eq("yt thumb", iwYoutubeThumb("https://youtu.be/dQw4w9WgXcQ"), "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg");
+eq("vimeo", iwVimeoEmbedUrl("https://vimeo.com/123456789"), "https://player.vimeo.com/video/123456789");
+eq("embedUrl generic", iwEmbedUrl("https://a.com/x"), "https://a.com/x");
+eq("embedUrl js", iwEmbedUrl("javascript:alert(1)"), "");
+
+// ---- HTML
+eq("link html", iwLinkHtml("A<b>", "https://a.com/?x=\"1\""), "<a class=\"iw-link\" href=\"https://a.com/?x=&quot;1&quot;\" target=\"_blank\" rel=\"noopener noreferrer\">A&lt;b&gt;</a>");
+eq("link blocked", iwLinkHtml("x", "javascript:alert(1)"), "<span class=\"iw-link iw-link-blocked\">x</span>");
+eq("link mail", contains(iwLinkHtml("m", "mailto:a@b.co"), "href=\"mailto:a@b.co\""), true);
+eq("link mail no target", contains(iwLinkHtml("m", "mailto:a@b.co"), "target"), false);
+eq("iframe bad", iwIframeHtml("javascript:1", {}), "");
+eq("iframe ok", contains(iwIframeHtml("https://a.com/e", {"ratio": "4:3"}), "padding-top:75%"), true);
+eq("iframe 16:9", contains(iwIframeHtml("https://a.com/e", {}), "padding-top:56.25%"), true);
+eq("embed html", contains(iwEmbedHtml("https://youtu.be/dQw4w9WgXcQ", {}), "youtube-nocookie.com/embed/dQw4w9WgXcQ"), true);
+eq("tap button", contains(iwTapButton("OK", {}), "RinPreview.tap()"), true);
+eq("fragment", startsWith(iwFragment("<p>x</p>", {"dir": "rtl"}), "<div dir=\"rtl\""), true);
+eq("page csp", contains(iwPage("<p>x</p>", {"title": "T<"}), "script-src 'none'"), true);
+eq("page title esc", contains(iwPage("", {"title": "T<"}), "<title>T&lt;</title>"), true);
+
+// ---- WebView
+eq("ratio 16:9", round(iwRatio("16:9") * 1000), 1778);
+eq("ratio slash", iwRatio("4/2"), 2);
+eq("ratio num", iwRatio(1.5), 1.5);
+eq("ratio bad", iwRatio("abc"), 0);
+eq("height", iwHeightForRatio(320, "16:9"), 180);
+
+let w1 = iwWebViewAttrs("example.com/page", {"ratio": "16:9"});
+eq("wv url ok", w1["ok"], true);
+eq("wv url mode", w1["mode"], "url");
+eq("wv url", w1["attrs"]["url"], "https://example.com/page");
+eq("wv ratio", w1["attrs"]["ratio"], "16:9");
+let w2 = iwWebViewAttrs("javascript:alert(1)", {});
+eq("wv js blocked", w2["ok"], false);
+eq("wv js has html", has(w2["attrs"], "html"), true);
+eq("wv js no url", has(w2["attrs"], "url"), false);
+let w3 = iwWebViewAttrs("https://evil.com", {"allow": ["good.com"]});
+eq("wv allow blocked", w3["mode"], "blocked");
+let w4 = iwWebViewAttrs("<p onclick=\"x()\">hi</p><script>1</script>", {});
+eq("wv html mode", w4["mode"], "html");
+eq("wv html clean", contains(w4["attrs"]["html"], "script"), false);
+let w5 = iwWebViewAttrs("https://youtu.be/dQw4w9WgXcQ", {"embed": true});
+eq("wv embed", startsWith(w5["attrs"]["url"], "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ"), true);
+eq("wv empty", iwWebViewAttrs("  ", {})["ok"], false);
+
+eq("rin string", iwRinString("a\"b\\c\nd"), "\"a\\\"b\\\\c\\nd\"");
+eq("wv source", iwWebViewSource("Site", "https://a.com/x", {"ratio": "16:9", "height": 240}),
+   "@view.WebView=Site\n    url=\"https://a.com/x\";\n    ratio=\"16:9\";\n    height=240;\n.end/view\n");
+eq("wv source element", startsWith(iwWebViewSource("S", "https://a.com", {"dialect": "element"}), "@element.WebView=S\n"), true);
+eq("wv source bad name", iwWebViewSource("bad name", "https://a.com", {}), "");
+eq("yt webview", contains(iwYoutubeWebView("V", "https://youtu.be/dQw4w9WgXcQ", {}), "ratio=\"16:9\""), true);
+eq("yt webview bad", iwYoutubeWebView("V", "https://a.com", {}), "");
+
+// ---- تنقّل
+let nav = iwNavNew();
+eq("nav empty", iwNavCurrent(nav), "");
+iwNavVisit(nav, "a.com");
+iwNavVisit(nav, "b.com");
+iwNavVisit(nav, "b.com");
+eq("nav cur", iwNavCurrent(nav), "https://b.com/");
+eq("nav len", len(nav["stack"]), 2);
+eq("nav back", iwNavBack(nav), "https://a.com/");
+eq("nav canBack", iwCanBack(nav), false);
+eq("nav canFwd", iwCanForward(nav), true);
+iwNavVisit(nav, "c.com");
+eq("nav trims fwd", len(nav["stack"]), 2);
+eq("nav unsafe", iwNavVisit(nav, "javascript:1"), false);
+eq("nav fwd none", iwNavForward(nav), "https://c.com/");
+
+eq("info", iwInfo()["name"], "indsinweb");
+// ---- v1.1: تنظيف/كشف
+eq("strip tracking", iwStripTracking("https://a.com/p?utm_source=x&id=5&fbclid=z#h"), "https://a.com/p?id=5#h");
+eq("strip none", iwStripTracking("https://a.com/p"), "https://a.com/p");
+eq("ipv4", iwIsIpv4("192.168.1.1"), true);
+eq("ipv4 bad", iwIsIpv4("999.1.1.1"), false);
+eq("private localhost", iwIsPrivateHost("localhost"), true);
+eq("private 10", iwIsPrivateHost("10.0.0.5"), true);
+eq("private 172.20", iwIsPrivateHost("172.20.1.1"), true);
+eq("public 172.32", iwIsPrivateHost("172.32.1.1"), false);
+eq("private 192.168", iwIsPrivateHost("192.168.0.1"), true);
+eq("private meta", iwIsPrivateHost("169.254.169.254"), true);
+eq("private v6", iwIsPrivateHost("[::1]"), true);
+eq("private .local", iwIsPrivateHost("printer.local"), true);
+eq("public host", iwIsPrivateHost("example.com"), false);
+eq("public web", iwIsPublicWeb("https://example.com/"), true);
+eq("public web local", iwIsPublicWeb("http://127.0.0.1:8080/"), false);
+eq("filename", iwFileName("https://a.com/d/My%20File.PDF?x=1"), "My File.PDF");
+eq("ext", iwExtension("https://a.com/d/My%20File.PDF?x=1"), "pdf");
+eq("ext none", iwExtension("https://a.com/d/"), "");
+eq("media image", iwMediaKind("https://a.com/x.PNG"), "image");
+eq("media video", iwMediaKind("https://a.com/x.mp4"), "video");
+eq("media yt", iwMediaKind("https://youtu.be/dQw4w9WgXcQ"), "video");
+eq("media pdf", iwMediaKind("https://a.com/x.pdf"), "pdf");
+eq("media page", iwMediaKind("https://a.com/x"), "page");
+
+// ---- شريط العنوان
+eq("omni url", iwResolveInput("example.com/a", {})["url"], "https://example.com/a");
+eq("omni search", iwResolveInput("how to rin", {})["kind"], "search");
+eq("omni search url", iwResolveInput("rin lang", {"engine": "google"})["url"], "https://www.google.com/search?q=rin%20lang");
+eq("omni arabic", iwResolveInput("مرحبا", {})["kind"], "search");
+eq("omni js", iwResolveInput("javascript:alert(1)", {})["kind"], "blocked");
+eq("omni empty", iwResolveInput("  ", {})["kind"], "empty");
+eq("omni localhost", iwResolveInput("localhost:3000", {})["url"], "https://localhost:3000/");
+eq("search wiki", iwSearchUrl("wikipedia", "Rin"), "https://wikipedia.org/w/index.php?search=Rin");
+
+// ---- مشاركة
+eq("share x", iwShareUrl("x", "https://a.com/p", "hi there"), "https://twitter.com/intent/tweet?url=https%3A%2F%2Fa.com%2Fp&text=hi%20there");
+eq("share wa", iwShareUrl("whatsapp", "https://a.com", "hi"), "https://wa.me/?text=hi%20https%3A%2F%2Fa.com");
+eq("share bad", iwShareUrl("x", "javascript:1", "hi"), "");
+eq("share unknown", iwShareUrl("myspace", "https://a.com", ""), "");
+eq("share email", startsWith(iwShareUrl("email", "https://a.com", "S"), "mailto:?subject=S&body="), true);
+
+// ---- مزوّدون
+eq("spotify", iwSpotifyEmbedUrl("https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC?si=x"), "https://open.spotify.com/embed/track/4uLU6hMCjMI75M1A2tKUQC");
+eq("spotify bad", iwSpotifyEmbedUrl("https://open.spotify.com/user/abc"), "");
+eq("dailymotion", iwDailymotionEmbedUrl("https://www.dailymotion.com/video/x8abcd1"), "https://www.dailymotion.com/embed/video/x8abcd1");
+eq("dai.ly", iwDailymotionEmbedUrl("https://dai.ly/x8abcd1"), "https://www.dailymotion.com/embed/video/x8abcd1");
+eq("drive", iwDriveEmbedUrl("https://drive.google.com/file/d/1AbCdEfGhIjKlMn/view?usp=sharing"), "https://drive.google.com/file/d/1AbCdEfGhIjKlMn/preview");
+eq("maps embed", iwMapsEmbedUrl([33.5, 35.5]), "https://www.google.com/maps?q=33.5,35.5&output=embed");
+eq("embeddable", iwIsEmbeddable("https://youtu.be/dQw4w9WgXcQ"), true);
+eq("not embeddable", iwIsEmbeddable("https://a.com"), false);
+eq("embedUrl spotify", startsWith(iwEmbedUrl("https://open.spotify.com/album/4uLU6hMCjMI75M1A2tKUQC"), "https://open.spotify.com/embed/album/"), true);
+
+// ---- توجيه
+let r1 = iwRoute("myapp://open/item/42?ref=a", ["open/user/:id", "open/item/:id"]);
+eq("route matched", r1["matched"], true);
+eq("route param", r1["params"]["id"], "42");
+eq("route pattern", r1["pattern"], "open/item/:id");
+eq("route query", r1["query"]["ref"], "a");
+let r2 = iwRoute("https://a.com/u/%D8%B9/posts", ["/u/:name/posts"]);
+eq("route path", r2["params"]["name"], "ع");
+eq("route none", iwRoute("https://a.com/zzz", ["/u/:id"])["matched"], false);
+eq("route len", iwRoute("https://a.com/u/1/x", ["/u/:id"])["matched"], false);
+
+// ---- نصوص
+let urls = iwExtractUrls("See https://a.com/x, and (http://b.org/y?z=1). Done.");
+eq("extract n", len(urls), 2);
+eq("extract 1", urls[0], "https://a.com/x");
+eq("extract 2", urls[1], "http://b.org/y?z=1");
+eq("linkify", iwLinkify("a<b https://a.com/x.\nend", {}), "a&lt;b <a class=\"iw-link\" href=\"https://a.com/x\" target=\"_blank\" rel=\"noopener noreferrer\">https://a.com/x</a>.<br>end");
+let au = iwAuditHtml("<a href=\"https://a.com\">1</a><a HREF='javascript:x()'>2</a><a href=\"mailto:a@b.co\">3</a>");
+eq("audit n", len(au), 3);
+eq("audit safe1", au[0]["safe"], true);
+eq("audit js", au[1]["safe"], false);
+eq("audit kind", au[1]["kind"], "script");
+eq("audit mail", au[2]["safe"], true);
+
+// ---- خطة الفتح
+eq("plan web", iwOpenPlan("https://a.com", {})["action"], "webview");
+eq("plan local", iwOpenPlan("http://localhost:8080", {})["action"], "blocked");
+eq("plan local ok", iwOpenPlan("http://localhost:8080", {"allowPrivate": true})["action"], "webview");
+eq("plan mail", iwOpenPlan("mailto:a@b.co", {})["action"], "external");
+eq("plan wa", iwOpenPlan("https://wa.me/961", {})["action"], "external");
+eq("plan intent", iwOpenPlan("intent://x#Intent;end", {})["action"], "blocked");
+eq("plan intent ok", iwOpenPlan("intent://x#Intent;end", {"allowIntent": true})["action"], "external");
+eq("plan js", iwOpenPlan("javascript:1", {})["action"], "blocked");
+eq("plan allow", iwOpenPlan("https://evil.com", {"allow": ["good.com"]})["reason"], "host not allowed");
+eq("plan rel", iwOpenPlan("/x", {})["action"], "blocked");
+
+// ---- صفحات
+eq("card", contains(iwCardHtml("T<", "d", "https://a.com/x", "https://a.com/i.png"), "<img src=\"https://a.com/i.png\""), true);
+eq("card escape", contains(iwCardHtml("T<", "d", "https://a.com/x", ""), "T&lt;"), true);
+eq("card bad img", contains(iwCardHtml("T", "d", "https://a.com/x", "javascript:1"), "<img"), false);
+eq("card bad url", contains(iwCardHtml("T", "d", "javascript:1", ""), "href"), false);
+eq("error html", contains(iwErrorHtml("Oops", "No net", {"retry": "Retry"}), "RinPreview.tap()"), true);
+eq("loading html", contains(iwLoadingHtml("Loading", {"theme": "dark"}), "#181920"), true);
+eq("theme dark", contains(iwFragment("x", {"theme": "dark"}), "background:#181920"), true);
+let wp = iwWebViewAttrs("http://192.168.1.5/admin", {"blockPrivate": true});
+eq("wv private", wp["mode"], "blocked");
+eq("wv strip", iwWebViewAttrs("https://a.com/?utm_source=x&k=1", {"stripTracking": true})["attrs"]["url"], "https://a.com/?k=1");
+
+// ---- مفضّلة
+let bm = iwBookmarksNew();
+eq("bm add", iwBookmarkAdd(bm, "a.com", "Site A"), true);
+eq("bm add2", iwBookmarkAdd(bm, "https://b.com/Docs", ""), true);
+eq("bm bad", iwBookmarkAdd(bm, "javascript:1", "x"), false);
+eq("bm update", iwBookmarkAdd(bm, "https://a.com/", "Renamed"), true);
+eq("bm count", len(bm["items"]), 2);
+eq("bm title default", bm["items"][1]["title"], "b.com/Docs");
+eq("bm has", iwBookmarkHas(bm, "a.com"), true);
+eq("bm list q", len(iwBookmarkList(bm, "RENAMED")), 1);
+eq("bm list all", len(iwBookmarkList(bm, "")), 2);
+let saved = iwBookmarksSave(bm);
+let bm2 = iwBookmarksLoad(saved);
+eq("bm roundtrip", len(bm2["items"]), 2);
+eq("bm load evil", len(iwBookmarksLoad("[{\"url\": \"javascript:1\"}, 5, {\"url\": \"https://ok.com\"}]")["items"]), 1);
+eq("bm remove", iwBookmarkRemove(bm, "a.com"), true);
+eq("bm remove none", iwBookmarkRemove(bm, "a.com"), false);
+eq("bm after remove", len(bm["items"]), 1);
+eq("info ver", iwInfo()["version"], "1.0.0");
+
+// ---- شاشة الربط
+eq("screen kind video", iwScreenKind("https://youtu.be/dQw4w9WgXcQ"), "video");
+eq("screen kind web", iwScreenKind("https://a.com/x"), "web");
+eq("screen kind image", iwScreenKind("https://a.com/x.jpg"), "image");
+eq("screen kind spotify", iwScreenKind("https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC"), "audio");
+eq("screen kind drive", iwScreenKind("https://drive.google.com/file/d/1AbCdEfGhIjKlMn/view"), "document");
+eq("screen kind mail", iwScreenKind("mailto:a@b.co"), "mail");
+eq("screen kind rin", iwScreenKind("https://dlof-lib.github.io/rinlang/@majd/math.og.rin"), "rin");
+let sv = iwLinkScreen("https://youtu.be/dQw4w9WgXcQ", {});
+eq("screen video thumb", contains(sv, "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg"), true);
+eq("screen video play href", contains(sv, "href=\"https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ"), true);
+eq("screen video label", contains(sv, "Video") and contains(sv, "Play"), true);
+eq("screen video embed mode", contains(iwLinkScreen("https://youtu.be/dQw4w9WgXcQ", {"mode": "embed"}), "<iframe"), true);
+let sw = iwLinkScreen("https://example.com/a?b=1", {"lang": "ar", "theme": "light"});
+eq("screen web ar", contains(sw, "صفحة ويب") and contains(sw, "فتح"), true);
+eq("screen web secure", contains(sw, "🔒"), true);
+eq("screen web rtl", contains(sw, "dir=\"rtl\""), true);
+eq("screen http warn", contains(iwLinkScreen("http://example.com", {}), "⚠️"), true);
+eq("screen image", contains(iwLinkScreen("https://a.com/x.png", {}), "<img src=\"https://a.com/x.png\""), true);
+eq("screen mail", contains(iwLinkScreen("mailto:me@b.co?subject=x", {}), "me@b.co") and contains(iwLinkScreen("mailto:me@b.co", {}), "Send email"), true);
+eq("screen tel", contains(iwLinkScreen("tel:+9613123456", {}), "+9613123456") and contains(iwLinkScreen("tel:+9613123456", {}), "Call"), true);
+eq("screen pdf", contains(iwLinkScreen("https://a.com/My%20Doc.pdf", {}), "My Doc.pdf") and contains(iwLinkScreen("https://a.com/d.pdf", {}), "Download"), true);
+eq("screen rin", contains(iwLinkScreen("https://dlof-lib.github.io/rinlang/@majd/math.og.rin", {}), "@majd / math"), true);
+eq("screen blocked", contains(iwLinkScreen("javascript:alert(1)", {}), "Link blocked"), true);
+eq("screen blocked no href", contains(iwLinkScreen("javascript:alert(1)", {}), "href"), false);
+eq("screen blocked private", contains(iwLinkScreen("http://127.0.0.1/", {}), "Link blocked"), true);
+eq("screen xss title", contains(iwLinkScreen("https://a.com/", {"title": "<script>x</script>"}), "<script>"), false);
+eq("screen no js", contains(iwLinkScreen("https://a.com/", {}), "onclick"), false);
+let sa = iwLinkScreenAttrs("https://youtu.be/dQw4w9WgXcQ", {"height": 320});
+eq("screen attrs ok", sa["ok"], true);
+eq("screen attrs kind", sa["kind"], "video");
+eq("screen attrs height", sa["attrs"]["height"], 320);
+eq("screen attrs blocked", iwLinkScreenAttrs("javascript:1", {})["ok"], false);
+eq("screen source", startsWith(iwLinkScreenSource("Screen", "https://a.com", {"height": 300}), "@view.WebView=Screen\n    html=\""), true);
+eq("screen source end", endsWith(iwLinkScreenSource("Screen", "https://a.com", {"height": 300}), "    height=300;\n.end/view\n"), true);
+eq("screen source bad name", iwLinkScreenSource("a b", "https://a.com", {}), "");
+
+
+
+print("indsinweb: " + toString(__pass) + " passed, " + toString(__fail) + " failed");
+if (__fail > 0) { fail("indsinweb tests failed"); }

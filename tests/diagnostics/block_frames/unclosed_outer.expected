@@ -1,0 +1,13 @@
+error[E0012]: `@Volume` opened with `{` at line 1 was never closed
+  --> unclosed_outer.rin:5:1
+
+ 5 | 
+   | ^
+
+reason:
+  the file ended while this block was still open
+
+help:
+  add a closing `}` for the `@Volume` block that starts at line 1
+
+1 error emitted

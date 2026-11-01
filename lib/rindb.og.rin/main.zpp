@@ -1,0 +1,21 @@
+// rindb — الجزء الأساسي. مكتبة قاعدة بيانات بلغة Rin الصرفة (لا دوال أصلية جديدة).
+//
+//   @import "rindb";
+//   let db = rdb_open("shop", "shop.rdb");            // أو rdb_open("shop", nil) في الذاكرة
+//   rdb_create_table(db, "users", {"schema": {"name": "string"}, "indexes": ["name"]});
+//   rdb_put(db, "users", "u1", {"name": "Sara"});
+//   print rdb_query(db, "users&name:eq(Sara)");
+//
+// الهيكل: القاعدة = مجموعة منطقية (Containers.Group RinDB تُسجَّل فيها القواعد المفتوحة)،
+// والجدول = حاوية container.doc حقيقية تُنشأ بـ spawn وقت التشغيل باسم «قاعدة__جدول».
+
+@Containers.Group=RinDB
+    @container=catalog
+        let version = "1.0.0";
+        let openCount = 0;
+    .end/container
+.end/Containers.Group
+
+let RDB_VERSION = "1.0.0";
+let RDB_FORMAT = 1;
+let RDB = { dbs: {} };

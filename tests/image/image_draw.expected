@@ -1,0 +1,31 @@
+{"width": 8, "height": 6}
+#102030
+#ff0000
+nil
+#00ff00 #00ff00 #102030
+#ffffff
+#0000ff
+#808080
+#00000000
+true {"width": 8, "height": 6} {"width": 8, "height": 6}
+#ff0000 #ffffff #00ff00
+true
+png
+#00000000
+{"width": 16, "height": 12} #960e15
+{"width": 3, "height": 2} #00ff00
+#ff00ff
+true
+{"width": 12, "height": 7} {"width": 24, "height": 32}
+{"width": 12, "height": 7}
+ +   +   +                    
+ @   @  ++                    
+ @+++@   @                    
+ @   @  +@+                   
+                              
+{"width": 16, "height": 21}
+❌ [ERROR] e1
+true
+1
+png
+true

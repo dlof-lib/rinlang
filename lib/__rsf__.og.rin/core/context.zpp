@@ -1,0 +1,45 @@
+// core/context.zpp — إعدادات مشتقّة من RINTWIST.
+//   limit  : سقف خطوات التتبّع (أقل على android / wasm)
+//   depth  : أقصى عمق لبناء مفتاح قيمة متداخلة (يحمي من القيم الذاتية المرجع)
+//   strict : true ⇒ rsf_iterate/rsf_walk يرمون خطأً عند اكتشاف دورة بدل إرجاع التقرير
+//   trace  : يتفعّل تلقائياً عند RINTWIST.app.debug
+fun rsf_defaultLimit() {
+    let mode = rintwist.get("app.mode", "cli");
+    if (mode == "android" or mode == "wasm") { return 200000; }
+    return 5000000;
+}
+let RSF_CFG = {limit: rsf_defaultLimit(), depth: 64, strict: false, trace: rintwist.get("app.debug", false) == true};
+
+fun rsf_tag() {
+    if (rintwist.get("lib.active", false)) { return rintwist.get("lib.name", "rsf"); }
+    return rintwist.get("file.stem", "rsf");
+}
+
+export fun rsf_config(opts) {
+    if (opts == nil) { return rsf_settings(); }
+    if (type(opts) != "map") { throw "__rsf__: rsf_config expects a map such as {limit: 1000, strict: true}"; }
+    for (let k in keys(opts)) {
+        if (!has(RSF_CFG, k)) { throw "__rsf__: unknown setting '" + k + "' (limit, depth, strict, trace)"; }
+        if ((k == "limit" or k == "depth") and (type(opts[k]) != "number" or opts[k] < 1)) { throw "__rsf__: '" + k + "' must be a positive number"; }
+        RSF_CFG[k] = opts[k];
+    }
+    return rsf_settings();
+}
+export fun rsf_settings() {
+    return {limit: RSF_CFG["limit"], depth: RSF_CFG["depth"], strict: RSF_CFG["strict"], trace: RSF_CFG["trace"], tag: rsf_tag()};
+}
+fun rsf_trace(msg) {
+    if (RSF_CFG["trace"]) { print "[" + rsf_tag() + "] __rsf__: " + msg; }
+}
+fun rsf_checkFn(fn, who) {
+    if (!isFunction(fn)) { throw "__rsf__: " + who + " expects a function, found " + type(fn); }
+}
+fun rsf_arr(x, who) {
+    if (type(x) == "array") { return slice(x, 0, len(x)); }
+    if (type(x) == "string") {
+        let out = [];
+        for (let ch in x) { push(out, ch); }
+        return out;
+    }
+    throw "__rsf__: " + who + " expects an array or a string, found " + type(x);
+}

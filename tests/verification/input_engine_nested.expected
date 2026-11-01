@@ -1,0 +1,8 @@
+U> name: [Ali] U> home.city: [Riyadh] U> home.zip: [11564] V> name: [Ali] V> home.city: [Riyadh] V> home.zip: [11564] C> title: [t] C> geo.lat: [0] C> geo.lng: [0] W> name: [Ali] W> home.city: [Riyadh] W> home.zip: [11564] [أدخل رقماً صالحاً] W> home.zip: [11564] [أدخل رقماً صالحاً] W> home.zip: [11564] [أدخل رقماً صالحاً] W> home.zip: [11564] [أدخل رقماً صالحاً] W> home.zip: [11564] Omar|Makkah|24231|true
+Sara|Jeddah|21442
+📦 container = Geo
+✅ .end/container (Geo)
+[geo] lat=12.5
+Trip|12.5|34|12.5
+
+true|Ali|Riyadh|11564

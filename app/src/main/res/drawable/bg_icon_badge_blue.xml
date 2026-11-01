@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- شارة مربّعة زرقاء خلف أيقونة الملف في بطاقات شاشة الملفات، لتمييزها بصرياً عن شارة المشاريع البنفسجية -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/status_running" />
+    <corners android:radius="11dp" />
+</shape>

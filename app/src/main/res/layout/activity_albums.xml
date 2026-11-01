@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="vertical" android:background="@color/rin_background">
+
+    <LinearLayout android:layout_width="match_parent" android:layout_height="64dp"
+        android:gravity="center_vertical" android:paddingStart="12dp" android:paddingEnd="12dp"
+        android:background="@color/rin_toolbar">
+        <ImageButton android:id="@+id/btnAlbumBack" android:layout_width="44dp" android:layout_height="44dp"
+            android:background="@drawable/bg_icon_btn" android:src="@android:drawable/ic_menu_revert"
+            android:tint="@color/rin_on_toolbar" android:contentDescription="@string/back" />
+        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+            android:orientation="vertical" android:layout_marginStart="8dp">
+            <TextView android:id="@+id/txtAlbumToolbarTitle" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:textColor="@color/rin_on_toolbar" android:textSize="19sp" android:textStyle="bold" />
+            <TextView android:id="@+id/txtAlbumCount" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:textColor="@color/rin_editor_hint" android:textSize="11sp" />
+        </LinearLayout>
+        <ImageButton android:id="@+id/btnNewAlbum" android:layout_width="46dp" android:layout_height="46dp"
+            android:background="@drawable/bg_album_add" android:src="@android:drawable/ic_input_add"
+            android:tint="@android:color/white" android:contentDescription="@string/album_new" />
+    </LinearLayout>
+
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="مجلداتك الإبداعية" android:textColor="@color/rin_on_toolbar" android:textSize="23sp"
+        android:textStyle="bold" android:layout_marginStart="18dp" android:layout_marginTop="18dp" />
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="اجمع مشاريعك ورتّبها في ألبومات جميلة وسهلة الوصول." android:textColor="@color/rin_editor_hint"
+        android:textSize="12.5sp" android:layout_marginStart="18dp" android:layout_marginEnd="18dp" android:layout_marginTop="5dp" />
+
+    <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
+        <androidx.recyclerview.widget.RecyclerView android:id="@+id/rvAlbums" android:layout_width="match_parent" android:layout_height="match_parent"
+            android:clipToPadding="false" android:padding="10dp" />
+        <LinearLayout android:id="@+id/albumEmptyState" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_gravity="center" android:gravity="center" android:orientation="vertical" android:padding="32dp">
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="✦"
+                android:textSize="42sp" android:textColor="@color/rin_accent" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp"
+                android:text="لا توجد ألبومات بعد" android:textColor="@color/rin_on_toolbar" android:textSize="17sp" android:textStyle="bold" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="5dp"
+                android:text="أنشئ أول ألبوم وابدأ بجمع مشاريعك." android:textColor="@color/rin_editor_hint" android:textSize="12sp" />
+        </LinearLayout>
+    </FrameLayout>
+    <include layout="@layout/bottom_nav_bar" />
+</LinearLayout>

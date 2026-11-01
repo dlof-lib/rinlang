@@ -1,0 +1,75 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Indsin Media — اختيار الوسائط ورفعها — Rin</title>
+<meta name="description" content="توثيق لغة البرمجة Rin"><link rel="icon" href="../assets/brand/icon-32.png">
+<link rel="stylesheet" href="assets/style.css"></head><body>
+<header><button id="mn" aria-label="القائمة">☰</button><a class="logo" href="index.html"><img src="../assets/brand/icon-48.png" alt="" width="26">Rin</a>
+<input id="q" type="search" placeholder="ابحث في التوثيق…" autocomplete="off"><button id="th" aria-label="الوضع">◐</button>
+<a class="gh" href="https://github.com/dlof-lib/rinlang">GitHub</a><div id="res"></div></header>
+<div class="wrap"><nav id="sb"><details ><summary>ابدأ هنا</summary><a href="getting-started.html">البداية</a><a href="syntax.html">القواعد النحوية العامة</a><a href="variables.html">let`، مصفوفات، قواميس، نطاق</a><a href="template-strings.html">النصوص القالبية (متغيّرات داخل النص)</a><a href="input.html">إدخال المستخدم (Input)</a><a href="control-flow.html">الشروط، الحلقات، `goal`/`achieve</a><a href="loops.html">حلقات Rin — Loops v2</a><a href="functions.html">fun`/`return`، التكرار الذاتي</a><a href="enums.html">enum`: قوائم اختيار مغلقة</a></details><details ><summary>اللغة</summary><a href="language-reference.html">المرجع الشامل وخريطة ترابط المفاهيم</a><a href="objects.html">class`/`struct`، `.object()`، `@Object`، `document</a><a href="oop.html">البرمجة الكائنية الموسَّعة (Rin 1.0)</a><a href="containers.html">دليل `@container` / `@element` / `@loop</a><a href="table.html">الجدول (`@table` / `@container.table`) ودوال اللغة عليه</a><a href="set.html">Set`: نوع المجموعة الأساسي</a><a href="pipelines.html">عامل الأنابيب `|&gt;</a><a href="RECKON.html">reckon`: مفهوم حسابي بسطرين</a><a href="let-plus.html">let` المطوَّر</a><a href="living-variables.html">المتغيرات الحيّة (Living Variables)</a><a href="label-define.html">label` و`define` (تسمية وتعريف)</a><a href="block-frames.html">بداية الكتل ونهايتها (Block Frames)</a><a href="compare_ops.html">معاملات المقارنة `/=` و `=/=` و `=/</a><a href="max_min.html">max / min family</a><a href="scope-guarantees.html">ضمانات النطاق: `finally` · `defer` · `catch … when` · `rethrow</a><a href="key_terms_and_builtins.html">Rin KEY_TERMS and Built-in Conditions</a><a href="number_builtins.html">Rin Number Built-ins</a></details><details open><summary>الواجهات (Indsin)</summary><a href="indsin.html">Indsin — Interface Design</a><a href="indsin_rin.html">indsin يعتمد على لغة Rin</a><a href="indsin_expansion.html">Indsin — التوسعة الاحترافية (Design System v2)</a><a href="indsin_object.html">indsin-object — API reference</a><a href="indsin_media.html" class=on>Indsin Media — اختيار الوسائط ورفعها</a><a href="indsin_icons.html">مكتبة أيقونات indsin (متجهية)</a><a href="indsin_tooling.html">indsin tooling — icon, file association, syntax highlighting</a><a href="indsinweb.html">IndsinWeb — مكتبة WebView والروابط لـ indsin</a><a href="RIN_ELEMENTS.html">دليل `@element.*` الكامل</a><a href="events-effects.html">الأحداث والتأثيرات (Events &amp; Effects) — محرك Indsin UI</a><a href="banner.html">Banner: إشعار شريطي</a><a href="simple-style.html">Rin Simple Style</a></details><details ><summary>بيئة التشغيل</summary><a href="runtime.html">وقت تشغيل Rin (Rin Runtime) · المرجع الرسمي</a><a href="standard-library.html">المكتبة القياسية (`lib/*.og.rin`)</a><a href="errors.html">نظام الأخطاء: أكواد، `try`/`catch`/`throw</a><a href="ERROR_SYSTEM.html">نظام التشخيص: البنية الداخلية + جدول الأكواد الكامل</a><a href="storage.html">تخزين دائم</a><a href="http.html">شبكات</a><a href="env.html">ربط Rin بملف `.env</a><a href="terminal.html">الطرفية التفاعلية — `rin terminal</a><a href="vm.html">RinVM — آلة Rin الافتراضية (بايتكود)</a><a href="rinflow.html">RinFlow: طبقة تنفيذ التدفّق المهيكل</a><a href="MAKE_UNIT.html">@make.(name)`: وحدة بسياسة قدرات صريحة</a><a href="MAKE_MEDIA.html">فيديو · صوت · API · إزالة الخلفية · قراءة النص من الصور</a><a href="TIME.html">مفهوم `time`: الزمن كقيمة من الدرجة الأولى</a><a href="native-additions.html">دوال Rin الأصلية الجديدة (Rin 1.0)</a></details><details ><summary>الحاويات وقواعد البيانات</summary><a href="container_advanced.html">Rin Container Advanced Built-ins</a><a href="container_pro.html">Rin Container Pro</a><a href="container_sql.html">RIN CONTAINER SQL (RCSQL)</a><a href="cross-file-containers.html">استدعاء إعلانات من ملف آخر</a></details><details ><summary>الحزم والتكامل</summary><a href="api.html">واجهة C المسطَّحة (Embedding API)</a><a href="android.html">استضافة Rin على أندرويد</a><a href="packages-and-interop.html">Rin 1.0 — المكتبات والحزم وجسر C++ وJSON واختبارات rintest</a><a href="rinpak-format.html">RinPak — حزمة مشروع Rin (`.rinpak`)</a><a href="html-projects.html">مشاريع HTML في Rin — الربط بين index.html وملف الحاوية</a><a href="project-og-urin.html">project.og.urin` — البيانات الوصفية لمشروع Rin</a><a href="CONTENT_PACKS.html">حزم المحتوى القابلة للتنزيل (Content Packs)</a><a href="previewkit.html">previewkit — معاينة حيّة لملفات PDF / Markdown / TypeScript</a></details><details ><summary>المكتبات المتخصصة</summary><a href="rinml.html">RinML / RinDF / RinAI — الذكاء الاصطناعي وتحليل البيانات في Rin</a><a href="STATS.html">RinStat — التحليل الإحصائي (`lib/rinstat.og.rin`)</a><a href="STATS_ADV.html">RinStat المتقدّم + RinAuto</a><a href="LINALG.html">الجبر الخطي للمهندسين — `mat*` و`vec*</a><a href="PLOT.html">RinPlot — الرسوم البيانية الإحصائية (`lib/rinplot.og.rin`)</a><a href="ALGO.html">تطوير الخوارزميات والحساب العددي — `algo*</a><a href="NUMBER.html">مفهوم `number` في Rin</a><a href="boat.html">&quot;Boat&quot;: مفاهيم أساسية مجمَّعة</a><a href="passkit.html">passkit — passwords, encryption, databases and a tag language</a><a href="passkit-crypto-db.html">Passkit feature catalog: encryption, databases and container linking</a><a href="hash-family.html">عائلة `#` — مفاهيم ودوال جديدة تبدأ بعلامة `#</a><a href="image-draw.html">إنشاء الصور في Rin — رسم وحفظ PNG وlog كصورة</a><a href="image-terminal.html">طباعة الصور في الـ terminal — `printImage` / `imageAnsi` / `imageInfo</a></details><details ><summary>المشروع</summary><a href="CONTRIBUTING.html">المساهمة في Rin</a><a href="CODE_OF_CONDUCT.html">قواعد السلوك</a><a href="SECURITY.html">سياسة الأمان</a><a href="SUPPORT.html">الحصول على المساعدة</a><a href="TRADEMARKS.html">سياسة العلامة التجارية — Trademark Policy</a><a href="THIRD_PARTY_NOTICES.html">إشعارات المكوّنات الخارجية — Third-Party Notices</a></details><details ><summary>مراجع إضافية</summary><a href="ANDROID_VERSIONS.html">حزم RinStudio لكل إصدار أندرويد</a><a href="TOKEN.html">مفهوم `token` في Rin</a><a href="TOOLCHAIN.html">Rin Professional Language Toolchain</a><a href="TOOLCHAIN_UPGRADE.html">Toolchain Upgrade — 2026-09</a><a href="architecture.html">المعمارية وبنية المستودع</a><a href="base-accept.html">base` و`accept`: متغيّران يخدمان `if</a><a href="channel47.html">channel47 — لغة وصف البيانات والإعدادات</a><a href="ci.html">CI وأدوات المستودع</a><a href="loop-templates.html">قوالب الحلقات `@tmpl</a><a href="pre-post.html">pre` و`post` (ما قبل / ما بعد): عقد انتقال حول الإسناد</a><a href="print-fonts.html">خطوط `print` — bold / italic / underline وغيرها</a><a href="print-image-terminal.html">طباعة الصور كنص في الطرفية</a><a href="print-templates.html">قوالب الطباعة `@tmpl ... print` — قوالب نصية خطية وتنسيقية</a><a href="rdoc.html">rdoc — Documentation Container</a><a href="rdoc-reference.html">وثيقة rdoc الشاملة — Documentation Container</a><a href="screenshots.html">لقطات من RinStudio</a></details></nav>
+<main><article><h1 id="indsin-media">Indsin Media — اختيار الوسائط ورفعها<a class="headerlink" href="#indsin-media" title="Permanent link">#</a></h1>
+<p>أفعال <code>onTap=</code> (تعمل أيضاً مع <code>onLongPress=</code>/<code>onDoubleTap=</code>):</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الفعل</th>
+<th>المعنى</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pickMedia(kind, cell [, multiple [, maxMb [, maxDim [, quality]]]])</code></td>
+<td>يفتح منتقي النظام. <code>kind</code>: <code>image</code> <code>video</code> <code>audio</code> <code>file</code> <code>any</code>، أو <strong><code>camera</code></strong> (صورة بالكاميرا) / <strong><code>camera:video</code></strong>. <code>maxMb</code> = 0 بلا حدّ. الوسيط الثالث <code>"append"</code> = اختيار متعدد يُضاف إلى السابق (للكاميرا: التقاطات متتابعة). <strong><code>maxDim</code></strong> (64–8192) يصغّر الصور إلى أطول ضلع بهذا الحجم، و<code>quality</code> (1–100، الافتراضي 85) جودة JPEG</td>
+</tr>
+<tr>
+<td><code>uploadMedia(cell, url [, field [, auth [, retries]]])</code></td>
+<td>يرفع الملفات المختارة في <code>cell</code> بطلب <code>multipart/form-data</code> واحد (الحقل الافتراضي <code>file</code>). <code>auth</code> يُرسَل كترويسة <code>Authorization</code> (مثل <code>"Bearer ..."</code>، بلا CR/LF). <strong><code>retries</code></strong> (0–5، الافتراضي 2) إعادة محاولة تلقائية بتراجع أسّي 1s/2s/4s.. عند فشل الشبكة أو 5xx/408/429؛ أخطاء 4xx لا تُعاد</td>
+</tr>
+<tr>
+<td><code>cancelUpload(cell)</code></td>
+<td>يقطع رفعاً جارياً ويُبقي الاختيار (الحالة تعود <code>picked</code>)</td>
+</tr>
+<tr>
+<td><code>clearMedia(cell)</code></td>
+<td>يمسح الاختيار</td>
+</tr>
+<tr>
+<td><code>removeMedia(cell, index)</code></td>
+<td>يحذف الملف رقم <code>index</code> (من 0) من اختيار متعدد</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="warp">خلايا Warp المشتقة (تُزرَع تلقائياً من أول رسم)<a class="headerlink" href="#warp" title="Permanent link">#</a></h2>
+<p><code>cell</code> (مسار أول ملف — يصلح لـ <code>Image src=</code>) · <code>_name</code> · <code>_mime</code> · <code>_size</code> (بايت) · <code>_sizeText</code> · <code>_kind</code> ·
+<code>_count</code> · <code>_all</code> (JSON لكل الملفات) · <code>_status</code> (<code>idle|picked|uploading|done|error</code>) · <code>_progress</code> (0–100) ·
+<code>_error</code> · <code>_attempt</code> (رقم محاولة الرفع: 1 الأولى، 2+ إعادة) · <code>_response</code> (ردّ الخادم، حتى 4KB).</p>
+<p>مثال كامل: <code>examples/samples/indsin_media_demo.rin</code>.</p>
+<h2 id="_1">الكاميرا والتصغير والإعادة<a class="headerlink" href="#_1" title="Permanent link">#</a></h2>
+<ul>
+<li><strong>الكاميرا</strong>: <code>pickMedia("camera", photo)</code> تستخدم تطبيق الكاميرا عبر عقد النظام (TakePicture/CaptureVideo) + FileProvider (مسار <code>indsin_capture</code> في <code>file_paths.xml</code>). <strong>لا تعلن صلاحية <code>CAMERA</code> في المانيفست</strong> — بدون إعلانها لا تُطلب صلاحية وقت التشغيل؛ إعلانها يجعل أندرويد يطلبها ويفشل الالتقاط بدونها.</li>
+<li><strong>التصغير</strong>: يُطبَّق على JPEG/PNG/WebP/HEIC فقط (GIF/SVG لا تُمَسّ). يحترم اتجاه EXIF، ويُسقط بيانات EXIF (ومنها الموقع). حدّ <code>maxMb</code> يُفحص بعد التصغير. إن لم يصغر الملف ولم تلزم المعالجة يبقى الأصل.</li>
+<li><strong>الإعادة</strong>: <code>cancelUpload</code> يوقف الانتظار والمحاولات أيضاً.</li>
+</ul>
+<h2 id="_2">الأمان<a class="headerlink" href="#_2" title="Permanent link">#</a></h2>
+<ul>
+<li>المنتقي هو Storage Access Framework: <strong>لا صلاحيات</strong> مطلوبة. الملفات تُنسخ إلى <code>&lt;مشروع&gt;/media/</code> باسم معقَّم وفريد.</li>
+<li>المحرّك يعيد التحقق من كل ملف: مسار نسبي بلا <code>..</code>/مطلق/مخطط، تطابق النوع، حدّ الحجم.</li>
+<li>الرفع <code>http/https</code> فقط، بلا بيانات اعتماد في الرابط، بلا متابعة إعادة توجيه، ولا يرفع إلا ملفات داخل جذر المشروع.</li>
+<li>رفض الرفع إن لم يوجد اختيار أو كان رفع آخر لنفس الخلية جارياً.</li>
+<li>ملاحظة: <code>http://</code> (غير مشفّر) قد يحجبه أندرويد 9+ ما لم تسمح به إعدادات الشبكة؛ يظهر الخطأ في <code>_error</code>.</li>
+</ul>
+<h2 id="_3">البنية<a class="headerlink" href="#_3" title="Permanent link">#</a></h2>
+<p><code>rin_indsin_media.h</code> (النموذج/التحقق/الخلايا) ← <code>rin_indsin_needle.h</code> (يُخرج <code>TapResult.pick/.upload</code>) ←
+<code>rin_indsin_c_api.cpp</code> (حقل <code>"media"</code> في غلاف النقر + <code>rin_indsin_session_media_picked/_progress</code>) ← JNI ←
+<code>IndsinPreviewManager</code> ← <code>IndsinMediaHost.kt</code> (المنتقي + الرفع بالبث مع تقدّم). الاختبار: <code>tools/test_indsin_media.cpp</code>.</p></article>
+<div class="pnav"><a class="pn" href="indsin_object.html">→ indsin-object — API reference</a><a class="pn" href="indsin_icons.html">مكتبة أيقونات indsin (متجهية) ←</a></div><p class="edit"><a href="https://github.com/dlof-lib/rinlang/edit/main/docs/indsin_media.md">✎ عدّل هذه الصفحة على GitHub</a></p>
+<footer>Rin 1.0.0 · رخصة MIT</footer></main>
+<aside id="toc"><b>في هذه الصفحة</b><div class="toc">
+<ul>
+<li><a href="#warp">خلايا Warp المشتقة (تُزرَع تلقائياً من أول رسم)</a></li>
+<li><a href="#_1">الكاميرا والتصغير والإعادة</a></li>
+<li><a href="#_2">الأمان</a></li>
+<li><a href="#_3">البنية</a></li>
+</ul>
+</div>
+</aside></div>
+<script src="assets/app.js"></script></body></html>

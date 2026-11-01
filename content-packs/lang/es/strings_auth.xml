@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Inicio de sesión -->
+    <string name="login_title">Iniciar sesión</string>
+    <string name="login_subtitle">Inicia sesión para publicar tus bibliotecas en la Tienda Rin</string>
+    <string name="hint_email">Correo electrónico</string>
+    <string name="hint_password">Contraseña</string>
+    <string name="action_login">Iniciar sesión</string>
+    <string name="login_no_account">¿No tienes una cuenta?</string>
+    <string name="action_create_account">Crear cuenta</string>
+
+    <!-- Crear cuenta -->
+    <string name="register_title">Crear cuenta</string>
+    <string name="register_subtitle">Únete a la Tienda Rin y publica tus bibliotecas para todos</string>
+    <string name="hint_full_name">Nombre completo</string>
+    <string name="hint_username">Nombre de usuario</string>
+    <string name="action_create_account_submit">Crear cuenta</string>
+    <string name="register_have_account">¿Ya tienes una cuenta?</string>
+
+    <!-- Código de verificación -->
+    <string name="verify_title">Verificar cuenta</string>
+    <string name="verify_subtitle_format">Enviamos un código de verificación de 5 dígitos a %1$s</string>
+    <string name="hint_verification_code">Introduce el código de 5 dígitos</string>
+    <string name="action_verify">Verificar</string>
+    <string name="action_resend_code">Reenviar código</string>
+    <string name="verify_success">Cuenta creada correctamente ✓</string>
+    <string name="code_resent">Se envió un nuevo código a tu correo</string>
+
+    <!-- Errores generales -->
+    <string name="error_required_fields">Completa todos los campos</string>
+    <string name="error_username_taken">Este nombre de usuario ya está en uso, prueba con otro</string>
+    <string name="error_email_invalid">Introduce un correo electrónico válido</string>
+    <string name="error_password_short">La contraseña debe tener al menos 6 caracteres</string>
+</resources>

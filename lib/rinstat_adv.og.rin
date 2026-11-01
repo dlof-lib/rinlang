@@ -1,0 +1,604 @@
+// ============================================================================
+//  lib/rinstat_adv.og.rin — RinStat المتقدّم
+//
+//  @version 1.0.0
+//  @category data
+//  @prefix st_
+//
+//  يُكمل lib/rinstat بما يحتاجه التحليل الجاد، ويعيد استعمال الأصلي:
+//    matSolve/matInv/matMul (LINALG) ← انحدار لوجستي IRLS
+//    algoPolyFit ← انحدار كثير الحدود   algoMinimize ← ضبط التمهيد الأسي
+//    st_rank/st_anova/st_chi2_sf/st_norm_cdf (rinstat) ← كل الاختبارات اللامعلمية
+//
+//  المحتوى: logit+ROC/AUC · Kruskal-Wallis · Wilcoxon · KS · Fisher · Levene ·
+//           مقارنات زوجية مع تصحيح · ACF/PACF/Ljung-Box · SES/Holt ·
+//           Kaplan-Meier + log-rank · تحليل القوة · KDE ثنائي · كثير الحدود.
+//  استيراد:  @import "lib/rinstat_adv.og.rin";
+// ============================================================================
+@import "lib/rinstat.og.rin";
+
+// ---------------------------------------------------------------------------
+//  1) الانحدار اللوجستي (IRLS) — X بلا عمود ثابت، y ∈ {0,1}
+// ---------------------------------------------------------------------------
+fun st_sigmoid(z) {
+    if (z >= 0) { return 1 / (1 + exp(-z)); }
+    let e = exp(z);
+    return e / (1 + e);
+}
+fun st_logit(X, y, names) {
+    let n = len(y);
+    let k = len(X[0]);
+    let D = [];
+    let i = 0;
+    while (i < n) { push(D, concat([1], X[i])); i = i + 1; }
+    let Dt = matTranspose(D);
+    let beta = [];
+    let j = 0;
+    while (j <= k) { push(beta, 0); j = j + 1; }
+    let A = nil;
+    let iters = 0;
+    let converged = false;
+    while (iters < 40) {
+        let eta = matMul(D, beta);
+        let g = [];
+        let Dw = [];
+        i = 0;
+        while (i < n) {
+            let p = st_sigmoid(eta[i]);
+            if (p < 1e-10) { p = 1e-10; }
+            if (p > 1 - 1e-10) { p = 1 - 1e-10; }
+            push(g, y[i] - p);
+            let w = p * (1 - p);
+            let row = [];
+            for (let v in D[i]) { push(row, v * w); }
+            push(Dw, row);
+            i = i + 1;
+        }
+        A = matMul(matTranspose(Dw), D);
+        if (matIs(A, "singular")) { return nil; }
+        let step = matSolve(A, matMul(Dt, g));
+        let mx = 0;
+        j = 0;
+        while (j <= k) { beta[j] = beta[j] + step[j]; if (abs(step[j]) > mx) { mx = abs(step[j]); } j = j + 1; }
+        iters = iters + 1;
+        if (mx < 1e-9) { converged = true; break; }
+    }
+    let cov = matInv(A);
+    let eta2 = matMul(D, beta);
+    let probs = [];
+    let ll = 0;
+    let ones = 0;
+    i = 0;
+    while (i < n) {
+        let p2 = st_sigmoid(eta2[i]);
+        push(probs, p2);
+        let pc = p2;
+        if (pc < 1e-12) { pc = 1e-12; }
+        if (pc > 1 - 1e-12) { pc = 1 - 1e-12; }
+        ll = ll + y[i] * log(pc) + (1 - y[i]) * log(1 - pc);
+        ones = ones + y[i];
+        i = i + 1;
+    }
+    let pb = ones / n;
+    let ll0 = 0;
+    if (pb > 0 and pb < 1) { ll0 = ones * log(pb) + (n - ones) * log(1 - pb); }
+    let coefs = [];
+    j = 0;
+    while (j <= k) {
+        let se = sqrt(cov[j][j]);
+        let z = 0;
+        if (se > 0) { z = beta[j] / se; }
+        let nm = "b" + str(j);
+        if (j == 0) { nm = "(Intercept)"; } else if (len(names) >= j) { nm = names[j - 1]; }
+        push(coefs, {"name": nm, "coef": beta[j], "se": se, "z": z, "p": 2 * (1 - st_norm_cdf(abs(z), 0, 1)),
+                     "or": exp(beta[j]), "or_lo": exp(beta[j] - 1.959964 * se), "or_hi": exp(beta[j] + 1.959964 * se)});
+        j = j + 1;
+    }
+    let lr = 2 * (ll - ll0);
+    let correct = 0;
+    i = 0;
+    while (i < n) { let pr = 0; if (probs[i] >= 0.5) { pr = 1; } if (pr == y[i]) { correct = correct + 1; } i = i + 1; }
+    return {"coefs": coefs, "beta": beta, "loglik": ll, "loglik0": ll0, "aic": 2 * (k + 1) - 2 * ll,
+            "mcfadden_r2": 1 - ll / ll0, "lr_stat": lr, "lr_df": k, "lr_p": st_chi2_sf(lr, k),
+            "probs": probs, "accuracy": correct / n, "n": n, "iters": iters, "converged": converged, "cov": cov};
+}
+fun st_logit_predict(fit, X) {
+    let out = [];
+    for (let r in X) { push(out, st_sigmoid(fit["beta"][0] + vecDot(slice(fit["beta"], 1, len(fit["beta"])), r))); }
+    return out;
+}
+
+// ROC: y ∈ {0,1}، scores أكبر = أرجح للفئة 1. AUC من الرتب (دقيق مع الروابط)
+fun st_roc(y, scores) {
+    let n = len(y);
+    let n1 = sum(y);
+    let n0 = n - n1;
+    if (n1 == 0 or n0 == 0) { return nil; }
+    let rk = st_rank(scores);
+    let r1 = 0;
+    let i = 0;
+    while (i < n) { if (y[i] == 1) { r1 = r1 + rk[i]; } i = i + 1; }
+    let auc = (r1 - n1 * (n1 + 1) / 2) / (n1 * n0);
+    let neg = [];
+    for (let s in scores) { push(neg, -s); }
+    let ord = st_argsort(neg);
+    let fpr = [0]; let tpr = [0]; let thr = [maxOf(scores) + 1];
+    let tp = 0; let fp = 0;
+    i = 0;
+    let best = -1; let bestT = 0;
+    while (i < n) {
+        let j = i;
+        while (j < n) {
+            if (scores[ord[j]] != scores[ord[i]]) { break; }
+            if (y[ord[j]] == 1) { tp = tp + 1; } else { fp = fp + 1; }
+            j = j + 1;
+        }
+        push(fpr, fp / n0); push(tpr, tp / n1); push(thr, scores[ord[i]]);
+        if (tp / n1 - fp / n0 > best) { best = tp / n1 - fp / n0; bestT = scores[ord[i]]; }
+        i = j;
+    }
+    return {"fpr": fpr, "tpr": tpr, "thr": thr, "auc": auc, "youden": best, "best_threshold": bestT};
+}
+// مصفوفة الالتباس 2×2 وقياساتها
+fun st_confusion(y, pred) {
+    let tp = 0; let fp = 0; let tn = 0; let fn = 0;
+    let i = 0;
+    while (i < len(y)) {
+        if (y[i] == 1 and pred[i] == 1) { tp = tp + 1; }
+        else if (y[i] == 0 and pred[i] == 1) { fp = fp + 1; }
+        else if (y[i] == 0 and pred[i] == 0) { tn = tn + 1; }
+        else { fn = fn + 1; }
+        i = i + 1;
+    }
+    let prec = 0; if (tp + fp > 0) { prec = tp / (tp + fp); }
+    let rec = 0; if (tp + fn > 0) { rec = tp / (tp + fn); }
+    let f1 = 0; if (prec + rec > 0) { f1 = 2 * prec * rec / (prec + rec); }
+    return {"matrix": [[tn, fp], [fn, tp]], "tp": tp, "fp": fp, "tn": tn, "fn": fn,
+            "accuracy": (tp + tn) / len(y), "precision": prec, "recall": rec, "f1": f1};
+}
+
+// ---------------------------------------------------------------------------
+//  2) اختبارات لامعلمية وغيرها
+// ---------------------------------------------------------------------------
+fun st_tie_term(sorted_arr) {
+    let n = len(sorted_arr);
+    let t = 0;
+    let i = 0;
+    while (i < n) {
+        let j = i;
+        while (j + 1 < n and sorted_arr[j + 1] == sorted_arr[i]) { j = j + 1; }
+        let c = j - i + 1;
+        t = t + (c * c * c - c);
+        i = j + 1;
+    }
+    return t;
+}
+fun st_kruskal(groups) {
+    let all = [];
+    let gs = [];
+    for (let g in groups) { let c = st_clean(g); push(gs, c); for (let v in c) { push(all, v); } }
+    let N = len(all);
+    let k = len(gs);
+    if (k < 2 or N < 3) { return nil; }
+    let rk = st_rank(all);
+    let pos = 0;
+    let h = 0;
+    for (let c in gs) {
+        let s = 0;
+        let i = 0;
+        while (i < len(c)) { s = s + rk[pos + i]; i = i + 1; }
+        if (len(c) > 0) { h = h + s * s / len(c); }
+        pos = pos + len(c);
+    }
+    h = 12 / (N * (N + 1)) * h - 3 * (N + 1);
+    let corr = 1 - st_tie_term(st_sorted(all)) / (N * N * N - N);
+    if (corr <= 0) { return nil; }
+    h = h / corr;
+    let r = st_result("Kruskal-Wallis", h, k - 1, st_chi2_sf(h, k - 1), N);
+    r["epsilon2"] = h / (N - 1);
+    return r;
+}
+// Wilcoxon للإشارات (مقترن أو عيّنة واحدة عند y=nil) — تقريب طبيعي مع تصحيح الروابط
+fun st_wilcoxon(x, y) {
+    let d = [];
+    let i = 0;
+    while (i < len(x)) {
+        let v = x[i];
+        if (y != nil) { v = x[i] - y[i]; }
+        if (v != 0) { push(d, v); }
+        i = i + 1;
+    }
+    let n = len(d);
+    if (n < 5) { return nil; }
+    let ab = [];
+    for (let v in d) { push(ab, abs(v)); }
+    let rk = st_rank(ab);
+    let wp = 0;
+    i = 0;
+    while (i < n) { if (d[i] > 0) { wp = wp + rk[i]; } i = i + 1; }
+    let mu = n * (n + 1) / 4;
+    let sd2 = n * (n + 1) * (2 * n + 1) / 24 - st_tie_term(st_sorted(ab)) / 48;
+    let z = (wp - mu) / sqrt(sd2);
+    let r = st_result("Wilcoxon signed-rank", wp, nil, 2 * (1 - st_norm_cdf(abs(z), 0, 1)), n);
+    r["z"] = z;
+    return r;
+}
+// Kolmogorov–Smirnov لعيّنتين (p تقاربي)
+fun st_ks2(x, y) {
+    let a = st_sorted(x);
+    let b = st_sorted(y);
+    let n = len(a); let m = len(b);
+    if (n < 2 or m < 2) { return nil; }
+    let i = 0; let j = 0; let d = 0;
+    while (i < n and j < m) {
+        let v = a[i];
+        if (b[j] < v) { v = b[j]; }
+        while (i < n and a[i] <= v) { i = i + 1; }
+        while (j < m and b[j] <= v) { j = j + 1; }
+        let diff = abs(i / n - j / m);
+        if (diff > d) { d = diff; }
+    }
+    let en = sqrt(n * m / (n + m));
+    let lam = en * d;
+    let p = 0;
+    let k = 1;
+    while (k <= 100) {
+        let term = 2 * exp(-2 * k * k * lam * lam);
+        if (k % 2 == 0) { p = p - term; } else { p = p + term; }
+        if (term < 1e-12) { break; }
+        k = k + 1;
+    }
+    if (p > 1) { p = 1; }
+    if (p < 0) { p = 0; }
+    if (lam < 0.2) { p = 1; }
+    return st_result("Kolmogorov-Smirnov 2-sample", d, nil, p, n + m);
+}
+fun st_lchoose(n, k) { return st_lgamma(n + 1) - st_lgamma(k + 1) - st_lgamma(n - k + 1); }
+// Fisher الدقيق لجدول 2×2: [[a,b],[c,d]] — p ثنائي الذيل
+fun st_fisher(t) {
+    let a = t[0][0]; let b = t[0][1]; let c = t[1][0]; let d = t[1][1];
+    let r1 = a + b; let r2 = c + d; let c1 = a + c; let n = r1 + r2;
+    let lo = max(0, c1 - r2);
+    let hi = min(r1, c1);
+    let lp = st_lchoose(r1, a) + st_lchoose(r2, c1 - a) - st_lchoose(n, c1);
+    let pobs = exp(lp);
+    let p = 0;
+    let x = lo;
+    while (x <= hi) {
+        let px = exp(st_lchoose(r1, x) + st_lchoose(r2, c1 - x) - st_lchoose(n, c1));
+        if (px <= pobs * (1 + 1e-7)) { p = p + px; }
+        x = x + 1;
+    }
+    if (p > 1) { p = 1; }
+    let orr = nil;
+    if (b * c > 0) { orr = a * d / (b * c); }
+    let r = st_result("Fisher exact", orr, nil, p, n);
+    r["odds_ratio"] = orr;
+    return r;
+}
+// Levene (Brown–Forsythe: التمركز حول الوسيط) = ANOVA على الانحرافات المطلقة
+fun st_levene(groups) {
+    let zs = [];
+    for (let g in groups) {
+        let c = st_clean(g);
+        let m = median(c);
+        let z = [];
+        for (let v in c) { push(z, abs(v - m)); }
+        push(zs, z);
+    }
+    let r = st_anova(zs);
+    if (r != nil) { r["test"] = "Levene (Brown-Forsythe)"; }
+    return r;
+}
+// مقارنات زوجية بين مجموعات [{name,values}] مع تصحيح التعدد
+fun st_pairwise(groups, adjust) {
+    let out = [];
+    let ps = [];
+    let i = 0;
+    while (i < len(groups)) {
+        let j = i + 1;
+        while (j < len(groups)) {
+            let t = st_ttest_welch(groups[i]["values"], groups[j]["values"]);
+            if (t != nil) {
+                push(out, {"a": groups[i]["name"], "b": groups[j]["name"], "diff": t["diff"], "t": t["stat"], "p": t["p"], "d": t["d"]});
+                push(ps, t["p"]);
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    let adj = st_p_adjust(ps, adjust);
+    i = 0;
+    while (i < len(out)) { out[i]["p_adj"] = adj[i]; i = i + 1; }
+    return out;
+}
+// اختيار اختبار المقارنة تلقائياً: طبيعية (JB) + تجانس (Levene) → ANOVA/Welch أو لامعلمي
+fun st_auto_compare(groups) {
+    let arrs = [];
+    let normal = true;
+    for (let g in groups) {
+        push(arrs, g["values"]);
+        if (len(g["values"]) >= 8) {
+            let nt = st_normality(g["values"]);
+            if (nt != nil and nt["p"] < 0.01) { normal = false; }
+        }
+    }
+    let lev = st_levene(arrs);
+    let equalVar = true;
+    if (lev != nil and lev["p"] < 0.05) { equalVar = false; }
+    let r = nil;
+    let why = "";
+    if (len(arrs) == 2) {
+        if (normal) { r = st_ttest_welch(arrs[0], arrs[1]); why = "normal data, two groups -> Welch t"; }
+        else { r = st_mannwhitney(arrs[0], arrs[1]); why = "non-normal data, two groups -> Mann-Whitney"; }
+    } else {
+        if (normal) { r = st_anova(arrs); why = "normal data -> one-way ANOVA"; }
+        else { r = st_kruskal(arrs); why = "non-normal data -> Kruskal-Wallis"; }
+    }
+    if (r != nil) { r["why"] = why; r["levene_p"] = nil; if (lev != nil) { r["levene_p"] = lev["p"]; } }
+    return r;
+}
+
+// ---------------------------------------------------------------------------
+//  3) السلاسل الزمنية
+// ---------------------------------------------------------------------------
+fun st_acf(x, maxlag) {
+    let a = st_clean(x);
+    let n = len(a);
+    let m = mean(a);
+    let c0 = 0;
+    for (let v in a) { c0 = c0 + (v - m) * (v - m); }
+    let out = [1];
+    let k = 1;
+    while (k <= maxlag and k < n) {
+        let s = 0;
+        let t = 0;
+        while (t < n - k) { s = s + (a[t] - m) * (a[t + k] - m); t = t + 1; }
+        push(out, s / c0);
+        k = k + 1;
+    }
+    return out;
+}
+// PACF بخوارزمية Durbin–Levinson
+fun st_pacf(x, maxlag) {
+    let r = st_acf(x, maxlag);
+    let out = [1];
+    let phi = [];
+    let k = 1;
+    while (k < len(r)) {
+        let num = r[k];
+        let den = 1;
+        let j = 0;
+        while (j < k - 1) { num = num - phi[j] * r[k - 1 - j]; den = den - phi[j] * r[j + 1]; j = j + 1; }
+        let pk = num / den;
+        let nphi = [];
+        j = 0;
+        while (j < k - 1) { push(nphi, phi[j] - pk * phi[k - 2 - j]); j = j + 1; }
+        push(nphi, pk);
+        phi = nphi;
+        push(out, pk);
+        k = k + 1;
+    }
+    return out;
+}
+fun st_ljungbox(x, lag) {
+    let a = st_clean(x);
+    let n = len(a);
+    let r = st_acf(a, lag);
+    let q = 0;
+    let k = 1;
+    while (k <= lag and k < len(r)) { q = q + r[k] * r[k] / (n - k); k = k + 1; }
+    q = q * n * (n + 2);
+    return st_result("Ljung-Box", q, lag, st_chi2_sf(q, lag), n);
+}
+fun st_diff(x, d) {
+    let a = x;
+    let i = 0;
+    while (i < d) {
+        let b = [];
+        let t = 1;
+        while (t < len(a)) { push(b, a[t] - a[t - 1]); t = t + 1; }
+        a = b;
+        i = i + 1;
+    }
+    return a;
+}
+// تمهيد أسي بسيط: SSE خطوة-أمام لقيمة alpha
+fun st_ses_sse(a, alpha) {
+    let lvl = a[0];
+    let sse = 0;
+    let t = 1;
+    while (t < len(a)) { let e = a[t] - lvl; sse = sse + e * e; lvl = lvl + alpha * e; t = t + 1; }
+    return sse;
+}
+// يضبط alpha بـ algoMinimize الأصلية (Brent) ويتنبّأ h خطوة
+fun st_ses(x, h) {
+    let a = st_clean(x);
+    let best = algoMinimize(fun(al) { return st_ses_sse(a, al); }, 0.001, 0.999);
+    let alpha = best["x"];
+    let lvl = a[0];
+    let t = 1;
+    while (t < len(a)) { lvl = lvl + alpha * (a[t] - lvl); t = t + 1; }
+    let fc = [];
+    let i = 0;
+    while (i < h) { push(fc, lvl); i = i + 1; }
+    return {"alpha": alpha, "level": lvl, "forecast": fc, "sse": st_ses_sse(a, alpha)};
+}
+// Holt (اتجاه خطي): alpha/beta بـ Nelder–Mead الأصلية
+fun st_holt_sse(a, al, be) {
+    let lvl = a[0]; let tr = a[1] - a[0];
+    let sse = 0;
+    let t = 1;
+    while (t < len(a)) {
+        let f = lvl + tr;
+        let e = a[t] - f;
+        sse = sse + e * e;
+        let nl = al * a[t] + (1 - al) * f;
+        tr = be * (nl - lvl) + (1 - be) * tr;
+        lvl = nl;
+        t = t + 1;
+    }
+    return sse;
+}
+fun st_holt(x, h) {
+    let a = st_clean(x);
+    let clip = fun(v) { if (v < 0.001) { return 0.001; } if (v > 0.999) { return 0.999; } return v; };
+    let best = algoMinimize(fun(p) { return st_holt_sse(a, clip(p[0]), clip(p[1])); }, [0.5, 0.2]);
+    let al = clip(best["x"][0]); let be = clip(best["x"][1]);
+    let lvl = a[0]; let tr = a[1] - a[0];
+    let t = 1;
+    while (t < len(a)) {
+        let f = lvl + tr;
+        let nl = al * a[t] + (1 - al) * f;
+        tr = be * (nl - lvl) + (1 - be) * tr;
+        lvl = nl;
+        t = t + 1;
+    }
+    let fc = [];
+    let i = 1;
+    while (i <= h) { push(fc, lvl + i * tr); i = i + 1; }
+    return {"alpha": al, "beta": be, "level": lvl, "trend": tr, "forecast": fc, "sse": st_holt_sse(a, al, be)};
+}
+
+// ---------------------------------------------------------------------------
+//  4) تحليل البقاء: Kaplan–Meier و log-rank
+//  times: أزمنة، events: 1=حدث 0=رقابة
+// ---------------------------------------------------------------------------
+fun st_km(times, events) {
+    let n = len(times);
+    let ord = st_argsort(times);
+    let ts = [0]; let surv = [1]; let lo = [1]; let hi = [1]; let atrisk = [n];
+    let s = 1; let gv = 0;
+    let i = 0;
+    let med = nil;
+    while (i < n) {
+        let j = i;
+        let d = 0; let c = 0;
+        while (j < n) {
+            if (times[ord[j]] != times[ord[i]]) { break; }
+            if (events[ord[j]] == 1) { d = d + 1; } else { c = c + 1; }
+            j = j + 1;
+        }
+        let nr = n - i;
+        if (d > 0) {
+            s = s * (1 - d / nr);
+            if (nr > d) { gv = gv + d / (nr * (nr - d)); }
+            let se = s * sqrt(gv);
+            push(ts, times[ord[i]]); push(surv, s);
+            push(lo, max(0, s - 1.959964 * se)); push(hi, min(1, s + 1.959964 * se));
+            push(atrisk, nr);
+            if (med == nil and s <= 0.5) { med = times[ord[i]]; }
+        }
+        i = j;
+    }
+    return {"t": ts, "s": surv, "lo": lo, "hi": hi, "n_at_risk": atrisk, "median": med, "n": n, "events": sum(events)};
+}
+// log-rank لمجموعتين
+fun st_logrank(t1, e1, t2, e2) {
+    let T = concat(t1, t2);
+    let E = concat(e1, e2);
+    let G = [];
+    for (let v in t1) { push(G, 1); }
+    for (let v in t2) { push(G, 2); }
+    let ord = st_argsort(T);
+    let n = len(T);
+    let n1 = len(t1); let n2 = len(t2);
+    let oe = 0; let v = 0;
+    let i = 0;
+    while (i < n) {
+        let j = i;
+        let d = 0; let d1 = 0; let rm = 0; let r1 = 0;
+        while (j < n) {
+            if (T[ord[j]] != T[ord[i]]) { break; }
+            if (E[ord[j]] == 1) { d = d + 1; if (G[ord[j]] == 1) { d1 = d1 + 1; } }
+            j = j + 1;
+        }
+        let nt = n1 + n2;
+        if (d > 0 and nt > 0) {
+            let ex = d * n1 / nt;
+            oe = oe + d1 - ex;
+            if (nt > 1) { v = v + d * (n1 / nt) * (1 - n1 / nt) * (nt - d) / (nt - 1); }
+        }
+        let k = i;
+        while (k < j) { if (G[ord[k]] == 1) { n1 = n1 - 1; } else { n2 = n2 - 1; } k = k + 1; }
+        i = j;
+    }
+    if (v <= 0) { return nil; }
+    let chi = oe * oe / v;
+    return st_result("log-rank", chi, 1, st_chi2_sf(chi, 1), n);
+}
+
+// ---------------------------------------------------------------------------
+//  5) تحليل القوة وحجم العيّنة (t لعيّنتين، تقريب مع حرج t)
+// ---------------------------------------------------------------------------
+fun st_power_t2(d, n, alpha) {
+    let df = 2 * n - 2;
+    let tc = st_t_ppf(1 - alpha / 2, df);
+    let ncp = d * sqrt(n / 2);
+    return 1 - st_norm_cdf(tc - ncp, 0, 1) + st_norm_cdf(-tc - ncp, 0, 1);
+}
+fun st_sample_size_t2(d, alpha, power) {
+    let n = 2;
+    while (n < 100000) {
+        if (st_power_t2(d, n, alpha) >= power) { return n; }
+        n = n + 1;
+    }
+    return nil;
+}
+
+// ---------------------------------------------------------------------------
+//  6) كثافة ثنائية وكثير الحدود
+// ---------------------------------------------------------------------------
+// {x:[nx], y:[ny], z:[ny][nx]} بنواة غاوسية وعرض Silverman لكل محور
+fun st_kde2(x, y, nx, ny) {
+    let hx = st_bandwidth(x); let hy = st_bandwidth(y);
+    let x0 = minOf(x) - 2 * hx; let x1 = maxOf(x) + 2 * hx;
+    let y0 = minOf(y) - 2 * hy; let y1 = maxOf(y) + 2 * hy;
+    let gx = []; let gy = [];
+    let i = 0;
+    while (i < nx) { push(gx, x0 + (x1 - x0) * i / (nx - 1)); i = i + 1; }
+    i = 0;
+    while (i < ny) { push(gy, y0 + (y1 - y0) * i / (ny - 1)); i = i + 1; }
+    let n = len(x);
+    let z = [];
+    let r = 0;
+    while (r < ny) {
+        let row = [];
+        let c = 0;
+        while (c < nx) {
+            let s = 0;
+            let k = 0;
+            while (k < n) {
+                let u = (gx[c] - x[k]) / hx; let v = (gy[r] - y[k]) / hy;
+                s = s + exp(-0.5 * (u * u + v * v));
+                k = k + 1;
+            }
+            push(row, s / (n * 2 * PI * hx * hy));
+            c = c + 1;
+        }
+        push(z, row);
+        r = r + 1;
+    }
+    return {"x": gx, "y": gy, "z": z};
+}
+// كثير الحدود بدرجة deg (algoPolyFit الأصلية) + AIC وتقدير عند شبكة
+fun st_polyreg(x, y, deg) {
+    let f = algoPolyFit(x, y, deg);
+    let n = len(x);
+    let sse = f["rmse"] * f["rmse"] * n;
+    let k = deg + 1;
+    let aic = n * log(max(sse / n, 1e-300)) + 2 * k;
+    let adj = 1 - (1 - f["r2"]) * (n - 1) / (n - k);
+    return {"coeffs": f["coeffs"], "r2": f["r2"], "adj_r2": adj, "rmse": f["rmse"], "aic": aic, "deg": deg};
+}
+// يختار الدرجة بأقل AIC من 1..maxdeg
+fun st_poly_select(x, y, maxdeg) {
+    let best = nil;
+    let d = 1;
+    while (d <= maxdeg) {
+        let f = st_polyreg(x, y, d);
+        if (best == nil or f["aic"] < best["aic"]) { best = f; }
+        d = d + 1;
+    }
+    return best;
+}

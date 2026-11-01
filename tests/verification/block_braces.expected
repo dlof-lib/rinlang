@@ -1,0 +1,16 @@
+📚 Volume = shop
+📦 container = cart
+✅ .end/container (cart)
+🗂️ container.data = cfg
+✅ .end/container.data (cfg)
+✅ .end/Volume (shop) [تحتوي: cart, cfg]
+📦 container = legacy
+✅ .end/container (legacy)
+📦 container
+✅ .end/container
+🧩 .object("u1") -> {"name": "Ali"}
+📦 container = bare
+✅ .end/container (bare)
+📦 container = named
+✅ .end/container (named)
+braces-ok

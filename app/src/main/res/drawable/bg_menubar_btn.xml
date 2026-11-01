@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- خلفية أزرار شريط القوائم العلوي (File / Edit / View / Run): مسطّحة واحترافية،
+     بحواف صغيرة وتأثير موجي خفيف عند الضغط، بديلاً عن شكل الزر الافتراضي الضخم. -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="@color/rin_ghost_ripple">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@android:color/transparent" />
+            <corners android:radius="6dp" />
+        </shape>
+    </item>
+</ripple>

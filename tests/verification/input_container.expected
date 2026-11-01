@@ -1,0 +1,7 @@
+Profile> age: [30] Profile> name: [Ali] Profile> subscribed: [false] name2? [Sara] age2? [41] 📦 container = Profile
+✅ .end/container (Profile)
+[hook] changed, prev={"age": 30, "name": "Ali"}
+[hook] changed, prev={"age": 41, "name": "Ali"}
+Sara,41,true
+42
+Sara,41

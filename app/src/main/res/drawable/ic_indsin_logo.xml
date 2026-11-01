@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- indsin product logo (flat vector, 48dp): gradient-free so it renders on every API level.
+     Mirrors assets/branding/indsin/indsin_icon.svg. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <path android:fillColor="#6A55D8"
+        android:pathData="M112,0 L400,0 Q512,0 512,112 L512,400 Q512,512 400,512 L112,512 Q0,512 0,400 L0,112 Q0,0 112,0 Z" />
+    <path android:fillColor="#33FFFFFF"
+        android:strokeColor="#61FFFFFF" android:strokeWidth="6"
+        android:pathData="M140,104 L372,104 Q416,104 416,148 L416,364 Q416,408 372,408 L140,408 Q96,408 96,364 L96,148 Q96,104 140,104 Z" />
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M146,136 L366,136 Q384,136 384,154 Q384,172 366,172 L146,172 Q128,172 128,154 Q128,136 146,136 Z" />
+    <path android:fillColor="#FFB938"
+        android:pathData="M358,145 A9,9 0 1,1 358,163 A9,9 0 1,1 358,145 Z" />
+    <path android:fillColor="#CFC6FF"
+        android:pathData="M154,200 L206,200 Q232,200 232,226 L232,350 Q232,376 206,376 L154,376 Q128,376 128,350 L128,226 Q128,200 154,200 Z" />
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M278,200 L358,200 Q384,200 384,226 L384,254 Q384,280 358,280 L278,280 Q252,280 252,254 L252,226 Q252,200 278,200 Z" />
+    <path android:fillColor="#E6E1FF"
+        android:pathData="M278,296 L358,296 Q384,296 384,322 L384,350 Q384,376 358,376 L278,376 Q252,376 252,350 L252,322 Q252,296 278,296 Z" />
+    <path android:fillColor="#4A36C4"
+        android:pathData="M180,237 A13,13 0 1,1 180,263 A13,13 0 1,1 180,237 Z" />
+    <path android:fillColor="#4A36C4"
+        android:pathData="M180,282 Q192,282 192,294 L192,334 Q192,346 180,346 Q168,346 168,334 L168,294 Q168,282 180,282 Z" />
+</vector>

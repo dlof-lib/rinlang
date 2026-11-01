@@ -1,0 +1,68 @@
+// Trailing guards (return/break/continue/achieve/throw), case guards, subject-less match
+fun signOf(n) {
+  return "neg" when (n < 0);
+  return "zero" if (n == 0);
+  return "pos";
+}
+print signOf(-4), signOf(0), signOf(9);
+
+fun firstPositive(xs) {
+  for (let x in xs) {
+    continue unless (isPositive2(x));
+    return x;
+  }
+  return nil;
+}
+fun isPositive2(v) { return v > 0; }
+print firstPositive([-3, 0, 7, 9]);
+
+let n = 0;
+while (true) {
+  n = n + 1;
+  continue when (isOdd2(n));
+  break when (n >= 6);
+}
+fun isOdd2(v) { return v % 2 == 1; }
+print "n=" + n;
+
+let r = goal {
+  let i = 0;
+  while (i < 10) { i = i + 1; achieve i * 10 when (i == 4); }
+};
+print r;
+
+try { throw "boom" when (n == 6); print "no"; } catch (e) { print "caught:" + e["message"]; }
+try { throw "boom" unless (n == 6); print "after"; } catch (e) { print "BAD"; }
+
+enum Level { Low, Mid, High }
+fun describe(l, vip) {
+  match (l) {
+    case Level.High when (vip) { return "high-vip"; }
+    case Level.High { return "high"; }
+    case Level.Low, Level.Mid unless (vip) { return "plain"; }
+    else { return "other"; }
+  }
+}
+print describe(Level.High, true), describe(Level.High, false), describe(Level.Mid, false), describe(Level.Mid, true);
+
+fun grade(s) {
+  match {
+    case (s >= 90) { return "A"; }
+    case (between(s, 80, 89)) { return "B"; }
+    case (oneOf(s, 70, 71, 72)) { return "C-ish"; }
+    else { return "F"; }
+  }
+}
+print grade(95), grade(85), grade(71), grade(10);
+
+// old meaning of a function named `when` after return must stay intact
+fun when2(x) { return x; }
+print when2(5);
+
+// predicate-based conditions
+let nums = [2, 4, 7, 8];
+let isBig = fun(x) { return x > 5; };
+let isEvenN = fun(x) { return x % 2 == 0; };
+print every(nums, isEvenN), some(nums, isBig), countIf(nums, isEvenN), findIf(nums, isBig), findIf(nums, fun(x) { return x > 100; });
+print every([], isBig), some([], isBig), some(Set(1, 9), isBig);
+=if=(some(nums, isBig)) { print "has big"; }

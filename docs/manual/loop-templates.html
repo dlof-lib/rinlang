@@ -1,0 +1,88 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>قوالب الحلقات `@tmpl — Rin</title>
+<meta name="description" content="توثيق لغة البرمجة Rin"><link rel="icon" href="../assets/brand/icon-32.png">
+<link rel="stylesheet" href="assets/style.css"></head><body>
+<header><button id="mn" aria-label="القائمة">☰</button><a class="logo" href="index.html"><img src="../assets/brand/icon-48.png" alt="" width="26">Rin</a>
+<input id="q" type="search" placeholder="ابحث في التوثيق…" autocomplete="off"><button id="th" aria-label="الوضع">◐</button>
+<a class="gh" href="https://github.com/dlof-lib/rinlang">GitHub</a><div id="res"></div></header>
+<div class="wrap"><nav id="sb"><details ><summary>ابدأ هنا</summary><a href="getting-started.html">البداية</a><a href="syntax.html">القواعد النحوية العامة</a><a href="variables.html">let`، مصفوفات، قواميس، نطاق</a><a href="template-strings.html">النصوص القالبية (متغيّرات داخل النص)</a><a href="input.html">إدخال المستخدم (Input)</a><a href="control-flow.html">الشروط، الحلقات، `goal`/`achieve</a><a href="loops.html">حلقات Rin — Loops v2</a><a href="functions.html">fun`/`return`، التكرار الذاتي</a><a href="enums.html">enum`: قوائم اختيار مغلقة</a></details><details ><summary>اللغة</summary><a href="language-reference.html">المرجع الشامل وخريطة ترابط المفاهيم</a><a href="objects.html">class`/`struct`، `.object()`، `@Object`، `document</a><a href="oop.html">البرمجة الكائنية الموسَّعة (Rin 1.0)</a><a href="containers.html">دليل `@container` / `@element` / `@loop</a><a href="table.html">الجدول (`@table` / `@container.table`) ودوال اللغة عليه</a><a href="set.html">Set`: نوع المجموعة الأساسي</a><a href="pipelines.html">عامل الأنابيب `|&gt;</a><a href="RECKON.html">reckon`: مفهوم حسابي بسطرين</a><a href="let-plus.html">let` المطوَّر</a><a href="living-variables.html">المتغيرات الحيّة (Living Variables)</a><a href="label-define.html">label` و`define` (تسمية وتعريف)</a><a href="block-frames.html">بداية الكتل ونهايتها (Block Frames)</a><a href="compare_ops.html">معاملات المقارنة `/=` و `=/=` و `=/</a><a href="max_min.html">max / min family</a><a href="scope-guarantees.html">ضمانات النطاق: `finally` · `defer` · `catch … when` · `rethrow</a><a href="key_terms_and_builtins.html">Rin KEY_TERMS and Built-in Conditions</a><a href="number_builtins.html">Rin Number Built-ins</a></details><details ><summary>الواجهات (Indsin)</summary><a href="indsin.html">Indsin — Interface Design</a><a href="indsin_rin.html">indsin يعتمد على لغة Rin</a><a href="indsin_expansion.html">Indsin — التوسعة الاحترافية (Design System v2)</a><a href="indsin_object.html">indsin-object — API reference</a><a href="indsin_media.html">Indsin Media — اختيار الوسائط ورفعها</a><a href="indsin_icons.html">مكتبة أيقونات indsin (متجهية)</a><a href="indsin_tooling.html">indsin tooling — icon, file association, syntax highlighting</a><a href="indsinweb.html">IndsinWeb — مكتبة WebView والروابط لـ indsin</a><a href="RIN_ELEMENTS.html">دليل `@element.*` الكامل</a><a href="events-effects.html">الأحداث والتأثيرات (Events &amp; Effects) — محرك Indsin UI</a><a href="banner.html">Banner: إشعار شريطي</a><a href="simple-style.html">Rin Simple Style</a></details><details ><summary>بيئة التشغيل</summary><a href="runtime.html">وقت تشغيل Rin (Rin Runtime) · المرجع الرسمي</a><a href="standard-library.html">المكتبة القياسية (`lib/*.og.rin`)</a><a href="errors.html">نظام الأخطاء: أكواد، `try`/`catch`/`throw</a><a href="ERROR_SYSTEM.html">نظام التشخيص: البنية الداخلية + جدول الأكواد الكامل</a><a href="storage.html">تخزين دائم</a><a href="http.html">شبكات</a><a href="env.html">ربط Rin بملف `.env</a><a href="terminal.html">الطرفية التفاعلية — `rin terminal</a><a href="vm.html">RinVM — آلة Rin الافتراضية (بايتكود)</a><a href="rinflow.html">RinFlow: طبقة تنفيذ التدفّق المهيكل</a><a href="MAKE_UNIT.html">@make.(name)`: وحدة بسياسة قدرات صريحة</a><a href="MAKE_MEDIA.html">فيديو · صوت · API · إزالة الخلفية · قراءة النص من الصور</a><a href="TIME.html">مفهوم `time`: الزمن كقيمة من الدرجة الأولى</a><a href="native-additions.html">دوال Rin الأصلية الجديدة (Rin 1.0)</a></details><details ><summary>الحاويات وقواعد البيانات</summary><a href="container_advanced.html">Rin Container Advanced Built-ins</a><a href="container_pro.html">Rin Container Pro</a><a href="container_sql.html">RIN CONTAINER SQL (RCSQL)</a><a href="cross-file-containers.html">استدعاء إعلانات من ملف آخر</a></details><details ><summary>الحزم والتكامل</summary><a href="api.html">واجهة C المسطَّحة (Embedding API)</a><a href="android.html">استضافة Rin على أندرويد</a><a href="packages-and-interop.html">Rin 1.0 — المكتبات والحزم وجسر C++ وJSON واختبارات rintest</a><a href="rinpak-format.html">RinPak — حزمة مشروع Rin (`.rinpak`)</a><a href="html-projects.html">مشاريع HTML في Rin — الربط بين index.html وملف الحاوية</a><a href="project-og-urin.html">project.og.urin` — البيانات الوصفية لمشروع Rin</a><a href="CONTENT_PACKS.html">حزم المحتوى القابلة للتنزيل (Content Packs)</a><a href="previewkit.html">previewkit — معاينة حيّة لملفات PDF / Markdown / TypeScript</a></details><details ><summary>المكتبات المتخصصة</summary><a href="rinml.html">RinML / RinDF / RinAI — الذكاء الاصطناعي وتحليل البيانات في Rin</a><a href="STATS.html">RinStat — التحليل الإحصائي (`lib/rinstat.og.rin`)</a><a href="STATS_ADV.html">RinStat المتقدّم + RinAuto</a><a href="LINALG.html">الجبر الخطي للمهندسين — `mat*` و`vec*</a><a href="PLOT.html">RinPlot — الرسوم البيانية الإحصائية (`lib/rinplot.og.rin`)</a><a href="ALGO.html">تطوير الخوارزميات والحساب العددي — `algo*</a><a href="NUMBER.html">مفهوم `number` في Rin</a><a href="boat.html">&quot;Boat&quot;: مفاهيم أساسية مجمَّعة</a><a href="passkit.html">passkit — passwords, encryption, databases and a tag language</a><a href="passkit-crypto-db.html">Passkit feature catalog: encryption, databases and container linking</a><a href="hash-family.html">عائلة `#` — مفاهيم ودوال جديدة تبدأ بعلامة `#</a><a href="image-draw.html">إنشاء الصور في Rin — رسم وحفظ PNG وlog كصورة</a><a href="image-terminal.html">طباعة الصور في الـ terminal — `printImage` / `imageAnsi` / `imageInfo</a></details><details ><summary>المشروع</summary><a href="CONTRIBUTING.html">المساهمة في Rin</a><a href="CODE_OF_CONDUCT.html">قواعد السلوك</a><a href="SECURITY.html">سياسة الأمان</a><a href="SUPPORT.html">الحصول على المساعدة</a><a href="TRADEMARKS.html">سياسة العلامة التجارية — Trademark Policy</a><a href="THIRD_PARTY_NOTICES.html">إشعارات المكوّنات الخارجية — Third-Party Notices</a></details><details open><summary>مراجع إضافية</summary><a href="ANDROID_VERSIONS.html">حزم RinStudio لكل إصدار أندرويد</a><a href="TOKEN.html">مفهوم `token` في Rin</a><a href="TOOLCHAIN.html">Rin Professional Language Toolchain</a><a href="TOOLCHAIN_UPGRADE.html">Toolchain Upgrade — 2026-09</a><a href="architecture.html">المعمارية وبنية المستودع</a><a href="base-accept.html">base` و`accept`: متغيّران يخدمان `if</a><a href="channel47.html">channel47 — لغة وصف البيانات والإعدادات</a><a href="ci.html">CI وأدوات المستودع</a><a href="loop-templates.html" class=on>قوالب الحلقات `@tmpl</a><a href="pre-post.html">pre` و`post` (ما قبل / ما بعد): عقد انتقال حول الإسناد</a><a href="print-fonts.html">خطوط `print` — bold / italic / underline وغيرها</a><a href="print-image-terminal.html">طباعة الصور كنص في الطرفية</a><a href="print-templates.html">قوالب الطباعة `@tmpl ... print` — قوالب نصية خطية وتنسيقية</a><a href="rdoc.html">rdoc — Documentation Container</a><a href="rdoc-reference.html">وثيقة rdoc الشاملة — Documentation Container</a><a href="screenshots.html">لقطات من RinStudio</a></details></nav>
+<main><article><h1 id="tmpl">قوالب الحلقات <code>@tmpl</code><a class="headerlink" href="#tmpl" title="Permanent link">#</a></h1>
+<p>بدل أن تكتب حلقة جديدة في كل مرة، تعرّف <strong>قالبًا مرة واحدة</strong> وتعيد استخدامه مع مجموعات مختلفة.
+يبدأ التعريف بـ <code>@tmpl</code> ويبدأ الاستعمال بـ <code>@اسم_القالب(...)</code>.</p>
+<p>القوالب تُفكَّك على مستوى التوكنات قبل التحليل النحوي، لذلك تعمل مع <strong>كل</strong> أنواع الحلقات
+(<code>each</code> <code>for</code> <code>while</code> <code>loop</code> <code>repeat</code> <code>retry</code> + <code>limit</code> + التسميات) على المفسّر الشجري وRinVM وأندرويد والويب،
+ولا تغيّر المفسّر ولا الآلة الافتراضية. برنامج بلا <code>@tmpl</code> لا يُمَسّ إطلاقاً.</p>
+<h2 id="1">1) قالب ترويسة<a class="headerlink" href="#1" title="Permanent link">#</a></h2>
+<p>القالب = ترويسة حلقة تنتهي بـ <code>;</code>، وجسم الحلقة تكتبه عند الاستعمال:</p>
+<pre><code class="language-kotlin">@tmpl evens(xs) each x in xs where x % 2 == 0;
+
+@evens([1, 2, 3, 4, 5, 6]) { print x; }      // 2 4 6
+@evens(1 to 10) as n { print n; }            // as = تسمية متغيّر الحلقة
+@evens(nums) take 2 { print x; }             // مرشّحات إضافية بعد الاستعمال تُضاف طبيعياً
+</code></pre>
+<h2 id="2">2) معاملات وقيم افتراضية<a class="headerlink" href="#2" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">@tmpl top(xs, k = 2) each v in xs sorted desc take k;
+@top(scores) { print v; }           // k = 2
+@top(scores, 5) as s { print s; }
+</code></pre>
+<p>المعامل الذي يأتي مباشرة بعد <code>in</code> يُعوَّض كما هو (فيعمل <code>1 to 10</code> وسلاسل <code>chain</code>)،
+وغيره يُغلَّف بأقواس تلقائياً إن كان أكثر من توكن (فلا يتغيّر ترتيب العمليات).</p>
+<h2 id="3">3) جسم افتراضي<a class="headerlink" href="#3" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">@tmpl show(xs) each item in xs { print &quot;item &quot; + item; }
+@show([&quot;a&quot;, &quot;b&quot;]);                  // بلا جسم → يُستعمل الافتراضي
+@show([&quot;a&quot;]) { print &quot;mine&quot;; }      // جسمك يحلّ محلّه
+</code></pre>
+<h2 id="4-as">4) <code>as</code> — تسمية متغيّرات الحلقة<a class="headerlink" href="#4-as" title="Permanent link">#</a></h2>
+<p>تُستنتج المتغيّرات القابلة للتسمية تلقائياً من الترويسة: <code>each x, i in</code> ← <code>x, i</code> · <code>each x in a, y in b</code> ← <code>x, y</code> ·
+<code>repeat n as i</code> ← <code>i</code> · <code>retry n as a</code> ← <code>a</code>.</p>
+<pre><code class="language-kotlin">@tmpl numbered(xs) each x, i in xs from 1;
+@numbered(names) as name, no { print no + &quot;. &quot; + name; }
+</code></pre>
+<p>يمكن تسمية عدد أقل من المتغيّرات، لا أكثر (خطأ واضح يعرض الأسماء المتاحة).</p>
+<h2 id="5">5) كل أنواع الحلقات<a class="headerlink" href="#5" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">@tmpl times(n) repeat n as i;           @times(3) { print i; }
+@tmpl attempts(n) retry n as a;         @attempts(5) { callFlaky(); }
+@tmpl up(n) for (let i = 0; i &lt; n; i++) limit 1000;
+@tmpl until0(n) while (n &gt; 0) limit 50;
+outer: @evens(xs) { ... continue outer; ... }   // التسميات تعمل
+</code></pre>
+<h2 id="6">6) داخل التعابير<a class="headerlink" href="#6" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">[@evens(xs) yield x * x]            sum @evens(xs) yield x
+count @evens(1 to 9)                {@evens(xs) yield x : x * x}
+</code></pre>
+<h2 id="7-body">7) قوالب الكتلة و<code>@body</code><a class="headerlink" href="#7-body" title="Permanent link">#</a></h2>
+<p>حين يلزم أكثر من ترويسة (حلقات متداخلة، تغليف) اكتب القالب بين <code>{ }</code> وضع <code>@body</code> مكان جسم المستدعي،
+واكشف المتغيّرات بـ <code>as</code>:</p>
+<pre><code class="language-kotlin">@tmpl grid(r, c) as i, j { each i in 1 to r { each j in 1 to c { @body } } }
+@grid(2, 3) { print i + &quot;,&quot; + j; }
+@grid(4, 4) as row, col { if (row == col) { print row; } }
+</code></pre>
+<h2 id="8">8) قالب يستعمل قالباً آخر<a class="headerlink" href="#8" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">@tmpl evenSquares(xs) @evens(xs) take 2;
+</code></pre>
+<h2 id="_1">قواعد وأخطاء<a class="headerlink" href="#_1" title="Permanent link">#</a></h2>
+<ul>
+<li>يُعرَّف القالب قبل استعماله في الملف، وفي أي مكان (حتى داخل دالة) لكنه عام للملف كله؛ لا يعبر <code>@import</code>.</li>
+<li>الأسماء المحجوزة: <code>tmpl body import view element container Containers make loop Volume volume link portal route object install</code>.</li>
+<li>أخطاء واضحة: عدد الوسائط، وسيط ناقص، <code>as</code> أكثر من المتاح، قالب مُعرَّف مرتين، قالب كتلة بلا <code>@body</code>، قالب بلا جسم افتراضي
+  استُعمل بلا جسم، استدعاء ذاتي (<code>loop template expansion is too deep</code>).</li>
+<li>الأسماء داخل القالب غير معزولة (غير hygienic): اختر أسماء متغيّرات لا تصطدم بمتغيّراتك أو استعمل <code>as</code>.</li>
+<li>اختبار: <code>tests/loops/loops_tmpl.rin</code>.</li>
+</ul></article>
+<div class="pnav"><a class="pn" href="ci.html">→ CI وأدوات المستودع</a><a class="pn" href="pre-post.html">pre` و`post` (ما قبل / ما بعد): عقد انتقال حول الإسناد ←</a></div><p class="edit"><a href="https://github.com/dlof-lib/rinlang/edit/main/docs/loop-templates.md">✎ عدّل هذه الصفحة على GitHub</a></p>
+<footer>Rin 1.0.0 · رخصة MIT</footer></main>
+<aside id="toc"><b>في هذه الصفحة</b><div class="toc">
+<ul>
+<li><a href="#1">1) قالب ترويسة</a></li>
+<li><a href="#2">2) معاملات وقيم افتراضية</a></li>
+<li><a href="#3">3) جسم افتراضي</a></li>
+<li><a href="#4-as">4) as — تسمية متغيّرات الحلقة</a></li>
+<li><a href="#5">5) كل أنواع الحلقات</a></li>
+<li><a href="#6">6) داخل التعابير</a></li>
+<li><a href="#7-body">7) قوالب الكتلة و@body</a></li>
+<li><a href="#8">8) قالب يستعمل قالباً آخر</a></li>
+<li><a href="#_1">قواعد وأخطاء</a></li>
+</ul>
+</div>
+</aside></div>
+<script src="assets/app.js"></script></body></html>

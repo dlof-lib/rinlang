@@ -1,0 +1,280 @@
+#pragma once
+#include <unordered_set>
+#include <map>
+#include <memory>
+#include "rin_common.h"
+#include "rin_ast.h"
+#include "diagnostics/diagnostic.h"
+#include "diagnostics/diagnostic_engine.h"
+
+namespace rin {
+
+// PolicyAccumulator: نفس حقول policy block (use/need/allow/deny/strict/version/description +
+// hasPolicy) الموجودة أصلاً في ContainerStmt/MakeStmt/ContainerGroupStmt، لكن كـ struct مستقل
+// بلا أي ارتباط بنوع AST معيّن -- بهذا يستطيع tryParsePolicyDirective تعبئتها مرة واحدة أثناء
+// تحليل جسم أي @container أو @Containers.Group، ثم يُنسَخ محتواها لاحقاً (فقط إن hasPolicy)
+// إلى حقول ContainerStmt أو ContainerGroupStmt الفعلية حسب نوع الوسم -- بلا تكرار منطق التحليل
+// نفسه لكل نوع AST على حدة.
+struct PolicyAccumulator {
+    std::vector<std::string> uses;
+    std::vector<std::string> needs;
+    std::vector<std::string> allows;
+    std::vector<std::string> denies;
+    std::string version;
+    std::string description;
+    bool strict = false;
+    bool hasPolicy = false;
+};
+
+class Parser {
+public:
+    explicit Parser(std::vector<Token> tokens, std::string filename = "<input>");
+    std::vector<StmtPtr> parse();
+
+    // Parses the full token stream while collecting as many diagnostics as it safely can
+    // instead of throwing (stopping) at the first error — القسم 21/22/23 من نظام Diagnostics
+    // (Multiple Errors + Error Recovery). Statements that fail to parse are skipped up to the
+    // next synchronization point (';', '}', ')' or a '.end/...' closing tag). The returned
+    // vector of statements may be incomplete/partial when diagnostics were emitted; callers
+    // that need a strict parse (throw on first error) should keep using parse() instead.
+    std::vector<StmtPtr> parseCollectingDiagnostics(diag::DiagnosticEngine& engine);
+
+private:
+    std::vector<Token> tokens;
+    size_t current = 0;
+    std::string file;              // اسم الملف؛ يُستخدم في كل Diagnostic صادر من هذا الـ Parser
+
+    // helpers
+    bool isAtEnd() const;
+    const Token& peek() const;
+    const Token& previous() const;
+    const Token& advance();
+    bool check(TokenType type) const;
+    bool checkNext(TokenType type) const;
+    bool atTemplate(size_t offset = 0) const;       // هل التوكن (current+offset) بداية قالب نصي ديناميكي `..${}..`
+    ExprPtr templateNameExpr();                      // يقرأ قالباً ديناميكياً (بين أقواسه فقط، بلا call لاحق)
+    Token consumeStaticText(const std::string& msg); // نص ثابت فقط؛ ${} هنا خطأ بتلميح واضح // ينظر إلى التوكن التالي (current+1) دون استهلاكه
+    // RCS-1.0 §3.13/§7 Phase 0: يحاول تحليل توجيه سياسة واحد (use/need/allow/deny/strict/
+    // version/description) في بداية جسم أي @container عادية أو @Containers.Group (Phase 1:
+    // عُمِّمت من @container فقط إلى @Containers.Group أيضاً -- انظر PolicyAccumulator أعلاه
+    // وتعليق hasPolicy في ContainerGroupStmt في rin_ast.h). يعيد false ويستعيد موضع القارئ كما
+    // كان تماماً إن لم يطابق النمط المتوقع بالضبط — حتى لا يكسر أي برنامج قديم قد يستخدم هذه
+    // الكلمات كأسماء متغيرات/دوال عادية داخل حاوية/مجموعة.
+    bool tryParsePolicyDirective(PolicyAccumulator& s);
+    bool match(std::initializer_list<TokenType> types);
+    const Token& consume(TokenType type, const std::string& message);
+
+    // ---- Diagnostics helpers (src/diagnostics — انظر app/src/main/cpp/diagnostics/) ----
+    // يبني RinError غنياً بموقع دقيق (سطر/عمود مأخوذان من التوكن) لأي خطأ Parser مخصص لا يمرّ
+    // عبر consume(). إن كان recoveryEngine مفعّلاً (داخل parseCollectingDiagnostics) يُصدِر
+    // الـ Diagnostic إلى المُجمِّع بدل رميه مباشرة، ويستدعي المستدعي synchronize() بنفسه.
+    RinError err(diag::Code code, const Token& tok, std::string message) const;
+    // نسخة غنية من err(): تضيف reason: (لماذا حدث الخطأ) و/أو help: (كيف يُصلَح) مباشرة، لتفادي
+    // تكرار بناء Diagnostic يدوياً في كل موقع استدعاء يحتاج تفصيلاً أكثر من رسالة سطر واحد.
+    // expected/found اختياريان: يُملآن فقط إن مُرِّرت سلسلة غير فارغة.
+    RinError errRich(diag::Code code, const Token& tok, std::string message, std::string reason,
+                      std::string hint, std::string expected = "", std::string found = "") const;
+    // نسخة لأخطاء تُبنى من Stmt/Expr (اللذان يحملان .line فقط بلا عمود دقيق، انظر rin_ast.h)؛
+    // العمود يُقارَب بـ 1 (بداية السطر) — لا يزال أدق بكثير من عدم وجود Diagnostic إطلاقاً.
+    RinError errAtLine(diag::Code code, int line, std::string message) const;
+    diag::SourceLocation locOf(const Token& tok) const;
+    // يحاول استخراج النص بين أول علامتي اقتباس مفردتين من رسالة على شكل "Expected ')' after ..."
+    // لملء حقل expected: تلقائياً دون الحاجة لإعادة كتابة كل موقع استدعاء على حدة.
+    static std::string extractQuoted(const std::string& message);
+    // بعد خطأ غير قابل للاستمرار الآمن، يتقدّم حتى نقطة تزامن (';' / '}' / ')' / '.end/...')
+    // حتى يمكن الاستمرار بمحاولة تحليل بقية الملف وجمع مزيد من الأخطاء دفعة واحدة.
+    void synchronize();
+
+    // statements
+    StmtPtr declaration();
+    StmtPtr letDeclaration();
+    StmtPtr letDeclarator();      // let+: عنصر واحد من `let a = 1, [b, c] = pair;`
+    LetPattern letPattern();      // let+: نمط تفكيك كامل
+    LetPattern letPatternPrimary();
+    void checkPatternDuplicates(const LetPattern& p, const Token& at) const;
+    // المتغيرات الحيّة (docs/living-variables.md): stone/gauge/tape/lens/fuse + bell + trial + undo/redo/rearm/unbell/abort
+    StmtPtr liveDeclaration();
+    StmtPtr bellDeclaration();
+    StmtPtr trialStatement();
+    StmtPtr liveActionStatement();
+    StmtPtr reckonDeclaration();
+    StmtPtr setDeclaration(); // 'set' name 'to' expr ';'  -> صياغة إنجليزية مبسّطة (sugar) لِـ LetStmt، مطابقة تماماً لـ let من ناحية الدلالة
+    StmtPtr functionDeclaration();
+    // OOP: class Name [extends Base] { fields/methods }  |  struct Name { fields/methods }
+    // (يُستدعى بعد استهلاك 'class' أو 'struct' في declaration(); isStruct يفرّق بينهما)
+    StmtPtr classDeclaration(bool isStruct);
+    // Rin 1.0: صيغة موسَّعة — kind (class/interface/trait) + abstract/final.
+    StmtPtr classDeclarationEx(bool isStruct, ClassKind kind, bool isAbstract, bool isFinal);
+    // 'fun name(params)[: T] { body }' أو (حين allowBodyless) 'fun name(params)[: T];' بلا جسم.
+    std::shared_ptr<FunctionStmt> memberFunction(bool allowBodyless);
+    // enum Name { CaseA, CaseB = expr, ... }  (يُستدعى بعد استهلاك 'enum' في declaration())
+    StmtPtr enumDeclaration();
+    // match (subject) { case v1, v2 { .. } case v3 { .. } else { .. } }  (يُستدعى بعد استهلاك
+    // 'match' في declaration())
+    StmtPtr matchStatement();
+    StmtPtr conditionMatchStatement();        // match { case (cond) {..} ... else {..} } -> if/else-if chain
+    ExprPtr trailingGuard();                  // `when (c)` / `unless (c)` / `if (c)` after return/break/continue/achieve/throw/case
+    StmtPtr guarded(StmtPtr inner, ExprPtr guard);
+    // achieve expr; / achieve;  (يُستدعى بعد استهلاك 'achieve' في declaration())
+    StmtPtr achieveStatement();
+    StmtPtr statement();
+    StmtPtr printStatement();
+    StmtPtr ifStatement();
+    StmtPtr whenStatement(); // 'when' (condition) thenBranch ['otherwise' elseBranch]  -> صياغة إنجليزية مبسّطة (sugar) لِـ IfStmt، مطابقة تماماً لـ if/else من ناحية الدلالة
+    bool atKeyCondition(size_t at, std::string& term) const; // `= term =(` at tokens[at]: =if= =when= =unless= =while= =all= ... (docs/key_terms_and_builtins.md)
+    StmtPtr keyConditionStatement(bool asElseIf = false);                       // compact key-condition forms -> IfStmt / WhileStmt
+    StmtPtr whileStatement();
+    StmtPtr forStatement(); // for (init; condition; increment) body  -> حلقة for على طراز C
+                             // أو for (let NAME in iterable) body -> ForInStmt (انظر rin_ast.h)
+    StmtPtr plusConditionStatement(); // plus.condition(cond) { .. } / { .. } -> شرط ثلاثي عام
+    StmtPtr returnStatement();
+    // ---- عائلة # (docs/hash-family.md): عبارات #do #done #ban #ignorance #swap ----
+    StmtPtr hashStatement();                 // nullptr إن لم تكن العبارة الحالية من العائلة (فتُقرأ كتعبير عادي)
+    StmtPtr hashDoStatement();               // #do body #while (cond);
+    StmtPtr hashBanStatement();              // #ban x[, y]; | #ban x = expr;
+    StmtPtr hashIgnoranceStatement();        // #ignorance { ... } | #ignorance stmt
+    StmtPtr hashSwapStatement();             // #swap a, b;  |  #swap(a, b);   (nullptr إن كانت الصيغة الدالّية ذات 3 وسائط)
+    void attachDoneBlock(StmtPtr& done);     // يقرأ  #done { ... }  اختيارياً بعد جسم حلقة
+    ExprPtr maybeHashRange(ExprPtr first);   // A #to B [step C]  ->  #to(A, B[, C])
+    int hashCounter = 0;
+    StmtPtr breakStatement();
+    StmtPtr continueStatement();
+    StmtPtr rinopenStatement();
+    StmtPtr objectFieldStatement();
+    StmtPtr objectLiteralStatement(const Token& objectTok); // .object("id") field(value); ... container.(); .end/object
+    StmtPtr viewPrintObjectStatement(); // view.print/object(expr);  (يُستدعى بعد استهلاك 'view' '.' 'print')
+    StmtPtr logStatement(const Token& printTok); // print.log(...) / print.log.info/warn/error/debug(...)  (يُستدعى بعد استهلاك 'print' '.' 'log')
+    StmtPtr imageStatement(const Token& printTok); // print.image(path, caption=, width=, if=)  (يُستدعى بعد استهلاك 'print' '.' 'image')
+    // ── إطارات الكتل (Block Frames) ─────────────────────────────────────────────────────────
+    // كل كتلة '@...'/'.object(...)' تفتح "إطاراً" يسجّل طريقة إغلاقها: brace=true إن فُتحت بـ '{' على
+    // نفس سطر الترويسة (تُغلق بـ '}')، وإلا الشكل القديم ('.end/x' أو '.end;'). تحديد الطريقة عند
+    // الفتح وحدها يمنع خلط الأسلوبين داخل كتلة واحدة ويمنع أي التباس مع '{ }' الخاصة بالدوال/الشروط.
+    struct BlockFrame { bool brace; int openLine; };
+    std::vector<BlockFrame> frames;
+    struct FrameGuard { // RAII: يضمن سحب الإطار حتى عند رمي خطأ نحوي (لا يبقى إطار يتيم بعد synchronize)
+        Parser& p; bool brace;
+        FrameGuard(Parser& parser, bool b, int line) : p(parser), brace(b) { p.frames.push_back({b, line}); }
+        ~FrameGuard() { p.frames.pop_back(); }
+        FrameGuard(const FrameGuard&) = delete; FrameGuard& operator=(const FrameGuard&) = delete;
+    };
+    bool openBraceIfSameLine();        // يستهلك '{' إن وقعت على نفس سطر آخر توكن في الترويسة، ويُرجع هل استُهلكت
+    // ---- Loops v2 (docs/loops.md): each / repeat / loop / retry / labels / limit — كلها تفكيك لعقد موجودة ----
+    struct LoopProp { std::string flag; int targetDepth; int kind; };
+    struct LoopCtx { int depth = 0; std::string label, flag; std::vector<LoopProp> props; };
+    struct LabelInfo { std::string name, flag; int depth; bool needFlag = false; };
+    std::vector<LoopCtx> loopStack, doneStack;
+    std::vector<LabelInfo> labels;
+    std::string pendingLabel;
+    int loopSeq = 0;
+    // ---- قوالب الحلقات @tmpl (docs/loop-templates.md): تفكيك على مستوى التوكنات قبل التحليل النحوي ----
+    struct LoopTmpl;
+    std::map<std::string, std::shared_ptr<LoopTmpl>> tmpls;
+    bool tmplDone = false;
+    void expandLoopTemplates();
+    std::vector<Token> expandTmplStream(const std::vector<Token>& in, int depth);
+    size_t tmplParseDef(const std::vector<Token>& in, size_t i);
+    size_t tmplExpandUse(const LoopTmpl& t, const std::vector<Token>& in, size_t i, std::vector<Token>& out, int depth);
+    void enterLoop();
+    void exitLoop();
+    StmtPtr finishLoop(StmtPtr loop, ExprPtr limit = nullptr);
+    ExprPtr limitClause();
+    StmtPtr loopsV2Statement();   // each / repeat / loop / retry / label: — nullptr إن لم تكن العبارة منها
+    StmtPtr labeledJump(bool isBreak, const Token& tok);
+    ExprPtr eachComprehension();  // [each x in xs where c => expr]
+    bool atLoopForm(size_t at) const;
+    bool atEachForm(size_t at, bool forKw = false) const;
+    bool tokensMayCapture(size_t from, size_t to) const; // Rin For+: هل في [from,to) ما قد ينشئ closure؟
+    bool isSimpleTarget(const ExprPtr& e) const;         // هدف += / ++ بلا آثار جانبية (يُقيَّم مرتين)
+    // Loops v3: مراحل التيار بالترتيب المكتوب — kind: 0=where 1=skip 2=take 3=until 4=while 5=distinct (e = المفتاح أو null)
+    struct Stage { int kind; ExprPtr e; int line = 0; };
+    // mode: 1=by 2=zip 3=window 4=every 5=cross 6=pairs ؛ from = بداية الفهرس مع متغيّرين
+    struct EachHdr { std::string v1, v2; std::shared_ptr<LetPattern> pat; ExprPtr iter; std::vector<Stage> stages; std::vector<std::pair<std::string, ExprPtr>> extra; /* each x in xs, y in ys */ int mode = 0; ExprPtr arg, iter2, from; int line = 0; };
+    ExprPtr reduceComprehension(); // sum/product/count/avg/min/max/any/all/first/last each x in xs [where c] [yield e]
+    ExprPtr mapComprehension();    // {each x in xs yield key: value}
+    bool atReducer(size_t at) const;
+    EachHdr parseEachHdr();
+    StmtPtr buildEach(EachHdr& h, StmtPtr body, int line, ExprPtr lim);
+    // i / y الضمنيان (docs/loops.md): from/to = مدى التوكنات الذي حلّله الجسم/التعبير بعد ترويسة الحلقة
+    StmtPtr buildEachImplicit(EachHdr& h, StmtPtr body, int line, ExprPtr lim, size_t from, size_t to);
+    bool nameDeclaredBefore(const std::string& nm, size_t at) const;
+    bool implicitWanted(const std::string& nm, size_t from, size_t to) const;
+    std::unordered_set<std::string> labelFlagUsed;
+    int loopDepth = 0; // >0 داخل جسم حلقة while؛ يُستخدم للتحقق من صحة break/continue وقت التحليل
+    int goalDepth = 0; // >0 داخل جسم 'goal { .. }'؛ يُستخدم للتحقق من صحة 'achieve' وقت التحليل
+    std::shared_ptr<BlockStmt> block();
+    StmtPtr expressionStatement();
+
+    // data-container language (container / Containers.Group / Volume / Section / ...)
+    std::string readTagKeyword();      // يقرأ "container" أو "Volume" أو "Containers.Group" ...
+    // يقرأ "=name" اختياريًا بعد كلمة مفتاحية. context يصف — بلغة الإنسان — أي بنية يُقرأ لها
+    // الاسم (مثلاً "a `@container` block", "an `@element` name", "a closing tag") حتى تحمل
+    // رسالة الخطأ E0012 عند غياب الاسم بعد '=' سياقاً دقيقاً بدل رسالة عامة واحدة للجميع.
+    std::string readOptionalName(const std::string& context = "this");
+    bool checkClosingTag() const;      // هل التوكن الحالي إغلاقٌ للإطار الحالي: ".end/..." (قديم) أو "}" (كتلة أقواس)
+    void consumeEndTag(const std::string& expectedTag, int openLine, const std::string& openName = ""); // يستهلك ويتحقق من ".end/<expectedTag>" أو اختصارها ".end;"
+
+    // RCS-1.0 §3.2 Lifecycle: on init/mount/update/destroy/error(params) { body }  (يُستدعى بعد
+    // استهلاك 'on' فقط عندما لا يتبعها '.' — تلك تبقى on.<element>.<event> عبر uiBindingStatement()).
+    StmtPtr lifecycleHookDeclaration();
+    // RCS-1.0 §3.3 State: state IDENT = expr;  (يُستدعى بعد استهلاك 'state')
+    StmtPtr stateDeclaration();
+    // RCS-1.0 §3.5 Tree (Phase 2): slot IDENT;  (يُستدعى بعد استهلاك 'slot')
+    StmtPtr slotDeclaration();
+    // RCS-1.0 §3.6 Events (Phase 2): emit STRING (, expr)? (bubbles)? ;  (يُستدعى بعد استهلاك 'emit')
+    StmtPtr emitStatement();
+    // RCS-1.0 §3.6 Events (Phase 2): on.event STRING (params) { body }  (يُستدعى بعد استهلاك
+    // 'on' '.' 'event' -- يُميَّز عن on.<element>.<event> في declaration() بالنظر للتوكن الرابع).
+    StmtPtr eventHandlerDeclaration();
+    // RCS-1.0 §3.14 Dependency (Phase 3): requires IDENT (, IDENT)* ;  (يُستدعى بعد استهلاك 'requires')
+    StmtPtr dependencyDeclaration();
+    StmtPtr textDeclaration();
+    StmtPtr objectStyleFieldDeclaration(ObjectStyleFieldKind kind); // txt/img/object.file/Fonts/background/css3 name=...; (حصراً داخل @Object)
+    StmtPtr atBlock();                 // @container / @container.pipe / @container.data / @container.api / @container.import / @Containers.Group / @Volume
+    StmtPtr makeUnitBlock();          // @make.(name) ... .end/make[=name]
+    StmtPtr importStatement();         // @import "path"; / @import "path" as alias;   (يُستدعى بعد استهلاك '@' و'import')
+    // Modules: import { a, b, c } from "path";  (يُستدعى بعد استهلاك 'import' فقط -- بلا '@' --
+    // من declaration(); صياغة جديدة كلياً منفصلة عن importStatement()/@import أعلاه بالكامل)
+    StmtPtr importSelectedStatement();
+    void validateDataContainerBody(const std::vector<StmtPtr>& body); // يمنع تعريف الدوال أو الحاويات المتداخلة داخل container.data
+    StmtPtr sectionBlock();
+    StmtPtr translationsBlock();
+    StmtPtr translationStatement();
+    StmtPtr linkStatement();
+    StmtPtr tyingStatement();
+    StmtPtr mergeStatement();
+    StmtPtr installationStatement(bool simplifiedFlag);
+    StmtPtr saveStatement(bool simplifiedFlag);
+    StmtPtr fileStatement();
+    StmtPtr routeStatement();     // route method=... path=... status=... body=...;  (داخل container.api)
+    StmtPtr simplifiedStatement(); // "simplified" متبوعة بـ installation أو save
+    StmtPtr rowStatement();       // row cells=[...];              (مفهوم الجدول: container.table / table)
+    StmtPtr styleStatement();     // style value="style://theme";  (مفهوم الجدول: container.table / table)
+    StmtPtr documentStatement();  // document id="..." fields={...};  (قاعدة بيانات NoSQL: container.doc / doc)
+    std::string readOptionalFormatAttr(); // يقرأ "format=IDENT" اختيارياً (لـ save/installation)، أو "" إن لم توجد
+
+    // Indsintime rendering engine (view strands / reactive state) — امتداد إضافي
+    std::shared_ptr<ViewStmt> viewDeclaration(); // @view.<Kind>=name ... .end/view
+    std::shared_ptr<ViewStmt> elementDeclaration(); // @element.<Kind>=name ... .end/element
+    std::shared_ptr<ViewStmt> loopCanvasDeclaration(); // @loop.<Kind>=name ... .end/loop OR @loop=name ...
+    StmtPtr uiBindingStatement(); // on.<element>.<event>=handler(...); inside a Container
+    StmtPtr warpDeclaration();                    // warp name = expr;
+    StmtPtr easyKeyDeclaration();                // easy_key = "key";        داخل جسم الحاوية
+    StmtPtr maskDeclaration();                    // mask = expr;              (يُستدعى بعد استهلاك 'warp')
+    StmtPtr themeDeclaration(int kind = 0); /* 0 theme · 1 effect · 2 font */                   // @theme=Name key=expr; ... .end/theme  (يُستدعى بعد استهلاك '@' و'theme')
+
+    // expressions (precedence climbing)
+    ExprPtr expression();
+    ExprPtr assignment();
+    ExprPtr pipeline();   // a |> f(b, c)  =>  f(a, b, c)  (خط الأنابيب: للتحويل/التجميع الإحصائي)
+    ExprPtr logicOr();
+    ExprPtr logicAnd();
+    ExprPtr equality();
+    ExprPtr comparison();
+    ExprPtr term();
+    ExprPtr factor();
+    ExprPtr unary();
+    ExprPtr call();
+    ExprPtr primary();
+};
+
+} // namespace rin

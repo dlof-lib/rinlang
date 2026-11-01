@@ -1,0 +1,253 @@
+package com.dlof.rinlang
+
+import androidx.annotation.ColorRes
+import androidx.annotation.DrawableRes
+import java.io.File
+import java.util.Locale
+
+/** Category of a single formatted output line (drives the icon + accent color used to render it). */
+enum class LogKind(@DrawableRes val icon: Int?, @ColorRes val colorRes: Int) {
+    STRUCTURE(R.drawable.ic_log_container, R.color.log_kind_structure),
+    SUCCESS(R.drawable.ic_log_check, R.color.log_kind_success),
+    IMPORT(R.drawable.ic_log_import, R.color.log_kind_import),
+    LINK(R.drawable.ic_log_link, R.color.log_kind_import),
+    EXPORT(R.drawable.ic_log_export, R.color.log_kind_export),
+    IMAGE(R.drawable.ic_log_image, R.color.log_kind_export),
+    ARCHIVE(R.drawable.ic_log_archive, R.color.log_kind_export),
+    FILE(R.drawable.ic_log_file, R.color.log_kind_data),
+    GRID(R.drawable.ic_log_grid, R.color.log_kind_data),
+    STYLE(R.drawable.ic_log_palette, R.color.log_kind_style),
+    NETWORK(R.drawable.ic_log_globe, R.color.log_kind_network),
+    DOC_INSERT(R.drawable.ic_new_file, R.color.log_kind_success),   // 🧾 إدراج مستند NoSQL جديد
+    DOC_UPDATE(R.drawable.ic_redo, R.color.log_kind_import),        // 🔄 تحديث مستند NoSQL موجود
+    ERROR(R.drawable.ic_status_error, R.color.log_kind_error),
+    // الثلاثة أدناه خاصة حصراً بسمة print level="..." الجديدة (انظر PrintStmt في rin_ast.h ورمز
+    // level في rin_interpreter.cpp) — success/error التابعتان لـ print level="success"/"error"
+    // تُصنَّفان أعلاه ضمن SUCCESS/ERROR الموجودتين أصلاً (نفس الهوية اللونية منطقياً)، أما
+    // info/warn/debug فتصنيفات جديدة بالكامل لا نظير سابق لها.
+    INFO(R.drawable.ic_log_info, R.color.log_kind_info),
+    WARNING(R.drawable.ic_status_warning, R.color.log_kind_warning),
+    DEBUG(R.drawable.ic_log_debug, R.color.log_kind_debug),
+    // خاصة بسطر `print.image(...)` الجديد (انظر PrintImageStmt في rin_ast.h وrin_interpreter.cpp) —
+    // على عكس أي LogKind آخر، هذا السطر لا يُعرَض كنص فقط: RinJobAdapter.kt يفكّ [RinLogLine.imageRelPath]
+    // ويعرض مصغّرة (thumbnail) فعلية من ملف الصورة، مع [RinLogLine.imageCaption] كتسمية أسفلها.
+    PRINT_IMAGE(R.drawable.ic_log_image, R.color.log_kind_export),
+    PLAIN(null, R.color.log_kind_plain)
+}
+
+/** One line of a job's console output, ready to be rendered as an icon + styled text row.
+ *  [imageRelPath]/[imageCaption]/[imageWidthDp] are non-null only for [LogKind.PRINT_IMAGE] lines
+ *  (see [RinConsoleFormatter.RE_PRINT_IMAGE]) — everything else keeps using [text] alone, exactly
+ *  as before this field was added. */
+data class RinLogLine(
+    val kind: LogKind,
+    val text: String,
+    val imageRelPath: String? = null,
+    val imageCaption: String? = null,
+    val imageWidthDp: Float? = null,
+    /** رقم السطر المصدري لأخطاء `[Error line N]:` (null لغيرها) — يتيح «اذهب إلى السطر» من الكونسول. */
+    val errorLine: Int? = null,
+    /** إزاحة السطر الأصلية (Tab = 4)؛ [text] نفسه يبقى مقصوصاً كما كان، فلا يتأثر أي عارض قائم. */
+    val indent: Int = 0,
+    /** عدد مرات تكرار هذا السطر متتالياً بعد [collapseRepeats] (1 = غير مكرَّر). */
+    val repeat: Int = 1,
+    /** غير null لأسطر فتح/إغلاق الحاويات (`@container...`/Group/Volume/Section) — يُبنى منها العرض المميَّز. */
+    val container: RinContainerMark? = null
+)
+
+/** File kinds save/installation can actually write to disk, and how to open/share them afterwards. */
+enum class ArtifactKind(val mime: String, @DrawableRes val icon: Int) {
+    IMAGE_PNG("image/png", R.drawable.ic_log_image),
+    ARCHIVE_ZIP("application/zip", R.drawable.ic_log_archive),
+    /** حزمة مشروع Rin (.rinpak) — MIME خاص كي لا يضيف MediaStore لاحقة .zip إلى اسم الملف. */
+    RINPAK("application/vnd.rin.pak", R.drawable.ic_rinpak_file),
+    RIN_DOC("text/plain", R.drawable.ic_log_export),
+    APK("application/vnd.android.package-archive", R.drawable.ic_log_export)
+}
+
+/**
+ * A real file produced by a `save` / `installation` statement during the last run.
+ * [absoluteFile] always points at an existing file under the engine's base directory —
+ * this is genuine on-disk output, not something synthesized for display.
+ */
+data class RinArtifact(
+    val kind: ArtifactKind,
+    val relPath: String,
+    val absoluteFile: File,
+    val sizeBytes: Long
+) {
+    val displayName: String get() = File(relPath).name
+}
+
+object RinConsoleFormatter {
+
+    // كل بادئة مطابقة لنفس النص الذي يطبعه rin_interpreter.cpp حرفياً، مرتّبة من الأكثر تحديداً.
+    private val PREFIX_ORDER: List<Pair<String, LogKind>> = listOf(
+        "🖼️" to LogKind.IMAGE,
+        "🗜️" to LogKind.ARCHIVE,
+        "⚙️" to LogKind.EXPORT,
+        "💾" to LogKind.EXPORT,
+        "📄" to LogKind.FILE,
+        "📥" to LogKind.IMPORT,
+        "📦⬅️" to LogKind.IMPORT,
+        "📦" to LogKind.IMPORT,
+        "↺" to LogKind.IMPORT,
+        "✅" to LogKind.SUCCESS,
+        "◽" to LogKind.SUCCESS,
+        // print(level="...") prefixes emitted by rin_interpreter.cpp's PrintStmt handling
+        // (see the exact "\u274C "/"\u26A0\uFE0F "/"\u2139\uFE0F "/"\U0001F41E " literals it
+        // writes). Previously missing here entirely, so an error/warn/info/debug-level print
+        // silently fell through to LogKind.PLAIN -- e.g. print("x", level="error") rendered as
+        // plain text instead of as an error, even though LogKind.ERROR/WARNING/INFO/DEBUG (and
+        // their icons/colors) already existed and were otherwise unreachable dead code.
+        "❌" to LogKind.ERROR,
+        "⚠️" to LogKind.WARNING,
+        "ℹ️" to LogKind.INFO,
+        "🐞" to LogKind.DEBUG,
+        "🗂️" to LogKind.STRUCTURE,
+        "📊" to LogKind.STRUCTURE,
+        "🧵" to LogKind.STRUCTURE,
+        "📚" to LogKind.STRUCTURE,
+        "🔹" to LogKind.STRUCTURE,
+        "🌐" to LogKind.NETWORK,
+        "🌍" to LogKind.NETWORK,
+        "🔗" to LogKind.LINK,
+        "🪢" to LogKind.LINK,
+        "🧬" to LogKind.LINK,
+        "▦" to LogKind.GRID,
+        "🎨" to LogKind.STYLE,
+        "🧾" to LogKind.DOC_INSERT,
+        "🔄" to LogKind.DOC_UPDATE
+    )
+
+    // `print.image(...)` (انظر PrintImageStmt/rin_interpreter.cpp): يطابق تماماً السطر الذي يكتبه
+    // المفسِّر: "🖨️ print.image -> <path> (<size> بايت[، عرض <w>dp])[ — <caption>]". الثلاثة أدناه
+    // تُستخرَج معاً من نفس السطر: المسار (نسبي لمجلد المشروع، تماماً كـ RE_SAVE_PNG/RE_SAVE_RIN)،
+    // عرض العرض الاختياري بالـ dp (width= في اللغة)، والتعليق الاختياري (caption=) بعد "— ".
+    private val RE_PRINT_IMAGE = Regex("""^🖨️\s*print\.image\s*->\s*(.+?)\s*\(""")
+    private val RE_PRINT_IMAGE_WIDTH = Regex("""عرض\s*([0-9]+(?:\.[0-9]+)?)dp""")
+    private val RE_PRINT_IMAGE_CAPTION = Regex("""\)\s*—\s*(.*)$""")
+
+    private val RE_SAVE_PNG = Regex("""^🖼️\s*save\s*\(png\)\s*->\s*(.+?)\s*\(""")
+    private val RE_SAVE_ZIP = Regex("""^🗜️\s*save\s*\(zip\)\s*->\s*(.+?)\s*\(""")
+    private val RE_SAVE_RIN = Regex("""^💾\s*save(?:\s*\(simplified\))?\s*->\s*(.+?)\s*\(""")
+    private val RE_INSTALL_ZIP = Regex("""^🗜️\s*installation\s*\(zip\):\s*\S+\s*->\s*(.+?)\s*\(""")
+    private val RE_INSTALL_RIN = Regex("""^⚙️\s*installation(?:\s*\(simplified\))?:\s*\S+\s*->\s*(.+?)\s*\(""")
+
+    /**
+     * Matches every genuine error format the engine/scheduler actually emit:
+     *   "[Error line N]: <message>"   (rin_interpreter.cpp — runtime error)
+     *   "[Error]: <message>"          (rin_interpreter.cpp — e.g. 'return' outside a function)
+     *   "[Timeout]: <message>"        (RinJobScheduler.kt — execution exceeded the time limit)
+     *   "[Fatal error]: <message>"    (RinJobScheduler.kt — uncaught exception in the job runner)
+     * Anchored and specific on purpose — a plain print of a JSON array/object (e.g. `["a","b"]`
+     * from docIds/allDocs/queryDocs, or `[]`) also starts with '[' but is NOT an error, and must
+     * never be misclassified as one.
+     */
+    private val RE_ERROR_LINE_NO = Regex("""^\[Error\s+line\s+(\d+)]:""")
+
+    private val RE_RUNTIME_ERROR = Regex("""^\[(?:Error(?:\s+line\s+\d+)?|Timeout|Fatal error)]:""")
+
+    /** True only for a genuine interpreter error line, never for ordinary array/object output. */
+    private fun isErrorLine(trimmedStart: String): Boolean = RE_RUNTIME_ERROR.containsMatchIn(trimmedStart)
+
+    /** Splits raw native output into styled lines (strips the leading emoji glyph itself). */
+    fun formatLines(rawOutput: String): List<RinLogLine> {
+        if (rawOutput.isBlank()) return emptyList()
+        return rawOutput.split("\n")
+            .filter { it.isNotBlank() }
+            .map { rawLine ->
+                val line = rawLine.trimEnd()
+                val trimmedStart = line.trimStart()
+                val indent = line.takeWhile { it == ' ' || it == '\t' }
+                    .fold(0) { acc, c -> acc + if (c == '\t') 4 else 1 }
+                val imgMatch = if (trimmedStart.startsWith("🖨️")) RE_PRINT_IMAGE.find(trimmedStart) else null
+                if (imgMatch != null) {
+                    val relPath = imgMatch.groupValues[1].trim().trim('"')
+                    val widthDp = RE_PRINT_IMAGE_WIDTH.find(trimmedStart)?.groupValues?.get(1)?.toFloatOrNull()
+                    val caption = RE_PRINT_IMAGE_CAPTION.find(trimmedStart)?.groupValues?.get(1)?.trim()?.takeIf { it.isNotEmpty() }
+                    RinLogLine(
+                        kind = LogKind.PRINT_IMAGE,
+                        text = caption ?: relPath,
+                        imageRelPath = relPath,
+                        imageCaption = caption,
+                        imageWidthDp = widthDp,
+                        indent = indent
+                    )
+                } else if (isErrorLine(trimmedStart)) {
+                    val errLine = RE_ERROR_LINE_NO.find(trimmedStart)?.groupValues?.get(1)?.toIntOrNull()
+                    RinLogLine(LogKind.ERROR, trimmedStart, errorLine = errLine, indent = indent)
+                } else {
+                    val mark = RinContainerParser.parse(trimmedStart)
+                    if (mark != null && mark.role == ContainerRole.OPEN) {
+                        // سطر فتح حاوية: يُصنَّف دائماً STRUCTURE (كان 🧾/📦 يُصنَّفان DOC_INSERT/IMPORT خطأً
+                        // فيظهر حدث الحاوية في تبويب Events بنوع خاطئ) والنص بلا الأيقونة الأولى.
+                        RinLogLine(
+                            LogKind.STRUCTURE, trimmedStart.substringAfter(' ').trim(),
+                            indent = indent, container = mark
+                        )
+                    } else {
+                        val match = PREFIX_ORDER.firstOrNull { (prefix, _) -> trimmedStart.startsWith(prefix) }
+                        if (match != null) {
+                            val (prefix, kind) = match
+                            RinLogLine(kind, trimmedStart.removePrefix(prefix).trim(), indent = indent, container = mark)
+                        } else {
+                            RinLogLine(LogKind.PLAIN, trimmedStart, indent = indent, container = mark)
+                        }
+                    }
+                }
+            }
+    }
+
+    /**
+     * Finds every real file save/installation wrote to disk during this run by resolving the
+     * relative path each line reports against the engine's actual base directory, then reading
+     * that file's true size straight off disk (never trusting a byte-count printed in the log).
+     */
+    fun extractArtifacts(rawOutput: String, baseDir: String): List<RinArtifact> {
+        if (rawOutput.isBlank() || baseDir.isBlank()) return emptyList()
+        val base = File(baseDir)
+        val found = LinkedHashMap<String, RinArtifact>()
+
+        fun consider(relPath: String, kind: ArtifactKind) {
+            val cleanRel = relPath.trim().trim('"')
+            if (cleanRel.isEmpty()) return
+            val file = File(base, cleanRel)
+            if (file.exists() && file.isFile) {
+                found[file.absolutePath] = RinArtifact(kind, cleanRel, file, file.length())
+            }
+        }
+
+        rawOutput.split("\n").forEach { rawLine ->
+            val line = rawLine.trim()
+            RE_SAVE_PNG.find(line)?.let { consider(it.groupValues[1], ArtifactKind.IMAGE_PNG) }
+            RE_SAVE_ZIP.find(line)?.let { consider(it.groupValues[1], ArtifactKind.ARCHIVE_ZIP) }
+            RE_INSTALL_ZIP.find(line)?.let { consider(it.groupValues[1], ArtifactKind.ARCHIVE_ZIP) }
+            RE_SAVE_RIN.find(line)?.let { consider(it.groupValues[1], ArtifactKind.RIN_DOC) }
+            RE_INSTALL_RIN.find(line)?.let { consider(it.groupValues[1], ArtifactKind.RIN_DOC) }
+        }
+        return found.values.toList()
+    }
+
+    /** Resolves a `print.image`/artifact relative path against the engine's real base directory,
+     *  returning the file only if it genuinely exists on disk — never a path that merely looks
+     *  plausible. Shared by [extractArtifacts] and [RinJobAdapter]'s inline image thumbnail so both
+     *  use the exact same existence check. */
+    fun resolveExistingFile(relPath: String, baseDir: String): File? {
+        if (relPath.isBlank() || baseDir.isBlank()) return null
+        val file = File(baseDir, relPath.trim().trim('"'))
+        return if (file.exists() && file.isFile) file else null
+    }
+
+    /** Human friendly "12.4 MB" / "512 KB" / "180 بايت" formatting for progress UI. */
+    fun formatBytes(bytes: Long): String {
+        // Locale.ROOT: بدون ذلك قد تُنتج لغة الجهاز العربية أرقاماً هندية أو فاصلة عشرية «٫».
+        if (bytes < 1024) return "${maxOf(bytes, 0L)} بايت"
+        val kb = bytes / 1024.0
+        if (kb < 1024) return String.format(Locale.ROOT, "%.1f KB", kb)
+        val mb = kb / 1024.0
+        if (mb < 1024) return String.format(Locale.ROOT, "%.1f MB", mb)
+        val gb = mb / 1024.0
+        return String.format(Locale.ROOT, "%.2f GB", gb)
+    }
+}

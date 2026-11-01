@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- حركة ظهور كل بطاقة حزمة عند استبدال الهيكل التغبيشي (skeleton) بالقائمة الحقيقية: تلاشٍ
+     للداخل + ارتفاع خفيف من الأسفل، بدل الظهور المفاجئ دفعة واحدة. تُستخدَم عبر
+     layout_animation_store_list.xml مع Adapter.notifyDataSetChanged() + scheduleLayoutAnimation(). -->
+<set xmlns:android="http://schemas.android.com/apk/res/android"
+    android:interpolator="@android:anim/decelerate_interpolator">
+    <alpha
+        android:fromAlpha="0.0"
+        android:toAlpha="1.0"
+        android:duration="260" />
+    <translate
+        android:fromYDelta="8%"
+        android:toYDelta="0"
+        android:duration="260" />
+</set>

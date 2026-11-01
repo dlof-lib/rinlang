@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- خلفية بطاقة عنصر قابل للّمس (مشروع / ملف) داخل قوائم RecyclerView:
+     نفس أسلوب بطاقات قائمة التشغيل (job card) + تأثير موجي خفيف عند اللمس. -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="@color/rin_ghost_ripple">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/rin_job_card_bg" />
+            <stroke android:width="1dp" android:color="@color/rin_job_card_border" />
+            <corners android:radius="14dp" />
+        </shape>
+    </item>
+</ripple>

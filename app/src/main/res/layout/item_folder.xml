@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- صف مجلد فرعي داخل شاشة الملفات: نفس أسلوب item_file.xml بصرياً، لكن بأيقونة مجلد
+     وبدون معلومات حجم (المجلد لا "حجم" مباشر له)، مع نفس زرَّي إعادة التسمية والحذف. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:background="@drawable/bg_list_card"
+    android:layout_marginStart="4dp"
+    android:layout_marginEnd="4dp"
+    android:layout_marginTop="5dp"
+    android:layout_marginBottom="5dp"
+    android:padding="12dp">
+
+    <ImageView
+        android:id="@+id/imgFolderIcon"
+        android:layout_width="42dp"
+        android:layout_height="42dp"
+        android:scaleType="fitCenter"
+        android:src="@drawable/ic_rin_folder"
+        android:contentDescription="@null" />
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:layout_marginStart="12dp"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/txtFolderNameItem"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="15.5sp"
+            android:textStyle="bold"
+            android:fontFamily="monospace"
+            android:textColor="@color/rin_on_toolbar"
+            android:ellipsize="end"
+            android:maxLines="1" />
+
+        <TextView
+            android:id="@+id/txtFolderMeta"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:textSize="12.5sp"
+            android:textColor="@color/rin_editor_hint" />
+    </LinearLayout>
+
+    <ImageButton
+        android:id="@+id/btnRenameFolder"
+        android:layout_width="38dp"
+        android:layout_height="38dp"
+        android:padding="10dp"
+        android:layout_marginEnd="4dp"
+        android:background="@drawable/bg_icon_btn"
+        android:contentDescription="@string/rename"
+        android:src="@drawable/ic_edit_pencil" />
+
+    <ImageButton
+        android:id="@+id/btnDeleteFolder"
+        android:layout_width="38dp"
+        android:layout_height="38dp"
+        android:padding="10dp"
+        android:background="@drawable/bg_icon_btn"
+        android:contentDescription="@string/delete_folder_title"
+        android:src="@drawable/ic_trash_red" />
+
+</LinearLayout>

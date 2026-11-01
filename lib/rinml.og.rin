@@ -1,0 +1,1106 @@
+// ============================================================================
+//  lib/rinml.og.rin — RinML: تعلّم آلة وذكاء اصطناعي خالص بلغة Rin
+//
+//  @version 1.0.0
+//  @category ai
+//  @prefix nd_ / ml_
+//
+//  المحتوى:
+//    nd_*  جبر خطي ودوال عددية آمنة (dot, solve, softmax, ...)
+//    ml_*  تحضير بيانات (split / scalers / one-hot / k-fold)
+//          نماذج: انحدار خطي/ريدج، لوجستي، kNN، k-means، Naive Bayes، شجرة قرار،
+//                 شبكة عصبية متعددة الطبقات (MLP) بالانتشار العكسي، مصنّف نصوص (Naive Bayes)
+//          مقاييس: accuracy / confusion / precision / recall / f1 / mse / rmse / mae / r2
+//          حفظ/تحميل: ml_save / ml_load (JSON)
+//
+//  كل النماذج قواميس بحقل "type" (قابلة للتحويل إلى JSON وللتخزين داخل @container).
+//  استيراد:  @import "lib/rinml.og.rin";
+//
+//  قيود المفسِّر التي صُمِّمت حولها: لا وسائط اختيارية (عدد الوسائط ثابت)، و`<` للأرقام فقط،
+//  و`round` بوسيط واحد، و`ln(0)` يرمي خطأ — لذلك نستعمل nd_round / nd_ln الآمنتين.
+// ============================================================================
+
+// ---------------------------------------------------------------------------
+//  nd_: دوال عددية ومتجهات ومصفوفات
+// ---------------------------------------------------------------------------
+fun nd_pi() { return 3.141592653589793; }
+
+fun nd_clip(x, lo, hi) {
+    if (x < lo) { return lo; }
+    if (x > hi) { return hi; }
+    return x;
+}
+
+fun nd_round(x, d) {
+    let p = pow(10, d);
+    return round(x * p) / p;
+}
+
+// exp/ln آمنتان: لا inf ولا خطأ عند الصفر.
+fun nd_exp(x) { return exp(nd_clip(x, -60, 60)); }
+fun nd_ln(x) {
+    if (x < 0.000000000001) { return ln(0.000000000001); }
+    return ln(x);
+}
+
+fun nd_sigmoid(x) { return 1 / (1 + nd_exp(0 - x)); }
+fun nd_tanh(x) {
+    let e = nd_exp(2 * x);
+    return (e - 1) / (e + 1);
+}
+fun nd_relu(x) {
+    if (x > 0) { return x; }
+    return 0;
+}
+
+fun nd_zeros(n) {
+    let o = [];
+    let i = 0;
+    while (i < n) { push(o, 0); i = i + 1; }
+    return o;
+}
+
+fun nd_fill(n, v) {
+    let o = [];
+    let i = 0;
+    while (i < n) { push(o, v); i = i + 1; }
+    return o;
+}
+
+fun nd_seq(n) {
+    let o = [];
+    let i = 0;
+    while (i < n) { push(o, i); i = i + 1; }
+    return o;
+}
+
+fun nd_dot(a, b) {
+    let s = 0;
+    let i = 0;
+    let n = len(a);
+    while (i < n) { s = s + a[i] * b[i]; i = i + 1; }
+    return s;
+}
+
+fun nd_vadd(a, b) {
+    let o = [];
+    let i = 0;
+    while (i < len(a)) { push(o, a[i] + b[i]); i = i + 1; }
+    return o;
+}
+
+fun nd_vsub(a, b) {
+    let o = [];
+    let i = 0;
+    while (i < len(a)) { push(o, a[i] - b[i]); i = i + 1; }
+    return o;
+}
+
+fun nd_vscale(a, k) {
+    let o = [];
+    let i = 0;
+    while (i < len(a)) { push(o, a[i] * k); i = i + 1; }
+    return o;
+}
+
+fun nd_norm(a) { return sqrt(nd_dot(a, a)); }
+
+fun nd_dist(a, b) {
+    let s = 0;
+    let i = 0;
+    while (i < len(a)) { let d = a[i] - b[i]; s = s + d * d; i = i + 1; }
+    return sqrt(s);
+}
+
+fun nd_sum(a) {
+    let s = 0;
+    let i = 0;
+    while (i < len(a)) { s = s + a[i]; i = i + 1; }
+    return s;
+}
+
+fun nd_mean(a) {
+    if (len(a) == 0) { return 0; }
+    return nd_sum(a) / len(a);
+}
+
+fun nd_var(a) {
+    if (len(a) == 0) { return 0; }
+    let m = nd_mean(a);
+    let s = 0;
+    let i = 0;
+    while (i < len(a)) { let d = a[i] - m; s = s + d * d; i = i + 1; }
+    return s / len(a);
+}
+
+fun nd_std(a) { return sqrt(nd_var(a)); }
+
+fun nd_minv(a) {
+    let m = a[0];
+    let i = 1;
+    while (i < len(a)) { if (a[i] < m) { m = a[i]; } i = i + 1; }
+    return m;
+}
+
+fun nd_maxv(a) {
+    let m = a[0];
+    let i = 1;
+    while (i < len(a)) { if (a[i] > m) { m = a[i]; } i = i + 1; }
+    return m;
+}
+
+fun nd_argmax(a) {
+    let bi = 0;
+    let i = 1;
+    while (i < len(a)) { if (a[i] > a[bi]) { bi = i; } i = i + 1; }
+    return bi;
+}
+
+fun nd_argmin(a) {
+    let bi = 0;
+    let i = 1;
+    while (i < len(a)) { if (a[i] < a[bi]) { bi = i; } i = i + 1; }
+    return bi;
+}
+
+fun nd_softmax(a) {
+    let m = nd_maxv(a);
+    let e = [];
+    let i = 0;
+    let s = 0;
+    while (i < len(a)) { let v = nd_exp(a[i] - m); push(e, v); s = s + v; i = i + 1; }
+    let o = [];
+    i = 0;
+    while (i < len(e)) { push(o, e[i] / s); i = i + 1; }
+    return o;
+}
+
+// أعمدة/صفوف
+fun nd_col(M, j) {
+    let o = [];
+    let i = 0;
+    while (i < len(M)) { push(o, M[i][j]); i = i + 1; }
+    return o;
+}
+
+fun nd_transpose(M) {
+    if (len(M) == 0) { return []; }
+    let o = [];
+    let j = 0;
+    while (j < len(M[0])) { push(o, nd_col(M, j)); j = j + 1; }
+    return o;
+}
+
+fun nd_matvec(M, v) {
+    let o = [];
+    let i = 0;
+    while (i < len(M)) { push(o, nd_dot(M[i], v)); i = i + 1; }
+    return o;
+}
+
+fun nd_matmul(A, B) {
+    let Bt = nd_transpose(B);
+    let o = [];
+    let i = 0;
+    while (i < len(A)) {
+        let rw = [];
+        let j = 0;
+        while (j < len(Bt)) { push(rw, nd_dot(A[i], Bt[j])); j = j + 1; }
+        push(o, rw);
+        i = i + 1;
+    }
+    return o;
+}
+
+// يحلّ A·x = b بطريقة غاوس-جوردان مع محورية جزئية. يعيد nil إن كانت المصفوفة شاذّة.
+fun nd_solve(A, b) {
+    let n = len(A);
+    let M = [];
+    let i = 0;
+    while (i < n) {
+        let rw = [];
+        let j = 0;
+        while (j < n) { push(rw, A[i][j]); j = j + 1; }
+        push(rw, b[i]);
+        push(M, rw);
+        i = i + 1;
+    }
+    let c = 0;
+    while (c < n) {
+        let p = c;
+        let r = c + 1;
+        while (r < n) { if (abs(M[r][c]) > abs(M[p][c])) { p = r; } r = r + 1; }
+        if (abs(M[p][c]) < 0.000000000001) { return nil; }
+        let tmp = M[c]; M[c] = M[p]; M[p] = tmp;
+        let pv = M[c][c];
+        let k = c;
+        while (k <= n) { M[c][k] = M[c][k] / pv; k = k + 1; }
+        r = 0;
+        while (r < n) {
+            if (r != c) {
+                let f = M[r][c];
+                if (f != 0) {
+                    k = c;
+                    while (k <= n) { M[r][k] = M[r][k] - f * M[c][k]; k = k + 1; }
+                }
+            }
+            r = r + 1;
+        }
+        c = c + 1;
+    }
+    let x = [];
+    i = 0;
+    while (i < n) { push(x, M[i][n]); i = i + 1; }
+    return x;
+}
+
+// قيم فريدة بترتيب الظهور (تعمل مع الأرقام والنصوص).
+fun nd_unique(a) {
+    let seen = {};
+    let o = [];
+    let i = 0;
+    while (i < len(a)) {
+        let k = str(a[i]);
+        if (!has(seen, k)) { seen[k] = true; push(o, a[i]); }
+        i = i + 1;
+    }
+    return o;
+}
+
+fun nd_index_of(a, v) {
+    let i = 0;
+    while (i < len(a)) { if (a[i] == v) { return i; } i = i + 1; }
+    return -1;
+}
+
+// خلط Fisher–Yates (يستخدم seed(n) العام للتكرارية).
+fun nd_shuffle(a) {
+    let o = [];
+    let i = 0;
+    while (i < len(a)) { push(o, a[i]); i = i + 1; }
+    i = len(o) - 1;
+    while (i > 0) {
+        let j = floor(random() * (i + 1));
+        let t = o[i]; o[i] = o[j]; o[j] = t;
+        i = i - 1;
+    }
+    return o;
+}
+
+fun nd_take(a, idx) {
+    let o = [];
+    let i = 0;
+    while (i < len(idx)) { push(o, a[idx[i]]); i = i + 1; }
+    return o;
+}
+
+// ---------------------------------------------------------------------------
+//  تحضير البيانات
+// ---------------------------------------------------------------------------
+// يعيد {Xtr, ytr, Xte, yte}. testRatio مثل 0.2 ؛ sd بذرة التكرارية.
+fun ml_train_test_split(X, y, testRatio, sd) {
+    seed(sd);
+    let idx = nd_shuffle(nd_seq(len(X)));
+    let nTest = floor(len(X) * testRatio);
+    if (nTest < 1) { nTest = 1; }
+    let teIdx = slice(idx, 0, nTest);
+    let trIdx = slice(idx, nTest, len(X));
+    return {
+        "Xtr": nd_take(X, trIdx), "ytr": nd_take(y, trIdx),
+        "Xte": nd_take(X, teIdx), "yte": nd_take(y, teIdx)
+    };
+}
+
+// معايرة قياسية (z-score): يعيد {type, mu, sd}
+fun ml_scaler_fit(X) {
+    let d = len(X[0]);
+    let mu = [];
+    let sd = [];
+    let j = 0;
+    while (j < d) {
+        let c = nd_col(X, j);
+        let s = nd_std(c);
+        if (s < 0.000000000001) { s = 1; }
+        push(mu, nd_mean(c));
+        push(sd, s);
+        j = j + 1;
+    }
+    return {"type": "scaler", "mu": mu, "sd": sd};
+}
+
+fun ml_scaler_row(sc, x) {
+    let o = [];
+    let j = 0;
+    while (j < len(x)) { push(o, (x[j] - sc["mu"][j]) / sc["sd"][j]); j = j + 1; }
+    return o;
+}
+
+fun ml_scaler_transform(sc, X) {
+    let o = [];
+    let i = 0;
+    while (i < len(X)) { push(o, ml_scaler_row(sc, X[i])); i = i + 1; }
+    return o;
+}
+
+// معايرة min-max إلى [0,1]
+fun ml_minmax_fit(X) {
+    let d = len(X[0]);
+    let lo = [];
+    let hi = [];
+    let j = 0;
+    while (j < d) {
+        let c = nd_col(X, j);
+        push(lo, nd_minv(c));
+        let h = nd_maxv(c);
+        if (h - lo[j] < 0.000000000001) { h = lo[j] + 1; }
+        push(hi, h);
+        j = j + 1;
+    }
+    return {"type": "minmax", "lo": lo, "hi": hi};
+}
+
+fun ml_minmax_transform(sc, X) {
+    let o = [];
+    let i = 0;
+    while (i < len(X)) {
+        let rw = [];
+        let j = 0;
+        while (j < len(X[i])) { push(rw, (X[i][j] - sc["lo"][j]) / (sc["hi"][j] - sc["lo"][j])); j = j + 1; }
+        push(o, rw);
+        i = i + 1;
+    }
+    return o;
+}
+
+// ترميز فئات إلى one-hot: يعيد {classes, matrix}
+fun ml_onehot(labels) {
+    let classes = nd_unique(labels);
+    let m = [];
+    let i = 0;
+    while (i < len(labels)) {
+        let rw = nd_zeros(len(classes));
+        rw[nd_index_of(classes, labels[i])] = 1;
+        push(m, rw);
+        i = i + 1;
+    }
+    return {"classes": classes, "matrix": m};
+}
+
+// ---------------------------------------------------------------------------
+//  الانحدار الخطي (حل مغلق + ريدج) و SGD
+// ---------------------------------------------------------------------------
+// lambda = 0 → OLS ؛ lambda > 0 → Ridge (لا يُعاقَب الحدّ الثابت)
+fun ml_linreg_fit(X, y, lambda) {
+    let n = len(X);
+    let d = len(X[0]);
+    let A = [];
+    let r = 0;
+    while (r <= d) { push(A, nd_zeros(d + 1)); r = r + 1; }
+    let b = nd_zeros(d + 1);
+    let i = 0;
+    while (i < n) {
+        let xa = concat([1], X[i]);
+        let p = 0;
+        while (p <= d) {
+            b[p] = b[p] + xa[p] * y[i];
+            let q = 0;
+            while (q <= d) { A[p][q] = A[p][q] + xa[p] * xa[q]; q = q + 1; }
+            p = p + 1;
+        }
+        i = i + 1;
+    }
+    let k = 1;
+    while (k <= d) { A[k][k] = A[k][k] + lambda; k = k + 1; }
+    let w = nd_solve(A, b);
+    if (w == nil) { return nil; }
+    return {"type": "linreg", "b": w[0], "w": slice(w, 1, d + 1)};
+}
+
+// انحدار بالتدرّج (batch GD) — يُنصَح بمعايرة X أولاً.
+fun ml_linreg_sgd(X, y, lr, epochs) {
+    let n = len(X);
+    let d = len(X[0]);
+    let w = nd_zeros(d);
+    let b = 0;
+    let e = 0;
+    while (e < epochs) {
+        let gw = nd_zeros(d);
+        let gb = 0;
+        let i = 0;
+        while (i < n) {
+            let err = nd_dot(w, X[i]) + b - y[i];
+            let j = 0;
+            while (j < d) { gw[j] = gw[j] + err * X[i][j]; j = j + 1; }
+            gb = gb + err;
+            i = i + 1;
+        }
+        let j2 = 0;
+        while (j2 < d) { w[j2] = w[j2] - lr * gw[j2] / n; j2 = j2 + 1; }
+        b = b - lr * gb / n;
+        e = e + 1;
+    }
+    return {"type": "linreg", "b": b, "w": w};
+}
+
+// ---------------------------------------------------------------------------
+//  الانحدار اللوجستي الثنائي (y ∈ {0,1})
+// ---------------------------------------------------------------------------
+fun ml_logreg_fit(X, y, lr, epochs, lambda) {
+    let n = len(X);
+    let d = len(X[0]);
+    let w = nd_zeros(d);
+    let b = 0;
+    let e = 0;
+    while (e < epochs) {
+        let gw = nd_zeros(d);
+        let gb = 0;
+        let i = 0;
+        while (i < n) {
+            let err = nd_sigmoid(nd_dot(w, X[i]) + b) - y[i];
+            let j = 0;
+            while (j < d) { gw[j] = gw[j] + err * X[i][j]; j = j + 1; }
+            gb = gb + err;
+            i = i + 1;
+        }
+        let j2 = 0;
+        while (j2 < d) { w[j2] = w[j2] - lr * (gw[j2] / n + lambda * w[j2]); j2 = j2 + 1; }
+        b = b - lr * gb / n;
+        e = e + 1;
+    }
+    return {"type": "logreg", "b": b, "w": w};
+}
+
+fun ml_logreg_proba(m, x) { return nd_sigmoid(nd_dot(m["w"], x) + m["b"]); }
+
+// ---------------------------------------------------------------------------
+//  k أقرب جيران (تصنيف "class" أو انحدار "reg")
+// ---------------------------------------------------------------------------
+fun ml_knn_fit(X, y, k, mode) {
+    return {"type": "knn", "X": X, "y": y, "k": k, "mode": mode};
+}
+
+fun ml_knn_predict(m, x) {
+    let n = len(m["X"]);
+    let dists = [];
+    let i = 0;
+    while (i < n) { push(dists, nd_dist(m["X"][i], x)); i = i + 1; }
+    let k = m["k"];
+    if (k > n) { k = n; }
+    let used = nd_fill(n, false);
+    let picked = [];
+    let t = 0;
+    while (t < k) {
+        let bi = -1;
+        i = 0;
+        while (i < n) {
+            if (!used[i]) {
+                if (bi == -1) { bi = i; }
+                else { if (dists[i] < dists[bi]) { bi = i; } }
+            }
+            i = i + 1;
+        }
+        used[bi] = true;
+        push(picked, m["y"][bi]);
+        t = t + 1;
+    }
+    if (m["mode"] == "reg") { return nd_mean(picked); }
+    let counts = {};
+    let best = picked[0];
+    let bestC = 0;
+    i = 0;
+    while (i < len(picked)) {
+        let key = str(picked[i]);
+        if (!has(counts, key)) { counts[key] = 0; }
+        counts[key] = counts[key] + 1;
+        if (counts[key] > bestC) { bestC = counts[key]; best = picked[i]; }
+        i = i + 1;
+    }
+    return best;
+}
+
+// ---------------------------------------------------------------------------
+//  k-means (تهيئة k-means++)
+// ---------------------------------------------------------------------------
+fun ml_kmeans_nearest(centroids, x) {
+    let bi = 0;
+    let bd = nd_dist(centroids[0], x);
+    let c = 1;
+    while (c < len(centroids)) {
+        let d = nd_dist(centroids[c], x);
+        if (d < bd) { bd = d; bi = c; }
+        c = c + 1;
+    }
+    return bi;
+}
+
+fun ml_kmeans_fit(X, k, iters, sd) {
+    seed(sd);
+    let n = len(X);
+    let d = len(X[0]);
+    let cent = [];
+    push(cent, deepCopy(X[floor(random() * n)]));
+    while (len(cent) < k) {
+        let w = [];
+        let tot = 0;
+        let i = 0;
+        while (i < n) {
+            let c = ml_kmeans_nearest(cent, X[i]);
+            let dd = nd_dist(cent[c], X[i]);
+            push(w, dd * dd);
+            tot = tot + dd * dd;
+            i = i + 1;
+        }
+        let r = random() * tot;
+        let acc = 0;
+        let pick = n - 1;
+        i = 0;
+        while (i < n) {
+            acc = acc + w[i];
+            if (acc >= r) { pick = i; break; }
+            i = i + 1;
+        }
+        push(cent, deepCopy(X[pick]));
+    }
+    let labels = nd_fill(n, -1);
+    let it = 0;
+    while (it < iters) {
+        let changed = false;
+        let i2 = 0;
+        while (i2 < n) {
+            let c2 = ml_kmeans_nearest(cent, X[i2]);
+            if (c2 != labels[i2]) { labels[i2] = c2; changed = true; }
+            i2 = i2 + 1;
+        }
+        if (!changed) { break; }
+        let sums = [];
+        let cnt = nd_zeros(k);
+        let c3 = 0;
+        while (c3 < k) { push(sums, nd_zeros(d)); c3 = c3 + 1; }
+        i2 = 0;
+        while (i2 < n) {
+            let l = labels[i2];
+            sums[l] = nd_vadd(sums[l], X[i2]);
+            cnt[l] = cnt[l] + 1;
+            i2 = i2 + 1;
+        }
+        c3 = 0;
+        while (c3 < k) {
+            if (cnt[c3] > 0) { cent[c3] = nd_vscale(sums[c3], 1 / cnt[c3]); }
+            c3 = c3 + 1;
+        }
+        it = it + 1;
+    }
+    let inertia = 0;
+    let i3 = 0;
+    while (i3 < n) {
+        let dd2 = nd_dist(cent[labels[i3]], X[i3]);
+        inertia = inertia + dd2 * dd2;
+        i3 = i3 + 1;
+    }
+    return {"type": "kmeans", "k": k, "centroids": cent, "labels": labels, "inertia": inertia};
+}
+
+fun ml_kmeans_predict(m, x) { return ml_kmeans_nearest(m["centroids"], x); }
+
+// ---------------------------------------------------------------------------
+//  Gaussian Naive Bayes
+// ---------------------------------------------------------------------------
+fun ml_nb_fit(X, y) {
+    let classes = nd_unique(y);
+    let d = len(X[0]);
+    let priors = [];
+    let means = [];
+    let vars = [];
+    let c = 0;
+    while (c < len(classes)) {
+        let rows = [];
+        let i = 0;
+        while (i < len(X)) { if (y[i] == classes[c]) { push(rows, X[i]); } i = i + 1; }
+        push(priors, len(rows) / len(X));
+        let mu = [];
+        let vr = [];
+        let j = 0;
+        while (j < d) {
+            let col = nd_col(rows, j);
+            push(mu, nd_mean(col));
+            push(vr, nd_var(col) + 0.000001);
+            j = j + 1;
+        }
+        push(means, mu);
+        push(vars, vr);
+        c = c + 1;
+    }
+    return {"type": "nb", "classes": classes, "priors": priors, "means": means, "vars": vars};
+}
+
+fun ml_nb_scores(m, x) {
+    let out = [];
+    let c = 0;
+    while (c < len(m["classes"])) {
+        let s = nd_ln(m["priors"][c]);
+        let j = 0;
+        while (j < len(x)) {
+            let v = m["vars"][c][j];
+            let dx = x[j] - m["means"][c][j];
+            s = s - 0.5 * nd_ln(2 * nd_pi() * v) - dx * dx / (2 * v);
+            j = j + 1;
+        }
+        push(out, s);
+        c = c + 1;
+    }
+    return out;
+}
+
+fun ml_nb_predict(m, x) { return m["classes"][nd_argmax(ml_nb_scores(m, x))]; }
+
+// ---------------------------------------------------------------------------
+//  شجرة قرار (CART، معيار Gini) للتصنيف
+// ---------------------------------------------------------------------------
+fun ml_gini(labels) {
+    let n = len(labels);
+    if (n == 0) { return 0; }
+    let counts = {};
+    let i = 0;
+    while (i < n) {
+        let k = str(labels[i]);
+        if (!has(counts, k)) { counts[k] = 0; }
+        counts[k] = counts[k] + 1;
+        i = i + 1;
+    }
+    let g = 1;
+    let ks = keys(counts);
+    i = 0;
+    while (i < len(ks)) { let p = counts[ks[i]] / n; g = g - p * p; i = i + 1; }
+    return g;
+}
+
+fun ml_majority(labels) {
+    let counts = {};
+    let best = labels[0];
+    let bestC = 0;
+    let i = 0;
+    while (i < len(labels)) {
+        let k = str(labels[i]);
+        if (!has(counts, k)) { counts[k] = 0; }
+        counts[k] = counts[k] + 1;
+        if (counts[k] > bestC) { bestC = counts[k]; best = labels[i]; }
+        i = i + 1;
+    }
+    return best;
+}
+
+fun ml_tree_build(X, y, depth, maxDepth, minSamples) {
+    let n = len(y);
+    let g = ml_gini(y);
+    if (g == 0 or depth >= maxDepth or n < minSamples) {
+        return {"leaf": true, "label": ml_majority(y), "n": n};
+    }
+    let bestGain = 0;
+    let bestF = -1;
+    let bestT = 0;
+    let d = len(X[0]);
+    let f = 0;
+    while (f < d) {
+        let vals = sort(nd_unique(nd_col(X, f)));
+        let cands = [];
+        let step = 1;
+        if (len(vals) > 33) { step = floor(len(vals) / 32); }
+        let v = 0;
+        while (v + 1 < len(vals)) {
+            push(cands, (vals[v] + vals[v + 1]) / 2);
+            v = v + step;
+        }
+        let c = 0;
+        while (c < len(cands)) {
+            let t = cands[c];
+            let ly = [];
+            let ry = [];
+            let i = 0;
+            while (i < n) {
+                if (X[i][f] <= t) { push(ly, y[i]); } else { push(ry, y[i]); }
+                i = i + 1;
+            }
+            if (len(ly) > 0 and len(ry) > 0) {
+                let gain = g - (len(ly) / n) * ml_gini(ly) - (len(ry) / n) * ml_gini(ry);
+                if (gain > bestGain) { bestGain = gain; bestF = f; bestT = t; }
+            }
+            c = c + 1;
+        }
+        f = f + 1;
+    }
+    if (bestF == -1) { return {"leaf": true, "label": ml_majority(y), "n": n}; }
+    let LX = []; let Ly = []; let RX = []; let Ry = [];
+    let i2 = 0;
+    while (i2 < n) {
+        if (X[i2][bestF] <= bestT) { push(LX, X[i2]); push(Ly, y[i2]); }
+        else { push(RX, X[i2]); push(Ry, y[i2]); }
+        i2 = i2 + 1;
+    }
+    return {
+        "leaf": false, "f": bestF, "t": bestT, "n": n,
+        "l": ml_tree_build(LX, Ly, depth + 1, maxDepth, minSamples),
+        "r": ml_tree_build(RX, Ry, depth + 1, maxDepth, minSamples)
+    };
+}
+
+fun ml_tree_fit(X, y, maxDepth, minSamples) {
+    return {"type": "tree", "root": ml_tree_build(X, y, 0, maxDepth, minSamples)};
+}
+
+fun ml_tree_predict(m, x) {
+    let node = m["root"];
+    while (!node["leaf"]) {
+        if (x[node["f"]] <= node["t"]) { node = node["l"]; } else { node = node["r"]; }
+    }
+    return node["label"];
+}
+
+// ---------------------------------------------------------------------------
+//  الشبكة العصبية متعددة الطبقات (MLP) — انتشار عكسي + SGD
+//    sizes   مثل [2, 4, 1]
+//    act     الطبقات المخفية: "tanh" | "relu" | "sigmoid"
+//    outAct  الخرج: "linear" (انحدار) | "sigmoid" (ثنائي) | "softmax" (متعدد الفئات)
+//  الخسارة تُطابق دالة الخرج (MSE / BCE / CE) فتكون delta = out - target.
+// ---------------------------------------------------------------------------
+fun ml_mlp_init(sizes, act, outAct, sd) {
+    seed(sd);
+    let W = [];
+    let B = [];
+    let l = 0;
+    while (l + 1 < len(sizes)) {
+        let nin = sizes[l];
+        let nout = sizes[l + 1];
+        let lim = sqrt(6 / (nin + nout));
+        let M = [];
+        let i = 0;
+        while (i < nout) {
+            let rw = [];
+            let j = 0;
+            while (j < nin) { push(rw, (random() * 2 - 1) * lim); j = j + 1; }
+            push(M, rw);
+            i = i + 1;
+        }
+        push(W, M);
+        push(B, nd_zeros(nout));
+        l = l + 1;
+    }
+    return {"type": "mlp", "sizes": sizes, "act": act, "out": outAct, "W": W, "B": B, "loss": 0};
+}
+
+fun ml_act(name, z) {
+    if (name == "relu") { return nd_relu(z); }
+    if (name == "sigmoid") { return nd_sigmoid(z); }
+    return nd_tanh(z);
+}
+
+fun ml_act_grad(name, a) {
+    if (name == "relu") { if (a > 0) { return 1; } return 0; }
+    if (name == "sigmoid") { return a * (1 - a); }
+    return 1 - a * a;
+}
+
+// يعيد قائمة تنشيطات كل الطبقات (الأولى = المدخل، الأخيرة = الخرج)
+fun ml_mlp_forward(m, x) {
+    let acts = [x];
+    let a = x;
+    let L = len(m["W"]);
+    let l = 0;
+    while (l < L) {
+        let z = nd_vadd(nd_matvec(m["W"][l], a), m["B"][l]);
+        let nxt = [];
+        let i = 0;
+        if (l == L - 1) {
+            if (m["out"] == "softmax") { nxt = nd_softmax(z); }
+            else {
+                while (i < len(z)) {
+                    if (m["out"] == "sigmoid") { push(nxt, nd_sigmoid(z[i])); } else { push(nxt, z[i]); }
+                    i = i + 1;
+                }
+            }
+        } else {
+            while (i < len(z)) { push(nxt, ml_act(m["act"], z[i])); i = i + 1; }
+        }
+        push(acts, nxt);
+        a = nxt;
+        l = l + 1;
+    }
+    return acts;
+}
+
+// يدرّب النموذج في مكانه ويعيده. Y = مصفوفة متجهات هدف (استعمل ml_onehot للفئات).
+fun ml_mlp_fit(m, X, Y, lr, epochs) {
+    let L = len(m["W"]);
+    let n = len(X);
+    let e = 0;
+    while (e < epochs) {
+        let order = nd_shuffle(nd_seq(n));
+        let loss = 0;
+        let s = 0;
+        while (s < n) {
+            let idx = order[s];
+            let acts = ml_mlp_forward(m, X[idx]);
+            let out = acts[L];
+            let delta = nd_vsub(out, Y[idx]);
+            let q = 0;
+            while (q < len(delta)) { loss = loss + delta[q] * delta[q]; q = q + 1; }
+            let l = L - 1;
+            while (l >= 0) {
+                let prev = acts[l];
+                let nextDelta = nil;
+                if (l > 0) {
+                    nextDelta = nd_zeros(len(prev));
+                    let j = 0;
+                    while (j < len(prev)) {
+                        let sacc = 0;
+                        let i = 0;
+                        while (i < len(delta)) { sacc = sacc + m["W"][l][i][j] * delta[i]; i = i + 1; }
+                        nextDelta[j] = sacc * ml_act_grad(m["act"], prev[j]);
+                        j = j + 1;
+                    }
+                }
+                let i2 = 0;
+                while (i2 < len(delta)) {
+                    let j2 = 0;
+                    while (j2 < len(prev)) {
+                        m["W"][l][i2][j2] = m["W"][l][i2][j2] - lr * delta[i2] * prev[j2];
+                        j2 = j2 + 1;
+                    }
+                    m["B"][l][i2] = m["B"][l][i2] - lr * delta[i2];
+                    i2 = i2 + 1;
+                }
+                if (l > 0) { delta = nextDelta; }
+                l = l - 1;
+            }
+            s = s + 1;
+        }
+        m["loss"] = loss / n;
+        e = e + 1;
+    }
+    return m;
+}
+
+fun ml_mlp_output(m, x) {
+    let acts = ml_mlp_forward(m, x);
+    return acts[len(acts) - 1];
+}
+
+// خرج واحد sigmoid → فئة 0/1 ؛ خرج واحد linear → القيمة ؛ عدة مخارج → فهرس الأكبر
+fun ml_mlp_predict(m, x) {
+    let o = ml_mlp_output(m, x);
+    if (len(o) == 1) {
+        if (m["out"] == "sigmoid") { if (o[0] >= 0.5) { return 1; } return 0; }
+        return o[0];
+    }
+    return nd_argmax(o);
+}
+
+// ---------------------------------------------------------------------------
+//  مصنّف نصوص (Multinomial Naive Bayes) — يدعم العربية عبر tokenizeWords/arabicNormalize
+// ---------------------------------------------------------------------------
+fun ml_tokens(txt) {
+    let t = lower(arabicNormalize(str(txt)));
+    return tokenizeWords(t);
+}
+
+fun ml_textnb_fit(docs, labels) {
+    let classes = nd_unique(labels);
+    let counts = {};
+    let totals = {};
+    let docsPer = {};
+    let vocab = {};
+    let c = 0;
+    while (c < len(classes)) {
+        let k = str(classes[c]);
+        counts[k] = {};
+        totals[k] = 0;
+        docsPer[k] = 0;
+        c = c + 1;
+    }
+    let i = 0;
+    while (i < len(docs)) {
+        let k2 = str(labels[i]);
+        docsPer[k2] = docsPer[k2] + 1;
+        let toks = ml_tokens(docs[i]);
+        let t = 0;
+        while (t < len(toks)) {
+            let w = toks[t];
+            vocab[w] = true;
+            if (!has(counts[k2], w)) { counts[k2][w] = 0; }
+            counts[k2][w] = counts[k2][w] + 1;
+            totals[k2] = totals[k2] + 1;
+            t = t + 1;
+        }
+        i = i + 1;
+    }
+    return {
+        "type": "textnb", "classes": classes, "counts": counts, "totals": totals,
+        "docs": docsPer, "n": len(docs), "vocab": len(keys(vocab))
+    };
+}
+
+fun ml_textnb_scores(m, txt) {
+    let toks = ml_tokens(txt);
+    let out = [];
+    let c = 0;
+    while (c < len(m["classes"])) {
+        let k = str(m["classes"][c]);
+        let s = nd_ln(m["docs"][k] / m["n"]);
+        let t = 0;
+        while (t < len(toks)) {
+            let cnt = 0;
+            if (has(m["counts"][k], toks[t])) { cnt = m["counts"][k][toks[t]]; }
+            s = s + nd_ln((cnt + 1) / (m["totals"][k] + m["vocab"]));
+            t = t + 1;
+        }
+        push(out, s);
+        c = c + 1;
+    }
+    return out;
+}
+
+fun ml_textnb_predict(m, txt) { return m["classes"][nd_argmax(ml_textnb_scores(m, txt))]; }
+
+// ---------------------------------------------------------------------------
+//  واجهة موحّدة: ml_predict / ml_predict_all  (حسب حقل type)
+// ---------------------------------------------------------------------------
+fun ml_predict(m, x) {
+    let t = m["type"];
+    if (t == "linreg") { return nd_dot(m["w"], x) + m["b"]; }
+    if (t == "logreg") { if (ml_logreg_proba(m, x) >= 0.5) { return 1; } return 0; }
+    if (t == "knn") { return ml_knn_predict(m, x); }
+    if (t == "kmeans") { return ml_kmeans_predict(m, x); }
+    if (t == "nb") { return ml_nb_predict(m, x); }
+    if (t == "tree") { return ml_tree_predict(m, x); }
+    if (t == "mlp") { return ml_mlp_predict(m, x); }
+    if (t == "textnb") { return ml_textnb_predict(m, x); }
+    fail("ml_predict: نوع نموذج غير معروف: " + str(t));
+}
+
+fun ml_predict_all(m, X) {
+    let o = [];
+    let i = 0;
+    while (i < len(X)) { push(o, ml_predict(m, X[i])); i = i + 1; }
+    return o;
+}
+
+// ---------------------------------------------------------------------------
+//  المقاييس
+// ---------------------------------------------------------------------------
+fun ml_accuracy(yt, yp) {
+    if (len(yt) == 0) { return 0; }
+    let ok = 0;
+    let i = 0;
+    while (i < len(yt)) { if (yt[i] == yp[i]) { ok = ok + 1; } i = i + 1; }
+    return ok / len(yt);
+}
+
+// يعيد {labels, matrix} — الصفوف = الحقيقي، الأعمدة = المتوقَّع
+fun ml_confusion(yt, yp) {
+    let labels = sort(nd_unique(concat(yt, yp)));
+    let M = [];
+    let i = 0;
+    while (i < len(labels)) { push(M, nd_zeros(len(labels))); i = i + 1; }
+    i = 0;
+    while (i < len(yt)) {
+        let r = nd_index_of(labels, yt[i]);
+        let c = nd_index_of(labels, yp[i]);
+        M[r][c] = M[r][c] + 1;
+        i = i + 1;
+    }
+    return {"labels": labels, "matrix": M};
+}
+
+fun ml_precision(yt, yp, pos) {
+    let tp = 0; let fp = 0;
+    let i = 0;
+    while (i < len(yt)) {
+        if (yp[i] == pos) { if (yt[i] == pos) { tp = tp + 1; } else { fp = fp + 1; } }
+        i = i + 1;
+    }
+    if (tp + fp == 0) { return 0; }
+    return tp / (tp + fp);
+}
+
+fun ml_recall(yt, yp, pos) {
+    let tp = 0; let fneg = 0;
+    let i = 0;
+    while (i < len(yt)) {
+        if (yt[i] == pos) { if (yp[i] == pos) { tp = tp + 1; } else { fneg = fneg + 1; } }
+        i = i + 1;
+    }
+    if (tp + fneg == 0) { return 0; }
+    return tp / (tp + fneg);
+}
+
+fun ml_f1(yt, yp, pos) {
+    let p = ml_precision(yt, yp, pos);
+    let r = ml_recall(yt, yp, pos);
+    if (p + r == 0) { return 0; }
+    return 2 * p * r / (p + r);
+}
+
+fun ml_mse(yt, yp) {
+    let s = 0;
+    let i = 0;
+    while (i < len(yt)) { let d = yt[i] - yp[i]; s = s + d * d; i = i + 1; }
+    return s / len(yt);
+}
+
+fun ml_rmse(yt, yp) { return sqrt(ml_mse(yt, yp)); }
+
+fun ml_mae(yt, yp) {
+    let s = 0;
+    let i = 0;
+    while (i < len(yt)) { s = s + abs(yt[i] - yp[i]); i = i + 1; }
+    return s / len(yt);
+}
+
+fun ml_r2(yt, yp) {
+    let m = nd_mean(yt);
+    let ssr = 0;
+    let sst = 0;
+    let i = 0;
+    while (i < len(yt)) {
+        let a = yt[i] - yp[i];
+        let b = yt[i] - m;
+        ssr = ssr + a * a;
+        sst = sst + b * b;
+        i = i + 1;
+    }
+    if (sst == 0) { return 0; }
+    return 1 - ssr / sst;
+}
+
+// ---------------------------------------------------------------------------
+//  تحقّق متقاطع k-fold
+//    fitFn(Xtr, ytr) -> model ، metricFn(yte, ypred) -> رقم
+//    مثال:  ml_kfold(X, y, 5, 1, fun(a,b){ return ml_nb_fit(a,b); }, ml_accuracy)
+// ---------------------------------------------------------------------------
+fun ml_kfold(X, y, k, sd, fitFn, metricFn) {
+    seed(sd);
+    let idx = nd_shuffle(nd_seq(len(X)));
+    let n = len(X);
+    let scores = [];
+    let f = 0;
+    while (f < k) {
+        let lo = floor(n * f / k);
+        let hi = floor(n * (f + 1) / k);
+        let teIdx = slice(idx, lo, hi);
+        let trIdx = concat(slice(idx, 0, lo), slice(idx, hi, n));
+        let model = fitFn(nd_take(X, trIdx), nd_take(y, trIdx));
+        let preds = ml_predict_all(model, nd_take(X, teIdx));
+        push(scores, metricFn(nd_take(y, teIdx), preds));
+        f = f + 1;
+    }
+    return {"scores": scores, "mean": nd_mean(scores), "std": nd_std(scores)};
+}
+
+// ---------------------------------------------------------------------------
+//  حفظ/تحميل النماذج (JSON)
+// ---------------------------------------------------------------------------
+fun ml_save(m, path) {
+    writeFile(path, jsonEncode(m));
+    return path;
+}
+
+fun ml_load(path) { return jsonDecode(readFile(path)); }

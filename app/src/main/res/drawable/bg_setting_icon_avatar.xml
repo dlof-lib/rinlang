@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- دائرة خلفية خفيفة خلف أيقونة/إيموجي صف Row.Link (زي "🌐" اللغة)، بدل مربّع بلا هوية
+     بصرية واضحة — لمسة احترافية بسيطة تفرّق الأيقونة عن باقي الصف. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
+    <solid android:color="@color/rin_setting_icon_avatar_bg" />
+</shape>

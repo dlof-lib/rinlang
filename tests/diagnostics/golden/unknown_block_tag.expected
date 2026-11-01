@@ -1,0 +1,16 @@
+error[E0015]: unsupported block `@containr`
+  --> unknown_block_tag.rin:1:1
+
+ 1 | @containr
+   | ^
+
+reason:
+  `containr` is not a recognized Rin container/block kind
+
+did you mean:
+  `container`
+
+help:
+  did you mean `@container`?
+
+1 error emitted

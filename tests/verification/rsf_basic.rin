@@ -1,0 +1,83 @@
+// __rsf__ — منع التكرار تلقائياً + كشف الدورات (RINTWIST + Disconom)
+@import "__rsf__";
+
+print "-- keys";
+print rsf_equal([1, {a: 1, b: 2}], [1, {b: 2, a: 1}]);
+print rsf_equal(1, "1");
+print rsf_equal([1, 2], [2, 1]);
+
+print "-- dedupe";
+print rsf_dedupe([3, 1, 3, 2, 1]);
+print rsf_dedupe([[1, 2], [1, 2], {a: 1, b: 2}, {b: 2, a: 1}, 1, "1", nil, nil, true, "true"]);
+print rsf_dedupe("abca");
+print rsf_dedupeBy(["ab", "ac", "bd"], fun(w) { return substr(w, 0, 1); });
+print rsf_duplicates([1, 2, 1, 3, 2, 1]);
+print rsf_hasDuplicates([1, 2, 3]), rsf_hasDuplicates([1, 2, 1]);
+print rsf_counts(["a", "b", "a", "a"]);
+let orig = [2, 2, 1];
+print rsf_dedupe(orig), orig;
+let s = rsf_set();
+print rsf_add(s, [1]), rsf_add(s, [1]), rsf_add(s, 2), rsf_size(s), rsf_has(s, [1]), rsf_has(s, 3);
+print rsf_items(s);
+
+print "-- memo";
+let calls = 0;
+let sq = rsf_memo(fun(x) { calls = calls + 1; return x * x; });
+print sq(4), sq(4), sq(5), calls;
+let fib = nil;
+fib = rsf_memo(fun(n) { return n < 2 ? n : fib(n - 1) + fib(n - 2); });
+print fib(40);
+let loopy = nil;
+loopy = rsf_memo(fun(n) { return loopy(n % 3 + 1); });
+try { loopy(1); } catch (e) { print "caught: " + e["message"]; }
+
+print "-- sequences";
+print rsf_iterate(1, fun(x) { return x < 5 ? x + 1 : nil; });
+let r = rsf_iterate(0, fun(x) { return (x * x + 1) % 7; });
+print r["status"], r["mu"], r["lambda"], r["cycle"];
+let collatz = rsf_iterate(27, fun(x) { return x == 1 ? nil : (x % 2 == 0 ? x / 2 : 3 * x + 1); });
+print collatz["status"], collatz["steps"];
+print rsf_brent(0, fun(x) { return (x * x + 1) % 7; });
+print rsf_brent(1, fun(x) { return x < 3 ? x + 1 : nil; });
+print rsf_hasCycle(2, fun(x) { return (x + 3) % 12; });
+rsf_config({limit: 50});
+let lim = rsf_iterate(0, fun(x) { return x + 1; });
+print lim["status"], lim["steps"];
+rsf_config({limit: 5000000});
+
+print "-- graphs";
+print rsf_cycles({a: ["b"], b: ["c"], c: ["a"]});
+print rsf_cycles({a: ["a"]});
+print rsf_cycles({a: ["b", "c"], b: ["d"], c: ["d"], d: []});
+print rsf_cycles({a: ["b"], b: ["a", "c"], c: ["b"]});
+print rsf_isAcyclic({x: ["y"], y: []}), rsf_isAcyclic({x: ["y"], y: ["x"]});
+print rsf_graph({app: ["lib", "lib", "util"], lib: ["util", "ghost"], util: []});
+print rsf_topo({app: ["lib", "util"], lib: ["util"], util: []});
+try { rsf_topo({a: ["b"], b: ["a"]}); } catch (e) { print "caught: " + e["message"]; }
+let links = {home: ["about", "blog", "about"], about: ["home"], blog: ["post1", "post2"], post1: ["blog"], post2: []};
+let w = rsf_walk("home", fun(n) { return links[n]; });
+print w["visited"];
+print w["cycles"];
+
+print "-- strict";
+rsf_config({strict: true});
+try { rsf_cycles({a: ["b"], b: ["a"]}); } catch (e) { print "caught: " + e["message"]; }
+try { rsf_iterate(1, fun(x) { return 1; }); } catch (e) { print "caught: " + e["message"]; }
+rsf_config({strict: false});
+
+print "-- RINTWIST + Disconom";
+let st = rsf_importStack();
+print st["chain"], st["cycle"];
+print rsf_loadedDuplicates();
+let g = rsf_libGraph("__rsf__");
+print g["ok"], g["cycles"], g["missing"];
+let chk = rsf_selfCheck();
+print chk["ok"], chk["lib"] == "";
+print rsf_settings()["limit"], rsf_settings()["tag"];
+
+print "-- rintwist.rsf";
+print rintwist.rsf("dedupe", [1, 1, 2]);
+print rintwist.rsf("cycles", {p: ["q"], q: ["p"]});
+let R = rintwist.rsf();
+print R.version, R.hasCycle(0, fun(x) { return (x + 1) % 3; });
+try { rintwist.rsf("nope"); } catch (e) { print "caught: unknown member"; }

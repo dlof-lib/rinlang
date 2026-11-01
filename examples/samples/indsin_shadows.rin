@@ -1,0 +1,8 @@
+<Screen#a size=phone bg="#F2F4F8" padding=24 gap=28>
+  <Text#t size=heading color=#222>Shadows</Text>
+  <Card#c1 width=full height=70 radius=16 bg=#ffffff elevation=sm />
+  <Card#c2 width=full height=70 radius=16 bg=#ffffff elevation=lg />
+  <Card#c3 width=full height=70 radius=16 bg=#ffffff elevation=xl />
+  <Card#c4 width=full height=70 radius=16 bg=#6C5CE7 shadowColor=#6C5CE7 elevation=xl />
+  <Button#b shadow=14 shadowColor=#FD79A8>Glow</Button>
+</Screen>

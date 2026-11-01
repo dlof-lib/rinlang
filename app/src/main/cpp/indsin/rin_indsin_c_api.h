@@ -1,0 +1,214 @@
+// indsin/rin_indsin_c_api.h — Flat C ABI for the Indsintime rendering engine, extending rin_c_api.h's
+// existing conventions (malloc'd char* results freed via rin_free_string, extern "C").
+#pragma once
+#include "../rin_c_api.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// Runs the cold Indsintime pipeline (Lexer -> Parser -> Warp seeding -> Fabric -> Indsin -> Dye)
+// on `source`, laying the root out at `rootWidth` px, and returns a JSON dump of the Fabric
+// (kind/name/line/geometry/resolved attrs, recursively) — or a JSON error object of the form
+// {"error":"...", "line":N} if the source has no @view root or fails to parse.
+// Free the result with rin_free_string().
+RIN_API char* rin_indsin_render_json(const char* source, int rootWidth);
+
+// Same as rin_indsin_render_json, but builds the Fabric from the @view root that lives *inside* a
+// named @container (rather than the top-level program) — the container-scoped counterpart that
+// makes Indsintime actually tied to `container`: every @container carrying its own @view/warp/
+// @theme becomes an independently renderable screen/component, scoped to that container's own
+// warp state. Returns a JSON error object if no container/group/volume with that name exists, or
+// it has no @view root inside it. Free the result with rin_free_string().
+RIN_API char* rin_indsin_render_container_json(const char* source, const char* containerName, int rootWidth);
+
+// ---------------------------------------------------------------------
+// Indsintime *session*: unlike rin_indsin_render_json (a stateless one-shot render), a session keeps
+// its Fabric + Warp state alive across calls, so a tap can actually mutate state in place (via
+// Needle -- see rin_indsin_needle.h) and only the affected Strands are re-resolved, instead of the
+// whole preview being rebuilt from scratch. This is what lets an `onTap` handler (including one
+// backed by a real `fun` with a `while` loop) actually do something in the live preview.
+
+// Creates a session from `source`, laid out at `rootWidth` px. Always release with
+// rin_indsin_session_free, even if creation failed to parse (check via rin_indsin_session_render_json).
+RIN_API void* rin_indsin_session_create(const char* source, int rootWidth);
+
+// Container-scoped counterpart of rin_indsin_session_create: the live session's Fabric/Warp state
+// is seeded from the named @container's own body instead of the top-level program. Always
+// release with rin_indsin_session_free, even if creation failed to parse.
+RIN_API void* rin_indsin_session_create_for_container(const char* source, const char* containerName, int rootWidth);
+
+// Overlay Engine (rin_indsin_overlay.h): sets the *viewport* height (the visible screen) used to
+// center an open Dialog / anchor a Tooltip -- a different quantity from rootWidth's paired height,
+// which is left unbounded (1e9) everywhere else in this engine because the rest of the Indsin lays
+// out a scrollable design-time canvas, not a fixed screen. Defaults to 844 (a common phone
+// viewport height) if never called. Triggers an immediate re-layout + overlay pass; call again
+// whenever the host's visible area actually changes (e.g. rotation).
+RIN_API void rin_indsin_session_set_viewport(void* session, int viewportHeight);
+
+// ---- Design freedom: canvas size + default background (docs/indsin_design_freedom.md) -------------------
+// Default background of the screen canvas (the area behind the Fabric). Precedence: root `canvas=` (what
+// `<Screen bg=...>` writes) > this host default > the active theme's `background`. Pass "" or NULL to clear.
+// Accepts any color literal (#RGB, #RRGGBB, rgb(), hsl(), CSS names). Returns 1 on success, 0 if unparsable.
+RIN_API int rin_indsin_session_set_default_background(void* session, const char* color);
+// Text entry for a bound Input: sets warp cell `name` to `text` (what the tap envelope's "focus.bind" named).
+RIN_API char* rin_indsin_session_set_input(void* session, const char* name, const char* text);
+// Host resize: base width (and viewport height, 0 = keep) -> immediate re-layout. A root `screen="phone|390x844"` /
+// `canvas_width=` declared in the source still overrides the width.
+RIN_API void rin_indsin_session_resize(void* session, int width, int viewportHeight);
+// {"width","height","background":"#RRGGBB","source":"screen|host|theme"} — canvas the host should size/clear with.
+// Every tap/render envelope also carries this object as "canvas". Free with rin_free_string().
+RIN_API char* rin_indsin_session_canvas_json(void* session);
+
+// Current Fabric snapshot plus the exact native Dye paint plan (`paint` array), same JSON shape as rin_indsin_render_json. Free with rin_free_string().
+RIN_API char* rin_indsin_session_render_json(void* session);
+
+// Dispatches a tap at (x, y) — same pixel space as the session's rootWidth. Finds the topmost
+// Strand under the point that declared onTap=...;, runs it for real (a matching top-level `fun`
+// if one exists, else a small set of built-in Warp ops: increment/decrement/toggle/set), applies
+// any resulting Warp changes to the Fabric, and re-lays-out. Returns:
+//   {"ok":true,"handled":bool,"targetId":N,"changed":["name",...],"error"?:"...","fabric":{...}}
+// `error` is only present if a handler was found but failed at runtime (e.g. wrong arg count).
+// Free with rin_free_string().
+RIN_API char* rin_indsin_session_tap(void* session, double x, double y);
+
+// ---- Events: long-press / double-tap / hover (rin_indsin_needle.h's dispatchLongPress/
+// dispatchDoubleTap/dispatchHover, Overlay-aware) — same shape/semantics as rin_indsin_session_tap
+// above, just against a different attribute (`onLongPress=`/`onDoubleTap=`/`onHoverEnter=` or
+// `onHoverExit=`) instead of `onTap=`. A hit with no matching handler on that attribute simply
+// reports `"handled":false` (not an error) — see dispatchGestureAttr's own doc comment. Free every
+// result with rin_free_string().
+
+// Dispatches a long-press at (x, y). The host is responsible for actually detecting a long-press
+// gesture (hold duration) — this only resolves *what* to run once told one landed here.
+RIN_API char* rin_indsin_session_long_press(void* session, double x, double y);
+
+// Dispatches a double-tap at (x, y). Same caveat as long-press: gesture *detection* (two taps
+// within a time/distance window) is the host's job.
+RIN_API char* rin_indsin_session_double_tap(void* session, double x, double y);
+
+// Dispatches a hover enter (entering=1) or exit (entering=0) at (x, y). Meant for a pointer/mouse/
+// stylus host (Mirror Indsin desktop preview, or a mouse-driven Android device) — the host tracks
+// which Strand it last considered hovered and calls this with entering=0 on it before calling it
+// with entering=1 on whatever's under the pointer now, mirroring a real UI toolkit's enter/exit pair.
+RIN_API char* rin_indsin_session_hover(void* session, double x, double y, int entering);
+
+// ---- Effects: advances the session's animation clock (rin_indsin_effects.h's EffectRuntime) to
+// "now" and re-applies every animating Strand's current opacity/translate/scale frame, WITHOUT
+// dispatching any gesture — this is what a host's per-frame callback (Choreographer on Android,
+// requestAnimationFrame-equivalent elsewhere) calls in a loop while an enter transition (effect=
+// on some Strand) is still short of its `duration=`. Same JSON envelope shape as
+// rin_indsin_session_tap (with "handled":false, "changed":[]), plus one more top-level field:
+// `"animating":bool` — true if at least one Strand is still short of its full duration, i.e. the
+// host should schedule another tick; false means it's safe to stop the per-frame loop until the
+// next real interaction (tap/long-press/.../update_source) starts a fresh animation. Free with
+// rin_free_string().
+// ساعة حيّة (docs/TIME.md): إن عرّف المصدر `warp clock = time.ms();` فكل tick يحدّث الخلية `clock` عند تغيّر الثانية
+// ويعيد حساب كل خاصية تقرؤها (مثل text=time(clock, "HH:mm:ss"))، ويضيف الحقل "ticking":true (والمضيف يواصل النداء
+// ما دام true؛ يكفي نداء كل ثانية). "changed" يحوي "clock" عند حدوث تحديث.
+RIN_API char* rin_indsin_session_tick(void* session);
+
+// ---- Effects Studio (rin_indsin_effects.h) ----
+// تعريف تأثير مخصّص: frames = "0%{opacity:0,y:20} 100%{opacity:1,y:0}" (أو فارغ مع options تحوي x_fn=…)،
+// options = "duration=600;easing=spring;iterations=infinite;…" . يعيد 1 عند النجاح، 0 عند الخطأ (انظر effects_json).
+RIN_API int rin_indsin_effect_define(const char* name, const char* frames, const char* options);
+// قائمة التأثيرات {"effects":[{name,builtin,duration,iterations,channels}],"error":""} — free بـ rin_free_string.
+RIN_API char* rin_indsin_effects_json(void);
+// تشغيل/إيقاف تأثير على كل عنصر باسم target (اسم الـStrand) ويعيد الغلاف المعتاد.
+RIN_API char* rin_indsin_session_play_effect(void* session, const char* target, const char* effect);
+RIN_API char* rin_indsin_session_stop_effect(void* session, const char* target);
+
+// ---- Fonts: CustomFont / FontLoad / FontDisplay (rin_indsin_typography.h) ----
+// تسجيل خط من المضيف: family = اسم العائلة، src = "fonts/a.woff2" أو "url(a.woff2) format(woff2), local(Arial)"،
+// options = "weight=100 900;display=swap;axes=wght 100 900;load=lazy|eager|preload;fallback=Tahoma,system".
+// يبدأ التحميل (idle → loading) ما لم يكن load=lazy. يعيد 1/0 (الخطأ في rin_indsin_fonts_json).
+RIN_API int rin_indsin_font_load(const char* family, const char* src, const char* options);
+// المضيف يبلّغ بنتيجة التحميل: status = loaded | error | loading | idle (error اختياري). يعيد 1 إن وُجد الخط.
+RIN_API int rin_indsin_font_set_status(const char* family, const char* status, const char* error);
+// {"fonts":[{family,src[],weight:[min,max],style,display,variable,axes[],status,preload,fallback[]}],"generic":[…],"error":""}
+RIN_API char* rin_indsin_fonts_json(void);
+
+// ---- Text animation / Accessibility ----
+// يعيد تشغيل حركة النص لكل عنصر باسم target من البداية، ويعيد الغلاف المعتاد.
+RIN_API char* rin_indsin_session_play_text(void* session, const char* target);
+// ReduceMotion: 1 يلغي حركة النص (يظهر النص النهائي الثابت). يبقى الإعداد حتى تغييره.
+RIN_API void  rin_indsin_session_set_reduce_motion(void* session, int on);
+// شجرة الوصول الكاملة (role/name/description/lang/dir/level/state/aria + transcript) — free بـ rin_free_string.
+RIN_API char* rin_indsin_session_a11y_json(void* session);
+// ما يقوله قارئ الشاشة بالترتيب (سطر لكل عنصر) كنص عادي.
+RIN_API char* rin_indsin_session_screenreader(void* session);
+// إعلانات المناطق الحيّة (aria_live) التي تغيّرت منذ النداء السابق: [{"id","text","politeness"}].
+RIN_API char* rin_indsin_session_announcements_json(void* session);
+
+
+// Re-parses `newSource` and diffs it against the session's existing Fabric in place (Shuttle),
+// keeping all current Warp values (so state like a tapped counter survives editing elsewhere in
+// the file). On a parse error the previous Fabric is left completely untouched (Snag containment)
+// and the returned JSON still carries "fabric" (the last-good frame) alongside an "error"/"line".
+// Free with rin_free_string().
+RIN_API char* rin_indsin_session_update_source(void* session, const char* newSource);
+
+
+// ---- Media (rin_indsin_media.h): المضيف يُجيب على طلب "media" الذي أخرجه tap (pickMedia/uploadMedia).
+// picked: الملفات المختارة كمصفوفة JSON [{"path","name","mime","size","kind"}] (path نسبي لجذر المشروع).
+//   kind/multiple/maxMb: نفس قيم طلب pick (يُعاد التحقق منها هنا). append=1 يضيف للاختيار الحالي.
+// progress: status = uploading|done|error، progress 0..100، detail = ردّ الخادم (done) أو رسالة الخطأ.
+// كلاهما يعيد نفس غلاف tap ("changed":[...] + fabric). Free with rin_free_string().
+RIN_API char* rin_indsin_session_media_picked(void* session, const char* cell, const char* itemsJson,
+                                              const char* kind, int multiple, double maxMb, int append);
+RIN_API char* rin_indsin_session_media_progress(void* session, const char* cell, const char* status,
+                                                double progress, const char* detail);
+
+// Releases a session created by rin_indsin_session_create.
+RIN_API void rin_indsin_session_free(void* session);
+
+// ---------------------------------------------------------------------
+// Native raster access (Desktop client — see tools/rin_indsin_desktop.cpp): unlike
+// rin_indsin_session_render_json's "paint" array (a DrawCommand list a *host* renderer walks and
+// draws itself, e.g. IndsinFabricView.kt's Canvas), these two return/consume the actual flat pixel
+// buffer produced by the engine's own rasterizer (rin_indsin_paint.h's rasterizeToBuffer/writePNG —
+// the ONE rasterizer in the engine; nothing here re-implements paint logic). This is what lets a
+// dependency-free desktop window (Xlib, no Skia/Cairo/GL) blit a genuinely-rendered frame with
+// XPutImage, and what lets the same tool dump a headless screenshot with no display at all.
+
+// Rasterizes the session's current Fabric+Overlay (same paintWithOverlay() pass
+// rin_indsin_session_render_json uses) into a malloc'd RGB888 buffer (row-major, top-to-bottom,
+// 3 bytes/pixel). *outW receives rootWidth; *outH receives the Fabric's measured content height.
+// Returns nullptr (and 0/0 in outW/outH) if the session has no valid Fabric. Free the result with
+// rin_indsin_free_buffer().
+RIN_API unsigned char* rin_indsin_session_render_rgb(void* session, int* outW, int* outH);
+
+// Releases a buffer returned by rin_indsin_session_render_rgb.
+RIN_API void rin_indsin_free_buffer(unsigned char* buf);
+
+// Rasterizes the session's current Fabric+Overlay and writes it straight to a real PNG file at
+// `path` (spec-valid PNG, same encoder as the Container-export path) — a headless equivalent of
+// the Desktop client's window, for CI/screenshot use with no X server involved. Returns 1 on
+// success, 0 on failure (no Fabric, or the file could not be written).
+RIN_API int rin_indsin_session_export_png(void* session, const char* path);
+
+// Standalone HTML preview of the session's current frame (same Dye paint plan as the PNG path, but text is
+// laid out by the browser so Arabic/RTL/emoji render correctly). Free with rin_free_string(). NULL if no Fabric.
+RIN_API char* rin_indsin_session_export_html(void* session);
+
+
+// ---- Design System v2 / Audit / Introspection (rin_indsin_system.h, _audit.h, _query.h) -------
+// All return malloc'd JSON/text (free with rin_free_string) except where noted.
+RIN_API char* rin_indsin_session_audit_json(void* session);   // a11y + layout audit of the live Fabric
+RIN_API char* rin_indsin_session_stats_json(void* session);   // nodes / depth / kinds / categories
+RIN_API char* rin_indsin_session_outline(void* session);      // indented plain-text tree
+RIN_API char* rin_indsin_tokens_json(void);                   // every token scale + active theme
+RIN_API char* rin_indsin_catalog_json(void);                  // component taxonomy
+RIN_API char* rin_indsin_palette_json(const char* seedColor); // tonal palette 50..900
+RIN_API char* rin_indsin_theme_from_seed_json(const char* seedColor, int dark); // theme + WCAG report
+// ---- Web Layout Concepts (docs/indsin_web_layout.md) ----
+RIN_API char* rin_indsin_query_selector_json(void* session, const char* selector);  // Selector: [{name,kind,x,y,w,h}...] | {"error":...}
+RIN_API char* rin_indsin_collisions_json(void* session);                         // CollisionDetection: أزواج الإخوة المتداخلة
+RIN_API char* rin_indsin_space_report_json(void* session, const char* name);     // Inner/Outer/Occupied/Empty/AvailableSpace
+RIN_API int   rin_indsin_scroll_to(void* session, const char* name, double x, double y); // ScrollTo + إعادة تخطيط (1 = تم)
+RIN_API void  rin_indsin_set_scroll_window(void* session, double scrollX, double scrollY); // يحدّث fixed/sticky لإزاحة تمرير الصفحة
+RIN_API char* rin_indsin_validate_theme_json(const char* themeName);            // WCAG report for a theme
+
+#ifdef __cplusplus
+}
+#endif

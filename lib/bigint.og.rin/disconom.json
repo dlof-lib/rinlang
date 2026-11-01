@@ -1,0 +1,13 @@
+{
+  "disconom": 1,
+  "name": "bigint",
+  "version": "1.0.0",
+  "description": "أرقام صحيحة ضخمة بلا حدّ للحجم: جمع، طرح، ضرب (Karatsuba)، قسمة (Knuth D)، أسّ، قاسم مشترك، جذر، عاملي، فيبوناتشي",
+  "rin": ">=1.0.0",
+  "authors": ["Rin"],
+  "license": "MIT",
+  "keywords": ["bigint", "math", "numbers", "أرقام ضخمة"],
+  "main": "main.zpp",
+  "parts": ["main.zpp", "core/magnitude.zpp", "core/convert.zpp", "ops/arith.zpp", "ops/theory.zpp"],
+  "run": ["run.rinz"]
+}

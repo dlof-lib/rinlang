@@ -1,0 +1,1632 @@
+#pragma once
+#include "rin_ast.h"
+#include "diagnostics/diagnostic.h"
+#include "diagnostics/diagnostic_engine.h"
+#include "clc/clc_io.h" // ClcFormatError (يُستخدَم في معالجة أخطاء natives CLC أدناه) — clc_container.h
+                          // لا يتضمّنه تلقائياً بذاته.
+#include "clc/clc_container.h" // مكتبة CLC (Rin Compact Library Container، .rcl) — انظر
+                                // clcContainerOpen/clcContainerClose/libraryImport/libraryExport
+                                // في registerNatives()/invokeCallee() (rin_interpreter.cpp)
+                                // وdocs/RIN_INTEGRATION.md في مستودع rin-clc الأصلي.
+#include "loader_ui/library_loader_ui.h" // rin::loaderui — انظر setImportUISink/setImportUIMode أدناه
+#include "rin_candle.h" // rin::CandleRegistry — طبقة id-to-id غير محدودة فوق mask/id مباشرة، انظر docs/candle.md
+#include "rin_libdir.h" // rin::libdir — مكتبات Rin المقسَّمة (مجلد .og.rin: Disconom + .zpp + .rinz + native/)
+#include "rin_container_sql.h" // rin::sql — RIN CONTAINER SQL (RCSQL): محلّل استعلام /  : & () # فقط، انظر sqlViews/sqlExecute أدناه
+                                          // وربطها الفعلي مع @import في rin_interpreter.cpp.
+#include <string_view>
+#include <sstream>
+#include <iostream>
+#include <map>
+#include <unordered_map>
+#include <unordered_set>
+#include <memory>
+#include <variant>
+#include <functional>
+#include <array>
+#include <vector>
+#include <tuple>
+#include <utility>
+#include <chrono>
+#include <mutex>
+#include <atomic>
+#include <optional>
+
+namespace rin {
+
+namespace vm { struct State; struct RunState; struct Proto; struct Stats; } // RinVM (rin_bcvm.h)
+
+struct Environment;
+using EnvPtr = std::shared_ptr<Environment>;
+struct NsNode; // Namespace tree node (container / group / Volume) - defined right after Environment
+
+struct Value; // fwd
+struct InstanceData; // fwd (see full definition after Value below — OOP: class/struct instances)
+
+struct Callable {
+    std::shared_ptr<FunctionStmt> declaration;
+    EnvPtr closure;
+};
+
+// مصفوفة (array): تُمرَّر بالمرجع (shared_ptr) حتى تعمل push/pop/الفهرسة بالتعديل المباشر.
+using ArrayData = std::vector<Value>;
+using ArrayPtr = std::shared_ptr<ArrayData>;
+
+// قاموس (map): قائمة أزواج (key, value) تحافظ على ترتيب الإدخال؛ المقارنة بالقيمة عبر valuesEqual.
+// يُعرَّف MapData الكامل بعد Value مباشرة (يحتاج Value كاملة النوع لأجل فهرس التجزئة الكسول).
+struct MapData;
+using MapPtr = std::shared_ptr<MapData>;
+
+// مجموعة (set): عناصر فريدة بحسب valuesEqual (مقارنة تركيبية) مع حفظ ترتيب الإدراج؛ تُمرَّر بالمرجع
+// (shared_ptr) تماماً كالمصفوفة والقاموس، فتعمل add/remove بالتعديل المباشر. تعريف SetData الكامل
+// بعد Value مباشرة (يحتاج Value كاملة النوع)، والتنفيذ في rin_set.cpp (يُضمَّن في نهاية
+// rin_interpreter.cpp) — الشرح الكامل: docs/set.md
+struct SetData;
+using SetPtr = std::shared_ptr<SetData>;
+
+struct Value {
+    // INSTANCE: كائن (class أو struct) — انظر InstanceData أدناه (تُعرَّف بعد Value لأنها تحتاج
+    // Value كاملة النوع لأجل std::unordered_map<std::string, Value> حقولها؛ shared_ptr هنا لا
+    // يحتاج نوعاً كاملاً فيعمل بلا مشكلة).
+    enum class Type { NIL, NUMBER, STRING, BOOL, FUNCTION, ARRAY, MAP, INSTANCE, SET } type = Type::NIL;
+    double number = 0.0;
+    std::string str;
+    bool boolean = false;
+    std::shared_ptr<Callable> function;
+    ArrayPtr array;
+    MapPtr map;
+    std::shared_ptr<InstanceData> instance;
+    SetPtr set; // Type::SET
+
+    static Value nil() { return Value{}; }
+    static Value num(double n) { Value v; v.type = Type::NUMBER; v.number = n; return v; }
+    static Value string(std::string s) { Value v; v.type = Type::STRING; v.str = std::move(s); return v; }
+    static Value boolean_(bool b) { Value v; v.type = Type::BOOL; v.boolean = b; return v; }
+    static Value makeArray(ArrayPtr a) { Value v; v.type = Type::ARRAY; v.array = std::move(a); return v; }
+    static Value makeMap(MapPtr m) { Value v; v.type = Type::MAP; v.map = std::move(m); return v; }
+    static Value makeSet(SetPtr st) { Value v; v.type = Type::SET; v.set = std::move(st); return v; }
+    static Value makeInstance(std::shared_ptr<InstanceData> inst) { Value v; v.type = Type::INSTANCE; v.instance = std::move(inst); return v; }
+
+    bool isTruthy() const {
+        if (type == Type::NIL) return false;
+        if (type == Type::BOOL) return boolean;
+        if (type == Type::NUMBER) return number != 0.0;
+        return true;
+    }
+    std::string toDisplayString() const;
+    std::string typeName() const;
+};
+
+// محتوى القاموس: قائمة أزواج (key, value) بترتيب الإدخال (نفس السلوك السابق حرفياً، ويرث std::vector
+// فكل الشيفرة القديمة تعمل كما هي) + فهرس تجزئة "كسول" للمفاتيح البدائية (رقم/نص/منطقي/nil).
+//  - find(key): O(1) تقريباً للمفتاح البدائي حين size() >= kIndexThreshold، وإلا مسح خطّي بـ valuesEqual.
+//  - append(key, value): إضافة مفتاح جديد مع إبقاء الفهرس صالحاً (لا إعادة بناء).
+//  - أي تعديل آخر يغيّر الحجم (push_back/erase/clear...) يُسقط الفهرس تلقائياً: يُعاد بناؤه عند أول بحث
+//    لاحق (O(n) مرة واحدة). أما حذف عنصر فمرّ عبر eraseAt() الذي يُسقط الفهرس صراحةً.
+//  - عند الفهرس المتقادم يتحقق find() من المفتاح الفعلي في الموضع، فلا يعيد أبداً عنصراً خاطئاً.
+// الشرح الكامل: docs/runtime.md
+struct MapData : std::vector<std::pair<Value, Value>> {
+    using Base = std::vector<std::pair<Value, Value>>;
+    static constexpr size_t kIndexThreshold = 12;
+    static constexpr size_t npos = static_cast<size_t>(-1);
+
+    MapData() = default;
+    MapData(std::initializer_list<value_type> il) : Base(il) {}
+    MapData(const Base& b) : Base(b) {}
+    MapData(Base&& b) noexcept : Base(std::move(b)) {}
+    MapData(const MapData& o) : Base(static_cast<const Base&>(o)) {}   // الفهرس لا يُنسخ
+    MapData(MapData&& o) noexcept : Base(std::move(static_cast<Base&>(o))) { o.dropIndex(); }
+    MapData& operator=(const MapData& o) { if (this != &o) { Base::operator=(static_cast<const Base&>(o)); dropIndex(); } return *this; }
+    MapData& operator=(MapData&& o) noexcept { if (this != &o) { Base::operator=(std::move(static_cast<Base&>(o))); dropIndex(); o.dropIndex(); } return *this; }
+    MapData& operator=(const Base& o) { Base::operator=(o); dropIndex(); return *this; }
+    MapData& operator=(Base&& o) noexcept { Base::operator=(std::move(o)); dropIndex(); return *this; }
+
+    size_t findIndex(const Value& key) const;          // npos إن لم يوجد
+    Value* findValue(const Value& key) { size_t i = findIndex(key); return i == npos ? nullptr : &(*this)[i].second; }
+    const Value* findValue(const Value& key) const { size_t i = findIndex(key); return i == npos ? nullptr : &(*this)[i].second; }
+    void append(const Value& key, const Value& value);  // المفتاح غير موجود (يضمن المستدعي ذلك عبر findIndex)
+    void put(const Value& key, const Value& value);     // إدراج أو استبدال
+    void eraseAt(size_t i) { erase(begin() + static_cast<std::ptrdiff_t>(i)); dropIndex(); }
+    void dropIndex() const { idxValid_ = false; pidx_.clear(); }
+
+private:
+    mutable std::unordered_map<std::string, size_t> pidx_;
+    mutable size_t idxN_ = 0;
+    mutable bool idxValid_ = false;
+    void rebuildIndex() const;
+};
+
+// محتوى المجموعة: items بترتيب الإدراج + فهرس تجزئة للقيم "البدائية" (رقم/نص/منطقي/nil) فيصبح
+// add/has/remove لها O(1) تقريباً بدل مسح خطّي؛ العناصر المركّبة (مصفوفة/قاموس/مجموعة/كائن/دالة)
+// تُقارَن بـ valuesEqual عبر قائمة comp. الفهرس "كسول": أي إزالة تُسقطه (indexed=false) ويُعاد
+// بناؤه عند أول بحث لاحق. لا تعدّل items مباشرة من خارج هذه الدوال وإلا فسد الفهرس.
+struct SetData {
+    std::vector<Value> items;
+    mutable std::unordered_map<std::string, size_t> pidx; // مفتاح بدائي -> موضعه في items
+    mutable std::vector<size_t> comp;                      // مواضع العناصر المركّبة
+    mutable bool indexed = true;
+
+    size_t size() const { return items.size(); }
+    bool empty() const { return items.empty(); }
+    bool contains(const Value& x) const;     // O(1) للبدائي، O(#composite) للمركّب
+    bool add(const Value& x);                // true إن أُضيف فعلاً
+    bool remove(const Value& x);             // true إن كان موجوداً وأُزيل
+    void clear() { items.clear(); pidx.clear(); comp.clear(); indexed = true; }
+    void reindex() const;
+    static bool primKey(const Value& v, std::string& key); // false = عنصر مركّب
+};
+
+// ---- OOP: بيانات كائن (instance) فعلي لصنف class/struct مُعرَّف عبر ClassStmt (rin_ast.h) ----
+// class (isStruct=false) لها دلالة مرجع (reference) عادية: نسخ Value لكائن class ينسخ shared_ptr
+// فقط (نفس البيانات الأصلية، تماماً كمصفوفات/قواميس Rin). struct (isStruct=true) لها دلالة قيمة
+// (value): Interpreter::copyForBinding في rin_interpreter.cpp يستنسخ InstanceData كاملة عند
+// الإسناد (let/=) وعند تمرير وسيط لدالة/method، فيسلك عملياً كنسخ قيمة حقيقي عند أهم نقطتين
+// (الإسناد والتمرير)، دون الحاجة لإعادة تصميم Value بالكامل.
+struct InstanceData {
+    std::string className;
+    bool isStruct = false;
+    std::unordered_map<std::string, Value> fields;
+    std::vector<std::string> fieldOrder; // ترتيب أول ظهور لكل حقل (لأجل toDisplayString مرتّبة)
+    bool frozen = false; // Rin 1.0: oop.freeze(obj) — يمنع أي كتابة لاحقة على الحقول
+};
+
+// مقارنة تركيبية (structural) بين قيمتين، تُستخدم في == != وفهرسة القواميس بالمفتاح.
+bool valuesEqual(const Value& a, const Value& b);
+bool sameShape(const Value& a, const Value& b); // =::= (تطابق الشكل)
+std::string shapeOf(const Value& v);              // shapeOf(v)
+std::vector<std::array<std::string, 4>> shapeDiff(const Value& value, const Value& model); // shapeDiff(value, model)
+
+// ---- Set: عمليات مجموعات حرّة (تُعرَّف في rin_set.cpp) تستعملها valuesEqual/المعاملات/التكرار ----
+namespace setops {
+bool equal(const SetData& a, const SetData& b);              // تساوٍ بلا اعتبار للترتيب
+bool subset(const SetData& a, const SetData& b);             // a ⊆ b
+SetPtr unite(const SetData& a, const SetData& b);            // a ∪ b (ترتيب: a ثم الجديد من b)
+SetPtr intersect(const SetData& a, const SetData& b);        // a ∩ b (ترتيب a)
+SetPtr subtract(const SetData& a, const SetData& b);         // a − b (ترتيب a)
+// معاملات + - * < <= > >= عندما يكون أحد الطرفين SET؛ يرمي E0004 برسالة واضحة إن كان الآخر ليس SET.
+Value binary(TokenType op, const Value& l, const Value& r, int line);
+std::string display(const SetData& s);                       // "Set{1, 2, 3}"
+} // namespace setops
+
+// ---- OOP: تعريف صنف (class/struct) واحد — مبني من ClassStmt عند تنفيذه/hoisting (انظر
+// Interpreter::registerClassStmt في rin_interpreter.cpp) ----
+struct ClassDef {
+    std::string name;
+    std::string superclass; // فارغ = بلا وراثة
+    bool isStruct = false;
+    std::vector<std::pair<std::string, ExprPtr>> fieldDefs; // (اسم الحقل، عبارة القيمة الافتراضية أو nullptr)
+    std::unordered_map<std::string, std::shared_ptr<FunctionStmt>> methods; // تتضمن "init" إن عُرِّفت
+    int line = 0;
+
+    // ---- Rin 1.0: OOP الموسَّع ----
+    ClassKind kind = ClassKind::Class;           // class/struct | interface | trait
+    bool isAbstract = false;
+    bool isFinal = false;
+    std::vector<std::string> interfaces;         // implements (class) / extends (interface)
+    std::vector<std::string> traits;             // uses
+    struct MemberMeta { std::string access; bool isFinal = false; };
+    std::unordered_map<std::string, MemberMeta> fieldMeta;   // صلاحيات/final للحقول (instance)
+    // حقول static: تُهيَّأ كسولاً عند أول وصول (ensureStatics) كي تستطيع إشارة أصنافاً مُعرَّفة لاحقاً.
+    std::vector<std::pair<std::string, ExprPtr>> staticFieldDefs;
+    std::unordered_map<std::string, MemberMeta> staticMeta;
+    std::unordered_map<std::string, Value> staticValues;
+    std::vector<std::string> staticOrder;
+    bool staticsInitialized = false;
+    std::unordered_map<std::string, std::shared_ptr<FunctionStmt>> staticMethods;
+    // خصائص محسوبة: get name() {...} / set name(v) {...}
+    std::unordered_map<std::string, std::shared_ptr<FunctionStmt>> getters;
+    std::unordered_map<std::string, std::shared_ptr<FunctionStmt>> setters;
+};
+
+// ---- Rin 1.0: مراقبون/روابط/مستمعو أحداث على الكائنات (oop.observe/bindProperty/on ...) ----
+// سجل واحد في Interpreter::observers_. المراقب يرتبط بكائن عبر weak_ptr (لا يُطيل عمر الكائن).
+struct OopObserver {
+    int id = 0;
+    std::weak_ptr<InstanceData> obj;
+    std::string field;            // اسم الحقل/الخاصية ("*" = أي حقل)، أو اسم الحدث إن isEvent
+    bool isEvent = false;         // true: مستمع حدث يُشغَّل بـ oop.emit
+    bool once = false;            // يُزال بعد أول تشغيل
+    Value fn;                     // callback: (new, old, obj) للمراقب — (args...) للحدث
+    bool isBinding = false;       // ربط خصائص: يكتب القيمة الجديدة في dst.dstField
+    Value dst;
+    std::string dstField;
+    Value transform;              // دالة اختيارية تحوّل القيمة قبل الكتابة (أو nil)
+};
+
+// ---- Rin 1.0: روابط الكائنات بالحاويات وخلايا Warp الخاصة بـ Indsin (oop.bindContainer / oop.bindWarp ...) ----
+// رابط = ربط حقل كائن (OOP) بهدف خارجي:
+//   Container: حقل بيئة حاوية (يُقرأ/يُكتب عبر نفس مسار الإسناد المراعي لـ state فيُطلَق on update).
+//   Warp     : خلية Warp في Indsin (= متغيّر عام في المفسّر؛ Indsin ينقلها من/إلى المعالجات عند كل tap).
+//   Watch    : مراقبة بحتة لحقل حاوية بـ callback (بلا كائن).
+// mode: 0 = push (الكائن -> الهدف) ، 1 = pull (الهدف -> الكائن) ، 2 = اتجاهان.
+struct OopLink {
+    enum class Target { Container, Warp, Watch };
+    int id = 0;
+    Target target = Target::Container;
+    std::weak_ptr<InstanceData> obj;   // فارغ لـ Watch
+    std::string field;                 // حقل الكائن
+    std::string container;             // اسم الحاوية (Container/Watch)
+    std::string key;                   // مفتاح الحاوية، أو اسم خلية Warp، أو "*" لـ Watch
+    int mode = 0;
+    Value transform;                   // اختياري: يُطبَّق على القيمة العابرة (push أو pull فقط، لا two-way)
+    Value fn;                          // callback الـ Watch: (new, old, key, container)
+    Value lastSeen;                    // آخر قيمة نُقلت (تمنع الصدى بين الاتجاهين)
+    bool hasSeen = false;
+    bool busy = false;                 // حارس إعادة الدخول
+};
+
+// نقطة API واحدة مُسجَّلة داخل @container.api عبر عبارة route؛ يُستخدَم لمطابقة استدعاءات call()/callApi()
+// بأسلوب "API حقيقي قابل للاختبار" (mock/stub) دون الحاجة لاتصال شبكة فعلي.
+struct ApiRoute {
+    std::string method;
+    std::string path;
+    double status = 200;
+    Value body;
+};
+
+// نقطة API حقيقية وفعلية (تختلف تماماً عن ApiRoute أعلاه، والتي تبقى صالحة كما هي لأجل
+// المحاكاة/الاختبار بلا شبكة عبر route/call): يُسجِّلها المبرمج بنفسه عبر apiRegister(name, baseUrl)
+// ويمكنه إضافة ترويساتها الخاصة (مفتاح API، Authorization...) عبر apiHeader(name, key, value)، ثم
+// استدعاؤها فعلياً بطلب شبكة حقيقي عبر apiGet/apiPost/apiPut/apiPatch/apiDelete/apiCall.
+struct ApiEndpoint {
+    std::string baseUrl;
+    std::vector<std::pair<std::string, std::string>> headers; // بترتيب التسجيل؛ نفس المفتاح المُعاد تسجيله يُحدَّث مكانه
+};
+
+// سجلّ واحد صادر عن print.log(...) / print.log.info/warn/error/debug(...) (انظر LogStmt في
+// rin_ast.h) — الحقول الخمسة المطلوبة حرفياً: Time/Level/Message/Source/Line. يُراكَم كل سجلّ في
+// Interpreter::logHistory_ عند تنفيذه (بصرف النظر عن طباعته من عدمه)، وهذا بالضبط ما يجعل النظام
+// قابلاً للتوسّع مستقبلاً إلى ملفات Log: logSave()/logHistory() (natives، انظر registerNatives())
+// تُبنى فوق logHistory_ الموجود دون أي حاجة لتغيير عبارة print.log نفسها لاحقاً.
+struct LogEntry {
+    std::string time;    // HH:MM:SS وقت التنفيذ الفعلي
+    std::string level;   // "log" | "info" | "warn" | "error" | "debug"
+    std::string message; // exprs مُجمَّعة بـ sep
+    std::string source;  // sourceFile الحالي، أو source= مخصّص
+    int line = 0;         // رقم سطر عبارة print.log في الكود
+};
+
+// ---- relation: علاقة معرَّفة بين مجموعتَي مستندات (شبيهة بمفتاح أجنبي/foreign key بسيط) ----
+// يربط قيمة حقل fromField داخل مستند في fromContainer بكل مستند في toContainer تساوي فيه toField
+// نفس القيمة (انظر relatedDocs). يُعرَّف عبر defineRelation، ويُستعلَم عنه عبر relatedDocs.
+struct RelationDef {
+    std::string fromContainer, fromField, toContainer, toField;
+};
+
+// ---- migration: خطوة ترحيل مُسمّاة (up/down)، كلاهما دالة Rin بلا وسائط (انظر defineMigration) ----
+struct MigrationDef {
+    Value up;   // تُستدعى عند runMigration (يجب أن تكون دالة Rin)
+    Value down; // تُستدعى عند rollbackMigration؛ قد تبقى nil إن لم تُمرَّر (لا رجوع لهذا الترحيل)
+};
+
+// ---- cache: مدخل مخزَّن مؤقّتاً مع مهلة صلاحية اختيارية (TTL) ----
+struct CacheEntry {
+    Value value;
+    long long expiresAt = 0; // 0 أو أقل = بلا انتهاء صلاحية؛ غير ذلك = طابع زمني Unix بالثواني (انظر std::time)
+};
+
+// ---- المتغيرات الحيّة (Living Variables) — docs/living-variables.md ----
+// بيانات وصفية اختيارية تُلحَق باسم متغيّر داخل Environment التي تملكه (Environment::live). المتغيّر العادي
+// لا يملك أي مُدخَل هنا أبداً، فتكلفته صفر. كل "نوع" (stone/gauge/tape/lens/fuse) مجرّد إعداد مسبق لنفس الحقول
+// القابلة للتركيب (مثلاً gauge + keep = مقياس بذاكرة؛ وأي متغيّر يقبل bell). الحياة مرتبطة بالـ Environment نفسها،
+// فلا تتسرّب بيانات وصفية قديمة إن أُعيد استعمال عنوان بيئة محذوفة.
+struct LiveMeta {
+    std::string kind = "plain";               // "stone" | "gauge" | "tape" | "lens" | "fuse" | "plain" (لمتغيّر عادي عليه bell فقط)
+    bool frozen = false;                       // stone
+    bool ranged = false; double lo = 0, hi = 0; int rangeMode = 0; // gauge: 0 clamp، 1 strict، 2 wrap
+    bool taped = false; size_t keep = 10; std::vector<Value> past, future; // tape: التاريخ وما أُلغي (للإعادة)
+    bool derived = false; ExprPtr expr; std::weak_ptr<Environment> scope; bool evaluating = false; // lens
+    bool fused = false; long burns = 1, left = 1; bool burnt = false; Value armed; // fuse
+    std::vector<Value> bells;                  // دوال الأجراس (Callable) بترتيب التسجيل
+    long reads = 0, writes = 0;
+    // ---- عائلة الشروط (docs/base-accept.md) ----
+    bool based = false; Value baseVal; double step = 1;             // base: خط الأساس + خطوة inc/dec الافتراضية
+    bool hasGoal = false; Value goal;                                // base ... to GOAL
+    bool guarded = false; ExprPtr rule, fallback; bool strictAccept = false; // accept: شرط القبول + بديل else + strict
+    long accepted = 0, rejected = 0; bool lastOk = true; Value refused;      // accept: العدّادات وآخر قيمة رُفضت
+    // ---- pre/post (docs/pre-post.md): عقد انتقال؛ يعيد استعمال strictAccept/accepted/rejected/lastOk/refused/scope أعلاه ----
+    bool gated = false; ExprPtr preRule, postRule;                           // شرط «قبل» (يُسأل قبل الكتابة) وشرط «بعد» (يُسأل بعد الكتابة)
+    bool named = false; std::string ident; Value metaLabel, metaAbout, metaUnit;  // label/define (docs/label-define.md): تسمية/وصف/وحدة
+    Value lastPre, lastPost;                                                  // آخر محاولة كتابة: القيمة قبلها والقيمة التي حاولت أن تضعها
+};
+
+// C++20/23: تجزئة "شفّافة" (heterogeneous lookup) — البحث بـ std::string_view / const char* بلا إنشاء
+// std::string مؤقّتة (تخصيص ذاكرة) لكل قراءة متغيّر. السلوك الدلالي مطابق تماماً لـ unordered_map العادية.
+struct StringHash {
+    using is_transparent = void;
+    size_t operator()(std::string_view s) const noexcept { return std::hash<std::string_view>{}(s); }
+    size_t operator()(const std::string& s) const noexcept { return std::hash<std::string_view>{}(s); }
+    size_t operator()(const char* s) const noexcept { return std::hash<std::string_view>{}(s); }
+};
+using ValueMap = std::unordered_map<std::string, Value, StringHash, std::equal_to<>>;
+
+struct Environment : std::enable_shared_from_this<Environment> {
+    ValueMap values;
+    std::unordered_map<std::string, std::shared_ptr<LiveMeta>> live; // المتغيرات الحيّة فقط (غالباً فارغة)
+    EnvPtr parent;
+    std::weak_ptr<NsNode> ns; // set only on the private env of a named container/group/Volume (namespace root scope)
+    explicit Environment(EnvPtr parentEnv = nullptr) : parent(std::move(parentEnv)) {}
+
+    // إعادة التعريف (let جديدة/معامل دالة) بنفس الاسم في نفس البيئة تُنهي حياة المتغيّر الحيّ السابق.
+    void define(const std::string& name, const Value& v) { values[name] = v; if (!live.empty()) live.erase(name); }
+    void define(const std::string& name, Value&& v) { values[name] = std::move(v); if (!live.empty()) live.erase(name); }
+
+    // بحث بلا نسخ: يعيد مؤشراً إلى القيمة في أقرب نطاق يعرّف الاسم، أو nullptr. تكراري (بلا عودية)
+    // فلا يكبر مكدّس C++ مع عمق سلسلة النطاقات، ولا كلفة نداء إضافي لكل مستوى.
+    [[nodiscard]] Value* lookup(std::string_view name) noexcept {
+        for (Environment* e = this; e; e = e->parent.get()) {
+            auto it = e->values.find(name);
+            if (it != e->values.end()) return &it->second;
+        }
+        return nullptr;
+    }
+    [[nodiscard]] const Value* lookup(std::string_view name) const noexcept {
+        for (const Environment* e = this; e; e = e->parent.get()) {
+            auto it = e->values.find(name);
+            if (it != e->values.end()) return &it->second;
+        }
+        return nullptr;
+    }
+    bool assign(const std::string& name, const Value& v) {
+        if (Value* p = lookup(name)) { *p = v; return true; }
+        return false;
+    }
+    bool get(const std::string& name, Value& out) {
+        if (const Value* p = lookup(name)) { out = *p; return true; }
+        return false;
+    }
+
+    // يجمع كل أسماء المتغيرات المرئية في هذا النطاق وكل الآباء (بلا تكرار)؛ يُستخدم حصراً لبناء
+    // اقتراحات "did you mean" لأخطاء E0001 (متغير غير معرَّف) — انظر diagnostics/diagnostic_engine.h.
+    void collectVisibleNames(std::unordered_set<std::string>& out) const {
+        for (auto& kv : values) out.insert(kv.first);
+        if (parent) parent->collectVisibleNames(out);
+    }
+};
+
+// ============================================================================
+// Namespaces - container / Containers.Group / Volume as real, nestable name scopes
+// ============================================================================
+// Every NAMED container, Containers.Group and Volume is also a node in one namespace tree.
+// `container` is the foundation: it works as a namespace entirely on its own at top level.
+// `Containers.Group` and `Volume` are optional extra levels you may wrap around it (any order,
+// any depth); nothing requires them. `@container` nested inside `@container` nests namespaces too.
+//
+//   shop.users.count            read   a variable of namespace `shop.users`
+//   shop.users.count = 3;       write  (fires `on update` for `state` fields, like any assignment)
+//   shop.users.add("x");        call   a function declared inside that namespace
+//
+// A node owns ONLY the names declared directly inside it (`env->values`), so the same name may
+// live in many namespaces without clashing. Child namespaces are looked up before variables.
+struct NsNode {
+    enum class Kind { Container, Group, Volume };
+    Kind kind = Kind::Container;
+    std::string name;                 // local (unqualified) name
+    std::string key;                  // legacy flat registry key (containers / groupEnvs / volumeEnvs)
+    EnvPtr env;                       // private scope holding this namespace's own names
+    std::weak_ptr<NsNode> parent;     // empty for a root namespace
+    std::vector<std::pair<std::string, std::shared_ptr<NsNode>>> children; // insertion order
+    std::shared_ptr<NsNode> child(const std::string& n) const {
+        for (auto& c : children) if (c.first == n) return c.second;
+        return nullptr;
+    }
+    // ---- Capabilities: what the QUALIFIED access (`a.b.x`) may do. container is the strongest. ----
+    //   Volume    : read-only organisation layer (config / constants / grouping)
+    //   Group     : read + write shared fields                (no calls)
+    //   container : read + write + call functions + `state`/`on update` hooks + transactions
+    bool canWrite() const { return kind != Kind::Volume; }
+    bool canCall() const { return kind == Kind::Container; }
+    bool hasStateHooks() const { return kind == Kind::Container; }
+    bool canTransact() const { return kind == Kind::Container; }
+    const char* kindName() const {
+        return kind == Kind::Container ? "container" : kind == Kind::Group ? "group" : "volume";
+    }
+    std::string path() const {        // fully qualified dotted path, e.g. "Store.Inventory.items"
+        auto p = parent.lock();
+        return p ? p->path() + "." + name : name;
+    }
+};
+
+// Internal control-flow signal used to unwind the stack on `return`.
+struct ReturnSignal { Value value; };
+// Internal exception signal. It carries the user-thrown value without losing type information.
+struct ThrowSignal { Value value; int line = 0; };
+// Internal control-flow signals used to unwind the stack on `break` / `continue` inside `while`.
+struct BreakSignal {};
+struct ContinueSignal {};
+// Internal control-flow signal used to unwind the stack on `achieve` inside a `goal { ... }`
+// block (see GoalExpr/AchieveStmt in rin_ast.h). Caught only by Interpreter::evaluate(GoalExpr);
+// if it escapes past the nearest enclosing goal block (i.e. `achieve` used outside any `goal`),
+// it propagates like any uncaught internal signal and is reported as a runtime error by the same
+// top-level catch-all that handles a stray `break`/`continue` outside a loop.
+struct AchieveSignal { Value value; };
+
+// ============================================================================
+// RinFlow — Execution Flow Engine
+// ============================================================================
+// يحوّل RinFlow من "pipeline tracer" (سجل نصي/تنسيقي فوق تنفيذ عادي) إلى محرّك تنفيذ حقيقي: كل
+// سلسلة `a |> b() |> c()` مكتوبة بلغة Rin (انظر Parser::pipeline() في rin_parser.cpp و
+// CallExpr::isPipelineRoot في rin_ast.h) تُبنى وتُنفَّذ فعلياً عبر Flow Graph من FlowNode، وكل
+// خطوة تصدر Execution Events حقيقية (بداية/نهاية/خطأ) تعكس التنفيذ الفعلي لحظة وقوعه -- وليس
+// إعادة عرض متأخرة أو محاكاة. هذا إضافي بحت فوق rin::Interpreter::run() العادي: برنامج Rin بلا أي
+// `|>` فيه يعمل بالضبط كما كان دائماً (انظر Interpreter::evaluate(): مسار CallExpr العادي لا يتغيّر
+// إطلاقاً ما لم يوجد isPipelineRoot=true *و* جلسة Flow نشِطة في نفس الوقت).
+namespace flow {
+
+// أنواع Node قابلة للتوسع (قسم 1 من الطلب) دون كسر Syntax الحالية: هذا التعداد داخلي فقط،
+// ولا علاقة له بأي كلمة محجوزة في اللغة؛ يُشتقّ من اسم الدالة المُستدعاة في كل مرحلة |> عبر جدول
+// اسم->نوع قابل للتوسّع في وقت التشغيل (انظر Interpreter::registerFlowNodeType أدناه)، وليس عبر
+// افتراض وجود هذه الأسماء كبنية لغوية.
+enum class NodeType {
+    INPUT, OUTPUT, FILTER, MAP, TRANSFORM, SORT, REDUCE,
+    CONTAINER, FILE, NETWORK, PIPELINE, CUSTOM
+};
+std::string nodeTypeName(NodeType t);
+
+enum class NodeStatus { QUEUED, RUNNING, SUCCESS, ERROR, SKIPPED, CANCELLED, TIMEOUT };
+std::string nodeStatusName(NodeStatus s);
+
+enum class EventType {
+    FLOW_STARTED, NODE_QUEUED, NODE_STARTED, NODE_OUTPUT, NODE_FINISHED,
+    NODE_ERROR, FLOW_FINISHED, FLOW_CANCELLED, FLOW_TIMEOUT
+};
+std::string eventTypeName(EventType t);
+
+enum class SessionStatus { RUNNING, SUCCESS, ERROR, CANCELLED, TIMEOUT };
+std::string sessionStatusName(SessionStatus s);
+
+// خطأ مرتبط بـ Node مُحدَّدة (قسم 8: Flow Diagnostics) -- يُبنى فقط من RinError حقيقي مُلتقَط أثناء
+// تنفيذ تلك الـ Node فعلياً؛ لا يُخترَع أبداً.
+struct NodeError {
+    std::string code;    // مثل "RIN-F2003" -- كود RinFlow الداخلي (مستقل عن diag::Code لغوياً)
+    std::string message;
+    int line = 0;
+    int column = 1; // تقريب ثابت لأن AST لا تحمل عموداً دقيقاً هنا (نفس ملاحظة Interpreter::err في rin_interpreter.cpp)
+};
+
+// معاينة بيانات محدودة الحجم (قسم 12: Data Inspector) -- أبداً لا تُخزَّن بلا حدود لتفادي
+// OutOfMemoryError؛ [preview] نص مقتطَع، و[recordCount] العدد الحقيقي الكامل (وليس عدد العناصر
+// المعروضة في preview) عندما تكون القيمة مصفوفة.
+struct DataPreview {
+    bool available = false;   // false = لم تُسجَّل بيانات فعلياً بعد (لا تُعرض قيمة مُختلَقة)
+    std::string preview;      // نص مقتطَع بحدود FlowRunOptions::maxPreviewChars
+    long long recordCount = -1; // -1 = غير قابل للعدّ (ليست مصفوفة)؛ >=0 = طول المصفوفة الحقيقي الكامل
+    bool truncated = false;   // true إن كانت preview أقصر من التمثيل الكامل فعلياً
+};
+
+// يبني DataPreview من قيمة Rin حقيقية فعلياً (لا يخترع بيانات أبداً -- قسم 12). لمصفوفة: يعرض
+// أول [maxRecordsPreview] عنصر كحد أقصى ثم "... (+N more)"، ويحسب [recordCount] الكامل الحقيقي
+// دائماً. لأي قيمة أخرى: toDisplayString() مقتطَعة بحدود [maxPreviewChars] حرف.
+DataPreview makeDataPreview(const Value& v, int maxPreviewChars, int maxRecordsPreview);
+
+// كل Node داخل الـ Flow Graph (قسم 2). id مستقر ضمن نفس الجلسة (تسلسلي بترتيب الإنشاء).
+struct FlowNode {
+    int id = 0;
+    NodeType type = NodeType::CUSTOM;
+    std::string name;    // اسم الدالة/المرحلة كما كُتب في الكود (مثال: "filter")
+    NodeStatus status = NodeStatus::QUEUED;
+    DataPreview input;
+    DataPreview output;
+    long long startedAt = 0;  // epoch ms، 0 = لم تبدأ بعد
+    long long finishedAt = 0; // epoch ms، 0 = لم تنتهِ بعد
+    long long durationMs = 0; // = finishedAt - startedAt بعد الانتهاء فقط
+    int line = 0;
+    int column = 1;
+    std::optional<NodeError> error;
+    std::unordered_map<std::string, std::string> metadata; // حر الشكل (مثال: "condition" لـ FILTER)
+};
+
+// حدث تنفيذ واحد (قسم 4) -- تسلسل [sequence] عام لكل الجلسة، يزداد أحادياً بشكل ذرّي (Thread-safe).
+struct FlowEvent {
+    long long sequence = 0;
+    long long timestamp = 0; // epoch ms
+    std::string flowId;
+    int nodeId = -1; // -1 = حدث على مستوى الـ Flow نفسه (FLOW_STARTED/FLOW_FINISHED/...)، لا Node بعينها
+    EventType type;
+    std::string message;
+    int line = 0;
+    int column = 1;
+    long long durationMs = 0; // مفيد فقط لأحداث *_FINISHED/NODE_ERROR
+    std::unordered_map<std::string, std::string> metadata;
+};
+
+// مقاييس قابلة للقياس فعلياً فقط (قسم 13) -- لا تُعرَض أي قيمة لم تُحسَب من Nodes حقيقية.
+struct FlowMetrics {
+    int totalNodes = 0;
+    int completedNodes = 0; // SUCCESS
+    int failedNodes = 0;    // ERROR
+    int skippedNodes = 0;   // SKIPPED
+    int cancelledNodes = 0; // CANCELLED
+    int timeoutNodes = 0;   // TIMEOUT
+    long long totalDurationMs = 0;
+    long long totalInputRecords = 0;  // مجموع DataPreview::recordCount الحقيقية (>=0 فقط) لكل Node.input
+    long long totalOutputRecords = 0; // نفس الشيء لـ Node.output
+};
+
+struct FlowGraph {
+    std::vector<FlowNode> nodes;
+    // حواف بسيطة (from -> to) بترتيب التنفيذ الفعلي؛ خطّية دائماً اليوم (قسم 14: لا توازي افتراضي)،
+    // لكن التمثيل نفسه (قائمة حواف عامة، لا "next واحد فقط" مُدمَج في FlowNode) يسمح لاحقاً بتفريعات
+    // Graph غير خطية بلا كسر أي مستهلك حالي لهذا الحقل.
+    std::vector<std::pair<int,int>> edges;
+};
+
+using EventSink = std::function<void(const FlowEvent&)>;
+
+// PipelineTracer -- طُوِّر (وليس استُبدِل): هذه واجهة C++ الحقيقية المسؤولة عن كل event حي أثناء
+// تنفيذ Flow (قسم 5)، بديل C++-side لِـ PipelineTracer.kt/RinFlowTracer.kt الحاليَين اللذين يبقيان
+// كما هما في Kotlin ويُستهلَكان الآن من خلال JSON حقيقي صادر عن هذا الكلاس (انظر jni_bridge.cpp).
+// Thread-safe: mutex واحد يحمي graph_/metrics_، وatomic لِـ sequence حتى تبقى start/finish/fail/
+// cancel Node قابلة للاستدعاء بأمان من أكثر من ترد لو احتاج مستقبلاً (اليوم كل الاستدعاءات متزامنة
+// على نفس الترد الذي يُنفِّذ Flow، تماماً كـ Interpreter::StreamSink).
+class PipelineTracer {
+public:
+    explicit PipelineTracer(std::string flowId) : flowId_(std::move(flowId)) {}
+
+    void setSink(EventSink sink) { std::lock_guard<std::mutex> lk(mu_); sink_ = std::move(sink); }
+
+    // ينشئ Node جديدة بحالة QUEUED ويصدر NODE_QUEUED، ويُعيد id الـ Node (لاستخدامه في باقي النداءات).
+    int queueNode(NodeType type, const std::string& name, int line);
+    void startNode(int nodeId);
+    void recordInput(int nodeId, const Value& v, int maxPreviewChars, int maxRecordsPreview);
+    void recordOutput(int nodeId, const Value& v, int maxPreviewChars, int maxRecordsPreview);
+    void finishNode(int nodeId); // SUCCESS
+    void failNode(int nodeId, const NodeError& err);
+    void skipNode(int nodeId);     // لم يبدأ إطلاقاً بسبب فشل/إلغاء/انتهاء مهلة سابق في نفس السلسلة
+    void cancelNode(int nodeId);
+    void timeoutNode(int nodeId);
+
+    void emitFlowStarted();
+    void emitFlowFinished(SessionStatus status);
+
+    FlowGraph snapshotGraph() const { std::lock_guard<std::mutex> lk(mu_); return graph_; }
+    FlowMetrics snapshotMetrics() const { std::lock_guard<std::mutex> lk(mu_); return metrics_; }
+    std::vector<FlowEvent> snapshotEvents() const { std::lock_guard<std::mutex> lk(mu_); return events_; }
+
+    const std::string& flowId() const { return flowId_; }
+
+private:
+    std::string flowId_;
+    mutable std::mutex mu_;
+    std::atomic<long long> seq_{0};
+    FlowGraph graph_;
+    FlowMetrics metrics_;
+    // كل الأحداث (بحد أقصى kMaxEvents الأحدث -- قسم 12/25: لا تراكم بلا حدود) لأجل replay/inspector
+    // بلا الحاجة لإعادة تنفيذ الجلسة، ولأجل rin_c_api/jni_bridge (JSON كامل لكل الجلسة دفعة واحدة).
+    std::vector<FlowEvent> events_;
+    static constexpr size_t kMaxEvents = 5000;
+
+    EventSink sink_;
+    void emit(EventType type, int nodeId, const std::string& message, int line, long long durationMs,
+              std::unordered_map<std::string, std::string> metadata = {});
+    void updateMetricsLocked(); // يُعاد حسابها بالكامل من graph_.nodes في كل مرة (بسيط ومضمون الصحة)
+    static long long nowMs();
+};
+
+// جلسة تنفيذ واحدة لِـ Flow (قسم 3). كل استدعاء لـ Interpreter::runProgramAsFlow ينشئ FlowSession
+// جديدة عبر RinFlowEngine (قسم 11: replay ينشئ جلسة *جديدة* دائماً ولا يمسّ القديمة).
+struct FlowSession {
+    std::string id;
+    std::shared_ptr<PipelineTracer> tracer;
+    SessionStatus status = SessionStatus::RUNNING;
+    std::shared_ptr<std::atomic<bool>> cancelFlag = std::make_shared<std::atomic<bool>>(false);
+    // نقطة زمنية مطلقة (steady_clock) بعدها يُعتبَر الـ Flow TIMEOUT؛ nullopt = بلا مهلة. الفحص
+    // تعاوني (cooperative) بين مراحل |> فقط -- تماماً كملاحظة RinJobScheduler.kt القديمة ("النداء
+    // الأصلي ليس له خُطّاف مقاطعة")، لكن الآن على حبيبية Node واحدة بدل البرنامج كله.
+    std::optional<std::chrono::steady_clock::time_point> deadline;
+
+    // لأجل Replay (قسم 11) فقط: جذر آخر سلسلة |> نُفِّذت في هذه الجلسة + البيئة التي نُفِّذت بها.
+    // يُحدَّث في كل استدعاء لـ evaluatePipelineFlow. shared_ptr آمن لإعادة الاستخدام لاحقاً (الجلسة
+    // القديمة نفسها لا تُعدَّل أبداً عند الـ replay -- فقط تُقرَأ منها هذه المراجع).
+    std::shared_ptr<CallExpr> lastRootExpr;
+    EnvPtr lastEnv;
+
+    bool isCancelled() const { return cancelFlag->load(std::memory_order_relaxed); }
+    bool isTimedOut() const { return deadline.has_value() && std::chrono::steady_clock::now() >= *deadline; }
+};
+
+// خيارات تشغيل Flow واحد (حدود Data Inspector + Timeout -- أقسام 10 و12).
+struct FlowRunOptions {
+    long long timeoutMs = 0;       // <=0 = بلا مهلة
+    int maxPreviewChars = 2000;    // حدّ طول نص المعاينة لكل Node.input/output
+    int maxRecordsPreview = 50;    // حدّ عدد عناصر المصفوفة المعروضة داخل preview (recordCount يبقى الحقيقي الكامل)
+};
+
+// يدير كل جلسات Flow النشطة/المنتهية لِـ Interpreter واحد (قسم 9/11: cancellation + replay).
+// Thread-safe (mutex واحد)؛ يُبقي فقط آخر kMaxSessions جلسة منتهية لتفادي تراكم غير محدود بالذاكرة
+// (نفس فلسفة RinJobScheduler.kt: MAX_HISTORY).
+class RinFlowEngine {
+public:
+    std::shared_ptr<FlowSession> createSession(const std::string& id);
+    std::shared_ptr<FlowSession> getSession(const std::string& id) const;
+    // true فقط إن كانت الجلسة موجودة وما تزال RUNNING؛ يرفع cancelFlag فوراً (يُفحَص قبل كل Node
+    // تالية -- انظر FlowSession::isCancelled أعلاه)، ولا يوقف Node قيد التنفيذ فعلياً هذه اللحظة
+    // (التنفيذ متزامن أحادي الترد، تماماً كملاحظة RinJobScheduler.kt).
+    bool requestCancel(const std::string& id);
+    std::vector<std::string> listSessionIds() const;
+
+private:
+    mutable std::mutex mu_;
+    std::unordered_map<std::string, std::shared_ptr<FlowSession>> sessions_;
+    std::vector<std::string> order_; // ترتيب الإنشاء لأجل تقليم kMaxSessions
+    static constexpr size_t kMaxSessions = 100;
+};
+
+} // namespace flow
+
+class Interpreter;
+// خطّافات تثبيت مكتبات المضيف: كل دالة هنا تُستدعى على كل Interpreter جديد بعد تسجيل الدوال المدمجة
+// (مثلاً indsin.* و indsin.mount/tap/... من rin_indsin_c_api.cpp)، فتعمل في أي برنامج Rin عادي لا داخل indsin فقط.
+inline std::vector<std::function<void(Interpreter&)>>& interpreterInstallers() {
+    static std::vector<std::function<void(Interpreter&)>> v;
+    return v;
+}
+
+class Interpreter {
+public:
+    Interpreter();
+    // Runs a full program, returns everything printed (or a formatted error).
+    std::string run(const std::vector<StmtPtr>& statements);
+
+    // ---- Structured result of the last run() call (see run()'s catch block) ----
+    // Set precisely when run() actually caught a RinError (i.e. a real failure occurred),
+    // never inferred from the text of the returned string -- so callers (e.g. the JNI
+    // structured-execution bridge) can report SUCCESS/ERROR correctly even when the program's
+    // own printed output happens to start with '[' (e.g. `print ["a","b"];`).
+    bool hadError() const { return lastDiagnostic_.has_value() || lastErrorMessage_.has_value(); }
+    // Full Diagnostic (code/line/column/hints/...) when the failure was raised through the
+    // diag:: system; absent for the rare paths that still throw a bare RinError(message,line).
+    const std::optional<diag::Diagnostic>& lastDiagnostic() const { return lastDiagnostic_; }
+    // Always populated on failure, diagnostic or not: a plain fallback message + line.
+    const std::optional<std::string>& lastErrorMessage() const { return lastErrorMessage_; }
+    int lastErrorLine() const { return lastErrorLine_; }
+
+    // اسم الملف المستخدَم في كل Diagnostic صادر عن هذا الـ Interpreter (نظام Diagnostics — انظر
+    // diagnostics/). يُضبَط عادة إلى نفس الاسم الذي مُرِّر إلى Lexer/Parser لنفس الملف.
+    void setSourceFile(const std::string& name) { sourceFile = name; }
+
+    // يحدّد جذر حقيقي على القرص تُبنى فوقه كل مسارات file/save/installation/writeFile/readFile...
+    // (مثلاً مجلد التطبيق الخاص على أندرويد عبر context.filesDir). فارغ = المجلد الحالي (CWD).
+    void setBasePath(const std::string& path) { basePath = path; }
+    // ملفات افتراضية للاستيراد (تُملأ من صورة rin_vm/.rvm): مفتاحها مسار المكتبة كما يحسبه @import
+    // (lib/<name>.og.rin للأسماء العارية، أو المسار المكتوب حرفياً). تُفحَص قبل القرص، فيعمل تنفيذي
+    // مستقل بلا ملفات مرافقة. فارغة افتراضياً فلا أثر على أي استدعاء سابق.
+    void setVirtualFiles(std::unordered_map<std::string, std::string> files) { virtualFiles_ = std::move(files); }
+
+    // ---- الحزم: توكن الأداة OG + المكتبات (rin_libdir.h / rin_libdir.cpp) ----
+    // توكن الأداة OG = ملف واحد <rinname>.og.rin (ما كان يُسمّى «مكتبة Rin» القديمة).
+    // مكتبة         = مجلد  <name>.og.rin/  فيه Disconom (disconom.json|xml) + أجزاء .zpp + ملفات تشغيل .rinz
+    //                 + native/*.cpp اختياري. كلاهما يستورده @import "name" (انظر docs/split-libraries.md).
+    // true = لا تُنفَّذ ملفات .rinz عند استيراد مكتبة (يستعمله `rin run x.rinz`: الملف نفسه هو المشغِّل).
+    void setSkipLibraryRun(bool skip) { skipLibraryRun_ = skip; }
+    struct LibraryCheckReport {
+        bool ok = false;
+        std::string root, name, version;
+        std::string kind;          // "library" | "tool-token"
+        std::string fingerprint;   // SHA-256 لمحتوى كل ملفات المكتبة (فارغ عند وجود أخطاء تخطيط)
+        std::vector<std::string> errors, warnings, parts, runFiles;
+        std::vector<std::string> loadOrder;   // أسماء التبعيات المتعدّية بترتيب تحميلها (الجذر أخيراً)
+    };
+    // فحص ساكن كامل لمجلد مكتبة (Disconom + تحليل كل .zpp/.rinz بالمحلّل الحقيقي) دون تنفيذ أي شيء.
+    LibraryCheckReport checkLibraryDir(const std::string& root);
+    // يحوّل اسماً (math) أو مساراً إلى مجلد مكتبة إن وُجد (نفس منطق @import).
+    bool locateLibraryDir(const std::string& nameOrPath, std::string& rootOut) const;
+    // يحلّ اسماً أو مساراً إلى حزمة من أيّ نوع: مكتبة (مجلد) أو توكن أداة OG (ملف: افتراضي/مدمج/قرص).
+    bool resolvePackage(const std::string& nameOrPath, libdir::PackageRef& out) const;
+    // يسرد توكنات الأداة (ملفات <name>.og.rin) في مجلد (الافتراضي lib) مع المدمجة داخل المفسّر.
+    std::vector<libdir::TokenInfo> listToolTokens(const std::string& dir = "lib") const;
+    // رسم التبعيات المتعدّية لمكتبة (كشف الدورات، فحص الإصدارات، ترتيب التحميل).
+    libdir::DepGraph dependencyGraph(const std::string& nameOrRoot) const;
+    // بصمة SHA-256 ثابتة لمحتوى المكتبة (مسارات + بايتات، مرتبة) — للتحقق من السلامة والأقفال.
+    std::string libraryFingerprint(const std::string& nameOrRoot) const;
+
+    // ---- Live streaming (Rin Run Queue + Code Output 2.0 — انظر jni_bridge.cpp) ----
+    // [sink] اختياري، غير مفعّل افتراضياً، لذا [run] يتصرف حرفياً كما كان قبله متى لم يُضبط أي sink
+    // (وهذا هو حال runSourceNative/runSourceStructuredNative القديمتين تماماً — توافق تام). عند
+    // ضبطه، يستدعيه [run] فور انتهاء تنفيذ كل statement علوي (top-level) بالـ *نص الإضافي الجديد
+    // فقط* الذي أضافه ذلك الـ statement إلى [output] — بث حقيقي أثناء التنفيذ الفعلي للمحرك، وليس
+    // إعادة تشغيل مموَّهة أو تجزئة زمنية وهمية لناتج جاهز مسبقاً.
+    using StreamSink = std::function<void(const std::string& incrementalChunk)>;
+    void setStreamSink(StreamSink sink) { streamSink_ = std::move(sink); }
+
+    // ---- إدخال المستخدم (input / inputNumber / confirm / choose) ----
+    // [InputProvider] يُستدعى من دوال الإدخال الأصلية أثناء التنفيذ (متزامناً، على نفس الترد، تماماً
+    // كـ StreamSink). يستلم نص السؤال [prompt] ويملأ [answer] بما كتبه المستخدم؛ يعيد false إذا ألغى
+    // المستخدم الإدخال (فيُوقَف البرنامج بخطأ تشغيل واضح). إن لم يُضبط أي provider: يقرأ المحرك من
+    // stdin (سلوك CLI)، وعند نهاية stdin يعيد النص الفارغ — فلا يتغير شيء لأي مستهلك قديم.
+    // على أندرويد يربطه jni_bridge.cpp بنافذة إدخال حقيقية (انظر RinInputBridge.kt).
+    using InputProvider = std::function<bool(const std::string& prompt, std::string& answer)>;
+    void setInputProvider(InputProvider p) { inputProvider_ = std::move(p); }
+
+    // ---- Library Loader UI (see loader_ui/library_loader_ui.h) ----
+    // [importUISink_] اختياري، غير مفعّل افتراضياً (nullptr)، لذا @import يتصرف حرفياً كما كان قبل
+    // هذه الميزة متى لم يُضبط أي sink (نفس فلسفة streamSink_ أعلاه). عند ضبطه، تُبلَّغ كل مرحلة من
+    // مراحل @import (Resolving/Locating/Reading/Parsing/Dependencies/Registering/Initializing/
+    // Completed) فعلياً أثناء تنفيذها في execute()، وليس عبر Animation وهمية.
+    void setImportUISink(std::shared_ptr<loaderui::ILoadSink> sink) { importUISink_ = std::move(sink); }
+    // اختصار سريع: Verbose -> شريط تقدّم على std::cout، Quiet -> بلا أي إخراج (لكن بمرور فعلي عبر
+    // نفس مسار LoadSession، بخلاف عدم ضبط أي sink إطلاقاً).
+    void setImportUIMode(loaderui::Mode mode) { importUISink_ = loaderui::makeSink(mode, std::cout); }
+
+    // كل معرّفات الربط العامة (container.link.id) المسجَّلة أثناء هذا التشغيل، ومقابل كل واحد اسم
+    // الحاوية التي سجّلته. تُستخدم من طرف التطبيق/الأدوات الخارجية (مثلاً tools/rin_link_index.py)
+    // لبناء فهرس ربط شامل بين ملفات rin. و.html/.js/.cpp عبر نفس المعرّف (انظر rin_ast.h: LinkIdDeclStmt).
+    const std::unordered_map<std::string, std::string>& getLinkIds() const { return linkIdToContainer; }
+
+    // ---- Indsintime bridge (see indsin/rin_indsin_needle.h) ----
+    // Calls a top-level RIN function by name using the *real* interpreter -- full language
+    // semantics (loops, recursion, stdlib) included -- so a Warp-bound `onTap` handler can
+    // genuinely mutate state instead of being limited to the read-only attribute evaluator in
+    // rin_indsin_eval.h (which only captures `onTap=increment(count);` as a string, never runs it).
+    //
+    // `program` supplies every top-level statement so the callee's own `fun` declaration (and any
+    // others it calls) hoist exactly like a normal run(). `args` are already-evaluated argument
+    // values in call order; `paramAliases[i]` (same length as args, entries may be "") names the
+    // Warp cell that argument literally came from in the call expression -- e.g. for
+    // `onTap=increment(count);`, args[0] is count's current value and paramAliases[0]=="count".
+    // A parameter shadows a same-named global inside the function body, so if the body reassigns
+    // that parameter (`fun increment(count){ count = count + 1; }`) the new value only exists in
+    // the call frame; after the call returns, this writes it back into `globalsInOut["count"]` via
+    // the alias so the caller can push it back into the Warp cell. `globalsInOut` also seeds every
+    // current Warp cell as a plain global (so a zero-arg handler like
+    // `fun increment(){ count = count + 1; }` works too, by direct global mutation) and is updated
+    // in place with the post-call value of every name it originally contained. Returns false
+    // (globalsInOut left untouched) if no such function exists in `program`, or if it does but
+    // fails at runtime (arity mismatch, a RinError raised inside it, etc.) -- `errorOut` explains why.
+    bool callTopLevelFunction(const std::vector<StmtPtr>& program,
+                               const std::string& fnName,
+                               std::vector<Value>& args,
+                               const std::vector<std::string>& paramAliases,
+                               std::unordered_map<std::string, Value>& globalsInOut,
+                               std::string& errorOut);
+
+    // ---- RinFlow: Execution Flow Engine (see the `namespace flow` block above) ----
+
+    // نتيجة تشغيل برنامج كامل كـ Flow -- غلاف حول نفس std::string الذي يُعيده run() العادي، زائد
+    // معرّف الجلسة ولقطة الـ Graph/Metrics النهائية (بعد انتهاء التنفيذ بالكامل).
+    struct FlowRunResult {
+        std::string sessionId;
+        std::string output;          // نفس ناتج run() العادي بالضبط (توافقية: نفس التنسيق/الأخطاء)
+        flow::SessionStatus status = flow::SessionStatus::SUCCESS;
+        flow::FlowGraph graph;
+        flow::FlowMetrics metrics;
+    };
+
+    // يشغّل [statements] بالضبط كما يفعل run() (نفس hoisting، نفس output، نفس lastDiagnostic/
+    // lastErrorMessage بعد العودة) لكن مع جلسة Flow مسلَّحة (armed): كل سلسلة top-level من الشكل
+    // `a |> b() |> c()` (انظر CallExpr::isPipelineRoot) تُبنى فعلياً كـ Flow Graph وتُنفَّذ عبر
+    // evaluatePipelineFlow بدل التقييم الفوري المباشر، وتُبَث كل Node/Event حية عبر [sink] (اختياري،
+    // نفس فلسفة setStreamSink -- استدعاءات متزامنة على نفس الترد، بلا thread جديد). لا يوجد أي `|>`
+    // في البرنامج؟ يتصرف تماماً كـ run() العادي (graph فارغة، FLOW_STARTED/FLOW_FINISHED فقط).
+    FlowRunResult runProgramAsFlow(const std::vector<StmtPtr>& statements,
+                                    const flow::FlowRunOptions& opts,
+                                    flow::EventSink sink = nullptr);
+
+    // يعيد تشغيل جلسة Flow سابقة (بنفس السلسلة/البيئة المسجَّلتين في FlowSession::lastRootExpr/
+    // lastEnv) داخل جلسة *جديدة* كلياً؛ لا يُعدَّل أي شيء في الجلسة القديمة (قسم 11: Replay).
+    // يُعيد nullopt إن لم تكن الجلسة موجودة أو لم تُنفِّذ أي سلسلة |> بعد (لا شيء لإعادة تشغيله).
+    std::optional<FlowRunResult> replayFlow(const std::string& previousSessionId,
+                                              const flow::FlowRunOptions& opts,
+                                              flow::EventSink sink = nullptr);
+
+    bool cancelFlow(const std::string& sessionId) { return flowEngine_.requestCancel(sessionId); }
+    std::shared_ptr<flow::FlowSession> getFlowSession(const std::string& id) const { return flowEngine_.getSession(id); }
+
+    // يسجّل/يستبدل تخمين النوع الافتراضي لاسم دالة معيّن عند ظهورها كمرحلة |> (قسم 1: Nodes قابلة
+    // للتوسّع). مثال: registerFlowNodeType("myCustomStage", flow::NodeType::TRANSFORM);
+    void registerFlowNodeType(const std::string& fnName, flow::NodeType type) { flowNodeTypeOverrides_[fnName] = type; }
+
+    // ---- Live Preview / Indsintime runtime bridge (see indsin/rin_live_runtime.h) ----
+    //
+    // Reads back every top-level binding currently visible in the global Environment after a
+    // run() (variables from `let`/`warp`, hoisted `fun`s as FUNCTION values, etc.) as a plain
+    // name->Value snapshot. This is what lets a caller that just executed a *real* program via
+    // run() (not the old AST-scanning shortcut) recover the actual resulting state -- e.g. to
+    // seed indsin::WarpScope from the true post-execution value of a `warp` cell instead of only
+    // ever evaluating its initializer expression once, in isolation, the way
+    // indsin::runColdPipeline used to. Read-only: does not copy the Environment's parent chain
+    // (globals has none) and does not mutate anything.
+    std::unordered_map<std::string, Value> exportGlobals() const {
+        std::unordered_map<std::string, Value> out;
+        if (globals) out.insert(globals->values.begin(), globals->values.end());
+        return out;
+    }
+
+    // Same idea as exportGlobals(), but for a named @container's own Environment -- e.g. to read
+    // back the real post-execution value of a `warp` cell declared *inside* that container's body
+    // (see the ContainerStmt case in execute(): each container gets its own child Environment,
+    // registered here under its name). Empty map if no container by that name was registered
+    // during the last run() (never executed, or run() failed before reaching it).
+    std::unordered_map<std::string, Value> exportContainerGlobals(const std::string& containerName) const {
+        auto it = containers.find(containerName);
+        if (it == containers.end() || !it->second) return {};
+        return std::unordered_map<std::string, Value>(it->second->values.begin(), it->second->values.end());
+    }
+
+    // ---- Indsin <-> Rin: واجهة التقييم المعزول (rin_expr_host.cpp) ----
+    // تتيح لمحرّك indsin تقييم أي تعبير Rin داخل قيم خصائص @view (text=/color=/visible=...) بدلالات
+    // اللغة الحقيقية بدل المُقيِّم المصغَّر (أرقام/نصوص فقط). لا تنفّذ جُملاً ولا تغيّر حالة الأخطاء.
+    //  - lookupGlobal: قيمة متغيّر عام (let/const/warp) — من بيئة الحاوية أولاً إن سُمّيت ثم globals.
+    //  - isCallableName: اسم دالة أصلية (بما فيها Set.of/indsin.*) أو `fun` معرَّفة في المستوى الأعلى.
+    //  - evalExpression: يقيّم e في بيئة ابنة لبيئة globals/الحاوية، تُعرَّف فيها locals (خلايا warp).
+    //    يعيد false ويملأ err عند أي RinError/استثناء؛ لا يرمي أبداً.
+    //  - registerHostNative: يسجّل دالة أصلية من المضيف (مثلاً indsin.* من rin_indsin_rinlib.h).
+    bool lookupGlobal(const std::string& name, Value& out, const std::string& containerName = "") const;
+    bool isCallableName(const std::string& name) const;
+    bool evalExpression(const ExprPtr& e, const std::unordered_map<std::string, Value>& locals, Value& out,
+                        std::string& err, const std::string& containerName = "");
+    void registerHostNative(const std::string& name, std::function<Value(std::vector<Value>&, int)> fn) {
+        natives[name] = std::move(fn);
+    }
+
+    // Caps the total number of statements execute() will run across this Interpreter's lifetime
+    // (cumulative, not per-call -- callers that want a fresh budget per run() should construct a
+    // fresh Interpreter, exactly like Live Preview's cold/hot pipeline does). 0 (the default)
+    // means unlimited, i.e. completely unchanged behavior for the CLI and every existing caller
+    // that never calls this. Live Preview is the one caller expected to set this, so that a
+    // program the user is actively typing (e.g. `while (true) {}`) can't hang the preview thread
+    // -- see rin_indsin_pipeline.h's runColdPipeline overload that takes an Interpreter&.
+    void setExecutionBudget(long long maxStatements) { execBudget_ = maxStatements; }
+    long long executedStatementCount() const { return execCount_; }
+
+    // ---- Real branch-aware `@view` selection (Live Preview §4/§10) ----
+    //
+    // A `@view...=name ... .end/view` root can now sit inside real control flow, e.g.:
+    //   if (logged) { @view...=title text="Welcome"; .end/view }
+    //   else        { @view...=title text="Login";   .end/view }
+    // execute() has always silently no-op'd on a ViewStmt it encounters (view markup isn't
+    // executable code); this callback -- fired from that same no-op case, purely as an
+    // observation hook -- lets a caller (see indsin::runColdPipelineWithRuntime) find out which
+    // ViewStmt real execution actually walked into, so the *correct* branch's view genuinely
+    // becomes the one built into the Fabric, decided by the real `if`/`while`/`for` control flow
+    // that already ran, rather than a second, separate static scan of the AST guessing at it.
+    // Unset by default (nullptr), so every pre-existing caller of run()/execute() is unaffected.
+    using ViewReachedCallback = std::function<void(const std::shared_ptr<ViewStmt>&)>;
+    void setViewReachedCallback(ViewReachedCallback cb) { viewReachedCb_ = std::move(cb); }
+
+    // وسائط سطر الأوامر الإضافية بعد اسم الملف (rin file.rin arg1 arg2 ...) -- تُعرَّف كمتغيّر
+    // "args" (مصفوفة نصوص) في بيئة أقرب @Program إلى سطح الملف عند تنفيذها (انظر ProgramStmt في
+    // rin_ast.h). استدعاؤها قبل run() اختياري تماماً؛ بلا استدعاء، programArgs_ تبقى فارغة كما كانت
+    // دائماً فتُصبح "args" = [] (توافقية خلفية كاملة لأي مستدعٍ لا يستخدم هذه الميزة).
+    void setProgramArgs(std::vector<std::string> args) { programArgs_ = std::move(args); }
+
+    // ---- RinVM: آلة Rin الافتراضية (rin_bcvm.h / rin_bcvm_exec.cpp) ----
+    // عند التفعيل تُترجَم كل كتلة/عبارة/تعبير إلى بايتكود وتُنفَّذ على الآلة الافتراضية بدل المرور الشجري؛
+    // الدلالات متطابقة (راجع docs/vm.md). الافتراضي: معطَّل (المفسِّر الشجري كما كان). يمكن التفعيل أيضاً
+    // بمتغير البيئة RIN_ENGINE=vm عند أول run().
+    void setEngineVM(bool on) { vmEnabled_ = on; }
+    bool engineVM() const { return vmEnabled_; }
+    // إحصاءات الآلة (nullptr إن لم تُستخدم بعد) ومفكّك لبرنامج كامل (يترجم دون تنفيذ).
+    const rin::vm::Stats* vmStats() const;
+    std::string vmDisassembleProgram(const std::vector<StmtPtr>& program);
+    // يُفرغ كاش البايتكود (بعد تعديل شجرة AST خارجياً مثلاً).
+    void vmFlushCache();
+
+private:
+    std::vector<std::string> programArgs_;
+    std::unordered_map<std::string, std::string> virtualFiles_;
+    // ---- مكتبات Rin المقسَّمة (rin_libdir.cpp) ----
+    struct LoadedLibrary {
+        std::shared_ptr<libdir::Plan> plan;
+        bool nativeLoaded = false;
+        int nativeHandle = 0;
+        std::string nativeStatus = "none";   // none | loaded | disabled | failed: ...
+        double loadMillis = 0;               // زمن التحميل الفعلي (قراءة + تحليل + native) بالمللي ثانية
+    };
+    struct LibraryUnit {
+        std::string root, name, version;
+        std::shared_ptr<libdir::Plan> plan;
+        std::vector<StmtPtr> statements;                              // [تبعيات][أغلفة native احتياطية][أجزاء .zpp][أغلفة native][ملفات .rinz]
+        std::vector<std::pair<size_t, std::string>> segments;         // (نهاية المقطع، اسم الملف) لتحديد مصدر الأخطاء
+        std::string nativeNote;
+        std::string describe() const;                                 // " (مكتبة: ...)" لسطر الاستيراد
+    };
+    std::map<std::string, LoadedLibrary> loadedLibs_;
+    std::vector<std::string> loadedLibOrder_;
+    bool skipLibraryRun_ = false;
+    libdir::FS makeLibFS() const;
+    bool findLibraryDir(const std::string& rawPath, const std::string& libPath, std::string& rootOut) const;
+    // تبعية مكتبة: تُبحث بجوار المكتبة نفسها (sibling=true) ثم في lib/ . true = وُجدت كمكتبة (مجلد).
+    bool findDependencyDir(const std::string& libRoot, const std::string& depName, std::string& depRootOut, bool* sibling = nullptr) const;
+    // محتوى توكن أداة OG (افتراضي ← مدمج ← قرص) بنفس أولوية @import.
+    bool readToolToken(const libdir::PackageRef& ref, std::string& out) const;
+    void loadLibraryUnit(const std::string& root, int line, LibraryUnit& unit);
+    void execLibraryBody(const std::vector<StmtPtr>& stmts, const std::vector<std::pair<size_t, std::string>>* segs, const EnvPtr& env);
+    void registerNativesLibDir();   // rin_libdir.cpp — rinlib.*
+    void registerNativesRintwist(); // rin_rintwist.cpp — rintwist.get / fmt / stack
+    void registerNativesCapture();  // rin_expr_host.cpp — captureOutput/capture/indsin.run: استدعاء دالة والتقاط ما تطبعه (جسر <<...>>)
+    // يستدعي دالة Rin (FUNCTION أو اسم fun/native) ويلتقط كل ما طبعته إلى captured بدل أن يبقى في ناتج البرنامج.
+    Value captureCall(const Value& callee, std::vector<Value>& args, int line, std::string& captured);
+    EnvPtr globals;
+    std::ostringstream output;
+    std::unordered_map<std::string, std::string> runCache_; // ذاكرة indsin.run(name, args...) — تُفرَّغ عند كل run()/callTopLevelFunction
+    std::string sourceFile = "<input>"; // نظام Diagnostics — انظر setSourceFile() أعلاه
+    // KEY_TERMS: vocabulary/semantic aliases declared by `.KEY_TERMS = {...};`.
+    // This registry is intentionally runtime metadata; it never mutates the lexer/parser keyword table.
+    std::unordered_map<std::string, std::string> keyTerms_;
+
+    // ---- Structured result state for the last run() (see hadError()/lastDiagnostic() above) ----
+    std::optional<diag::Diagnostic> lastDiagnostic_;
+    std::optional<std::string> lastErrorMessage_;
+    int lastErrorLine_ = 0;
+    StreamSink streamSink_; // انظر setStreamSink() أعلاه — فارغ افتراضياً (no-op)
+    InputProvider inputProvider_; // انظر setInputProvider() أعلاه — فارغ افتراضياً (stdin)
+    bool inputAtEof_ = false;     // آخر سؤال إدخال انتهى بنهاية stdin (يقرؤه محرّك النماذج rin_input.cpp لإيقاف إعادة السؤال)
+    std::streamoff streamMark_ = 0; // كل ما قبل هذا الموضع في [output] سبق بثّه عبر streamSink_ (يمنع التكرار عند تفريغ ما قبل الإدخال)
+
+    std::shared_ptr<loaderui::ILoadSink> importUISink_; // انظر setImportUISink()/setImportUIMode() أعلاه — nullptr افتراضياً (no-op)
+    // ---- RINTWIST: متغيّر مضمَّن للقراءة فقط يصف سياق التنفيذ (ملف/خادم/تاريخ/تطبيق/مكتبة) — انظر docs/rintwist.md ----
+    // إطار لكل @import جارٍ تنفيذه (الأحدث في النهاية)؛ فارغ = نحن في الملف الرئيسي.
+    struct ExecFrame { std::string path, kind /*library|tool-token*/, libName, libVersion, libRoot, part; };
+    std::vector<ExecFrame> execFrames_;
+    struct ExecFrameScope {                      // RAII: يدفع الإطار عند بدء تنفيذ الاستيراد ويسحبه حتى مع الاستثناءات
+        ExecFrameScope(Interpreter& in, const std::string& path, const LibraryUnit* unit);
+        ~ExecFrameScope();
+        Interpreter& in_;
+    };
+    std::chrono::steady_clock::time_point startedAt_ = std::chrono::steady_clock::now();   // RINTWIST.run.uptimeMs
+    long long startedUnixMs_ = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    Value rintwistValue() const;                 // يبني خريطة RINTWIST الحيّة لحظة القراءة
+    std::size_t importDepth_ = 0; // عمق @import الحالي (0 = أعلى مستوى)، يُمرَّر إلى LoadSession في execute()
+
+    // ---- Diagnostics helpers (src/diagnostics) ----
+    // يبني RinError غنياً (Diagnostic كامل: كود + موقع من رقم السطر + رسالة) لأي خطأ تشغيل. العمود
+    // يُقارَب بـ 1 لأن AST nodes تحمل .line فقط بلا عمود دقيق (خلافاً لـ Token في مرحلة التحليل).
+    RinError err(diag::Code code, int line, std::string message) const;
+    // نفس err() لكنها تضيف حقل reason: مباشرة (تُستخدم للأخطاء التي تحتاج شرح "لماذا" منفصلاً عن العنوان).
+    RinError errWithReason(diag::Code code, int line, std::string message, std::string reason) const;
+    // undefined variable/property مع اقتراح "did you mean" عبر Levenshtein على الأسماء المرئية فعلياً
+    // في هذا النطاق (env) + أسماء الدوال المدمجة (natives) عند كان يبحث عن دالة.
+    RinError undefinedVariableErr(const std::string& name, int line, const EnvPtr& env) const;
+    RinError unknownFunctionErr(const std::string& name, int line) const;
+
+    // حالة لغة الحاويات/البيانات (container / Containers.Group / Volume / link / tying / merge ...)
+    std::unordered_map<std::string, EnvPtr> containers;      // اسم الحاوية -> بيئة متغيراتها
+    std::unordered_map<std::string, ContainerKind> containerKinds; // اسم الحاوية -> نوعها (لإعادة بنائها بشكل صحيح عند الحفظ)
+    // اسم حاوية أُنشئت ديناميكياً عبر spawn(kind, name) -> نص "kind" كما مرَّره المبرمج حرفياً
+    // (قد لا يطابق أي ContainerKind معروف؛ يُستخدَم فقط لأجل kindOf() الاستقصائية). انظر قسم
+    // "أدوات @Everything الديناميكية" في registerNatives() لمزيد من التفصيل.
+    std::unordered_map<std::string, std::string> containerCustomKind;
+    std::unordered_map<std::string, std::string> containerMasks; // قناع الحاوية -> اسمها
+    std::unordered_map<std::string, std::string> groupMasks;     // قناع المجموعة -> اسمها
+    std::unordered_map<std::string, std::string> volumeMasks;    // قناع Volume -> اسمها
+    // Mask v3: metadata/relations kept independently from the target object's name.
+    std::unordered_map<std::string, std::string> maskAliases; // alias -> canonical mask
+    std::unordered_map<std::string, std::vector<std::string>> maskTags; // mask -> unique tags
+    std::unordered_map<std::string, std::vector<std::string>> maskRefs; // mask -> logical references
+    std::unordered_set<std::string> lockedMasks; // immutable identity guard for runtime changes
+    // Mask v4: lifecycle + indexing metadata. These remain separate from the target name so
+    // a mask stays stable while the object is renamed or rebuilt.
+    std::unordered_map<std::string, std::string> maskNamespaces; // mask -> logical namespace
+    std::unordered_map<std::string, std::string> maskParents;    // mask -> parent mask (explicit relation)
+    std::unordered_map<std::string, std::string> maskVersions;   // mask -> user-defined identity version
+    std::unordered_map<std::string, bool> maskEnabled;           // mask -> active/inactive identity
+    std::unordered_map<std::string, std::string> maskNotes;     // mask -> short developer note
+
+    // candle: علاقة موجَّهة id -> id (فوق mask/id خام مباشرة)، مستقلة تماماً عن mask.
+    // كل عنصر: (from, to, relation) — relation قد تكون فارغة (بلا وسم).
+    std::vector<std::tuple<std::string, std::string, std::string>> candleEdges;
+    // Candle: طبقة علاقات id-to-id فوق mask/id مباشرة، غير محدودة الصادر (∞ من id).
+    // مستقلة تماماً عن mask نفسه؛ أطراف light()/الاستعلامات تُحل عبر candleResolve أولاً
+    // (مطابقة تامة لمنطق mask v3/v4: mask معروف -> targetها، وإلا تُعامَل كـ id خام). انظر
+    // docs/candle.md ورين rin_candle.h.
+    rin::CandleRegistry candleRegistry;
+    std::unordered_map<std::string, EnvPtr> groupEnvs;       // اسم المجموعة -> بيئتها الخاصة (متغيرات مُعلَنة مباشرة داخلها)
+    std::unordered_map<std::string, std::vector<std::string>> groupMembers; // اسم المجموعة -> أسماء الحاويات/المجموعات الفرعية المباشرة بداخلها (بالترتيب)
+    // ---- Containers.Group: توسيع (انظر natives groupVars/hasGroup/groupNames/groupParent/
+    // groupPath/groupContainerCount/groupHasContainer/groupSnapshot في registerNatives()) ----
+    std::vector<std::string> groupOrder;                      // أسماء المجموعات المُسمّاة بترتيب أول ظهور (بلا تكرار) -- بنفس مبدأ sectionOrder/volumeOrder
+    std::unordered_map<std::string, std::string> groupParentOf; // اسم مجموعة فرعية -> اسم المجموعة الأب المباشرة (غير موجود/فارغ = مجموعة جذر)
+    // ---- Volume: كانت سابقاً زخرفية بحتة (تنفِّذ جسمها مباشرة داخل بيئة الأب بلا نطاق خاص، بلا
+    // أي تسجيل عضوية) -- الآن بنفس دلالات Containers.Group تماماً: بيئة خاصة بها، تسجيل الحاويات/
+    // المجموعات/الأحجام الفرعية المباشرة بداخلها، ودعم التعشيش (Volume داخل Volume، وGroup داخل
+    // Volume تُفرَّط عبر منطقها الخاص). انظر natives volumeContainers/volumeMembers/hasVolume/
+    // volumeNames/volumeVars/volumeParent/volumePath/volumeContainerCount/volumeHasContainer/
+    // volumeSnapshot في registerNatives()، وcollectVolumeContainerNames أعلى الملف.
+    std::unordered_map<std::string, EnvPtr> volumeEnvs;       // اسم Volume -> بيئتها الخاصة (متغيرات مُعلَنة مباشرة داخلها)
+    std::unordered_map<std::string, std::vector<std::string>> volumeMembers; // اسم Volume -> أسماء الحاويات/المجموعات/الأحجام الفرعية المباشرة بداخلها (بالترتيب)
+    std::vector<std::string> volumeOrder;                      // أسماء الأحجام المُسمّاة بترتيب أول ظهور (بلا تكرار)
+    std::unordered_map<std::string, std::string> volumeParentOf; // اسم Volume فرعي -> اسم Volume الأب المباشرة (غير موجود/فارغ = Volume جذر)
+    // ---- Section: حالة تُحفَظ بعد الإغلاق (قبل هذا كانت Section زخرفية بحتة: تطبع 🔹/◽ فقط ثم
+    // تُفقَد متغيراتها فوراً مع نهاية الكتلة، بلا أي إمكانية للاستعلام عنها لاحقاً) ----
+    std::unordered_map<std::string, EnvPtr> sectionEnvs; // اسم القسم -> بيئته (آخر تنفيذ له إن تكرّر، مثلاً داخل حلقة)
+    std::vector<std::string> sectionOrder;               // أسماء الأقسام المُسمّاة بترتيب أول ظهور (بلا تكرار)
+    std::vector<std::string> groupStack;                      // المجموعة الحالية المفتوحة (لتسجيل الأعضاء أثناء التنفيذ)
+    std::vector<std::string> volumeStack;                     // Volume الحالية المفتوحة (لتسجيل الأعضاء أثناء التنفيذ، بنفس مبدأ groupStack)
+    // 'G' عند فتح Containers.Group، 'V' عند فتح Volume -- بالتوازي التام مع groupStack/volumeStack
+    // (نفس الـ push/pop في نفس المكان بالضبط)، تُستخدَم حصراً لمعرفة "أقرب مجمِّع مفتوح فعلياً"
+    // عند تسجيل عضوية Volume المباشرة: حاوية داخل Group متداخلة داخل Volume يجب أن تُسجَّل عضواً في
+    // تلك Group فقط (كالسابق تماماً، بلا أي تغيير) -- لا عضواً مباشراً إضافياً في الـ Volume أيضاً
+    // (وإلا لتكررت في volumeContainers/volumeSnapshot: مرة عبر تفرّع Group ومرة كعضو مباشر). أما
+    // تسجيل Group نفسها كعضو مباشر في Volume المحيطة (انظر ContainerGroupStmt) فيبقى غير متأثر بهذا
+    // الحارس، فتبقى مرئية عبر التفرّع دون ازدواج. Containers.Group نفسها لا تستخدم هذا الحارس على
+    // الإطلاق (تسجيلها في groupStack يبقى كما كان قبل وجود Volume إطلاقاً، بلا أي تغيير سلوك).
+    std::vector<char> openCollectorKinds;
+    // ---- Namespaces (see NsNode above) ----
+    std::vector<std::pair<std::string, std::shared_ptr<NsNode>>> nsRoots; // root namespaces, insertion order
+    // Easy_key: مفتاح داخلي فريد لكل حاوية. الافتراضي = اسمها، وعند تعارض اسم حاويتين في مساري أسماء مختلفين
+    // تأخذ الثانية مفتاحها = مسارها الكامل (A.app / B.app). ويمكن كتابة مفتاح بديل: easy_key = "main"; داخل الجسم.
+    std::unordered_map<std::string, std::string> easyKeys;           // مفتاح مكتوب -> المفتاح الداخلي
+    std::unordered_map<std::string, std::string> easyKeyOfContainer; // المفتاح الداخلي -> المفتاح المكتوب
+    std::unordered_map<std::string, std::string> containerPathOf;    // المفتاح الداخلي -> مسار فضاء الأسماء
+    std::unordered_map<std::string, std::string> easyGroupKeys;      // مفتاح مكتوب -> مفتاح المجموعة الداخلي
+    std::unordered_map<std::string, std::string> easyVolumeKeys;     // مفتاح مكتوب -> مفتاح الحجم الداخلي
+    std::unordered_map<std::string, std::string> groupPathOf, volumePathOf; // المفتاح الداخلي -> المسار
+    std::string canonContainer(const std::string& n) const;          // اسم/مفتاح مكتوب/مسار -> المفتاح الداخلي
+    std::string canonGroup(const std::string& n) const;
+    std::string canonVolume(const std::string& n) const;
+    bool easyKeyTaken(const std::string& key, const std::string& kind, const std::string& internal) const;
+    std::vector<std::shared_ptr<NsNode>> nsStack;                         // namespaces open at definition time
+    std::shared_ptr<NsNode> nsOpen(NsNode::Kind kind, const std::string& name, const std::string& key, const EnvPtr& env);
+    struct NsScope { Interpreter* in; bool active; NsScope(Interpreter* i, std::shared_ptr<NsNode> n); ~NsScope(); };
+    std::shared_ptr<NsNode> nsResolveHead(const std::string& name, const EnvPtr& env) const; // lexical, innermost first
+    std::shared_ptr<NsNode> nsResolveExpr(const ExprPtr& obj, const EnvPtr& env) const;      // `a`, `a.b`, `a.b.c` -> node or null
+    std::shared_ptr<NsNode> nsResolvePath(const std::string& dotted) const;                  // absolute "a.b.c" -> node or null
+    Value nsGet(const std::shared_ptr<NsNode>& n, const std::string& member, int line);
+    Value nsSet(const std::shared_ptr<NsNode>& n, const std::string& member, const Value& v, int line);
+    Value nsCall(const std::shared_ptr<NsNode>& n, const std::string& member, std::vector<Value>& args, int line);
+    Value nsSnapshot(const std::shared_ptr<NsNode>& n) const;
+    bool nsTryCallDotted(const std::string& callee, std::vector<Value>& args, int line, const EnvPtr& env, Value& out);
+    void nsCollectPaths(const std::shared_ptr<NsNode>& n, std::vector<std::string>& out) const;
+    std::unordered_map<std::string, std::string> translations; // lang -> text (آخر ترجمة مسجّلة لكل لغة)
+    std::unordered_set<std::string> installedNames;          // ما تم "تثبيته" عبر installation (بما فيها ما حُمِّل من فهرس سابق فعلي على القرص)
+    std::vector<std::string> containerStack;                 // مفتاح الحاوية الحالية (لأجل link/tying/merge/save/route/call)
+    std::string currentFilePath;                              // آخر مسار مُعرَّف عبر file
+    std::vector<LogEntry> logHistory_;                        // كل سجلّات print.log بترتيب حدوثها (انظر LogEntry أعلاه) — logHistory()/logSave()/logClear() natives
+    std::unordered_map<std::string, std::vector<ApiRoute>> apiRoutes; // مفتاح container.api -> نقاطها المسجَّلة عبر route
+    std::unordered_map<std::string, ApiEndpoint> apiEndpoints; // اسم -> نقطة API حقيقية مسجَّلة عبر apiRegister/apiHeader
+    int defaultHttpTimeoutMs = 15000; // مهلة افتراضية لكل طلب HTTP حقيقي (قابلة للتعديل عبر httpSetTimeout)
+    std::unordered_set<std::string> importedPaths;            // مسارات @import المُنفَّذة فعلاً في هذا التشغيل (لمنع الاستيراد المكرَّر)
+    // Modules: سلسلة الاستيرادات الجارية حالياً (dependency graph بأبسط شكل ممكن: مجرد مكدّس
+    // نصي). importedPaths أعلاه يمنع إعادة استيراد ملف اكتمل استيراده بالفعل، لكنه لا يكتشف دورة
+    // استيراد لم تكتمل بعد (A تستورد B وB لا تزال بمنتصف استيراد A نفسها) — importChain تحديداً
+    // لهذه الحالة (انظر ImportChainGuard في execute(ImportStmt) في rin_interpreter.cpp).
+    std::vector<std::string> importChain;
+    std::unordered_map<std::string, std::string> linkIdToContainer; // معرّف الربط العام (container.link.id) -> اسم الحاوية المسجَّلة به
+
+    // ---- .object("id") ... container.(); .end/object  (انظر ObjectLiteralStmt في rin_ast.h) ----
+    // معرّف .object("id") -> قيمة الكائن (Value::MAP)، تُسجَّل فقط عند وجود 'container.();' داخل
+    // الجسم، بحيث يمكن الوصول لاحقاً من أي مكان عبر نفس المعرّف (تماماً كـ linkIdToContainer أعلاه
+    // لكن للكائنات نفسها بدل أسماء الحاويات) — تحديداً عبر view.print/object("id").
+    std::unordered_map<std::string, Value> objectRegistry;
+
+    // ---- مفهوم الجدول (container.table / table المستقلة) ----
+    // مفتاح الحاوية -> صفوفها (كل صف Value::ARRAY). مصفوفة مشتركة (shared_ptr) عمداً: الحقل الافتراضي
+    // `rows` الذي تُرجعه getField/container.get/container.fields مقبض *حيّ* على نفس المصفوفة، فكل دالة
+    // موجودة أصلاً في اللغة تعدّل مصفوفة في مكانها (push/pop/sort/reverse/remove و #add و #swap)
+    // تعدّل الجدول نفسه مباشرة بلا أي دالة جدول جديدة.
+    std::unordered_map<std::string, std::shared_ptr<ArrayData>> tableRows;
+    // ---- جسر الجدول مع دوال الحاويات الموجودة (getField/setField/hasField/container.fields/...) ----
+    // الحقول الافتراضية لجدول: rows (مقبض حيّ) · columns (نسخة مقلوبة من الصفوف) · style (إن وُجد).
+    // أي متغيّر حقيقي بنفس الاسم داخل الجدول له الأولوية (لا يُحجَب بحقل افتراضي).
+    bool isTableContainer(const std::string& name) const;
+    std::shared_ptr<ArrayData> tableRowsOf(const std::string& name);
+    // container.datalist: يُكشَف بنفس آلية الجدول (حقول افتراضية items/ids/size/first/last/header + دوال container.* التحليلية)
+    bool isDatalistContainer(const std::string& name) const;
+    void datalistSync(const std::string& name); // يعيد بناء tableRows[name] (رأس + صفوف) من docStore
+    bool datalistVirtualGet(const std::string& name, const std::string& key, Value& out);
+    bool datalistVirtualSet(const std::string& name, const std::string& key, const Value& v, int line);
+    bool tableVirtualGet(const std::string& name, const std::string& key, Value& out);
+    bool tableVirtualSet(const std::string& name, const std::string& key, const Value& v, int line);
+    bool tableVirtualDelete(const std::string& name, const std::string& key);
+    std::vector<std::string> tableVirtualKeys(const std::string& name) const;
+    // رأس الجدول = أول صف إن كانت كل خلاياه نصوصاً (وإلا تُسمّى الأعمدة c1,c2,... وكل الصفوف جسم).
+    // يُستعمل لكشف الجدول لاستعلامات RCSQL الموجودة (sql/sqlCount/sqlSum/sqlUpdate/sqlDelete...).
+    bool tableHeader(const std::string& name, std::vector<std::string>& header) const;
+    std::vector<std::pair<std::string, Value>> tableAsDocs(const std::string& name) const;
+    // ---- توسعة الجدول (rin_table.cpp): كل ما يلي يعمل *داخل* دوال اللغة الموجودة (insertDoc/allDocs/container.sum/
+    //      container.toCsv/renameField/clone/rename/...) و`save format=csv|json|md|html|txt` — بلا أي اسم دالة جديد. ----
+    // خطّاف واحد تستدعيه الدوال الموجودة في أول سطر منها: يرجع true (ومعه out) إن كان الوسيط الأول جدولاً وعالجتها بدلاً منه.
+    bool tableNative(const std::string& fn, std::vector<Value>& a, int line, Value& out);
+    bool tableNativeCore(const std::string& fn, std::vector<Value>& a, int line, Value& out);
+    // عمود باسمه (من الرأس النصي، أو c1,c2.. إن لم يوجد رأس) -> قيم الجسم؛ false إن لم يوجد العمود.
+    bool tableColumnValues(const std::string& name, const std::string& col, std::vector<Value>& out) const;
+    // ترتيب سجلّ (قاموس) حسب رأس الجدول: الغائب nil · عمود غير موجود E0007 · بلا رأس E0004.
+    Value tableOrderRecord(const std::string& name, const Value& rec, int line);
+    // تصدير نصي: csv · json · md · html · txt
+    std::string tableExport(const std::string& name, const std::string& fmt, int line);
+    // CSV -> صفوف (الخلايا الرقمية تتحوّل لأرقام، الفارغة nil)
+    void tableLoadCsv(const std::string& name, const std::string& text);
+    // تفريغ حالة الجدول عند حذف الحاوية / نقلها عند إعادة التسمية / نسخها عند الاستنساخ
+    void tableForget(const std::string& name);
+    void tableMove(const std::string& from, const std::string& to);
+    void tableCopy(const std::string& from, const std::string& to);
+    // يُلحق سجلّات (قواميس) بالجدول؛ الأعمدة الجديدة تُضاف للرأس (والصفوف السابقة nil). يُرجع عدد المُلحَق.
+    size_t tableAppendRecords(const std::string& name, const std::vector<Value>& records, int line);
+    // مفتاح الحاوية -> آخر "style value=" مسجَّل (مثال: "style://dark"). كانت خاصة بالجداول فقط،
+    // وعُمِّمت الآن لتُستخدم أيضاً داخل container.object/Object، container.portal/portal،
+    // container.block/block (مفاهيم التنسيق والستايل)، وليس container.table/table حصراً.
+    std::unordered_map<std::string, std::string> containerStyles;
+    std::string buildTablePng(const std::string& key) const;        // يرسم الجدول كصورة PNG حقيقية (شبكة خلايا ملوّنة)
+    // يرسم سجلّ محادثة (container.chatbot) كصورة PNG حقيقية: فقاعة واحدة لكل رسالة، بترتيب
+    // الإرسال من الأعلى للأسفل (سطر واحد لكل رسالة، بلا التفاف نص، بنفس منطق buildTablePng).
+    std::string buildChatPng(const std::string& key) const;
+
+    // ---- قاعدة بيانات لاعلاقية / NoSQL (container.doc / doc المستقلة) ----
+    // container = "مجموعة مستندات" (collection)، وتُخزَّن مستنداتها هنا بترتيب الإدخال؛ id عربون
+    // فريد داخل نفس المجموعة (إدراج بنفس id موجود = تحديث/upsert). Containers.Group التي تضم عدّة
+    // container.doc تصبح فعلياً "قاعدة بيانات" (database) كاملة من عدّة مجموعات مستندات مرتّبة.
+    std::unordered_map<std::string, std::vector<std::pair<std::string, Value>>> docStore;
+
+    // ---- RIN CONTAINER SQL (RCSQL) — انظر rin_container_sql.h للصياغة الكاملة ----
+    // اسم حاوية @sql/@container.sql (ContainerKind::SQL) -> نص استعلام RCSQL الخام المخزَّن في
+    // حقلها 'text query = "...";' (يُملأ عند تنفيذ ContainerStmt، انظر execute(StmtPtr) في
+    // rin_interpreter.cpp). natives sql()/sqlOne()/sqlCount() تقبل إما نص RCSQL خام مباشرة، أو
+    // قناع (mask) حاوية @sql مُعرَّفة مسبقاً -- في الحالة الثانية يُستبدَل الوسيط بنص هذا الجدول
+    // قبل أي تحليل (انظر sqlResolveQueryText أدناه)، وهذا هو معنى "استدعاء ... بالأقنعة".
+    std::unordered_map<std::string, std::string> sqlViews;
+
+    // يحوّل وسيط sql()/sqlOne()/sqlCount() الخام إلى نص RCSQL فعلي جاهز للتحليل: إن كان الوسيط
+    // قناعاً معروفاً لحاوية ContainerKind::SQL يُستبدَل بنص sqlViews[الحاوية]، وإلا يُعاد كما هو
+    // (استعلام RCSQL خام فوري بلا حاوية مُسمّاة).
+    std::string sqlResolveQueryText(const std::string& arg) const;
+    // يحلّ هدف استعلام RCSQL (rin::sql::Query::target) إلى اسم حاوية doc فعلي: "#mask" عبر
+    // containerMasks، أو مسار IDENT("/"IDENT)* عبر تتبّع عضوية groupMembers خطوة بخطوة، أو اسم
+    // حاوية مباشر لمسار من جزء واحد. يعيد نصاً فارغاً إن تعذّر الحل (فتُعيد sql() حينها مصفوفة فارغة
+    // بصمت، بنفس سلوك بقية دوال docStore الحالية مع حاوية غير موجودة، بدل رمي خطأ).
+    std::string sqlResolveTargetContainer(const rin::sql::Query& q) const;
+
+    // نتيجة صف واحد بعد فلترة/فرز/تصفّح RCSQL كاملة (بلا بناء map العرض النهائي بعد).
+    struct SqlMatch { std::string id; Value doc; };
+    // ناتج تنفيذ استعلام RCSQL كامل (فلترة AND/OR + distinct + order + offset/limit)، مع اسم
+    // الحاوية الفعلي الذي حُلَّ إليه الهدف وقائمة حقول select المطلوبة (إن وُجدت) لمن يبني عرضاً
+    // نهائياً من الصفوف (sqlExecute)، أو يحتاج اسم الحاوية لتعديل/حذف مباشر (sqlUpdate/sqlDelete).
+    struct SqlRawResult {
+        std::string container;             // فارغ = هدف لم يُحلّ (قناع/مسار غير موجود)
+        std::vector<SqlMatch> rows;         // بعد كامل الأنبوب: فلترة -> distinct -> order -> offset -> limit
+        std::vector<std::string> selectFields; // من الاستعلام نفسه (select:has(...))؛ فارغ = كل الحقول
+    };
+    // ينفّذ استعلام RCSQL خاماً بالكامل (تحليل + حلّ الهدف + فلترة + distinct + فرز + offset/limit)
+    // ويعيد الصفوف الخام (بلا حقل "_id" مُدرَج بعد، وبلا إسقاط select مُطبَّق بعد). هذه هي القناة
+    // المشتركة الوحيدة التي تبني عليها كل نواتج RCSQL (sql/sqlOne/sqlCount/sqlExists/sqlIds/sqlPluck/
+    // sqlSum/sqlAvg/sqlMin/sqlMax/sqlDelete/sqlUpdate) لتفادي أي تكرار أو تفاوت سلوك بينها.
+    SqlRawResult sqlRunRaw(const std::string& rawArg, int line) const;
+    // sql(): يبني من sqlRunRaw مصفوفة نتائج نهائية للعرض، كل عنصر map يحمل "_id" + (كل الحقول، أو
+    // فقط حقول selectFields إن حُدِّدت في الاستعلام عبر select:has(...)).
+    ArrayPtr sqlExecute(const std::string& rawArg, int line) const;
+
+    // ---- مفهوم روبوت المحادثة (container.chatbot / chatbot المستقلة) ----
+    // كل رسالة = map { role, text, time, kind, meta } بترتيب الإدخال. container -> سجلّها الكامل.
+    // "kind" = "text" (افتراضي) أو "attachment". "meta" = map حرّة (اسم ملف/رابط عند attachment، إلخ).
+    std::unordered_map<std::string, std::vector<Value>> chatHistoryStore;
+    std::unordered_map<std::string, bool> chatTypingState;   // container -> هل يكتب البوت الآن (typing indicator)
+    // container -> [(الحدث "message"/"open"/"close"/"typing", دالة Rin مسجَّلة عبر onChat)]
+    std::unordered_map<std::string, std::vector<std::pair<std::string, Value>>> chatHandlers;
+    // يستدعي كل معالجات (container, event) بترتيب تسجيلها، ويتجاهل بصمت أي حاوية/حدث بلا معالجين.
+    void fireChatEvent(const std::string& container, const std::string& event, std::vector<Value> args, int line);
+
+    // ---- schema: مخطط حقول اختياري لكل مجموعة مستندات (container.doc/doc) ----
+    // container -> [(اسم الحقل، اسم النوع)] بترتيب التعريف عبر defineSchema. أنواع مدعومة:
+    // "string"/"number"/"bool"/"boolean"/"array"/"map"/"object"/"any". حقل مُعرَّف هنا يصبح
+    // إلزامياً: أي إدراج/تحديث لاحق عبر insertDoc/updateDoc/document يُرفَض (RinError) إن غاب
+    // الحقل أو خالف نوعه (انظر schemaErrors أدناه وvalidateDoc في .cpp).
+    std::unordered_map<std::string, std::vector<std::pair<std::string, std::string>>> schemaStore;
+    // يتحقّق من قيمة (map حقول مستند مقترح) مقابل مخطط الحاوية المُعرَّف؛ مصفوفة فارغة = صالح
+    // (أو لا يوجد مخطط أصلاً لهذه الحاوية، فلا قيود). تُستخدم من قِبل الدالة الأصلية validateDoc
+    // ومن insertDoc/updateDoc/DocumentStmt قبل أي التزام فعلي بالتغيير.
+    std::vector<std::string> schemaErrors(const std::string& container, const Value& fields) const;
+
+    // ---- index: فهرسة قيم حقل معيّن داخل مجموعة مستندات (تسريع البحث عبر findByIndex) ----
+    // container -> [(اسم الحقل، جدول: مفتاح القيمة النصي (repr) -> [ids المطابقة بترتيب الإدخال])].
+    // تُعاد بناؤها بالكامل (بدل تحديث تفاضلي) بعد أي إدراج/تحديث/حذف مستند أو rollbackTransaction،
+    // عبر refreshIndexesForContainer -- أبسط وأقل عرضة للأخطاء من الصيانة التفاضلية، ومقبولة الكلفة
+    // لحجم البيانات المتوقَّع في مفسّر Rin.
+    using IndexBuckets = std::unordered_map<std::string, std::vector<std::string>>;
+    std::unordered_map<std::string, std::vector<std::pair<std::string, IndexBuckets>>> indexStore;
+    void refreshIndexesForContainer(const std::string& container);
+
+    // ---- transaction: لقطات (snapshots) عميقة من docStore لدعم commit/rollback حقيقيَّين ----
+    // لقطة عميقة إلزامية (لا يكفي نسخ Value الضحلة) لأن updateDoc يُعدِّل MapData داخل MapPtr
+    // القائم مكانه أحياناً (دمج جزئي/patch)، فيؤثّر ذلك على أي نسخة ضحلة تشارك نفس المؤشّر.
+    std::vector<std::unordered_map<std::string, std::vector<std::pair<std::string, Value>>>> txStack;
+
+    // ---- relation: علاقات معرَّفة بين مجموعتَي مستندات (انظر RelationDef أعلاه) ----
+    std::unordered_map<std::string, RelationDef> relationStore;
+    std::vector<std::string> relationOrder; // أسماء العلاقات بترتيب أول تعريف (listRelations)
+
+    // ---- migration: خطوات ترحيل مُسمّاة، بترتيب تعريفها وبترتيب تطبيقها الفعلي ----
+    std::unordered_map<std::string, MigrationDef> migrationStore;
+    std::vector<std::string> migrationOrder;    // أسماء الترحيلات بترتيب التعريف (defineMigration)
+    std::vector<std::string> appliedMigrations; // أسماء الترحيلات المُطبَّقة فعلاً، بترتيب التطبيق (runMigration)
+
+    // ---- cache: تخزين مؤقّت للقيم بمهلة صلاحية اختيارية (انظر CacheEntry أعلاه) ----
+    std::unordered_map<std::string, CacheEntry> cacheStore;
+
+    // ---- watch/subscribe: دوال Rin مسجَّلة تُستدعى تلقائياً عند حدث ----
+    // watch: اسم مجموعة مستندات -> دوال بتوقيع fun(id, doc, event) تُستدعى بعد كل insertDoc/
+    // updateDoc/deleteDoc/document عليها (event = "insert"/"update"/"delete").
+    std::unordered_map<std::string, std::vector<Value>> docWatchers;
+    // subscribe/publish: قناة أحداث عامة مستقلة عن أي مجموعة مستندات؛ دوال بتوقيع fun(payload).
+    std::unordered_map<std::string, std::vector<Value>> channelSubs;
+    void notifyWatchers(const std::string& container, const std::string& id, const Value& doc,
+                         const std::string& event, int line);
+
+    // ---- RCS-1.0 §3.2 Lifecycle + §3.3 State (Phase 1) ----
+    // اسم الحاوية -> قيم دوالها الخمس (Value::Type::FUNCTION أو Value::nil() إن لم تُعرَّف). تُملأ
+    // عند تنفيذ LifecycleHookStmt داخل جسم الحاوية (انظر execute() في rin_interpreter.cpp)، ولا
+    // تُنفَّذ أبداً كعبارة عادية -- فقط تُسجَّل، ثم تُستدعى تلقائياً من نقاط محدَّدة (init/mount عند
+    // نهاية جسم الحاوية، update عند إسناد لحقل state، destroy عبر destroyContainer، error عند
+    // استثناء RinError يقع أثناء استدعاء أي خُطّاف آخر لنفس الحاوية).
+    struct LifecycleHooks {
+        Value init, mount, update, destroy, error;
+    };
+    std::unordered_map<std::string, LifecycleHooks> containerLifecycle;
+    // اسم الحاوية -> أسماء حقولها المُعلَنة عبر `state` (لا `let` العادية). يُستخدَم فقط لتمييز
+    // إسناد يستحق إطلاق on update(prevState) تلقائياً من إسناد عادي لا علاقة له بأي خُطّاف.
+    std::unordered_map<std::string, std::unordered_set<std::string>> containerStateNames;
+    // يستدعي دالة خُطّاف واحدة (إن كانت مُعرَّفة فعلاً) بأمان: أي RinError يقع أثناء تنفيذها يُوجَّه
+    // تلقائياً إلى خُطّاف on error(err) الخاص بنفس الحاوية إن وُجد (err = {message: "..."})، وإلا
+    // يُعاد رميه كما هو (نفس سلوك أي خطأ Rin عادي بلا أي كتم صامت). لا تفعل شيئاً إن كانت hookFn
+    // ليست دالة أصلاً (الحالة الافتراضية لأي حاوية لم تُعرِّف هذا الخُطّاف).
+    void fireLifecycleHook(const std::string& containerKey, const Value& hookFn,
+                            std::vector<Value> args, int line);
+    // يُستدعى بدل الإسناد المباشر لأي متغيّر تم إيجاد بيئته المالكة (owner) مسبقاً: يكتب newValue
+    // بنفسه، ويطلق تلقائياً on update(prevState) *بعد* الكتابة مباشرة إن كانت owner بيئة حاوية
+    // معروفة و`name` أحد حقول `state` المُعلَنة لها ولديها خُطّاف update مُعرَّف -- الالتقاط
+    // (snapshot) لكل حقول state الحالية يحدث *قبل* الكتابة بالذات حتى يعكس prevState القيم كما
+    // كانت فعلاً قبل هذا الإسناد (لا بعده).
+    void assignStateAware(Environment* owner, const std::string& name, const Value& newValue, int line);
+
+    // ---- RCS-1.0 §3.5 Tree (Phase 2) ----
+    // اسم حاوية ابن -> اسم حاوية أبها المباشرة. تُملأ فقط للحاويات المتعشَّشة نصّياً داخل جسم حاوية
+    // أخرى وقت التنفيذ (انظر ContainerStmt في execute(): تُسجَّل قبل push على containerStack مباشرة
+    // إن كانت containerStack غير فارغة حينها). حاوية أُنشئت عبر spawn()/create() أو حاوية جذرية أعلى
+    // المستوى لا تملك أباً في هذه الخريطة إطلاقاً (لا مُدخَل لها هنا على الإطلاق).
+    std::unordered_map<std::string, std::string> containerParent;
+    // اسم حاوية الأب -> أسماء أبنائها المباشرين فقط بترتيب أول ظهور -- لا الأحفاد، مطابقةً حرفياً
+    // لِـ RCS-1.0 §3.5: "الأب يرى الأبناء المباشرين فقط لا الأحفاد (لمنع تسرّب حالة عابر للمستويات
+    // بلا قصد)". يُستخدَم من natives الجديدة childrenOf/siblingsOf أدناه.
+    std::unordered_map<std::string, std::vector<std::string>> containerChildren;
+    // اسم الحاوية -> أسماء حقول `slot` المُعلَنة بداخلها بترتيب التعريف (RCS-1.0 §3.5). توثيق بنيوي
+    // بحت في Phase 2 -- بلا أي ربط فعلي لحاوية ابن حقيقية بكل slot بعد (انظر SlotDeclStmt في
+    // rin_ast.h)؛ تُستخدَم فقط من native جديدة slotsOf أدناه لأجل الاستقصاء.
+    std::unordered_map<std::string, std::vector<std::string>> containerSlots;
+    // يبحث عن اسم أقرب حاوية "مالكة" فعلياً لبيئة تنفيذ مُعطاة (startEnv)، بالمشي صعوداً عبر سلسلة
+    // آباء البيئة (Environment::parent) حتى إيجاد بيئة مطابقة تماماً (بالمؤشر) لإحدى قيم `containers`،
+    // أو الوصول لجذر السلسلة بلا أي تطابق. ضروري لـ EmitStmt تحديداً: 'emit' يقع غالباً داخل جسم
+    // دالة (fun) تُستدعى *بعد* انتهاء التنفيذ التصريحي للحاوية بوقت طويل (حين تكون containerStack قد
+    // فرغت مجدداً بالفعل، خلافاً للحظة تعريف state/on التي تلتقطها containerStack مباشرة في Phase 1)،
+    // فلا يكفي الاعتماد على قمة containerStack وحدها لمعرفة "الحاوية التي نُنفَّذ حالياً بداخلها".
+    // يُعيد نصاً فارغاً إن لم تكن startEnv (ولا أي جدّ لها) بيئة حاوية مسجَّلة إطلاقاً (تنفيذ عالمي
+    // خارج أي حاوية على الإطلاق).
+    std::string containerKeyForEnv(Environment* startEnv) const;
+
+    // ---- RCS-1.0 §3.6 Events (Phase 2) ----
+    // اسم الحاوية -> [(اسم الحدث، دالة المعالج)] بترتيب التسجيل عبر `on.event` -- نفس شكل
+    // chatHandlers أعلاه بالضبط. مستقلّة تماماً عن channelSubs (PubSub §3.12 -- انظر الفرق الموثَّق
+    // هناك): هذه الأحداث تصعد فقط عبر شجرة Tree (§3.5) -- الأب المباشر افتراضياً، أو كل الأجداد صعوداً
+    // مع 'emit ... bubbles;' -- بلا أي اسم قناة صريح يُسجَّل له مشتركون من أي مكان في البرنامج.
+    std::unordered_map<std::string, std::vector<std::pair<std::string, Value>>> eventHandlers;
+
+    // ---- تخزين حقيقي على القرص (save/file/installation) ----
+    std::string basePath;                                     // جذر حقيقي اختياري لكل عمليات الملفات
+    bool installedIndexLoaded = false;
+    // يدمج basePath مع مسار نسبي، ويطبّع المسار (يحلّ "." و".." ويرفض أي محاولة هروب خارج basePath
+    // نفسه، سواء عبر "../" متكررة أو مسار مطلق صريح) لمنع أي كود Rin (خصوصاً مكتبة مستوردة من مصدر
+    // غير موثوق) من الوصول لملفات خارج مجلد المشروع المعزول. line اختياري لرسالة خطأ أوضح إن توفّر.
+    std::string resolvePath(const std::string& rawPath, int line = -1) const;
+    // ---- تكامل RinPM (Package Manager) مع @import ----
+    // يُستدعى فقط بعد فشل البحث عن اسم "عارٍ" كمكتبة مدمجة أو كملف في lib/ الخاص بالمشروع.
+    // يبحث عن pkgName في rin.lock الخاص بالمشروع الحالي (basePath)، ثم يقرأ مصدرها الفعلي من
+    // الكاش العالمي لـ RinPM (~/.rin/packages/<name>/<version>/src/...) الذي تملؤه فعلياً
+    // `rin pkg install`. هذا هو نقطة التكامل الوحيدة بين محرك اللغة وطبقة الحزم المستقلة
+    // (cli/linux/src/pkg/*) — عمداً بلا أي #include لملفات تلك الطبقة هنا، حفاظاً على استقلالية
+    // محرك اللغة (يُبنى أيضاً لأندرويد/macOS/ويندوز حيث لا معنى لمسارات RinPM الخاصة بلينكس CLI).
+    bool tryLoadInstalledPackageEntry(const std::string& pkgName, std::string& sourceOut) const;
+    void ensureParentDir(const std::string& fullPath) const;            // ينشئ مجلدات الأب إن لزم (mkdir -p يدوياً)
+    std::string buildSaveDocument(const std::string& key, const EnvPtr& containerEnv,
+                                   ContainerKind kind, bool simplified) const; // يبني نص .rin قابل لإعادة القراءة من متغيرات حاوية
+    void writeRealFile(const std::string& relPath, const std::string& content, int line, const std::string& who) const; // كتابة فعلية + رسائل خطأ واضحة
+    void loadInstalledIndex();                                          // يحمّل فهرس rin_installed/index.rininstall عند بداية run()
+    void appendInstalledIndex(const std::string& name, const std::string& relPath, bool simplified) const;
+
+    Value performApiCall(const std::string& containerKey, const std::string& method, const std::string& path, int line);
+
+    // API حقيقية مسجَّلة عبر apiRegister/apiHeader: يبني baseUrl+path مع ترويسات النقطة، يُجري طلب
+    // شبكة حقيقياً فعلياً (rin_http.h)، ويُعيد Value(map) بنتيجته (انظر httpResultToValue في .cpp).
+    Value performRealApiCall(const std::string& endpointName, const std::string& method,
+                              const std::string& path, const Value& bodyValue, int line);
+
+    // المكتبة القياسية (stdlib): دوال رياضية، معالجة نصوص، مصفوفات وقواميس.
+    using NativeFn = std::function<Value(std::vector<Value>&, int)>;
+    std::unordered_map<std::string, NativeFn> natives;
+    void registerNatives();
+    void registerNativesExtra(); // rin_extra_natives.cpp — Rin 1.0 additions (core helpers + container API)
+    void registerNativesExtra5(); // rin_extra_natives5.cpp — عائلة # (#sed #sum #diff #add #to #swap)
+    void registerNativesExtra6(); // rin_extra_natives6.cpp — make.video/audio/api/image.removeBg/ocr (docs/MAKE_MEDIA.md)
+    void registerNativesExtra7(); // rin_extra_natives7.cpp — مفهوم time (docs/TIME.md)
+    void registerNativesExtra8(); // rin_extra_natives8.cpp — مفهوم token: tokenList/tokenStats/tokenAt/... (docs/TOKEN.md)
+    void registerNativesExtra10(); // rin_extra_natives10.cpp — مفهوم linalg: mat*/vec* للجبر الخطي (docs/LINALG.md)
+    void registerNativesExtra12(); // rin_extra_natives12.cpp — fileSync/fileLock/fileRename/fileSize/findByRange (docs/FILEDB.md)
+    void registerNativesExtra11(); // rin_extra_natives11.cpp — مفهوم algo: algo* لتطوير الخوارزميات والحساب العددي (docs/ALGO.md)
+    void registerNativesExtra9(); // rin_extra_natives9.cpp — مفهوم number: number/numberRound/numberFormat/... (docs/NUMBER.md)
+    void registerNativesImageDraw(); // rin_image_draw.cpp — imgNew/imgLine/imgText/imgSave/imgFromLog…: إنشاء صور ورسمها وحفظها PNG (docs/image-draw.md)
+    void registerNativesImage();  // rin_image_ansi.cpp — printImage/imageAnsi/imageInfo: صور داخل الـ terminal كنص (docs/image-terminal.md)
+    void registerNativesEnv();   // rin_env.cpp — Env.load/get/require/... لربط Rin بملف .env (docs/env.md)
+    void registerNativesConditions(); // rin_conditions.cpp — متغيّرات الشروط الموسّعة (notNil/present/oneOf/inRange/matches/...) (docs/key_terms_and_builtins.md)
+    void registerNativesSet();    // rin_set.cpp — نوع Set الأساسي: Set(...) و Set.* + جعل len/contains/has/remove/sum/... تفهمه (docs/set.md)
+    // s.method(args...) على قيمة SET (طريقة نقطية). تُرجع true وتملأ out إن كان method من عمليات Set المعروفة.
+    bool tryCallSetMethod(const Value& obj, const std::string& method, std::vector<Value>& args, int line, Value& out);
+    void registerNativesExtra4(); // rin_extra_natives4.cpp — Rin 1.0 (json.* / semver.* / pkg.* / cpp.* جسر C++)
+    void registerNativesExtra3(); // rin_extra_natives3.cpp — Rin 1.0 additions (net.* بشبكة حقيقية + container.* إضافية)
+    void registerNativesExtra2(); // rin_extra_natives2.cpp — Rin 1.0 additions (sec./file./net./log./automation. + container extras)
+
+    // ---- RinVM (التنفيذ في rin_bcvm_exec.cpp) ----
+    bool vmEnabled_ = false;
+    std::shared_ptr<rin::vm::State> vm_;
+    const Stmt* vmDirectStmt_ = nullptr;   // عبارة مفوَّضة الآن للـ runtime: exec() التالي لها لا يُعاد توجيهه للآلة
+    std::shared_ptr<rin::vm::State> vmState();
+    struct VmFrame; struct VmHandler; struct VmLoopMark;
+    Value evaluateTree(const ExprPtr& expr, const EnvPtr& env); // المسار الشجري الأصلي لـ evaluate
+    void execute(const StmtPtr& stmt, EnvPtr env);
+    void executeBlock(const std::vector<StmtPtr>& statements, EnvPtr env);
+    // مسار التنفيذ السريع: return/break/continue تُنقَل كقيمة Flow بدل استثناءات C++ (الاستثناء يكلّف
+    // عشرات الميكروثواني لكل return، وهو ما كان يجعل fib(25) تأخذ 7 ثوانٍ). execute()/executeBlock()
+    // أعلاه تبقى كما هي لكل المستدعين القدامى وتُحوّل Flow إلى نفس الاستثناءات القديمة.
+    // Scope Guarantees: الخطأ الذي يعالجه كل catch نشط حالياً (لـ `rethrow;`). انظر TryCatchStmt في rin_ast.h.
+    struct ActiveCatch { bool isRin = false; Value thrown; int line = 0; std::string message; std::optional<diag::Diagnostic> diag; };
+    std::vector<ActiveCatch> activeCatches_;
+    enum class Flow { None, Return, Break, Continue };
+    Flow exec(const StmtPtr& stmt, const EnvPtr& env, Value& ret);
+    Flow execBlockFlow(const std::vector<StmtPtr>& statements, const EnvPtr& env, Value& ret);
+    Flow vmRunBlock(const std::vector<StmtPtr>& statements, EnvPtr env, Value& ret);
+    Flow vmRunStmt(const StmtPtr& stmt, EnvPtr env, Value& ret);
+    Value vmRunExpr(const ExprPtr& expr, EnvPtr env);
+    Flow vmExecute(const std::shared_ptr<rin::vm::Proto>& proto, EnvPtr env, Value& ret);
+    Flow vmLoop(rin::vm::RunState& rs, Value& ret);
+    // يشغّل Proto (بنفس اتفاقية Flow) ويعيد القيمة الناتجة لبروتو تعبير.
+    std::shared_ptr<rin::vm::Proto> vmBlockProto(const std::vector<StmtPtr>& statements);
+    std::shared_ptr<rin::vm::Proto> vmFunctionProto(const std::shared_ptr<FunctionStmt>& decl);
+    Value vmBinary(int op, Value& l, Value& r, int line);
+    void vmEnterCall(rin::vm::RunState& rs, const std::shared_ptr<Callable>& fn, std::vector<Value>& args, int line);
+    Value evaluate(const ExprPtr& expr, const EnvPtr& env);
+    Value callFunction(const std::shared_ptr<Callable>& fn, std::vector<Value>& args, int line);
+
+    // ---- OOP: class/struct/enum runtime (rin_interpreter.cpp) ----
+    // اسم الصنف -> تعريفه (ClassDef). سجل عام واحد (بنفس فلسفة `containers` أعلاه: كل الأصناف
+    // "عامة" بصرف النظر عن مكان تعريفها نصياً)، يُملأ إما عبر hoisting (run()/callTopLevelFunction،
+    // بنفس أسلوب FunctionStmt) أو عند تنفيذ ClassStmt مباشرة (تعريف محلي داخل دالة/كتلة).
+    std::unordered_map<std::string, ClassDef> classes;
+    void registerClassStmt(const std::shared_ptr<ClassStmt>& s);
+    // يتحقق هل [name] مستخدَم مسبقاً كنوع مختلف من الكيانات القابلة للنداء (دالة مدمجة native، أو
+    // صنف OOP آخر، أو دالة عرَّفها المستخدم في globals) — يُستدعى عند تسجيل صنف جديد أو hoisting
+    // دالة جديدة لمنع التظليل الصامت بينها (انظر errWithReason(E0002_DuplicateVariable, ...) في
+    // المواضع التي تستدعيه). يُعيد true ويملأ whatOut بنوع الكيان المتصادم إن وُجد تصادم، وfalse لو
+    // الاسم حر تماماً. [includeExistingFunction]: مرّرها false عند hoisting دالة (fun) تحديداً، لأن
+    // إعادة تعريف دالة بنفس اسمها سلوك مسموح ومقصود أصلاً في اللغة (آخر تعريف يفوز، بلا خطأ) —
+    // مرّرها true (الافتراضي) عند تسجيل صنف، حيث تصادم اسمه مع دالة مُعرَّفة مسبقاً *يجب* أن يُرفَض.
+    bool nameCollides(const std::string& name, std::string& whatOut, bool includeExistingFunction = true) const;
+    // يبني كائناً جديداً من صنف [className]: يمشي سلسلة الوراثة من الجذر (الأب الأبعد) حتى الصنف
+    // نفسه فيُهيّئ كل الحقول بترتيبها (فتُطغى قيم الابن على الأب عند تكرار نفس الاسم)، ثم يستدعي
+    // 'init' الأقرب في سلسلة الوراثة إن عُرِّفت (بـ args)، أو يرفض أي وسيط إن لم تُعرَّف init إطلاقاً.
+    // [env] (اختياري، Rin 1.0): بيئة المستدعي — تُستخدم لفحص صلاحية مُنشئ private/protected (سياق الصنف).
+    Value instantiateClass(const std::string& className, std::vector<Value>& args, int line, const EnvPtr& env = nullptr);
+    // يبحث عن دالة (method) باسم معيّن بدءاً من [className] ثم صعوداً عبر superclass (توريث بسيط
+    // بترتيب أقرب تعريف يفوز)؛ nullptr إن لم توجد في السلسلة كاملة.
+    // يبحث عن دالة (method) باسم معيّن بدءاً من [className] ثم صعوداً عبر superclass (توريث بسيط
+    // بترتيب أقرب تعريف يفوز)؛ nullptr إن لم توجد في السلسلة كاملة. [ownerOut] (اختياري) يُملأ باسم
+    // الصنف الذي وُجدت فيه فعلاً -- يلزم لدعم 'super.method()' (انظر bindMethod/evaluateSuperGet
+    // أدناه): نداء super يجب أن يبحث بدءاً من *أب الصنف المُعرِّف* للدالة الحالية، لا من صنف self
+    // وقت التشغيل (توزيع ديناميكي/virtual عادي هو ما يستخدم self.method()، لا super.method()).
+    std::shared_ptr<FunctionStmt> findMethod(const std::string& className, const std::string& methodName,
+                                              std::string* ownerOut = nullptr) const;
+    // يبني قيمة FUNCTION "مربوطة" (bound method): نفس جسم [method]، لكن بيئة إغلاق (closure) جديدة
+    // تُعرِّف 'self' = receiver مسبقاً، بحيث تُستدعى عبر callFunction العادية بلا أي مسار خاص.
+    // يبني قيمة FUNCTION "مربوطة" (bound method): نفس جسم [method]، لكن بيئة إغلاق (closure) جديدة
+    // تُعرِّف 'self' = receiver مسبقاً، بحيث تُستدعى عبر callFunction العادية بلا أي مسار خاص.
+    // [ownerClass] (اختياري): إن مُرِّر، يُعرَّف أيضاً '__class__' = ownerClass في نفس الإغلاق --
+    // هذا وحده ما يجعل 'super.method()' داخل جسم هذه الدالة يعرف من أين يبدأ البحث (انظر
+    // evaluateSuperGet أدناه).
+    Value bindMethod(const Value& receiver, const std::shared_ptr<FunctionStmt>& method,
+                      const std::string& ownerClass = std::string());
+    // 'super.name' / 'super.method(...)': يقرأ 'self' و'__class__' (اسم الصنف المُعرِّف للدالة
+    // الحالية) من env، ثم يبحث عن [name] بدءاً من *أب* ذلك الصنف تحديداً (بحث ساكن/static، بعكس
+    // self.name الديناميكي). يرمي خطأً واضحاً إن استُخدمت 'super' خارج جسم دالة صنف، أو إن كان
+    // الصنف الحالي بلا أب (extends). تُستخدم من evaluate(GetExpr) وevaluate(MethodCallExpr) كلتيهما
+    // (الثانية تستدعيها لتحصل على الدالة المربوطة ثم تنادي عليها بنفسها بالوسائط).
+    Value evaluateSuperGet(const std::string& name, const EnvPtr& env, int line);
+    // دلالة القيمة (value semantics) لـ struct: عند إسناد/تمرير قيمة struct instance، تُستنسَخ
+    // InstanceData بالكامل (استنساخ عميق متكرر لأي حقل struct متداخل بدوره) بدل مشاركة نفس
+    // shared_ptr كما تفعل class/array/map عادةً. أي قيمة أخرى (بما فيها class instance عادية) تُعاد
+    // كما هي بلا أي نسخ (سلوك المرجع المعتاد، بلا أي تغيير).
+    Value copyForBinding(const Value& v) const;
+
+public: // Rin 1.0: واجهة OOP الموسَّعة (يستدعيها Value::toDisplayString وrin_oop*.cpp)
+    // ================= Rin 1.0: OOP الموسَّع (interface / trait / abstract / static / private / get-set ...) =================
+    // ينفَّذ في rin_interpreter.cpp (قسم "OOP 1.4") وتُسجَّل دوال oop.* في rin_oop_natives.cpp.
+    bool restrictedMembers_ = false;      // true إن استُخدم private/protected/final أي مرة (لتجاوز الفحص الكلفة صفر قبلها)
+    bool accessorsExist_ = false;         // true إن عُرِّف أي get/set أي مرة
+    std::unordered_set<std::string> validatedClasses_; // أصناف اجتازت فحص abstract/interface/final/override
+    std::unordered_map<std::string, Value> singletons_;
+    bool skipInit_ = false;               // يُضبَط مؤقتاً من oop.fromMap لإنشاء كائن بلا استدعاء init
+    Value bindStaticFn(const std::shared_ptr<FunctionStmt>& m, const std::string& owner);
+    void registerNativesOop();            // rin_oop_natives.cpp
+    void registerNativesInput();          // rin_input.cpp — مفسِّر/مترجم/منفِّذ نماذج الإدخال (معاملة، تداخل، مُدقِّق النموذج)
+    void registerNativesOopLink();        // rin_oop_link.cpp — روابط الحاويات وIndsin (Warp)
+    std::vector<OopLink> links_;
+    int nextLinkId_ = 1;
+    bool linksExist_ = false;             // false => كلفة صفر في assignStateAware/setField/callTopLevelFunction
+    // ---- let+ (docs/let-plus.md) — التنفيذ في آخر rin_interpreter.cpp ----
+    using LetBindings = std::vector<std::pair<std::string, Value>>;
+    bool letBindPattern(const LetPattern& p, const Value& v, const EnvPtr& env, LetBindings& out, std::string& why);
+    void letRunElse(const std::shared_ptr<BlockStmt>& blk, const EnvPtr& env, int line, const std::string& what);
+    void letExecPattern(const std::shared_ptr<LetPatternStmt>& s, const EnvPtr& env);
+    Value letPatternAssign(const std::shared_ptr<PatternAssignExpr>& e, const EnvPtr& env);
+    // ---- المتغيرات الحيّة (Living Variables) — التنفيذ في آخر rin_interpreter.cpp ----
+    bool tryAppendInPlace(const std::shared_ptr<AssignExpr>& e, const EnvPtr& env); // s = s + <نص/متغيّر> بلا نسخ النص كاملاً (docs/runtime.md)
+    bool liveActive_ = false;                 // false => كلفة صفر على كل قراءة/إسناد (لا يصير true إلا عند أول استعمال)
+    struct TrialEntry { EnvPtr env; std::string name; Value oldValue; std::shared_ptr<LiveMeta> metaSnapshot; };
+    std::vector<std::vector<TrialEntry>> trialStack_; // سجل تراجع لكل trial نشِطة (الأعمق في النهاية)
+    int bellDepth_ = 0;                       // حماية من جرس يعيد تفعيل نفسه بلا نهاية
+    Environment* findLiveOwner(const EnvPtr& env, const std::string& name) const; // أول بيئة تملك الاسم (أو nullptr)
+    Value liveRead(Environment* owner, const std::shared_ptr<LiveMeta>& m, const std::string& name, int line);
+    Value liveAssign(Environment* owner, const std::string& name, Value v, int line);
+    Value liveApplyRange(const LiveMeta& m, const std::string& name, const Value& v, int line) const;
+    // accept: يطبّق شرط القبول على القيمة المرشّحة. true = تُكتب `v` (قد تُستبدل ببديل else)؛ false = تُتجاهل (أو يُرمى E0049 في strict).
+    bool liveCheckAccept(LiveMeta& m, const std::string& name, Value& v, int line, bool initial);
+    // pre/post: يقيّم شرطاً في نطاق التصريح، حيث old = القيمة السابقة وnew = المكتوبة، واسم المتغيّر = old (للـ pre) أو new (للـ post).
+    bool liveGateEval(LiveMeta& m, const ExprPtr& rule, const std::string& name, const Value& oldV, const Value& newV, bool asPost, int line);
+    // يسجّل رفض الانتقال (العدّادات + refused)؛ وفي strict يرمي E0051.
+    void liveGateRefuse(LiveMeta& m, const std::string& name, const Value& oldV, const Value& newV, bool post, int line);
+    void liveFireBells(const std::shared_ptr<LiveMeta>& m, const Value& oldV, const Value& newV, int line);
+    void liveJournal(Environment* owner, const std::string& name); // يلتقط (قيمة + بيانات وصفية) قبل أي تغيير داخل trial نشِطة
+    bool livePropertyGet(const EnvPtr& env, const std::string& name, const std::string& prop, int line, Value& out);
+    void liveExecDecl(const std::shared_ptr<LiveDeclStmt>& s, const EnvPtr& env);
+    void liveExecBell(const std::shared_ptr<BellStmt>& s, const EnvPtr& env);
+    void liveExecTrial(const std::shared_ptr<TrialStmt>& s, const EnvPtr& env);
+    void liveExecAction(const std::shared_ptr<LiveActionStmt>& s, const EnvPtr& env);
+    void liveGuardWrite(const EnvPtr& env, const ExprPtr& objectExpr, int line) const; // stone/lens: منع x[i]=.. وx.f=..
+    // الكائن تغيّر -> ادفع إلى الأهداف (حاويات/Warp). تُستدعى من notifyObservers.
+    void pushLinks(const Value& obj, const std::string& field, const Value& newV, int line);
+    // حقل حاوية كُتب -> اسحب إلى الكائنات واستدعِ المراقبين. تُستدعى من assignStateAware/setField.
+    void onContainerWrite(const std::string& container, const std::string& key, const Value& oldV, const Value& newV, int line);
+    // قيم خلايا Warp (المتغيّرات العامة) تغيّرت من Indsin -> اسحب إلى الكائنات. تُستدعى من callTopLevelFunction.
+    void syncWarpLinks(int line);
+    bool applyPullLink(int id, const Value& incoming, int line); // يكتب قيمة الهدف في حقل الكائن (مع منع الصدى)
+    // سحب يدوي شامل (يغطي الكتابات الخام التي لا تمر بمسارات الإسناد).
+    int syncAllLinks(int line);
+    void registerNativesOopBind();        // rin_oop_bind.cpp — دوال الربط (bind/partial/curry/observe/bindProperty/on)
+    std::vector<OopObserver> observers_;
+    int nextObserverId_ = 1;
+    bool observersExist_ = false;         // false => كلفة صفر في writeMember
+    void notifyObservers(const Value& obj, const std::string& field, const Value& oldV, const Value& newV, int line);
+    // يستدعي fn مع قصّ/حشو (nil) الوسائط لتطابق عدد وسائطها المعلنة — فيقبل callback بوسيط واحد أو صفر.
+    Value callFlexible(const Value& fn, std::vector<Value> args, int line);
+
+    // ---- استعلامات الأنواع والوراثة ----
+    bool classIsSubclassOf(const std::string& cls, const std::string& base) const;   // يشمل التساوي (سلسلة extends فقط)
+    bool isInstanceOf(const Value& v, const std::string& typeName) const;             // class chain + interfaces + traits
+    bool typeNameIsAncestor(const std::string& cls, const std::string& typeName) const; // نفس السابقة لكن على اسم صنف
+    void collectInterfaces(const std::string& cls, std::vector<std::string>& out) const; // كل الواجهات (مع الموروثة)
+    void collectTraits(const std::string& cls, std::vector<std::string>& out) const;     // كل السمات (مع المتداخلة)
+    std::vector<std::string> classChain(const std::string& cls) const;                  // [cls, parent, grandparent...]
+    std::shared_ptr<FunctionStmt> findAccessor(const std::string& cls, const std::string& name, bool setter,
+                                                std::string* ownerOut = nullptr) const;
+    const ClassDef::MemberMeta* findFieldMeta(const std::string& cls, const std::string& name,
+                                               std::string* declOut = nullptr) const;
+    void validateInstantiable(const std::string& className, int line);
+
+    // ---- static ----
+    void ensureStatics(const std::string& cls);
+    ClassDef* findStaticFieldOwner(const std::string& cls, const std::string& name);
+    std::shared_ptr<FunctionStmt> findStaticMethod(const std::string& cls, const std::string& name, std::string* ownerOut = nullptr) const;
+    Value staticGet(const std::string& cls, const std::string& name, const EnvPtr& env, int line);
+    Value staticSet(const std::string& cls, const std::string& name, const Value& v, const EnvPtr& env, int line);
+    Value callStatic(const std::string& cls, const std::string& name, std::vector<Value>& args, const EnvPtr& env, int line);
+
+    // ---- الوصول للأعضاء (صلاحيات + خصائص + استدعاء) ----
+    std::string currentClassCtx(const EnvPtr& env) const;
+    void checkMemberAccess(const std::string& declClass, const std::string& access, const std::string& member,
+                           const char* what, const EnvPtr& env, int line) const;
+    Value readMember(const Value& obj, const std::string& name, const EnvPtr& env, int line);
+    Value writeMember(const Value& obj, const std::string& name, const Value& val, const EnvPtr& env, int line);
+    Value callMethodOn(const Value& obj, const std::string& method, std::vector<Value>& args, const EnvPtr& env, int line);
+    Value callValue(const Value& callee, std::vector<Value>& args, int line); // دالة أو كائن بـ __call__
+
+    // ---- العوامل السحرية الإضافية ----
+    std::optional<Value> tryCompareOverload(TokenType op, const Value& l, const Value& r, int line);
+    std::optional<bool> tryEqOverload(const Value& l, const Value& r, bool negate, int line);
+    std::optional<Value> callMagic(const Value& inst, const std::string& magic, std::vector<Value>& args, int line);
+    bool hasMagic(const Value& inst, const std::string& magic) const;
+    bool tryInstanceToString(const Value& v, std::string& out); // __str__ / toString
+private:
+
+    // ---- Type System: أبسط تحقق ممكن (اختياري 100%، additive بحت) ----
+    // 'let x: Type = ...' / 'fun f(a: Type): Type' -- typeName الفارغ يعني "بلا نوع معلَن"، فيعود
+    // فوراً بلا أي فحص (نفس سلوك اللغة القديم تماماً). لا static analysis، لا type inference، لا
+    // generics، لا تمييز nullable/non-nullable (nil يمر دائماً مهما كان النوع المعلَن). فقط: عند
+    // 'let'، عند ربط كل وسيط دالة، وعند قيمة الإرجاع -- إن كانت القيمة الفعلية لا تطابق الاسم
+    // المعلَن (نوع بدائي مبني في اللغة، أو اسم صنف/بنية يُقارَن بـ "is-a" عبر سلسلة الوراثة كما في
+    // findMethod)، يُرمى خطأ واضح فوراً بدل الاستمرار بقيمة خاطئة النوع بصمت. انظر التنفيذ في
+    // rin_interpreter.cpp لقائمة الأنواع البدائية المدعومة بالضبط.
+    void checkDeclaredType(const Value& v, const std::string& typeName, const std::string& context, int line) const;
+
+    // ---- RMF (Rin Math Fabric) Phase 1 §33/§41 — Operator Overloading ----
+    // الأساس اللي كل نوع رياضي إضافي (Vector/Matrix/Complex/Fraction/Unit...) يُبنى فوقه: أي صنف
+    // (class/struct) يعرّف دالة سحرية باسم معيّن (__add__/__sub__/__mul__/__div__/__mod__/__neg__)
+    // يصبح فوراً قابلاً للاستخدام مع عامل التشغيل المقابل (+ - * / % وسالب أحادي) بدل الحاجة لدالة
+    // منفصلة (add(a,b)) لكل نوع جديد -- هذا ما يجعل RMF "لغة رياضية واحدة متماسكة" بدل مجموعة
+    // دوال متفرقة (انظر evaluate(BinaryExpr)/evaluate(UnaryExpr) في rin_interpreter.cpp). يُبحَث
+    // أولاً في الطرف الأيسر (left.__op__(right))، ثم في الطرف الأيمن إن غاب (لعمليات مثل
+    // Number * Vector عندما لا يعرّف Number نفسه أي شيء عن Vector). لا نتيجة (nullopt) يعني: لا
+    // يوجد أي طرف INSTANCE يعرّف هذه الدالة السحرية، فليكمل المستدعي بمنطقه الرقمي العادي (والذي
+    // سيرمي خطأ نوع واضحاً بنفسه إن لم يكن كلا الطرفين رقماً أصلاً).
+    std::optional<Value> tryOperatorOverload(const std::string& magicName, const Value& left,
+                                              const Value& right, int line);
+
+    // ---- RinFlow internals ----
+    // يُنفِّذ نداءً واحداً بالاسم (builtinOps الخاصة، ثم natives، ثم دالة Rin مُعرَّفة) بعد أن تكون
+    // [args] قد قُيِّمت مسبقاً بالفعل. استُخرِج من داخل حالة CallExpr في evaluate() (rin_interpreter.cpp)
+    // ليُشارَك حرفياً -- بلا أي فرق سلوكي -- مع evaluatePipelineFlow أدناه، بدل تكرار نفس منطق
+    // الفرز/الأخطاء مرتين. لا يغيّر أي سلوك على المسار العادي (evaluate() تستدعيه الآن بدل تكرار كوده).
+    Value invokeCallee(const std::string& callee, std::vector<Value>& args, int line, const EnvPtr& env);
+
+    // ---- ربط CLC (Rin Compact Library Container، .rcl) ----------------------------------
+    // container.open/container.close/library.export لا تحتاج env فتُسجَّل كـ natives عادية في
+    // registerNatives() (أدناه). library.import وحدها تحتاج env (لتدمج كل @import من ملفات .rin
+    // المستخرَجة داخل نفس نطاق نداء library.import نفسه، تماماً كسلوك @import العادي) فتُعترَض هنا
+    // في invokeCallee() قبل الوصول لخريطة natives العامة، بنفس أسلوب اعتراض builtinOps أعلاه.
+    Value doLibraryImport(std::vector<Value>& args, int line, const EnvPtr& env);
+    // libraryImportUrl(url) -> بث حقيقي كامل بلا أي تخزين على القرص إطلاقاً: يُنزِّل حاوية .rcl عبر
+    // rin::http::performRequest() مباشرة إلى الذاكرة (body عبارة عن std::string بايتات خام)، ثم
+    // يُمرِّرها لنفس executeLibraryContainerBytes() أدناه — لا ملف حاوية، لا مجلد مؤقت، لا كتابة على
+    // القرص في أي مرحلة من التنزيل حتى التنفيذ. هذا هو المسار المطابق لخط أنابيب Rin Runtime الكامل:
+    // Downloader (rin::http) -> Reader/Extractor (clc::*FromMemory) -> Parser/SymbolRegistry/Runtime
+    // (executeBlock الموجودة أصلاً).
+    Value doLibraryImportUrl(std::vector<Value>& args, int line, const EnvPtr& env);
+    // منطق مشترك بين doLibraryImport وdoLibraryImportUrl: يأخذ بايتات حاوية .rcl (من أي مصدر —
+    // ملف محلي قُرئ مرة واحدة، أو رد HTTP) ويستخرج+ينفّذ كل ملف .rin بداخلها من الذاكرة مباشرة،
+    // بلا أي ملف مؤقت على القرص في هذه الخطوة (بعكس السلوك القديم الذي كان يكتب كل ملف مستخرَج إلى
+    // .rin_clc_tmp/ ثم يعيد قراءته). [sourceLabel] يُستخدَم فقط في أسماء الاستيراد ورسائل الخطأ.
+    Value executeLibraryContainerBytes(const std::vector<uint8_t>& bytes, const std::string& sourceLabel,
+                                        int line, const EnvPtr& env);
+    // جدول حاويات .rcl المفتوحة حالياً عبر container.open (المفتاح = المقبض/handle الرقمي المُعاد
+    // للمستخدم). container.close يزيل المدخلة. لا حاجة لقفل/تزامن: Interpreter غير مشترك بين خيوط.
+    std::unordered_map<int, clc::ContainerInfo> clcOpenContainers_;
+    std::unordered_map<int, std::string> clcOpenContainerPaths_; // نفس المفتاح -> مسار الملف .rcl نفسه (لازم لاحقاً لـ extractOneFile)
+    int clcNextHandle_ = 1;
+
+    flow::RinFlowEngine flowEngine_;
+    // جلسة Flow النشطة حالياً لهذا الـ Interpreter (nullptr خارج runProgramAsFlow) -- تُقرَأ من
+    // evaluate() لمعرفة إن كان يجب توجيه CallExpr::isPipelineRoot عبر evaluatePipelineFlow أو تركه
+    // يُقيَّم بالطريقة العادية تماماً (لا جلسة نشطة = سلوك run() الأصلي حرفياً).
+    std::shared_ptr<flow::FlowSession> activeFlowSession_;
+    flow::FlowRunOptions activeFlowOptions_;
+    std::unordered_map<std::string, flow::NodeType> flowNodeTypeOverrides_;
+    flow::NodeType inferFlowNodeType(const std::string& fnName) const;
+
+    // يُسطِّح سلسلة |> (root -> ... -> الإدخال الأصلي) إلى قائمة مراحل بترتيب التنفيذ الحقيقي
+    // (الإدخال أولاً). كل عنصر هو CallExpr واحد من السلسلة (args[0] هو تعبير المدخل القادم من يسار
+    // |>، وليس قيمة مُقيَّمة بعد). الإدخال الأصلي (ليس CallExpr ناتجاً عن |>) يُعاد بمفرده منفصلاً.
+    void flattenPipelineChain(const std::shared_ptr<CallExpr>& root,
+                                ExprPtr& outOriginalInput,
+                                std::vector<std::shared_ptr<CallExpr>>& outStages) const;
+    Value evaluatePipelineFlow(const std::shared_ptr<CallExpr>& root, EnvPtr env);
+
+    // ---- حارس عمق الاستدعاء (call depth guard) ----
+    // بلا هذا الحارس، دالة Rin تتكرّر ذاتياً بلا حالة توقّف (خطأ شائع من المستخدم، وليس فقط هجوماً
+    // متعمَّداً) تُسبِّب Stack Overflow حقيقياً في مكدّس C++ الأصلي — وهذا segmentation fault لا يمكن
+    // لأي try/catch اعتراضه أبداً (على خلاف RinError)، فيُسقِط التطبيق بالكامل (أو عملية الاختبار
+    // خارج أندرويد) بدل رسالة خطأ Rin واضحة وقابلة للاستمرار. الحد أدناه محافظ (يعمل بأمان حتى مع
+    // مكدّسات صغيرة نسبياً كما في بعض خيوط أندرويد)، ويكفي لأي تكرار عملي (fibonacci، إلخ).
+    // حدّ عمق استدعاء الدوال. الافتراضي 300 آمن لأي خيط بمكدّس صغير (أندرويد)؛ مضيف يملك مكدّساً كبيراً
+    // (rin CLI يشغّل المفسِّر على خيط بمكدّس 1GB) يرفعه عبر setDefaultMaxCallDepth() قبل إنشاء المفسِّر،
+    // أو عبر setMaxCallDepth() لمثيل واحد. التجاوز يُنتج RinError عادياً (E0035) لا segfault.
+    static inline int defaultMaxCallDepth_ = 300;
+    int maxCallDepth_ = defaultMaxCallDepth_;
+public:
+    static void setDefaultMaxCallDepth(int d) { if (d > 0) defaultMaxCallDepth_ = d; }
+    void setMaxCallDepth(int d) { if (d > 0) maxCallDepth_ = d; }
+    int maxCallDepth() const { return maxCallDepth_; }
+private:
+    int callDepth = 0;
+    // ---- Execution budget (Live Preview infinite-loop protection; see setExecutionBudget()) ----
+    long long execBudget_ = 0;  // 0 = unlimited (unchanged default behavior for every existing caller)
+    long long execCount_ = 0;   // total execute() calls so far on this Interpreter instance
+    ViewReachedCallback viewReachedCb_; // see setViewReachedCallback() above; null = old no-op behavior
+
+    // ينسخ متغيرات هدف tying/merge (حاوية مفردة أو Containers.Group كاملة) داخل بيئة الحاوية الحالية.
+    // يُرجع true إن كان الهدف مجموعة (Containers.Group)، أو false إن كان حاوية مفردة.
+    bool copyTargetIntoCurrentContainer(const std::string& target, int line);
+};
+
+} // namespace rin

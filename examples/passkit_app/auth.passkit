@@ -1,0 +1,52 @@
+<!-- auth.passkit — account system: register, login, API key.
+     Called from main.rin:  passkitRun("auth.passkit", { action: "register", ... })
+     Inputs come from Rin; time and the master key are passed in (Rin has no wall clock). -->
+<passkit>
+
+  <input name="action"   required />
+  <input name="email"    default="" />
+  <input name="password" default="" />
+  <input name="masterKey" required />
+  <input name="token"    default="" />
+  <input name="now"      default="0" />
+
+  <!-- ===== register ===== -->
+  <if var="$action" eq="register">
+    <email name="e" address="$email" />
+    <assert var="$e.ok" message="invalid email address" />
+
+    <password name="policy" check="$password" policy="standard" email="$e.address" />
+    <assert var="$policy.ok" message="password does not meet the policy" />
+
+    <db name="u" table="app_users" op="user.create" key="$masterKey" email="$e.address" password="$password" now="$now" />
+    <assert var="$u.ok" message="could not create the user" />
+
+    <db name="k" table="app_keys" op="apikey.create" owner="$u.id" scopes="read" prefix="pk_live" now="$now" />
+    <db table="app_audit" op="audit" event="register" actor="$u.id" now="$now" />
+
+    <call fn="appLog" arg0="registered {e.masked}" />
+    <!-- the raw API key is shown only once; only its hash is stored -->
+    <return value="{u.id}|{k.key}" />
+  </if>
+
+  <!-- ===== login: returns a session token (only its sha256 is stored) ===== -->
+  <if var="$action" eq="login">
+    <db name="l" table="app_users" op="user.login" key="$masterKey" email="$email" password="$password" now="$now" />
+    <if var="$l.ok" eq="false">
+      <db table="app_audit" op="audit" event="login-failed" actor="$email" now="$now" />
+      <return value="denied" />
+    </if>
+    <db name="s" table="app_sessions" op="session.create" user="$l.id" ttl="3600" now="$now" />
+    <db table="app_audit" op="audit" event="login" actor="$l.id" now="$now" />
+    <return value="$s.token" />
+  </if>
+
+  <!-- ===== check a session token ===== -->
+  <if var="$action" eq="session">
+    <db name="c" table="app_sessions" op="session.check" token="$token" now="$now" />
+    <if var="$c.ok" eq="true"><return value="{c.userId}" /></if>
+    <return value="{c.reason}" />
+  </if>
+
+  <return value="unknown action" />
+</passkit>

@@ -1,0 +1,6 @@
+export fun greet(who) { return "hello " + who; }
+export fun greeter_sum(numbers) {
+    let t = 0;
+    for (let n in numbers) { t = t + n; }
+    return t + 0;
+}

@@ -745,8 +745,6 @@ int cmdRun(const std::vector<std::string>& args) {
         std::cerr << "rin run: تعذّر فتح الملف '" << file << "'\n";
         return 2;
     }
-    // ملف واجهة بصيغة الوسوم → مسار indsin (وإلا فشل lexer العادي عند أول `<!--` بخطأ E0011)
-    if (rin::terminal::isIndsinTagSource(source)) return rin::terminal::runIndsinCommand({file, "--plain"});
     rin::Interpreter interp;
     source = rinzPrelude(file, interp) + source;   // ملف .rinz داخل مكتبة: اربط أجزاءها أولاً
     // --import-progress اختياري تماماً: بدونه السلوك مطابق تماماً لما كان عليه قبل هذه الميزة
@@ -1409,7 +1407,6 @@ static int realMain(int argc, char** argv) {
             return 2;
         }
         sourceName = argv[1];
-        if (rin::terminal::isIndsinTagSource(source)) return rin::terminal::runIndsinCommand({argv[1], "--plain"});
         for (int i = 2; i < argc; i++) rest.emplace_back(argv[i]);
     } else if (isatty(fileno(stdin))) {
         return runRepl();

@@ -1,0 +1,41 @@
+// Set: التعديل في المكان (مرجعي) والدوال العليا
+let s = Set();
+print s.add(1), s.add(1), s.add(2);
+print s.addAll([2, 3, 4]);
+print s.remove(1), s.remove(1);
+print s;
+print s.removeAll([2, 99]);
+print s.retain([3, 7]);
+print s;
+let alias = s;
+alias.add(100);
+print s;
+print s.pop(), s;
+print s.clear(), s;
+try { s.pop(); } catch (e) { print e.code; }
+Set.add(s, 5); Set.addAll(s, [6, 7]);
+print s, Set.size(s), Set.has(s, 6);
+try { Set.add([1], 2); } catch (e) { print e.code; }
+let n = Set([3, 1, 2]);
+print n.sorted(), n.min(), n.max(), n.sum(), n.first(), n.last();
+print n.join("-"), join(n, "+"), sum(n), mean(n);
+fun dbl(x) { return x * 2; }
+fun odd(x) { return x % 2 == 1; }
+fun add2(acc, x) { return acc + x; }
+print n.map(dbl), n.filter(odd), n.some(odd), n.every(odd), n.reduce(add2, 10), n.reduce(add2);
+n.each(dbl);
+let c = n.copy(); c.add(99);
+print n, c;
+let big = Set();
+for (let i = 0; i < 50000; i = i + 1) { big.add(i % 20000); }
+print big.size(), big.has(19999), big.has(20000);
+let seen = Set(["a", "b"]);
+seen.remove("a");
+print seen.has("b"), seen.has("a"), seen;
+print Set([1, 2, 3]).remove(2);
+class Box { let items = Set(); }
+let bx = Box(); bx.items.add(4); bx.items.add(4);
+print bx.items.size();
+let m = {"k": Set([1])};
+m["k"].add(2);
+print m["k"];

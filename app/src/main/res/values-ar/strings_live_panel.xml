@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_panel_title">معاينة حية</string>
+    <string name="live_panel_back">العودة للصفحة السابقة</string>
+    <string name="live_panel_expand">ملء الشاشة</string>
+    <string name="live_panel_waiting">في انتظار أول عرض…</string>
+    <string name="menu_run_live_panel">معاينة حية بجانب المحرر</string>
+    <string name="menu_run_live_fullscreen">معاينة حية (ملء الشاشة)</string>
+</resources>

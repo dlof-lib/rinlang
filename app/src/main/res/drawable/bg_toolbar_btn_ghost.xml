@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- خلفية الأزرار الثانوية (فتح/حفظ/مسح/تراجع/إعادة/بحث): شفافة افتراضياً، مستديرة الحواف،
+     مع تأثير موجي (ripple) خفيف عند اللمس بدل الخلفية الرمادية الافتراضية لعناصر Button. -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="@color/rin_ghost_ripple">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@android:color/transparent" />
+            <corners android:radius="8dp" />
+        </shape>
+    </item>
+</ripple>

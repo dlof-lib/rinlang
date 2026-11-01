@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/bg_list_card"
+    android:layout_margin="5dp"
+    android:padding="13dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <!-- أيقونة حاوية .rcl داخل شارة دائرية بلون التمييز -->
+        <FrameLayout
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_marginEnd="12dp">
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@drawable/bg_icon_badge_accent"
+                android:alpha="0.16" />
+
+            <ImageView
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:layout_gravity="center"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_log_container"
+                app:tint="@color/rin_accent"
+                android:contentDescription="@null" />
+        </FrameLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/txtClcNameItem"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:ellipsize="middle"
+                android:singleLine="true"
+                android:textColor="@color/rin_on_toolbar" />
+
+            <TextView
+                android:id="@+id/txtClcMeta"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="1dp"
+                android:textSize="12sp"
+                android:textColor="@color/rin_editor_hint" />
+        </LinearLayout>
+
+        <ImageButton
+            android:id="@+id/btnDeleteClc"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:padding="9dp"
+            android:background="@drawable/bg_icon_btn"
+            android:contentDescription="@string/delete"
+            android:src="@drawable/ic_trash_red" />
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginTop="10dp"
+        android:background="@color/rin_divider" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/btnInspectClc"
+            android:layout_width="0dp"
+            android:layout_height="34dp"
+            android:layout_weight="1"
+            android:layout_marginEnd="6dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:text="@string/action_inspect"
+            android:textAllCaps="false"
+            android:textSize="12sp"
+            android:background="@drawable/bg_toolbar_btn_ghost"
+            android:textColor="@color/rin_on_toolbar" />
+
+        <Button
+            android:id="@+id/btnImportRunClc"
+            android:layout_width="0dp"
+            android:layout_height="34dp"
+            android:layout_weight="1"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:text="@string/action_import_and_run"
+            android:textAllCaps="false"
+            android:textSize="12sp"
+            android:background="@drawable/bg_toolbar_btn_primary"
+            android:textColor="@android:color/white" />
+    </LinearLayout>
+
+</LinearLayout>

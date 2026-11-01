@@ -1,0 +1,17 @@
+🛠️ make.task = a1
+false
+✅ .end/make.task (a1)
+allow-image: ok
+deny-api: E0016 [E0016] invalid Make Unit: Make Unit 'a2' kind='task' denies capability: api
+strict-ocr-in-function: E0016 [E0016] invalid Make Unit: Make Unit 'a3' kind='app' is strict: capability 'ocr' must be declared with `use ocr;`
+library-no-video: E0016 [E0016] invalid Make Unit: Make Unit 'a4' kind='library' uses forbidden capabilities: video
+need-unused: E0016 [E0016] invalid Make Unit: Make Unit 'a5' kind='page' requires capabilities not used: video
+🛠️ make.component = a6
+false
+✅ .end/make.component (a6)
+audio-in-ternary: ok
+🛠️ make.app = a7
+string
+map
+✅ .end/make.app (a7)
+non-capability-calls: ok

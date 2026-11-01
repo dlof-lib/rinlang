@@ -1,0 +1,75 @@
+// Scope Guarantees (ضمانات النطاق): finally / defer / catch-when / rethrow
+// docs/scope-guarantees.md
+
+// 1) finally يعمل في المسار الطبيعي ومسار الخطأ
+try { print "1a body"; } finally { print "1a finally"; }
+try { throw "boom"; } catch (e) { print "1b caught", e.message; } finally { print "1b finally"; }
+
+// 2) finally مع return: يُنفَّذ قبل خروج الدالة، والقيمة تبقى
+fun f2() {
+    try { return "value"; } finally { print "2 cleanup"; }
+}
+print f2();
+
+// 3) finally لا يبتلع الخطأ المعلَّق (try/finally بلا catch)
+try {
+    try { throw "inner"; } finally { print "3 inner finally"; }
+} catch (e) { print "3 outer caught", e.message; }
+
+// 4) return داخل finally يحسم النتيجة
+fun f4() {
+    try { throw "lost"; } finally { return "finally wins"; }
+}
+print f4();
+
+// 5) defer: LIFO وعند الخروج بـ return
+fun f5() {
+    defer print "5 first-deferred (runs last)";
+    defer print "5 second-deferred (runs first)";
+    print "5 body";
+    return "done";
+}
+print f5();
+
+// 6) defer مع break و continue داخل حلقة
+for (let i = 0; i < 4; i = i + 1) {
+    defer print "6 end of iteration", i;
+    if (i == 1) { continue; }
+    if (i == 2) { break; }
+    print "6 work", i;
+}
+
+// 7) defer عند الخطأ، والتنظيف قبل وصول الخطأ للمُعالج الخارجي
+fun f7() {
+    defer print "7 cleanup";
+    throw "bad";
+}
+try { f7(); } catch (e) { print "7 caught", e.message; }
+
+// 8) catch ... when: فلترة بالكود، وأول بند مطابق يفوز
+fun risky(kind) {
+    if (kind == 1) { throw {"code": "E_NOT_FOUND", "message": "missing"}; }
+    if (kind == 2) { throw {"code": "E_DENIED", "message": "denied"}; }
+    return [1, 2][10];
+}
+for (let k = 1; k <= 3; k = k + 1) {
+    try { risky(k); }
+    catch (e) when (e.code == "E_NOT_FOUND") { print "8 not-found:", e.code; }
+    catch (e) when (e.code == "E_DENIED")    { print "8 denied:", e.code; }
+    catch (e)                                { print "8 other:", e.code; }
+}
+
+// 9) عدم تطابق أي بند => الخطأ الأصلي يكمل صعوده كما هو
+try {
+    try { risky(2); } catch (e) when (e.code == "E_NOT_FOUND") { print "9 WRONG"; }
+} catch (outer) { print "9 outer got", outer.code; }
+
+// 10) rethrow يحفظ الخطأ الأصلي (حتى أخطاء النظام بكودها)
+try {
+    try { let x = [1, 2][10]; }
+    catch (e) { print "10 inner saw", e.code; rethrow; }
+} catch (e2) { print "10 outer saw", e2.code; }
+
+// 11) كلمات سياقية: defer / finally / rethrow ما زالت صالحة كأسماء عادية
+let defer = 5;
+print "11", defer + 1;

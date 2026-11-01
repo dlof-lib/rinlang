@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_panel_title">Live preview</string>
+    <string name="live_panel_back">Back to previous page</string>
+    <string name="live_panel_expand">Full screen</string>
+    <string name="live_panel_waiting">Waiting for the first render…</string>
+    <string name="menu_run_live_panel">Live preview beside editor</string>
+    <string name="menu_run_live_fullscreen">Live preview (full screen)</string>
+</resources>

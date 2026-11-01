@@ -1,0 +1,16 @@
+library
+tool-token
+tool-token
+nil
+tool-token disk legacy_token
+tool-token embedded
+legacy_token
+["cyca:library", "cycb:library", "geomcore:library", "greeter:library", "legacy_token:tool-token", "shapes:library", "twist:library", "twist_token:tool-token"]
+true
+["geomcore", "shapes"]
+false
+["cyca -> cycb -> cyca"]
+true
+false
+tool-token true
+false

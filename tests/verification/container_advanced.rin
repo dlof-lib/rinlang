@@ -1,0 +1,24 @@
+// Sets up real containers so the introspection calls below have something to
+// actually report (the container.* queries are meaningless against a name
+// that was never created -- everything just returns nil/false/empty).
+@container=App
+    @container=Users
+        let name = "Ali";
+        let age = 20;
+    .end/container
+.end/container
+
+print container.exists("Users");
+print container.kind("Users");
+print container.size("Users");
+print container.empty("Users");
+print container.childCount("Users");
+print container.hasChildren("Users");
+print container.depth("Users");
+print container.roots();
+print container.leaves();
+print container.stats();
+print container.snapshot("Users");
+print container.fieldType("Users", "name");
+print container.findField("name", "Ali");
+print container.find("container");

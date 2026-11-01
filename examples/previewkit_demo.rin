@@ -1,0 +1,30 @@
+// examples/previewkit_demo.rin — معاينة حيّة لملفات md / pdf / ts بسطر واحد لكل ملف
+//   rin examples/previewkit_demo.rin
+@import "lib/previewkit.og.rin";
+
+// 1) ملف Markdown صغير
+writeFile("demo_notes.md", "# ملاحظات\n\nمرحباً **Rin** — [الموقع](https://example.com)\n\n## قائمة\n- أ\n- ب\n");
+
+// 2) ملف TypeScript صغير
+writeFile("demo_app.ts",
+    "import { Http } from \"./http\";\n" +
+    "export interface User { id: number; name: string; }\n" +
+    "export class Repo {\n  async get(id: number): Promise<User> { return fetch(`/u/${id}`).then(r => r.json()); }\n}\n");
+
+let r1 = pvRun("demo_notes.md", {});
+let r2 = pvRun("demo_app.ts", {"lang": "en"});
+print r1["output"] + "  (" + r1["kind"] + ", " + toString(r1["bytes"]) + " bytes)";
+print r2["output"] + "  (" + r2["kind"] + ", " + toString(r2["functions"]) + " functions, " + toString(r2["problems"]) + " problems)";
+
+// 3) PDF (إن وُجد ملف باسم sample.pdf بجوار السكربت): نص + تبويب الأصل
+if (fileExists("sample.pdf")) {
+    let r3 = pvPreview("sample.pdf", "sample.preview.html", {"embedSrc": "sample.pdf"});
+    print r3["output"] + "  (" + r3["kind"] + ", " + toString(r3["pageCount"]) + " pages)";
+}
+
+// 4) معاينة حيّة: عدّل demo_notes.md أثناء التشغيل وافتح demo_notes.live.html في المتصفح (يتحدّث تلقائياً)
+print "watching demo_notes.md for ~20s ... edit it and watch demo_notes.live.html";
+pvLive("demo_notes.md", "demo_notes.live.html", {
+    "intervalMs": 500, "maxTicks": 40,
+    "onUpdate": fun(r) { print "re-rendered: " + toString(r["bytes"]) + " bytes in " + toString(r["ms"]) + "ms"; }
+});

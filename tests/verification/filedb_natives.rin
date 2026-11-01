@@ -1,0 +1,28 @@
+// tests/verification/filedb_natives.rin — fileSync / fileRename / fileSize / fileLock / fileUnlock / fileIsLocked / findByRange
+let f = "filedb_test_a.tmp";
+let g = "filedb_test_b.tmp";
+writeFile(f, "hello\n");
+print "size=" + fileSize(f) + " sync=" + fileSync(f);
+writeFile(g, "old content that will be replaced");
+print "rename=" + fileRename(f, g) + " old gone=" + !fileExists(f) + " size now=" + fileSize(g) + " text=" + readFile(g);
+try { fileSize("filedb_missing.tmp"); } catch (e) { print "caught: size of missing file"; }
+try { fileSync("filedb_missing.tmp"); } catch (e) { print "caught: sync of missing file"; }
+try { fileRename("filedb_missing.tmp", "x.tmp"); } catch (e) { print "caught: rename of missing file"; }
+
+let lk = "filedb_test.lock";
+print "locked before=" + fileIsLocked(lk);
+print "lock=" + fileLock(lk) + " again(own)=" + fileLock(lk) + " isLocked=" + fileIsLocked(lk);
+print "unlock=" + fileUnlock(lk) + " unlock again=" + fileUnlock(lk) + " isLocked=" + fileIsLocked(lk);
+deleteFile(g); deleteFile(lk);
+
+@container.datalist=items
+    document fields={"n": 5, "d": "2026-03-10"};
+    document fields={"n": 1, "d": "2026-01-05"};
+    document id="x" fields={"n": 9, "d": "2026-02-20"};
+    document fields={"n": "bad"};
+.end/container.datalist
+print "range n: " + findByRange("items", "n", 2, 9);
+print "open low: " + findByRange("items", "n", nil, 5);
+print "dates: " + findByRange("items", "d", "2026-01-01", "2026-02-28");
+try { findByRange("items", "n", 1, "z"); } catch (e) { print "caught: mixed bounds"; }
+try { findByRange("nothing", "n", 1, 2); } catch (e) { print "caught: unknown collection"; }

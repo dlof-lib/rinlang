@@ -1,0 +1,18 @@
+{
+  "id": "__LANG_ID__",
+  "name": "__LANG_NAME__",
+  "version": "0.1.0",
+  "developer": "__DEVELOPER__",
+  "fileExtension": "__LANG_EXT__",
+  "description": "__LANG_DESCRIPTION__",
+  "entry": {
+    "lexer": "Lexer.rin",
+    "parser": "Parser.rin",
+    "interpreter": "Interpreter.rin",
+    "codegen": "CodeGen.rin",
+    "run": "run.rin"
+  },
+  "syntax": "syntax.rinsyntax.json",
+  "official": false,
+  "createdWithRinLangVersion": "langkit-1.0"
+}

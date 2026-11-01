@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<disconom format="2">
+  <name>xmlfull</name><version>0.9.0</version><description>XML كامل</description>
+  <authors><author>Droy</author></authors><license>MIT</license>
+  <rin>&gt;=1.0.0</rin><private>true</private>
+  <dependencies><dependency name="base" version="^1.0.0"/></dependencies>
+  <optionalDependencies><dependency name="extra" version="^1.0.0"/></optionalDependencies>
+  <devDependencies><dependency name="testkit" version="^2"/></devDependencies>
+  <scripts><script name="test">rin tests/basic.rin</script></scripts>
+  <features><feature name="default"><item>x</item></feature><feature name="x"><item>dep:extra</item></feature></features>
+  <files><file>main.zpp</file></files>
+  <native std="c++17" required="false"><source>native/a.cpp</source><function name="f1" params="a,b"/><function name="f2"/></native>
+</disconom>

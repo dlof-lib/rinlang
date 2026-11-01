@@ -1,0 +1,32 @@
+// core/facade.zpp — الاختصارات: كل الدوال بلا البادئة lt_ تحت كائن واحد LT.
+//   @import "looptwist";
+//   for c in LT.chunk(LT.range(10), 4) { print c; }
+//   LT.each([1,2,3], fun(x) { print x; });
+//   LT.retry(3, fun(a) { return fetch(a); }, {delay: 100, factor: 2});
+export fun lt_facade() {
+    return {
+        STOP: LT_STOP, version: LT_VERSION,
+        // مصادر
+        upto: lt_upto, range: lt_range, rangeBy: lt_rangeBy, irange: lt_irange, irangeBy: lt_irangeBy, linspace: lt_linspace,
+        enumerate: lt_enumerate, enumerateFrom: lt_enumerateFrom, zip: lt_zip, zipAll: lt_zipAll,
+        chunk: lt_chunk, window: lt_window, windowBy: lt_windowBy, pairs: lt_pairs, flatten: lt_flatten,
+        unique: lt_unique, uniqueBy: lt_uniqueBy, product: lt_product, cycle: lt_cycle, fill: lt_fill,
+        take: lt_take, skip: lt_skip, reversed: lt_reversed, group: lt_group, partition: lt_partition,
+        tally: lt_tally, countBy: lt_countBy,
+        sorted: lt_sorted, sortedDesc: lt_sortedDesc, sortedBy: lt_sortedBy, sortedByDesc: lt_sortedByDesc,
+        // حلقات
+        times: lt_times, each: lt_each, eachi: lt_eachi, eachKV: lt_eachKV, map: lt_map, mapi: lt_mapi,
+        filter: lt_filter, filteri: lt_filteri, reduce: lt_reduce, fold: lt_fold, sum: lt_sum, sumBy: lt_sumBy,
+        count: lt_count, countIf: lt_countIf, find: lt_find, findIndex: lt_findIndex, any: lt_any, all: lt_all,
+        whileDo: lt_whileDo, untilDo: lt_untilDo, loopDo: lt_loopDo, every: lt_every,
+        // زمن
+        timed: lt_timed, budget: lt_budget, retry: lt_retry, retryWith: lt_retryWith,
+        poll: lt_poll, pollEvery: lt_pollEvery,
+        progress: lt_progress, progressWidth: lt_progressWidth, tick: lt_tick, tickBy: lt_tickBy, line: lt_progressLine,
+        // إعدادات وسياق RINTWIST
+        config: lt_config, settings: lt_settings, trace: lt_trace, traceWith: lt_traceWith, where: lt_where,
+        logName: lt_logName, logNameExt: lt_logNameExt
+    };
+}
+
+export let LT = lt_facade();

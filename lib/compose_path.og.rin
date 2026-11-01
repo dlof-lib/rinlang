@@ -1,0 +1,423 @@
+// ============================================================================
+//  lib/compose_path.og.rin — الوصول والتعديل بالمسارات داخل أي بنية متداخلة
+//  (مساعدة لـ compose)
+//
+//  المسار: مصفوفة مقاطع ["a", 0, "b"] أو نص منقّط "a.0.b" (المقطع الرقمي يُفهم كفهرس
+//  حين يكون الهدف array، وكمفتاح حين يكون map). تعمل على map/array/كائن class.
+//
+//    قراءة    : getIn  hasIn  pathOf  leafPaths  findPaths
+//    كتابة    : setIn (غير مُعدِّلة)  putIn (في المكان)  updateIn  deleteIn
+//    تسطيح    : flattenKeys  unflattenKeys
+//    شكل      : keepKeys  dropKeys  renameKeys  mapKeys  invertMap  dropNil  withDefaults
+//    مشي      : walkValues  mapLeaves  cloneDeep
+//
+//  استيراد:  @import "lib/compose_path.og.rin";   (تستورد compose تلقائياً)
+// ============================================================================
+@import "compose";
+
+// ───────────────────────── المسارات ─────────────────────────
+
+// نص رقمي صحيح؟  "12" -> true   "a1" -> false
+fun _isIndexText(s) {
+    if (type(s) != "string" or len(s) == 0) { return false; }
+    let i = 0;
+    while (i < len(s)) {
+        let c = ord(substr(s, i, 1));
+        if (c < 48 or c > 57) { return false; }
+        i = i + 1;
+    }
+    return true;
+}
+
+// pathOf("a.0.b") -> ["a", "0", "b"]   pathOf(["a", 0]) -> ["a", 0]   pathOf(nil) -> []
+fun pathOf(p) {
+    if (type(p) == "array") { return p; }
+    if (p == nil) { return []; }
+    if (type(p) == "number") { return [p]; }
+    if (p == "") { return []; }
+    return split(p, ".");
+}
+
+// مقطع -> مفتاح مناسب لنوع الحاوية
+fun _segFor(holder, seg) {
+    if (valueKind(holder) == "array") {
+        if (type(seg) == "number") { return seg; }
+        if (_isIndexText(seg)) { return number(seg); }
+        return nil;
+    }
+    return seg;
+}
+
+// خطوة واحدة للأسفل: (found, value)
+fun _stepIn(cur, seg) {
+    let k = valueKind(cur);
+    if (k == "array") {
+        let idx = _segFor(cur, seg);
+        if (idx == nil or idx < 0 or idx >= len(cur)) { return [false, nil]; }
+        return [true, cur[idx]];
+    }
+    if (k == "map" or k == "instance") {
+        let m = asMap(cur);
+        if (has(m, seg)) { return [true, m[seg]]; }
+        if (type(seg) == "number" and has(m, str(seg))) { return [true, m[str(seg)]]; }
+        if (_isIndexText(seg) and has(m, number(seg))) { return [true, m[number(seg)]]; }
+        return [false, nil];
+    }
+    return [false, nil];
+}
+
+fun hasIn(x, path) {
+    let segs = pathOf(path);
+    let cur = x;
+    let i = 0;
+    while (i < len(segs)) {
+        let r = _stepIn(cur, segs[i]);
+        if (!r[0]) { return false; }
+        cur = r[1];
+        i = i + 1;
+    }
+    return true;
+}
+
+// getIn(x, path, fallback): القيمة عند المسار أو fallback إن لم يوجد
+fun getIn(x, path, fallback) {
+    let segs = pathOf(path);
+    let cur = x;
+    let i = 0;
+    while (i < len(segs)) {
+        let r = _stepIn(cur, segs[i]);
+        if (!r[0]) { return fallback; }
+        cur = r[1];
+        i = i + 1;
+    }
+    return cur;
+}
+
+// ───────────────────────── نسخ ─────────────────────────
+
+fun _shallow(x) {
+    let k = valueKind(x);
+    if (k == "array") { return concat([], x); }
+    if (k == "map") { return mergeWith({}, x, "override"); }
+    if (k == "set") { return Set(x.toArray()); }
+    if (k == "instance") { return mergeWith({}, x, "override"); }
+    return x;
+}
+
+// نسخة عميقة لـ map/array/Set (الكائنات تتحوّل إلى map بحقولها)
+fun cloneDeep(x) {
+    let k = valueKind(x);
+    if (k == "array") {
+        let out = [];
+        let i = 0;
+        while (i < len(x)) { push(out, cloneDeep(x[i])); i = i + 1; }
+        return out;
+    }
+    if (k == "map" or k == "instance") {
+        let m = asMap(x);
+        let out = {};
+        let ks = keys(m);
+        let i = 0;
+        while (i < len(ks)) { out[ks[i]] = cloneDeep(m[ks[i]]); i = i + 1; }
+        return out;
+    }
+    if (k == "set") {
+        let out = Set();
+        for (let e in x) { out.add(cloneDeep(e)); }
+        return out;
+    }
+    return x;
+}
+
+// ───────────────────────── كتابة ─────────────────────────
+
+fun _emptyFor(nextSeg) {
+    if (type(nextSeg) == "number") { return []; }
+    return {};
+}
+
+// setIn(x, path, value) -> بنية جديدة (الأصل لا يتغير؛ ما لا يمسّه المسار يُشارَك)
+fun setIn(x, path, value) {
+    let segs = pathOf(path);
+    if (len(segs) == 0) { return value; }
+    return _setAt(x, segs, 0, value);
+}
+
+fun _setAt(cur, segs, depth, value) {
+    let seg = segs[depth];
+    let last = depth == len(segs) - 1;
+    let k = valueKind(cur);
+    if (k == "array" and _segFor(cur, seg) != nil) {
+        let idx = _segFor(cur, seg);
+        let out = concat([], cur);
+        while (len(out) <= idx) { push(out, nil); }
+        if (last) { out[idx] = value; }
+        else { out[idx] = _setAt(out[idx], segs, depth + 1, value); }
+        return out;
+    }
+    let base = {};
+    if (k == "map" or k == "instance") { base = mergeWith({}, cur, "override"); }
+    if (last) { base[seg] = value; return base; }
+    let child = nil;
+    if (has(base, seg)) { child = base[seg]; }
+    if (child == nil) { child = _emptyFor(segs[depth + 1]); }
+    base[seg] = _setAt(child, segs, depth + 1, value);
+    return base;
+}
+
+// putIn(x, path, value): نفس setIn لكن في المكان (x يجب أن يكون map/array) ويُرجع x
+fun putIn(x, path, value) {
+    let segs = pathOf(path);
+    if (len(segs) == 0) { throw "putIn: المسار فارغ"; }
+    let cur = x;
+    let i = 0;
+    while (i < len(segs) - 1) {
+        let r = _stepIn(cur, segs[i]);
+        let child = r[1];
+        if (!r[0] or child == nil or (valueKind(child) != "map" and valueKind(child) != "array")) {
+            child = _emptyFor(segs[i + 1]);
+            if (valueKind(cur) == "array") { cur[_segFor(cur, segs[i])] = child; }
+            else { cur[segs[i]] = child; }
+        }
+        cur = child;
+        i = i + 1;
+    }
+    let lastSeg = segs[len(segs) - 1];
+    if (valueKind(cur) == "array") {
+        let idx = _segFor(cur, lastSeg);
+        while (len(cur) <= idx) { push(cur, nil); }
+        cur[idx] = value;
+    } else { cur[lastSeg] = value; }
+    return x;
+}
+
+// updateIn(x, path, f): القيمة الجديدة = f(القيمة الحالية أو nil)
+fun updateIn(x, path, f) {
+    let g = asFn(f);
+    return setIn(x, path, g(getIn(x, path, nil)));
+}
+
+// deleteIn(x, path) -> بنية جديدة بدون المسار (غير موجود: نفس x)
+fun deleteIn(x, path) {
+    let segs = pathOf(path);
+    if (len(segs) == 0 or !hasIn(x, segs)) { return x; }
+    return _deleteAt(x, segs, 0);
+}
+
+fun _deleteAt(cur, segs, depth) {
+    let seg = segs[depth];
+    let last = depth == len(segs) - 1;
+    if (valueKind(cur) == "array") {
+        let idx = _segFor(cur, seg);
+        let out = [];
+        let i = 0;
+        while (i < len(cur)) {
+            if (i == idx) {
+                if (!last) { push(out, _deleteAt(cur[i], segs, depth + 1)); }
+            } else { push(out, cur[i]); }
+            i = i + 1;
+        }
+        return out;
+    }
+    let m = asMap(cur);
+    let out = {};
+    let ks = keys(m);
+    let i = 0;
+    while (i < len(ks)) {
+        let same = ks[i] == seg or str(ks[i]) == str(seg);
+        if (same) {
+            if (!last) { out[ks[i]] = _deleteAt(m[ks[i]], segs, depth + 1); }
+        } else { out[ks[i]] = m[ks[i]]; }
+        i = i + 1;
+    }
+    return out;
+}
+
+// ───────────────────────── مشي وتسطيح ─────────────────────────
+
+// leafPaths(x) -> كل مسارات الأوراق (قيم ليست map/array) كمصفوفات مقاطع
+fun leafPaths(x) {
+    let out = [];
+    _collectLeaves(x, [], out);
+    return out;
+}
+
+fun _collectLeaves(cur, prefix, out) {
+    let k = valueKind(cur);
+    if (k == "array" and len(cur) > 0) {
+        let i = 0;
+        while (i < len(cur)) { _collectLeaves(cur[i], concat(prefix, [i]), out); i = i + 1; }
+        return nil;
+    }
+    if ((k == "map" or k == "instance") and len(asMap(cur)) > 0) {
+        let m = asMap(cur);
+        let ks = keys(m);
+        let i = 0;
+        while (i < len(ks)) { _collectLeaves(m[ks[i]], concat(prefix, [ks[i]]), out); i = i + 1; }
+        return nil;
+    }
+    push(out, prefix);
+    return nil;
+}
+
+// findPaths(x, pred) -> مسارات الأوراق التي تحقق الشرط
+fun findPaths(x, pred) {
+    let p = asFn(pred);
+    let all = leafPaths(x);
+    let out = [];
+    let i = 0;
+    while (i < len(all)) {
+        if (p(getIn(x, all[i], nil))) { push(out, all[i]); }
+        i = i + 1;
+    }
+    return out;
+}
+
+fun _joinSegs(segs, sep) {
+    let out = "";
+    let i = 0;
+    while (i < len(segs)) {
+        if (i > 0) { out = out + sep; }
+        out = out + str(segs[i]);
+        i = i + 1;
+    }
+    return out;
+}
+
+// flattenKeys(x, sep): {"a": {"b": 1}, "c": [5]} -> {"a.b": 1, "c.0": 5}
+fun flattenKeys(x, sep) {
+    let paths = leafPaths(x);
+    let out = {};
+    let i = 0;
+    while (i < len(paths)) {
+        out[_joinSegs(paths[i], sep)] = getIn(x, paths[i], nil);
+        i = i + 1;
+    }
+    return out;
+}
+
+// unflattenKeys(m, sep): عكس flattenKeys (المقاطع الرقمية تبقى مفاتيح map نصية)
+fun unflattenKeys(m, sep) {
+    let out = {};
+    let ks = keys(m);
+    let i = 0;
+    while (i < len(ks)) {
+        putIn(out, split(str(ks[i]), sep), m[ks[i]]);
+        i = i + 1;
+    }
+    return out;
+}
+
+// walkValues(x, f): يطبّق f على كل عقدة من الأسفل للأعلى ويُعيد بنية جديدة
+fun walkValues(x, f) {
+    let k = valueKind(x);
+    let rebuilt = x;
+    if (k == "array") {
+        rebuilt = [];
+        let i = 0;
+        while (i < len(x)) { push(rebuilt, walkValues(x[i], f)); i = i + 1; }
+    } else if (k == "map" or k == "instance") {
+        let m = asMap(x);
+        rebuilt = {};
+        let ks = keys(m);
+        let i = 0;
+        while (i < len(ks)) { rebuilt[ks[i]] = walkValues(m[ks[i]], f); i = i + 1; }
+    }
+    return f(rebuilt);
+}
+
+// mapLeaves(x, f): يطبّق f على الأوراق فقط (غير map/array) ويحفظ الشكل
+fun mapLeaves(x, f) {
+    return walkValues(x, fun(v) {
+        let k = valueKind(v);
+        if (k == "map" or k == "array" or k == "instance") { return v; }
+        return f(v);
+    });
+}
+
+// ───────────────────────── أشكال map ─────────────────────────
+
+fun keepKeys(x, wanted) {
+    let m = asMap(x);
+    let out = {};
+    let i = 0;
+    while (i < len(wanted)) {
+        if (has(m, wanted[i])) { out[wanted[i]] = m[wanted[i]]; }
+        i = i + 1;
+    }
+    return out;
+}
+
+fun dropKeys(x, blocked) {
+    let m = asMap(x);
+    let skip = Set(blocked);
+    let out = {};
+    let ks = keys(m);
+    let i = 0;
+    while (i < len(ks)) {
+        if (!skip.has(ks[i])) { out[ks[i]] = m[ks[i]]; }
+        i = i + 1;
+    }
+    return out;
+}
+
+// renameKeys(x, {"old": "new"})
+fun renameKeys(x, mapping) {
+    let m = asMap(x);
+    let out = {};
+    let ks = keys(m);
+    let i = 0;
+    while (i < len(ks)) {
+        let nk = ks[i];
+        if (has(mapping, ks[i])) { nk = mapping[ks[i]]; }
+        out[nk] = m[ks[i]];
+        i = i + 1;
+    }
+    return out;
+}
+
+// mapKeys(x, f): يحوّل المفاتيح بدالة (أي مفهوم قابل للاستدعاء)
+fun mapKeys(x, f) {
+    let g = asFn(f);
+    let m = asMap(x);
+    let out = {};
+    let ks = keys(m);
+    let i = 0;
+    while (i < len(ks)) { out[g(ks[i])] = m[ks[i]]; i = i + 1; }
+    return out;
+}
+
+// invertMap({"a": 1}) -> {"1": "a"}
+fun invertMap(x) {
+    let m = asMap(x);
+    let out = {};
+    let ks = keys(m);
+    let i = 0;
+    while (i < len(ks)) { out[str(m[ks[i]])] = ks[i]; i = i + 1; }
+    return out;
+}
+
+// dropNil: يحذف الحقول التي قيمتها nil (عميقاً)
+fun dropNil(x) {
+    let k = valueKind(x);
+    if (k == "array") {
+        let out = [];
+        let i = 0;
+        while (i < len(x)) { if (x[i] != nil) { push(out, dropNil(x[i])); } i = i + 1; }
+        return out;
+    }
+    if (k == "map" or k == "instance") {
+        let m = asMap(x);
+        let out = {};
+        let ks = keys(m);
+        let i = 0;
+        while (i < len(ks)) { if (m[ks[i]] != nil) { out[ks[i]] = dropNil(m[ks[i]]); } i = i + 1; }
+        return out;
+    }
+    return x;
+}
+
+// withDefaults(x, defaults): يملأ الحقول الناقصة فقط (عميقاً) — قيم x لها الأولوية
+fun withDefaults(x, defaults) {
+    return mergeWith(defaults, x, "deep");
+}

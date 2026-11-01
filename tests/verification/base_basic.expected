@@ -1,0 +1,35 @@
+20
+30
+2
+true
+base
+25
+5
+true
+false
+true
+warmer than base
+0.5
+5
+false
+30
+true
+20
+false
+20
+true
+20
+true
+true
+true
+E0050
+50
+0.5
+false
+true
+E0050
+E0050
+E0050
+5
+6
+{"kind": "base", "reads": 4, "writes": 6, "bells": 0, "base": 20, "step": 2, "goal": 30}

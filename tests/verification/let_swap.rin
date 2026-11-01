@@ -1,0 +1,16 @@
+// let_swap.rin — اختبار تحقّق لـ docs/let-plus.md
+let a = 1; let b = 2;
+[a, b] = [b, a];
+print a; print b;
+let x = 1, y = 2, z = 3;
+[x, y, z] = [z, x, y];
+print x; print y; print z;
+let [p, q] = [0, 0];
+[p, q] = [10, 20, 30];
+print p + q;
+[p, _] = [5, 99];
+print p;
+[p, q = 77] = [1];
+print q;
+let arr = [3, 1, 2];
+[arr[0], arr[1]] = [arr[1], arr[0]];

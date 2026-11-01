@@ -1,0 +1,20 @@
+// Rin Units Pro — common metric, temperature and time conversions.
+fun unit_mToCm(x){return x*100;}
+fun unit_cmToM(x){return x/100;}
+fun unit_kmToM(x){return x*1000;}
+fun unit_mToKm(x){return x/1000;}
+fun unit_mToMm(x){return x*1000;}
+fun unit_mmToM(x){return x/1000;}
+fun unit_kgToG(x){return x*1000;}
+fun unit_gToKg(x){return x/1000;}
+fun unit_tToKg(x){return x*1000;}
+fun unit_cToF(x){return x*9/5+32;}
+fun unit_fToC(x){return (x-32)*5/9;}
+fun unit_cToK(x){return x+273.15;}
+fun unit_kToC(x){return x-273.15;}
+fun unit_sToMs(x){return x*1000;}
+fun unit_msToS(x){return x/1000;}
+fun unit_minToS(x){return x*60;}
+fun unit_hToS(x){return x*3600;}
+fun unit_kmhToMs(x){return x/3.6;}
+fun unit_msToKmh(x){return x*3.6;}

@@ -1,0 +1,358 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>channel47 — لغة وصف البيانات والإعدادات — Rin</title>
+<meta name="description" content="توثيق لغة البرمجة Rin"><link rel="icon" href="../assets/brand/icon-32.png">
+<link rel="stylesheet" href="assets/style.css"></head><body>
+<header><button id="mn" aria-label="القائمة">☰</button><a class="logo" href="index.html"><img src="../assets/brand/icon-48.png" alt="" width="26">Rin</a>
+<input id="q" type="search" placeholder="ابحث في التوثيق…" autocomplete="off"><button id="th" aria-label="الوضع">◐</button>
+<a class="gh" href="https://github.com/dlof-lib/rinlang">GitHub</a><div id="res"></div></header>
+<div class="wrap"><nav id="sb"><details ><summary>ابدأ هنا</summary><a href="getting-started.html">البداية</a><a href="syntax.html">القواعد النحوية العامة</a><a href="variables.html">let`، مصفوفات، قواميس، نطاق</a><a href="template-strings.html">النصوص القالبية (متغيّرات داخل النص)</a><a href="input.html">إدخال المستخدم (Input)</a><a href="control-flow.html">الشروط، الحلقات، `goal`/`achieve</a><a href="loops.html">حلقات Rin — Loops v2</a><a href="functions.html">fun`/`return`، التكرار الذاتي</a><a href="enums.html">enum`: قوائم اختيار مغلقة</a></details><details ><summary>اللغة</summary><a href="language-reference.html">المرجع الشامل وخريطة ترابط المفاهيم</a><a href="objects.html">class`/`struct`، `.object()`، `@Object`، `document</a><a href="oop.html">البرمجة الكائنية الموسَّعة (Rin 1.0)</a><a href="containers.html">دليل `@container` / `@element` / `@loop</a><a href="table.html">الجدول (`@table` / `@container.table`) ودوال اللغة عليه</a><a href="set.html">Set`: نوع المجموعة الأساسي</a><a href="pipelines.html">عامل الأنابيب `|&gt;</a><a href="RECKON.html">reckon`: مفهوم حسابي بسطرين</a><a href="let-plus.html">let` المطوَّر</a><a href="living-variables.html">المتغيرات الحيّة (Living Variables)</a><a href="label-define.html">label` و`define` (تسمية وتعريف)</a><a href="block-frames.html">بداية الكتل ونهايتها (Block Frames)</a><a href="compare_ops.html">معاملات المقارنة `/=` و `=/=` و `=/</a><a href="max_min.html">max / min family</a><a href="scope-guarantees.html">ضمانات النطاق: `finally` · `defer` · `catch … when` · `rethrow</a><a href="key_terms_and_builtins.html">Rin KEY_TERMS and Built-in Conditions</a><a href="number_builtins.html">Rin Number Built-ins</a></details><details ><summary>الواجهات (Indsin)</summary><a href="indsin.html">Indsin — Interface Design</a><a href="indsin_rin.html">indsin يعتمد على لغة Rin</a><a href="indsin_expansion.html">Indsin — التوسعة الاحترافية (Design System v2)</a><a href="indsin_object.html">indsin-object — API reference</a><a href="indsin_media.html">Indsin Media — اختيار الوسائط ورفعها</a><a href="indsin_icons.html">مكتبة أيقونات indsin (متجهية)</a><a href="indsin_tooling.html">indsin tooling — icon, file association, syntax highlighting</a><a href="indsinweb.html">IndsinWeb — مكتبة WebView والروابط لـ indsin</a><a href="RIN_ELEMENTS.html">دليل `@element.*` الكامل</a><a href="events-effects.html">الأحداث والتأثيرات (Events &amp; Effects) — محرك Indsin UI</a><a href="banner.html">Banner: إشعار شريطي</a><a href="simple-style.html">Rin Simple Style</a></details><details ><summary>بيئة التشغيل</summary><a href="runtime.html">وقت تشغيل Rin (Rin Runtime) · المرجع الرسمي</a><a href="standard-library.html">المكتبة القياسية (`lib/*.og.rin`)</a><a href="errors.html">نظام الأخطاء: أكواد، `try`/`catch`/`throw</a><a href="ERROR_SYSTEM.html">نظام التشخيص: البنية الداخلية + جدول الأكواد الكامل</a><a href="storage.html">تخزين دائم</a><a href="http.html">شبكات</a><a href="env.html">ربط Rin بملف `.env</a><a href="terminal.html">الطرفية التفاعلية — `rin terminal</a><a href="vm.html">RinVM — آلة Rin الافتراضية (بايتكود)</a><a href="rinflow.html">RinFlow: طبقة تنفيذ التدفّق المهيكل</a><a href="MAKE_UNIT.html">@make.(name)`: وحدة بسياسة قدرات صريحة</a><a href="MAKE_MEDIA.html">فيديو · صوت · API · إزالة الخلفية · قراءة النص من الصور</a><a href="TIME.html">مفهوم `time`: الزمن كقيمة من الدرجة الأولى</a><a href="native-additions.html">دوال Rin الأصلية الجديدة (Rin 1.0)</a></details><details ><summary>الحاويات وقواعد البيانات</summary><a href="container_advanced.html">Rin Container Advanced Built-ins</a><a href="container_pro.html">Rin Container Pro</a><a href="container_sql.html">RIN CONTAINER SQL (RCSQL)</a><a href="cross-file-containers.html">استدعاء إعلانات من ملف آخر</a></details><details ><summary>الحزم والتكامل</summary><a href="api.html">واجهة C المسطَّحة (Embedding API)</a><a href="android.html">استضافة Rin على أندرويد</a><a href="packages-and-interop.html">Rin 1.0 — المكتبات والحزم وجسر C++ وJSON واختبارات rintest</a><a href="rinpak-format.html">RinPak — حزمة مشروع Rin (`.rinpak`)</a><a href="html-projects.html">مشاريع HTML في Rin — الربط بين index.html وملف الحاوية</a><a href="project-og-urin.html">project.og.urin` — البيانات الوصفية لمشروع Rin</a><a href="CONTENT_PACKS.html">حزم المحتوى القابلة للتنزيل (Content Packs)</a><a href="previewkit.html">previewkit — معاينة حيّة لملفات PDF / Markdown / TypeScript</a></details><details ><summary>المكتبات المتخصصة</summary><a href="rinml.html">RinML / RinDF / RinAI — الذكاء الاصطناعي وتحليل البيانات في Rin</a><a href="STATS.html">RinStat — التحليل الإحصائي (`lib/rinstat.og.rin`)</a><a href="STATS_ADV.html">RinStat المتقدّم + RinAuto</a><a href="LINALG.html">الجبر الخطي للمهندسين — `mat*` و`vec*</a><a href="PLOT.html">RinPlot — الرسوم البيانية الإحصائية (`lib/rinplot.og.rin`)</a><a href="ALGO.html">تطوير الخوارزميات والحساب العددي — `algo*</a><a href="NUMBER.html">مفهوم `number` في Rin</a><a href="boat.html">&quot;Boat&quot;: مفاهيم أساسية مجمَّعة</a><a href="passkit.html">passkit — passwords, encryption, databases and a tag language</a><a href="passkit-crypto-db.html">Passkit feature catalog: encryption, databases and container linking</a><a href="hash-family.html">عائلة `#` — مفاهيم ودوال جديدة تبدأ بعلامة `#</a><a href="image-draw.html">إنشاء الصور في Rin — رسم وحفظ PNG وlog كصورة</a><a href="image-terminal.html">طباعة الصور في الـ terminal — `printImage` / `imageAnsi` / `imageInfo</a></details><details ><summary>المشروع</summary><a href="CONTRIBUTING.html">المساهمة في Rin</a><a href="CODE_OF_CONDUCT.html">قواعد السلوك</a><a href="SECURITY.html">سياسة الأمان</a><a href="SUPPORT.html">الحصول على المساعدة</a><a href="TRADEMARKS.html">سياسة العلامة التجارية — Trademark Policy</a><a href="THIRD_PARTY_NOTICES.html">إشعارات المكوّنات الخارجية — Third-Party Notices</a></details><details open><summary>مراجع إضافية</summary><a href="ANDROID_VERSIONS.html">حزم RinStudio لكل إصدار أندرويد</a><a href="TOKEN.html">مفهوم `token` في Rin</a><a href="TOOLCHAIN.html">Rin Professional Language Toolchain</a><a href="TOOLCHAIN_UPGRADE.html">Toolchain Upgrade — 2026-09</a><a href="architecture.html">المعمارية وبنية المستودع</a><a href="base-accept.html">base` و`accept`: متغيّران يخدمان `if</a><a href="channel47.html" class=on>channel47 — لغة وصف البيانات والإعدادات</a><a href="ci.html">CI وأدوات المستودع</a><a href="loop-templates.html">قوالب الحلقات `@tmpl</a><a href="pre-post.html">pre` و`post` (ما قبل / ما بعد): عقد انتقال حول الإسناد</a><a href="print-fonts.html">خطوط `print` — bold / italic / underline وغيرها</a><a href="print-image-terminal.html">طباعة الصور كنص في الطرفية</a><a href="print-templates.html">قوالب الطباعة `@tmpl ... print` — قوالب نصية خطية وتنسيقية</a><a href="rdoc.html">rdoc — Documentation Container</a><a href="rdoc-reference.html">وثيقة rdoc الشاملة — Documentation Container</a><a href="screenshots.html">لقطات من RinStudio</a></details></nav>
+<main><article><p align="center"><img src="icons/channel47.svg" width="96" alt="channel47"></p>
+
+<h1 id="channel47">channel47 — لغة وصف البيانات والإعدادات<a class="headerlink" href="#channel47" title="Permanent link">#</a></h1>
+<p><strong>الامتداد:</strong> <code>.ch47</code> · <strong>الإصدار:</strong> 1.0 · <strong>الترميز:</strong> UTF-8 · <strong>MIME:</strong> <code>text/x-channel47</code></p>
+<p>لغة نصّية صغيرة وصارمة لوصف <strong>بيانات المكتبات والحزم والأدوات</strong> وإعداداتها في منظومة Rin
+(بيانات <code>RinPM</code>، مخزن المكتبات، إعدادات الأدوات). تمثّل: <strong>النصوص، الأرقام، القيم المنطقية، التواريخ،
+المصفوفات، الجداول</strong> — وتقرأ بالعين كما تُكتب باليد.</p>
+<h2 id="_1">لمحة سريعة<a class="headerlink" href="#_1" title="Permanent link">#</a></h2>
+<pre><code class="language-channel47">channel47 1.0
+kind        = &quot;library&quot;
+name        = &quot;rin.math&quot;
+version     = &quot;1.2.0&quot;
+stable      = true
+released    = 2026-10-15
+keywords    = [&quot;math&quot;, &quot;رياضيات&quot;]
+
+table deps(name: text, version: text, optional: bool = false)
+  &quot;rin.core&quot;,  &quot;^1.0.0&quot;
+  &quot;rin.stats&quot;, &quot;~0.4.0&quot;, true
+end
+
+[build]
+ratio = 0.75
+size  = 1_048_576
+</code></pre>
+<h2 id="_2">المبادئ<a class="headerlink" href="#_2" title="Permanent link">#</a></h2>
+<ol>
+<li><strong>صارمة</strong>: نصٌّ بلا اقتباس خطأ (لا تخمين). مفتاح مكرر خطأ. نوع خاطئ في خلية خطأ.</li>
+<li><strong>حتمية</strong>: لكل مستند معنى واحد، وله شكل قانوني واحد (<code>fmt</code>) يُنتج الفروقات نفسها في Git.</li>
+<li><strong>أخطاء دقيقة</strong>: <code>الملف:السطر:العمود</code> + رمز ثابت <code>C47xxx</code> + سهم تحت الموضع.</li>
+<li><strong>عربية أولاً</strong>: المفاتيح تقبل الحروف العربية (<code>مفتاح = 1</code>)، والرسائل بالعربية والإنجليزية (<code>--lang en</code>).</li>
+</ol>
+<h2 id="_3">بنية الملف<a class="headerlink" href="#_3" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>العنصر</th>
+<th>الصيغة</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ترويسة (اختيارية)</td>
+<td><code>channel47 1.0</code> أول سطر غير فارغ. إصدار رئيسي غير 1 ← <code>C47002</code></td>
+</tr>
+<tr>
+<td>تعليق</td>
+<td><code># ...</code> حتى آخر السطر</td>
+</tr>
+<tr>
+<td>تعيين</td>
+<td><code>مفتاح = قيمة</code> · مفتاح منقّط <code>a.b = 1</code> · مفتاح مقتبس <code>"my key" = 1</code></td>
+</tr>
+<tr>
+<td>قسم</td>
+<td><code>[a.b]</code> — كل ما بعده يخصّه حتى القسم التالي</td>
+</tr>
+<tr>
+<td>جدول</td>
+<td><code>table اسم(أعمدة) … end</code></td>
+</tr>
+</tbody>
+</table></div>
+<p>المفتاح الصريح: <code>[^\W\d][\w-]*</code> (حروف يونيكود/<code>_</code>/<code>-</code>، لا يبدأ برقم). غير ذلك يُقتبس.</p>
+<h2 id="_4">الأنواع<a class="headerlink" href="#_4" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>النوع</th>
+<th>أمثلة</th>
+<th>ملاحظات</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>نص</strong> <code>text</code></td>
+<td><code>"سلام\n"</code> · <code>'خام\n'</code> · <code>"""متعدد الأسطر"""</code></td>
+<td>الهروب في <code>"</code> فقط: <code>\n \t \r \" \\ \0 \b \f \u{1F600}</code>. <code>'</code> حرفي بلا هروب. <code>"""</code>/<code>'''</code> يحذف السطر الأول إن كان فارغاً</td>
+</tr>
+<tr>
+<td><strong>عدد صحيح</strong> <code>int</code></td>
+<td><code>42</code> <code>-7</code> <code>1_000</code> <code>0xFF</code> <code>0o17</code> <code>0b101</code></td>
+<td>64 بت مُوقَّع؛ لا أصفار بادئة (<code>007</code> ← <code>C47024</code>)</td>
+</tr>
+<tr>
+<td><strong>عدد عشري</strong> <code>float</code></td>
+<td><code>1.5</code> <code>-0.25</code> <code>1e-3</code> <code>6.02E23</code></td>
+<td>لا <code>NaN</code> ولا <code>Infinity</code></td>
+</tr>
+<tr>
+<td><strong>منطقي</strong> <code>bool</code></td>
+<td><code>true</code> <code>false</code></td>
+<td>بالحروف الصغيرة فقط</td>
+</tr>
+<tr>
+<td><strong>فراغ</strong></td>
+<td><code>nil</code></td>
+<td></td>
+</tr>
+<tr>
+<td><strong>تاريخ</strong> <code>date</code></td>
+<td><code>2026-10-15</code></td>
+<td>يُتحقَّق من صحته (13 شهراً ← <code>C47022</code>)</td>
+</tr>
+<tr>
+<td><strong>وقت</strong> <code>time</code></td>
+<td><code>09:30</code> <code>09:30:15.5</code></td>
+<td></td>
+</tr>
+<tr>
+<td><strong>تاريخ ووقت</strong> <code>datetime</code></td>
+<td><code>2026-10-15T09:30:00Z</code> · <code>...+03:00</code> · بلا منطقة = محلي</td>
+<td>الفاصل <code>T</code> فقط</td>
+</tr>
+<tr>
+<td><strong>مصفوفة</strong></td>
+<td><code>[1, "a", [2]]</code></td>
+<td>أي أنواع مختلطة؛ أسطر متعددة وتعليقات وفاصلة أخيرة مسموحة</td>
+</tr>
+<tr>
+<td><strong>كائن مضمَّن</strong></td>
+<td><code>{ rpm = 60, burst = 10 }</code></td>
+<td>مغلق: لا يُوسَّع لاحقاً بـ<code>[قسم]</code> أو مفتاح منقّط</td>
+</tr>
+<tr>
+<td><strong>جدول</strong></td>
+<td>انظر أدناه</td>
+<td>قائمة صفوف مُنمَّطة</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="_5">الجداول<a class="headerlink" href="#_5" title="Permanent link">#</a></h2>
+<pre><code class="language-channel47">table commands(name: text, summary: text, aliases: text[] = [], since: date?)
+  &quot;format&quot;, &quot;تنسيق ملف&quot;,     [&quot;fmt&quot;, &quot;f&quot;], 2026-01-10
+  &quot;check&quot;,  &quot;فحص بلا تعديل&quot;, _,            _
+  &quot;watch&quot;,  &quot;مراقبة المجلد&quot;, [&quot;w&quot;]
+end
+</code></pre>
+<ul>
+<li><strong>العمود</strong>: <code>اسم: نوع</code> مع لواحق اختيارية بهذا الترتيب: <code>[]</code> (مصفوفة من النوع) ثم <code>?</code> (يقبل <code>nil</code>) ثم <code>= افتراضي</code>.</li>
+<li><strong>الأنواع</strong>: <code>text int float bool date time datetime any</code> (غير ذلك ← <code>C47030</code>). <code>float</code> تقبل أعداداً صحيحة وتحوّلها.</li>
+<li><strong>الصف</strong>: سطر قيم مفصولة بفاصلة. سطر ينتهي بفاصلة يكمل في التالي. الخلايا الناقصة في النهاية تأخذ الافتراضي، أو <code>nil</code> إن كان العمود <code>?</code>، وإلا <code>C47041</code>.</li>
+<li><strong><code>_</code></strong> في خلية = «استعمل الافتراضي».</li>
+<li><strong>التحقق</strong>: كل خلية تُفحص بنوع عمودها (<code>C47042</code>)، وعدد الخلايا لا يتجاوز الأعمدة (<code>C47040</code>)، ويجب إغلاق الجدول بـ<code>end</code> (<code>C47043</code>).</li>
+<li><strong>النتيجة</strong>: قائمة قواميس بترتيب الأعمدة، مع بقاء تعريف الأعمدة (لإعادة الكتابة والتحقق).</li>
+</ul>
+<h2 id="_6">الأقسام والمسارات<a class="headerlink" href="#_6" title="Permanent link">#</a></h2>
+<ul>
+<li><code>[a.b]</code> يُنشئ <code>a</code> ضمنياً. تعريف القسم نفسه مرتين ← <code>C47012</code>. مفتاح مكرر ← <code>C47013</code>.</li>
+<li>لا مصفوفة أقسام <code>[[x]]</code> (← <code>C47014</code>): استعمل <code>table</code>.</li>
+<li>الكائن المضمَّن والجدول <strong>مغلقان</strong> بعد تعريفهما (<code>C47011</code>/<code>C47012</code>).</li>
+</ul>
+<h2 id="fmt">الصيغة القانونية (<code>fmt</code>)<a class="headerlink" href="#fmt" title="Permanent link">#</a></h2>
+<p>ترويسة <code>channel47 1.0</code> ← مفاتيح بسيطة ← جداول ← أقسام فرعية (<code>[a.b]</code>) · نص بين <code>"</code> · أعداد عشرية تحمل <code>.</code> دائماً ·
+<code>Z</code> للـUTC · مصفوفات أقصر من 72 حرفاً في سطر وإلا سطر لكل عنصر · أعمدة الجداول محاذاة. التعليقات <strong>لا تُحفظ</strong> (النموذج: بيانات لا نص).
+الكتابة ثم القراءة ثم الكتابة تعطي النص نفسه (idempotent).</p>
+<h2 id="kind">بيانات الحزم: <code>kind</code><a class="headerlink" href="#kind" title="Permanent link">#</a></h2>
+<p>مفتاح <code>kind</code> يفعّل التحقق الدلالي (<code>channel47.py check</code>):</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>kind</th>
+<th>مطلوب</th>
+<th>اختياري</th>
+<th>جداول</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>library</code></td>
+<td><code>name</code> <code>version</code> <code>entry</code></td>
+<td><code>exports</code> + المشترك</td>
+<td><code>deps(name, version)</code></td>
+</tr>
+<tr>
+<td><code>package</code></td>
+<td><code>name</code> <code>version</code></td>
+<td><code>files</code> <code>entry</code> + المشترك</td>
+<td><code>deps</code></td>
+</tr>
+<tr>
+<td><code>tool</code></td>
+<td><code>name</code> <code>version</code> <code>bin</code></td>
+<td><code>entry</code> + المشترك</td>
+<td><code>commands(name, summary)</code> <code>deps</code></td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>المشترك</strong>: <code>description license authors[] homepage keywords[] released(date|datetime) permissions[] stable rin</code>.
+- <code>name</code>: <code>^[a-z0-9][a-z0-9._-]{0,63}$</code> (نفس قاعدة معرّف RinPak) · <code>version</code>: إصدار دلالي <code>X.Y.Z[-pre][+build]</code>.
+- مفتاح غير معروف في أعلى المستند ← تحذير <code>C47053</code> (لا يفشل). الأقسام الفرعية حرة (<code>[build]</code> …).
+- <code>deps.version</code> نص قيد حر (<code>^1.0.0</code>، <code>~0.4.0</code>، <code>&gt;=1.0.0</code>) تفسّره أداة الحزم.</p>
+<h2 id="_7">رموز الأخطاء<a class="headerlink" href="#_7" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الرمز</th>
+<th>المعنى</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>C47002</td>
+<td>إصدار مواصفة غير مدعوم</td>
+</tr>
+<tr>
+<td>C47010</td>
+<td>صياغة غير متوقعة</td>
+</tr>
+<tr>
+<td>C47011</td>
+<td>مسار ليس قسماً قابلاً للتوسعة</td>
+</tr>
+<tr>
+<td>C47012</td>
+<td>قسم معرَّف مسبقاً</td>
+</tr>
+<tr>
+<td>C47013</td>
+<td>مفتاح مكرر</td>
+</tr>
+<tr>
+<td>C47014</td>
+<td><code>[[...]]</code> غير مدعوم</td>
+</tr>
+<tr>
+<td>C47020</td>
+<td>نص غير منتهٍ</td>
+</tr>
+<tr>
+<td>C47021</td>
+<td>قيمة غير معروفة (نص بلا اقتباس غالباً)</td>
+</tr>
+<tr>
+<td>C47022</td>
+<td>تاريخ/وقت غير صالح</td>
+</tr>
+<tr>
+<td>C47023</td>
+<td>رمز هروب غير صالح</td>
+</tr>
+<tr>
+<td>C47024</td>
+<td>رقم غير صالح / خارج 64 بت</td>
+</tr>
+<tr>
+<td>C47030 / C47031</td>
+<td>نوع عمود غير معروف / عمود مكرر</td>
+</tr>
+<tr>
+<td>C47040 – C47043</td>
+<td>صف: خلايا زائدة / ناقصة / نوع خاطئ / جدول غير مغلق</td>
+</tr>
+<tr>
+<td>C47050 – C47054</td>
+<td>تحقق البيان: مفقود / نوع خاطئ / قيمة غير صالحة / مفتاح غير معروف (تحذير) / <code>kind</code> غير معروف</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="ebnf">القواعد النحوية (EBNF مختصر)<a class="headerlink" href="#ebnf" title="Permanent link">#</a></h2>
+<pre><code>document  = [header] { statement } ;
+header    = &quot;channel47&quot; version NL ;
+statement = section | table | assign ;
+section   = &quot;[&quot; keypath &quot;]&quot; NL ;
+assign    = keypath &quot;=&quot; value NL ;
+table     = &quot;table&quot; keypath &quot;(&quot; column {&quot;,&quot; column} &quot;)&quot; NL { row } &quot;end&quot; NL ;
+column    = name &quot;:&quot; type [&quot;[]&quot;] [&quot;?&quot;] [&quot;=&quot; value] ;
+row       = cell {&quot;,&quot; cell} NL ;           (* سطر ينتهي بفاصلة يكمل *)
+cell      = value | &quot;_&quot; ;
+value     = string | number | bool | &quot;nil&quot; | date | time | datetime | array | object ;
+array     = &quot;[&quot; [ value {&quot;,&quot; value} [&quot;,&quot;] ] &quot;]&quot; ;
+object    = &quot;{&quot; [ name &quot;=&quot; value {&quot;,&quot; name &quot;=&quot; value} [&quot;,&quot;] ] &quot;}&quot; ;
+</code></pre>
+<h2 id="_8">الأدوات<a class="headerlink" href="#_8" title="Permanent link">#</a></h2>
+<pre><code class="language-bash">python3 tools/channel47.py check  examples/channel47/rin-math.library.ch47   # صياغة + بيان
+python3 tools/channel47.py fmt    app.ch47 -w                               # تنسيق قانوني
+python3 tools/channel47.py json   app.ch47                                  # → JSON
+python3 tools/channel47.py from-json data.json                              # JSON → channel47
+python3 tools/channel47.py get    app.ch47 net.timeout                      # قراءة مسار
+python3 tools/channel47.py merge  defaults.ch47 user.ch47                   # طبقات (الثاني يغلب)
+python3 tests/channel47_test.py                                             # 20 اختباراً (بايثون)
+rin_run tests/channel47_rin_test.rin                                        # 57 فحصاً (Rin، من جذر المشروع)
+</code></pre>
+<ul>
+<li><strong>JSON</strong>: التواريخ تصير نصوص ISO-8601، والجداول قوائم قواميس. <code>from-json</code> لا يستنتج تواريخ من النصوص.</li>
+<li><strong>الدمج</strong>: القواميس تُدمج بعمق؛ المصفوفات والجداول والقيم تُستبدل كاملة.</li>
+</ul>
+<h2 id="rin-libchannel47ogrin">داخل Rin: <code>lib/channel47.og.rin</code><a class="headerlink" href="#rin-libchannel47ogrin" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">@import &quot;lib/channel47.og.rin&quot;;
+let r = c47_try(readFile(&quot;package.ch47&quot;));
+if (r.ok) { print c47_get(r.value, &quot;deps&quot;, []); } else { print r.error.code + &quot; @ &quot; + str(r.error.line); }
+</code></pre>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الدالة</th>
+<th>الوظيفة</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>c47_parse(src)</code></td>
+<td>يحلّل النص ويُرجع قاموساً؛ يرمي <code>{code, message, line, col}</code> عند الخطأ</td>
+</tr>
+<tr>
+<td><code>c47_try(src)</code></td>
+<td><code>{ok, value, error}</code> بلا رمي</td>
+</tr>
+<tr>
+<td><code>c47_get(doc, "a.b", default)</code> · <code>c47_has</code> · <code>c47_merge(a, b)</code></td>
+<td>قراءة مسار / وجوده / دمج طبقات</td>
+</tr>
+<tr>
+<td><code>c47_check(doc, kind?)</code></td>
+<td>تحقق البيان: مصفوفة <code>{level, code, path}</code> (المطلوب + <code>name</code> + <code>version</code>)</td>
+</tr>
+</tbody>
+</table></div>
+<p>ملاحظات: الأعداد مزدوجة الدقة (أعداد صحيحة فوق 2^53 تفقد دقتها)، والتواريخ والأوقات تعود <strong>نصوص ISO</strong>، والجداول مصفوفات قواميس.
+الكتابة (<code>fmt</code>/<code>from-json</code>) والتحقق الكامل بالجداول في أداة بايثون؛ قارئ Rin للقراءة والفحص الأساسي.
+تنبيه لكتّاب المكتبات: <code>text</code> و<code>row</code> كلمتان محجوزتان في Rin فلا تُستعملان أسماء متغيّرات.</p>
+<h2 id="_9">الأيقونة<a class="headerlink" href="#_9" title="Permanent link">#</a></h2>
+<p><img src="icons/channel47.svg" width="64"> <img src="icons/channel47-file.svg" width="64"></p>
+<p>أيقونتان في <code>assets/branding/channel47/</code>: <strong>التطبيق</strong> (<code>channel47.*</code>) و<strong>الملف <code>.ch47</code></strong> (<code>channel47-file.*</code>)، كل منهما SVG + PNG (16…512) + ICO.
+الشعار: حرف <strong>C</strong> من قناتين متحدتي المركز تفتحان نحو اليمين، ونواة عنبرية في المركز، وثلاثة خطوط بيانات تخرج من الفتحة — على تدرّج أزرق داكن→سماوي بنفس شكل أيقونات Rin. أيقونة الملف تضيف شارة «47».
+التوليد: <code>python3 tools/gen_channel47_icon.py assets/branding/channel47</code> (الألوان والهندسة في أعلى السكربت).</p>
+<h2 id="10">حدود الإصدار 1.0<a class="headerlink" href="#10" title="Permanent link">#</a></h2>
+<p>لا استيراد ملفات، لا استيفاء متغيّرات (<code>${...}</code>)، لا مدد زمنية، لا مصفوفة أقسام، ولا حفظ للتعليقات عند <code>fmt</code>. هذه إضافات محتملة في 1.x دون كسر الصيغة.</p></article>
+<div class="pnav"><a class="pn" href="base-accept.html">→ base` و`accept`: متغيّران يخدمان `if</a><a class="pn" href="ci.html">CI وأدوات المستودع ←</a></div><p class="edit"><a href="https://github.com/dlof-lib/rinlang/edit/main/docs/channel47.md">✎ عدّل هذه الصفحة على GitHub</a></p>
+<footer>Rin 1.0.0 · رخصة MIT</footer></main>
+<aside id="toc"><b>في هذه الصفحة</b><div class="toc">
+<ul>
+<li><a href="#_1">لمحة سريعة</a></li>
+<li><a href="#_2">المبادئ</a></li>
+<li><a href="#_3">بنية الملف</a></li>
+<li><a href="#_4">الأنواع</a></li>
+<li><a href="#_5">الجداول</a></li>
+<li><a href="#_6">الأقسام والمسارات</a></li>
+<li><a href="#fmt">الصيغة القانونية (fmt)</a></li>
+<li><a href="#kind">بيانات الحزم: kind</a></li>
+<li><a href="#_7">رموز الأخطاء</a></li>
+<li><a href="#ebnf">القواعد النحوية (EBNF مختصر)</a></li>
+<li><a href="#_8">الأدوات</a></li>
+<li><a href="#rin-libchannel47ogrin">داخل Rin: lib/channel47.og.rin</a></li>
+<li><a href="#_9">الأيقونة</a></li>
+<li><a href="#10">حدود الإصدار 1.0</a></li>
+</ul>
+</div>
+</aside></div>
+<script src="assets/app.js"></script></body></html>

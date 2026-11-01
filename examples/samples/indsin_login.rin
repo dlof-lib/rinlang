@@ -1,0 +1,38 @@
+<!-- شاشة تسجيل دخول كاملة: حقول مرتبطة بخلايا warp، إظهار/إخفاء كلمة المرور، تذكّرني،
+     خطأ لكل حقل وخطأ عام، زر بحالة تحميل، دخول اجتماعي، ورمز تحقق.
+     التشغيل: rin_indsin_preview indsin_login.rin --png out.png
+     في التطبيق: لمس حقل يُرجع "focus" والمضيف يستدعي rin_indsin_session_set_input(name,text). -->
+<Palette seed=#6C5CE7 />
+
+<warp email={""} />
+<warp password={""} />
+<warp showPw={false} />
+<warp remember={true} />
+<warp err={""} />
+<warp emailErr={""} />
+<warp passErr={""} />
+<warp busy={false} />
+<warp code={"48"} />
+
+<Fun#signIn>
+  emailErr = indsin.fieldError("email", email);
+  passErr = indsin.fieldError("password", password);
+  if (email == "") { emailErr = indsin.fieldError("required", email); }
+  err = "";
+  if (emailErr == "" and passErr == "") { err = "Wrong email or password for " + indsin.maskEmail(email); }
+</Fun>
+<Fun#google>
+  err = "Google sign-in is not configured";
+</Fun>
+
+<Screen#app size=phone bg="#6C5CE7,#A29BFE,160" padding=20 gap=14>
+  <Text#brand size=heading color=#ffffff>Welcome back</Text>
+  <LoginForm meter=true title="Sign in" subtitle="Use your account to continue"
+             email={email} password={password} show={showPw} remember={remember}
+             error={err} emailError={emailErr} passError={passErr} loading={busy}
+             submit={signIn()} forgot={google()} />
+  <OrDivider text="or continue with" />
+  <SocialButton provider="Google" tap={google()} />
+  <Text#otpl color=#ffffff>Verification code</Text>
+  <OtpBoxes code={code} />
+</Screen>

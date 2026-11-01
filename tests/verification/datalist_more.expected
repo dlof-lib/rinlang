@@ -1,0 +1,44 @@
+📋 container.datalist = orders
+🧾 document (إدراج) -> 1 = {"item": "pen", "qty": 10, "price": 2.5, "day": "2026-01-05", "tags": ["office", "blue"]}
+🧾 document (إدراج) -> 2 = {"item": "book", "qty": 2, "price": 12, "day": "2026-01-20", "tags": ["paper"]}
+🧾 document (إدراج) -> 3 = {"item": "pen", "qty": 5, "price": 2.5, "day": "2026-02-02", "tags": []}
+🧾 document (إدراج) -> x9 = {"item": "bag", "qty": 1, "price": 40, "day": "2026-02-15"}
+🧾 document (إدراج) -> 5 = {"item": "book", "qty": 7, "price": 12, "day": "2026-03-30", "tags": ["paper", "gift"]}
+✅ .end/container.datalist (orders)
+size=5 ids=["1", "2", "3", "x9", "5"]
+first={"_id": "1", "item": "pen", "qty": 10, "price": 2.5, "day": "2026-01-05", "tags": ["office", "blue"]}
+last={"_id": "5", "item": "book", "qty": 7, "price": 12, "day": "2026-03-30", "tags": ["paper", "gift"]}
+header=["item", "qty", "price", "day", "tags"]
+qty column=[10, 2, 5, 1, 7]
+has items=true empty=false
+info={"name": "orders", "kind": "container.datalist", "size": 0, "parent": nil, "childCount": 0, "key": "orders", "path": "orders", "items": 5, "columns": 5}
+sum=25 avg=13.8 min=1 max=10
+distinct=["pen", "book", "bag"]
+countBy={"pen": 2, "book": 2, "bag": 1}
+top2 ids=["1", "5"]
+sortBy ids=["x9", "2", "3", "5", "1"]
+search=["5"]
+csv:
+item,qty,price,day,tags
+pen,10,2.5,2026-01-05,"[""office"",""blue""]"
+book,2,12,2026-01-20,"[""paper""]"
+pen,5,2.5,2026-02-02,[]
+bag,1,40,2026-02-15,
+book,7,12,2026-03-30,"[""paper"",""gift""]"
+
+after set: ids=["1", "z"] size=2
+caught: read-only
+cleared: size=0 empty=true
+📋 container.datalist = log
+🧾 document (إدراج) -> 1 = {"who": "sara", "day": "2026-01-05", "ms": 120, "note": "Login OK"}
+🧾 document (إدراج) -> 2 = {"who": "omar", "day": "2026-01-20", "ms": 80, "note": "timeout"}
+🧾 document (إدراج) -> 3 = {"who": "sara", "day": "2026-02-02", "ms": 100, "note": "Upload"}
+🧾 document (إدراج) -> 4 = {"who": "sara", "day": "2026-02-20", "ms": 300, "note": "login failed", "tags": ["auth", "err"]}
+🧾 document (إدراج) -> 5 = {"who": "lina", "day": "2026-03-01", "ms": 60}
+✅ .end/container.datalist (log)
+[{"_id": "2026-01", "month_day": "2026-01", "count": 2, "count_who": 2, "distinct_who": 2, "median_ms": 100}, {"_id": "2026-02", "month_day": "2026-02", "count": 2, "count_who": 2, "distinct_who": 1, "median_ms": 200}, {"_id": "2026-03", "month_day": "2026-03", "count": 1, "count_who": 1, "distinct_who": 1, "median_ms": 60}]
+[{"_id": "2026", "year_day": "2026", "count": 5, "sum_ms": 660}]
+search any=2 tag any=1
+["3", "4"]
+caught: bad page
+caught: modifier-only

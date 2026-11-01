@@ -1,0 +1,517 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  صفحة "تفاصيل الحزمة" — نسخة مطوَّرة بصرياً على غرار صفحة مستودع GitHub: رأس (hero) بخلفية
+  متدرّجة خفيفة يجمع الاسم والوصف والناشر وشريط إحصائيات + زر تثبيت بارز، يليه مباشرة متصفّح
+  ملفات حقيقي بشريط مسار (breadcrumb) قابل للنقر يدخل/يخرج من المجلدات فعلياً (كترتيب GitHub:
+  الملفات أولاً)، ثم بطاقة README.md بشريط عنوان ثابت باسم الملف، ثم الترخيص أخيراً. كل معرّفات
+  العناصر المرتبطة بـPackageDetailActivity.kt بقيت كما هي بلا أي تغيير.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/rin_background">
+
+    <include layout="@layout/toolbar_app" />
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="14dp">
+
+            <!-- رأس الحزمة (Hero): بانر خلفية علوي (خلايا سداسية/أرقام ثنائية) ثم اسم الحزمة +
+                 وصفها + صف الناشر + شريط إحصائيات + زر تثبيت -->
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_detail_hero_frame"
+                android:clipToOutline="true">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <FrameLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="84dp">
+
+                    <!-- يُستبدَل هذا البانر الافتراضي بصورة مصغّرة (thumbnail) حقيقية للحزمة عبر
+                         PackageDetailActivity.kt إن رفعها الناشر عند النشر، وإلا يبقى كما هو. -->
+                    <ImageView
+                        android:id="@+id/imgDetailHeroBanner"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="centerCrop"
+                        android:src="@drawable/img_hex_banner"
+                        android:contentDescription="@null" />
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:background="@drawable/bg_banner_scrim" />
+                </FrameLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="18dp">
+
+                <!-- أيقونة الحزمة (حرفها الأول على شارة متدرّجة) + الاسم في صفّ واحد، بدل اسم
+                     مجرَّد بلا هوية بصرية مميّزة — نفس تدرّج bg_package_icon_gradient المستخدم
+                     في بطاقات المتجر، لتوحيد الهوية بين شاشة القائمة وشاشة التفاصيل. -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <FrameLayout
+                        android:layout_width="44dp"
+                        android:layout_height="44dp">
+
+                        <TextView
+                            android:id="@+id/txtDetailPackageIcon"
+                            android:layout_width="44dp"
+                            android:layout_height="44dp"
+                            android:background="@drawable/bg_package_icon_gradient"
+                            android:gravity="center"
+                            android:textColor="@android:color/white"
+                            android:textSize="18sp"
+                            android:textStyle="bold"
+                            tools:text="M" />
+
+                        <!-- أيقونة الحزمة الحقيقية (إن رفعها الناشر عبر شاشة النشر)، تحلّ محل شارة
+                             الحرف الأول أعلاه — دائرية مسبقاً (AvatarUtils) فلا حاجة لأي قصّ إضافي هنا. -->
+                        <ImageView
+                            android:id="@+id/imgDetailPackageIcon"
+                            android:layout_width="44dp"
+                            android:layout_height="44dp"
+                            android:scaleType="fitCenter"
+                            android:visibility="gone"
+                            android:contentDescription="@null" />
+                    </FrameLayout>
+
+                    <TextView
+                        android:id="@+id/txtDetailPackageName"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="12dp"
+                        android:textSize="21sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/rin_on_toolbar"
+                        tools:text="mathlib" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/txtDetailDescription"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:textSize="13.5sp"
+                    android:lineSpacingExtra="2dp"
+                    android:textColor="@color/rin_editor_text" />
+
+                <!-- صف الناشر: صورة دائرية + اسم + شارة توثيق (تظهر فقط للناشرين المؤهلين) —
+                     الصف كامل قابل للضغط لفتح الملف الشخصي العام لهذا الناشر -->
+                <LinearLayout
+                    android:id="@+id/rowDetailPublisher"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:background="@drawable/bg_icon_btn"
+                    android:paddingHorizontal="8dp"
+                    android:paddingVertical="8dp">
+
+                    <FrameLayout
+                        android:layout_width="36dp"
+                        android:layout_height="36dp">
+
+                        <ImageView
+                            android:id="@+id/imgDetailPublisherAvatar"
+                            android:layout_width="36dp"
+                            android:layout_height="36dp"
+                            android:background="@drawable/bg_avatar_circle"
+                            android:scaleType="centerCrop"
+                            android:contentDescription="@null" />
+
+                        <TextView
+                            android:id="@+id/txtDetailPublisherInitial"
+                            android:layout_width="36dp"
+                            android:layout_height="36dp"
+                            android:gravity="center"
+                            android:textColor="@android:color/white"
+                            android:textStyle="bold"
+                            android:textSize="14sp" />
+                    </FrameLayout>
+
+                    <TextView
+                        android:id="@+id/txtDetailPublisherName"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="10dp"
+                        android:textSize="13.5sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/rin_on_toolbar" />
+
+                    <ImageView
+                        android:id="@+id/imgDetailVerifiedBadge"
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:layout_marginStart="5dp"
+                        android:src="@drawable/ic_verified_badge"
+                        android:visibility="gone"
+                        android:contentDescription="@string/verified_publisher_badge_description" />
+
+                    <View
+                        android:layout_width="0dp"
+                        android:layout_height="0dp"
+                        android:layout_weight="1" />
+
+                    <!-- زر الانتساب لهذا الناشر: يتبدّل نصه/شكله بين "انتساب" و"تم الانتساب".
+                         مخفي افتراضياً (View.GONE) حتى تُحدَّد هوية الناشر مقابل المستخدم الحالي
+                         داخل bindSubscribe() في PackageDetailActivity.kt (لا يظهر لناشر الحزمة نفسه). -->
+                    <TextView
+                        android:id="@+id/btnDetailSubscribe"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:background="@drawable/bg_subscribe_button"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:paddingHorizontal="14dp"
+                        android:paddingVertical="7dp"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/rin_accent"
+                        android:text="@string/action_subscribe_publisher"
+                        android:visibility="gone" />
+                </LinearLayout>
+
+                <!-- صفّ إحصائيات مقسَّم إلى بطاقات مفردة (بدل حبّة واحدة مدموجة): الإصدار /
+                     التنزيلات / التقييم، ثم زر الإعجاب (قلب) منفصلاً بلون مميَّز عند التفعيل.
+                     الترخيص انتقل إلى قسمه المخصَّص أسفل الصفحة (نص txtDetailLicense) فلا داعي
+                     لتكراره هنا. القيم الفعلية لكل حبّة تُضبط في PackageDetailActivity.bindHeader(). -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/txtDetailStatVersion"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="6dp"
+                        android:background="@drawable/bg_detail_stat_chip"
+                        android:gravity="center"
+                        android:paddingVertical="10dp"
+                        android:textSize="11.5sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/rin_editor_hint"
+                        tools:text="الإصدار 1.0.0" />
+
+                    <TextView
+                        android:id="@+id/txtDetailStatDownloads"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="6dp"
+                        android:background="@drawable/bg_detail_stat_chip"
+                        android:gravity="center"
+                        android:paddingVertical="10dp"
+                        android:textSize="11.5sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/rin_accent_green"
+                        tools:text="120 تنزيل" />
+
+                    <TextView
+                        android:id="@+id/txtDetailStatRating"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="6dp"
+                        android:background="@drawable/bg_detail_stat_chip"
+                        android:gravity="center"
+                        android:paddingVertical="10dp"
+                        android:textSize="11.5sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/rin_star_gold"
+                        tools:text="★ 4.5 (12)" />
+
+                    <LinearLayout
+                        android:id="@+id/btnDetailLike"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1"
+                        android:background="@drawable/bg_detail_stat_chip"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center"
+                        android:orientation="horizontal"
+                        android:contentDescription="@string/action_like_package">
+
+                        <ImageView
+                            android:id="@+id/imgDetailLikeIcon"
+                            android:layout_width="15dp"
+                            android:layout_height="15dp"
+                            android:src="@drawable/ic_heart_outline"
+                            app:tint="@color/rin_editor_hint"
+                            android:contentDescription="@null" />
+
+                        <TextView
+                            android:id="@+id/txtDetailLikeCount"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="6dp"
+                            android:textSize="11.5sp"
+                            android:textStyle="bold"
+                            android:textColor="@color/rin_editor_hint" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <Button
+                    android:id="@+id/btnDetailInstall"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="16dp"
+                    android:minWidth="0dp"
+                    android:minHeight="0dp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:drawableStart="@drawable/ic_log_download"
+                    android:drawablePadding="8dp"
+                    android:text="@string/action_install"
+                    android:textAllCaps="false"
+                    android:textSize="13.5sp"
+                    android:textStyle="bold"
+                    android:background="@drawable/bg_install_button_premium"
+                    android:textColor="@android:color/white" />
+
+                <!-- يظهر لناشر الحزمة فقط: يفتح شاشة تعديل المكتبة (بيانات + README + ملفات ومجلدات) -->
+                <Button
+                    android:id="@+id/btnDetailEdit"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:layout_marginTop="10dp"
+                    android:minWidth="0dp"
+                    android:minHeight="0dp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:drawableStart="@drawable/ic_edit_pencil"
+                    android:drawablePadding="8dp"
+                    android:text="@string/action_edit_package"
+                    android:textAllCaps="false"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:background="@drawable/bg_btn_outline"
+                    android:textColor="@color/rin_accent"
+                    android:visibility="gone" />
+            </LinearLayout>
+            </LinearLayout>
+            </FrameLayout>
+
+            <!-- قسم ملفات الحزمة — أولاً، قبل README (كترتيب صفحة مستودع GitHub الفعلي: قائمة
+                 الملفات أعلى الصفحة، وREADME مُصيَّراً أسفلها). -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:layout_marginBottom="8dp"
+                android:drawableStart="@drawable/ic_files_stack"
+                android:drawablePadding="8dp"
+                android:gravity="center_vertical"
+                android:text="@string/package_detail_section_files"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:textColor="@color/rin_on_toolbar" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="@drawable/bg_detail_section_card">
+
+                <!-- شارة "rin" صغيرة + شريط المسار (breadcrumb) — دائم أعلى القائمة، يُعاد ملء
+                     containerFilesBreadcrumb ديناميكياً في كل تنقّل عبر
+                     PackageDetailActivity.renderFilesBreadcrumb. الشارة ثابتة (تمييز هوية
+                     التطبيق واضح فوق متصفّح الملفات، لا مجرّد نسخة من شكل GitHub العام). -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:paddingHorizontal="14dp"
+                    android:paddingVertical="10dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_toolbar_logo_badge"
+                        android:paddingHorizontal="6dp"
+                        android:paddingVertical="2dp"
+                        android:fontFamily="monospace"
+                        android:textStyle="bold"
+                        android:textSize="10sp"
+                        android:textColor="@android:color/white"
+                        android:text="rin" />
+
+                    <HorizontalScrollView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="8dp"
+                        android:scrollbars="none">
+
+                        <LinearLayout
+                            android:id="@+id/containerFilesBreadcrumb"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical" />
+                    </HorizontalScrollView>
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/rin_divider" />
+
+                <LinearLayout
+                    android:id="@+id/containerDetailFiles"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:divider="@drawable/divider_hairline"
+                    android:showDividers="middle" />
+
+                <!-- شريط "تركيبة ملفات الحزمة" — محسوب من الحجم الحقيقي لكل نوع ملف (انظر
+                     PackagingUtils.languageBreakdown)، بنفس مبدأ شريط تركيبة اللغات في GitHub
+                     لكن بألوان/تصنيفات Rin نفسها المستخدَمة أعلاه لأيقونات الملفات — يُخفَى
+                     بالكامل تلقائياً إن كانت الحزمة بنوع ملف واحد فقط. -->
+                <View
+                    android:id="@+id/dividerFilesLanguageBar"
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/rin_divider" />
+
+                <LinearLayout
+                    android:id="@+id/containerFilesLanguageBar"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingHorizontal="14dp"
+                    android:paddingVertical="12dp" />
+            </LinearLayout>
+
+            <!-- قسم README.md -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:layout_marginBottom="8dp"
+                android:drawableStart="@drawable/ic_readme_doc"
+                android:drawablePadding="8dp"
+                android:gravity="center_vertical"
+                android:text="@string/package_detail_section_readme"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:textColor="@color/rin_on_toolbar" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="@drawable/bg_detail_section_card">
+
+                <!-- شريط عنوان ثابت باسم الملف داخل البطاقة (icon + "README.md") — نفس شكل
+                     شريط عنوان بطاقة الـREADME في صفحة مستودع GitHub. -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:paddingHorizontal="14dp"
+                    android:paddingVertical="10dp">
+
+                    <ImageView
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:src="@drawable/ic_readme_doc"
+                        app:tint="@color/rin_editor_hint"
+                        android:contentDescription="@null" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:fontFamily="monospace"
+                        android:textStyle="bold"
+                        android:textSize="12.5sp"
+                        android:textColor="@color/rin_on_toolbar"
+                        android:text="README.md" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/rin_divider" />
+
+                <!-- حشو أوسع قليلاً (كان 15dp) — نص README لا يلامس حواف البطاقة، أقرب لتجربة
+                     قراءة مستند حقيقي وأريح للعين من نص مكدَّس عند الحافة مباشرة. -->
+                <LinearLayout
+                    android:id="@+id/containerDetailReadme"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingHorizontal="18dp"
+                    android:paddingVertical="16dp" />
+            </LinearLayout>
+
+            <!-- قسم الترخيص -->
+            <TextView
+                android:id="@+id/txtDetailLicenseTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:layout_marginBottom="8dp"
+                android:drawableStart="@drawable/ic_license_shield"
+                android:drawablePadding="8dp"
+                android:gravity="center_vertical"
+                android:text="@string/package_detail_section_license"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:textColor="@color/rin_on_toolbar" />
+
+            <TextView
+                android:id="@+id/txtDetailLicense"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_detail_section_card"
+                android:padding="15dp"
+                android:fontFamily="monospace"
+                android:textSize="11.5sp"
+                android:lineSpacingExtra="3dp"
+                android:textColor="@color/rin_editor_hint" />
+
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+
+</LinearLayout>

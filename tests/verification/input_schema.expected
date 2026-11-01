@@ -1,0 +1,9 @@
+User> name: [الطول يجب أن يكون بين 2 و 20] User> name: User> age: [أدخل رقماً صالحاً] User> age: [خارج 1..120] User> age: User> email: [بريد إلكتروني غير صالح] User> email: User> role: 
+1) Admin
+2) Editor
+3) ViewerUser> vip: Cfg> host: [localhost] Cfg> port: 📦 @import: تم استيراد "lib/inputkit.og.rin" (مكتبة مدمجة)
+Sara|34|s@x.org|true|false
+📦 container = Cfg
+✅ .end/container (Cfg)
+[hook]
+y:8080

@@ -1,0 +1,145 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>previewkit — معاينة حيّة لملفات PDF / Markdown / TypeScript — Rin</title>
+<meta name="description" content="توثيق لغة البرمجة Rin"><link rel="icon" href="../assets/brand/icon-32.png">
+<link rel="stylesheet" href="assets/style.css"></head><body>
+<header><button id="mn" aria-label="القائمة">☰</button><a class="logo" href="index.html"><img src="../assets/brand/icon-48.png" alt="" width="26">Rin</a>
+<input id="q" type="search" placeholder="ابحث في التوثيق…" autocomplete="off"><button id="th" aria-label="الوضع">◐</button>
+<a class="gh" href="https://github.com/dlof-lib/rinlang">GitHub</a><div id="res"></div></header>
+<div class="wrap"><nav id="sb"><details ><summary>ابدأ هنا</summary><a href="getting-started.html">البداية</a><a href="syntax.html">القواعد النحوية العامة</a><a href="variables.html">let`، مصفوفات، قواميس، نطاق</a><a href="template-strings.html">النصوص القالبية (متغيّرات داخل النص)</a><a href="input.html">إدخال المستخدم (Input)</a><a href="control-flow.html">الشروط، الحلقات، `goal`/`achieve</a><a href="loops.html">حلقات Rin — Loops v2</a><a href="functions.html">fun`/`return`، التكرار الذاتي</a><a href="enums.html">enum`: قوائم اختيار مغلقة</a></details><details ><summary>اللغة</summary><a href="language-reference.html">المرجع الشامل وخريطة ترابط المفاهيم</a><a href="objects.html">class`/`struct`، `.object()`، `@Object`، `document</a><a href="oop.html">البرمجة الكائنية الموسَّعة (Rin 1.0)</a><a href="containers.html">دليل `@container` / `@element` / `@loop</a><a href="table.html">الجدول (`@table` / `@container.table`) ودوال اللغة عليه</a><a href="set.html">Set`: نوع المجموعة الأساسي</a><a href="pipelines.html">عامل الأنابيب `|&gt;</a><a href="RECKON.html">reckon`: مفهوم حسابي بسطرين</a><a href="let-plus.html">let` المطوَّر</a><a href="living-variables.html">المتغيرات الحيّة (Living Variables)</a><a href="label-define.html">label` و`define` (تسمية وتعريف)</a><a href="block-frames.html">بداية الكتل ونهايتها (Block Frames)</a><a href="compare_ops.html">معاملات المقارنة `/=` و `=/=` و `=/</a><a href="max_min.html">max / min family</a><a href="scope-guarantees.html">ضمانات النطاق: `finally` · `defer` · `catch … when` · `rethrow</a><a href="key_terms_and_builtins.html">Rin KEY_TERMS and Built-in Conditions</a><a href="number_builtins.html">Rin Number Built-ins</a></details><details ><summary>الواجهات (Indsin)</summary><a href="indsin.html">Indsin — Interface Design</a><a href="indsin_rin.html">indsin يعتمد على لغة Rin</a><a href="indsin_expansion.html">Indsin — التوسعة الاحترافية (Design System v2)</a><a href="indsin_object.html">indsin-object — API reference</a><a href="indsin_media.html">Indsin Media — اختيار الوسائط ورفعها</a><a href="indsin_icons.html">مكتبة أيقونات indsin (متجهية)</a><a href="indsin_tooling.html">indsin tooling — icon, file association, syntax highlighting</a><a href="indsinweb.html">IndsinWeb — مكتبة WebView والروابط لـ indsin</a><a href="RIN_ELEMENTS.html">دليل `@element.*` الكامل</a><a href="events-effects.html">الأحداث والتأثيرات (Events &amp; Effects) — محرك Indsin UI</a><a href="banner.html">Banner: إشعار شريطي</a><a href="simple-style.html">Rin Simple Style</a></details><details ><summary>بيئة التشغيل</summary><a href="runtime.html">وقت تشغيل Rin (Rin Runtime) · المرجع الرسمي</a><a href="standard-library.html">المكتبة القياسية (`lib/*.og.rin`)</a><a href="errors.html">نظام الأخطاء: أكواد، `try`/`catch`/`throw</a><a href="ERROR_SYSTEM.html">نظام التشخيص: البنية الداخلية + جدول الأكواد الكامل</a><a href="storage.html">تخزين دائم</a><a href="http.html">شبكات</a><a href="env.html">ربط Rin بملف `.env</a><a href="terminal.html">الطرفية التفاعلية — `rin terminal</a><a href="vm.html">RinVM — آلة Rin الافتراضية (بايتكود)</a><a href="rinflow.html">RinFlow: طبقة تنفيذ التدفّق المهيكل</a><a href="MAKE_UNIT.html">@make.(name)`: وحدة بسياسة قدرات صريحة</a><a href="MAKE_MEDIA.html">فيديو · صوت · API · إزالة الخلفية · قراءة النص من الصور</a><a href="TIME.html">مفهوم `time`: الزمن كقيمة من الدرجة الأولى</a><a href="native-additions.html">دوال Rin الأصلية الجديدة (Rin 1.0)</a></details><details ><summary>الحاويات وقواعد البيانات</summary><a href="container_advanced.html">Rin Container Advanced Built-ins</a><a href="container_pro.html">Rin Container Pro</a><a href="container_sql.html">RIN CONTAINER SQL (RCSQL)</a><a href="cross-file-containers.html">استدعاء إعلانات من ملف آخر</a></details><details open><summary>الحزم والتكامل</summary><a href="api.html">واجهة C المسطَّحة (Embedding API)</a><a href="android.html">استضافة Rin على أندرويد</a><a href="packages-and-interop.html">Rin 1.0 — المكتبات والحزم وجسر C++ وJSON واختبارات rintest</a><a href="rinpak-format.html">RinPak — حزمة مشروع Rin (`.rinpak`)</a><a href="html-projects.html">مشاريع HTML في Rin — الربط بين index.html وملف الحاوية</a><a href="project-og-urin.html">project.og.urin` — البيانات الوصفية لمشروع Rin</a><a href="CONTENT_PACKS.html">حزم المحتوى القابلة للتنزيل (Content Packs)</a><a href="previewkit.html" class=on>previewkit — معاينة حيّة لملفات PDF / Markdown / TypeScript</a></details><details ><summary>المكتبات المتخصصة</summary><a href="rinml.html">RinML / RinDF / RinAI — الذكاء الاصطناعي وتحليل البيانات في Rin</a><a href="STATS.html">RinStat — التحليل الإحصائي (`lib/rinstat.og.rin`)</a><a href="STATS_ADV.html">RinStat المتقدّم + RinAuto</a><a href="LINALG.html">الجبر الخطي للمهندسين — `mat*` و`vec*</a><a href="PLOT.html">RinPlot — الرسوم البيانية الإحصائية (`lib/rinplot.og.rin`)</a><a href="ALGO.html">تطوير الخوارزميات والحساب العددي — `algo*</a><a href="NUMBER.html">مفهوم `number` في Rin</a><a href="boat.html">&quot;Boat&quot;: مفاهيم أساسية مجمَّعة</a><a href="passkit.html">passkit — passwords, encryption, databases and a tag language</a><a href="passkit-crypto-db.html">Passkit feature catalog: encryption, databases and container linking</a><a href="hash-family.html">عائلة `#` — مفاهيم ودوال جديدة تبدأ بعلامة `#</a><a href="image-draw.html">إنشاء الصور في Rin — رسم وحفظ PNG وlog كصورة</a><a href="image-terminal.html">طباعة الصور في الـ terminal — `printImage` / `imageAnsi` / `imageInfo</a></details><details ><summary>المشروع</summary><a href="CONTRIBUTING.html">المساهمة في Rin</a><a href="CODE_OF_CONDUCT.html">قواعد السلوك</a><a href="SECURITY.html">سياسة الأمان</a><a href="SUPPORT.html">الحصول على المساعدة</a><a href="TRADEMARKS.html">سياسة العلامة التجارية — Trademark Policy</a><a href="THIRD_PARTY_NOTICES.html">إشعارات المكوّنات الخارجية — Third-Party Notices</a></details><details ><summary>مراجع إضافية</summary><a href="ANDROID_VERSIONS.html">حزم RinStudio لكل إصدار أندرويد</a><a href="TOKEN.html">مفهوم `token` في Rin</a><a href="TOOLCHAIN.html">Rin Professional Language Toolchain</a><a href="TOOLCHAIN_UPGRADE.html">Toolchain Upgrade — 2026-09</a><a href="architecture.html">المعمارية وبنية المستودع</a><a href="base-accept.html">base` و`accept`: متغيّران يخدمان `if</a><a href="channel47.html">channel47 — لغة وصف البيانات والإعدادات</a><a href="ci.html">CI وأدوات المستودع</a><a href="loop-templates.html">قوالب الحلقات `@tmpl</a><a href="pre-post.html">pre` و`post` (ما قبل / ما بعد): عقد انتقال حول الإسناد</a><a href="print-fonts.html">خطوط `print` — bold / italic / underline وغيرها</a><a href="print-image-terminal.html">طباعة الصور كنص في الطرفية</a><a href="print-templates.html">قوالب الطباعة `@tmpl ... print` — قوالب نصية خطية وتنسيقية</a><a href="rdoc.html">rdoc — Documentation Container</a><a href="rdoc-reference.html">وثيقة rdoc الشاملة — Documentation Container</a><a href="screenshots.html">لقطات من RinStudio</a></details></nav>
+<main><article><h1 id="previewkit-pdf-markdown-typescript">previewkit — معاينة حيّة لملفات PDF / Markdown / TypeScript<a class="headerlink" href="#previewkit-pdf-markdown-typescript" title="Permanent link">#</a></h1>
+<p>مكتبة Rin خالصة (<code>lib/previewkit.og.rin</code>، مضمّنة في كل البنى) تحوّل ملفاً إلى <strong>صفحة HTML كاملة</strong> تُعرض في WebView أو المتصفح،
+وتُعيد توليدها تلقائياً عند أي تعديل. كل ما فيها مكتوب بـ Rin فوق natives موجودة، مع native واحد جديد: <code>zlibInflate</code>.</p>
+<pre><code class="language-kotlin">@import &quot;lib/previewkit.og.rin&quot;;
+
+pvRun(&quot;notes.md&quot;, {});                                   // يكتب notes.md.preview.html ويعيد الملخص
+pvPreview(&quot;main.ts&quot;, &quot;main.html&quot;, {&quot;lang&quot;: &quot;en&quot;});        // صفحة بإخراج تختاره
+pvLive(&quot;report.pdf&quot;, &quot;report.html&quot;, {&quot;embedSrc&quot;: &quot;report.pdf&quot;, &quot;intervalMs&quot;: 800, &quot;maxTicks&quot;: 300});
+</code></pre>
+<h2 id="_1">الأنواع<a class="headerlink" href="#_1" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>النوع</th>
+<th>الامتدادات</th>
+<th>ما تعرضه الصفحة</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Markdown</td>
+<td><code>md markdown mdown mkd</code></td>
+<td>HTML عبر <code>relyRIN</code> + فهرس عناوين جانبي بروابط + كلمات/زمن القراءة</td>
+</tr>
+<tr>
+<td>PDF</td>
+<td><code>pdf</code> (أو توقيع <code>%PDF-</code>)</td>
+<td>نص كل صفحة + بيانات الوثيقة (عنوان/مؤلف/مُنتِج/تاريخ/خطوط/صور) + تبويب «الأصل» (<code>embedSrc</code>)</td>
+</tr>
+<tr>
+<td>TypeScript / JavaScript</td>
+<td><code>ts tsx mts cts js jsx mjs cjs</code></td>
+<td>تلوين، <strong>هيكل الملف</strong> (class/interface/type/enum/function/const + أعضاء الأصناف)، الاستيرادات، فحص أقواس ونصوص غير مغلقة</td>
+</tr>
+<tr>
+<td>JSON</td>
+<td><code>json jsonc webmanifest</code></td>
+<td>تلوين (المفاتيح مميّزة) + حكم الصلاحية</td>
+</tr>
+<tr>
+<td>كود عام</td>
+<td><code>rin kt java c cpp go rs py ...</code></td>
+<td>عرض ملوّن بأرقام أسطر</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="_2">الواجهة<a class="headerlink" href="#_2" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الدالة</th>
+<th>الوصف</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pvRender(path, opts)</code></td>
+<td>يقرأ الملف ويعيد <code>{ok, kind, html, ...}</code></td>
+</tr>
+<tr>
+<td><code>pvRenderText(kind, src, opts)</code></td>
+<td>نفسه من نص مباشر (<code>"markdown"</code>, <code>"typescript"</code>, <code>"json"</code>, ...)</td>
+</tr>
+<tr>
+<td><code>pvPreview(path, outPath, opts)</code></td>
+<td>يولّد ويكتب الصفحة؛ يعيد <code>{ok, kind, output, bytes, ms, stamp}</code></td>
+</tr>
+<tr>
+<td><code>pvRun(path, opts)</code></td>
+<td>اختصار: يكتب <code>path + ".preview.html"</code> (أو <code>opts.output</code>)</td>
+</tr>
+<tr>
+<td><code>pvPollOnce(path, out, opts, state)</code></td>
+<td>فحص واحد <strong>غير حاجب</strong> لبصمة الملف (CRC32): يعيد <code>{changed, state, result}</code> — مناسب لحلقة المضيف</td>
+</tr>
+<tr>
+<td><code>pvLive(path, out, opts)</code></td>
+<td>مراقبة حاجبة: تولّد ثم تفحص كل <code>intervalMs</code> (50–60000) حتى <code>maxTicks</code>؛ <code>onUpdate(result)</code> اختيارية</td>
+</tr>
+<tr>
+<td><code>pvStamp(path)</code></td>
+<td>بصمة المحتوى</td>
+</tr>
+<tr>
+<td><code>pvDetect(path, bytes)</code> / <code>pvSupported()</code></td>
+<td>كشف النوع / الأنواع المدعومة</td>
+</tr>
+<tr>
+<td><code>pvPdfText(path)</code> / <code>pvPdfInfo(path)</code> / <code>pvPdfAnalyze(bytes)</code></td>
+<td>استخراج نص PDF وبياناته بلا HTML</td>
+</tr>
+<tr>
+<td><code>pvTsOutline(src, "ts"\|"js")</code></td>
+<td><code>{outline, imports, problems, functions, types}</code></td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="opts">الخيارات (<code>opts</code>)<a class="headerlink" href="#opts" title="Permanent link">#</a></h3>
+<p><code>lang</code> (<code>"ar"</code> الافتراضي أو <code>"en"</code>) · <code>live</code> (يضيف تحديثاً ذاتياً للصفحة مع حفظ موضع التمرير) · <code>intervalSec</code> ·
+<code>dark</code> (<code>"auto"</code> / <code>"on"</code>) · ألوان الثيم (<code>accent</code>, <code>bg</code>, <code>text</code>, ... كما في <code>relyTheme</code>) · <code>embedSrc</code> (مسار نسبي لـ PDF الأصلي) · <code>kind</code> (فرض النوع).</p>
+<h2 id="_3">كيف تعمل المعاينة الحيّة<a class="headerlink" href="#_3" title="Permanent link">#</a></h2>
+<ol>
+<li><code>pvLive</code>/<code>pvPollOnce</code> يقارنان بصمة الملف ويعيدان توليد HTML عند التغيّر فقط.</li>
+<li>الصفحة الناتجة بخيار <code>live: true</code> تُحدّث نفسها (<code>meta refresh</code>) وتحفظ موضع التمرير، فيظهر التعديل في العارض دون تدخّل.</li>
+</ol>
+<h2 id="pdf">استخراج PDF — ما يدعمه وما لا يدعمه<a class="headerlink" href="#pdf" title="Permanent link">#</a></h2>
+<ul>
+<li>يدعم: جداول xref وxref streams (لا يعتمد عليها أصلاً؛ يقرأ الأجسام مباشرة)، object streams، <code>FlateDecode</code> و<code>ASCII85Decode</code> و<code>ASCIIHexDecode</code>،
+  ترتيب الصفحات من شجرة <code>/Pages</code>، موارد الخطوط الموروثة، خطوط بسيطة (WinAnsi) وخطوط Type0 مع <code>ToUnicode</code>.</li>
+<li>المسافات بين الكلمات تُحسب من <strong>عروض الخطوط</strong> (<code>/Widths</code> و<code>/W</code>) والفجوات الفعلية، ومصفوفات <code>cm</code>/<code>Tm</code> تُتابَع لتحديد الأسطر.</li>
+<li>العربية/العبرية: يُفضَّل <code>/ActualText</code> (Chrome/Skia)، وإلا تُرتَّب المقاطع بصرياً بحسب موضع x ثم تُحوَّل إلى الترتيب المنطقي.</li>
+<li>غير مدعوم (يُبلَّغ بوضوح بدل التخمين): الملفات المشفّرة، <code>LZWDecode</code>/<code>RunLengthDecode</code>، خطوط Type0 بلا <code>ToUnicode</code>، الصفحات الممسوحة (لا OCR).
+  للمعاينة البصرية الحقيقية استخدم تبويب «الأصل» (يعرضه عارض PDF في المتصفح).</li>
+<li><strong>TypeScript</strong>: لا تنفيذ للشيفرة (لا native لتشغيل عمليات)؛ المعاينة = تلوين + هيكل + فحص. regex literal يُكتشف بعد <code>= ( , : [ ! &amp; | ? { } ;</code> فقط.</li>
+</ul>
+<h2 id="native-zlibinflatedata-maxbytes">native جديد: <code>zlibInflate(data, maxBytes?)</code><a class="headerlink" href="#native-zlibinflatedata-maxbytes" title="Permanent link">#</a></h2>
+<p>يفك تغليف zlib/gzip <strong>دون معرفة الحجم الأصلي</strong> (على عكس <code>zlibInflateRaw</code>)؛ يُرجع <code>nil</code> للبيانات التالفة أو عند تجاوز السقف
+(افتراضي 64MB، أقصى 512MB — حماية من قنابل الضغط).</p>
+<h2 id="_4">الاختبار<a class="headerlink" href="#_4" title="Permanent link">#</a></h2>
+<p><code>rin tests/previewkit_tests.rin</code> — 22 اختباراً (تُبنى ملفات PDF داخل الاختبار نفسه). مثال: <code>examples/previewkit_demo.rin</code>.</p></article>
+<div class="pnav"><a class="pn" href="CONTENT_PACKS.html">→ حزم المحتوى القابلة للتنزيل (Content Packs)</a><a class="pn" href="rinml.html">RinML / RinDF / RinAI — الذكاء الاصطناعي وتحليل البيانات في Rin ←</a></div><p class="edit"><a href="https://github.com/dlof-lib/rinlang/edit/main/docs/previewkit.md">✎ عدّل هذه الصفحة على GitHub</a></p>
+<footer>Rin 1.0.0 · رخصة MIT</footer></main>
+<aside id="toc"><b>في هذه الصفحة</b><div class="toc">
+<ul>
+<li><a href="#_1">الأنواع</a></li>
+<li><a href="#_2">الواجهة</a><ul>
+<li><a href="#opts">الخيارات (opts)</a></li>
+</ul>
+</li>
+<li><a href="#_3">كيف تعمل المعاينة الحيّة</a></li>
+<li><a href="#pdf">استخراج PDF — ما يدعمه وما لا يدعمه</a></li>
+<li><a href="#native-zlibinflatedata-maxbytes">native جديد: zlibInflate(data, maxBytes?)</a></li>
+<li><a href="#_4">الاختبار</a></li>
+</ul>
+</div>
+</aside></div>
+<script src="assets/app.js"></script></body></html>

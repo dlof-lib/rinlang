@@ -1,0 +1,11 @@
+// hash_sed.rin — #sed على طريقة sed (docs/hash-family.md)
+print #sed("hello world", "s/o/0/");
+print #sed("hello world", "s/o/0/g");
+print #sed("Hello World", "s/world/Rin/i");
+print #sed("a.b.c", "\\.", "-", "g");
+print #sed("2026-10-02", "([0-9]+)-([0-9]+)-([0-9]+)", "\\3/\\2/\\1");
+print #sed("cat", "c", "[&]");
+print #sed("a/b", "s|/|::|");
+print #sed(["aa", "ba"], "s/a/x/g");
+try { #sed("x", "s/(/y/"); } catch (e) { print "bad regex caught"; }
+try { #sed(5, "s/a/b/"); } catch (e) { print e.code; }

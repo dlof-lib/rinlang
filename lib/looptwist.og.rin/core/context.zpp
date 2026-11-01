@@ -1,0 +1,78 @@
+// core/context.zpp — الإعدادات والسياق المشتقّان من RINTWIST.
+//
+//   limit : سقف أمان لعدد الدورات (يمنع الحلقات الجامحة). أقل على المنصات الصغيرة (android / wasm).
+//   trace : طباعة تتبّع الحلقات — يتفعّل تلقائياً عندما RINTWIST.app.debug == true.
+//   tag   : وسم الرسائل — يُحسب وقت الاستدعاء: اسم المكتبة الجارية إن وُجدت وإلا اسم الملف (بلا امتداد)؛ lt_config({tag: "x"}) يثبّته.
+//   sleep : هل ينتظر lt_retry/lt_poll فعلاً (time.sleep) — false يجعلها فورية (مفيد للاختبار).
+fun lt_defaultLimit() {
+    let mode = rintwist.get("app.mode", "cli");
+    if (mode == "android" or mode == "wasm") { return 200000; }
+    return 5000000;
+}
+
+fun lt_defaultTag() {
+    if (rintwist.get("lib.active", false)) { return rintwist.get("lib.name", "rin"); }
+    return rintwist.get("file.stem", "rin");
+}
+
+// الوسم الحالي: المضبوط يدوياً أو اسم الملف/المكتبة الجاري تنفيذه وقت الاستدعاء.
+fun lt_tagNow() { return LT_CFG["tag"] == nil ? lt_defaultTag() : LT_CFG["tag"]; }
+
+let LT_CFG = {
+    limit: lt_defaultLimit(),
+    trace: rintwist.get("app.debug", false) == true,
+    tag: nil,   // nil = يُحسب وقت الاستدعاء من RINTWIST (الملف/المكتبة الذي يستدعي الحلقة)
+    sleep: true
+};
+
+// يدمج إعدادات جديدة (القيم المجهولة تُرفض) ويُرجع الإعدادات الحالية.
+export fun lt_config(opts) {
+    if (opts == nil) { return lt_settings(); }
+    if (type(opts) != "map") { throw "looptwist: lt_config expects a map such as {limit: 1000, trace: true}"; }
+    for (let k in keys(opts)) {
+        if (!has(LT_CFG, k)) { throw "looptwist: unknown setting '" + k + "' (limit, trace, tag, sleep)"; }
+        if (k == "limit" and (type(opts[k]) != "number" or opts[k] < 1)) { throw "looptwist: 'limit' must be a positive number"; }
+        LT_CFG[k] = opts[k];
+    }
+    return lt_settings();
+}
+
+// نسخة من الإعدادات الحالية (تعديلها لا يغيّر الإعدادات).
+export fun lt_settings() {
+    return {limit: LT_CFG["limit"], trace: LT_CFG["trace"], tag: lt_tagNow(), sleep: LT_CFG["sleep"]};
+}
+
+// أين نحن الآن؟ "looptwist@1.0.0 core/control.zpp" أو "main.rin" — عبر قالب RINTWIST.
+export fun lt_where() {
+    if (rintwist.get("lib.active", false)) { return rintwist.fmt("{lib.name}@{lib.version} {file.part}"); }
+    return rintwist.fmt("{file.name}");
+}
+
+// اسم ملف سجلّ جاهز: app-2026-10-24.log  (يمكن تمرير بادئة/لاحقة)
+fun ltx_logName(ext) {
+    let e = ext == nil ? "log" : ext;
+    return rintwist.fmt("{file.stem}-{date.date}." + e);
+}
+
+// تتبّع: يطبع فقط عندما trace=true. "[tag] label: details"
+fun ltx_trace(label, details) {
+    if (!LT_CFG["trace"]) { return nil; }
+    let d = details == nil ? "" : ": " + toString(details);
+    print "[" + lt_tagNow() + "] " + label + d;
+    return nil;
+}
+
+// ساعة موحَّدة بالميلي ثانية (عمر المفسّر من RINTWIST.run) — لقياس الفروق بين لحظتين.
+fun lt_clock() { return RINTWIST.run.uptimeMs; }
+
+fun lt_checkFn(fn, who) {
+    if (!isFunction(fn)) { throw "looptwist: " + who + " expects a function, found " + type(fn); }
+}
+fun lt_checkInt(n, who) {
+    if (type(n) != "number" or n != floor(n)) { throw "looptwist: " + who + " expects an integer, found " + toString(n); }
+}
+fun lt_guard(count, who) {
+    if (count > LT_CFG["limit"]) {
+        throw "looptwist: loop limit exceeded in " + who + " (more than " + toString(LT_CFG["limit"]) + " iterations) — raise it with lt_config({limit: N})";
+    }
+}

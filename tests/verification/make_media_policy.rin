@@ -1,0 +1,85 @@
+// make_media_policy.rin — قدرات الوسائط (video/audio/api/image/ocr) تخضع لسياسة @make.(name)
+// الكشف يعمل داخل التعبيرات المتداخلة (دالة / شرط / ternary / lambda)، لا العبارات فقط.
+
+fun attempt(label, runner) {
+    try {
+        runner();
+        print label + ": ok";
+    } catch (e) {
+        print label + ": " + e.code + " " + e.message;
+    }
+}
+
+// مسموح: need + use لقدرة image، والاستدعاء داخل let
+attempt("allow-image", fun() {
+    @make.(a1)
+        kind task;
+        use image; use io;
+        need image;
+        strict;
+        let r = make.image.removeBg("no_such_file.png", "o.png");
+        print r.ok;
+    .end/make=a1
+});
+
+// deny api ثم استدعاء make.api
+attempt("deny-api", fun() {
+    @make.(a2)
+        kind task;
+        use io; use api;
+        deny api;
+        let r = make.api("http://127.0.0.1:1/");
+    .end/make=a2
+});
+
+// strict يطلب use ocr حتى لو الاستدعاء داخل جسم دالة
+attempt("strict-ocr-in-function", fun() {
+    @make.(a3)
+        kind app;
+        use io; use function;
+        strict;
+        fun f(p) { return make.ocr(p); }
+        print f("x.png");
+    .end/make=a3
+});
+
+// library لا تسمح بـ video افتراضياً (الاستدعاء داخل شرط)
+attempt("library-no-video", fun() {
+    @make.(a4)
+        kind library;
+        use io;
+        if (make.video.info("x.mp4").ok) { print 1; }
+    .end/make=a4
+});
+
+// need video بلا استخدام فعلي
+attempt("need-unused", fun() {
+    @make.(a5)
+        kind page;
+        use io; use video;
+        need video;
+        print 1;
+    .end/make=a5
+});
+
+// make.audio داخل ternary
+attempt("audio-in-ternary", fun() {
+    @make.(a6)
+        kind component;
+        use io; use audio; use video; use image;
+        need audio;
+        let x = true ? make.audio.info("no.wav").ok : false;
+        print x;
+    .end/make=a6
+});
+
+// make.uuid / make.media.tools ليست قدرات: وحدة strict بدونهما في use تنجح
+attempt("non-capability-calls", fun() {
+    @make.(a7)
+        kind app;
+        use io;
+        strict;
+        print type(make.uuid());
+        print type(make.media.tools());
+    .end/make=a7
+});

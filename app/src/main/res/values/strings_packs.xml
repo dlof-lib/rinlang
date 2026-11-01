@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- نصوص ميزة الحزم القابلة للتنزيل (ContentPacksActivity / PackDownloadDialog) -->
+<resources>
+    <string name="packs_title">الحزم والتنزيلات</string>
+    <string name="packs_subtitle">نزّل اللغات والأصول عند الحاجة لتبقى مساحة التطبيق صغيرة</string>
+    <string name="packs_section_languages">حزم اللغات</string>
+    <string name="packs_section_assets">حزم الأصول</string>
+    <string name="packs_storage_used_format">المساحة التي تشغلها الحزم المثبّتة: %1$s</string>
+    <string name="packs_builtin">مدمجة في التطبيق</string>
+    <string name="packs_installed">مثبّتة</string>
+    <string name="packs_update_available">يتوفر تحديث</string>
+    <string name="packs_action_download">تنزيل (%1$s)</string>
+    <string name="packs_action_update">تحديث (%1$s)</string>
+    <string name="packs_action_delete">حذف</string>
+    <string name="packs_action_cancel">إلغاء</string>
+    <string name="packs_action_retry">إعادة المحاولة</string>
+    <string name="packs_downloading_format">جارٍ التنزيل… %1$d%%</string>
+    <string name="packs_verifying">جارٍ التحقق من سلامة الملف…</string>
+    <string name="packs_installing">جارٍ التثبيت…</string>
+    <string name="packs_done_toast">تم تثبيت «%1$s»</string>
+    <string name="packs_deleted_toast">تم حذف «%1$s»</string>
+    <string name="packs_cancelled">أُلغي التنزيل</string>
+    <string name="packs_error_format">تعذّر التنزيل: %1$s</string>
+    <string name="packs_error_offline">لا يوجد اتصال بالإنترنت</string>
+    <string name="packs_error_hash">فشل التحقق من سلامة الملف، أعد المحاولة</string>
+    <string name="packs_error_unknown_pack">الحزمة غير موجودة في القائمة</string>
+    <string name="packs_catalog_failed">تعذّر تحميل قائمة الحزم. تُعرض الحزم المثبّتة فقط.</string>
+    <string name="packs_empty">لا توجد حزم متاحة حالياً</string>
+    <string name="packs_refresh">تحديث القائمة</string>
+    <string name="packs_delete_title">حذف الحزمة</string>
+    <string name="packs_delete_message_format">سيتم حذف «%1$s» من الجهاز ويمكنك تنزيلها لاحقاً.</string>
+    <string name="packs_need_title">حزمة مطلوبة</string>
+    <string name="packs_need_message_format">«%1$s» غير مدمجة في التطبيق لتقليل حجمه. هل تنزّلها الآن (%2$s)؟</string>
+    <string name="packs_dialog_title_format">تنزيل «%1$s»</string>
+    <string name="packs_language_pending_toast">نزّل حزمة اللغة أولاً لتطبيقها</string>
+    <string name="settings_packs_title">الحزم والتنزيلات</string>
+    <string name="settings_packs_hint">إدارة اللغات والأصول القابلة للتنزيل وحجمها على الجهاز</string>
+</resources>

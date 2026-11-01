@@ -1,0 +1,18 @@
+# rindb — محرك قاعدة بيانات مكتوب بلغة Rin نفسها، فوق ما في اللغة أصلاً:
+# spawn("doc") + insertDoc/findDoc/updateDoc/deleteDoc + RCSQL + defineSchema/createIndex +
+# beginTransaction/commitTransaction/rollbackTransaction + readFile/writeFile/appendFile + hash + json.
+# لا دوال أصلية جديدة ولا تعديل في المفسّر.
+disconom = 2
+name = "rindb"
+version = "1.0.0"
+description = "محرك قاعدة بيانات Rin: جداول مستندات تُنشأ وقت التشغيل، تخزين دائم بسجل أمامي (WAL) مع checksum، معاملات، فهارس، استعلامات RCSQL"
+authors = ["Rin"]
+license = "MIT"
+keywords = ["database", "storage", "wal", "قاعدة بيانات"]
+categories = ["data", "storage"]
+rin = ">=1.0.0"
+main = "main.zpp"
+parts = ["main.zpp", "core/store.zpp", "core/persist.zpp", "core/api.zpp", "core/bind.zpp"]
+
+[scripts]
+test = "cd ../.. && rin tests/verification/rindb_lib.rin"

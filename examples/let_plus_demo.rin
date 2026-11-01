@@ -1,0 +1,48 @@
+// let_plus_demo.rin — let المطوَّر: تفكيك، عدة تصريحات، حارس else، تبديل
+// التشغيل: rin examples/let_plus_demo.rin   (انظر docs/let-plus.md)
+
+// 1) إجابة API: تفكيك قاموس مع قيم افتراضية وتعشيش
+let response = {"status": 200, "data": {"user": {"name": "Sara", "tags": ["admin", "dev", "ops"]}}};
+let {status, data: {user: {name, tags: [mainTag, ...moreTags]}}, error = "none"} = response;
+print name + " (" + status + ") main=" + mainTag + " more=" + moreTags + " error=" + error;
+
+// 2) دالة بحارس: تخرج مبكرًا بدل if متداخلة
+fun describe(row) {
+    let {id, label} = row else { return "invalid row"; };
+    let price = row["price"] else { return id + ":" + label + " (no price)"; };
+    return id + ":" + label + " = " + price;
+}
+print describe({"id": 1, "label": "pen", "price": 3});
+print describe({"id": 2, "label": "ink"});
+print describe(nil);
+
+// 3) حلقة تفكّك أزواجًا وتتخطّى الفارغ
+let total = 0;
+for (let [item, qty] in [["a", 2], ["b", 5], [nil, 1]]) {
+    let it = item else { continue; };
+    total = total + qty;
+    print "  " + it + " x" + qty;
+}
+print "total=" + total;
+
+// 4) عدة تصريحات في سطر + تبديل قيم + ترتيب فقاعي بالتبديل
+let lo = 0, hi = 9, mid = (lo + hi) / 2;
+[lo, hi] = [hi, lo];
+print lo + " " + hi + " " + mid;
+let nums = [5, 2, 9, 1];
+let n = len(nums), i = 0;
+while (i < n) {
+    let j = 0;
+    while (j < n - 1 - i) {
+        if (nums[j] > nums[j + 1]) { [nums[j], nums[j + 1]] = [nums[j + 1], nums[j]]; }
+        j = j + 1;
+    }
+    i = i + 1;
+}
+print nums;
+
+// 5) مع المتغيرات الحيّة: تبديل ضمن trial يتراجع كله
+gauge hp = 50 within 0 to 100;
+tape pos = 1;
+trial { [hp, pos] = [500, 2]; abort; }
+print hp; print pos;

@@ -1,0 +1,45 @@
+<!-- hello.passkit — Register a new user: email + password + API key + link + database -->
+<passkit>
+
+  <!-- 1) Email -->
+  <email name="e" address="Rima@Example.com" />
+  <print value="Email: {e.address}  valid? {e.ok}  masked: {e.masked}" />
+
+  <!-- 2) Password: generate + policy check + hash -->
+  <password name="pw" generate length="18" />
+  <password name="chk" check="$pw.password" policy="strict" email="$e.address" />
+  <assert var="$chk.ok" message="password does not match the policy" />
+  <password name="h" hash="$pw.password" />
+  <password name="again" verify="$pw.password" against="$h.hash" />
+  <print value="Strength: {pw.strength}/4  entropy: {pw.entropyBits} bits  verified: {again.ok}" />
+
+  <!-- 3) API key (shown once, only the hash is stored) -->
+  <apikey name="k" generate prefix="pk_live" />
+  <print value="API key: {k.masked}" />
+
+  <!-- 4) Database (RCSQL) — no raw secret is ever stored -->
+  <sql table="users" insert id="u1" email="$e.address" password_hash="$h.hash" key_id="$k.id" key_hash="$k.hash" role="admin" />
+  <sql table="users" find field="email" equals="$e.address" name="me" />
+  <print value="exists in the database? {me.found}  Role: {me.row.role}" />
+  <sql table="users" count where="role:eq(admin)" name="admins" />
+  <print value="admin count: {admins}" />
+
+  <!-- 5) Link + API call (dry = build the request offline, key is hidden) -->
+  <link name="l" build base="https://api.example.com" path="v1/users" query.email="$e.address" query.page="1" />
+  <print value="Link: {l.url}" />
+  <api name="r" url="$l.url" method="GET" key="$k.key" dry />
+  <print value="{r.request.method} {r.request.url}" />
+  <print value="Authorization: {r.request.headers.Authorization}" />
+
+  <!-- 6) Conditions and loops -->
+  <if var="$pw.strength" gte="3">
+    <print value="password is strong" />
+    <else />
+    <print value="password is weak" />
+  </if>
+  <sql table="users" select where="role:eq(admin)" name="rows" />
+  <for each="u" in="$rows">
+    <print value="user: {u._id}" />
+  </for>
+
+</passkit>

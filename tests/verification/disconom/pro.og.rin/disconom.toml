@@ -1,0 +1,50 @@
+# Disconom 2 بصيغة TOML — مكتبة احترافية كاملة الحقول
+disconom = 2
+name = "pro"
+version = "2.3.1-beta.1"
+description = "مكتبة تجريبية تغطي كل حقول Disconom 2"
+authors = ["Droy", "Rin Team"]
+contributors = ["Ali"]
+license = "MIT OR Apache-2.0"
+keywords = ["pro", "demo", "اختبار"]
+categories = ["testing"]
+homepage = "https://example.com/pro"
+repository = "https://github.com/example/pro"
+bugs = "https://github.com/example/pro/issues"
+funding = "https://example.com/sponsor"
+readme = "README.md"
+rin = ">=1.0.0 <2.0.0"
+platforms = ["linux", "android", "windows"]
+main = "main.zpp"
+parts = ["main.zpp", "core/**"]
+run = ["run.rinz"]
+exclude = ["drafts/**"]
+files = ["main.zpp", "core", "run.rinz", "README.md"]
+x-custom = { team = "core", tier = 3 }
+
+[dependencies]
+base = "^1.0.0"
+
+[optionalDependencies]
+extra = "^1.0.0"
+
+[peerDependencies]
+hostlib = ">=1.0.0"
+
+[devDependencies]
+testkit = "^2.0.0"
+
+[scripts]
+test = "rin tests/basic.rin"
+"lint:all" = "rin lib check ."
+
+[features]
+default = ["text"]
+text = ["dep:extra"]
+fast = ["text"]
+
+[native]
+sources = ["native/fast.cpp"]
+std = "c++20"
+required = false
+functions = [ { name = "pro_fast", params = ["numbers"] }, "pro_ping" ]

@@ -1,0 +1,2 @@
+shapes_register("run");
+print "shapes ready: " + str(len(SHAPES_LOADED)) + " parts";

@@ -1,0 +1,69 @@
+// aukt_demo.aak.rin
+// ============================================================================
+// AUKT — Automated Knowledge Tables (جداول المعرفة الآلية)
+// ============================================================================
+// هذا مثال كامل لملف AUKT حقيقي بامتداد ".aak.rin". الترميز والبنية الداخلية
+// هما نفس ترميز/بنية أي ملف Rin عادي (نص عادي UTF-8، يُقرأ بنفس lexer/parser/
+// interpreter الموجودين أصلاً) — الفرق الوحيد هو أن هذا الملف مغلَّف بالكامل
+// داخل كتلة واحدة من نوع @AUKT تجمع كل مفاهيم "جدول المعرفة" في مكان واحد:
+//   1) جدول (أو أكثر) بيانات       -> @table
+//   2) قاموس (أو أكثر) NoSQL       -> @doc
+//   3) نمط/ستايل عام للحزمة كاملة  -> style (مباشرة داخل @AUKT)
+//   4) مكتبة خطوط قابلة للاعتماد   -> @Object=fonts
+//   5) أيقونات قابلة للتخصيص       -> @sticker=icons
+//   6) شريط أدوات (Toolbar) قابل للتخصيص -> @block="toolbar"
+// ============================================================================
+
+@AUKT=knowledge_base
+    text title = "قاعدة معرفة DLoF/RinLang";
+    text description = "مثال AUKT كامل: جدول فريق + قاموس مصطلحات + ستايل + خطوط + أيقونات + شريط أدوات";
+
+    // نمط عرض افتراضي لكامل حزمة AUKT (يُستخدم ما لم يُخصَّص نمط محلي داخل جدول/قاموس فرعي)
+    style value="style://dark";
+
+    // ---- 1) جدول معرفة: أعضاء الفريق ----
+    @table=team_members
+        row cells=["الاسم", "الدور", "المشروع"];
+        row cells=["جو", "مطوّر أندرويد (Kotlin/Compose)", "DLoF + RinLang"];
+        row cells=["علي", "تصميم الأيقونة والهوية البصرية", "Creative Ali"];
+        // نمط محلي خاص بهذا الجدول فقط (يتجاوز نمط AUKT العام أعلاه لهذا الجدول تحديداً)
+        style value="style://grid";
+    .end/table
+
+    // ---- 2) قاموس معرفة (NoSQL): مصطلحات المشروع ----
+    @doc=glossary
+        document id="dlof" fields={ term: "DLoF", meaning: "Document Loop Format — صيغة مستندات XML حلقية الربط" };
+        document id="rin"  fields={ term: "Rin", meaning: "لغة صغيرة (lexer/parser/interpreter بلغة ++C) مدمجة داخل تطبيق أندرويد عبر JNI" };
+        document id="aukt" fields={ term: "AUKT", meaning: "Automated Knowledge Tables — جداول وقواميس معرفة آلية بامتداد .aak.rin" };
+    .end/doc
+
+    // ---- 3) مكتبة خطوط يمكن اعتمادها في عرض الجداول/القواميس ----
+    @Object=fonts
+        text primary   = "Cairo";           // الخط الأساسي (نصوص عربية)
+        text secondary = "Tajawal";         // خط ثانوي/عناوين
+        text monospace = "JetBrains Mono";  // خط للأرقام/الأكواد داخل الخلايا
+        style value="style://light";
+    .end/Object
+
+    // ---- 4) أيقونات قابلة للتخصيص (بطاقة هوية بصرية لحزمة AUKT) ----
+    @sticker=icons
+        text icon      = "aukt_table_icon.png";
+        text colors    = "#3498db,#2ecc71";
+        text edges     = "rounded:12";
+        text animation = "fade-in:200ms";
+    .end/sticker
+
+    // ---- 5) شريط أدوات (Toolbar) قابل للتخصيص بالكامل ----
+    @block="toolbar"
+        text items    = "جديد,حذف,فرز,تصفية,تصدير,استيراد";
+        text position = "top";
+        text icon_set = "icons"; // إشارة إلى حاوية sticker=icons أعلاه
+        style value="style://dark";
+    .end/block
+
+.end/AUKT
+
+// تصدير جدول الفريق كصورة PNG مستقلة (متاحة أصلاً لأي @table/@container.table)
+installation team_members format=zip;
+
+print "تم بناء حزمة AUKT بنجاح.";

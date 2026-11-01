@@ -1,0 +1,13 @@
+// يُشغَّل مع stdin من input_natives.stdin ويُقارَن بـ input_natives.expected
+let name = input("name? ");
+print "[" + name + "]";
+let n = inputNumber("n? ");
+print n + 1;
+let neg = inputNumber("neg? ");
+print neg;
+print confirm("yes? ");
+print confirm("no? ");
+print choose("pick", ["a", "b", "c"]);
+print choose("pick by text", ["a", "b", "c"]);
+let rest = input();
+print "[" + rest + "]";

@@ -1,0 +1,17 @@
+// hash_ban.rin — #ban
+let x = 5;
+#ban x;
+print x;
+try { x = 6; } catch (e) { print e.code; print e.message; }
+let cfg = {"mode": "dark"};
+#ban cfg;
+try { cfg["mode"] = "light"; } catch (e) { print e.code; }
+print cfg["mode"];
+#ban y = 7;
+try { y = 8; } catch (e) { print e.code; }
+print y;
+let a = 1, b = 2;
+#ban a, b;
+try { a = 9; } catch (e) { print "a banned"; }
+try { b = 9; } catch (e) { print "b banned"; }
+print x.kind;

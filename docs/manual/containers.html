@@ -1,0 +1,273 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>دليل `@container` / `@element` / `@loop — Rin</title>
+<meta name="description" content="توثيق لغة البرمجة Rin"><link rel="icon" href="../assets/brand/icon-32.png">
+<link rel="stylesheet" href="assets/style.css"></head><body>
+<header><button id="mn" aria-label="القائمة">☰</button><a class="logo" href="index.html"><img src="../assets/brand/icon-48.png" alt="" width="26">Rin</a>
+<input id="q" type="search" placeholder="ابحث في التوثيق…" autocomplete="off"><button id="th" aria-label="الوضع">◐</button>
+<a class="gh" href="https://github.com/dlof-lib/rinlang">GitHub</a><div id="res"></div></header>
+<div class="wrap"><nav id="sb"><details ><summary>ابدأ هنا</summary><a href="getting-started.html">البداية</a><a href="syntax.html">القواعد النحوية العامة</a><a href="variables.html">let`، مصفوفات، قواميس، نطاق</a><a href="template-strings.html">النصوص القالبية (متغيّرات داخل النص)</a><a href="input.html">إدخال المستخدم (Input)</a><a href="control-flow.html">الشروط، الحلقات، `goal`/`achieve</a><a href="loops.html">حلقات Rin — Loops v2</a><a href="functions.html">fun`/`return`، التكرار الذاتي</a><a href="enums.html">enum`: قوائم اختيار مغلقة</a></details><details open><summary>اللغة</summary><a href="language-reference.html">المرجع الشامل وخريطة ترابط المفاهيم</a><a href="objects.html">class`/`struct`، `.object()`، `@Object`، `document</a><a href="oop.html">البرمجة الكائنية الموسَّعة (Rin 1.0)</a><a href="containers.html" class=on>دليل `@container` / `@element` / `@loop</a><a href="table.html">الجدول (`@table` / `@container.table`) ودوال اللغة عليه</a><a href="set.html">Set`: نوع المجموعة الأساسي</a><a href="pipelines.html">عامل الأنابيب `|&gt;</a><a href="RECKON.html">reckon`: مفهوم حسابي بسطرين</a><a href="let-plus.html">let` المطوَّر</a><a href="living-variables.html">المتغيرات الحيّة (Living Variables)</a><a href="label-define.html">label` و`define` (تسمية وتعريف)</a><a href="block-frames.html">بداية الكتل ونهايتها (Block Frames)</a><a href="compare_ops.html">معاملات المقارنة `/=` و `=/=` و `=/</a><a href="max_min.html">max / min family</a><a href="scope-guarantees.html">ضمانات النطاق: `finally` · `defer` · `catch … when` · `rethrow</a><a href="key_terms_and_builtins.html">Rin KEY_TERMS and Built-in Conditions</a><a href="number_builtins.html">Rin Number Built-ins</a></details><details ><summary>الواجهات (Indsin)</summary><a href="indsin.html">Indsin — Interface Design</a><a href="indsin_rin.html">indsin يعتمد على لغة Rin</a><a href="indsin_expansion.html">Indsin — التوسعة الاحترافية (Design System v2)</a><a href="indsin_object.html">indsin-object — API reference</a><a href="indsin_media.html">Indsin Media — اختيار الوسائط ورفعها</a><a href="indsin_icons.html">مكتبة أيقونات indsin (متجهية)</a><a href="indsin_tooling.html">indsin tooling — icon, file association, syntax highlighting</a><a href="indsinweb.html">IndsinWeb — مكتبة WebView والروابط لـ indsin</a><a href="RIN_ELEMENTS.html">دليل `@element.*` الكامل</a><a href="events-effects.html">الأحداث والتأثيرات (Events &amp; Effects) — محرك Indsin UI</a><a href="banner.html">Banner: إشعار شريطي</a><a href="simple-style.html">Rin Simple Style</a></details><details ><summary>بيئة التشغيل</summary><a href="runtime.html">وقت تشغيل Rin (Rin Runtime) · المرجع الرسمي</a><a href="standard-library.html">المكتبة القياسية (`lib/*.og.rin`)</a><a href="errors.html">نظام الأخطاء: أكواد، `try`/`catch`/`throw</a><a href="ERROR_SYSTEM.html">نظام التشخيص: البنية الداخلية + جدول الأكواد الكامل</a><a href="storage.html">تخزين دائم</a><a href="http.html">شبكات</a><a href="env.html">ربط Rin بملف `.env</a><a href="terminal.html">الطرفية التفاعلية — `rin terminal</a><a href="vm.html">RinVM — آلة Rin الافتراضية (بايتكود)</a><a href="rinflow.html">RinFlow: طبقة تنفيذ التدفّق المهيكل</a><a href="MAKE_UNIT.html">@make.(name)`: وحدة بسياسة قدرات صريحة</a><a href="MAKE_MEDIA.html">فيديو · صوت · API · إزالة الخلفية · قراءة النص من الصور</a><a href="TIME.html">مفهوم `time`: الزمن كقيمة من الدرجة الأولى</a><a href="native-additions.html">دوال Rin الأصلية الجديدة (Rin 1.0)</a></details><details ><summary>الحاويات وقواعد البيانات</summary><a href="container_advanced.html">Rin Container Advanced Built-ins</a><a href="container_pro.html">Rin Container Pro</a><a href="container_sql.html">RIN CONTAINER SQL (RCSQL)</a><a href="cross-file-containers.html">استدعاء إعلانات من ملف آخر</a></details><details ><summary>الحزم والتكامل</summary><a href="api.html">واجهة C المسطَّحة (Embedding API)</a><a href="android.html">استضافة Rin على أندرويد</a><a href="packages-and-interop.html">Rin 1.0 — المكتبات والحزم وجسر C++ وJSON واختبارات rintest</a><a href="rinpak-format.html">RinPak — حزمة مشروع Rin (`.rinpak`)</a><a href="html-projects.html">مشاريع HTML في Rin — الربط بين index.html وملف الحاوية</a><a href="project-og-urin.html">project.og.urin` — البيانات الوصفية لمشروع Rin</a><a href="CONTENT_PACKS.html">حزم المحتوى القابلة للتنزيل (Content Packs)</a><a href="previewkit.html">previewkit — معاينة حيّة لملفات PDF / Markdown / TypeScript</a></details><details ><summary>المكتبات المتخصصة</summary><a href="rinml.html">RinML / RinDF / RinAI — الذكاء الاصطناعي وتحليل البيانات في Rin</a><a href="STATS.html">RinStat — التحليل الإحصائي (`lib/rinstat.og.rin`)</a><a href="STATS_ADV.html">RinStat المتقدّم + RinAuto</a><a href="LINALG.html">الجبر الخطي للمهندسين — `mat*` و`vec*</a><a href="PLOT.html">RinPlot — الرسوم البيانية الإحصائية (`lib/rinplot.og.rin`)</a><a href="ALGO.html">تطوير الخوارزميات والحساب العددي — `algo*</a><a href="NUMBER.html">مفهوم `number` في Rin</a><a href="boat.html">&quot;Boat&quot;: مفاهيم أساسية مجمَّعة</a><a href="passkit.html">passkit — passwords, encryption, databases and a tag language</a><a href="passkit-crypto-db.html">Passkit feature catalog: encryption, databases and container linking</a><a href="hash-family.html">عائلة `#` — مفاهيم ودوال جديدة تبدأ بعلامة `#</a><a href="image-draw.html">إنشاء الصور في Rin — رسم وحفظ PNG وlog كصورة</a><a href="image-terminal.html">طباعة الصور في الـ terminal — `printImage` / `imageAnsi` / `imageInfo</a></details><details ><summary>المشروع</summary><a href="CONTRIBUTING.html">المساهمة في Rin</a><a href="CODE_OF_CONDUCT.html">قواعد السلوك</a><a href="SECURITY.html">سياسة الأمان</a><a href="SUPPORT.html">الحصول على المساعدة</a><a href="TRADEMARKS.html">سياسة العلامة التجارية — Trademark Policy</a><a href="THIRD_PARTY_NOTICES.html">إشعارات المكوّنات الخارجية — Third-Party Notices</a></details><details ><summary>مراجع إضافية</summary><a href="ANDROID_VERSIONS.html">حزم RinStudio لكل إصدار أندرويد</a><a href="TOKEN.html">مفهوم `token` في Rin</a><a href="TOOLCHAIN.html">Rin Professional Language Toolchain</a><a href="TOOLCHAIN_UPGRADE.html">Toolchain Upgrade — 2026-09</a><a href="architecture.html">المعمارية وبنية المستودع</a><a href="base-accept.html">base` و`accept`: متغيّران يخدمان `if</a><a href="channel47.html">channel47 — لغة وصف البيانات والإعدادات</a><a href="ci.html">CI وأدوات المستودع</a><a href="loop-templates.html">قوالب الحلقات `@tmpl</a><a href="pre-post.html">pre` و`post` (ما قبل / ما بعد): عقد انتقال حول الإسناد</a><a href="print-fonts.html">خطوط `print` — bold / italic / underline وغيرها</a><a href="print-image-terminal.html">طباعة الصور كنص في الطرفية</a><a href="print-templates.html">قوالب الطباعة `@tmpl ... print` — قوالب نصية خطية وتنسيقية</a><a href="rdoc.html">rdoc — Documentation Container</a><a href="rdoc-reference.html">وثيقة rdoc الشاملة — Documentation Container</a><a href="screenshots.html">لقطات من RinStudio</a></details></nav>
+<main><article><h1 id="containersmd-container-element-loop">containers.md — دليل <code>@container</code> / <code>@element</code> / <code>@loop</code><a class="headerlink" href="#containersmd-container-element-loop" title="Permanent link">#</a></h1>
+<blockquote>
+<p>كان هذا الملف مُشارًا إليه من <code>indsin.md</code>، ومن تعليق التوثيق أعلى <code>ContainerStmt</code>
+في <code>app/src/main/cpp/rin_ast.h</code> مباشرة، لكنه لم يكن موجودًا فعليًا. المحتوى هنا
+مبنيّ على قراءة فعلية للمحلِّل (<code>rin_parser.cpp</code>) وشجرة AST (<code>rin_ast.h</code>) والأمثلة
+الحقيقية الموجودة في <code>examples/</code>، وتحقّقتُ من الأمثلة القابلة للتحقق عبر بناء
+واختبار فعليَّين قبل كتابتها هنا.</p>
+</blockquote>
+<h2 id="_1">الفكرة: فصل ثلاثي<a class="headerlink" href="#_1" title="Permanent link">#</a></h2>
+<p>كل واجهة في Rin مبنية من ثلاث طبقات منفصلة عمدًا، كل واحدة "تملك" شيئًا واحدًا فقط:</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>البيان</th>
+<th>يملك</th>
+<th>لا يملك</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>@container</code></td>
+<td><strong>السلوك</strong>: دوال، حالة (<code>state</code>)، خُطّاف دورة الحياة، ربط الأحداث</td>
+<td>أي شكل بصري</td>
+</tr>
+<tr>
+<td><code>@loop</code></td>
+<td><strong>الشكل</strong>: حجم الشاشة، الألوان، الخطوط، الافتراضيات الموروثة</td>
+<td>السلوك/المنطق</td>
+</tr>
+<tr>
+<td><code>@element</code></td>
+<td><strong>الوظيفة فقط</strong>: أي عنصر UI هو (زر، حقل، مخطط...) وبياناته الوظيفية</td>
+<td>أي تنسيق بصري في مصدره</td>
+</tr>
+</tbody>
+</table></div>
+<p>هذا الفصل ليس تعليقًا فقط — المحلِّل والمحرّك يفرضانه فعليًا: أي خاصية "بصرية"
+(<code>color=</code>, <code>radius=</code>, <code>padding=</code>...) مكتوبة داخل <code>@element</code> تُحذَف عند البناء
+(<code>sanitizeElements()</code> في <code>rin_indsin_pipeline.h</code>)، بينما <code>@loop</code> نفسه حرّ تمامًا في
+حمل أي خاصية بصرية يريدها (<code>width=</code>, <code>background=</code>...) لأن دوره بالتحديد هو الشكل.</p>
+<h2 id="element"><code>@element</code><a class="headerlink" href="#element" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">@element.&lt;kind&gt;=&lt;name&gt;
+    attribute = value;
+    ...
+    // يمكن تعشيش @element أخرى بداخله أيضًا
+.end/element
+</code></pre>
+<ul>
+<li><code>&lt;kind&gt;</code> هو نوع العنصر (<code>button</code>, <code>text</code>, <code>input</code>, <code>donutchart</code>, ...) — القائمة
+  الكاملة مع كل الأسماء البديلة في <a href="RIN_ELEMENTS.html"><code>RIN_ELEMENTS.md</code></a>.</li>
+<li><code>&lt;name&gt;</code> اختياري — يُستخدَم لربط الأحداث لاحقًا (<code>on.&lt;name&gt;.&lt;event&gt;=...;</code>) ولتمييز
+  العنصر عند القراءة/التتبّع.</li>
+<li>غير حسّاس لحالة الأحرف: <code>@element.Button</code> و<code>@element.button</code> متطابقان تمامًا.</li>
+<li><strong>يعمل كجذر شاشة مستقل الآن أيضًا</strong> (وليس فقط متداخلاً داخل <code>@view</code>/<code>@loop</code>) —
+  إن كان <code>@element</code> هو البيان الوحيد على المستوى الأعلى في الملف، يصبح هو الشاشة
+  نفسها. عند وجود <code>@view</code>/<code>@loop</code> معه، هما يفوزان دائمًا كجذر (سلوك لم يتغيّر).
+  التفاصيل الكاملة والاختبارات في قسم "دمج @element بـ indsin" أسفل
+  <a href="indsin.html"><code>../indsin.md</code></a>.</li>
+</ul>
+<h2 id="loop"><code>@loop</code><a class="headerlink" href="#loop" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">@loop=&lt;name&gt;              // النوع الافتراضي: Column
+@loop.&lt;kind&gt;=&lt;name&gt;        // أو حدِّد نوع تخطيط الشاشة صراحةً (مثلًا Column/Row/Stack)
+    width = 390;
+    height = 700;
+    background = &quot;#ffffff&quot;;
+
+    // element_&lt;key&gt;= يُورَّث تلقائيًا لكل @element مباشر أو متداخل بداخل هذا @loop
+    // (ما لم يحدِّد العنصر نفسه نفس المفتاح صراحةً — الأولوية دائمًا للعنصر):
+    element_width = 320;
+    element_height = 44;
+    element_color = &quot;#111111&quot;;
+    element_background = &quot;#1e1f28&quot;;
+    element_text_size = 16;
+    element_radius = 8;
+    element_padding = 12;
+    element_font = &quot;Inter&quot;;
+    element_margin = 8;
+
+    @element.text=title
+        text = &quot;شاشتي&quot;;
+    .end/element
+.end/loop
+</code></pre>
+<p><code>@loop</code> هو "اللوحة/الشاشة" التي تحمل حجمها ولونها وخطوطها الافتراضية، ثم تُورِّث كل
+ذلك تلقائيًا لأي <code>@element</code> بداخلها عبر مفاتيح <code>element_*</code> — دون أن يحتاج كل عنصر
+لتكرار نفس القيم. <code>screen=</code> اختصار حجم شاشة جاهز (<code>phone_small</code> 360×640،
+<code>phone</code> 390×844، <code>phone_large</code> 430×932، <code>tablet</code> 768×1024، <code>tablet_large</code>
+1024×1366، <code>desktop</code> 1280×800، <code>desktop_wide</code> 1440×900) — يُستخدَم فقط على <code>@loop</code>
+نفسه (<code>screen=</code> مرفوضة داخل <code>@element</code>، انظر القائمة السوداء في RIN_ELEMENTS.md).</p>
+<h2 id="container"><code>@container</code><a class="headerlink" href="#container" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">@container=&lt;name&gt;              // النوع الافتراضي: PLAIN
+@container.&lt;kind&gt;=&lt;name&gt;        // أو نوع حاوية متخصِّص (جدول أدناه)
+    // حالة قابلة للمراقبة: أي إسناد لاحق لها يُطلق تلقائيًا on update(prev) إن وُجدت
+    state counter = 0;
+
+    // خُطّاف دورة الحياة (كلها اختيارية):
+    on init()    { print &quot;created&quot;; }
+    on mount()   { print &quot;mounted&quot;; }
+    on update(prev) { print &quot;counter changed from &quot; + prev; }
+    on destroy() { print &quot;destroyed&quot;; }
+    on error(e)  { print &quot;error: &quot; + e; }
+
+    fun increment() { counter = counter + 1; }
+
+    @element.button=inc
+        text = &quot;+1&quot;;
+    .end/element
+
+    on.inc.click = increment();
+.end/container
+</code></pre>
+<ul>
+<li><strong>الحالة (<code>state</code>)</strong>: نفس <code>let</code> تمامًا، إلا أن أي إسناد لاحق لنفس الاسم (من داخل
+  الحاوية أو من دالة معرَّفة بداخلها) يُطلق تلقائيًا خُطّاف <code>on update(prevState)</code> إن
+  كان معرَّفًا لنفس الحاوية.</li>
+<li><strong>الأقنعة (<code>mask=</code>)</strong>: هوية منطقية قابلة لإعادة الاستخدام للحاوية، مستقلة عن الاسم
+  — تُستخدَم لربط استعلامات RCSQL المسمّاة (<code>sql(mask)</code>) وغيرها.</li>
+<li><strong>كتلة السياسة (Policy، اختيارية بالكامل)</strong>: نفس أربع كلمات Make Unit تمامًا —
+  <code>use</code>/<code>need</code>/<code>allow</code>/<code>deny</code> + <code>strict</code>/<code>version</code>/<code>description</code>. حاوية لا تستخدم أيًا
+  منها تسلك تمامًا كما تسلك اليوم (permissive) — التحقّق (<code>validateContainerPolicy</code>
+  في <code>rin_make.cpp</code>) يُطبَّق فقط إن استُخدمت كلمة واحدة منها فعليًا.</li>
+</ul>
+<h3 id="containerkind">أنواع الحاويات المتخصِّصة (<code>ContainerKind</code>)<a class="headerlink" href="#containerkind" title="Permanent link">#</a></h3>
+<p>كل نوع أدناه هو <code>@container.&lt;kind&gt;=name ... .end/container.&lt;kind&gt;</code> (بديل مختصر:
+بعضها يقبل أيضًا <code>@&lt;kind&gt;=name</code> مباشرة — انظر التعليق الخاص بكل نوع في <code>rin_ast.h</code>
+إن احتجت الصياغة المختصرة بالضبط). هذا سرد موجز لدور كل نوع، وليس مرجعًا كاملاً
+لسلوكه — للتفاصيل الكاملة والقيود الدقيقة لكل نوع، اقرأ <code>rin_interpreter.cpp</code>
+(تنفيذ <code>ContainerStmt</code>) و<code>rin_container_sql.h</code> (لنوع <code>sql</code>) مباشرة، فهما المصدر
+الوحيد الموثوق لكل التفاصيل الدقيقة لكل نوع في هذا الإصدار:</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>النوع</th>
+<th>الدور المختصر</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pipe</code></td>
+<td>خط أنابيب بيانات/إحصاء.</td>
+</tr>
+<tr>
+<td><code>data</code></td>
+<td>حاوية بيانات نقية — بلا دوال ولا حاويات متداخلة.</td>
+</tr>
+<tr>
+<td><code>api</code></td>
+<td>نقاط API وهمية (<code>route ...</code>)، تُستدعى عبر <code>call()</code>.</td>
+</tr>
+<tr>
+<td><code>import</code></td>
+<td>يستورد وينفّذ فعليًا محتوى ملف <code>.rin</code> آخر.</td>
+</tr>
+<tr>
+<td><code>table</code></td>
+<td>جدول (صفوف <code>row</code> + <code>style</code> اختياري)؛ يُقرأ ويُعدَّل بدوال اللغة الموجودة وعائلة <code>#</code> — انظر <a href="table.html"><code>table.md</code></a>.</td>
+</tr>
+<tr>
+<td><code>doc</code></td>
+<td>حاوية NoSQL (مستندات <code>document</code>).</td>
+</tr>
+<tr>
+<td><code>object</code></td>
+<td>كائن ببيانات نقية (حقول حرة + <code>style</code> اختياري).</td>
+</tr>
+<tr>
+<td><code>portal</code></td>
+<td>حاوية تنسيق تحمل نمطًا (<code>style</code>) عامًا.</td>
+</tr>
+<tr>
+<td><code>block</code></td>
+<td>كتلة واجهة جاهزة (شريط علوي/سفلي/زر...).</td>
+</tr>
+<tr>
+<td><code>sticker</code></td>
+<td>بطاقة هوية بصرية جاهزة.</td>
+</tr>
+<tr>
+<td><code>aukt</code></td>
+<td>جداول معرفة آلية (Automated Knowledge Tables).</td>
+</tr>
+<tr>
+<td><code>chatbot</code></td>
+<td>حاوية روبوت محادثة.</td>
+</tr>
+<tr>
+<td><code>sql</code></td>
+<td>استعلام RCSQL مُسمّى — يُستدعى لاحقًا بقناع الحاوية عبر <code>sql(mask)</code>/<code>sqlOne(mask)</code>/<code>sqlCount(mask)</code> بدل تكرار نص الاستعلام.</td>
+</tr>
+<tr>
+<td><code>make</code></td>
+<td>بنفس أسلوب <code>container.xxx</code> الأخرى، لكن بمعنى Make Unit.</td>
+</tr>
+<tr>
+<td><code>everything</code></td>
+<td>حاوية تجميعية شاملة.</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="containersgroup-volume"><code>@Containers.Group</code> و<code>@Volume</code><a class="headerlink" href="#containersgroup-volume" title="Permanent link">#</a></h3>
+<p><code>@Containers.Group=name ... .end/Containers.Group</code> يجمع عدة حاويات/مجموعات فرعية
+تحت سياسة واحدة (نفس كلمات <code>use</code>/<code>need</code>/<code>allow</code>/<code>deny</code> لكن مُجمَّعة على مستوى الشجرة
+كاملةً بدل حاوية واحدة). <code>@Volume=name ... .end/Volume</code> تعشيش كامل بنفس حرّية
+<code>@container</code> العادية — غرضها تنظيمي بحت (تجميع منطقي)، لا قيد إضافي على المحتوى.</p>
+<h2 id="_2">مثال كامل مُتحقَّق منه (الفصل الثلاثي كاملاً)<a class="headerlink" href="#_2" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">@container=app
+    @element.button=saveBtn
+        text = &quot;حفظ&quot;;
+    .end/element
+
+    on.saveBtn.click = saveForm();
+.end/container
+
+fun saveForm() {
+    print &quot;Saved&quot;;
+}
+
+@loop=canvas
+    width = 390;
+    height = 900;
+    background = &quot;#ffffff&quot;;
+    element_width = 320;
+    element_height = 44;
+    element_color = &quot;#111111&quot;;
+    element_text_size = 16;
+
+    @element.text=title
+        text = &quot;Ready Elements&quot;;
+    .end/element
+
+    @element.row=actions
+        direction = &quot;rtl&quot;;
+        @element.button=saveBtn
+            text = &quot;حفظ&quot;;
+        .end/element
+    .end/element
+.end/loop
+</code></pre>
+<p>(نفس بنية <code>examples/elements_extended_demo.rin</code> الموجود فعليًا في المستودع.)</p>
+<h2 id="_3">انظر أيضًا<a class="headerlink" href="#_3" title="Permanent link">#</a></h2>
+<ul>
+<li><a href="RIN_ELEMENTS.html"><code>RIN_ELEMENTS.md</code></a> — كل أنواع <code>@element.*</code> وبدائلها الاسمية.</li>
+<li><a href="indsin.html"><code>../indsin.md</code></a> — كيف يحوّل المحرّك (indsin) هذه البيانات إلى
+  شجرة مقاسة ثم بكسلات فعلية، وقسم "دمج @element بـ indsin" لتفاصيل جذر الشاشة.</li>
+<li><code>app/src/main/cpp/rin_ast.h</code> — البنية الكاملة (<code>ContainerStmt</code>, <code>ViewStmt</code>,
+  <code>LifecycleHookStmt</code>, <code>StateDeclStmt</code>) بتعليقات مصدرية مفصَّلة لكل حقل.</li>
+</ul></article>
+<div class="pnav"><a class="pn" href="oop.html">→ البرمجة الكائنية الموسَّعة (Rin 1.0)</a><a class="pn" href="table.html">الجدول (`@table` / `@container.table`) ودوال اللغة عليه ←</a></div><p class="edit"><a href="https://github.com/dlof-lib/rinlang/edit/main/docs/containers.md">✎ عدّل هذه الصفحة على GitHub</a></p>
+<footer>Rin 1.0.0 · رخصة MIT</footer></main>
+<aside id="toc"><b>في هذه الصفحة</b><div class="toc">
+<ul>
+<li><a href="#_1">الفكرة: فصل ثلاثي</a></li>
+<li><a href="#element">@element</a></li>
+<li><a href="#loop">@loop</a></li>
+<li><a href="#container">@container</a><ul>
+<li><a href="#containerkind">أنواع الحاويات المتخصِّصة (ContainerKind)</a></li>
+<li><a href="#containersgroup-volume">@Containers.Group و@Volume</a></li>
+</ul>
+</li>
+<li><a href="#_2">مثال كامل مُتحقَّق منه (الفصل الثلاثي كاملاً)</a></li>
+<li><a href="#_3">انظر أيضًا</a></li>
+</ul>
+</div>
+</aside></div>
+<script src="assets/app.js"></script></body></html>

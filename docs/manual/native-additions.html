@@ -1,0 +1,550 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>دوال Rin الأصلية الجديدة (Rin 1.0) — Rin</title>
+<meta name="description" content="توثيق لغة البرمجة Rin"><link rel="icon" href="../assets/brand/icon-32.png">
+<link rel="stylesheet" href="assets/style.css"></head><body>
+<header><button id="mn" aria-label="القائمة">☰</button><a class="logo" href="index.html"><img src="../assets/brand/icon-48.png" alt="" width="26">Rin</a>
+<input id="q" type="search" placeholder="ابحث في التوثيق…" autocomplete="off"><button id="th" aria-label="الوضع">◐</button>
+<a class="gh" href="https://github.com/dlof-lib/rinlang">GitHub</a><div id="res"></div></header>
+<div class="wrap"><nav id="sb"><details ><summary>ابدأ هنا</summary><a href="getting-started.html">البداية</a><a href="syntax.html">القواعد النحوية العامة</a><a href="variables.html">let`، مصفوفات، قواميس، نطاق</a><a href="template-strings.html">النصوص القالبية (متغيّرات داخل النص)</a><a href="input.html">إدخال المستخدم (Input)</a><a href="control-flow.html">الشروط، الحلقات، `goal`/`achieve</a><a href="loops.html">حلقات Rin — Loops v2</a><a href="functions.html">fun`/`return`، التكرار الذاتي</a><a href="enums.html">enum`: قوائم اختيار مغلقة</a></details><details ><summary>اللغة</summary><a href="language-reference.html">المرجع الشامل وخريطة ترابط المفاهيم</a><a href="objects.html">class`/`struct`، `.object()`، `@Object`، `document</a><a href="oop.html">البرمجة الكائنية الموسَّعة (Rin 1.0)</a><a href="containers.html">دليل `@container` / `@element` / `@loop</a><a href="table.html">الجدول (`@table` / `@container.table`) ودوال اللغة عليه</a><a href="set.html">Set`: نوع المجموعة الأساسي</a><a href="pipelines.html">عامل الأنابيب `|&gt;</a><a href="RECKON.html">reckon`: مفهوم حسابي بسطرين</a><a href="let-plus.html">let` المطوَّر</a><a href="living-variables.html">المتغيرات الحيّة (Living Variables)</a><a href="label-define.html">label` و`define` (تسمية وتعريف)</a><a href="block-frames.html">بداية الكتل ونهايتها (Block Frames)</a><a href="compare_ops.html">معاملات المقارنة `/=` و `=/=` و `=/</a><a href="max_min.html">max / min family</a><a href="scope-guarantees.html">ضمانات النطاق: `finally` · `defer` · `catch … when` · `rethrow</a><a href="key_terms_and_builtins.html">Rin KEY_TERMS and Built-in Conditions</a><a href="number_builtins.html">Rin Number Built-ins</a></details><details ><summary>الواجهات (Indsin)</summary><a href="indsin.html">Indsin — Interface Design</a><a href="indsin_rin.html">indsin يعتمد على لغة Rin</a><a href="indsin_expansion.html">Indsin — التوسعة الاحترافية (Design System v2)</a><a href="indsin_object.html">indsin-object — API reference</a><a href="indsin_media.html">Indsin Media — اختيار الوسائط ورفعها</a><a href="indsin_icons.html">مكتبة أيقونات indsin (متجهية)</a><a href="indsin_tooling.html">indsin tooling — icon, file association, syntax highlighting</a><a href="indsinweb.html">IndsinWeb — مكتبة WebView والروابط لـ indsin</a><a href="RIN_ELEMENTS.html">دليل `@element.*` الكامل</a><a href="events-effects.html">الأحداث والتأثيرات (Events &amp; Effects) — محرك Indsin UI</a><a href="banner.html">Banner: إشعار شريطي</a><a href="simple-style.html">Rin Simple Style</a></details><details open><summary>بيئة التشغيل</summary><a href="runtime.html">وقت تشغيل Rin (Rin Runtime) · المرجع الرسمي</a><a href="standard-library.html">المكتبة القياسية (`lib/*.og.rin`)</a><a href="errors.html">نظام الأخطاء: أكواد، `try`/`catch`/`throw</a><a href="ERROR_SYSTEM.html">نظام التشخيص: البنية الداخلية + جدول الأكواد الكامل</a><a href="storage.html">تخزين دائم</a><a href="http.html">شبكات</a><a href="env.html">ربط Rin بملف `.env</a><a href="terminal.html">الطرفية التفاعلية — `rin terminal</a><a href="vm.html">RinVM — آلة Rin الافتراضية (بايتكود)</a><a href="rinflow.html">RinFlow: طبقة تنفيذ التدفّق المهيكل</a><a href="MAKE_UNIT.html">@make.(name)`: وحدة بسياسة قدرات صريحة</a><a href="MAKE_MEDIA.html">فيديو · صوت · API · إزالة الخلفية · قراءة النص من الصور</a><a href="TIME.html">مفهوم `time`: الزمن كقيمة من الدرجة الأولى</a><a href="native-additions.html" class=on>دوال Rin الأصلية الجديدة (Rin 1.0)</a></details><details ><summary>الحاويات وقواعد البيانات</summary><a href="container_advanced.html">Rin Container Advanced Built-ins</a><a href="container_pro.html">Rin Container Pro</a><a href="container_sql.html">RIN CONTAINER SQL (RCSQL)</a><a href="cross-file-containers.html">استدعاء إعلانات من ملف آخر</a></details><details ><summary>الحزم والتكامل</summary><a href="api.html">واجهة C المسطَّحة (Embedding API)</a><a href="android.html">استضافة Rin على أندرويد</a><a href="packages-and-interop.html">Rin 1.0 — المكتبات والحزم وجسر C++ وJSON واختبارات rintest</a><a href="rinpak-format.html">RinPak — حزمة مشروع Rin (`.rinpak`)</a><a href="html-projects.html">مشاريع HTML في Rin — الربط بين index.html وملف الحاوية</a><a href="project-og-urin.html">project.og.urin` — البيانات الوصفية لمشروع Rin</a><a href="CONTENT_PACKS.html">حزم المحتوى القابلة للتنزيل (Content Packs)</a><a href="previewkit.html">previewkit — معاينة حيّة لملفات PDF / Markdown / TypeScript</a></details><details ><summary>المكتبات المتخصصة</summary><a href="rinml.html">RinML / RinDF / RinAI — الذكاء الاصطناعي وتحليل البيانات في Rin</a><a href="STATS.html">RinStat — التحليل الإحصائي (`lib/rinstat.og.rin`)</a><a href="STATS_ADV.html">RinStat المتقدّم + RinAuto</a><a href="LINALG.html">الجبر الخطي للمهندسين — `mat*` و`vec*</a><a href="PLOT.html">RinPlot — الرسوم البيانية الإحصائية (`lib/rinplot.og.rin`)</a><a href="ALGO.html">تطوير الخوارزميات والحساب العددي — `algo*</a><a href="NUMBER.html">مفهوم `number` في Rin</a><a href="boat.html">&quot;Boat&quot;: مفاهيم أساسية مجمَّعة</a><a href="passkit.html">passkit — passwords, encryption, databases and a tag language</a><a href="passkit-crypto-db.html">Passkit feature catalog: encryption, databases and container linking</a><a href="hash-family.html">عائلة `#` — مفاهيم ودوال جديدة تبدأ بعلامة `#</a><a href="image-draw.html">إنشاء الصور في Rin — رسم وحفظ PNG وlog كصورة</a><a href="image-terminal.html">طباعة الصور في الـ terminal — `printImage` / `imageAnsi` / `imageInfo</a></details><details ><summary>المشروع</summary><a href="CONTRIBUTING.html">المساهمة في Rin</a><a href="CODE_OF_CONDUCT.html">قواعد السلوك</a><a href="SECURITY.html">سياسة الأمان</a><a href="SUPPORT.html">الحصول على المساعدة</a><a href="TRADEMARKS.html">سياسة العلامة التجارية — Trademark Policy</a><a href="THIRD_PARTY_NOTICES.html">إشعارات المكوّنات الخارجية — Third-Party Notices</a></details><details ><summary>مراجع إضافية</summary><a href="ANDROID_VERSIONS.html">حزم RinStudio لكل إصدار أندرويد</a><a href="TOKEN.html">مفهوم `token` في Rin</a><a href="TOOLCHAIN.html">Rin Professional Language Toolchain</a><a href="TOOLCHAIN_UPGRADE.html">Toolchain Upgrade — 2026-09</a><a href="architecture.html">المعمارية وبنية المستودع</a><a href="base-accept.html">base` و`accept`: متغيّران يخدمان `if</a><a href="channel47.html">channel47 — لغة وصف البيانات والإعدادات</a><a href="ci.html">CI وأدوات المستودع</a><a href="loop-templates.html">قوالب الحلقات `@tmpl</a><a href="pre-post.html">pre` و`post` (ما قبل / ما بعد): عقد انتقال حول الإسناد</a><a href="print-fonts.html">خطوط `print` — bold / italic / underline وغيرها</a><a href="print-image-terminal.html">طباعة الصور كنص في الطرفية</a><a href="print-templates.html">قوالب الطباعة `@tmpl ... print` — قوالب نصية خطية وتنسيقية</a><a href="rdoc.html">rdoc — Documentation Container</a><a href="rdoc-reference.html">وثيقة rdoc الشاملة — Documentation Container</a><a href="screenshots.html">لقطات من RinStudio</a></details></nav>
+<main><article><h1 id="rin-rin-10">دوال Rin الأصلية الجديدة (Rin 1.0)<a class="headerlink" href="#rin-rin-10" title="Permanent link">#</a></h1>
+<p>أُضيفت هذه الدوال في <code>app/src/main/cpp/rin_extra_natives2.cpp</code> (مُضمَّن بعد
+<code>rin_extra_natives.cpp</code> في نهاية <code>rin_interpreter.cpp</code>، فيدخل تلقائياً في كل أهداف
+البناء: APK/CLI/WASM/CI) دون تعديل أي ملف موجود. كلها مغطّاة باختبار فعلي:</p>
+<pre><code class="language-text">rin_run tests/verification/extra_natives2.rin
+</code></pre>
+<p>يطبع <code>ALL PASSED (extra_natives2)</code> عند النجاح، وأي فشل يوقف التشغيل برمز خروج <code>1</code>.</p>
+<blockquote>
+<p>ملاحظة تسمية: الكلمتان <code>file</code> و<code>pipe</code> محجوزتان في Rin (لبنية <code>@file</code> وتاريخياً في
+<code>container.pipe</code>)، فاستُخدم <code>fs.*</code> بدل <code>file.*</code> و<code>automation.chain</code> بدل
+<code>automation.pipe</code> تفادياً للتعارض مع المحلّل اللغوي.</p>
+</blockquote>
+<h2 id="sec"><code>sec.*</code> — أدوات أمن (تجزئة، ترميز، تحقق)<a class="headerlink" href="#sec" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الدالة</th>
+<th>الوصف</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sec.sha256(s)</code></td>
+<td>بصمة SHA-256 (hex، 64 محرفاً) — تُعيد استخدام <code>clc::sha256</code> الموجودة أصلاً في المشروع</td>
+</tr>
+<tr>
+<td><code>sec.md5(s)</code></td>
+<td>بصمة MD5 (hex، 32 محرفاً) — توافقية/checksum فقط، ليست لأي استخدام أمني حديث</td>
+</tr>
+<tr>
+<td><code>sec.crc32(s)</code></td>
+<td>CRC-32 كرقم (للتحقق السريع من سلامة بيانات، ليست أمنية)</td>
+</tr>
+<tr>
+<td><code>sec.hmacSha256(key, msg)</code></td>
+<td>HMAC-SHA256 (hex) — للتحقق من أصالة رسالة بمفتاح مشترك</td>
+</tr>
+<tr>
+<td><code>sec.base64Encode(s)</code> / <code>sec.base64Decode(s)</code></td>
+<td>ترميز/فك Base64 القياسي</td>
+</tr>
+<tr>
+<td><code>sec.hexEncode(s)</code> / <code>sec.hexDecode(s)</code></td>
+<td>ترميز/فك Hex</td>
+</tr>
+<tr>
+<td><code>sec.randomToken(bytes?)</code></td>
+<td>رمز عشوائي (hex) بطول <code>bytes</code> بايت (افتراضي 16)، عبر <code>std::random_device</code></td>
+</tr>
+<tr>
+<td><code>sec.constantTimeEqual(a, b)</code></td>
+<td>مقارنة نصّين بزمن ثابت (تفادي هجمات التوقيت عند مقارنة أسرار)</td>
+</tr>
+<tr>
+<td><code>sec.aesGcmSeal(keyHex, nonceHex, plaintextHex, aadHex)</code></td>
+<td>AES-GCM (key 16/24/32 bytes, nonce exactly 12 bytes): returns hex of ciphertext + 16-byte tag (NIST SP 800-38D)</td>
+</tr>
+<tr>
+<td><code>sec.aesGcmOpen(keyHex, nonceHex, ciphertextTagHex, aadHex)</code></td>
+<td>verifies the tag in constant time and returns the plaintext hex, or <code>nil</code> if authentication fails</td>
+</tr>
+<tr>
+<td><code>sec.pbkdf2Sha256(password, saltHex, iterations, dkLen)</code></td>
+<td>PBKDF2-HMAC-SHA256 (RFC 8018), returns hex; iterations up to 10,000,000</td>
+</tr>
+<tr>
+<td><code>sec.randomToken(n)</code></td>
+<td>now reads the OS CSPRNG (<code>/dev/urandom</code>) instead of a seeded Mersenne Twister</td>
+</tr>
+<tr>
+<td><code>sec.xorCipher(s, key)</code></td>
+<td>XOR بسيط قابل للعكس بنفس الاستدعاء — للتعتيم فقط، <strong>ليس تشفيراً آمناً</strong></td>
+</tr>
+<tr>
+<td><code>sec.rot13(s)</code></td>
+<td>ROT13 الكلاسيكي</td>
+</tr>
+<tr>
+<td><code>sec.passwordStrength(s)</code></td>
+<td><code>{score:0..4, length, hasUpper, hasLower, hasDigit, hasSymbol, feedback:[...]}</code></td>
+</tr>
+</tbody>
+</table></div>
+<pre><code class="language-kotlin">let token = sec.randomToken(16);
+let sig = sec.hmacSha256(&quot;shared-secret&quot;, &quot;payload&quot;);
+assert(sec.constantTimeEqual(sig, expectedSig));
+</code></pre>
+<h2 id="fs"><code>fs.*</code> — تحليل ملفات ومجلدات<a class="headerlink" href="#fs" title="Permanent link">#</a></h2>
+<p>كل المسارات تمرّ عبر <code>resolvePath()</code> نفسها المستخدمة في <code>readFile</code>/<code>writeFile</code>، فتبقى
+معزولة داخل مجلد المشروع (<code>basePath</code>) بنفس سياسة بقية اللغة.</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الدالة</th>
+<th>الوصف</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>fs.hash(path, algo?)</code></td>
+<td>بصمة محتوى ملف كامل؛ <code>algo</code> من <code>"sha256"</code> (افتراضي) / <code>"md5"</code> / <code>"crc32"</code></td>
+</tr>
+<tr>
+<td><code>fs.lineCount(path)</code></td>
+<td>عدد الأسطر، أو <code>nil</code> إن تعذّر فتح الملف</td>
+</tr>
+<tr>
+<td><code>fs.tail(path, n)</code></td>
+<td>آخر <code>n</code> سطراً كمصفوفة (نافذة دائرية، بلا تحميل الملف كاملاً في الذاكرة)</td>
+</tr>
+<tr>
+<td><code>fs.grep(path, pattern)</code></td>
+<td><code>[{line, text}, ...]</code> لأسطر تطابق نمط regex (نفس صيغة <code>regexTest</code>، تدعم بادئة <code>i:</code>/<code>m:</code>)</td>
+</tr>
+<tr>
+<td><code>fs.scanDir(path, recursive?)</code></td>
+<td><code>[{name, path, isDir, size, extension}, ...]</code></td>
+</tr>
+<tr>
+<td><code>fs.extensionStats(path, recursive?)</code></td>
+<td><code>{".ext": عدد, ...}</code></td>
+</tr>
+<tr>
+<td><code>fs.find(path, namePattern, recursive?)</code></td>
+<td>مسارات الملفات التي يطابق <strong>اسمها</strong> نمط regex</td>
+</tr>
+</tbody>
+</table></div>
+<pre><code class="language-kotlin">let bigLogs = fs.find(&quot;logs&quot;, &quot;\\.log$&quot;, true);
+for (let p of bigLogs) {
+    let hits = fs.grep(p, &quot;i:error&quot;);
+    if (len(hits) &gt; 0) print p + &quot;: &quot; + len(hits) + &quot; error line(s)&quot;;
+}
+</code></pre>
+<h2 id="net"><code>net.*</code> — الشبكة: تحليل + اتصال حقيقي بالإنترنت<a class="headerlink" href="#net" title="Permanent link">#</a></h2>
+<p>مجموعتان: (أ) دوال تحليل بلا اتصال (هذا الجدول)، و(ب) دوال <strong>تتصل فعلياً بالإنترنت</strong> موثّقة أدناه
+في <a href="#net--الاتصال-الحقيقي-بالإنترنت"><code>net.*</code> — الاتصال الحقيقي</a>. لا تُرمى أخطاء عند فشل الشبكة، بل تُرجَع نتيجة <code>ok: false</code>.</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الدالة</th>
+<th>الوصف</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>net.parseUrl(url)</code></td>
+<td><code>{scheme, host, port, path, query, fragment}</code> أو <code>nil</code> إن كان الرابط غير صالح (يتطلب <code>scheme://</code>)</td>
+</tr>
+<tr>
+<td><code>net.parseQuery(qs)</code></td>
+<td>يفكّك <code>a=1&amp;b=2</code> إلى قاموس (يدعم <code>%XX</code> و<code>+</code>)</td>
+</tr>
+<tr>
+<td><code>net.buildQuery(map)</code></td>
+<td>يبني نص query من قاموس</td>
+</tr>
+<tr>
+<td><code>net.isValidIPv4(s)</code> / <code>net.isValidIPv6(s)</code></td>
+<td>تحقق من صيغة العنوان</td>
+</tr>
+<tr>
+<td><code>net.ipToInt(ipv4)</code> / <code>net.intToIp(n)</code></td>
+<td>تحويل IPv4 ⇄ رقم 32-bit</td>
+</tr>
+<tr>
+<td><code>net.cidrContains(cidr, ip)</code></td>
+<td>هل عنوان IPv4 ضمن مدى CIDR (مثل <code>"10.0.0.0/8"</code>)</td>
+</tr>
+<tr>
+<td><code>net.isPrivateIp(ip)</code></td>
+<td>عناوين خاصة/loopback/link-local (RFC 1918 + <code>127.0.0.0/8</code> + <code>169.254.0.0/16</code>)</td>
+</tr>
+</tbody>
+</table></div>
+<pre><code class="language-kotlin">let u = net.parseUrl(&quot;https://api.example.com:8443/v1/users?active=true&quot;);
+print u.host;                              // api.example.com
+print net.isPrivateIp(&quot;192.168.1.5&quot;);      // true
+print net.cidrContains(&quot;10.0.0.0/8&quot;, &quot;10.2.3.4&quot;); // true
+</code></pre>
+<h2 id="net_1"><code>net.*</code> — الاتصال الحقيقي بالإنترنت<a class="headerlink" href="#net_1" title="Permanent link">#</a></h2>
+<p>كل الدوال التالية تُجري <strong>اتصالاً شبكياً فعلياً</strong> (لا محاكاة). لا ترمي خطأً عند انقطاع الشبكة:
+تُرجع <code>{ok: false, error: "..."}</code> (أو <code>nil</code> للدوال التي تُرجع قيمة واحدة). HTTP مقصور على
+<code>http://</code> و<code>https://</code> (أي مخطط آخر مثل <code>file://</code> يُرفض).</p>
+<h3 id="http-https-cli-httpget">HTTP / HTTPS (يعمل على CLI وأندرويد عبر نفس عميل <code>httpGet</code>)<a class="headerlink" href="#http-https-cli-httpget" title="Permanent link">#</a></h3>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الدالة</th>
+<th>الوصف</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>net.fetch(url, opts?)</code></td>
+<td>طلب كامل. <code>opts</code>: <code>{method, headers, body, timeout, retries}</code> (<code>retries</code> حتى 5). يُرجع <code>{ok, status, statusText, body, json, error, ms, size, headers, url}</code></td>
+</tr>
+<tr>
+<td><code>net.get(url, headers?)</code> / <code>net.head(url, headers?)</code></td>
+<td>GET / HEAD</td>
+</tr>
+<tr>
+<td><code>net.post(url, body, headers?)</code></td>
+<td>POST (قاموس/مصفوفة تُرمَّز JSON تلقائياً)</td>
+</tr>
+<tr>
+<td><code>net.getJson(url, headers?)</code> / <code>net.postJson(url, body, headers?)</code></td>
+<td>القيمة المُحلَّلة مباشرة، أو <code>nil</code> عند الفشل/رد غير JSON/حالة غير 2xx</td>
+</tr>
+<tr>
+<td><code>net.headers(url)</code></td>
+<td>قاموس ترويسات الرد (مفاتيح بحروف صغيرة) أو <code>nil</code></td>
+</tr>
+<tr>
+<td><code>net.status(url)</code></td>
+<td>رمز الحالة (0 عند الفشل)</td>
+</tr>
+<tr>
+<td><code>net.isUp(url)</code></td>
+<td>هل يستجيب الخادوم (أي رد بحالة &lt; 500)</td>
+</tr>
+<tr>
+<td><code>net.measure(url, count=3)</code></td>
+<td>زمن استجابة فعلي: <code>{ok, failed, minMs, avgMs, medianMs, maxMs}</code></td>
+</tr>
+<tr>
+<td><code>net.checkUrls([urls])</code></td>
+<td>فحص حتى 50 رابطاً: <code>[{url, ok, status, ms, error}]</code></td>
+</tr>
+<tr>
+<td><code>net.download(url, path)</code></td>
+<td>تنزيل حقيقي إلى ملف → <code>{ok, bytes, path, status, ms, error}</code></td>
+</tr>
+<tr>
+<td><code>net.publicIp()</code></td>
+<td>عنوانك العام كما يراه الإنترنت</td>
+</tr>
+<tr>
+<td><code>net.ipInfo(ip?)</code></td>
+<td>معلومات عنوان (بلد/مدينة/مزوّد) عبر ipinfo.io</td>
+</tr>
+<tr>
+<td><code>net.dnsQuery(name, type="A")</code></td>
+<td>سجلات DNS حقيقية عبر DNS-over-HTTPS (A, AAAA, MX, TXT, NS, CNAME, SOA, CAA, PTR, SRV)</td>
+</tr>
+<tr>
+<td><code>net.setTimeout(ms)</code> / <code>net.getTimeout()</code></td>
+<td>مهلة الطلبات (100–60000، افتراضي 10000)</td>
+</tr>
+</tbody>
+</table></div>
+<blockquote>
+<p><code>net.headers</code> وحقل <code>headers</code> في <code>net.fetch</code> يعملان على CLI (curl). على أندرويد يكون <code>headers</code> فارغاً
+لأن جسر JNI الحالي لا يُعيد ترويسات الرد.</p>
+</blockquote>
+<h3 id="tcp-dns-macos">مقابس TCP / DNS / النظام (لينكس، macOS، أندرويد — تُرجع خطأً واضحاً على غيرها)<a class="headerlink" href="#tcp-dns-macos" title="Permanent link">#</a></h3>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الدالة</th>
+<th>الوصف</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>net.resolve(host)</code></td>
+<td>حلّ DNS محلي: <code>{ok, addresses, ipv4, ipv6, ms}</code></td>
+</tr>
+<tr>
+<td><code>net.reverseDns(ip)</code></td>
+<td>اسم المضيف لعنوان، أو <code>nil</code></td>
+</tr>
+<tr>
+<td><code>net.tcpCheck(host, port, timeoutMs=3000)</code></td>
+<td>اتصال TCP واحد إلى منفذ واحد: <code>{ok, ip, ms, error}</code></td>
+</tr>
+<tr>
+<td><code>net.tcpPing(host, port=443, count=4, timeoutMs=2000)</code></td>
+<td>"ping" عبر TCP: <code>{sent, received, lossPct, minMs, avgMs, maxMs}</code> (ICMP يتطلب root)</td>
+</tr>
+<tr>
+<td><code>net.tcpSend(host, port, data, timeoutMs=5000)</code></td>
+<td>يرسل بايتات خاماً ويقرأ الرد (حتى 64KB)</td>
+</tr>
+<tr>
+<td><code>net.whois(domain)</code></td>
+<td>WHOIS حقيقي (IANA ثم خادوم السجل): <code>{ok, server, text}</code></td>
+</tr>
+<tr>
+<td><code>net.isOnline()</code></td>
+<td>اتصال TCP فعلي بـ 1.1.1.1 / 8.8.8.8 / 9.9.9.9</td>
+</tr>
+<tr>
+<td><code>net.localIPs()</code> / <code>net.hostname()</code></td>
+<td>واجهات الجهاز وعناوينها / اسم الجهاز</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="_1">مساعدات بلا اتصال<a class="headerlink" href="#_1" title="Permanent link">#</a></h3>
+<p><code>net.urlEncode/urlDecode</code>، <code>net.joinUrl(base, rel)</code>، <code>net.isValidUrl/isValidDomain/isValidEmail/isValidPort/isValidMac</code>،
+<code>net.ipVersion(ip)</code> (4/6/nil)، <code>net.domainOf(url)</code>، <code>net.cidrInfo("192.168.1.0/24")</code>
+(<code>{network, broadcast, netmask, first, last, prefix, total, hosts}</code>)، <code>net.httpStatusText(code)</code>،
+<code>net.portService(443)</code> → <code>"https"</code> / <code>net.servicePort("ssh")</code> → <code>22</code>، <code>net.parseHeaders(text)</code>، <code>net.basicAuth(user, pass)</code>.</p>
+<pre><code class="language-kotlin">if (net.isOnline()) {
+    let r = net.fetch(&quot;https://api.github.com/repos/torvalds/linux&quot;,
+                      {headers: {&quot;User-Agent&quot;: &quot;rin&quot;}, retries: 2});
+    print r.status + &quot; in &quot; + r.ms + &quot;ms&quot;;
+    print r.json.stargazers_count;
+
+    let dns = net.dnsQuery(&quot;example.com&quot;, &quot;A&quot;);
+    for (let rec of dns.answers) print rec.data;
+
+    let chk = net.tcpCheck(&quot;example.com&quot;, 443);
+    print chk.ok;
+    net.download(&quot;https://example.com/&quot;, &quot;example.html&quot;);
+}
+</code></pre>
+<h2 id="log-logs"><code>log.*</code> — تحليل سجلات (logs)<a class="headerlink" href="#log-logs" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الدالة</th>
+<th>الوصف</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>log.parseLines(text)</code></td>
+<td>يفكّك نصاً كاملاً إلى مصفوفة أسطر (يدعم <code>\r\n</code>)</td>
+</tr>
+<tr>
+<td><code>log.parseCommonLog(line)</code></td>
+<td>يفكّك سطر Apache/Nginx Common/Combined Log Format إلى <code>{ip, ident, user, time, method, path, protocol, status, size}</code>، أو <code>nil</code> إن لم يطابق</td>
+</tr>
+<tr>
+<td><code>log.extractIPs(text)</code></td>
+<td>كل عناوين IPv4 الفريدة الموجودة في نص، بترتيب ظهورها</td>
+</tr>
+<tr>
+<td><code>log.extractTimestamps(text, pattern?)</code></td>
+<td>طوابع زمنية مطابقة (افتراضياً صيغ ISO8601 و<code>[dd/Mon/yyyy:HH:MM:SS]</code> الشائعة، أو نمط مخصّص)</td>
+</tr>
+<tr>
+<td><code>log.countBy(lines, fn)</code></td>
+<td><code>{مفتاح: عدد}</code> حيث <code>fn(line)</code> تُرجع المفتاح لكل سطر</td>
+</tr>
+<tr>
+<td><code>log.topN(countsMap, n)</code></td>
+<td>أعلى <code>n</code> أزواج <code>[مفتاح, عدد]</code> مرتّبة تنازلياً</td>
+</tr>
+<tr>
+<td><code>log.filterLines(lines, pattern)</code></td>
+<td>الأسطر المطابقة لنمط regex فقط</td>
+</tr>
+<tr>
+<td><code>log.levelCounts(lines)</code></td>
+<td><code>{FATAL, ERROR, WARN, INFO, DEBUG, TRACE, OTHER}</code> — عدّ حسب أول كلمة مستوى موجودة (case-insensitive)</td>
+</tr>
+<tr>
+<td><code>log.detectSpikes(counts, factor?)</code></td>
+<td>فهارس عناصر مصفوفة أرقام تتجاوز <code>متوسط × factor</code> (افتراضي <code>2.0</code>) — كشف ارتفاعات بسيط</td>
+</tr>
+</tbody>
+</table></div>
+<pre><code class="language-kotlin">let lines = log.parseLines(readFile(&quot;access.log&quot;));
+let byStatus = log.countBy(lines, fun(l) {
+    let rec = log.parseCommonLog(l);
+    return rec == nil ? &quot;unparsed&quot; : rec.status;
+});
+print log.topN(byStatus, 5);
+</code></pre>
+<h2 id="automation"><code>automation.*</code> — أتمتة سير العمل<a class="headerlink" href="#automation" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الدالة</th>
+<th>الوصف</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>automation.retry(fn, times, delayMs?)</code></td>
+<td>يستدعي <code>fn()</code> حتى النجاح أو استنفاد <code>times</code> محاولة؛ يعيد رمي آخر خطأ عند الفشل الكامل؛ <code>delayMs</code> (سقف 60000) إيقاف فعلي بين المحاولات</td>
+</tr>
+<tr>
+<td><code>automation.chain(value, [fn1, fn2, ...])</code></td>
+<td>أنبوب دوال: <code>fnN(...fn2(fn1(value)))</code></td>
+</tr>
+<tr>
+<td><code>automation.timeIt(fn)</code></td>
+<td><code>{result, ms}</code> — قيمة <code>fn()</code> مع مدة التنفيذ بالميلي‑ثانية</td>
+</tr>
+<tr>
+<td><code>automation.batch(items, size)</code></td>
+<td>يقسّم مصفوفة إلى دفعات بحجم <code>size</code></td>
+</tr>
+<tr>
+<td><code>automation.sequence([fn1, fn2, ...])</code></td>
+<td>يشغّل الدوال بالترتيب ويجمع نتائجها في مصفوفة؛ يتوقف عند أول خطأ</td>
+</tr>
+<tr>
+<td><code>automation.sleepMs(ms)</code></td>
+<td>إيقاف فعلي محدود السقف (60000 مللي‑ثانية كحد أقصى)</td>
+</tr>
+</tbody>
+</table></div>
+<pre><code class="language-kotlin">let data = automation.retry(fun() { return fetchSomething(); }, 3, 500);
+let pipeline = automation.chain(rawInput, [normalize, validate, save]);
+</code></pre>
+<h2 id="container">امتدادات <code>container.*</code><a class="headerlink" href="#container" title="Permanent link">#</a></h2>
+<p>فوق ما ورد في <code>native-additions.md</code> (Rin 1.0):</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الدالة</th>
+<th>الوصف</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>container.snapshot(name)</code></td>
+<td>نسخة عميقة من كل الحقول (بلا الدوال) كقاموس، أو <code>nil</code> إن غابت الحاوية</td>
+</tr>
+<tr>
+<td><code>container.restore(name, snap)</code></td>
+<td>يكتب حقول <code>snap</code> فوق الحاوية (لا يحذف حقولاً غائبة من <code>snap</code>)؛ <code>false</code> إن غابت</td>
+</tr>
+<tr>
+<td><code>container.lock(name)</code> / <code>container.unlock(name)</code> / <code>container.isLocked(name)</code></td>
+<td>علم قفل بسيط (حقل داخلي <code>__locked</code>)</td>
+</tr>
+<tr>
+<td><code>container.logEvent(name, msg)</code></td>
+<td>يضيف <code>{t, msg}</code> إلى سجل أحداث الحاوية (<code>__events</code>)؛ يُعيد الطول الجديد</td>
+</tr>
+<tr>
+<td><code>container.history(name)</code></td>
+<td>يُعيد مصفوفة أحداث <code>container.logEvent</code> (فارغة إن لا شيء)</td>
+</tr>
+<tr>
+<td><code>container.filter(kind, fn)</code></td>
+<td>أسماء الحاويات من <code>kind</code> حيث <code>fn(fieldsMap)</code> صحيحة</td>
+</tr>
+<tr>
+<td><code>container.stats(kind)</code></td>
+<td><code>{count, fields: {field: {count, numeric, min?, max?, sum?, avg?}}}</code> — الحقول الداخلية (<code>__</code>) مُستبعدة</td>
+</tr>
+<tr>
+<td><code>container.validate(name, schema)</code></td>
+<td><code>{valid, errors:[...]}</code>؛ <code>schema</code> قاموس <code>{field: "type"}</code>، أضف <code>؟</code> (<code>"number?"</code>) لحقل اختياري؛ الأنواع: <code>number/string/bool/array/map/function/any</code></td>
+</tr>
+<tr>
+<td><code>container.exportToFile(name, path)</code></td>
+<td>يكتب حقول الحاوية JSON فعلياً على القرص (عبر <code>container.toJson</code> + الكتابة المعزولة)</td>
+</tr>
+<tr>
+<td><code>container.importFromFile(name, path, overwrite?)</code></td>
+<td>يقرأ JSON من القرص ويدمجه داخل حاوية موجودة (عبر <code>container.fromJson</code>)</td>
+</tr>
+</tbody>
+</table></div>
+<pre><code class="language-kotlin">spawn(&quot;host&quot;, &quot;srv1&quot;);
+setField(&quot;srv1&quot;, &quot;cpu&quot;, 10);
+let before = container.snapshot(&quot;srv1&quot;);
+container.incr(&quot;srv1&quot;, &quot;cpu&quot;, 90);
+container.restore(&quot;srv1&quot;, before);          // cpu = 10 من جديد
+
+let check = container.validate(&quot;srv1&quot;, {cpu: &quot;number&quot;, name: &quot;string?&quot;});
+if (!check.valid) print check.errors;
+
+container.exportToFile(&quot;srv1&quot;, &quot;backups/srv1.json&quot;);
+</code></pre>
+<h2 id="container-rin-10">دوال <code>container.*</code> الإضافية (Rin 1.0)<a class="headerlink" href="#container-rin-10" title="Permanent link">#</a></h2>
+<p>الدوال المُعدِّلة هنا تحترم <code>container.lock(name)</code>: تُرمى <code>E0035</code> عند الكتابة على حاوية مقفلة.</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>المجموعة</th>
+<th>الدوال</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>إدارة</td>
+<td><code>container.names(kind?)</code>، <code>container.remove(name)</code>، <code>container.removeAll(kind)</code></td>
+</tr>
+<tr>
+<td>نسخ/نقل حقول</td>
+<td><code>container.copyField(src, field, dst, as?)</code>، <code>container.moveField(src, field, dst)</code>، <code>container.mergeFrom(dst, src, overwrite=true)</code></td>
+</tr>
+<tr>
+<td>مسارات متداخلة</td>
+<td><code>container.getPath(name, "a.b.0.c", default?)</code>، <code>container.setPath(name, "a.b.0.c", value)</code></td>
+</tr>
+<tr>
+<td>قيم افتراضية/تعديل</td>
+<td><code>container.setDefault(name, field, v)</code>، <code>container.defaults(name, {..})</code>، <code>container.decr(name, field, by?)</code>، <code>container.toggle(name, field)</code></td>
+</tr>
+<tr>
+<td>مصفوفات</td>
+<td><code>container.push(name, field, v)</code>، <code>container.pop(name, field)</code>، <code>container.contains(name, field, x)</code></td>
+</tr>
+<tr>
+<td>استعلام</td>
+<td><code>container.search(text, kind?)</code>، <code>container.sortBy(kind, field, desc?)</code>، <code>container.top(kind, field, n)</code>، <code>container.paginate(kind, page, size)</code></td>
+</tr>
+<tr>
+<td>تجميع</td>
+<td><code>container.avg/min/max(kind, field)</code>، <code>container.distinct(kind, field)</code>، <code>container.countBy(kind, field)</code></td>
+</tr>
+<tr>
+<td>فحص</td>
+<td><code>container.equals(a, b)</code>، <code>container.checksum(name)</code> (SHA-256)، <code>container.requireFields(name, [..])</code>، <code>container.fieldsOfType(name, type)</code>، <code>container.summary()</code></td>
+</tr>
+<tr>
+<td>تصدير</td>
+<td><code>container.entries(name)</code>، <code>container.valuesOf(name)</code>، <code>container.toRows(kind, fields?)</code>، <code>container.toCsv(kind, fields?)</code>، <code>container.exportCsv(kind, path, fields?)</code></td>
+</tr>
+</tbody>
+</table></div>
+<p><code>toCsv/exportCsv</code> تُسبق النصوص التي تبدأ بـ <code>= + - @</code> بفاصلة عليا لمنع حقن الصيغ في Excel.</p></article>
+<div class="pnav"><a class="pn" href="TIME.html">→ مفهوم `time`: الزمن كقيمة من الدرجة الأولى</a><a class="pn" href="container_advanced.html">Rin Container Advanced Built-ins ←</a></div><p class="edit"><a href="https://github.com/dlof-lib/rinlang/edit/main/docs/native-additions.md">✎ عدّل هذه الصفحة على GitHub</a></p>
+<footer>Rin 1.0.0 · رخصة MIT</footer></main>
+<aside id="toc"><b>في هذه الصفحة</b><div class="toc">
+<ul>
+<li><a href="#sec">sec.* — أدوات أمن (تجزئة، ترميز، تحقق)</a></li>
+<li><a href="#fs">fs.* — تحليل ملفات ومجلدات</a></li>
+<li><a href="#net">net.* — الشبكة: تحليل + اتصال حقيقي بالإنترنت</a></li>
+<li><a href="#net_1">net.* — الاتصال الحقيقي بالإنترنت</a><ul>
+<li><a href="#http-https-cli-httpget">HTTP / HTTPS (يعمل على CLI وأندرويد عبر نفس عميل httpGet)</a></li>
+<li><a href="#tcp-dns-macos">مقابس TCP / DNS / النظام (لينكس، macOS، أندرويد — تُرجع خطأً واضحاً على غيرها)</a></li>
+<li><a href="#_1">مساعدات بلا اتصال</a></li>
+</ul>
+</li>
+<li><a href="#log-logs">log.* — تحليل سجلات (logs)</a></li>
+<li><a href="#automation">automation.* — أتمتة سير العمل</a></li>
+<li><a href="#container">امتدادات container.*</a></li>
+<li><a href="#container-rin-10">دوال container.* الإضافية (Rin 1.0)</a></li>
+</ul>
+</div>
+</aside></div>
+<script src="assets/app.js"></script></body></html>

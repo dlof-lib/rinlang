@@ -1,0 +1,37 @@
+[1, 2]
+[3, 4]
+[5]
+0:abc
+1:def
+[1, 2]
+[2, 3]
+[3, 4]
+0|[1, 2, 3]
+0a
+2c
+4e
+1x
+2y
+a10
+b20
+odd-start [1, 2]
+odd-start [3, 4]
+[3, 5, 7]
+[3, 8]
+second [3, 4]
+[1, 2]
+done
+w[1]
+w[2]
+for 7
+for 8
+to 1
+to 2
+to 3
+a
+b
+p1
+c0
+c1
+`by` needs a positive integer
+`each ... window` needs an array or a string

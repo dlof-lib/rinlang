@@ -1,0 +1,32 @@
+📊 container.table = staff
+▦ row -> ["name", "dept", "score"]
+▦ row -> ["sara", "dev", 95]
+▦ row -> ["yusuf", "ops", 88]
+✅ .end/container.table (staff)
+2
+["1", "2"]
+[{"name": "sara", "dept": "dev", "score": 95}, {"name": "yusuf", "dept": "ops", "score": 88}]
+{"name": "yusuf", "dept": "ops", "score": 88}
+{"name": "sara", "dept": "dev", "score": 95}
+nil
+[{"name": "sara", "dept": "dev", "score": 95}]
+{"name": "yusuf", "dept": "ops", "score": 88}
+nil
+true
+false
+["omar", "ops", 71]
+true
+false
+{"name": "sara", "dept": "dev", "score": 99}
+true
+false
+2
+["1", "2"]
+1
+E0007
+E0007
+E0020
+📊 container.table = bare
+▦ row -> [1, 2]
+✅ .end/container.table (bare)
+E0004

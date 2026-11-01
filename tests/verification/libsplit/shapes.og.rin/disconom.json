@@ -1,0 +1,11 @@
+{
+  "disconom": 1,
+  "name": "shapes",
+  "version": "2.1.0",
+  "description": "مكتبة أشكال مقسّمة إلى أجزاء",
+  "rin": ">=1.0.0 <2.0.0",
+  "authors": ["Jo"],
+  "license": "MIT",
+  "main": "main.zpp",
+  "dependencies": { "geomcore": "^1.0.0" }
+}

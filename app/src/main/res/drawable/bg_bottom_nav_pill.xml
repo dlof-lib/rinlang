@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- الحبّة (pill) العائمة خلف التبويب المُحدَّد في الشريط السفلي — أصبحت الآن تدرّجاً بنفسجياً
+     كامل التشبّع (بدل تلوين شفاف باهت بالكاد يُرى)، فتصير شارة واضحة "مُحدَّد الآن" بدل تلميح
+     خافت — الأيقونة/النص فوقها يتحوّلان للأبيض (انظر BottomNavHelper.kt) لضمان تباين ممتاز.
+     تتحرّك أفقياً برمجياً بين التبويبات (انظر BottomNavHelper.kt / animateIndicatorTo). -->
+<!-- تطوير إضافي: طبقة "لمعان" زجاجي علوية (بيضاء متدرّجة نحو الشفافية) فوق تدرّج الحبّة
+     الأساسي، لإحساس بصري أكثر ثراءً وحيوية (glossy pill) بدل سطح تدرّج مسطّح بلا عمق —
+     نفس الأسلوب المستخدم في أزرار وبطاقات التطبيقات الحديثة المتميّزة. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:type="linear"
+                android:angle="0"
+                android:startColor="@color/rin_run_gradient_start"
+                android:endColor="@color/rin_accent_pressed" />
+            <corners android:radius="20dp" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:type="linear"
+                android:angle="90"
+                android:startColor="#33FFFFFF"
+                android:endColor="#00FFFFFF" />
+            <corners android:radius="20dp" />
+        </shape>
+    </item>
+</layer-list>

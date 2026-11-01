@@ -1,0 +1,11 @@
+// let_compat.rin — اختبار تحقّق لـ docs/let-plus.md
+// old let forms are untouched
+let x = 5; print x;
+let y; print y;
+let s: String = "t"; print s;
+for (let i = 0; i < 2; i = i + 1) { print i; }
+for (let w in [1, 2]) { print w; }
+class A { let f = 1; let g = 2; fun sum() { return self.f + self.g; } }
+print A().sum();
+let arr = [1, 2]; arr[0] = 9; print arr;
+let tape = 1; let bell = 2; print tape + bell;

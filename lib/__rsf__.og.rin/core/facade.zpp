@@ -1,0 +1,19 @@
+// core/facade.zpp — الواجهة RSF: كل الدوال بلا البادئة rsf_. هي ما تُرجعه rintwist.rsf().
+export fun rsf_facade() {
+    return {
+        version: RSF_VERSION,
+        // مفاتيح وتساوٍ
+        key: rsf_key, equal: rsf_equal,
+        // منع التكرار
+        set: rsf_set, add: rsf_add, has: rsf_has, size: rsf_size, items: rsf_items,
+        dedupe: rsf_dedupe, dedupeBy: rsf_dedupeBy, duplicates: rsf_duplicates, hasDuplicates: rsf_hasDuplicates,
+        counts: rsf_counts, memo: rsf_memo,
+        // كشف الدورات
+        iterate: rsf_iterate, brent: rsf_brent, hasCycle: rsf_hasCycle,
+        cycles: rsf_cycles, isAcyclic: rsf_isAcyclic, graph: rsf_graph, topo: rsf_topo, walk: rsf_walk,
+        // RINTWIST + Disconom
+        importStack: rsf_importStack, loadedDuplicates: rsf_loadedDuplicates, libGraph: rsf_libGraph, selfCheck: rsf_selfCheck,
+        config: rsf_config, settings: rsf_settings
+    };
+}
+export let RSF = rsf_facade();

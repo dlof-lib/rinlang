@@ -1,0 +1,38 @@
+outer: for (let i = 0; i < 3; i = i + 1) {
+    for (let j = 0; j < 3; j = j + 1) {
+        if (j == 2) { continue outer; }
+        if (i == 2) { break outer; }
+        print i + "," + j;
+    }
+}
+print "after outer";
+rows: each r in [[1, 2], [3, -1], [5, 6]] {
+    each v in r {
+        if (v < 0) { print "neg"; break rows; }
+        print v;
+    }
+}
+a: while (true) {
+    b: loop {
+        each z in [1, 2, 3] {
+            if (z == 2) { break a; }
+            print "z" + z;
+        }
+    }
+}
+print "end";
+fun find(grid, t) {
+    found: each row, y in grid {
+        each cell, x in row {
+            if (cell == t) { return [x, y]; }
+        }
+    }
+    return nil;
+}
+print find([[1, 2], [3, 4]], 3);
+outer2: for (let i = 0; i < 2; i = i + 1) {
+    each q in [1, 2] {
+        break outer2 when (i == 1);
+        print "i" + i + "q" + q;
+    }
+}

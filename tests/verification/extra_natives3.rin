@@ -1,0 +1,138 @@
+// اختبار دوال Rin : net.* (الجزء المحلي + الاتصال الحقيقي الاختياري) + container.* الإضافية
+
+// ---------------- net.* (بلا اتصال) ----------------
+assertEq(net.urlEncode("a b&c=é"), "a%20b%26c%3D%C3%A9", "urlEncode");
+assertEq(net.urlDecode("a%20b%26c"), "a b&c", "urlDecode");
+assertEq(net.joinUrl("https://a.com/x/y/z.html", "../q?k=1"), "https://a.com/x/q?k=1", "joinUrl ..");
+assertEq(net.joinUrl("https://a.com/x/", "/root"), "https://a.com/root", "joinUrl abs");
+assertEq(net.joinUrl("https://a.com:8080/x", "//b.com/p"), "https://b.com/p", "joinUrl scheme-relative");
+assert(net.isValidUrl("https://example.com/a?b=1"), "isValidUrl ok");
+assert(!net.isValidUrl("file:///etc/passwd"), "isValidUrl rejects file://");
+assert(!net.isValidUrl("ftp://example.com"), "isValidUrl rejects ftp");
+assert(net.isValidDomain("sub.example.com"), "isValidDomain ok");
+assert(!net.isValidDomain("-bad.com"), "isValidDomain hyphen");
+assert(!net.isValidDomain("nodot"), "isValidDomain nodot");
+assert(net.isValidEmail("ali.k+tag@example.com"), "email ok");
+assert(!net.isValidEmail("a@@b.com"), "email bad");
+assert(net.isValidPort(443), "isValidPort ok");
+assert(!net.isValidPort(0), "isValidPort 0");
+assert(!net.isValidPort(70000), "isValidPort big");
+assert(net.isValidMac("aa:BB:cc:00:11:22"), "mac ok");
+assert(!net.isValidMac("aa:bb:cc"), "mac bad");
+assertEq(net.ipVersion("10.0.0.1"), 4, "ipVersion 4");
+assertEq(net.ipVersion("::1"), 6, "ipVersion 6");
+assertEq(net.ipVersion("nope"), nil, "ipVersion nil");
+assertEq(net.domainOf("https://WWW.Example.com:8443/x"), "www.example.com", "domainOf");
+let ci = net.cidrInfo("192.168.1.77/24");
+assertEq(ci.network, "192.168.1.0", "cidr network");
+assertEq(ci.broadcast, "192.168.1.255", "cidr broadcast");
+assertEq(ci.netmask, "255.255.255.0", "cidr netmask");
+assertEq(ci.first, "192.168.1.1", "cidr first");
+assertEq(ci.last, "192.168.1.254", "cidr last");
+assertEq(ci.hosts, 254, "cidr hosts");
+assertEq(net.cidrInfo("10.0.0.0/33"), nil, "cidr invalid");
+assertEq(net.httpStatusText(404), "Not Found", "statusText");
+assertEq(net.portService(443), "https", "portService");
+assertEq(net.servicePort("ssh"), 22, "servicePort");
+assertEq(net.basicAuth("user", "pass"), "Basic dXNlcjpwYXNz", "basicAuth");
+assertEq(net.parseHeaders("Content-Type: text/html\r\nX-A:  b")["content-type"], "text/html", "parseHeaders");
+assertEq(net.setTimeout(5000), 5000, "setTimeout");
+assertEq(net.getTimeout(), 5000, "getTimeout");
+// رفض المخططات غير http(s) — لا اتصال ولا خطأ يوقف البرنامج
+let bad = net.fetch("file:///etc/passwd");
+assert(!bad.ok, "fetch rejects file://");
+assertEq(bad.status, 0, "fetch rejected status");
+assertEq(len(net.localIPs()) >= 0, true, "localIPs callable");
+print "net.* (offline) OK";
+
+// ---------------- net.* (اتصال حقيقي — يُتخطّى إن لم توجد شبكة) ----------------
+if (net.isOnline()) {
+    let r = net.fetch("https://example.com", {retries: 1});
+    assert(r.ok, "real fetch ok");
+    assert(r.status > 0, "real fetch status");
+    assert(r.size > 0, "real fetch size");
+    assert(len(net.headers("https://example.com")) > 0, "real headers");
+    assert(net.isUp("https://example.com"), "isUp");
+    let dns = net.resolve("example.com");
+    assert(dns.ok, "resolve ok");
+    assert(len(dns.addresses) > 0, "resolve addrs");
+    assert(net.tcpCheck("example.com", 443).ok, "tcpCheck 443");
+    assert(net.tcpPing("example.com", 443, 2).received >= 1, "tcpPing");
+    // خدمات طرف ثالث (قد تُحجب في بيئات مقيّدة): تُجرَّب دون إفشال الاختبار
+    let pip = net.publicIp();
+    if (pip != nil) print "publicIp: " + pip; else print "publicIp unavailable (service blocked?)";
+    let q = net.dnsQuery("example.com", "A");
+    if (q.ok) assert(len(q.answers) > 0, "dnsQuery answers"); else print "dnsQuery unavailable: " + q.error;
+    print "net.* (online) OK";
+} else {
+    print "net.* (online) SKIPPED - no network";
+}
+
+// ---------------- container.* extras ----------------
+spawn("container.doc", "u1");
+spawn("container.doc", "u2");
+spawn("container.doc", "u3");
+container.set("u1", "name", "Ali");   container.set("u1", "age", 30); container.set("u1", "tags", ["a"]);
+container.set("u2", "name", "Sara");  container.set("u2", "age", 25);
+container.set("u3", "name", "omar");  container.set("u3", "age", 30);
+
+assertEq(len(container.names("container.doc")), 3, "names");
+assertEq(container.avg("container.doc", "age"), 85 / 3, "avg");
+assertEq(container.min("container.doc", "age"), 25, "min");
+assertEq(container.max("container.doc", "age"), 30, "max");
+assertEq(len(container.distinct("container.doc", "age")), 2, "distinct");
+assertEq(container.countBy("container.doc", "age")[30], 2, "countBy");
+assertEq(container.sortBy("container.doc", "age")[0], "u2", "sortBy asc");
+assertEq(container.sortBy("container.doc", "name", true)[0], "u3", "sortBy desc (byte order: omar > Sara > Ali)");
+assertEq(len(container.top("container.doc", "age", 2)), 2, "top");
+assertEq(len(container.search("ALI")), 1, "search");
+let pg = container.paginate("container.doc", 2, 2);
+assertEq(len(pg.items), 1, "paginate items");
+assertEq(pg.pages, 2, "paginate pages");
+
+container.setPath("u1", "profile.address.city", "Beirut");
+assertEq(container.getPath("u1", "profile.address.city"), "Beirut", "setPath/getPath");
+assertEq(container.getPath("u1", "profile.zip", "none"), "none", "getPath default");
+container.setPath("u1", "tags.1", "b");
+assertEq(container.getPath("u1", "tags.1"), "b", "setPath array index");
+assertEq(container.push("u1", "tags", "c"), 3, "push");
+assertEq(container.pop("u1", "tags"), "c", "pop");
+assert(container.contains("u1", "tags", "a"), "contains array");
+assert(container.contains("u1", "name", "li"), "contains string");
+assertEq(container.decr("u1", "age", 5), 25, "decr");
+assertEq(container.toggle("u1", "active"), true, "toggle on");
+assertEq(container.toggle("u1", "active"), false, "toggle off");
+assertEq(container.setDefault("u1", "city", "X"), "X", "setDefault new");
+assertEq(container.setDefault("u1", "city", "Y"), "X", "setDefault keeps");
+assertEq(container.defaults("u1", {city: "Z", lang: "ar"}), 1, "defaults adds missing only");
+
+assert(container.copyField("u1", "name", "u2", "friend"), "copyField");
+assertEq(container.get("u2", "friend"), "Ali", "copyField value");
+assert(container.moveField("u2", "friend", "u3"), "moveField");
+assert(!container.has("u2", "friend"), "moveField removed");
+assertEq(len(container.requireFields("u2", ["name", "email"])), 1, "requireFields");
+assertEq(container.fieldsOfType("u2", "number"), ["age"], "fieldsOfType");
+
+container.clone("u2", "u2b");
+assert(container.equals("u2", "u2b"), "equals true");
+assertEq(container.checksum("u2"), container.checksum("u2b"), "checksum equal");
+container.set("u2b", "age", 99);
+assert(!container.equals("u2", "u2b"), "equals false");
+assert(container.checksum("u2") != container.checksum("u2b"), "checksum differs");
+assertEq(len(container.checksum("u2")), 64, "checksum length");
+
+let csv = container.toCsv("container.doc", ["name", "age"]);
+assert(len(csv) > 0, "toCsv");
+assertEq(len(container.toRows("container.doc", ["name"])), 4, "toRows");
+assertEq(container.summary().total >= 4, true, "summary");
+
+container.lock("u3");
+let threw = false;
+try { container.push("u3", "tags", 1); } catch (e) { threw = true; }
+assert(threw, "locked container rejects writes");
+assert(!container.remove("nonexistent"), "remove missing");
+container.unlock("u3");
+assert(container.remove("u3"), "remove");
+assertEq(container.exists("u3"), false, "removed gone");
+assertEq(container.removeAll("container.doc") >= 3, true, "removeAll");
+print "container.* extras OK";

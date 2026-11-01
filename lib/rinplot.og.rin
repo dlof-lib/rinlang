@@ -1,0 +1,1110 @@
+// ============================================================================
+//  lib/rinplot.og.rin — RinPlot: الرسوم البيانية الإحصائية المعقّدة
+//
+//  @version 1.0.0
+//  @category data
+//  @prefix pl_
+//
+//  لا نُعيد اختراع الرسم: المكتبة "مشهد" مجرّد (مستطيلات/خطوط/مضلّعات/نصوص)
+//  يُرسم بواجهتين من نفس المصدر، فتتطابق النتيجة:
+//    • SVG  ← نص نظيف قابل للتكبير، يدعم العربية بالكامل (يُشكَّل في المتصفح)
+//    • PNG  ← عبر دوال img* الأصلية (imgNew/imgLine/imgPolygon/imgText/imgSave)
+//             ملاحظة: خط البكسل المدمج لا يُشكِّل الحروف العربية — استعمل SVG للعربية.
+//  وتعتمد على الموجود: الألوان (colorMix/colorParse/colorTextOn)، التنسيق
+//  (numberFormat/numberRound/numberMap)، والإحصاء (lib/rinstat) لكل رسم إحصائي
+//  (st_hist/st_kde/st_qq/st_linreg/st_summary/st_outliers/st_corr_matrix...).
+//
+//  الاستعمال المختصر:
+//    @import "lib/rinplot.og.rin";
+//    let fig = pl_figure(960, 640, 1, 1, "عنوان");
+//    let ax  = pl_axes(fig, 0, 0);
+//    pl_scatter(ax, xs, ys, {"label": "قياسات"});
+//    pl_save(fig, "out/chart.svg");        // أو .png
+//
+//  كل دالة رسم: pl_<نوع>(ax, بيانات..., opts) حيث opts قاموس (يمكن {}).
+//  خيارات شائعة: label color width alpha size dash.
+// ============================================================================
+@import "lib/rinstat.og.rin";
+
+// ---------------------------------------------------------------------------
+//  1) السمات والألوان
+// ---------------------------------------------------------------------------
+fun pl_palette() {   // Okabe–Ito: آمنة لعمى الألوان
+    return ["#0072B2", "#E69F00", "#009E73", "#D55E00", "#CC79A7", "#56B4E9", "#B8A400", "#555555"];
+}
+fun pl_theme(name) {
+    if (name == "dark") {
+        return {"bg": "#0f172a", "fg": "#e2e8f0", "grid": "#273449", "axis": "#64748b", "panel": "#111c33"};
+    }
+    return {"bg": "#ffffff", "fg": "#1f2937", "grid": "#e5e7eb", "axis": "#9ca3af", "panel": "#ffffff"};
+}
+
+// خرائط لونية: تتدرّج بـ colorMix الأصلية بين محطات
+fun pl_ramp(stops, t) {
+    if (t < 0) { t = 0; }
+    if (t > 1) { t = 1; }
+    let n = len(stops) - 1;
+    let p = t * n;
+    let i = floor(p);
+    if (i >= n) { return stops[n]; }
+    return colorMix(stops[i], stops[i + 1], p - i);
+}
+fun pl_cmap(name, t) {
+    if (name == "coolwarm") { return pl_ramp(["#3b4cc0", "#8db0fe", "#f1f1f1", "#f49a7b", "#b40426"], t); }
+    if (name == "blues") { return pl_ramp(["#f7fbff", "#9ecae1", "#2171b5", "#08306b"], t); }
+    return pl_ramp(["#440154", "#3b528b", "#21918c", "#5ec962", "#fde725"], t);   // viridis
+}
+
+// ---------------------------------------------------------------------------
+//  2) الأشكال واللوحات
+// ---------------------------------------------------------------------------
+fun pl_figure(w, h, rows, cols, title) {
+    return {"w": w, "h": h, "rows": rows, "cols": cols, "title": title, "axes": [], "fs": 2,
+            "theme": "light", "hgap": 0, "vgap": 0};
+}
+fun pl_axes_span(fig, r, c, rs, cs) {
+    let ax = {"row": r, "col": c, "rs": rs, "cs": cs, "title": "", "xlabel": "", "ylabel": "",
+              "layers": [], "kind": "cartesian", "xcats": nil, "xlim": nil, "ylim": nil,
+              "grid": true, "legend": "upper right", "ci": 0, "xlog": false, "ylog": false,
+              "ytickfmt": nil, "fig": nil, "ycats": nil};
+    push(fig["axes"], ax);
+    return ax;
+}
+fun pl_axes(fig, r, c) { return pl_axes_span(fig, r, c, 1, 1); }
+fun pl_title(ax, s) { ax["title"] = s; return ax; }
+fun pl_xlabel(ax, s) { ax["xlabel"] = s; return ax; }
+fun pl_ylabel(ax, s) { ax["ylabel"] = s; return ax; }
+fun pl_xlim(ax, lo, hi) { ax["xlim"] = [lo, hi]; return ax; }
+fun pl_ylim(ax, lo, hi) { ax["ylim"] = [lo, hi]; return ax; }
+fun pl_xcats(ax, labels) { ax["xcats"] = labels; return ax; }
+fun pl_legend(ax, pos) { ax["legend"] = pos; return ax; }      // "upper right"|"upper left"|"lower right"|"lower left"|"none"
+fun pl_logx(ax) { ax["xlog"] = true; return ax; }
+fun pl_logy(ax) { ax["ylog"] = true; return ax; }
+fun pl_dark(fig) { fig["theme"] = "dark"; return fig; }
+
+fun pl_opt(o, k, d) { if (has(o, k)) { return o[k]; } return d; }
+fun pl_next_color(ax) {
+    let p = pl_palette();
+    let c = p[ax["ci"] % len(p)];
+    ax["ci"] = ax["ci"] + 1;
+    return c;
+}
+fun pl_pick_color(ax, o) {
+    if (has(o, "color")) { return o["color"]; }
+    return pl_next_color(ax);
+}
+
+// ---------------------------------------------------------------------------
+//  3) طبقات الرسم (تُخزَّن بيانات فقط؛ الرسم الفعلي عند الحفظ)
+// ---------------------------------------------------------------------------
+fun pl_line(ax, x, y, o) {
+    push(ax["layers"], {"type": "line", "x": x, "y": y, "color": pl_pick_color(ax, o), "label": pl_opt(o, "label", ""),
+                        "width": pl_opt(o, "width", 2), "dash": pl_opt(o, "dash", false)});
+    return ax;
+}
+fun pl_scatter(ax, x, y, o) {
+    push(ax["layers"], {"type": "scatter", "x": x, "y": y, "color": pl_pick_color(ax, o), "label": pl_opt(o, "label", ""),
+                        "size": pl_opt(o, "size", 3), "alpha": pl_opt(o, "alpha", 0.75)});
+    return ax;
+}
+// أعمدة: x مواضع رقمية (أو نصوص فتتحوّل إلى فئات)، y ارتفاعات
+fun pl_bar(ax, x, y, o) {
+    let xs = x;
+    if (len(x) > 0 and type(x[0]) != "number") {
+        ax["xcats"] = x;
+        xs = [];
+        let i = 0;
+        while (i < len(x)) { push(xs, i + 1); i = i + 1; }
+    }
+    push(ax["layers"], {"type": "bar", "x": xs, "y": y, "color": pl_pick_color(ax, o), "label": pl_opt(o, "label", ""),
+                        "w": pl_opt(o, "w", 0.7), "alpha": pl_opt(o, "alpha", 0.9), "base": pl_opt(o, "base", 0)});
+    return ax;
+}
+fun pl_band(ax, x, lo, hi, o) {
+    push(ax["layers"], {"type": "band", "x": x, "lo": lo, "hi": hi, "color": pl_pick_color(ax, o),
+                        "label": pl_opt(o, "label", ""), "alpha": pl_opt(o, "alpha", 0.25)});
+    return ax;
+}
+fun pl_area(ax, x, y, o) {
+    let z = [];
+    for (let v in y) { push(z, 0); }
+    return pl_band(ax, x, z, y, o);
+}
+fun pl_errorbar(ax, x, y, err, o) {
+    push(ax["layers"], {"type": "errbar", "x": x, "y": y, "err": err, "color": pl_pick_color(ax, o),
+                        "label": pl_opt(o, "label", ""), "size": pl_opt(o, "size", 3)});
+    return ax;
+}
+fun pl_hline(ax, v, o) {
+    push(ax["layers"], {"type": "hline", "v": v, "color": pl_opt(o, "color", "#888888"), "label": pl_opt(o, "label", ""),
+                        "width": pl_opt(o, "width", 1), "dash": pl_opt(o, "dash", true)});
+    return ax;
+}
+fun pl_vline(ax, v, o) {
+    push(ax["layers"], {"type": "vline", "v": v, "color": pl_opt(o, "color", "#888888"), "label": pl_opt(o, "label", ""),
+                        "width": pl_opt(o, "width", 1), "dash": pl_opt(o, "dash", true)});
+    return ax;
+}
+fun pl_text(ax, x, y, s, o) {
+    push(ax["layers"], {"type": "text", "x": x, "y": y, "s": s, "color": pl_opt(o, "color", ""),
+                        "anchor": pl_opt(o, "anchor", "start"), "label": ""});
+    return ax;
+}
+// خريطة حرارية لمصفوفة M (صفوف × أعمدة)
+fun pl_heat(ax, M, rowlab, collab, o) {
+    ax["kind"] = "heat";
+    ax["heat"] = {"m": M, "rows": rowlab, "cols": collab, "cmap": pl_opt(o, "cmap", "viridis"),
+                  "vmin": pl_opt(o, "vmin", nil), "vmax": pl_opt(o, "vmax", nil),
+                  "annotate": pl_opt(o, "annotate", true), "digits": pl_opt(o, "digits", 2),
+                  "stars": pl_opt(o, "stars", nil)};
+    return ax;
+}
+// فطيرة/دونات: قيم + تسميات
+fun pl_pie(ax, vals, labels, o) {
+    ax["kind"] = "pie";
+    ax["pie"] = {"v": vals, "labels": labels, "hole": pl_opt(o, "hole", 0)};
+    return ax;
+}
+
+// ---------------------------------------------------------------------------
+//  4) المقاييس والتدريجات
+// ---------------------------------------------------------------------------
+fun pl_nice_step(rng, target) {
+    if (rng <= 0) { return 1; }
+    let raw = rng / target;
+    let mag = pow(10, floor(log10(raw)));
+    let r = raw / mag;
+    let s = 10;
+    if (r < 1.5) { s = 1; } else if (r < 3) { s = 2; } else if (r < 7) { s = 5; }
+    return s * mag;
+}
+fun pl_ticks(lo, hi, target) {
+    let step = pl_nice_step(hi - lo, target);
+    let out = [];
+    let v = ceil(lo / step - 1e-9) * step;
+    let guard = 0;
+    while (v <= hi + step * 1e-9 and guard < 200) {
+        push(out, numberRound(v, 10));
+        v = v + step;
+        guard = guard + 1;
+    }
+    return {"ticks": out, "step": step};
+}
+fun pl_tick_label(v, step) {
+    let d = 0;
+    if (step < 1) { d = ceil(-log10(step) - 1e-9); }
+    if (d > 8) { d = 8; }
+    if (abs(v) >= 1e7) { return str(v); }
+    return numberFormat(v, {"decimals": d, "group": ""});
+}
+fun pl_tf(v, lg) {
+    if (lg) { if (v <= 0) { return -300; } return log10(v); }
+    return v;
+}
+fun pl_mx(g, v) {
+    let t = pl_tf(v, g["xlog"]);
+    let a = g["xlo"]; let b = g["xhi"];
+    if (b == a) { return (g["px0"] + g["px1"]) / 2; }
+    return g["px0"] + (t - a) / (b - a) * (g["px1"] - g["px0"]);
+}
+fun pl_my(g, v) {
+    let t = pl_tf(v, g["ylog"]);
+    let a = g["ylo"]; let b = g["yhi"];
+    if (b == a) { return (g["py0"] + g["py1"]) / 2; }
+    let y = g["py1"] - (t - a) / (b - a) * (g["py1"] - g["py0"]);
+    if (y < g["py0"] - 2) { y = g["py0"] - 2; }
+    if (y > g["py1"] + 2) { y = g["py1"] + 2; }
+    return y;
+}
+
+// المدى [x0,x1,y0,y1] لطبقة
+fun pl_extent(L) {
+    let t = L["type"];
+    if (t == "line" or t == "scatter") { return [minOf(L["x"]), maxOf(L["x"]), minOf(L["y"]), maxOf(L["y"])]; }
+    if (t == "bar") {
+        let lo = minOf(L["y"]); let hi = maxOf(L["y"]);
+        if (L["base"] < lo) { lo = L["base"]; }
+        if (L["base"] > hi) { hi = L["base"]; }
+        return [minOf(L["x"]) - L["w"] / 2, maxOf(L["x"]) + L["w"] / 2, lo, hi];
+    }
+    if (t == "band") {
+        let lo2 = minOf(L["lo"]); let hi2 = maxOf(L["hi"]);
+        return [minOf(L["x"]), maxOf(L["x"]), lo2, hi2];
+    }
+    if (t == "errbar") {
+        let ys = [];
+        let i = 0;
+        while (i < len(L["y"])) { push(ys, L["y"][i] - L["err"][i]); push(ys, L["y"][i] + L["err"][i]); i = i + 1; }
+        return [minOf(L["x"]), maxOf(L["x"]), minOf(ys), maxOf(ys)];
+    }
+    if (t == "box") {
+        let lo3 = L["lo"]; let hi3 = L["hi"];
+        for (let o in L["out"]) { if (o < lo3) { lo3 = o; } if (o > hi3) { hi3 = o; } }
+        return [L["x"] - L["w"], L["x"] + L["w"], lo3, hi3];
+    }
+    if (t == "violin") { return [L["x"] - L["w"], L["x"] + L["w"], minOf(L["ky"]), maxOf(L["ky"])]; }
+    if (t == "raster") { return [L["gx"][0], L["gx"][len(L["gx"]) - 1], L["gy"][0], L["gy"][len(L["gy"]) - 1]]; }
+    if (t == "hrange") { return [minOf(L["lo"]), maxOf(L["hi"]), minOf(L["y"]) - 0.5, maxOf(L["y"]) + 0.5]; }
+    if (t == "hline") { return [nil, nil, L["v"], L["v"]]; }
+    if (t == "vline") { return [L["v"], L["v"], nil, nil]; }
+    if (t == "text") { return [L["x"], L["x"], L["y"], L["y"]]; }
+    return [nil, nil, nil, nil];
+}
+
+fun pl_range(ax) {
+    let x0 = nil; let x1 = nil; let y0 = nil; let y1 = nil;
+    for (let L in ax["layers"]) {
+        let e = pl_extent(L);
+        if (e[0] != nil and (x0 == nil or e[0] < x0)) { x0 = e[0]; }
+        if (e[1] != nil and (x1 == nil or e[1] > x1)) { x1 = e[1]; }
+        if (e[2] != nil and (y0 == nil or e[2] < y0)) { y0 = e[2]; }
+        if (e[3] != nil and (y1 == nil or e[3] > y1)) { y1 = e[3]; }
+    }
+    if (x0 == nil) { x0 = 0; x1 = 1; }
+    if (y0 == nil) { y0 = 0; y1 = 1; }
+    if (ax["xcats"] != nil) { x0 = 0.5; x1 = len(ax["xcats"]) + 0.5; }
+    if (has(ax, "ycats") and ax["ycats"] != nil) { y0 = 0.5; y1 = len(ax["ycats"]) + 0.5; if (has(ax, "ypad")) { y1 = y1 + ax["ypad"]; } }
+    // هامش 5% (ولا هامش أسفل الأعمدة)
+    let hasBar = false;
+    for (let L in ax["layers"]) { if (L["type"] == "bar") { hasBar = true; } }
+    if (ax["xlog"]) { x0 = log10(max(x0, 1e-12)); x1 = log10(max(x1, 1e-12)); }
+    if (ax["ylog"]) { y0 = log10(max(y0, 1e-12)); y1 = log10(max(y1, 1e-12)); }
+    let dx = x1 - x0; if (dx == 0) { dx = 1; }
+    let dy = y1 - y0; if (dy == 0) { dy = 1; }
+    if (ax["xcats"] == nil) { x0 = x0 - dx * 0.04; x1 = x1 + dx * 0.04; }
+    if (!(hasBar and y0 >= 0 and !ax["ylog"])) { y0 = y0 - dy * 0.05; }
+    y1 = y1 + dy * 0.06;
+    if (ax["xlim"] != nil) { x0 = pl_tf(ax["xlim"][0], ax["xlog"]); x1 = pl_tf(ax["xlim"][1], ax["xlog"]); }
+    if (ax["ylim"] != nil) { y0 = pl_tf(ax["ylim"][0], ax["ylog"]); y1 = pl_tf(ax["ylim"][1], ax["ylog"]); }
+    if (has(ax, "ycats") and ax["ycats"] != nil) { y0 = 0.5; y1 = len(ax["ycats"]) + 0.5; if (has(ax, "ypad")) { y1 = y1 + ax["ypad"]; } }
+    return {"xlo": x0, "xhi": x1, "ylo": y0, "yhi": y1};
+}
+
+// ---------------------------------------------------------------------------
+//  5) المشهد: عناصر بكسلية مجرّدة
+// ---------------------------------------------------------------------------
+fun pl_s_rect(sc, x, y, w, h, fill, stroke, sw) { push(sc, {"t": "rect", "x": x, "y": y, "w": w, "h": h, "fill": fill, "stroke": stroke, "sw": sw}); }
+fun pl_s_line(sc, x1, y1, x2, y2, c, w, dash) { push(sc, {"t": "line", "x1": x1, "y1": y1, "x2": x2, "y2": y2, "c": c, "w": w, "dash": dash}); }
+fun pl_s_poly(sc, pts, fill, stroke, sw, closed) { push(sc, {"t": "poly", "pts": pts, "fill": fill, "stroke": stroke, "sw": sw, "closed": closed, "dash": false}); }
+fun pl_s_circle(sc, x, y, r, fill, stroke) { push(sc, {"t": "circle", "x": x, "y": y, "r": r, "fill": fill, "stroke": stroke}); }
+fun pl_s_text(sc, x, y, s, c, fs, anchor, bold) { push(sc, {"t": "text", "x": x, "y": y, "s": s, "c": c, "fs": fs, "anchor": anchor, "bold": bold}); }
+fun pl_tw(s, fs) { return len(s) * 6 * fs; }                       // عرض النص التقديري
+fun pl_alpha(c, a) {                                                // لون + شفافية
+    let p = colorComponents(c);
+    return colorRgba(p["r"], p["g"], p["b"], a);
+}
+
+// ---------------------------------------------------------------------------
+//  6) رسم الطبقات داخل منطقة المحاور (g = هندسة المحاور)
+// ---------------------------------------------------------------------------
+fun pl_draw_layer(sc, L, g, th, fs) {
+    let t = L["type"];
+    let c = L["color"];
+    if (t == "line") {
+        let pts = [];
+        let i = 0;
+        while (i < len(L["x"])) { push(pts, [pl_mx(g, L["x"][i]), pl_my(g, L["y"][i])]); i = i + 1; }
+        pl_s_poly(sc, pts, nil, c, L["width"], false);
+        if (L["dash"]) { sc[len(sc) - 1]["dash"] = true; }
+    } else if (t == "scatter") {
+        let fillc = pl_alpha(c, L["alpha"]);
+        let i2 = 0;
+        while (i2 < len(L["x"])) {
+            pl_s_circle(sc, pl_mx(g, L["x"][i2]), pl_my(g, L["y"][i2]), L["size"] * fs / 2 + 1, fillc, nil);
+            i2 = i2 + 1;
+        }
+    } else if (t == "bar") {
+        let fillb = pl_alpha(c, L["alpha"]);
+        let yb = pl_my(g, L["base"]);
+        let i3 = 0;
+        while (i3 < len(L["x"])) {
+            let xa = pl_mx(g, L["x"][i3] - L["w"] / 2);
+            let xb = pl_mx(g, L["x"][i3] + L["w"] / 2);
+            let yt = pl_my(g, L["y"][i3]);
+            let top = yt; let hh = yb - yt;
+            if (hh < 0) { top = yb; hh = -hh; }
+            pl_s_rect(sc, xa, top, xb - xa, hh, fillb, nil, 0);
+            i3 = i3 + 1;
+        }
+    } else if (t == "band") {
+        let pts2 = [];
+        let i4 = 0;
+        while (i4 < len(L["x"])) { push(pts2, [pl_mx(g, L["x"][i4]), pl_my(g, L["hi"][i4])]); i4 = i4 + 1; }
+        i4 = len(L["x"]) - 1;
+        while (i4 >= 0) { push(pts2, [pl_mx(g, L["x"][i4]), pl_my(g, L["lo"][i4])]); i4 = i4 - 1; }
+        pl_s_poly(sc, pts2, pl_alpha(c, L["alpha"]), nil, 0, true);
+    } else if (t == "errbar") {
+        let i5 = 0;
+        while (i5 < len(L["x"])) {
+            let ex = pl_mx(g, L["x"][i5]);
+            let ya = pl_my(g, L["y"][i5] - L["err"][i5]);
+            let yc = pl_my(g, L["y"][i5] + L["err"][i5]);
+            pl_s_line(sc, ex, ya, ex, yc, c, 2, false);
+            pl_s_line(sc, ex - 3 * fs, ya, ex + 3 * fs, ya, c, 2, false);
+            pl_s_line(sc, ex - 3 * fs, yc, ex + 3 * fs, yc, c, 2, false);
+            pl_s_circle(sc, ex, pl_my(g, L["y"][i5]), L["size"] * fs / 2 + 1, c, nil);
+            i5 = i5 + 1;
+        }
+    } else if (t == "box") {
+        let bx = L["x"]; let bw = L["w"] * 0.6;
+        let xa2 = pl_mx(g, bx - bw); let xb2 = pl_mx(g, bx + bw); let xm = pl_mx(g, bx);
+        let cap = (xb2 - xa2) * 0.25;
+        pl_s_line(sc, xm, pl_my(g, L["lo"]), xm, pl_my(g, L["q1"]), c, 2, false);
+        pl_s_line(sc, xm, pl_my(g, L["q3"]), xm, pl_my(g, L["hi"]), c, 2, false);
+        pl_s_line(sc, xm - cap, pl_my(g, L["lo"]), xm + cap, pl_my(g, L["lo"]), c, 2, false);
+        pl_s_line(sc, xm - cap, pl_my(g, L["hi"]), xm + cap, pl_my(g, L["hi"]), c, 2, false);
+        let yq3 = pl_my(g, L["q3"]); let yq1 = pl_my(g, L["q1"]);
+        pl_s_rect(sc, xa2, yq3, xb2 - xa2, yq1 - yq3, pl_alpha(c, 0.35), c, 2);
+        pl_s_line(sc, xa2, pl_my(g, L["med"]), xb2, pl_my(g, L["med"]), c, 3, false);
+        for (let o in L["out"]) { pl_s_circle(sc, xm, pl_my(g, o), 2 * fs, nil, c); }
+        if (L["mean"] != nil) { pl_s_circle(sc, xm, pl_my(g, L["mean"]), 2 * fs, th["fg"], nil); }
+    } else if (t == "violin") {
+        let mx = maxOf(L["kd"]);
+        let pts3 = [];
+        let i6 = 0;
+        while (i6 < len(L["ky"])) { push(pts3, [pl_mx(g, L["x"] + L["w"] * L["kd"][i6] / mx), pl_my(g, L["ky"][i6])]); i6 = i6 + 1; }
+        i6 = len(L["ky"]) - 1;
+        while (i6 >= 0) { push(pts3, [pl_mx(g, L["x"] - L["w"] * L["kd"][i6] / mx), pl_my(g, L["ky"][i6])]); i6 = i6 - 1; }
+        pl_s_poly(sc, pts3, pl_alpha(c, 0.45), c, 2, true);
+        pl_s_line(sc, pl_mx(g, L["x"] - L["w"] * 0.25), pl_my(g, L["med"]), pl_mx(g, L["x"] + L["w"] * 0.25), pl_my(g, L["med"]), th["fg"], 3, false);
+    } else if (t == "raster") {
+        let nxr = len(L["gx"]); let nyr = len(L["gy"]);
+        let zmx = L["zmax"];
+        let rr = 0;
+        while (rr < nyr - 1) {
+            let cc = 0;
+            while (cc < nxr - 1) {
+                let tv = L["z"][rr][cc] / zmx;
+                if (tv > 0.02) {
+                    let xa3 = pl_mx(g, L["gx"][cc]); let xb3 = pl_mx(g, L["gx"][cc + 1]);
+                    let ya3 = pl_my(g, L["gy"][rr + 1]); let yb3 = pl_my(g, L["gy"][rr]);
+                    pl_s_rect(sc, xa3, ya3, xb3 - xa3 + 0.7, yb3 - ya3 + 0.7, pl_alpha(pl_cmap(L["cmap"], tv), 0.85), nil, 0);
+                }
+                cc = cc + 1;
+            }
+            rr = rr + 1;
+        }
+    } else if (t == "hrange") {
+        let i7 = 0;
+        while (i7 < len(L["y"])) {
+            let yy7 = pl_my(g, L["y"][i7]);
+            pl_s_line(sc, pl_mx(g, L["lo"][i7]), yy7, pl_mx(g, L["hi"][i7]), yy7, c, 2, false);
+            pl_s_line(sc, pl_mx(g, L["lo"][i7]), yy7 - 3 * fs, pl_mx(g, L["lo"][i7]), yy7 + 3 * fs, c, 2, false);
+            pl_s_line(sc, pl_mx(g, L["hi"][i7]), yy7 - 3 * fs, pl_mx(g, L["hi"][i7]), yy7 + 3 * fs, c, 2, false);
+            let ex7 = pl_mx(g, L["est"][i7]);
+            pl_s_rect(sc, ex7 - 2.5 * fs, yy7 - 2.5 * fs, 5 * fs, 5 * fs, c, nil, 0);
+            i7 = i7 + 1;
+        }
+    } else if (t == "hline") {
+        pl_s_line(sc, g["px0"], pl_my(g, L["v"]), g["px1"], pl_my(g, L["v"]), c, L["width"], L["dash"]);
+    } else if (t == "vline") {
+        pl_s_line(sc, pl_mx(g, L["v"]), g["py0"], pl_mx(g, L["v"]), g["py1"], c, L["width"], L["dash"]);
+    } else if (t == "text") {
+        let tc = L["color"];
+        if (tc == "") { tc = th["fg"]; }
+        pl_s_text(sc, pl_mx(g, L["x"]), pl_my(g, L["y"]), L["s"], tc, fs, L["anchor"], false);
+    }
+}
+
+fun pl_axis_ticks(lo, hi, lg, target) {
+    if (lg) {
+        let out = [];
+        let k = ceil(lo - 1e-9);
+        while (k <= floor(hi + 1e-9)) { push(out, k); k = k + 1; }
+        return {"ticks": out, "step": 1, "log": true};
+    }
+    let r = pl_ticks(lo, hi, target);
+    r["log"] = false;
+    return r;
+}
+
+fun pl_draw_legend(sc, ax, g, th, fs) {
+    if (ax["legend"] == "none") { return 0; }
+    let ents = [];
+    for (let L in ax["layers"]) { if (has(L, "label") and L["label"] != "") { push(ents, L); } }
+    if (len(ents) == 0) { return 0; }
+    let mw = 0;
+    for (let L in ents) { let tw = pl_tw(L["label"], fs); if (tw > mw) { mw = tw; } }
+    let bw = mw + 18 * fs; let rh = 9 * fs; let bh = len(ents) * rh + 4 * fs;
+    let pos = ax["legend"];
+    let bx = g["px1"] - bw - 4; let by = g["py0"] + 4;
+    if (pos == "upper left" or pos == "lower left") { bx = g["px0"] + 4; }
+    if (pos == "lower right" or pos == "lower left") { by = g["py1"] - bh - 4; }
+    pl_s_rect(sc, bx, by, bw, bh, pl_alpha(th["bg"], 0.85), th["axis"], 1);
+    let i = 0;
+    for (let L in ents) {
+        let yy = by + 2 * fs + i * rh;
+        let cy = yy + 3.5 * fs;
+        if (L["type"] == "scatter" or L["type"] == "errbar") { pl_s_circle(sc, bx + 6 * fs, cy, 2 * fs, L["color"], nil); }
+        else if (L["type"] == "bar" or L["type"] == "band") { pl_s_rect(sc, bx + 3 * fs, cy - 2.5 * fs, 6 * fs, 5 * fs, pl_alpha(L["color"], 0.7), nil, 0); }
+        else { pl_s_line(sc, bx + 3 * fs, cy, bx + 9 * fs, cy, L["color"], 2, false); }
+        pl_s_text(sc, bx + 12 * fs, yy, L["label"], th["fg"], fs, "start", false);
+        i = i + 1;
+    }
+    return 0;
+}
+
+fun pl_draw_axes(sc, ax, th, fs, x, y, w, h) {
+    if (ax["kind"] == "heat") { return pl_draw_heat(sc, ax, th, fs, x, y, w, h); }
+    if (ax["kind"] == "pie") { return pl_draw_pie(sc, ax, th, fs, x, y, w, h); }
+    let rg = pl_range(ax);
+    let xt = pl_axis_ticks(rg["xlo"], rg["xhi"], ax["xlog"], 6);
+    let yt = pl_axis_ticks(rg["ylo"], rg["yhi"], ax["ylog"], 6);
+    if (ax["xcats"] != nil) {
+        let ct = [];
+        let i = 1;
+        while (i <= len(ax["xcats"])) { push(ct, i); i = i + 1; }
+        xt = {"ticks": ct, "step": 1, "log": false};
+    }
+    // تسميات المحور الرأسي لقياس الهامش الأيسر
+    let ylabs = [];
+    if (has(ax, "ycats") and ax["ycats"] != nil) {
+        let ct2 = [];
+        let q = 1;
+        while (q <= len(ax["ycats"])) { push(ct2, q); push(ylabs, str(ax["ycats"][q - 1])); q = q + 1; }
+        yt = {"ticks": ct2, "step": 1, "log": false};
+    } else {
+        for (let v in yt["ticks"]) {
+            if (yt["log"]) { push(ylabs, str(pow(10, v))); } else { push(ylabs, pl_tick_label(v, yt["step"])); }
+        }
+    }
+    let mxl = 1;
+    for (let s in ylabs) { if (len(s) > mxl) { mxl = len(s); } }
+    let lm = 6 * fs * mxl + 8 * fs;
+    let tm = 6;
+    if (ax["title"] != "") { tm = tm + 8 * fs + 12; }
+    if (ax["ylabel"] != "") { tm = tm + 8 * fs + 2; }
+    let bm = 7 * fs + 10;
+    if (ax["xlabel"] != "") { bm = bm + 8 * fs + 4; }
+    let g = {"px0": x + lm, "px1": x + w - 8 * fs, "py0": y + tm, "py1": y + h - bm,
+             "xlo": rg["xlo"], "xhi": rg["xhi"], "ylo": rg["ylo"], "yhi": rg["yhi"],
+             "xlog": ax["xlog"], "ylog": ax["ylog"]};
+    pl_s_rect(sc, g["px0"], g["py0"], g["px1"] - g["px0"], g["py1"] - g["py0"], th["panel"], nil, 0);
+    // شبكة وتدريجات
+    let i = 0;
+    for (let v in yt["ticks"]) {
+        let vv = v;
+        if (yt["log"]) { vv = pow(10, v); }
+        let yy = pl_my(g, vv);
+        if (ax["grid"]) { pl_s_line(sc, g["px0"], yy, g["px1"], yy, th["grid"], 1, false); }
+        pl_s_line(sc, g["px0"] - 4, yy, g["px0"], yy, th["axis"], 1, false);
+        pl_s_text(sc, g["px0"] - 6 - pl_tw(ylabs[i], fs), yy - 3.5 * fs, ylabs[i], th["fg"], fs, "start", false);
+        i = i + 1;
+    }
+    i = 0;
+    for (let v in xt["ticks"]) {
+        let vx = v;
+        if (xt["log"]) { vx = pow(10, v); }
+        let xx = pl_mx(g, vx);
+        let lab = "";
+        if (ax["xcats"] != nil) { lab = str(ax["xcats"][i]); }
+        else if (xt["log"]) { lab = str(pow(10, v)); }
+        else { lab = pl_tick_label(v, xt["step"]); }
+        if (ax["grid"] and ax["xcats"] == nil) { pl_s_line(sc, xx, g["py0"], xx, g["py1"], th["grid"], 1, false); }
+        pl_s_line(sc, xx, g["py1"], xx, g["py1"] + 4, th["axis"], 1, false);
+        pl_s_text(sc, xx, g["py1"] + 6, lab, th["fg"], fs, "middle", false);
+        i = i + 1;
+    }
+    for (let L in ax["layers"]) { pl_draw_layer(sc, L, g, th, fs); }
+    pl_s_line(sc, g["px0"], g["py0"], g["px0"], g["py1"], th["axis"], 1, false);
+    pl_s_line(sc, g["px0"], g["py1"], g["px1"], g["py1"], th["axis"], 1, false);
+    pl_draw_legend(sc, ax, g, th, fs);
+    if (ax["title"] != "") { pl_s_text(sc, (g["px0"] + g["px1"]) / 2, y + 4, ax["title"], th["fg"], fs, "middle", true); }
+    if (ax["ylabel"] != "") { pl_s_text(sc, g["px0"], g["py0"] - 8 * fs - 1, ax["ylabel"], th["fg"], fs, "start", false); }
+    if (ax["xlabel"] != "") { pl_s_text(sc, (g["px0"] + g["px1"]) / 2, g["py1"] + 7 * fs + 12, ax["xlabel"], th["fg"], fs, "middle", false); }
+    return 0;
+}
+
+fun pl_stars(p) {
+    if (p == nil) { return ""; }
+    if (p < 0.001) { return "***"; }
+    if (p < 0.01) { return "**"; }
+    if (p < 0.05) { return "*"; }
+    return "";
+}
+
+fun pl_draw_heat(sc, ax, th, fs, x, y, w, h) {
+    let H = ax["heat"];
+    let M = H["m"];
+    let nr = len(M);
+    let nc = len(M[0]);
+    let vmin = H["vmin"]; let vmax = H["vmax"];
+    if (vmin == nil or vmax == nil) {
+        let lo = M[0][0]; let hi = M[0][0];
+        for (let rw in M) { for (let v in rw) { if (v < lo) { lo = v; } if (v > hi) { hi = v; } } }
+        if (H["cmap"] == "coolwarm" and lo < 0) { let a = max(abs(lo), abs(hi)); lo = -a; hi = a; }
+        if (vmin == nil) { vmin = lo; }
+        if (vmax == nil) { vmax = hi; }
+    }
+    if (vmax == vmin) { vmax = vmin + 1; }
+    let mrl = 1;
+    for (let s in H["rows"]) { if (len(str(s)) > mrl) { mrl = len(str(s)); } }
+    let lm = 6 * fs * mrl + 8 * fs;
+    let tm = 6;
+    if (ax["title"] != "") { tm = tm + 8 * fs + 12; }
+    let bm = 7 * fs + 10;
+    let rm = 8 * fs + 14 * fs + 6 * fs * 5;
+    let px0 = x + lm; let px1 = x + w - rm; let py0 = y + tm; let py1 = y + h - bm;
+    let cw = (px1 - px0) / nc; let ch = (py1 - py0) / nr;
+    let r = 0;
+    while (r < nr) {
+        let c = 0;
+        while (c < nc) {
+            let v = M[r][c];
+            let col = pl_cmap(H["cmap"], (v - vmin) / (vmax - vmin));
+            pl_s_rect(sc, px0 + c * cw, py0 + r * ch, cw, ch, col, th["bg"], 1);
+            if (H["annotate"] and cw > 6 * fs * 3 and ch > 8 * fs) {
+                let lab = numberFormat(v, {"decimals": H["digits"], "group": ""});
+                if (H["stars"] != nil and cw > pl_tw(lab + "***", fs) + 2) { lab = lab + pl_stars(H["stars"][r][c]); }
+                if (cw > pl_tw(lab, fs) + 2) {
+                    pl_s_text(sc, px0 + (c + 0.5) * cw, py0 + (r + 0.5) * ch - 3.5 * fs, lab, colorTextOn(col), fs, "middle", false);
+                }
+            }
+            c = c + 1;
+        }
+        let rl = str(H["rows"][r]);
+        pl_s_text(sc, px0 - 6 - pl_tw(rl, fs), py0 + (r + 0.5) * ch - 3.5 * fs, rl, th["fg"], fs, "start", false);
+        r = r + 1;
+    }
+    let c2 = 0;
+    while (c2 < nc) {
+        let cl = str(H["cols"][c2]);
+        let maxch = floor(cw / (6 * fs));
+        if (maxch < 1) { maxch = 1; }
+        if (len(cl) > maxch) { cl = substr(cl, 0, maxch); }
+        pl_s_text(sc, px0 + (c2 + 0.5) * cw, py1 + 6, cl, th["fg"], fs, "middle", false);
+        c2 = c2 + 1;
+    }
+    // شريط الألوان
+    let bx = px1 + 8 * fs; let bw = 10 * fs; let steps = 40;
+    let k = 0;
+    while (k < steps) {
+        let t = 1 - (k + 0.5) / steps;
+        pl_s_rect(sc, bx, py0 + k * (py1 - py0) / steps, bw, (py1 - py0) / steps + 0.6, pl_cmap(H["cmap"], t), nil, 0);
+        k = k + 1;
+    }
+    let tk = pl_ticks(vmin, vmax, 5);
+    for (let v in tk["ticks"]) {
+        let yy = py1 - (v - vmin) / (vmax - vmin) * (py1 - py0);
+        pl_s_line(sc, bx + bw, yy, bx + bw + 3, yy, th["axis"], 1, false);
+        pl_s_text(sc, bx + bw + 5, yy - 3.5 * fs, pl_tick_label(v, tk["step"]), th["fg"], fs, "start", false);
+    }
+    if (ax["title"] != "") { pl_s_text(sc, (px0 + px1) / 2, y + 4, ax["title"], th["fg"], fs, "middle", true); }
+    return 0;
+}
+
+fun pl_draw_pie(sc, ax, th, fs, x, y, w, h) {
+    let P = ax["pie"];
+    let tot = sum(P["v"]);
+    let tm = 6;
+    if (ax["title"] != "") { tm = tm + 8 * fs + 12; }
+    let cx = x + w / 2; let cy = y + tm + (h - tm) / 2;
+    let mlab = 1;
+    for (let lb in P["labels"]) { if (len(str(lb)) > mlab) { mlab = len(str(lb)); } }
+    let rad = min(w / 2 - 6 * fs * (mlab + 8), (h - tm) / 2 - 14 * fs);
+    if (rad < 10) { rad = 10; }
+    let pal = pl_palette();
+    let a0 = -PI / 2;
+    let i = 0;
+    while (i < len(P["v"])) {
+        let frac = P["v"][i] / tot;
+        let a1 = a0 + frac * 2 * PI;
+        let n = ceil((a1 - a0) / 0.05) + 1;
+        let pts = [];
+        let k = 0;
+        while (k <= n) { let a = a0 + (a1 - a0) * k / n; push(pts, [cx + rad * cos(a), cy + rad * sin(a)]); k = k + 1; }
+        if (P["hole"] > 0) {
+            k = n;
+            while (k >= 0) { let a = a0 + (a1 - a0) * k / n; push(pts, [cx + rad * P["hole"] * cos(a), cy + rad * P["hole"] * sin(a)]); k = k - 1; }
+        } else { push(pts, [cx, cy]); }
+        pl_s_poly(sc, pts, pal[i % len(pal)], th["bg"], 2, true);
+        let am = (a0 + a1) / 2;
+        let lab = str(P["labels"][i]) + " " + numberFormat(frac * 100, {"decimals": 1}) + "%";
+        let lx = cx + (rad + 6 * fs) * cos(am); let ly = cy + (rad + 6 * fs) * sin(am);
+        let anc = "start";
+        if (cos(am) < 0) { anc = "end"; }
+        pl_s_text(sc, lx, ly - 3.5 * fs, lab, th["fg"], fs, anc, false);
+        a0 = a1;
+        i = i + 1;
+    }
+    if (ax["title"] != "") { pl_s_text(sc, cx, y + 4, ax["title"], th["fg"], fs, "middle", true); }
+    return 0;
+}
+
+// بناء المشهد الكامل للشكل
+fun pl_build(fig) {
+    let th = pl_theme(fig["theme"]);
+    let fs = fig["fs"];
+    let W = fig["w"]; let H = fig["h"];
+    let sc = [];
+    pl_s_rect(sc, 0, 0, W, H, th["bg"], nil, 0);
+    let m = 8 * fs;
+    let top = m;
+    if (fig["title"] != "") {
+        pl_s_text(sc, W / 2, m, fig["title"], th["fg"], fs + 1, "middle", true);
+        top = m + 8 * (fs + 1) + 6;
+    }
+    let cw = (W - 2 * m) / fig["cols"];
+    let ch = (H - top - m) / fig["rows"];
+    for (let ax in fig["axes"]) {
+        pl_draw_axes(sc, ax, th, fs, m + ax["col"] * cw, top + ax["row"] * ch, ax["cs"] * cw, ax["rs"] * ch);
+    }
+    return {"w": W, "h": H, "items": sc};
+}
+
+// ---------------------------------------------------------------------------
+//  7) واجهة SVG
+// ---------------------------------------------------------------------------
+fun pl_xml(s) {
+    let t = replace(str(s), "&", "&amp;");
+    t = replace(t, "<", "&lt;");
+    return replace(t, ">", "&gt;");
+}
+fun pl_n(v) { return str(numberRound(v, 2)); }
+// سمة لون SVG: fill="#rrggbb" fill-opacity="a"  (SVG 1.1 لا يقبل rgba)
+fun pl_svg_paint(attr, c) {
+    if (c == nil) { return attr + "=\"none\""; }
+    let p = colorParse(c);
+    if (len(p) == 9) {
+        let a = numberFromBase(substr(p, 7, 2), 16) / 255;
+        return attr + "=\"" + substr(p, 0, 7) + "\" " + attr + "-opacity=\"" + str(numberRound(a, 3)) + "\"";
+    }
+    return attr + "=\"" + p + "\"";
+}
+fun pl_svg_item(it) {
+    let t = it["t"];
+    if (t == "rect") {
+        let s = "<rect x=\"" + pl_n(it["x"]) + "\" y=\"" + pl_n(it["y"]) + "\" width=\"" + pl_n(max(0, it["w"])) + "\" height=\"" + pl_n(max(0, it["h"])) + "\" " + pl_svg_paint("fill", it["fill"]);
+        if (it["stroke"] != nil) { s = s + " " + pl_svg_paint("stroke", it["stroke"]) + " stroke-width=\"" + pl_n(it["sw"]) + "\""; }
+        return s + "/>";
+    }
+    if (t == "line") {
+        let s2 = "<line x1=\"" + pl_n(it["x1"]) + "\" y1=\"" + pl_n(it["y1"]) + "\" x2=\"" + pl_n(it["x2"]) + "\" y2=\"" + pl_n(it["y2"]) + "\" " + pl_svg_paint("stroke", it["c"]) + " stroke-width=\"" + pl_n(it["w"]) + "\"";
+        if (it["dash"]) { s2 = s2 + " stroke-dasharray=\"6 4\""; }
+        return s2 + "/>";
+    }
+    if (t == "poly") {
+        let pts = [];
+        for (let p in it["pts"]) { push(pts, pl_n(p[0]) + "," + pl_n(p[1])); }
+        let tag = "polyline";
+        if (it["closed"]) { tag = "polygon"; }
+        let s3 = "<" + tag + " points=\"" + join(pts, " ") + "\" " + pl_svg_paint("fill", it["fill"]);
+        if (it["stroke"] != nil) { s3 = s3 + " " + pl_svg_paint("stroke", it["stroke"]) + " stroke-width=\"" + pl_n(it["sw"]) + "\" stroke-linejoin=\"round\" stroke-linecap=\"round\""; }
+        if (it["dash"]) { s3 = s3 + " stroke-dasharray=\"6 4\""; }
+        return s3 + "/>";
+    }
+    if (t == "circle") {
+        let s4 = "<circle cx=\"" + pl_n(it["x"]) + "\" cy=\"" + pl_n(it["y"]) + "\" r=\"" + pl_n(it["r"]) + "\" " + pl_svg_paint("fill", it["fill"]);
+        if (it["stroke"] != nil) { s4 = s4 + " " + pl_svg_paint("stroke", it["stroke"]) + " stroke-width=\"1.5\""; }
+        return s4 + "/>";
+    }
+    // نص: y = أعلى الصندوق ← خط الأساس = y + 7*fs
+    let anc = "start";
+    if (it["anchor"] == "middle") { anc = "middle"; }
+    let tx = it["x"];
+    let s5 = "<text x=\"" + pl_n(tx) + "\" y=\"" + pl_n(it["y"] + 7 * it["fs"]) + "\" font-size=\"" + pl_n(10 * it["fs"]) + "\" text-anchor=\"" + anc + "\" " + pl_svg_paint("fill", it["c"]);
+    if (it["anchor"] == "end") { s5 = "<text x=\"" + pl_n(tx) + "\" y=\"" + pl_n(it["y"] + 7 * it["fs"]) + "\" font-size=\"" + pl_n(10 * it["fs"]) + "\" text-anchor=\"end\" " + pl_svg_paint("fill", it["c"]); }
+    if (it["bold"]) { s5 = s5 + " font-weight=\"700\""; }
+    return s5 + ">" + pl_xml(it["s"]) + "</text>";
+}
+fun pl_svg(fig) {
+    let sc = pl_build(fig);
+    let out = ["<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"" + str(sc["w"]) + "\" height=\"" + str(sc["h"]) + "\" viewBox=\"0 0 " + str(sc["w"]) + " " + str(sc["h"]) + "\" font-family=\"'DejaVu Sans', 'Noto Sans Arabic', Arial, sans-serif\">"];
+    for (let it in sc["items"]) { push(out, pl_svg_item(it)); }
+    push(out, "</svg>");
+    return join(out, "\n");
+}
+fun pl_html(fig) {
+    return "<!doctype html><html><head><meta charset=\"utf-8\"><title>" + pl_xml(fig["title"]) + "</title><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"></head><body style=\"margin:0;display:flex;justify-content:center;background:#f3f4f6\">" + pl_svg(fig) + "</body></html>";
+}
+
+// ---------------------------------------------------------------------------
+//  8) واجهة PNG (دوال img* الأصلية)
+// ---------------------------------------------------------------------------
+fun pl_png_segments(img, pts, c, w, dash) {
+    let i = 0;
+    while (i + 1 < len(pts)) {
+        if (!dash or i % 2 == 0) { imgLine(img, pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1], c, w); }
+        i = i + 1;
+    }
+}
+fun pl_png_item(img, it) {
+    let t = it["t"];
+    if (t == "rect") {
+        if (it["fill"] != nil) { imgRect(img, it["x"], it["y"], max(0, it["w"]), max(0, it["h"]), it["fill"]); }
+        if (it["stroke"] != nil) { imgRect(img, it["x"], it["y"], max(0, it["w"]), max(0, it["h"]), it["stroke"], {"fill": false, "width": it["sw"]}); }
+    } else if (t == "line") {
+        if (it["dash"]) {
+            let dx = it["x2"] - it["x1"]; let dy = it["y2"] - it["y1"];
+            let len2 = sqrt(dx * dx + dy * dy);
+            let n = floor(len2 / 10);
+            let k = 0;
+            while (k < n) {
+                imgLine(img, it["x1"] + dx * k / n, it["y1"] + dy * k / n, it["x1"] + dx * (k + 0.6) / n, it["y1"] + dy * (k + 0.6) / n, it["c"], it["w"]);
+                k = k + 1;
+            }
+        } else { imgLine(img, it["x1"], it["y1"], it["x2"], it["y2"], it["c"], it["w"]); }
+    } else if (t == "poly") {
+        if (it["fill"] != nil and len(it["pts"]) >= 3) { imgPolygon(img, it["pts"], it["fill"]); }
+        if (it["stroke"] != nil) {
+            pl_png_segments(img, it["pts"], it["stroke"], it["sw"], it["dash"]);
+            if (it["closed"] and len(it["pts"]) > 1) {
+                let n2 = len(it["pts"]);
+                imgLine(img, it["pts"][n2 - 1][0], it["pts"][n2 - 1][1], it["pts"][0][0], it["pts"][0][1], it["stroke"], it["sw"]);
+            }
+        }
+    } else if (t == "circle") {
+        if (it["fill"] != nil) { imgCircle(img, it["x"], it["y"], it["r"], it["fill"]); }
+        if (it["stroke"] != nil) { imgCircle(img, it["x"], it["y"], it["r"], it["stroke"], {"fill": false, "width": 1.5}); }
+    } else {
+        let sx = it["x"];
+        let tw = pl_tw(it["s"], it["fs"]);
+        if (it["anchor"] == "middle") { sx = sx - tw / 2; }
+        if (it["anchor"] == "end") { sx = sx - tw; }
+        sx = round(sx);
+        let sy = round(it["y"]);
+        imgText(img, sx, sy, it["s"], it["c"], {"size": it["fs"]});
+        if (it["bold"]) { imgText(img, sx + 1, sy, it["s"], it["c"], {"size": it["fs"]}); }
+    }
+}
+// يُنشئ لوحة img ويُعيد معرّفها (حرّرها بـ imgFree)
+fun pl_render(fig) {
+    let sc = pl_build(fig);
+    let img = imgNew(sc["w"], sc["h"], "#ffffff");
+    for (let it in sc["items"]) { pl_png_item(img, it); }
+    return img;
+}
+fun pl_png(fig, path) {
+    let img = pl_render(fig);
+    let n = imgSave(img, path);
+    imgFree(img);
+    return n;
+}
+// عرض سريع في الطرفية
+fun pl_print(fig, cols) {
+    let img = pl_render(fig);
+    imgPrint(img, cols);
+    imgFree(img);
+    return fig;
+}
+
+// ---------------------------------------------------------------------------
+//  9) الحفظ حسب الامتداد: .svg | .png | .bmp | .ppm | .html
+// ---------------------------------------------------------------------------
+fun pl_save(fig, path) {
+    let p = lower(path);
+    let n = len(p);
+    if (n > 4 and substr(p, n - 4, 4) == ".svg") { return writeFile(path, pl_svg(fig)); }
+    if (n > 5 and substr(p, n - 5, 5) == ".html") { return writeFile(path, pl_html(fig)); }
+    return pl_png(fig, path);
+}
+
+// ============================================================================
+//  10) الرسوم الإحصائية — كل واحد يُركّب rinstat فوق طبقات النواة
+// ============================================================================
+
+// مخطط تكراري بالكثافة + منحنى KDE + (اختياري) المنحنى الطبيعي الملائم
+// o: {bins, kde:true, normal:false, color, label}
+fun pl_hist(ax, data, o) {
+    let a = st_clean(data);
+    let h = st_hist(a, pl_opt(o, "bins", 0));
+    let col = pl_pick_color(ax, o);
+    let dens = pl_opt(o, "density", true);
+    let ys = h["counts"];
+    if (dens) { ys = h["density"]; }
+    push(ax["layers"], {"type": "bar", "x": h["mids"], "y": ys, "color": col, "label": pl_opt(o, "label", ""),
+                        "w": h["width"] * 0.96, "alpha": 0.7, "base": 0});
+    if (dens and pl_opt(o, "kde", true) and len(a) > 2) {
+        let k = st_kde(a, 80);
+        pl_line(ax, k["x"], k["y"], {"color": colorDarken(col, 0.25), "label": "KDE", "width": 2});
+    }
+    if (dens and pl_opt(o, "normal", false) and len(a) > 2) {
+        let mu = mean(a); let sd = sampleStdDev(a);
+        let xs = []; let ys2 = [];
+        let i = 0;
+        while (i < 80) {
+            let x = minOf(a) - sd + (maxOf(a) - minOf(a) + 2 * sd) * i / 79;
+            push(xs, x); push(ys2, st_norm_pdf(x, mu, sd));
+            i = i + 1;
+        }
+        pl_line(ax, xs, ys2, {"color": "#666666", "label": "Normal", "dash": true, "width": 2});
+    }
+    ax["ylabel"] = ax["ylabel"];
+    return ax;
+}
+
+// صندوقي: طبقة واحدة عند الموضع pos (يستعمل st_summary وst_outliers)
+fun pl_box(ax, pos, data, o) {
+    let a = st_clean(data);
+    if (len(a) < 2) { return ax; }
+    let s = st_summary(a);
+    let fence = st_outliers(a, 1.5);
+    let lo = s["q1"]; let hi = s["q3"];
+    let out = [];
+    for (let v in a) {
+        if (v < fence["lo"] or v > fence["hi"]) { push(out, v); }
+        else { if (v < lo) { lo = v; } if (v > hi) { hi = v; } }
+    }
+    push(ax["layers"], {"type": "box", "x": pos, "w": pl_opt(o, "w", 0.35), "color": pl_pick_color(ax, o), "label": pl_opt(o, "label", ""),
+                        "q1": s["q1"], "med": s["median"], "q3": s["q3"], "lo": lo, "hi": hi, "out": out,
+                        "mean": pl_opt(o, "mean", s["mean"])});
+    return ax;
+}
+// كمان: كثافة KDE متماثلة
+fun pl_violin(ax, pos, data, o) {
+    let a = st_clean(data);
+    if (len(a) < 3) { return ax; }
+    let k = st_kde(a, 60);
+    push(ax["layers"], {"type": "violin", "x": pos, "w": pl_opt(o, "w", 0.4), "color": pl_pick_color(ax, o), "label": pl_opt(o, "label", ""),
+                        "ky": k["x"], "kd": k["y"], "med": median(a)});
+    return ax;
+}
+// groups: [{name, values}] (نفس ناتج st_groups) — kind: "box" | "violin" | "both"
+fun pl_groups(ax, groups, kind) {
+    let names = [];
+    let i = 1;
+    for (let g in groups) {
+        let col = pl_palette()[(i - 1) % len(pl_palette())];
+        if (kind == "violin" or kind == "both") { pl_violin(ax, i, g["values"], {"color": col}); }
+        if (kind == "box" or kind == "both") {
+            let w = 0.35; if (kind == "both") { w = 0.12; }
+            pl_box(ax, i, g["values"], {"color": col, "w": w});
+        }
+        push(names, g["name"]);
+        i = i + 1;
+    }
+    ax["xcats"] = names;
+    ax["legend"] = "none";
+    return ax;
+}
+
+// انحدار: نقاط + خط الملاءمة + نطاق ثقة (kind "mean") ونطاق تنبؤ اختياري، مع المعادلة وR² وp
+fun pl_regplot(ax, x, y, o) {
+    let fit = st_linreg(x, y);
+    if (fit == nil) { return pl_scatter(ax, x, y, o); }
+    let col = pl_pick_color(ax, o);
+    let lvl = pl_opt(o, "level", 0.95);
+    let xs = fit["x"];
+    let lo = minOf(xs); let hi = maxOf(xs);
+    let grid = [];
+    let i = 0;
+    while (i < 50) { push(grid, lo + (hi - lo) * i / 49); i = i + 1; }
+    if (pl_opt(o, "predband", false)) {
+        let pb = st_linreg_band(fit, grid, lvl, "pred");
+        pl_band(ax, pb["x"], pb["lo"], pb["hi"], {"color": "#999999", "alpha": 0.15});
+    }
+    let b = st_linreg_band(fit, grid, lvl, "mean");
+    pl_band(ax, b["x"], b["lo"], b["hi"], {"color": col, "alpha": 0.22});
+    pl_scatter(ax, xs, fit["y"], {"color": col, "label": pl_opt(o, "label", "")});
+    let eq = "y = " + st_fmt(fit["slope"], 3) + "x + " + st_fmt(fit["intercept"], 3);
+    pl_line(ax, b["x"], b["y"], {"color": colorDarken(col, 0.2), "label": eq, "width": 2});
+    ax["legend"] = "upper left";
+    let note = "R2=" + st_fmt(fit["r2"], 3) + "  p=" + st_fmt_p(fit["coefs"][1]["p"]);
+    ax["title"] = ax["title"];
+    if (pl_opt(o, "annotate", true)) {
+        pl_text(ax, hi, minOf(fit["y"]), note, {"anchor": "end"});
+    }
+    return fit;
+}
+
+// Q-Q مقابل الطبيعي + خط مرجعي يمرّ بالربيعين
+fun pl_qq(ax, data, o) {
+    let q = st_qq(data);
+    let col = pl_pick_color(ax, o);
+    pl_scatter(ax, q["theoretical"], q["sample"], {"color": col});
+    let a = q["sample"];
+    let q1 = percentile(a, 25); let q3 = percentile(a, 75);
+    let t1 = st_norm_ppf(0.25, 0, 1); let t3 = st_norm_ppf(0.75, 0, 1);
+    let slope = (q3 - q1) / (t3 - t1);
+    let ic = q1 - slope * t1;
+    let tx = [q["theoretical"][0], q["theoretical"][len(a) - 1]];
+    pl_line(ax, tx, [ic + slope * tx[0], ic + slope * tx[1]], {"color": "#D55E00", "dash": true, "width": 2});
+    ax["xlabel"] = "Theoretical quantiles";
+    ax["ylabel"] = "Sample quantiles";
+    ax["legend"] = "none";
+    return ax;
+}
+fun pl_ecdf(ax, data, o) {
+    let e = st_ecdf(data);
+    // درجات: نكرّر النقاط لرسم خطوات
+    let xs = []; let ys = [];
+    let i = 0;
+    while (i < len(e["x"])) {
+        push(xs, e["x"][i]); push(ys, i / len(e["x"]));
+        push(xs, e["x"][i]); push(ys, e["y"][i]);
+        i = i + 1;
+    }
+    pl_line(ax, xs, ys, {"color": pl_pick_color(ax, o), "label": pl_opt(o, "label", ""), "width": 2});
+    ax["ylabel"] = "ECDF";
+    return ax;
+}
+// سلسلة زمنية + متوسط متحرك (الدالة الأصلية movingAverage)
+fun pl_timeseries(ax, x, y, window, o) {
+    pl_line(ax, x, y, {"color": pl_opt(o, "color", "#9ca3af"), "label": pl_opt(o, "label", "data"), "width": 1});
+    if (window > 1 and len(y) >= window) {
+        let ma = movingAverage(y, window);              // أصلية: طولها n-w+1 (نافذة كاملة فقط)
+        let off = floor((window - 1) / 2);
+        pl_line(ax, slice(x, off, off + len(ma)), ma, {"color": "#0072B2", "label": "MA(" + str(window) + ")", "width": 3});
+    }
+    return ax;
+}
+
+// مصفوفة ارتباط (بيرسون) مع نجوم الدلالة — df + أسماء الأعمدة
+fun pl_corr_heatmap(ax, df, names) {
+    let cm = st_corr_matrix(df, names);
+    pl_heat(ax, cm["r"], names, names, {"cmap": "coolwarm", "vmin": -1, "vmax": 1, "stars": cm["p"], "digits": 2});
+    return cm;
+}
+
+// ---------------------------------------------------------------------------
+//  11) لوحات مركّبة (أشكال كاملة)
+// ---------------------------------------------------------------------------
+// تقرير توزيع: 2×2 (مخطط تكراري+KDE+طبيعي | صندوقي+كمان | Q-Q | ECDF)
+fun pl_dist_report(data, title) {
+    let a = st_clean(data);
+    let fig = pl_figure(1100, 760, 2, 2, title);
+    let s = st_summary(a);
+    let a1 = pl_axes(fig, 0, 0);
+    pl_title(a1, "Histogram + KDE"); pl_hist(a1, a, {"normal": true, "bins": 0});
+    let a2 = pl_axes(fig, 0, 1);
+    pl_title(a2, "Box + Violin");
+    pl_groups(a2, [{"name": "data", "values": a}], "both");
+    let a3 = pl_axes(fig, 1, 0);
+    pl_title(a3, "Normal Q-Q"); pl_qq(a3, a, {});
+    let a4 = pl_axes(fig, 1, 1);
+    pl_title(a4, "ECDF"); pl_ecdf(a4, a, {});
+    pl_vline(a4, s["median"], {"label": "median " + st_fmt(s["median"], 2), "color": "#D55E00"});
+    pl_vline(a4, s["mean"], {"label": "mean " + st_fmt(s["mean"], 2), "color": "#009E73"});
+    a4["legend"] = "lower right";
+    return fig;
+}
+
+// مقارنة مجموعات: صندوقي+كمان، والعنوان يحمل نتيجة الاختبار المناسب تلقائياً
+fun pl_compare_groups(df, groupCol, valueCol) {
+    let g = st_groups(df, groupCol, valueCol);
+    let r = st_compare(df, groupCol, valueCol);
+    let fig = pl_figure(900, 620, 1, 1, "");
+    let ax = pl_axes(fig, 0, 0);
+    pl_groups(ax, g, "both");
+    ax["title"] = st_report(r);
+    ax["ylabel"] = valueCol;
+    ax["xlabel"] = groupCol;
+    return fig;
+}
+
+// pairplot: قطر = KDE، أسفل = نقاط (+ ألوان حسب hue إن وُجد)، أعلى = r مع النجوم
+fun pl_pairplot(df, names, hueCol) {
+    let k = len(names);
+    let side = 230 * k + 60;
+    let fig = pl_figure(side, side, k, k, "Pair plot");
+    fig["fs"] = 1;
+    let cm = st_corr_matrix(df, names);
+    let groups = nil;
+    if (hueCol != "") { groups = st_groups_idx(df, hueCol); }
+    let i = 0;
+    while (i < k) {
+        let j = 0;
+        while (j < k) {
+            let ax = pl_axes(fig, i, j);
+            ax["legend"] = "none";
+            if (i == j) {
+                let col = df_col(df, names[i]);
+                let kd = st_kde(col, 60);
+                pl_area(ax, kd["x"], kd["y"], {"color": "#0072B2"});
+                pl_line(ax, kd["x"], kd["y"], {"color": "#0072B2", "width": 2});
+                ax["title"] = names[i];
+            } else if (i > j) {
+                let xs = df_col(df, names[j]); let ys = df_col(df, names[i]);
+                if (groups == nil) { pl_scatter(ax, xs, ys, {"size": 2, "color": "#0072B2", "alpha": 0.6}); }
+                else {
+                    let gi = 0;
+                    for (let gr in groups) {
+                        let gx = []; let gy = [];
+                        for (let idx in gr["idx"]) { push(gx, xs[idx]); push(gy, ys[idx]); }
+                        pl_scatter(ax, gx, gy, {"size": 2, "color": pl_palette()[gi % len(pl_palette())], "alpha": 0.7});
+                        gi = gi + 1;
+                    }
+                }
+            } else {
+                ax["kind"] = "heat";
+                let rr = cm["r"][i][j];
+                pl_heat(ax, [[rr]], [""], [""], {"cmap": "coolwarm", "vmin": -1, "vmax": 1, "digits": 2, "stars": [[cm["p"][i][j]]]});
+                ax["title"] = names[i] + " ~ " + names[j];
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return fig;
+}
+// فهارس الصفوف لكل قيمة في عمود التجميع (لـ hue)
+fun st_groups_idx(df, groupCol) {
+    let col = df_col(df, groupCol);
+    let order = [];
+    let seen = {};
+    let i = 0;
+    while (i < len(col)) {
+        let key = str(col[i]);
+        if (!has(seen, key)) { seen[key] = {"name": col[i], "idx": []}; push(order, key); }
+        push(seen[key]["idx"], i);
+        i = i + 1;
+    }
+    let out = [];
+    for (let kk in order) { push(out, seen[kk]); }
+    return out;
+}
+
+// تشخيص الانحدار: 2×2 (بواقي~مقدَّر | Q-Q للبواقي | مقياس-موضع | مخطط تكراري للبواقي)
+fun pl_regression_diagnostics(fit, title) {
+    let fig = pl_figure(1100, 760, 2, 2, title);
+    let res = fit["residuals"]; let fv = fit["fitted"];
+    let a1 = pl_axes(fig, 0, 0);
+    pl_title(a1, "Residuals vs Fitted");
+    pl_scatter(a1, fv, res, {});
+    pl_hline(a1, 0, {"color": "#D55E00"});
+    a1["xlabel"] = "Fitted"; a1["ylabel"] = "Residual"; a1["legend"] = "none";
+    let a2 = pl_axes(fig, 0, 1);
+    pl_title(a2, "Normal Q-Q of residuals"); pl_qq(a2, res, {});
+    let a3 = pl_axes(fig, 1, 0);
+    pl_title(a3, "Scale-Location");
+    let sq = [];
+    for (let r in res) { push(sq, sqrt(abs(r / fit["sigma"]))); }
+    pl_scatter(a3, fv, sq, {"color": "#009E73"});
+    a3["xlabel"] = "Fitted"; a3["ylabel"] = "sqrt|std resid|"; a3["legend"] = "none";
+    let a4 = pl_axes(fig, 1, 1);
+    pl_title(a4, "Residual distribution"); pl_hist(a4, res, {"normal": true});
+    return fig;
+}
+
+// تحليل انحدار كامل بدالة واحدة: شكل 1×2 (الانحدار + الجدول النصي للمعاملات)
+fun pl_regression_report(x, y, title) {
+    let fig = pl_figure(1000, 560, 1, 1, title);
+    let ax = pl_axes(fig, 0, 0);
+    let fit = pl_regplot(ax, x, y, {"predband": true, "label": "data"});
+    ax["xlabel"] = "x"; ax["ylabel"] = "y";
+    return fig;
+}
+
+// تقرير PCA: scree + مخطط الدرجات PC1×PC2 + خريطة الأحمال (يستعمل st_pca)
+fun pl_pca_report(df, names, title) {
+    let r = st_pca(df, names);
+    let k = len(names);
+    let fig = pl_figure(1400, 520, 1, 3, title);
+    let a1 = pl_axes(fig, 0, 0);
+    pl_title(a1, "Scree");
+    let idx = []; let cum = []; let run = 0; let i = 0;
+    while (i < k) { push(idx, "PC" + str(i + 1)); run = run + r["ratio"][i]; push(cum, run); i = i + 1; }
+    pl_bar(a1, idx, r["ratio"], {"label": "variance ratio"});
+    let xs = []; i = 1; while (i <= k) { push(xs, i); i = i + 1; }
+    pl_line(a1, xs, cum, {"label": "cumulative", "color": "#D55E00"});
+    a1["legend"] = "lower right";
+    let a2 = pl_axes(fig, 0, 1);
+    pl_title(a2, "Scores PC1 vs PC2");
+    pl_scatter(a2, nd_col(r["scores"], 0), nd_col(r["scores"], 1), {});
+    a2["legend"] = "none";
+    let a3 = pl_axes(fig, 0, 2);
+    pl_title(a3, "Loadings");
+    let pcs = []; i = 0; while (i < k) { push(pcs, "PC" + str(i + 1)); i = i + 1; }
+    pl_heat(a3, r["loadings"], names, pcs, {"cmap": "coolwarm", "vmin": -1, "vmax": 1});
+    return fig;
+}

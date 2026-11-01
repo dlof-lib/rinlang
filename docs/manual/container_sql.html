@@ -1,0 +1,362 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>RIN CONTAINER SQL (RCSQL) — Rin</title>
+<meta name="description" content="توثيق لغة البرمجة Rin"><link rel="icon" href="../assets/brand/icon-32.png">
+<link rel="stylesheet" href="assets/style.css"></head><body>
+<header><button id="mn" aria-label="القائمة">☰</button><a class="logo" href="index.html"><img src="../assets/brand/icon-48.png" alt="" width="26">Rin</a>
+<input id="q" type="search" placeholder="ابحث في التوثيق…" autocomplete="off"><button id="th" aria-label="الوضع">◐</button>
+<a class="gh" href="https://github.com/dlof-lib/rinlang">GitHub</a><div id="res"></div></header>
+<div class="wrap"><nav id="sb"><details ><summary>ابدأ هنا</summary><a href="getting-started.html">البداية</a><a href="syntax.html">القواعد النحوية العامة</a><a href="variables.html">let`، مصفوفات، قواميس، نطاق</a><a href="template-strings.html">النصوص القالبية (متغيّرات داخل النص)</a><a href="input.html">إدخال المستخدم (Input)</a><a href="control-flow.html">الشروط، الحلقات، `goal`/`achieve</a><a href="loops.html">حلقات Rin — Loops v2</a><a href="functions.html">fun`/`return`، التكرار الذاتي</a><a href="enums.html">enum`: قوائم اختيار مغلقة</a></details><details ><summary>اللغة</summary><a href="language-reference.html">المرجع الشامل وخريطة ترابط المفاهيم</a><a href="objects.html">class`/`struct`، `.object()`، `@Object`، `document</a><a href="oop.html">البرمجة الكائنية الموسَّعة (Rin 1.0)</a><a href="containers.html">دليل `@container` / `@element` / `@loop</a><a href="table.html">الجدول (`@table` / `@container.table`) ودوال اللغة عليه</a><a href="set.html">Set`: نوع المجموعة الأساسي</a><a href="pipelines.html">عامل الأنابيب `|&gt;</a><a href="RECKON.html">reckon`: مفهوم حسابي بسطرين</a><a href="let-plus.html">let` المطوَّر</a><a href="living-variables.html">المتغيرات الحيّة (Living Variables)</a><a href="label-define.html">label` و`define` (تسمية وتعريف)</a><a href="block-frames.html">بداية الكتل ونهايتها (Block Frames)</a><a href="compare_ops.html">معاملات المقارنة `/=` و `=/=` و `=/</a><a href="max_min.html">max / min family</a><a href="scope-guarantees.html">ضمانات النطاق: `finally` · `defer` · `catch … when` · `rethrow</a><a href="key_terms_and_builtins.html">Rin KEY_TERMS and Built-in Conditions</a><a href="number_builtins.html">Rin Number Built-ins</a></details><details ><summary>الواجهات (Indsin)</summary><a href="indsin.html">Indsin — Interface Design</a><a href="indsin_rin.html">indsin يعتمد على لغة Rin</a><a href="indsin_expansion.html">Indsin — التوسعة الاحترافية (Design System v2)</a><a href="indsin_object.html">indsin-object — API reference</a><a href="indsin_media.html">Indsin Media — اختيار الوسائط ورفعها</a><a href="indsin_icons.html">مكتبة أيقونات indsin (متجهية)</a><a href="indsin_tooling.html">indsin tooling — icon, file association, syntax highlighting</a><a href="indsinweb.html">IndsinWeb — مكتبة WebView والروابط لـ indsin</a><a href="RIN_ELEMENTS.html">دليل `@element.*` الكامل</a><a href="events-effects.html">الأحداث والتأثيرات (Events &amp; Effects) — محرك Indsin UI</a><a href="banner.html">Banner: إشعار شريطي</a><a href="simple-style.html">Rin Simple Style</a></details><details ><summary>بيئة التشغيل</summary><a href="runtime.html">وقت تشغيل Rin (Rin Runtime) · المرجع الرسمي</a><a href="standard-library.html">المكتبة القياسية (`lib/*.og.rin`)</a><a href="errors.html">نظام الأخطاء: أكواد، `try`/`catch`/`throw</a><a href="ERROR_SYSTEM.html">نظام التشخيص: البنية الداخلية + جدول الأكواد الكامل</a><a href="storage.html">تخزين دائم</a><a href="http.html">شبكات</a><a href="env.html">ربط Rin بملف `.env</a><a href="terminal.html">الطرفية التفاعلية — `rin terminal</a><a href="vm.html">RinVM — آلة Rin الافتراضية (بايتكود)</a><a href="rinflow.html">RinFlow: طبقة تنفيذ التدفّق المهيكل</a><a href="MAKE_UNIT.html">@make.(name)`: وحدة بسياسة قدرات صريحة</a><a href="MAKE_MEDIA.html">فيديو · صوت · API · إزالة الخلفية · قراءة النص من الصور</a><a href="TIME.html">مفهوم `time`: الزمن كقيمة من الدرجة الأولى</a><a href="native-additions.html">دوال Rin الأصلية الجديدة (Rin 1.0)</a></details><details open><summary>الحاويات وقواعد البيانات</summary><a href="container_advanced.html">Rin Container Advanced Built-ins</a><a href="container_pro.html">Rin Container Pro</a><a href="container_sql.html" class=on>RIN CONTAINER SQL (RCSQL)</a><a href="cross-file-containers.html">استدعاء إعلانات من ملف آخر</a></details><details ><summary>الحزم والتكامل</summary><a href="api.html">واجهة C المسطَّحة (Embedding API)</a><a href="android.html">استضافة Rin على أندرويد</a><a href="packages-and-interop.html">Rin 1.0 — المكتبات والحزم وجسر C++ وJSON واختبارات rintest</a><a href="rinpak-format.html">RinPak — حزمة مشروع Rin (`.rinpak`)</a><a href="html-projects.html">مشاريع HTML في Rin — الربط بين index.html وملف الحاوية</a><a href="project-og-urin.html">project.og.urin` — البيانات الوصفية لمشروع Rin</a><a href="CONTENT_PACKS.html">حزم المحتوى القابلة للتنزيل (Content Packs)</a><a href="previewkit.html">previewkit — معاينة حيّة لملفات PDF / Markdown / TypeScript</a></details><details ><summary>المكتبات المتخصصة</summary><a href="rinml.html">RinML / RinDF / RinAI — الذكاء الاصطناعي وتحليل البيانات في Rin</a><a href="STATS.html">RinStat — التحليل الإحصائي (`lib/rinstat.og.rin`)</a><a href="STATS_ADV.html">RinStat المتقدّم + RinAuto</a><a href="LINALG.html">الجبر الخطي للمهندسين — `mat*` و`vec*</a><a href="PLOT.html">RinPlot — الرسوم البيانية الإحصائية (`lib/rinplot.og.rin`)</a><a href="ALGO.html">تطوير الخوارزميات والحساب العددي — `algo*</a><a href="NUMBER.html">مفهوم `number` في Rin</a><a href="boat.html">&quot;Boat&quot;: مفاهيم أساسية مجمَّعة</a><a href="passkit.html">passkit — passwords, encryption, databases and a tag language</a><a href="passkit-crypto-db.html">Passkit feature catalog: encryption, databases and container linking</a><a href="hash-family.html">عائلة `#` — مفاهيم ودوال جديدة تبدأ بعلامة `#</a><a href="image-draw.html">إنشاء الصور في Rin — رسم وحفظ PNG وlog كصورة</a><a href="image-terminal.html">طباعة الصور في الـ terminal — `printImage` / `imageAnsi` / `imageInfo</a></details><details ><summary>المشروع</summary><a href="CONTRIBUTING.html">المساهمة في Rin</a><a href="CODE_OF_CONDUCT.html">قواعد السلوك</a><a href="SECURITY.html">سياسة الأمان</a><a href="SUPPORT.html">الحصول على المساعدة</a><a href="TRADEMARKS.html">سياسة العلامة التجارية — Trademark Policy</a><a href="THIRD_PARTY_NOTICES.html">إشعارات المكوّنات الخارجية — Third-Party Notices</a></details><details ><summary>مراجع إضافية</summary><a href="ANDROID_VERSIONS.html">حزم RinStudio لكل إصدار أندرويد</a><a href="TOKEN.html">مفهوم `token` في Rin</a><a href="TOOLCHAIN.html">Rin Professional Language Toolchain</a><a href="TOOLCHAIN_UPGRADE.html">Toolchain Upgrade — 2026-09</a><a href="architecture.html">المعمارية وبنية المستودع</a><a href="base-accept.html">base` و`accept`: متغيّران يخدمان `if</a><a href="channel47.html">channel47 — لغة وصف البيانات والإعدادات</a><a href="ci.html">CI وأدوات المستودع</a><a href="loop-templates.html">قوالب الحلقات `@tmpl</a><a href="pre-post.html">pre` و`post` (ما قبل / ما بعد): عقد انتقال حول الإسناد</a><a href="print-fonts.html">خطوط `print` — bold / italic / underline وغيرها</a><a href="print-image-terminal.html">طباعة الصور كنص في الطرفية</a><a href="print-templates.html">قوالب الطباعة `@tmpl ... print` — قوالب نصية خطية وتنسيقية</a><a href="rdoc.html">rdoc — Documentation Container</a><a href="rdoc-reference.html">وثيقة rdoc الشاملة — Documentation Container</a><a href="screenshots.html">لقطات من RinStudio</a></details></nav>
+<main><article><h1 id="rin-container-sql-rcsql">RIN CONTAINER SQL (RCSQL)<a class="headerlink" href="#rin-container-sql-rcsql" title="Permanent link">#</a></h1>
+<p>نظام استعلام مصغّر ومميّز خاص بلغة Rin، للبحث/الفلترة/الفرز/التصفّح/التجميع/التعديل بالجملة/
+التشخيص داخل مجموعات المستندات القائمة أصلاً في اللغة عبر <code>@container.doc</code> / <code>@doc</code> (RCSQL
+يستعلم/يعدِّل بيانات موجودة، لا يعرِّف نوع تخزين جديداً).</p>
+<h2 id="_1">الفكرة<a class="headerlink" href="#_1" title="Permanent link">#</a></h2>
+<ul>
+<li><strong>بنية البيانات المُستعلَمة تبقى <code>@</code> كما هي دوماً</strong>: تُعرَّف المستندات كالمعتاد بـ
+  <code>@container.doc=name ... document id="..." fields={...}; ... .end/container.doc</code>.</li>
+<li><strong>الاستعلام نفسه يُكتَب بخمسة رموز تركيبية فقط</strong>: <code>/</code> <code>:</code> <code>&amp;</code> <code>()</code> <code>#</code> — بالإضافة لحروف/أرقام
+  المعرّفات (لاتينية أو عربية). أي رمز آخر (مثل <code>|</code> أو <code>=</code> أو <code>,</code>) يُرفَض فوراً بخطأ <code>E0042</code>.</li>
+<li><strong>الاستدعاء يكون بالأقنعة (masks)</strong>: يمكن تعريف استعلام RCSQL كحاوية <code>@</code> مستقلة قابلة لإعادة
+  الاستخدام عبر <code>@sql</code>/<code>@container.sql</code>، ثم استدعاؤه لاحقاً بقناعها فقط دون تكرار نص الاستعلام.</li>
+</ul>
+<h2 id="_2">الصياغة<a class="headerlink" href="#_2" title="Permanent link">#</a></h2>
+<pre><code>query      := target ( &quot;&amp;&quot; clause )*
+target     := &quot;#&quot; IDENT                  -- قناع (mask) يُحلّ إلى اسم حاوية
+            | IDENT ( &quot;/&quot; IDENT )*        -- اسم حاوية مباشر، أو مسار Group/حاوية متداخل
+clause     := predicate                   -- شرط فلترة (AND مع بقية الشروط)
+            | group                       -- مجموعة منطقية: or(...) / and(...) / not(...)
+            | modifier                    -- order/limit/offset/select/distinct
+group      := (&quot;or&quot;|&quot;and&quot;) &quot;(&quot; pg (&quot;&amp;&quot; pg)* &quot;)&quot;   -- pg = predicate أو مجموعة متداخلة أخرى
+            | &quot;not&quot; &quot;(&quot; pg &quot;)&quot;                     -- نفي شرط/مجموعة فرعية واحدة (بلا '&amp;' بداخلها)
+predicate  := field &quot;:&quot; OP &quot;(&quot; ARG? &quot;)&quot;
+field      := IDENT ( &quot;/&quot; IDENT )*        -- يدعم حقول map متداخلة: address/city
+OP         := eq | ne | ieq | gt | gte | lt | lte
+            | has | like | starts | ends | exists | missing
+ARG        := IDENT                       -- وسيط واحد فقط (لا فاصلة: ',' ليست من الرموز المسموحة)
+</code></pre>
+<h3 id="target">الأهداف (target)<a class="headerlink" href="#target" title="Permanent link">#</a></h3>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الشكل</th>
+<th>المعنى</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>#mask</code></td>
+<td>يُحلّ عبر سجل الأقنعة (<code>mask="...";</code>) إلى اسم الحاوية الفعلي</td>
+</tr>
+<tr>
+<td><code>name</code></td>
+<td>اسم حاوية <code>@container.doc</code>/<code>@doc</code> مباشر</td>
+</tr>
+<tr>
+<td><code>group/name</code></td>
+<td>حاوية متداخلة داخل <code>@Containers.Group</code> — يُتحقَّق من العضوية خطوة بخطوة</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="predicate-op">العمليات (predicate OP)<a class="headerlink" href="#predicate-op" title="Permanent link">#</a></h3>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>العملية</th>
+<th>المعنى</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>eq</code></td>
+<td>يساوي (<code>valuesEqual</code>)</td>
+</tr>
+<tr>
+<td><code>ne</code></td>
+<td>لا يساوي</td>
+</tr>
+<tr>
+<td><code>ieq</code></td>
+<td>يساوي نصّاً بغضّ النظر عن حالة الأحرف</td>
+</tr>
+<tr>
+<td><code>gt</code>/<code>gte</code>/<code>lt</code>/<code>lte</code></td>
+<td>مقارنة رقمية (يتطلّب أن يكون الحقل والوسيط رقمَين، وإلا فالنتيجة false)</td>
+</tr>
+<tr>
+<td><code>has</code></td>
+<td>الحقل مصفوفة تحوي الوسيط، أو map يحوي مفتاحاً بنفس اسم الوسيط</td>
+</tr>
+<tr>
+<td><code>like</code></td>
+<td>الحقل نص، ويحوي الوسيط كنص جزئي (substring) بغضّ النظر عن حالة الأحرف</td>
+</tr>
+<tr>
+<td><code>starts</code></td>
+<td>الحقل نص يبدأ بالوسيط (بغضّ النظر عن حالة الأحرف)</td>
+</tr>
+<tr>
+<td><code>ends</code></td>
+<td>الحقل نص ينتهي بالوسيط (بغضّ النظر عن حالة الأحرف)</td>
+</tr>
+<tr>
+<td><code>exists</code></td>
+<td>الحقل موجود في المستند (بأي قيمة، بلا وسيط: <code>field:exists()</code>)</td>
+</tr>
+<tr>
+<td><code>missing</code></td>
+<td>الحقل غير موجود في المستند (بلا وسيط: <code>field:missing()</code>)</td>
+</tr>
+</tbody>
+</table></div>
+<p>الوسيط (ARG) يُفسَّر تلقائياً (لبقية العمليات): <code>true</code>/<code>false</code> → منطقي، <code>null</code>/<code>nil</code> → nil، نص
+يُقرأ كاملاً كرقم صالح → رقم، وإلا → نص كما كُتب (لا توجد علامات اقتباس ضمن الصياغة المسموحة).</p>
+<h3 id="or-and-not">مجموعات منطقية: OR / AND / NOT<a class="headerlink" href="#or-and-not" title="Permanent link">#</a></h3>
+<p>بما أن <code>&amp;</code> هي AND ضمنية بين شروط الاستعلام مباشرة، تُستخدَم <code>or(...)</code>/<code>and(...)</code>/<code>not(...)</code>
+لتركيب منطق أعقد (ويمكن تداخلها ببعضها بحرّية):</p>
+<pre><code class="language-kotlin">// OR بسيطة
+sql(&quot;#app.users &amp; or(role:eq(admin) &amp; role:eq(owner))&quot;)
+
+// NOT -- نفي شرط واحد (أو مجموعة واحدة)
+sql(&quot;#app.users &amp; not(role:eq(banned))&quot;)
+
+// تركيب متداخل: (admin AND active) OR (owner AND active)
+sql(&quot;#app.users &amp; or(and(role:eq(admin) &amp; active:eq(true)) &amp; and(role:eq(owner) &amp; active:eq(true)))&quot;)
+</code></pre>
+<p><code>not(...)</code> تأخذ شرطاً/مجموعة واحدة بالضبط (بلا <code>&amp;</code> بداخلها) — لنفي عدّة شروط معاً استخدم
+<code>not(and(...))</code>.</p>
+<h3 id="_3">المُعدِّلات (تشكيل النتيجة، لا تُعتبَر شروط فلترة)<a class="headerlink" href="#_3" title="Permanent link">#</a></h3>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>المُعدِّل</th>
+<th>المعنى</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>order:asc(field)</code></td>
+<td>فرز تصاعدي حسب <code>field</code> (تُكرَّر لعدّة مفاتيح فرز متتالية)</td>
+</tr>
+<tr>
+<td><code>order:desc(field)</code></td>
+<td>فرز تنازلي حسب <code>field</code></td>
+</tr>
+<tr>
+<td><code>limit:eq(N)</code></td>
+<td>أقصى عدد نتائج</td>
+</tr>
+<tr>
+<td><code>offset:eq(N)</code></td>
+<td>تخطّي أول N نتيجة (بعد الفرز)</td>
+</tr>
+<tr>
+<td><code>select:has(field)</code></td>
+<td>إسقاط: إبقاء حقل واحد فقط (تُكرَّر لعدّة حقول؛ <code>_id</code> يبقى دوماً)</td>
+</tr>
+<tr>
+<td><code>distinct:eq(field)</code></td>
+<td>إزالة التكرار (تُكرَّر لبناء <strong>مفتاح تفريد مركّب</strong> من عدّة حقول معاً)</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>ترتيب التنفيذ الفعلي دوماً</strong>: فلترة (AND/OR/NOT) → <code>distinct</code> → <code>order</code> → <code>offset</code> → <code>limit</code> →
+<code>select</code>. المستندات المفقود منها حقل الفرز تُدفَع دوماً إلى آخر النتائج.</p>
+<pre><code class="language-kotlin">// أحدث 5 حسابات فعّالة، الاسم فقط
+sql(&quot;#app.users &amp; active:eq(true) &amp; order:desc(createdAt) &amp; limit:eq(5) &amp; select:has(name)&quot;)
+
+// الصفحة الثانية (10 لكل صفحة) مرتّبة بالاسم
+sql(&quot;#app.users &amp; order:asc(name) &amp; offset:eq(10) &amp; limit:eq(10)&quot;)
+
+// تفريد مركّب: أول مستند فقط لكل تركيبة (مدينة، دور) معاً
+sql(&quot;#app.users &amp; distinct:eq(city) &amp; distinct:eq(role)&quot;)
+</code></pre>
+<h2 id="_4">أمثلة أساسية<a class="headerlink" href="#_4" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">@container.doc=users
+    mask=&quot;app.users&quot;;
+    document id=&quot;u1&quot; fields={ name: &quot;Ali&quot;,  role: &quot;admin&quot;, age: 25, address: { city: &quot;Cairo&quot; } };
+    document id=&quot;u2&quot; fields={ name: &quot;Sara&quot;, role: &quot;user&quot;,  age: 30, address: { city: &quot;Giza&quot; } };
+.end/container.doc
+
+print sql(&quot;#app.users &amp; role:eq(admin) &amp; age:gte(18)&quot;);
+print sqlOne(&quot;#app.users &amp; address/city:eq(Cairo)&quot;);
+print sqlCount(&quot;#app.users &amp; role:eq(admin)&quot;);
+</code></pre>
+<h3 id="_5">تعريف استعلام مُسمّى واستدعاؤه بالقناع<a class="headerlink" href="#_5" title="Permanent link">#</a></h3>
+<pre><code class="language-kotlin">@sql=activeAdmins
+    mask=&quot;q.activeAdmins&quot;;
+    text query = &quot;#app.users &amp; role:eq(admin) &amp; age:gte(18) &amp; order:desc(age)&quot;;
+.end/sql
+
+print sql(&quot;q.activeAdmins&quot;); // بلا تكرار نص RCSQL في كل مرة
+</code></pre>
+<p><code>sql()</code> وكل النواتج أدناه تتعامل مع الوسيط الممرَّر بشكل موحَّد: إن كان قناعاً لحاوية
+<code>@sql</code>/<code>@container.sql</code> معرَّفة مسبقاً تُستبدَل تلقائياً بنص RCSQL المخزَّن بداخلها؛ وإلا يُعامَل
+كنص RCSQL خام فوري.</p>
+<h2 id="rcsql-natives">دوال RCSQL (natives)<a class="headerlink" href="#rcsql-natives" title="Permanent link">#</a></h2>
+<h3 id="_6">قراءة/فحص<a class="headerlink" href="#_6" title="Permanent link">#</a></h3>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الدالة</th>
+<th>تُعيد</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sql(query)</code></td>
+<td>مصفوفة كل المستندات المطابقة (كل عنصر map يحمل <code>_id</code> + الحقول)</td>
+</tr>
+<tr>
+<td><code>sqlOne(query)</code></td>
+<td>أول مستند مطابق فقط، أو <code>nil</code></td>
+</tr>
+<tr>
+<td><code>sqlCount(query)</code></td>
+<td>عدد المستندات المطابقة (رقم)</td>
+</tr>
+<tr>
+<td><code>sqlExists(query)</code></td>
+<td><code>true</code>/<code>false</code> — أخفّ من <code>sqlCount</code> حين يهمّك الوجود فقط</td>
+</tr>
+<tr>
+<td><code>sqlIds(query)</code></td>
+<td>مصفوفة معرّفات (<code>_id</code>) فقط</td>
+</tr>
+<tr>
+<td><code>sqlPluck(query, field)</code></td>
+<td>مصفوفة قيمة حقل واحد عبر كل مطابقة (<code>nil</code> لمن لا يملكه؛ <code>field</code> يقبل <code>/</code>)</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="_7">تجميع<a class="headerlink" href="#_7" title="Permanent link">#</a></h3>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الدالة</th>
+<th>تُعيد</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sqlSum(query, field)</code></td>
+<td>مجموع القيم الرقمية للحقل (0 إن لم توجد قيم رقمية)</td>
+</tr>
+<tr>
+<td><code>sqlAvg(query, field)</code></td>
+<td>متوسط القيم الرقمية للحقل (<code>nil</code> إن لم توجد)</td>
+</tr>
+<tr>
+<td><code>sqlMin(query, field)</code> / <code>sqlMax</code></td>
+<td>أصغر/أكبر قيمة رقمية للحقل (<code>nil</code> إن لم توجد)</td>
+</tr>
+<tr>
+<td><code>sqlGroupBy(query, field)</code></td>
+<td>مصفوفة <code>{key, count, ids}</code> — تجميع (GROUP BY) حسب قيمة <code>field</code></td>
+</tr>
+<tr>
+<td><code>sqlGroupSum(query, groupField, sumField)</code></td>
+<td>مصفوفة <code>{key, sum, count}</code> — GROUP BY ثم SUM لكل مجموعة</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="_8">تعديل بالجملة<a class="headerlink" href="#_8" title="Permanent link">#</a></h3>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الدالة</th>
+<th>تُعيد</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sqlUpdate(query, field, value)</code></td>
+<td>يضبط <code>field</code> (يقبل <code>/</code> لحقل متداخل) إلى <code>value</code> على كل المطابقات؛ يعيد عدد المُحدَّث</td>
+</tr>
+<tr>
+<td><code>sqlDelete(query)</code></td>
+<td>يحذف كل المطابقات فعلياً من حاويتها؛ يعيد عدد المحذوف</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="_9">تطوير/تشخيص<a class="headerlink" href="#_9" title="Permanent link">#</a></h3>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الدالة</th>
+<th>تُعيد</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sqlValidate(query)</code></td>
+<td><code>{ok:true, container}</code> أو <code>{ok:false, error}</code> — <strong>لا يرمي أبداً</strong>، مناسب لمحرّر استعلامات تفاعلي</td>
+</tr>
+<tr>
+<td><code>sqlExplain(query)</code></td>
+<td>map تشخيصي كامل: الهدف، اسم الحاوية المحلول، شجرة الشروط (بما فيها or/and/not)، الفرز، limit/offset، select/distinct</td>
+</tr>
+</tbody>
+</table></div>
+<p>مثال <code>sqlExplain</code>:</p>
+<pre><code class="language-kotlin">print sqlExplain(&quot;#app.users &amp; role:eq(admin) &amp; order:desc(age) &amp; limit:eq(5)&quot;);
+// {&quot;queryText&quot;: &quot;...&quot;, &quot;targetMask&quot;: &quot;app.users&quot;, &quot;container&quot;: &quot;users&quot;,
+//  &quot;predicates&quot;: [{&quot;field&quot;: &quot;role&quot;, &quot;op&quot;: &quot;eq&quot;, &quot;arg&quot;: &quot;admin&quot;}],
+//  &quot;orderBy&quot;: [{&quot;field&quot;: &quot;age&quot;, &quot;desc&quot;: true}], &quot;limit&quot;: 5, &quot;offset&quot;: 0,
+//  &quot;selectFields&quot;: [], &quot;distinctFields&quot;: []}
+</code></pre>
+<p>ملاحظة: الوسيط <code>field</code>/<code>groupField</code>/<code>sumField</code> في <code>sqlPluck</code>/<code>sqlSum</code>/<code>sqlAvg</code>/<code>sqlMin</code>/<code>sqlMax</code>/
+<code>sqlUpdate</code>/<code>sqlGroupBy</code>/<code>sqlGroupSum</code> وسيط Rin عادي (نص Value منفصل عن نص الاستعلام)، وليس جزءاً
+من نص RCSQL — لذا غير مقيَّد بمجموعة رموزها.</p>
+<p><code>sqlUpdate</code> <strong>ذرّي على مستوى الدفعة</strong>: يتحقّق من مخطط كل مستند مُعدَّل أولاً على نسخ منفصلة؛ إن
+خالف أيّ مستند واحد المخطط بعد التعديل تُرفَض العملية بالكامل بخطأ <code>E0019</code> (schema violation)،
+ولا يُحدَّث أي مستند جزئياً. <code>sqlDelete</code> بلا تراجع (لا استرجاع)، تماماً كـ <code>deleteDoc()</code> الحالية.</p>
+<p>حاوية/قناع غير موجود، أو بلا أي تطابق، يعيد قيمة فارغة مناسبة بصمت (<code>[]</code>/<code>0</code>/<code>nil</code>/<code>false</code> حسب
+الدالة) — بلا خطأ، بنفس سلوك بقية دوال <code>docStore</code> الحالية.</p>
+<h2 id="_10">الأخطاء<a class="headerlink" href="#_10" title="Permanent link">#</a></h2>
+<p>رمز خارج القائمة المسموحة، حقل بلا عملية، عملية غير معروفة، قوس ناقص، <code>not(...)</code> بأكثر من شرط
+واحد، أو مُعدِّل بشكل غير صالح (مثال: <code>limit:eq(abc)</code> أو <code>order:up(x)</code>) — كل ذلك يُرفَض بخطأ
+تشخيصي <code>E0042</code> (<code>InvalidSql</code>) يوضّح موضع/سبب الخلل بالضبط داخل نص الاستعلام (باستثناء
+<code>sqlValidate</code> التي تُعيد هذا الخطأ كقيمة <code>{ok:false, error}</code> بدل رميه).</p>
+<h2 id="_11">الملفات<a class="headerlink" href="#_11" title="Permanent link">#</a></h2>
+<ul>
+<li><code>rin_container_sql.h</code> / <code>rin_container_sql.cpp</code> — المحلّل النحوي البحت (<code>Query</code>/<code>Predicate</code>/
+  <code>SortKey</code>/<code>parse</code>، بما فيه مجموعات <code>or</code>/<code>and</code>/<code>not</code> المتداخلة)، بلا أي اعتماد على
+  <code>Interpreter</code>/<code>Value</code>.</li>
+<li><code>rin_interpreter.h</code>/<code>.cpp</code> — الربط الفعلي: <code>sqlViews</code>، <code>sqlResolveQueryText</code>/
+  <code>sqlResolveTargetContainer</code>/<code>sqlRunRaw</code> (الأنبوب الكامل: فلترة→distinct→order→offset/limit)،
+  <code>sqlExecute</code> (يبني عرض <code>sql()</code> النهائي)، وكل النواتج أعلاه.</li>
+<li><code>rin_ast.h</code> — <code>ContainerKind::SQL</code>.</li>
+<li><code>rin_parser.cpp</code> — التعرّف على وسمَي <code>@sql</code>/<code>@container.sql</code> (حاوية بيانات نقية، بنفس قيود
+  <code>container.data</code>/<code>table</code>/<code>doc</code>/...).</li>
+<li><code>diagnostics/diagnostic.h</code>/<code>.cpp</code> — <code>E0042_InvalidSql</code>.</li>
+<li><code>tools/test_container_sql.cpp</code> (ومثلها في <code>tests/tools/</code>) — 29 حالة اختبار عبر مسار CLI الحقيقي.</li>
+</ul></article>
+<div class="pnav"><a class="pn" href="container_pro.html">→ Rin Container Pro</a><a class="pn" href="cross-file-containers.html">استدعاء إعلانات من ملف آخر ←</a></div><p class="edit"><a href="https://github.com/dlof-lib/rinlang/edit/main/docs/container_sql.md">✎ عدّل هذه الصفحة على GitHub</a></p>
+<footer>Rin 1.0.0 · رخصة MIT</footer></main>
+<aside id="toc"><b>في هذه الصفحة</b><div class="toc">
+<ul>
+<li><a href="#_1">الفكرة</a></li>
+<li><a href="#_2">الصياغة</a><ul>
+<li><a href="#target">الأهداف (target)</a></li>
+<li><a href="#predicate-op">العمليات (predicate OP)</a></li>
+<li><a href="#or-and-not">مجموعات منطقية: OR / AND / NOT</a></li>
+<li><a href="#_3">المُعدِّلات (تشكيل النتيجة، لا تُعتبَر شروط فلترة)</a></li>
+</ul>
+</li>
+<li><a href="#_4">أمثلة أساسية</a><ul>
+<li><a href="#_5">تعريف استعلام مُسمّى واستدعاؤه بالقناع</a></li>
+</ul>
+</li>
+<li><a href="#rcsql-natives">دوال RCSQL (natives)</a><ul>
+<li><a href="#_6">قراءة/فحص</a></li>
+<li><a href="#_7">تجميع</a></li>
+<li><a href="#_8">تعديل بالجملة</a></li>
+<li><a href="#_9">تطوير/تشخيص</a></li>
+</ul>
+</li>
+<li><a href="#_10">الأخطاء</a></li>
+<li><a href="#_11">الملفات</a></li>
+</ul>
+</div>
+</aside></div>
+<script src="assets/app.js"></script></body></html>

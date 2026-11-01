@@ -1,0 +1,124 @@
+// core/graph.zpp — كشف الدورات في الرسوم (تبعيات، روابط، إحالات). الرسم: {عقدة: [جيران...]} حيث العقدة تعتمد على جيرانها.
+// DFS تكراري (لا استدعاء ذاتي فلا خطر تجاوز العمق) يزور كل عقدة مرة واحدة فقط، ويحذف الأحرف المكرَّرة تلقائياً.
+
+fun rsf_nbrs(nbrsFn, node) {
+    let r = nbrsFn(node);
+    if (r == nil) { return []; }
+    if (type(r) != "array") { throw "__rsf__: the neighbors of " + toString(node) + " must be an array, found " + type(r); }
+    return rsf_dedupe(r);
+}
+
+// مفتاح دورة مستقل عن نقطة البداية (تدوير): نفس الدورة تُعدّ مرة واحدة مهما كانت العقدة التي دخلناها منها.
+fun rsf_cycleKey(nodes) {
+    let ks = [];
+    for (let n in nodes) { push(ks, rsf_key(n)); }
+    let smallest = sort(ks)[0];
+    let best = 0;
+    for (let i = 0; i < len(ks); i++) { if (ks[i] == smallest) { best = i; break; } }
+    let out = "";
+    for (let i = 0; i < len(ks); i++) { out = out + ks[(best + i) % len(ks)] + "|"; }
+    return out;
+}
+
+// النواة: starts = مصفوفة عقد البداية، nbrsFn(node) = مصفوفة الجيران.
+// تُرجع {visited (الأسبقية)، order (التبعيات أولاً)، cycles ([a,b,a] ...)، steps}
+fun rsf_dfs(starts, nbrsFn) {
+    let state = {};
+    let visited = [];
+    let order = [];
+    let cycles = [];
+    let cycSeen = {};
+    let steps = 0;
+    for (let s in starts) {
+        if (has(state, rsf_key(s))) { continue; }
+        state[rsf_key(s)] = 1;
+        push(visited, s);
+        let stack = [{node: s, nbrs: rsf_nbrs(nbrsFn, s), i: 0}];
+        while (len(stack) > 0) {
+            steps = steps + 1;
+            if (steps > RSF_CFG["limit"]) { throw "__rsf__: graph walk exceeded " + toString(RSF_CFG["limit"]) + " steps — raise it with rsf_config({limit: N})"; }
+            let top = stack[len(stack) - 1];
+            if (top["i"] >= len(top["nbrs"])) {
+                state[rsf_key(top["node"])] = 2;
+                push(order, top["node"]);
+                pop(stack);
+                continue;
+            }
+            let nx = top["nbrs"][top["i"]];
+            top["i"] = top["i"] + 1;
+            let nk = rsf_key(nx);
+            if (!has(state, nk)) {
+                state[nk] = 1;
+                push(visited, nx);
+                push(stack, {node: nx, nbrs: rsf_nbrs(nbrsFn, nx), i: 0});
+            } else if (state[nk] == 1) {
+                let j = 0;
+                for (let q = 0; q < len(stack); q++) { if (rsf_key(stack[q]["node"]) == nk) { j = q; break; } }
+                let cyc = [];
+                for (let q = j; q < len(stack); q++) { push(cyc, stack[q]["node"]); }
+                let ck = rsf_cycleKey(cyc);
+                if (!has(cycSeen, ck)) {
+                    cycSeen[ck] = true;
+                    push(cyc, nx);
+                    push(cycles, cyc);
+                    rsf_trace("cycle found: " + toString(cyc));
+                }
+            }
+        }
+    }
+    if (RSF_CFG["strict"] and len(cycles) > 0) { throw "__rsf__: cycle detected: " + toString(cycles[0]); }
+    return {visited: visited, order: order, cycles: cycles, steps: steps};
+}
+
+fun rsf_graphNbrs(g) {
+    return fun(n) {
+        let k = toString(n);
+        if (has(g, k)) { return g[k]; }
+        return [];
+    };
+}
+fun rsf_checkGraph(g, who) {
+    if (type(g) != "map") { throw "__rsf__: " + who + " expects a graph map such as {a: [\"b\"], b: []}, found " + type(g); }
+}
+
+// كل الدورات (واحدة لكل حافة رجوع): [["a","b","a"], ...] — فارغة إن لم توجد
+export fun rsf_cycles(g) {
+    rsf_checkGraph(g, "rsf_cycles");
+    return rsf_dfs(keys(g), rsf_graphNbrs(g))["cycles"];
+}
+export fun rsf_isAcyclic(g) { return len(rsf_cycles(g)) == 0; }
+
+// تقرير كامل: {ok, order, cycles, nodes, edges, duplicateEdges, missing}
+//   order: العقد مرتّبة بحيث تأتي التبعيات قبل من يعتمد عليها (فارغ إن وُجدت دورة)
+//   duplicateEdges: عدد الأحرف المكرَّرة التي أُزيلت تلقائياً؛ missing: جيران غير معرَّفين كمفاتيح
+export fun rsf_graph(g) {
+    rsf_checkGraph(g, "rsf_graph");
+    let dup = 0;
+    let edges = 0;
+    let missing = rsf_set();
+    for (let k in keys(g)) {
+        let ns = g[k];
+        if (type(ns) != "array") { throw "__rsf__: the neighbors of " + k + " must be an array, found " + type(ns); }
+        let u = rsf_dedupe(ns);
+        dup = dup + (len(ns) - len(u));
+        edges = edges + len(u);
+        for (let n in u) { if (!has(g, toString(n))) { rsf_add(missing, n); } }
+    }
+    let r = rsf_dfs(keys(g), rsf_graphNbrs(g));
+    return {ok: len(r["cycles"]) == 0, order: len(r["cycles"]) == 0 ? r["order"] : [], cycles: r["cycles"],
+            nodes: len(r["visited"]), edges: edges, duplicateEdges: dup, missing: rsf_items(missing)};
+}
+// ترتيب تبعيات: التبعيات أولاً؛ يرمي عند وجود دورة.
+export fun rsf_topo(g) {
+    rsf_checkGraph(g, "rsf_topo");
+    let r = rsf_dfs(keys(g), rsf_graphNbrs(g));
+    if (len(r["cycles"]) > 0) { throw "__rsf__: cannot order a graph with a cycle: " + toString(r["cycles"][0]); }
+    return r["order"];
+}
+
+// مشي بدالة جيران: كل عقدة تُزار مرة واحدة تلقائياً مهما تكررت الإحالات، وتُكشف الدورات.
+//   rsf_walk(start, fun(node) { return links[node]; }) → {visited, order, cycles, steps}
+export fun rsf_walk(start, nbrsFn) {
+    rsf_checkFn(nbrsFn, "rsf_walk");
+    return rsf_dfs([start], nbrsFn);
+}

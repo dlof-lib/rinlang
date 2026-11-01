@@ -1,0 +1,89 @@
+{
+ "libraries": {
+  "math_og_rin": {
+   "name": "math",
+   "fileName": "math.og.rin",
+   "version": "2.1.0",
+   "sizeBytes": 18200,
+   "updatedAt": 1790000000000,
+   "downloadCount": 1520,
+   "likeCount": 87,
+   "description": "Math helpers for Rin: sqrt, pow, trig, random ranges and statistics."
+  },
+  "csv_og_rin": {
+   "name": "csv",
+   "fileName": "csv.og.rin",
+   "version": "1.0.0",
+   "sizeBytes": 6100,
+   "updatedAt": 1789000000000,
+   "downloadCount": 210,
+   "likeCount": 9,
+   "description": "قراءة وكتابة ملفات CSV بسهولة داخل لغة Rin مع دعم الفواصل والاقتباس."
+  }
+ },
+ "packages": {
+  "-Npk1": {
+   "name": "Http Client",
+   "version": "0.9.3",
+   "publisherUsername": "dlof",
+   "publisherName": "Dlof Dev",
+   "sizeBytes": 42000,
+   "createdAt": 1788000000000,
+   "downloadCount": 3400000,
+   "likeCount": 1200,
+   "ratingSum": 46,
+   "ratingCount": 10,
+   "description": "A tiny HTTP client with retries, JSON helpers and timeouts. <script>alert(1)</script> \"quoted\" & more.",
+   "iconBase64": "iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAIAAABMXPacAAACaElEQVR4nO2d0U0DQQwFL4g6+KIQqqECyqACmqAhiuFjpehEhBSE7fHuznxHwvbs810kor08vXwewvFAF7A7CoBRAIwCYBQAowAYBcAoAEYBMAqAUQCMAmAUAKMAGAXAKABGATAKgFEAjAJgFACjABgFwDzSBfyNr/fXez72/PaRXUkUl/7/mHXn0H+juYy+Av4591t6mmgnIHzut7Qy0UhAwejPNNHQQkDx6M/gGvjXUHD6+F8/2ATgzZ+hooAloNX0D64eRkC36Q+QqqpXUM/R/6ByHZUmYIrpH7V11gmYZfqDsmqLBMw1/UFNzfz3gM2pEDDj8R8UVJ4uYN7pD7LrzxUw+/QHqV34DIBJFLDG8R/k9ZIlYKXpD5I6cgXBpAhY7/gPMvoyATDxAlY9/oPw7kwAjAJgggWsvX8GsT2aABgFwEQK2GH/DAI7NQEwCoBRAEyYgH0eAIOofk0AjAJgFACjABgFwCgARgEwCoBRAIwCYBQAowCYMAH4T86LierXBMAoAEYBMJEC9nkMBHZqAmAUABMsYIctFNujCYBRAEy8gLW3UHh3JgAmRcCqIcjoywTAZAlYLwRJHSUmYCUHeb24gmByBawRgtQu0hMwu4Ps+itW0LwOCir3GQBTJGDGENTUXJeAuRyUVVu6gmZxUFknc39A21/01R8R5iHcMwpIVdhbUDcHVD38JT74OmKPAv89gO0fDyKfgCveI9YCb9LrgndJdsHbVBvhfcISDP8aujkKgFEAjAJgFACjABgFwCgARgEwCoBRAIwCYBQAowAYBcAoAEYBMAqAUQCMAmAUAKMAmG90957DJu0rcwAAAABJRU5ErkJggg==",
+   "category": "Network"
+  },
+  "-Npk2": {
+   "name": "مكتبة-الرسم",
+   "version": "1.2.0",
+   "publisherUsername": "سارة",
+   "publisherName": "سارة",
+   "sizeBytes": 900,
+   "createdAt": 1787000000000,
+   "downloadCount": 12,
+   "likeCount": 3,
+   "description": "مكتبة عربية للرسم على اللوحة: خطوط ودوائر ومستطيلات وألوان جاهزة مع أمثلة كاملة وشرح مفصل لكل دالة موجودة في المكتبة.",
+   "category": "Graphics"
+  },
+  "-Npk3": {
+   "name": "A very long library name that keeps going and going forever",
+   "version": "3.0.0-beta",
+   "publisherUsername": "alex",
+   "createdAt": 1786000000000,
+   "downloadCount": 0,
+   "likeCount": 0,
+   "description": ""
+  },
+  "-Npk4": {
+   "name": "evil/../name",
+   "version": "1.0.0",
+   "publisherUsername": "mallory",
+   "createdAt": 1
+  },
+  "-Npk5": {
+   "name": "Http Client",
+   "version": "0.8.0",
+   "publisherUsername": "dlof",
+   "createdAt": 1700000000000
+  }
+ },
+ "extensions": {
+  "-Nex1": {
+   "name": "Dark Theme",
+   "version": "1.4.0",
+   "developerUsername": "dlof",
+   "developer": "Dlof Dev",
+   "type": "theme",
+   "releaseDate": 1790500000000,
+   "downloadCount": 950,
+   "likeCount": 61,
+   "ratingSum": 19,
+   "ratingCount": 4,
+   "description": "A dark editor theme tuned for Rin syntax."
+  }
+ }
+}

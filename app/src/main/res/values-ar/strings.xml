@@ -1,0 +1,409 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">RinStudio</string>
+    <string name="app_editor_title">Rin Editor</string>
+    <string name="action_run">Run</string>
+
+    <!-- RinFlow: الاسم الرسمي لميزة رِن لتصوير وتنفيذ الأنابيب (@container.pipe) بشكل مرئي حي -->
+    <string name="pipeline_runner_title">RinFlow</string>
+    <string name="pipeline_source_label">Source</string>
+    <string name="pipeline_node_source">Source</string>
+    <string name="pipeline_node_output">Final Output</string>
+    <string name="pipeline_status_running">RinFlow: Running…</string>
+    <string name="pipeline_status_success">RinFlow: Completed Successfully</string>
+    <string name="pipeline_status_success_timed">RinFlow: Completed in %1$d ms (real engine time)</string>
+    <string name="pipeline_status_error">RinFlow: Failed</string>
+    <string name="pipeline_status_idle">RinFlow: Not run yet</string>
+    <string name="pipeline_status_stopped">RinFlow: Stopped</string>
+    <string name="pipeline_no_block_found">No @container.pipe block was found in this code. Add one, then press Run again.</string>
+    <string name="pipeline_action_run">Run</string>
+    <string name="pipeline_action_stop">Stop</string>
+    <string name="pipeline_action_configure">Configure</string>
+    <string name="pipeline_action_load_sample">Load Example Pipeline</string>
+    <string name="pipeline_configure_title">RinFlow</string>
+    <string name="pipeline_configure_message">Container: %1$s\nStages: %2$d\nTimeout: %3$d s\n\nEach value shown in the diagram is produced by actually re-running your code through the native Rin engine, truncated at each stage of the pipe expression — nothing here is simulated.</string>
+
+    <!-- تصميم RinFlow الجديد: تدفق أفقي + شريط legend، بأسلوب لوحات CI/CD الاحترافية -->
+    <string name="pipeline_flow_label">rinflow — pipeline.trace</string>
+    <string name="pipeline_terminal_legend">✓ نجاح   ✗ فشل</string>
+    <string name="pipeline_legend_success">Passed</string>
+    <string name="pipeline_legend_failed">Failed</string>
+    <string name="pipeline_legend_node">RinFlow node</string>
+    <string name="pipeline_node_status_ok">Passed</string>
+    <string name="pipeline_node_status_error">Failed</string>
+    <!-- يظهر بعد الضغط على Run عندما يحتوي الكود الحالي على كتلة @container.pipe حقيقية -->
+    <string name="rinflow_detected_snackbar">RinFlow pipeline detected in this run</string>
+    <string name="rinflow_open_action">Open RinFlow</string>
+    <string name="action_clear">Clear</string>
+    <string name="action_open">Open</string>
+
+    <!-- شاشة انقطاع الاتصال بالإنترنت (تظهر تلقائياً في أي شاشة تحتاج شبكة) -->
+    <string name="no_connection_title">لا يوجد اتصال بالإنترنت</string>
+    <string name="no_connection_message">تحقّق من اتصال الواي فاي أو بيانات الجوال ثم أعد المحاولة</string>
+    <string name="action_retry">إعادة المحاولة</string>
+    <string name="action_save">Save</string>
+
+    <!-- شريط القوائم العلوي المضغوط (File / Edit / View / Run) — قوائم منسدلة بأسلوب
+         تطبيقات الكمبيوتر، لكن مصمَّمة لمس على الموبايل بدل شريط أزرار طويل -->
+    <string name="menu_file">File</string>
+    <string name="menu_edit">Edit</string>
+    <string name="menu_view">View</string>
+    <string name="menu_run">Run</string>
+    <string name="menu_file_new">New file</string>
+    <string name="menu_file_open">Open…</string>
+    <string name="menu_file_save">Save</string>
+    <string name="menu_file_projects">Projects</string>
+    <string name="menu_edit_undo">Undo</string>
+    <string name="menu_edit_redo">Redo</string>
+    <string name="menu_edit_find">Find &amp; Replace</string>
+    <string name="menu_edit_select_all">Select all</string>
+    <string name="menu_edit_clear_all">Clear editor</string>
+    <string name="menu_edit_toggle_comment">Toggle line comment</string>
+    <string name="menu_edit_duplicate_line">Duplicate line</string>
+    <string name="menu_edit_delete_line">Delete line</string>
+    <string name="menu_edit_move_line_up">Move line up</string>
+    <string name="menu_edit_move_line_down">Move line down</string>
+    <string name="menu_edit_indent">Indent selection</string>
+    <string name="menu_edit_unindent">Unindent selection</string>
+    <string name="menu_edit_insert_snippet">إدراج مقتطف Rin…</string>
+    <string name="menu_edit_sort_lines">ترتيب الأسطر</string>
+    <string name="menu_edit_join_line">دمج مع السطر التالي</string>
+    <string name="menu_edit_trim_now">حذف المسافات الزائدة الآن</string>
+    <string name="menu_edit_convert_tabs_now">تحويل التبويبات إلى مسافات الآن</string>
+    <string name="menu_view_zoom_in">Increase font size</string>
+    <string name="menu_view_zoom_out">Decrease font size</string>
+    <string name="menu_view_toggle_lines">Toggle line numbers</string>
+    <string name="menu_view_clear_console">Clear run history</string>
+    <string name="menu_view_go_to_line">Go to line…</string>
+    <string name="menu_view_outline">بنية الملف (الحاويات/الأقسام)…</string>
+    <string name="menu_view_fold_current">طيّ الكتلة الحالية</string>
+    <string name="menu_view_fold_all">طيّ الكل</string>
+    <string name="menu_view_unfold_all">فكّ طيّ الكل</string>
+    <string name="menu_view_toggle_whitespace">تبديل علامات المسافات</string>
+    <string name="menu_view_settings">فتح الإعدادات…</string>
+    <string name="exit_unsaved_title">تعديلات غير محفوظة</string>
+    <string name="exit_unsaved_message">لديك تعديلات غير محفوظة. ماذا تريد أن تفعل؟</string>
+    <string name="exit_unsaved_stay">البقاء</string>
+    <string name="exit_unsaved_discard">تجاهل</string>
+    <string name="exit_unsaved_save">حفظ</string>
+    <string name="menu_run_run">Run program</string>
+    <string name="menu_run_check_brackets">Check brackets</string>
+    <string name="menu_run_html_page">تشغيل كصفحة HTML</string>
+    <string name="menu_run_check_tags">فحص توازن وسوم الحاويات</string>
+    <string name="menu_run_auto_run">التشغيل التلقائي أثناء الكتابة</string>
+    <string name="auto_run_enabled_toast">تم تفعيل التشغيل التلقائي — تُحدَّث وحدة التحكم بعد توقفك عن الكتابة بقليل</string>
+    <string name="auto_run_disabled_toast">تم إيقاف التشغيل التلقائي</string>
+    <string name="snippets_dialog_title">إدراج مقتطف Rin</string>
+    <string name="outline_dialog_title">بنية الملف</string>
+    <string name="outline_empty_toast">لا توجد كتل @container أو Section أو Translations</string>
+    <string name="outline_line_format">السطر %1$d</string>
+    <string name="desc_explorer_quick">مستكشف المشروع</string>
+    <string name="explorer_panel_title">المستكشف</string>
+    <string name="explorer_close">إغلاق المستكشف</string>
+    <string name="explorer_tab_files">الملفات</string>
+    <string name="explorer_tab_outline">البنية</string>
+    <string name="explorer_no_project">افتح مشروعاً لتصفّح ملفاته.</string>
+    <string name="explorer_open_projects_action">فتح المشاريع…</string>
+    <string name="explorer_empty_folder">هذا المجلد فارغ.</string>
+    <string name="explorer_outline_empty">لا توجد كتل @container أو Section أو Translations.</string>
+    <string name="explorer_current_file_badge">مفتوح</string>
+    <string name="outline_line_range_format">الأسطر %1$d–%2$d</string>
+    <string name="outline_child_count_format">%1$d فرعي</string>
+    <string name="tags_balanced_toast">وسوم الحاويات متوازنة ✓</string>
+    <string name="tags_unbalanced_toast">وسم حاوية غير متوازن قرب السطر %1$d</string>
+    <string name="new_file_name">untitled.rin</string>
+    <string name="new_file_toast">New file</string>
+    <string name="desc_menu_file">File menu</string>
+    <string name="desc_menu_edit">Edit menu</string>
+    <string name="desc_menu_view">View menu</string>
+    <string name="desc_run_quick">Run</string>
+    <string name="desc_projects_quick">Projects</string>
+    <string name="editor_hint">Write Rin code here…</string>
+    <string name="file_unsaved">untitled.rin</string>
+    <string name="file_open_error">Could not open file</string>
+    <string name="file_save_error">Could not save file</string>
+    <string name="file_saved_toast">Saved: %1$s</string>
+    <string name="file_opened_toast">Opened: %1$s</string>
+
+    <!-- المحرر: تراجع/إعادة وبحث واستبدال -->
+    <string name="action_undo">Undo</string>
+    <string name="action_redo">Redo</string>
+    <string name="action_find">Find</string>
+    <string name="find_hint">Find…</string>
+    <string name="replace_hint">Replace with…</string>
+    <string name="btn_find_next">Next</string>
+    <string name="btn_find_prev">Prev</string>
+    <string name="btn_replace_one">Replace</string>
+    <string name="btn_replace_all">All</string>
+    <string name="find_not_found_toast">"Not found: %1$s"</string>
+    <string name="replaced_count_toast">Replaced %1$d occurrence(s)</string>
+    <string name="find_close_desc">Close find bar</string>
+    <string name="find_case_sensitive_desc">Toggle case-sensitive search</string>
+    <string name="find_case_sensitive_on_toast">Case-sensitive search: on</string>
+    <string name="find_case_sensitive_off_toast">Case-sensitive search: off</string>
+    <string name="find_regex_on_toast">بحث بتعبير نمطي: مفعّل</string>
+    <string name="find_regex_off_toast">بحث بتعبير نمطي: معطّل</string>
+    <string name="find_regex_invalid_toast">تعبير نمطي غير صالح</string>
+    <string name="find_case_sensitive_regex_desc">اضغط مطولاً: تبديل البحث بتعبير نمطي</string>
+    <string name="find_count_format">%1$d/%2$d</string>
+    <string name="find_count_none">0/0</string>
+    <string name="status_cursor_position">سطر %1$d، عمود %2$d</string>
+    <string name="status_cursor_position_selection">سطر %1$d، عمود %2$d (محدَّد %3$d)</string>
+    <string name="status_line_count">%1$d سطرًا</string>
+    <string name="no_changes_toast">لا تغييرات</string>
+    <string name="lines_sorted_toast">تم ترتيب الأسطر</string>
+    <string name="lines_joined_toast">تم دمج السطرين</string>
+    <string name="trailing_trimmed_toast">تم حذف المسافات الزائدة</string>
+    <string name="tabs_converted_toast">تم تحويل التبويبات إلى مسافات</string>
+    <string name="go_to_line_title">Go to line</string>
+    <string name="go_to_line_hint">Line number</string>
+    <string name="go_to_line_action">Go</string>
+    <string name="go_to_line_cancel">Cancel</string>
+    <string name="go_to_line_invalid_toast">Enter a valid line number</string>
+    <string name="brackets_balanced_toast">Brackets are balanced ✓</string>
+    <string name="brackets_unbalanced_toast">Unbalanced brackets near line %1$d</string>
+    <string name="line_deleted_toast">Line deleted</string>
+
+    <!-- قائمة التشغيل المجدولة (job queue) وسجل التنفيذ -->
+    <string name="console_title">Run Queue</string>
+    <string name="action_clear_console">Clear history</string>
+    <string name="no_jobs_yet">No runs yet — press Run to execute your Rin program.</string>
+    <string name="job_title_fmt">Run #%1$d</string>
+    <string name="job_status_queued">QUEUED</string>
+    <string name="job_status_running">RUNNING…</string>
+    <string name="job_status_success">SUCCESS</string>
+    <string name="job_status_error">ERROR</string>
+    <string name="job_status_timeout">TIMEOUT</string>
+    <string name="job_status_cancelled">CANCELLED</string>
+    <string name="job_duration_fmt">%1$d ms</string>
+    <string name="job_timeout_message">"[Timeout]: execution exceeded %1$d seconds and was abandoned"</string>
+    <string name="job_cancel_cta">Cancel this queued run</string>
+    <string name="job_queue_full_toast">Too many runs are already queued — wait for one to finish first</string>
+    <string name="job_pin_cta">Pin this run</string>
+    <string name="job_unpin_cta">Unpin this run</string>
+    <string name="job_copied_toast">Copied to clipboard</string>
+    <string name="job_toggle_expand_cta">طي/توسيع تفاصيل التشغيل</string>
+    <string name="job_stats_fmt">%1$d ms  •  %2$d حدث  •  %3$s  •  %4$d ملف</string>
+    <string name="job_details_cta">Details</string>
+    <string name="job_copy_cta">Copy</string>
+    <string name="job_share_cta">مشاركة</string>
+    <string name="job_rerun_cta">إعادة التشغيل</string>
+    <string name="job_rerun_toast">جارٍ إعادة تشغيل التشغيلة رقم %1$d…</string>
+    <string name="job_time_fmt">%1$s</string>
+    <string name="diag_reason_label">reason</string>
+    <string name="diag_expected_label">expected</string>
+    <string name="diag_found_label">found</string>
+    <string name="diag_suggestions_label">did you mean</string>
+    <string name="diag_hint_label">help</string>
+    <string name="diag_notes_label">note</string>
+
+    <!-- تنزيل الملفات الفعلية التي أنتجها save/installation إلى مجلد Downloads بالجهاز -->
+    <string name="download_results_label">النتائج الجاهزة للتنزيل</string>
+    <string name="download_button_fmt">%1$s · %2$s</string>
+    <string name="download_dialog_title">جارٍ التنزيل إلى الجهاز…</string>
+    <string name="download_status_copying">جارٍ نسخ البيانات فعلياً…</string>
+    <string name="download_status_done">تم التنزيل بنجاح ✓</string>
+    <string name="download_done_toast">تم حفظ %1$s في مجلد Downloads</string>
+    <string name="download_error_toast">تعذّر التنزيل: %1$s</string>
+    <string name="download_no_app_toast">لا يوجد تطبيق مناسب لفتح هذا النوع من الملفات</string>
+    <string name="download_permission_needed_toast">التطبيق يحتاج إذن التخزين لحفظ الملف في Downloads</string>
+    <string name="download_open_action">فتح</string>
+    <string name="sample_program">// Welcome to the Rin programming language!
+fun fib(n) {
+    if (n &lt; 2) { return n; }
+    return fib(n - 1) + fib(n - 2);
+}
+
+let i = 0;
+while (i &lt; 10) {
+    print \"fib(\" + i + \") = \" + fib(i);
+    i = i + 1;
+}
+
+let name = \"world\";
+print \"Hello, \" + name + \"!\";
+</string>
+
+    <!-- ===== شريط التنقل السفلي الموحّد ===== -->
+    <string name="nav_editor">المحرر</string>
+    <string name="nav_projects">المشاريع</string>
+    <string name="nav_store">المتجر</string>
+    <string name="nav_profile">حسابي</string>
+    <string name="nav_more">المزيد</string>
+
+    <!-- ===== شاشة "المزيد" (باقي الأقسام) ===== -->
+    <string name="more_screen_title">المزيد</string>
+    <string name="more_row_files_subtitle">تصفح ملفات المشروع</string>
+    <string name="more_row_libraries_subtitle">مكتبات lib/*.og.rin الخاصة بالمشروع</string>
+    <string name="more_row_pipeline_subtitle">تتبّع تنفيذ الأنابيب خطوة بخطوة</string>
+    <string name="more_row_extensions_subtitle">إضافات وأدوات رسمية للمحرر</string>
+    <string name="more_row_settings_subtitle">حجم الخط، أرقام الأسطر، وخيارات أخرى</string>
+    <string name="more_row_needs_project_toast">اختر مشروعاً أولاً</string>
+    <string name="more_row_apk_export_subtitle">صدّر مشروعك كملف APK موقّع وقابل للتثبيت</string>
+
+    <string name="apk_export_screen_title">تصدير APK</string>
+    <string name="apk_export_terminal_label">rinlang — apk.export</string>
+    <string name="apk_export_field_name_label">اسم التطبيق المعروض</string>
+    <string name="apk_export_field_name_hint">مثال: تطبيق المبيعات</string>
+    <string name="apk_export_field_entry_label">ملف البداية (Entry)</string>
+    <string name="apk_export_section_identity">الهوية</string>
+    <string name="apk_export_section_icon">الأيقونة</string>
+    <string name="apk_export_field_icon_hint">أيقونة مخصصة لتطبيقك على الشاشة الرئيسية (اختياري)</string>
+    <string name="apk_export_field_icon_from_sticker">🏷️ استُخدمت أيقونة من حاوية sticker في مشروعك تلقائياً — اضغط \"اختيار\" لاستبدالها</string>
+    <string name="apk_export_action_pick_icon">اختيار</string>
+    <string name="apk_export_section_splash">شاشة البداية</string>
+    <string name="apk_export_field_splash_hint">نص يظهر أسفل الشعار عند تشغيل التطبيق (اختياري)</string>
+    <string name="apk_export_section_compat">التوافق</string>
+    <string name="apk_export_field_min_sdk_label">الحد الأدنى لإصدار أندرويد</string>
+    <string name="apk_export_field_target_sdk_label">الإصدار المستهدف</string>
+    <string name="apk_export_section_build">البناء</string>
+    <string name="apk_export_action_build">بناء وتوقيع APK</string>
+    <string name="apk_export_action_install">تثبيت</string>
+    <string name="apk_install_allow_unknown_sources">اسمح بالتثبيت من هذا المصدر ثم ارجع واضغط «تثبيت» مرة أخرى</string>
+    <string name="apk_export_action_share">مشاركة</string>
+    <string name="apk_export_action_save">حفظ في التنزيلات</string>
+    <string name="apk_export_status_idle">جاهز للتصدير</string>
+    <string name="apk_export_status_building">جارٍ البناء…</string>
+    <string name="apk_export_status_success">تم البناء والتوقيع بنجاح</string>
+    <string name="apk_export_status_failed">فشل التصدير</string>
+    <string name="apk_export_no_entry_error">لا يوجد ملف .rin واحد على الأقل في هذا المشروع</string>
+    <string name="apk_export_icon_load_error">تعذّر تحميل الأيقونة المحدَّدة</string>
+    <string name="apk_export_sdk_range_error">الحد الأدنى لإصدار SDK يجب ألا يتجاوز الإصدار المستهدف</string>
+    <string name="apk_export_note_limitation">ملاحظة: اسم التطبيق وأيقونته على الشاشة الرئيسية للحزمة الناتجة يبقيان كما في RinStudio — هوية مشروعك الفعلية تظهر داخل شاشة تشغيله بعد فتحه. التوقيع حقيقي بمخطّطي v1 وv2 معاً (v2 يُتحقَّق ذاتياً تلقائياً، ويتراجع لـ v1 وحدها إن تعذّر ذلك) لأقصى ثقة تثبيت.</string>
+
+    <string name="more_row_rin_apps_subtitle">تصفّح كل تطبيقاتك المُصدَّرة سابقاً، ثبّتها أو شاركها أو أعد تصديرها</string>
+    <string name="rin_apps_screen_title">تطبيقات Rin</string>
+    <string name="rin_apps_empty_title">لا توجد تطبيقات مُصدَّرة بعد</string>
+    <string name="rin_apps_empty_hint">اضغط + لتصدير أول تطبيق من أحد مشاريعك</string>
+    <string name="rin_apps_more_actions">إجراءات إضافية</string>
+    <string name="rin_apps_count_format">%d تطبيق مُصدَّر</string>
+    <string name="rin_app_action_details">التفاصيل</string>
+    <string name="rin_app_action_reexport">إعادة تصدير</string>
+    <string name="rin_app_action_delete">حذف</string>
+    <string name="rin_app_meta_format">%1$s · %2$d ك.ب · %3$s · %4$s</string>
+    <string name="rin_app_delete_confirm">سيُحذف ملف الـ APK نهائياً من الجهاز. تثبيته الحالي على الجهاز (إن وُجد) لن يتأثر.</string>
+    <string name="rin_app_deleted_toast">تم حذف التطبيق من السجل</string>
+    <string name="rin_app_not_found_toast">تعذّر العثور على هذا التطبيق في السجل</string>
+    <string name="rin_app_settings_screen_title">إعدادات التطبيق</string>
+    <string name="rin_app_detail_project">المشروع</string>
+    <string name="rin_app_detail_package_id">معرّف الحزمة</string>
+    <string name="rin_app_detail_entry_file">ملف الدخول</string>
+    <string name="rin_app_detail_size">الحجم</string>
+    <string name="rin_app_detail_date">تاريخ التصدير</string>
+    <string name="rin_app_detail_signing">مخطّط التوقيع</string>
+    <string name="rin_app_detail_fingerprint">بصمة مفتاح التوقيع</string>
+    <string name="rin_app_detail_unavailable">غير متاح</string>
+    <string name="rin_app_signing_v1_v2">v1 + v2 (مُتحقَّق ذاتياً)</string>
+    <string name="rin_app_signing_v1_only">v1 فقط (تراجع تلقائي)</string>
+    <string name="exported_run_loading">جارٍ تشغيل المشروع…</string>
+    <string name="exported_run_error_prefix">خطأ أثناء التشغيل:</string>
+    <string name="exported_run_restart">إعادة التشغيل</string>
+
+    <!-- ===== اختيار الصورة الرمزية (أيقونة من مكتبة أو رفع من الاستوديو) ===== -->
+    <string name="avatar_picker_title">اختر صورتك الرمزية</string>
+    <string name="avatar_picker_subtitle">اختر أيقونة من المكتبة، أو ارفع صورة من الاستوديو</string>
+    <string name="avatar_picker_upload_studio">رفع صورة من الاستوديو</string>
+
+    <!-- ===== شاشة البداية (Splash) ===== -->
+    <string name="splash_tagline">لغة برمجة خفيفة وسريعة</string>
+
+    <!-- ===== المعاينة الحية (محرّك Indsintime / "Mirror Indsin") ===== -->
+    <string name="indsin_preview_title">معاينة حية</string>
+    <string name="indsin_live_label">مباشر</string>
+    <string name="indsin_close">إغلاق</string>
+    <string name="indsin_device_default">390px</string>
+    <string name="indsin_device_width_format">%1$dpx</string>
+    <string name="indsin_device_fit_screen">ملء الشاشة (العرض الكامل)</string>
+    <string name="indsin_toggle_grid">إظهار/إخفاء شبكة المحاذاة</string>
+    <string name="indsin_zoom_in">تكبير</string>
+    <string name="indsin_zoom_out">تصغير</string>
+    <string name="indsin_zoom_100">100%</string>
+    <string name="indsin_zoom_percent_format">%1$d%%</string>
+    <string name="indsin_link_open_failed">تعذر فتح الرابط: %1$s</string>
+    <string name="indsin_restart_session">إعادة تشغيل الجلسة</string>
+    <string name="indsin_session_restarted_toast">تمت إعادة تشغيل جلسة المعاينة الحية</string>
+    <string name="indsin_device_changed_toast">تم تغيير عرض الجهاز إلى %1$dpx — أُعيد تشغيل الجلسة</string>
+    <string name="indsin_internal_error">وصلت نتيجة غير قابلة للقراءة من المحرّك.</string>
+    <string name="indsin_unknown_error">خطأ غير معروف</string>
+    <string name="indsin_error_format">خطأ: %1$s</string>
+    <string name="indsin_error_line_format">خلل (Snag) في السطر %1$d: %2$s — ما زال يُعرض آخر إطار سليم</string>
+    <string name="indsin_stats_error_only">لا يوجد إطار سليم بعد — أصلح الخطأ أعلاه وتابع الكتابة.</string>
+    <string name="indsin_stats_idle">في انتظار أول عرض…</string>
+    <string name="indsin_stats_format">%1$d عنصر · تم العرض خلال %2$d مللي ثانية · إصابات الذاكرة المؤقتة %3$d · اضغط مطوّلاً على أي عنصر لفحصه</string>
+    <string name="indsin_inspector_title_format">%1$s · %2$s (السطر %3$d)</string>
+    <string name="indsin_view_detected_snackbar">تم اكتشاف واجهة Indsin — يتم فتح المعاينة الحية</string>
+    <string name="indsin_open_action">فتح</string>
+    <string name="menu_run_live_preview">معاينة حية</string>
+    <string name="indsin_no_view_toast">لا يوجد أي مقطع @view.&lt;Kind&gt;=name في هذا الكود بعد.</string>
+    <string name="indsin_navigate_missing_toast">الصفحة غير موجودة: %1$s</string>
+
+    <!-- ===== حوار لوج الكراش/الخطأ (انظر CrashHandler وErrorReporter وCrashReportActivity) ===== -->
+    <string name="crash_dialog_title_fatal">حدثت مشكلة في التطبيق</string>
+    <string name="crash_dialog_title_error">حدث خطأ</string>
+    <string name="crash_dialog_no_log">لا يوجد لوج متاح.</string>
+    <string name="crash_dialog_copy">نسخ اللوج</string>
+    <string name="crash_dialog_copied">تم نسخ اللوج</string>
+    <string name="crash_dialog_close_app">إغلاق التطبيق</string>
+    <string name="crash_dialog_dismiss">إغلاق</string>
+
+    <string name="job_search_hint">ابحث في ناتج/أحداث هذا التشغيل</string>
+    <string name="job_tab_output_fmt">الناتج (%1$d)</string>
+    <string name="job_tab_events_fmt">الأحداث (%1$d)</string>
+    <string name="job_tab_diagnostics_fmt">التشخيص (%1$d)</string>
+    <string name="job_no_diagnostics">لا توجد تشخيصات لهذا التشغيل.</string>
+    <string name="job_filter_all">الكل</string>
+    <string name="job_filter_output">ناتج</string>
+    <string name="job_filter_info">معلومة</string>
+    <string name="job_filter_warning">تحذير</string>
+    <string name="job_filter_error">خطأ</string>
+    <string name="job_filter_debug">تصحيح</string>
+    <string name="job_no_results">لا نتائج مطابقة لهذا البحث/الفلتر.</string>
+    <string name="print_image_load_failed_fmt">تعذّر عرض الصورة: %1$s (الملف غير موجود أو تالف)</string>
+    <string name="action_rename_symbol">إعادة تسمية</string>
+    <string name="rename_dialog_title">إعادة تسمية الرمز</string>
+    <string name="rename_dialog_hint">الاسم الجديد</string>
+
+    <!-- لوحة مفاتيح المحرر (activity_main.xml): مفاتيح تنقّل عامة -->
+    <string name="key_tab">Tab</string>
+    <string name="key_home">Home</string>
+    <string name="key_end">End</string>
+    <string name="key_left">تحريك لليسار</string>
+    <string name="key_right">تحريك لليمين</string>
+    <string name="key_up">تحريك لأعلى</string>
+    <string name="key_down">تحريك لأسفل</string>
+    <string name="key_backspace">حذف للخلف</string>
+    <string name="link_copied">تم النسخ</string>
+    <string name="link_share">مشاركة</string>
+    <string name="link_copy">نسخ</string>
+    <string name="rin_input_title">إدخال</string>
+    <string name="rin_input_hint">اكتب إجابتك</string>
+    <string name="rin_input_default_prompt">البرنامج ينتظر إدخالاً</string>
+
+    <!-- نسخ/قص/لصق المحرر -->
+    <string name="clip_empty">الحافظة فارغة</string>
+    <string name="clip_large_title">لصق كبير</string>
+    <string name="clip_large_message_fmt">لصق %1$d سطر (حوالي %2$d ك.ب)؟ قد يستغرق لحظات.</string>
+    <string name="clip_large_confirm">لصق</string>
+    <string name="clip_history_title">سجل الحافظة</string>
+    <string name="clip_history_empty">سجل الحافظة فارغ</string>
+    <string name="clip_history_clear">مسح الكل</string>
+    <string name="clip_history_meta_fmt">%1$d سطر · %2$d حرف</string>
+    <string name="clip_history_whole_lines">أسطر كاملة</string>
+    <string name="action_copy_line">نسخ السطر</string>
+    <string name="action_cut_line">قص السطر</string>
+    <string name="action_paste_plain">لصق كما هو</string>
+    <string name="action_clip_history">سجل الحافظة…</string>
+    <string name="action_duplicate">تكرار</string>
+    <string name="action_select_line">تحديد السطر</string>
+    <string name="action_copy_markdown">نسخ كـ Markdown</string>
+    <string name="indsin_background_menu">خلفية الشاشة</string>
+    <string name="indsin_background_theme">افتراضي الثيم</string>
+    <string name="indsin_background_black">أسود</string>
+    <string name="indsin_background_midnight">منتصف الليل</string>
+    <string name="indsin_background_slate">رمادي داكن</string>
+    <string name="indsin_background_paper">ورقي</string>
+    <string name="indsin_background_white">أبيض</string>
+    <string name="indsin_background_changed_toast">تم تغيير الخلفية الافتراضية</string>
+    <string name="indsin_background_aurora">تدرّج الشفق</string>
+    <string name="indsin_background_ocean">تدرّج المحيط</string>
+</resources>

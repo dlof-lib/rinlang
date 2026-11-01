@@ -1,0 +1,194 @@
+// ============================================================================
+//  lib/rinplot_adv.og.rin — الرسوم الإحصائية المتخصصة
+//
+//  @version 1.0.0
+//  @category data
+//  @prefix pl_
+//
+//  فوق rinplot (النواة) وrinstat_adv: ROC · Kaplan-Meier · ACF/PACF · forest ·
+//  كثافة ثنائية · ridgeline · مصفوفة التباس · توقّع · كثير حدود، وتقارير كاملة:
+//  pl_logit_report · pl_ts_report · pl_survival_report.
+//  استيراد:  @import "lib/rinplot_adv.og.rin";
+// ============================================================================
+@import "lib/rinplot.og.rin";
+@import "lib/rinstat_adv.og.rin";
+
+fun pl_roc(ax, roc, label) {
+    pl_line(ax, [0, 1], [0, 1], {"color": "#999999", "dash": true, "width": 1});
+    pl_line(ax, roc["fpr"], roc["tpr"], {"color": "#0072B2", "width": 3, "label": label + " AUC=" + st_fmt(roc["auc"], 3)});
+    ax["xlabel"] = "False positive rate"; ax["ylabel"] = "True positive rate";
+    ax["legend"] = "lower right";
+    pl_xlim(ax, 0, 1); pl_ylim(ax, 0, 1.02);
+    return ax;
+}
+// منحنى بقاء بدرجات + نطاق ثقة (Greenwood)
+fun pl_km(ax, km, label, color) {
+    let xs = []; let ys = []; let lo = []; let hi = [];
+    let i = 0;
+    while (i < len(km["t"])) {
+        if (i > 0) { push(xs, km["t"][i]); push(ys, km["s"][i - 1]); push(lo, km["lo"][i - 1]); push(hi, km["hi"][i - 1]); }
+        push(xs, km["t"][i]); push(ys, km["s"][i]); push(lo, km["lo"][i]); push(hi, km["hi"][i]);
+        i = i + 1;
+    }
+    pl_band(ax, xs, lo, hi, {"color": color, "alpha": 0.15});
+    pl_line(ax, xs, ys, {"color": color, "width": 3, "label": label});
+    ax["xlabel"] = "Time"; ax["ylabel"] = "Survival probability";
+    pl_ylim(ax, 0, 1.03);
+    return ax;
+}
+fun pl_acf(ax, vals, n, title) {
+    let idx = []; let i = 0;
+    while (i < len(vals)) { push(idx, i); i = i + 1; }
+    pl_bar(ax, idx, vals, {"w": 0.25, "color": "#0072B2"});
+    let band = 1.959964 / sqrt(n);
+    pl_hline(ax, band, {"color": "#D55E00"}); pl_hline(ax, -band, {"color": "#D55E00"});
+    ax["title"] = title; ax["xlabel"] = "Lag"; ax["legend"] = "none";
+    return ax;
+}
+// forest: تقديرات + فواصل ثقة أفقية، labels على المحور الرأسي (الأول في الأعلى)
+fun pl_forest(ax, labels, est, lo, hi, ref) {
+    let k = len(labels);
+    let ys = []; let i = 0;
+    while (i < k) { push(ys, k - i); i = i + 1; }
+    let rev = [];
+    i = k - 1;
+    while (i >= 0) { push(rev, labels[i]); i = i - 1; }
+    push(ax["layers"], {"type": "hrange", "y": ys, "est": est, "lo": lo, "hi": hi, "color": "#0072B2", "label": ""});
+    ax["ycats"] = rev;
+    if (ref != nil) { pl_vline(ax, ref, {"color": "#D55E00"}); }
+    ax["legend"] = "none";
+    return ax;
+}
+fun pl_logit_forest(ax, fit) {
+    let labs = []; let est = []; let lo = []; let hi = [];
+    let i = 1;
+    while (i < len(fit["coefs"])) {
+        let c = fit["coefs"][i];
+        push(labs, c["name"]); push(est, c["or"]); push(lo, c["or_lo"]); push(hi, c["or_hi"]);
+        i = i + 1;
+    }
+    pl_forest(ax, labs, est, lo, hi, 1);
+    pl_logx(ax);
+    ax["xlabel"] = "Odds ratio (95% CI, log scale)";
+    return ax;
+}
+// كثافة ثنائية (st_kde2) كخريطة نقطية + نقاط البيانات
+fun pl_density2d(ax, x, y, o) {
+    let k = st_kde2(x, y, 36, 36);
+    let zm = 0;
+    for (let r in k["z"]) { for (let v in r) { if (v > zm) { zm = v; } } }
+    push(ax["layers"], {"type": "raster", "gx": k["x"], "gy": k["y"], "z": k["z"], "zmax": zm,
+                        "cmap": pl_opt(o, "cmap", "viridis"), "color": "#000000", "label": ""});
+    if (pl_opt(o, "points", true)) { pl_scatter(ax, x, y, {"size": 2, "color": "#ffffff", "alpha": 0.5}); }
+    ax["legend"] = "none";
+    return ax;
+}
+// ridgeline: كثافة كل مجموعة مُزاحة رأسياً — groups: [{name,values}]
+fun pl_ridgeline(ax, groups) {
+    let names = [];
+    let k = len(groups);
+    let i = 0;
+    while (i < k) {
+        let g = groups[i];
+        let kd = st_kde(g["values"], 70);
+        let mx = maxOf(kd["y"]);
+        let base = k - i;
+        let top = []; let bs = [];
+        for (let v in kd["y"]) { push(top, base + 0.9 * v / mx); push(bs, base); }
+        let col = pl_palette()[i % len(pl_palette())];
+        pl_band(ax, kd["x"], bs, top, {"color": col, "alpha": 0.6});
+        pl_line(ax, kd["x"], top, {"color": col, "width": 2});
+        push(names, g["name"]);
+        i = i + 1;
+    }
+    let rev = []; i = k - 1;
+    while (i >= 0) { push(rev, names[i]); i = i - 1; }
+    ax["ycats"] = rev;
+    ax["ypad"] = 0.5;
+    ax["legend"] = "none";
+    return ax;
+}
+fun pl_confusion(ax, conf) {
+    pl_heat(ax, conf["matrix"], ["actual 0", "actual 1"], ["pred 0", "pred 1"], {"cmap": "blues", "digits": 0});
+    return ax;
+}
+// سلسلة + توقّع (خط متقطّع يبدأ من آخر نقطة) + نطاق ±1.96*RMSE تقريبي
+fun pl_forecast(ax, y, fc, label) {
+    let n = len(y);
+    let xs = []; let i = 0;
+    while (i < n) { push(xs, i + 1); i = i + 1; }
+    pl_line(ax, xs, y, {"color": "#555555", "width": 2, "label": "observed"});
+    let fx = [n]; let fy = [y[n - 1]];
+    i = 0;
+    while (i < len(fc)) { push(fx, n + i + 1); push(fy, fc[i]); i = i + 1; }
+    pl_line(ax, fx, fy, {"color": "#D55E00", "width": 3, "dash": true, "label": label});
+    ax["legend"] = "upper left";
+    return ax;
+}
+fun pl_polyfit(ax, x, y, deg) {
+    let f = st_polyreg(x, y, deg);
+    pl_scatter(ax, x, y, {});
+    let lo = minOf(x); let hi = maxOf(x);
+    let gx = []; let gy = []; let i = 0;
+    while (i < 60) {
+        let v = lo + (hi - lo) * i / 59;
+        push(gx, v); push(gy, algoPolyEval(f["coeffs"], v));
+        i = i + 1;
+    }
+    pl_line(ax, gx, gy, {"color": "#D55E00", "label": "deg " + str(deg) + "  R2=" + st_fmt(f["r2"], 3), "width": 3});
+    ax["legend"] = "upper left";
+    return f;
+}
+
+// ---------------------------------------------------------------------------
+//  تقارير كاملة
+// ---------------------------------------------------------------------------
+// انحدار لوجستي: OR + ROC + مصفوفة التباس + توزيع الاحتمالات حسب الفئة
+fun pl_logit_report(fit, y, title) {
+    let fig = pl_figure(1150, 780, 2, 2, title);
+    let a1 = pl_axes(fig, 0, 0); pl_title(a1, "Odds ratios"); pl_logit_forest(a1, fit);
+    let roc = st_roc(y, fit["probs"]);
+    let a2 = pl_axes(fig, 0, 1); pl_title(a2, "ROC"); pl_roc(a2, roc, "model");
+    let pred = []; for (let p in fit["probs"]) { if (p >= 0.5) { push(pred, 1); } else { push(pred, 0); } }
+    let conf = st_confusion(y, pred);
+    let a3 = pl_axes(fig, 1, 0); pl_title(a3, "Confusion (acc " + st_fmt(conf["accuracy"], 2) + ")"); pl_confusion(a3, conf);
+    let a4 = pl_axes(fig, 1, 1); pl_title(a4, "Predicted probability");
+    let p0 = []; let p1 = []; let i = 0;
+    while (i < len(y)) { if (y[i] == 1) { push(p1, fit["probs"][i]); } else { push(p0, fit["probs"][i]); } i = i + 1; }
+    pl_hist(a4, p0, {"label": "class 0", "kde": false, "bins": 10});
+    pl_hist(a4, p1, {"label": "class 1", "kde": false, "bins": 10});
+    a4["legend"] = "upper center";
+    return fig;
+}
+// سلاسل زمنية: توقّع Holt + ACF + PACF + بواقي تمهيد
+fun pl_ts_report(y, horizon, title) {
+    let fig = pl_figure(1150, 780, 2, 2, title);
+    let h = st_holt(y, horizon);
+    let a1 = pl_axes(fig, 0, 0); pl_title(a1, "Holt forecast"); pl_forecast(a1, y, h["forecast"], "forecast");
+    let lag = min(20, floor(len(y) / 2));
+    let a2 = pl_axes(fig, 0, 1); pl_acf(a2, st_acf(y, lag), len(y), "ACF");
+    let a3 = pl_axes(fig, 1, 0); pl_acf(a3, st_pacf(y, lag), len(y), "PACF");
+    let d = st_diff(y, 1);
+    let a4 = pl_axes(fig, 1, 1); pl_title(a4, "First difference");
+    let xs = []; let i = 0; while (i < len(d)) { push(xs, i + 2); i = i + 1; }
+    pl_line(a4, xs, d, {"color": "#009E73"}); pl_hline(a4, 0, {});
+    a4["legend"] = "none";
+    return fig;
+}
+// بقاء: groups = [{name,t,e}] — KM لكل مجموعة + log-rank عند اثنتين
+fun pl_survival_report(groups, title) {
+    let fig = pl_figure(1000, 620, 1, 1, "");
+    let ax = pl_axes(fig, 0, 0);
+    let i = 0;
+    for (let g in groups) {
+        pl_km(ax, st_km(g["t"], g["e"]), g["name"], pl_palette()[i % len(pl_palette())]);
+        i = i + 1;
+    }
+    ax["title"] = title;
+    if (len(groups) == 2) {
+        let lr = st_logrank(groups[0]["t"], groups[0]["e"], groups[1]["t"], groups[1]["e"]);
+        if (lr != nil) { ax["title"] = title + "   log-rank p=" + st_fmt_p(lr["p"]); }
+    }
+    ax["legend"] = "lower left";
+    return fig;
+}

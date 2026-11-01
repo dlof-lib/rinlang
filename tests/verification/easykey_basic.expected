@@ -1,0 +1,25 @@
+🗂️ Containers.Group = A
+📋 container.datalist = items
+🧾 document (إدراج) -> 1 = {"n": 1}
+🧾 document (إدراج) -> 2 = {"n": 2}
+✅ .end/container.datalist (items)
+📦 container = app
+✅ .end/container (app)
+✅ .end/Containers.Group (A) [تحتوي: items, app]
+🗂️ Containers.Group = B
+📋 container.datalist = items
+🧾 document (إدراج) -> 1 = {"n": 10}
+✅ .end/container.datalist (items)
+📦 container = app
+✅ .end/container (app)
+✅ .end/Containers.Group (B) [تحتوي: items, app]
+from A / from B
+keys: app | bee | path=B.app
+A.items=["1", "2"] B.items=["1"]
+sql: 2 / 1
+bee=from B exists=true exists(B.app)=true
+get by name=from A by path=from B
+📦 container = settings
+✅ .end/container (settings)
+cfg=dark key=cfg
+no key => default: items

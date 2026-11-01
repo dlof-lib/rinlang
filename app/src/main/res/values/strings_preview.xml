@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="preview_live">● حيّة</string>
+    <string name="preview_reload">إعادة التوليد</string>
+    <string name="preview_close">إغلاق</string>
+    <string name="preview_error">خطأ</string>
+</resources>

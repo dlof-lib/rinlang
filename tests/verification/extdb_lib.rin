@@ -1,0 +1,79 @@
+// tests/verification/extdb_lib.rin — extdb: external databases for containers, with a named
+// connection provider ("rtdb" / "pgrest"). Needs the mock servers in tests/tools/extdb_mock.py
+// (python3 tests/tools/extdb_mock.py 8765) — it emulates tree-style REST (rtdb) and PostgREST (pgrest).
+@import "extdb";
+
+let base = "http://127.0.0.1:8765";
+print "providers=" + xdb_providers();
+
+// ---- 1) provider name resolution + validation ------------------------------------------
+try { xdb_connect("oracle", "x", {}); } catch (e) { print "caught: unknown provider"; }
+try { xdb_connect("rtdb", "x", {}); } catch (e) { print "caught: rtdb needs url"; }
+try { xdb_connect("pgrest", "x", {"url": base}); } catch (e) { print "caught: pgrest needs key"; }
+
+// ---- 2) rtdb provider -----------------------------------------------------------------
+let fb = xdb_connect("RTDB", "fbdb", {"url": base + "/rt", "auth": "SECRET"});
+print "fb provider=" + fb["provider"] + " ping=" + xdb_ping(fb);
+xdb_put(fb, "users", "u1", {"name": "Sara", "age": 30});
+xdb_put(fb, "users", "u2", {"name": "Omar", "age": 41});
+print "fb get=" + xdb_get(fb, "users", "u1");
+print "fb has=" + xdb_has(fb, "users", "u2") + "/" + xdb_has(fb, "users", "zz") + " missing=" + xdb_get(fb, "users", "zz");
+print "fb update=" + xdb_update(fb, "users", "u1", {"age": 31}) + "/" + xdb_update(fb, "users", "zz", {"age": 1});
+print "fb after update=" + xdb_get(fb, "users", "u1");
+let k = xdb_add(fb, "users", {"name": "Lina", "age": 25});
+print "fb add key ok=" + (len(k) > 0) + " name=" + xdb_get(fb, "users", k)["name"];
+print "fb count=" + xdb_count(fb, "users");
+print "fb find=" + xdb_find(fb, "users", "name", "Omar")[0]["_id"];
+print "fb list=" + xdb_list(fb, "users", {"order": "age", "desc": true, "limit": 2});
+try { xdb_insert(fb, "users", "u1", {"name": "X"}); } catch (e) { print "caught: fb duplicate"; }
+print "fb delete=" + xdb_delete(fb, "users", k) + "/" + xdb_delete(fb, "users", k);
+try { xdb_get(fb, "bad.table", "u1"); } catch (e) { print "caught: fb bad path"; }
+let badfb = xdb_connect("rtdb", "badfb", {"url": base + "/rt", "auth": "WRONG"});
+try { xdb_get(badfb, "users", "u1"); } catch (e) { print "caught: fb permission " + e["message"]; }
+xdb_close(badfb);
+
+// ---- 3) pgrest provider -----------------------------------------------------------------
+let sb = xdb_connect("pgrest", "sbdb", {"url": base, "key": "ANON"});
+print "sb provider=" + sb["provider"] + " ping=" + xdb_ping(sb);
+print "sb get seed=" + xdb_get(sb, "users", "u1");
+xdb_put(sb, "users", "u2", {"name": "Omar", "age": 41});
+xdb_put(sb, "users", "u2", {"age": 42});
+print "sb upsert=" + xdb_get(sb, "users", "u2");
+print "sb has=" + xdb_has(sb, "users", "u2") + "/" + xdb_has(sb, "users", "zz");
+print "sb update=" + xdb_update(sb, "users", "u1", {"age": 31}) + "/" + xdb_update(sb, "users", "zz", {"age": 1});
+let nid = xdb_add(sb, "users", {"name": "Lina", "age": 25});
+print "sb add id ok=" + (len(nid) > 0);
+print "sb count=" + xdb_count(sb, "users") + " ids=" + xdb_ids(sb, "users");
+print "sb find=" + xdb_find(sb, "users", "name", "Omar")[0]["_id"];
+print "sb list=" + xdb_list(sb, "users", {"order": "age", "desc": true, "limit": 2});
+try { xdb_insert(sb, "users", "u1", {"name": "X"}); } catch (e) { print "caught: sb duplicate"; }
+print "sb delete=" + xdb_delete(sb, "users", nid) + "/" + xdb_delete(sb, "users", nid);
+try { xdb_get(sb, "ghost", "1"); } catch (e) { print "caught: sb no table"; }
+try { xdb_get(sb, "users; drop", "1"); } catch (e) { print "caught: sb bad name"; }
+print "sb rpc=" + xdb_rpc(sb, "hello", {"x": 1});
+try { xdb_rpc(fb, "hello", {}); } catch (e) { print "caught: rpc only pgrest"; }
+
+// ---- 4) containers: pull / push between a remote DB and container.doc ---------------------------
+print "pull fb=" + xdb_pull(fb, "users", "FbUsers", nil) + " kind=" + container.kind("FbUsers");
+print "pull sb=" + xdb_pull(sb, "users", "SbUsers", nil) + " docs=" + docIds("SbUsers");
+insertDoc("FbUsers", "u3", {"name": "Zed", "age": 50});
+print "push fb=" + xdb_push(fb, "users", "FbUsers", nil) + " has u3=" + xdb_has(fb, "users", "u3");
+print "push sb as new table=" + xdb_push(sb, "orders", "SbUsers", nil) + " count=" + xdb_count(sb, "orders");
+deleteDoc("FbUsers", "u2");
+xdb_push(fb, "users", "FbUsers", {"prune": true});
+print "fb after prune=" + xdb_ids(fb, "users");
+
+// ---- 5) bound objects living inside a container ---------------------------------------------------
+@container=app
+    let db = xdb_open("pgrest", "sbbound", {"url": base, "key": "ANON"});
+    let users = db.table("users");
+    fun names() {
+        let out = [];
+        for (let d in users.all()) { push(out, d["name"]); }
+        return out;
+    }
+.end/container
+print "bound provider=" + app.db.provider + " names=" + app.names();
+print "connections=" + xdb_connections() + " openCount=" + ExtDB.catalog.openCount;
+xdb_close(fb);
+try { xdb_get(fb, "users", "u1"); } catch (e) { print "caught: closed"; }

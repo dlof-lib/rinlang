@@ -1,0 +1,263 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- شاشة "تعديل المكتبة المنشورة": بيانات الحزمة (الاسم/الإصدار/الوصف/التصنيف) + README.md +
+     مستكشف ملفات بمجلدات (إنشاء مجلد/ملف، إضافة ملفات، فتح بالمحرر) + زر حفظ ونشر التعديلات. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/rin_background">
+
+    <include layout="@layout/toolbar_app" />
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="20dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/edit_package_subtitle"
+                android:textColor="@color/rin_editor_hint"
+                android:textSize="12.5sp"
+                android:layout_marginBottom="16dp" />
+
+            <!-- ============ بيانات الحزمة ============ -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/hint_package_name"
+                android:textColor="@color/rin_on_toolbar"
+                android:textSize="12sp"
+                android:layout_marginBottom="4dp" />
+
+            <EditText
+                android:id="@+id/edtEditName"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:background="@drawable/bg_input_field"
+                android:paddingHorizontal="16dp"
+                android:textColor="@color/rin_editor_text"
+                android:textColorHint="@color/rin_editor_hint"
+                android:textSize="14sp"
+                android:singleLine="true" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:text="@string/hint_package_version"
+                android:textColor="@color/rin_on_toolbar"
+                android:textSize="12sp"
+                android:layout_marginBottom="4dp" />
+
+            <EditText
+                android:id="@+id/edtEditVersion"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:background="@drawable/bg_input_field"
+                android:paddingHorizontal="16dp"
+                android:textColor="@color/rin_editor_text"
+                android:textColorHint="@color/rin_editor_hint"
+                android:textSize="14sp"
+                android:singleLine="true" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:text="@string/hint_package_description"
+                android:textColor="@color/rin_on_toolbar"
+                android:textSize="12sp"
+                android:layout_marginBottom="4dp" />
+
+            <EditText
+                android:id="@+id/edtEditDescription"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="96dp"
+                android:background="@drawable/bg_input_field"
+                android:padding="16dp"
+                android:gravity="top|start"
+                android:inputType="textMultiLine"
+                android:textColor="@color/rin_editor_text"
+                android:textColorHint="@color/rin_editor_hint"
+                android:textSize="14sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:text="@string/edit_package_category"
+                android:textColor="@color/rin_on_toolbar"
+                android:textSize="12sp"
+                android:layout_marginBottom="4dp" />
+
+            <com.google.android.material.chip.ChipGroup
+                android:id="@+id/chipGroupEditCategory"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+
+            <!-- ============ README.md ============ -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="22dp"
+                android:text="@string/edit_package_readme_title"
+                android:textColor="@color/rin_on_toolbar"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/btnEditReadme"
+                    android:layout_width="0dp"
+                    android:layout_height="46dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_btn_primary"
+                    android:text="@string/edit_package_edit_readme"
+                    android:textAllCaps="false"
+                    android:textColor="@android:color/white"
+                    android:textStyle="bold" />
+
+                <Button
+                    android:id="@+id/btnReplaceReadme"
+                    android:layout_width="0dp"
+                    android:layout_height="46dp"
+                    android:layout_weight="1"
+                    android:layout_marginStart="8dp"
+                    android:background="@drawable/bg_btn_outline"
+                    android:text="@string/edit_package_replace_readme"
+                    android:textAllCaps="false"
+                    android:textColor="@color/rin_accent" />
+            </LinearLayout>
+
+            <!-- ============ الملفات والمجلدات ============ -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="22dp"
+                android:text="@string/edit_package_files_title"
+                android:textColor="@color/rin_on_toolbar"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/btnNewFolder"
+                    android:layout_width="0dp"
+                    android:layout_height="42dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_btn_outline"
+                    android:text="@string/edit_package_new_folder"
+                    android:textAllCaps="false"
+                    android:textSize="12sp"
+                    android:textColor="@color/rin_accent" />
+
+                <Button
+                    android:id="@+id/btnNewFile"
+                    android:layout_width="0dp"
+                    android:layout_height="42dp"
+                    android:layout_weight="1"
+                    android:layout_marginStart="6dp"
+                    android:background="@drawable/bg_btn_outline"
+                    android:text="@string/edit_package_new_file"
+                    android:textAllCaps="false"
+                    android:textSize="12sp"
+                    android:textColor="@color/rin_accent" />
+
+                <Button
+                    android:id="@+id/btnAddFiles"
+                    android:layout_width="0dp"
+                    android:layout_height="42dp"
+                    android:layout_weight="1"
+                    android:layout_marginStart="6dp"
+                    android:background="@drawable/bg_btn_outline"
+                    android:text="@string/edit_package_add_files"
+                    android:textAllCaps="false"
+                    android:textSize="12sp"
+                    android:textColor="@color/rin_accent" />
+            </LinearLayout>
+
+            <!-- شريط المسار (breadcrumb): اسم الحزمة / مجلد / مجلد فرعي — كل جزء قابل للمس -->
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:scrollbars="none">
+
+                <LinearLayout
+                    android:id="@+id/containerEditBreadcrumb"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layoutDirection="ltr" />
+            </HorizontalScrollView>
+
+            <LinearLayout
+                android:id="@+id/containerEditFiles"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:orientation="vertical"
+                android:background="@drawable/bg_input_field" />
+
+            <TextView
+                android:id="@+id/txtEditFilesEmpty"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:padding="16dp"
+                android:gravity="center"
+                android:text="@string/edit_package_folder_empty"
+                android:textColor="@color/rin_editor_hint"
+                android:textSize="12.5sp"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/txtEditPendingHint"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:text="@string/edit_package_unsaved_hint"
+                android:textColor="@color/rin_editor_hint"
+                android:textSize="11.5sp" />
+
+            <Button
+                android:id="@+id/btnSaveChanges"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:layout_marginTop="14dp"
+                android:background="@drawable/bg_run_button_premium"
+                android:text="@string/edit_package_save_publish"
+                android:textAllCaps="false"
+                android:textColor="@android:color/white"
+                android:textStyle="bold"
+                android:elevation="0dp" />
+
+            <ProgressBar
+                android:id="@+id/progressEditPackage"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_marginTop="16dp"
+                android:layout_gravity="center"
+                android:visibility="gone" />
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</LinearLayout>

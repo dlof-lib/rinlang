@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="20dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/edit_profile_name_hint"
+        android:textColor="@color/rin_on_toolbar"
+        android:textSize="12sp"
+        android:layout_marginBottom="4dp" />
+
+    <EditText
+        android:id="@+id/edtProfileName"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:background="@drawable/bg_input_field"
+        android:paddingHorizontal="16dp"
+        android:textColor="@color/rin_editor_text"
+        android:textColorHint="@color/rin_editor_hint"
+        android:textSize="14sp"
+        android:singleLine="true" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:text="@string/edit_profile_bio_hint"
+        android:textColor="@color/rin_on_toolbar"
+        android:textSize="12sp"
+        android:layout_marginBottom="4dp" />
+
+    <EditText
+        android:id="@+id/edtProfileBio"
+        android:layout_width="match_parent"
+        android:layout_height="90dp"
+        android:background="@drawable/bg_input_field"
+        android:padding="16dp"
+        android:gravity="top|start"
+        android:inputType="textMultiLine"
+        android:textColor="@color/rin_editor_text"
+        android:textColorHint="@color/rin_editor_hint"
+        android:textSize="14sp" />
+
+</LinearLayout>

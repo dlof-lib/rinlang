@@ -1,0 +1,59 @@
+// pre/post: عقد انتقال حول الإسناد (docs/pre-post.md)
+
+// --- pre: يُسأل قبل الكتابة، x = القيمة القديمة و new = المرشّحة ---
+pre door = "closed" if old != "locked";
+door = "open";    print door;           // open
+door = "locked";  print door;           // locked   (الخروج من open مسموح)
+door = "open";    print door;           // locked   (محجوب: القديمة locked)
+print door.ok;                          // false
+print door.refused;                     // open
+print door.pre;                         // locked
+print door.post;                        // open  (المحاولة المرفوضة)
+print door.kind;                        // pre
+
+// --- post: يُسأل بعد الكتابة، x = الجديدة و old = القديمة ---
+post stock = 10 if new >= 0 and new <= old + 100;
+stock = 50;   print stock;              // 50
+stock = -5;   print stock;              // 50   (تراجع)
+stock = 500;  print stock;              // 50   (قفزة أكبر من 100)
+print stock.ok;                         // false
+stock = 80;   print stock.ok;           // true
+print stock.pre;                        // 50
+print stock.post;                       // 80
+print stock.accepted;                   // 2   (50 و 80)
+print stock.rejected;                   // 2
+
+// --- الاسم نفسه داخل الشرط: pre => القديمة ، post => الجديدة ---
+pre a = 5 if a > 0;                     // يكفي أن القديمة موجبة
+a = -3; print a;                        // -3 (القديمة 5 موجبة)
+a = 9;  print a;                        // -3 (القديمة -3 ليست موجبة: محجوب)
+post b = 5 if b > 0;                    // الجديدة موجبة
+b = -3; print b;                        // 5
+
+// --- الشرطان معًا ---
+pre lvl = 1 if old < 5 post new <= old + 1;
+lvl = 2; lvl = 4; print lvl;            // 2 (القفزة 2->4 كسرت post)
+lvl = 3; print lvl;                     // 3
+inc lvl; inc lvl; print lvl;            // 5
+inc lvl; print lvl;                     // 5 (pre: القديمة 5 ليست < 5)
+post lvl2 = 1 if new <= old + 1 pre old < 5;   // الترتيب المعاكس
+lvl2 = 2; print lvl2;                   // 2
+
+// --- strict ---
+post age = 20 if new >= 0 and new < 150 strict;
+age = 30; print age;                    // 30
+trial { age = 500; } else { print "caught"; print age; }   // caught / 30
+
+// --- جرس يرنّ فقط عند النجاح + trial يعيد العدّادات ---
+pre p = 0 if old < 3;
+bell p (o, n) { print "bell " + str(o) + "->" + str(n); }
+p = 1; p = 2; p = 3; p = 4; p = 5; print p;   // bell 0->1 ، 1->2 ، 2->3 ؛ ثم 3 (محجوب)
+trial { p = 9; abort; }
+print p.rejected;                        // 2
+
+// --- القيمة الابتدائية ---
+pre first = 100 if old < 0;              // pre لا يُسأل عن القيمة الابتدائية
+print first;                              // 100
+// --- أسماء عادية تبقى صالحة ---
+let pre = 1; let post = 2; print pre + post;   // 3
+fun pre2(post) { return post; }  print pre2(7);

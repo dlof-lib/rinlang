@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rinlang.dev/schemas/rinpak-signature-1.json",
+  "title": "RinPak signature (META-INF/signature.json)",
+  "type": "object",
+  "required": [
+    "algorithm",
+    "signs",
+    "keyId",
+    "publicKey",
+    "signature"
+  ],
+  "properties": {
+    "algorithm": {
+      "const": "Ed25519"
+    },
+    "signs": {
+      "const": "META-INF/manifest.json"
+    },
+    "keyId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{16}$"
+    },
+    "publicKey": {
+      "type": "string",
+      "description": "base64 of 32 raw bytes"
+    },
+    "signature": {
+      "type": "string",
+      "description": "base64 of 64 raw bytes over 'RinPak-v1\\0' + manifest bytes"
+    }
+  }
+}

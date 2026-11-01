@@ -1,0 +1,137 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>الجبر الخطي للمهندسين — `mat*` و`vec* — Rin</title>
+<meta name="description" content="توثيق لغة البرمجة Rin"><link rel="icon" href="../assets/brand/icon-32.png">
+<link rel="stylesheet" href="assets/style.css"></head><body>
+<header><button id="mn" aria-label="القائمة">☰</button><a class="logo" href="index.html"><img src="../assets/brand/icon-48.png" alt="" width="26">Rin</a>
+<input id="q" type="search" placeholder="ابحث في التوثيق…" autocomplete="off"><button id="th" aria-label="الوضع">◐</button>
+<a class="gh" href="https://github.com/dlof-lib/rinlang">GitHub</a><div id="res"></div></header>
+<div class="wrap"><nav id="sb"><details ><summary>ابدأ هنا</summary><a href="getting-started.html">البداية</a><a href="syntax.html">القواعد النحوية العامة</a><a href="variables.html">let`، مصفوفات، قواميس، نطاق</a><a href="template-strings.html">النصوص القالبية (متغيّرات داخل النص)</a><a href="input.html">إدخال المستخدم (Input)</a><a href="control-flow.html">الشروط، الحلقات، `goal`/`achieve</a><a href="loops.html">حلقات Rin — Loops v2</a><a href="functions.html">fun`/`return`، التكرار الذاتي</a><a href="enums.html">enum`: قوائم اختيار مغلقة</a></details><details ><summary>اللغة</summary><a href="language-reference.html">المرجع الشامل وخريطة ترابط المفاهيم</a><a href="objects.html">class`/`struct`، `.object()`، `@Object`، `document</a><a href="oop.html">البرمجة الكائنية الموسَّعة (Rin 1.0)</a><a href="containers.html">دليل `@container` / `@element` / `@loop</a><a href="table.html">الجدول (`@table` / `@container.table`) ودوال اللغة عليه</a><a href="set.html">Set`: نوع المجموعة الأساسي</a><a href="pipelines.html">عامل الأنابيب `|&gt;</a><a href="RECKON.html">reckon`: مفهوم حسابي بسطرين</a><a href="let-plus.html">let` المطوَّر</a><a href="living-variables.html">المتغيرات الحيّة (Living Variables)</a><a href="label-define.html">label` و`define` (تسمية وتعريف)</a><a href="block-frames.html">بداية الكتل ونهايتها (Block Frames)</a><a href="compare_ops.html">معاملات المقارنة `/=` و `=/=` و `=/</a><a href="max_min.html">max / min family</a><a href="scope-guarantees.html">ضمانات النطاق: `finally` · `defer` · `catch … when` · `rethrow</a><a href="key_terms_and_builtins.html">Rin KEY_TERMS and Built-in Conditions</a><a href="number_builtins.html">Rin Number Built-ins</a></details><details ><summary>الواجهات (Indsin)</summary><a href="indsin.html">Indsin — Interface Design</a><a href="indsin_rin.html">indsin يعتمد على لغة Rin</a><a href="indsin_expansion.html">Indsin — التوسعة الاحترافية (Design System v2)</a><a href="indsin_object.html">indsin-object — API reference</a><a href="indsin_media.html">Indsin Media — اختيار الوسائط ورفعها</a><a href="indsin_icons.html">مكتبة أيقونات indsin (متجهية)</a><a href="indsin_tooling.html">indsin tooling — icon, file association, syntax highlighting</a><a href="indsinweb.html">IndsinWeb — مكتبة WebView والروابط لـ indsin</a><a href="RIN_ELEMENTS.html">دليل `@element.*` الكامل</a><a href="events-effects.html">الأحداث والتأثيرات (Events &amp; Effects) — محرك Indsin UI</a><a href="banner.html">Banner: إشعار شريطي</a><a href="simple-style.html">Rin Simple Style</a></details><details ><summary>بيئة التشغيل</summary><a href="runtime.html">وقت تشغيل Rin (Rin Runtime) · المرجع الرسمي</a><a href="standard-library.html">المكتبة القياسية (`lib/*.og.rin`)</a><a href="errors.html">نظام الأخطاء: أكواد، `try`/`catch`/`throw</a><a href="ERROR_SYSTEM.html">نظام التشخيص: البنية الداخلية + جدول الأكواد الكامل</a><a href="storage.html">تخزين دائم</a><a href="http.html">شبكات</a><a href="env.html">ربط Rin بملف `.env</a><a href="terminal.html">الطرفية التفاعلية — `rin terminal</a><a href="vm.html">RinVM — آلة Rin الافتراضية (بايتكود)</a><a href="rinflow.html">RinFlow: طبقة تنفيذ التدفّق المهيكل</a><a href="MAKE_UNIT.html">@make.(name)`: وحدة بسياسة قدرات صريحة</a><a href="MAKE_MEDIA.html">فيديو · صوت · API · إزالة الخلفية · قراءة النص من الصور</a><a href="TIME.html">مفهوم `time`: الزمن كقيمة من الدرجة الأولى</a><a href="native-additions.html">دوال Rin الأصلية الجديدة (Rin 1.0)</a></details><details ><summary>الحاويات وقواعد البيانات</summary><a href="container_advanced.html">Rin Container Advanced Built-ins</a><a href="container_pro.html">Rin Container Pro</a><a href="container_sql.html">RIN CONTAINER SQL (RCSQL)</a><a href="cross-file-containers.html">استدعاء إعلانات من ملف آخر</a></details><details ><summary>الحزم والتكامل</summary><a href="api.html">واجهة C المسطَّحة (Embedding API)</a><a href="android.html">استضافة Rin على أندرويد</a><a href="packages-and-interop.html">Rin 1.0 — المكتبات والحزم وجسر C++ وJSON واختبارات rintest</a><a href="rinpak-format.html">RinPak — حزمة مشروع Rin (`.rinpak`)</a><a href="html-projects.html">مشاريع HTML في Rin — الربط بين index.html وملف الحاوية</a><a href="project-og-urin.html">project.og.urin` — البيانات الوصفية لمشروع Rin</a><a href="CONTENT_PACKS.html">حزم المحتوى القابلة للتنزيل (Content Packs)</a><a href="previewkit.html">previewkit — معاينة حيّة لملفات PDF / Markdown / TypeScript</a></details><details open><summary>المكتبات المتخصصة</summary><a href="rinml.html">RinML / RinDF / RinAI — الذكاء الاصطناعي وتحليل البيانات في Rin</a><a href="STATS.html">RinStat — التحليل الإحصائي (`lib/rinstat.og.rin`)</a><a href="STATS_ADV.html">RinStat المتقدّم + RinAuto</a><a href="LINALG.html" class=on>الجبر الخطي للمهندسين — `mat*` و`vec*</a><a href="PLOT.html">RinPlot — الرسوم البيانية الإحصائية (`lib/rinplot.og.rin`)</a><a href="ALGO.html">تطوير الخوارزميات والحساب العددي — `algo*</a><a href="NUMBER.html">مفهوم `number` في Rin</a><a href="boat.html">&quot;Boat&quot;: مفاهيم أساسية مجمَّعة</a><a href="passkit.html">passkit — passwords, encryption, databases and a tag language</a><a href="passkit-crypto-db.html">Passkit feature catalog: encryption, databases and container linking</a><a href="hash-family.html">عائلة `#` — مفاهيم ودوال جديدة تبدأ بعلامة `#</a><a href="image-draw.html">إنشاء الصور في Rin — رسم وحفظ PNG وlog كصورة</a><a href="image-terminal.html">طباعة الصور في الـ terminal — `printImage` / `imageAnsi` / `imageInfo</a></details><details ><summary>المشروع</summary><a href="CONTRIBUTING.html">المساهمة في Rin</a><a href="CODE_OF_CONDUCT.html">قواعد السلوك</a><a href="SECURITY.html">سياسة الأمان</a><a href="SUPPORT.html">الحصول على المساعدة</a><a href="TRADEMARKS.html">سياسة العلامة التجارية — Trademark Policy</a><a href="THIRD_PARTY_NOTICES.html">إشعارات المكوّنات الخارجية — Third-Party Notices</a></details><details ><summary>مراجع إضافية</summary><a href="ANDROID_VERSIONS.html">حزم RinStudio لكل إصدار أندرويد</a><a href="TOKEN.html">مفهوم `token` في Rin</a><a href="TOOLCHAIN.html">Rin Professional Language Toolchain</a><a href="TOOLCHAIN_UPGRADE.html">Toolchain Upgrade — 2026-09</a><a href="architecture.html">المعمارية وبنية المستودع</a><a href="base-accept.html">base` و`accept`: متغيّران يخدمان `if</a><a href="channel47.html">channel47 — لغة وصف البيانات والإعدادات</a><a href="ci.html">CI وأدوات المستودع</a><a href="loop-templates.html">قوالب الحلقات `@tmpl</a><a href="pre-post.html">pre` و`post` (ما قبل / ما بعد): عقد انتقال حول الإسناد</a><a href="print-fonts.html">خطوط `print` — bold / italic / underline وغيرها</a><a href="print-image-terminal.html">طباعة الصور كنص في الطرفية</a><a href="print-templates.html">قوالب الطباعة `@tmpl ... print` — قوالب نصية خطية وتنسيقية</a><a href="rdoc.html">rdoc — Documentation Container</a><a href="rdoc-reference.html">وثيقة rdoc الشاملة — Documentation Container</a><a href="screenshots.html">لقطات من RinStudio</a></details></nav>
+<main><article><h1 id="mat-vec">الجبر الخطي للمهندسين — <code>mat*</code> و<code>vec*</code><a class="headerlink" href="#mat-vec" title="Permanent link">#</a></h1>
+<p>54 دالة أصلية (C++) فوق <strong>المصفوفة العادية في Rin</strong> (مصفوفة صفوف، والمتجه مصفوفة أرقام). لا نوع جديد، فتعمل مباشرةً مع <code>lib/matrix.og.rin</code> (<code>mat_*</code>) و<code>lib/math.og.rin</code> (<code>matrixFrom</code>, <code>solveLinear</code>) و<code>lib/rinml.og.rin</code> (<code>nd_*</code>) دون أي تحويل. المصدر: <code>rin_extra_natives10.cpp</code>.</p>
+<h2 id="_1">كيف تتكامل مع ما هو موجود<a class="headerlink" href="#_1" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الموجود</th>
+<th>كيف تعيد الدوال الجديدة استعماله</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>numberSum</code> (جمع Neumaier)</td>
+<td><code>matTrace</code>، <code>vecSum</code>، <code>vecNorm(p)</code> تجمع بنفس الخوارزمية — لا تراكم أخطاء</td>
+</tr>
+<tr>
+<td><code>numberApprox</code> (rel=1e-9, abs=1e-12)</td>
+<td><code>matApprox</code> يطبّق نفس الدلالة على كل عنصر</td>
+</tr>
+<tr>
+<td><code>numberFormat</code></td>
+<td><code>matFormat</code> يستدعيه لكل خلية: <code>matFormat(M, {decimals: 3, group: ","})</code></td>
+</tr>
+<tr>
+<td>نظام التشخيص <code>E0004/E0007/E0035</code></td>
+<td>كل الأخطاء قابلة للالتقاط بـ <code>try/catch</code> وتذكر الدالة والصف/البُعد</td>
+</tr>
+<tr>
+<td><code>lib/matrix.og.rin</code></td>
+<td><code>mat_mul</code> تبقى كما هي (بطيئة وصغيرة)؛ <code>matMul</code> أصلية وتقبل متجهات وسلسلة</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="_2">الإنشاء والفحص<a class="headerlink" href="#_2" title="Permanent link">#</a></h2>
+<p><code>matZeros(r[,c])</code> · <code>matOnes</code> · <code>matEye(n[,m])</code> · <code>matDiag(v|M)</code> · <code>matBuild(r,c,fn(i,j))</code> · <code>matRandom(r,c,{seed,min,max,normal,mean,std,int})</code> (حتمية بـ seed على كل المنصّات) · <code>matHilbert(n)</code> · <code>matVandermonde(v[,cols])</code> · <code>matShape(M)</code> · <code>matCheck(M)</code> (بلا استثناء) · <code>matIs(M, "symmetric"|"orthogonal"|"diagonal"|"identity"|"upper"|"lower"|"positive-definite"|"singular"|"square"|"zero"[,tol])</code>.</p>
+<h2 id="_3">العمليات<a class="headerlink" href="#_3" title="Permanent link">#</a></h2>
+<p><code>matAdd</code> <code>matSub</code> <code>matHadamard</code> <code>matScale</code> <code>matTranspose</code> <code>matTrace</code> <code>matKron</code> <code>matMap(M, fn(x,i,j))</code> · <code>matPow(M,k)</code> (سالبة عبر المعكوس) · <code>matNorm(M, 1|2|"inf"|"fro"|"max"|"nuc")</code> · <code>matApprox</code> · <code>matFormat</code>.</p>
+<p><code>matMul(A, B, ...)</code>: مصفوفة×مصفوفة، مصفوفة×متجه ← متجه، متجه×مصفوفة ← متجه. متجه×متجه يُرفض برسالة تدلّ على <code>vecDot</code>.</p>
+<h2 id="_4">التحليلات<a class="headerlink" href="#_4" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الدالة</th>
+<th>الناتج</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>matLU(M)</code></td>
+<td><code>{L, U, P, perm, sign, singular}</code> حيث <code>P·M = L·U</code></td>
+</tr>
+<tr>
+<td><code>matQR(M[,{reduced}])</code></td>
+<td><code>{Q, R}</code> (Householder)</td>
+</tr>
+<tr>
+<td><code>matCholesky(M)</code></td>
+<td><code>L</code> حيث <code>M = L·Lᵀ</code> (خطأ واضح إن لم تكن SPD)</td>
+</tr>
+<tr>
+<td><code>matEigSym(M)</code></td>
+<td><code>{values (تنازلياً), vectors (أعمدة)}</code> — Jacobi</td>
+</tr>
+<tr>
+<td><code>matEigvals(M[,{real}])</code></td>
+<td>قيم ذاتية لمصفوفة حقيقية عامة: <code>[{re,im}]</code> (توازن + Hessenberg + QR مُزاح)</td>
+</tr>
+<tr>
+<td><code>matEig(M)</code></td>
+<td><code>{values:[{re,im}], vectors:[متجه\|nil]}</code>: المتجه الذاتي للقيم الحقيقية (طوله 1)، و<code>nil</code> للمركّبة</td>
+</tr>
+<tr>
+<td><code>matSVD(M)</code></td>
+<td><code>{U, S, V, rank}</code> حيث <code>M = U·diag(S)·Vᵀ</code></td>
+</tr>
+<tr>
+<td><code>matRank</code> · <code>matCond(M[,p])</code> · <code>matDet</code> · <code>matInv</code></td>
+<td>رتبة، شرطية (<code>Infinity</code> للمنفردة)، محدّد، معكوس</td>
+</tr>
+<tr>
+<td><code>matPinv(M)</code> · <code>matNull(M)</code> · <code>matRref(M)</code></td>
+<td>مور–بنروز، فضاء الصفر، الصيغة الدرجية المختزلة</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="_5">الحل<a class="headerlink" href="#_5" title="Permanent link">#</a></h2>
+<ul>
+<li><code>matSolve(A, b[,{info:true}])</code>: مربعة ← LU بتدوير جزئي (منفردة ← خطأ يقترح <code>matLstsq</code>)، غير مربعة ← أقل المربعات. <code>b</code> متجه أو مصفوفة.</li>
+<li><code>matLstsq(A, b)</code> ← <code>{x, residual, rank}</code> (أصغر نظيم عند نقص الرتبة).</li>
+<li><code>matSolveIter(A, b, {method: "cg"|"jacobi"|"gauss-seidel"|"sor", tol, maxIter, omega, x0})</code> ← <code>{x, iterations, residual, converged}</code>.</li>
+<li><code>matPowerIter(M)</code> ← القيمة الذاتية المهيمنة.</li>
+</ul>
+<h2 id="_6">المتجهات<a class="headerlink" href="#_6" title="Permanent link">#</a></h2>
+<p><code>vecDot</code> (مُعوَّض الدقة Dot2: <code>vecDot([1e16,1,-1e16],[1,1,1]) == 1</code>) · <code>vecNorm(v[,p])</code> (بلا فيض: <code>vecNorm([3e200,4e200]) == 5e200</code>) · <code>vecCross</code> · <code>vecNormalize</code> · <code>vecAngle</code> (مستقرّة) · <code>vecProject</code> · <code>vecAdd</code> <code>vecSub</code> <code>vecScale</code> · <code>vecDist</code> · <code>vecLinspace</code> · <code>vecSum</code>.</p>
+<h2 id="_7">مثال<a class="headerlink" href="#_7" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">let A = [[4, 1, 0], [1, 3, 1], [0, 1, 2]];
+let b = [1, 2, 3];
+let x = matSolve(A, b);
+print matFormat([x], {decimals: 4});                  // [ 0.2222  0.1111  1.4444 ]
+print matApprox(matMul(A, x), b);                      // true
+print matCond(A);                                      // رقم الشرطية
+let e = matEigSym(A);  print e.values;                 // تنازلياً
+let s = matSVD(A);     print matRank(A);
+</code></pre>
+<h2 id="_8">الدقة والحدود<a class="headerlink" href="#_8" title="Permanent link">#</a></h2>
+<ul>
+<li>الأعمدة/الصفوف تبدأ من 0. المصفوفات كثيفة؛ الكلفة O(n³) لمعظم التحليلات (<code>matSVD</code> بـ Jacobi أبطأ لكنه دقيق جداً للقيم الصغيرة).</li>
+<li>منفردة تعني ركيزة ≤ <code>n·eps·max|A|</code>. الرتبة/الشرطية/<code>pinv</code> تستعمل عتبة <code>max(m,n)·σ₁·eps</code> أو <code>tol</code> الممرَّر.</li>
+<li>اتفاقيات الإشارة: أكبر مركّبة في كل متجه ذاتي موجبة؛ قطر <code>R</code> في QR قد يكون سالباً.</li>
+<li>المتجهات الذاتية لغير المتناظرة تُحسب للقيم الحقيقية فقط (<code>matEig</code>)؛ المصفوفات المركّبة والمتناثرة غير مدعومة.</li>
+<li>الأداء المقيس (Linux): ضرب 400×400 ≈ 63 ms، حلّ 400 مجهول ≈ 21 ms، SVD 100×100 ≈ 19 ms، قيم ذاتية 200×200 ≈ 22 ms.</li>
+<li>الاختبار: <code>tests/verification/linalg_algo.rin</code> (تحقّق من القيم مقابل NumPy، وخصائص <code>P·A=L·U</code> و<code>Q·R=A</code> و<code>A·v=λ·v</code> و<code>U·S·Vᵀ=A</code> على مصفوفات عشوائية طويلة وعريضة ومربعة).</li>
+</ul></article>
+<div class="pnav"><a class="pn" href="STATS_ADV.html">→ RinStat المتقدّم + RinAuto</a><a class="pn" href="PLOT.html">RinPlot — الرسوم البيانية الإحصائية (`lib/rinplot.og.rin`) ←</a></div><p class="edit"><a href="https://github.com/dlof-lib/rinlang/edit/main/docs/LINALG.md">✎ عدّل هذه الصفحة على GitHub</a></p>
+<footer>Rin 1.0.0 · رخصة MIT</footer></main>
+<aside id="toc"><b>في هذه الصفحة</b><div class="toc">
+<ul>
+<li><a href="#_1">كيف تتكامل مع ما هو موجود</a></li>
+<li><a href="#_2">الإنشاء والفحص</a></li>
+<li><a href="#_3">العمليات</a></li>
+<li><a href="#_4">التحليلات</a></li>
+<li><a href="#_5">الحل</a></li>
+<li><a href="#_6">المتجهات</a></li>
+<li><a href="#_7">مثال</a></li>
+<li><a href="#_8">الدقة والحدود</a></li>
+</ul>
+</div>
+</aside></div>
+<script src="assets/app.js"></script></body></html>

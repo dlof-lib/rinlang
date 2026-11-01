@@ -1,0 +1,25 @@
+// tests/verification/easykey_more.rin — easy_key لمجموعة وحجم، وتعارض اسم مجموعتين، والوصول بالنقطة عبر المفتاح
+@Volume=Store
+    easy_key = "st";
+    @Containers.Group=Shop
+        easy_key = "shp";
+        @container=app
+            let v = "store-shop-app";
+            easy_key = "app1";
+        .end/container
+    .end/Containers.Group
+.end/Volume
+
+@Volume=Other
+    @Containers.Group=Shop
+        @container=app
+            let v = "other-shop-app";
+        .end/container
+    .end/Containers.Group
+.end/Volume
+
+print "paths: " + Store.Shop.app.v + " | " + Other.Shop.app.v;
+print "by key: " + st.Shop.app.v + " | " + shp.app.v + " | " + app1.v;
+print "natives by key: " + groupMembers("shp") + " " + volumeMembers("st");
+print "container.get by key: " + container.get("app1", "v");
+print "same-named group no longer clobbers: " + groupMembers("Shop") + " / " + groupMembers("Other.Shop");

@@ -1,0 +1,163 @@
+// ============================================================================
+//  lib/compose_store.og.rin — مخزن حالة تفاعلي (مساعد لـ compose)
+//
+//  مخزن واحد يجمع الحالة + المشتركين + القيم المشتقّة + التراجع، ويتصل بالحاويات.
+//  الحالة تُعدَّل دائماً بشكل غير مُعدِّل (setIn)، فالحالات القديمة تبقى سليمة للتراجع.
+//
+//    storeNew(initial)                  -> مخزن (map) — لا تلمس حقوله مباشرة
+//    storeGet(s, path)  storeState(s)   -> قراءة
+//    storeSet(s, path, v)  storeUpdate(s, path, f)  storeMerge(s, map)  storeReplace(s, state)
+//    storeSubscribe(s, path, fn)        -> معرّف الاشتراك؛ fn(new, old, path) عند تغيّر القيمة
+//    storeUnsubscribe(s, id)
+//    storeComputed(s, name, fn)         -> قيمة مشتقّة تُحسب عند الطلب وتُخزَّن حتى يتغيّر شيء
+//    storeRead(s, name)                 -> قراءة قيمة مشتقّة
+//    storeBatch(s, fn)                  -> تجميع تعديلات؛ الإشعارات تُرسل مرة واحدة في النهاية
+//    storeUndo(s)  storeRedo(s)  storeCanUndo(s)  storeHistoryLength(s)
+//    storeToContainer(s, path, name, key)    -> يدفع قيمة المسار إلى حقل حاوية كلما تغيّرت
+//    storeFromContainer(s, path, name, key)  -> يراقب حقل حاوية ويكتب قيمه في المخزن
+//
+//  استيراد:  @import "lib/compose_store.og.rin";   (تستورد compose + compose_path)
+// ============================================================================
+@import "compose";
+@import "compose_path";
+
+fun storeNew(initial) {
+    return {
+        "state": initial == nil ? {} : initial,
+        "subs": [],
+        "nextId": 1,
+        "computed": {},
+        "version": 0,
+        "past": [],
+        "future": [],
+        "batchDepth": 0,
+        "pending": []
+    };
+}
+
+fun storeState(s) { return s["state"]; }
+
+fun storeGet(s, path) { return getIn(s["state"], path, nil); }
+
+// أرسل الإشعارات للمشتركين المتأثرين بين حالتين
+fun _notify(s, before, after) {
+    let subs = s["subs"];
+    let i = 0;
+    while (i < len(subs)) {
+        let sub = subs[i];
+        let oldV = getIn(before, sub["path"], nil);
+        let newV = getIn(after, sub["path"], nil);
+        if (oldV != newV) { sub["fn"](newV, oldV, sub["path"]); }
+        i = i + 1;
+    }
+    return nil;
+}
+
+// طبّق حالة جديدة: سجّل للتراجع، وأشعر (أو أجّل داخل batch)
+fun _commit(s, newState, recordHistory) {
+    let before = s["state"];
+    if (before == newState) { return s; }
+    if (recordHistory) {
+        push(s["past"], before);
+        s["future"] = [];
+    }
+    s["state"] = newState;
+    s["version"] = s["version"] + 1;
+    if (s["batchDepth"] > 0) {
+        if (len(s["pending"]) == 0) { push(s["pending"], before); }
+    } else { _notify(s, before, newState); }
+    return s;
+}
+
+fun storeSet(s, path, value) { return _commit(s, setIn(s["state"], path, value), true); }
+
+fun storeUpdate(s, path, f) { return _commit(s, updateIn(s["state"], path, f), true); }
+
+fun storeMerge(s, m) { return _commit(s, mergeWith(s["state"], m, "deep"), true); }
+
+fun storeReplace(s, state) { return _commit(s, state, true); }
+
+fun storeSubscribe(s, path, fn) {
+    let id = s["nextId"];
+    s["nextId"] = id + 1;
+    push(s["subs"], {"id": id, "path": path, "fn": fn});
+    return id;
+}
+
+fun storeUnsubscribe(s, id) {
+    let keep = [];
+    let i = 0;
+    while (i < len(s["subs"])) {
+        if (s["subs"][i]["id"] != id) { push(keep, s["subs"][i]); }
+        i = i + 1;
+    }
+    let removed = len(keep) != len(s["subs"]);
+    s["subs"] = keep;
+    return removed;
+}
+
+// قيمة مشتقّة: fn(state) تُحسب عند storeRead فقط إن تغيّر version منذ آخر حساب
+fun storeComputed(s, name, fn) {
+    s["computed"][name] = {"fn": fn, "version": -1, "value": nil};
+    return s;
+}
+
+fun storeRead(s, name) {
+    let c = s["computed"][name];
+    if (c["version"] != s["version"]) {
+        c["value"] = c["fn"](s["state"]);
+        c["version"] = s["version"];
+    }
+    return c["value"];
+}
+
+// storeBatch: كل التعديلات داخل fn تُصدِر إشعاراً واحداً بالمقارنة بين الحالة الأولى والأخيرة
+fun storeBatch(s, fn) {
+    s["batchDepth"] = s["batchDepth"] + 1;
+    let failed = false;
+    let why = nil;
+    try { fn(s); } catch (e) { failed = true; why = e; }
+    s["batchDepth"] = s["batchDepth"] - 1;
+    if (s["batchDepth"] == 0 and len(s["pending"]) > 0) {
+        let before = s["pending"][0];
+        s["pending"] = [];
+        _notify(s, before, s["state"]);
+    }
+    if (failed) { throw why; }
+    return s;
+}
+
+fun storeCanUndo(s) { return len(s["past"]) > 0; }
+fun storeCanRedo(s) { return len(s["future"]) > 0; }
+fun storeHistoryLength(s) { return len(s["past"]); }
+
+fun storeUndo(s) {
+    if (len(s["past"]) == 0) { return s; }
+    let prev = pop(s["past"]);
+    push(s["future"], s["state"]);
+    _commit(s, prev, false);
+    return s;
+}
+
+fun storeRedo(s) {
+    if (len(s["future"]) == 0) { return s; }
+    let nxt = pop(s["future"]);
+    push(s["past"], s["state"]);
+    _commit(s, nxt, false);
+    return s;
+}
+
+// المخزن -> حقل حاوية: كلما تغيّرت قيمة المسار تُكتب في container[key]. يُرجع معرّف الاشتراك.
+fun storeToContainer(s, path, name, key) {
+    if (!container.exists(name)) { throw "storeToContainer: الحاوية غير موجودة: " + name; }
+    container.set(name, key, storeGet(s, path));
+    return storeSubscribe(s, path, fun(newV, oldV, p) { container.set(name, key, newV); });
+}
+
+// حقل حاوية -> المخزن: أي تغيير في container[key] يُكتب في المسار. يُرجع معرّف المراقبة.
+fun storeFromContainer(s, path, name, key) {
+    if (!container.exists(name)) { throw "storeFromContainer: الحاوية غير موجودة: " + name; }
+    return oop.watchContainer(name, key, fun(newValue, oldValue, k, c) {
+        storeSet(s, path, newValue);
+    });
+}

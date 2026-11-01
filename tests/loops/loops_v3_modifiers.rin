@@ -1,0 +1,45 @@
+each x in [1, 2, 3, 4, 5, 6] skip 1 take 3 { print "a" + x; }
+each x in [1, 2, 3, 4, 5, 6] where x % 2 == 0 take 2 { print "b" + x; }
+each x in [5, 6, 7, 8, 9] until x > 7 { print "u" + x; }
+each x in [5, 6, 7, 8, 9] while x < 8 { print "w" + x; }
+each x in [1, 2, 3] take 0 { print "never"; }
+each x in [3, 1, 2] sorted { print "s" + x; }
+each x in [3, 1, 2] sorted desc { print "d" + x; }
+each w in ["ccc", "a", "bb"] sorted by len(w) { print w; }
+each w in ["ccc", "a", "bb"] sorted by len(w) desc { print w; }
+each x in [1, 2, 2, 3, 1] unique { print "q" + x; }
+each x in [[1, 2], [3]] flat { print "f" + x; }
+each x in [1, 2] chain [3] chain [4, 5] { print "c" + x; }
+each i in 5 downto 3 { print "dn" + i; }
+each i in 10 downto 1 step 4 { print "ds" + i; }
+each i in 1 downto 5 { print "never"; }
+each x, i in ["a", "b"] from 1 { print i + x; }
+each a, b in [1, 2] cross ["x", "y"] { print a + b; }
+each a, b in [1, 2, 3] pairs { print a + "-" + b; }
+each a, b in [] pairs { print "never"; }
+each a, b in [1] cross [] { print "never"; }
+each c in "hello" unique sorted { print c; }
+print [each x in [5, 3, 8, 1] sorted take 2 yield x * 10];
+let src = [3, 1, 2];
+each x in src sorted { }
+print src;
+// for ... nobreak (== #done): runs only when the loop was not broken
+each n in [4, 6, 8] { if (n % 2 == 1) { print "odd found"; break; } } nobreak { print "all even"; }
+each n in [4, 5, 8] { if (n % 2 == 1) { print "odd found"; break; } } nobreak { print "never"; }
+let i = 0;
+while (i < 2) { i = i + 1; } nobreak { print "while done"; }
+// labels combined with take / until
+outer: each a in [1, 2, 3] take 2 {
+    each b in [1, 2, 3] until b > 2 {
+        if (b == 2) { continue outer; }
+        print a + "," + b;
+    }
+}
+// words stay ordinary names
+let take = 5; let skip = 2; let sorted = 1;
+print take + skip + sorted;
+each x in [1] { print take; }
+// errors
+let neg = -1;
+try { each x in [1] take neg { } } catch (e) { print e["message"]; }
+try { each x in [1, "a"] sorted { } } catch (e) { print "mixed rejected"; }

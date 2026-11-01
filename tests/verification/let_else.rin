@@ -1,0 +1,27 @@
+// let_else.rin — اختبار تحقّق لـ docs/let-plus.md
+fun find(k) { if (k == "a") { return 1; } return nil; }
+fun f1(k) {
+    let v = find(k) else { return "missing " + k; };
+    return "found " + v;
+}
+print f1("a"); print f1("b");
+fun f2(m) {
+    let {id, name} = m else { return "bad shape"; };
+    return id + ":" + name;
+}
+print f2({"id": 1, "name": "x"}); print f2(nil); print f2(5);
+let total = 0;
+for (let item in [1, nil, 3, nil, 5]) {
+    let v = item else { continue; };
+    total = total + v;
+}
+print total;
+let i = 0;
+while (true) { i = i + 1; let z = ((i < 3) and 1) or nil else { break; }; }
+print i;
+fun bad(k) { let v = find(k) else { print "no exit"; }; return v; }
+try { bad("zzz"); } catch (e) { print e.code + " " + e.message; }
+try { let [a, b] = nil; } catch (e) { print e.code + " " + e.message; }
+try { let {a} = [1]; } catch (e) { print e.code + " " + e.message; }
+try { let [a] = {"k": 1}; } catch (e) { print e.code + " " + e.message; }
+try { throw "boom"; } catch (e) { print "plain throw still ok"; }

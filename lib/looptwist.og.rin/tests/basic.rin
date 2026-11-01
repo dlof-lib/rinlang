@@ -1,0 +1,100 @@
+@import "looptwist";
+print lt_upto(5);
+print lt_rangeBy(2, 10, 3);
+print lt_rangeBy(10, 0, -4);
+print lt_irange(1, 5);
+print lt_irangeBy(5, 1, -2);
+print lt_linspace(0, 1, 5);
+print lt_enumerateFrom(["a", "b"], 1);
+print lt_zip([1, 2, 3], ["x", "y"]);
+print lt_zipAll([[1, 2], [3, 4], [5, 6]]);
+print lt_chunk([1, 2, 3, 4, 5], 2);
+print lt_chunk("abcdef", 4);
+print lt_window([1, 2, 3, 4], 2);
+print lt_windowBy([1, 2, 3, 4, 5], 2, 2);
+print lt_pairs([1, 2, 3]);
+print lt_flatten([1, [2, 3], [4]]);
+print lt_unique([3, 1, 3, 2, 1]);
+print lt_uniqueBy(["ab", "ac", "bd"], fun(w) { return substr(w, 0, 1); });
+print lt_product([1, 2], ["a", "b"]);
+print lt_cycle([1, 2], 3);
+print lt_fill(0, 3);
+print lt_take([1, 2, 3], 2), lt_skip([1, 2, 3], 1), lt_reversed([1, 2, 3]);
+print lt_group(["a", "bb", "cc", "d"], fun(w) { return len(w); });
+print lt_partition([1, 2, 3, 4, 5], fun(x) { return x % 2 == 0; });
+print lt_tally(["a", "b", "a"]);
+let orig = [3, 1, 2];
+print lt_sorted(orig), lt_sortedDesc(orig), orig;
+print lt_sortedBy(["bbb", "a", "cc"], fun(w) { return len(w); });
+// حلقات
+print lt_times(3, fun(i) { print "t" + i; });
+print lt_times(10, fun(i) { if (i == 2) { return LT_STOP; } });
+print lt_each([1, 2, 3], fun(x) { if (x == 2) { return LT_STOP; } });
+print lt_eachi(["a", "b"], fun(x, i) { print i + x; });
+print lt_eachKV({p: 1, q: 2}, fun(k, v) { print k + "=" + v; });
+print lt_map([1, 2, 3], fun(x) { return x * x; });
+print lt_mapi(["a", "b"], fun(x, i) { return x + i; });
+print lt_filter([1, 2, 3, 4], fun(x) { return x > 2; });
+print lt_reduce([1, 2, 3, 4], fun(a, x) { return a + x; });
+print lt_reduce([], fun(a, x) { return a + x; });
+print lt_fold([1, 2], 10, fun(a, x) { return a + x; });
+print lt_sum([1, 2, 3]), lt_sumBy([1, 2, 3], fun(x) { return x * 2; });
+print lt_countIf([1, 2, 3, 4], fun(x) { return x % 2 == 0; }), lt_count([1, 2]);
+print lt_find([1, 5, 9], fun(x) { return x > 3; }), lt_find([1], fun(x) { return x > 3; });
+print lt_findIndex([1, 5, 9], fun(x) { return x > 3; });
+print lt_any([1, 2], fun(x) { return x > 1; }), lt_all([1, 2], fun(x) { return x > 1; });
+let n = 0;
+print lt_whileDo(fun() { return n < 3; }, fun(i) { n = n + 1; });
+let m = 0;
+print lt_untilDo(fun() { return m >= 2; }, fun(i) { m = m + 1; });
+print lt_loopDo(fun(i) { if (i == 4) { return LT_STOP; } });
+lt_every(3, 0, fun(i) { print "every " + i; });
+lt_every(3, 1, fun(i) { print "never"; });
+// أمان
+lt_config({limit: 50});
+try { lt_loopDo(fun(i) { return nil; }); } catch (e) { print e.message; }
+try { lt_range(0, 1000); } catch (e) { print e.message; }
+try { lt_chunk([1], 0); } catch (e) { print e.message; }
+try { lt_config({nope: 1}); } catch (e) { print e.message; }
+try { lt_each(5, fun(x) { }); } catch (e) { print e.message; }
+print lt_settings().limit;
+// retry / poll / budget / timed / progress
+lt_config({limit: 100000, sleep: false});
+let tries = 0;
+print lt_retry(5, fun(a) { tries = tries + 1; if (a < 3) { throw "fail" + a; } return "ok@" + a; });
+try { lt_retry(2, fun(a) { throw "boom" + a; }); } catch (e) { print e.message; }
+let seen = [];
+lt_retryWith(3, fun(a) { if (a < 3) { throw "x"; } }, {delay: 10, factor: 2, onRetry: fun(a, e, w) { push(seen, w); }});
+print seen;
+let k = 0;
+print lt_pollEvery(fun() { k = k + 1; return k >= 3; }, 1, 1000);
+print lt_pollEvery(fun() { return false; }, 1, 5);
+let b = lt_budget(5, fun(i) { if (i == 3) { return LT_STOP; } });
+print b.iterations, b.stopped;
+let b2 = lt_budget(2, fun(i) { });
+print b2.stopped, b2.iterations > 0;
+let tm = lt_timed("work", fun() { return 42; });
+print tm.value, tm.ms >= 0, tm.label;
+let p = lt_progressWidth(10, 10);
+lt_tickBy(p, 4);
+let line = lt_progressLine(p);
+print substr(line, 0, 21);
+lt_tickBy(p, 100);
+print p.done;
+// RINTWIST
+print lt_settings().tag, lt_settings().trace;
+print lt_where();
+lt_config({trace: true});
+lt_trace("hello");
+lt_traceWith("k", [1, 2]);
+lt_config({trace: false, tag: "custom"});
+print lt_settings().tag;
+lt_config({trace: true});
+lt_trace("x");
+lt_config({trace: false});
+print lt_logNameExt("txt") == RINTWIST.file.stem + "-" + RINTWIST.date.date + ".txt";
+// الاختصارات
+print LT.chunk(LT.upto(7), 3);
+print LT.version, LT.STOP == LT_STOP;
+print LT.sum(LT.map(LT.irange(1, 4), fun(x) { return x * x; }));
+for (let c in LT.window(LT.upto(4), 2)) { print c; }

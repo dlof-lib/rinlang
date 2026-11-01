@@ -1,0 +1,53 @@
+📥 @import: تم استيراد "lib/__rsf__.og.rin" (مكتبة: __rsf__ 1.0.0 — 8 أجزاء)
+-- keys
+true
+false
+false
+-- dedupe
+[3, 1, 2]
+[[1, 2], {"a": 1, "b": 2}, 1, "1", nil, true, "true"]
+["a", "b", "c"]
+["ab", "bd"]
+[1, 2]
+false true
+[["a", 3], ["b", 1]]
+[2, 1] [2, 2, 1]
+true false true 2 true false
+[[1], 2]
+-- memo
+16 16 25 2
+102334155
+caught: __rsf__: cycle detected in rsf_memo: 1 -> 2 -> 3 -> 1
+-- sequences
+{"status": "end", "steps": 5, "path": [1, 2, 3, 4, 5], "mu": -1, "lambda": 0, "cycle": []}
+cycle 3 1 [5]
+end 112
+{"cycle": true, "limit": false, "mu": 3, "lambda": 1}
+{"cycle": false, "limit": false, "mu": -1, "lambda": 0}
+true
+limit 50
+-- graphs
+[["a", "b", "c", "a"]]
+[["a", "a"]]
+[]
+[["a", "b", "a"], ["b", "c", "b"]]
+true false
+{"ok": true, "order": ["util", "ghost", "lib", "app"], "cycles": [], "nodes": 4, "edges": 4, "duplicateEdges": 1, "missing": ["ghost"]}
+["util", "lib", "app"]
+caught: __rsf__: cannot order a graph with a cycle: ["a", "b", "a"]
+["home", "about", "blog", "post1", "post2"]
+[["home", "about", "home"], ["blog", "post1", "blog"]]
+-- strict
+caught: __rsf__: cycle detected: ["a", "b", "a"]
+caught: __rsf__: cycle detected (starts at step 0, length 1)
+-- RINTWIST + Disconom
+["rsf_basic.rin"] false
+[]
+true [] []
+true true
+5000000 rsf_basic
+-- rintwist.rsf
+[1, 2]
+[["p", "q", "p"]]
+1.0.0 true
+caught: unknown member

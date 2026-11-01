@@ -1,0 +1,18 @@
+{
+  "id": "calclang",
+  "name": "CalcLang",
+  "version": "0.1.0",
+  "developer": "syrian-vcg",
+  "fileExtension": "calc",
+  "description": "لغة حسابية صغيرة بمتغيرات وشروط، مبنية كمثال كامل فوق langkit.og.rin",
+  "entry": {
+    "lexer": "Lexer.rin",
+    "parser": "Parser.rin",
+    "interpreter": "Interpreter.rin",
+    "codegen": "CodeGen.rin",
+    "run": "run.rin"
+  },
+  "syntax": "syntax.rinsyntax.json",
+  "official": false,
+  "createdWithRinLangVersion": "langkit-1.0"
+}

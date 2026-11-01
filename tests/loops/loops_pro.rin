@@ -1,0 +1,24 @@
+// product (itertools.product)
+each x in [1, 2], y in ["a", "b"] { print x + y; }
+each x in [1, 2, 3], y in [1, 2, 3] where x < y { print x + "<" + y; }
+each a in "ab", b in "cd", c in [1, 2] { print a + b + c; }
+each x in [1, 2], y in [1, 2] { if (y == 2) { continue; } if (x == 2) { break; } print "p" + x + y; }
+each x in [], y in [1, 2] { print "never"; } #done { print "empty product"; }
+// takewhile / until
+each n in [1, 2, 3, 10, 4] while n < 5 { print "tw " + n; }
+each n in [1, 2, 3, 10, 4] until n >= 3 { print "un " + n; }
+// take / skip
+each n in 1 to 10 take 3 { print "take " + n; }
+each n in 1 to 6 skip 4 { print "skip " + n; }
+each n in 1 to 10 skip 2 take 2 { print "st " + n; }
+each n in 1 to 10 where n % 2 == 0 take 2 { print "wt " + n; }
+// sorted / chain
+each n in [3, 1, 2] sorted { print "s" + n; }
+each n in [3, 1, 2] sorted desc { print "d" + n; }
+each n in [1, 2] chain [3, 4] { print "ch" + n; }
+// map comprehension
+print {each k in ["a", "b"] yield k: 1};
+print {each k, v in {"x": 1, "y": 2} where v > 1 yield v: k};
+print {each w, i in ["p", "q"] yield w: i};
+print sum([each x in 1 to 100 where x % 3 == 0 yield x]);
+print len([each x in [1, 2, 3], y in [1, 2, 3] where x + y == 4 yield [x, y]]);

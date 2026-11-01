@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- خلفية "حبّة" كلمة محجوزة في صف كلمات Rin ضمن لوحة مفاتيح المحرر (activity_main.xml):
+     تعبئة خفيفة بلون هوية التطبيق rin_accent (بدل الشفافية الكاملة لأزرار الرموز العامة
+     bg_toolbar_btn_ghost) لتمييز كلمات اللغة المحجوزة بصريًا عن رموز الترقيم العامة. -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="@color/rin_ghost_ripple">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/rin_accent_border_subtle" />
+            <corners android:radius="14dp" />
+        </shape>
+    </item>
+</ripple>

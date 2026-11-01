@@ -1,0 +1,325 @@
+package com.dlof.rinlang
+
+import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.ForegroundColorSpan
+import android.text.style.StyleSpan
+import android.graphics.Typeface
+import android.view.View
+import android.widget.ArrayAdapter
+import android.widget.Button
+import android.widget.EditText
+import android.widget.ImageButton
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.ProgressBar
+import android.widget.Spinner
+import android.widget.TextView
+import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
+import com.dlof.rinlang.apk.RinApkExporter
+import java.util.concurrent.Executors
+
+/**
+ * شاشة "تصدير APK": تأخذ مشروع Rin محدداً (EXTRA_PROJECT_NAME) وتبنيه عبر [RinApkExporter]
+ * كحزمة APK حقيقية موقّعة (انظر توثيق تلك الكائن لتفاصيل الآلية)، بنفس أسلوب الطرفية
+ * المستخدم في RinFlow لعرض خطوات البناء والتوقيع سطراً سطراً — مُنظَّمة الآن في أقسام
+ * واضحة: الهوية، الأيقونة، شاشة البداية، التوافق (إصدارات أندرويد)، والبناء.
+ */
+class ApkExportActivity : RinBaseActivity() {
+
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val buildExecutor = Executors.newSingleThreadExecutor()
+
+    private lateinit var project: Project
+    private lateinit var logContainer: LinearLayout
+    private lateinit var edtAppName: EditText
+    private lateinit var spinnerEntry: Spinner
+    private lateinit var imgIconPreview: ImageView
+    private lateinit var btnPickIcon: Button
+    private lateinit var txtIconHint: TextView
+    private lateinit var edtSplashTagline: EditText
+    private lateinit var spinnerMinSdk: Spinner
+    private lateinit var spinnerTargetSdk: Spinner
+    private lateinit var btnBuild: Button
+    private lateinit var progress: ProgressBar
+    private lateinit var txtStatus: TextView
+    private lateinit var statusBanner: LinearLayout
+    private lateinit var resultActionsRow: LinearLayout
+    private lateinit var btnInstall: Button
+    private lateinit var btnSave: Button
+    private lateinit var btnShare: Button
+
+    private var lastResult: RinApkExporter.ExportResult? = null
+    private var selectedIcon: Bitmap? = null
+    // true طالما [selectedIcon] الحالية أتت تلقائياً من حقل icon لحاوية sticker في المشروع
+    // (انظر [RinStickerIcon]) لا من اختيار يدوي — يقرر هذا نص التلميح المعروض فقط، ولا يمنع
+    // btnPickIcon من الاستبدال في أي وقت.
+    private var iconFromSticker = false
+
+    /** مستويات API معروضة للاختيار — من 35 (أدنى ما يضمنه build.gradle للحزمة المضيفة: minSdk 35،
+     * لأن classes.dex والمكتبات الأصلية المُعاد استخدامها بُنيت على أساسه) حتى 36 (Android 16). */
+    private val sdkLevels = listOf(
+        35 to "API 35 — Android 15",
+        36 to "API 36 — Android 16"
+    )
+
+    private val pickIconLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) loadPickedIcon(uri)
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_apk_export)
+
+        val projectName = intent.getStringExtra(EXTRA_PROJECT_NAME)
+        val found = projectName?.let { name -> ProjectManager.listProjects(this).find { it.name == name } }
+        if (found == null) {
+            Toast.makeText(this, getString(R.string.more_row_needs_project_toast), Toast.LENGTH_SHORT).show()
+            finish()
+            return
+        }
+        project = found
+
+        logContainer = findViewById(R.id.apkExportLog)
+        edtAppName = findViewById(R.id.edtApkExportAppName)
+        spinnerEntry = findViewById(R.id.spinnerApkExportEntry)
+        imgIconPreview = findViewById(R.id.imgApkExportIconPreview)
+        btnPickIcon = findViewById(R.id.btnApkExportPickIcon)
+        txtIconHint = findViewById(R.id.txtApkExportIconHint)
+        edtSplashTagline = findViewById(R.id.edtApkExportSplashTagline)
+        spinnerMinSdk = findViewById(R.id.spinnerApkExportMinSdk)
+        spinnerTargetSdk = findViewById(R.id.spinnerApkExportTargetSdk)
+        btnBuild = findViewById(R.id.btnApkExportBuild)
+        progress = findViewById(R.id.progressApkExport)
+        txtStatus = findViewById(R.id.txtApkExportStatus)
+        statusBanner = findViewById(R.id.apkExportStatusBanner)
+        resultActionsRow = findViewById(R.id.rowApkExportResultActions)
+        btnInstall = findViewById(R.id.btnApkExportInstall)
+        btnSave = findViewById(R.id.btnApkExportSave)
+        btnShare = findViewById(R.id.btnApkExportShare)
+
+        findViewById<TextView>(R.id.txtApkExportProjectName).text = "project: ${project.name}"
+        findViewById<ImageButton>(R.id.btnApkExportClose).setOnClickListener { finish() }
+
+        edtAppName.setText(project.name)
+
+        val rinFiles = ProjectManager.listFiles(project).filter { it.name.endsWith(".rin") }
+        val entryNames = rinFiles.map { it.name }.ifEmpty { listOf("main.rin") }
+        spinnerEntry.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, entryNames)
+        val mainIndex = entryNames.indexOf("main.rin")
+        if (mainIndex >= 0) spinnerEntry.setSelection(mainIndex)
+
+        // أيقونة sticker تلقائياً: نعيد البحث في كل مرة يتغيّر فيها ملف الدخول المختار، لكن فقط
+        // طالما المستخدم لم يختر أيقونة يدوياً بعد (btnPickIcon يقطع هذا السلوك نهائياً بمجرد
+        // استخدامه — انظر loadPickedIcon).
+        autoDetectStickerIcon(entryNames.getOrNull(spinnerEntry.selectedItemPosition))
+        spinnerEntry.setOnItemSelectedListener(object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, pos: Int, id: Long) {
+                autoDetectStickerIcon(entryNames.getOrNull(pos))
+            }
+            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
+        })
+
+        val sdkLabels = sdkLevels.map { it.second }
+        spinnerMinSdk.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, sdkLabels)
+        spinnerTargetSdk.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, sdkLabels)
+        spinnerMinSdk.setSelection(0) // API 35 — نفس الحد الأدنى الحقيقي للحزمة المضيفة
+        spinnerTargetSdk.setSelection(sdkLevels.lastIndex) // API 36 — Android 16، نفس compileSdk الحالي
+
+        btnPickIcon.setOnClickListener { pickIconLauncher.launch("image/*") }
+
+        btnBuild.setOnClickListener { startBuild(rinFiles.isNotEmpty()) }
+        btnInstall.setOnClickListener { lastResult?.let { installApk(it.apkFile) } }
+        btnSave.setOnClickListener { lastResult?.let { saveToDownloads(it.apkFile) } }
+        btnShare.setOnClickListener { lastResult?.let { shareApk(it.apkFile) } }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        buildExecutor.shutdownNow()
+    }
+
+    private fun loadPickedIcon(uri: Uri) {
+        try {
+            val input = contentResolver.openInputStream(uri) ?: return
+            val bitmap = input.use { BitmapFactory.decodeStream(it) }
+            if (bitmap == null) {
+                Toast.makeText(this, getString(R.string.apk_export_icon_load_error), Toast.LENGTH_SHORT).show()
+                return
+            }
+            selectedIcon = bitmap
+            iconFromSticker = false
+            txtIconHint.text = getString(R.string.apk_export_field_icon_hint)
+            imgIconPreview.setImageBitmap(bitmap)
+        } catch (e: Exception) {
+            Toast.makeText(this, getString(R.string.apk_export_icon_load_error), Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * تجعل حاوية @sticker/@container.sticker مسؤولة تلقائياً عن أيقونة التطبيق المُصدَّر: تبحث
+     * (عبر [RinStickerIcon]) عن حقل icon داخل أول sticker في مشروع المستخدم، وتملأ معاينة
+     * الأيقونة بها بلا أي تدخل يدوي إن وُجدت — بشرط ألا يكون قد اختار المستخدم أيقونة بنفسه
+     * فعلاً (btnPickIcon له الأولوية دوماً، انظر [loadPickedIcon]).
+     */
+    private fun autoDetectStickerIcon(entryFileName: String?) {
+        if (!iconFromSticker && selectedIcon != null) return // المستخدم اختار يدوياً — لا نتجاوزه
+        val file = RinStickerIcon.findIconFile(project, entryFileName)
+        if (file == null) {
+            if (iconFromSticker) { // كانت من sticker ولم تعد موجودة (تغيّر ملف الدخول مثلاً) — ارجع للافتراضي
+                selectedIcon = null
+                iconFromSticker = false
+                txtIconHint.text = getString(R.string.apk_export_field_icon_hint)
+                imgIconPreview.setImageResource(R.mipmap.ic_launcher_round)
+            }
+            return
+        }
+        val bitmap = try { BitmapFactory.decodeFile(file.absolutePath) } catch (e: Exception) { null } ?: return
+        selectedIcon = bitmap
+        iconFromSticker = true
+        txtIconHint.text = getString(R.string.apk_export_field_icon_from_sticker)
+        imgIconPreview.setImageBitmap(bitmap)
+    }
+
+    private fun startBuild(hasEntryFiles: Boolean) {
+        if (!hasEntryFiles) {
+            Toast.makeText(this, getString(R.string.apk_export_no_entry_error), Toast.LENGTH_SHORT).show()
+            return
+        }
+        val minSdk = sdkLevels[spinnerMinSdk.selectedItemPosition].first
+        val targetSdk = sdkLevels[spinnerTargetSdk.selectedItemPosition].first
+        if (minSdk > targetSdk) {
+            Toast.makeText(this, getString(R.string.apk_export_sdk_range_error), Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        logContainer.removeAllViews()
+        resultActionsRow.visibility = View.GONE
+        lastResult = null
+        btnBuild.isEnabled = false
+        progress.visibility = View.VISIBLE
+        txtStatus.text = getString(R.string.apk_export_status_building)
+
+        val appName = edtAppName.text.toString().trim().ifBlank { project.name }
+        val entry = spinnerEntry.selectedItem as? String ?: "main.rin"
+        val tagline = edtSplashTagline.text.toString().trim().ifBlank { null }
+        val icon = selectedIcon
+
+        buildExecutor.execute {
+            RinApkExporter.export(
+                context = applicationContext,
+                project = project,
+                appDisplayName = appName,
+                entryFile = entry,
+                minSdkVersion = minSdk,
+                targetSdkVersion = targetSdk,
+                customIcon = icon,
+                splash = RinApkExporter.SplashConfig(tagline = tagline)
+            ) { p ->
+                mainHandler.post { handleProgress(p) }
+            }
+        }
+    }
+
+    private fun handleProgress(p: RinApkExporter.Progress) {
+        when (p) {
+            is RinApkExporter.Progress.Log -> appendLogLine(p.text, p.ok)
+            is RinApkExporter.Progress.Done -> {
+                lastResult = p.result
+                btnBuild.isEnabled = true
+                progress.visibility = View.GONE
+                txtStatus.text = getString(R.string.apk_export_status_success)
+                resultActionsRow.visibility = View.VISIBLE
+            }
+            is RinApkExporter.Progress.Failed -> {
+                appendLogLine("✗ ${p.message}", ok = false)
+                btnBuild.isEnabled = true
+                progress.visibility = View.GONE
+                txtStatus.text = getString(R.string.apk_export_status_failed)
+            }
+        }
+    }
+
+    private fun appendLogLine(text: String, ok: Boolean) {
+        val dp = resources.displayMetrics.density
+        val line = TextView(this).apply {
+            typeface = Typeface.MONOSPACE
+            textSize = 12.5f
+            setPadding(0, (2 * dp).toInt(), 0, (2 * dp).toInt())
+        }
+        val colorRes = if (ok) R.color.pipeline_terminal_text else R.color.pipeline_terminal_red
+        val sb = SpannableStringBuilder(text)
+        sb.setSpan(ForegroundColorSpan(ContextCompat.getColor(this, colorRes)), 0, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        if (!ok) sb.setSpan(StyleSpan(Typeface.BOLD), 0, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        line.text = sb
+        logContainer.addView(line)
+    }
+
+    // ---- result actions ----
+
+    private fun apkUri(file: java.io.File): Uri =
+        androidx.core.content.FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+
+    private fun installApk(file: java.io.File) {
+        try {
+            val uri = apkUri(file)
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            ErrorReporter.report(this, e, "APK_INSTALL")
+        }
+    }
+
+    private fun shareApk(file: java.io.File) {
+        try {
+            val uri = apkUri(file)
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "application/vnd.android.package-archive"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(Intent.createChooser(intent, getString(R.string.apk_export_action_share)))
+        } catch (e: Exception) {
+            ErrorReporter.report(this, e, "APK_SHARE")
+        }
+    }
+
+    private fun saveToDownloads(file: java.io.File) {
+        val artifact = RinArtifact(
+            kind = ArtifactKind.APK,
+            relPath = file.name,
+            absoluteFile = file,
+            sizeBytes = file.length()
+        )
+        RinDownloadManager.downloadToPublicDownloads(
+            activity = this,
+            artifact = artifact,
+            onProgress = { _, _ -> },
+            onDone = { uri, error ->
+                if (error != null || uri == null) {
+                    Toast.makeText(this, error?.message ?: "error", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this, getString(R.string.apk_export_action_save), Toast.LENGTH_SHORT).show()
+                }
+            }
+        )
+    }
+
+    companion object {
+        const val EXTRA_PROJECT_NAME = "extra_project_name"
+    }
+}

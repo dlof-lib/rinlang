@@ -1,0 +1,11 @@
+// input_demo.rin — إدخال المستخدم (انظر docs/input.md)
+let name = input("ما اسمك؟ ");
+let age = inputNumber("كم عمرك؟ ");
+print "مرحباً " + name + "، بعد سنة سيكون عمرك " + (age + 1);
+
+if (confirm("هل تريد اختيار لون؟ (نعم/لا) ")) {
+    let color = choose("اللون المفضل:", ["أحمر", "أخضر", "أزرق"]);
+    print "اخترت: " + color;
+} else {
+    print "حسناً، لا لون.";
+}

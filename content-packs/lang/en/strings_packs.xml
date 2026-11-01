@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Downloadable content packs UI strings -->
+<resources>
+    <string name="packs_title">Packs &amp; downloads</string>
+    <string name="packs_subtitle">Download languages and assets only when you need them to keep the app small</string>
+    <string name="packs_section_languages">Language packs</string>
+    <string name="packs_section_assets">Asset packs</string>
+    <string name="packs_storage_used_format">Space used by installed packs: %1$s</string>
+    <string name="packs_builtin">Built into the app</string>
+    <string name="packs_installed">Installed</string>
+    <string name="packs_update_available">Update available</string>
+    <string name="packs_action_download">Download (%1$s)</string>
+    <string name="packs_action_update">Update (%1$s)</string>
+    <string name="packs_action_delete">Delete</string>
+    <string name="packs_action_cancel">Cancel</string>
+    <string name="packs_action_retry">Retry</string>
+    <string name="packs_downloading_format">Downloading… %1$d%%</string>
+    <string name="packs_verifying">Verifying file integrity…</string>
+    <string name="packs_installing">Installing…</string>
+    <string name="packs_done_toast">\"%1$s\" installed</string>
+    <string name="packs_deleted_toast">\"%1$s\" deleted</string>
+    <string name="packs_cancelled">Download cancelled</string>
+    <string name="packs_error_format">Download failed: %1$s</string>
+    <string name="packs_error_offline">No internet connection</string>
+    <string name="packs_error_hash">File integrity check failed, please retry</string>
+    <string name="packs_error_unknown_pack">This pack is not in the catalog</string>
+    <string name="packs_catalog_failed">Could not load the pack list. Only installed packs are shown.</string>
+    <string name="packs_empty">No packs available right now</string>
+    <string name="packs_refresh">Refresh list</string>
+    <string name="packs_delete_title">Delete pack</string>
+    <string name="packs_delete_message_format">\"%1$s\" will be removed from this device. You can download it again later.</string>
+    <string name="packs_need_title">Pack required</string>
+    <string name="packs_need_message_format">\"%1$s\" is not bundled with the app to keep it small. Download it now (%2$s)?</string>
+    <string name="packs_dialog_title_format">Downloading \"%1$s\"</string>
+    <string name="packs_language_pending_toast">Download the language pack first to apply it</string>
+    <string name="settings_packs_title">Packs &amp; downloads</string>
+    <string name="settings_packs_hint">Manage downloadable languages and assets and their size on this device</string>
+</resources>

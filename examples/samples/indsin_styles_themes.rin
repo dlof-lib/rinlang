@@ -1,0 +1,9 @@
+<Tokens brand=#6C5CE7 pad=20 />
+<Style#card radius=16 elevation=md bg=surface padding=14 />
+<Style#hero extends="card" bg={brand} />
+<Screen#a size=phone padding={pad} gap=14>
+  <Card#c1 class="card"><Text#a>Normal card</Text></Card>
+  <Card#c2 class="hero" height=80><Text#b color=#fff>Hero card (extends card)</Text></Card>
+  <Button#t onTap={toggleTheme()}>Toggle theme</Button>
+  <Button#s onTap={setThemeSeed("#E17055", false)}>Orange light</Button>
+</Screen>

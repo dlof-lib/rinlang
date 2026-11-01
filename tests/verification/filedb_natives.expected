@@ -1,0 +1,20 @@
+size=6 sync=true
+rename=true old gone=true size now=6 text=hello
+
+caught: size of missing file
+caught: sync of missing file
+caught: rename of missing file
+locked before=false
+lock=true again(own)=true isLocked=true
+unlock=true unlock again=false isLocked=false
+📋 container.datalist = items
+🧾 document (إدراج) -> 1 = {"n": 5, "d": "2026-03-10"}
+🧾 document (إدراج) -> 2 = {"n": 1, "d": "2026-01-05"}
+🧾 document (إدراج) -> x = {"n": 9, "d": "2026-02-20"}
+🧾 document (إدراج) -> 4 = {"n": "bad"}
+✅ .end/container.datalist (items)
+range n: [{"_id": "1", "n": 5, "d": "2026-03-10"}, {"_id": "x", "n": 9, "d": "2026-02-20"}]
+open low: [{"_id": "2", "n": 1, "d": "2026-01-05"}, {"_id": "1", "n": 5, "d": "2026-03-10"}]
+dates: [{"_id": "2", "n": 1, "d": "2026-01-05"}, {"_id": "x", "n": 9, "d": "2026-02-20"}]
+caught: mixed bounds
+caught: unknown collection

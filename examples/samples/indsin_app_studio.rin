@@ -1,0 +1,102 @@
+<!-- Indsin Studio — تطبيق كامل بكل الميزات الجديدة:
+     <Tokens> · <Style>/class · <Palette> · <Screen> (حجم + خلفية متدرّجة) · gradient · elevation/shadowColor
+     · أحجام نسبية (30% / 40% / aspect) · <Define> · <Repeat> · <If>/<Else> · <Fun> · toggleTheme / setThemeSeed
+     التشغيل: rin_indsin_preview app_studio.rin --png out.png   (أو داخل معاينة التطبيق) -->
+
+<!-- ثوابت التصميم -->
+<Tokens brand=#6C5CE7 accent=#00CEC9 warm=#FD79A8 pad=20 />
+
+<!-- ثيم كامل من لون واحد -->
+<Palette seed=#6C5CE7 dark />
+
+<!-- أنماط قابلة لإعادة الاستعمال -->
+<Style#panel radius=18 elevation=md bg=surface padding=14 gap=8 />
+<Style#glass extends="panel" elevation=lg />
+<Style#pill radius=14 padding=10 />
+
+<!-- الحالة -->
+<warp steps={4200} />
+<warp goal={10000} />
+<warp mood={0} />
+<warp notes={true} />
+
+<!-- الدوال -->
+<Fun#walk>
+  steps = steps + 500;
+  if (steps > goal) { steps = goal; }
+</Fun>
+<Fun#nextMood>
+  mood = mood + 1;
+  if (mood > 2) { mood = 0; }
+</Fun>
+<Fun#resetAll>
+  steps = 0;
+  mood = 0;
+</Fun>
+
+<!-- قالب مكوّن: بطاقة إحصاء ملوّنة بتوهّج -->
+<Define#Metric label="Metric" value="0" tint=#6C5CE7>
+  <Card#m width=30% class="pill" bg={tint} shadowColor={tint} elevation=lg>
+    <Text#mv size=title color=#ffffff>{value}</Text>
+    <Text#ml size=small color=#ffffffcc>{label}</Text>
+  </Card>
+</Define>
+
+<!-- الشاشة: هاتف + خلفية متدرّجة ثابتة (لذا النصوص فوقها بألوان صريحة تبقى مقروءة عند تبديل الثيم) -->
+<Screen#app size=phone bg="#0B1020,#1B1450,#3A1C71,160" padding={pad} gap=16>
+
+  <Text#hello size=heading color=#ffffff>Studio ✨</Text>
+  <Text#sub size=small color=#b7bfdc>Daily activity · {steps}/{goal} steps</Text>
+
+  <!-- بطاقة البطل: تدرّج متعدد المحطات -->
+  <Card#hero width=full height=120 radius=22 elevation=xl shadowColor={brand}
+        gradient="#6C5CE7,#A29BFE,#FD79A8,35">
+    <Text#hv size=heading color=#ffffff>{steps * 100 / goal}%</Text>
+    <Text#hl color=#ffffffdd>of your daily goal</Text>
+  </Card>
+
+  <Progress#bar value={steps * 100 / goal} max=100 />
+
+  <!-- مقاييس: ثلاث بطاقات بنسبة 30% -->
+  <Row#metrics gap=10>
+    <Metric label="Steps" value={steps} tint=#6C5CE7 />
+    <Metric label="Left" value={goal - steps} tint=#00B894 />
+    <Metric label="Mood" value={mood} tint=#E17055 />
+  </Row>
+
+  <!-- أيام الأسبوع (تكرار وقت الترجمة) -->
+  <Card#week class="panel">
+    <Text#wt size=title>This week</Text>
+    <Row#days gap=6>
+      <Repeat times=7 as=d>
+        <Card#day width=11% height=36 radius=8 bg=primary opacity=0.45 />
+      </Repeat>
+    </Row>
+  </Card>
+
+  <!-- شرط تفاعلي -->
+  <If cond={steps >= goal}>
+    <Banner#win type=success message="Goal reached! 🎉" />
+  </If>
+  <Else>
+    <Text#more color=#b7bfdc>{goal - steps} steps to go</Text>
+  </Else>
+
+  <If cond={notes}>
+    <Card#tip class="glass" bg=#161B33>
+      <Text#tt size=small color=#dfe6ff>Tip: tap Walk to add 500 steps, Theme to switch Dark/Light.</Text>
+    </Card>
+  </If>
+
+  <!-- الأزرار -->
+  <Row#actions gap=10>
+    <Button#w width=40% gradient="#6C5CE7,#A29BFE,90" onTap={walk()}>Walk +500</Button>
+    <Button#m width=25% variant=outline onTap={nextMood()}>Mood</Button>
+    <Button#r variant=outline onTap={resetAll()}>Reset</Button>
+  </Row>
+  <Row#actions2 gap=10>
+    <Button#t width=40% variant=outline onTap={toggleTheme()}>Theme</Button>
+    <Button#o width=25% variant=outline onTap={setThemeSeed("#E17055", false)}>Warm</Button>
+    <Button#n variant=outline onTap={toggle(notes)}>Tips</Button>
+  </Row>
+</Screen>

@@ -1,0 +1,148 @@
+// ============================================================================
+//  lib/gridkit.og.rin — حلقات متداخلة على شبكات ثنائية الأبعاد (2D grids / matrices)
+//  استيراد:
+//    @import "lib/gridkit.og.rin";
+//    @import "lib/gridkit.og.rin" as grid;
+//
+//  الشبكة هنا مصفوفة صفوف، كل صف مصفوفة قيم: grid[row][col]. تُغلّف هذه المكتبة نمط
+//  الحلقة المزدوجة "while (row) { while (col) { ... } }" المتكرر عند التعامل مع
+//  مصفوفات ثنائية الأبعاد (لوحات ألعاب، مصفوفات رياضية، شاشات نصية...).
+//
+//  مثال سريع:
+//    let g = makeGrid(3, 3, 0);
+//    setCell(g, 1, 1, 9);
+//    fun show(value, r, c) { print toString(r) + "," + toString(c) + " = " + toString(value); }
+//    forEachCell(g, show);
+// ============================================================================
+
+// ينشئ شبكة بحجم rows×cols وكل خلاياها تساوي fillValue
+fun makeGrid(rows, cols, fillValue) {
+    let g = [];
+    let r = 0;
+    while (r < rows) {
+        let row = [];
+        let c = 0;
+        while (c < cols) {
+            push(row, fillValue);
+            c = c + 1;
+        }
+        push(g, row);
+        r = r + 1;
+    }
+    return g;
+}
+
+// عدد الصفوف
+fun gridRows(g) {
+    return len(g);
+}
+
+// عدد الأعمدة (بحسب أول صف؛ يفترض أن كل الصفوف بنفس الطول)
+fun gridCols(g) {
+    if (len(g) == 0) { return 0; }
+    return len(g[0]);
+}
+
+// هل (row, col) داخل حدود الشبكة؟
+fun gridInBounds(g, row, col) {
+    if (row < 0 or row >= gridRows(g)) { return false; }
+    if (col < 0 or col >= gridCols(g)) { return false; }
+    return true;
+}
+
+// قراءة خلية بأمان: تُعيد fallback إن كانت (row, col) خارج الحدود بدل توقف بخطأ
+fun getCell(g, row, col, fallback) {
+    if (gridInBounds(g, row, col) == false) { return fallback; }
+    return g[row][col];
+}
+
+// كتابة خلية بأمان: لا تفعل شيئاً إن كانت (row, col) خارج الحدود، وإلا تُعدّل الشبكة
+// مباشرة بالمرجع (المصفوفات في Rin مُشتركة بالمرجع) وتُعيد true للنجاح
+fun setCell(g, row, col, value) {
+    if (gridInBounds(g, row, col) == false) { return false; }
+    g[row][col] = value;
+    return true;
+}
+
+// يستدعي fn(value, row, col) على كل خلية بترتيب صف فصف من اليسار لليمين (بلا قيمة مُرجعة)
+fun forEachCell(g, fn) {
+    let r = 0;
+    while (r < gridRows(g)) {
+        let c = 0;
+        while (c < gridCols(g)) {
+            fn(g[r][c], r, c);
+            c = c + 1;
+        }
+        r = r + 1;
+    }
+    return nil;
+}
+
+// يبني شبكة جديدة بنفس الأبعاد حيث كل خلية = fn(value, row, col) المطبَّقة على الأصلية
+fun mapGrid(g, fn) {
+    let result = [];
+    let r = 0;
+    while (r < gridRows(g)) {
+        let newRow = [];
+        let c = 0;
+        while (c < gridCols(g)) {
+            push(newRow, fn(g[r][c], r, c));
+            c = c + 1;
+        }
+        push(result, newRow);
+        r = r + 1;
+    }
+    return result;
+}
+
+// ينقل (transpose) الشبكة: يصبح الصف عموداً والعكس
+fun transposeGrid(g) {
+    let rows = gridRows(g);
+    let cols = gridCols(g);
+    let result = makeGrid(cols, rows, nil);
+    let r = 0;
+    while (r < rows) {
+        let c = 0;
+        while (c < cols) {
+            result[c][r] = g[r][c];
+            c = c + 1;
+        }
+        r = r + 1;
+    }
+    return result;
+}
+
+// يُسطّح الشبكة إلى مصفوفة واحدة بُعدية بترتيب صف فصف
+fun flattenGrid(g) {
+    let result = [];
+    let r = 0;
+    while (r < gridRows(g)) {
+        let c = 0;
+        while (c < gridCols(g)) {
+            push(result, g[r][c]);
+            c = c + 1;
+        }
+        r = r + 1;
+    }
+    return result;
+}
+
+// جيران أربعة اتجاهات (فوق/تحت/يسار/يمين) داخل حدود الشبكة فقط، كمصفوفة {row,col}
+fun neighbors4(g, row, col) {
+    let candidates = [
+        { row: row - 1, col: col },
+        { row: row + 1, col: col },
+        { row: row, col: col - 1 },
+        { row: row, col: col + 1 }
+    ];
+    let result = [];
+    let i = 0;
+    while (i < len(candidates)) {
+        let p = candidates[i];
+        if (gridInBounds(g, p["row"], p["col"])) {
+            push(result, p);
+        }
+        i = i + 1;
+    }
+    return result;
+}

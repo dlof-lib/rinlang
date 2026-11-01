@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- خلفية زر "Pipeline" في الشريط العلوي: نفس أسلوب زر التشغيل بلون أخضر متّسق مع شاشة الأنابيب -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_enabled="false">
+        <shape android:shape="rectangle">
+            <solid android:color="#2E4A3E" />
+            <corners android:radius="10dp" />
+        </shape>
+    </item>
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/pipeline_green_dark" />
+            <corners android:radius="10dp" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/pipeline_green" />
+            <corners android:radius="10dp" />
+        </shape>
+    </item>
+</selector>

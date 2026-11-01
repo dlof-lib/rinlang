@@ -1,0 +1,17 @@
+// Rin Collections Pro — non-mutating and mutating collection utilities.
+fun col_map(arr, fn) { let out=[]; let i=0; while(i<len(arr)){push(out,fn(arr[i]));i=i+1;} return out; }
+fun col_filter(arr, fn) { let out=[]; let i=0; while(i<len(arr)){if(fn(arr[i])){push(out,arr[i]);}i=i+1;} return out; }
+fun col_reduce(arr, fn, initial) { let acc=initial; let i=0; while(i<len(arr)){acc=fn(acc,arr[i]);i=i+1;} return acc; }
+fun col_each(arr, fn) { let i=0; while(i<len(arr)){fn(arr[i]);i=i+1;} return arr; }
+fun col_chunk(arr,size){let out=[];if(size<=0){return out;}let i=0;while(i<len(arr)){let g=[];let j=i;while(j<len(arr) and j<i+size){push(g,arr[j]);j=j+1;}push(out,g);i=i+size;}return out;}
+fun col_take(arr,n){let out=[];let i=0;while(i<len(arr) and i<n){push(out,arr[i]);i=i+1;}return out;}
+fun col_drop(arr,n){let out=[];let i=n;while(i<len(arr)){push(out,arr[i]);i=i+1;}return out;}
+fun col_concat(a,b){let out=[];let i=0;while(i<len(a)){push(out,a[i]);i=i+1;}i=0;while(i<len(b)){push(out,b[i]);i=i+1;}return out;}
+fun col_flatten(arr){let out=[];let i=0;while(i<len(arr)){if(len(arr[i])>=0){let j=0;while(j<len(arr[i])){push(out,arr[i][j]);j=j+1;}}i=i+1;}return out;}
+fun col_reverse(arr){let out=[];let i=len(arr)-1;while(i>=0){push(out,arr[i]);i=i-1;}return out;}
+fun col_unique(arr){let out=[];let i=0;while(i<len(arr)){if(!contains(out,arr[i])){push(out,arr[i]);}i=i+1;}return out;}
+fun col_containsAll(arr,vals){let i=0;while(i<len(vals)){if(!contains(arr,vals[i])){return false;}i=i+1;}return true;}
+fun col_containsAny(arr,vals){let i=0;while(i<len(vals)){if(contains(arr,vals[i])){return true;}i=i+1;}return false;}
+fun col_zip(a,b){let out=[];let n=len(a);if(len(b)<n){n=len(b);}let i=0;while(i<n){push(out,[a[i],b[i]]);i=i+1;}return out;}
+fun col_first(arr,fallback){if(len(arr)==0){return fallback;}return arr[0];}
+fun col_last(arr,fallback){if(len(arr)==0){return fallback;}return arr[len(arr)-1];}

@@ -1,0 +1,9 @@
+// Rin Sort Pro — sorting and ranking helpers.
+fun sort_asc(arr){return sort(arr);}
+fun sort_desc(arr){let x=sort(arr);let out=[];let i=len(x)-1;while(i>=0){push(out,x[i]);i=i-1;}return out;}
+fun sort_unique(arr){let x=sort(arr);let out=[];let i=0;while(i<len(x)){if(i==0 or x[i]!=x[i-1]){push(out,x[i]);}i=i+1;}return out;}
+fun sort_min(arr){if(len(arr)==0){return nil;}return sort(arr)[0];}
+fun sort_max(arr){if(len(arr)==0){return nil;}let x=sort(arr);return x[len(x)-1];}
+fun sort_isSorted(arr){let i=1;while(i<len(arr)){if(arr[i]<arr[i-1]){return false;}i=i+1;}return true;}
+fun sort_insert(arr,value){let out=[];let done=false;let i=0;while(i<len(arr)){if(!done and value<arr[i]){push(out,value);done=true;}push(out,arr[i]);i=i+1;}if(!done){push(out,value);}return out;}
+fun sort_top(arr,n){let x=sort_desc(arr);let out=[];let i=0;while(i<len(x) and i<n){push(out,x[i]);i=i+1;}return out;}

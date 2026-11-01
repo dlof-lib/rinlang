@@ -1,0 +1,30 @@
+Windows Registry Editor Version 5.00
+
+; Manual alternative to install.ps1. Edit the two paths below (double the backslashes), then double-click.
+; Per-user (HKCU) — no administrator rights required.
+
+[HKEY_CURRENT_USER\Software\Classes\.indsin]
+@="indsin.Document"
+"Content Type"="text/x-indsin"
+"PerceivedType"="text"
+
+[HKEY_CURRENT_USER\Software\Classes\indsin.Document]
+@="indsin UI document"
+
+[HKEY_CURRENT_USER\Software\Classes\indsin.Document\DefaultIcon]
+@="C:\\Tools\\indsin\\indsin_file.ico,0"
+
+[HKEY_CURRENT_USER\Software\Classes\indsin.Document\shell]
+@="open"
+
+[HKEY_CURRENT_USER\Software\Classes\indsin.Document\shell\open]
+@="Open with indsin Viewer"
+
+[HKEY_CURRENT_USER\Software\Classes\indsin.Document\shell\open\command]
+@="\"C:\\Program Files\\nodejs\\node.exe\" \"C:\\Tools\\indsin\\bin\\indsin-open.js\" \"%1\""
+
+[HKEY_CURRENT_USER\Software\Classes\indsin.Document\shell\source]
+@="View source (highlighted)"
+
+[HKEY_CURRENT_USER\Software\Classes\indsin.Document\shell\source\command]
+@="\"C:\\Program Files\\nodejs\\node.exe\" \"C:\\Tools\\indsin\\bin\\indsin-open.js\" \"%1\" --source"

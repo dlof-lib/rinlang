@@ -1,0 +1,20 @@
+📊 container.table = t
+🎨 style -> style://dark
+▦ row -> ["a", "b"]
+▦ row -> [1, 2]
+✅ .end/container.table (t)
+t2
+[["a", "b"], [1, 2]]
+style://dark
+2
+3
+true
+[["a", "b"], [1, 2], [3, 4]]
+container.table
+2
+true
+false
+📊 container.table = t3
+✅ .end/container.table (t3)
+[]
+nil

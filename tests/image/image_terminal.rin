@@ -1,0 +1,7 @@
+// printImage / imageAnsi / imageInfo — docs/image-terminal.md (وضع ascii حتمي لا يتأثر بالطرفية)
+let info = imageInfo("sample.png");
+print info.width, info.height, info.format;
+printImage("sample.png", 16, "ascii");
+let blocks = imageAnsi("sample.png", 8, "blocks");
+print blocks;
+print len(imageAnsi("sample.png", 8, "color")) > 0;

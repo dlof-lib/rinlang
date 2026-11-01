@@ -1,0 +1,16 @@
+// Set: المعاملات والعلاقات والعمليات
+let a = Set([1, 2, 3, 4]);
+let b = Set([3, 4, 5]);
+print a + b, a * b, a - b, b - a;
+print a.union(b), a.intersect(b), a.diff(b), a.symDiff(b);
+print a.union([9], Set([8])), a.intersect([1, 2, 99], [2]), a.diff([1], [2]);
+print Set([1, 2]) <= a, Set([1, 2]) < a, a < a, a <= a;
+print a >= Set([1]), a > Set([1]), a > a;
+print a.isSubset([1, 2, 3, 4, 5]), a.isSuperset([1, 2]), a.isDisjoint([7, 8]), a.isDisjoint([4]);
+print a.hasAll([1, 2]), a.hasAll([1, 9]), a.hasAny([9, 4]), a.hasAny([9]);
+print a.equals([4, 3, 2, 1]);
+print Set.union(a, b), Set.intersect([1, 2, 3], [2, 3, 4]), Set.diff([1, 2, 3], [2]);
+try { a + 1; } catch (e) { print e.code; }
+try { a - [1]; } catch (e) { print e.code; }
+try { a[0]; } catch (e) { print e.code; }
+print a, b;

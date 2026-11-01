@@ -1,0 +1,53 @@
+<!-- extdb داخل indsin: قاعدة بيانات خارجية (مزوّد اتصال rtdb أو pgrest) تُقرأ وتُكتب من أزرار الواجهة.
+     كل onTap يُنفَّذ في مفسّر جديد، لذا يُفتح الاتصال داخل المعالج بـ xdb_session (غير مسجَّل) ويُكتب الناتج في خلايا warp.
+     الدوال النقية xdb_cell / xdb_len / xdb_page / xdb_msg تُستعمل في قيم الخصائص مباشرة.
+     التشغيل (مع المحاكي): python3 tests/tools/extdb_mock.py 8765   ثم   rin_indsin_preview indsin_extdb_demo.rin --png out.png -->
+<Import src="extdb" />
+<Palette seed=#0984E3 />
+
+<Tokens provider="pgrest" />
+<warp rows={[]} />
+<warp page={0} />
+<warp status={"Press Load"} />
+<warp failed={false} />
+
+<Rin>
+fun dbCfg() { return {"url": "http://127.0.0.1:8765", "key": "ANON", "retryDelayMs": 50}; }
+fun dbOpen() { return xdb_session(provider, dbCfg()); }
+fun shown(list, p, i) { let r = xdb_page(list, p, 3); return xdb_cell(r, i, "name") + "  ·  " + xdb_cell(r, i, "age"); }
+</Rin>
+
+<Fun#load>
+  try {
+    rows = xdb_list(dbOpen(), "users", {"order": "age", "desc": true});
+    page = 0; failed = false;
+    status = "Loaded " + xdb_len(rows) + " users from " + provider;
+  } catch (e) { failed = true; status = xdb_msg(e); }
+</Fun>
+
+<Fun#addUser>
+  try {
+    xdb_add(dbOpen(), "users", {"name": "User " + (xdb_len(rows) + 1), "age": 20 + xdb_len(rows)});
+    rows = xdb_list(dbOpen(), "users", {"order": "age", "desc": true});
+    status = "Added — now " + xdb_len(rows);
+  } catch (e) { failed = true; status = xdb_msg(e); }
+</Fun>
+
+<Fun#nextPage>
+  if ((page + 1) * 3 < xdb_len(rows)) { page = page + 1; } else { page = 0; }
+</Fun>
+
+<Screen#app size=phone padding=20 gap=12>
+  <Text#hdr size=heading>Users ({xdb_len(rows)})</Text>
+  <Alert#st tone={failed ? "error" : "info"} title={status} />
+  <Section title="Page">
+    <Text#r0>{shown(rows, page, 0)}</Text>
+    <Text#r1>{shown(rows, page, 1)}</Text>
+    <Text#r2>{shown(rows, page, 2)}</Text>
+  </Section>
+  <Row#bar gap=8>
+    <Button#l onTap={load()}>Load</Button>
+    <Button#a variant=outline onTap={addUser()}>Add</Button>
+    <Button#n variant=outline onTap={nextPage()}>Next</Button>
+  </Row>
+</Screen>

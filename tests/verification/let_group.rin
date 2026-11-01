@@ -1,0 +1,10 @@
+// let_group.rin — اختبار تحقّق لـ docs/let-plus.md
+let a = 1, b = a + 1, c = b + 1;
+print a + b + c;
+let n: Number = 5, s: String = "x";
+print n; print s;
+let [p, q] = [7, 8], r = p + q;
+print r;
+for (let i = 0, j = 10; i < 3; i = i + 1) { j = j - 1; }
+print "ok";
+{ let k = 1, l = 2; print k + l; }

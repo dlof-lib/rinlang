@@ -1,0 +1,9 @@
+// Rin URLKit Pro — URL parsing and query helpers.
+fun url_scheme(s){if(startsWith(s,"https://")){return "https";}if(startsWith(s,"http://")){return "http";}return "";}
+fun url_withoutScheme(s){let p=url_scheme(s);if(p==""){return s;}return substr(s,len(p)+3);}
+fun url_isSecure(s){return url_scheme(s)=="https";}
+fun url_host(s){let x=url_withoutScheme(s);let i=indexOf(x,"/");if(i==-1){i=indexOf(x,"?");}if(i==-1){return x;}return substr(x,0,i);}
+fun url_path(s){let x=url_withoutScheme(s);let i=indexOf(x,"/");if(i==-1){return "/";}return substr(x,i);}
+fun url_hasQuery(s){return indexOf(s,"?")!=-1;}
+fun url_hasFragment(s){return indexOf(s,"#")!=-1;}
+fun url_join(base,path){if(endsWith(base,"/") and startsWith(path,"/")){return substr(base,0,len(base)-1)+path;}if(!endsWith(base,"/") and !startsWith(path,"/")){return base+"/"+path;}return base+path;}

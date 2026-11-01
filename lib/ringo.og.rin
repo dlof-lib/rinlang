@@ -1,0 +1,213 @@
+// ============================================================================
+//  lib/ringo.og.rin — Ringo: لغة ترميز خفيفة بوسوم [tag]، تُصيَّر إلى HTML أو نص عادي
+//  استيراد:
+//    @import "lib/ringo.og.rin";
+//    @import "lib/ringo.og.rin" as ringo;
+//
+//  مكتبة مدمجة (embedded) داخل ثنائي المحرّك نفسه (راجع rin_stdlib_libs.h) — تعمل عبر
+//  @import فوراً على أي جهاز/منصة دون أي خطوة تثبيت إضافية، تماماً كباقي مكتبات lib/*.og.rin.
+//
+//  صيغة Ringo (BBCode-like، بلا تداخل وسم من نفس النوع داخل نفسه):
+//    [b]...[/b]        عريض            -> <strong>
+//    [i]...[/i]        مائل            -> <em>
+//    [u]...[/u]        تسطير           -> <u>
+//    [s]...[/s]        يتوسّطه خط      -> <del>
+//    [code]...[/code]  كود مضمّن       -> <code>
+//    [quote]...[/quote] اقتباس         -> <blockquote>
+//    [h1]/[h2]/[h3]     عناوين         -> <h1>/<h2>/<h3>
+//    [color=#hex أو اسم]...[/color]     -> <span style="color:...">
+//    [link=URL]...[/link]               -> <a href="URL">
+//    [list] [*] عنصر  [*] عنصر [/list] -> <ul><li>...</li>...</ul>
+//    [br]  سطر جديد صريح   [hr]  خط فاصل أفقي
+//
+//  مثال:
+//    let src = "[h1]عنوان[/h1]\n[b]مرحباً[/b] يا [color=#7C5CFF]رنين[/color]!\n" +
+//              "[list][*]أول[*]ثاني[/list]";
+//    print ringoToHtml(src);
+//    print ringoToPlain(src);
+//
+//  ملاحظة (حد معروف v1، بنفس أسلوب توثيق القيود في هذا المشروع): الوسوم لا تتحقق من
+//  التطابق أو التداخل — إغلاق وسم بلا فتح مطابق يُصيَّر بأمان (يُطبع وسم HTML المقابل
+//  فقط) لكن دون تحقّق صحة كامل؛ القوائم [list] لا تدعم التداخل (قائمة داخل قائمة) بعد.
+// ============================================================================
+
+// يحوّل مصدر Ringo إلى مصفوفة "tokens" مسطّحة: كل عنصر إما نص خام، أو وسم فتح/إغلاق،
+// أو عنصر قائمة [*]. لا يبني شجرة متداخلة عمداً — التصيير (render) أدناه يتعامل مع
+// الترتيب الخطي مباشرة، وهذا يكفي لصياغة BBCode غير متداخلة العناصر من نفس النوع.
+fun ringoTokenize(source) {
+    let tokens = [];
+    let pos = 0;
+    let n = len(source);
+
+    while (pos < n) {
+        let rest = substr(source, pos);
+        let nextBracket = indexOf(rest, "[");
+
+        if (nextBracket == -1) {
+            push(tokens, { kind: "text", value: rest });
+            pos = n;
+        } else {
+            if (nextBracket > 0) {
+                push(tokens, { kind: "text", value: substr(rest, 0, nextBracket) });
+            }
+
+            let tagStart = pos + nextBracket + 1;
+            let afterTagStart = substr(source, tagStart);
+            let closeBracket = indexOf(afterTagStart, "]");
+
+            if (closeBracket == -1) {
+                // "[" بلا "]" مقابل: اعتبر الباقي كله نصاً خاماً (لا يوجد وسم صالح)
+                push(tokens, { kind: "text", value: substr(rest, nextBracket) });
+                pos = n;
+            } else {
+                let raw = substr(afterTagStart, 0, closeBracket);
+                pos = tagStart + closeBracket + 1;
+
+                if (raw == "*") {
+                    push(tokens, { kind: "item" });
+                } else if (len(raw) > 0 and charAt(raw, 0) == "/") {
+                    push(tokens, { kind: "close", name: lower(trim(substr(raw, 1))) });
+                } else {
+                    let eq = indexOf(raw, "=");
+                    if (eq == -1) {
+                        push(tokens, { kind: "open", name: lower(trim(raw)), attr: "" });
+                    } else {
+                        push(tokens, {
+                            kind: "open",
+                            name: lower(trim(substr(raw, 0, eq))),
+                            attr: trim(substr(raw, eq + 1))
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    return tokens;
+}
+
+// وسم HTML المقابل لفتح وسم Ringo باسم name (ومَعامل attr إن وُجد لـ color/link)؛
+// وسم غير معروف يُتجاهَل بصمت (نص فارغ) بدل رمي خطأ، اتساقاً مع فلسفة المكتبة الآمنة
+fun ringoHtmlOpenTag(name, attr) {
+    if (name == "b") { return "<strong>"; }
+    if (name == "i") { return "<em>"; }
+    if (name == "u") { return "<u>"; }
+    if (name == "s") { return "<del>"; }
+    if (name == "code") { return "<code>"; }
+    if (name == "quote") { return "<blockquote>"; }
+    if (name == "h1") { return "<h1>"; }
+    if (name == "h2") { return "<h2>"; }
+    if (name == "h3") { return "<h3>"; }
+    if (name == "color") { return "<span style=\"color:" + attr + "\">"; }
+    if (name == "link") { return "<a href=\"" + attr + "\">"; }
+    return "";
+}
+
+// وسم HTML الخاص بإغلاق وسم Ringo باسم name — مطابق لـ ringoHtmlOpenTag
+fun ringoHtmlCloseTag(name) {
+    if (name == "b") { return "</strong>"; }
+    if (name == "i") { return "</em>"; }
+    if (name == "u") { return "</u>"; }
+    if (name == "s") { return "</del>"; }
+    if (name == "code") { return "</code>"; }
+    if (name == "quote") { return "</blockquote>"; }
+    if (name == "h1") { return "</h1>"; }
+    if (name == "h2") { return "</h2>"; }
+    if (name == "h3") { return "</h3>"; }
+    if (name == "color") { return "</span>"; }
+    if (name == "link") { return "</a>"; }
+    return "";
+}
+
+// يهرب أحرف HTML الخاصة داخل نص خام (& أولاً، ثم < > ") حتى لا يُفسَّر كوسم HTML فعلي
+fun ringoEscapeHtml(raw) {
+    let out = raw;
+    out = replace(out, "&", "&amp;");
+    out = replace(out, "<", "&lt;");
+    out = replace(out, ">", "&gt;");
+    out = replace(out, "\"", "&quot;");
+    return out;
+}
+
+// يحوّل مصدر Ringo كاملاً إلى HTML جاهز للعرض (مثلاً داخل WebView في تطبيق DLoF/RinLang)
+fun ringoToHtml(source) {
+    let tokens = ringoTokenize(source);
+    let out = "";
+    let liOpen = false;
+    let i = 0;
+
+    while (i < len(tokens)) {
+        let t = tokens[i];
+        let kind = t["kind"];
+
+        if (kind == "text") {
+            let escaped = ringoEscapeHtml(t["value"]);
+            out = out + replace(escaped, "\n", "<br>\n");
+        } else if (kind == "open") {
+            let name = t["name"];
+            if (name == "list") {
+                out = out + "<ul>\n";
+            } else if (name == "br") {
+                out = out + "<br>\n";
+            } else if (name == "hr") {
+                out = out + "<hr>\n";
+            } else {
+                out = out + ringoHtmlOpenTag(name, t["attr"]);
+            }
+        } else if (kind == "item") {
+            if (liOpen) { out = out + "</li>\n"; }
+            out = out + "<li>";
+            liOpen = true;
+        } else if (kind == "close") {
+            let name = t["name"];
+            if (name == "list") {
+                if (liOpen) { out = out + "</li>\n"; liOpen = false; }
+                out = out + "</ul>\n";
+            } else {
+                out = out + ringoHtmlCloseTag(name);
+            }
+        }
+
+        i = i + 1;
+    }
+
+    return out;
+}
+
+// يحوّل مصدر Ringo إلى نص عادي (كل الوسوم تُزال، [*] تصبح "- "، [br]/[hr] تصبح أسطراً)؛
+// مفيد للمعاينة السريعة، أو للبحث/الفهرسة داخل نصوص Ringo دون HTML
+fun ringoToPlain(source) {
+    let tokens = ringoTokenize(source);
+    let out = "";
+    let i = 0;
+
+    while (i < len(tokens)) {
+        let t = tokens[i];
+        let kind = t["kind"];
+
+        if (kind == "text") {
+            out = out + t["value"];
+        } else if (kind == "item") {
+            out = out + "\n- ";
+        } else if (kind == "open") {
+            let name = t["name"];
+            if (name == "br") { out = out + "\n"; }
+            else if (name == "hr") { out = out + "\n----------\n"; }
+        }
+
+        i = i + 1;
+    }
+
+    return out;
+}
+
+// معلومات وصفية عن المكتبة (اسم/إصدار/وصف/دوال مصدَّرة)، بنفس أسلوب pkgInfo في oglang.og.rin،
+// جاهزة للطباعة المباشرة أو للعرض في شاشة "المكتبات" داخل التطبيق
+fun ringoInfo() {
+    return {
+        name: "ringo",
+        version: "1.0.0",
+        description: "لغة ترميز خفيفة بوسوم [tag] تُصيَّر إلى HTML أو نص عادي",
+        exports: ["ringoTokenize", "ringoToHtml", "ringoToPlain", "ringoEscapeHtml", "ringoInfo"]
+    };
+}

@@ -1,0 +1,24 @@
+// indsin_time_demo.rin — مفهوم time داخل واجهات indsin (docs/TIME.md)
+//
+// `time.*` دوال نقية فتعمل داخل أي خاصية. والخلية الخاصة `clock` ساعة حيّة: يحدّثها المضيف كل ثانية
+// (rin_indsin_session_tick) فتُعاد تلقائياً كل خاصية تقرؤها.
+
+let target = time.parse("2027-01-01");
+
+warp clock = time.ms();
+
+@view.Column=Root
+  padding=comfortable; gap=normal;
+
+  @view.Text=Clock
+    text=time(clock, "HH:mm:ss"); size=heading;
+  .end/view
+
+  @view.Text=Date
+    text=time(clock, "dddd D MMMM YYYY");
+  .end/view
+
+  @view.Text=Countdown
+    text="تبقّى " + time.diff(target, clock, "days") + " يوماً على 2027";
+  .end/view
+.end/view

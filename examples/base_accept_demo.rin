@@ -1,0 +1,31 @@
+// base_accept_demo.rin — base (مرجع يُقاس منه) + accept (حارس قبول): متغيّران يخدمان if
+// الشرح: docs/base-accept.md
+
+// ---- accept: لا يدخل إلا ما يقبله الشرط ----
+accept age = 20 if age >= 0 and age < 150;
+age = 30;
+print "age:", age, "ok:", age.ok;
+age = 500;                                   // مرفوضة (تُتجاهل بصمت)
+if (!age.ok) { print "rejected", age.refused, "- age is still", age; }
+
+accept pct = 50 if pct >= 0 and pct <= 100 else 100;   // بديل عند الرفض
+pct = 250;
+print "pct:", pct, "(rejected", pct.rejected, "time)";
+
+accept slot = 1 if slot >= 1 and slot <= 3 strict;     // الرفض خطأ E0049
+try { slot = 9; } catch (e) { print "caught", e.code; }
+
+// ---- base: خط أساس + هدف + خطوة ----
+base score = 10 to 40 step 5;
+inc score; inc score by 10;
+print "score:", score, "delta:", score.delta, "progress:", score.progress;
+if (score.up and !score.reached) { print "improving, not there yet"; }
+inc score 15;
+if (score.reached) { print "goal reached at", score; }
+rewind score;
+print "back to base:", score, score.same;
+
+// ---- معًا: inc يمرّ من الحارس ----
+accept level = 1 if level <= 3;
+for (let i = 0; i < 5; i = i + 1) { inc level; }
+print "level capped at", level, "- rejected", level.rejected;

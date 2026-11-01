@@ -1,0 +1,80 @@
+// ============================================================================
+//  Lexer.rin — المرحلة الأولى من لغة "__LANG_NAME__": تحويل النص المصدر إلى tokens
+//  المدخل: نص مصدر (string) بلغتك __LANG_NAME__
+//  المخرج: مصفوفة tokens، كل واحد { type, value, line } (راجع lib/langkit.og.rin::makeToken)
+// ============================================================================
+
+@import "langkit";
+
+// عدّل هذه القائمة لتضيف الكلمات المفتاحية الخاصة بلغتك
+fun isKeyword(word) {
+    let keywords = ["let", "print", "if", "else"];
+    return contains(keywords, word);
+}
+
+// نقطة الدخول الرئيسية: تُستدعى من Parser.rin
+fun lex(source) {
+    let tokens = [];
+    let i = 0;
+    let line = 1;
+    let n = len(source);
+
+    while (i < n) {
+        let ch = charAt(source, i);
+
+        // تجاهل الفراغات
+        if (isSpaceChar(ch)) {
+            i = i + 1;
+        } else if (isNewlineChar(ch)) {
+            line = line + 1;
+            i = i + 1;
+
+        // الأرقام: 123 أو 12.5
+        } else if (isDigitChar(ch)) {
+            let start = i;
+            while (i < n and (isDigitChar(charAt(source, i)) or charAt(source, i) == ".")) {
+                i = i + 1;
+            }
+            push(tokens, makeToken("NUMBER", substr(source, start, i - start), line));
+
+        // المعرّفات والكلمات المفتاحية: name أو let أو print
+        } else if (isAlphaChar(ch)) {
+            let start = i;
+            while (i < n and isAlnumChar(charAt(source, i))) {
+                i = i + 1;
+            }
+            let word = substr(source, start, i - start);
+            if (isKeyword(word)) {
+                push(tokens, makeToken("KEYWORD", word, line));
+            } else {
+                push(tokens, makeToken("IDENT", word, line));
+            }
+
+        // النصوص المحاطة بعلامتي اقتباس "..."
+        } else if (ch == "\"") {
+            let start = i + 1;
+            i = i + 1;
+            while (i < n and charAt(source, i) != "\"") {
+                i = i + 1;
+            }
+            push(tokens, makeToken("STRING", substr(source, start, i - start), line));
+            i = i + 1; // تجاوز علامة الاقتباس الختامية
+
+        // عوامل ورموز مفردة/مزدوجة: + - * / = ( ) ; == إلخ.
+        } else if (ch == "=" and i + 1 < n and charAt(source, i + 1) == "=") {
+            push(tokens, makeToken("OP", "==", line));
+            i = i + 2;
+        } else if (contains(["+", "-", "*", "/", "=", "(", ")", "{", "}", ";", "<", ">"], ch)) {
+            push(tokens, makeToken("OP", ch, line));
+            i = i + 1;
+
+        } else {
+            // محرف غير معروف: نسجّله كخطأ لغوي بدل تجاهله بصمت
+            push(tokens, langError("Lexer", "محرف غير متوقَّع: '" + ch + "'", line));
+            i = i + 1;
+        }
+    }
+
+    push(tokens, eofToken(line));
+    return tokens;
+}

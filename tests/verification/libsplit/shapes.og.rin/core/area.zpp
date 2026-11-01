@@ -1,0 +1,3 @@
+shapes_register("area");
+fun circle_area(r) { return GEOM_PI * geom_square(r); }
+fun rect_area(w, h) { return w * h; }

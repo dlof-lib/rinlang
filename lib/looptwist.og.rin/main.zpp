@@ -1,0 +1,12 @@
+// looptwist — الجزء الأساسي: الثوابت. كل الأجزاء تُربط في نطاق واحد (انظر disconom.toml).
+//
+//   @import "looptwist";
+//   lt_each([1, 2, 3], fun(x) { print x; });
+//   for x in lt_chunk([1,2,3,4,5], 2) { print x; }            // [1,2] [3,4] [5]
+//   let LT = lt_facade();  LT.range(0, 10, 3)                  // الاختصارات: كل الدوال بلا بادئة lt_
+//
+// الإعدادات الافتراضية تأتي من RINTWIST (لا تحتاج ضبطاً): انظر core/context.zpp و lt_config().
+
+// تُرجعها دالة الحلقة (callback) لإيقاف التكرار مبكراً: return LT_STOP;
+export let LT_STOP = "@@looptwist.stop@@";
+export let LT_VERSION = "1.0.0";

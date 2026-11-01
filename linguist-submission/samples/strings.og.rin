@@ -1,0 +1,114 @@
+// ============================================================================
+//  lib/strings.og.rin — امتدادات نصوص فوق stdlib الأساسية (upper/lower/trim/substr/split/join...)
+//  استيراد:
+//    @import "lib/strings.og.rin";
+//    @import "lib/strings.og.rin" as strx;
+// ============================================================================
+
+// يجعل أول حرف كبيراً وبقية النص كما هو: "rin" -> "Rin"
+fun capitalize(s) {
+    if (len(s) == 0) { return s; }
+    return upper(charAt(s, 0)) + substr(s, 1);
+}
+
+// يعكس ترتيب أحرف النص: "abc" -> "cba"
+fun reverseStr(s) {
+    let result = "";
+    let i = len(s) - 1;
+    while (i >= 0) {
+        result = result + charAt(s, i);
+        i = i - 1;
+    }
+    return result;
+}
+
+// هل s يبدأ بـ prefix؟
+fun startsWith(s, prefix) {
+    if (len(prefix) > len(s)) { return false; }
+    return substr(s, 0, len(prefix)) == prefix;
+}
+
+// هل s ينتهي بـ suffix؟
+fun endsWith(s, suffix) {
+    let sl = len(s);
+    let pl = len(suffix);
+    if (pl > sl) { return false; }
+    return substr(s, sl - pl, pl) == suffix;
+}
+
+// يكمل النص من اليسار حتى يصل طوله إلى width باستخدام حرف الحشو ch
+fun padLeft(s, width, ch) {
+    let result = s;
+    while (len(result) < width) {
+        result = ch + result;
+    }
+    return result;
+}
+
+// يكمل النص من اليمين حتى يصل طوله إلى width باستخدام حرف الحشو ch
+fun padRight(s, width, ch) {
+    let result = s;
+    while (len(result) < width) {
+        result = result + ch;
+    }
+    return result;
+}
+
+// يكرر النص s عدد n من المرات
+fun repeatStr(s, n) {
+    let result = "";
+    let i = 0;
+    while (i < n) {
+        result = result + s;
+        i = i + 1;
+    }
+    return result;
+}
+
+// يجعل أول حرف من كل كلمة كبيراً: "hello rin lang" -> "Hello Rin Lang"
+fun titleCase(s) {
+    let words = split(s, " ");
+    let result = [];
+    let i = 0;
+    while (i < len(words)) {
+        push(result, capitalize(words[i]));
+        i = i + 1;
+    }
+    return join(result, " ");
+}
+
+// هل النص فارغ أو يحتوي على مسافات فقط؟
+fun isBlank(s) {
+    return trim(s) == "";
+}
+
+// يحسب عدد مرات ظهور sub داخل s (بلا تداخل بين المطابقات)
+fun countOccurrences(s, sub) {
+    if (len(sub) == 0) { return 0; }
+    let count = 0;
+    let rest = s;
+    let idx = indexOf(rest, sub);
+    while (idx != -1) {
+        count = count + 1;
+        rest = substr(rest, idx + len(sub));
+        idx = indexOf(rest, sub);
+    }
+    return count;
+}
+
+// يزيل جميع الفراغات (المسافات) من النص
+fun stripSpaces(s) {
+    return replace(s, " ", "");
+}
+
+// يحوّل نص فاصل مثل "a-b-c" إلى مصفوفة عبر separator، بعد تقليم الفراغات من كل عنصر
+fun splitTrim(s, separator) {
+    let parts = split(s, separator);
+    let result = [];
+    let i = 0;
+    while (i < len(parts)) {
+        push(result, trim(parts[i]));
+        i = i + 1;
+    }
+    return result;
+}

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- زر الفرز الجديد (نص + أيقونة بدل أيقونة فقط): بطاقة بيضاوية بحدّ بنفسجي خافت، نفس هوية
+     bg_store_section_card لكن بزوايا كاملة الاستدارة (pill) لتمييزه كعنصر تفاعلي مستقل. -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="@color/rin_ghost_ripple">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/rin_job_card_bg" />
+            <stroke android:width="1dp" android:color="@color/rin_accent_border_subtle" />
+            <corners android:radius="20dp" />
+        </shape>
+    </item>
+</ripple>

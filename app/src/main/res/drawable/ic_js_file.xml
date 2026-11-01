@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- أيقونة ملفات .js/.mjs: مربع JavaScript الأصفر مع الحرفين JS داكنين — محلية بلا شبكة. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path android:fillColor="#F7DF1E"
+        android:pathData="M4.6,2.8 L19.4,2.8 C20.3,2.8 21,3.5 21,4.4 L21,19.6 C21,20.5 20.3,21.2 19.4,21.2 L4.6,21.2 C3.7,21.2 3,20.5 3,19.6 L3,4.4 C3,3.5 3.7,2.8 4.6,2.8 Z" />
+    <path
+        android:strokeColor="#323330"
+        android:strokeWidth="1.9"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M10.9,10 L10.9,15.4 C10.9,16.7 10.2,17.3 9.2,17.3 C8.5,17.3 7.9,17 7.6,16.4" />
+    <path
+        android:strokeColor="#323330"
+        android:strokeWidth="1.9"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M18.5,10.5 C18.1,10 17.5,9.8 16.8,9.8 C15.7,9.8 15,10.4 15,11.3 C15,12.2 15.7,12.5 16.8,12.9 C17.9,13.3 18.6,13.7 18.6,14.7 C18.6,15.7 17.8,16.3 16.7,16.3 C15.9,16.3 15.2,16 14.7,15.4" />
+</vector>

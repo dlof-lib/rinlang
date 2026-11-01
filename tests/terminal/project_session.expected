@@ -1,0 +1,65 @@
+✓ project created: demo
+  rin.toml
+  .gitignore
+  src/main.rin
+  tests/basic.rin
+  README.md
+now in: <TMP>/demo
+next:  :run   (or :test)
+  project: demo  v0.1.0
+  root:    <TMP>/demo
+  kind:    console
+  main:    src/main.rin
+  tests:   1
+Hello from Rin!
+✓ loaded <TMP>/demo/src/main.rin
+✓ basic.rin  N ms
+1 passed, 0 failed
+<TMP>
+✓ project created: ui-demo
+  rin.toml
+  .gitignore
+  src/main.rin
+  tests/basic.rin
+  README.md
+now in: <TMP>/ui-demo
+next:  :indsin   (or :test)
+  project: ui-demo  v0.1.0
+  root:    <TMP>/ui-demo
+  kind:    indsin (UI)
+  main:    src/main.rin
+  tests:   1
+
+
+
+    ui-demo
+
+
+
+
+    Count: 0
+
+
+
+
+
+                        +1
+
+
+
+
+
+
+                        -1
+
+
+
+
+
+
+✓ basic.rin  N ms
+1 passed, 0 failed
+<TMP>
+path already exists: demo
+invalid name: letters/digits/_/- only, starting with a letter
+unknown template: zzz  (console | indsin | lib)

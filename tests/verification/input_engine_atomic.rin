@@ -1,0 +1,24 @@
+// input_engine_atomic.rin — نموذج بمعاملة: الإلغاء/الفشل في منتصف النموذج يعيد الهدف كما كان (كائن · حاوية state · قاموس)
+class Person { let name = "Ali"; let age = 30; let active = false; }
+let p = Person();
+let failedObj = false;
+try { input("P> ", p); } catch (e) { failedObj = true; }
+print "";
+print "obj: " + failedObj + "|" + p.name + "|" + p.age + "|" + p.active;
+
+@container=Profile
+    state name = "Ali";
+    state age = 30;
+    state score = 0;
+    on update(prev) { print "[hook] " + getField("Profile", "name") + "/" + getField("Profile", "age"); }
+.end/container
+let failedCont = false;
+try { input("Q> ", "Profile"); } catch (e) { failedCont = true; }
+print "";
+print "cont: " + failedCont + "|" + getField("Profile", "name") + "|" + getField("Profile", "age") + "|" + getField("Profile", "score");
+
+let cfg = {"host": "localhost", "port": 80};
+let failedMap = false;
+try { input("M> ", cfg, {"tls": "bool", "host": "string", "port": "number"}); } catch (e) { failedMap = true; }
+print "";
+print "map: " + failedMap + "|" + len(cfg) + "|" + cfg.host + "|" + cfg.port;

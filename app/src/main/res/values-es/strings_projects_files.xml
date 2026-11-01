@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  This file is intentionally left empty.
+  The same resource names are already defined in the main strings XML files for each locale,
+  and keeping a second copy here caused duplicate resource merge failures during the Android build.
+-->
+<resources />

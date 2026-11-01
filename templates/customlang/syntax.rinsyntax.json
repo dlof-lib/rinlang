@@ -1,0 +1,17 @@
+{
+  "language": "__LANG_NAME__",
+  "fileExtension": "__LANG_EXT__",
+  "lineComment": "//",
+  "blockComment": { "start": "/*", "end": "*/" },
+  "keywords": ["let", "print", "if", "else"],
+  "operators": ["+", "-", "*", "/", "=", "==", "<", ">", "(", ")", "{", "}", ";"],
+  "rules": [
+    { "name": "comment", "pattern": "//[^\\n]*", "color": "#6A9955" },
+    { "name": "string", "pattern": "\"(?:[^\"\\\\]|\\\\.)*\"", "color": "#CE9178" },
+    { "name": "number", "pattern": "\\b[0-9]+(?:\\.[0-9]+)?\\b", "color": "#B5CEA8" },
+    { "name": "keyword", "pattern": "\\b(let|print|if|else)\\b", "color": "#C586C0" },
+    { "name": "identifier", "pattern": "\\b[A-Za-z_][A-Za-z0-9_]*\\b", "color": "#9CDCFE" },
+    { "name": "operator", "pattern": "==|[+\\-*/=<>(){};]", "color": "#D4D4D4" }
+  ],
+  "note": "هذا الملف يقرأه محرر Rin IDE (CustomLanguageSyntaxLoader.kt) لتلوين ملفات .__LANG_EXT__ تلقائياً. rules تُطبَّق بالترتيب كتعبيرات نمطية (regex) قياسية."
+}

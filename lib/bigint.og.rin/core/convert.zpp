@@ -1,0 +1,69 @@
+// التحويل من/إلى أرقام وسلاسل نصية — big(x) و big_str(a) و big_num(a)
+fun bi_from_number(x) {
+    if (x != floor(x)) { bi_fail("big(): the number " + str(x) + " is not an integer"); }
+    if (abs(x) > 9007199254740991) { bi_fail("big(): the number is beyond the safe integer range, pass it as a string"); }
+    let sign = x < 0 ? -1 : 1;
+    let m = abs(x); let mag = [];
+    while (m > 0) {
+        let q = floor(m / BIG_BASE);
+        push(mag, m - q * BIG_BASE);
+        m = q;
+    }
+    return bi_make(sign, mag);
+}
+fun bi_from_string(src) {
+    let s = src; let sign = 1;
+    while (len(s) > 0 and (s[0] == " " or s[0] == "\t" or s[0] == "\n")) { s = substr(s, 1); }
+    while (len(s) > 0 and (s[len(s) - 1] == " " or s[len(s) - 1] == "\t" or s[len(s) - 1] == "\n")) { s = substr(s, 0, len(s) - 1); }
+    if (len(s) > 0 and (s[0] == "-" or s[0] == "+")) { if (s[0] == "-") { sign = -1; } s = substr(s, 1); }
+    if (len(s) == 0) { bi_fail("big(): empty number"); }
+    let i = 0;
+    while (i < len(s)) {
+        let c = ord(s[i]);
+        if (c < 48 or c > 57) { bi_fail("big(): invalid digit '" + s[i] + "' in \"" + src + "\""); }
+        i = i + 1;
+    }
+    let mag = []; let hi = len(s);
+    while (hi > 0) {
+        let lo = max(0, hi - BIG_DIGITS);
+        push(mag, toNumber(substr(s, lo, hi - lo)));
+        hi = lo;
+    }
+    return bi_make(sign, mag);
+}
+// big(x): x رقم صحيح آمن، أو سلسلة أرقام بأي طول، أو رقم ضخم (يُرجع كما هو)
+export fun big(x) {
+    if (big_isBig(x)) { return x; }
+    let t = type(x);
+    if (t == "number") { return bi_from_number(x); }
+    if (t == "string") { return bi_from_string(x); }
+    bi_fail("big(): unsupported type " + t);
+}
+// النص العشري للرقم
+export fun big_str(a) {
+    let x = big(a);
+    if (x.s == 0) { return "0"; }
+    let parts = []; let i = len(x.d) - 1;
+    push(parts, str(x.d[i]));
+    i = i - 1;
+    while (i >= 0) {
+        let p = str(x.d[i]);
+        while (len(p) < BIG_DIGITS) { p = "0" + p; }
+        push(parts, p);
+        i = i - 1;
+    }
+    return (x.s < 0 ? "-" : "") + join(parts, "");
+}
+// تقريب إلى رقم عادي (قد يفقد الدقة، أو يعطي Infinity للضخم جداً)
+export fun big_num(a) {
+    let x = big(a);
+    let v = 0; let i = len(x.d) - 1;
+    while (i >= 0) { v = v * BIG_BASE + x.d[i]; i = i - 1; }
+    return x.s < 0 ? -v : v;
+}
+// عدد الخانات العشرية (بدون الإشارة)
+export fun big_digits(a) {
+    let x = big(a);
+    if (x.s == 0) { return 1; }
+    return (len(x.d) - 1) * BIG_DIGITS + len(str(x.d[len(x.d) - 1]));
+}

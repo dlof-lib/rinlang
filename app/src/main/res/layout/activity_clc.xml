@@ -1,0 +1,257 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- شاشة "CLC" الخاصة بمشروع واحد (Rin Compact Library Container، حاويات .rcl):
+     - قسم "تصدير مكتبة": يبني حاوية .rcl من أي مجلد فرعي داخل المشروع (libraryExport).
+     - قسم "حاويات .rcl في المشروع": كل حاوية موجودة فعلياً على القرص داخل المشروع (بحث متكرر) أو
+       أُحضِرت من الجهاز، مع إجراءات "فحص" (قراءة Metadata وقائمة الملفات فقط) و"استيراد وتشغيل"
+       (libraryImport فعلي + كود Rin اختياري إضافي). -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/rin_background">
+
+    <include layout="@layout/toolbar_app" />
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:clipToPadding="false"
+        android:paddingBottom="24dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="8dp">
+
+            <!-- قسم "تصدير مكتبة" -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:layout_marginStart="8dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <View
+                    android:layout_width="7dp"
+                    android:layout_height="7dp"
+                    android:layout_marginEnd="8dp"
+                    android:background="@drawable/bg_section_accent_dot" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/clc_section_export"
+                    android:textColor="@color/rin_on_toolbar"
+                    android:textStyle="bold"
+                    android:textSize="15sp" />
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="19dp"
+                android:layout_marginEnd="8dp"
+                android:layout_marginBottom="6dp"
+                android:text="@string/clc_section_export_hint"
+                android:textColor="@color/rin_editor_hint"
+                android:textSize="12sp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:layout_marginBottom="8dp"
+                android:orientation="vertical"
+                android:background="@drawable/bg_store_section_card"
+                android:padding="13dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/clc_export_src_hint"
+                    android:textColor="@color/rin_on_toolbar_dim"
+                    android:textSize="11.5sp"
+                    android:layout_marginBottom="4dp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <EditText
+                        android:id="@+id/edtExportSrcDir"
+                        android:layout_width="0dp"
+                        android:layout_height="44dp"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="8dp"
+                        android:background="@drawable/bg_input_field"
+                        android:paddingHorizontal="14dp"
+                        android:hint="@string/clc_export_src_field_hint"
+                        android:textColor="@color/rin_editor_text"
+                        android:textColorHint="@color/rin_editor_hint"
+                        android:textSize="14sp"
+                        android:singleLine="true"
+                        android:inputType="text" />
+
+                    <ImageButton
+                        android:id="@+id/btnBrowseSrcDir"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:padding="9dp"
+                        android:background="@drawable/bg_icon_btn"
+                        android:src="@drawable/ic_folder_solid"
+                        app:tint="@color/rin_accent"
+                        android:contentDescription="@string/action_browse_folder" />
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="@string/clc_export_out_hint"
+                    android:textColor="@color/rin_on_toolbar_dim"
+                    android:textSize="11.5sp"
+                    android:layout_marginBottom="4dp" />
+
+                <EditText
+                    android:id="@+id/edtExportOutName"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:background="@drawable/bg_input_field"
+                    android:paddingHorizontal="14dp"
+                    android:hint="library.rcl"
+                    android:text="library.rcl"
+                    android:textColor="@color/rin_editor_text"
+                    android:textColorHint="@color/rin_editor_hint"
+                    android:textSize="14sp"
+                    android:singleLine="true"
+                    android:inputType="text" />
+
+                <Button
+                    android:id="@+id/btnExportNow"
+                    android:layout_width="match_parent"
+                    android:layout_height="42dp"
+                    android:layout_marginTop="12dp"
+                    android:minWidth="0dp"
+                    android:minHeight="0dp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:text="@string/action_export_now"
+                    android:textAllCaps="false"
+                    android:textSize="13sp"
+                    android:background="@drawable/bg_toolbar_btn_primary"
+                    android:textColor="@android:color/white" />
+
+                <TextView
+                    android:id="@+id/txtExportResult"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:textSize="12.5sp"
+                    android:visibility="gone"
+                    tools:text="تم التصدير: mylib.rcl (12 KB)" />
+
+            </LinearLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="12dp"
+                android:layout_marginBottom="4dp"
+                android:background="@color/rin_divider" />
+
+            <!-- قسم "حاويات .rcl في المشروع" -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:layout_marginStart="8dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <View
+                    android:layout_width="7dp"
+                    android:layout_height="7dp"
+                    android:layout_marginEnd="8dp"
+                    android:background="@drawable/bg_section_accent_dot" />
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/clc_section_containers"
+                    android:textColor="@color/rin_on_toolbar"
+                    android:textStyle="bold"
+                    android:textSize="15sp" />
+
+                <Button
+                    android:id="@+id/btnImportFromDevice"
+                    android:layout_width="wrap_content"
+                    android:layout_height="34dp"
+                    android:minWidth="0dp"
+                    android:minHeight="0dp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:paddingHorizontal="12dp"
+                    android:text="@string/action_import_from_device"
+                    android:textAllCaps="false"
+                    android:textSize="12sp"
+                    android:background="@drawable/bg_toolbar_btn_ghost"
+                    android:textColor="@color/rin_on_toolbar" />
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="19dp"
+                android:layout_marginEnd="8dp"
+                android:layout_marginBottom="6dp"
+                android:text="@string/clc_section_containers_hint"
+                android:textColor="@color/rin_editor_hint"
+                android:textSize="12sp" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rvContainers"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:nestedScrollingEnabled="false" />
+
+            <LinearLayout
+                android:id="@+id/txtEmptyContainers"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:layout_marginBottom="8dp"
+                android:orientation="vertical"
+                android:gravity="center_horizontal"
+                android:visibility="gone">
+
+                <ImageView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:src="@drawable/ic_log_container"
+                    app:tint="@color/rin_editor_hint"
+                    android:contentDescription="@null" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:layout_marginStart="32dp"
+                    android:layout_marginEnd="32dp"
+                    android:gravity="center"
+                    android:text="@string/clc_no_containers_yet"
+                    android:textColor="@color/rin_editor_hint"
+                    android:textSize="13sp" />
+            </LinearLayout>
+
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+
+</LinearLayout>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- خيار غير مُحدَّد داخل صف Row.Choice (segmented control) بشاشة الإعدادات — رمادي فاتح
+     محايد، ripple بنفسجي خفيف عند اللمس قبل ما يصير هو المُحدَّد. -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="@color/rin_btn_outline_ripple">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/rin_segment_unselected_bg" />
+            <corners android:radius="10dp" />
+        </shape>
+    </item>
+</ripple>

@@ -1,0 +1,46 @@
+1a
+1b
+2a
+2b
+1<2
+1<3
+2<3
+ac1
+ac2
+ad1
+ad2
+bc1
+bc2
+bd1
+bd2
+p11
+empty product
+tw 1
+tw 2
+tw 3
+un 1
+un 2
+take 1
+take 2
+take 3
+skip 5
+skip 6
+st 3
+st 4
+wt 2
+wt 4
+s1
+s2
+s3
+d3
+d2
+d1
+ch1
+ch2
+ch3
+ch4
+{"a": 1, "b": 1}
+{2: "y"}
+{"p": 0, "q": 1}
+1683
+3

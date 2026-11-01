@@ -1,0 +1,74 @@
+// tests/indsin_icons_tests.rin — اختبارات lib/indsinicons.og.rin     rin tests/indsin_icons_tests.rin
+@import "rintest";
+@import "lib/indsinicons.og.rin";
+
+rt_describe("indsinicons: الفهرس", fun() {
+    rt_test("العدد والأسماء", fun() {
+        rt_expect(ic_count() >= 150).toBe(true);
+        rt_expect(len(ic_names())).toBe(ic_count());
+    });
+    rt_test("الأسماء البديلة وحالة الأحرف", fun() {
+        rt_expect(ic_resolve("gear")).toBe("settings");
+        rt_expect(ic_resolve("  HOME ")).toBe("home");
+        rt_expect(ic_resolve("لا-توجد")).toBe(nil);
+        rt_expect(ic_has("delete")).toBe(true);
+    });
+    rt_test("أسماء سجل المحرّك الـ27 كلها موجودة", fun() {
+        let eng = ["home","menu","close","search","settings","user","edit","delete","download","upload","play","pause","stop","check","plus","minus","arrow-left","arrow-right","arrow-up","arrow-down","eye","eye-off","lock","unlock","refresh","share","more"];
+        let a = ic_audit(eng);
+        rt_expect(a["ok"]).toBe(true);
+    });
+    rt_test("الفئات", fun() {
+        rt_expect(ic_category("home")).toBe("actions");
+        rt_expect(len(ic_byCategory("arrows")) >= 20).toBe(true);
+        rt_expect(ic_categoryName("dev", "en")).toBe("Developer & Rin");
+    });
+    rt_test("البحث يشمل الأسماء البديلة", fun() {
+        rt_expect(contains(ic_search("gear"), "settings")).toBe(true);
+        rt_expect(len(ic_search("zzzzzz"))).toBe(0);
+    });
+});
+
+rt_describe("indsinicons: التوليد", fun() {
+    rt_test("ic_svg يبني وسماً صالحاً", fun() {
+        let s = ic_svg("home", nil);
+        rt_expect(indexOf(s, "<svg ")).toBe(0);
+        rt_expect(contains(s, "viewBox=\"0 0 24 24\"")).toBe(true);
+        rt_expect(contains(s, ic_path("home"))).toBe(true);
+    });
+    rt_test("الخيارات", fun() {
+        let s = ic_svg("star", {"size": 40, "color": "#f59e0b", "stroke": 1.5, "filled": true, "title": "نجمة"});
+        rt_expect(contains(s, "width=\"40\"")).toBe(true);
+        rt_expect(contains(s, "fill=\"#f59e0b\"")).toBe(true);
+        rt_expect(contains(s, "aria-label")).toBe(true);
+    });
+    rt_test("اسم مجهول يعطي أيقونة مرئية لا فراغاً", fun() {
+        let s = ic_svg("nope-nope", nil);
+        rt_expect(contains(s, "data-missing")).toBe(true);
+        rt_expect(contains(s, "<path")).toBe(true);
+    });
+    rt_test("تهريب القيم الخطرة", fun() {
+        let s = ic_svg("home", {"color": "red\" onload=\"x"});
+        rt_expect(contains(s, "onload=\"x")).toBe(false);
+    });
+    rt_test("sprite وdata URI", fun() {
+        rt_expect(contains(ic_sprite(["home", "gear"]), "id=\"ic-settings\"")).toBe(true);
+        rt_expect(indexOf(ic_dataUri("check", {"color": "#16a34a"}), "data:image/svg+xml")).toBe(0);
+    });
+});
+
+rt_describe("indsinicons: التوسعة", fun() {
+    rt_test("ic_register", fun() {
+        let before = ic_count();
+        rt_expect(ic_register("my-logo", "brand", "M4 4H20V20H4Z")).toBe("my-logo");
+        rt_expect(ic_count()).toBe(before + 1);
+        rt_expect(contains(ic_svg("my-logo", nil), "M4 4H20V20H4Z")).toBe(true);
+    });
+    rt_test("ic_validPath", fun() {
+        rt_expect(ic_validPath("M4 4H20")).toBe(true);
+        rt_expect(ic_validPath("<script>alert(1)</script>")).toBe(false);
+        rt_expect(ic_validPath("L4 4")).toBe(false);
+    });
+});
+
+rt_done();

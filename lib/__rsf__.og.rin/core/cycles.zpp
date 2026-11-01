@@ -1,0 +1,60 @@
+// core/cycles.zpp — كشف الدورات في تتابع x → step(x) → ... (دالة الخطوة تُرجع nil عند النهاية).
+//
+// rsf_iterate(start, step): يتتبّع كل القيم المرئية (ذاكرة O(n))، ويتوقف عند أول تكرار.
+//   النتيجة {status, steps, path, mu, lambda, cycle}
+//     status: "end" (انتهى) | "cycle" (عاد إلى قيمة مرئية) | "limit" (تجاوز السقف)
+//     mu: فهرس بداية الدورة في path، lambda: طولها، cycle: عناصرها، steps: عدد الخطوات المنفّذة.
+export fun rsf_iterate(start, step) {
+    rsf_checkFn(step, "rsf_iterate");
+    let seen = {};
+    let path = [];
+    let x = start;
+    let steps = 0;
+    while (x != nil) {
+        let k = rsf_key(x);
+        if (has(seen, k)) {
+            let mu = seen[k];
+            let res = {status: "cycle", steps: steps, path: path, mu: mu, lambda: len(path) - mu, cycle: slice(path, mu, len(path))};
+            rsf_trace("cycle in sequence: mu=" + toString(mu) + " lambda=" + toString(res["lambda"]));
+            if (RSF_CFG["strict"]) { throw "__rsf__: cycle detected (starts at step " + toString(mu) + ", length " + toString(res["lambda"]) + ")"; }
+            return res;
+        }
+        if (steps >= RSF_CFG["limit"]) {
+            return {status: "limit", steps: steps, path: path, mu: -1, lambda: 0, cycle: []};
+        }
+        seen[k] = len(path);
+        push(path, x);
+        x = step(x);
+        steps = steps + 1;
+    }
+    return {status: "end", steps: steps, path: path, mu: -1, lambda: 0, cycle: []};
+}
+
+// rsf_brent(start, step): خوارزمية Brent — ذاكرة ثابتة O(1)، تُرجع {cycle, mu, lambda} (أو {cycle:false}).
+export fun rsf_brent(start, step) {
+    rsf_checkFn(step, "rsf_brent");
+    let power = 1;
+    let lam = 1;
+    let tortoise = start;
+    let hare = step(start);
+    let n = 0;
+    while (hare != nil and rsf_key(tortoise) != rsf_key(hare)) {
+        n = n + 1;
+        if (n > RSF_CFG["limit"]) { return {cycle: false, limit: true, mu: -1, lambda: 0}; }
+        if (power == lam) { tortoise = hare; power = power * 2; lam = 0; }
+        hare = step(hare);
+        lam = lam + 1;
+    }
+    if (hare == nil) { return {cycle: false, limit: false, mu: -1, lambda: 0}; }
+    tortoise = start;
+    hare = start;
+    for (let i = 0; i < lam; i++) { hare = step(hare); }
+    let mu = 0;
+    while (rsf_key(tortoise) != rsf_key(hare)) {
+        tortoise = step(tortoise);
+        hare = step(hare);
+        mu = mu + 1;
+    }
+    return {cycle: true, limit: false, mu: mu, lambda: lam};
+}
+export fun rsf_hasCycle(start, step) { return rsf_brent(start, step)["cycle"]; }

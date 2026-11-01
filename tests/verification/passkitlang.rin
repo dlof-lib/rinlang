@@ -1,0 +1,31 @@
+// tests/verification/passkitlang.rin — Calling the <passkit> language from Rin via the embedded library (bidirectional)
+@import "lib/passkitlang.og.rin";
+
+let fails = 0;
+fun check(cond, label) { if (cond) { print "PASS  " + label; } else { print "FAIL  " + label; fails = fails + 1; } }
+
+// Rin -> passkit
+let r = passkitRunSource("<input name=\"n\" required/><email name=\"e\" address=\"A@B.com\"/><return value=\"{e.address}#{n}\"/>", { n: "1" });
+check(r["ok"] and r["value"] == "a@b.com#1", "passkitRunSource: inputs in, <return> out");
+check(passkitGet(r, "e.domain") == "b.com", "passkitGet reads result vars");
+check(passkitRunSource("<input name=\"n\" required/>", {})["ok"] == false, "missing required input => ok:false");
+
+// passkit -> Rin
+fun twice(x) { return psNum(x, 0) * 2; }
+check(passkitRegister("twice", twice) and passkitRegister("nope", 3) == false, "register function / reject non-function");
+check(passkitRunSource("<call fn=\"twice\" arg0=\"21\" name=\"r\"/><return value=\"$r\"/>", {})["value"] == 42, "<call> reaches Rin function");
+check(passkitRunSource("<call fn=\"ghost\"/>", {})["ok"] == false, "<call> unregistered => error");
+
+// real files: import + run
+writeFile("_pl_child.passkit", "<input name=\"a\" required/><return value=\"child:{a}\"/>");
+writeFile("_pl_main.passkit", "<run file=\"_pl_child.passkit\" name=\"c\" in.a=\"9\" quiet/><return value=\"$c.value\"/>");
+let fr = passkitRun("_pl_main.passkit", {});
+check(fr["ok"] and fr["value"] == "child:9", "files linked: main <run> child <return>");
+deleteFile("_pl_child.passkit"); deleteFile("_pl_main.passkit");
+check(passkitRun("_pl_main.passkit", {})["ok"] == false, "missing file => ok:false");
+
+// the library does not pollute global names
+check(isFunction(passkitRun) and isFunction(pkLex), "public API + prefixed internals present");
+
+print "";
+if (fails == 0) { print "ALL PASSED"; } else { print "FAILURES: " + toString(fails); }

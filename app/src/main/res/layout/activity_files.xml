@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- شاشة "الملفات" الخاصة بمشروع واحد: شريط علوي موحّد (يعرض اسم المشروع) + قائمة ملفات المشروع
+     (بما فيها الوسائط والملفات غير .rin) على شكل بطاقات + أزرار "ملف جديد" و"رفع ملف" و"رفع وسائط" -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/rin_background">
+
+    <include layout="@layout/toolbar_app" />
+
+    <!-- شريط البحث داخل ملفات المشروع كله (كل المجلدات الفرعية)؛ نفس نمط بحث المشاريع
+         (bg_projects_search) لتناسق بصري. فارغ = تصفّح عادي مستوى بمستوى كما كان؛ أي نص
+         يُبدّل القائمة إلى نتائج بحث مسطّحة عبر المشروع كله (انظر FilesActivity.performSearch). -->
+    <EditText
+        android:id="@+id/inputSearchFiles"
+        android:layout_width="match_parent"
+        android:layout_height="46dp"
+        android:layout_marginStart="10dp"
+        android:layout_marginEnd="10dp"
+        android:layout_marginTop="10dp"
+        android:background="@drawable/bg_projects_search"
+        android:drawableStart="@android:drawable/ic_menu_search"
+        android:drawableTint="@color/rin_editor_hint"
+        android:hint="@string/search_files_hint"
+        android:paddingStart="14dp"
+        android:paddingEnd="14dp"
+        android:textColor="@color/rin_on_toolbar"
+        android:textColorHint="@color/rin_editor_hint"
+        android:textSize="13sp"
+        android:singleLine="true"
+        android:inputType="text"
+        android:imeOptions="actionDone" />
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvFiles"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:paddingTop="10dp"
+            android:paddingBottom="88dp" />
+
+        <LinearLayout
+            android:id="@+id/txtEmptyFiles"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:orientation="vertical"
+            android:gravity="center_horizontal"
+            android:visibility="gone">
+
+            <ImageView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:src="@drawable/ic_empty_folder"
+                android:contentDescription="@null" />
+
+            <TextView
+                android:id="@+id/txtEmptyFilesMessage"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:layout_marginStart="32dp"
+                android:layout_marginEnd="32dp"
+                android:gravity="center"
+                android:text="@string/no_files_yet"
+                android:textColor="@color/rin_editor_hint"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|end"
+            android:layout_margin="18dp"
+            android:orientation="vertical">
+
+            <com.google.android.material.floatingactionbutton.FloatingActionButton
+                android:id="@+id/fabZipTools"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:contentDescription="@string/zip_tools_title"
+                app:backgroundTint="@color/rin_toolbar_bottom"
+                app:tint="@android:color/white"
+                app:rippleColor="@color/rin_ghost_ripple"
+                app:fabSize="mini"
+                app:srcCompat="@drawable/ic_log_archive" />
+
+            <com.google.android.material.floatingactionbutton.FloatingActionButton
+                android:id="@+id/fabUploadMedia"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:contentDescription="@string/upload_media"
+                app:backgroundTint="@color/rin_toolbar_bottom"
+                app:tint="@android:color/white"
+                app:rippleColor="@color/rin_ghost_ripple"
+                app:fabSize="mini"
+                app:srcCompat="@drawable/ic_camera" />
+
+            <com.google.android.material.floatingactionbutton.FloatingActionButton
+                android:id="@+id/fabUploadFile"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:contentDescription="@string/upload_file"
+                app:backgroundTint="@color/rin_toolbar_bottom"
+                app:tint="@android:color/white"
+                app:rippleColor="@color/rin_ghost_ripple"
+                app:fabSize="mini"
+                app:srcCompat="@android:drawable/ic_menu_upload" />
+
+            <com.google.android.material.floatingactionbutton.FloatingActionButton
+                android:id="@+id/fabNewFolder"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:contentDescription="@string/new_folder_title"
+                app:backgroundTint="@color/rin_toolbar_bottom"
+                app:tint="@android:color/white"
+                app:rippleColor="@color/rin_ghost_ripple"
+                app:fabSize="mini"
+                app:srcCompat="@drawable/ic_rin_folder" />
+
+            <com.google.android.material.floatingactionbutton.FloatingActionButton
+                android:id="@+id/fabAddFile"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="@string/new_file_title"
+                app:backgroundTint="@color/rin_accent"
+                app:tint="@android:color/white"
+                app:rippleColor="@color/rin_accent_pressed"
+                app:srcCompat="@android:drawable/ic_input_add" />
+
+        </LinearLayout>
+
+    </FrameLayout>
+
+</LinearLayout>

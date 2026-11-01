@@ -1,0 +1,93 @@
+📊 container.table = staff
+🎨 style -> style://dark
+▦ row -> ["name", "note", "score"]
+▦ row -> ["sara", "a,b", 95]
+▦ row -> ["yusuf", "say "hi"", 88.5]
+▦ row -> ["=cmd", nil, -3]
+📄 save (csv) -> /tmp/rin_tbl_export.csv (64 بايت)
+📄 save (json) -> /tmp/rin_tbl_export.json (141 بايت)
+📄 save (md) -> /tmp/rin_tbl_export.md (109 بايت)
+📄 save (html) -> /tmp/rin_tbl_export.html (314 بايت)
+📄 save (txt) -> /tmp/rin_tbl_export.txt (203 بايت)
+✅ .end/container.table (staff)
+name,note,score
+sara,"a,b",95
+yusuf,"say ""hi""",88.5
+'=cmd,,-3
+
+[
+  {"name":"sara","note":"a,b","score":95},
+  {"name":"yusuf","note":"say \"hi\"","score":88.5},
+  {"name":"=cmd","note":null,"score":-3}
+]
+
+| name | note | score |
+| --- | --- | --- |
+| sara | a,b | 95 |
+| yusuf | say "hi" | 88.5 |
+| =cmd |  | -3 |
+
+<table class="rin-table" data-style="style://dark">
+  <thead><tr><th>name</th><th>note</th><th>score</th></tr></thead>
+  <tbody>
+    <tr><td>sara</td><td>a,b</td><td>95</td></tr>
+    <tr><td>yusuf</td><td>say &quot;hi&quot;</td><td>88.5</td></tr>
+    <tr><td>=cmd</td><td></td><td>-3</td></tr>
+  </tbody>
+</table>
+
++-------+----------+-------+
+| name  | note     | score |
++-------+----------+-------+
+| sara  | a,b      | 95    |
+| yusuf | say "hi" | 88.5  |
+| =cmd  |          | -3    |
++-------+----------+-------+
+
+name,score
+sara,95
+yusuf,88.5
+'=cmd,-3
+
+[
+  {"name":"sara","note":"a,b","score":95},
+  {"name":"yusuf","note":"say \"hi\"","score":88.5},
+  {"name":"=cmd","note":null,"score":-3}
+]
+
+📊 container.table = copy
+✅ .end/container.table (copy)
+[["name", "note", "score"], ["sara", "a,b", 95], ["yusuf", "say "hi"", 88.5], ["=cmd", nil, -3]]
+true
+📊 container.table = j
+✅ .end/container.table (j)
+true
+[["a", "b", "c"], [1, "x", nil], [2, nil, true]]
+true
+[["a", "b", "c"], [1, "x", nil], [2, nil, true], [3, nil, nil]]
+[
+  {"a":1,"b":"x","c":null},
+  {"a":2,"b":null,"c":true},
+  {"a":3,"b":null,"c":null}
+]
+
+false
+4
+📊 container.table = empty
+✅ .end/container.table (empty)
+
+[]
+
+📊 container.table = nums
+▦ row -> [1, 2]
+▦ row -> [3, 4]
+✅ .end/container.table (nums)
+[
+  [1,2],
+  [3,4]
+]
+
+1,2
+3,4
+
+6

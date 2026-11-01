@@ -1,0 +1,33 @@
+<!-- مصادر الصور: Src · SrcSet · URL · RemotePath · LocalPath · Base64 · DataURI · Blob · Upload · Download
+     الدليل: docs/indsin_image_sources.md -->
+<Column#root gap=12 padding=comfortable>
+  <Text#h size=heading>Image sources</Text>
+
+  <Text size=small color=text_muted>URL</Text>
+  <Image#url src="https://example.com/cat.png" width=120 height=80 alt="cat" />
+
+  <Text size=small color=text_muted>SrcSet (يُختار حسب عرض الخانة)</Text>
+  <Image#sset srcset="s.jpg 400w, m.jpg 800w, l.jpg 1600w" width=300 height=120 alt="responsive" />
+
+  <Text size=small color=text_muted>RemotePath + base</Text>
+  <Image#remote remotePath="/brand/logo.png" base="https://cdn.example.com" width=96 height=48 alt="logo" />
+
+  <Text size=small color=text_muted>LocalPath مع fallback</Text>
+  <Image#local localPath="photos/a.png" fallback="photos/missing.png" width=96 height=96 alt="local" />
+
+  <Text size=small color=text_muted>Base64 (PNG 1x1، النوع يُكتشف)</Text>
+  <Image#b64 base64="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==" width=48 height=48 alt="pixel" />
+
+  <Text size=small color=text_muted>DataURI</Text>
+  <Image#data dataUri="data:image/gif;base64,R0lGODlhAQABAAAAACw=" width=48 height=48 alt="gif" />
+
+  <Text size=small color=text_muted>مرفوض: javascript: → src فارغ + src_error</Text>
+  <Image#evil src="javascript:alert(1)" width=48 height=48 alt="blocked" />
+
+  <!-- Upload / Download -->
+  <Button#pick onTap={pickMedia("image", photo)}>Pick</Button>
+  <Image#preview src={photo} width=120 height=120 alt="picked" />
+  <Button#up onTap={uploadImage(photo, "https://example.com/upload")}>Upload</Button>
+  <Button#dl onTap={downloadImage("https://example.com/cat.png", "cat.png", saved)}>Download</Button>
+  <Text size=small color=text_muted>{saved_status} · {saved_progress}%</Text>
+</Column>

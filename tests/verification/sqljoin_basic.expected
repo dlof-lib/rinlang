@@ -1,0 +1,19 @@
+📋 container.datalist = users
+🧾 document (إدراج) -> 1 = {"name": "Sara", "city": "Cairo"}
+🧾 document (إدراج) -> 2 = {"name": "Omar", "city": "Riyadh"}
+✅ .end/container.datalist (users)
+📋 container.datalist = orders
+🧾 document (إدراج) -> 1 = {"user": "1", "total": 50}
+🧾 document (إدراج) -> 2 = {"user": "1", "total": 20}
+🧾 document (إدراج) -> 3 = {"user": "2", "total": 70}
+🧾 document (إدراج) -> 4 = {"user": "9", "total": 5}
+✅ .end/container.datalist (orders)
+inner:
+[{"_id": "2+1", "user": "1", "total": 20, "users_name": "Sara", "users_city": "Cairo", "users__id": "1"}, {"_id": "1+1", "user": "1", "total": 50, "users_name": "Sara", "users_city": "Cairo", "users__id": "1"}, {"_id": "3+2", "user": "2", "total": 70, "users_name": "Omar", "users_city": "Riyadh", "users__id": "2"}]
+left rows=4 inner rows=3
+where on joined field: 2
+[{"_id": "Omar", "users_name": "Omar", "count": 1, "sum_total": 70}, {"_id": "Sara", "users_name": "Sara", "count": 2, "sum_total": 70}]
+[{"_id": "Omar", "name": "Omar", "count": 1, "sum_orders_total": 70, "count_orders_total": 1}, {"_id": "Sara", "name": "Sara", "count": 2, "sum_orders_total": 70, "count_orders_total": 2}]
+caught: join needs 3 parts
+caught: unknown container
+caught: modifier-only op

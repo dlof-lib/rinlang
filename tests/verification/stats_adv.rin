@@ -1,0 +1,30 @@
+// RinStat المتقدّم — قيم محقَّقة مقابل SciPy/NumPy (مراجع مستقلة)
+@import "lib/rinstat_adv.og.rin";
+fun f(x) { return numberFormat(x, {"decimals": 4}); }
+let a=[5.1,4.9,6.2,5.8,6.0,5.5,5.3,6.1,4.8,5.9,5.0,6.4];
+let b=[6.3,6.8,5.9,7.1,6.6,7.0,6.4,6.9,7.2,6.1,6.0,7.5];
+let c=[8.1,7.9,8.4,8.8,7.7,9.2,8.0,8.6];
+let k=st_kruskal([a,b,c]); print f(k["stat"]), f(k["p"]);
+let w=st_wilcoxon(a,b); print f(w["stat"]), f(w["p"]);
+let ks=st_ks2(a,b); print f(ks["stat"]), f(ks["p"]);
+let fi=st_fisher([[8,2],[1,5]]); print f(fi["odds_ratio"]), f(fi["p"]);
+let lv=st_levene([a,b,c]); print f(lv["stat"]), f(lv["p"]);
+let xs=[0.5,1.2,-0.3,2.1,0.8,-1.1,1.9,0.1,-0.7,1.5,2.4,-1.6,0.9,-0.2,1.1,2.0,-0.9,0.4,1.7,-1.3];
+let zs=[1.0,-0.4,0.6,0.2,-1.2,0.9,0.3,-0.8,1.4,-0.1,0.7,0.5,-0.6,1.1,-1.0,0.0,0.8,-0.3,0.4,-0.9];
+let ys=[1,0,0,1,0,0,1,0,0,1,1,0,1,0,0,1,0,1,1,0];
+let X=[]; let i=0; while(i<20){ push(X,[xs[i],zs[i]]); i=i+1; }
+let lg=st_logit(X,ys,["x","z"]);
+print f(lg["beta"][0]), f(lg["beta"][1]), f(lg["beta"][2]), f(lg["loglik"]), f(lg["lr_p"]), f(lg["aic"]);
+print f(lg["coefs"][1]["se"]), f(lg["coefs"][1]["p"]), f(lg["coefs"][1]["or"]);
+let roc=st_roc(ys, st_logit_predict(lg,X)); print f(roc["auc"]);
+let ts=[5,8,12,3,9,15,20,7,6,11,14,2]; let ev=[1,1,0,1,1,0,1,1,0,1,1,1];
+let km=st_km(ts,ev); print km["median"], f(km["s"][4]), len(km["t"]);
+let lr=st_logrank([5,8,12,3,9,15],[1,1,0,1,1,0],[20,7,6,11,14,2],[1,1,0,1,1,1]); print f(lr["stat"]), f(lr["p"]);
+let ser=[3,5,4,6,8,7,9,12,11,13,12,15,14,16,18];
+let ac=st_acf(ser,4); let pc=st_pacf(ser,4); print f(ac[1]), f(ac[4]), f(pc[2]), f(pc[4]);
+let lb=st_ljungbox(ser,4); print f(lb["stat"]), f(lb["p"]);
+let se=st_ses(ser,2); print f(se["alpha"]), f(se["forecast"][0]);
+let ho=st_holt(ser,3); print f(ho["alpha"]), f(ho["beta"]), f(ho["forecast"][2]);
+print f(st_power_t2(0.5,64,0.05)), st_sample_size_t2(0.5,0.05,0.8);
+let pf=st_polyreg([1,2,3,4,5,6],[1.2,3.9,9.2,16.1,24.8,36.3],2); print f(pf["coeffs"][0]), f(pf["coeffs"][1]), f(pf["coeffs"][2]);
+let g=st_auto_compare([{"name":"a","values":a},{"name":"b","values":b}]); print g["test"], f(g["p"]);

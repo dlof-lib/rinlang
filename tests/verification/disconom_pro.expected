@@ -1,0 +1,21 @@
+📥 @import: تم استيراد "tests/verification/disconom/base.og.rin" (مكتبة: base 1.4.0 — 1 أجزاء)
+📥 @import: تم استيراد "tests/verification/disconom/extra.og.rin" (مكتبة: extra 1.0.0 — 1 أجزاء)
+[pro] ready
+📥 @import: تم استيراد "tests/verification/disconom/pro.og.rin" (مكتبة: pro 2.3.1-beta.1 — 2 أجزاء + 1 تشغيل، C++: معطَّل (استعمل --allow-native))
+hello Rin from pro
+42
+2.3.1-beta.1
+pro 2.3.1-beta.1
+["text"]
+rin tests/basic.rin
+{"extra": "^1.0.0"}
+{"testkit": "^2.0.0"}
+{"base": "^1.0.0"}
+true
+📥 @import: تم استيراد "tests/verification/disconom/optfeat.og.rin" (مكتبة: optfeat 1.0.0 — 1 أجزاء)
+true
+↺ @import: "tests/verification/disconom/extra.og.rin" مستورَدة مسبقاً بالفعل (تم تجاهل التكرار)
+📥 @import: تم استيراد "tests/verification/disconom/optauto.og.rin" (مكتبة: optauto 1.0.0 — 1 أجزاء)
+true
+true
+false

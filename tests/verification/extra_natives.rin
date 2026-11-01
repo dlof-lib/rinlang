@@ -1,0 +1,83 @@
+// Rin 1.0 — اختبار الدوال العامة الجديدة (rin_extra_natives.cpp)
+// التشغيل:  rin_run tests/verification/extra_natives.rin
+// أي فشل يرمي خطأ assertEq/assert فيتوقف التشغيل قبل طباعة "ALL PASSED".
+
+// ---- فحص الأنواع ----
+assertEq(isNil(nil), true);
+assertEq(isNil(0), false);
+assertEq(isNumber(3.5), true);
+assertEq(isNumber("3"), false);
+assertEq(isString("x"), true);
+assertEq(isArray([1]), true);
+assertEq(isArray({}), false);
+assertEq(isMap({a:1}), true);
+fun sample() { return 1; }
+assertEq(isFunction(sample), true);
+assertEq(isFunction(1), false);
+
+// ---- assert / assertEq ----
+assert(1 + 1 == 2, "math works");
+assertEq([1, 2, {a:3}], [1, 2, {a:3}]);
+
+// ---- نصوص ----
+assertEq(lastIndexOf("a.b.c", "."), 3);
+assertEq(lastIndexOf("abc", "z"), -1);
+assertEq(padStart("7", 3, "0"), "007");
+assertEq(padStart("abc", 2), "abc");
+assertEq(padEnd("ab", 5, "xy"), "abxyx");
+assertEq(padStart("رن", 4, "*"), "**رن");
+assertEq(repeat("ab", 3), "ababab");
+assertEq(repeat("x", 0), "");
+assertEq(trimStart("  hi  "), "hi  ");
+assertEq(trimEnd("  hi  "), "  hi");
+
+// ---- مصفوفات ----
+assertEq(slice([1, 2, 3, 4, 5], 1, 3), [2, 3]);
+assertEq(slice([1, 2, 3, 4, 5], -2), [4, 5]);
+assertEq(slice([1, 2, 3], 5), []);
+assertEq(slice("abcdef", 1, 4), "bcd");
+assertEq(slice("مرحبا", 1, 3), "رح");
+assertEq(reverse([1, 2, 3]), [3, 2, 1]);
+assertEq(reverse("abc"), "cba");
+assertEq(reverse("رين"), "نير");
+let orig = [1, 2, 3];
+let rev = reverse(orig);
+assertEq(orig, [1, 2, 3]);
+assertEq(concat([1, 2], [3], 4), [1, 2, 3, 4]);
+assertEq(flatten([1, [2, [3, [4]]]]), [1, 2, [3, [4]]]);
+assertEq(flatten([1, [2, [3, [4]]]], 2), [1, 2, 3, [4]]);
+assertEq(flatten([1, [2, [3, [4]]]], -1), [1, 2, 3, 4]);
+
+// ---- قواميس ----
+let m = {a:1, b:2};
+assertEq(entries(m), [["a", 1], ["b", 2]]);
+assertEq(fromEntries([["x", 10], ["y", 20]]), {x:10, y:20});
+assertEq(mergeMaps({a:1, b:2}, {b:3, c:4}), {a:1, b:3, c:4});
+assertEq(deepMerge({a:{x:1, y:2}, k:1}, {a:{y:9, z:3}}), {a:{x:1, y:9, z:3}, k:1});
+assertEq(pickKeys({a:1, b:2, c:3}, ["a", "c", "zzz"]), {a:1, c:3});
+assertEq(omitKeys({a:1, b:2, c:3}, ["b"]), {a:1, c:3});
+
+let original = {list:[1, 2], inner:{k:1}};
+let copy = deepCopy(original);
+push(copy["list"], 3);
+copy["inner"]["k"] = 99;
+assertEq(original, {list:[1, 2], inner:{k:1}});
+assertEq(copy["list"], [1, 2, 3]);
+
+// ---- getPath / setPath ----
+let data = {user:{name:"Ali", tags:["a", "b"], address:{city:"Damascus"}}};
+assertEq(getPath(data, "user.name"), "Ali");
+assertEq(getPath(data, "user.tags.1"), "b");
+assertEq(getPath(data, "user.tags.-1"), "b");
+assertEq(getPath(data, "user.address.city"), "Damascus");
+assertEq(getPath(data, "user.missing"), nil);
+assertEq(getPath(data, "user.missing.deeper", "fallback"), "fallback");
+assertEq(getPath(data, ["user", "name"]), "Ali");
+setPath(data, "user.address.zip", "0100");
+assertEq(data["user"]["address"]["zip"], "0100");
+setPath(data, "settings.theme.color", "dark");
+assertEq(getPath(data, "settings.theme.color"), "dark");
+setPath(data, "user.tags.0", "z");
+assertEq(data["user"]["tags"], ["z", "b"]);
+
+print "ALL PASSED (extra_natives)";

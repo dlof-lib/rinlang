@@ -1,0 +1,8 @@
+3.14159
+12.5664
+caught: [E0043] cannot assign to `PI`: it is a stone
+E0043
+caught2: [E0043] cannot modify the contents of `cfg`: it is a stone
+caught3: E0043
+dark
+stone

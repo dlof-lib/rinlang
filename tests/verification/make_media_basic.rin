@@ -1,0 +1,43 @@
+// make_media_basic.rin — سلوك دوال make.* للوسائط بلا أي أداة خارجية أو شبكة (حتميّ)
+
+// ---- جرد الأدوات: الشكل فقط (القيم تختلف بين الأجهزة)
+let t = make.media.tools();
+print type(t.platform);
+print type(t.tools);
+print type(t.videoPlayers);
+print type(t.ocrLangs);
+
+// ---- ملفات غير موجودة => ok:false بلا رمي
+print make.video.info("no_such.mp4").ok;
+print make.audio.info("no_such.wav").ok;
+print make.audio("no_such.wav").error;
+print make.video("no_such.mp4").error;
+print make.video.thumbnail("no_such.mp4", "t.png").error;
+print make.ocr("no_such.png").error;
+print make.image.removeBg("no_such.png", "o.png").error;
+
+// ---- مصدر بروتوكوله غير مسموح
+print make.video("ftp://example.com/a.mp4").error;
+print make.audio("file:///etc/passwd").error;
+
+// ---- make.api: رابط/فعل/ترويسة غير صالحة (قبل أي اتصال)
+print make.api("file:///etc/passwd").error;
+print make.api("ftp://x/y").ok;
+print make.api("http://x", {"method": "TELEPORT"}).error;
+print make.api("http://x", {"headers": {"Bad\nName": "v"}}).ok;
+print make.api("http://x", {"auth": 5}).error;
+print make.api.download("file:///etc/passwd", "o.bin").error;
+print make.api.clearCache().ok;
+
+// ---- أخطاء الاستخدام ترمي فعلاً
+fun thrown(runner) {
+    try { runner(); return "no error"; } catch (e) { return e.code; }
+}
+print thrown(fun() { make.video(5); });
+print thrown(fun() { make.api(); });
+print thrown(fun() { make.ocr("a.png", 3); });
+print thrown(fun() { make.audio("a.wav", "x"); });
+
+// ---- الحقل text متاح كخاصية (كان يرفضه المحلل)
+let m = {"text": "hi"};
+print m.text;

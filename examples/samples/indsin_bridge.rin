@@ -1,0 +1,46 @@
+<!-- جسر Rin ⇄ indsin: << >> — Rin للبيانات والمنطق، وindsin يرسم الواجهة (docs/indsin_bridge.md) -->
+<warp count={3} />
+
+<Rin>
+let user = {"name": "ليلى", "plan": "pro"};
+let people = [{"name": "Ali", "age": 30}, {"name": "Sara", "age": 25}, {"name": "Omar", "age": 41}];
+
+fun report(n) {
+  print "عدد العناصر: " + n;
+  print "المجموع: " + (n * 10);
+}
+fun select(k) { count = k; }
+</Rin>
+
+<<let greeting = "مرحباً">>
+
+<Screen#app size=phone bg=#0B1020>
+  <Column#root gap=12 padding=spacious>
+    <Text#hello size=heading><<greeting>> <<user.name>> — <<upper(user["plan"])>></Text>
+    <Text#c1 text="Count = <<count>>" />
+    <Text#c2><<print "next:", count + 1>></Text>
+
+    <!-- استدعاء دالة Rin وعرض ما تطبعه (تُعاد عند تغيّر count فقط) -->
+    <Card#out padding=10><Text#o><<run report(count)>></Text></Card>
+
+    <Button#inc onTap={count = count + 1}>+1</Button>
+
+    <<if count > 5>>
+      <Alert tone=success title="كثير!" />
+    <<else if count > 2>>
+      <Text#mid>متوسط</Text>
+    <<else>>
+      <Text#low>قليل</Text>
+    <</if>>
+
+    <!-- قائمة من بيانات Rin: كل عنصر بطاقة -->
+    <<each people as p, i>>
+      <Card#row padding=8>
+        <Text#nm><<i + 1>>. <<p["name"]>> (<<p.age>>)</Text>
+        <Button#pick onTap={select(i)}>Pick</Button>
+      </Card>
+    <</each>>
+
+    <<print "Total:", len(people)>>
+  </Column>
+</Screen>

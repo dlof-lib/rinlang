@@ -1,0 +1,306 @@
+package com.dlof.rinlang.auth
+
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.database.DataSnapshot
+import com.google.firebase.database.DatabaseError
+import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.ValueEventListener
+import kotlin.random.Random
+
+/** نتيجة عملية تسجيل الدخول: قد تنجح مباشرة، أو تنجح لكن الحساب غير موثّق بعد. */
+sealed class LoginResult {
+    data class Success(val user: RinUser) : LoginResult()
+    data class NeedsVerification(val uid: String, val email: String, val name: String) : LoginResult()
+    data class Failure(val message: String) : LoginResult()
+}
+
+sealed class RegisterResult {
+    data class NeedsVerification(val uid: String, val email: String, val name: String) : RegisterResult()
+    data class Failure(val message: String) : RegisterResult()
+}
+
+sealed class VerifyResult {
+    object Success : VerifyResult()
+    data class Failure(val message: String) : VerifyResult()
+}
+
+/**
+ * كل عمليات "حساب Rin": إنشاء حساب، تحقق بكود من 5 أرقام (عبر EmailJS)، تسجيل دخول.
+ * يستخدم فقط Firebase Auth (Email/Password) + Realtime Database — كلاهما ضمن خطة Spark
+ * المجانية. لا صلاحيات دفع أو Cloud Functions مطلوبة.
+ */
+object AuthRepository {
+
+    private const val CODE_VALID_MILLIS = 10 * 60 * 1000L // الكود صالح 10 دقائق
+
+    private val auth: FirebaseAuth get() = FirebaseAuth.getInstance()
+
+    private val db: FirebaseDatabase
+        get() = FirebaseDatabase.getInstance(FirebaseDbConfig.DATABASE_URL)
+
+    private fun usersRef() = db.getReference("users")
+    private fun codesRef() = db.getReference("verification_codes")
+
+    // ---------------------------------------------------------------------
+    // إنشاء حساب
+    // ---------------------------------------------------------------------
+
+    fun checkUsernameAvailable(username: String, callback: (available: Boolean) -> Unit) {
+        usersRef().orderByChild("username").equalTo(username)
+            .addListenerForSingleValueEvent(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) = callback(!snapshot.exists())
+                override fun onCancelled(error: DatabaseError) = callback(true) // لا نمنع المستخدم بسبب خطأ شبكة
+            })
+    }
+
+    fun register(
+        name: String,
+        username: String,
+        email: String,
+        password: String,
+        callback: (RegisterResult) -> Unit
+    ) {
+        auth.createUserWithEmailAndPassword(email, password)
+            .addOnSuccessListener { result ->
+                val uid = result.user?.uid
+                if (uid == null) {
+                    callback(RegisterResult.Failure("تعذّر إنشاء الحساب، حاول مرة أخرى"))
+                    return@addOnSuccessListener
+                }
+
+                val profile = mapOf(
+                    "uid" to uid,
+                    "name" to name,
+                    "username" to username,
+                    "email" to email,
+                    "verified" to false,
+                    "createdAt" to System.currentTimeMillis()
+                )
+
+                usersRef().child(uid).setValue(profile)
+                    .addOnSuccessListener {
+                        sendNewCode(uid, email, name) { _, _ -> }
+                        callback(RegisterResult.NeedsVerification(uid, email, name))
+                    }
+                    .addOnFailureListener { e ->
+                        callback(RegisterResult.Failure(e.message ?: "فشل حفظ بيانات الحساب"))
+                    }
+            }
+            .addOnFailureListener { e ->
+                callback(RegisterResult.Failure(mapFirebaseError(e.message)))
+            }
+    }
+
+    // ---------------------------------------------------------------------
+    // كود التحقق (5 أرقام)
+    // ---------------------------------------------------------------------
+
+    /** يولّد كوداً جديداً، يخزّنه في Realtime Database، ويرسله عبر EmailJS. */
+    fun sendNewCode(
+        uid: String,
+        email: String,
+        name: String,
+        onEmailResult: (success: Boolean, error: String?) -> Unit
+    ) {
+        val code = Random.nextInt(10000, 99999).toString()
+        val payload = mapOf(
+            "code" to code,
+            "expiresAt" to (System.currentTimeMillis() + CODE_VALID_MILLIS)
+        )
+        codesRef().child(uid).setValue(payload)
+            .addOnSuccessListener {
+                EmailJsSender.sendVerificationCode(email, name, code, onEmailResult)
+            }
+            .addOnFailureListener { e -> onEmailResult(false, e.message) }
+    }
+
+    fun verifyCode(uid: String, enteredCode: String, callback: (VerifyResult) -> Unit) {
+        codesRef().child(uid).addListenerForSingleValueEvent(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val savedCode = snapshot.child("code").getValue(String::class.java)
+                val expiresAt = snapshot.child("expiresAt").getValue(Long::class.java) ?: 0L
+
+                when {
+                    savedCode == null -> callback(VerifyResult.Failure("لا يوجد كود مُرسَل، اطلب كوداً جديداً"))
+                    System.currentTimeMillis() > expiresAt ->
+                        callback(VerifyResult.Failure("انتهت صلاحية الكود، اطلب كوداً جديداً"))
+                    savedCode != enteredCode -> callback(VerifyResult.Failure("الكود غير صحيح"))
+                    else -> {
+                        usersRef().child(uid).child("verified").setValue(true)
+                        codesRef().child(uid).removeValue()
+                        callback(VerifyResult.Success)
+                    }
+                }
+            }
+
+            override fun onCancelled(error: DatabaseError) {
+                callback(VerifyResult.Failure(error.message))
+            }
+        })
+    }
+
+    // ---------------------------------------------------------------------
+    // تسجيل الدخول
+    // ---------------------------------------------------------------------
+
+    fun login(email: String, password: String, callback: (LoginResult) -> Unit) {
+        auth.signInWithEmailAndPassword(email, password)
+            .addOnSuccessListener { result ->
+                val uid = result.user?.uid
+                if (uid == null) {
+                    callback(LoginResult.Failure("تعذّر تسجيل الدخول"))
+                    return@addOnSuccessListener
+                }
+                usersRef().child(uid).addListenerForSingleValueEvent(object : ValueEventListener {
+                    override fun onDataChange(snapshot: DataSnapshot) {
+                        val user = snapshot.getValue(RinUser::class.java)
+                        when {
+                            user == null -> callback(LoginResult.Failure("لم يتم العثور على بيانات الحساب"))
+                            user.verified -> callback(LoginResult.Success(user))
+                            else -> callback(LoginResult.NeedsVerification(uid, user.email, user.name))
+                        }
+                    }
+
+                    override fun onCancelled(error: DatabaseError) {
+                        callback(LoginResult.Failure(error.message))
+                    }
+                })
+            }
+            .addOnFailureListener { e -> callback(LoginResult.Failure(mapFirebaseError(e.message))) }
+    }
+
+    fun currentUid(): String? = auth.currentUser?.uid
+
+    fun fetchProfile(uid: String, callback: (RinUser?) -> Unit) {
+        usersRef().child(uid).addListenerForSingleValueEvent(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) = callback(snapshot.getValue(RinUser::class.java))
+            override fun onCancelled(error: DatabaseError) = callback(null)
+        })
+    }
+
+    fun logout() = auth.signOut()
+
+    /** يحدّث صورة الملف الشخصي (base64 جاهزة مسبقاً بعد التصغير والضغط) لحساب [uid]. */
+    fun updateAvatar(uid: String, avatarBase64: String, callback: (Boolean) -> Unit) {
+        usersRef().child(uid).child("avatarBase64").setValue(avatarBase64)
+            .addOnSuccessListener { callback(true) }
+            .addOnFailureListener { callback(false) }
+    }
+
+    /** يحدّث الاسم الظاهر والنبذة القصيرة لحساب [uid]. */
+    fun updateProfile(uid: String, name: String, bio: String, callback: (Boolean) -> Unit) {
+        val updates = mapOf<String, Any>("name" to name, "bio" to bio)
+        usersRef().child(uid).updateChildren(updates)
+            .addOnSuccessListener { callback(true) }
+            .addOnFailureListener { callback(false) }
+    }
+
+    // ---------------------------------------------------------------------
+    // الانتساب لناشر (متابعة حساب، وليس متابعة حزمة بعينها) — تُخزَّن تحت
+    // users/{publisherUid}/subscribers/{subscriberUid} بنفس أسلوب "الإعجاب" في
+    // PackageRepository.toggleLike، مع عدّاد subscriberCount على مستوى صاحب الحساب.
+    // ---------------------------------------------------------------------
+
+    /** يجلب هل [subscriberUid] منتسِب حالياً لناشر [publisherUid] أم لا. */
+    fun fetchSubscriptionState(publisherUid: String, subscriberUid: String, callback: (subscribed: Boolean) -> Unit) {
+        usersRef().child(publisherUid).child("subscribers").child(subscriberUid)
+            .addListenerForSingleValueEvent(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) = callback(snapshot.exists())
+                override fun onCancelled(error: DatabaseError) = callback(false)
+            })
+    }
+
+    /**
+     * يبدّل انتساب [subscriberUid] لناشر [publisherUid]: يزيل الانتساب وينقص subscriberCount
+     * إن كان منتسِباً مسبقاً، أو يسجّله ويزيد subscriberCount إن لم يكن. يُعيد عبر [callback]
+     * الحالة الجديدة (subscribed) ونجاح العملية، لتحديث الواجهة تفاؤلياً ثم التراجع عند الفشل.
+     *
+     * إضافة إلى users/{publisherUid}/subscribers/{subscriberUid} (المستخدم من أجل "هل أنا منتسِب؟")
+     * يكتب أيضاً فهرساً عكسياً على حساب المنتسِب نفسه: users/{subscriberUid}/subscriptions/{publisherUid}،
+     * ليتسنى عرض "الانتسابات" (من أتابع) لأي حساب دون فحص subscribers لكل مستخدمين النظام.
+     */
+    fun toggleSubscription(publisherUid: String, subscriberUid: String, callback: (subscribed: Boolean, success: Boolean) -> Unit) {
+        val subRef = usersRef().child(publisherUid).child("subscribers").child(subscriberUid)
+        subRef.addListenerForSingleValueEvent(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val alreadySubscribed = snapshot.exists()
+                val newState = !alreadySubscribed
+                val writeTask = if (newState) subRef.setValue(true) else subRef.removeValue()
+                writeTask
+                    .addOnSuccessListener {
+                        // فهرس عكسي على حساب المنتسِب (uid الخاص به، مسموح له الكتابة فيه دوماً)
+                        val subscriptionsRef = usersRef().child(subscriberUid).child("subscriptions").child(publisherUid)
+                        if (newState) subscriptionsRef.setValue(true) else subscriptionsRef.removeValue()
+
+                        bumpCounter(usersRef().child(publisherUid).child("subscriberCount"), newState)
+                        bumpCounter(usersRef().child(subscriberUid).child("subscriptionsCount"), newState)
+                        callback(newState, true)
+                    }
+                    .addOnFailureListener { callback(alreadySubscribed, false) }
+            }
+            override fun onCancelled(error: DatabaseError) = callback(false, false)
+        })
+    }
+
+    /** يزيد [countRef] بمقدار 1 إن كانت [increment] صحيحة، أو ينقصها (بحد أدنى صفر) إن لم تكن. */
+    private fun bumpCounter(countRef: com.google.firebase.database.DatabaseReference, increment: Boolean) {
+        countRef.addListenerForSingleValueEvent(object : ValueEventListener {
+            override fun onDataChange(countSnap: DataSnapshot) {
+                val current = countSnap.getValue(Long::class.java) ?: 0L
+                val updated = if (increment) current + 1 else (current - 1).coerceAtLeast(0L)
+                countRef.setValue(updated)
+            }
+            override fun onCancelled(error: DatabaseError) = Unit
+        })
+    }
+
+    /** يجلب قائمة "المنتسبين" (المتابعين) لحساب [uid]: كل ملفات RinUser الموجودة تحت subscribers. */
+    fun fetchSubscribers(uid: String, callback: (List<RinUser>) -> Unit) {
+        usersRef().child(uid).child("subscribers")
+            .addListenerForSingleValueEvent(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    val uids = snapshot.children.mapNotNull { it.key }
+                    fetchProfiles(uids, callback)
+                }
+                override fun onCancelled(error: DatabaseError) = callback(emptyList())
+            })
+    }
+
+    /** يجلب قائمة "الانتسابات" (الحسابات التي يتابعها) حساب [uid]، عبر الفهرس العكسي subscriptions. */
+    fun fetchSubscriptions(uid: String, callback: (List<RinUser>) -> Unit) {
+        usersRef().child(uid).child("subscriptions")
+            .addListenerForSingleValueEvent(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    val uids = snapshot.children.mapNotNull { it.key }
+                    fetchProfiles(uids, callback)
+                }
+                override fun onCancelled(error: DatabaseError) = callback(emptyList())
+            })
+    }
+
+    /** يجلب ملفات [uids] الشخصية دفعة واحدة، ويُعيدها عبر [callback] بعد اكتمال آخر طلب. */
+    private fun fetchProfiles(uids: List<String>, callback: (List<RinUser>) -> Unit) {
+        if (uids.isEmpty()) { callback(emptyList()); return }
+        val results = arrayOfNulls<RinUser>(uids.size)
+        var remaining = uids.size
+        uids.forEachIndexed { index, id ->
+            fetchProfile(id) { profile ->
+                results[index] = profile
+                remaining--
+                if (remaining == 0) callback(results.filterNotNull())
+            }
+        }
+    }
+
+    private fun mapFirebaseError(raw: String?): String {
+        val text = raw ?: return "حدث خطأ غير متوقع"
+        return when {
+            text.contains("email address is already in use", true) -> "هذا البريد مستخدم بالفعل"
+            text.contains("password is invalid", true) -> "كلمة السر غير صحيحة"
+            text.contains("no user record", true) -> "لا يوجد حساب بهذا البريد"
+            text.contains("badly formatted", true) -> "صيغة البريد الإلكتروني غير صحيحة"
+            text.contains("at least 6 characters", true) -> "كلمة السر يجب أن تكون 6 أحرف على الأقل"
+            else -> text
+        }
+    }
+}

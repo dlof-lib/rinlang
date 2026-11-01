@@ -1,0 +1,175 @@
+// عمليات على المقادير (مصفوفات خانات بلا إشارة) — داخلية
+fun mag_trim(a) {
+    while (len(a) > 0 and a[len(a) - 1] == 0) { pop(a); }
+    return a;
+}
+fun mag_cmp(a, b) {
+    let na = len(a); let nb = len(b);
+    if (na != nb) { return na < nb ? -1 : 1; }
+    let i = na - 1;
+    while (i >= 0) {
+        if (a[i] != b[i]) { return a[i] < b[i] ? -1 : 1; }
+        i = i - 1;
+    }
+    return 0;
+}
+fun mag_add(a, b) {
+    let n = max(len(a), len(b));
+    let out = []; let carry = 0; let i = 0;
+    while (i < n) {
+        let s = carry;
+        if (i < len(a)) { s = s + a[i]; }
+        if (i < len(b)) { s = s + b[i]; }
+        if (s >= BIG_BASE) { s = s - BIG_BASE; carry = 1; } else { carry = 0; }
+        push(out, s);
+        i = i + 1;
+    }
+    if (carry > 0) { push(out, carry); }
+    return out;
+}
+// a - b بشرط a >= b
+fun mag_sub(a, b) {
+    let out = []; let borrow = 0; let i = 0;
+    while (i < len(a)) {
+        let s = a[i] - borrow;
+        if (i < len(b)) { s = s - b[i]; }
+        if (s < 0) { s = s + BIG_BASE; borrow = 1; } else { borrow = 0; }
+        push(out, s);
+        i = i + 1;
+    }
+    return mag_trim(out);
+}
+// ضرب في عدد صغير 0 <= n < 10^8
+fun mag_mul_small(a, n) {
+    if (n == 0 or len(a) == 0) { return []; }
+    let out = []; let carry = 0; let i = 0;
+    while (i < len(a)) {
+        let cur = a[i] * n + carry;
+        carry = floor(cur / BIG_BASE);
+        push(out, cur - carry * BIG_BASE);
+        i = i + 1;
+    }
+    while (carry > 0) {
+        let c2 = floor(carry / BIG_BASE);
+        push(out, carry - c2 * BIG_BASE);
+        carry = c2;
+    }
+    return out;
+}
+// قسمة على عدد صغير 0 < n < 10^8 → [خارج، باقٍ]
+fun mag_divmod_small(a, n) {
+    let q = []; let rem = 0; let i = len(a) - 1;
+    while (i >= 0) {
+        let cur = rem * BIG_BASE + a[i];
+        let qd = floor(cur / n);
+        rem = cur - qd * n;
+        push(q, qd);
+        i = i - 1;
+    }
+    let out = []; let j = len(q) - 1;
+    while (j >= 0) { push(out, q[j]); j = j - 1; }
+    return [mag_trim(out), rem];
+}
+fun mag_shift(a, k) {
+    if (len(a) == 0) { return []; }
+    let out = []; let i = 0;
+    while (i < k) { push(out, 0); i = i + 1; }
+    i = 0;
+    while (i < len(a)) { push(out, a[i]); i = i + 1; }
+    return out;
+}
+fun mag_mul_school(a, b) {
+    let na = len(a); let nb = len(b);
+    let res = []; let i = 0;
+    while (i < na + nb) { push(res, 0); i = i + 1; }
+    i = 0;
+    while (i < na) {
+        let ai = a[i];
+        if (ai != 0) {
+            let carry = 0; let j = 0;
+            while (j < nb) {
+                let cur = res[i + j] + ai * b[j] + carry;
+                carry = floor(cur / BIG_BASE);
+                res[i + j] = cur - carry * BIG_BASE;
+                j = j + 1;
+            }
+            let k = i + nb;
+            while (carry > 0) {
+                let cur2 = res[k] + carry;
+                carry = floor(cur2 / BIG_BASE);
+                res[k] = cur2 - carry * BIG_BASE;
+                k = k + 1;
+            }
+        }
+        i = i + 1;
+    }
+    return mag_trim(res);
+}
+fun mag_mul(a, b) {
+    let na = len(a); let nb = len(b);
+    if (na == 0 or nb == 0) { return []; }
+    if (na < BIG_KARATSUBA or nb < BIG_KARATSUBA) { return mag_mul_school(a, b); }
+    let m = floor(max(na, nb) / 2);
+    let a0 = mag_trim(slice(a, 0, min(m, na))); let a1 = mag_trim(slice(a, min(m, na), na));
+    let b0 = mag_trim(slice(b, 0, min(m, nb))); let b1 = mag_trim(slice(b, min(m, nb), nb));
+    let z0 = mag_mul(a0, b0);
+    let z2 = mag_mul(a1, b1);
+    let z1 = mag_sub(mag_sub(mag_mul(mag_add(a0, a1), mag_add(b0, b1)), z0), z2);
+    return mag_trim(mag_add(mag_add(z0, mag_shift(z1, m)), mag_shift(z2, 2 * m)));
+}
+// قسمة المقادير (Knuth D) → [خارج، باقٍ]
+fun mag_divmod(a, b) {
+    if (len(b) == 0) { bi_fail("division by zero"); }
+    if (mag_cmp(a, b) < 0) { return [[], slice(a, 0, len(a))]; }
+    let n = len(b);
+    if (n == 1) {
+        let r1 = mag_divmod_small(a, b[0]);
+        return [r1[0], r1[1] == 0 ? [] : [r1[1]]];
+    }
+    let f = floor(BIG_BASE / (b[n - 1] + 1));
+    let u = mag_mul_small(a, f);
+    while (len(u) < len(a) + 1) { push(u, 0); }
+    let v = mag_mul_small(b, f);
+    let m = len(a) - n;
+    let q = []; let z = 0;
+    while (z <= m) { push(q, 0); z = z + 1; }
+    let j = m;
+    while (j >= 0) {
+        let num = u[j + n] * BIG_BASE + u[j + n - 1];
+        let qhat = floor(num / v[n - 1]);
+        let rhat = num - qhat * v[n - 1];
+        while (qhat >= BIG_BASE or qhat * v[n - 2] > rhat * BIG_BASE + u[j + n - 2]) {
+            qhat = qhat - 1;
+            rhat = rhat + v[n - 1];
+            if (rhat >= BIG_BASE) { break; }
+        }
+        let borrow = 0; let carry = 0; let i = 0;
+        while (i < n) {
+            let p = qhat * v[i] + carry;
+            carry = floor(p / BIG_BASE);
+            let sub = u[i + j] - (p - carry * BIG_BASE) - borrow;
+            if (sub < 0) { sub = sub + BIG_BASE; borrow = 1; } else { borrow = 0; }
+            u[i + j] = sub;
+            i = i + 1;
+        }
+        let top = u[j + n] - carry - borrow;
+        if (top < 0) { top = top + BIG_BASE; borrow = 1; } else { borrow = 0; }
+        u[j + n] = top;
+        if (borrow == 1) {
+            qhat = qhat - 1;
+            let c = 0; i = 0;
+            while (i < n) {
+                let s = u[i + j] + v[i] + c;
+                if (s >= BIG_BASE) { s = s - BIG_BASE; c = 1; } else { c = 0; }
+                u[i + j] = s;
+                i = i + 1;
+            }
+            u[j + n] = (u[j + n] + c) % BIG_BASE;
+        }
+        q[j] = qhat;
+        j = j - 1;
+    }
+    let rem = mag_trim(slice(u, 0, n));
+    let rr = mag_divmod_small(rem, f);
+    return [mag_trim(q), rr[0]];
+}

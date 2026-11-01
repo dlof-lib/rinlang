@@ -1,0 +1,64 @@
+// input_integration.rin — دوال الإدخال تستدعي مفاهيم اللغة الأخرى (انظر docs/input.md). شغّله: rin run input_integration.rin
+enum Role { Admin, Editor, Viewer }
+
+class User {
+    let name = "";
+    let age = 0;
+    let role = nil;
+    let _email = "";
+    get email() { return self._email; }
+    set email(v) { self._email = lower(trim(v)); }   // الإدخال يمرّ عبر set المعرّفة في الصنف
+}
+
+@container=Settings
+    let theme = "light";
+    let volume = 5;
+.end/container
+
+// 1) مُدقِّق = fun عادية (تُستدعى عبر callValue)
+fun isShort(s) { return len(s) <= 3; }
+let w = input("short? ", isShort);
+print "word=" + w;
+
+// 2) مُدقِّق = كائن OOP يعرّف __call__ ويعيد نصاً كسبب رفض
+class Range {
+    let lo = 0;
+    let hi = 0;
+    fun init(lo, hi) { self.lo = lo; self.hi = hi; }
+    fun __call__(n) {
+        if (n < self.lo or n > self.hi) { return "خارج " + self.lo + ".." + self.hi; }
+        return true;
+    }
+}
+let u = User();
+inputNumber("age? ", Range(0, 120), u, "age");      // يكتب في u.age عبر oop.set
+print "age=" + u.age;
+
+// 3) input إلى كائن (set property) وإلى حاوية (setField)
+input("email? ", u, "email");
+print "email=" + u.email;
+input("theme? ", "Settings", "theme");
+inputNumber("volume? ", "Settings", "volume");
+print getField("Settings", "theme") + "/" + getField("Settings", "volume");
+
+// 4) choose على enum: النتيجة حالة enum نفسها، والتسليم لحقل كائن
+choose("الدور:", Role, u, "role");
+print u.role == Role.Editor;
+match (u.role) {
+    case Role.Admin { print "مدير"; }
+    case Role.Editor, Role.Viewer { print "محرر/مشاهد"; }
+    else { print "؟"; }
+}
+
+// 5) choose على حاوية (حقولها) وعلى مصفوفة كائنات (تسمية name) وعلى قاموس
+print choose("حقل:", "Settings");
+let team = [User(), User()];
+team[0].name = "سعد"; team[1].name = "منى";
+let who = choose("من؟", team);
+print who.name;
+print choose("لون:", {"أحمر": "#f00", "أخضر": "#0f0"});
+
+// 6) confirm إلى حقل
+let flags = {};
+confirm("موافق؟ ", flags, "ok");
+print flags.ok;

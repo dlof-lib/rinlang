@@ -1,0 +1,305 @@
+// ============================================================================
+//  lib/rinauto.og.rin — RinAuto: تحليل آلي كامل ببيانات → تقرير واحد
+//
+//  @version 1.0.0
+//  @category data
+//  @prefix st_ / pl_
+//
+//  نداء واحد يقرأ إطار بيانات (rindf أو CSV) ويُنتج:
+//    • تصنيف الأعمدة (رقمي / فئوي) وتنميط الجودة (مفقود، شاذ، طبيعية)
+//    • كل الارتباطات مع تصحيح FDR (Benjamini–Hochberg)
+//    • مقارنة المجموعات: اختيار الاختبار آلياً (Welch/ANOVA/Mann-Whitney/Kruskal
+//      بحسب الطبيعية والتجانس) + تصحيح FDR + حجم الأثر
+//    • اختبارات استقلال الفئويين (كاي-تربيع + Cramér V)
+//    • تقرير HTML واحد بعربي أو إنجليزي (RTL) فيه الرسوم SVG مضمَّنة
+//
+//  استعمال:   @import "lib/rinauto.og.rin";
+//             let r = st_auto(df);                    // التحليل فقط
+//             pl_auto_report(df, "report.html", "عنوان", "ar");
+//             pl_auto_csv("data.csv", "report.html", "عنوان", "ar");
+// ============================================================================
+@import "lib/rinplot_adv.og.rin";
+
+fun st_is_num(v) { return type(v) == "number"; }
+
+// تصنيف عمود: {name, kind: "numeric"|"categorical"|"other", n, missing, unique}
+fun st_profile_col(df, name) {
+    let col = df_col(df, name);
+    let n = len(col);
+    let nums = 0; let miss = 0;
+    for (let v in col) {
+        if (v == nil or v == "") { miss = miss + 1; }
+        else if (st_is_num(v)) { nums = nums + 1; }
+    }
+    let uniq = df_unique(df, name);
+    let kind = "other";
+    let present = n - miss;
+    if (present > 0 and nums >= 0.9 * present) { kind = "numeric"; }
+    else if (len(uniq) >= 2 and len(uniq) <= 12) { kind = "categorical"; }
+    return {"name": name, "kind": kind, "n": n, "missing": miss, "unique": len(uniq)};
+}
+
+// عدّ القيم لعمود فئوي: [{level, count}] مرتبة تنازلياً
+fun st_level_counts(df, name) {
+    let col = df_col(df, name);
+    let order = [];
+    let cnt = {};
+    for (let v in col) {
+        if (v != nil and v != "") {
+            let k = str(v);
+            if (!has(cnt, k)) { cnt[k] = 0; push(order, k); }
+            cnt[k] = cnt[k] + 1;
+        }
+    }
+    let out = [];
+    for (let k in order) { push(out, {"level": k, "count": cnt[k]}); }
+    return out;
+}
+fun st_pos(arr, v) {
+    let i = 0;
+    while (i < len(arr)) { if (arr[i] == v) { return i; } i = i + 1; }
+    return -1;
+}
+// جدول طوارئ بين عمودين فئويين
+fun st_crosstab(df, a, b) {
+    let ca = df_col(df, a); let cb = df_col(df, b);
+    let la = []; let lb = [];
+    for (let e in st_level_counts(df, a)) { push(la, e["level"]); }
+    for (let e in st_level_counts(df, b)) { push(lb, e["level"]); }
+    let T = matZeros(len(la), len(lb));
+    let i = 0;
+    while (i < len(ca)) {
+        if (ca[i] != nil and cb[i] != nil and ca[i] != "" and cb[i] != "") {
+            let ia = st_pos(la, str(ca[i])); let ib = st_pos(lb, str(cb[i]));
+            T[ia][ib] = T[ia][ib] + 1;
+        }
+        i = i + 1;
+    }
+    return {"table": T, "rows": la, "cols": lb};
+}
+
+fun st_auto(df) {
+    let names = df_names(df);
+    let profiles = [];
+    let nums = []; let cats = [];
+    for (let nm in names) {
+        let p = st_profile_col(df, nm);
+        if (p["kind"] == "numeric") {
+            let a = st_clean(df_col(df, nm));
+            p["summary"] = st_summary(a);
+            p["outliers"] = len(st_outliers(a, 1.5)["outliers"]);
+            p["normality"] = st_normality(a);
+            push(nums, nm);
+        } else if (p["kind"] == "categorical") {
+            p["levels"] = st_level_counts(df, nm);
+            push(cats, nm);
+        }
+        push(profiles, p);
+    }
+    // ارتباطات
+    let corrs = [];
+    let i = 0;
+    while (i < len(nums)) {
+        let j = i + 1;
+        while (j < len(nums)) {
+            let t = st_corr_test(df_col(df, nums[i]), df_col(df, nums[j]));
+            if (t != nil) { push(corrs, {"a": nums[i], "b": nums[j], "r": t["r"], "p": t["p"], "n": t["n"]}); }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    if (len(corrs) > 0) {
+        let ps = []; for (let c in corrs) { push(ps, c["p"]); }
+        let adj = st_p_adjust(ps, "bh");
+        i = 0; while (i < len(corrs)) { corrs[i]["p_adj"] = adj[i]; i = i + 1; }
+    }
+    // مقارنات مجموعات
+    let comps = [];
+    for (let c in cats) {
+        for (let nm in nums) {
+            let g = st_groups(df, c, nm);
+            let ok = len(g) >= 2;
+            for (let e in g) { if (len(e["values"]) < 2) { ok = false; } }
+            if (ok) {
+                let r = st_auto_compare(g);
+                if (r != nil) {
+                    let eff = nil;
+                    if (has(r, "eta2")) { eff = r["eta2"]; } else if (has(r, "d")) { eff = abs(r["d"]); } else if (has(r, "epsilon2")) { eff = r["epsilon2"]; }
+                    push(comps, {"group": c, "value": nm, "test": r["test"], "why": r["why"], "stat": r["stat"], "p": r["p"], "effect": eff, "levels": len(g)});
+                }
+            }
+        }
+    }
+    if (len(comps) > 0) {
+        let ps2 = []; for (let c in comps) { push(ps2, c["p"]); }
+        let adj2 = st_p_adjust(ps2, "bh");
+        i = 0; while (i < len(comps)) { comps[i]["p_adj"] = adj2[i]; i = i + 1; }
+    }
+    // استقلال الفئويين
+    let assoc = [];
+    i = 0;
+    while (i < len(cats)) {
+        let j = i + 1;
+        while (j < len(cats)) {
+            let x = st_crosstab(df, cats[i], cats[j]);
+            if (len(x["rows"]) >= 2 and len(x["cols"]) >= 2) {
+                let r = st_chi2_indep(x["table"]);
+                if (r != nil) { push(assoc, {"a": cats[i], "b": cats[j], "chi2": r["stat"], "df": r["df"], "p": r["p"], "v": r["cramers_v"]}); }
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return {"rows": df_shape(df)[0], "profiles": profiles, "numeric": nums, "categorical": cats,
+            "correlations": corrs, "comparisons": comps, "associations": assoc};
+}
+
+// ---------------------------------------------------------------------------
+//  نصوص التقرير ثنائية اللغة
+// ---------------------------------------------------------------------------
+fun st_tr(lang, key) {
+    let ar = {"overview": "نظرة عامة", "rows": "عدد الصفوف", "cols": "الأعمدة", "col": "العمود", "kind": "النوع",
+              "missing": "مفقود", "outliers": "شاذ", "mean": "المتوسط", "sd": "الانحراف", "median": "الوسيط",
+              "normal": "طبيعي؟", "numeric": "رقمي", "categorical": "فئوي", "other": "أخرى", "dist": "التوزيعات",
+              "corr": "الارتباطات", "groups": "مقارنة المجموعات", "assoc": "العلاقات بين الفئويات", "findings": "أهم النتائج",
+              "none": "لا توجد نتائج دالة بعد تصحيح FDR", "yes": "نعم", "no": "لا", "effect": "حجم الأثر",
+              "test": "الاختبار", "padj": "p المصحّح", "why": "سبب الاختيار", "note": "p مصحّحة بطريقة Benjamini–Hochberg عبر كل الاختبارات في كل قسم."};
+    let en = {"overview": "Overview", "rows": "Rows", "cols": "Columns", "col": "Column", "kind": "Type",
+              "missing": "Missing", "outliers": "Outliers", "mean": "Mean", "sd": "SD", "median": "Median",
+              "normal": "Normal?", "numeric": "numeric", "categorical": "categorical", "other": "other", "dist": "Distributions",
+              "corr": "Correlations", "groups": "Group comparisons", "assoc": "Categorical associations", "findings": "Key findings",
+              "none": "No significant results after FDR correction", "yes": "yes", "no": "no", "effect": "Effect size",
+              "test": "Test", "padj": "adj. p", "why": "Why this test", "note": "p-values adjusted with Benjamini-Hochberg across all tests in each section."};
+    if (lang == "ar") { return ar[key]; }
+    return en[key];
+}
+fun st_h(s) { return pl_xml(s); }
+
+fun st_findings(r, lang) {
+    let out = [];
+    for (let c in r["correlations"]) {
+        if (c["p_adj"] < 0.05 and abs(c["r"]) >= 0.3) {
+            let dir = "positive"; if (lang == "ar") { dir = "طردي"; }
+            if (c["r"] < 0) { dir = "negative"; if (lang == "ar") { dir = "عكسي"; } }
+            if (lang == "ar") { push(out, "ارتباط " + dir + " بين " + c["a"] + " و" + c["b"] + " (r=" + st_fmt(c["r"], 2) + "، p=" + st_fmt_p(c["p_adj"]) + ")"); }
+            else { push(out, "Significant " + dir + " correlation between " + c["a"] + " and " + c["b"] + " (r=" + st_fmt(c["r"], 2) + ", adj p=" + st_fmt_p(c["p_adj"]) + ")"); }
+        }
+    }
+    for (let c in r["comparisons"]) {
+        if (c["p_adj"] < 0.05) {
+            if (lang == "ar") { push(out, c["value"] + " يختلف بين مستويات " + c["group"] + " (" + c["test"] + "، p=" + st_fmt_p(c["p_adj"]) + ")"); }
+            else { push(out, c["value"] + " differs across " + c["group"] + " (" + c["test"] + ", adj p=" + st_fmt_p(c["p_adj"]) + ")"); }
+        }
+    }
+    for (let a in r["associations"]) {
+        if (a["p"] < 0.05) {
+            if (lang == "ar") { push(out, "ارتباط بين " + a["a"] + " و" + a["b"] + " (كاي-تربيع، Cramér V=" + st_fmt(a["v"], 2) + "، p=" + st_fmt_p(a["p"]) + ")"); }
+            else { push(out, a["a"] + " and " + a["b"] + " are associated (chi-square, Cramer V=" + st_fmt(a["v"], 2) + ", p=" + st_fmt_p(a["p"]) + ")"); }
+        }
+    }
+    return out;
+}
+
+fun pl_auto_table(headers, rows) {
+    let h = "<table><thead><tr>";
+    for (let x in headers) { h = h + "<th>" + st_h(x) + "</th>"; }
+    h = h + "</tr></thead><tbody>";
+    for (let r in rows) {
+        h = h + "<tr>";
+        for (let c in r) { h = h + "<td>" + st_h(c) + "</td>"; }
+        h = h + "</tr>";
+    }
+    return h + "</tbody></table>";
+}
+
+// يبني HTML كاملاً (نصاً). lang: "ar" | "en"
+fun pl_auto_html(df, title, lang) {
+    let r = st_auto(df);
+    let dir = "ltr"; if (lang == "ar") { dir = "rtl"; }
+    let css = "body{font-family:'Noto Sans Arabic','DejaVu Sans',Arial,sans-serif;max-width:1100px;margin:24px auto;padding:0 16px;color:#1f2937;line-height:1.6}h1{margin-bottom:4px}h2{border-bottom:2px solid #0072B2;padding-bottom:4px;margin-top:36px}table{border-collapse:collapse;width:100%;margin:12px 0;font-size:14px}th,td{border:1px solid #e5e7eb;padding:6px 10px;text-align:start}th{background:#f3f4f6}.fig{overflow-x:auto;margin:16px 0}.find li{margin:6px 0}.muted{color:#6b7280;font-size:13px}svg{max-width:100%;height:auto}";
+    let h = "<!doctype html><html lang=\"" + lang + "\" dir=\"" + dir + "\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>" + st_h(title) + "</title><style>" + css + "</style></head><body>";
+    h = h + "<h1>" + st_h(title) + "</h1><div class=\"muted\">" + st_tr(lang, "rows") + ": " + str(r["rows"]) + " · " + st_tr(lang, "cols") + ": " + str(len(r["profiles"])) + "</div>";
+    // النتائج
+    h = h + "<h2>" + st_tr(lang, "findings") + "</h2>";
+    let fnd = st_findings(r, lang);
+    if (len(fnd) == 0) { h = h + "<p>" + st_tr(lang, "none") + "</p>"; }
+    else { h = h + "<ul class=\"find\">"; for (let f in fnd) { h = h + "<li>" + st_h(f) + "</li>"; } h = h + "</ul>"; }
+    // نظرة عامة
+    h = h + "<h2>" + st_tr(lang, "overview") + "</h2>";
+    let rows = [];
+    for (let p in r["profiles"]) {
+        let m = ""; let sd = ""; let md = ""; let nm = ""; let ou = "";
+        if (p["kind"] == "numeric") {
+            m = st_fmt(p["summary"]["mean"], 3); sd = st_fmt(p["summary"]["sd"], 3); md = st_fmt(p["summary"]["median"], 3);
+            ou = str(p["outliers"]);
+            if (p["normality"] != nil) { if (p["normality"]["p"] >= 0.05) { nm = st_tr(lang, "yes"); } else { nm = st_tr(lang, "no"); } }
+        }
+        push(rows, [p["name"], st_tr(lang, p["kind"]), str(p["missing"]), m, sd, md, ou, nm]);
+    }
+    h = h + pl_auto_table([st_tr(lang, "col"), st_tr(lang, "kind"), st_tr(lang, "missing"), st_tr(lang, "mean"), st_tr(lang, "sd"), st_tr(lang, "median"), st_tr(lang, "outliers"), st_tr(lang, "normal")], rows);
+    // توزيعات
+    if (len(r["numeric"]) > 0) {
+        h = h + "<h2>" + st_tr(lang, "dist") + "</h2>";
+        let nn = min(len(r["numeric"]), 9);
+        let cols = 3; if (nn < 3) { cols = nn; }
+        let rws = ceil(nn / cols);
+        let fig = pl_figure(380 * cols, 280 * rws + 20, rws, cols, "");
+        let i = 0;
+        while (i < nn) {
+            let ax = pl_axes(fig, floor(i / cols), i % cols);
+            pl_title(ax, r["numeric"][i]);
+            pl_hist(ax, df_col(df, r["numeric"][i]), {"label": ""});
+            ax["legend"] = "none";
+            i = i + 1;
+        }
+        h = h + "<div class=\"fig\">" + pl_svg(fig) + "</div>";
+    }
+    // ارتباطات
+    if (len(r["numeric"]) >= 2) {
+        h = h + "<h2>" + st_tr(lang, "corr") + "</h2>";
+        let nm2 = slice(r["numeric"], 0, min(len(r["numeric"]), 12));
+        let fig2 = pl_figure(760, 640, 1, 1, "");
+        let ax2 = pl_axes(fig2, 0, 0);
+        pl_corr_heatmap(ax2, df, nm2);
+        h = h + "<div class=\"fig\">" + pl_svg(fig2) + "</div><p class=\"muted\">* p&lt;0.05 &nbsp; ** p&lt;0.01 &nbsp; *** p&lt;0.001</p>";
+    }
+    // مقارنات
+    if (len(r["comparisons"]) > 0) {
+        h = h + "<h2>" + st_tr(lang, "groups") + "</h2>";
+        let crow = [];
+        for (let c in r["comparisons"]) {
+            let e = ""; if (c["effect"] != nil) { e = st_fmt(c["effect"], 3); }
+            push(crow, [c["value"] + " ~ " + c["group"], c["test"], st_fmt(c["stat"], 3), st_fmt_p(c["p"]), st_fmt_p(c["p_adj"]), e, c["why"]]);
+        }
+        h = h + pl_auto_table([st_tr(lang, "col"), st_tr(lang, "test"), "stat", "p", st_tr(lang, "padj"), st_tr(lang, "effect"), st_tr(lang, "why")], crow);
+        // أرسم أقوى 3 فروق
+        let order = st_argsort(map_p(r["comparisons"]));
+        let k = 0;
+        while (k < min(3, len(order))) {
+            let c = r["comparisons"][order[k]];
+            if (c["p_adj"] < 0.05) { h = h + "<div class=\"fig\">" + pl_svg(pl_compare_groups(df, c["group"], c["value"])) + "</div>"; }
+            k = k + 1;
+        }
+    }
+    if (len(r["associations"]) > 0) {
+        h = h + "<h2>" + st_tr(lang, "assoc") + "</h2>";
+        let arow = [];
+        for (let a in r["associations"]) { push(arow, [a["a"] + " × " + a["b"], st_fmt(a["chi2"], 3), str(a["df"]), st_fmt_p(a["p"]), st_fmt(a["v"], 3)]); }
+        h = h + pl_auto_table([st_tr(lang, "col"), "chi2", "df", "p", "Cramer V"], arow);
+    }
+    h = h + "<p class=\"muted\">" + st_tr(lang, "note") + "</p></body></html>";
+    return {"html": h, "analysis": r, "findings": fnd};
+}
+fun map_p(arr) {
+    let out = [];
+    for (let c in arr) { push(out, c["p_adj"]); }
+    return out;
+}
+fun pl_auto_report(df, path, title, lang) {
+    let res = pl_auto_html(df, title, lang);
+    writeFile(path, res["html"]);
+    return res;
+}
+fun pl_auto_csv(csvPath, outPath, title, lang) {
+    return pl_auto_report(df_read_csv(csvPath), outPath, title, lang);
+}

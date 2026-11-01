@@ -1,0 +1,51 @@
+// examples/match_enum_goal_demo.rin
+// يوضّح ثلاثة مفاهيم مترابطة: enum (خيارات)، match/case (مطابقة أنماط تمتد
+// من الشروط)، وgoal/achieve (هدف داخل تدفق منطقي). راجع docs/enums.md
+// وdocs/control-flow.md (§2.1 وَ§6) للشرح الكامل.
+
+// 1) enum -> قائمة اختيار مغلقة
+enum Status {
+    Active,
+    Paused,
+    Done
+}
+
+let current = Status.Paused;
+
+// 2) match/case -> مطابقة أنماط على قيمة enum
+match (current) {
+    case Status.Active {
+        print "الحالة: نشط";
+    }
+    case Status.Paused, Status.Done {
+        print "الحالة: متوقف";
+    }
+    else {
+        print "الحالة: غير معروفة";
+    }
+}
+
+// 3) goal/achieve -> هدف داخل تدفق منطقي (خروج مبكر بقيمة بلا الحاجة لدالة كاملة)
+fun findFirstEven(arr) {
+    let result = goal {
+        let i = 0;
+        while (i < len(arr)) {
+            if (arr[i] % 2 == 0) {
+                achieve arr[i]; // تحقّق الهدف: يوقف goal فوراً بهذه القيمة
+            }
+            i = i + 1;
+        }
+        // لا يوجد achieve هنا: يعني لم يتحقق الهدف إطلاقاً -> النتيجة nil
+    };
+    return result;
+}
+
+print findFirstEven([1, 3, 5, 8, 9]); // 8
+print findFirstEven([1, 3, 5]);       // nil
+
+// bonus: when/otherwise (صياغة إنجليزية مبسّطة لِـ if/else، أُصلحت لتعمل فعلياً)
+when (len([1, 2, 3]) == 3) {
+    print "when/otherwise يعمل";
+} otherwise {
+    print "لن يظهر هذا";
+}

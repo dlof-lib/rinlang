@@ -1,0 +1,11 @@
+// Rin Layout Pro — responsive geometry calculations.
+fun layout_center(total,size){return (total-size)/2;}
+fun layout_end(total,size){return total-size;}
+fun layout_gap(total,count,size){if(count<=1){return 0;}return (total-count*size)/(count-1);}
+fun layout_equal(total,count){if(count<=0){return 0;}return total/count;}
+fun layout_percent(total,p){return total*p/100;}
+fun layout_minSize(total,min){if(total<min){return total;}return min;}
+fun layout_maxSize(total,max){if(total>max){return max;}return total;}
+fun layout_clamp(total,min,max){if(total<min){return min;}if(total>max){return max;}return total;}
+fun layout_grid(total,count,gap){if(count<=0){return 0;}return (total-(count-1)*gap)/count;}
+fun layout_row(total,count,size){return {count:count,size:size,gap:layout_gap(total,count,size)};}

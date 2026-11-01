@@ -1,0 +1,29 @@
+// accept_basic.rin — اختبار تحقّق لـ docs/base-accept.md (accept: حارس قبول يخدم if)
+accept age = 20 if age >= 0 and age < 150;
+age = 30; print age; print age.ok;
+age = 500; print age; print age.ok; print age.refused; print age.accepted; print age.rejected;
+if (!age.ok) { print "rejected"; }
+age = 40; print age; print age.ok;
+accept pct = 50 if pct >= 0 and pct <= 100 else 100;
+pct = 250; print pct; print pct.ok; print pct.rejected;
+pct = -5; print pct;
+inc age by 1000; print age; print age.ok;
+accept name = "bob" if len(name) > 0 strict;
+name = "alice"; print name;
+try { name = ""; } catch (e) { print e.code; }
+print name;
+try { accept bad = 5 if bad > 10; } catch (e) { print e.code; }
+accept odd = 7 if odd % 2 == 1 else 1;
+fun f() {
+  accept local = 3 if local % 2 == 1;
+  local = 4; print local; local = 5; print local;
+}
+f();
+accept hp = 10 if hp >= 0;
+bell hp (old, new) { print "hp:", old, "->", new; }
+hp = 15; hp = -1; hp = 3;
+trial { hp = -1; hp = 20; abort; }
+print hp; print hp.accepted; print hp.rejected;
+print hp.kind; print hp.vitals;
+let plain = 1;
+try { print plain.ok; } catch (e) { print "no ok on plain"; }

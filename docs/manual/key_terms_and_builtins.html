@@ -1,0 +1,298 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Rin KEY_TERMS and Built-in Conditions — Rin</title>
+<meta name="description" content="توثيق لغة البرمجة Rin"><link rel="icon" href="../assets/brand/icon-32.png">
+<link rel="stylesheet" href="assets/style.css"></head><body>
+<header><button id="mn" aria-label="القائمة">☰</button><a class="logo" href="index.html"><img src="../assets/brand/icon-48.png" alt="" width="26">Rin</a>
+<input id="q" type="search" placeholder="ابحث في التوثيق…" autocomplete="off"><button id="th" aria-label="الوضع">◐</button>
+<a class="gh" href="https://github.com/dlof-lib/rinlang">GitHub</a><div id="res"></div></header>
+<div class="wrap"><nav id="sb"><details ><summary>ابدأ هنا</summary><a href="getting-started.html">البداية</a><a href="syntax.html">القواعد النحوية العامة</a><a href="variables.html">let`، مصفوفات، قواميس، نطاق</a><a href="template-strings.html">النصوص القالبية (متغيّرات داخل النص)</a><a href="input.html">إدخال المستخدم (Input)</a><a href="control-flow.html">الشروط، الحلقات، `goal`/`achieve</a><a href="loops.html">حلقات Rin — Loops v2</a><a href="functions.html">fun`/`return`، التكرار الذاتي</a><a href="enums.html">enum`: قوائم اختيار مغلقة</a></details><details open><summary>اللغة</summary><a href="language-reference.html">المرجع الشامل وخريطة ترابط المفاهيم</a><a href="objects.html">class`/`struct`، `.object()`، `@Object`، `document</a><a href="oop.html">البرمجة الكائنية الموسَّعة (Rin 1.0)</a><a href="containers.html">دليل `@container` / `@element` / `@loop</a><a href="table.html">الجدول (`@table` / `@container.table`) ودوال اللغة عليه</a><a href="set.html">Set`: نوع المجموعة الأساسي</a><a href="pipelines.html">عامل الأنابيب `|&gt;</a><a href="RECKON.html">reckon`: مفهوم حسابي بسطرين</a><a href="let-plus.html">let` المطوَّر</a><a href="living-variables.html">المتغيرات الحيّة (Living Variables)</a><a href="label-define.html">label` و`define` (تسمية وتعريف)</a><a href="block-frames.html">بداية الكتل ونهايتها (Block Frames)</a><a href="compare_ops.html">معاملات المقارنة `/=` و `=/=` و `=/</a><a href="max_min.html">max / min family</a><a href="scope-guarantees.html">ضمانات النطاق: `finally` · `defer` · `catch … when` · `rethrow</a><a href="key_terms_and_builtins.html" class=on>Rin KEY_TERMS and Built-in Conditions</a><a href="number_builtins.html">Rin Number Built-ins</a></details><details ><summary>الواجهات (Indsin)</summary><a href="indsin.html">Indsin — Interface Design</a><a href="indsin_rin.html">indsin يعتمد على لغة Rin</a><a href="indsin_expansion.html">Indsin — التوسعة الاحترافية (Design System v2)</a><a href="indsin_object.html">indsin-object — API reference</a><a href="indsin_media.html">Indsin Media — اختيار الوسائط ورفعها</a><a href="indsin_icons.html">مكتبة أيقونات indsin (متجهية)</a><a href="indsin_tooling.html">indsin tooling — icon, file association, syntax highlighting</a><a href="indsinweb.html">IndsinWeb — مكتبة WebView والروابط لـ indsin</a><a href="RIN_ELEMENTS.html">دليل `@element.*` الكامل</a><a href="events-effects.html">الأحداث والتأثيرات (Events &amp; Effects) — محرك Indsin UI</a><a href="banner.html">Banner: إشعار شريطي</a><a href="simple-style.html">Rin Simple Style</a></details><details ><summary>بيئة التشغيل</summary><a href="runtime.html">وقت تشغيل Rin (Rin Runtime) · المرجع الرسمي</a><a href="standard-library.html">المكتبة القياسية (`lib/*.og.rin`)</a><a href="errors.html">نظام الأخطاء: أكواد، `try`/`catch`/`throw</a><a href="ERROR_SYSTEM.html">نظام التشخيص: البنية الداخلية + جدول الأكواد الكامل</a><a href="storage.html">تخزين دائم</a><a href="http.html">شبكات</a><a href="env.html">ربط Rin بملف `.env</a><a href="terminal.html">الطرفية التفاعلية — `rin terminal</a><a href="vm.html">RinVM — آلة Rin الافتراضية (بايتكود)</a><a href="rinflow.html">RinFlow: طبقة تنفيذ التدفّق المهيكل</a><a href="MAKE_UNIT.html">@make.(name)`: وحدة بسياسة قدرات صريحة</a><a href="MAKE_MEDIA.html">فيديو · صوت · API · إزالة الخلفية · قراءة النص من الصور</a><a href="TIME.html">مفهوم `time`: الزمن كقيمة من الدرجة الأولى</a><a href="native-additions.html">دوال Rin الأصلية الجديدة (Rin 1.0)</a></details><details ><summary>الحاويات وقواعد البيانات</summary><a href="container_advanced.html">Rin Container Advanced Built-ins</a><a href="container_pro.html">Rin Container Pro</a><a href="container_sql.html">RIN CONTAINER SQL (RCSQL)</a><a href="cross-file-containers.html">استدعاء إعلانات من ملف آخر</a></details><details ><summary>الحزم والتكامل</summary><a href="api.html">واجهة C المسطَّحة (Embedding API)</a><a href="android.html">استضافة Rin على أندرويد</a><a href="packages-and-interop.html">Rin 1.0 — المكتبات والحزم وجسر C++ وJSON واختبارات rintest</a><a href="rinpak-format.html">RinPak — حزمة مشروع Rin (`.rinpak`)</a><a href="html-projects.html">مشاريع HTML في Rin — الربط بين index.html وملف الحاوية</a><a href="project-og-urin.html">project.og.urin` — البيانات الوصفية لمشروع Rin</a><a href="CONTENT_PACKS.html">حزم المحتوى القابلة للتنزيل (Content Packs)</a><a href="previewkit.html">previewkit — معاينة حيّة لملفات PDF / Markdown / TypeScript</a></details><details ><summary>المكتبات المتخصصة</summary><a href="rinml.html">RinML / RinDF / RinAI — الذكاء الاصطناعي وتحليل البيانات في Rin</a><a href="STATS.html">RinStat — التحليل الإحصائي (`lib/rinstat.og.rin`)</a><a href="STATS_ADV.html">RinStat المتقدّم + RinAuto</a><a href="LINALG.html">الجبر الخطي للمهندسين — `mat*` و`vec*</a><a href="PLOT.html">RinPlot — الرسوم البيانية الإحصائية (`lib/rinplot.og.rin`)</a><a href="ALGO.html">تطوير الخوارزميات والحساب العددي — `algo*</a><a href="NUMBER.html">مفهوم `number` في Rin</a><a href="boat.html">&quot;Boat&quot;: مفاهيم أساسية مجمَّعة</a><a href="passkit.html">passkit — passwords, encryption, databases and a tag language</a><a href="passkit-crypto-db.html">Passkit feature catalog: encryption, databases and container linking</a><a href="hash-family.html">عائلة `#` — مفاهيم ودوال جديدة تبدأ بعلامة `#</a><a href="image-draw.html">إنشاء الصور في Rin — رسم وحفظ PNG وlog كصورة</a><a href="image-terminal.html">طباعة الصور في الـ terminal — `printImage` / `imageAnsi` / `imageInfo</a></details><details ><summary>المشروع</summary><a href="CONTRIBUTING.html">المساهمة في Rin</a><a href="CODE_OF_CONDUCT.html">قواعد السلوك</a><a href="SECURITY.html">سياسة الأمان</a><a href="SUPPORT.html">الحصول على المساعدة</a><a href="TRADEMARKS.html">سياسة العلامة التجارية — Trademark Policy</a><a href="THIRD_PARTY_NOTICES.html">إشعارات المكوّنات الخارجية — Third-Party Notices</a></details><details ><summary>مراجع إضافية</summary><a href="ANDROID_VERSIONS.html">حزم RinStudio لكل إصدار أندرويد</a><a href="TOKEN.html">مفهوم `token` في Rin</a><a href="TOOLCHAIN.html">Rin Professional Language Toolchain</a><a href="TOOLCHAIN_UPGRADE.html">Toolchain Upgrade — 2026-09</a><a href="architecture.html">المعمارية وبنية المستودع</a><a href="base-accept.html">base` و`accept`: متغيّران يخدمان `if</a><a href="channel47.html">channel47 — لغة وصف البيانات والإعدادات</a><a href="ci.html">CI وأدوات المستودع</a><a href="loop-templates.html">قوالب الحلقات `@tmpl</a><a href="pre-post.html">pre` و`post` (ما قبل / ما بعد): عقد انتقال حول الإسناد</a><a href="print-fonts.html">خطوط `print` — bold / italic / underline وغيرها</a><a href="print-image-terminal.html">طباعة الصور كنص في الطرفية</a><a href="print-templates.html">قوالب الطباعة `@tmpl ... print` — قوالب نصية خطية وتنسيقية</a><a href="rdoc.html">rdoc — Documentation Container</a><a href="rdoc-reference.html">وثيقة rdoc الشاملة — Documentation Container</a><a href="screenshots.html">لقطات من RinStudio</a></details></nav>
+<main><article><h1 id="rin-key_terms-and-built-in-conditions">Rin KEY_TERMS and Built-in Conditions<a class="headerlink" href="#rin-key_terms-and-built-in-conditions" title="Permanent link">#</a></h1>
+<h2 id="key-conditions">Key conditions<a class="headerlink" href="#key-conditions" title="Permanent link">#</a></h2>
+<p>Rin supports compact key-condition forms. Each one is pure syntax sugar over the normal <code>IfStmt</code> / <code>WhileStmt</code> runtime, so they behave exactly like their long forms (including <code>break</code>/<code>continue</code>, <code>#done</code>, scoping and short-circuiting).</p>
+<pre><code class="language-kotlin">=if=(score &gt;= 80) {
+    print &quot;passed&quot;;
+}
+
+=unless=(empty(name)) {
+    print name;
+}
+
+=when=(typeIs(value, &quot;number&quot;)) {
+    print &quot;number&quot;;
+}
+</code></pre>
+<h3 id="forms">Forms<a class="headerlink" href="#forms" title="Permanent link">#</a></h3>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>Form</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>=if=(c)</code> / <code>=when=(c)</code></td>
+<td><code>if (c)</code></td>
+</tr>
+<tr>
+<td><code>=unless=(c)</code> / <code>=ifnot=(c)</code></td>
+<td><code>if (!c)</code></td>
+</tr>
+<tr>
+<td><code>=elif=(c)</code> / <code>=elseif=(c)</code></td>
+<td>continues a chain: <code>else if (c)</code></td>
+</tr>
+<tr>
+<td><code>=else=</code></td>
+<td>alternative spelling of <code>else</code></td>
+</tr>
+<tr>
+<td><code>=while=(c)</code></td>
+<td><code>while (c)</code></td>
+</tr>
+<tr>
+<td><code>=until=(c)</code></td>
+<td><code>while (!c)</code></td>
+</tr>
+<tr>
+<td><code>=all=(a, b, ...)</code></td>
+<td><code>a and b and ...</code> (short-circuit)</td>
+</tr>
+<tr>
+<td><code>=any=(a, b, ...)</code></td>
+<td><code>a or b or ...</code> (short-circuit)</td>
+</tr>
+<tr>
+<td><code>=none=(a, b, ...)</code></td>
+<td><code>!(a or b or ...)</code></td>
+</tr>
+<tr>
+<td><code>=nil=(x)</code> / <code>=notnil=(x)</code></td>
+<td><code>x == nil</code> / <code>x != nil</code></td>
+</tr>
+<tr>
+<td><code>=empty=(x)</code> / <code>=present=(x)</code></td>
+<td><code>empty(x)</code> / <code>present(x)</code></td>
+</tr>
+</tbody>
+</table></div>
+<p><code>key_conditions()</code> returns this table at runtime (form name -&gt; canonical meaning).</p>
+<h3 id="chains">Chains<a class="headerlink" href="#chains" title="Permanent link">#</a></h3>
+<p>Any branching form accepts an optional tail: a plain <code>else</code>, <code>=else=</code>, or any number of <code>=elif=</code> links.</p>
+<pre><code class="language-kotlin">=if=(score &gt; 95) { print &quot;A+&quot;; }
+=elif=(score &gt; 80) { print &quot;B&quot;; }
+=elif=(score &gt; 60) { print &quot;C&quot;; }
+=else= { print &quot;F&quot;; }
+</code></pre>
+<p><code>=elif=</code> / <code>=elseif=</code> are only valid as a continuation; starting a statement with one is a parse error that says so.</p>
+<h3 id="loops">Loops<a class="headerlink" href="#loops" title="Permanent link">#</a></h3>
+<pre><code class="language-kotlin">let i = 0;
+=while=(i &lt; 3) { i = i + 1; }
+=until=(i == 0) { i = i - 1; }
+</code></pre>
+<h3 id="several-conditions-at-once">Several conditions at once<a class="headerlink" href="#several-conditions-at-once" title="Permanent link">#</a></h3>
+<pre><code class="language-kotlin">=all=(age &gt;= 18, has(roles, &quot;admin&quot;), present(token)) { grant(); }
+=any=(isNil(a), isNil(b)) { print &quot;something is missing&quot;; }
+=none=(failed, timedOut) { print &quot;clean run&quot;; }
+</code></pre>
+<h2 id="using-conditions-inside-other-concepts">Using conditions inside other concepts<a class="headerlink" href="#using-conditions-inside-other-concepts" title="Permanent link">#</a></h2>
+<p>The same condition vocabulary works inside the constructs that need to decide something.</p>
+<h3 id="trailing-guards-return-break-continue-achieve-throw">Trailing guards: <code>return</code> / <code>break</code> / <code>continue</code> / <code>achieve</code> / <code>throw</code><a class="headerlink" href="#trailing-guards-return-break-continue-achieve-throw" title="Permanent link">#</a></h3>
+<p>Append <code>when (c)</code>, <code>unless (c)</code> or <code>if (c)</code> before the <code>;</code>. Sugar for wrapping the statement in an <code>if</code>.</p>
+<pre><code class="language-kotlin">fun label(n) {
+    return &quot;neg&quot;  when (n &lt; 0);
+    return &quot;zero&quot; if (n == 0);
+    return &quot;pos&quot;;
+}
+
+while (true) {
+    n = n + 1;
+    continue when (isOdd(n));
+    break    when (n &gt;= 6);
+}
+
+throw &quot;bad input&quot; unless (present(name));
+let r = goal { achieve found when (isTrue(ok)); };
+</code></pre>
+<p><code>return;</code> with a guard is written <code>return if (c);</code> (after <code>return</code>, <code>when(...)</code> / <code>unless(...)</code> still means a normal call unless a value precedes it).</p>
+<h3 id="match-guards"><code>match</code> guards<a class="headerlink" href="#match-guards" title="Permanent link">#</a></h3>
+<pre><code class="language-kotlin">match (level) {
+    case Level.High when (vip)     { print &quot;high-vip&quot;; }
+    case Level.High                { print &quot;high&quot;; }
+    case Level.Low, Level.Mid unless (vip) { print &quot;plain&quot;; }
+    else                           { print &quot;other&quot;; }
+}
+</code></pre>
+<p>A guarded <code>case</code> only runs when its value matches <strong>and</strong> the guard is truthy; otherwise matching continues with the next <code>case</code>.</p>
+<h3 id="subject-less-match-a-readable-if-else-if-chain">Subject-less <code>match</code>: a readable if / else-if chain<a class="headerlink" href="#subject-less-match-a-readable-if-else-if-chain" title="Permanent link">#</a></h3>
+<pre><code class="language-kotlin">match {
+    case (score &gt;= 90)            { print &quot;A&quot;; }
+    case (between(score, 80, 89)) { print &quot;B&quot;; }
+    case (oneOf(score, 70, 71))   { print &quot;C&quot;; }
+    else                          { print &quot;F&quot;; }
+}
+</code></pre>
+<p>The first <code>case</code> whose condition is truthy runs. <code>else</code> must be last.</p>
+<h3 id="already-works">Already works<a class="headerlink" href="#already-works" title="Permanent link">#</a></h3>
+<p>Every helper above is an ordinary function, so it can be used anywhere an expression is accepted: <code>print ... if=</code>, <code>reckon ... where</code>, <code>for (...) when (c) {...}</code>, ternaries, <code>plus.condition</code>, container queries and template strings.</p>
+<h2 id="key_terms-registry">KEY_TERMS registry<a class="headerlink" href="#key_terms-registry" title="Permanent link">#</a></h2>
+<p><code>KEY_TERMS</code> is runtime vocabulary metadata. It does not change the global lexer keyword table.</p>
+<pre><code class="language-kotlin">.KEY_TERMS = {
+    &quot;when&quot;: &quot;if&quot;,
+    &quot;unless&quot;: &quot;if&quot;,
+    &quot;otherwise&quot;: &quot;else&quot;
+};
+
+print key_terms();
+
+.KEY_TERMS == {
+    &quot;when&quot;: &quot;if&quot;,
+    &quot;unless&quot;: &quot;if&quot;,
+    &quot;otherwise&quot;: &quot;else&quot;
+};
+</code></pre>
+<p><code>=</code> replaces the current registry. <code>==</code> validates that the supplied map matches the current registry.</p>
+<h2 id="built-in-condition-helpers">Built-in condition helpers<a class="headerlink" href="#built-in-condition-helpers" title="Permanent link">#</a></h2>
+<p>Original helpers:</p>
+<ul>
+<li><code>is(a, b)</code> — structural equality.</li>
+<li><code>isNot(a, b)</code> — structural inequality.</li>
+<li><code>empty(value)</code> — true for nil, empty string, array, map, or set.</li>
+<li><code>typeIs(value, "number")</code> — runtime type check.</li>
+<li><code>has(collection, value)</code> — membership in a map key set, array, or substring in a string.</li>
+<li><code>between(value, min, max)</code> — inclusive numeric range.</li>
+<li><code>all(array)</code> — every item is truthy.</li>
+<li><code>any(array)</code> — at least one item is truthy.</li>
+<li><code>none(array)</code> — no item is truthy.</li>
+<li><code>coalesce(a, b, ...)</code> — first non-nil value.</li>
+<li><code>toBool(value)</code> — explicit truthiness conversion.</li>
+<li><code>key_terms()</code> — returns the current KEY_TERMS registry as a map.</li>
+</ul>
+<p>Extended helpers (<code>rin_conditions.cpp</code>):</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>Group</th>
+<th>Helper</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Presence</td>
+<td><code>notNil(x)</code></td>
+<td><code>x</code> is not nil</td>
+</tr>
+<tr>
+<td></td>
+<td><code>present(x)</code></td>
+<td>has a real value: not nil, not empty, not whitespace-only text</td>
+</tr>
+<tr>
+<td></td>
+<td><code>blank(x)</code></td>
+<td>opposite of <code>present</code></td>
+</tr>
+<tr>
+<td>Strict booleans</td>
+<td><code>isTrue(x)</code> / <code>isFalse(x)</code></td>
+<td>exactly <code>true</code> / <code>false</code> (no truthiness: <code>isTrue(1)</code> is false)</td>
+</tr>
+<tr>
+<td></td>
+<td><code>xor(a, b)</code></td>
+<td>exactly one of <code>a</code>, <code>b</code> is truthy</td>
+</tr>
+<tr>
+<td></td>
+<td><code>implies(p, q)</code></td>
+<td><code>p =&gt; q</code></td>
+</tr>
+<tr>
+<td>Choices</td>
+<td><code>oneOf(x, a, b, ...)</code> / <code>oneOf(x, [a, b])</code></td>
+<td><code>x</code> equals one of the options</td>
+</tr>
+<tr>
+<td></td>
+<td><code>noneOf(x, ...)</code></td>
+<td><code>x</code> equals none of the options</td>
+</tr>
+<tr>
+<td>Counting</td>
+<td><code>exactly(arr, n)</code> / <code>atLeast(arr, n)</code> / <code>atMost(arr, n)</code></td>
+<td>number of truthy items in <code>arr</code></td>
+</tr>
+<tr>
+<td></td>
+<td><code>lengthIs(x, n)</code></td>
+<td>length of text / array / map / set equals <code>n</code></td>
+</tr>
+<tr>
+<td>Numbers</td>
+<td><code>outside(x, lo, hi)</code></td>
+<td>not in the closed range <code>[lo, hi]</code> (the opposite of <code>between</code>)</td>
+</tr>
+<tr>
+<td></td>
+<td><code>isInt(x)</code></td>
+<td>a number with no fractional part (text is not converted)</td>
+</tr>
+<tr>
+<td></td>
+<td><code>isZero(x)</code></td>
+<td><code>x == 0</code></td>
+</tr>
+<tr>
+<td></td>
+<td><code>closeTo(a, b, eps = 1e-9)</code></td>
+<td><code>abs(a - b) &lt;= eps</code></td>
+</tr>
+<tr>
+<td>Text</td>
+<td><code>matches(text, pattern)</code></td>
+<td>the whole text matches the ECMAScript regex</td>
+</tr>
+<tr>
+<td>Predicates</td>
+<td><code>every(items, fn)</code> / <code>some(items, fn)</code></td>
+<td>all / at least one item satisfies <code>fn</code> (array or set; <code>every([])</code> is true)</td>
+</tr>
+<tr>
+<td></td>
+<td><code>countIf(items, fn)</code> / <code>findIf(items, fn)</code></td>
+<td>how many satisfy <code>fn</code> / the first one that does (or nil)</td>
+</tr>
+<tr>
+<td>Introspection</td>
+<td><code>key_conditions()</code></td>
+<td>the supported <code>=term=</code> forms</td>
+</tr>
+</tbody>
+</table></div>
+<p><code>isNumeric</code>, <code>isEven</code>, <code>isOdd</code>, <code>isPositive</code>, <code>isNegative</code>, <code>inRange</code>, <code>startsWith</code> and <code>endsWith</code> are intentionally <strong>not</strong> native: they already exist as Rin functions in <code>lib/*.og.rin</code>, and Rin does not allow a function to share a name with a built-in.</p>
+<p>All of these are ordinary native functions, so they compose with existing <code>if</code>, <code>while</code>, pipelines, functions, and containers.</p></article>
+<div class="pnav"><a class="pn" href="scope-guarantees.html">→ ضمانات النطاق: `finally` · `defer` · `catch … when` · `rethrow</a><a class="pn" href="number_builtins.html">Rin Number Built-ins ←</a></div><p class="edit"><a href="https://github.com/dlof-lib/rinlang/edit/main/docs/key_terms_and_builtins.md">✎ عدّل هذه الصفحة على GitHub</a></p>
+<footer>Rin 1.0.0 · رخصة MIT</footer></main>
+<aside id="toc"><b>في هذه الصفحة</b><div class="toc">
+<ul>
+<li><a href="#key-conditions">Key conditions</a><ul>
+<li><a href="#forms">Forms</a></li>
+<li><a href="#chains">Chains</a></li>
+<li><a href="#loops">Loops</a></li>
+<li><a href="#several-conditions-at-once">Several conditions at once</a></li>
+</ul>
+</li>
+<li><a href="#using-conditions-inside-other-concepts">Using conditions inside other concepts</a><ul>
+<li><a href="#trailing-guards-return-break-continue-achieve-throw">Trailing guards: return / break / continue / achieve / throw</a></li>
+<li><a href="#match-guards">match guards</a></li>
+<li><a href="#subject-less-match-a-readable-if-else-if-chain">Subject-less match: a readable if / else-if chain</a></li>
+<li><a href="#already-works">Already works</a></li>
+</ul>
+</li>
+<li><a href="#key_terms-registry">KEY_TERMS registry</a></li>
+<li><a href="#built-in-condition-helpers">Built-in condition helpers</a></li>
+</ul>
+</div>
+</aside></div>
+<script src="assets/app.js"></script></body></html>

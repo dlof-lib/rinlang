@@ -1,0 +1,12 @@
+[1mbold[0m
+[1;3;4;9;2;7;5mall[0m
+[38;2;255;99;71;48;2;17;34;51mcolor[0m
+off
+[1m   PADDED   [0m
+[1;38;2;255;0;0mvar | flag[0m
+cond
+[1;4;38;2;255;215;0m     Title      [0m
+⚠️ [1mcareful[0m
+[1;4;38;2;255;215;0m   Card   [0m
+[3mbody[0m
+bad color rejected

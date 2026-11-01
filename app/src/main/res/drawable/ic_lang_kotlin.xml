@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Kotlin — الشعار/الرمز المعروف بلون هويته؛ المسارات من Simple Icons (CC0) أو Material Design Icons / Font Awesome Free. محلي بلا شبكة. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <group
+        android:scaleX="0.83333"
+        android:scaleY="0.83333"
+        android:translateX="2.000"
+        android:translateY="2.000">
+        <path android:fillColor="#7F52FF"
+            android:pathData="M24 24H0V0h24L12 12Z" />
+    </group>
+</vector>

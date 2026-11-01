@@ -1,0 +1,13611 @@
+#include <utility>
+#include <exception> // std::exception_ptr / current_exception (libc++ على NDK يتطلبه صراحةً)
+#include "rin_interpreter.h"
+#include "rin_version.h"
+#include "rin_make.h"
+#include "rin_artifact.h"
+#include "rin_lexer.h"
+#include "rin_parser.h"
+#include "rin_stdlib_libs.h"
+#include "rin_http.h"
+#include "rin_json.h"
+#include "rin_color.h" // rincolor:: — the shared Color Engine (parsing/math/HSL/WCAG); also
+                        // used by indsin/rin_indsin_tokens.h. See that header's doc comment for the
+                        // full literal syntax. Registered as language-level natives below
+                        // (registerNatives()'s "محرك الألوان" section).
+#include "diagnostics/diagnostic_renderer.h"
+#include "diagnostics/source_manager.h"
+#include "binfmt/elf_format.h"
+#include "binfmt/ar_format.h"
+#include "binfmt/pe_format.h"
+#include "binfmt/macho_format.h"
+#include "binfmt/coff_obj.h"
+#include <cmath>
+#include <sstream>
+#include <fstream>
+#include <filesystem>
+#include <unordered_set>
+#include <algorithm>
+#include <cctype>
+#include <cstring>
+#include <iostream>
+#include <cstdlib>
+#include <ctime>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <errno.h>
+#include <cstdint>
+#include <unordered_map>
+#include <regex> // regexTest/regexFind/regexFindAll/regexReplace/regexSplit/regexGroups (معالجة نصوص متقدمة)
+#ifdef _WIN32
+#include <io.h>
+#define rin_isatty _isatty
+#else
+#include <unistd.h>
+#define rin_isatty isatty
+#endif
+#include <zlib.h> // zlibDeflateRaw/zlibInflateRaw (ضغط DEFLATE حقيقي متوافق مع صيغة ZIP method=8)
+
+// ---- توافق ويندوز/POSIX لـ stat()/mkdir() ----------------------------------
+// على أندرويد NDK/لينكس/macOS: stat()/mkdir(path, mode) القياسيتان بتوقيعهما
+// المعروف. على ويندوز (MSVC أو MinGW): الاسمان المتاحان بلا بادئة تحته سفلي هما
+// _stat()/_mkdir(path) (بلا وسيط mode)، ولا يمكن استدعاء mkdir بوسيطين هناك.
+// هذا القسم فقط يوحّد الاسم المُستخدَم أدناه؛ لا يغيّر أي سلوك على المنصات الأخرى.
+#ifdef _WIN32
+    #include <direct.h>
+    using rin_stat_t = struct _stat;
+    #define RIN_STAT(pathCStr, stPtr) ::_stat((pathCStr), (stPtr))
+    #define RIN_MKDIR(pathCStr) ::_mkdir(pathCStr)
+#else
+    using rin_stat_t = struct stat;
+    #define RIN_STAT(pathCStr, stPtr) ::stat((pathCStr), (stPtr))
+    #define RIN_MKDIR(pathCStr) ::mkdir((pathCStr), 0755)
+#endif
+
+namespace rin {
+namespace imgdraw { // rin_image_draw.cpp (يُضمَّن في نهاية هذا الملف)
+bool isImagePath(const std::string& path);
+std::string logAsImageBytes(const std::vector<LogEntry>& entries, const std::string& path);
+bool getRgba(int id, int& w, int& h, std::vector<uint8_t>& px);
+}
+
+// ---- Diagnostics: نظام موحّد (src/diagnostics) ----
+// اسم الملف الحالي المستخدَم في كل Diagnostic صادر عن دوال حرة (utilities) أو lambdas لا تصل إلى
+// Interpreter::sourceFile (asNumber/asString/expectArgs/requireNumbers/معظم natives...).
+// يُضبَط من Interpreter::run()/setSourceFile() قبل أي تنفيذ، ومن قِبل معالجة container.import/@import
+// أثناء الدخول إلى ملف/مكتبة مستوردة، بحيث تشير أخطاء تلك الدوال الحرة إلى الملف الصحيح فعلياً.
+std::string g_diagFile = "<input>";
+
+// يبني RinError غنياً (Diagnostic كامل: كود + موقع من رقم السطر + رسالة) بلا حاجة لِـ `this` —
+// يُستخدم من كل الدوال الحرة و lambdas التي لا تلتقط Interpreter (natives أغلبها [this] فعلاً، لكن
+// استخدام دالة حرة واحدة موحّدة لكل المواقع يبقي الكود بسيطاً ويتجنّب تعارض التقاط this في lambdas).
+RinError diagErr(diag::Code code, int line, std::string message) {
+    diag::Diagnostic d(code, message, diag::SourceLocation::point(g_diagFile, line, 1));
+    return RinError(std::move(d));
+}
+
+
+// let+: كل الأسماء التي يعرّفها تصريح let (بسيط/مجموعة/نمط) — تُستعمل لتصدير export وللاستيراد الانتقائي.
+static void letDeclaredNames(const StmtPtr& st, std::vector<std::string>& out) {
+    if (auto ls = std::dynamic_pointer_cast<LetStmt>(st)) { out.push_back(ls->name); return; }
+    if (auto lp = std::dynamic_pointer_cast<LetPatternStmt>(st)) { letPatternNames(lp->pattern, out); return; }
+    if (auto lg = std::dynamic_pointer_cast<LetGroupStmt>(st)) for (auto& it : lg->items) letDeclaredNames(it, out);
+}
+
+// تصريحات أمامية (forward declarations): تُستخدَم هذه الدوال داخل registerNatives() أدناه
+// (natives["httpRequest"]... إلخ) قبل تعريفها الفعلي في نهاية الملف (قسم "أدوات HTTP الحقيقي")،
+// وبلا هذه التصريحات لن يُبنى الملف (استخدام قبل التعريف). عرّفها هنا فقط، اترك التعريف الفعلي
+// في مكانه الأصلي بالأسفل.
+static http::HeaderList headersFromValue(const Value& v, const std::string& fn, int line);
+static std::string bodyToString(const Value& v, http::HeaderList& headers);
+static Value httpResultToValue(const http::HttpResult& r);
+
+// تمثيل "متداخل" لقيمة (يُستخدم داخل عناصر المصفوفات/القواميس عند الطباعة): النصوص توضع بين علامتي تنصيص.
+static std::string reprValue(const Value& v) {
+    if (v.type == Value::Type::STRING) return "\"" + v.str + "\"";
+    return v.toDisplayString();
+}
+
+// تهيئة متعددة الأسطر (multi-line, indented) لمصفوفة/قاموس — تُستخدم حصرياً عبر print pretty=true
+// (انظر PrintStmt في rin_ast.h). كل مستوى تعشيش يُزاح بمسافتين إضافيتين؛ العناصر/القيم غير
+// المُركَّبة (رقم/نص/منطقي/nil/دالة) تُطبع عبر reprValue تماماً كالتمثيل المضغوط المعتاد، فقط
+// الحاويات (array/map) نفسها هي ما يتمدد على عدة أسطر. مصفوفة/قاموس فارغان يبقيان "[]"/"{}"
+// على سطر واحد بلا تمدد (لا فائدة من تعدد أسطر لعنصر فارغ).
+static std::string prettyPrintValue(const Value& v, int indent) {
+    std::string ind(static_cast<size_t>(indent) * 2, ' ');
+    std::string indInner(static_cast<size_t>(indent + 1) * 2, ' ');
+    if (v.type == Value::Type::ARRAY) {
+        if (v.array->empty()) return "[]";
+        std::ostringstream ss;
+        ss << "[\n";
+        for (size_t i = 0; i < v.array->size(); i++) {
+            const Value& item = (*v.array)[i];
+            ss << indInner;
+            if (item.type == Value::Type::ARRAY || item.type == Value::Type::MAP || item.type == Value::Type::SET) {
+                ss << prettyPrintValue(item, indent + 1);
+            } else {
+                ss << reprValue(item);
+            }
+            if (i + 1 < v.array->size()) ss << ",";
+            ss << "\n";
+        }
+        ss << ind << "]";
+        return ss.str();
+    }
+    if (v.type == Value::Type::MAP) {
+        if (v.map->empty()) return "{}";
+        std::ostringstream ss;
+        ss << "{\n";
+        for (size_t i = 0; i < v.map->size(); i++) {
+            const Value& key = (*v.map)[i].first;
+            const Value& val = (*v.map)[i].second;
+            ss << indInner << reprValue(key) << ": ";
+            if (val.type == Value::Type::ARRAY || val.type == Value::Type::MAP || val.type == Value::Type::SET) {
+                ss << prettyPrintValue(val, indent + 1);
+            } else {
+                ss << reprValue(val);
+            }
+            if (i + 1 < v.map->size()) ss << ",";
+            ss << "\n";
+        }
+        ss << ind << "}";
+        return ss.str();
+    }
+    if (v.type == Value::Type::SET) {
+        if (!v.set || v.set->empty()) return "Set{}";
+        std::ostringstream ss;
+        ss << "Set{\n";
+        for (size_t i = 0; i < v.set->items.size(); i++) {
+            const Value& item = v.set->items[i];
+            ss << indInner;
+            if (item.type == Value::Type::ARRAY || item.type == Value::Type::MAP || item.type == Value::Type::SET) ss << prettyPrintValue(item, indent + 1);
+            else ss << reprValue(item);
+            if (i + 1 < v.set->items.size()) ss << ",";
+            ss << "\n";
+        }
+        ss << ind << "}";
+        return ss.str();
+    }
+    return reprValue(v);
+}
+
+// ---- Rin 1.0: المفسّر "الحالي" لهذا الخيط -- يلزم فقط كي تستطيع Value::toDisplayString (دالة عضو في
+// Value بلا وصول إلى Interpreter) استدعاء __str__/toString المعرَّفة من المستخدم على كائنات class. يُضبَط
+// بحارس RAII داخل run()/callTopLevelFunction()/callFunction() ويُستعاد السابق عند الخروج، فلا مؤشّر
+// معلّقاً أبداً (خارج أي تنفيذ يبقى nullptr فيعود العرض الافتراضي كما كان).
+static thread_local Interpreter* g_currentInterp = nullptr;
+struct CurrentInterpGuard {
+    Interpreter* prev;
+    explicit CurrentInterpGuard(Interpreter* i) : prev(g_currentInterp) { g_currentInterp = i; }
+    ~CurrentInterpGuard() { g_currentInterp = prev; }
+};
+
+bool valuesEqual(const Value& a, const Value& b) {
+    if (a.type != b.type) return false;
+    switch (a.type) {
+        case Value::Type::NIL: return true;
+        case Value::Type::NUMBER: return a.number == b.number;
+        case Value::Type::STRING: return a.str == b.str;
+        case Value::Type::BOOL: return a.boolean == b.boolean;
+        case Value::Type::FUNCTION: return a.function == b.function;
+        case Value::Type::ARRAY: {
+            if (a.array == b.array) return true;
+            if (!a.array || !b.array) return false;
+            if (a.array->size() != b.array->size()) return false;
+            for (size_t i = 0; i < a.array->size(); i++) {
+                if (!valuesEqual((*a.array)[i], (*b.array)[i])) return false;
+            }
+            return true;
+        }
+        case Value::Type::MAP: {
+            if (a.map == b.map) return true;
+            if (!a.map || !b.map) return false;
+            if (a.map->size() != b.map->size()) return false;
+            for (auto& kv : *a.map) {
+                bool found = false;
+                for (auto& kv2 : *b.map) {
+                    if (valuesEqual(kv.first, kv2.first) && valuesEqual(kv.second, kv2.second)) {
+                        found = true; break;
+                    }
+                }
+                if (!found) return false;
+            }
+            return true;
+        }
+        case Value::Type::SET: {
+            if (a.set == b.set) return true;
+            if (!a.set || !b.set) return false;
+            return setops::equal(*a.set, *b.set); // بلا اعتبار للترتيب
+        }
+        case Value::Type::INSTANCE: {
+            // class (reference semantics): مساواة فقط لنفس الكائن بالذات (نفس المؤشّر).
+            // struct (value semantics): مساواة تركيبية (نفس الصنف + كل الحقول متساوية)، تماماً
+            // كـ ARRAY/MAP أعلاه — الأنسب لنوع القيمة الذي يُفترَض أن ينسخه المبرمج بحرّية.
+            if (a.instance == b.instance) return true;
+            if (!a.instance || !b.instance) return false;
+            if (!a.instance->isStruct || !b.instance->isStruct) return false;
+            if (a.instance->className != b.instance->className) return false;
+            if (a.instance->fields.size() != b.instance->fields.size()) return false;
+            for (auto& kv : a.instance->fields) {
+                auto it = b.instance->fields.find(kv.first);
+                if (it == b.instance->fields.end() || !valuesEqual(kv.second, it->second)) return false;
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
+// =::= — تطابق الشكل (البنية والأنواع، القيم الورقية تُتجاهل):
+//   • نفس نوع القيمة؛ nil يطابق nil فقط. العدد/النص/المنطقي: يكفي النوع.
+//   • الدالة المعرَّفة في Rin: نفس عدد المعاملات (الدوال الأصلية: النوع يكفي).
+//   • المصفوفة: نفس الطول وكل عنصر بنفس شكل نظيره. القاموس: نفس المفاتيح (بالقيمة وبلا ترتيب) وكل قيمة بنفس شكلها.
+//   • الكائن: نفس الصنف ونفس أسماء الحقول وأشكال قيمها. المجموعة: نفس العدد ولكل عنصر نظير بنفس الشكل (بلا ترتيب).
+//   • محمي من الدوران الذاتي (عمق أقصى 64).
+// نفس المسار يخدم shapeDiff(value, model): يجمع كل المخالفات مع مساراتها بدل الوقوف عند أولاها.
+struct ShapeIssue { std::string path, reason, expected, actual; };
+
+static std::string shapeKeyText(const Value& k) { return k.type == Value::Type::STRING ? k.str : k.toDisplayString(); }
+static std::string shapeStr(const Value& v, int depth) {
+    if (depth > 8) return "...";
+    switch (v.type) {
+        case Value::Type::ARRAY: {
+            std::string o = "[";
+            if (v.array) for (size_t i = 0; i < v.array->size(); i++) {
+                if (i) o += ",";
+                if (i >= 32) { o += "..."; break; }
+                o += shapeStr((*v.array)[i], depth + 1);
+            }
+            return o + "]";
+        }
+        case Value::Type::MAP: {
+            std::vector<std::pair<std::string, std::string>> kv;
+            if (v.map) for (auto& e : *v.map) kv.push_back({shapeKeyText(e.first), shapeStr(e.second, depth + 1)});
+            std::sort(kv.begin(), kv.end());
+            std::string o = "{";
+            for (size_t i = 0; i < kv.size(); i++) { if (i) o += ","; if (i >= 32) { o += "..."; break; } o += kv[i].first + ":" + kv[i].second; }
+            return o + "}";
+        }
+        case Value::Type::SET: return "set(" + std::to_string(v.set ? v.set->size() : 0) + ")";
+        case Value::Type::INSTANCE: {
+            if (!v.instance) return "instance";
+            std::vector<std::pair<std::string, std::string>> kv;
+            for (auto& e : v.instance->fields) kv.push_back({e.first, shapeStr(e.second, depth + 1)});
+            std::sort(kv.begin(), kv.end());
+            std::string o = v.instance->className + "{";
+            for (size_t i = 0; i < kv.size(); i++) { if (i) o += ","; o += kv[i].first + ":" + kv[i].second; }
+            return o + "}";
+        }
+        case Value::Type::FUNCTION:
+            return v.function && v.function->declaration ? "function/" + std::to_string(v.function->declaration->params.size()) : "function";
+        default: return v.typeName();
+    }
+}
+static bool shapeRec(const Value& a, const Value& b, const std::string& path, std::vector<ShapeIssue>* out, int depth) {
+    auto fail = [&](const std::string& reason) {
+        if (out) out->push_back({path, reason, shapeStr(b, 7), shapeStr(a, 7)});
+        return false;
+    };
+    if (a.type != b.type) return fail("type mismatch");
+    if (depth > 64) return true;
+    switch (a.type) {
+        case Value::Type::ARRAY: {
+            if (a.array == b.array) return true;
+            if (!a.array || !b.array) return fail("empty reference");
+            bool ok = true;
+            if (a.array->size() != b.array->size()) { ok = fail("length " + std::to_string(a.array->size()) + " != " + std::to_string(b.array->size())); if (!out) return false; }
+            size_t n = std::min(a.array->size(), b.array->size());
+            for (size_t i = 0; i < n; i++)
+                if (!shapeRec((*a.array)[i], (*b.array)[i], path + "[" + std::to_string(i) + "]", out, depth + 1)) { ok = false; if (!out) return false; }
+            return ok;
+        }
+        case Value::Type::MAP: {
+            if (a.map == b.map) return true;
+            if (!a.map || !b.map) return fail("empty reference");
+            bool ok = true;
+            if (!out && a.map->size() != b.map->size()) return false;
+            for (auto& kv : *b.map) {   // المفاتيح التي يتطلّبها النموذج
+                const Value* av = nullptr;
+                for (auto& kv2 : *a.map) if (valuesEqual(kv.first, kv2.first)) { av = &kv2.second; break; }
+                std::string kp = path + (kv.first.type == Value::Type::STRING ? "." + kv.first.str : "[" + kv.first.toDisplayString() + "]");
+                if (!av) { ok = false; if (!out) return false; out->push_back({kp, "missing key", shapeStr(kv.second, 7), "(absent)"}); continue; }
+                if (!shapeRec(*av, kv.second, kp, out, depth + 1)) { ok = false; if (!out) return false; }
+            }
+            if (out) for (auto& kv : *a.map) {   // مفاتيح زائدة
+                bool found = false;
+                for (auto& kv2 : *b.map) if (valuesEqual(kv.first, kv2.first)) { found = true; break; }
+                if (!found) { ok = false; out->push_back({path + (kv.first.type == Value::Type::STRING ? "." + kv.first.str : "[" + kv.first.toDisplayString() + "]"), "unexpected key", "(absent)", shapeStr(kv.second, 7)}); }
+            }
+            return ok;
+        }
+        case Value::Type::SET: {
+            if (a.set == b.set) return true;
+            if (!a.set || !b.set) return fail("empty reference");
+            if (a.set->size() != b.set->size()) return fail("size " + std::to_string(a.set->size()) + " != " + std::to_string(b.set->size()));
+            auto covered = [&](const SetData& x, const SetData& y) {
+                for (auto& xe : x.items) { bool f = false; for (auto& ye : y.items) if (shapeRec(xe, ye, path, nullptr, depth + 1)) { f = true; break; } if (!f) return false; }
+                return true;
+            };
+            if (!covered(*a.set, *b.set) || !covered(*b.set, *a.set)) return fail("element shapes differ");
+            return true;
+        }
+        case Value::Type::INSTANCE: {
+            if (a.instance == b.instance) return true;
+            if (!a.instance || !b.instance) return fail("empty reference");
+            if (a.instance->className != b.instance->className) return fail("class " + a.instance->className + " != " + b.instance->className);
+            bool ok = true;
+            for (auto& kv : b.instance->fields) {
+                auto it = a.instance->fields.find(kv.first);
+                if (it == a.instance->fields.end()) { ok = false; if (!out) return false; out->push_back({path + "." + kv.first, "missing field", shapeStr(kv.second, 7), "(absent)"}); continue; }
+                if (!shapeRec(it->second, kv.second, path + "." + kv.first, out, depth + 1)) { ok = false; if (!out) return false; }
+            }
+            if (a.instance->fields.size() != b.instance->fields.size()) {
+                ok = false; if (!out) return false;
+                for (auto& kv : a.instance->fields) if (!b.instance->fields.count(kv.first)) out->push_back({path + "." + kv.first, "unexpected field", "(absent)", shapeStr(kv.second, 7)});
+            }
+            return ok;
+        }
+        case Value::Type::FUNCTION: {
+            auto da = a.function ? a.function->declaration : nullptr, db = b.function ? b.function->declaration : nullptr;
+            if (da && db && da->params.size() != db->params.size()) return fail("arity " + std::to_string(da->params.size()) + " != " + std::to_string(db->params.size()));
+            return true;
+        }
+        default: return true; // nil/number/string/bool: النوع نفسه يكفي
+    }
+}
+bool sameShape(const Value& a, const Value& b) { return shapeRec(a, b, "$", nullptr, 0); }
+std::string shapeOf(const Value& v) { return shapeStr(v, 0); }
+std::vector<std::array<std::string, 4>> shapeDiff(const Value& value, const Value& model) {
+    std::vector<ShapeIssue> out; shapeRec(value, model, "$", &out, 0);
+    std::vector<std::array<std::string, 4>> r;
+    for (auto& i : out) r.push_back({i.path, i.reason, i.expected, i.actual});
+    return r;
+}
+
+// هوية مرجعية: للأنواع المرجعية (ARRAY/MAP/SET/INSTANCE/FUNCTION) نفس المؤشّر بالذات؛
+// للأنواع القيمية (nil/number/string/bool) تساوي القيمة نفسها (لا معنى لـ"كائن آخر" لها).
+static bool sameReference(const Value& a, const Value& b) {
+    if (a.type != b.type) return false;
+    switch (a.type) {
+        case Value::Type::ARRAY:    return a.array == b.array;
+        case Value::Type::MAP:      return a.map == b.map;
+        case Value::Type::SET:      return a.set == b.set;
+        case Value::Type::INSTANCE: return a.instance == b.instance;
+        case Value::Type::FUNCTION: return a.function == b.function;
+        default:                    return valuesEqual(a, b);
+    }
+}
+
+std::string Value::typeName() const {
+    switch (type) {
+        case Type::NIL: return "nil";
+        case Type::NUMBER: return "number";
+        case Type::STRING: return "string";
+        case Type::BOOL: return "bool";
+        case Type::FUNCTION: return "function";
+        case Type::ARRAY: return "array";
+        case Type::MAP: return "map";
+        case Type::SET: return "set";
+        case Type::INSTANCE: return instance ? instance->className : "instance";
+    }
+    return "nil";
+}
+
+std::string Value::toDisplayString() const {
+    switch (type) {
+        case Type::NIL: return "nil";
+        case Type::BOOL: return boolean ? "true" : "false";
+        case Type::STRING: return str;
+        case Type::FUNCTION: return "<function>";
+        case Type::NUMBER: {
+            std::ostringstream ss;
+            if (number == static_cast<long long>(number)) {
+                ss << static_cast<long long>(number);
+            } else {
+                ss << number;
+            }
+            return ss.str();
+        }
+        case Type::ARRAY: {
+            std::ostringstream ss;
+            ss << "[";
+            for (size_t i = 0; i < array->size(); i++) {
+                if (i) ss << ", ";
+                ss << reprValue((*array)[i]);
+            }
+            ss << "]";
+            return ss.str();
+        }
+        case Type::MAP: {
+            // OOP: قيمة enum case (انظر execute(EnumStmt) في rin_interpreter.cpp) لها شكل ثابت
+            // {__enum__, name, value} بهذا الترتيب بالضبط -- نعرضها بصيغة "EnumName.CaseName"
+            // المألوفة بدل تفريغ الـ map الخام، بلا أي تغيير على أي map عادية أخرى في اللغة.
+            if (map->size() == 3 &&
+                (*map)[0].first.type == Type::STRING && (*map)[0].first.str == "__enum__" &&
+                (*map)[0].second.type == Type::STRING &&
+                (*map)[1].first.type == Type::STRING && (*map)[1].first.str == "name" &&
+                (*map)[1].second.type == Type::STRING &&
+                (*map)[2].first.type == Type::STRING && (*map)[2].first.str == "value") {
+                return (*map)[0].second.str + "." + (*map)[1].second.str;
+            }
+            std::ostringstream ss;
+            ss << "{";
+            for (size_t i = 0; i < map->size(); i++) {
+                if (i) ss << ", ";
+                ss << reprValue((*map)[i].first) << ": " << reprValue((*map)[i].second);
+            }
+            ss << "}";
+            return ss.str();
+        }
+        case Type::SET: return set ? setops::display(*set) : std::string("Set{}");
+        case Type::INSTANCE: {
+            if (!instance) return "nil";
+            // Rin 1.0: __str__ / toString() المعرَّفة في الصنف تتحكّم بالعرض (print + الدمج النصي + str()).
+            { std::string custom; if (g_currentInterp && g_currentInterp->tryInstanceToString(*this, custom)) return custom; }
+            std::ostringstream ss;
+            ss << instance->className << " { ";
+            bool first = true;
+            for (auto& name : instance->fieldOrder) {
+                auto it = instance->fields.find(name);
+                if (it == instance->fields.end()) continue;
+                if (!first) ss << ", ";
+                first = false;
+                ss << name << ": " << reprValue(it->second);
+            }
+            ss << " }";
+            return ss.str();
+        }
+    }
+    return "nil";
+}
+
+// ---- Diagnostics helpers (src/diagnostics) — انظر تعليقات الإعلان في rin_interpreter.h ----
+
+RinError Interpreter::err(diag::Code code, int line, std::string message) const {
+    diag::Diagnostic d(code, message, diag::SourceLocation::point(sourceFile, line, 1));
+    return RinError(std::move(d));
+}
+
+RinError Interpreter::errWithReason(diag::Code code, int line, std::string message, std::string reason) const {
+    diag::Diagnostic d(code, message, diag::SourceLocation::point(sourceFile, line, 1));
+    d.withReason(std::move(reason));
+    return RinError(std::move(d));
+}
+
+RinError Interpreter::undefinedVariableErr(const std::string& name, int line, const EnvPtr& env) const {
+    if (name == "RINTWIST") {   // القراءة لا تصل إلى هنا أبداً، فهذا إسناد: المتغيّر للقراءة فقط
+        diag::Diagnostic rd(diag::Code::E0035_RuntimeError, "`RINTWIST` is read-only",
+                            diag::SourceLocation::point(sourceFile, line, 1));
+        rd.withReason("RINTWIST is a built-in snapshot of the running context (file / server / date / app / lib)")
+          .withHint("copy it first: `let ctx = RINTWIST;`, or declare your own variable with a different name");
+        return RinError(std::move(rd));
+    }
+    diag::Diagnostic d(diag::Code::E0001_UndefinedVariable, "undefined variable `" + name + "`",
+                        diag::SourceLocation::point(sourceFile, line, 1));
+    d.withReason("no variable named `" + name + "` exists in this scope");
+    if (env) {
+        std::unordered_set<std::string> visible;
+        env->collectVisibleNames(visible);
+        std::vector<std::string> candidates(visible.begin(), visible.end());
+        auto matches = diag::nearestMatches(name, candidates, 2, 3);
+        for (auto& m : matches) d.withSuggestion(m);
+        if (!matches.empty()) d.withHint("did you mean `" + matches.front() + "`?");
+        else d.withHint("define the variable before using it: `let " + name + " = ...;`");
+    }
+    return RinError(std::move(d));
+}
+
+RinError Interpreter::unknownFunctionErr(const std::string& name, int line) const {
+    diag::Diagnostic d(diag::Code::E0006_UnknownFunction, "`" + name + "` is not a function",
+                        diag::SourceLocation::point(sourceFile, line, 1));
+    d.withReason("no function (built-in or user-defined) named `" + name + "` is callable here");
+    std::vector<std::string> candidates;
+    candidates.reserve(natives.size());
+    for (auto& kv : natives) candidates.push_back(kv.first);
+    auto matches = diag::nearestMatches(name, candidates, 2, 3);
+    for (auto& m : matches) d.withSuggestion(m);
+    if (!matches.empty()) d.withHint("did you mean `" + matches.front() + "()`?");
+    return RinError(std::move(d));
+}
+
+Interpreter::Interpreter() {
+    globals = std::make_shared<Environment>();
+    globals->define("PI", Value::num(3.14159265358979323846));
+    globals->define("E", Value::num(2.71828182845904523536));
+    // RMF (Rin Math Fabric) Phase 1 §31 — ثوابت رياضية إضافية، نفس أسلوب PI/E أعلاه بالضبط
+    // (متغيّرات globals عادية قابلة لإعادة التعريف كأي متغيّر آخر، لا آلية "ثابت محمي" منفصلة —
+    // أبسط ما يمكن).
+    globals->define("TAU", Value::num(6.28318530717958647692));  // 2π
+    globals->define("PHI", Value::num(1.61803398874989484820));  // النسبة الذهبية (1+√5)/2
+    // RMF Phase 4 §22 — Random: قبل هذا التعديل لم يكن أي مكان في الكود يستدعي std::srand()
+    // إطلاقاً، فكانت random()/randomChoice()/shuffle() تُنتج بالضبط نفس التسلسل في كل تشغيل
+    // للبرنامج (بذرة std::rand الافتراضية = 1) دون أن يطلب المبرمج ذلك أو يعرفه. هنا: بذرة عشوائية
+    // حقيقية (وقت التشغيل الفعلي) تلقائياً عند بدء أي برنامج Rin، فيصبح random() عشوائياً فعلاً
+    // بشكل افتراضي (السلوك المتوقَّع)، مع إبقاء إمكانية استعادة قابلية التكرار الكاملة صراحةً عبر
+    // seed(n) (انظر natives["seed"] أدناه) عندما يحتاجها المبرمج تحديداً (محاكاة/اختبارات).
+    std::srand(static_cast<unsigned int>(std::time(nullptr)));
+    registerNatives();
+    for (auto& install : interpreterInstallers()) install(*this); // مكتبات المضيف المربوطة (indsin.* …)
+}
+
+static double asNumber(const Value& v, const std::string& fn, int line) {
+    if (v.type != Value::Type::NUMBER) {
+        throw diagErr(diag::Code::E0004_InvalidType, line, "'" + fn + "' expects a number but got " + v.typeName());
+    }
+    return v.number;
+}
+
+// ---- مفهوم "token": يحوّل TokenType إلى اسمه النصي (للاستخدام في native "tokens" أدناه، التي
+// تكشف تدفّق الرموز اللغوية الفعلي الذي ينتجه محلّل Rin الحقيقي (rin::Lexer) للمستخدم/المبرمج،
+// بدل أن يبقى تفصيلاً داخلياً غير مرئي. مفيد لتعلّم اللغة، تصحيح أخطاء بناء الجملة، أو بناء أدوات
+// تحليل نصوص (مثل lib/lexkit.og.rin) تعتمد على معرفة كيف يُقسَّم مصدر Rin فعلياً إلى tokens.
+static std::string tokenTypeName(TokenType t) {
+    switch (t) {
+        case TokenType::NUMBER: return "NUMBER";
+        case TokenType::STRING: return "STRING";
+        case TokenType::IDENT: return "IDENT";
+        case TokenType::LET: return "LET";
+        case TokenType::PRINT: return "PRINT";
+        case TokenType::IF: return "IF";
+        case TokenType::ELSE: return "ELSE";
+        case TokenType::WHILE: return "WHILE";
+        case TokenType::FUN: return "FUN";
+        case TokenType::RETURN: return "RETURN";
+        case TokenType::TRUE: return "TRUE";
+        case TokenType::FALSE: return "FALSE";
+        case TokenType::NIL: return "NIL";
+        case TokenType::AND: return "AND";
+        case TokenType::OR: return "OR";
+        case TokenType::BREAK: return "BREAK";
+        case TokenType::CONTINUE: return "CONTINUE";
+        case TokenType::RINOPEN: return "RINOPEN";
+        case TokenType::FOR: return "FOR";
+        case TokenType::TEXT: return "TEXT";
+        case TokenType::CONTAINER: return "CONTAINER";
+        case TokenType::CONTAINERS: return "CONTAINERS";
+        case TokenType::GROUP: return "GROUP";
+        case TokenType::VOLUME: return "VOLUME";
+        case TokenType::SECTION: return "SECTION";
+        case TokenType::TRANSLATIONS: return "TRANSLATIONS";
+        case TokenType::TRANSLATION: return "TRANSLATION";
+        case TokenType::LINK: return "LINK";
+        case TokenType::TYING: return "TYING";
+        case TokenType::MERGE: return "MERGE";
+        case TokenType::INSTALLATION: return "INSTALLATION";
+        case TokenType::SIMPLIFIED: return "SIMPLIFIED";
+        case TokenType::SAVE: return "SAVE";
+        case TokenType::FILE_KW: return "FILE";
+        case TokenType::END: return "END";
+        case TokenType::PIPE_KW: return "PIPE_KW";
+        case TokenType::PLUS: return "PLUS";
+        case TokenType::MINUS: return "MINUS";
+        case TokenType::STAR: return "STAR";
+        case TokenType::SLASH: return "SLASH";
+        case TokenType::PERCENT: return "PERCENT";
+        case TokenType::EQUAL: return "EQUAL";
+        case TokenType::EQUAL_EQUAL: return "EQUAL_EQUAL";
+        case TokenType::BANG: return "BANG";
+        case TokenType::BANG_EQUAL: return "BANG_EQUAL";
+        case TokenType::NOT_SAME: return "NOT_SAME";
+        case TokenType::COPY_OF: return "COPY_OF";
+        case TokenType::SAME_SHAPE: return "SAME_SHAPE";
+        case TokenType::LESS: return "LESS";
+        case TokenType::LESS_EQUAL: return "LESS_EQUAL";
+        case TokenType::GREATER: return "GREATER";
+        case TokenType::GREATER_EQUAL: return "GREATER_EQUAL";
+        case TokenType::LPAREN: return "LPAREN";
+        case TokenType::RPAREN: return "RPAREN";
+        case TokenType::LBRACE: return "LBRACE";
+        case TokenType::RBRACE: return "RBRACE";
+        case TokenType::LBRACKET: return "LBRACKET";
+        case TokenType::RBRACKET: return "RBRACKET";
+        case TokenType::COLON: return "COLON";
+        case TokenType::COMMA: return "COMMA";
+        case TokenType::SEMICOLON: return "SEMICOLON";
+        case TokenType::AT: return "AT";
+        case TokenType::DOT: return "DOT";
+        case TokenType::PIPE: return "PIPE";
+        case TokenType::QUESTION: return "QUESTION";
+        case TokenType::END_OF_FILE: return "EOF";
+        case TokenType::ERROR: return "ERROR";
+    }
+    return "UNKNOWN";
+}
+
+static std::string asString(const Value& v, const std::string& fn, int line) {
+    if (v.type != Value::Type::STRING) {
+        throw diagErr(diag::Code::E0004_InvalidType, line, "'" + fn + "' expects a string but got " + v.typeName());
+    }
+    return v.str;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// النصوص القالبية: التنسيق وقوالب وقت التشغيل (docs/template-strings.md)
+// ─────────────────────────────────────────────────────────────────────────────
+namespace {
+
+size_t tplU8Len(const std::string& s) { size_t n = 0; for (unsigned char c : s) if ((c & 0xC0) != 0x80) n++; return n; }
+size_t tplCpBytes(unsigned char c) { return c < 0x80 ? 1 : (c >> 5) == 6 ? 2 : (c >> 4) == 14 ? 3 : (c >> 3) == 30 ? 4 : 1; }
+std::string tplTrim(const std::string& s) {
+    size_t b = s.find_first_not_of(" \t\r\n"), e = s.find_last_not_of(" \t\r\n");
+    return b == std::string::npos ? "" : s.substr(b, e - b + 1);
+}
+std::string tplPad(const std::string& body, size_t width, const std::string& fill, char align) {
+    size_t len = tplU8Len(body);
+    if (width <= len) return body;
+    size_t pad = width - len, left = align == '>' ? pad : align == '^' ? pad / 2 : 0, right = pad - left;
+    std::string out;
+    for (size_t i = 0; i < left; i++) out += fill;
+    out += body;
+    for (size_t i = 0; i < right; i++) out += fill;
+    return out;
+}
+std::string tplGroup(const std::string& s, char sep) { // فواصل الآلاف على الجزء الصحيح
+    size_t st = (!s.empty() && (s[0] == '-' || s[0] == '+' || s[0] == ' ')) ? 1 : 0;
+    size_t en = s.find_first_not_of("0123456789", st);
+    if (en == std::string::npos) en = s.size();
+    std::string ip = s.substr(st, en - st), out;
+    for (size_t k = 0; k < ip.size(); k++) { if (k && (ip.size() - k) % 3 == 0) out += sep; out += ip[k]; }
+    return s.substr(0, st) + out + s.substr(en);
+}
+std::string tplArabicDigits(const std::string& s) { // 0-9 . , % -> ٠-٩ ٫ ٬ ٪
+    static const char* d[] = {"\xD9\xA0","\xD9\xA1","\xD9\xA2","\xD9\xA3","\xD9\xA4","\xD9\xA5","\xD9\xA6","\xD9\xA7","\xD9\xA8","\xD9\xA9"};
+    std::string out;
+    for (char c : s) {
+        if (c >= '0' && c <= '9') out += d[c - '0'];
+        else if (c == '.') out += "\xD9\xAB";
+        else if (c == ',') out += "\xD9\xAC";
+        else if (c == '%') out += "\xD9\xAA";
+        else out += c;
+    }
+    return out;
+}
+
+// مرحلة واحدة من التنسيق. الصيغة:  [[حشو]محاذاة][إشارة][0][عرض][, أو _][.دقة][نوع]
+//   محاذاة < > ^ ؛ حشو = أي حرف قبلها (مثل *^10 أو -<8) ؛ إشارة + أو مسافة
+//   نوع: f ثابت · d صحيح · % نسبة · e علمي · x X ست‌عشري · b ثنائي · o ثماني · s نص
+//   كلمات: upper lower trim title cap ar (أرقام عربية-هندية)
+Value tplStage(const Value& v, const std::string& specIn, int line, const std::string& whole) {
+    const std::string spec = tplTrim(specIn);
+    auto bad = [&](const std::string& why) {
+        return diagErr(diag::Code::E0007_InvalidArguments, line, "invalid format `:" + whole + "` in template string: " + why);
+    };
+    if (spec.empty()) throw bad("empty format stage");
+    if (spec == "upper" || spec == "lower" || spec == "title" || spec == "cap") {
+        std::string s = v.toDisplayString();
+        bool startWord = true;
+        for (auto& c : s) {
+            unsigned char u = (unsigned char)c;
+            if (spec == "upper") c = (char)std::toupper(u);
+            else if (spec == "lower") c = (char)std::tolower(u);
+            else if (spec == "title") { c = startWord ? (char)std::toupper(u) : (char)std::tolower(u); startWord = (c == ' ' || c == '\t' || c == '\n'); }
+            else if (spec == "cap") { if (&c == &s[0]) c = (char)std::toupper(u); }
+        }
+        return Value::string(s);
+    }
+    if (spec == "trim") return Value::string(tplTrim(v.toDisplayString()));
+    if (spec == "ar")   return Value::string(tplArabicDigits(v.toDisplayString()));
+
+    size_t i = 0;
+    std::string fill = " ";
+    char align = 0;
+    {   // [[حشو]محاذاة]
+        size_t L = tplCpBytes((unsigned char)spec[0]);
+        if (L < spec.size() && (spec[L] == '<' || spec[L] == '>' || spec[L] == '^')) { fill = spec.substr(0, L); align = spec[L]; i = L + 1; }
+        else if (spec[0] == '<' || spec[0] == '>' || spec[0] == '^') { align = spec[0]; i = 1; }
+    }
+    char sign = 0;
+    if (i < spec.size() && (spec[i] == '+' || spec[i] == ' ')) sign = spec[i++];
+    bool zero = false;
+    if (i < spec.size() && spec[i] == '0') { zero = true; i++; }
+    size_t width = 0;
+    while (i < spec.size() && isdigit((unsigned char)spec[i])) width = width * 10 + (spec[i++] - '0');
+    char group = 0;
+    if (i < spec.size() && (spec[i] == ',' || spec[i] == '_')) group = spec[i++];
+    int prec = -1;
+    if (i < spec.size() && spec[i] == '.') {
+        i++;
+        if (i >= spec.size() || !isdigit((unsigned char)spec[i])) throw bad("expected digits after `.`");
+        prec = 0;
+        while (i < spec.size() && isdigit((unsigned char)spec[i])) prec = prec * 10 + (spec[i++] - '0');
+    }
+    char type = 0;
+    if (i < spec.size() && std::strchr("fd%exXbos", spec[i])) type = spec[i++];
+    if (i != spec.size())
+        throw bad("unknown part `" + spec.substr(i) + "` (examples: .2f  ,.2f  05  +d  *^10  >8  x  b  e  .0%  upper  lower  title  trim  ar  or chain with |)");
+
+    const bool isNum = v.type == Value::Type::NUMBER;
+    const bool numericType = type && type != 's';
+    if ((numericType || group || sign || zero) && !isNum) throw bad("this format needs a number but got " + v.typeName());
+
+    std::string s;
+    if (isNum) {
+        char buf[512];
+        double x = v.number;
+        if (type == 'x' || type == 'X' || type == 'o' || type == 'b') {
+            long long n = std::llround(x);
+            bool neg = n < 0; unsigned long long u = neg ? (unsigned long long)(-n) : (unsigned long long)n;
+            std::string d;
+            if (type == 'b') { if (!u) d = "0"; while (u) { d.insert(d.begin(), char('0' + (u & 1))); u >>= 1; } }
+            else { snprintf(buf, sizeof buf, type == 'x' ? "%llx" : type == 'X' ? "%llX" : "%llo", u); d = buf; }
+            s = (neg ? "-" : "") + d;
+        } else if (type == '%') { snprintf(buf, sizeof buf, "%.*f%%", prec < 0 ? 0 : prec, x * 100.0); s = buf; }
+        else if (type == 'd')   { snprintf(buf, sizeof buf, "%.0f", std::round(x)); s = buf; }
+        else if (type == 'e')   { snprintf(buf, sizeof buf, "%.*e", prec < 0 ? 6 : prec, x); s = buf; }
+        else if (type == 'f' || prec >= 0) { snprintf(buf, sizeof buf, "%.*f", prec < 0 ? 6 : prec, x); s = buf; }
+        else s = v.toDisplayString();
+        if (s == "-0") s = "0";
+        if (group && (type == 0 || type == 'f' || type == 'd' || type == '%')) s = tplGroup(s, group == '_' ? '_' : ',');
+        if (sign && !s.empty() && s[0] != '-') s.insert(s.begin(), sign);
+    } else {
+        s = v.toDisplayString();
+        if (prec >= 0) { // قصّ النص إلى prec حرفاً
+            size_t bytes = 0, cps = 0;
+            while (bytes < s.size() && cps < (size_t)prec) { bytes += tplCpBytes((unsigned char)s[bytes]); cps++; }
+            s = s.substr(0, bytes);
+        }
+    }
+
+    if (width > tplU8Len(s)) {
+        if (zero && isNum && !align) {
+            size_t st = (!s.empty() && (s[0] == '-' || s[0] == '+' || s[0] == ' ')) ? 1 : 0;
+            s.insert(st, std::string(width - tplU8Len(s), '0'));
+        } else {
+            s = tplPad(s, width, fill, align ? align : (isNum ? '>' : '<'));
+        }
+    }
+    return Value::string(s);
+}
+
+} // namespace
+
+// يطبّق تتابع مراحل مفصولة بـ | على القيمة:  "trim|upper|>10"
+static Value templateFormat(const Value& v, const std::string& spec, int line) {
+    Value cur = v;
+    size_t pos = 0;
+    while (true) {
+        size_t bar = spec.find('|', pos);
+        std::string part = spec.substr(pos, bar == std::string::npos ? std::string::npos : bar - pos);
+        cur = tplStage(cur, part, line, spec);
+        if (bar == std::string::npos) break;
+        pos = bar + 1;
+    }
+    return cur;
+}
+
+// قوالب وقت التشغيل: render("مرحباً ${user.name ?? \"زائر\"}، ${total:,.2f}", data)
+//   ${مسار}  ${مسار ?? بديل}  ${مسار:تنسيق}  ${مسار ?? بديل:تنسيق}  ويكافئها {{...}}
+//   المسار: مفاتيح مفصولة بنقطة، والأرقام فهارس للمصفوفات (items.0.name). الكتابة $${ تعطي ${ حرفياً.
+//   لا يُنفَّذ أي كود Rin داخل القالب (آمن لقوالب قادمة من ملفات/مستخدمين).
+static Value templateLookup(const Value& root, const std::string& path, bool& found) {
+    Value cur = root;
+    found = true;
+    size_t pos = 0;
+    while (pos <= path.size()) {
+        size_t dot = path.find('.', pos);
+        std::string seg = tplTrim(path.substr(pos, dot == std::string::npos ? std::string::npos : dot - pos));
+        pos = dot == std::string::npos ? path.size() + 1 : dot + 1;
+        if (seg.empty()) { found = false; return Value::nil(); }
+        if (cur.type == Value::Type::MAP) {
+            bool hit = false;
+            for (auto& kv : *cur.map) if (kv.first.type == Value::Type::STRING && kv.first.str == seg) { cur = kv.second; hit = true; break; }
+            if (!hit) { found = false; return Value::nil(); }
+        } else if (cur.type == Value::Type::ARRAY && std::all_of(seg.begin(), seg.end(), ::isdigit)) {
+            size_t idx = (size_t)std::stoull(seg);
+            if (idx >= cur.array->size()) { found = false; return Value::nil(); }
+            cur = (*cur.array)[idx];
+        } else { found = false; return Value::nil(); }
+    }
+    if (cur.type == Value::Type::NIL) found = false;
+    return cur;
+}
+static size_t templateFindOutsideQuotes(const std::string& s, const std::string& needle, size_t from = 0) {
+    char q = 0;
+    for (size_t i = from; i < s.size(); i++) {
+        if (q) { if (s[i] == '\\') i++; else if (s[i] == q) q = 0; continue; }
+        if (s[i] == '"' || s[i] == '\'') { q = s[i]; continue; }
+        if (s.compare(i, needle.size(), needle) == 0) return i;
+    }
+    return std::string::npos;
+}
+static Value templateLiteral(const std::string& raw) {
+    std::string t = tplTrim(raw);
+    if (t.size() >= 2 && (t[0] == '"' || t[0] == '\'') && t.back() == t[0]) return Value::string(t.substr(1, t.size() - 2));
+    if (t == "true" || t == "false") return Value::boolean_(t == "true");
+    if (t == "nil") return Value::nil();
+    char* endp = nullptr;
+    double d = std::strtod(t.c_str(), &endp);
+    if (!t.empty() && endp && *endp == 0) return Value::num(d);
+    return Value::string(t);
+}
+static std::string templateRender(const std::string& tpl, const Value& data, int line) {
+    std::string out;
+    size_t i = 0;
+    while (i < tpl.size()) {
+        if (tpl.compare(i, 3, "$${") == 0) { out += "${"; i += 3; continue; }
+        bool dollar = tpl.compare(i, 2, "${") == 0, braces = !dollar && tpl.compare(i, 2, "{{") == 0;
+        if (!dollar && !braces) { out += tpl[i++]; continue; }
+        const std::string close = dollar ? "}" : "}}";
+        size_t from = i + 2;
+        size_t end = tpl.find(close, from);
+        if (end == std::string::npos) throw diagErr(diag::Code::E0007_InvalidArguments, line, "render: unterminated placeholder starting at `" + tpl.substr(i, 12) + "`");
+        std::string inner = tpl.substr(from, end - from);
+        i = end + close.size();
+
+        std::string spec, head = inner;
+        size_t colon = templateFindOutsideQuotes(inner, ":");
+        if (colon != std::string::npos) { head = inner.substr(0, colon); spec = tplTrim(inner.substr(colon + 1)); }
+        std::string path = head, defText; bool hasDefault = false;
+        size_t dq = templateFindOutsideQuotes(head, "??");
+        if (dq != std::string::npos) { path = head.substr(0, dq); defText = head.substr(dq + 2); hasDefault = true; }
+        path = tplTrim(path);
+        if (path.empty()) throw diagErr(diag::Code::E0007_InvalidArguments, line, "render: empty placeholder `" + tpl.substr(i - inner.size() - close.size() - 2, inner.size() + close.size() + 2) + "`");
+        bool found = false;
+        Value val = templateLookup(data, path, found);
+        if (!found) {
+            if (!hasDefault) throw diagErr(diag::Code::E0001_UndefinedVariable, line, "render: no value for `" + path + "` in the data (add `?? default` to make it optional)");
+            val = templateLiteral(defText);
+        }
+        out += spec.empty() ? val.toDisplayString() : templateFormat(val, spec, line).str;
+    }
+    return out;
+}
+
+static void expectArgs(const std::string& fn, std::vector<Value>& args, size_t count, int line) {
+    if (args.size() != count) {
+        throw diagErr(diag::Code::E0007_InvalidArguments, line, "'" + fn + "' expects " + std::to_string(count) +
+                        " argument(s) but got " + std::to_string(args.size()));
+    }
+}
+
+// يتحقّق أن عدد الوسائط بين min و max (شاملَين) -- لدوال بوسيط أخير اختياري مثل cacheSet(key,
+// value[, ttlSeconds]) أو defineMigration(name, up[, down]).
+static void expectArgsRange(const std::string& fn, std::vector<Value>& args, size_t minCount, size_t maxCount, int line) {
+    if (args.size() < minCount || args.size() > maxCount) {
+        throw diagErr(diag::Code::E0007_InvalidArguments, line, "'" + fn + "' expects " + std::to_string(minCount) + " to " + std::to_string(maxCount) +
+                        " argument(s) but got " + std::to_string(args.size()));
+    }
+}
+
+// ---- schema: يتحقّق أن قيمة تطابق اسم نوع مخطط نصي (انظر Interpreter::schemaErrors) ----
+static bool valueMatchesSchemaType(const Value& v, const std::string& type) {
+    if (type == "any") return true;
+    if (type == "string") return v.type == Value::Type::STRING;
+    if (type == "number") return v.type == Value::Type::NUMBER;
+    if (type == "bool" || type == "boolean") return v.type == Value::Type::BOOL;
+    if (type == "array") return v.type == Value::Type::ARRAY;
+    if (type == "map" || type == "object") return v.type == Value::Type::MAP;
+    if (type == "set") return v.type == Value::Type::SET;
+    return true; // اسم نوع غير معروف: يُتجاهَل التحقق منه بدل رفض الإدراج بلا سبب واضح للمستخدم
+}
+
+// يدمج رسائل أخطاء schemaErrors في سطر واحد لرسالة RinError واضحة.
+static std::string joinErrors(const std::vector<std::string>& errs) {
+    std::string out;
+    for (size_t i = 0; i < errs.size(); i++) {
+        if (i) out += "; ";
+        out += errs[i];
+    }
+    return out;
+}
+
+// ---- transaction: نسخ عميق (deep clone) لقيمة Rin -- ضروري للقطات beginTransaction/rollback:
+// نسخ Value وحدها ضحل (ARRAY/MAP يشاركان نفس shared_ptr)، وupdateDoc قد يُعدِّل MapData مكانه
+// (دمج جزئي)، فبلا نسخ عميق حقيقي كانت أي لقطة ستتأثر بتعديلات لاحقة على نفس المستند.
+static Value deepCloneValue(const Value& v) {
+    switch (v.type) {
+        case Value::Type::ARRAY: {
+            auto arr = std::make_shared<ArrayData>();
+            if (v.array) {
+                arr->reserve(v.array->size());
+                for (auto& item : *v.array) arr->push_back(deepCloneValue(item));
+            }
+            return Value::makeArray(arr);
+        }
+        case Value::Type::MAP: {
+            auto m = std::make_shared<MapData>();
+            if (v.map) {
+                m->reserve(v.map->size());
+                for (auto& kv : *v.map) m->push_back({deepCloneValue(kv.first), deepCloneValue(kv.second)});
+            }
+            return Value::makeMap(m);
+        }
+        case Value::Type::SET: {
+            auto st = std::make_shared<SetData>();
+            if (v.set) for (auto& e : v.set->items) st->add(deepCloneValue(e));
+            return Value::makeSet(st);
+        }
+        default:
+            return v; // NUMBER/STRING/BOOL/NIL/FUNCTION: لا حالة مشتركة قابلة للتغيير، النسخ بالقيمة كافٍ
+    }
+}
+
+// يتحقّق أن طرفَي عملية حسابية/مقارنة (غير + التي تدعم النصوص أيضاً) هما رقمان فعلاً، بدلاً من الاعتماد
+// الصامت على Value::number الذي يساوي 0.0 افتراضياً لأي نوع آخر (نص/مصفوفة/قاموس/nil) — وهو ما كان
+// يجعل عبارة مثل "abc" - 5 تُحسَب بصمت كـ 0 - 5 بدل رمي خطأ واضح.
+static void requireNumbers(const Value& left, const Value& right, const std::string& op, int line) {
+    if (left.type != Value::Type::NUMBER || right.type != Value::Type::NUMBER) {
+        const Value& bad = (left.type != Value::Type::NUMBER) ? left : right;
+        throw diagErr(diag::Code::E0004_InvalidType, line, "operator `" + op + "` requires two numbers, but found a `" + bad.typeName() + "`");
+    }
+}
+
+// يحوّل قيمة من نوع array إلى مصفوفة أرقام C++ لاستخدامها في الدوال الإحصائية.
+static std::vector<double> asNumberArray(const Value& v, const std::string& fn, int line) {
+    if (v.type != Value::Type::ARRAY) {
+        throw diagErr(diag::Code::E0004_InvalidType, line, "'" + fn + "' expects an array of numbers but got " + v.typeName());
+    }
+    std::vector<double> out;
+    out.reserve(v.array->size());
+    for (auto& item : *v.array) {
+        if (item.type != Value::Type::NUMBER) {
+            throw diagErr(diag::Code::E0004_InvalidType, line, "'" + fn + "' expects an array of numbers, found a " + item.typeName() + " element");
+        }
+        out.push_back(item.number);
+    }
+    if (out.empty()) {
+        throw diagErr(diag::Code::E0004_InvalidType, line, "'" + fn + "' لا يقبل مصفوفة فارغة (empty array)");
+    }
+    return out;
+}
+
+// max/min المعمَّمة: أرقام كلها أو نصوص كلها (مقارنة بايتات UTF-8 أي بترتيب code point)؛ فارغ => nil؛ أول عنصر يفوز عند التساوي.
+static Value extremumOf(const char* fn, const std::vector<Value>& items, bool wantMax, int line) {
+    if (items.empty()) return Value::nil();
+    const Value::Type t0 = items[0].type;
+    if (t0 != Value::Type::NUMBER && t0 != Value::Type::STRING)
+        throw diagErr(diag::Code::E0004_InvalidType, line, std::string("'") + fn + "' expects numbers or strings but got " + items[0].typeName());
+    size_t best = 0;
+    for (size_t i = 1; i < items.size(); ++i) {
+        if (items[i].type != t0)
+            throw diagErr(diag::Code::E0004_InvalidType, line, std::string("'") + fn + "' cannot compare a " + items[0].typeName() + " with a " + items[i].typeName());
+        bool better = t0 == Value::Type::NUMBER
+            ? (wantMax ? items[i].number > items[best].number : items[i].number < items[best].number)
+            : (wantMax ? items[i].str > items[best].str : items[i].str < items[best].str);
+        if (better) best = i;
+    }
+    return items[best];
+}
+
+// ============================================================================
+//  معالجة نصوص متقدّمة (UTF-8 / عربي / Regex) — أدوات حرة يستخدمها natives القسم
+//  "معالجة نصوص متقدمة" أدناه في registerNatives(). كل دوال upper/lower/substr/reverseStr
+//  الأصلية في stdlib تعمل على البايتات (bytes) لا نقاط الترميز (codepoints)، وهذا يكسر أي نص
+//  عربي/RTL أو غير-ASCII (كل حرف عربي = بايتان أو أكثر في UTF-8). الدوال هنا تعمل على
+//  "نقاط ترميز" (codepoints) حقيقية فتبقى صحيحة مع العربية ومعظم اللغات الأخرى.
+// ============================================================================
+
+// يحلّل نصاً UTF-8 خاماً إلى مصفوفة نقاط ترميز، كل نقطة محفوظة كسلسلة بايتات UTF-8 خاصة بها
+// (وليس كرقم)، حتى يسهل إعادة تجميعها كنص Rin عادي دون أي تحويل ترميز إضافي. بايت غير صالح
+// يُعامَل كنقطة ترميز مستقلة من بايت واحد (لا يتوقف التحليل، فقط لا يُفهَم كجزء من تسلسل متعدد
+// البايتات) حتى لا تفشل الدوال بصمت على نص فيه بيانات ثنائية عرضاً.
+static std::vector<std::string> utf8Codepoints(const std::string& s) {
+    std::vector<std::string> out;
+    size_t i = 0, n = s.size();
+    while (i < n) {
+        unsigned char c = static_cast<unsigned char>(s[i]);
+        size_t len = 1;
+        if ((c & 0x80) == 0x00) len = 1;
+        else if ((c & 0xE0) == 0xC0) len = 2;
+        else if ((c & 0xF0) == 0xE0) len = 3;
+        else if ((c & 0xF8) == 0xF0) len = 4;
+        else len = 1; // بايت متابعة تائه أو ترميز غير صالح: خذه كنقطة مستقلة بدل التعثّر
+        if (i + len > n) len = 1;
+        out.push_back(s.substr(i, len));
+        i += len;
+    }
+    return out;
+}
+
+// يعيد أول نقطة ترميز في codepoint (سلسلة بايتات UTF-8) كنقطة كود رقمية (لأجل مقارنات المدى
+// اليونيكودية مثل التشكيل العربي/نطاق الأحرف العربية)، أو -1 إن كانت فارغة.
+static long utf8CodepointValue(const std::string& cp) {
+    if (cp.empty()) return -1;
+    unsigned char c0 = static_cast<unsigned char>(cp[0]);
+    if ((c0 & 0x80) == 0x00) return c0;
+    if ((c0 & 0xE0) == 0xC0 && cp.size() >= 2) {
+        return ((c0 & 0x1F) << 6) | (static_cast<unsigned char>(cp[1]) & 0x3F);
+    }
+    if ((c0 & 0xF0) == 0xE0 && cp.size() >= 3) {
+        return ((c0 & 0x0F) << 12) | ((static_cast<unsigned char>(cp[1]) & 0x3F) << 6) |
+               (static_cast<unsigned char>(cp[2]) & 0x3F);
+    }
+    if ((c0 & 0xF8) == 0xF0 && cp.size() >= 4) {
+        return ((c0 & 0x07) << 18) | ((static_cast<unsigned char>(cp[1]) & 0x3F) << 12) |
+               ((static_cast<unsigned char>(cp[2]) & 0x3F) << 6) | (static_cast<unsigned char>(cp[3]) & 0x3F);
+    }
+    return c0;
+}
+
+// نطاقات يونيكود: تشكيل عربي (حركات/تنوين/سكون/شدّة + علامات قرآنية) + التطويل (ـ). تُستخدم في
+// arabicStripDiacritics/arabicNormalize.
+static bool isArabicDiacriticCp(long cp) {
+    if (cp == 0x0640) return true; // ـ tatweel/kashida
+    if (cp >= 0x064B && cp <= 0x065F) return true; // حركات وتنوين أساسية
+    if (cp == 0x0670) return true; // ألف خنجرية علوية
+    if (cp >= 0x06D6 && cp <= 0x06ED) return true; // علامات قرآنية إضافية
+    return false;
+}
+
+// نطاق الحروف العربية الأساسي (يشمل الفارسية/الأردية الملحقة بنفس الكتلة تقريباً) لأجل
+// detectScript/تحليل اللغة.
+static bool isArabicLetterCp(long cp) {
+    return (cp >= 0x0621 && cp <= 0x064A) || (cp >= 0x0660 && cp <= 0x0669) /*أرقام عربية-هندية*/ ||
+           (cp >= 0x0670 && cp <= 0x06FF) || (cp >= 0xFB50 && cp <= 0xFDFF) || (cp >= 0xFE70 && cp <= 0xFEFF);
+}
+
+static bool isLatinLetterCp(long cp) {
+    return (cp >= 'a' && cp <= 'z') || (cp >= 'A' && cp <= 'Z');
+}
+
+// يحوّل نمط regex نصّي (وربما بادئة أعلام مثل "i:" لعدم حساسية الأحرف الكبيرة/الصغيرة) إلى
+// std::regex فعلي، ويرمي RinError واضحاً بدل استثناء std::regex_error المبهم عند نمط غير صالح.
+// الأعلام المدعومة (اختيارية، توضع قبل النمط بفاصلة ":"): "i" = بلا حساسية لحالة الأحرف،
+// "m" = multiline (^/$ تطابق بداية/نهاية كل سطر).
+static std::regex compileRinRegex(const std::string& rawPattern, const std::string& fn, int line) {
+    std::string pattern = rawPattern;
+    auto flags = std::regex::ECMAScript;
+    if (pattern.size() >= 2 && pattern[1] == ':' &&
+        (pattern[0] == 'i' || pattern[0] == 'm' || pattern[0] == 'I' || pattern[0] == 'M')) {
+        // يدعم أيضاً علمين معاً مثل "im:النمط"
+        size_t colon = pattern.find(':');
+        std::string flagChars = pattern.substr(0, colon);
+        bool looksLikeFlags = !flagChars.empty();
+        for (char fc : flagChars) {
+            char lo = static_cast<char>(std::tolower(static_cast<unsigned char>(fc)));
+            if (lo != 'i' && lo != 'm') { looksLikeFlags = false; break; }
+        }
+        if (looksLikeFlags) {
+            for (char fc : flagChars) {
+                char lo = static_cast<char>(std::tolower(static_cast<unsigned char>(fc)));
+                if (lo == 'i') flags |= std::regex::icase;
+                if (lo == 'm') flags |= std::regex::multiline;
+            }
+            pattern = pattern.substr(colon + 1);
+        }
+    }
+    try {
+        return std::regex(pattern, flags);
+    } catch (const std::regex_error& e) {
+        throw diagErr(diag::Code::E0035_RuntimeError, line,
+                      "'" + fn + "': نمط regex غير صالح: " + std::string(e.what()));
+    }
+}
+
+// يجمع أسماء الحاويات (containers) الفعلية داخل مجموعة (Containers.Group)، متفرّعاً بشكل متكرر
+// عبر أي مجموعات فرعية متداخلة بداخلها، ومحافظاً على ترتيب الإدخال.
+static void collectGroupContainerNames(const std::unordered_map<std::string, std::vector<std::string>>& groupMembers,
+                                        const std::string& groupKey,
+                                        std::vector<std::string>& out) {
+    auto it = groupMembers.find(groupKey);
+    if (it == groupMembers.end()) return;
+    for (auto& memberName : it->second) {
+        if (groupMembers.count(memberName)) {
+            collectGroupContainerNames(groupMembers, memberName, out); // عضو هو مجموعة فرعية -> تفرّع
+        } else {
+            out.push_back(memberName); // عضو هو حاوية فعلية
+        }
+    }
+}
+
+// يجمع أسماء الحاويات (containers) الفعلية داخل Volume، متفرّعاً بشكل متكرر عبر أي Volume فرعية
+// متداخلة بداخلها (بنفس مبدأ collectGroupContainerNames تماماً)، وأيضاً عبر أي Containers.Group
+// متداخلة داخل Volume -- في هذه الحالة يُفوَّض التفرّع لمنطق المجموعة الخاص بها (collectGroup-
+// ContainerNames) بدل إعادته هنا، فيبقى Volume قادراً على احتواء Group كعضو مباشر ورؤية كل
+// حاوياتها مفلطحة، دون أن يحتاج Group نفسه لأي معرفة بوجود Volume من الأساس.
+static void collectVolumeContainerNames(const std::unordered_map<std::string, std::vector<std::string>>& volumeMembers,
+                                         const std::unordered_map<std::string, std::vector<std::string>>& groupMembers,
+                                         const std::string& volumeKey,
+                                         std::vector<std::string>& out) {
+    auto it = volumeMembers.find(volumeKey);
+    if (it == volumeMembers.end()) return;
+    for (auto& memberName : it->second) {
+        if (volumeMembers.count(memberName)) {
+            collectVolumeContainerNames(volumeMembers, groupMembers, memberName, out); // عضو هو Volume فرعية -> تفرّع
+        } else if (groupMembers.count(memberName)) {
+            collectGroupContainerNames(groupMembers, memberName, out); // عضو هو Containers.Group متداخلة -> تفرّع عبر منطقها
+        } else {
+            out.push_back(memberName); // عضو هو حاوية فعلية
+        }
+    }
+}
+
+// يبني map مُرتَّب أبجدياً بمتغيرات env المباشرة كقيمة Rin حيّة (MapData) جاهزة للإرجاع من native،
+// بنفس مبدأ serializeEnvBody أدناه. الدوال (FUNCTION) تُستبعَد لأنها لا تُمثَّل كقيمة Rin عادية.
+// تُستخدَم من volumeVars/volumeSnapshot.
+static std::shared_ptr<MapData> envVarsAsMap(const EnvPtr& env) {
+    auto result = std::make_shared<MapData>();
+    std::vector<std::string> keys;
+    keys.reserve(env->values.size());
+    for (auto& kv : env->values) keys.push_back(kv.first);
+    std::sort(keys.begin(), keys.end());
+    for (auto& k : keys) {
+        const Value& v = env->values[k];
+        if (v.type == Value::Type::FUNCTION) continue;
+        result->push_back({Value::string(k), v});
+    }
+    return result;
+}
+
+static std::string toUpperAscii(std::string s) {
+    for (auto& c : s) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    return s;
+}
+
+static std::string containerTagName(ContainerKind k) {
+    switch (k) {
+        case ContainerKind::PIPE: return "container.pipe";
+        case ContainerKind::DATA: return "container.data";
+        case ContainerKind::API: return "container.api";
+        case ContainerKind::IMPORT: return "container.import";
+        // ملاحظة: سواء فُتحت بصيغة "@container.table=" (مدمجة) أو "@table=" (مستقلة)، تُحفَظ
+        // دائماً بنفس الوسم الموحَّد "container.table" لضمان إعادة قراءة واحدة لا لبس فيها.
+        case ContainerKind::TABLE: return "container.table";
+        // نفس المبدأ لـ "@container.doc=" / "@doc=" -> دائماً "container.doc" موحَّدة.
+        case ContainerKind::DOC: return "container.doc";
+        case ContainerKind::DATALIST: return "container.datalist";
+        // نفس المبدأ لمفاهيم التنسيق/الستايل الجديدة: "@Object="/"@portal="/"@block=" توحَّد دائماً
+        // إلى "container.object"/"container.portal"/"container.block" عند الحفظ وإعادة القراءة.
+        case ContainerKind::OBJECT: return "container.object";
+        case ContainerKind::PORTAL: return "container.portal";
+        case ContainerKind::BLOCK: return "container.block";
+        // "@sticker="/"@container.sticker=" توحَّد دائماً إلى "container.sticker" عند الحفظ وإعادة القراءة.
+        case ContainerKind::STICKER: return "container.sticker";
+        // "@chatbot=" أو "@container.chatbot=" -> دائماً "container.chatbot" موحَّدة عند الحفظ وإعادة القراءة.
+        case ContainerKind::CHATBOT: return "container.chatbot";
+        // "@make="/"@Rin.make="/"@container.make=" (والاسمان القديمان للتوافق العكسي: "@Everything="/
+        // "@container.everything=") توحَّد جميعاً دائماً إلى "container.make" عند الحفظ وإعادة
+        // القراءة — نفس مبدأ بقية المفاهيم أعلاه.
+        case ContainerKind::EVERYTHING: return "container.make";
+        // "@sql="/"@container.sql=" توحَّد دائماً إلى "container.sql" عند الحفظ وإعادة القراءة.
+        case ContainerKind::SQL: return "container.sql";
+        default: return "container";
+    }
+}
+
+static std::string containerIcon(ContainerKind k) {
+    switch (k) {
+        case ContainerKind::PIPE: return "🧵";
+        case ContainerKind::DATA: return "🗂️";
+        case ContainerKind::API: return "🌐";
+        case ContainerKind::IMPORT: return "📦⬅️";
+        case ContainerKind::TABLE: return "📊";
+        case ContainerKind::DOC: return "🧾";
+        case ContainerKind::DATALIST: return "📋";
+        case ContainerKind::OBJECT: return "🧩";
+        case ContainerKind::PORTAL: return "🎨";
+        case ContainerKind::BLOCK: return "🧱";
+        case ContainerKind::STICKER: return "🏷️";
+        case ContainerKind::CHATBOT: return "💬";
+        case ContainerKind::EVERYTHING: return "🛠️";
+        case ContainerKind::SQL: return "🔎";
+        default: return "📦";
+    }
+}
+
+// يحوّل نص kind حرّاً (كما يمرّره المبرمج إلى spawn(kind, name)) إلى ContainerKind معروف، بمطابقة
+// غير حسّاسة لحالة الأحرف وبتجاهل بادئة "container." الاختيارية (نفس أسماء الوسوم الرسمية في
+// rin_parser.cpp: container/pipe/data/api/table/doc/object/portal/block/sticker/aukt/chatbot/
+// everything). أي نص غير معروف يُعاد كـ ContainerKind::PLAIN (بلا أي تقييد على الجسم لاحقاً) —
+// النص الأصلي يبقى محفوظاً كاملاً في containerCustomKind لأجل kindOf() الاستقصائية.
+static ContainerKind resolveContainerKindName(const std::string& raw) {
+    std::string s = raw;
+    for (auto& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    static const std::string prefix = "container.";
+    if (s.compare(0, prefix.size(), prefix) == 0) s = s.substr(prefix.size());
+    if (s == "pipe") return ContainerKind::PIPE;
+    if (s == "data") return ContainerKind::DATA;
+    if (s == "api") return ContainerKind::API;
+    if (s == "table") return ContainerKind::TABLE;
+    if (s == "doc") return ContainerKind::DOC;
+    if (s == "datalist" || s == "list") return ContainerKind::DATALIST;
+    if (s == "object") return ContainerKind::OBJECT;
+    if (s == "portal") return ContainerKind::PORTAL;
+    if (s == "block") return ContainerKind::BLOCK;
+    if (s == "sticker") return ContainerKind::STICKER;
+    if (s == "aukt") return ContainerKind::AUKT;
+    if (s == "chatbot") return ContainerKind::CHATBOT;
+    if (s == "sql") return ContainerKind::SQL;
+    if (s == "everything" || s == "make") return ContainerKind::EVERYTHING;
+    if (s == "container" || s == "plain") return ContainerKind::PLAIN;
+    return ContainerKind::PLAIN;
+}
+
+// ================= تسلسل القيم (serialization) لأجل save/installation الحقيقيَّين =================
+// يحوّل رقماً إلى نص Rin قابل لإعادة التحليل مباشرة (بدون ترميز علمي e/E غير مدعوم في scanNumber).
+static std::string numberLiteral(double n) {
+    if (std::isnan(n) || std::isinf(n)) return "0";
+    bool neg = n < 0.0;
+    double absN = std::fabs(n);
+    std::ostringstream oss;
+    if (absN == std::floor(absN) && absN < 1e15) {
+        oss << static_cast<long long>(absN);
+    } else {
+        oss.setf(std::ios::fixed);
+        oss.precision(10);
+        oss << absN;
+        std::string s = oss.str();
+        size_t dot = s.find('.');
+        if (dot != std::string::npos) {
+            size_t last = s.find_last_not_of('0');
+            if (last == dot) last++; // خانة صفر واحدة بعد الفاصلة على الأقل
+            s = s.substr(0, last + 1);
+        }
+        return (neg ? "-" : "") + s;
+    }
+    return (neg ? "-" : "") + oss.str();
+}
+
+// يهرّب نصاً ليكون قابلاً لإعادة القراءة داخل علامتي تنصيص Rin (يعتمد على دعم \" \\ \n \t في scanString).
+static std::string escapeStringLiteral(const std::string& s) {
+    std::string out;
+    out.reserve(s.size() + 2);
+    for (char c : s) {
+        switch (c) {
+            case '"': out += "\\\""; break;
+            case '\\': out += "\\\\"; break;
+            case '\n': out += "\\n"; break;
+            case '\r': out += "\\r"; break;
+            case '\t': out += "\\t"; break;
+            default: out += c; break;
+        }
+    }
+    return out;
+}
+
+static bool looksLikeIdentifier(const std::string& s) {
+    if (s.empty() || (!std::isalpha(static_cast<unsigned char>(s[0])) && s[0] != '_')) return false;
+    for (char c : s) {
+        if (!std::isalnum(static_cast<unsigned char>(c)) && c != '_') return false;
+    }
+    return true;
+}
+
+// يحوّل Value إلى نص حرفي (literal) صالح لإعادة التحليل: أرقام/نصوص/منطقية/مصفوفات/قواميس متداخلة.
+// الدوال (FUNCTION) لا يمكن تمثيلها كقيمة حرفية فتُستبدَل بـ nil مع تعليق توضيحي من المستدعي.
+static std::string serializeValueLiteral(const Value& v) {
+    switch (v.type) {
+        case Value::Type::NIL: return "nil";
+        case Value::Type::NUMBER: return numberLiteral(v.number);
+        case Value::Type::BOOL: return v.boolean ? "true" : "false";
+        case Value::Type::STRING: return "\"" + escapeStringLiteral(v.str) + "\"";
+        case Value::Type::FUNCTION: return "nil";
+        // Instances are runtime objects, not Rin literals. Keep literal serialization safe.
+        case Value::Type::INSTANCE: return "nil";
+        case Value::Type::SET: {
+            // Set has no brace literal; Set([...]) re-creates it (order preserved) when the text is parsed back.
+            std::string out = "Set([";
+            if (v.set) {
+                for (size_t i = 0; i < v.set->items.size(); i++) {
+                    if (i) out += ", ";
+                    out += serializeValueLiteral(v.set->items[i]);
+                }
+            }
+            out += "])";
+            return out;
+        }
+        case Value::Type::ARRAY: {
+            std::string out = "[";
+            if (v.array) {
+                for (size_t i = 0; i < v.array->size(); i++) {
+                    if (i) out += ", ";
+                    out += serializeValueLiteral((*v.array)[i]);
+                }
+            }
+            out += "]";
+            return out;
+        }
+        case Value::Type::MAP: {
+            std::string out = "{";
+            if (v.map) {
+                for (size_t i = 0; i < v.map->size(); i++) {
+                    if (i) out += ", ";
+                    const auto& kv = (*v.map)[i];
+                    std::string keyStr = (kv.first.type == Value::Type::STRING && looksLikeIdentifier(kv.first.str))
+                                          ? kv.first.str
+                                          : serializeValueLiteral(kv.first);
+                    out += keyStr + ": " + serializeValueLiteral(kv.second);
+                }
+            }
+            out += "}";
+            return out;
+        }
+    }
+    return "nil";
+}
+
+// يبني جسم الحاوية (كل متغيراتها المباشرة: text للنصوص، let لغير ذلك) كنص Rin. الترتيب أبجدي
+// لضمان مخرجات ثابتة (deterministic) عند كل حفظ بغضّ النظر عن ترتيب unordered_map الداخلي.
+static std::string serializeEnvBody(const EnvPtr& env, bool simplified) {
+    std::vector<std::string> names;
+    names.reserve(env->values.size());
+    for (auto& kv : env->values) names.push_back(kv.first);
+    std::sort(names.begin(), names.end());
+
+    std::ostringstream out;
+    int skippedFunctions = 0;
+    for (auto& name : names) {
+        const Value& v = env->values[name];
+        if (v.type == Value::Type::FUNCTION) { skippedFunctions++; continue; }
+        std::string kw = (v.type == Value::Type::STRING) ? "text" : "let";
+        if (simplified) {
+            out << kw << " " << name << "=" << serializeValueLiteral(v) << ";";
+        } else {
+            out << "    " << kw << " " << name << " = " << serializeValueLiteral(v) << ";\n";
+        }
+    }
+    if (!simplified && skippedFunctions > 0) {
+        out << "    // ملاحظة: تم تجاهل " << skippedFunctions
+            << " دالة/دوال عند الحفظ (الدوال لا يمكن تمثيلها كقيمة محفوظة حالياً)\n";
+    }
+    return out.str();
+}
+
+// ============================================================================================
+// RIN CONTAINER SQL (RCSQL) — منطق التنفيذ (مطابقة/فرز/تصفّح/حلّ الهدف). التحليل النحوي البحت في
+// rin_container_sql.h/.cpp؛ ما هنا يربطه بـ docStore/containerMasks/groupMembers/valuesEqual.
+// ============================================================================================
+namespace {
+
+std::vector<std::string> sqlSplitSlash(const std::string& path) {
+    std::vector<std::string> parts;
+    size_t start = 0;
+    while (start <= path.size()) {
+        size_t pos = path.find('/', start);
+        if (pos == std::string::npos) { parts.push_back(path.substr(start)); break; }
+        parts.push_back(path.substr(start, pos - start));
+        start = pos + 1;
+    }
+    return parts;
+}
+
+// يتتبّع مساراً مفصولاً بـ '/' داخل map متداخلة (لدعم address/city في شرط RCSQL). يعيد false إن لم
+// يوجد المفتاح في أي مستوى أو لم يكن المستوى الوسيط map أصلاً.
+bool sqlGetNestedField(const Value& doc, const std::vector<std::string>& path, Value& out) {
+    const Value* cur = &doc;
+    for (auto& seg : path) {
+        if (cur->type != Value::Type::MAP || !cur->map) return false;
+        bool found = false;
+        for (auto& kv : *cur->map) {
+            if (kv.first.type == Value::Type::STRING && kv.first.str == seg) { cur = &kv.second; found = true; break; }
+        }
+        if (!found) return false;
+    }
+    out = *cur;
+    return true;
+}
+
+// يبني نسخة جديدة من doc مع تعيين الحقل عند path (متداخل، يُنشئ map وسيطة تلقائياً إن لزم) إلى
+// newVal. لا يُعدِّل doc الأصلية (نسخ بالقيمة على مستوى كل map على المسار فقط، بقية الحقول تبقى
+// بنفس shared_ptr المشترك -- كافٍ لأن Value/MapData في هذه اللغة تُعامَل كقيم غير قابلة للتغيير
+// المشترك عبر عدّة حاويات). تُستخدَم من sqlUpdate() لتحديث حقل واحد (بما فيها حقول متداخلة).
+Value sqlSetNestedField(const Value& doc, const std::vector<std::string>& path, const Value& newVal) {
+    if (path.empty()) return newVal;
+    auto newMap = std::make_shared<MapData>();
+    if (doc.type == Value::Type::MAP && doc.map) *newMap = *doc.map;
+    const std::string& key = path[0];
+    std::vector<std::string> rest(path.begin() + 1, path.end());
+    bool found = false;
+    for (auto& kv : *newMap) {
+        if (kv.first.type == Value::Type::STRING && kv.first.str == key) {
+            kv.second = rest.empty() ? newVal : sqlSetNestedField(kv.second, rest, newVal);
+            found = true;
+            break;
+        }
+    }
+    if (!found) {
+        Value childVal = rest.empty() ? newVal : sqlSetNestedField(Value::nil(), rest, newVal);
+        newMap->push_back({Value::string(key), childVal});
+    }
+    return Value::makeMap(newMap);
+}
+
+// يفسّر نص وسيط RCSQL الخام (بلا علامات اقتباس -- ليست ضمن الرموز المسموحة) إلى أفضل نوع Value
+// مناسب: true/false -> BOOL، null/nil -> nil، رقم صالح كاملاً -> NUMBER، وإلا -> STRING كما هو.
+Value sqlParseArg(const std::string& raw) {
+    if (raw == "true") return Value::boolean_(true);
+    if (raw == "false") return Value::boolean_(false);
+    if (raw == "null" || raw == "nil") return Value::nil();
+    if (!raw.empty()) {
+        char* end = nullptr;
+        double d = std::strtod(raw.c_str(), &end);
+        if (end && *end == '\0' && end != raw.c_str()) return Value::num(d);
+    }
+    return Value::string(raw);
+}
+
+std::string sqlLower(std::string x) {
+    for (auto& c : x) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return x;
+}
+
+// يطابق مستنداً واحداً ضد شرط RCSQL واحد -- مجموعة منطقية (OR: يكفي شرط فرعي واحد، AND: يجب كل
+// الشروط الفرعية، NOT: نفي الشرط الفرعي الوحيد)، أو شرط ورقة (field OP (arg)) عادي بإحدى العمليات
+// المدعومة (انظر rin_container_sql.h للصياغة الكاملة).
+bool sqlMatchPredicate(const Value& doc, const rin::sql::Predicate& pr) {
+    if (pr.isGroup) {
+        if (pr.groupOp == "or") {
+            for (auto& sub : pr.subs) if (sqlMatchPredicate(doc, sub)) return true;
+            return false;
+        }
+        if (pr.groupOp == "and") {
+            for (auto& sub : pr.subs) if (!sqlMatchPredicate(doc, sub)) return false;
+            return true;
+        }
+        if (pr.groupOp == "not") {
+            // not(...) صادرة من parse() تحمل دوماً شرطاً فرعياً واحداً بالضبط؛ subs فارغة (لا ينبغي
+            // أن تحدث) تُعامَل كنفي شرط "صحيح دوماً" فتُعيد false، تماشياً مع دلالة not(true) = false.
+            if (pr.subs.empty()) return false;
+            return !sqlMatchPredicate(doc, pr.subs[0]);
+        }
+        return false; // مُعامل مجموعة غير معروف -- لا ينبغي أن يحدث (parse() لا تُنتج غير or/and/not)
+    }
+
+    if (pr.op == "any" && pr.field == "search") { // search:any(text) — نص غير حسّاس للحالة في أي حقل (نص/رقم/مصفوفة نصوص)
+        if (doc.type != Value::Type::MAP || !doc.map) return false;
+        std::string needle = sqlLower(pr.arg);
+        for (auto& kv : *doc.map) {
+            if (kv.second.type == Value::Type::STRING && sqlLower(kv.second.str).find(needle) != std::string::npos) return true;
+            if (kv.second.type == Value::Type::NUMBER && sqlLower(kv.second.toDisplayString()).find(needle) != std::string::npos) return true;
+            if (kv.second.type == Value::Type::ARRAY && kv.second.array)
+                for (auto& el : *kv.second.array) if (el.type == Value::Type::STRING && sqlLower(el.str).find(needle) != std::string::npos) return true;
+        }
+        return false;
+    }
+    Value field;
+    bool found = sqlGetNestedField(doc, sqlSplitSlash(pr.field), field);
+    if (pr.op == "exists") return found;
+    if (pr.op == "missing") return !found;
+    if (!found) return false;
+
+    if (pr.op == "eq") return valuesEqual(field, sqlParseArg(pr.arg));
+    if (pr.op == "ne") return !valuesEqual(field, sqlParseArg(pr.arg));
+    if (pr.op == "ieq") {
+        if (field.type != Value::Type::STRING) return false;
+        return sqlLower(field.str) == sqlLower(pr.arg);
+    }
+    if (pr.op == "gt" || pr.op == "gte" || pr.op == "lt" || pr.op == "lte") {
+        Value argVal = sqlParseArg(pr.arg);
+        if (field.type != Value::Type::NUMBER || argVal.type != Value::Type::NUMBER) return false;
+        if (pr.op == "gt") return field.number > argVal.number;
+        if (pr.op == "gte") return field.number >= argVal.number;
+        if (pr.op == "lt") return field.number < argVal.number;
+        return field.number <= argVal.number;
+    }
+    if (pr.op == "has") {
+        Value argVal = sqlParseArg(pr.arg);
+        if (field.type == Value::Type::ARRAY && field.array) {
+            for (auto& el : *field.array) if (valuesEqual(el, argVal)) return true;
+            return false;
+        }
+        if (field.type == Value::Type::MAP && field.map) {
+            for (auto& kv : *field.map) if (kv.first.type == Value::Type::STRING && kv.first.str == pr.arg) return true;
+            return false;
+        }
+        return false;
+    }
+    if (pr.op == "like") {
+        if (field.type != Value::Type::STRING) return false;
+        return sqlLower(field.str).find(sqlLower(pr.arg)) != std::string::npos;
+    }
+    // ---- عمليات RCSQL الإضافية ----
+    if (pr.op == "notlike") {
+        if (field.type != Value::Type::STRING) return false;
+        return sqlLower(field.str).find(sqlLower(pr.arg)) == std::string::npos;
+    }
+    if (pr.op == "nstarts" || pr.op == "nends") {
+        if (field.type != Value::Type::STRING) return false;
+        std::string hay = sqlLower(field.str), needle = sqlLower(pr.arg);
+        if (needle.size() > hay.size()) return true;
+        bool hit = pr.op == "nstarts" ? hay.compare(0, needle.size(), needle) == 0
+                                      : hay.compare(hay.size() - needle.size(), needle.size(), needle) == 0;
+        return !hit;
+    }
+    if (pr.op == "in" || pr.op == "nin" || pr.op == "between") {
+        std::vector<std::string> items; { std::string cur; for (char ch : pr.arg) { if (ch == '/') { items.push_back(cur); cur.clear(); } else cur += ch; } items.push_back(cur); }
+        if (pr.op == "between") {
+            if (items.size() != 2) return false;
+            if (field.type == Value::Type::NUMBER) {
+                Value lo = sqlParseArg(items[0]), hi = sqlParseArg(items[1]);
+                if (lo.type != Value::Type::NUMBER || hi.type != Value::Type::NUMBER) return false;
+                return field.number >= lo.number && field.number <= hi.number;
+            }
+            if (field.type != Value::Type::STRING) return false;
+            // نص/تاريخ ISO: مقارنة بطول كل حدّ (2026-01 يطابق كل الشهر)
+            auto pre = [&](const std::string& lim) { return field.str.substr(0, lim.size()); };
+            return pre(items[0]) >= items[0] && pre(items[1]) <= items[1];
+        }
+        bool hit = false;
+        for (auto& it2 : items) if (valuesEqual(field, sqlParseArg(it2))) { hit = true; break; }
+        return pr.op == "in" ? hit : !hit;
+    }
+    if (pr.op == "before" || pr.op == "after" || pr.op == "on") {
+        if (field.type == Value::Type::NUMBER) {
+            Value a = sqlParseArg(pr.arg);
+            if (a.type != Value::Type::NUMBER) return false;
+            if (pr.op == "before") return field.number < a.number;
+            if (pr.op == "after") return field.number > a.number;
+            return field.number == a.number;
+        }
+        if (field.type != Value::Type::STRING) return false;
+        std::string pfx = field.str.substr(0, pr.arg.size()); // تاريخ ISO: 2026-03 يطابق كل مارس
+        if (pr.op == "before") return pfx < pr.arg;
+        if (pr.op == "after") return pfx > pr.arg;
+        return pfx == pr.arg;
+    }
+    if (pr.op == "any") { // f:any(text): نص أو أي عنصر نصي في مصفوفة يحتوي النص
+        std::string needle = sqlLower(pr.arg);
+        if (field.type == Value::Type::STRING) return sqlLower(field.str).find(needle) != std::string::npos;
+        if (field.type == Value::Type::ARRAY && field.array)
+            for (auto& el : *field.array) if (el.type == Value::Type::STRING && sqlLower(el.str).find(needle) != std::string::npos) return true;
+        return false;
+    }
+    if (pr.op == "isa") {
+        std::string t = sqlLower(pr.arg);
+        switch (field.type) {
+            case Value::Type::NUMBER: return t == "number";
+            case Value::Type::STRING: return t == "string";
+            case Value::Type::BOOL: return t == "bool" || t == "boolean";
+            case Value::Type::ARRAY: return t == "array";
+            case Value::Type::MAP: return t == "map";
+            default: return t == "nil";
+        }
+    }
+    if (pr.op == "empty" || pr.op == "filled") {
+        bool e = false;
+        if (field.type == Value::Type::STRING) e = field.str.empty();
+        else if (field.type == Value::Type::ARRAY) e = !field.array || field.array->empty();
+        else if (field.type == Value::Type::MAP) e = !field.map || field.map->empty();
+        else if (field.type == Value::Type::NIL) e = true;
+        return pr.op == "empty" ? e : !e;
+    }
+    if (pr.op == "starts" || pr.op == "ends") {
+        if (field.type != Value::Type::STRING) return false;
+        std::string hay = sqlLower(field.str), needle = sqlLower(pr.arg);
+        if (needle.size() > hay.size()) return false;
+        if (pr.op == "starts") return hay.compare(0, needle.size(), needle) == 0;
+        return hay.compare(hay.size() - needle.size(), needle.size(), needle) == 0;
+    }
+    return false; // "asc"/"desc" أو أي عملية أخرى غير منطقية كفلتر فعلي (لا ينبغي أن تصل هنا أصلاً)
+}
+
+// مقارنة ترتيبية بين قيمتين لأجل order:asc/desc: رقم-رقم أو نص-نص أو منطقي-منطقي فقط؛ أي تركيبة
+// أخرى (أنواع مختلفة، أو نوع غير قابل للترتيب مثل map/array) تُعامَل كمتعادلة (0) فيحسمها مفتاح
+// الفرز التالي إن وُجد، أو يبقى ترتيب الإدخال كما هو (استقرار std::stable_sort).
+int sqlCompareValues(const Value& a, const Value& b) {
+    if (a.type == Value::Type::NUMBER && b.type == Value::Type::NUMBER) {
+        return (a.number < b.number) ? -1 : (a.number > b.number ? 1 : 0);
+    }
+    if (a.type == Value::Type::STRING && b.type == Value::Type::STRING) {
+        return a.str.compare(b.str);
+    }
+    if (a.type == Value::Type::BOOL && b.type == Value::Type::BOOL) {
+        return static_cast<int>(a.boolean) - static_cast<int>(b.boolean);
+    }
+    return 0;
+}
+
+// يحوّل شجرة Predicate (شرط ورقة أو مجموعة or/and/not متداخلة) إلى Value قابلة للطباعة/الفحص من
+// كود Rin نفسه -- تُستخدَم من sqlExplain() فقط (أداة تشخيص/تصحيح، لا تُستدعى أثناء التنفيذ الفعلي).
+Value sqlPredicateToValue(const rin::sql::Predicate& p) {
+    auto m = std::make_shared<MapData>();
+    if (p.isGroup) {
+        m->push_back({Value::string("group"), Value::string(p.groupOp)});
+        auto subs = std::make_shared<ArrayData>();
+        for (auto& s : p.subs) subs->push_back(sqlPredicateToValue(s));
+        m->push_back({Value::string("subs"), Value::makeArray(subs)});
+    } else {
+        m->push_back({Value::string("field"), Value::string(p.field)});
+        m->push_back({Value::string("op"), Value::string(p.op)});
+        m->push_back({Value::string("arg"), Value::string(p.arg)});
+    }
+    return Value::makeMap(m);
+}
+
+} // namespace
+
+std::string Interpreter::sqlResolveQueryText(const std::string& arg) const {
+    auto maskIt = containerMasks.find(arg);
+    if (maskIt != containerMasks.end()) {
+        const std::string& containerName = maskIt->second;
+        auto kindIt = containerKinds.find(containerName);
+        if (kindIt != containerKinds.end() && kindIt->second == ContainerKind::SQL) {
+            auto viewIt = sqlViews.find(containerName);
+            if (viewIt != sqlViews.end()) return viewIt->second;
+        }
+    }
+    // ليس قناعاً لحاوية @sql معروفة (أو لا نص query مخزَّن بداخلها) -> اعتبره استعلام RCSQL خاماً فورياً.
+    return arg;
+}
+
+std::string Interpreter::sqlResolveTargetContainer(const rin::sql::Query& q) const {
+    if (q.targetIsMask) {
+        auto it = containerMasks.find(q.targetMask);
+        return it != containerMasks.end() ? it->second : std::string();
+    }
+    if (q.targetPath.empty()) return std::string();
+    if (q.targetPath.size() == 1) return canonContainer(q.targetPath[0]); // اسم/مفتاح مكتوب/مسار
+    // مسار متعدد الأجزاء: تحقّق أن كل جزء لاحق عضو مباشر (groupMembers) في سابقه، خطوة بخطوة.
+    for (size_t k = 0; k + 1 < q.targetPath.size(); k++) {
+        auto git = groupMembers.find(q.targetPath[k]);
+        if (git == groupMembers.end()) return std::string();
+        bool ok = false;
+        for (auto& m : git->second) if (m == q.targetPath[k + 1]) { ok = true; break; }
+        if (!ok) return std::string();
+    }
+    return q.targetPath.back();
+}
+
+Interpreter::SqlRawResult Interpreter::sqlRunRaw(const std::string& rawArg, int line) const {
+    std::string queryText = sqlResolveQueryText(rawArg);
+    rin::sql::Query q;
+    try {
+        q = rin::sql::parse(queryText);
+    } catch (const rin::sql::SqlSyntaxError& e) {
+        throw diagErr(diag::Code::E0042_InvalidSql, line, std::string(e.what()));
+    }
+
+    SqlRawResult result;
+    result.selectFields = q.selectFields;
+    result.container = sqlResolveTargetContainer(q);
+    if (result.container.empty()) return result;
+    // جدول (@table): يُكشَف لـ RCSQL كمستندات {عنوان العمود: خلية} (الرأس = أول صف نصي)،
+    // فتعمل عليه كل نواتج sql/sqlOne/sqlCount/sqlSum/sqlGroupBy/... بلا أي دالة جديدة.
+    std::vector<std::pair<std::string, Value>> tableDocs;
+    const std::vector<std::pair<std::string, Value>>* source = nullptr;
+    auto it = docStore.find(result.container);
+    if (it != docStore.end()) source = &it->second;
+    else if (isTableContainer(result.container)) { tableDocs = tableAsDocs(result.container); source = &tableDocs; }
+    if (!source) return result;
+
+    // 0) JOIN: يُبنى الصف المربوط قبل الفلترة فتصلح الشروط على الحقول المربوطة (other_field)
+    std::vector<std::pair<std::string, Value>> joinedRows;
+    if (!q.joins.empty()) {
+        joinedRows = *source;
+        for (auto& jn : q.joins) {
+            std::string other = canonContainer(jn.target);
+            std::vector<std::pair<std::string, Value>> otherDocs;
+            auto ot = docStore.find(other);
+            if (ot != docStore.end()) otherDocs = ot->second;
+            else if (isTableContainer(other)) otherDocs = tableAsDocs(other);
+            else throw diagErr(diag::Code::E0042_InvalidSql, line, "RIN CONTAINER SQL: join: الحاوية `" + jn.target + "` غير موجودة أو ليست حاوية مستندات/جدول");
+            std::string prefix = jn.target;
+            for (auto& ch : prefix) if (ch == '.' || ch == '/') ch = '_';
+            auto lpath = sqlSplitSlash(jn.local), fpath = sqlSplitSlash(jn.foreign);
+            std::vector<std::pair<std::string, Value>> next;
+            for (auto& row : joinedRows) {
+                Value lv; bool has = jn.local == "_id" ? (lv = Value::string(row.first), true) : sqlGetNestedField(row.second, lpath, lv);
+                bool matched = false;
+                if (has && lv.type != Value::Type::NIL)
+                    for (auto& od : otherDocs) {
+                        Value fv; bool fh = jn.foreign == "_id" ? (fv = Value::string(od.first), true) : sqlGetNestedField(od.second, fpath, fv);
+                        if (!fh || !valuesEqual(lv, fv)) continue;
+                        matched = true;
+                        auto m = std::make_shared<MapData>();
+                        if (row.second.type == Value::Type::MAP && row.second.map) for (auto& kv : *row.second.map) m->push_back(kv);
+                        if (od.second.type == Value::Type::MAP && od.second.map)
+                            for (auto& kv : *od.second.map) m->push_back({Value::string(prefix + "_" + kv.first.toDisplayString()), kv.second});
+                        m->push_back({Value::string(prefix + "__id"), Value::string(od.first)});
+                        next.push_back({row.first + "+" + od.first, Value::makeMap(m)});
+                    }
+                if (!matched && jn.left) next.push_back(row);
+            }
+            joinedRows = std::move(next);
+        }
+        source = &joinedRows;
+    }
+
+    // 1) فلترة (AND بين q.predicates، كل عنصر قد يكون بدوره مجموعة OR داخلية)
+    std::vector<std::pair<std::string, Value>> rows;
+    for (auto& entry : *source) {
+        bool ok = true;
+        for (auto& pr : q.predicates) {
+            if (!sqlMatchPredicate(entry.second, pr)) { ok = false; break; }
+        }
+        if (ok) rows.push_back(entry);
+    }
+
+    // 1ب) GROUP BY + تجميعات + HAVING: كل مجموعة تصير «مستنداً» {حقول التجميع, count, sum_f, avg_f, ...}
+    //     فتعمل بعدها كل مراحل distinct/order/offset/limit/select (وشروط having) على الناتج كالمعتاد.
+    if (!q.groupFields.empty() || !q.aggregates.empty()) {
+        struct Grp { std::vector<Value> key; long count = 0; std::vector<std::vector<Value>> vals; };
+        std::vector<std::vector<std::string>> gpaths, apaths;
+        for (auto& f : q.groupFields) gpaths.push_back(sqlSplitSlash(f));
+        for (auto& a : q.aggregates) apaths.push_back(sqlSplitSlash(a.field));
+        auto bucketLen = [](const std::string& b) -> size_t { return b == "year" ? 4 : b == "month" ? 7 : b == "day" ? 10 : 0; };
+        std::vector<Grp> groups;
+        for (auto& row : rows) {
+            std::vector<Value> key;
+            for (size_t k = 0; k < gpaths.size(); k++) {
+                Value v;
+                if (!sqlGetNestedField(row.second, gpaths[k], v)) v = Value::nil();
+                size_t bl = k < q.groupBuckets.size() ? bucketLen(q.groupBuckets[k]) : 0;
+                if (bl && v.type == Value::Type::STRING) v = Value::string(v.str.substr(0, bl)); // 2026-03-15 -> 2026-03
+                key.push_back(v);
+            }
+            Grp* g = nullptr;
+            for (auto& cand : groups) {
+                bool eq = true;
+                for (size_t k = 0; k < key.size(); k++) if (!valuesEqual(cand.key[k], key[k])) { eq = false; break; }
+                if (eq) { g = &cand; break; }
+            }
+            if (!g) { groups.push_back(Grp{}); g = &groups.back(); g->key = key; g->vals.assign(q.aggregates.size(), {}); }
+            g->count++;
+            for (size_t k = 0; k < q.aggregates.size(); k++) {
+                Value v;
+                if (sqlGetNestedField(row.second, apaths[k], v) && v.type != Value::Type::NIL) g->vals[k].push_back(v);
+            }
+        }
+        if (groups.empty() && q.groupFields.empty()) { groups.push_back(Grp{}); groups.back().vals.assign(q.aggregates.size(), {}); }
+        std::vector<std::pair<std::string, Value>> grouped;
+        for (auto& g : groups) {
+            auto m = std::make_shared<MapData>();
+            std::string gid;
+            for (size_t k = 0; k < q.groupFields.size(); k++) {
+                std::string nm = q.groupFields[k];
+                for (auto& ch : nm) if (ch == '/') ch = '_';
+                if (k < q.groupBuckets.size() && !q.groupBuckets[k].empty()) nm = q.groupBuckets[k] + "_" + nm;
+                m->push_back({Value::string(nm), g.key[k]});
+                if (k) gid += "|";
+                gid += g.key[k].toDisplayString();
+            }
+            if (gid.empty()) gid = "all";
+            m->push_back({Value::string("count"), Value::num(static_cast<double>(g.count))});
+            for (size_t k = 0; k < q.aggregates.size(); k++) {
+                std::string nm = q.aggregates[k].field;
+                for (auto& ch : nm) if (ch == '/') ch = '_';
+                const std::string& fn = q.aggregates[k].fn;
+                auto& vs = g.vals[k];
+                std::vector<double> nums;
+                for (auto& v : vs) if (v.type == Value::Type::NUMBER) nums.push_back(v.number);
+                Value out = Value::nil();
+                if (fn == "sum") { double t = 0; for (double x : nums) t += x; out = Value::num(t); }
+                else if (fn == "avg") { if (!nums.empty()) { double t = 0; for (double x : nums) t += x; out = Value::num(t / static_cast<double>(nums.size())); } }
+                else if (fn == "count") out = Value::num(static_cast<double>(vs.size()));
+                else if (fn == "distinct") {
+                    std::vector<Value> seen;
+                    for (auto& v : vs) { bool dup = false; for (auto& s2 : seen) if (valuesEqual(s2, v)) { dup = true; break; } if (!dup) seen.push_back(v); }
+                    out = Value::num(static_cast<double>(seen.size()));
+                } else if (fn == "median") {
+                    if (!nums.empty()) {
+                        std::sort(nums.begin(), nums.end());
+                        size_t n2 = nums.size();
+                        out = Value::num(n2 % 2 ? nums[n2 / 2] : (nums[n2 / 2 - 1] + nums[n2 / 2]) / 2.0);
+                    }
+                } else { // min / max على أرقام أو نصوص (تواريخ) من نفس النوع
+                    bool have = false;
+                    for (auto& v : vs) {
+                        if (v.type != Value::Type::NUMBER && v.type != Value::Type::STRING) continue;
+                        if (!have) { out = v; have = true; continue; }
+                        if (v.type != out.type) continue;
+                        int c = sqlCompareValues(v, out);
+                        if ((fn == "min" && c < 0) || (fn == "max" && c > 0)) out = v;
+                    }
+                }
+                m->push_back({Value::string(fn + "_" + nm), out});
+            }
+            Value doc = Value::makeMap(m);
+            bool ok = true;
+            for (auto& hp : q.having) if (!sqlMatchPredicate(doc, hp)) { ok = false; break; }
+            if (ok) grouped.push_back({gid, doc});
+        }
+        rows = std::move(grouped);
+    }
+
+    // 2) DISTINCT (إبقاء أول ظهور فقط لكل تركيبة قيم مختلفة لحقول q.distinctFields معاً -- حقل
+    //    واحد = تفريد بسيط، عدّة حقول = مفتاح تفريد مركّب. المستندات التي لا تملك حقلاً من الحقول
+    //    تُعامَل عنده كقيمة nil ضمن المفتاح المركّب.)
+    if (!q.distinctFields.empty()) {
+        std::vector<std::vector<std::string>> distinctPaths;
+        for (auto& f : q.distinctFields) distinctPaths.push_back(sqlSplitSlash(f));
+        std::vector<std::vector<Value>> seenKeys;
+        std::vector<std::pair<std::string, Value>> deduped;
+        deduped.reserve(rows.size());
+        for (auto& row : rows) {
+            std::vector<Value> key;
+            key.reserve(distinctPaths.size());
+            for (auto& path : distinctPaths) {
+                Value v;
+                if (!sqlGetNestedField(row.second, path, v)) v = Value::nil();
+                key.push_back(v);
+            }
+            bool dup = false;
+            for (auto& sk : seenKeys) {
+                bool allEqual = true;
+                for (size_t k = 0; k < key.size(); k++) if (!valuesEqual(sk[k], key[k])) { allEqual = false; break; }
+                if (allEqual) { dup = true; break; }
+            }
+            if (!dup) { seenKeys.push_back(key); deduped.push_back(row); }
+        }
+        rows = std::move(deduped);
+    }
+
+    // 3) ORDER BY (مفاتيح متعددة بالترتيب المكتوب؛ std::stable_sort يحافظ على ترتيب الإدخال عند
+    //    تعادل كل مفاتيح الفرز؛ المستندات المفقود منها حقل الفرز تُدفَع دوماً إلى آخر النتائج بصرف
+    //    النظر عن asc/desc، ثم تُفصَّل فيما بينها بالمفتاح التالي أو تبقى بترتيب الإدخال)
+    if (!q.orderBy.empty()) {
+        std::vector<std::vector<std::string>> keyPaths;
+        for (auto& k : q.orderBy) keyPaths.push_back(sqlSplitSlash(k.field));
+        std::stable_sort(rows.begin(), rows.end(),
+            [&](const std::pair<std::string, Value>& A, const std::pair<std::string, Value>& B) {
+                for (size_t k = 0; k < q.orderBy.size(); k++) {
+                    Value av, bv;
+                    bool af = sqlGetNestedField(A.second, keyPaths[k], av);
+                    bool bf = sqlGetNestedField(B.second, keyPaths[k], bv);
+                    if (af != bf) return af; // الموجود يسبق المفقود دوماً
+                    if (!af) continue;       // كلاهما مفقود عند هذا المفتاح -- انتقل للمفتاح التالي
+                    int c = sqlCompareValues(av, bv);
+                    if (c != 0) return q.orderBy[k].desc ? (c > 0) : (c < 0);
+                }
+                return false; // تعادل تام على كل المفاتيح
+            });
+    }
+
+    // 4) OFFSET ثم LIMIT (بهذا الترتيب دوماً، بعد الفرز/التصفية/التفريد أعلاه)
+    if (q.offset > 0) {
+        if (static_cast<size_t>(q.offset) >= rows.size()) rows.clear();
+        else rows.erase(rows.begin(), rows.begin() + q.offset);
+    }
+    if (q.limit >= 0 && static_cast<size_t>(q.limit) < rows.size()) {
+        rows.resize(static_cast<size_t>(q.limit));
+    }
+
+    result.rows.reserve(rows.size());
+    for (auto& r : rows) result.rows.push_back(SqlMatch{r.first, r.second});
+    return result;
+}
+
+ArrayPtr Interpreter::sqlExecute(const std::string& rawArg, int line) const {
+    auto raw = sqlRunRaw(rawArg, line);
+    auto result = std::make_shared<ArrayData>();
+    for (auto& row : raw.rows) {
+        auto m = std::make_shared<MapData>();
+        m->push_back({Value::string("_id"), Value::string(row.id)});
+        if (raw.selectFields.empty()) {
+            if (row.doc.type == Value::Type::MAP && row.doc.map) {
+                for (auto& kv : *row.doc.map) m->push_back(kv);
+            }
+        } else {
+            for (auto& fname : raw.selectFields) {
+                Value v;
+                if (sqlGetNestedField(row.doc, sqlSplitSlash(fname), v)) {
+                    m->push_back({Value::string(fname), v});
+                }
+            }
+        }
+        result->push_back(Value::makeMap(m));
+    }
+    return result;
+}
+
+void Interpreter::registerNatives() {
+    // ========================================================================
+    // KEY_TERMS + built-in conditions
+    // ------------------------------------------------------------------------
+    // KEY_TERMS is deliberately a runtime registry, not a second parser.
+    // It lets libraries describe their preferred vocabulary while keeping Rin's
+    // core syntax stable. Key-condition forms (`=if=`, `=unless=`, `=when=`) are
+    // parser sugar over the existing IfStmt.
+    // ========================================================================
+    natives["__key_terms.set"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("__key_terms.set", a, 1, line);
+        if (a[0].type != Value::Type::MAP)
+            throw diagErr(diag::Code::E0004_InvalidType, line, "'.KEY_TERMS' يجب أن تكون map من الاسم إلى المصطلح");
+        keyTerms_.clear();
+        for (const auto& kv : *a[0].map) {
+            if (kv.first.type != Value::Type::STRING || kv.second.type != Value::Type::STRING)
+                throw diagErr(diag::Code::E0004_InvalidType, line, "'.KEY_TERMS' يقبل أزواج string -> string فقط");
+            keyTerms_[kv.first.str] = kv.second.str;
+        }
+        return Value::boolean_(true);
+    };
+
+    natives["__key_terms.check"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("__key_terms.check", a, 1, line);
+        if (a[0].type != Value::Type::MAP)
+            throw diagErr(diag::Code::E0004_InvalidType, line, "'.KEY_TERMS == {...}' يتطلب map");
+        if (keyTerms_.size() != a[0].map->size()) return Value::boolean_(false);
+        for (const auto& kv : *a[0].map) {
+            if (kv.first.type != Value::Type::STRING || kv.second.type != Value::Type::STRING)
+                throw diagErr(diag::Code::E0004_InvalidType, line, "'.KEY_TERMS' يقبل أزواج string -> string فقط");
+            auto it = keyTerms_.find(kv.first.str);
+            if (it == keyTerms_.end() || it->second != kv.second.str) return Value::boolean_(false);
+        }
+        return Value::boolean_(true);
+    };
+
+    natives["key_terms"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("key_terms", a, 0, line);
+        auto m = std::make_shared<MapData>();
+        for (const auto& kv : keyTerms_)
+            m->push_back({Value::string(kv.first), Value::string(kv.second)});
+        return Value::makeMap(m);
+    };
+
+    // Generic condition helpers. They return bool and are safe to compose with if/when/loops.
+    natives["is"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("is", a, 2, line);
+        return Value::boolean_(valuesEqual(a[0], a[1]));
+    };
+    natives["isNot"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("isNot", a, 2, line);
+        return Value::boolean_(!valuesEqual(a[0], a[1]));
+    };
+    natives["empty"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("empty", a, 1, line);
+        const Value& v = a[0];
+        if (v.type == Value::Type::NIL) return Value::boolean_(true);
+        if (v.type == Value::Type::STRING) return Value::boolean_(v.str.empty());
+        if (v.type == Value::Type::ARRAY) return Value::boolean_(!v.array || v.array->empty());
+        if (v.type == Value::Type::MAP) return Value::boolean_(!v.map || v.map->empty());
+        if (v.type == Value::Type::SET) return Value::boolean_(!v.set || v.set->empty());
+        return Value::boolean_(false);
+    };
+    natives["typeIs"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("typeIs", a, 2, line);
+        if (a[1].type != Value::Type::STRING)
+            throw diagErr(diag::Code::E0004_InvalidType, line, "'typeIs' يتطلب اسم النوع كنص");
+        return Value::boolean_(a[0].typeName() == a[1].str);
+    };
+    natives["between"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("between", a, 3, line);
+        double x = asNumber(a[0], "between", line);
+        double lo = asNumber(a[1], "between", line);
+        double hi = asNumber(a[2], "between", line);
+        if (lo > hi) std::swap(lo, hi);
+        return Value::boolean_(x >= lo && x <= hi);
+    };
+    natives["all"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("all", a, 1, line);
+        if (a[0].type != Value::Type::ARRAY)
+            throw diagErr(diag::Code::E0004_InvalidType, line, "'all' يتطلب array");
+        for (const auto& v : *a[0].array) if (!v.isTruthy()) return Value::boolean_(false);
+        return Value::boolean_(true);
+    };
+    natives["any"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("any", a, 1, line);
+        if (a[0].type != Value::Type::ARRAY)
+            throw diagErr(diag::Code::E0004_InvalidType, line, "'any' يتطلب array");
+        for (const auto& v : *a[0].array) if (v.isTruthy()) return Value::boolean_(true);
+        return Value::boolean_(false);
+    };
+    natives["none"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("none", a, 1, line);
+        if (a[0].type != Value::Type::ARRAY)
+            throw diagErr(diag::Code::E0004_InvalidType, line, "'none' يتطلب array");
+        for (const auto& v : *a[0].array) if (v.isTruthy()) return Value::boolean_(false);
+        return Value::boolean_(true);
+    };
+    natives["coalesce"] = [](std::vector<Value>& a, int line) -> Value {
+        if (a.empty()) return Value::nil();
+        for (const auto& v : a) if (v.type != Value::Type::NIL) return v;
+        return Value::nil();
+    };
+    // ========================================================================
+    // Rin Artifact / Container Factory
+    // إنشاء ملفات وQR/Barcode/IDs/Hash مرتبطة بالحاوية الحالية. كل Artifact يُحفظ
+    // داخل containers/<container>/ ما دام التنفيذ داخل @container، وإلا في جذر المشروع.
+    // ========================================================================
+    auto artifactContainerPrefix = [this]() -> std::string {
+        if (containerStack.empty()) return std::string();
+        return std::string("containers/") + artifact::sanitizeName(containerStack.back());
+    };
+    auto artifactPath = [this, artifactContainerPrefix](const std::string& name) -> std::string {
+        std::string safe = artifact::sanitizeName(name);
+        std::string prefix = artifactContainerPrefix();
+        return prefix.empty() ? safe : (prefix + "/" + safe);
+    };
+
+    natives["make.uuid"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("make.uuid", a, 0, line);
+        return Value::string(artifact::uuidV4());
+    };
+    natives["uuid"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("uuid", a, 0, line);
+        return Value::string(artifact::uuidV4());
+    };
+    natives["make.filename"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("make.filename", a, 0, 2, line);
+        std::string prefix = a.empty() ? "artifact" : asString(a[0], "make.filename", line);
+        std::string ext = a.size() > 1 ? asString(a[1], "make.filename", line) : "dat";
+        return Value::string(artifact::uniqueFilename(prefix, ext));
+    };
+    natives["filename"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("filename", a, 1, line);
+        return Value::string(artifact::sanitizeName(asString(a[0], "filename", line)));
+    };
+    natives["make.hash"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("make.hash", a, 1, line);
+        return Value::string(artifact::sha256Hex(asString(a[0], "make.hash", line)));
+    };
+    natives["hash"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("hash", a, 1, line);
+        return Value::string(artifact::sha256Hex(asString(a[0], "hash", line)));
+    };
+
+    auto writeArtifact = [this](const std::string& relative, const std::string& content, int line, const std::string& who) -> Value {
+        ensureParentDir(resolvePath(relative, line));
+        writeRealFile(relative, content, line, who);
+        return Value::string(relative);
+    };
+
+    natives["make.file"] = [this, artifactPath, writeArtifact](std::vector<Value>& a, int line) -> Value {
+        expectArgs("make.file", a, 2, line);
+        std::string name = asString(a[0], "make.file", line);
+        std::string content = asString(a[1], "make.file", line);
+        return writeArtifact(artifactPath(name), content, line, "make.file");
+    };
+    natives["container.make.file"] = [this, artifactPath, writeArtifact](std::vector<Value>& a, int line) -> Value {
+        expectArgs("container.make.file", a, 2, line);
+        return writeArtifact(artifactPath(asString(a[0], "container.make.file", line)),
+                             asString(a[1], "container.make.file", line), line, "container.make.file");
+    };
+
+    auto makeBarcode = [this, artifactPath, writeArtifact](std::vector<Value>& a, int line, const std::string& fn) -> Value {
+        expectArgsRange(fn, a, 1, 3, line);
+        std::string data = asString(a[0], fn, line);
+        artifact::Options o;
+        std::string name = a.size() > 1 ? asString(a[1], fn, line) : artifact::uniqueFilename("barcode", "svg");
+        if (a.size() > 2) o.type = asString(a[2], fn, line);
+        if (o.type != "code128") throw diagErr(diag::Code::E0016_InvalidProperty, line, fn + ": currently supported barcode type is code128");
+        std::string rel = artifactPath(name.find('.') == std::string::npos ? name + ".svg" : name);
+        return writeArtifact(rel, artifact::barcodeSvg(data, o), line, fn);
+    };
+    natives["make.barcode"] = [makeBarcode](std::vector<Value>& a, int line) -> Value { return makeBarcode(a, line, "make.barcode"); };
+    natives["barcode"] = [makeBarcode](std::vector<Value>& a, int line) -> Value { return makeBarcode(a, line, "barcode"); };
+    natives["container.make.barcode"] = [makeBarcode](std::vector<Value>& a, int line) -> Value { return makeBarcode(a, line, "container.make.barcode"); };
+
+    auto makeQr = [this, artifactPath, writeArtifact](std::vector<Value>& a, int line, const std::string& fn) -> Value {
+        expectArgsRange(fn, a, 1, 3, line);
+        std::string data = asString(a[0], fn, line);
+        artifact::Options o;
+        std::string name = a.size() > 1 ? asString(a[1], fn, line) : artifact::uniqueFilename("qr", "svg");
+        if (a.size() > 2) o.size = static_cast<int>(asNumber(a[2], fn, line));
+        std::string rel = artifactPath(name.find('.') == std::string::npos ? name + ".svg" : name);
+        return writeArtifact(rel, artifact::qrSvg(data, o), line, fn);
+    };
+    natives["make.qr"] = [makeQr](std::vector<Value>& a, int line) -> Value { return makeQr(a, line, "make.qr"); };
+    natives["qr"] = [makeQr](std::vector<Value>& a, int line) -> Value { return makeQr(a, line, "qr"); };
+    natives["container.make.qr"] = [makeQr](std::vector<Value>& a, int line) -> Value { return makeQr(a, line, "container.make.qr"); };
+
+    natives["artifact.info"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("artifact.info", a, 1, line);
+        std::string raw = asString(a[0], "artifact.info", line);
+        std::string full = resolvePath(raw, line);
+        std::error_code ec;
+        auto st = std::filesystem::status(full, ec);
+        if (ec || !std::filesystem::exists(st)) return Value::nil();
+        auto m = std::make_shared<MapData>();
+        m->push_back({Value::string("path"), Value::string(raw)});
+        m->push_back({Value::string("name"), Value::string(std::filesystem::path(full).filename().string())});
+        m->push_back({Value::string("extension"), Value::string(std::filesystem::path(full).extension().string())});
+        m->push_back({Value::string("size"), Value::num(static_cast<double>(std::filesystem::file_size(full, ec)))});
+        m->push_back({Value::string("exists"), Value::boolean_(true)});
+        return Value::makeMap(m);
+    };
+    natives["container.artifact.info"] = natives["artifact.info"];
+
+    // ---- رياضيات (math) ----
+    natives["abs"] = [](std::vector<Value>& a, int line) {
+        expectArgs("abs", a, 1, line);
+        return Value::num(std::fabs(asNumber(a[0], "abs", line)));
+    };
+    natives["sqrt"] = [](std::vector<Value>& a, int line) {
+        expectArgs("sqrt", a, 1, line);
+        double n = asNumber(a[0], "sqrt", line);
+        if (n < 0) throw diagErr(diag::Code::E0004_InvalidType, line, "'sqrt' لا يقبل عدداً سالباً");
+        return Value::num(std::sqrt(n));
+    };
+    natives["pow"] = [](std::vector<Value>& a, int line) {
+        expectArgs("pow", a, 2, line);
+        return Value::num(std::pow(asNumber(a[0], "pow", line), asNumber(a[1], "pow", line)));
+    };
+    natives["floor"] = [](std::vector<Value>& a, int line) {
+        expectArgs("floor", a, 1, line);
+        return Value::num(std::floor(asNumber(a[0], "floor", line)));
+    };
+    natives["ceil"] = [](std::vector<Value>& a, int line) {
+        expectArgs("ceil", a, 1, line);
+        return Value::num(std::ceil(asNumber(a[0], "ceil", line)));
+    };
+    natives["round"] = [](std::vector<Value>& a, int line) {
+        expectArgs("round", a, 1, line);
+        return Value::num(std::round(asNumber(a[0], "round", line)));
+    };
+    // min/max(a, b, ...) أو min/max([..]): أرقام أو نصوص؛ مصفوفة فارغة => nil. الاستدعاء القديم min(a, b) بلا تغيير.
+    auto extremumNative = [](const char* fn, bool wantMax) {
+        return [fn, wantMax](std::vector<Value>& a, int line) -> Value {
+            if (a.empty()) throw diagErr(diag::Code::E0007_InvalidArguments, line, std::string("'") + fn + "' expects at least 1 argument");
+            if (a.size() == 1) {
+                if (a[0].type != Value::Type::ARRAY || !a[0].array)
+                    throw diagErr(diag::Code::E0004_InvalidType, line, std::string("'") + fn + "' with one argument expects an array but got " + a[0].typeName());
+                return extremumOf(fn, *a[0].array, wantMax, line);
+            }
+            return extremumOf(fn, a, wantMax, line);
+        };
+    };
+    natives["min"] = extremumNative("min", false);
+    natives["max"] = extremumNative("max", true);
+    natives["random"] = [](std::vector<Value>& a, int line) {
+        expectArgs("random", a, 0, line);
+        return Value::num(static_cast<double>(std::rand()) / (static_cast<double>(RAND_MAX) + 1.0));
+    };
+    // RMF Phase 4 §22 — seed(n): يُعيد ضبط مولّد الأرقام العشوائية العام (نفس المولّد الذي تعتمد
+    // عليه random()/randomChoice()/shuffle() كلها) لبذرة محدَّدة، فيُنتِج بالضبط نفس تسلسل
+    // "العشوائية" في كل مرة يُستدعى فيها seed(n) بنفس n -- وهذا بالضبط تعريف "simulation قابل
+    // للتكرار" (reproducible): نفس البذرة = نفس النتائج، مفيد للاختبارات وتصحيح الأخطاء.
+    natives["seed"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("seed", a, 1, line);
+        double n = asNumber(a[0], "seed", line);
+        std::srand(static_cast<unsigned int>(n));
+        return Value::nil();
+    };
+    // ---- RMF (Rin Math Fabric) Phase 1 §6 — دوال رياضية إضافية (مثلثيات/أسّية/لوغاريتمية) ----
+    natives["sin"] = [](std::vector<Value>& a, int line) { expectArgs("sin", a, 1, line); return Value::num(std::sin(asNumber(a[0], "sin", line))); };
+    natives["cos"] = [](std::vector<Value>& a, int line) { expectArgs("cos", a, 1, line); return Value::num(std::cos(asNumber(a[0], "cos", line))); };
+    natives["tan"] = [](std::vector<Value>& a, int line) { expectArgs("tan", a, 1, line); return Value::num(std::tan(asNumber(a[0], "tan", line))); };
+    natives["asin"] = [](std::vector<Value>& a, int line) {
+        expectArgs("asin", a, 1, line);
+        double n = asNumber(a[0], "asin", line);
+        if (n < -1.0 || n > 1.0) throw diagErr(diag::Code::E0004_InvalidType, line, "'asin' expects a number in [-1, 1]");
+        return Value::num(std::asin(n));
+    };
+    natives["acos"] = [](std::vector<Value>& a, int line) {
+        expectArgs("acos", a, 1, line);
+        double n = asNumber(a[0], "acos", line);
+        if (n < -1.0 || n > 1.0) throw diagErr(diag::Code::E0004_InvalidType, line, "'acos' expects a number in [-1, 1]");
+        return Value::num(std::acos(n));
+    };
+    natives["atan"] = [](std::vector<Value>& a, int line) { expectArgs("atan", a, 1, line); return Value::num(std::atan(asNumber(a[0], "atan", line))); };
+    natives["atan2"] = [](std::vector<Value>& a, int line) {
+        expectArgs("atan2", a, 2, line);
+        return Value::num(std::atan2(asNumber(a[0], "atan2", line), asNumber(a[1], "atan2", line)));
+    };
+    natives["exp"] = [](std::vector<Value>& a, int line) { expectArgs("exp", a, 1, line); return Value::num(std::exp(asNumber(a[0], "exp", line))); };
+    natives["log"] = [](std::vector<Value>& a, int line) {
+        // log(x) طبيعي افتراضياً (ln)، أو log(x, base) بقاعدة صريحة — أبسط من فرض اسمين منفصلين
+        // لكل قاعدة، ويبقى 'ln' متاحاً أيضاً كاسم صريح للحالة الطبيعية (انظر أدناه).
+        if (a.size() != 1 && a.size() != 2) {
+            throw diagErr(diag::Code::E0007_InvalidArguments, line, "'log' expects 1 or 2 argument(s) but got " + std::to_string(a.size()));
+        }
+        double n = asNumber(a[0], "log", line);
+        if (n <= 0) throw diagErr(diag::Code::E0004_InvalidType, line, "'log' expects a positive number");
+        if (a.size() == 1) return Value::num(std::log(n));
+        double base = asNumber(a[1], "log", line);
+        if (base <= 0 || base == 1.0) throw diagErr(diag::Code::E0004_InvalidType, line, "'log' base must be positive and not equal to 1");
+        return Value::num(std::log(n) / std::log(base));
+    };
+    natives["log10"] = [](std::vector<Value>& a, int line) {
+        expectArgs("log10", a, 1, line);
+        double n = asNumber(a[0], "log10", line);
+        if (n <= 0) throw diagErr(diag::Code::E0004_InvalidType, line, "'log10' expects a positive number");
+        return Value::num(std::log10(n));
+    };
+    natives["ln"] = [](std::vector<Value>& a, int line) {
+        expectArgs("ln", a, 1, line);
+        double n = asNumber(a[0], "ln", line);
+        if (n <= 0) throw diagErr(diag::Code::E0004_InvalidType, line, "'ln' expects a positive number");
+        return Value::num(std::log(n));
+    };
+    natives["cbrt"] = [](std::vector<Value>& a, int line) { expectArgs("cbrt", a, 1, line); return Value::num(std::cbrt(asNumber(a[0], "cbrt", line))); };
+    natives["trunc"] = [](std::vector<Value>& a, int line) { expectArgs("trunc", a, 1, line); return Value::num(std::trunc(asNumber(a[0], "trunc", line))); };
+    natives["sign"] = [](std::vector<Value>& a, int line) {
+        expectArgs("sign", a, 1, line);
+        double n = asNumber(a[0], "sign", line);
+        return Value::num(n > 0 ? 1.0 : (n < 0 ? -1.0 : 0.0));
+    };
+    // lerp(a, b, t) — انظر §28 (Interpolation)؛ نسخة عددية بسيطة هنا. Vector.lerp الخاصة بالمتجهات
+    // مُعرَّفة في مكتبة lib/math.og.rin بدل هنا لتبقى natives هذه للأعداد المجردة فقط.
+    natives["lerp"] = [](std::vector<Value>& a, int line) {
+        expectArgs("lerp", a, 3, line);
+        double x = asNumber(a[0], "lerp", line);
+        double y = asNumber(a[1], "lerp", line);
+        double t = asNumber(a[2], "lerp", line);
+        return Value::num(x + (y - x) * t);
+    };
+    // RMF Phase 2 §33/§41 — استبطان النوع (type introspection) من داخل Rin نفسها: يُعيد اسم نوع
+    // القيمة كنص ("number"/"string"/"bool"/"array"/"map"/"function"/"nil"، أو اسم الصنف الفعلي لأي
+    // class/struct instance -- انظر Value::typeName() في هذا الملف). هذا ما يسمح لدالة سحرية مثل
+    // Matrix.__mul__ أن تميّز بنفسها (من كود Rin) بين "الطرف الآخر رقم" و"الطرف الآخر Vector3" و
+    // "الطرف الآخر Matrix" وتتصرف بما يناسب كل حالة، بدل الحاجة لثلاث دوال منفصلة (mulScalar/
+    // mulVector/mulMatrix) -- هذا بالضبط أساس "الحساب الذكي" (§3) و"الترقية التلقائية للأنواع" (§33).
+    natives["type"] = [](std::vector<Value>& a, int line) {
+        expectArgs("type", a, 1, line);
+        return Value::string(a[0].typeName());
+    };
+    // رقم إصدار المحرّك الرسمي (rin_version.h — المصدر الوحيد، انظر
+    // docs/VERSIONING.md) متاح الآن داخل كود Rin نفسه، وليس فقط عبر
+    // rin --version / rin_engine_version() / RinEngine.engineVersion() على
+    // مستوى المضيف. مفيد لسكربتات تعرض رقمها في واجهتها، أو تتحقّق منه قبل
+    // استخدام ميزة معيّنة.
+    natives["rinVersion"] = [](std::vector<Value>& a, int line) {
+        expectArgs("rinVersion", a, 0, line);
+        return Value::string(RIN_VERSION_STRING);
+    };
+    natives["rinEdition"] = [](std::vector<Value>& a, int line) {
+        expectArgs("rinEdition", a, 0, line);
+        return Value::string(RIN_VERSION_EDITION);
+    };
+
+    // ---- معالجة نصوص (strings) ----
+    natives["len"] = [](std::vector<Value>& a, int line) {
+        expectArgs("len", a, 1, line);
+        if (a[0].type == Value::Type::STRING) return Value::num(static_cast<double>(a[0].str.size()));
+        if (a[0].type == Value::Type::ARRAY) return Value::num(static_cast<double>(a[0].array->size()));
+        if (a[0].type == Value::Type::MAP) return Value::num(static_cast<double>(a[0].map->size()));
+        throw diagErr(diag::Code::E0004_InvalidType, line, "'len' expects a string, array or map but got " + a[0].typeName());
+    };
+    natives["upper"] = [](std::vector<Value>& a, int line) {
+        expectArgs("upper", a, 1, line);
+        std::string s = asString(a[0], "upper", line);
+        for (auto& c : s) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+        return Value::string(s);
+    };
+    natives["lower"] = [](std::vector<Value>& a, int line) {
+        expectArgs("lower", a, 1, line);
+        std::string s = asString(a[0], "lower", line);
+        for (auto& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        return Value::string(s);
+    };
+    natives["trim"] = [](std::vector<Value>& a, int line) {
+        expectArgs("trim", a, 1, line);
+        std::string s = asString(a[0], "trim", line);
+        size_t b = s.find_first_not_of(" \t\r\n");
+        if (b == std::string::npos) return Value::string("");
+        size_t e = s.find_last_not_of(" \t\r\n");
+        return Value::string(s.substr(b, e - b + 1));
+    };
+    natives["substr"] = [](std::vector<Value>& a, int line) -> Value {
+        if (a.size() != 2 && a.size() != 3) {
+            throw diagErr(diag::Code::E0007_InvalidArguments, line, "'substr' expects 2 or 3 argument(s) but got " + std::to_string(a.size()));
+        }
+        std::string s = asString(a[0], "substr", line);
+        long start = static_cast<long>(asNumber(a[1], "substr", line));
+        if (start < 0) start = 0;
+        if (static_cast<size_t>(start) > s.size()) start = static_cast<long>(s.size());
+        long len = a.size() == 3 ? static_cast<long>(asNumber(a[2], "substr", line))
+                                  : static_cast<long>(s.size()) - start;
+        if (len < 0) len = 0;
+        return Value::string(s.substr(static_cast<size_t>(start), static_cast<size_t>(len)));
+    };
+    natives["split"] = [](std::vector<Value>& a, int line) {
+        expectArgs("split", a, 2, line);
+        std::string s = asString(a[0], "split", line);
+        std::string sep = asString(a[1], "split", line);
+        auto result = std::make_shared<ArrayData>();
+        if (sep.empty()) {
+            for (char c : s) result->push_back(Value::string(std::string(1, c)));
+        } else {
+            size_t pos = 0;
+            while (true) {
+                size_t next = s.find(sep, pos);
+                if (next == std::string::npos) {
+                    result->push_back(Value::string(s.substr(pos)));
+                    break;
+                }
+                result->push_back(Value::string(s.substr(pos, next - pos)));
+                pos = next + sep.size();
+            }
+        }
+        return Value::makeArray(result);
+    };
+    natives["join"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("join", a, 2, line);
+        if (a[0].type != Value::Type::ARRAY) {
+            throw diagErr(diag::Code::E0004_InvalidType, line, "'join' expects an array as the first argument");
+        }
+        std::string sep = asString(a[1], "join", line);
+        std::ostringstream ss;
+        for (size_t i = 0; i < a[0].array->size(); i++) {
+            if (i) ss << sep;
+            ss << (*a[0].array)[i].toDisplayString();
+        }
+        return Value::string(ss.str());
+    };
+    natives["indexOf"] = [](std::vector<Value>& a, int line) {
+        expectArgs("indexOf", a, 2, line);
+        std::string s = asString(a[0], "indexOf", line);
+        std::string sub = asString(a[1], "indexOf", line);
+        auto pos = s.find(sub);
+        return Value::num(pos == std::string::npos ? -1.0 : static_cast<double>(pos));
+    };
+    natives["replace"] = [](std::vector<Value>& a, int line) {
+        expectArgs("replace", a, 3, line);
+        std::string s = asString(a[0], "replace", line);
+        std::string from = asString(a[1], "replace", line);
+        std::string to = asString(a[2], "replace", line);
+        if (from.empty()) return Value::string(s);
+        std::string out;
+        size_t pos = 0;
+        while (true) {
+            size_t next = s.find(from, pos);
+            if (next == std::string::npos) { out += s.substr(pos); break; }
+            out += s.substr(pos, next - pos);
+            out += to;
+            pos = next + from.size();
+        }
+        return Value::string(out);
+    };
+    natives["contains"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("contains", a, 2, line);
+        if (a[0].type == Value::Type::STRING) {
+            return Value::boolean_(a[0].str.find(asString(a[1], "contains", line)) != std::string::npos);
+        }
+        if (a[0].type == Value::Type::ARRAY) {
+            for (auto& item : *a[0].array) if (valuesEqual(item, a[1])) return Value::boolean_(true);
+            return Value::boolean_(false);
+        }
+        throw diagErr(diag::Code::E0004_InvalidType, line, "'contains' expects a string or array as the first argument");
+    };
+    natives["charAt"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("charAt", a, 2, line);
+        std::string s = asString(a[0], "charAt", line);
+        long i = static_cast<long>(asNumber(a[1], "charAt", line));
+        if (i < 0 || static_cast<size_t>(i) >= s.size()) {
+            throw diagErr(diag::Code::E0035_RuntimeError, line, "'charAt': index out of range");
+        }
+        return Value::string(std::string(1, s[static_cast<size_t>(i)]));
+    };
+
+    // ================================================================
+    // ---- معالجة نصوص متقدمة: UTF-8 حقيقي (عربي/RTL) --------------------
+    // upper/lower/substr/charAt/reverseStr الأساسية تعمل على البايتات، فتكسر أي حرف عربي (أو أي
+    // حرف غير-ASCII) لأنه أكثر من بايت واحد في UTF-8. هذه النسخ "utf8*" تعمل على نقاط ترميز
+    // حقيقية (codepoints) فتبقى سليمة مع النصوص العربية ومعظم اللغات الأخرى.
+    // ================================================================
+    natives["utf8Len"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("utf8Len", a, 1, line);
+        std::string s = asString(a[0], "utf8Len", line);
+        return Value::num(static_cast<double>(utf8Codepoints(s).size()));
+    };
+    natives["utf8ToArray"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("utf8ToArray", a, 1, line);
+        std::string s = asString(a[0], "utf8ToArray", line);
+        auto cps = utf8Codepoints(s);
+        auto result = std::make_shared<ArrayData>();
+        result->reserve(cps.size());
+        for (auto& cp : cps) result->push_back(Value::string(cp));
+        return Value::makeArray(result);
+    };
+    natives["utf8CharAt"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("utf8CharAt", a, 2, line);
+        std::string s = asString(a[0], "utf8CharAt", line);
+        long i = static_cast<long>(asNumber(a[1], "utf8CharAt", line));
+        auto cps = utf8Codepoints(s);
+        if (i < 0 || static_cast<size_t>(i) >= cps.size()) {
+            throw diagErr(diag::Code::E0035_RuntimeError, line, "'utf8CharAt': index out of range");
+        }
+        return Value::string(cps[static_cast<size_t>(i)]);
+    };
+    natives["utf8Substr"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("utf8Substr", a, 2, 3, line);
+        std::string s = asString(a[0], "utf8Substr", line);
+        auto cps = utf8Codepoints(s);
+        long start = static_cast<long>(asNumber(a[1], "utf8Substr", line));
+        if (start < 0) start = 0;
+        if (static_cast<size_t>(start) > cps.size()) start = static_cast<long>(cps.size());
+        long len = a.size() == 3 ? static_cast<long>(asNumber(a[2], "utf8Substr", line))
+                                  : static_cast<long>(cps.size()) - start;
+        if (len < 0) len = 0;
+        if (static_cast<size_t>(start) + static_cast<size_t>(len) > cps.size()) {
+            len = static_cast<long>(cps.size()) - start;
+        }
+        std::string out;
+        for (long k = start; k < start + len; k++) out += cps[static_cast<size_t>(k)];
+        return Value::string(out);
+    };
+    natives["utf8Reverse"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("utf8Reverse", a, 1, line);
+        std::string s = asString(a[0], "utf8Reverse", line);
+        auto cps = utf8Codepoints(s);
+        std::string out;
+        for (auto it = cps.rbegin(); it != cps.rend(); ++it) out += *it;
+        return Value::string(out);
+    };
+
+    // ---- معالجة نصوص متقدمة: تطبيع/تحليل عربي (Arabic normalization) ----
+    // مفيدة قبل البحث/المقارنة/فهرسة نصوص عربية (نفس الكلمة تُكتب أحياناً بأشكال مختلفة للألف/الهمزة
+    // أو بتشكيل زائد لا يغيّر المعنى للمطابقة النصية).
+    natives["arabicStripDiacritics"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("arabicStripDiacritics", a, 1, line);
+        std::string s = asString(a[0], "arabicStripDiacritics", line);
+        std::string out;
+        for (auto& cp : utf8Codepoints(s)) {
+            if (!isArabicDiacriticCp(utf8CodepointValue(cp))) out += cp;
+        }
+        return Value::string(out);
+    };
+    natives["arabicNormalize"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("arabicNormalize", a, 1, line);
+        std::string s = asString(a[0], "arabicNormalize", line);
+        std::string out;
+        for (auto& cp : utf8Codepoints(s)) {
+            long v = utf8CodepointValue(cp);
+            if (isArabicDiacriticCp(v)) continue; // إزالة التشكيل والتطويل أيضاً كجزء من التطبيع
+            // توحيد أشكال الألف (أ إ آ ٱ) إلى ا العادية
+            if (v == 0x0623 || v == 0x0625 || v == 0x0622 || v == 0x0671) { out += "\xD8\xA7" /*ا*/; continue; }
+            // توحيد الياء المقصورة ى إلى ي (شائع في التطبيع لأغراض البحث؛ لا يغيّر النطق عملياً)
+            if (v == 0x0649) { out += "\xD9\x8A" /*ي*/; continue; }
+            out += cp;
+        }
+        return Value::string(out);
+    };
+    // detectScript(s) -> "arabic" | "latin" | "digits" | "mixed" | "other" | "empty"،
+    // بحسب الأغلبية بين نقاط الترميز غير-الفراغية في s. مفيدة كأساس بسيط لـ detectLanguage
+    // في lib/nlpkit.og.rin، ولأي منطق RTL/LTR في واجهات العرض.
+    natives["detectScript"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("detectScript", a, 1, line);
+        std::string s = asString(a[0], "detectScript", line);
+        long arabicCount = 0, latinCount = 0, digitCount = 0, otherCount = 0;
+        for (auto& cp : utf8Codepoints(s)) {
+            long v = utf8CodepointValue(cp);
+            if (v == ' ' || v == '\t' || v == '\n' || v == '\r') continue;
+            if (isArabicLetterCp(v)) arabicCount++;
+            else if (isLatinLetterCp(v)) latinCount++;
+            else if (v >= '0' && v <= '9') digitCount++;
+            else otherCount++;
+        }
+        long total = arabicCount + latinCount + digitCount + otherCount;
+        if (total == 0) return Value::string("empty");
+        if (arabicCount > 0 && latinCount > 0) return Value::string("mixed");
+        if (arabicCount > 0) return Value::string("arabic");
+        if (latinCount > 0) return Value::string("latin");
+        if (digitCount > 0) return Value::string("digits");
+        return Value::string("other");
+    };
+
+    // levenshtein(a, b) -> مسافة التحرير (عدد الإدراج/الحذف/الاستبدال الأدنى لتحويل a إلى b)،
+    // محسوبة على نقاط ترميز UTF-8 (وليس بايتات) لتبقى صحيحة مع العربية. أساس textSimilarity في
+    // lib/nlpkit.og.rin، ومفيدة مباشرةً للتصحيح الإملائي التقريبي/المطابقة الضبابية (fuzzy match).
+    natives["levenshtein"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("levenshtein", a, 2, line);
+        auto x = utf8Codepoints(asString(a[0], "levenshtein", line));
+        auto y = utf8Codepoints(asString(a[1], "levenshtein", line));
+        size_t n = x.size(), m = y.size();
+        std::vector<std::vector<size_t>> dp(n + 1, std::vector<size_t>(m + 1, 0));
+        for (size_t i = 0; i <= n; i++) dp[i][0] = i;
+        for (size_t j = 0; j <= m; j++) dp[0][j] = j;
+        for (size_t i = 1; i <= n; i++) {
+            for (size_t j = 1; j <= m; j++) {
+                size_t cost = (x[i - 1] == y[j - 1]) ? 0 : 1;
+                size_t del = dp[i - 1][j] + 1;
+                size_t ins = dp[i][j - 1] + 1;
+                size_t sub = dp[i - 1][j - 1] + cost;
+                dp[i][j] = std::min({del, ins, sub});
+            }
+        }
+        return Value::num(static_cast<double>(dp[n][m]));
+    };
+
+    // tokenizeWords(s) -> يقسّم s إلى مصفوفة "كلمات"، حيث الكلمة تسلسل متتابع من حروف عربية
+    // (بما فيها تشكيلها الملتصق) أو حروف لاتينية أو أرقام (عربية-هندية أو ASCII)، وأي شيء آخر
+    // (مسافات/علامات ترقيم) هو فاصل يُتجاهَل. مبنية على نقاط ترميز UTF-8 حقيقية فتُرجّئ الكلمات
+    // العربية سليمة (بخلاف split(s," ") العادية التي تكسر مع علامات ترقيم ملاصقة).
+    natives["tokenizeWords"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("tokenizeWords", a, 1, line);
+        std::string s = asString(a[0], "tokenizeWords", line);
+        auto result = std::make_shared<ArrayData>();
+        std::string cur;
+        for (auto& cp : utf8Codepoints(s)) {
+            long v = utf8CodepointValue(cp);
+            bool isWordCp = isArabicLetterCp(v) || isLatinLetterCp(v) || (v >= '0' && v <= '9') || isArabicDiacriticCp(v);
+            if (isWordCp) {
+                cur += cp;
+            } else if (!cur.empty()) {
+                result->push_back(Value::string(cur));
+                cur.clear();
+            }
+        }
+        if (!cur.empty()) result->push_back(Value::string(cur));
+        return Value::makeArray(result);
+    };
+    // splitSentences(s) -> يقسّم s إلى جمل عند . ! ? ؟ (علامة الاستفهام العربية) أو ۔، مع تقليم كل
+    // جملة وإسقاط الجمل الفارغة الناتجة (نقاط متتالية مثلاً).
+    natives["splitSentences"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("splitSentences", a, 1, line);
+        std::string s = asString(a[0], "splitSentences", line);
+        auto result = std::make_shared<ArrayData>();
+        std::string cur;
+        auto flush = [&]() {
+            size_t b = cur.find_first_not_of(" \t\r\n");
+            if (b == std::string::npos) { cur.clear(); return; }
+            size_t e = cur.find_last_not_of(" \t\r\n");
+            result->push_back(Value::string(cur.substr(b, e - b + 1)));
+            cur.clear();
+        };
+        for (auto& cp : utf8Codepoints(s)) {
+            long v = utf8CodepointValue(cp);
+            bool isEnder = (v == '.' || v == '!' || v == '?' || v == 0x061F /*؟*/ || v == 0x06D4 /*۔*/);
+            if (isEnder) { flush(); }
+            else { cur += cp; }
+        }
+        flush();
+        return Value::makeArray(result);
+    };
+
+    // ---- معالجة نصوص متقدمة: Regular Expressions (Regex) ----
+    // النمط بصيغة ECMAScript القياسية (std::regex). يمكن بَدء النمط بأعلام اختيارية قبل ":"،
+    // مثل "i:^abc$" (بلا حساسية لحالة الأحرف) أو "im:...". ملاحظة مهمة: المطابقة نفسها تعمل على
+    // مستوى البايتات (بايتات UTF-8)، فالنصوص الحرفية العربية داخل النمط تُطابَق بشكل صحيح، لكن
+    // أصناف الأحرف العامة مثل \w \s \b لا "تفهم" حرفاً عربياً واحداً كوحدة (تتعامل مع بايتاته
+    // منفردة) — لأصناف أحرف عربية استخدم مدى Unicode صريحاً في النمط، أو دوال utf8*/arabic* أعلاه.
+    natives["regexTest"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("regexTest", a, 2, line);
+        std::string s = asString(a[0], "regexTest", line);
+        std::regex re = compileRinRegex(asString(a[1], "regexTest", line), "regexTest", line);
+        return Value::boolean_(std::regex_search(s, re));
+    };
+    natives["regexFind"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("regexFind", a, 2, line);
+        std::string s = asString(a[0], "regexFind", line);
+        std::regex re = compileRinRegex(asString(a[1], "regexFind", line), "regexFind", line);
+        std::smatch m;
+        if (!std::regex_search(s, m, re)) return Value::string("");
+        return Value::string(m.str(0));
+    };
+    natives["regexFindAll"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("regexFindAll", a, 2, line);
+        std::string s = asString(a[0], "regexFindAll", line);
+        std::regex re = compileRinRegex(asString(a[1], "regexFindAll", line), "regexFindAll", line);
+        auto result = std::make_shared<ArrayData>();
+        auto begin = std::sregex_iterator(s.begin(), s.end(), re);
+        auto end = std::sregex_iterator();
+        for (auto it = begin; it != end; ++it) result->push_back(Value::string(it->str(0)));
+        return Value::makeArray(result);
+    };
+    // regexGroups(s, pattern) -> أول تطابق كاملاً مع مجموعاته الملتقطة: العنصر 0 هو التطابق
+    // الكامل، ثم مجموعة 1، 2... بترتيبها. مصفوفة فارغة إن لم يوجد تطابق.
+    natives["regexGroups"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("regexGroups", a, 2, line);
+        std::string s = asString(a[0], "regexGroups", line);
+        std::regex re = compileRinRegex(asString(a[1], "regexGroups", line), "regexGroups", line);
+        std::smatch m;
+        auto result = std::make_shared<ArrayData>();
+        if (std::regex_search(s, m, re)) {
+            for (size_t i = 0; i < m.size(); i++) result->push_back(Value::string(m[i].matched ? m.str(i) : ""));
+        }
+        return Value::makeArray(result);
+    };
+    // regexReplace(s, pattern, replacement[, all]) -> all افتراضياً true (يستبدل كل المطابقات)؛
+    // مرّر false لاستبدال أول مطابقة فقط. replacement يدعم مراجع المجموعات $1 $2... (صيغة ECMAScript).
+    natives["regexReplace"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("regexReplace", a, 3, 4, line);
+        std::string s = asString(a[0], "regexReplace", line);
+        std::regex re = compileRinRegex(asString(a[1], "regexReplace", line), "regexReplace", line);
+        std::string repl = asString(a[2], "regexReplace", line);
+        bool all = a.size() == 4 ? a[3].isTruthy() : true;
+        if (all) return Value::string(std::regex_replace(s, re, repl));
+        std::smatch m;
+        if (!std::regex_search(s, m, re)) return Value::string(s);
+        std::string out;
+        out += s.substr(0, static_cast<size_t>(m.position(0)));
+        out += m.format(repl);
+        out += s.substr(static_cast<size_t>(m.position(0) + m.length(0)));
+        return Value::string(out);
+    };
+    // regexSplit(s, pattern) -> يقسّم s عند كل تطابق للنمط (بدل فاصل ثابت كما في split العادية).
+    natives["regexSplit"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("regexSplit", a, 2, line);
+        std::string s = asString(a[0], "regexSplit", line);
+        std::regex re = compileRinRegex(asString(a[1], "regexSplit", line), "regexSplit", line);
+        auto result = std::make_shared<ArrayData>();
+        std::sregex_token_iterator it(s.begin(), s.end(), re, -1), end;
+        for (; it != end; ++it) result->push_back(Value::string(*it));
+        if (result->empty()) result->push_back(Value::string(s));
+        return Value::makeArray(result);
+    };
+
+    // chr(n) -> يحوّل رقماً صحيحاً (0..255) إلى نص من بايت واحد (عكس ord).
+    // يسمح ببناء بيانات ثنائية خام (مثل ملفات PNG) داخل سكربتات Rin نفسها.
+    natives["chr"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("chr", a, 1, line);
+        double n = asNumber(a[0], "chr", line);
+        long i = static_cast<long>(n);
+        if (i < 0 || i > 255) {
+            throw diagErr(diag::Code::E0004_InvalidType, line, "'chr': القيمة يجب أن تكون بين 0 و255 (تلقّت " + std::to_string(i) + ")");
+        }
+        return Value::string(std::string(1, static_cast<char>(static_cast<unsigned char>(i))));
+    };
+    // ord(s) -> يحوّل أول بايت من نص إلى رقمه (0..255)، عكس chr.
+    natives["ord"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("ord", a, 1, line);
+        std::string s = asString(a[0], "ord", line);
+        if (s.empty()) throw diagErr(diag::Code::E0004_InvalidType, line, "'ord': النص فارغ");
+        return Value::num(static_cast<double>(static_cast<unsigned char>(s[0])));
+    };
+    // bytesFromArray(arr) -> يحوّل مصفوفة أرقام (كل عنصر 0..255) إلى نص بايتات واحد دفعة
+    // واحدة (أسرع من استدعاء chr() داخل حلقة وتجميع النتيجة بـ +).
+    natives["bytesFromArray"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("bytesFromArray", a, 1, line);
+        if (a[0].type != Value::Type::ARRAY) {
+            throw diagErr(diag::Code::E0004_InvalidType, line, "'bytesFromArray' expects an array but got " + a[0].typeName());
+        }
+        std::string out;
+        out.reserve(a[0].array->size());
+        for (auto& item : *a[0].array) {
+            double n = asNumber(item, "bytesFromArray", line);
+            long i = static_cast<long>(n);
+            if (i < 0 || i > 255) {
+                throw diagErr(diag::Code::E0004_InvalidType, line, "'bytesFromArray': كل عنصر يجب أن يكون بين 0 و255 (وُجد " + std::to_string(i) + ")");
+            }
+            out.push_back(static_cast<char>(static_cast<unsigned char>(i)));
+        }
+        return Value::string(out);
+    };
+    // crc32(s) -> يحسب CRC-32 (نفس خوارزمية zlib/PNG/gzip) لنص بايتات خام، ويعيده كرقم غير سالب.
+    // لازم لبناء أي chunk في ملف PNG صالح (IHDR, IDAT, IEND...) من داخل Rin بدون C++.
+    natives["crc32"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("crc32", a, 1, line);
+        std::string s = asString(a[0], "crc32", line);
+        static uint32_t table[256];
+        static bool tableInit = false;
+        if (!tableInit) {
+            for (uint32_t n = 0; n < 256; n++) {
+                uint32_t c = n;
+                for (int k = 0; k < 8; k++) {
+                    c = (c & 1) ? (0xEDB88320u ^ (c >> 1)) : (c >> 1);
+                }
+                table[n] = c;
+            }
+            tableInit = true;
+        }
+        uint32_t crc = 0xFFFFFFFFu;
+        for (unsigned char ch : s) {
+            crc = table[(crc ^ ch) & 0xFF] ^ (crc >> 8);
+        }
+        crc ^= 0xFFFFFFFFu;
+        return Value::num(static_cast<double>(crc));
+    };
+    // adler32(s) -> يحسب Adler-32 (المطلوب في نهاية كل تدفّق zlib، بما فيها بيانات IDAT في PNG).
+    natives["adler32"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("adler32", a, 1, line);
+        std::string s = asString(a[0], "adler32", line);
+        const uint32_t MOD_ADLER = 65521u;
+        uint32_t a32 = 1, b32 = 0;
+        for (unsigned char ch : s) {
+            a32 = (a32 + ch) % MOD_ADLER;
+            b32 = (b32 + a32) % MOD_ADLER;
+        }
+        return Value::num(static_cast<double>((b32 << 16) | a32));
+    };
+    // ---- ضغط/فكّ ضغط DEFLATE حقيقي (zlib) — natives خام (raw، بلا رأس zlib/gzip) ----
+    // يُطابق تماماً method=8 في صيغة ZIP الرسمية (PKWARE APPNOTE)، فيُنتج/يقرأ أرشيفات
+    // .zip مضغوطة فعلياً ومتوافقة 100% مع أي أداة ZIP قياسية (unzip, 7-Zip...).
+    // zlibDeflateRaw(s) -> نص بايتات s الخام مضغوطاً بـ DEFLATE خام (بلا أي رأس/تذييل إضافي).
+    natives["zlibDeflateRaw"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("zlibDeflateRaw", a, 1, line);
+        std::string input = asString(a[0], "zlibDeflateRaw", line);
+        z_stream strm{};
+        // windowBits = -15: يطلب من zlib صيغة DEFLATE الخام (RFC 1951) بدل التغليف بصيغة
+        // zlib (RFC 1950) أو gzip — وهذا بالضبط ما يتوقّعه حقل بيانات ملف ZIP لكل entry.
+        if (deflateInit2(&strm, Z_DEFAULT_COMPRESSION, Z_DEFLATED, -15, 8, Z_DEFAULT_STRATEGY) != Z_OK) {
+            throw diagErr(diag::Code::E0035_RuntimeError, line, "zlibDeflateRaw: تعذّر تهيئة الضاغط (deflateInit2 فشل)");
+        }
+        strm.next_in = reinterpret_cast<Bytef*>(const_cast<char*>(input.data()));
+        strm.avail_in = static_cast<uInt>(input.size());
+        std::string out;
+        out.resize(static_cast<size_t>(compressBound(static_cast<uLong>(input.size()))) + 64);
+        strm.next_out = reinterpret_cast<Bytef*>(out.empty() ? nullptr : &out[0]);
+        strm.avail_out = static_cast<uInt>(out.size());
+        int ret = deflate(&strm, Z_FINISH);
+        if (ret != Z_STREAM_END) {
+            deflateEnd(&strm);
+            throw diagErr(diag::Code::E0035_RuntimeError, line, "zlibDeflateRaw: فشل الضغط (deflate لم يُكمل التدفّق)");
+        }
+        out.resize(strm.total_out);
+        deflateEnd(&strm);
+        return Value::string(out);
+    };
+    // zlibInflateRaw(compressed, expectedSize) -> يفكّ ضغط compressed (ناتج DEFLATE خام، مثل
+    // zlibDeflateRaw أو أي entry method=8 داخل ملف ZIP) إلى expectedSize بايت أصلية بالضبط
+    // (الحجم الأصلي محفوظ دائماً صراحة في صيغة ZIP نفسها، فلا حاجة لتخمينه). يرمي خطأً صريحاً
+    // إن كانت البيانات تالفة أو الحجم المتوقّع غير مطابق للتدفّق الفعلي.
+    natives["zlibInflateRaw"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("zlibInflateRaw", a, 2, line);
+        std::string input = asString(a[0], "zlibInflateRaw", line);
+        double expectedD = asNumber(a[1], "zlibInflateRaw", line);
+        if (expectedD < 0) {
+            throw diagErr(diag::Code::E0004_InvalidType, line, "zlibInflateRaw: الحجم المتوقّع يجب أن يكون >= 0");
+        }
+        size_t expected = static_cast<size_t>(expectedD);
+        if (expected == 0) { return Value::string(""); }
+        z_stream strm{};
+        if (inflateInit2(&strm, -15) != Z_OK) {
+            throw diagErr(diag::Code::E0035_RuntimeError, line, "zlibInflateRaw: تعذّر تهيئة فاكّ الضغط (inflateInit2 فشل)");
+        }
+        strm.next_in = reinterpret_cast<Bytef*>(const_cast<char*>(input.data()));
+        strm.avail_in = static_cast<uInt>(input.size());
+        std::string out;
+        out.resize(expected);
+        strm.next_out = reinterpret_cast<Bytef*>(&out[0]);
+        strm.avail_out = static_cast<uInt>(out.size());
+        int ret = inflate(&strm, Z_FINISH);
+        inflateEnd(&strm);
+        if (ret != Z_STREAM_END || strm.total_out != expected) {
+            throw diagErr(diag::Code::E0035_RuntimeError, line, "zlibInflateRaw: فشل فكّ الضغط (بيانات تالفة أو الحجم المتوقّع خاطئ)");
+        }
+        return Value::string(out);
+    };
+    // ---- CLC (Rin Compact Library Container، .rcl) — natives خام فوق مكتبة clc:: (clc/) ----
+    // نفس فكرة crc32/zlibDeflateRaw أعلاه بالضبط: هذه natives رقيقة تستدعي مباشرة دوال مكتبة C++
+    // مستقلة (هنا clc::) بلا أي تكرار لمنطقها. انظر clc/clc_container.h ودليل التكامل الأصلي
+    // (docs/RIN_INTEGRATION.md في مستودع rin-clc) لتفاصيل صيغة .rcl والتصميم.
+    // ملاحظة أمان: مسار الحاوية نفسه يمرّ عبر resolvePath() فيُمنَع من الخروج خارج basePath المعزول
+    // (نفس الحماية المطبَّقة على @import/container.import)؛ أما الأمان *داخل* الحاوية (Path
+    // Traversal بين entries، إلخ) فتتكفّل به clc_security.cpp من جهتها. أما ما يحدث *بعد* تنفيذ
+    // ملفات .rin المستوردة (library.import) فيبقى خاضعاً لنفس ثقة @import العادي — استيراد حاوية
+    // من مصدر غير موثوق يبقى غير آمن بنفس القدر تماماً، وهذا ليس تراجعاً جديداً في الحماية.
+
+    // container.open(path) -> handle رقمي (>=1)، أو -1 عند فشل صامت غير متوقَّع لا يُفترض حدوثه هنا
+    // (نرمي خطأً صريحاً بدل ذلك في كل حالة فشل فعلية، فـ -1 غير مُستخدَم عملياً لكنه محفوظ للتوافق مع
+    // ما ورد في التصميم الأصلي).
+    natives["clcContainerOpen"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("clcContainerOpen", a, 1, line);
+        std::string rawPath = asString(a[0], "clcContainerOpen", line);
+        std::string fullPath = resolvePath(rawPath, line);
+        try {
+            auto info = clc::readContainerInfo(fullPath);
+            int handle = clcNextHandle_++;
+            clcOpenContainers_.emplace(handle, std::move(info));
+            clcOpenContainerPaths_.emplace(handle, fullPath);
+            return Value::num(double(handle));
+        } catch (const clc::ClcFormatError& e) {
+            throw errWithReason(diag::Code::E0036_IOFailure, line,
+                                 "container.open: تعذّرت قراءة الحاوية '" + rawPath + "'",
+                                 e.what());
+        } catch (const std::exception& e) {
+            throw errWithReason(diag::Code::E0036_IOFailure, line,
+                                 "container.open: تعذّر فتح '" + rawPath + "'", e.what());
+        }
+    };
+    // container.close(handle) -> بلا قيمة إرجاع مفيدة (يحرر المدخلة من الجدول الداخلي فقط).
+    natives["clcContainerClose"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("clcContainerClose", a, 1, line);
+        int handle = int(asNumber(a[0], "clcContainerClose", line));
+        clcOpenContainers_.erase(handle);
+        clcOpenContainerPaths_.erase(handle);
+        return Value::nil();
+    };
+    // container.fileCount(handle) -> عدد الإدخالات (ملفات + مجلدات) داخل الحاوية.
+    natives["clcContainerFileCount"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("clcContainerFileCount", a, 1, line);
+        int handle = int(asNumber(a[0], "clcContainerFileCount", line));
+        auto it = clcOpenContainers_.find(handle);
+        if (it == clcOpenContainers_.end()) {
+            throw diagErr(diag::Code::E0035_RuntimeError, line, "clcContainerFileCount: handle غير صالح أو مُغلَق بالفعل");
+        }
+        return Value::num(double(it->second.files.size()));
+    };
+    // container.fileName(handle, index) -> المسار النسبي للملف رقم index (0-based) داخل الحاوية.
+    natives["clcContainerFileName"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("clcContainerFileName", a, 2, line);
+        int handle = int(asNumber(a[0], "clcContainerFileName", line));
+        int idx = int(asNumber(a[1], "clcContainerFileName", line));
+        auto it = clcOpenContainers_.find(handle);
+        if (it == clcOpenContainers_.end()) {
+            throw diagErr(diag::Code::E0035_RuntimeError, line, "clcContainerFileName: handle غير صالح أو مُغلَق بالفعل");
+        }
+        if (idx < 0 || size_t(idx) >= it->second.files.size()) {
+            throw diagErr(diag::Code::E0021_InvalidIndex, line, "clcContainerFileName: index خارج حدود ملفات الحاوية");
+        }
+        return Value::string(it->second.files[size_t(idx)].path);
+    };
+    // container.metaName(handle) / container.metaVersion(handle) -> حقول Metadata الأساسية
+    // (name/version) المخزَّنة داخل الحاوية نفسها (تُملأ عند library.export من PackOptions::metadata).
+    natives["clcContainerMetaName"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("clcContainerMetaName", a, 1, line);
+        int handle = int(asNumber(a[0], "clcContainerMetaName", line));
+        auto it = clcOpenContainers_.find(handle);
+        if (it == clcOpenContainers_.end()) {
+            throw diagErr(diag::Code::E0035_RuntimeError, line, "clcContainerMetaName: handle غير صالح أو مُغلَق بالفعل");
+        }
+        return Value::string(it->second.metadata.name);
+    };
+    natives["clcContainerMetaVersion"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("clcContainerMetaVersion", a, 1, line);
+        int handle = int(asNumber(a[0], "clcContainerMetaVersion", line));
+        auto it = clcOpenContainers_.find(handle);
+        if (it == clcOpenContainers_.end()) {
+            throw diagErr(diag::Code::E0035_RuntimeError, line, "clcContainerMetaVersion: handle غير صالح أو مُغلَق بالفعل");
+        }
+        return Value::string(it->second.metadata.version);
+    };
+    // library.export(outPath, sourceDir) -> يبني حاوية .rcl من مجلد مشروع كامل (تغليف
+    // clc::packDirectory مباشرة)، ويُعيد الحجم المضغوط بالبايت. كلا المسارين يمرّان عبر
+    // resolvePath() (نفس عزل المشروع المطبَّق على أي كتابة/قراءة ملف حقيقي في بقية اللغة).
+    natives["libraryExport"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("libraryExport", a, 2, line);
+        std::string outPath = resolvePath(asString(a[0], "libraryExport", line), line);
+        std::string srcDir  = resolvePath(asString(a[1], "libraryExport", line), line);
+        try {
+            clc::PackOptions opts; // القيم الافتراضية (level=L2) كافية هنا؛ يمكن توسيعها لاحقاً بوسائط إضافية
+            auto stats = clc::packDirectory(srcDir, outPath, opts);
+            return Value::num(double(stats.compressedSize));
+        } catch (const clc::ClcFormatError& e) {
+            throw errWithReason(diag::Code::E0035_RuntimeError, line, "library.export: فشل بناء الحاوية", e.what());
+        } catch (const std::exception& e) {
+            throw errWithReason(diag::Code::E0035_RuntimeError, line, "library.export: فشل بناء الحاوية", e.what());
+        }
+    };
+    // library.import(path) نفسها مُسجَّلة *ليست* هنا: تحتاج env (لتدمج @import من ملفات .rin
+    // المستخرَجة في نفس نطاق الاستدعاء) فتُعترَض في Interpreter::invokeCallee() مباشرة قبل خريطة
+    // natives هذه، وتُنفَّذ فعلياً في Interpreter::doLibraryImport() أسفل الملف.
+
+    natives["toString"] = [](std::vector<Value>& a, int line) {
+        expectArgs("toString", a, 1, line);
+        return Value::string(a[0].toDisplayString());
+    };
+    // str(value) -> alias for toString(value). Several stdlib libraries (lib/colors.og.rin,
+    // lib/csv.og.rin, lib/format.og.rin, ...) already call `str(...)` expecting exactly this
+    // short alias to exist; it never did, so every one of those call sites was an undefined-
+    // function runtime error waiting to happen. Registered as a real native (not a `fun` in
+    // rin_stdlib_libs.h) so it's available to every .rin source with no @import required, same
+    // as toString/len/upper/... already are.
+    natives["str"] = natives["toString"];
+    // #str(value) -> نفس toString لكن باسم لا يمكن لمتغيّر/دالة المستخدم أن تحجبه. يستعمله Lexer
+    // عند تحويل النصوص القالبية `...${expr}...` إلى `"..." + #str(expr) + "..."`.
+    natives["#str"] = natives["toString"];
+
+    // ── ملحقات النصوص القالبية (يولّدها Lexer::scanTemplate، انظر docs/template-strings.md) ──
+    // #default(a, b): `${name ?? "زائر"}` -> b إن كانت a تساوي nil، وإلا a.
+    natives["#default"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("#default", a, 2, line);
+        return a[0].type == Value::Type::NIL ? a[1] : a[0];
+    };
+    // #now(name): القيم الجاهزة `${#date}` `${#time}` ... من ساعة الجهاز.
+    natives["#now"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("#now", a, 1, line);
+        const std::string n = a[0].str;
+        if (n == "version") return Value::string(RIN_VERSION_STRING);
+        std::time_t t = std::time(nullptr);
+        std::tm tmv{};
+#if defined(_WIN32)
+        localtime_s(&tmv, &t);
+#else
+        localtime_r(&t, &tmv);
+#endif
+        auto fmt = [&](const char* f) { char buf[64]; std::strftime(buf, sizeof buf, f, &tmv); return Value::string(buf); };
+        if (n == "date")     return fmt("%Y-%m-%d");
+        if (n == "time")     return fmt("%H:%M:%S");
+        if (n == "datetime") return fmt("%Y-%m-%d %H:%M:%S");
+        if (n == "year")     return Value::num(tmv.tm_year + 1900);
+        if (n == "month")    return Value::num(tmv.tm_mon + 1);
+        if (n == "day")      return Value::num(tmv.tm_mday);
+        if (n == "hour")     return Value::num(tmv.tm_hour);
+        if (n == "minute")   return Value::num(tmv.tm_min);
+        if (n == "second")   return Value::num(tmv.tm_sec);
+        if (n == "weekday")  return Value::num(tmv.tm_wday); // 0 = الأحد
+        throw diagErr(diag::Code::E0007_InvalidArguments, line, "unknown built-in template value `#" + n + "`");
+    };
+    // #fmt(value, spec): `${value:spec}` -- انظر templateFormat() أعلاه (تتابع مراحل مفصولة بـ |).
+    natives["#fmt"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("#fmt", a, 2, line);
+        return templateFormat(a[0], a[1].type == Value::Type::STRING ? a[1].str : a[1].toDisplayString(), line);
+    };
+    // render(template, data): قوالب وقت التشغيل -- `${مسار.داخل.البيانات ?? بديل : تنسيق}` أو {{مسار}}.
+    natives["render"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("render", a, 2, line);
+        if (a[0].type != Value::Type::STRING) throw diagErr(diag::Code::E0004_InvalidType, line, "'render' expects a template string as first argument but got " + a[0].typeName());
+        return Value::string(templateRender(a[0].str, a[1], line));
+    };
+    natives["toNumber"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("toNumber", a, 1, line);
+        if (a[0].type == Value::Type::NUMBER) return a[0];
+        std::string s = asString(a[0], "toNumber", line);
+        try {
+            size_t idx = 0;
+            double d = std::stod(s, &idx);
+            return Value::num(d);
+        } catch (...) {
+            throw diagErr(diag::Code::E0035_RuntimeError, line, "'toNumber': \"" + s + "\" ليست رقماً صالحاً");
+        }
+    };
+    // ====================== إدخال المستخدم ======================
+    // مبدأ التصميم: دوال الإدخال الأربع (input / inputNumber / confirm / choose) لا تخترع منطقاً جديداً —
+    // كل مرحلة تُفوَّض إلى مفهوم موجود أصلاً في اللغة (بالاستدعاء، لا بالنسخ):
+    //   • قراءة السطر      : askRaw — نقطة I/O وحيدة (نافذة أندرويد عبر InputProvider، أو stdin)
+    //   • تنظيف/تطبيع النص : natives["trim"] · natives["lower"]
+    //   • نص → رقم         : natives["toNumber"]
+    //   • نعم/لا           : natives["contains"] على مصفوفة كلمات الموافقة
+    //   • التحقق           : callValue(...) — أي `fun` أو كائن OOP يعرّف __call__
+    //   • مصادر الخيارات   : مصفوفة | قاموس | enum | كائن (oop.toMap) | حاوية (container.fieldNames + getField)
+    //   • تسمية الخيار     : oop.get على name/title/label (للكائنات والقواميس وحالات enum)
+    //   • تسليم النتيجة    : setField (حاوية) · oop.set (كائن/قاموس) — فتعمل الصلاحيات و`set` والتجميد
+    //                         والمراقبون وروابط OOP/Indsin كلها كما لو كُتبت القيمة يدوياً.
+    // التوقيعات القديمة تعمل كما هي حرفياً؛ كل ما أُضيف وسائط اختيارية في آخر القائمة.
+    struct InArgs {
+        std::string prompt;
+        bool hasValidator = false; Value validator;
+        bool hasTarget = false;    Value target; std::string key;
+        bool form = false;         // input(prompt, target): املأ كل حقول الهدف (حاوية/كائن/قاموس)
+        bool hasSchema = false; Value schema;  // input(prompt, target, {حقل: مواصفة}) — يغطي حتى حقول nil
+    };
+    // askRaw: نقطة واحدة تقرأ سطراً من المستخدم — عبر InputProvider (نافذة على أندرويد) أو stdin (CLI).
+    // يعيد false إذا ألغى المستخدم/انتهى الإدخال بلا بيانات (EOF في stdin يُعامَل كإلغاء فقط حين
+    // يكون الإدخال مطلوباً رقماً أو اختياراً أو مُدقَّقاً؛ أما input() العادية فتعيد "" عند EOF).
+    auto askRaw = [this](const std::string& prompt, std::string& answer, bool& eof) -> bool {
+        eof = false; inputAtEof_ = false;
+        if (inputProvider_) {
+            // أظهِر للمستخدم كل ما طُبع حتى الآن قبل أن يرى سؤال الإدخال (بث حي فقط إن وُجد sink).
+            if (streamSink_) {
+                std::streamoff now = output.tellp();
+                if (now > streamMark_) {
+                    streamSink_(output.str().substr(static_cast<size_t>(streamMark_), static_cast<size_t>(now - streamMark_)));
+                    streamMark_ = now;
+                }
+            }
+            return inputProvider_(prompt, answer);
+        }
+        if (!prompt.empty()) { std::cout << prompt; std::cout.flush(); }
+        if (!std::getline(std::cin, answer)) { eof = true; inputAtEof_ = true; answer.clear(); return true; }
+        if (!answer.empty() && answer.back() == '\r') answer.pop_back();
+        return true;
+    };
+    // callNat: استدعاء دالة مبنية موجودة بالاسم (نفس ما يفعله `name(args)` في كود Rin).
+    auto callNat = [this](const char* fn, std::vector<Value> args, int line) -> Value {
+        auto it = natives.find(fn);
+        if (it == natives.end())
+            throw diagErr(diag::Code::E0035_RuntimeError, line, std::string("input: الدالة المبنية '") + fn + "' غير مسجَّلة");
+        return it->second(args, line);
+    };
+    // parseArgs: [prompt] [validator] [target, key] — فهرس أول وسيط إضافي يحدده المستدعي.
+    auto parseArgs = [this](const std::string& fn, std::vector<Value>& a, size_t firstExtra, bool allowValidator, int line) -> InArgs {
+        InArgs ia;
+        if (!a.empty()) ia.prompt = a[0].type == Value::Type::STRING ? a[0].str : a[0].toDisplayString();
+        size_t i = firstExtra;
+        if (allowValidator && i < a.size() &&
+            (a[i].type == Value::Type::FUNCTION || (a[i].type == Value::Type::INSTANCE && hasMagic(a[i], "__call__")))) {
+            ia.hasValidator = true; ia.validator = a[i]; ++i;
+        }
+        size_t rest = a.size() > i ? a.size() - i : 0;
+        if (rest == 0) return ia;
+        if (rest == 1 && fn == "input" &&
+            ((a[i].type == Value::Type::STRING && containers.count(a[i].str)) ||
+             a[i].type == Value::Type::MAP || a[i].type == Value::Type::INSTANCE)) {
+            if (a[i].type == Value::Type::INSTANCE && a[i].instance && a[i].instance->frozen)   // افشل قبل السؤال لا بعده
+                throw errWithReason(diag::Code::E0035_RuntimeError, line, "cannot fill a frozen `" + a[i].instance->className + "` object",
+                                    "this object was frozen with `oop.freeze(...)`");
+            ia.hasTarget = true; ia.target = a[i]; ia.form = true; return ia;
+        }
+        if (rest == 2 && fn == "input" && a[i + 1].type == Value::Type::MAP &&
+            ((a[i].type == Value::Type::STRING && containers.count(a[i].str)) ||
+             a[i].type == Value::Type::MAP || a[i].type == Value::Type::INSTANCE)) {
+            if (a[i].type == Value::Type::INSTANCE && a[i].instance && a[i].instance->frozen)
+                throw errWithReason(diag::Code::E0035_RuntimeError, line, "cannot fill a frozen `" + a[i].instance->className + "` object",
+                                    "this object was frozen with `oop.freeze(...)`");
+            ia.hasTarget = true; ia.target = a[i]; ia.form = true; ia.hasSchema = true; ia.schema = a[i + 1];
+            return ia;
+        }
+        if (rest != 2)
+            throw diagErr(diag::Code::E0007_InvalidArguments, line,
+                          "'" + fn + "': الوسائط الإضافية إمّا (target, key) أو " + (allowValidator ? "(validator) أو (validator, target, key)" : "لا شيء"));
+        const Value& t = a[i]; const Value& k = a[i + 1];
+        if (k.type != Value::Type::STRING)
+            throw diagErr(diag::Code::E0004_InvalidType, line, "'" + fn + "': اسم الحقل (key) يجب أن يكون نصاً");
+        if (t.type == Value::Type::STRING) {
+            if (!containers.count(t.str))   // افحص قبل أن نسأل المستخدم، لا بعد أن يكتب إجابته
+                throw errWithReason(diag::Code::E0014_InvalidContainer, line,
+                                    "'" + t.str + "' is not a known container",
+                                    "create it first via `@container=" + t.str + "`");
+        } else if (t.type != Value::Type::MAP && t.type != Value::Type::INSTANCE) {
+            throw diagErr(diag::Code::E0004_InvalidType, line,
+                          "'" + fn + "': الهدف يجب أن يكون اسم حاوية أو كائناً أو قاموساً، لا " + t.typeName());
+        }
+        ia.hasTarget = true; ia.target = t; ia.key = k.str;
+        return ia;
+    };
+    // validate: true إن قُبلت القيمة. المُدقِّق يعيد true للقبول؛ نصاً => رفض مع سبب؛ أي شيء "كاذب" => رفض.
+    auto validate = [this](const InArgs& ia, const Value& v, std::string& why, int line) -> bool {
+        why.clear();
+        if (!ia.hasValidator) return true;
+        std::vector<Value> args{v};
+        Value r = callValue(ia.validator, args, line);
+        if (r.type == Value::Type::STRING) { why = r.str; return false; }
+        return r.isTruthy();
+    };
+    // deliver: يسلّم القيمة للهدف عبر الدوال الموجودة (إن وُجد هدف) ثم يعيدها.
+    auto deliver = [callNat](const InArgs& ia, const Value& v, int line) -> Value {
+        if (!ia.hasTarget) return v;
+        // setState = setField + إطلاق on update(prev) إن كان الحقل `state` — فتتفاعل الحاوية مع الإدخال.
+        if (ia.target.type == Value::Type::STRING) callNat("setState", {ia.target, Value::string(ia.key), v}, line);
+        else                                       callNat("oop.set",  {ia.target, Value::string(ia.key), v}, line);
+        return v;
+    };
+    // curOf: القيمة الحالية للحقل في الهدف (nil إن لم توجد) — getField للحاوية، oop.get لغيرها.
+    auto curOf = [callNat](const InArgs& ia, int line) -> Value {
+        if (!ia.hasTarget || ia.form) return Value::nil();
+        try {
+            if (ia.target.type == Value::Type::STRING) return callNat("getField", {ia.target, Value::string(ia.key)}, line);
+            return callNat("oop.get", {ia.target, Value::string(ia.key), Value::nil()}, line);
+        } catch (const RinError&) { return Value::nil(); }
+    };
+    // shownPrompt: يُلحِق القيمة الحالية بين [ ] (الإجابة الفارغة تُبقيها).
+    auto shownPrompt = [](const std::string& p, const Value& cur) -> std::string {
+        if (cur.type == Value::Type::NIL || cur.type == Value::Type::MAP || cur.type == Value::Type::ARRAY ||
+            cur.type == Value::Type::INSTANCE || cur.type == Value::Type::FUNCTION) return p;
+        std::string d = cur.toDisplayString();
+        return d.empty() ? p : p + "[" + d + "] ";
+    };
+    // fillForm: لكل حقل في الحاوية (مرتباً) يستدعي input/inputNumber/confirm نفسها حسب container.fieldType.
+    auto fillForm = [this, callNat](const InArgs& ia, int line) -> Value {
+        const bool isCont = ia.target.type == Value::Type::STRING;
+        std::vector<std::string> ks;
+        std::unordered_map<std::string, std::string> tys;           // اسم الحقل -> نوعه
+        if (isCont) {
+            Value names = callNat("container.fieldNames", {ia.target}, line);
+            if (names.type == Value::Type::ARRAY && names.array) for (auto& n : *names.array) ks.push_back(n.str);
+            std::sort(ks.begin(), ks.end());                         // ترتيب حقول الحاوية غير مضمون => أبجدي
+            for (const auto& k : ks) tys[k] = callNat("container.fieldType", {ia.target, Value::string(k)}, line).str;
+        } else {
+            // كائن أو قاموس: oop.toMap للكائن (بترتيب التعريف)، والقاموس نفسه بترتيب إدخاله.
+            Value m = ia.target.type == Value::Type::INSTANCE ? callNat("oop.toMap", {ia.target}, line) : ia.target;
+            for (auto& kv : *m.map) { ks.push_back(kv.first.toDisplayString()); tys[ks.back()] = kv.second.typeName(); }
+        }
+        // مواصفات المخطّط: حقول المخطّط غير الموجودة في الهدف (مثل حقل nil) تُضاف بعد حقوله.
+        std::unordered_map<std::string, Value> spec;
+        if (ia.hasSchema) {
+            for (auto& kv : *ia.schema.map) {
+                std::string k = kv.first.toDisplayString();
+                spec[k] = kv.second;
+                if (!tys.count(k)) { ks.push_back(k); tys[k] = "nil"; }
+            }
+        }
+        for (const auto& k : ks) {
+            Value lbl = Value::string(ia.prompt + k + ": ");
+            Value kk = Value::string(k);
+            auto sp = spec.find(k);
+            // 1) بلا مواصفة: النوع من القيمة الحالية (nil/مركّب => يُتخطّى).
+            // 2) مواصفة نص "number"/"bool"/"string": النوع صراحةً.
+            // 3) مواصفة مصفوفة/قاموس/enum: choose.   4) مواصفة callable (fun/صنف __call__): validator.
+            std::string ty = tys[k];
+            const Value* validator = nullptr;
+            if (sp != spec.end()) {
+                const Value& v = sp->second;
+                if (v.type == Value::Type::NIL) continue;
+                if (v.type == Value::Type::STRING) {
+                    if (v.str != "number" && v.str != "bool" && v.str != "string" && v.str != "text")
+                        throw diagErr(diag::Code::E0007_InvalidArguments, line,
+                                      "input: نوع غير معروف '" + v.str + "' للحقل '" + k + "' (المتاح: number · bool · string)");
+                    ty = v.str == "text" ? "string" : v.str;
+                } else if (v.type == Value::Type::ARRAY || v.type == Value::Type::MAP) {
+                    callNat("choose", {lbl, v, ia.target, kk}, line);
+                    continue;
+                } else if (v.type == Value::Type::FUNCTION || (v.type == Value::Type::INSTANCE && hasMagic(v, "__call__"))) {
+                    validator = &v;
+                    // نوع الحقل: من حقل `type` في صنف المُدقِّق (انظر lib/inputkit)، وإلا من القيمة الحالية، وإلا نص.
+                    Value t = v.type == Value::Type::INSTANCE ? callNat("oop.get", {v, Value::string("type"), Value::nil()}, line) : Value::nil();
+                    if (t.type == Value::Type::STRING) ty = t.str;
+                    else if (ty == "nil") ty = "string";
+                } else {
+                    throw diagErr(diag::Code::E0004_InvalidType, line,
+                                  "input: مواصفة الحقل '" + k + "' يجب أن تكون نوعاً (نص) أو خيارات أو مُدقِّقاً، لا " + v.typeName());
+                }
+            }
+            const char* fn = ty == "number" ? "inputNumber" : ty == "bool" ? "confirm" : ty == "string" ? "input" : nullptr;
+            if (!fn) continue;                                  // مصفوفات/قواميس/دوال/nil بلا مواصفة: خارج النموذج
+            if (validator && ty != "bool") callNat(fn, {lbl, *validator, ia.target, kk}, line);
+            else                           callNat(fn, {lbl, ia.target, kk}, line);
+        }
+        return isCont ? callNat("container.snapshot", {ia.target}, line) : ia.target;
+    };
+    auto cancelErr = [](const char* fn, int line) {
+        return diagErr(diag::Code::E0035_RuntimeError, line, std::string("تم إلغاء الإدخال (") + fn + ")");
+    };
+
+    // input(prompt?, validator?, target?, key?) -> string
+    natives["input"] = [askRaw, parseArgs, validate, deliver, cancelErr, curOf, shownPrompt, fillForm](std::vector<Value>& a, int line) -> Value {
+        InArgs ia = parseArgs("input", a, 1, true, line);
+        if (ia.form) return fillForm(ia, line);
+        const Value cur = curOf(ia, line);
+        const int attempts = ia.hasValidator ? 5 : 1;
+        std::string why;
+        for (int attempt = 0; attempt < attempts; ++attempt) {
+            std::string ans; bool eof = false;
+            std::string base = shownPrompt(ia.prompt, cur);
+            std::string shown = attempt == 0 ? base : ("[" + why + "] " + base);
+            if (!askRaw(shown, ans, eof)) throw cancelErr("input", line);
+            if (eof && ia.hasValidator) throw cancelErr("input", line);
+            if (ans.empty() && cur.type == Value::Type::STRING && !cur.str.empty()) return cur;   // Enter = أبقِ الحالي
+            Value v = Value::string(ans);
+            if (validate(ia, v, why, line)) return deliver(ia, v, line);
+            if (why.empty()) why = "قيمة غير مقبولة";
+        }
+        throw diagErr(diag::Code::E0035_RuntimeError, line, "'input': لم تُقبل القيمة بعد 5 محاولات");
+    };
+    // inputNumber(prompt?, validator?, target?, key?) -> number — النص يمرّ عبر trim ثم toNumber الموجودتين.
+    natives["inputNumber"] = [askRaw, callNat, parseArgs, validate, deliver, cancelErr, curOf, shownPrompt](std::vector<Value>& a, int line) -> Value {
+        InArgs ia = parseArgs("inputNumber", a, 1, true, line);
+        const Value cur = curOf(ia, line);
+        std::string why;
+        for (int attempt = 0; attempt < 5; ++attempt) {
+            std::string ans; bool eof = false;
+            std::string base = shownPrompt(ia.prompt, cur);
+            std::string shown = attempt == 0 ? base
+                              : ("[" + (why.empty() ? std::string("أدخل رقماً صالحاً") : why) + "] " + base);
+            if (!askRaw(shown, ans, eof) || eof) throw cancelErr("inputNumber", line);
+            Value t = callNat("trim", {Value::string(ans)}, line);
+            why.clear();
+            if (t.str.empty()) { if (cur.type == Value::Type::NUMBER) return cur; continue; }   // Enter = أبقِ الحالي
+            Value num;
+            try { num = callNat("toNumber", {t}, line); } catch (const RinError&) { continue; }
+            // toNumber تقبل بادئة رقمية ("12abc" => 12)؛ هنا نطلب نصاً رقمياً كاملاً.
+            { char* end = nullptr; std::strtod(t.str.c_str(), &end); if (!end || *end != '\0') continue; }
+            if (validate(ia, num, why, line)) return deliver(ia, num, line);
+            if (why.empty()) why = "قيمة غير مقبولة";
+        }
+        throw diagErr(diag::Code::E0035_RuntimeError, line, "'inputNumber': لم يُدخَل رقم صالح بعد 5 محاولات");
+    };
+    // confirm(prompt?, target?, key?) -> bool — trim + lower + contains(كلمات الموافقة).
+    natives["confirm"] = [askRaw, callNat, parseArgs, deliver, cancelErr, curOf, shownPrompt](std::vector<Value>& a, int line) -> Value {
+        InArgs ia = parseArgs("confirm", a, 1, false, line);
+        const Value cur = curOf(ia, line);
+        std::string ans; bool eof = false;
+        if (!askRaw(shownPrompt(ia.prompt, cur), ans, eof) || eof) throw cancelErr("confirm", line);
+        Value t = callNat("lower", {callNat("trim", {Value::string(ans)}, line)}, line);
+        if (t.str.empty() && cur.type == Value::Type::BOOL) return cur;                      // Enter = أبقِ الحالي
+        auto yes = std::make_shared<ArrayData>();
+        for (const char* w : {"y", "yes", "true", "1", "نعم", "ن"}) yes->push_back(Value::string(w));
+        return deliver(ia, callNat("contains", {Value::makeArray(yes), t}, line), line);
+    };
+    // choose(prompt, options, target?, key?) — options: مصفوفة | قاموس | enum | كائن | اسم حاوية.
+    // يختار المستخدم برقم الخيار (من 1) أو بتسميته؛ والنتيجة هي *قيمة* الخيار (حالة enum نفسها، قيمة الحقل، …).
+    natives["choose"] = [this, askRaw, callNat, parseArgs, deliver, cancelErr](std::vector<Value>& a, int line) -> Value {
+        if (a.size() < 2)
+            throw diagErr(diag::Code::E0007_InvalidArguments, line, "'choose' expects at least 2 argument(s) but got " + std::to_string(a.size()));
+        InArgs ia = parseArgs("choose", a, 2, false, line);
+        std::string prompt = asString(a[0], "choose", line);
+
+        struct Item { std::string label; Value value; };
+        std::vector<Item> items;
+        // تسمية عنصر: name/title/label عبر oop.get للكائنات/القواميس/حالات enum، وإلا عرضه العادي.
+        auto labelOf = [&callNat, line](const Value& v) -> std::string {
+            if (v.type == Value::Type::MAP || v.type == Value::Type::INSTANCE) {
+                for (const char* k : {"name", "title", "label"}) {
+                    try {
+                        Value r = callNat("oop.get", {v, Value::string(k), Value::nil()}, line);
+                        if (r.type == Value::Type::STRING || r.type == Value::Type::NUMBER) return r.toDisplayString();
+                    } catch (const RinError&) {}
+                }
+            }
+            return v.toDisplayString();
+        };
+        auto fromMap = [&items](const Value& m) { for (auto& kv : *m.map) items.push_back({kv.first.toDisplayString(), kv.second}); };
+        const Value& src = a[1];
+        if (src.type == Value::Type::ARRAY && src.array) {
+            for (const auto& el : *src.array) items.push_back({labelOf(el), el});
+        } else if (src.type == Value::Type::MAP && src.map) {
+            fromMap(src);                                           // قاموس أو نوع enum كامل (Status)
+        } else if (src.type == Value::Type::INSTANCE) {
+            Value m = callNat("oop.toMap", {src}, line);            // حقول الكائن
+            fromMap(m);
+        } else if (src.type == Value::Type::STRING && containers.count(src.str)) {
+            Value names = callNat("container.fieldNames", {src}, line);   // حقول الحاوية
+            if (names.type == Value::Type::ARRAY && names.array)
+                for (const auto& n : *names.array) items.push_back({n.toDisplayString(), callNat("getField", {src, n}, line)});
+            // حقول الحاوية بلا ترتيب مضمون (جدول تجزئة) — رتّبها أبجدياً ليكون رقم كل خيار ثابتاً بين التشغيلات.
+            std::sort(items.begin(), items.end(), [](const Item& x, const Item& y) { return x.label < y.label; });
+        } else {
+            throw diagErr(diag::Code::E0004_InvalidType, line,
+                          "'choose' expects an array, map/enum, object or container name as its 2nd argument");
+        }
+        if (items.empty())
+            throw diagErr(diag::Code::E0004_InvalidType, line, "'choose' expects a non-empty list of options as its 2nd argument");
+
+        std::string menu = prompt;
+        for (size_t i = 0; i < items.size(); ++i) menu += "\n" + std::to_string(i + 1) + ") " + items[i].label;
+        for (int attempt = 0; attempt < 5; ++attempt) {
+            std::string ans; bool eof = false;
+            if (!askRaw(attempt == 0 ? menu : ("[اختر رقماً من القائمة]\n" + menu), ans, eof) || eof)
+                throw cancelErr("choose", line);
+            Value t = callNat("trim", {Value::string(ans)}, line);
+            if (t.str.empty()) continue;
+            const Item* picked = nullptr;
+            try {
+                size_t idx = 0;
+                long n = std::stol(t.str, &idx);
+                if (idx == t.str.size() && n >= 1 && static_cast<size_t>(n) <= items.size()) picked = &items[static_cast<size_t>(n) - 1];
+            } catch (...) {}
+            if (!picked) for (const auto& it : items) if (it.label == t.str || it.value.toDisplayString() == t.str) { picked = &it; break; }
+            if (picked) return deliver(ia, picked->value, line);
+        }
+        throw diagErr(diag::Code::E0035_RuntimeError, line, "'choose': لم يُختَر خيار صالح بعد 5 محاولات");
+    };
+
+    // toBool(value) -> يحوّل صراحةً إلى Boolean:
+    //   - BOOL تُعاد كما هي.
+    //   - NUMBER: 0 -> false، أي رقم آخر -> true (نفس قاعدة isTruthy لكن بشكل صريح ومقروء بالكود).
+    //   - STRING: فقط "true"/"false" (بأي حالة أحرف) مقبولتان؛ أي نص آخر خطأ صريح بدل تخمين صامت.
+    //   - NIL: false.
+    //   - ARRAY/MAP/FUNCTION: خطأ صريح، لأن "صدق" هذه الأنواع غامض المعنى ولا ينبغي تحويله تلقائياً.
+    natives["toBool"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("toBool", a, 1, line);
+        const Value& v = a[0];
+        switch (v.type) {
+            case Value::Type::BOOL:
+                return v;
+            case Value::Type::NUMBER:
+                return Value::boolean_(v.number != 0.0);
+            case Value::Type::NIL:
+                return Value::boolean_(false);
+            case Value::Type::STRING: {
+                std::string lower = v.str;
+                for (char& c : lower) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                if (lower == "true") return Value::boolean_(true);
+                if (lower == "false") return Value::boolean_(false);
+                throw diagErr(diag::Code::E0035_RuntimeError, line, "'toBool': \"" + v.str + "\" ليست true/false صالحة");
+            }
+            default:
+                throw diagErr(diag::Code::E0035_RuntimeError, line, "'toBool' لا يدعم تحويل نوع " + v.typeName() + " إلى Boolean");
+        }
+    };
+    // isBool(value) -> true فقط إن كانت القيمة من نوع Boolean فعلياً (وليس أي قيمة "صادقة" عبر isTruthy).
+    natives["isBool"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("isBool", a, 1, line);
+        return Value::boolean_(a[0].type == Value::Type::BOOL);
+    };
+
+    // ---- محرك الألوان (Color Engine) — rin_color.h، مشترك مع indsin::Color/resolveColor() -----
+    // كل الدوال هنا تقبل أي صياغة لونية حرفية (#rgb/#rgba/#rrggbb/#rrggbbaa، rgb()/rgba()،
+    // hsl()/hsla()، أو اسم لون CSS مثل "tomato") وليس أسماء الأدوار الدلالية (primary/danger/…)
+    // — تلك خاصة بـ Indsin (tone=) وتُحلّ عبر الـ Theme هناك، لا هنا على مستوى اللغة.
+    auto parseColorArg = [](const Value& v, const std::string& fn, int line) -> rincolor::Color {
+        std::string s = asString(v, fn, line);
+        rincolor::Color c;
+        if (!rincolor::tryParseColor(s, c))
+            throw diagErr(diag::Code::E0035_RuntimeError, line, "'" + fn + "': \"" + s + "\" ليست قيمة لون صالحة");
+        return c;
+    };
+    // toHex(n) -> بايت واحد (0-255) إلى صيغة سداسية عشرية من رقمين ("FF"، "0A"، ...). هذه هي
+    // الدالة التي كانت lib/colors.og.rin تفترض وجودها دون أن تكون معرّفة فعلياً في أي مكان.
+    natives["toHex"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("toHex", a, 1, line);
+        int n = (int)std::lround(asNumber(a[0], "toHex", line));
+        return Value::string(rincolor::toHexByte(rincolor::clampByte(n)));
+    };
+    natives["colorValid"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("colorValid", a, 1, line);
+        rincolor::Color c;
+        return Value::boolean_(a[0].type == Value::Type::STRING && rincolor::tryParseColor(a[0].str, c));
+    };
+    // colorParse(literal) -> الصيغة السداسية العشرية القانونية: 6 خانات إن كان معتماً تماماً،
+    // و8 خانات (مع alpha) إن كان يحمل شفافية — أي صياغة مدخلة (rgb()/hsl()/اسم لون/...) تُطبَّع
+    // لهذا الشكل الموحّد.
+    natives["colorParse"] = [parseColorArg](std::vector<Value>& a, int line) -> Value {
+        expectArgs("colorParse", a, 1, line);
+        return Value::string(rincolor::toHexAuto(parseColorArg(a[0], "colorParse", line)));
+    };
+    natives["colorRgb"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("colorRgb", a, 3, line);
+        rincolor::Color c{ rincolor::clampByte((int)asNumber(a[0],"colorRgb",line)),
+                            rincolor::clampByte((int)asNumber(a[1],"colorRgb",line)),
+                            rincolor::clampByte((int)asNumber(a[2],"colorRgb",line)), 255 };
+        return Value::string(rincolor::toHex6(c));
+    };
+    // colorRgba(r,g,b,a) -> a كنسبة 0..1 (مطابقة لـ CSS rgba()).
+    natives["colorRgba"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("colorRgba", a, 4, line);
+        rincolor::Color c{ rincolor::clampByte((int)asNumber(a[0],"colorRgba",line)),
+                            rincolor::clampByte((int)asNumber(a[1],"colorRgba",line)),
+                            rincolor::clampByte((int)asNumber(a[2],"colorRgba",line)),
+                            rincolor::alphaFromUnit(asNumber(a[3],"colorRgba",line)) };
+        return Value::string(rincolor::toHex8(c));
+    };
+    // colorHsl(h, s, l) -> h بالدرجات (0-360)، s/l كنسبة مئوية (0-100)، مطابقة لكتابة hsl() في CSS.
+    natives["colorHsl"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("colorHsl", a, 3, line);
+        rincolor::Color c = rincolor::hslToRgb(asNumber(a[0],"colorHsl",line),
+                                                asNumber(a[1],"colorHsl",line) / 100.0,
+                                                asNumber(a[2],"colorHsl",line) / 100.0);
+        return Value::string(rincolor::toHex6(c));
+    };
+    natives["colorHsla"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("colorHsla", a, 4, line);
+        rincolor::Color c = rincolor::hslToRgb(asNumber(a[0],"colorHsla",line),
+                                                asNumber(a[1],"colorHsla",line) / 100.0,
+                                                asNumber(a[2],"colorHsla",line) / 100.0,
+                                                rincolor::alphaFromUnit(asNumber(a[3],"colorHsla",line)));
+        return Value::string(rincolor::toHex8(c));
+    };
+    // colorComponents(literal) -> {r,g,b} 0-255 وalpha 0..1 — للسكربتات التي تريد الوصول
+    // الرقمي لمكوّنات لون مكتوب بأي صياغة (بما فيها اسم لون أو hsl()).
+    natives["colorComponents"] = [parseColorArg](std::vector<Value>& a, int line) -> Value {
+        expectArgs("colorComponents", a, 1, line);
+        rincolor::Color c = parseColorArg(a[0], "colorComponents", line);
+        auto m = std::make_shared<MapData>();
+        m->push_back({Value::string("r"), Value::num(c.r)});
+        m->push_back({Value::string("g"), Value::num(c.g)});
+        m->push_back({Value::string("b"), Value::num(c.b)});
+        m->push_back({Value::string("alpha"), Value::num(rincolor::unitFromAlpha(c.a))});
+        return Value::makeMap(m);
+    };
+    // colorToHsl(literal) -> {h,s,l}: h بالدرجات، s/l كنسبة مئوية.
+    natives["colorToHsl"] = [parseColorArg](std::vector<Value>& a, int line) -> Value {
+        expectArgs("colorToHsl", a, 1, line);
+        rincolor::HSL hsl = rincolor::rgbToHsl(parseColorArg(a[0], "colorToHsl", line));
+        auto m = std::make_shared<MapData>();
+        m->push_back({Value::string("h"), Value::num(hsl.h)});
+        m->push_back({Value::string("s"), Value::num(hsl.s * 100.0)});
+        m->push_back({Value::string("l"), Value::num(hsl.l * 100.0)});
+        return Value::makeMap(m);
+    };
+    natives["colorToRgbaString"] = [parseColorArg](std::vector<Value>& a, int line) -> Value {
+        expectArgs("colorToRgbaString", a, 1, line);
+        return Value::string(rincolor::toRgbaString(parseColorArg(a[0], "colorToRgbaString", line)));
+    };
+    natives["colorToHslaString"] = [parseColorArg](std::vector<Value>& a, int line) -> Value {
+        expectArgs("colorToHslaString", a, 1, line);
+        return Value::string(rincolor::toHslaString(parseColorArg(a[0], "colorToHslaString", line)));
+    };
+    // colorMix(c1, c2, t) -> مزج خطي بين لونين (t: 0 يعطي c1، 1 يعطي c2)، بما فيها alpha.
+    natives["colorMix"] = [parseColorArg](std::vector<Value>& a, int line) -> Value {
+        expectArgs("colorMix", a, 3, line);
+        rincolor::Color mixed = rincolor::mix(parseColorArg(a[0], "colorMix", line),
+                                               parseColorArg(a[1], "colorMix", line),
+                                               asNumber(a[2], "colorMix", line));
+        return Value::string(rincolor::toHexAuto(mixed));
+    };
+    natives["colorLighten"] = [parseColorArg](std::vector<Value>& a, int line) -> Value {
+        expectArgs("colorLighten", a, 2, line);
+        return Value::string(rincolor::toHexAuto(rincolor::lighten(parseColorArg(a[0], "colorLighten", line), asNumber(a[1], "colorLighten", line))));
+    };
+    natives["colorDarken"] = [parseColorArg](std::vector<Value>& a, int line) -> Value {
+        expectArgs("colorDarken", a, 2, line);
+        return Value::string(rincolor::toHexAuto(rincolor::darken(parseColorArg(a[0], "colorDarken", line), asNumber(a[1], "colorDarken", line))));
+    };
+    // colorWithAlpha(c, alpha) -> نفس اللون بشفافية جديدة (alpha: 0..1)، بصرف النظر عن أي
+    // alpha كان يحمله المدخل أصلاً.
+    natives["colorWithAlpha"] = [parseColorArg](std::vector<Value>& a, int line) -> Value {
+        expectArgs("colorWithAlpha", a, 2, line);
+        return Value::string(rincolor::toHex8(rincolor::withAlpha(parseColorArg(a[0], "colorWithAlpha", line), asNumber(a[1], "colorWithAlpha", line))));
+    };
+    // colorBlend(fg, bg) -> النتيجة الفعلية لرسم fg (وقد يكون شفافاً) فوق bg (يُعامَل كمعتم) —
+    // ما "يبدو عليه" اللون فعلاً بعد التركيب، وليس مجرد مزج حسابي بسيط.
+    natives["colorBlend"] = [parseColorArg](std::vector<Value>& a, int line) -> Value {
+        expectArgs("colorBlend", a, 2, line);
+        return Value::string(rincolor::toHex6(rincolor::alphaBlend(parseColorArg(a[0], "colorBlend", line), parseColorArg(a[1], "colorBlend", line))));
+    };
+    natives["colorInvert"] = [parseColorArg](std::vector<Value>& a, int line) -> Value {
+        expectArgs("colorInvert", a, 1, line);
+        return Value::string(rincolor::toHexAuto(rincolor::invert(parseColorArg(a[0], "colorInvert", line))));
+    };
+    natives["colorGrayscale"] = [parseColorArg](std::vector<Value>& a, int line) -> Value {
+        expectArgs("colorGrayscale", a, 1, line);
+        return Value::string(rincolor::toHexAuto(rincolor::grayscale(parseColorArg(a[0], "colorGrayscale", line))));
+    };
+    // colorLuminance(c) -> اللمعان النسبي وفق WCAG 2.x (0 أسود .. 1 أبيض).
+    natives["colorLuminance"] = [parseColorArg](std::vector<Value>& a, int line) -> Value {
+        expectArgs("colorLuminance", a, 1, line);
+        return Value::num(rincolor::relativeLuminance(parseColorArg(a[0], "colorLuminance", line)));
+    };
+    // colorContrast(c1, c2) -> نسبة تباين WCAG (1.0 .. 21.0) — 4.5 حدّ AA للنص العادي، 7.0 لـ AAA.
+    natives["colorContrast"] = [parseColorArg](std::vector<Value>& a, int line) -> Value {
+        expectArgs("colorContrast", a, 2, line);
+        return Value::num(rincolor::contrastRatio(parseColorArg(a[0], "colorContrast", line), parseColorArg(a[1], "colorContrast", line)));
+    };
+    natives["colorIsLight"] = [parseColorArg](std::vector<Value>& a, int line) -> Value {
+        expectArgs("colorIsLight", a, 1, line);
+        return Value::boolean_(rincolor::isLight(parseColorArg(a[0], "colorIsLight", line)));
+    };
+    // colorTextOn(bg) -> "#000000" أو "#FFFFFF"، أياً كان الأوضح فوق bg — نفس القاعدة التي تحدّد
+    // متى يكون النص المناسب على خلفية ما أسود أم أبيض.
+    natives["colorTextOn"] = [parseColorArg](std::vector<Value>& a, int line) -> Value {
+        expectArgs("colorTextOn", a, 1, line);
+        return Value::string(rincolor::toHex6(rincolor::bestTextColor(parseColorArg(a[0], "colorTextOn", line))));
+    };
+
+    // colorAnsi(text, colorLiteral) -> نفس "text" لكن ملفوفاً بأكواد ANSI (truecolor 24-bit) بحيث
+    // يظهر ملوّناً في الطرفيّة عند طباعته. يقبل نفس صياغات الألوان التي تقبلها colorParse/colorRgb
+    // (اسم CSS، #rrggbb، rgb()، ...). لا يفعل شيئاً في طرفيات لا تدعم ANSI (تُطبع الأكواد كنص خام).
+    natives["colorAnsi"] = [parseColorArg](std::vector<Value>& a, int line) -> Value {
+        expectArgs("colorAnsi", a, 2, line);
+        std::string text = asString(a[0], "colorAnsi", line);
+        rincolor::Color c = parseColorArg(a[1], "colorAnsi", line);
+        std::ostringstream buf;
+        buf << "\x1b[38;2;" << (int)c.r << ";" << (int)c.g << ";" << (int)c.b << "m" << text << "\x1b[0m";
+        return Value::string(buf.str());
+    };
+
+    // __fxcode(bold, italic, underline, strike, dim, reverse, blink, color, bg) -> أكواد SGR مفصولة بـ ';' (أو "" بلا تنسيق).
+    // يستعمله print عبر سمات bold=/italic=/underline=/strike=/dim=/reverse=/blink=/color=/bg= (docs/print-fonts.md).
+    // التنسيق يُفعَّل فقط حين يكون الخرج طرفية (isatty) أو FORCE_COLOR=1، ويُعطَّل بـ NO_COLOR — فلا تتلوّث الملفات/الأنابيب/كونسول أندرويد بأكواد خام.
+    natives["__fxcode"] = [parseColorArg](std::vector<Value>& a, int line) -> Value {
+        expectArgs("__fxcode", a, 9, line);
+        const char* force = std::getenv("FORCE_COLOR");
+        bool on = (force && *force && std::strcmp(force, "0") != 0) ? true
+                : (std::getenv("NO_COLOR") ? false : rin_isatty(1) != 0);
+        static const char* flagCode[7] = {"1", "3", "4", "9", "2", "7", "5"};
+        static const char* flagName[7] = {"bold", "italic", "underline", "strike", "dim", "reverse", "blink"};
+        std::string code;
+        auto add = [&](const std::string& c) { if (!code.empty()) code += ";"; code += c; };
+        for (int i = 0; i < 7; i++)
+            if (a[i].type != Value::Type::NIL && a[i].isTruthy()) add(flagCode[i]);
+        for (int i = 7; i < 9; i++) {
+            if (a[i].type == Value::Type::NIL) continue;
+            const char* nm = i == 7 ? "color" : "bg";
+            if (a[i].type == Value::Type::BOOL && !a[i].isTruthy()) continue;
+            if (a[i].type != Value::Type::STRING)
+                throw diagErr(diag::Code::E0004_InvalidType, line, std::string("'print': '") + nm + "' يجب أن يكون نصاً (اسم لون أو #rrggbb)، لكن وُجد نوع " + a[i].typeName());
+            rincolor::Color c = parseColorArg(a[i], std::string("print ") + nm, line);
+            add(std::string(i == 7 ? "38" : "48") + ";2;" + std::to_string((int)c.r) + ";" + std::to_string((int)c.g) + ";" + std::to_string((int)c.b));
+        }
+        (void)flagName;
+        return Value::string(on ? code : std::string());
+    };
+
+    // pattern(shape, size, symbol?, color?) -> بديل جاهز عن حلقات for المتداخلة (i,j) التي
+    // تُستخدَم عادة في بايثون لرسم أشكال نجمية (مثلث/هرم/معيّن/مربع/قلب) — استدعاء واحد بدل
+    // حلقتين متداخلتين وشروط i==0/j==n-1/... . يطبع الشكل مباشرة (مثل print) ولا يُعيد قيمة.
+    //   pattern("pyramid", 5)                    -> هرم من 5 صفوف بـ "*"
+    //   pattern("heart", 6, "❤")                 -> قلب بحجم 6 برمز "❤"
+    //   pattern("diamond", 5, "*", "tomato")      -> معيّن ملوّن (يقبل أي صياغة لون صالحة)
+    // الأشكال المتاحة: triangle, invertedTriangle, pyramid, diamond, square, hollowSquare, heart.
+    natives["pattern"] = [this, parseColorArg](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("pattern", a, 2, 4, line);
+        std::string shape = asString(a[0], "pattern", line);
+        int n = (int)std::lround(asNumber(a[1], "pattern", line));
+        if (n < 1) n = 1;
+        if (n > 200) n = 200; // حماية بسيطة من طلب حجم ضخم يُغرق المخرجات
+        std::string sym = (a.size() > 2 && a[2].type != Value::Type::NIL) ? asString(a[2], "pattern", line) : std::string("*");
+        if (sym.empty()) sym = "*";
+        bool hasColor = a.size() > 3 && a[3].type != Value::Type::NIL;
+        std::string colorOn, colorOff;
+        if (hasColor) {
+            rincolor::Color c = parseColorArg(a[3], "pattern", line);
+            std::ostringstream cbuf;
+            cbuf << "\x1b[38;2;" << (int)c.r << ";" << (int)c.g << ";" << (int)c.b << "m";
+            colorOn = cbuf.str();
+            colorOff = "\x1b[0m";
+        }
+
+        std::ostringstream buf;
+        auto rep = [&](int count) { for (int k = 0; k < count; k++) buf << sym; };
+        auto pad = [&](int count) { for (int k = 0; k < count; k++) buf << ' '; };
+
+        if (shape == "triangle" || shape == "rightTriangle") {
+            for (int i = 1; i <= n; i++) { rep(i); buf << "\n"; }
+        } else if (shape == "invertedTriangle") {
+            for (int i = n; i >= 1; i--) { rep(i); buf << "\n"; }
+        } else if (shape == "pyramid") {
+            for (int i = 1; i <= n; i++) { pad(n - i); rep(2 * i - 1); buf << "\n"; }
+        } else if (shape == "diamond") {
+            for (int i = 1; i <= n; i++) { pad(n - i); rep(2 * i - 1); buf << "\n"; }
+            for (int i = n - 1; i >= 1; i--) { pad(n - i); rep(2 * i - 1); buf << "\n"; }
+        } else if (shape == "square") {
+            for (int i = 0; i < n; i++) { rep(n); buf << "\n"; }
+        } else if (shape == "hollowSquare") {
+            for (int i = 0; i < n; i++) {
+                for (int j = 0; j < n; j++) buf << ((i == 0 || i == n - 1 || j == 0 || j == n - 1) ? sym : " ");
+                buf << "\n";
+            }
+        } else if (shape == "heart") {
+            // معادلة القلب الكلاسيكية (x²+y²-1)³ - x²y³ ≤ 0، مرسومة على شبكة نصّية تتوسّع مع n
+            // (عكس صورة بايثون التي كانت مقاسها ثابتاً 9x13 بشروط i/j يدوية).
+            const double range = 1.3;
+            int rows = 2 * n, cols = 4 * n;
+            for (int iy = 0; iy <= rows; iy++) {
+                double yf = range - (2.0 * range * iy) / rows;
+                for (int ix = 0; ix <= cols; ix++) {
+                    double xf = (-2.0 * range + (4.0 * range * ix) / cols) / 2.0;
+                    double val = std::pow(xf * xf + yf * yf - 1.0, 3) - xf * xf * yf * yf * yf;
+                    buf << (val <= 0.0 ? sym : " ");
+                }
+                buf << "\n";
+            }
+        } else {
+            throw diagErr(diag::Code::E0035_RuntimeError, line,
+                "'pattern': شكل غير معروف \"" + shape + "\" — المتاح: triangle, invertedTriangle, pyramid, diamond, square, hollowSquare, heart");
+        }
+
+        std::string body = buf.str();
+        if (hasColor) this->output << colorOn << body << colorOff;
+        else this->output << body;
+        return Value::nil();
+    };
+
+    // ---- إحصاء (statistics) - مصمّمة للعمل مع خطوط الأنابيب |> و container.pipe ----
+    // مرحلة "تجميع" (Aggregation): تُلخّص مصفوفة أرقام إلى قيمة واحدة.
+    natives["sum"] = [](std::vector<Value>& a, int line) {
+        expectArgs("sum", a, 1, line);
+        auto nums = asNumberArray(a[0], "sum", line);
+        double total = 0.0;
+        for (double n : nums) total += n;
+        return Value::num(total);
+    };
+    natives["mean"] = [](std::vector<Value>& a, int line) {
+        expectArgs("mean", a, 1, line);
+        auto nums = asNumberArray(a[0], "mean", line);
+        double total = 0.0;
+        for (double n : nums) total += n;
+        return Value::num(total / static_cast<double>(nums.size()));
+    };
+    natives["median"] = [](std::vector<Value>& a, int line) {
+        expectArgs("median", a, 1, line);
+        auto nums = asNumberArray(a[0], "median", line);
+        std::sort(nums.begin(), nums.end());
+        size_t n = nums.size();
+        if (n % 2 == 1) return Value::num(nums[n / 2]);
+        return Value::num((nums[n / 2 - 1] + nums[n / 2]) / 2.0);
+    };
+    natives["variance"] = [](std::vector<Value>& a, int line) {
+        expectArgs("variance", a, 1, line);
+        auto nums = asNumberArray(a[0], "variance", line);
+        double m = 0.0;
+        for (double n : nums) m += n;
+        m /= static_cast<double>(nums.size());
+        double sq = 0.0;
+        for (double n : nums) sq += (n - m) * (n - m);
+        return Value::num(sq / static_cast<double>(nums.size()));
+    };
+    natives["stddev"] = [](std::vector<Value>& a, int line) {
+        expectArgs("stddev", a, 1, line);
+        auto nums = asNumberArray(a[0], "stddev", line);
+        double m = 0.0;
+        for (double n : nums) m += n;
+        m /= static_cast<double>(nums.size());
+        double sq = 0.0;
+        for (double n : nums) sq += (n - m) * (n - m);
+        return Value::num(std::sqrt(sq / static_cast<double>(nums.size())));
+    };
+    natives["mode"] = [](std::vector<Value>& a, int line) {
+        expectArgs("mode", a, 1, line);
+        auto nums = asNumberArray(a[0], "mode", line);
+        double best = nums[0];
+        int bestCount = 0;
+        for (double candidate : nums) {
+            int count = 0;
+            for (double n : nums) if (n == candidate) count++;
+            if (count > bestCount) { bestCount = count; best = candidate; }
+        }
+        return Value::num(best);
+    };
+    natives["minOf"] = [](std::vector<Value>& a, int line) {
+        expectArgs("minOf", a, 1, line);
+        auto nums = asNumberArray(a[0], "minOf", line);
+        return Value::num(*std::min_element(nums.begin(), nums.end()));
+    };
+    natives["maxOf"] = [](std::vector<Value>& a, int line) {
+        expectArgs("maxOf", a, 1, line);
+        auto nums = asNumberArray(a[0], "maxOf", line);
+        return Value::num(*std::max_element(nums.begin(), nums.end()));
+    };
+
+    // مرحلة "تحويل" (Transformation): تُنتج مصفوفة جديدة بنفس الحجم.
+    natives["normalize"] = [](std::vector<Value>& a, int line) {
+        expectArgs("normalize", a, 1, line);
+        auto nums = asNumberArray(a[0], "normalize", line);
+        double lo = *std::min_element(nums.begin(), nums.end());
+        double hi = *std::max_element(nums.begin(), nums.end());
+        auto result = std::make_shared<ArrayData>();
+        result->reserve(nums.size());
+        for (double n : nums) {
+            double normalized = (hi == lo) ? 0.0 : (n - lo) / (hi - lo);
+            result->push_back(Value::num(normalized));
+        }
+        return Value::makeArray(result);
+    };
+    natives["scale"] = [](std::vector<Value>& a, int line) {
+        // Factor is optional (default 1.0, i.e. a no-op multiplier) so `|> normalize() |> scale()`
+        // is valid on its own inside a Reckon pipeline; pass an explicit factor to actually rescale,
+        // e.g. `|> normalize() |> scale(100)` for a 0-100 range.
+        expectArgsRange("scale", a, 1, 2, line);
+        auto nums = asNumberArray(a[0], "scale", line);
+        double factor = (a.size() > 1) ? asNumber(a[1], "scale", line) : 1.0;
+        auto result = std::make_shared<ArrayData>();
+        result->reserve(nums.size());
+        for (double n : nums) result->push_back(Value::num(n * factor));
+        return Value::makeArray(result);
+    };
+    natives["shift"] = [](std::vector<Value>& a, int line) {
+        expectArgs("shift", a, 2, line);
+        auto nums = asNumberArray(a[0], "shift", line);
+        double delta = asNumber(a[1], "shift", line);
+        auto result = std::make_shared<ArrayData>();
+        result->reserve(nums.size());
+        for (double n : nums) result->push_back(Value::num(n + delta));
+        return Value::makeArray(result);
+    };
+
+    // ---- Reckon expansion: مزيد من دوال العمليات الحسابية القابلة للاستخدام بعد |> (وبالتالي
+    // داخل جسم reckon)، بنفس أسلوب sum/mean/variance/... أعلاه تماماً. انظر docs/RECKON.md و
+    // docs/standard-library.md. كل دالة "تجميع" (aggregation) تُرجع رقماً واحداً؛ كل دالة
+    // "تحويل" (transformation) تُرجع مصفوفة بنفس حجم المُدخَل (أو أصغر لِـ movingAverage).
+
+    // product(nums) -> aggregation: حاصل ضرب كل العناصر.
+    natives["product"] = [](std::vector<Value>& a, int line) {
+        expectArgs("product", a, 1, line);
+        auto nums = asNumberArray(a[0], "product", line);
+        double total = 1.0;
+        for (double n : nums) total *= n;
+        return Value::num(total);
+    };
+    // count(nums) -> aggregation: عدد العناصر؛ مفيدة بعد where لمعرفة كم عنصراً مرّ الفلتر.
+    natives["count"] = [](std::vector<Value>& a, int line) {
+        expectArgs("count", a, 1, line);
+        auto nums = asNumberArray(a[0], "count", line);
+        return Value::num(static_cast<double>(nums.size()));
+    };
+    // range(nums) -> aggregation: المدى (أكبر قيمة - أصغر قيمة).
+    natives["range"] = [](std::vector<Value>& a, int line) {
+        expectArgs("range", a, 1, line);
+        auto nums = asNumberArray(a[0], "range", line);
+        double lo = *std::min_element(nums.begin(), nums.end());
+        double hi = *std::max_element(nums.begin(), nums.end());
+        return Value::num(hi - lo);
+    };
+    // geometricMean(nums) -> aggregation: الوسط الهندسي؛ يتطلّب أرقاماً موجبة تماماً.
+    natives["geometricMean"] = [](std::vector<Value>& a, int line) {
+        expectArgs("geometricMean", a, 1, line);
+        auto nums = asNumberArray(a[0], "geometricMean", line);
+        double logSum = 0.0;
+        for (double n : nums) {
+            if (n <= 0.0) throw diagErr(diag::Code::E0004_InvalidType, line,
+                "'geometricMean' expects strictly positive numbers, found " + std::to_string(n));
+            logSum += std::log(n);
+        }
+        return Value::num(std::exp(logSum / static_cast<double>(nums.size())));
+    };
+    // harmonicMean(nums) -> aggregation: الوسط التوافقي؛ يتطلّب أرقاماً غير صفرية.
+    natives["harmonicMean"] = [](std::vector<Value>& a, int line) {
+        expectArgs("harmonicMean", a, 1, line);
+        auto nums = asNumberArray(a[0], "harmonicMean", line);
+        double invSum = 0.0;
+        for (double n : nums) {
+            if (n == 0.0) throw diagErr(diag::Code::E0035_RuntimeError, line,
+                "'harmonicMean' cannot divide by a zero element");
+            invSum += 1.0 / n;
+        }
+        return Value::num(static_cast<double>(nums.size()) / invSum);
+    };
+    // rms(nums) -> aggregation: الجذر التربيعي لمتوسط المربعات (root mean square).
+    natives["rms"] = [](std::vector<Value>& a, int line) {
+        expectArgs("rms", a, 1, line);
+        auto nums = asNumberArray(a[0], "rms", line);
+        double sq = 0.0;
+        for (double n : nums) sq += n * n;
+        return Value::num(std::sqrt(sq / static_cast<double>(nums.size())));
+    };
+    // percentile(nums, p) -> aggregation: المئين p (0-100) بالاستيفاء الخطي بين أقرب رتبتين.
+    natives["percentile"] = [](std::vector<Value>& a, int line) {
+        expectArgs("percentile", a, 2, line);
+        auto nums = asNumberArray(a[0], "percentile", line);
+        double p = asNumber(a[1], "percentile", line);
+        if (p < 0.0 || p > 100.0) throw diagErr(diag::Code::E0007_InvalidArguments, line,
+            "'percentile' expects its second argument to be between 0 and 100");
+        std::sort(nums.begin(), nums.end());
+        double rank = (p / 100.0) * static_cast<double>(nums.size() - 1);
+        size_t lo = static_cast<size_t>(std::floor(rank));
+        size_t hi = static_cast<size_t>(std::ceil(rank));
+        if (lo == hi) return Value::num(nums[lo]);
+        double frac = rank - static_cast<double>(lo);
+        return Value::num(nums[lo] + (nums[hi] - nums[lo]) * frac);
+    };
+    // iqr(nums) -> aggregation: المدى الربيعي (Q3 - Q1)، مقياس تشتت أقل حساسية للقيم الشاذة.
+    natives["iqr"] = [](std::vector<Value>& a, int line) {
+        expectArgs("iqr", a, 1, line);
+        auto nums = asNumberArray(a[0], "iqr", line);
+        std::sort(nums.begin(), nums.end());
+        auto percentileOf = [&](double p) {
+            double rank = (p / 100.0) * static_cast<double>(nums.size() - 1);
+            size_t lo = static_cast<size_t>(std::floor(rank));
+            size_t hi = static_cast<size_t>(std::ceil(rank));
+            if (lo == hi) return nums[lo];
+            double frac = rank - static_cast<double>(lo);
+            return nums[lo] + (nums[hi] - nums[lo]) * frac;
+        };
+        return Value::num(percentileOf(75.0) - percentileOf(25.0));
+    };
+    // weightedMean(nums, weights) -> aggregation: متوسط مرجَّح؛ المصفوفتان يجب أن تتساويا طولاً.
+    natives["weightedMean"] = [](std::vector<Value>& a, int line) {
+        expectArgs("weightedMean", a, 2, line);
+        auto nums = asNumberArray(a[0], "weightedMean", line);
+        auto weights = asNumberArray(a[1], "weightedMean", line);
+        if (nums.size() != weights.size()) throw diagErr(diag::Code::E0007_InvalidArguments, line,
+            "'weightedMean' expects its two arrays to be the same length");
+        double weightedSum = 0.0, weightSum = 0.0;
+        for (size_t i = 0; i < nums.size(); i++) { weightedSum += nums[i] * weights[i]; weightSum += weights[i]; }
+        if (weightSum == 0.0) throw diagErr(diag::Code::E0035_RuntimeError, line,
+            "'weightedMean' cannot divide by a zero total weight");
+        return Value::num(weightedSum / weightSum);
+    };
+    // zscore(nums) -> transformation: كل عنصر يصبح (x - mean) / stddev؛ نفس حجم المُدخَل.
+    natives["zscore"] = [](std::vector<Value>& a, int line) {
+        expectArgs("zscore", a, 1, line);
+        auto nums = asNumberArray(a[0], "zscore", line);
+        double m = 0.0;
+        for (double n : nums) m += n;
+        m /= static_cast<double>(nums.size());
+        double sq = 0.0;
+        for (double n : nums) sq += (n - m) * (n - m);
+        double sd = std::sqrt(sq / static_cast<double>(nums.size()));
+        auto result = std::make_shared<ArrayData>();
+        result->reserve(nums.size());
+        for (double n : nums) result->push_back(Value::num(sd == 0.0 ? 0.0 : (n - m) / sd));
+        return Value::makeArray(result);
+    };
+    // cumulativeSum(nums) -> transformation: مجموع تراكمي؛ نفس حجم المُدخَل.
+    natives["cumulativeSum"] = [](std::vector<Value>& a, int line) {
+        expectArgs("cumulativeSum", a, 1, line);
+        auto nums = asNumberArray(a[0], "cumulativeSum", line);
+        auto result = std::make_shared<ArrayData>();
+        result->reserve(nums.size());
+        double running = 0.0;
+        for (double n : nums) { running += n; result->push_back(Value::num(running)); }
+        return Value::makeArray(result);
+    };
+    // movingAverage(nums, windowSize) -> transformation: متوسط متحرك بنافذة windowSize؛ الناتج
+    // أقصر بـ (windowSize - 1) عنصراً من المُدخَل، تماماً كأي متوسط متحرك تقليدي.
+    natives["movingAverage"] = [](std::vector<Value>& a, int line) {
+        expectArgs("movingAverage", a, 2, line);
+        auto nums = asNumberArray(a[0], "movingAverage", line);
+        double windowD = asNumber(a[1], "movingAverage", line);
+        if (windowD < 1.0 || windowD > static_cast<double>(nums.size()))
+            throw diagErr(diag::Code::E0007_InvalidArguments, line,
+                "'movingAverage' expects a window size between 1 and the array length");
+        size_t window = static_cast<size_t>(windowD);
+        auto result = std::make_shared<ArrayData>();
+        result->reserve(nums.size() - window + 1);
+        double windowSum = 0.0;
+        for (size_t i = 0; i < window; i++) windowSum += nums[i];
+        result->push_back(Value::num(windowSum / static_cast<double>(window)));
+        for (size_t i = window; i < nums.size(); i++) {
+            windowSum += nums[i] - nums[i - window];
+            result->push_back(Value::num(windowSum / static_cast<double>(window)));
+        }
+        return Value::makeArray(result);
+    };
+    // clamp(nums, lo, hi) -> transformation على مصفوفة (سلوكها الأصلي، بلا أي تغيير): يقصّ كل
+    // عنصر إلى المجال [lo, hi]؛ نفس حجم المُدخَل.
+    // RMF Phase 1 §6/§28: clamp(x, lo, hi) على رقم مفرد أيضاً الآن (بنفس الاسم -- لا داعي لاسمين
+    // منفصلين، النوع الفعلي للوسيط الأول يحدّد السلوك المناسب تلقائياً).
+    natives["clamp"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("clamp", a, 3, line);
+        double lo = asNumber(a[1], "clamp", line);
+        double hi = asNumber(a[2], "clamp", line);
+        if (lo > hi) throw diagErr(diag::Code::E0007_InvalidArguments, line,
+            "'clamp' expects its low bound to be <= its high bound");
+        if (a[0].type == Value::Type::NUMBER) {
+            return Value::num(std::min(hi, std::max(lo, a[0].number)));
+        }
+        auto nums = asNumberArray(a[0], "clamp", line);
+        auto result = std::make_shared<ArrayData>();
+        result->reserve(nums.size());
+        for (double n : nums) result->push_back(Value::num(std::min(hi, std::max(lo, n))));
+        return Value::makeArray(result);
+    };
+
+    // ---- Containers.Group: استعلام عن أعضاء المجموعة ----
+    natives["groupContainers"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("groupContainers", a, 1, line);
+        std::string name = canonGroup(asString(a[0], "groupContainers", line));
+        auto result = std::make_shared<ArrayData>();
+        if (groupMembers.count(name)) {
+            std::vector<std::string> flat;
+            collectGroupContainerNames(groupMembers, name, flat);
+            for (auto& n : flat) result->push_back(Value::string(n));
+        }
+        return Value::makeArray(result);
+    };
+    natives["groupMembers"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("groupMembers", a, 1, line);
+        std::string name = canonGroup(asString(a[0], "groupMembers", line));
+        auto result = std::make_shared<ArrayData>();
+        auto it = groupMembers.find(name);
+        if (it != groupMembers.end()) {
+            for (auto& n : it->second) result->push_back(Value::string(n));
+        }
+        return Value::makeArray(result);
+    };
+
+    // ---- Containers.Group: توسيع (الدفعة الثانية) -- تحوّل Group من مجرّد "غلاف تنظيمي" (تسجيل
+    // عضوية فقط) إلى بنية يمكن الاستعلام عن حالتها/شجرتها/بياناتها فعلياً، بنفس الأسماء والدلالات
+    // المستخدَمة أعلاه لـ Volume (hasVolume/volumeNames/.../volumeSnapshot) لكن بادئة group ----
+
+    // hasGroup(name) -> true إن عُرِّفت مجموعة بهذا الاسم مرة واحدة على الأقل حتى الآن.
+    natives["hasGroup"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("hasGroup", a, 1, line);
+        std::string name = asString(a[0], "hasGroup", line);
+        return Value::boolean_(groupMembers.count(name) > 0);
+    };
+    // groupNames() -> مصفوفة أسماء كل المجموعات (Containers.Group) المُعرَّفة حتى الآن، بترتيب
+    // أول ظهور (جذوراً كانت أو متداخلة).
+    natives["groupNames"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("groupNames", a, 0, line);
+        auto result = std::make_shared<ArrayData>();
+        for (auto& n : groupOrder) result->push_back(Value::string(n));
+        return Value::makeArray(result);
+    };
+    // groupVars(name) -> map بالمتغيرات المُعلَنة مباشرة داخل جسم المجموعة (خارج أي حاوية/مجموعة
+    // فرعية بداخلها) -- مفيد لحقول "على مستوى المجموعة" مشتركة بين كل أعضائها (مثال: text owner
+    // = "..."; مباشرة داخل @Containers.Group). map فارغ إن لم تُعرَّف مجموعة بهذا الاسم.
+    natives["groupVars"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("groupVars", a, 1, line);
+        std::string name = canonGroup(asString(a[0], "groupVars", line));
+        auto it = groupEnvs.find(name);
+        auto result = (it != groupEnvs.end()) ? envVarsAsMap(it->second) : std::make_shared<MapData>();
+        return Value::makeMap(result);
+    };
+    // groupParent(name) -> اسم المجموعة الأب المباشرة التي تحتوي "name" كمجموعة فرعية متداخلة،
+    // أو نص فارغ "" إن كانت "name" مجموعة جذر (أو غير معرَّفة أصلاً).
+    natives["groupParent"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("groupParent", a, 1, line);
+        std::string name = canonGroup(asString(a[0], "groupParent", line));
+        auto it = groupParentOf.find(name);
+        return Value::string(it != groupParentOf.end() ? it->second : std::string());
+    };
+    // groupPath(name) -> مصفوفة أسماء تمثّل مسار الأجداد من الجذر وصولاً إلى "name" نفسها ضمناً
+    // (مثال: مجموعة "team_nested" داخل "team_root" -> ["team_root", "team_nested"]). مصفوفة
+    // فارغة إن لم تُعرَّف مجموعة بهذا الاسم أصلاً.
+    natives["groupPath"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("groupPath", a, 1, line);
+        std::string name = canonGroup(asString(a[0], "groupPath", line));
+        auto result = std::make_shared<ArrayData>();
+        if (!groupMembers.count(name)) return Value::makeArray(result);
+        std::vector<std::string> chain;
+        std::string cur = name;
+        std::unordered_set<std::string> seen; // حارس ضد أي دورة غير متوقّعة في groupParentOf
+        while (true) {
+            chain.push_back(cur);
+            if (!seen.insert(cur).second) break;
+            auto it = groupParentOf.find(cur);
+            if (it == groupParentOf.end()) break;
+            cur = it->second;
+        }
+        for (auto rit = chain.rbegin(); rit != chain.rend(); ++rit) result->push_back(Value::string(*rit));
+        return Value::makeArray(result);
+    };
+    // groupContainerCount(name) -> عدد الحاويات الفعلية (leaf) داخل المجموعة، مفلطحاً عبر كل
+    // المجموعات الفرعية المتداخلة (نفس تفرّع groupContainers لكن عدداً فقط بدل مصفوفة الأسماء).
+    natives["groupContainerCount"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("groupContainerCount", a, 1, line);
+        std::string name = canonGroup(asString(a[0], "groupContainerCount", line));
+        std::vector<std::string> flat;
+        if (groupMembers.count(name)) collectGroupContainerNames(groupMembers, name, flat);
+        return Value::num(static_cast<double>(flat.size()));
+    };
+    // groupHasContainer(name, containerName) -> true إن كانت "containerName" حاوية فعلية عضوة
+    // (مباشرة أو عبر تفرّع مجموعة فرعية متداخلة) داخل المجموعة "name".
+    natives["groupHasContainer"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("groupHasContainer", a, 2, line);
+        std::string name = canonGroup(asString(a[0], "groupHasContainer", line));
+        std::string target = asString(a[1], "groupHasContainer", line);
+        std::vector<std::string> flat;
+        if (groupMembers.count(name)) collectGroupContainerNames(groupMembers, name, flat);
+        return Value::boolean_(std::find(flat.begin(), flat.end(), target) != flat.end());
+    };
+    // groupSnapshot(name) -> مصفوفة map واحدة لكل حاوية فعلية عضوة في المجموعة (مفلطحة عبر أي
+    // تعشيش)، بنفس ترتيب groupContainers، وبكل متغيراتها المباشرة + حقلين وصفيين "__container"
+    // (اسم الحاوية) و"__kind" (وسمها الموحَّد) -- هذا ما يجعل المجموعة "مفيدة" فعلياً كبنية بيانات
+    // قابلة للاستعلام دفعة واحدة (شبيه بجدول/قائمة سجلّات)، بدل مجرّد تسجيل عضوية اسمي.
+    natives["groupSnapshot"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("groupSnapshot", a, 1, line);
+        std::string name = canonGroup(asString(a[0], "groupSnapshot", line));
+        auto result = std::make_shared<ArrayData>();
+        std::vector<std::string> flat;
+        if (groupMembers.count(name)) collectGroupContainerNames(groupMembers, name, flat);
+        for (auto& cname : flat) {
+            auto it = containers.find(cname);
+            if (it == containers.end()) continue;
+            auto m = envVarsAsMap(it->second);
+            { Value tv; if (tableVirtualGet(cname, "rows", tv)) m->push_back({Value::string("rows"), tv}); } // جدول: + صفوفه
+            m->push_back({Value::string("__container"), Value::string(cname)});
+            auto kindIt = containerKinds.find(cname);
+            m->push_back({Value::string("__kind"), Value::string(kindIt != containerKinds.end() ? containerTagName(kindIt->second) : std::string("container"))});
+            result->push_back(Value::makeMap(m));
+        }
+        return Value::makeArray(result);
+    };
+
+    // ---- Volume: توسيع كامل (كانت سابقاً زخرفية بحتة -- انظر شرح VolumeStmt في executeStmt
+    // أعلاه). المجموعة أدناه تجمع بين ما يوازي groupContainers/groupMembers الأساسيين، وما يوازي
+    // دفعة التوسيع الثانية لـ Group (hasGroup/groupNames/groupVars/groupParent/groupPath/
+    // groupContainerCount/groupHasContainer/groupSnapshot) دفعة واحدة، بنفس الأسماء لكن بادئة
+    // volume بدل group ----
+
+    // volumeContainers(name) -> مصفوفة أسماء الحاويات الفعلية العضوة في Volume (مفلطحة عبر أي
+    // Volume فرعية متداخلة، وأي Containers.Group متداخلة بداخلها).
+    natives["volumeContainers"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("volumeContainers", a, 1, line);
+        std::string name = canonVolume(asString(a[0], "volumeContainers", line));
+        auto result = std::make_shared<ArrayData>();
+        if (volumeMembers.count(name)) {
+            std::vector<std::string> flat;
+            collectVolumeContainerNames(volumeMembers, groupMembers, name, flat);
+            for (auto& n : flat) result->push_back(Value::string(n));
+        }
+        return Value::makeArray(result);
+    };
+    // volumeMembers(name) -> مصفوفة أسماء الأعضاء المباشرين فقط (بلا تفرّع)، سواء كانوا حاويات
+    // فعلية أو مجموعات/أحجام فرعية متداخلة كما هي.
+    natives["volumeMembers"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("volumeMembers", a, 1, line);
+        std::string name = canonVolume(asString(a[0], "volumeMembers", line));
+        auto result = std::make_shared<ArrayData>();
+        auto it = volumeMembers.find(name);
+        if (it != volumeMembers.end()) {
+            for (auto& n : it->second) result->push_back(Value::string(n));
+        }
+        return Value::makeArray(result);
+    };
+    // hasVolume(name) -> true إن عُرِّفت Volume بهذا الاسم مرة واحدة على الأقل حتى الآن.
+    natives["hasVolume"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("hasVolume", a, 1, line);
+        std::string name = asString(a[0], "hasVolume", line);
+        return Value::boolean_(volumeMembers.count(name) > 0);
+    };
+    // volumeNames() -> مصفوفة أسماء كل الأحجام (Volume) المُعرَّفة حتى الآن، بترتيب أول ظهور
+    // (جذوراً كانت أو متداخلة).
+    natives["volumeNames"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("volumeNames", a, 0, line);
+        auto result = std::make_shared<ArrayData>();
+        for (auto& n : volumeOrder) result->push_back(Value::string(n));
+        return Value::makeArray(result);
+    };
+    // volumeVars(name) -> map بالمتغيرات المُعلَنة مباشرة داخل جسم Volume (خارج أي حاوية/مجموعة/
+    // Volume فرعية بداخلها) -- مفيد لحقول "على مستوى Volume" مشتركة بين كل أعضائها (مثال:
+    // text owner = "..."; مباشرة داخل @Volume). map فارغ إن لم تُعرَّف Volume بهذا الاسم.
+    natives["volumeVars"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("volumeVars", a, 1, line);
+        std::string name = canonVolume(asString(a[0], "volumeVars", line));
+        auto it = volumeEnvs.find(name);
+        auto result = (it != volumeEnvs.end()) ? envVarsAsMap(it->second) : std::make_shared<MapData>();
+        return Value::makeMap(result);
+    };
+    // volumeParent(name) -> اسم الـ Volume الأب المباشرة التي تحتوي "name" كـ Volume فرعية
+    // متداخلة، أو نص فارغ "" إن كانت "name" Volume جذر (أو غير معرَّفة أصلاً).
+    natives["volumeParent"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("volumeParent", a, 1, line);
+        std::string name = canonVolume(asString(a[0], "volumeParent", line));
+        auto it = volumeParentOf.find(name);
+        return Value::string(it != volumeParentOf.end() ? it->second : std::string());
+    };
+    // volumePath(name) -> مصفوفة أسماء تمثّل مسار الأجداد من الجذر وصولاً إلى "name" نفسها ضمناً
+    // (مثال: Volume "cold_archive" داخل "assets" -> ["assets", "cold_archive"]). مصفوفة فارغة إن
+    // لم تُعرَّف Volume بهذا الاسم أصلاً.
+    natives["volumePath"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("volumePath", a, 1, line);
+        std::string name = canonVolume(asString(a[0], "volumePath", line));
+        auto result = std::make_shared<ArrayData>();
+        if (!volumeMembers.count(name)) return Value::makeArray(result);
+        std::vector<std::string> chain;
+        std::string cur = name;
+        std::unordered_set<std::string> seen; // حارس ضد أي دورة غير متوقّعة في volumeParentOf
+        while (true) {
+            chain.push_back(cur);
+            if (!seen.insert(cur).second) break;
+            auto it = volumeParentOf.find(cur);
+            if (it == volumeParentOf.end()) break;
+            cur = it->second;
+        }
+        for (auto rit = chain.rbegin(); rit != chain.rend(); ++rit) result->push_back(Value::string(*rit));
+        return Value::makeArray(result);
+    };
+    // volumeContainerCount(name) -> عدد الحاويات الفعلية (leaf) داخل Volume، مفلطحاً عبر كل
+    // الأعضاء الفرعيين المتداخلين (نفس تفرّع volumeContainers لكن عدداً فقط بدل مصفوفة الأسماء).
+    natives["volumeContainerCount"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("volumeContainerCount", a, 1, line);
+        std::string name = canonVolume(asString(a[0], "volumeContainerCount", line));
+        std::vector<std::string> flat;
+        if (volumeMembers.count(name)) collectVolumeContainerNames(volumeMembers, groupMembers, name, flat);
+        return Value::num(static_cast<double>(flat.size()));
+    };
+    // volumeHasContainer(name, containerName) -> true إن كانت "containerName" حاوية فعلية عضوة
+    // (مباشرة أو عبر تفرّع عضو فرعي متداخل) داخل Volume "name".
+    natives["volumeHasContainer"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("volumeHasContainer", a, 2, line);
+        std::string name = canonVolume(asString(a[0], "volumeHasContainer", line));
+        std::string target = asString(a[1], "volumeHasContainer", line);
+        std::vector<std::string> flat;
+        if (volumeMembers.count(name)) collectVolumeContainerNames(volumeMembers, groupMembers, name, flat);
+        return Value::boolean_(std::find(flat.begin(), flat.end(), target) != flat.end());
+    };
+    // volumeSnapshot(name) -> مصفوفة map واحدة لكل حاوية فعلية عضوة في Volume (مفلطحة عبر أي
+    // تعشيش)، بنفس ترتيب volumeContainers، وبكل متغيراتها المباشرة + حقلين وصفيين "__container"
+    // (اسم الحاوية) و"__kind" (وسمها الموحَّد، مثال "container.doc") -- هذا ما يجعل Volume "مفيدة"
+    // فعلياً كطبقة تخزين قابلة للاستعلام دفعة واحدة (شبيه بقراءة كل ملفات مجلّد تخزين مرة واحدة)،
+    // بدل مجرّد تسجيل عضوية اسمي كما كانت الحال سابقاً.
+    natives["volumeSnapshot"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("volumeSnapshot", a, 1, line);
+        std::string name = canonVolume(asString(a[0], "volumeSnapshot", line));
+        auto result = std::make_shared<ArrayData>();
+        std::vector<std::string> flat;
+        if (volumeMembers.count(name)) collectVolumeContainerNames(volumeMembers, groupMembers, name, flat);
+        for (auto& cname : flat) {
+            auto it = containers.find(cname);
+            if (it == containers.end()) continue;
+            auto m = envVarsAsMap(it->second);
+            { Value tv; if (tableVirtualGet(cname, "rows", tv)) m->push_back({Value::string("rows"), tv}); } // جدول: + صفوفه
+            m->push_back({Value::string("__container"), Value::string(cname)});
+            auto kindIt = containerKinds.find(cname);
+            m->push_back({Value::string("__kind"), Value::string(kindIt != containerKinds.end() ? containerTagName(kindIt->second) : std::string("container"))});
+            result->push_back(Value::makeMap(m));
+        }
+        return Value::makeArray(result);
+    };
+
+    // ---- Section: استعلام عن حالة قسم بعد إغلاقه (يحوّل Section من زخرفية بحتة إلى شيء يمكن
+    // قراءته وبناء منطق فوقه، بنفس روح groupContainers/groupMembers أعلاه) ----
+
+    // sectionVars(name) -> map بمتغيرات القسم المباشرة (بالاسم name فقط، إن كان له وُجِد)، أو map
+    // فارغ إن لم يُنفَّذ أي قسم بهذا الاسم بعد. المفاتيح مرتّبة أبجدياً لمخرجات ثابتة (نفس مبدأ
+    // serializeEnvBody أعلاه)، والدوال (FUNCTION) تُستبعَد لأنها لا تُمثَّل كقيمة Rin عادية.
+    natives["sectionVars"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("sectionVars", a, 1, line);
+        std::string name = asString(a[0], "sectionVars", line);
+        auto result = std::make_shared<MapData>();
+        auto it = sectionEnvs.find(name);
+        if (it != sectionEnvs.end()) {
+            std::vector<std::string> keys;
+            keys.reserve(it->second->values.size());
+            for (auto& kv : it->second->values) keys.push_back(kv.first);
+            std::sort(keys.begin(), keys.end());
+            for (auto& k : keys) {
+                const Value& v = it->second->values[k];
+                if (v.type == Value::Type::FUNCTION) continue;
+                result->push_back({Value::string(k), v});
+            }
+        }
+        return Value::makeMap(result);
+    };
+    // sectionNames() -> مصفوفة أسماء كل الأقسام المُسمّاة التي نُفِّذت حتى الآن، بترتيب أول ظهور.
+    natives["sectionNames"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("sectionNames", a, 0, line);
+        auto result = std::make_shared<ArrayData>();
+        for (auto& n : sectionOrder) result->push_back(Value::string(n));
+        return Value::makeArray(result);
+    };
+    // hasSection(name) -> true إن نُفِّذ قسم بهذا الاسم مرة واحدة على الأقل حتى الآن.
+    natives["hasSection"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("hasSection", a, 1, line);
+        std::string name = asString(a[0], "hasSection", line);
+        return Value::boolean_(sectionEnvs.count(name) > 0);
+    };
+
+    // ---- container.doc / doc: قاعدة بيانات لاعلاقية (NoSQL) بمستندات ----
+    // container = "مجموعة مستندات" (collection)، و Containers.Group التي تضمّها = "قاعدة بيانات"
+    // (database) كاملة (استخدم groupContainers(dbName) لسرد مجموعات مستنداتها). الإدراج الوصفي عبر
+    // 'document id=... fields=...;' داخل @container.doc، أو الإدراج/التحديث الحيّ عبر insertDoc/updateDoc أدناه.
+
+    // insertDoc(collection, id, fields) -> true إن كان إدراجاً جديداً، false إن استبدل مستنداً موجوداً (upsert كامل)
+    natives["insertDoc"] = [this](std::vector<Value>& a, int line) -> Value {
+        { Value tv_; if (tableNative("insertDoc", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
+        expectArgs("insertDoc", a, 3, line);
+        std::string container = canonContainer(asString(a[0], "insertDoc", line));
+        std::string id = asString(a[1], "insertDoc", line);
+        if (a[2].type != Value::Type::MAP) {
+            throw diagErr(diag::Code::E0020_InvalidDocument, line, "'insertDoc' expects a map as the third argument (document fields)");
+        }
+        if (!containerKinds.count(container) || (containerKinds[container] != ContainerKind::DOC && containerKinds[container] != ContainerKind::DATALIST)) {
+            throw errWithReason(diag::Code::E0020_InvalidDocument, line,
+                                 "'" + container + "' is not a NoSQL document collection",
+                                 "expected a `container.doc` / `doc` / `container.datalist` container");
+        }
+        auto errors = schemaErrors(container, a[2]);
+        if (!errors.empty()) {
+            auto d = diagErr(diag::Code::E0019_SchemaViolation, line, "schema violation in `" + container + "`");
+            d.diagnostic->withReason(joinErrors(errors));
+            throw d;
+        }
+        auto& docs = docStore[container];
+        bool isUpdate = false;
+        for (auto& entry : docs) {
+            if (entry.first == id) { entry.second = a[2]; isUpdate = true; break; }
+        }
+        if (!isUpdate) docs.push_back({id, a[2]});
+        refreshIndexesForContainer(container);
+        notifyWatchers(container, id, a[2], isUpdate ? "update" : "insert", line);
+        return Value::boolean_(!isUpdate);
+    };
+
+    // updateDoc(collection, id, partialFields) -> true إن وُجد ودُمجت الحقول الجديدة (تحديث جزئي/patch)، false إن لم يوجد
+    natives["updateDoc"] = [this](std::vector<Value>& a, int line) -> Value {
+        { Value tv_; if (tableNative("updateDoc", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
+        expectArgs("updateDoc", a, 3, line);
+        std::string container = canonContainer(asString(a[0], "updateDoc", line));
+        std::string id = asString(a[1], "updateDoc", line);
+        if (a[2].type != Value::Type::MAP) {
+            throw diagErr(diag::Code::E0004_InvalidType, line, "'updateDoc' يتوقّع كائناً/قاموساً (map) كوسيط ثالث للحقول الجديدة");
+        }
+        auto it = docStore.find(container);
+        if (it == docStore.end()) return Value::boolean_(false);
+        for (auto& entry : it->second) {
+            if (entry.first != id) continue;
+            // يُبنى الدمج في نسخة منفصلة أولاً ويُتحقَّق من المخطط عليها قبل أي التزام فعلي، حتى لا
+            // يُترك المستند بحالة جزئية غير صالحة إن فشل التحقق (schemaErrors) في المنتصف.
+            auto merged = std::make_shared<MapData>();
+            if (entry.second.type == Value::Type::MAP && entry.second.map) *merged = *entry.second.map;
+            for (auto& kv : *a[2].map) {
+                bool found = false;
+                for (auto& existing : *merged) {
+                    if (valuesEqual(existing.first, kv.first)) { existing.second = kv.second; found = true; break; }
+                }
+                if (!found) merged->push_back(kv);
+            }
+            Value mergedVal = Value::makeMap(merged);
+            auto errors = schemaErrors(container, mergedVal);
+            if (!errors.empty()) {
+                auto d = diagErr(diag::Code::E0019_SchemaViolation, line, "schema violation in `" + container + "`");
+                d.diagnostic->withReason(joinErrors(errors));
+                throw d;
+            }
+            entry.second = mergedVal;
+            refreshIndexesForContainer(container);
+            notifyWatchers(container, id, mergedVal, "update", line);
+            return Value::boolean_(true);
+        }
+        return Value::boolean_(false);
+    };
+
+    // deleteDoc(collection, id) -> true إن حُذف فعلاً، false إن لم يوجد أصلاً
+    natives["deleteDoc"] = [this](std::vector<Value>& a, int line) -> Value {
+        { Value tv_; if (tableNative("deleteDoc", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
+        expectArgs("deleteDoc", a, 2, line);
+        std::string container = canonContainer(asString(a[0], "deleteDoc", line));
+        std::string id = asString(a[1], "deleteDoc", line);
+        auto it = docStore.find(container);
+        if (it != docStore.end()) {
+            auto& vec = it->second;
+            for (size_t i = 0; i < vec.size(); i++) {
+                if (vec[i].first == id) {
+                    Value removed = vec[i].second;
+                    vec.erase(vec.begin() + i);
+                    refreshIndexesForContainer(container);
+                    notifyWatchers(container, id, removed, "delete", line);
+                    return Value::boolean_(true);
+                }
+            }
+        }
+        return Value::boolean_(false);
+    };
+
+    // findDoc(collection, id) -> حقول المستند (map) أو nil إن لم يوجد
+    natives["findDoc"] = [this](std::vector<Value>& a, int line) -> Value {
+        { Value tv_; if (tableNative("findDoc", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
+        expectArgs("findDoc", a, 2, line);
+        std::string container = canonContainer(asString(a[0], "findDoc", line));
+        std::string id = asString(a[1], "findDoc", line);
+        auto it = docStore.find(container);
+        if (it != docStore.end()) {
+            for (auto& entry : it->second) if (entry.first == id) return entry.second;
+        }
+        return Value::nil();
+    };
+
+    // queryDocs(collection, field, value) -> مصفوفة كل المستندات (map) التي يساوي فيها field القيمة المعطاة
+    natives["queryDocs"] = [this](std::vector<Value>& a, int line) -> Value {
+        { Value tv_; if (tableNative("queryDocs", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
+        expectArgs("queryDocs", a, 3, line);
+        std::string container = canonContainer(asString(a[0], "queryDocs", line));
+        std::string field = asString(a[1], "queryDocs", line);
+        Value target = a[2];
+        auto result = std::make_shared<ArrayData>();
+        auto it = docStore.find(container);
+        if (it != docStore.end()) {
+            for (auto& entry : it->second) {
+                const Value& doc = entry.second;
+                if (doc.type != Value::Type::MAP || !doc.map) continue;
+                for (auto& kv : *doc.map) {
+                    if (kv.first.type == Value::Type::STRING && kv.first.str == field && valuesEqual(kv.second, target)) {
+                        result->push_back(doc);
+                        break;
+                    }
+                }
+            }
+        }
+        return Value::makeArray(result);
+    };
+
+    // queryOneDoc(collection, field, value) -> أول مستند مطابق (map) أو nil
+    natives["queryOneDoc"] = [this](std::vector<Value>& a, int line) -> Value {
+        { Value tv_; if (tableNative("queryOneDoc", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
+        expectArgs("queryOneDoc", a, 3, line);
+        std::string container = canonContainer(asString(a[0], "queryOneDoc", line));
+        std::string field = asString(a[1], "queryOneDoc", line);
+        Value target = a[2];
+        auto it = docStore.find(container);
+        if (it != docStore.end()) {
+            for (auto& entry : it->second) {
+                const Value& doc = entry.second;
+                if (doc.type != Value::Type::MAP || !doc.map) continue;
+                for (auto& kv : *doc.map) {
+                    if (kv.first.type == Value::Type::STRING && kv.first.str == field && valuesEqual(kv.second, target)) {
+                        return doc;
+                    }
+                }
+            }
+        }
+        return Value::nil();
+    };
+
+    // ---- RIN CONTAINER SQL (RCSQL) -- انظر rin_container_sql.h للصياغة الكاملة ----
+    // sql(query) -> مصفوفة كل المستندات المطابقة (كل نتيجة map تحمل "_id" إضافياً + حقول المستند).
+    // الوسيط query إما نص RCSQL خام ("#mask & field:op(arg) & ...")، أو قناع (mask) حاوية
+    // @sql/@container.sql مُعرَّفة مسبقاً -- عندها يُستبدَل تلقائياً بنص RCSQL المخزَّن بداخلها
+    // (هذا هو "استدعاء RIN CONTAINER SQL بالأقنعة"). حاوية/قناع غير موجود أو بلا مطابقات -> مصفوفة فارغة.
+    natives["sql"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("sql", a, 1, line);
+        std::string raw = asString(a[0], "sql", line);
+        return Value::makeArray(sqlExecute(raw, line));
+    };
+
+    // sqlOne(query) -> أول مستند مطابق (بنفس شكل sql()) أو nil إن لم يوجد أي تطابق
+    natives["sqlOne"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("sqlOne", a, 1, line);
+        std::string raw = asString(a[0], "sqlOne", line);
+        auto res = sqlExecute(raw, line);
+        return (res && !res->empty()) ? (*res)[0] : Value::nil();
+    };
+
+    // sqlCount(query) -> عدد المستندات المطابقة (بلا بناء المستندات نفسها في القيمة المُعادة)
+    natives["sqlCount"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("sqlCount", a, 1, line);
+        std::string raw = asString(a[0], "sqlCount", line);
+        auto res = sqlExecute(raw, line);
+        return Value::num(res ? static_cast<double>(res->size()) : 0.0);
+    };
+
+    // sqlExists(query) -> true إن وُجد تطابق واحد على الأقل، وإلا false (أخفّ من sqlCount حين لا
+    // يهمّك إلا وجود/عدم وجود تطابق -- لا يبني مصفوفة نتائج كاملة)
+    natives["sqlExists"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("sqlExists", a, 1, line);
+        std::string raw = asString(a[0], "sqlExists", line);
+        return Value::boolean_(!sqlRunRaw(raw, line).rows.empty());
+    };
+
+    // sqlIds(query) -> مصفوفة معرّفات (_id) المستندات المطابقة فقط، بنفس ترتيب sql()
+    natives["sqlIds"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("sqlIds", a, 1, line);
+        std::string raw = asString(a[0], "sqlIds", line);
+        auto res = std::make_shared<ArrayData>();
+        for (auto& row : sqlRunRaw(raw, line).rows) res->push_back(Value::string(row.id));
+        return Value::makeArray(res);
+    };
+
+    // sqlPluck(query, field) -> مصفوفة قيمة حقل واحد (field، يقبل مسار متداخل بـ '/') عبر كل
+    // المستندات المطابقة، بنفس ترتيبها وعددها؛ مستند لا يملك الحقل -> nil في موضعه (يحافظ على
+    // التطابق 1-إلى-1 بين موضع القيمة وموضع المستند المقابل لها). ملاحظة: field وسيط Rin عادي (نصّ
+    // Value منفصل عن نص الاستعلام)، فليس مقيَّداً بمجموعة رموز RCSQL -- يمكن أن يحوي '/' بحرّية.
+    natives["sqlPluck"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("sqlPluck", a, 2, line);
+        std::string raw = asString(a[0], "sqlPluck", line);
+        std::string field = asString(a[1], "sqlPluck", line);
+        auto path = sqlSplitSlash(field);
+        auto res = std::make_shared<ArrayData>();
+        for (auto& row : sqlRunRaw(raw, line).rows) {
+            Value v;
+            res->push_back(sqlGetNestedField(row.doc, path, v) ? v : Value::nil());
+        }
+        return Value::makeArray(res);
+    };
+
+    // sqlSum/sqlAvg/sqlMin/sqlMax(query, field) -> تجميع رقمي على حقل field عبر كل المستندات
+    // المطابقة؛ القيم غير الرقمية أو المفقودة تُتجاهَل بصمت (لا تُحتسَب). sqlSum على مجموعة خالية
+    // من القيم الرقمية -> 0. sqlAvg/sqlMin/sqlMax على مجموعة كذلك -> nil (لا معنى رياضياً لمتوسط/
+    // أصغر/أكبر مجموعة فارغة، بخلاف المجموع الذي عنصره المحايد 0 منطقي).
+    auto sqlAggregate = [this](const char* nativeName, std::vector<Value>& a, int line,
+                                double init, bool (*combine)(double&, double), bool wantAvgDivide,
+                                bool nilWhenEmpty) -> Value {
+        expectArgs(nativeName, a, 2, line);
+        std::string raw = asString(a[0], nativeName, line);
+        std::string field = asString(a[1], nativeName, line);
+        auto path = sqlSplitSlash(field);
+        double acc = init;
+        long count = 0;
+        for (auto& row : sqlRunRaw(raw, line).rows) {
+            Value v;
+            if (!sqlGetNestedField(row.doc, path, v)) continue;
+            if (v.type != Value::Type::NUMBER) continue;
+            combine(acc, v.number);
+            count++;
+        }
+        if (count == 0) return nilWhenEmpty ? Value::nil() : Value::num(0.0);
+        if (wantAvgDivide) return Value::num(acc / static_cast<double>(count));
+        return Value::num(acc);
+    };
+    natives["sqlSum"] = [sqlAggregate](std::vector<Value>& a, int line) -> Value {
+        return sqlAggregate("sqlSum", a, line, 0.0,
+                             +[](double& acc, double v) -> bool { acc += v; return true; },
+                             false, false);
+    };
+    natives["sqlAvg"] = [sqlAggregate](std::vector<Value>& a, int line) -> Value {
+        return sqlAggregate("sqlAvg", a, line, 0.0,
+                             +[](double& acc, double v) -> bool { acc += v; return true; },
+                             true, true);
+    };
+    natives["sqlMin"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("sqlMin", a, 2, line);
+        std::string raw = asString(a[0], "sqlMin", line);
+        std::string field = asString(a[1], "sqlMin", line);
+        auto path = sqlSplitSlash(field);
+        bool any = false; double best = 0.0;
+        for (auto& row : sqlRunRaw(raw, line).rows) {
+            Value v;
+            if (!sqlGetNestedField(row.doc, path, v) || v.type != Value::Type::NUMBER) continue;
+            if (!any || v.number < best) best = v.number;
+            any = true;
+        }
+        return any ? Value::num(best) : Value::nil();
+    };
+    natives["sqlMax"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("sqlMax", a, 2, line);
+        std::string raw = asString(a[0], "sqlMax", line);
+        std::string field = asString(a[1], "sqlMax", line);
+        auto path = sqlSplitSlash(field);
+        bool any = false; double best = 0.0;
+        for (auto& row : sqlRunRaw(raw, line).rows) {
+            Value v;
+            if (!sqlGetNestedField(row.doc, path, v) || v.type != Value::Type::NUMBER) continue;
+            if (!any || v.number > best) best = v.number;
+            any = true;
+        }
+        return any ? Value::num(best) : Value::nil();
+    };
+
+    // sqlDelete(query) -> يحذف كل المستندات المطابقة للاستعلام (بعد تطبيق أي order/limit/offset/
+    // distinct فيه أيضاً -- مفيد لعمليات مثل "احذف أقدم 3 حسابات معطَّلة") من حاويتها فعلياً، ويعيد
+    // عدد المستندات المحذوفة. بلا استرجاع (لا تراجع) -- تماماً كـ deleteDoc() الحالية لكن بالجملة.
+    natives["sqlDelete"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("sqlDelete", a, 1, line);
+        std::string raw = asString(a[0], "sqlDelete", line);
+        auto matched = sqlRunRaw(raw, line);
+        if (matched.container.empty() || matched.rows.empty()) return Value::num(0.0);
+        if (docStore.find(matched.container) == docStore.end() && isTableContainer(matched.container)) {
+            // جدول: المعرّف = رقم صف الجسم (1-based)؛ تُحذف الصفوف من الأعلى فهرساً حتى لا تنزاح الباقية.
+            std::vector<std::string> hdr;
+            size_t off = tableHeader(matched.container, hdr) ? 1 : 0;
+            std::vector<size_t> idx;
+            for (auto& row : matched.rows) idx.push_back(static_cast<size_t>(std::stoul(row.id)) - 1 + off);
+            std::sort(idx.begin(), idx.end(), std::greater<size_t>());
+            auto rowsPtr = tableRowsOf(matched.container);
+            long n = 0;
+            for (size_t i : idx) if (i < rowsPtr->size()) { rowsPtr->erase(rowsPtr->begin() + i); ++n; }
+            return Value::num(static_cast<double>(n));
+        }
+        auto storeIt = docStore.find(matched.container);
+        if (storeIt == docStore.end()) return Value::num(0.0);
+        long deleted = 0;
+        for (auto& row : matched.rows) {
+            auto& vec = storeIt->second;
+            for (size_t i = 0; i < vec.size(); i++) {
+                if (vec[i].first == row.id) {
+                    Value removed = vec[i].second;
+                    vec.erase(vec.begin() + i);
+                    notifyWatchers(matched.container, row.id, removed, "delete", line);
+                    deleted++;
+                    break;
+                }
+            }
+        }
+        if (deleted > 0) refreshIndexesForContainer(matched.container);
+        return Value::num(static_cast<double>(deleted));
+    };
+
+    // sqlUpdate(query, field, value) -> يضبط حقلاً واحداً (field، يقبل مسار متداخل بـ '/' فيُنشئ
+    // map وسيطة تلقائياً عند الحاجة) إلى value على كل المستندات المطابقة للاستعلام، ويعيد عدد
+    // المستندات المُحدَّثة فعلياً. تحقّق ذرّي من المخطط أولاً على نسخ من كل المستندات المطابقة قبل
+    // أي التزام فعلي -- إن خالف أيّ مستند مخطط الحاوية بعد التعديل تُرفَض العملية بالكامل (لا يُحدَّث
+    // أي مستند جزئياً)، تماماً كسلوك updateDoc() الحالي لكن مضموناً على الدفعة كاملة معاً.
+    natives["sqlUpdate"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("sqlUpdate", a, 3, line);
+        std::string raw = asString(a[0], "sqlUpdate", line);
+        std::string field = asString(a[1], "sqlUpdate", line);
+        Value newVal = a[2];
+        auto path = sqlSplitSlash(field);
+        auto matched = sqlRunRaw(raw, line);
+        if (matched.container.empty() || matched.rows.empty()) return Value::num(0.0);
+
+        if (docStore.find(matched.container) == docStore.end() && isTableContainer(matched.container)) {
+            // جدول: field يجب أن يكون عنواناً موجوداً في الرأس (لا حقول متداخلة)؛ تُكتب الخلية في الصف نفسه.
+            std::vector<std::string> hdr;
+            size_t off = tableHeader(matched.container, hdr) ? 1 : 0;
+            size_t col = std::find(hdr.begin(), hdr.end(), field) - hdr.begin();
+            if (path.size() != 1 || col >= hdr.size())
+                throw diagErr(diag::Code::E0035_RuntimeError, line, "sqlUpdate على جدول: العمود '" + field + "' غير موجود في الرأس");
+            auto rowsPtr = tableRowsOf(matched.container);
+            long n = 0;
+            for (auto& row : matched.rows) {
+                size_t i = static_cast<size_t>(std::stoul(row.id)) - 1 + off;
+                if (i >= rowsPtr->size() || (*rowsPtr)[i].type != Value::Type::ARRAY) continue;
+                auto cells = (*rowsPtr)[i].array;
+                while (cells->size() <= col) cells->push_back(Value::nil());
+                (*cells)[col] = newVal;
+                ++n;
+            }
+            return Value::num(static_cast<double>(n));
+        }
+        std::vector<std::pair<std::string, Value>> merged;
+        merged.reserve(matched.rows.size());
+        for (auto& row : matched.rows) {
+            Value updated = sqlSetNestedField(row.doc, path, newVal);
+            auto errors = schemaErrors(matched.container, updated);
+            if (!errors.empty()) {
+                auto d = diagErr(diag::Code::E0019_SchemaViolation, line,
+                                  "schema violation in `" + matched.container + "` (sqlUpdate, doc id `" + row.id + "`)");
+                d.diagnostic->withReason(joinErrors(errors));
+                throw d;
+            }
+            merged.push_back({row.id, updated});
+        }
+
+        auto storeIt = docStore.find(matched.container);
+        if (storeIt == docStore.end()) return Value::num(0.0);
+        long updatedCount = 0;
+        for (auto& [id, val] : merged) {
+            for (auto& entry : storeIt->second) {
+                if (entry.first == id) {
+                    entry.second = val;
+                    notifyWatchers(matched.container, id, val, "update", line);
+                    updatedCount++;
+                    break;
+                }
+            }
+        }
+        if (updatedCount > 0) refreshIndexesForContainer(matched.container);
+        return Value::num(static_cast<double>(updatedCount));
+    };
+
+    // sqlExplain(query) -> map تشخيصي يعرض الاستعلام بعد تحليله: الهدف، اسم الحاوية الذي حُلَّ
+    // إليه (أو nil إن تعذّر)، شجرة الشروط (predicates، بما فيها مجموعات or/and/not المتداخلة)،
+    // مفاتيح الفرز، limit/offset، وحقول select/distinct -- أداة تصحيح/تطوير مفيدة لفهم ما ستفعله
+    // RCSQL فعلياً قبل تشغيلها على بيانات حقيقية، خصوصاً للاستعلامات المُسمّاة عبر @sql/الأقنعة.
+    natives["sqlExplain"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("sqlExplain", a, 1, line);
+        std::string arg = asString(a[0], "sqlExplain", line);
+        std::string queryText = sqlResolveQueryText(arg);
+        rin::sql::Query q;
+        try {
+            q = rin::sql::parse(queryText);
+        } catch (const rin::sql::SqlSyntaxError& e) {
+            throw diagErr(diag::Code::E0042_InvalidSql, line, std::string(e.what()));
+        }
+        auto m = std::make_shared<MapData>();
+        m->push_back({Value::string("queryText"), Value::string(queryText)});
+        if (q.targetIsMask) {
+            m->push_back({Value::string("targetMask"), Value::string(q.targetMask)});
+        } else {
+            auto pathArr = std::make_shared<ArrayData>();
+            for (auto& part : q.targetPath) pathArr->push_back(Value::string(part));
+            m->push_back({Value::string("targetPath"), Value::makeArray(pathArr)});
+        }
+        std::string container = sqlResolveTargetContainer(q);
+        m->push_back({Value::string("container"), container.empty() ? Value::nil() : Value::string(container)});
+        auto predsArr = std::make_shared<ArrayData>();
+        for (auto& pr : q.predicates) predsArr->push_back(sqlPredicateToValue(pr));
+        m->push_back({Value::string("predicates"), Value::makeArray(predsArr)});
+        auto orderArr = std::make_shared<ArrayData>();
+        for (auto& o : q.orderBy) {
+            auto om = std::make_shared<MapData>();
+            om->push_back({Value::string("field"), Value::string(o.field)});
+            om->push_back({Value::string("desc"), Value::boolean_(o.desc)});
+            orderArr->push_back(Value::makeMap(om));
+        }
+        m->push_back({Value::string("orderBy"), Value::makeArray(orderArr)});
+        m->push_back({Value::string("limit"), q.limit >= 0 ? Value::num(static_cast<double>(q.limit)) : Value::nil()});
+        m->push_back({Value::string("offset"), Value::num(static_cast<double>(q.offset))});
+        auto selArr = std::make_shared<ArrayData>();
+        for (auto& s : q.selectFields) selArr->push_back(Value::string(s));
+        m->push_back({Value::string("selectFields"), Value::makeArray(selArr)});
+        auto distArr = std::make_shared<ArrayData>();
+        for (auto& d : q.distinctFields) distArr->push_back(Value::string(d));
+        m->push_back({Value::string("distinctFields"), Value::makeArray(distArr)});
+        return Value::makeMap(m);
+    };
+
+    // sqlValidate(query) -> {ok:true, container:name|nil} أو {ok:false, error:"..."}. بخلاف كل
+    // نواتج RCSQL الأخرى، لا يرمي أبداً خطأ E0042 -- مصمَّمة خصيصاً لواجهات تسمح للمستخدم بكتابة
+    // استعلام تفاعلياً والتحقّق من صحته قبل تنفيذه (مثال: محرّر استعلامات، معاينة حيّة).
+    natives["sqlValidate"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("sqlValidate", a, 1, line);
+        std::string arg = asString(a[0], "sqlValidate", line);
+        std::string queryText = sqlResolveQueryText(arg);
+        auto m = std::make_shared<MapData>();
+        (void)line;
+        try {
+            rin::sql::Query q = rin::sql::parse(queryText);
+            std::string container = sqlResolveTargetContainer(q);
+            m->push_back({Value::string("ok"), Value::boolean_(true)});
+            m->push_back({Value::string("container"), container.empty() ? Value::nil() : Value::string(container)});
+        } catch (const rin::sql::SqlSyntaxError& e) {
+            m->push_back({Value::string("ok"), Value::boolean_(false)});
+            m->push_back({Value::string("error"), Value::string(e.what())});
+        }
+        return Value::makeMap(m);
+    };
+
+    // sqlGroupBy(query, field) -> مصفوفة {key, count, ids} لكل قيمة مختلفة لحقل field (يقبل '/')
+    // عبر المستندات المطابقة (بعد تطبيق order/limit/offset/distinct في الاستعلام نفسه إن وُجدت)؛
+    // بترتيب أول ظهور لكل قيمة. مستند لا يملك field يُجمَّع ضمن مجموعة مفتاحها nil.
+    natives["sqlGroupBy"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("sqlGroupBy", a, 2, line);
+        std::string raw = asString(a[0], "sqlGroupBy", line);
+        std::string field = asString(a[1], "sqlGroupBy", line);
+        auto path = sqlSplitSlash(field);
+        auto matched = sqlRunRaw(raw, line);
+        std::vector<Value> keys;
+        std::vector<long> counts;
+        std::vector<ArrayPtr> idLists;
+        for (auto& row : matched.rows) {
+            Value v;
+            if (!sqlGetNestedField(row.doc, path, v)) v = Value::nil();
+            long idx = -1;
+            for (size_t k = 0; k < keys.size(); k++) if (valuesEqual(keys[k], v)) { idx = static_cast<long>(k); break; }
+            if (idx < 0) {
+                keys.push_back(v);
+                counts.push_back(0);
+                idLists.push_back(std::make_shared<ArrayData>());
+                idx = static_cast<long>(keys.size()) - 1;
+            }
+            counts[idx]++;
+            idLists[idx]->push_back(Value::string(row.id));
+        }
+        auto result = std::make_shared<ArrayData>();
+        for (size_t k = 0; k < keys.size(); k++) {
+            auto m = std::make_shared<MapData>();
+            m->push_back({Value::string("key"), keys[k]});
+            m->push_back({Value::string("count"), Value::num(static_cast<double>(counts[k]))});
+            m->push_back({Value::string("ids"), Value::makeArray(idLists[k])});
+            result->push_back(Value::makeMap(m));
+        }
+        return Value::makeArray(result);
+    };
+
+    // sqlGroupSum(query, groupField, sumField) -> مصفوفة {key, sum, count} -- تجميع مركّب (GROUP BY
+    // groupField ثم SUM(sumField) لكل مجموعة)؛ count هنا عدد القيم الرقمية الفعلية المُحتسَبة في
+    // المجموع لهذه المجموعة تحديداً (لا إجمالي عدد المستندات في المجموعة)، والقيم غير الرقمية تُهمَل.
+    natives["sqlGroupSum"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("sqlGroupSum", a, 3, line);
+        std::string raw = asString(a[0], "sqlGroupSum", line);
+        std::string groupField = asString(a[1], "sqlGroupSum", line);
+        std::string sumField = asString(a[2], "sqlGroupSum", line);
+        auto groupPath = sqlSplitSlash(groupField);
+        auto sumPath = sqlSplitSlash(sumField);
+        auto matched = sqlRunRaw(raw, line);
+        std::vector<Value> keys;
+        std::vector<double> sums;
+        std::vector<long> counts;
+        for (auto& row : matched.rows) {
+            Value gv;
+            if (!sqlGetNestedField(row.doc, groupPath, gv)) gv = Value::nil();
+            long idx = -1;
+            for (size_t k = 0; k < keys.size(); k++) if (valuesEqual(keys[k], gv)) { idx = static_cast<long>(k); break; }
+            if (idx < 0) {
+                keys.push_back(gv);
+                sums.push_back(0.0);
+                counts.push_back(0);
+                idx = static_cast<long>(keys.size()) - 1;
+            }
+            Value sv;
+            if (sqlGetNestedField(row.doc, sumPath, sv) && sv.type == Value::Type::NUMBER) {
+                sums[idx] += sv.number;
+                counts[idx]++;
+            }
+        }
+        auto result = std::make_shared<ArrayData>();
+        for (size_t k = 0; k < keys.size(); k++) {
+            auto m = std::make_shared<MapData>();
+            m->push_back({Value::string("key"), keys[k]});
+            m->push_back({Value::string("sum"), Value::num(sums[k])});
+            m->push_back({Value::string("count"), Value::num(static_cast<double>(counts[k]))});
+            result->push_back(Value::makeMap(m));
+        }
+        return Value::makeArray(result);
+    };
+
+    // docIds(collection) -> مصفوفة أسماء (ids) كل المستندات بترتيب الإدخال
+    natives["docIds"] = [this](std::vector<Value>& a, int line) -> Value {
+        { Value tv_; if (tableNative("docIds", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
+        expectArgs("docIds", a, 1, line);
+        std::string container = canonContainer(asString(a[0], "docIds", line));
+        auto result = std::make_shared<ArrayData>();
+        auto it = docStore.find(container);
+        if (it != docStore.end()) for (auto& entry : it->second) result->push_back(Value::string(entry.first));
+        return Value::makeArray(result);
+    };
+
+    // allDocs(collection) -> مصفوفة كل المستندات (كل عنصر map) بترتيب الإدخال
+    natives["allDocs"] = [this](std::vector<Value>& a, int line) -> Value {
+        { Value tv_; if (tableNative("allDocs", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
+        expectArgs("allDocs", a, 1, line);
+        std::string container = canonContainer(asString(a[0], "allDocs", line));
+        auto result = std::make_shared<ArrayData>();
+        auto it = docStore.find(container);
+        if (it != docStore.end()) for (auto& entry : it->second) result->push_back(entry.second);
+        return Value::makeArray(result);
+    };
+
+    // countDocs(collection) -> عدد المستندات
+    natives["countDocs"] = [this](std::vector<Value>& a, int line) -> Value {
+        { Value tv_; if (tableNative("countDocs", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
+        expectArgs("countDocs", a, 1, line);
+        std::string container = canonContainer(asString(a[0], "countDocs", line));
+        auto it = docStore.find(container);
+        return Value::num(it != docStore.end() ? static_cast<double>(it->second.size()) : 0.0);
+    };
+
+    // ---- schema: مخطط حقول اختياري لمجموعة مستندات (يُفرَض تلقائياً داخل insertDoc/updateDoc/document) ----
+
+    // defineSchema(collection, {field: "type", ...}) -> true. أنواع مدعومة: string/number/bool
+    // (أو boolean)/array/map (أو object)/any. يستبدل أي مخطط سابق لنفس المجموعة بالكامل.
+    natives["defineSchema"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("defineSchema", a, 2, line);
+        std::string container = canonContainer(asString(a[0], "defineSchema", line));
+        if (a[1].type != Value::Type::MAP) {
+            throw diagErr(diag::Code::E0004_InvalidType, line, "'defineSchema' يتوقّع كائناً/قاموساً (map) كوسيط ثانٍ: {field: \"type\", ...}");
+        }
+        std::vector<std::pair<std::string, std::string>> fields;
+        for (auto& kv : *a[1].map) {
+            if (kv.first.type != Value::Type::STRING || kv.second.type != Value::Type::STRING) {
+                throw diagErr(diag::Code::E0004_InvalidType, line, "'defineSchema': كل مفتاح/قيمة يجب أن يكونا نصّين (اسم حقل -> اسم نوع)");
+            }
+            fields.push_back({kv.first.str, kv.second.str});
+        }
+        schemaStore[container] = std::move(fields);
+        return Value::boolean_(true);
+    };
+
+    // getSchema(collection) -> map {field: "type", ...} أو nil إن لم يُعرَّف مخطط لهذه المجموعة
+    natives["getSchema"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("getSchema", a, 1, line);
+        std::string container = asString(a[0], "getSchema", line);
+        auto it = schemaStore.find(container);
+        if (it == schemaStore.end()) return Value::nil();
+        auto result = std::make_shared<MapData>();
+        for (auto& fieldType : it->second) result->push_back({Value::string(fieldType.first), Value::string(fieldType.second)});
+        return Value::makeMap(result);
+    };
+
+    // dropSchema(collection) -> true إن كان هناك مخطط فحُذف، false إن لم يوجد أصلاً
+    natives["dropSchema"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("dropSchema", a, 1, line);
+        std::string container = asString(a[0], "dropSchema", line);
+        return Value::boolean_(schemaStore.erase(container) > 0);
+    };
+
+    // validateDoc(collection, fields) -> مصفوفة رسائل الأخطاء (فارغة = صالح أو لا يوجد مخطط أصلاً)،
+    // بلا رفض/استثناء -- للاستخدام كفحص مسبق يدوي قبل insertDoc/updateDoc عند الحاجة.
+    natives["validateDoc"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("validateDoc", a, 2, line);
+        std::string container = asString(a[0], "validateDoc", line);
+        if (a[1].type != Value::Type::MAP) {
+            throw diagErr(diag::Code::E0004_InvalidType, line, "'validateDoc' يتوقّع كائناً/قاموساً (map) كوسيط ثانٍ لحقول المستند");
+        }
+        auto errors = schemaErrors(container, a[1]);
+        auto result = std::make_shared<ArrayData>();
+        for (auto& e : errors) result->push_back(Value::string(e));
+        return Value::makeArray(result);
+    };
+
+    // ---- index: فهرسة قيم حقل داخل مجموعة مستندات (تسريع/تسهيل البحث المتساوي عبر findByIndex) ----
+
+    // createIndex(collection, field) -> true إن أُنشئ فهرس جديد، false إن كان موجوداً أصلاً (يُعاد بناؤه بأي حال)
+    natives["createIndex"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("createIndex", a, 2, line);
+        std::string container = canonContainer(asString(a[0], "createIndex", line));
+        std::string field = asString(a[1], "createIndex", line);
+        auto& fields = indexStore[container];
+        bool exists = false;
+        for (auto& fe : fields) if (fe.first == field) { exists = true; break; }
+        if (!exists) fields.push_back({field, IndexBuckets{}});
+        refreshIndexesForContainer(container);
+        return Value::boolean_(!exists);
+    };
+
+    // dropIndex(collection, field) -> true إن حُذف فعلاً، false إن لم يوجد أصلاً
+    natives["dropIndex"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("dropIndex", a, 2, line);
+        std::string container = canonContainer(asString(a[0], "dropIndex", line));
+        std::string field = asString(a[1], "dropIndex", line);
+        auto it = indexStore.find(container);
+        if (it == indexStore.end()) return Value::boolean_(false);
+        auto& fields = it->second;
+        for (size_t i = 0; i < fields.size(); i++) {
+            if (fields[i].first == field) { fields.erase(fields.begin() + i); return Value::boolean_(true); }
+        }
+        return Value::boolean_(false);
+    };
+
+    // listIndexes(collection) -> مصفوفة أسماء الحقول المفهرسة حالياً لهذه المجموعة، بترتيب الإنشاء
+    natives["listIndexes"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("listIndexes", a, 1, line);
+        std::string container = asString(a[0], "listIndexes", line);
+        auto result = std::make_shared<ArrayData>();
+        auto it = indexStore.find(container);
+        if (it != indexStore.end()) for (auto& fe : it->second) result->push_back(Value::string(fe.first));
+        return Value::makeArray(result);
+    };
+
+    // findByIndex(collection, field, value) -> مصفوفة كل المستندات المطابقة (map)، بترتيب الإدخال.
+    // إن لم يوجد فهرس على field بعد، يُنشأ تلقائياً (فهرسة كسولة/lazy) قبل البحث.
+    natives["findByIndex"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("findByIndex", a, 3, line);
+        std::string container = canonContainer(asString(a[0], "findByIndex", line));
+        std::string field = asString(a[1], "findByIndex", line);
+        Value target = a[2];
+        auto& fields = indexStore[container];
+        IndexBuckets* buckets = nullptr;
+        for (auto& fe : fields) if (fe.first == field) { buckets = &fe.second; break; }
+        if (!buckets) {
+            fields.push_back({field, IndexBuckets{}});
+            buckets = &fields.back().second;
+            refreshIndexesForContainer(container);
+        }
+        auto result = std::make_shared<ArrayData>();
+        auto keyIt = buckets->find(reprValue(target));
+        if (keyIt != buckets->end()) {
+            auto docIt = docStore.find(container);
+            if (docIt != docStore.end()) {
+                for (auto& id : keyIt->second) {
+                    for (auto& entry : docIt->second) if (entry.first == id) { result->push_back(entry.second); break; }
+                }
+            }
+        }
+        return Value::makeArray(result);
+    };
+
+    // ---- relation: ربط مجموعتَي مستندات بحقلَي انضمام (join)، شبيه بمفتاح أجنبي بسيط ----
+
+    // defineRelation(name, fromCollection, fromField, toCollection, toField) -> true (يستبدل أي علاقة بنفس الاسم)
+    natives["defineRelation"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("defineRelation", a, 5, line);
+        std::string name = asString(a[0], "defineRelation", line);
+        std::string fromContainer = asString(a[1], "defineRelation", line);
+        std::string fromField = asString(a[2], "defineRelation", line);
+        std::string toContainer = asString(a[3], "defineRelation", line);
+        std::string toField = asString(a[4], "defineRelation", line);
+        if (!relationStore.count(name)) relationOrder.push_back(name);
+        relationStore[name] = RelationDef{fromContainer, fromField, toContainer, toField};
+        return Value::boolean_(true);
+    };
+
+    // relatedDocs(relationName, fromId) -> مصفوفة كل مستندات toCollection التي يساوي فيها toField
+    // قيمة fromField لمستند fromId في fromCollection (مصفوفة فارغة إن لم يوجد fromId أو لا تطابق له)
+    natives["relatedDocs"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("relatedDocs", a, 2, line);
+        std::string name = asString(a[0], "relatedDocs", line);
+        std::string fromId = asString(a[1], "relatedDocs", line);
+        auto result = std::make_shared<ArrayData>();
+        auto relIt = relationStore.find(name);
+        if (relIt == relationStore.end()) {
+            auto d = diagErr(diag::Code::E0022_InvalidRelation, line, "no relation named `" + name + "`");
+            d.diagnostic->withReason("`" + name + "` was never registered")
+             .withHint("call `defineRelation(\"" + name + "\", ...)` before using it");
+            throw d;
+        }
+        const RelationDef& rel = relIt->second;
+        auto srcIt = docStore.find(rel.fromContainer);
+        if (srcIt == docStore.end()) return Value::makeArray(result);
+        Value joinVal;
+        bool haveJoin = false;
+        for (auto& entry : srcIt->second) {
+            if (entry.first != fromId) continue;
+            if (entry.second.type == Value::Type::MAP && entry.second.map) {
+                for (auto& kv : *entry.second.map) {
+                    if (kv.first.type == Value::Type::STRING && kv.first.str == rel.fromField) { joinVal = kv.second; haveJoin = true; break; }
+                }
+            }
+            break;
+        }
+        if (!haveJoin) return Value::makeArray(result);
+        auto dstIt = docStore.find(rel.toContainer);
+        if (dstIt != docStore.end()) {
+            for (auto& entry : dstIt->second) {
+                const Value& doc = entry.second;
+                if (doc.type != Value::Type::MAP || !doc.map) continue;
+                for (auto& kv : *doc.map) {
+                    if (kv.first.type == Value::Type::STRING && kv.first.str == rel.toField && valuesEqual(kv.second, joinVal)) {
+                        result->push_back(doc);
+                        break;
+                    }
+                }
+            }
+        }
+        return Value::makeArray(result);
+    };
+
+    // listRelations() -> مصفوفة أسماء كل العلاقات المُعرَّفة، بترتيب أول تعريف
+    natives["listRelations"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("listRelations", a, 0, line);
+        auto result = std::make_shared<ArrayData>();
+        for (auto& n : relationOrder) result->push_back(Value::string(n));
+        return Value::makeArray(result);
+    };
+
+    // ---- transaction: commit/rollback حقيقيَّين حول docStore (لقطات عميقة، انظر deepCloneValue) ----
+
+    // beginTransaction() -> true. يدعم التداخل (nested): كل begin يضيف لقطة جديدة فوق مكدّس txStack.
+    natives["beginTransaction"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("beginTransaction", a, 0, line);
+        std::unordered_map<std::string, std::vector<std::pair<std::string, Value>>> snapshot;
+        for (auto& kv : docStore) {
+            std::vector<std::pair<std::string, Value>> docs;
+            docs.reserve(kv.second.size());
+            for (auto& entry : kv.second) docs.push_back({entry.first, deepCloneValue(entry.second)});
+            snapshot[kv.first] = std::move(docs);
+        }
+        txStack.push_back(std::move(snapshot));
+        return Value::boolean_(true);
+    };
+
+    // commitTransaction() -> true إن كانت هناك معاملة مفتوحة فأُغلقت (تُعتمَد التغييرات)، false إن لم توجد
+    natives["commitTransaction"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("commitTransaction", a, 0, line);
+        if (txStack.empty()) return Value::boolean_(false);
+        txStack.pop_back();
+        return Value::boolean_(true);
+    };
+
+    // rollbackTransaction() -> true إن استُعيدت حالة docStore من آخر beginTransaction، false إن لم توجد معاملة مفتوحة
+    natives["rollbackTransaction"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("rollbackTransaction", a, 0, line);
+        if (txStack.empty()) return Value::boolean_(false);
+        docStore = std::move(txStack.back());
+        txStack.pop_back();
+        for (auto& kv : indexStore) refreshIndexesForContainer(kv.first);
+        return Value::boolean_(true);
+    };
+
+    // inTransaction() -> true إن كانت هناك معاملة واحدة مفتوحة على الأقل حالياً
+    natives["inTransaction"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("inTransaction", a, 0, line);
+        return Value::boolean_(!txStack.empty());
+    };
+
+    // ---- migration: خطوات ترحيل مُسمّاة (up/down)، مع تتبّع ما طُبِّق منها فعلاً ----
+
+    // defineMigration(name, upFn[, downFn]) -> true. upFn إلزامية (دالة Rin بلا وسائط)، downFn اختيارية
+    // (لأجل rollbackMigration). تعريف مكرَّر لنفس name يستبدل up/down بلا التأثير على appliedMigrations.
+    natives["defineMigration"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("defineMigration", a, 2, 3, line);
+        std::string name = asString(a[0], "defineMigration", line);
+        if (a[1].type != Value::Type::FUNCTION) {
+            throw diagErr(diag::Code::E0024_MigrationError, line, "'defineMigration': the second argument (up) must be a Rin function with no parameters");
+        }
+        Value down = Value::nil();
+        if (a.size() == 3) {
+            if (a[2].type != Value::Type::NIL && a[2].type != Value::Type::FUNCTION) {
+                throw diagErr(diag::Code::E0024_MigrationError, line, "'defineMigration': the third argument (down) must be a Rin function or nil");
+            }
+            down = a[2];
+        }
+        if (!migrationStore.count(name)) migrationOrder.push_back(name);
+        migrationStore[name] = MigrationDef{a[1], down};
+        return Value::boolean_(true);
+    };
+
+    // runMigration(name) -> true إن نُفِّذت الآن للمرة الأولى، false إن كانت مُطبَّقة أصلاً (لا تكرار)
+    natives["runMigration"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("runMigration", a, 1, line);
+        std::string name = asString(a[0], "runMigration", line);
+        auto it = migrationStore.find(name);
+        if (it == migrationStore.end()) {
+            auto d = diagErr(diag::Code::E0024_MigrationError, line, "no migration named `" + name + "`");
+            d.diagnostic->withReason("`" + name + "` was never registered")
+             .withHint("call `defineMigration(\"" + name + "\", ...)` before running it");
+            throw d;
+        }
+        for (auto& applied : appliedMigrations) if (applied == name) return Value::boolean_(false);
+        std::vector<Value> noArgs;
+        callFunction(it->second.up.function, noArgs, line);
+        appliedMigrations.push_back(name);
+        return Value::boolean_(true);
+    };
+
+    // rollbackMigration(name) -> true إن كانت مُطبَّقة فأُرجعت (استدعاء down إن وُجدت)، false إن لم تكن مُطبَّقة
+    natives["rollbackMigration"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("rollbackMigration", a, 1, line);
+        std::string name = asString(a[0], "rollbackMigration", line);
+        auto pos = std::find(appliedMigrations.begin(), appliedMigrations.end(), name);
+        if (pos == appliedMigrations.end()) return Value::boolean_(false);
+        auto it = migrationStore.find(name);
+        if (it != migrationStore.end() && it->second.down.type == Value::Type::FUNCTION) {
+            std::vector<Value> noArgs;
+            callFunction(it->second.down.function, noArgs, line);
+        }
+        appliedMigrations.erase(pos);
+        return Value::boolean_(true);
+    };
+
+    // appliedMigrations() -> مصفوفة أسماء الترحيلات المُطبَّقة فعلاً، بترتيب التطبيق
+    natives["appliedMigrations"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("appliedMigrations", a, 0, line);
+        auto result = std::make_shared<ArrayData>();
+        for (auto& n : appliedMigrations) result->push_back(Value::string(n));
+        return Value::makeArray(result);
+    };
+
+    // pendingMigrations() -> مصفوفة أسماء الترحيلات المُعرَّفة ولم تُطبَّق بعد، بترتيب التعريف
+    natives["pendingMigrations"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("pendingMigrations", a, 0, line);
+        auto result = std::make_shared<ArrayData>();
+        for (auto& n : migrationOrder) {
+            bool applied = false;
+            for (auto& app : appliedMigrations) if (app == n) { applied = true; break; }
+            if (!applied) result->push_back(Value::string(n));
+        }
+        return Value::makeArray(result);
+    };
+
+    // ---- cache: تخزين مؤقّت للقيم بمهلة صلاحية اختيارية (TTL بالثواني) ----
+
+    // cacheSet(key, value[, ttlSeconds]) -> true. بلا ttlSeconds = بلا انتهاء صلاحية.
+    natives["cacheSet"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("cacheSet", a, 2, 3, line);
+        std::string key = asString(a[0], "cacheSet", line);
+        long long expiresAt = 0;
+        if (a.size() == 3) {
+            double ttl = asNumber(a[2], "cacheSet", line);
+            expiresAt = static_cast<long long>(std::time(nullptr)) + static_cast<long long>(ttl);
+        }
+        cacheStore[key] = CacheEntry{a[1], expiresAt};
+        return Value::boolean_(true);
+    };
+
+    // cacheGet(key) -> القيمة المخزَّنة، أو nil إن لم توجد أو انتهت صلاحيتها (تُحذَف حينها تلقائياً)
+    natives["cacheGet"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("cacheGet", a, 1, line);
+        std::string key = asString(a[0], "cacheGet", line);
+        auto it = cacheStore.find(key);
+        if (it == cacheStore.end()) return Value::nil();
+        if (it->second.expiresAt > 0 && it->second.expiresAt <= static_cast<long long>(std::time(nullptr))) {
+            cacheStore.erase(it);
+            return Value::nil();
+        }
+        return it->second.value;
+    };
+
+    // cacheHas(key) -> true/false (بنفس منطق انتهاء الصلاحية اللحظي في cacheGet)
+    natives["cacheHas"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("cacheHas", a, 1, line);
+        std::string key = asString(a[0], "cacheHas", line);
+        auto it = cacheStore.find(key);
+        if (it == cacheStore.end()) return Value::boolean_(false);
+        if (it->second.expiresAt > 0 && it->second.expiresAt <= static_cast<long long>(std::time(nullptr))) {
+            cacheStore.erase(it);
+            return Value::boolean_(false);
+        }
+        return Value::boolean_(true);
+    };
+
+    // cacheDelete(key) -> true إن حُذف فعلاً، false إن لم يوجد أصلاً
+    natives["cacheDelete"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("cacheDelete", a, 1, line);
+        std::string key = asString(a[0], "cacheDelete", line);
+        return Value::boolean_(cacheStore.erase(key) > 0);
+    };
+
+    // cacheClear() -> true (يفرّغ كل التخزين المؤقّت)
+    natives["cacheClear"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("cacheClear", a, 0, line);
+        cacheStore.clear();
+        return Value::boolean_(true);
+    };
+
+    // cacheKeys() -> مصفوفة كل المفاتيح غير منتهية الصلاحية حالياً (تُحذَف أي مفاتيح منتهية أثناء المرور)
+    natives["cacheKeys"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("cacheKeys", a, 0, line);
+        long long now = static_cast<long long>(std::time(nullptr));
+        auto result = std::make_shared<ArrayData>();
+        for (auto it = cacheStore.begin(); it != cacheStore.end();) {
+            if (it->second.expiresAt > 0 && it->second.expiresAt <= now) { it = cacheStore.erase(it); continue; }
+            result->push_back(Value::string(it->first));
+            ++it;
+        }
+        return Value::makeArray(result);
+    };
+
+    // ---- watch: استدعاء دالة Rin تلقائياً عند تغيّر مجموعة مستندات (insertDoc/updateDoc/deleteDoc/document) ----
+
+    // watch(collection, fn) -> true. fn بتوقيع fun(id, doc, event) حيث event = "insert"/"update"/"delete"
+    // (doc = حقول المستند وقت الحدث؛ للحذف: المستند كما كان قبل حذفه مباشرة).
+    natives["watch"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("watch", a, 2, line);
+        std::string container = asString(a[0], "watch", line);
+        if (a[1].type != Value::Type::FUNCTION) {
+            throw diagErr(diag::Code::E0004_InvalidType, line, "'watch' يتوقّع دالة Rin كوسيط ثانٍ: fun(id, doc, event) { ... }");
+        }
+        docWatchers[container].push_back(a[1]);
+        return Value::boolean_(true);
+    };
+
+    // unwatch(collection) -> true إن كان هناك مراقبون فحُذفوا جميعاً، false إن لم يوجد أي مراقب أصلاً
+    natives["unwatch"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("unwatch", a, 1, line);
+        std::string container = asString(a[0], "unwatch", line);
+        return Value::boolean_(docWatchers.erase(container) > 0);
+    };
+
+    // ---- subscribe/publish: قناة أحداث عامة (pub/sub) مستقلة تماماً عن مجموعات المستندات ----
+
+    // subscribe(channel, fn) -> true. fn بتوقيع fun(payload) (payload = ما مرَّره publish كما هو)
+    natives["subscribe"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("subscribe", a, 2, line);
+        std::string channel = asString(a[0], "subscribe", line);
+        if (a[1].type != Value::Type::FUNCTION) {
+            throw diagErr(diag::Code::E0004_InvalidType, line, "'subscribe' يتوقّع دالة Rin كوسيط ثانٍ: fun(payload) { ... }");
+        }
+        channelSubs[channel].push_back(a[1]);
+        return Value::boolean_(true);
+    };
+
+    // unsubscribe(channel) -> true إن كان هناك مشتركون فحُذفوا جميعاً، false إن لم يوجد أي مشترك أصلاً
+    natives["unsubscribe"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("unsubscribe", a, 1, line);
+        std::string channel = asString(a[0], "unsubscribe", line);
+        return Value::boolean_(channelSubs.erase(channel) > 0);
+    };
+
+    // publish(channel, payload) -> عدد المشتركين الذين استُدعيت دوالهم فعلاً (0 إن لم يوجد أي مشترك بالقناة)
+    natives["publish"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("publish", a, 2, line);
+        std::string channel = asString(a[0], "publish", line);
+        int count = 0;
+        auto it = channelSubs.find(channel);
+        if (it != channelSubs.end()) {
+            for (auto& fn : it->second) {
+                if (fn.type != Value::Type::FUNCTION || !fn.function) continue;
+                std::vector<Value> cbArgs{a[1]};
+                callFunction(fn.function, cbArgs, line);
+                count++;
+            }
+        }
+        return Value::num(static_cast<double>(count));
+    };
+
+    // ---- container.chatbot / chatbot: روبوت محادثة (رسائل + سجلّ + ذاكرة + أحداث) ----
+    // الحاوية نفسها ليست مقيَّدة بقيود "البيانات النقية" (تماماً كـ container/container.api): يجوز
+    // أن تحوي fun ودوالاً واستدعاءات عادية. الذاكرة (memory) لا تحتاج دوالاً خاصة: أعلن ببساطة
+    // 'warp memory = {};' بداخل الحاوية، وهو نفس مبدأ warp المستخدم أصلاً لأي حالة حيّة (انظر
+    // container_indsin_api_demo.rin). ما يلي هو سجلّ الرسائل + مؤشر الكتابة + الأحداث فقط.
+
+    // يبني رسالة واحدة كـ map موحَّد الشكل: role/text/time/kind/format/meta
+    // format = "text" (افتراضي) | "markdown" | "code" -> يُقرَأ من طبقة العرض (Indsin) لتقرير كيفية
+    // رسم فقاعة الرسالة (نص عادي، Markdown مُنسَّق، أو كتلة كود بخط ثابت العرض). لا علاقة له بـ
+    // "kind" (text/attachment/...) الذي يصف نوع المحتوى نفسه لا طريقة عرضه.
+    auto makeChatMessageValue = [](const std::string& role, const Value& text,
+                                    const std::string& kind, const Value& meta,
+                                    const std::string& format = "text") -> Value {
+        auto m = std::make_shared<MapData>();
+        m->push_back({Value::string("role"), Value::string(role)});
+        m->push_back({Value::string("text"), text});
+        m->push_back({Value::string("time"), Value::num(static_cast<double>(std::time(nullptr)))});
+        m->push_back({Value::string("kind"), Value::string(kind)});
+        m->push_back({Value::string("format"), Value::string(format)});
+        m->push_back({Value::string("meta"), meta});
+        return Value::makeMap(m);
+    };
+
+    // يتحقّق من قيمة format مُمرَّرة اختيارياً لدوال الإرسال؛ يرمي خطأ إن كانت غير معروفة.
+    auto validateChatFormat = [this](const std::string& fn, const std::string& format, int line) {
+        static const std::vector<std::string> validFormats = {"text", "markdown", "code"};
+        if (std::find(validFormats.begin(), validFormats.end(), format) == validFormats.end()) {
+            throw errWithReason(diag::Code::E0016_InvalidProperty, line,
+                                 "'" + format + "' is not a recognized chat message format",
+                                 "expected one of: \"text\", \"markdown\", \"code\" (used by `" + fn + "`)");
+        }
+    };
+
+    // sendMessage(container, role, text, format?) -> يضيف رسالة (role عادةً "user" أو "bot" أو أي
+    // اسم آخر) ويطلق معالجات onChat(container, "message", fn) المسجَّلة (fn بتوقيع fun(msg) { ... }).
+    // format اختياري: "text" (افتراضي)/"markdown"/"code" -> يُخزَّن على الرسالة لتفسّره طبقة العرض.
+    // يُعيد الرسالة نفسها (map) بعد إضافتها.
+    natives["sendMessage"] = [this, makeChatMessageValue, validateChatFormat](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("sendMessage", a, 3, 4, line);
+        std::string container = asString(a[0], "sendMessage", line);
+        std::string role = asString(a[1], "sendMessage", line);
+        if (!containerKinds.count(container) || containerKinds[container] != ContainerKind::CHATBOT) {
+            throw errWithReason(diag::Code::E0014_InvalidContainer, line,
+                                 "'" + container + "' is not a chatbot container",
+                                 "expected a `container.chatbot` / `chatbot` container, defined with `container.chatbot`");
+        }
+        std::string format = a.size() > 3 ? asString(a[3], "sendMessage", line) : "text";
+        validateChatFormat("sendMessage", format, line);
+        Value msg = makeChatMessageValue(role, a[2], "text", Value::nil(), format);
+        chatHistoryStore[container].push_back(msg);
+        fireChatEvent(container, "message", {msg}, line);
+        return msg;
+    };
+
+    // botReply(container, text, format?) -> اختصار لِ sendMessage(container, "bot", text, format?)
+    natives["botReply"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("botReply", a, 2, 3, line);
+        std::vector<Value> forwarded{a[0], Value::string("bot"), a[1]};
+        if (a.size() > 2) forwarded.push_back(a[2]);
+        return natives["sendMessage"](forwarded, line);
+    };
+
+    // botReplyMarkdown(container, text) -> اختصار لِ botReply(container, text, "markdown")
+    natives["botReplyMarkdown"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("botReplyMarkdown", a, 2, line);
+        std::vector<Value> forwarded{a[0], a[1], Value::string("markdown")};
+        return natives["botReply"](forwarded, line);
+    };
+
+    // botReplyCode(container, code, language?) -> اختصار لِ botReply(container, code, "code")،
+    // مع تخزين language (مثال: "cpp"/"python"/"rin") داخل meta.language لتلوين الصياغة اختيارياً
+    // على مستوى طبقة العرض (Indsin/Kotlin). language اختياري، الافتراضي "" (بلا تلوين محدَّد).
+    natives["botReplyCode"] = [this, makeChatMessageValue](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("botReplyCode", a, 2, 3, line);
+        std::string container = asString(a[0], "botReplyCode", line);
+        if (!containerKinds.count(container) || containerKinds[container] != ContainerKind::CHATBOT) {
+            throw errWithReason(diag::Code::E0014_InvalidContainer, line,
+                                 "'" + container + "' is not a chatbot container",
+                                 "expected a `container.chatbot` / `chatbot` container, defined with `container.chatbot`");
+        }
+        std::string language = a.size() > 2 ? asString(a[2], "botReplyCode", line) : "";
+        auto meta = std::make_shared<MapData>();
+        meta->push_back({Value::string("language"), Value::string(language)});
+        Value msg = makeChatMessageValue("bot", a[1], "text", Value::makeMap(meta), "code");
+        chatHistoryStore[container].push_back(msg);
+        fireChatEvent(container, "message", {msg}, line);
+        return msg;
+    };
+
+    // streamReply(container, text, chunkSize?) -> يحاكي ردّاً تدريجياً (stream=true): يضيف رسالة
+    // بوت واحدة فوراً (meta.streaming=true) بأول جزء من النص، ثم يُحدِّث نفس الرسالة (بالمرجع، داخل
+    // chatHistoryStore) جزءاً تلو الآخر حتى اكتمال النص كاملاً (meta.streaming=false في النهاية).
+    // يطلق onChat(container, "message", fn) مع كل جزء (fn تستقبل الرسالة بحالتها الحالية)، فيكفي
+    // لطبقة العرض إعادة رسم آخر رسالة عند كل نداء بدل إضافة فقاعة جديدة في كل مرة -- هذا هو الفرق
+    // الجوهري بين stream=true وبين استدعاء botReply عدة مرات (الذي يُنشئ فقاعة منفصلة كل مرة).
+    // chunkSize اختياري (عدد الأحرف لكل جزء)، الافتراضي 8. يُعيد الرسالة النهائية المكتملة.
+    natives["streamReply"] = [this, makeChatMessageValue](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("streamReply", a, 2, 3, line);
+        std::string container = asString(a[0], "streamReply", line);
+        std::string fullText = asString(a[1], "streamReply", line);
+        if (!containerKinds.count(container) || containerKinds[container] != ContainerKind::CHATBOT) {
+            throw errWithReason(diag::Code::E0014_InvalidContainer, line,
+                                 "'" + container + "' is not a chatbot container",
+                                 "expected a `container.chatbot` / `chatbot` container, defined with `container.chatbot`");
+        }
+        int chunkSize = 8;
+        if (a.size() > 2) {
+            double n = asNumber(a[2], "streamReply", line);
+            if (n >= 1.0) chunkSize = static_cast<int>(n);
+        }
+        auto meta = std::make_shared<MapData>();
+        meta->push_back({Value::string("streaming"), Value::boolean_(true)});
+        Value msg = makeChatMessageValue("bot", Value::string(""), "text", Value::makeMap(meta), "text");
+        chatHistoryStore[container].push_back(msg);
+        size_t idx = chatHistoryStore[container].size() - 1;
+
+        std::string soFar;
+        for (size_t pos = 0; pos < fullText.size(); pos += static_cast<size_t>(chunkSize)) {
+            soFar += fullText.substr(pos, static_cast<size_t>(chunkSize));
+            bool isLast = (pos + static_cast<size_t>(chunkSize)) >= fullText.size();
+            auto m = std::make_shared<MapData>();
+            m->push_back({Value::string("role"), Value::string("bot")});
+            m->push_back({Value::string("text"), Value::string(soFar)});
+            m->push_back({Value::string("time"), Value::num(static_cast<double>(std::time(nullptr)))});
+            m->push_back({Value::string("kind"), Value::string("text")});
+            m->push_back({Value::string("format"), Value::string("text")});
+            auto stepMeta = std::make_shared<MapData>();
+            stepMeta->push_back({Value::string("streaming"), Value::boolean_(!isLast)});
+            m->push_back({Value::string("meta"), Value::makeMap(stepMeta)});
+            Value stepMsg = Value::makeMap(m);
+            chatHistoryStore[container][idx] = stepMsg;
+            fireChatEvent(container, "message", {stepMsg}, line);
+        }
+        if (fullText.empty()) {
+            // نص فارغ: لا حلقة أعلاه نُفِّذت، فأطلق نداءً أخيراً واحداً بحالة اكتمال فورية.
+            auto stepMeta = std::make_shared<MapData>();
+            stepMeta->push_back({Value::string("streaming"), Value::boolean_(false)});
+            auto m = std::make_shared<MapData>();
+            m->push_back({Value::string("role"), Value::string("bot")});
+            m->push_back({Value::string("text"), Value::string("")});
+            m->push_back({Value::string("time"), Value::num(static_cast<double>(std::time(nullptr)))});
+            m->push_back({Value::string("kind"), Value::string("text")});
+            m->push_back({Value::string("format"), Value::string("text")});
+            m->push_back({Value::string("meta"), Value::makeMap(stepMeta)});
+            Value stepMsg = Value::makeMap(m);
+            chatHistoryStore[container][idx] = stepMsg;
+            fireChatEvent(container, "message", {stepMsg}, line);
+        }
+        return chatHistoryStore[container][idx];
+    };
+
+    // attachToChat(container, role, fileRef, caption) -> مثل sendMessage لكن kind="attachment"،
+    // caption نص الرسالة (قد يكون فارغاً ""), fileRef يُحفَظ داخل meta.file (مسار/رابط/معرّف الملف).
+    natives["attachToChat"] = [this, makeChatMessageValue](std::vector<Value>& a, int line) -> Value {
+        expectArgs("attachToChat", a, 4, line);
+        std::string container = asString(a[0], "attachToChat", line);
+        std::string role = asString(a[1], "attachToChat", line);
+        if (!containerKinds.count(container) || containerKinds[container] != ContainerKind::CHATBOT) {
+            throw errWithReason(diag::Code::E0014_InvalidContainer, line,
+                                 "'" + container + "' is not a chatbot container",
+                                 "expected a `container.chatbot` / `chatbot` container, defined with `container.chatbot`");
+        }
+        auto meta = std::make_shared<MapData>();
+        meta->push_back({Value::string("file"), a[2]});
+        Value msg = makeChatMessageValue(role, a[3], "attachment", Value::makeMap(meta));
+        chatHistoryStore[container].push_back(msg);
+        fireChatEvent(container, "message", {msg}, line);
+        return msg;
+    };
+
+    // chatHistory(container) -> مصفوفة كل الرسائل (map لكل رسالة) بترتيب الإرسال
+    natives["chatHistory"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("chatHistory", a, 1, line);
+        std::string container = asString(a[0], "chatHistory", line);
+        auto result = std::make_shared<ArrayData>();
+        auto it = chatHistoryStore.find(container);
+        if (it != chatHistoryStore.end()) for (auto& m : it->second) result->push_back(m);
+        return Value::makeArray(result);
+    };
+
+    // lastChatMessage(container) -> آخر رسالة (map) أو nil إن كان السجلّ فارغاً/غير موجود
+    natives["lastChatMessage"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("lastChatMessage", a, 1, line);
+        std::string container = asString(a[0], "lastChatMessage", line);
+        auto it = chatHistoryStore.find(container);
+        if (it != chatHistoryStore.end() && !it->second.empty()) return it->second.back();
+        return Value::nil();
+    };
+
+    // chatMessageCount(container) -> عدد الرسائل في السجلّ
+    natives["chatMessageCount"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("chatMessageCount", a, 1, line);
+        std::string container = asString(a[0], "chatMessageCount", line);
+        auto it = chatHistoryStore.find(container);
+        return Value::num(it != chatHistoryStore.end() ? static_cast<double>(it->second.size()) : 0.0);
+    };
+
+    // clearChat(container) -> يمسح كامل سجلّ الرسائل (لا يمسّ الذاكرة/warp ولا المعالجات المسجَّلة).
+    // true إن كان هناك سجلّ فمُسِح، false إن كان فارغاً/غير موجود أصلاً.
+    natives["clearChat"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("clearChat", a, 1, line);
+        std::string container = asString(a[0], "clearChat", line);
+        auto it = chatHistoryStore.find(container);
+        if (it == chatHistoryStore.end() || it->second.empty()) return Value::boolean_(false);
+        it->second.clear();
+        return Value::boolean_(true);
+    };
+
+    // setChatTyping(container, true|false) -> يضبط مؤشر الكتابة، ويطلق onChat(container, "typing", fn)
+    // (fn بتوقيع fun(isTyping) { ... }) في كل مرة تتغيَّر فيها القيمة فعلياً.
+    natives["setChatTyping"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("setChatTyping", a, 2, line);
+        std::string container = asString(a[0], "setChatTyping", line);
+        bool typing = a[1].isTruthy();
+        bool changed = chatTypingState[container] != typing;
+        chatTypingState[container] = typing;
+        if (changed) fireChatEvent(container, "typing", {Value::boolean_(typing)}, line);
+        return Value::boolean_(true);
+    };
+
+    // isChatTyping(container) -> الحالة الحالية لمؤشر الكتابة (false افتراضياً إن لم تُضبَط قط)
+    natives["isChatTyping"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("isChatTyping", a, 1, line);
+        std::string container = asString(a[0], "isChatTyping", line);
+        auto it = chatTypingState.find(container);
+        return Value::boolean_(it != chatTypingState.end() && it->second);
+    };
+
+    // openChat(container) / closeChat(container) -> يطلقان onChat(container, "open"/"close", fn)
+    // (fn بلا وسائط) — تُستدعى من طبقة الواجهة (Indsin) عند فتح/إغلاق نافذة المحادثة فعلياً.
+    natives["openChat"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("openChat", a, 1, line);
+        std::string container = asString(a[0], "openChat", line);
+        fireChatEvent(container, "open", {}, line);
+        return Value::boolean_(true);
+    };
+    natives["closeChat"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("closeChat", a, 1, line);
+        std::string container = asString(a[0], "closeChat", line);
+        fireChatEvent(container, "close", {}, line);
+        return Value::boolean_(true);
+    };
+
+    // onChat(container, event, fn) -> يسجّل معالجاً لحدث من: "message"/"open"/"close"/"typing".
+    // نفس روح watch()/subscribe() تماماً: يمكن تسجيل أكثر من معالج لنفس الحدث، وتُستدعى جميعها
+    // بترتيب التسجيل. fn دالة Rin معرَّفة مسبقاً عبر fun (يُمرَّر اسمها كقيمة، لا كنداء).
+    natives["onChat"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("onChat", a, 3, line);
+        std::string container = asString(a[0], "onChat", line);
+        std::string event = asString(a[1], "onChat", line);
+        static const std::vector<std::string> validEvents = {"message", "open", "close", "typing"};
+        if (std::find(validEvents.begin(), validEvents.end(), event) == validEvents.end()) {
+            throw errWithReason(diag::Code::E0016_InvalidProperty, line,
+                                 "'" + event + "' is not a recognized chatbot event",
+                                 "expected one of: \"message\", \"open\", \"close\", \"typing\"");
+        }
+        if (a[2].type != Value::Type::FUNCTION) {
+            throw diagErr(diag::Code::E0004_InvalidType, line,
+                          "'onChat' يتوقّع دالة Rin كوسيط ثالث: fun(...) { ... }");
+        }
+        chatHandlers[container].push_back({event, a[2]});
+        return Value::boolean_(true);
+    };
+
+    // offChat(container, event) -> يحذف كل المعالجات المسجَّلة لحدث بعينه في هذه الحاوية.
+    // true إن حُذف معالج واحد أو أكثر فعلاً، false إن لم يوجد شيء أصلاً.
+    natives["offChat"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("offChat", a, 2, line);
+        std::string container = asString(a[0], "offChat", line);
+        std::string event = asString(a[1], "offChat", line);
+        auto it = chatHandlers.find(container);
+        if (it == chatHandlers.end()) return Value::boolean_(false);
+        size_t before = it->second.size();
+        it->second.erase(std::remove_if(it->second.begin(), it->second.end(),
+                          [&](const std::pair<std::string, Value>& e) { return e.first == event; }),
+                          it->second.end());
+        return Value::boolean_(it->second.size() != before);
+    };
+
+    // exportChat(container, format, path?) -> يصدّر سجلّ محادثة إلى ملف حقيقي على القرص:
+    //   format="text" -> نصّ عادي "role: text" سطراً لكل رسالة (UTF-8)، الامتداد الافتراضي .txt
+    //   format="png"  -> صورة فقاعات محادثة حقيقية (buildChatPng)، الامتداد الافتراضي .png
+    // path اختياري (نفس مبدأ save/writeFile)؛ الافتراضي = اسم الحاوية + الامتداد المناسب.
+    // يُعيد true دائماً عند النجاح (نفس عرف writeFile)، ويرمي خطأ إن كانت الحاوية ليست chatbot
+    // أو كانت format غير مدعومة.
+    natives["exportChat"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("exportChat", a, 2, 3, line);
+        std::string container = asString(a[0], "exportChat", line);
+        std::string format = asString(a[1], "exportChat", line);
+        if (!containerKinds.count(container) || containerKinds[container] != ContainerKind::CHATBOT) {
+            throw errWithReason(diag::Code::E0014_InvalidContainer, line,
+                                 "'" + container + "' is not a chatbot container",
+                                 "expected a `container.chatbot` / `chatbot` container, defined with `container.chatbot`");
+        }
+        std::string path;
+        if (a.size() > 2 && a[2].type != Value::Type::NIL) path = asString(a[2], "exportChat", line);
+
+        if (format == "text") {
+            std::ostringstream out;
+            auto it = chatHistoryStore.find(container);
+            if (it != chatHistoryStore.end()) {
+                for (auto& msgVal : it->second) {
+                    std::string role, text;
+                    if (msgVal.type == Value::Type::MAP && msgVal.map) {
+                        for (auto& kv : *msgVal.map) {
+                            if (kv.first.type != Value::Type::STRING) continue;
+                            if (kv.first.str == "role") role = kv.second.toDisplayString();
+                            else if (kv.first.str == "text") text = kv.second.toDisplayString();
+                        }
+                    }
+                    out << role << ": " << text << "\n";
+                }
+            }
+            if (path.empty()) path = container + ".txt";
+            writeRealFile(path, out.str(), line, "exportChat (text)");
+            return Value::boolean_(true);
+        }
+        if (format == "png") {
+            if (path.empty()) path = container + ".png";
+            std::string png = buildChatPng(container);
+            writeRealFile(path, png, line, "exportChat (png)");
+            return Value::boolean_(true);
+        }
+        throw errWithReason(diag::Code::E0016_InvalidProperty, line,
+                             "'" + format + "' is not a supported exportChat format",
+                             "expected \"text\" or \"png\"");
+    };
+
+    // ---- container.api: استدعاء نقاط API الوهمية المسجَّلة عبر route (حقيقي بالكامل، بلا شبكة) ----
+    // call(method, path) -> يبحث داخل container.api الحالي (الذي نُنفَّذ بداخله الآن)
+    natives["call"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("call", a, 2, line);
+        std::string method = asString(a[0], "call", line);
+        std::string path = asString(a[1], "call", line);
+        std::string key = containerStack.empty() ? "" : containerStack.back();
+        return performApiCall(key, method, path, line);
+    };
+    // callApi(apiContainerName, method, path) -> يستدعي أي container.api باسمه من أي مكان في البرنامج
+    natives["callApi"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("callApi", a, 3, line);
+        std::string key = asString(a[0], "callApi", line);
+        std::string method = asString(a[1], "callApi", line);
+        std::string path = asString(a[2], "callApi", line);
+        return performApiCall(key, method, path, line);
+    };
+
+    // ================= أدوات @make الديناميكية: أنشئ أي شيء وبرمِج أي شيء وقت التشغيل =================
+    // @make (الاسم الرسمي الحالي؛ سابقاً @Everything، وما زالت مقبولة كاسم قديم — انظر
+    // ContainerKind::EVERYTHING أعلى) تسمح فعلاً بتعشيش أي نوع حاوية آخر بصياغة
+    // ثابتة (@table=... .end/table إلخ) بلا أي قيد. الأدوات التالية تضيف الطبقة المكمّلة: إنشاء/قراءة/
+    // كتابة/استدعاء أي حاوية أو حقل بالاسم كنص عادي (Value) وقت التشغيل، بحيث يمكن لحلقة for واحدة أن
+    // "تُنشئ أي شيء" (أسماء وأنواع محسوبة ديناميكياً) و"تبرمج أي شيء" (تخزين حتى دوال Rin كقيم حقول
+    // ثم استدعاؤها لاحقاً عبر callFn). لا علاقة لهذه الأدوات بنوع الحاوية المحيطة بها إطلاقاً — تعمل
+    // من أي مكان في البرنامج، تماماً كـ callApi أعلاه.
+
+    // spawn(kind, name?) -> ينشئ حاوية جديدة باسم name (أو معرّفاً تلقائياً "#N" إن أُغفل/كان فارغاً)
+    // ونوع kind (نص حرّ: "table"/"chatbot"/"everything"/أي اسم آخر غير معروف -> PLAIN بلا أي قيد
+    // بيانات نقية). تُسجَّل داخل نفس containers/containerKinds الحقيقيَّين (فتراها install/save/link/
+    // tying/merge وكل أدوات container.* الأخرى بنفس الطريقة تماماً كأي @container عادية)، وتُضاف إلى
+    // آخر Containers.Group مفتوحة إن وُجدت. تُعيد اسم الحاوية الفعلي (string) لتيسير التسلسل/التخزين.
+    natives["spawn"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("spawn", a, 1, 2, line);
+        std::string kindRaw = asString(a[0], "spawn", line);
+        std::string name = (a.size() > 1) ? asString(a[1], "spawn", line) : "";
+        if (name.empty()) name = "#" + std::to_string(containers.size());
+        auto env = std::make_shared<Environment>(globals);
+        containers[name] = env;
+        containerKinds[name] = resolveContainerKindName(kindRaw);
+        containerCustomKind[name] = kindRaw;
+        if (!groupStack.empty()) groupMembers[groupStack.back()].push_back(name);
+        if (!volumeStack.empty() && (openCollectorKinds.empty() || openCollectorKinds.back() == 'V')) {
+            volumeMembers[volumeStack.back()].push_back(name); // انظر شرح openCollectorKinds في الهيدر: تُسجَّل عضواً مباشراً في Volume فقط إن لم تفصلها عنها Group مفتوحة
+        }
+        return Value::string(name);
+    };
+    // create(kind, name?) -> مرادف إنجليزي مبسّط كامل لـ spawn() (نفس الدالة حرفياً)، من نفس عائلة
+    // الكلمات السهلة المرافقة لمفهوم make: "create something executable or usable" وقت التشغيل.
+    natives["create"] = natives["spawn"];
+
+    // destroyContainer(name) -> يحذف حاوية أُنشئت عبر spawn (أو أي حاوية أخرى) بالكامل من containers/
+    // containerKinds. true إن كانت موجودة فحُذفت، false إن لم تكن موجودة أصلاً.
+    // RCS-1.0 §3.2 Lifecycle: on destroy() (إن كانت مُعرَّفة لهذه الحاوية) يُستدعى أولاً، قبل أي
+    // حذف فعلي -- حتى يستطيع كودها قراءة حقول state/getField للحاوية وهي لا تزال موجودة بالكامل.
+    natives["destroyContainer"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("destroyContainer", a, 1, line);
+        std::string name = asString(a[0], "destroyContainer", line);
+        bool existed = containers.count(name) > 0;
+        if (existed) {
+            auto hooksIt = containerLifecycle.find(name);
+            if (hooksIt != containerLifecycle.end()) {
+                fireLifecycleHook(name, hooksIt->second.destroy, {}, line);
+            }
+        }
+        containers.erase(name);
+        tableForget(name); // جدول: صفوفه ونمطه
+        containerKinds.erase(name);
+        containerCustomKind.erase(name);
+        containerLifecycle.erase(name);
+        containerStateNames.erase(name);
+        // RCS-1.0 §3.5 Tree + §3.6 Events (Phase 2): تنظيف كل أثر لهذه الحاوية من سجلات الشجرة
+        // والأحداث -- بما في ذلك إزالتها من قائمة أبناء أبيها (إن كان لها أب) حتى لا يبقى اسمها
+        // ميتاً داخل childrenOf(parent) بعد حذفها فعلياً.
+        auto parentIt = containerParent.find(name);
+        if (parentIt != containerParent.end()) {
+            auto childrenIt = containerChildren.find(parentIt->second);
+            if (childrenIt != containerChildren.end()) {
+                auto& siblings = childrenIt->second;
+                siblings.erase(std::remove(siblings.begin(), siblings.end(), name), siblings.end());
+            }
+            containerParent.erase(parentIt);
+        }
+        containerChildren.erase(name);
+        containerSlots.erase(name);
+        eventHandlers.erase(name);
+        return Value::boolean_(existed);
+    };
+
+    // hasContainer(name) -> true إن كانت هناك حاوية مسجَّلة بهذا الاسم (عبر @container أو spawn)
+    natives["hasContainer"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("hasContainer", a, 1, line);
+        return Value::boolean_(containers.count(canonContainer(asString(a[0], "hasContainer", line))) > 0);
+    };
+
+    // container(name) — أسلوب كتابة بسيط للوصول إلى حاوية موجودة.
+    // container(name, field) — قراءة حقل.
+    // container(name, field, value) — كتابة حقل.
+    // يعيد الاستدعاء الأول كائن وصف صغيراً حتى يصبح من السهل تمريره/طباعته دون API طويل.
+    natives["container"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("container", a, 1, 3, line);
+        std::string name = asString(a[0], "container", line);
+        if (!containers.count(name)) return Value::nil();
+        if (a.size() == 1) {
+            auto m = std::make_shared<MapData>();
+            m->push_back({Value::string("name"), Value::string(name)});
+            auto k = containerKinds.find(name);
+            m->push_back({Value::string("kind"), Value::string(k != containerKinds.end() ? containerTagName(k->second) : "container")});
+            return Value::makeMap(m);
+        }
+        std::string key = asString(a[1], "container", line);
+        if (a.size() == 2) {
+            auto env = containers.at(name);
+            auto it = env->values.find(key);
+            return it == env->values.end() ? Value::nil() : it->second;
+        }
+        auto env = containers.at(name);
+        env->values[key] = a[2];
+        return a[2];
+    };
+
+    // kindOf(name) -> نص نوع الحاوية: النص الحرفي الذي مُرِّر لِـ spawn() إن أُنشئت به، وإلا الوسم
+    // الرسمي الموحَّد (نفس containerTagName المستخدم في الحفظ/التسلسل، مثال "container.table").
+    // nil إن لم توجد حاوية بهذا الاسم إطلاقاً.
+    natives["kindOf"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("kindOf", a, 1, line);
+        std::string name = asString(a[0], "kindOf", line);
+        if (!containers.count(name)) return Value::nil();
+        auto customIt = containerCustomKind.find(name);
+        if (customIt != containerCustomKind.end()) return Value::string(customIt->second);
+        return Value::string(containerTagName(containerKinds.count(name) ? containerKinds[name] : ContainerKind::PLAIN));
+    };
+
+    // findMask(mask) -> الاسم المرتبط بالقناع، مع أولوية الحاويات ثم المجموعات ثم Volume.
+    // القناع هو هوية منطقية مستقلة عن الاسم؛ إعادة تسمية الاسم لا تغيّر عقد القناع في المصدر.
+    natives["findMask"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("findMask", a, 1, line);
+        std::string mask = asString(a[0], "findMask", line);
+        auto c = containerMasks.find(mask); if (c != containerMasks.end()) return Value::string(c->second);
+        auto g = groupMasks.find(mask); if (g != groupMasks.end()) return Value::string(g->second);
+        auto v = volumeMasks.find(mask); if (v != volumeMasks.end()) return Value::string(v->second);
+        return Value::nil();
+    };
+
+    // maskOf(name) -> القناع المسجّل للحاوية/المجموعة/Volume، أو nil.
+    natives["maskOf"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskOf", a, 1, line);
+        std::string name = asString(a[0], "maskOf", line);
+        for (auto& kv : containerMasks) if (kv.second == name) return Value::string(kv.first);
+        for (auto& kv : groupMasks) if (kv.second == name) return Value::string(kv.first);
+        for (auto& kv : volumeMasks) if (kv.second == name) return Value::string(kv.first);
+        return Value::nil();
+    };
+
+    // ---- Mask Power API ---------------------------------------------------------------
+    // القناع أصبح طبقة هوية تشغيلية: يمكن الاستعلام عنه، معرفة نوعه، سرد الأقنعة،
+    // واستعماله للوصول إلى أعضاء المجموعة/العلاقة الأب-الابن دون معرفة الاسم الأصلي.
+    natives["maskExists"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskExists", a, 1, line);
+        std::string mask = asString(a[0], "maskExists", line);
+        return Value::boolean_(!mask.empty() &&
+            (containerMasks.count(mask) || groupMasks.count(mask) || volumeMasks.count(mask)));
+    };
+
+    // mask(name) — اختصار بسيط للوصول إلى هوية Mask دون استدعاء maskInfo/maskTarget يدوياً.
+    // يعيد {mask,name,kind} أو nil، ويمكن تمريره مباشرةً داخل التعبيرات.
+    natives["mask"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("mask", a, 1, line);
+        std::string name = asString(a[0], "mask", line);
+        std::string kind, target;
+        if (auto it = containerMasks.find(name); it != containerMasks.end()) { kind = "container"; target = it->second; }
+        else if (auto it = groupMasks.find(name); it != groupMasks.end()) { kind = "group"; target = it->second; }
+        else if (auto it = volumeMasks.find(name); it != volumeMasks.end()) { kind = "volume"; target = it->second; }
+        else return Value::nil();
+        auto m = std::make_shared<MapData>();
+        m->push_back({Value::string("mask"), Value::string(name)});
+        m->push_back({Value::string("name"), Value::string(target)});
+        m->push_back({Value::string("kind"), Value::string(kind)});
+        return Value::makeMap(m);
+    };
+
+    // maskTarget(mask) -> الاسم/المفتاح المرتبط بالقناع.
+    natives["maskTarget"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskTarget", a, 1, line);
+        std::string mask = asString(a[0], "maskTarget", line);
+        auto c = containerMasks.find(mask); if (c != containerMasks.end()) return Value::string(c->second);
+        auto g = groupMasks.find(mask); if (g != groupMasks.end()) return Value::string(g->second);
+        auto v = volumeMasks.find(mask); if (v != volumeMasks.end()) return Value::string(v->second);
+        return Value::nil();
+    };
+
+    // maskKind(mask) -> container | group | volume | nil.
+    natives["maskKind"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskKind", a, 1, line);
+        std::string mask = asString(a[0], "maskKind", line);
+        if (containerMasks.count(mask)) return Value::string("container");
+        if (groupMasks.count(mask)) return Value::string("group");
+        if (volumeMasks.count(mask)) return Value::string("volume");
+        return Value::nil();
+    };
+
+    // maskNames(kind?) -> كل الأقنعة المسجّلة، أو أقنعة نوع محدد.
+    natives["maskNames"] = [this](std::vector<Value>& a, int line) -> Value {
+        if (a.size() > 1) expectArgsRange("maskNames", a, 0, 1, line);
+        std::string kind = a.empty() ? "" : asString(a[0], "maskNames", line);
+        auto result = std::make_shared<ArrayData>();
+        auto add = [&](const auto& table, const std::string& expected) {
+            if (!kind.empty() && kind != expected) return;
+            for (auto& kv : table) result->push_back(Value::string(kv.first));
+        };
+        add(containerMasks, "container"); add(groupMasks, "group"); add(volumeMasks, "volume");
+        std::sort(result->begin(), result->end(), [](const Value& x, const Value& y) { return x.str < y.str; });
+        return Value::makeArray(result);
+    };
+
+    // maskInfo(mask) -> كائن معلومات صغير مناسب للتفاعل والـ debugging.
+    natives["maskInfo"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskInfo", a, 1, line);
+        std::string mask = asString(a[0], "maskInfo", line);
+        std::string kind, target;
+        if (auto it = containerMasks.find(mask); it != containerMasks.end()) { kind = "container"; target = it->second; }
+        else if (auto it = groupMasks.find(mask); it != groupMasks.end()) { kind = "group"; target = it->second; }
+        else if (auto it = volumeMasks.find(mask); it != volumeMasks.end()) { kind = "volume"; target = it->second; }
+        else return Value::nil();
+        auto m = std::make_shared<MapData>();
+        m->push_back({Value::string("mask"), Value::string(mask)});
+        m->push_back({Value::string("name"), Value::string(target)});
+        m->push_back({Value::string("kind"), Value::string(kind)});
+        if (kind == "group") {
+            auto it = groupMembers.find(target);
+            auto members = std::make_shared<ArrayData>();
+            if (it != groupMembers.end()) for (auto& n : it->second) members->push_back(Value::string(n));
+            m->push_back({Value::string("members"), Value::makeArray(members)});
+        }
+        return Value::makeMap(m);
+    };
+
+    // maskMembers(mask) -> أعضاء المجموعة التي يحددها القناع، وإلا مصفوفة فارغة.
+    natives["maskMembers"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskMembers", a, 1, line);
+        std::string mask = asString(a[0], "maskMembers", line);
+        auto result = std::make_shared<ArrayData>();
+        auto gm = groupMasks.find(mask);
+        if (gm != groupMasks.end()) {
+            auto it = groupMembers.find(gm->second);
+            if (it != groupMembers.end()) for (auto& n : it->second) result->push_back(Value::string(n));
+        }
+        return Value::makeArray(result);
+    };
+
+    // maskParent(mask) -> قناع الأب عندما يكون الهدف حاوية متداخلة داخل حاوية أخرى.
+    natives["maskParent"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskParent", a, 1, line);
+        std::string mask = asString(a[0], "maskParent", line);
+        auto cm = containerMasks.find(mask);
+        if (cm == containerMasks.end()) return Value::nil();
+        auto p = containerParent.find(cm->second);
+        if (p == containerParent.end()) return Value::nil();
+        for (auto& kv : containerMasks) if (kv.second == p->second) return Value::string(kv.first);
+        return Value::nil();
+    };
+
+    // maskChildren(mask) -> أقنعة الأبناء المباشرين للحاوية التي يحددها القناع.
+    natives["maskChildren"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskChildren", a, 1, line);
+        std::string mask = asString(a[0], "maskChildren", line);
+        auto cm = containerMasks.find(mask);
+        auto result = std::make_shared<ArrayData>();
+        if (cm == containerMasks.end()) return Value::makeArray(result);
+        auto it = containerChildren.find(cm->second);
+        if (it == containerChildren.end()) return Value::makeArray(result);
+        for (auto& child : it->second) {
+            for (auto& kv : containerMasks) if (kv.second == child) { result->push_back(Value::string(kv.first)); break; }
+        }
+        return Value::makeArray(result);
+    };
+
+    // ---- Mask v3: identity graph ------------------------------------------------------
+    // v3 يجعل القناع طبقة هوية قابلة للتركيب: alias + tags + refs + lock + resolution.
+    // كل هذه البيانات مستقلة عن name، لذلك يمكن تغيير الاسم دون كسر هوية القناع.
+    auto maskKnown = [this](const std::string& m) -> bool {
+        return !m.empty() && (containerMasks.count(m) || groupMasks.count(m) || volumeMasks.count(m));
+    };
+    auto maskResolveInternal = [this, maskKnown](std::string token) -> std::string {
+        if (maskKnown(token)) return token;
+        std::unordered_set<std::string> seen;
+        for (int i = 0; i < 64 && !token.empty(); ++i) {
+            if (maskKnown(token)) return token;
+            if (!seen.insert(token).second) break;
+            auto it = maskAliases.find(token);
+            if (it == maskAliases.end()) break;
+            token = it->second;
+        }
+        return maskKnown(token) ? token : std::string();
+    };
+
+    natives["maskResolve"] = [this, maskResolveInternal](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskResolve", a, 1, line);
+        std::string r = maskResolveInternal(asString(a[0], "maskResolve", line));
+        return r.empty() ? Value::nil() : Value::string(r);
+    };
+
+    natives["maskAlias"] = [this, maskResolveInternal](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskAlias", a, 2, line);
+        std::string alias = asString(a[0], "maskAlias", line);
+        std::string target = maskResolveInternal(asString(a[1], "maskAlias", line));
+        if (alias.empty() || target.empty()) throw err(diag::Code::E0035_RuntimeError, line, "maskAlias: unknown or empty mask");
+        if (lockedMasks.count(target)) throw err(diag::Code::E0035_RuntimeError, line, "maskAlias: mask is locked");
+        maskAliases[alias] = target;
+        return Value::boolean_(true);
+    };
+
+    natives["maskAliases"] = [this, maskResolveInternal](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskAliases", a, 1, line);
+        std::string mask = maskResolveInternal(asString(a[0], "maskAliases", line));
+        auto out = std::make_shared<ArrayData>();
+        if (mask.empty()) return Value::makeArray(out);
+        for (auto& kv : maskAliases) if (maskResolveInternal(kv.second) == mask) out->push_back(Value::string(kv.first));
+        return Value::makeArray(out);
+    };
+
+    natives["maskTag"] = [this, maskResolveInternal](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskTag", a, 2, line);
+        std::string mask = maskResolveInternal(asString(a[0], "maskTag", line));
+        std::string tag = asString(a[1], "maskTag", line);
+        if (mask.empty() || tag.empty()) throw err(diag::Code::E0035_RuntimeError, line, "maskTag: unknown or empty mask/tag");
+        if (lockedMasks.count(mask)) throw err(diag::Code::E0035_RuntimeError, line, "maskTag: mask is locked");
+        auto& tags = maskTags[mask];
+        if (std::find(tags.begin(), tags.end(), tag) == tags.end()) tags.push_back(tag);
+        return Value::boolean_(true);
+    };
+
+    natives["maskUntag"] = [this, maskResolveInternal](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskUntag", a, 2, line);
+        std::string mask = maskResolveInternal(asString(a[0], "maskUntag", line));
+        std::string tag = asString(a[1], "maskUntag", line);
+        if (mask.empty()) return Value::boolean_(false);
+        if (lockedMasks.count(mask)) throw err(diag::Code::E0035_RuntimeError, line, "maskUntag: mask is locked");
+        auto it = maskTags.find(mask); if (it == maskTags.end()) return Value::boolean_(false);
+        auto& v = it->second;
+        auto pos = std::find(v.begin(), v.end(), tag);
+        if (pos == v.end()) return Value::boolean_(false);
+        v.erase(pos);
+        return Value::boolean_(true);
+    };
+
+    natives["maskTags"] = [this, maskResolveInternal](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskTags", a, 1, line);
+        std::string mask = maskResolveInternal(asString(a[0], "maskTags", line));
+        auto out = std::make_shared<ArrayData>();
+        auto it = maskTags.find(mask); if (it != maskTags.end()) for (auto& t : it->second) out->push_back(Value::string(t));
+        return Value::makeArray(out);
+    };
+
+    natives["maskHasTag"] = [this, maskResolveInternal](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskHasTag", a, 2, line);
+        std::string mask = maskResolveInternal(asString(a[0], "maskHasTag", line));
+        std::string tag = asString(a[1], "maskHasTag", line);
+        auto it = maskTags.find(mask); if (it == maskTags.end()) return Value::boolean_(false);
+        return Value::boolean_(std::find(it->second.begin(), it->second.end(), tag) != it->second.end());
+    };
+
+    natives["maskRef"] = [this, maskResolveInternal](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskRef", a, 2, line);
+        std::string mask = maskResolveInternal(asString(a[0], "maskRef", line));
+        std::string ref = asString(a[1], "maskRef", line);
+        if (mask.empty() || ref.empty()) throw err(diag::Code::E0035_RuntimeError, line, "maskRef: unknown or empty mask/ref");
+        if (lockedMasks.count(mask)) throw err(diag::Code::E0035_RuntimeError, line, "maskRef: mask is locked");
+        auto& refs = maskRefs[mask];
+        if (std::find(refs.begin(), refs.end(), ref) == refs.end()) refs.push_back(ref);
+        return Value::boolean_(true);
+    };
+
+    natives["maskRefs"] = [this, maskResolveInternal](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskRefs", a, 1, line);
+        std::string mask = maskResolveInternal(asString(a[0], "maskRefs", line));
+        auto out = std::make_shared<ArrayData>();
+        auto it = maskRefs.find(mask); if (it != maskRefs.end()) for (auto& r : it->second) out->push_back(Value::string(r));
+        return Value::makeArray(out);
+    };
+
+    natives["maskLock"] = [this, maskResolveInternal](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskLock", a, 1, line);
+        std::string mask = maskResolveInternal(asString(a[0], "maskLock", line));
+        if (mask.empty()) throw err(diag::Code::E0035_RuntimeError, line, "maskLock: unknown mask");
+        lockedMasks.insert(mask);
+        return Value::boolean_(true);
+    };
+
+    natives["maskLocked"] = [this, maskResolveInternal](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskLocked", a, 1, line);
+        std::string mask = maskResolveInternal(asString(a[0], "maskLocked", line));
+        return Value::boolean_(!mask.empty() && lockedMasks.count(mask));
+    };
+
+    natives["maskCompare"] = [this, maskResolveInternal](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskCompare", a, 2, line);
+        std::string x = maskResolveInternal(asString(a[0], "maskCompare", line));
+        std::string y = maskResolveInternal(asString(a[1], "maskCompare", line));
+        return Value::boolean_(!x.empty() && x == y);
+    };
+
+    natives["maskByTag"] = [this, maskResolveInternal](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskByTag", a, 1, line);
+        std::string tag = asString(a[0], "maskByTag", line);
+        auto out = std::make_shared<ArrayData>();
+        for (auto& kv : maskTags) {
+            if (!maskResolveInternal(kv.first).empty() && std::find(kv.second.begin(), kv.second.end(), tag) != kv.second.end())
+                out->push_back(Value::string(kv.first));
+        }
+        return Value::makeArray(out);
+    };
+
+    natives["maskSummary"] = [this, maskResolveInternal](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskSummary", a, 1, line);
+        std::string mask = maskResolveInternal(asString(a[0], "maskSummary", line));
+        auto m = std::make_shared<MapData>();
+        if (mask.empty()) return Value::makeMap(m);
+        std::string kind, target;
+        if (auto it = containerMasks.find(mask); it != containerMasks.end()) { kind="container"; target=it->second; }
+        else if (auto it = groupMasks.find(mask); it != groupMasks.end()) { kind="group"; target=it->second; }
+        else if (auto it = volumeMasks.find(mask); it != volumeMasks.end()) { kind="volume"; target=it->second; }
+        m->push_back({Value::string("mask"), Value::string(mask)});
+        m->push_back({Value::string("target"), Value::string(target)});
+        m->push_back({Value::string("kind"), Value::string(kind)});
+        m->push_back({Value::string("locked"), Value::boolean_(lockedMasks.count(mask) != 0)});
+        auto ts = maskTags.find(mask); auto rs = maskRefs.find(mask);
+        auto ta = std::make_shared<ArrayData>(); if (ts != maskTags.end()) for (auto& t:ts->second) ta->push_back(Value::string(t));
+        auto ra = std::make_shared<ArrayData>(); if (rs != maskRefs.end()) for (auto& r:rs->second) ra->push_back(Value::string(r));
+        m->push_back({Value::string("tags"), Value::makeArray(ta)});
+        m->push_back({Value::string("refs"), Value::makeArray(ra)});
+        auto aa = std::make_shared<ArrayData>(); for (auto& kv:maskAliases) if (maskResolveInternal(kv.second)==mask) aa->push_back(Value::string(kv.first));
+        m->push_back({Value::string("aliases"), Value::makeArray(aa)});
+        auto ni=maskNamespaces.find(mask); if(ni!=maskNamespaces.end()) m->push_back({Value::string("namespace"),Value::string(ni->second)});
+        auto vi=maskVersions.find(mask); if(vi!=maskVersions.end()) m->push_back({Value::string("version"),Value::string(vi->second)});
+        auto no=maskNotes.find(mask); if(no!=maskNotes.end()) m->push_back({Value::string("note"),Value::string(no->second)});
+        m->push_back({Value::string("active"),Value::boolean_(maskEnabled.count(mask)==0?true:maskEnabled[mask])});
+        auto pi=maskParents.find(mask); if(pi!=maskParents.end()) { std::string pm=maskResolveInternal(pi->second); if(!pm.empty()) m->push_back({Value::string("parent"),Value::string(pm)}); }
+        return Value::makeMap(m);
+    };
+
+    // ---- Mask v4: registry, lifecycle, namespaces and relations ----------------------
+    // v4 يجعل القناع سجلاً قابلاً للإدارة: يمكن تنظيمه داخل namespace، تعطيله، وصفه،
+    // إعطاؤه نسخة، وبناء علاقات أب/ابن مستقلة عن أسماء الحاويات.
+    auto maskResolve4 = maskResolveInternal;
+    [[maybe_unused]] auto maskType4 = [this](const std::string& mask) -> std::string {
+        if (containerMasks.count(mask)) return "container";
+        if (groupMasks.count(mask)) return "group";
+        if (volumeMasks.count(mask)) return "volume";
+        return "";
+    };
+    [[maybe_unused]] auto maskTarget4 = [this](const std::string& mask) -> std::string {
+        auto c=containerMasks.find(mask); if(c!=containerMasks.end()) return c->second;
+        auto g=groupMasks.find(mask); if(g!=groupMasks.end()) return g->second;
+        auto v=volumeMasks.find(mask); if(v!=volumeMasks.end()) return v->second;
+        return "";
+    };
+
+    natives["maskActive"] = [this, maskResolve4](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskActive", a, 1, line); std::string m=maskResolve4(asString(a[0],"maskActive",line));
+if(m.empty()) return Value::boolean_(false);
+        auto it=maskEnabled.find(m);
+        return Value::boolean_(it==maskEnabled.end() ? true : it->second);
+    };
+    natives["maskEnable"] = [this, maskResolve4](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskEnable", a, 1, line); std::string m=maskResolve4(asString(a[0],"maskEnable",line));
+if(m.empty()) throw err(diag::Code::E0035_RuntimeError,line,"maskEnable: unknown mask");
+        maskEnabled[m]=true;
+        return Value::boolean_(true);
+    };
+    natives["maskDisable"] = [this, maskResolve4](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskDisable", a, 1, line); std::string m=maskResolve4(asString(a[0],"maskDisable",line));
+if(m.empty()) throw err(diag::Code::E0035_RuntimeError,line,"maskDisable: unknown mask");
+        maskEnabled[m]=false;
+        return Value::boolean_(true);
+    };
+    natives["maskNamespace"] = [this, maskResolve4](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("maskNamespace", a, 1, 2, line); std::string m=maskResolve4(asString(a[0],"maskNamespace",line));
+if(m.empty()) return Value::nil();
+        if(a.size()==1){ auto it=maskNamespaces.find(m); return it==maskNamespaces.end()?Value::nil():Value::string(it->second); }
+        if(lockedMasks.count(m)) throw err(diag::Code::E0035_RuntimeError,line,"maskNamespace: mask is locked");
+        std::string ns=asString(a[1],"maskNamespace",line); if(ns.empty()) maskNamespaces.erase(m); else maskNamespaces[m]=ns; return Value::boolean_(true);
+    };
+    natives["maskByNamespace"] = [this, maskResolve4](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskByNamespace", a, 1, line); std::string ns=asString(a[0],"maskByNamespace",line); auto out=std::make_shared<ArrayData>();
+for(auto& kv:maskNamespaces) if(kv.second==ns && !maskResolve4(kv.first).empty()) out->push_back(Value::string(kv.first));
+        return Value::makeArray(out);
+    };
+    natives["maskVersion"] = [this, maskResolve4](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("maskVersion", a, 1, 2, line); std::string m=maskResolve4(asString(a[0],"maskVersion",line)); if(m.empty()) return Value::nil();
+        if(a.size()==1){auto it=maskVersions.find(m); return it==maskVersions.end()?Value::nil():Value::string(it->second);} if(lockedMasks.count(m)) throw err(diag::Code::E0035_RuntimeError,line,"maskVersion: mask is locked"); maskVersions[m]=asString(a[1],"maskVersion",line); return Value::boolean_(true);
+    };
+    natives["maskNote"] = [this, maskResolve4](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("maskNote", a, 1, 2, line); std::string m=maskResolve4(asString(a[0],"maskNote",line)); if(m.empty()) return Value::nil();
+        if(a.size()==1){auto it=maskNotes.find(m); return it==maskNotes.end()?Value::nil():Value::string(it->second);} if(lockedMasks.count(m)) throw err(diag::Code::E0035_RuntimeError,line,"maskNote: mask is locked"); maskNotes[m]=asString(a[1],"maskNote",line); return Value::boolean_(true);
+    };
+    natives["maskParentSet"] = [this, maskResolve4](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskParentSet", a, 2, line); std::string child=maskResolve4(asString(a[0],"maskParentSet",line)); std::string parent=maskResolve4(asString(a[1],"maskParentSet",line));
+if(child.empty()||parent.empty()||child==parent) throw err(diag::Code::E0035_RuntimeError,line,"maskParentSet: invalid mask relation");
+        if(lockedMasks.count(child)) throw err(diag::Code::E0035_RuntimeError,line,"maskParentSet: child is locked");
+        std::string p=parent; for(int i=0;i<64&&!p.empty();++i){ if(p==child) throw err(diag::Code::E0035_RuntimeError,line,"maskParentSet: cyclic relation"); auto it=maskParents.find(p); if(it==maskParents.end()) break; p=maskResolve4(it->second); }
+        maskParents[child]=parent; return Value::boolean_(true);
+    };
+    natives["maskParentGet"] = [this, maskResolve4](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskParentGet", a, 1, line); std::string m=maskResolve4(asString(a[0],"maskParentGet",line)); if(m.empty()) return Value::nil(); auto it=maskParents.find(m); if(it==maskParents.end()) return Value::nil(); std::string p=maskResolve4(it->second); return p.empty()?Value::nil():Value::string(p);
+    };
+    natives["maskChildrenOf"] = [this, maskResolve4](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskChildrenOf", a, 1, line); std::string parent=maskResolve4(asString(a[0],"maskChildrenOf",line)); auto out=std::make_shared<ArrayData>(); if(parent.empty()) return Value::makeArray(out);
+for(auto& kv:maskParents) if(maskResolve4(kv.second)==parent && !maskResolve4(kv.first).empty()) out->push_back(Value::string(kv.first));
+        return Value::makeArray(out);
+    };
+    natives["maskDescendants"] = [this, maskResolve4](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskDescendants", a, 1, line); std::string root=maskResolve4(asString(a[0],"maskDescendants",line)); auto out=std::make_shared<ArrayData>(); if(root.empty()) return Value::makeArray(out);
+        std::vector<std::string> q{root}; std::unordered_set<std::string> seen{root}; for(size_t i=0;i<q.size();++i){ for(auto& kv:maskParents) if(maskResolve4(kv.second)==q[i]){std::string c=maskResolve4(kv.first); if(!c.empty()&&seen.insert(c).second){out->push_back(Value::string(c));q.push_back(c);}} } return Value::makeArray(out);
+    };
+    natives["maskRoot"] = [this, maskResolve4](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskRoot", a, 1, line); std::string m=maskResolve4(asString(a[0],"maskRoot",line)); if(m.empty()) return Value::nil(); std::unordered_set<std::string> seen;
+        while(!m.empty() && seen.insert(m).second){auto it=maskParents.find(m); if(it==maskParents.end()) break; m=maskResolve4(it->second);} return m.empty()?Value::nil():Value::string(m);
+    };
+    natives["maskDepth"] = [this, maskResolve4](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskDepth", a, 1, line); std::string m=maskResolve4(asString(a[0],"maskDepth",line)); if(m.empty()) return Value::num(-1); int d=0; std::unordered_set<std::string> seen;
+        while(seen.insert(m).second){auto it=maskParents.find(m); if(it==maskParents.end()) break; m=maskResolve4(it->second); if(m.empty()) return Value::num(-1); ++d;} return Value::num(d);
+    };
+    natives["maskDetach"] = [this, maskResolve4](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskDetach", a, 1, line); std::string m=maskResolve4(asString(a[0],"maskDetach",line)); if(m.empty()) return Value::boolean_(false); if(lockedMasks.count(m)) throw err(diag::Code::E0035_RuntimeError,line,"maskDetach: mask is locked"); return Value::boolean_(maskParents.erase(m)>0);
+    };
+    natives["maskHasRef"] = [this, maskResolve4](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskHasRef", a, 2, line); std::string m=maskResolve4(asString(a[0],"maskHasRef",line)); std::string r=asString(a[1],"maskHasRef",line); auto it=maskRefs.find(m); return Value::boolean_(it!=maskRefs.end()&&std::find(it->second.begin(),it->second.end(),r)!=it->second.end());
+    };
+    natives["maskUnref"] = [this, maskResolve4](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskUnref", a, 2, line); std::string m=maskResolve4(asString(a[0],"maskUnref",line)); std::string r=asString(a[1],"maskUnref",line); if(m.empty()) return Value::boolean_(false); if(lockedMasks.count(m)) throw err(diag::Code::E0035_RuntimeError,line,"maskUnref: mask is locked"); auto it=maskRefs.find(m); if(it==maskRefs.end()) return Value::boolean_(false); auto p=std::find(it->second.begin(),it->second.end(),r); if(p==it->second.end()) return Value::boolean_(false); it->second.erase(p); return Value::boolean_(true);
+    };
+    natives["maskClearTags"] = [this, maskResolve4](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskClearTags", a, 1, line); std::string m=maskResolve4(asString(a[0],"maskClearTags",line)); if(m.empty()) return Value::boolean_(false); if(lockedMasks.count(m)) throw err(diag::Code::E0035_RuntimeError,line,"maskClearTags: mask is locked"); maskTags.erase(m); return Value::boolean_(true);
+    };
+    natives["maskClearRefs"] = [this, maskResolve4](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskClearRefs", a, 1, line); std::string m=maskResolve4(asString(a[0],"maskClearRefs",line)); if(m.empty()) return Value::boolean_(false); if(lockedMasks.count(m)) throw err(diag::Code::E0035_RuntimeError,line,"maskClearRefs: mask is locked"); maskRefs.erase(m); return Value::boolean_(true);
+    };
+    natives["maskCount"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskCount", a, 0, line); return Value::num(static_cast<double>(containerMasks.size()+groupMasks.size()+volumeMasks.size()));
+    };
+    natives["maskKinds"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskKinds", a, 0, line); auto out=std::make_shared<ArrayData>(); out->push_back(Value::string("container")); out->push_back(Value::string("group")); out->push_back(Value::string("volume")); return Value::makeArray(out);
+    };
+    natives["maskKindCount"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskKindCount", a, 1, line); std::string k=asString(a[0],"maskKindCount",line); if(k=="container") return Value::num(containerMasks.size()); if(k=="group") return Value::num(groupMasks.size()); if(k=="volume") return Value::num(volumeMasks.size()); return Value::num(0);
+    };
+    natives["maskHasAllTags"] = [this, maskResolve4](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskHasAllTags", a, 2, line); std::string m=maskResolve4(asString(a[0],"maskHasAllTags",line)); if(m.empty()||a[1].type!=Value::Type::ARRAY) return Value::boolean_(false); auto it=maskTags.find(m); if(it==maskTags.end()) return Value::boolean_(a[1].array->empty()); for(auto& x:*a[1].array) if(std::find(it->second.begin(),it->second.end(),asString(x,"maskHasAllTags",line))==it->second.end()) return Value::boolean_(false); return Value::boolean_(true);
+    };
+    natives["maskHasAnyTag"] = [this, maskResolve4](std::vector<Value>& a, int line) -> Value {
+        expectArgs("maskHasAnyTag", a, 2, line); std::string m=maskResolve4(asString(a[0],"maskHasAnyTag",line)); if(m.empty()||a[1].type!=Value::Type::ARRAY) return Value::boolean_(false); auto it=maskTags.find(m); if(it==maskTags.end()) return Value::boolean_(false); for(auto& x:*a[1].array) if(std::find(it->second.begin(),it->second.end(),asString(x,"maskHasAnyTag",line))!=it->second.end()) return Value::boolean_(true); return Value::boolean_(false);
+    };
+    // maskOf(name) يبقى متوافقاً، لكنه أصبح يشمل كل أنواع الكائنات المسجّلة.
+
+    // containerNames() -> مصفوفة بكل أسماء الحاويات المسجَّلة حالياً (عبر @container أو spawn)
+    natives["containerNames"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("containerNames", a, 0, line);
+        auto result = std::make_shared<ArrayData>();
+        for (auto& kv : containers) result->push_back(Value::string(kv.first));
+        return Value::makeArray(result);
+    };
+
+    // ---- RCS-1.0 §3.5 Tree (Phase 2): استعلام برمجي عن شجرة التعشيش النصّي الموجودة فعلاً ----
+    // مبنية فوق containerParent/containerChildren المُسجَّلتين تلقائياً في ContainerStmt (انظر
+    // execute()) لكل @container متعشَّشة نصّياً داخل جسم @container أخرى -- بلا أي بناء نحو جديد.
+
+    // parentOf(name) -> اسم حاوية الأب المباشرة (نص)، أو nil إن لم توجد حاوية بهذا الاسم أصلاً أو
+    // كانت حاوية جذرية (بلا أب) أو أُنشئت ديناميكياً عبر spawn()/create() (بلا تعشيش نصّي).
+    natives["parentOf"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("parentOf", a, 1, line);
+        std::string name = asString(a[0], "parentOf", line);
+        auto it = containerParent.find(name);
+        if (it == containerParent.end()) return Value::nil();
+        return Value::string(it->second);
+    };
+
+    // childrenOf(name) -> مصفوفة بأسماء الأبناء المباشرين فقط (لا الأحفاد) بترتيب أول تعريف؛
+    // مصفوفة فارغة إن لم توجد حاوية بهذا الاسم أو لم يكن لها أبناء متعشَّشون نصّياً بداخلها.
+    natives["childrenOf"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("childrenOf", a, 1, line);
+        std::string name = asString(a[0], "childrenOf", line);
+        auto result = std::make_shared<ArrayData>();
+        auto it = containerChildren.find(name);
+        if (it != containerChildren.end()) {
+            for (auto& child : it->second) result->push_back(Value::string(child));
+        }
+        return Value::makeArray(result);
+    };
+
+    // siblingsOf(name) -> مصفوفة بأسماء الحاويات الأخرى ذات الأب المباشر نفسه (باستثناء name نفسها)
+    // بترتيب أول تعريف؛ مصفوفة فارغة إن لم يكن لـname أب أصلاً (حاوية جذرية) أو لم يكن لها إخوة.
+    natives["siblingsOf"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("siblingsOf", a, 1, line);
+        std::string name = asString(a[0], "siblingsOf", line);
+        auto result = std::make_shared<ArrayData>();
+        auto parentIt = containerParent.find(name);
+        if (parentIt != containerParent.end()) {
+            auto childrenIt = containerChildren.find(parentIt->second);
+            if (childrenIt != containerChildren.end()) {
+                for (auto& sibling : childrenIt->second) {
+                    if (sibling != name) result->push_back(Value::string(sibling));
+                }
+            }
+        }
+        return Value::makeArray(result);
+    };
+
+    // slotsOf(name) -> مصفوفة بأسماء حقول `slot` المُعلَنة داخل الحاوية name بترتيب التعريف؛
+    // مصفوفة فارغة إن لم توجد حاوية بهذا الاسم أو لم تُعلن أي slot بداخلها (انظر SlotDeclStmt).
+    natives["slotsOf"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("slotsOf", a, 1, line);
+        std::string name = asString(a[0], "slotsOf", line);
+        auto result = std::make_shared<ArrayData>();
+        auto it = containerSlots.find(name);
+        if (it != containerSlots.end()) {
+            for (auto& slot : it->second) result->push_back(Value::string(slot));
+        }
+        return Value::makeArray(result);
+    };
+
+    // setField(container, key, value) -> يعرِّف/يحدِّث متغيّراً باسم key بداخل بيئة الحاوية container
+    // (مباشرة، بصرف النظر عن نوعها) — هذا ما يجعل "برمجة أي شيء" ممكنة وقت التشغيل: يمكن تخزين حتى
+    // دالة Rin كقيمة حقل (value من نوع FUNCTION)، تُستدعى لاحقاً عبر callFn(). يُعيد true عند النجاح.
+    natives["setField"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("setField", a, 3, line);
+        std::string name = canonContainer(asString(a[0], "setField", line));
+        std::string key = asString(a[1], "setField", line);
+        auto it = containers.find(name);
+        if (it == containers.end()) {
+            throw errWithReason(diag::Code::E0014_InvalidContainer, line,
+                                 "'" + name + "' is not a known container",
+                                 "create it first via `@container=" + name + "` or `spawn(kind, \"" + name + "\")`");
+        }
+        if (tableVirtualSet(name, key, a[2], line)) return Value::boolean_(true); // rows/style لحاوية الجدول
+        Value linkOld;
+        if (linksExist_) it->second->get(key, linkOld);
+        it->second->define(key, a[2]);
+        if (linksExist_) onContainerWrite(name, key, linkOld, a[2], line); // Rin 1.0: روابط OOP/Indsin
+        return Value::boolean_(true);
+    };
+
+    // setState(container, key, value) -> مثل setField تماماً من حيث التوقيع، لكنها تمر عبر
+    // assignStateAware() بدل owner->define() المباشرة: إن كان key حقل state مُعلَناً فعلاً لهذه
+    // الحاوية (عبر `state x = ...` داخل @container)، يُطلَق on update(prevState) تلقائياً بنفس آلية
+    // الإسناد الداخلي (=) — وهذا ما يجعل setState هو المدخل الصحيح لأي محرّك خارجي (مثل حلقة تحريك/
+    // Animation tick) يريد تحديث حالة حاوية إطاراً بعد إطار مع إطلاق إعادة العرض التفاعلي في كل مرة.
+    // إن لم يكن key حقل state مُعلَناً، تتصرف تماماً كـ setField (إسناد صامت بلا خُطّاف).
+    natives["setState"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("setState", a, 3, line);
+        std::string name = asString(a[0], "setState", line);
+        std::string key = asString(a[1], "setState", line);
+        auto it = containers.find(name);
+        if (it == containers.end()) {
+            throw errWithReason(diag::Code::E0014_InvalidContainer, line,
+                                 "'" + name + "' is not a known container",
+                                 "create it first via `@container=" + name + "` or `spawn(kind, \"" + name + "\")`");
+        }
+        assignStateAware(it->second.get(), key, a[2], line);
+        return Value::boolean_(true);
+    };
+
+    // now() -> عدد الميلي‑ثانية منذ نقطة مرجعية ثابتة (steady_clock)، كعدد عشري. ليست طابعاً زمنياً
+    // مطلقاً (epoch) — فقط فرق زمني موثوق بين استدعاءين، وهو كل ما تحتاجه حلقة تحريك (delta time) أو
+    // أي قياس مدة. <chrono> مُتضمَّن أصلاً عبر rin_interpreter.h فلا حاجة لأي include إضافي هنا.
+    natives["now"] = [](std::vector<Value>& a, int line) -> Value {
+        (void)a; (void)line;
+        auto ms = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now().time_since_epoch()).count();
+        return Value::num(ms);
+    };
+
+    // getField(container, key) -> قيمة الحقل key بداخل الحاوية container، أو nil إن لم يكن معرَّفاً
+    natives["getField"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("getField", a, 2, line);
+        std::string name = canonContainer(asString(a[0], "getField", line));
+        std::string key = asString(a[1], "getField", line);
+        auto it = containers.find(name);
+        if (it == containers.end()) {
+            throw errWithReason(diag::Code::E0014_InvalidContainer, line,
+                                 "'" + name + "' is not a known container",
+                                 "create it first via `@container=" + name + "` or `spawn(kind, \"" + name + "\")`");
+        }
+        Value out;
+        auto own = it->second->values.find(key);
+        if (own != it->second->values.end()) return own->second;
+        if (tableVirtualGet(name, key, out)) return out; // rows/columns/style لحاوية الجدول (قبل البيئة الأم)
+        if (it->second->get(key, out)) return out;
+        return Value::nil();
+    };
+
+    // hasField(container, key) -> true إن كان الحقل key معرَّفاً (مباشرة أو عبر أي بيئة أب) بداخل container
+    // ------------------------------------------------------------------------------------------
+    // candle — علاقة موجَّهة id -> id (انظر docs/candle.md). لا تستبدل mask ولا id: تضيف طبقة
+    // علاقات فوقهما، وكل طرف يُقبل كـ mask (يُحل عبر maskResolveInternal) أو كمعرّف خام مباشر إذا
+    // لم يكن قناعاً معروفاً (تحديداً عناصر @view/@element، التي لا تُسجَّل حالياً في أي سجل mask).
+    // ------------------------------------------------------------------------------------------
+    auto candleId = [maskResolveInternal](const std::string& token) -> std::string {
+        std::string resolved = maskResolveInternal(token);
+        return resolved.empty() ? token : resolved;
+    };
+    auto candleTargetsOf = [this](const std::string& id) -> std::vector<std::string> {
+        std::vector<std::string> out;
+        for (auto& e : candleEdges) if (std::get<0>(e) == id) out.push_back(std::get<1>(e));
+        return out;
+    };
+    auto candleSourcesOf = [this](const std::string& id) -> std::vector<std::string> {
+        std::vector<std::string> out;
+        for (auto& e : candleEdges) if (std::get<1>(e) == id) out.push_back(std::get<0>(e));
+        return out;
+    };
+
+    natives["light"] = [this, candleId](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("light", a, 2, 3, line);
+        std::string from = candleId(asString(a[0], "light", line));
+        std::string to = candleId(asString(a[1], "light", line));
+        std::string relation = a.size() > 2 ? asString(a[2], "light", line) : "";
+        if (from.empty() || to.empty() || from == to) return Value::boolean_(false);
+        for (auto& e : candleEdges) {
+            if (std::get<0>(e) == from && std::get<1>(e) == to) { std::get<2>(e) = relation; return Value::boolean_(true); }
+        }
+        candleEdges.push_back({from, to, relation});
+        return Value::boolean_(true);
+    };
+    natives["candleExists"] = [this, candleId](std::vector<Value>& a, int line) -> Value {
+        expectArgs("candleExists", a, 2, line);
+        std::string from = candleId(asString(a[0], "candleExists", line));
+        std::string to = candleId(asString(a[1], "candleExists", line));
+        for (auto& e : candleEdges) if (std::get<0>(e) == from && std::get<1>(e) == to) return Value::boolean_(true);
+        return Value::boolean_(false);
+    };
+    natives["candleTargets"] = [this, candleId, candleTargetsOf](std::vector<Value>& a, int line) -> Value {
+        expectArgs("candleTargets", a, 1, line);
+        auto out = std::make_shared<ArrayData>();
+        for (auto& t : candleTargetsOf(candleId(asString(a[0], "candleTargets", line)))) out->push_back(Value::string(t));
+        return Value::makeArray(out);
+    };
+    natives["candleSources"] = [this, candleId, candleSourcesOf](std::vector<Value>& a, int line) -> Value {
+        expectArgs("candleSources", a, 1, line);
+        auto out = std::make_shared<ArrayData>();
+        for (auto& t : candleSourcesOf(candleId(asString(a[0], "candleSources", line)))) out->push_back(Value::string(t));
+        return Value::makeArray(out);
+    };
+    natives["candleCount"] = [this, candleId, candleTargetsOf](std::vector<Value>& a, int line) -> Value {
+        expectArgs("candleCount", a, 1, line);
+        return Value::num(static_cast<double>(candleTargetsOf(candleId(asString(a[0], "candleCount", line))).size()));
+    };
+    natives["candleInfo"] = [this, candleId, candleTargetsOf, candleSourcesOf](std::vector<Value>& a, int line) -> Value {
+        expectArgs("candleInfo", a, 1, line);
+        std::string id = candleId(asString(a[0], "candleInfo", line));
+        auto targets = candleTargetsOf(id);
+        auto sources = candleSourcesOf(id);
+        auto m = std::make_shared<MapData>();
+        auto tArr = std::make_shared<ArrayData>(); for (auto& t : targets) tArr->push_back(Value::string(t));
+        auto sArr = std::make_shared<ArrayData>(); for (auto& s : sources) sArr->push_back(Value::string(s));
+        m->push_back({Value::string("targets"), Value::makeArray(tArr)});
+        m->push_back({Value::string("sources"), Value::makeArray(sArr)});
+        m->push_back({Value::string("isRoot"), Value::boolean_(sources.empty())});
+        m->push_back({Value::string("isLeaf"), Value::boolean_(targets.empty())});
+        return Value::makeMap(m);
+    };
+    natives["candleRelation"] = [this, candleId](std::vector<Value>& a, int line) -> Value {
+        expectArgs("candleRelation", a, 2, line);
+        std::string from = candleId(asString(a[0], "candleRelation", line));
+        std::string to = candleId(asString(a[1], "candleRelation", line));
+        for (auto& e : candleEdges) if (std::get<0>(e) == from && std::get<1>(e) == to) return Value::string(std::get<2>(e));
+        return Value::nil();
+    };
+    natives["candleByRelation"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("candleByRelation", a, 1, line);
+        std::string relation = asString(a[0], "candleByRelation", line);
+        auto out = std::make_shared<ArrayData>();
+        for (auto& e : candleEdges) {
+            if (std::get<2>(e) != relation) continue;
+            auto m = std::make_shared<MapData>();
+            m->push_back({Value::string("from"), Value::string(std::get<0>(e))});
+            m->push_back({Value::string("to"), Value::string(std::get<1>(e))});
+            out->push_back(Value::makeMap(m));
+        }
+        return Value::makeArray(out);
+    };
+    // candleChain(from, to) -> أقصر مسار (BFS) من from إلى to عبر candle edges، أو [] إن تعذّر.
+    natives["candleChain"] = [this, candleId, candleTargetsOf](std::vector<Value>& a, int line) -> Value {
+        expectArgs("candleChain", a, 2, line);
+        std::string from = candleId(asString(a[0], "candleChain", line));
+        std::string to = candleId(asString(a[1], "candleChain", line));
+        auto out = std::make_shared<ArrayData>();
+        if (from == to) { out->push_back(Value::string(from)); return Value::makeArray(out); }
+        std::unordered_map<std::string, std::string> cameFrom;
+        std::vector<std::string> queue{from};
+        std::unordered_set<std::string> seen{from};
+        bool found = false;
+        for (size_t i = 0; i < queue.size() && !found; ++i) {
+            for (auto& nxt : candleTargetsOf(queue[i])) {
+                if (!seen.insert(nxt).second) continue;
+                cameFrom[nxt] = queue[i];
+                if (nxt == to) { found = true; break; }
+                queue.push_back(nxt);
+            }
+        }
+        if (!found) return Value::makeArray(out);
+        std::vector<std::string> path;
+        std::string cur = to;
+        while (cur != from) { path.push_back(cur); cur = cameFrom[cur]; }
+        path.push_back(from);
+        for (auto it = path.rbegin(); it != path.rend(); ++it) out->push_back(Value::string(*it));
+        return Value::makeArray(out);
+    };
+    // candleDepth(id) -> أقصر مسافة BFS من أقرب جذر (عقدة بلا مصادر) إلى id، أو nil إن لم تكن مرتبطة.
+    natives["candleDepth"] = [this, candleId, candleSourcesOf, candleTargetsOf](std::vector<Value>& a, int line) -> Value {
+        expectArgs("candleDepth", a, 1, line);
+        std::string id = candleId(asString(a[0], "candleDepth", line));
+        std::unordered_set<std::string> nodes;
+        for (auto& e : candleEdges) { nodes.insert(std::get<0>(e)); nodes.insert(std::get<1>(e)); }
+        if (!nodes.count(id)) return Value::nil();
+        std::vector<std::string> roots;
+        for (auto& n : nodes) if (candleSourcesOf(n).empty()) roots.push_back(n);
+        std::unordered_map<std::string, int> dist;
+        std::vector<std::string> queue;
+        for (auto& r : roots) { dist[r] = 0; queue.push_back(r); }
+        for (size_t i = 0; i < queue.size(); ++i) {
+            for (auto& nxt : candleTargetsOf(queue[i])) {
+                if (dist.count(nxt)) continue;
+                dist[nxt] = dist[queue[i]] + 1;
+                queue.push_back(nxt);
+            }
+        }
+        auto it = dist.find(id);
+        return it == dist.end() ? Value::nil() : Value::num(static_cast<double>(it->second));
+    };
+    natives["candleRoots"] = [this, candleSourcesOf](std::vector<Value>& a, int line) -> Value {
+        expectArgs("candleRoots", a, 0, line);
+        std::unordered_set<std::string> nodes;
+        for (auto& e : candleEdges) { nodes.insert(std::get<0>(e)); nodes.insert(std::get<1>(e)); }
+        auto out = std::make_shared<ArrayData>();
+        for (auto& n : nodes) if (candleSourcesOf(n).empty()) out->push_back(Value::string(n));
+        return Value::makeArray(out);
+    };
+    natives["candleLeaves"] = [this, candleTargetsOf](std::vector<Value>& a, int line) -> Value {
+        expectArgs("candleLeaves", a, 0, line);
+        std::unordered_set<std::string> nodes;
+        for (auto& e : candleEdges) { nodes.insert(std::get<0>(e)); nodes.insert(std::get<1>(e)); }
+        auto out = std::make_shared<ArrayData>();
+        for (auto& n : nodes) if (candleTargetsOf(n).empty()) out->push_back(Value::string(n));
+        return Value::makeArray(out);
+    };
+    // candleTree(id) -> {id, relation, children:[...]} متداخلة؛ يحمي من الحلقات بمسار الزيارة الحالي.
+    {
+        auto buildTree = std::make_shared<std::function<Value(const std::string&, const std::string&, std::unordered_set<std::string>)>>();
+        *buildTree = [this, buildTree](const std::string& id, const std::string& relation, std::unordered_set<std::string> path) -> Value {
+            auto m = std::make_shared<MapData>();
+            m->push_back({Value::string("id"), Value::string(id)});
+            m->push_back({Value::string("relation"), relation.empty() ? Value::nil() : Value::string(relation)});
+            auto children = std::make_shared<ArrayData>();
+            if (path.insert(id).second) {
+                for (auto& e : candleEdges) {
+                    if (std::get<0>(e) != id) continue;
+                    children->push_back((*buildTree)(std::get<1>(e), std::get<2>(e), path));
+                }
+            }
+            m->push_back({Value::string("children"), Value::makeArray(children)});
+            return Value::makeMap(m);
+        };
+        natives["candleTree"] = [this, candleId, buildTree](std::vector<Value>& a, int line) -> Value {
+            expectArgs("candleTree", a, 1, line);
+            std::string id = candleId(asString(a[0], "candleTree", line));
+            return (*buildTree)(id, "", {});
+        };
+    }
+    natives["extinguish"] = [this, candleId](std::vector<Value>& a, int line) -> Value {
+        expectArgs("extinguish", a, 2, line);
+        std::string from = candleId(asString(a[0], "extinguish", line));
+        std::string to = candleId(asString(a[1], "extinguish", line));
+        for (auto it = candleEdges.begin(); it != candleEdges.end(); ++it) {
+            if (std::get<0>(*it) == from && std::get<1>(*it) == to) { candleEdges.erase(it); return Value::boolean_(true); }
+        }
+        return Value::boolean_(false);
+    };
+    natives["extinguishAll"] = [this, candleId](std::vector<Value>& a, int line) -> Value {
+        expectArgs("extinguishAll", a, 1, line);
+        std::string from = candleId(asString(a[0], "extinguishAll", line));
+        int removed = 0;
+        for (auto it = candleEdges.begin(); it != candleEdges.end();) {
+            if (std::get<0>(*it) == from) { it = candleEdges.erase(it); ++removed; } else ++it;
+        }
+        return Value::num(static_cast<double>(removed));
+    };
+
+    natives["hasField"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("hasField", a, 2, line);
+        std::string name = canonContainer(asString(a[0], "hasField", line));
+        auto it = containers.find(name);
+        if (it == containers.end()) return Value::boolean_(false);
+        Value out;
+        std::string key = asString(a[1], "hasField", line);
+        if (it->second->values.count(key) || tableVirtualGet(name, key, out)) return Value::boolean_(true);
+        return Value::boolean_(it->second->get(key, out));
+    };
+
+    // ------------------------------------------------------------------------------------------
+    // container.* — dot-syntax API documented in docs/container_advanced.md and
+    // docs/container_pro.md. These are thin wrappers over the state and natives already above
+    // (containers/containerKinds/containerParent/containerChildren, parentOf/childrenOf/
+    // siblingsOf/hasField/setField/getField) -- no new tracked state, just the entry points the
+    // docs (and tests/verification/container_advanced.rin, tests/verification/container_pro.rin)
+    // already assume exist. Missing-container behavior follows container_pro.md's stated design:
+    // inspection/query APIs return nil, mutation APIs return false.
+    // ------------------------------------------------------------------------------------------
+
+    // kindNameOf(name) -> النوع المعروض (نفس منطق kindOf أعلاه لكن بلا throw ولا Value wrapping)
+    auto kindNameOf = [this](const std::string& name) -> std::string {
+        auto customIt = containerCustomKind.find(name);
+        if (customIt != containerCustomKind.end()) return customIt->second;
+        auto k = containerKinds.find(name);
+        return containerTagName(k != containerKinds.end() ? k->second : ContainerKind::PLAIN);
+    };
+    // ancestorsOf(name) -> من الأب المباشر صعوداً حتى الجذر (لا يشمل name نفسها)
+    auto ancestorsOf = [this](const std::string& name) -> std::vector<std::string> {
+        std::vector<std::string> out;
+        std::string cur = name;
+        std::unordered_set<std::string> seen; // حماية من حلقة أب-ابن غير متوقعة
+        while (true) {
+            auto it = containerParent.find(cur);
+            if (it == containerParent.end() || !seen.insert(it->second).second) break;
+            out.push_back(it->second);
+            cur = it->second;
+        }
+        return out;
+    };
+    // descendantsOf(name) -> كل الأحفاد على أي عمق، بترتيب BFS (الأبناء المباشرون أولاً)
+    auto descendantsOf = [this](const std::string& name) -> std::vector<std::string> {
+        std::vector<std::string> out;
+        std::vector<std::string> queue;
+        auto first = containerChildren.find(name);
+        if (first != containerChildren.end()) queue = first->second;
+        for (size_t i = 0; i < queue.size(); ++i) {
+            out.push_back(queue[i]);
+            auto it = containerChildren.find(queue[i]);
+            if (it != containerChildren.end()) {
+                for (auto& g : it->second) queue.push_back(g);
+            }
+        }
+        return out;
+    };
+
+    // ---- ns.*: introspection + dynamic access for the namespace tree (container / group / Volume) ----
+    // Paths are absolute and dotted, e.g. "Store.Inventory.items". See docs/namespaces.md.
+    auto nsNodeOrErr = [this](const char* fn, std::vector<Value>& a, int line) -> std::shared_ptr<NsNode> {
+        std::string path = asString(a[0], fn, line);
+        auto n = nsResolvePath(path);
+        if (!n) throw diagErr(diag::Code::E0001_UndefinedVariable, line, std::string(fn) + ": no namespace `" + path + "`");
+        return n;
+    };
+    natives["ns.has"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("ns.has", a, 1, line);
+        return Value::boolean_(nsResolvePath(asString(a[0], "ns.has", line)) != nullptr);
+    };
+    natives["ns.kind"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("ns.kind", a, 1, line);
+        auto n = nsResolvePath(asString(a[0], "ns.kind", line));
+        return n ? Value::string(n->kindName()) : Value::nil();
+    };
+    natives["ns.paths"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("ns.paths", a, 0, line);
+        std::vector<std::string> out;
+        for (auto& r : nsRoots) nsCollectPaths(r.second, out);
+        auto arr = std::make_shared<ArrayData>();
+        for (auto& p : out) arr->push_back(Value::string(p));
+        return Value::makeArray(arr);
+    };
+    natives["ns.parent"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("ns.parent", a, 1, line);
+        auto n = nsResolvePath(asString(a[0], "ns.parent", line));
+        if (!n) return Value::nil();
+        auto p = n->parent.lock();
+        return p ? Value::string(p->path()) : Value::nil();
+    };
+    natives["ns.members"] = [this, nsNodeOrErr](std::vector<Value>& a, int line) -> Value {
+        expectArgs("ns.members", a, 1, line);
+        auto n = nsNodeOrErr("ns.members", a, line);
+        auto arr = std::make_shared<ArrayData>();
+        for (auto& c : n->children) arr->push_back(Value::string(c.first));
+        return Value::makeArray(arr);
+    };
+    natives["ns.fields"] = [this, nsNodeOrErr](std::vector<Value>& a, int line) -> Value {
+        expectArgs("ns.fields", a, 1, line);
+        auto n = nsNodeOrErr("ns.fields", a, line);
+        std::vector<std::string> names;
+        for (auto& kv : n->env->values) names.push_back(kv.first);
+        std::sort(names.begin(), names.end());
+        auto arr = std::make_shared<ArrayData>();
+        for (auto& k : names) arr->push_back(Value::string(k));
+        return Value::makeArray(arr);
+    };
+    natives["ns.capabilities"] = [this, nsNodeOrErr](std::vector<Value>& a, int line) -> Value {
+        expectArgs("ns.capabilities", a, 1, line);
+        auto n = nsNodeOrErr("ns.capabilities", a, line);
+        auto m = std::make_shared<MapData>();
+        auto put = [&](const char* k, Value v) { m->push_back({Value::string(k), std::move(v)}); };
+        put("kind", Value::string(n->kindName()));
+        put("read", Value::boolean_(true));
+        put("write", Value::boolean_(n->canWrite()));
+        put("call", Value::boolean_(n->canCall()));
+        put("state", Value::boolean_(n->hasStateHooks()));
+        put("transaction", Value::boolean_(n->canTransact()));
+        put("nest", Value::boolean_(true));
+        return Value::makeMap(m);
+    };
+    natives["ns.snapshot"] = [this, nsNodeOrErr](std::vector<Value>& a, int line) -> Value {
+        expectArgs("ns.snapshot", a, 1, line);
+        return nsSnapshot(nsNodeOrErr("ns.snapshot", a, line));
+    };
+    natives["ns.get"] = [this, nsNodeOrErr](std::vector<Value>& a, int line) -> Value {
+        expectArgs("ns.get", a, 2, line);
+        auto n = nsNodeOrErr("ns.get", a, line);
+        return nsGet(n, asString(a[1], "ns.get", line), line);
+    };
+    natives["ns.set"] = [this, nsNodeOrErr](std::vector<Value>& a, int line) -> Value {
+        expectArgs("ns.set", a, 3, line);
+        auto n = nsNodeOrErr("ns.set", a, line);
+        return nsSet(n, asString(a[1], "ns.set", line), a[2], line);
+    };
+    natives["ns.call"] = [this, nsNodeOrErr](std::vector<Value>& a, int line) -> Value {
+        if (a.size() < 2 || a.size() > 3) expectArgs("ns.call", a, 3, line);
+        auto n = nsNodeOrErr("ns.call", a, line);
+        std::vector<Value> cargs;
+        if (a.size() == 3) {
+            if (a[2].type != Value::Type::ARRAY) throw diagErr(diag::Code::E0004_InvalidType, line, "ns.call: arguments must be an array");
+            cargs = *a[2].array;
+        }
+        return nsCall(n, asString(a[1], "ns.call", line), cargs, line);
+    };
+
+    natives["container.exists"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("container.exists", a, 1, line);
+        return Value::boolean_(containers.count(canonContainer(asString(a[0], "container.exists", line))) > 0);
+    };
+    natives["container.kind"] = [this, kindNameOf](std::vector<Value>& a, int line) -> Value {
+        expectArgs("container.kind", a, 1, line);
+        std::string name = canonContainer(asString(a[0], "container.kind", line));
+        if (!containers.count(name)) return Value::nil();
+        return Value::string(kindNameOf(name));
+    };
+    natives["container.size"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("container.size", a, 1, line);
+        std::string name = canonContainer(asString(a[0], "container.size", line));
+        auto it = containers.find(name);
+        if (it == containers.end()) return Value::nil();
+        return Value::num(static_cast<double>(it->second->values.size()));
+    };
+    natives["container.empty"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("container.empty", a, 1, line);
+        std::string name = canonContainer(asString(a[0], "container.empty", line));
+        auto it = containers.find(name);
+        if (it == containers.end()) return Value::nil();
+        if (isDatalistContainer(name)) { auto di = docStore.find(name); if (di != docStore.end() && !di->second.empty()) return Value::boolean_(false); }
+        if (isTableContainer(name)) { // جدول فارغ = بلا متغيّرات وبلا صفوف
+            auto rit = tableRows.find(name);
+            if (rit != tableRows.end() && rit->second && !rit->second->empty()) return Value::boolean_(false);
+        }
+        return Value::boolean_(it->second->values.empty());
+    };
+    natives["container.childCount"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("container.childCount", a, 1, line);
+        std::string name = canonContainer(asString(a[0], "container.childCount", line));
+        auto it = containerChildren.find(name);
+        return Value::num(it == containerChildren.end() ? 0.0 : static_cast<double>(it->second.size()));
+    };
+    natives["container.hasChildren"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("container.hasChildren", a, 1, line);
+        std::string name = canonContainer(asString(a[0], "container.hasChildren", line));
+        auto it = containerChildren.find(name);
+        return Value::boolean_(it != containerChildren.end() && !it->second.empty());
+    };
+    natives["container.depth"] = [this, ancestorsOf](std::vector<Value>& a, int line) -> Value {
+        expectArgs("container.depth", a, 1, line);
+        std::string name = canonContainer(asString(a[0], "container.depth", line));
+        if (!containers.count(name)) return Value::nil();
+        return Value::num(static_cast<double>(ancestorsOf(name).size()));
+    };
+    natives["container.roots"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("container.roots", a, 0, line);
+        auto out = std::make_shared<ArrayData>();
+        for (auto& kv : containers) if (!containerParent.count(kv.first)) out->push_back(Value::string(kv.first));
+        return Value::makeArray(out);
+    };
+    natives["container.leaves"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("container.leaves", a, 0, line);
+        auto out = std::make_shared<ArrayData>();
+        for (auto& kv : containers) {
+            auto it = containerChildren.find(kv.first);
+            if (it == containerChildren.end() || it->second.empty()) out->push_back(Value::string(kv.first));
+        }
+        return Value::makeArray(out);
+    };
+    natives["container.parent"] = natives["parentOf"];
+    natives["container.childrenOf"] = natives["childrenOf"];
+    natives["container.siblings"] = natives["siblingsOf"];
+    natives["container.ancestors"] = [this, ancestorsOf](std::vector<Value>& a, int line) -> Value {
+        expectArgs("container.ancestors", a, 1, line);
+        std::string name = canonContainer(asString(a[0], "container.ancestors", line));
+        auto out = std::make_shared<ArrayData>();
+        for (auto& n : ancestorsOf(name)) out->push_back(Value::string(n));
+        return Value::makeArray(out);
+    };
+    natives["container.descendants"] = [this, descendantsOf](std::vector<Value>& a, int line) -> Value {
+        expectArgs("container.descendants", a, 1, line);
+        std::string name = canonContainer(asString(a[0], "container.descendants", line));
+        auto out = std::make_shared<ArrayData>();
+        for (auto& n : descendantsOf(name)) out->push_back(Value::string(n));
+        return Value::makeArray(out);
+    };
+    natives["container.path"] = [this, ancestorsOf](std::vector<Value>& a, int line) -> Value {
+        expectArgs("container.path", a, 1, line);
+        std::string name = canonContainer(asString(a[0], "container.path", line));
+        if (!containers.count(name)) return Value::nil();
+        auto chain = ancestorsOf(name); // من الأب المباشر صعوداً حتى الجذر
+        auto out = std::make_shared<ArrayData>();
+        for (auto it = chain.rbegin(); it != chain.rend(); ++it) out->push_back(Value::string(*it));
+        out->push_back(Value::string(name));
+        return Value::makeArray(out);
+    };
+    natives["container.info"] = [this, kindNameOf](std::vector<Value>& a, int line) -> Value {
+        expectArgs("container.info", a, 1, line);
+        std::string name = canonContainer(asString(a[0], "container.info", line));
+        auto it = containers.find(name);
+        if (it == containers.end()) return Value::nil();
+        auto m = std::make_shared<MapData>();
+        m->push_back({Value::string("name"), Value::string(name)});
+        m->push_back({Value::string("kind"), Value::string(kindNameOf(name))});
+        m->push_back({Value::string("size"), Value::num(static_cast<double>(it->second->values.size()))});
+        auto parentIt = containerParent.find(name);
+        m->push_back({Value::string("parent"), parentIt == containerParent.end() ? Value::nil() : Value::string(parentIt->second)});
+        auto childIt = containerChildren.find(name);
+        m->push_back({Value::string("childCount"), Value::num(childIt == containerChildren.end() ? 0.0 : static_cast<double>(childIt->second.size()))});
+        { auto ek = easyKeyOfContainer.find(name); auto pp = containerPathOf.find(name);
+          m->push_back({Value::string("key"), Value::string(ek != easyKeyOfContainer.end() ? ek->second : name)}); // Easy_key: المكتوب أو الافتراضي
+          m->push_back({Value::string("path"), Value::string(pp != containerPathOf.end() ? pp->second : name)}); }
+        if (isDatalistContainer(name)) { // قائمة بيانات: عدد السجلات والأعمدة
+            datalistSync(name);
+            auto rws = tableRowsOf(name);
+            size_t w = rws->empty() || (*rws)[0].type != Value::Type::ARRAY ? 0 : (*rws)[0].array->size();
+            auto di = docStore.find(name);
+            m->push_back({Value::string("items"), Value::num(di == docStore.end() ? 0.0 : static_cast<double>(di->second.size()))});
+            m->push_back({Value::string("columns"), Value::num(static_cast<double>(w))});
+        }
+        if (isTableContainer(name)) { // جدول: عدد الصفوف وعرض الجدول (أكبر عدد خلايا في صف)
+            auto rows = tableRowsOf(name);
+            size_t width = 0;
+            for (auto& r : *rows) if (r.type == Value::Type::ARRAY && r.array) width = std::max(width, r.array->size());
+            m->push_back({Value::string("rows"), Value::num(static_cast<double>(rows->size()))});
+            m->push_back({Value::string("columns"), Value::num(static_cast<double>(width))});
+        }
+        return Value::makeMap(m);
+    };
+    natives["container.fields"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("container.fields", a, 1, line);
+        std::string name = canonContainer(asString(a[0], "container.fields", line));
+        auto it = containers.find(name);
+        if (it == containers.end()) return Value::nil();
+        auto m = std::make_shared<MapData>();
+        for (auto& kv : it->second->values) m->push_back({Value::string(kv.first), kv.second});
+        for (auto& k : tableVirtualKeys(name)) { // جدول: + rows (حيّ) / columns / style
+            Value v;
+            if (tableVirtualGet(name, k, v)) m->push_back({Value::string(k), v});
+        }
+        return Value::makeMap(m);
+    };
+    natives["container.snapshot"] = natives["container.fields"];
+    natives["container.fieldNames"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("container.fieldNames", a, 1, line);
+        std::string name = canonContainer(asString(a[0], "container.fieldNames", line));
+        auto it = containers.find(name);
+        if (it == containers.end()) return Value::nil();
+        auto out = std::make_shared<ArrayData>();
+        for (auto& kv : it->second->values) out->push_back(Value::string(kv.first));
+        for (auto& k : tableVirtualKeys(name)) {
+            Value v;
+            if (tableVirtualGet(name, k, v)) out->push_back(Value::string(k));
+        }
+        return Value::makeArray(out);
+    };
+    natives["container.fieldType"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("container.fieldType", a, 2, line);
+        std::string name = canonContainer(asString(a[0], "container.fieldType", line));
+        auto it = containers.find(name);
+        if (it == containers.end()) return Value::nil();
+        Value out;
+        std::string key = asString(a[1], "container.fieldType", line);
+        auto own = it->second->values.find(key);
+        if (own != it->second->values.end()) out = own->second;
+        else if (!tableVirtualGet(name, key, out) && !it->second->get(key, out)) return Value::nil();
+        return Value::string(out.typeName());
+    };
+    natives["container.byKind"] = [this, kindNameOf](std::vector<Value>& a, int line) -> Value {
+        expectArgs("container.byKind", a, 1, line);
+        std::string kind = asString(a[0], "container.byKind", line);
+        auto out = std::make_shared<ArrayData>();
+        for (auto& kv : containers) if (kindNameOf(kv.first) == kind) out->push_back(Value::string(kv.first));
+        return Value::makeArray(out);
+    };
+    natives["container.find"] = [this, kindNameOf](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("container.find", a, 1, 2, line);
+        std::string kind = asString(a[0], "container.find", line);
+        const MapData* filter = nullptr;
+        if (a.size() == 2 && a[1].type == Value::Type::MAP) filter = a[1].map.get();
+        auto out = std::make_shared<ArrayData>();
+        for (auto& kv : containers) {
+            if (kindNameOf(kv.first) != kind) continue;
+            bool ok = true;
+            if (filter) {
+                for (auto& f : *filter) {
+                    Value have;
+                    if (!kv.second->get(f.first.toDisplayString(), have) || !valuesEqual(have, f.second)) { ok = false; break; }
+                }
+            }
+            if (ok) out->push_back(Value::string(kv.first));
+        }
+        return Value::makeArray(out);
+    };
+    natives["container.findField"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("container.findField", a, 2, line);
+        std::string field = asString(a[0], "container.findField", line);
+        Value target = a[1];
+        auto out = std::make_shared<ArrayData>();
+        for (auto& kv : containers) {
+            Value have;
+            if (kv.second->get(field, have) && valuesEqual(have, target)) out->push_back(Value::string(kv.first));
+        }
+        return Value::makeArray(out);
+    };
+    natives["container.set"] = natives["setField"];
+    natives["container.get"] = natives["getField"];
+    natives["container.has"] = natives["hasField"];
+    natives["container.renameField"] = [this](std::vector<Value>& a, int line) -> Value {
+        { Value tv_; if (tableNative("container.renameField", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
+        expectArgs("container.renameField", a, 3, line);
+        std::string name = canonContainer(asString(a[0], "container.renameField", line));
+        auto it = containers.find(name);
+        if (it == containers.end()) return Value::boolean_(false);
+        std::string oldKey = asString(a[1], "container.renameField", line);
+        std::string newKey = asString(a[2], "container.renameField", line);
+        auto& vals = it->second->values;
+        auto found = vals.find(oldKey);
+        if (found == vals.end()) return Value::boolean_(false);
+        vals[newKey] = found->second;
+        vals.erase(found);
+        return Value::boolean_(true);
+    };
+    natives["container.deleteField"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("container.deleteField", a, 2, line);
+        std::string name = canonContainer(asString(a[0], "container.deleteField", line));
+        auto it = containers.find(name);
+        if (it == containers.end()) return Value::boolean_(false);
+        std::string key = asString(a[1], "container.deleteField", line);
+        if (it->second->values.erase(key) > 0) return Value::boolean_(true);
+        return Value::boolean_(tableVirtualDelete(name, key)); // rows -> تفريغ الصفوف · style -> إزالة النمط
+    };
+    natives["container.mergeFields"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("container.mergeFields", a, 2, 3, line);
+        std::string name = canonContainer(asString(a[0], "container.mergeFields", line));
+        auto it = containers.find(name);
+        if (it == containers.end()) return Value::boolean_(false);
+        if (a[1].type != Value::Type::MAP) throw diagErr(diag::Code::E0004_InvalidType, line, "`container.mergeFields` expects a map as its second argument");
+        bool overwrite = a.size() < 3 || a[2].isTruthy();
+        for (auto& kv : *a[1].map) {
+            std::string key = kv.first.toDisplayString();
+            if (!overwrite && it->second->values.count(key)) continue;
+            it->second->values[key] = kv.second;
+        }
+        return Value::boolean_(true);
+    };
+    natives["container.clearFields"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("container.clearFields", a, 1, line);
+        std::string name = canonContainer(asString(a[0], "container.clearFields", line));
+        auto it = containers.find(name);
+        if (it == containers.end()) return Value::boolean_(false);
+        it->second->values.clear();
+        if (isTableContainer(name)) { tableRowsOf(name)->clear(); containerStyles.erase(name); } // الجدول: + الصفوف والنمط
+        if (isDatalistContainer(name)) { docStore[name].clear(); refreshIndexesForContainer(name); } // القائمة: + السجلات
+        return Value::boolean_(true);
+    };
+    natives["container.count"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("container.count", a, 0, line);
+        return Value::num(static_cast<double>(containers.size()));
+    };
+    natives["container.current"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("container.current", a, 0, line);
+        return containerStack.empty() ? Value::nil() : Value::string(containerStack.back());
+    };
+    natives["container.stats"] = [this, kindNameOf](std::vector<Value>& a, int line) -> Value {
+        expectArgs("container.stats", a, 0, line);
+        auto m = std::make_shared<MapData>();
+        m->push_back({Value::string("count"), Value::num(static_cast<double>(containers.size()))});
+        std::unordered_map<std::string, int> byKind;
+        for (auto& kv : containers) byKind[kindNameOf(kv.first)]++;
+        auto kinds = std::make_shared<MapData>();
+        for (auto& kv : byKind) kinds->push_back({Value::string(kv.first), Value::num(kv.second)});
+        m->push_back({Value::string("byKind"), Value::makeMap(kinds)});
+        return Value::makeMap(m);
+    };
+
+    // callFn(fn, args?) -> يستدعي أي قيمة دالة Rin (FUNCTION) — سواء أتت من getField()، أو من متغيّر
+    // عادي، أو من عنصر مصفوفة/قاموس — مع وسائط args (مصفوفة اختيارية، افتراضياً بلا وسائط). هذا هو ما
+    // يجعل تخزين "سلوك" كامل بداخل حقل حاوية مجدياً فعلاً: setField(name, "greet", greetFn) ثم لاحقاً
+    // callFn(getField(name, "greet"), ["World"]).
+    natives["callFn"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("callFn", a, 1, 2, line);
+        if (a[0].type != Value::Type::FUNCTION || !a[0].function) {
+            throw errWithReason(diag::Code::E0007_InvalidArguments, line,
+                                 "callFn() requires a function value as its first argument",
+                                 "got a " + a[0].typeName() + " instead — pass a `fun` value (e.g. from getField())");
+        }
+        std::vector<Value> args;
+        if (a.size() > 1) {
+            if (a[1].type != Value::Type::ARRAY || !a[1].array) {
+                throw errWithReason(diag::Code::E0007_InvalidArguments, line,
+                                     "callFn()'s second argument must be an array of arguments",
+                                     "got a " + a[1].typeName() + " instead — wrap arguments in [...]");
+            }
+            args = *a[1].array;
+        }
+        return callFunction(a[0].function, args, line);
+    };
+    // run(fn, args?) -> مرادف إنجليزي مبسّط كامل لـ callFn() (نفس الدالة حرفياً)، من نفس عائلة
+    // الكلمات السهلة المرافقة لمفهوم make: "run" أوضح لغوياً من "callFn" للمبرمج المبتدئ.
+    natives["run"] = natives["callFn"];
+
+    // ================= HTTP حقيقي وفعلي (اتصال شبكة حقيقي) =================
+    // على عكس container.api/route/call أعلاه (محاكاة صرفة بلا شبكة، جيدة للاختبار)، كل ما يلي
+    // يُجري طلب شبكة حقيقياً فعلياً: على أندرويد عبر java.net.HttpURLConnection حقيقي (انظر
+    // RinHttpBridge.kt + jni_bridge.cpp)، وعلى أدوات سطر الأوامر عبر curl حقيقي (rin_http.cpp).
+    natives["httpSetTimeout"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("httpSetTimeout", a, 1, line);
+        defaultHttpTimeoutMs = (int)asNumber(a[0], "httpSetTimeout", line);
+        return Value::nil();
+    };
+    natives["jsonEncode"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("jsonEncode", a, 1, line);
+        return Value::string(json::encode(a[0]));
+    };
+    natives["jsonDecode"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("jsonDecode", a, 1, line);
+        return json::decodeOrRaw(asString(a[0], "jsonDecode", line));
+    };
+
+    // tokens(source) -> مصفوفة tokens حقيقية (كل عنصر: {type, lexeme, line}) ناتجة عن تشغيل
+    // rin::Lexer الفعلي على النص source، تماماً كما يراه المحلل النحوي الداخلي بالضبط قبل أي بناء AST.
+    // يكشف مفهوم "token" للمبرمج نفسه (تعلّم/تصحيح أخطاء بناء الجملة/أدوات تحليل)، بدل أن يبقى تفصيلاً
+    // داخلياً غير مرئي. أخطاء اللغة الصريحة (نص غير مُغلَق، محرف غير متوقّع...) تُرمى كـ RinError عادي
+    // بنفس أسلوب باقي اللغة (وليس بصمت كـ token من نوع ERROR)، لأن rin::Lexer::scanTokens() نفسها
+    // تفعل ذلك بالفعل. لا يُنتج أبداً TokenType::ERROR عملياً حالياً؛ يبقى مُعالَجاً في tokenTypeName
+    // فقط للاكتمال في حال أُضيف مستقبلاً.
+    natives["tokens"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("tokens", a, 1, line);
+        std::string source = asString(a[0], "tokens", line);
+        Lexer lexer(source);
+        std::vector<Token> toks;
+        try {
+            toks = lexer.scanTokens();
+        } catch (RinError& e) {
+            throw diagErr(diag::Code::E0035_RuntimeError, line, "'tokens': " + e.message);
+        }
+        auto arr = std::make_shared<ArrayData>();
+        arr->reserve(toks.size());
+        for (auto& t : toks) {
+            auto m = std::make_shared<MapData>();
+            m->push_back({Value::string("type"), Value::string(tokenTypeName(t.type))});
+            m->push_back({Value::string("lexeme"), Value::string(t.lexeme)});
+            m->push_back({Value::string("line"), Value::num((double)t.line)});
+            arr->push_back(Value::makeMap(m));
+        }
+        return Value::makeArray(arr);
+    };
+    // shapeOf(v) -> وصف شكل القيمة كنص (مفاتيح القاموس مرتبة): shapeOf({"b": 1, "a": ["x"]}) = "{a:[string],b:number}"
+    natives["shapeOf"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("shapeOf", a, 1, line);
+        return Value::string(shapeOf(a[0]));
+    };
+    // shapeDiff(value, model) -> قائمة مخالفات الشكل (فارغة = متطابقان، أي value =::= model).
+    // كل عنصر قاموس: path ("$.user.tags[1]") · reason · expected (شكل النموذج) · actual (شكل القيمة).
+    natives["shapeDiff"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("shapeDiff", a, 2, line);
+        auto arr = std::make_shared<ArrayData>();
+        for (auto& d : shapeDiff(a[0], a[1])) {
+            auto m = std::make_shared<MapData>();
+            m->push_back({Value::string("path"), Value::string(d[0])});
+            m->push_back({Value::string("reason"), Value::string(d[1])});
+            m->push_back({Value::string("expected"), Value::string(d[2])});
+            m->push_back({Value::string("actual"), Value::string(d[3])});
+            arr->push_back(Value::makeMap(m));
+        }
+        return Value::makeArray(arr);
+    };
+    // tokenType(source) -> نوع أول token فقط (نص)، اختصار مريح عند فحص رمز واحد بدل مصفوفة كاملة
+    // مثلاً: tokenType("let") == "LET"، tokenType("foo") == "IDENT"، tokenType("==") == "EQUAL_EQUAL"
+    natives["tokenType"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("tokenType", a, 1, line);
+        std::string source = asString(a[0], "tokenType", line);
+        Lexer lexer(source);
+        std::vector<Token> toks;
+        try {
+            toks = lexer.scanTokens();
+        } catch (RinError& e) {
+            throw diagErr(diag::Code::E0035_RuntimeError, line, "'tokenType': " + e.message);
+        }
+        for (auto& t : toks) {
+            if (t.type != TokenType::END_OF_FILE) return Value::string(tokenTypeName(t.type));
+        }
+        return Value::string("EOF");
+    };
+
+    natives["httpRequest"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("httpRequest", a, 4, line);
+        std::string method = asString(a[0], "httpRequest", line);
+        std::string url = asString(a[1], "httpRequest", line);
+        auto headers = headersFromValue(a[2], "httpRequest", line);
+        std::string body = bodyToString(a[3], headers);
+        auto result = http::performRequest(method, url, headers, body, defaultHttpTimeoutMs);
+        return httpResultToValue(result);
+    };
+    natives["httpGet"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("httpGet", a, 1, line);
+        std::string url = asString(a[0], "httpGet", line);
+        auto result = http::performRequest("GET", url, {}, "", defaultHttpTimeoutMs);
+        return httpResultToValue(result);
+    };
+    natives["httpPost"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("httpPost", a, 2, line);
+        std::string url = asString(a[0], "httpPost", line);
+        http::HeaderList headers;
+        std::string body = bodyToString(a[1], headers);
+        auto result = http::performRequest("POST", url, headers, body, defaultHttpTimeoutMs);
+        return httpResultToValue(result);
+    };
+    natives["httpPut"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("httpPut", a, 2, line);
+        std::string url = asString(a[0], "httpPut", line);
+        http::HeaderList headers;
+        std::string body = bodyToString(a[1], headers);
+        auto result = http::performRequest("PUT", url, headers, body, defaultHttpTimeoutMs);
+        return httpResultToValue(result);
+    };
+    natives["httpPatch"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("httpPatch", a, 2, line);
+        std::string url = asString(a[0], "httpPatch", line);
+        http::HeaderList headers;
+        std::string body = bodyToString(a[1], headers);
+        auto result = http::performRequest("PATCH", url, headers, body, defaultHttpTimeoutMs);
+        return httpResultToValue(result);
+    };
+    natives["httpDelete"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("httpDelete", a, 1, line);
+        std::string url = asString(a[0], "httpDelete", line);
+        auto result = http::performRequest("DELETE", url, {}, "", defaultHttpTimeoutMs);
+        return httpResultToValue(result);
+    };
+
+    // ---- apiRegister/apiHeader: يسجّل المبرمج API خاصته الحقيقي (اسم + baseUrl + ترويساته
+    // الخاصة كمفتاح API/Authorization)، ثم يستدعيه لاحقاً باسمه من أي مكان في البرنامج ----
+    natives["apiRegister"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("apiRegister", a, 2, line);
+        std::string name = asString(a[0], "apiRegister", line);
+        std::string baseUrl = asString(a[1], "apiRegister", line);
+        apiEndpoints[name].baseUrl = baseUrl; // يحافظ على أي ترويسات مسجَّلة له مسبقاً إن أُعيد التسجيل
+        return Value::boolean_(true);
+    };
+    natives["apiHeader"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("apiHeader", a, 3, line);
+        std::string name = asString(a[0], "apiHeader", line);
+        std::string key = asString(a[1], "apiHeader", line);
+        std::string value = asString(a[2], "apiHeader", line);
+        auto it = apiEndpoints.find(name);
+        if (it == apiEndpoints.end()) throw diagErr(diag::Code::E0037_NetworkError, line, "apiHeader: لا وجود لـ API باسم '" + name + "' — سجِّله أولاً عبر apiRegister(name, baseUrl)");
+        auto& hs = it->second.headers;
+        for (auto& kv : hs) if (kv.first == key) { kv.second = value; return Value::boolean_(true); }
+        hs.push_back({key, value});
+        return Value::boolean_(true);
+    };
+    natives["apiCall"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("apiCall", a, 4, line);
+        std::string name = asString(a[0], "apiCall", line);
+        std::string method = asString(a[1], "apiCall", line);
+        std::string path = asString(a[2], "apiCall", line);
+        return performRealApiCall(name, method, path, a[3], line);
+    };
+
+    // ---- استرداد صور/أيقونات حقيقية من الإنترنت (fetchImage/fetchIcon) ----
+    // تبني فوق نفس عميل HTTP الحقيقي أعلاه (httpGet وغيرها) بدل تكرار منطق الاتصال: تُنفَّذ
+    // GET حقيقي إلى [url]، وعند نجاحه (ok && status 2xx) يُكتب جسم الرد الخام (بايتات الصورة/
+    // الأيقونة كما وصلت، بلا أي تحويل نصي يفسدها) إلى [savePath] عبر writeRealFile — نفس دالة
+    // الكتابة الثنائية الآمنة المستخدَمة أصلاً لتصدير PNG (exportChat/save). المسار المحفوظ نسبي
+    // لمشروع المخرج (basePath) تماماً كباقي natives الملفات (readFile/writeFile). fetchIcon اسم
+    // مستقل لنفس التنفيذ (أيقونة هي صورة صغيرة فعلياً) فقط لوضوح القراءة داخل كود Rin.
+    auto fetchImageImpl = [this](std::vector<Value>& a, int line, const char* who) -> Value {
+        expectArgs(who, a, 2, line);
+        std::string url = asString(a[0], who, line);
+        std::string savePath = asString(a[1], who, line);
+        // performBinaryGet (وليس httpGet/performRequest العادي): على أندرويد يمرّ بايتات الرد
+        // كـ jbyteArray خام بدل jstring نصّي، فلا تُفسَد بايتات PNG/JPEG الحقيقية (انظر شرح كامل
+        // في rin_http.h/jni_bridge.cpp). على CLI/سطح المكتب يُعيد توجيهه لنفس performRequest
+        // الآمن أصلاً هناك (curl عبر pipe).
+        auto result = http::performBinaryGet(url, defaultHttpTimeoutMs);
+        if (!result.ok) {
+            throw diagErr(diag::Code::E0037_NetworkError, line,
+                std::string(who) + ": تعذّر الاتصال بـ '" + url + "'" +
+                (result.error.empty() ? "" : (" (" + result.error + ")")));
+        }
+        if (result.status < 200 || result.status >= 300) {
+            throw diagErr(diag::Code::E0037_NetworkError, line,
+                std::string(who) + ": الخادوم ردّ بحالة " + std::to_string(result.status) + " لـ '" + url + "'");
+        }
+        if (result.body.empty()) {
+            throw diagErr(diag::Code::E0037_NetworkError, line,
+                std::string(who) + ": رد فارغ من '" + url + "' (لا توجد بيانات صورة لحفظها)");
+        }
+        writeRealFile(savePath, result.body, line, who);
+        return Value::boolean_(true);
+    };
+    natives["fetchImage"] = [fetchImageImpl](std::vector<Value>& a, int line) -> Value {
+        return fetchImageImpl(a, line, "fetchImage");
+    };
+    natives["fetchIcon"] = [fetchImageImpl](std::vector<Value>& a, int line) -> Value {
+        return fetchImageImpl(a, line, "fetchIcon");
+    };
+
+    // ---- Banner convenience API (see docs/banner.md) ----
+    // Deliberately flat identifiers (bannerSuccess, not banner.success) because Rin's call()
+    // parser only ever accepts a single IDENT followed by '(' -- there is no general member-call
+    // expression ('receiver.method(...)') anywhere in the grammar today (verified: rin_parser.cpp
+    // Parser::call() only special-cases VariableExpr + LPAREN; the handful of existing dotted
+    // forms like container.pipe/link.id/Containers.Group are hand-written *statement*-level
+    // keywords, not a general expression feature). Adding real receiver.method(...) call syntax
+    // is a legitimate, separate, cross-cutting parser+interpreter feature -- not something to
+    // bolt on unsafely here -- so until that lands, this flat naming is the honest, non-breaking
+    // way to expose banner.success("...")-equivalent convenience calls, and it matches the
+    // existing apiGet/apiPost/apiRegister naming convention already used in this file.
+    //
+    // Each call logs the exact BANNER_CREATED / BANNER_SHOWN execution events requested (task
+    // §20), through the interpreter's real `output` stream -- the same sink print/level= already
+    // writes to -- with a real wall-clock HH:MM:SS timestamp, not a placeholder string.
+    auto emitBannerEvent = [this](const std::string& eventName) {
+        std::time_t t = std::time(nullptr);
+        std::tm tmv{};
+#if defined(_WIN32)
+        localtime_s(&tmv, &t);
+#else
+        localtime_r(&t, &tmv);
+#endif
+        char buf[16];
+        std::snprintf(buf, sizeof(buf), "%02d:%02d:%02d", tmv.tm_hour, tmv.tm_min, tmv.tm_sec);
+        output << buf << " " << eventName << "\n";
+    };
+    auto bannerConvenience = [this, emitBannerEvent](const std::string& fnName, const std::string& type) {
+        return [this, emitBannerEvent, fnName, type](std::vector<Value>& a, int line) -> Value {
+            expectArgs(fnName, a, 1, line);
+            std::string text = asString(a[0], fnName, line);
+            emitBannerEvent("BANNER_CREATED");
+            emitBannerEvent("BANNER_SHOWN");
+            // Human-readable line in the Code Output panel (level= reuses the same icons print
+            // already uses for info/success/warn/error so a banner reads consistently next to
+            // ordinary print output).
+            std::string levelKey = (type == "warning") ? "warn" : type;
+            std::string prefix;
+            if (levelKey == "info") prefix = "\u2139\uFE0F ";
+            else if (levelKey == "success") prefix = "\u2705 ";
+            else if (levelKey == "warn") prefix = "\u26A0\uFE0F ";
+            else if (levelKey == "error") prefix = "\u274C ";
+            output << prefix << "[banner:" << type << "] " << text << "\n";
+            return Value::nil();
+        };
+    };
+    natives["bannerSuccess"] = bannerConvenience("bannerSuccess", "success");
+    natives["bannerError"]   = bannerConvenience("bannerError", "error");
+    natives["bannerWarning"] = bannerConvenience("bannerWarning", "warning");
+    natives["bannerInfo"]    = bannerConvenience("bannerInfo", "info");
+    natives["bannerDismiss"] = [this, emitBannerEvent](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("bannerDismiss", a, 0, 0, line);
+        emitBannerEvent("BANNER_DISMISSED");
+        return Value::nil();
+    };
+
+    // ---- Log System (print.log/print.log.info/warn/error/debug — انظر LogStmt في rin_ast.h) ----
+    // هذه الدوال الثلاث هي واجهة الاستعلام/التصدير فوق Interpreter::logHistory_ (يتراكم تلقائياً
+    // في execute()، فرع LogStmt، عند كل استدعاء print.log). نفس أسلوب التسمية المسطَّحة flat
+    // المستخدَم أعلاه لـ bannerSuccess/bannerError/... (اللغة لا تملك receiver.method(...) عاماً)،
+    // وهي بالضبط نقطة التوسّع المستقبلية "ملفات Log" المذكورة في تعليق LogEntry (rin_interpreter.h):
+    // logSave(path) تكتب فعلياً كل سجلّ متراكم إلى ملف حقيقي على القرص (إلحاق append، لا استبدال،
+    // فيمكن استدعاؤها أكثر من مرة أثناء تشغيل طويل بلا فقدان سجلّات سابقة كُتبت مسبقاً).
+    natives["logHistory"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("logHistory", a, 0, 0, line);
+        auto arr = std::make_shared<ArrayData>();
+        for (const auto& e : logHistory_) {
+            auto m = std::make_shared<MapData>();
+            m->push_back({Value::string("time"), Value::string(e.time)});
+            m->push_back({Value::string("level"), Value::string(e.level)});
+            m->push_back({Value::string("message"), Value::string(e.message)});
+            m->push_back({Value::string("source"), Value::string(e.source)});
+            m->push_back({Value::string("line"), Value::num(static_cast<double>(e.line))});
+            arr->push_back(Value::makeMap(m));
+        }
+        return Value::makeArray(arr);
+    };
+    natives["logClear"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("logClear", a, 0, 0, line);
+        size_t n = logHistory_.size();
+        logHistory_.clear();
+        return Value::num(static_cast<double>(n));
+    };
+    natives["logSave"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("logSave", a, 1, line);
+        std::string relPath = asString(a[0], "logSave", line);
+        if (imgdraw::isImagePath(relPath)) { // logSave("log.png"|".bmp"|".ppm"): السجلّ كصورة (يستبدل الملف، لا يُلحَق)
+            writeRealFile(relPath, imgdraw::logAsImageBytes(logHistory_, relPath), line, "logSave");
+            return Value::num(static_cast<double>(logHistory_.size()));
+        }
+        std::string fullPath = resolvePath(relPath, line);
+        ensureParentDir(fullPath);
+        std::ofstream out(fullPath, std::ios::binary | std::ios::app);
+        if (!out) {
+            throw diagErr(diag::Code::E0036_IOFailure, line, "logSave: تعذّر فتح/إنشاء الملف '" + relPath + "' للكتابة الفعلية على القرص");
+        }
+        for (const auto& e : logHistory_) {
+            std::string upperLevel = e.level;
+            std::transform(upperLevel.begin(), upperLevel.end(), upperLevel.begin(),
+                            [](unsigned char c) { return std::toupper(c); });
+            out << e.time << " [" << upperLevel << "] " << e.message
+                << " (" << e.source << ":" << e.line << ")\n";
+        }
+        if (!out.good()) {
+            throw diagErr(diag::Code::E0036_IOFailure, line, "logSave: حدث خطأ أثناء الكتابة الفعلية إلى '" + relPath + "'");
+        }
+        return Value::num(static_cast<double>(logHistory_.size()));
+    };
+
+    natives["apiGet"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("apiGet", a, 2, line);
+        std::string name = asString(a[0], "apiGet", line);
+        std::string path = asString(a[1], "apiGet", line);
+        return performRealApiCall(name, "GET", path, Value::nil(), line);
+    };
+    natives["apiPost"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("apiPost", a, 3, line);
+        std::string name = asString(a[0], "apiPost", line);
+        std::string path = asString(a[1], "apiPost", line);
+        return performRealApiCall(name, "POST", path, a[2], line);
+    };
+    natives["apiPut"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("apiPut", a, 3, line);
+        std::string name = asString(a[0], "apiPut", line);
+        std::string path = asString(a[1], "apiPut", line);
+        return performRealApiCall(name, "PUT", path, a[2], line);
+    };
+    natives["apiPatch"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("apiPatch", a, 3, line);
+        std::string name = asString(a[0], "apiPatch", line);
+        std::string path = asString(a[1], "apiPatch", line);
+        return performRealApiCall(name, "PATCH", path, a[2], line);
+    };
+    natives["apiDelete"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("apiDelete", a, 2, line);
+        std::string name = asString(a[0], "apiDelete", line);
+        std::string path = asString(a[1], "apiDelete", line);
+        return performRealApiCall(name, "DELETE", path, Value::nil(), line);
+    };
+
+    // ---- مصفوفات وقواميس (arrays & maps) ----
+    natives["push"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("push", a, 2, line);
+        if (a[0].type != Value::Type::ARRAY) throw diagErr(diag::Code::E0004_InvalidType, line, "'push' expects an array");
+        a[0].array->push_back(a[1]);
+        return Value::num(static_cast<double>(a[0].array->size()));
+    };
+    natives["pop"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("pop", a, 1, line);
+        if (a[0].type != Value::Type::ARRAY) throw diagErr(diag::Code::E0004_InvalidType, line, "'pop' expects an array");
+        if (a[0].array->empty()) throw diagErr(diag::Code::E0004_InvalidType, line, "'pop': المصفوفة فارغة");
+        Value v = a[0].array->back();
+        a[0].array->pop_back();
+        return v;
+    };
+    natives["sort"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("sort", a, 1, line);
+        if (a[0].type != Value::Type::ARRAY) throw diagErr(diag::Code::E0004_InvalidType, line, "'sort' expects an array");
+        std::sort(a[0].array->begin(), a[0].array->end(), [line](const Value& x, const Value& y) {
+            if (x.type == Value::Type::NUMBER && y.type == Value::Type::NUMBER) return x.number < y.number;
+            if (x.type == Value::Type::STRING && y.type == Value::Type::STRING) return x.str < y.str;
+            throw diagErr(diag::Code::E0035_RuntimeError, line, "'sort' يتطلب أن تكون كل العناصر أرقاماً أو نصوصاً فقط");
+        });
+        return a[0];
+    };
+    natives["keys"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("keys", a, 1, line);
+        if (a[0].type != Value::Type::MAP) throw diagErr(diag::Code::E0004_InvalidType, line, "'keys' expects a map");
+        auto result = std::make_shared<ArrayData>();
+        for (auto& kv : *a[0].map) result->push_back(kv.first);
+        return Value::makeArray(result);
+    };
+    natives["values"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("values", a, 1, line);
+        if (a[0].type != Value::Type::MAP) throw diagErr(diag::Code::E0004_InvalidType, line, "'values' expects a map");
+        auto result = std::make_shared<ArrayData>();
+        for (auto& kv : *a[0].map) result->push_back(kv.second);
+        return Value::makeArray(result);
+    };
+    natives["has"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("has", a, 2, line);
+        const Value& collection = a[0];
+        const Value& needle = a[1];
+        if (collection.type == Value::Type::MAP) {
+            if (collection.map->findIndex(needle) != MapData::npos) return Value::boolean_(true);
+            return Value::boolean_(false);
+        }
+        if (collection.type == Value::Type::ARRAY) {
+            for (const auto& v : *collection.array) if (valuesEqual(v, needle)) return Value::boolean_(true);
+            return Value::boolean_(false);
+        }
+        if (collection.type == Value::Type::STRING && needle.type == Value::Type::STRING)
+            return Value::boolean_(collection.str.find(needle.str) != std::string::npos);
+        throw diagErr(diag::Code::E0004_InvalidType, line, "'has' يتطلب map أو array، أو string مع string");
+    };
+    natives["remove"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("remove", a, 2, line);
+        if (a[0].type != Value::Type::MAP) throw diagErr(diag::Code::E0004_InvalidType, line, "'remove' expects a map");
+        size_t at = a[0].map->findIndex(a[1]);
+        if (at != MapData::npos) { a[0].map->eraseAt(at); return Value::boolean_(true); }
+        return Value::boolean_(false);
+    };
+
+    // ---- ملفات حقيقية على القرص (تُبنى فوق basePath عبر resolvePath) ----
+    natives["writeFile"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("writeFile", a, 2, line);
+        std::string path = asString(a[0], "writeFile", line);
+        std::string content = a[1].type == Value::Type::STRING ? a[1].str : a[1].toDisplayString();
+        writeRealFile(path, content, line, "writeFile");
+        return Value::boolean_(true);
+    };
+    natives["appendFile"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("appendFile", a, 2, line);
+        std::string path = asString(a[0], "appendFile", line);
+        std::string content = a[1].type == Value::Type::STRING ? a[1].str : a[1].toDisplayString();
+        std::string fullPath = resolvePath(path, line);
+        ensureParentDir(fullPath);
+        std::ofstream out(fullPath, std::ios::binary | std::ios::app);
+        if (!out) throw diagErr(diag::Code::E0036_IOFailure, line, "appendFile: تعذّر فتح الملف '" + path + "' للإضافة إليه");
+        out << content;
+        return Value::boolean_(true);
+    };
+    natives["readFile"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("readFile", a, 1, line);
+        std::string path = asString(a[0], "readFile", line);
+        std::ifstream in(resolvePath(path, line), std::ios::binary);
+        if (!in) throw diagErr(diag::Code::E0036_IOFailure, line, "readFile: تعذّر فتح الملف '" + path + "' للقراءة (غير موجود؟)");
+        std::ostringstream buf;
+        buf << in.rdbuf();
+        return Value::string(buf.str());
+    };
+    natives["fileExists"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("fileExists", a, 1, line);
+        std::string path = asString(a[0], "fileExists", line);
+        rin_stat_t rst{};
+        return Value::boolean_(RIN_STAT(resolvePath(path, line).c_str(), &rst) == 0);
+    };
+    natives["deleteFile"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("deleteFile", a, 1, line);
+        std::string path = asString(a[0], "deleteFile", line);
+        return Value::boolean_(::remove(resolvePath(path, line).c_str()) == 0);
+    };
+
+    // ---- تثبيتات حقيقية ومستمرة (installation) ----
+    natives["isInstalled"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("isInstalled", a, 1, line);
+        std::string name = asString(a[0], "isInstalled", line);
+        return Value::boolean_(installedNames.count(name) > 0);
+    };
+    natives["listInstalled"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("listInstalled", a, 0, line);
+        std::vector<std::string> names(installedNames.begin(), installedNames.end());
+        std::sort(names.begin(), names.end());
+        auto result = std::make_shared<ArrayData>();
+        for (auto& n : names) result->push_back(Value::string(n));
+        return Value::makeArray(result);
+    };
+    // loadInstalled(name) -> يقرأ نسخة حاوية مثبَّتة فعلياً من rin_installed/ وينفّذها (يعيد تسجيلها كحاوية عاملة)،
+    // ويُرجع true/false حسب نجاح العثور عليها وتحميلها. يفضّل النسخة الكاملة (.rin) على المبسّطة (.min.rin) إن وُجدت الاثنتان.
+    natives["loadInstalled"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("loadInstalled", a, 1, line);
+        std::string name = asString(a[0], "loadInstalled", line);
+        std::string fullVariant = resolvePath("rin_installed/" + name + ".rin");
+        std::string minVariant = resolvePath("rin_installed/" + name + ".min.rin");
+        std::string chosen;
+        { std::ifstream t(fullVariant, std::ios::binary); if (t.good()) chosen = fullVariant; }
+        if (chosen.empty()) { std::ifstream t(minVariant, std::ios::binary); if (t.good()) chosen = minVariant; }
+        if (chosen.empty()) return Value::boolean_(false);
+        std::ifstream in(chosen, std::ios::binary);
+        std::ostringstream buf;
+        buf << in.rdbuf();
+        std::string src = buf.str();
+        try {
+            Lexer lex(src);
+            auto toks = lex.scanTokens();
+            Parser p(toks);
+            auto stmts = p.parse();
+            executeBlock(stmts, globals);
+        } catch (RinError& e) {
+            throw diagErr(diag::Code::E0028_ImportError, line, "loadInstalled('" + name + "'): خطأ داخل الملف المحمّل فعلياً من القرص (سطر " +
+                            std::to_string(e.line) + "): " + e.message);
+        }
+        installedNames.insert(name);
+        return Value::boolean_(true);
+    };
+
+    // ========================================================================
+    // binfmt: صيغ تنفيذية/مكتبات حقيقية (PE/ELF/Mach-O/ar/COFF) — تُبنى بايتاً-بايتاً هنا
+    // (لا اعتماد على أي مكتبة PE/ELF/Mach-O خارجية)، وتُكتب فعلياً على القرص عبر writeRealFile
+    // تماماً كأي ملف Rin آخر. راجع app/src/main/cpp/binfmt/*.h للتفاصيل الهندسية الكاملة لكل
+    // صيغة (تحقّقنا من صحة ELF/ar تنفيذياً فعلاً، ومن صحة PE/Mach-O بنيوياً عبر objdump/تحليل
+    // يدوي مطابق للمواصفة — انظر README المرفق لتفاصيل التحقق الكاملة والقيود المعروفة).
+    natives["buildExe"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("buildExe", a, 2, 3, line);
+        std::string path = asString(a[0], "buildExe", line);
+        std::string platform = asString(a[1], "buildExe", line); // "windows" | "linux" | "macos"
+        double exitCode = a.size() >= 3 ? asNumber(a[2], "buildExe", line) : 0.0;
+        uint8_t code = uint8_t(int(exitCode) & 0xFF);
+        std::string bytes;
+        if (platform == "windows") bytes = binfmt::pe::buildExecutable(uint32_t(int(exitCode)));
+        else if (platform == "linux") bytes = binfmt::elf::buildExecutable(code);
+        else if (platform == "macos") bytes = binfmt::macho::buildExecutable(code);
+        else throw diagErr(diag::Code::E0004_InvalidType, line, "buildExe: platform يجب أن تكون 'windows' أو 'linux' أو 'macos' (وصلت: '" + platform + "')");
+        writeRealFile(path, bytes, line, "buildExe");
+        return Value::boolean_(true);
+    };
+    natives["buildCom"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("buildCom", a, 1, 2, line);
+        std::string path = asString(a[0], "buildCom", line);
+        double exitCode = a.size() >= 2 ? asNumber(a[1], "buildCom", line) : 0.0;
+        writeRealFile(path, binfmt::pe::buildCom(uint8_t(int(exitCode) & 0xFF)), line, "buildCom");
+        return Value::boolean_(true);
+    };
+    natives["buildDll"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("buildDll", a, 3, 4, line);
+        std::string path = asString(a[0], "buildDll", line);
+        std::string exportName = asString(a[1], "buildDll", line);
+        double returnValue = asNumber(a[2], "buildDll", line);
+        std::string dllFileName = a.size() >= 4 ? asString(a[3], "buildDll", line) : std::filesystem::path(path).filename().string();
+        writeRealFile(path, binfmt::pe::buildDll(exportName, int32_t(returnValue), dllFileName), line, "buildDll");
+        return Value::boolean_(true);
+    };
+    natives["buildSo"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("buildSo", a, 3, line);
+        std::string path = asString(a[0], "buildSo", line);
+        std::string exportName = asString(a[1], "buildSo", line);
+        double returnValue = asNumber(a[2], "buildSo", line);
+        writeRealFile(path, binfmt::elf::buildSharedObject(exportName, int32_t(returnValue)), line, "buildSo");
+        return Value::boolean_(true);
+    };
+    natives["buildDylib"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("buildDylib", a, 3, 4, line);
+        std::string path = asString(a[0], "buildDylib", line);
+        std::string exportName = asString(a[1], "buildDylib", line);
+        double returnValue = asNumber(a[2], "buildDylib", line);
+        std::string installName = a.size() >= 4 ? asString(a[3], "buildDylib", line) : std::filesystem::path(path).filename().string();
+        writeRealFile(path, binfmt::macho::buildDylib(exportName, int32_t(returnValue), installName), line, "buildDylib");
+        return Value::boolean_(true);
+    };
+    natives["buildA"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("buildA", a, 3, 4, line);
+        std::string path = asString(a[0], "buildA", line);
+        std::string symbolName = asString(a[1], "buildA", line);
+        double returnValue = asNumber(a[2], "buildA", line);
+        std::string memberName = a.size() >= 4 ? asString(a[3], "buildA", line) : (symbolName + ".o");
+        auto obj = binfmt::elf::buildRelocatable(symbolName, int32_t(returnValue));
+        binfmt::ar::Member m{memberName, obj, {symbolName}};
+        writeRealFile(path, binfmt::ar::build({m}), line, "buildA");
+        return Value::boolean_(true);
+    };
+    natives["buildLib"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("buildLib", a, 3, 4, line);
+        std::string path = asString(a[0], "buildLib", line);
+        std::string symbolName = asString(a[1], "buildLib", line);
+        double returnValue = asNumber(a[2], "buildLib", line);
+        std::string memberName = a.size() >= 4 ? asString(a[3], "buildLib", line) : (symbolName + ".obj");
+        auto obj = binfmt::coff::buildObject(symbolName, int32_t(returnValue));
+        binfmt::ar::Member m{memberName, obj, {symbolName}};
+        writeRealFile(path, binfmt::ar::build({m}), line, "buildLib");
+        return Value::boolean_(true);
+    };
+
+    registerNativesExtra(); // Rin 1.0: دوال إضافية (rin_extra_natives.cpp)
+    registerNativesExtra2(); // Rin 1.0: sec./file./net./log./automation. + امتدادات container.* (rin_extra_natives2.cpp)
+    registerNativesExtra3(); // Rin 1.0: net.* بشبكة حقيقية + container.* إضافية (rin_extra_natives3.cpp)
+    registerNativesExtra4(); // Rin 1.0: json./semver./pkg./cpp. (rin_extra_natives4.cpp)
+    registerNativesExtra5(); // عائلة #: #sed #sum #diff #add #to #swap (rin_extra_natives5.cpp)
+    registerNativesExtra6(); // make.video/audio/api/image.removeBg/ocr (rin_extra_natives6.cpp)
+    registerNativesExtra7(); // مفهوم time: time() و time.* (rin_extra_natives7.cpp، docs/TIME.md)
+    registerNativesExtra8(); // مفهوم token: tokenList/tokenStats/tokenAt/... (rin_extra_natives8.cpp، docs/TOKEN.md)
+    registerNativesExtra10(); // مفهوم linalg: mat*/vec* (rin_extra_natives10.cpp، docs/LINALG.md)
+    registerNativesExtra12(); // fileSync/fileLock/fileRename/fileSize/findByRange (rin_extra_natives12.cpp، docs/FILEDB.md)
+    registerNativesExtra11(); // مفهوم algo: algo* (rin_extra_natives11.cpp، docs/ALGO.md)
+    registerNativesRintwist(); // RINTWIST: rintwist.get/fmt/stack (rin_rintwist.cpp، docs/rintwist.md)
+    registerNativesLibDir(); // مكتبات Rin المقسَّمة: rinlib.* (rin_libdir.cpp، docs/split-libraries.md)
+    registerNativesCapture(); // captureOutput/capture/indsin.run — التقاط ناتج الطباعة لجسر <<...>> (rin_expr_host.cpp، docs/indsin_bridge.md)
+    registerNativesExtra9(); // مفهوم number: دوال الأرقام العملية (rin_extra_natives9.cpp، docs/NUMBER.md)
+    registerNativesOop(); // Rin 1.0: oop.* — استبطان الأصناف والكائنات + أدوات OOP (rin_oop_natives.cpp)
+    registerNativesInput(); // Rin 1.0: نماذج الإدخال (معاملة/تداخل/مُدقِّق النموذج) فوق input() — بعد oop.* لأنها تستدعيها (rin_input.cpp)
+    registerNativesConditions(); // متغيّرات الشروط الموسّعة (rin_conditions.cpp)
+    registerNativesImageDraw(); // imgNew/imgLine/imgText/imgSave/imgFromLog… (rin_image_draw.cpp)
+    registerNativesImage(); // printImage/imageAnsi/imageInfo (rin_image_ansi.cpp)
+    registerNativesEnv();   // ربط .env: Env.* (rin_env.cpp)
+    registerNativesSet();   // نوع Set الأساسي: Set(...) و Set.* وتوسعة len/contains/has/remove/sum... (rin_set.cpp) — أخيراً كي تلفّ ما سبقها
+}
+
+// ================= تخزين حقيقي على القرص (save/file/installation) =================
+
+std::string Interpreter::resolvePath(const std::string& rawPath, int line) const {
+    if (rawPath.empty()) return rawPath;
+    if (basePath.empty()) return rawPath; // بدون basePath لا يوجد "معزول" للخروج منه أصلاً (استخدام مباشر خارج أندرويد)
+
+    // كل المسارات (نسبية أو مطلقة) تُطبَّع بتفكيكها إلى مقاطع وحلّ "." و".." يدوياً، بدل تمريرها كما هي:
+    // مسار مطلق صريح (يبدأ بـ '/') كان سابقاً يتجاوز basePath كلياً، و"../" متكررة كانت تصعد فوق جذر
+    // basePath بلا أي رادع — كلاهما يسمح لكود Rin (مثلاً مكتبة @import من مصدر غير موثوق) بقراءة/كتابة
+    // ملفات عشوائية خارج مجلد المشروع المعزول. الآن أي محاولة صعود فوق basePath نفسه تُرفَض بخطأ واضح.
+    std::vector<std::string> segments;
+    size_t i = 0;
+    while (i <= rawPath.size()) {
+        size_t slash = rawPath.find('/', i);
+        std::string seg = (slash == std::string::npos) ? rawPath.substr(i) : rawPath.substr(i, slash - i);
+        if (seg.empty() || seg == ".") {
+            // تجاهل: فاصل مكرر أو "المجلد الحالي"
+        } else if (seg == "..") {
+            if (segments.empty()) {
+                throw diagErr(diag::Code::E0036_IOFailure, line, "مسار غير مسموح به (يحاول الخروج خارج مجلد المشروع المعزول): '" + rawPath + "'");
+            }
+            segments.pop_back();
+        } else {
+            segments.push_back(seg);
+        }
+        if (slash == std::string::npos) break;
+        i = slash + 1;
+    }
+    std::string base = basePath;
+    if (!base.empty() && base.back() != '/') base += '/';
+    std::string result = base;
+    for (size_t idx = 0; idx < segments.size(); idx++) {
+        result += segments[idx];
+        if (idx + 1 < segments.size()) result += '/';
+    }
+    return result;
+}
+
+// انظر التعليق على الإعلان في rin_interpreter.h. لا يعتمد هذا الكود على أي من رؤوس
+// طبقة pkg/ (لا toml_lite ولا manifest ولا lockfile)؛ فقط قراءة نصية مباشرة وبسيطة
+// لصيغة rin.lock (وهي TOML مبسَّط جداً: [[package]] name="..." version="..." ...)
+// كافية تماماً هنا لأن هذه القراءة للاستهلاك فقط، لا للتحقق من الصحة (ذلك من مسؤولية
+// `rin pkg install` الذي يكتب rin.lock أصلاً).
+namespace {
+bool findLockedPackageVersion(const std::string& lockPath, const std::string& pkgName, std::string& versionOut) {
+    std::ifstream in(lockPath, std::ios::binary);
+    if (!in) return false;
+
+    std::string line, currentName, currentVersion;
+    bool inPackageBlock = false;
+    auto flushIfMatch = [&]() -> bool {
+        return inPackageBlock && currentName == pkgName && !currentVersion.empty();
+    };
+    auto extractQuoted = [](const std::string& s) -> std::string {
+        size_t q1 = s.find('"');
+        if (q1 == std::string::npos) return "";
+        size_t q2 = s.find('"', q1 + 1);
+        if (q2 == std::string::npos) return "";
+        return s.substr(q1 + 1, q2 - q1 - 1);
+    };
+
+    while (std::getline(in, line)) {
+        size_t a = line.find_first_not_of(" \t\r");
+        if (a == std::string::npos) continue;
+        std::string t = line.substr(a);
+
+        if (t.rfind("[[package]]", 0) == 0) {
+            if (flushIfMatch()) { versionOut = currentVersion; return true; }
+            inPackageBlock = true;
+            currentName.clear();
+            currentVersion.clear();
+            continue;
+        }
+        if (!t.empty() && t[0] == '[') {
+            if (flushIfMatch()) { versionOut = currentVersion; return true; }
+            inPackageBlock = false;
+            continue;
+        }
+        if (!inPackageBlock) continue;
+
+        size_t eq = t.find('=');
+        if (eq == std::string::npos) continue;
+        std::string key = t.substr(0, eq);
+        while (!key.empty() && (key.back() == ' ' || key.back() == '\t')) key.pop_back();
+        std::string val = t.substr(eq + 1);
+        if (key == "name") currentName = extractQuoted(val);
+        else if (key == "version") currentVersion = extractQuoted(val);
+    }
+    if (flushIfMatch()) { versionOut = currentVersion; return true; }
+    return false;
+}
+
+// نفس حساب جذر الكاش الفعلي المستخدَم في cli/linux/src/pkg/cache.cpp (defaultCacheRoot)،
+// مكرَّر هنا بإيجاز بدل مشاركة الرأس، للسبب المذكور أعلاه (استقلالية محرك اللغة).
+std::string rinpmCacheRootForImport() {
+    if (const char* explicitHome = std::getenv("RIN_HOME")) if (*explicitHome) return std::string(explicitHome);
+    if (const char* home = std::getenv("HOME")) return std::string(home) + "/.rin";
+    if (const char* profile = std::getenv("USERPROFILE")) return std::string(profile) + "/.rin";
+    return "./.rin";
+}
+} // namespace
+
+bool Interpreter::tryLoadInstalledPackageEntry(const std::string& pkgName, std::string& sourceOut) const {
+    std::string lockPath = resolvePath("rin.lock");
+    std::string version;
+    if (!findLockedPackageVersion(lockPath, pkgName, version)) return false;
+
+    std::string srcDir = rinpmCacheRootForImport() + "/packages/" + pkgName + "/" + version + "/src";
+
+    // اتفاقية نقطة الدخول لحزمة RinPM (موثَّقة في docs/package-manager/packages.md):
+    // يُفضَّل lib.rin (كمكتبة)، ثم main.rin، ثم ملف بنفس اسم الحزمة في جذر src/.
+    static const char* kEntryCandidates[] = {"lib.rin", "main.rin"};
+    for (const char* cand : kEntryCandidates) {
+        std::ifstream in(srcDir + "/" + std::string(cand), std::ios::binary);
+        if (in) {
+            std::ostringstream buf;
+            buf << in.rdbuf();
+            sourceOut = buf.str();
+            return true;
+        }
+    }
+    std::ifstream in2(srcDir + "/" + pkgName + ".rin", std::ios::binary);
+    if (in2) {
+        std::ostringstream buf;
+        buf << in2.rdbuf();
+        sourceOut = buf.str();
+        return true;
+    }
+    return false;
+}
+
+void Interpreter::ensureParentDir(const std::string& fullPath) const {
+    size_t pos = fullPath.find_last_of('/');
+    if (pos == std::string::npos) return; // لا يوجد مجلد أب (ملف في المجلد الحالي)
+    std::string dir = fullPath.substr(0, pos);
+    if (dir.empty()) return;
+    // ينشئ المجلدات تدريجياً (يعادل mkdir -p) دون الاعتماد على <filesystem> لضمان توافق أوسع (NDK/g++ القديم).
+    std::string partial;
+    size_t start = 0;
+    if (dir.front() == '/') { partial = "/"; start = 1; }
+    while (start <= dir.size()) {
+        size_t slash = dir.find('/', start);
+        std::string segment = (slash == std::string::npos) ? dir.substr(start) : dir.substr(start, slash - start);
+        if (!segment.empty()) {
+            partial += segment;
+            if (RIN_MKDIR(partial.c_str()) != 0 && errno != EEXIST) {
+                // تُترك بصمت: محاولة الكتابة اللاحقة (ofstream) سترمي خطأ واضحاً إن كان هذا هو السبب الفعلي للفشل.
+            }
+            partial += "/";
+        }
+        if (slash == std::string::npos) break;
+        start = slash + 1;
+    }
+}
+
+// ================= PNG خفيف الوزن (بلا اعتماديات خارجية) — لأجل table.save/png =================
+// table.save/png يرسم صورة PNG حقيقية للجدول تُظهر محتوى الخلايا الفعلي كنص مرسوم بخط
+// متجهي (vector-stroke) مُضمَّن بالكامل في هذا الملف — بلا أي مكتبة خطوط خارجية ولا محرّك
+// تشكيل (shaping engine). يغطي هذا الخط: الأرقام 0-9، الحروف اللاتينية A-Z/a-z، علامات
+// ترقيم شائعة، وأشكال مبسَّطة (منفصلة/غير مُشكَّلة) لحروف الأبجدية العربية الأساسية.
+// أمانة واجبة: الحروف العربية هنا أشكال "استنسل" هندسية تقريبية بخطوط مستقيمة لكل حرف على
+// حدة (لتمييزه بصرياً عن غيره) وليست خطاً عربياً حقيقياً — فلا رَبْط بين الحروف (ligatures) ولا
+// أشكال سياقية (ابتدائي/وسطي/نهائي)، لأن ذلك يتطلب محرّك تشكيل كامل غير متوفر هنا. اتجاه النص
+// العام (RTL للعربية) مطبَّق فعلياً عبر ترتيب "runs" (مقاطع عربية/لاتينية) بصرياً بشكل صحيح.
+namespace pngutil {
+
+static uint32_t crc32(const unsigned char* data, size_t len) {
+    static uint32_t table[256];
+    static bool made = false;
+    if (!made) {
+        for (uint32_t n = 0; n < 256; n++) {
+            uint32_t c = n;
+            for (int k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320u ^ (c >> 1)) : (c >> 1);
+            table[n] = c;
+        }
+        made = true;
+    }
+    uint32_t c = 0xFFFFFFFFu;
+    for (size_t i = 0; i < len; i++) c = table[(c ^ data[i]) & 0xFFu] ^ (c >> 8);
+    return c ^ 0xFFFFFFFFu;
+}
+
+static uint32_t adler32(const unsigned char* data, size_t len) {
+    uint32_t a = 1, b = 0;
+    const uint32_t MOD = 65521;
+    for (size_t i = 0; i < len; i++) { a = (a + data[i]) % MOD; b = (b + a) % MOD; }
+    return (b << 16) | a;
+}
+
+static void putU32BE(std::string& out, uint32_t v) {
+    out += static_cast<char>((v >> 24) & 0xFF);
+    out += static_cast<char>((v >> 16) & 0xFF);
+    out += static_cast<char>((v >> 8) & 0xFF);
+    out += static_cast<char>(v & 0xFF);
+}
+
+static void putChunk(std::string& out, const char tag[4], const std::string& data) {
+    putU32BE(out, static_cast<uint32_t>(data.size()));
+    std::string typeAndData(tag, 4);
+    typeAndData += data;
+    out += typeAndData;
+    putU32BE(out, crc32(reinterpret_cast<const unsigned char*>(typeAndData.data()), typeAndData.size()));
+}
+
+// تيار zlib يحتوي 'raw' داخل كتل deflate من نوع "stored" (بلا ضغط فعلي) — صالح تماماً حسب
+// RFC 1950/1951، ويُقسَّم كتلاً ≤ 65535 بايت عند الحاجة.
+static std::string zlibStored(const std::string& raw) {
+    std::string out;
+    out += static_cast<char>(0x78);
+    out += static_cast<char>(0x01);
+    size_t pos = 0;
+    const size_t maxBlock = 65535;
+    if (raw.empty()) {
+        out += static_cast<char>(1);
+        out += static_cast<char>(0); out += static_cast<char>(0);
+        out += static_cast<char>(0xFF); out += static_cast<char>(0xFF);
+    }
+    while (pos < raw.size()) {
+        size_t remaining = raw.size() - pos;
+        size_t blockLen = std::min(remaining, maxBlock);
+        bool isLast = (pos + blockLen) >= raw.size();
+        out += static_cast<char>(isLast ? 1 : 0);
+        auto len = static_cast<uint16_t>(blockLen);
+        auto nlen = static_cast<uint16_t>(~len);
+        out += static_cast<char>(len & 0xFF); out += static_cast<char>((len >> 8) & 0xFF);
+        out += static_cast<char>(nlen & 0xFF); out += static_cast<char>((nlen >> 8) & 0xFF);
+        out.append(raw, pos, blockLen);
+        pos += blockLen;
+    }
+    putU32BE(out, adler32(reinterpret_cast<const unsigned char*>(raw.data()), raw.size()));
+    return out;
+}
+
+// يبني ملف PNG كامل من مصفوفة بكسلات RGB (3 بايت للبكسل) بأبعاد width x height.
+static std::string encodeRgbPng(int width, int height, const std::vector<unsigned char>& rgb) {
+    std::string out;
+    static const unsigned char sig[8] = {137, 80, 78, 71, 13, 10, 26, 10};
+    out.append(reinterpret_cast<const char*>(sig), 8);
+
+    std::string ihdr;
+    putU32BE(ihdr, static_cast<uint32_t>(width));
+    putU32BE(ihdr, static_cast<uint32_t>(height));
+    ihdr += static_cast<char>(8); ihdr += static_cast<char>(2);
+    ihdr += static_cast<char>(0); ihdr += static_cast<char>(0); ihdr += static_cast<char>(0);
+    putChunk(out, "IHDR", ihdr);
+
+    std::string raw;
+    raw.reserve(static_cast<size_t>(height) * (1 + static_cast<size_t>(width) * 3));
+    for (int y = 0; y < height; y++) {
+        raw += static_cast<char>(0); // فلتر "none" لكل سطر
+        raw.append(reinterpret_cast<const char*>(&rgb[static_cast<size_t>(y) * width * 3]),
+                    static_cast<size_t>(width) * 3);
+    }
+    putChunk(out, "IDAT", zlibStored(raw));
+    putChunk(out, "IEND", "");
+    return out;
+}
+
+} // namespace pngutil
+
+// ================= خط متجهي مُضمَّن (vector-stroke font) — لرسم نص حقيقي داخل صورة الجدول =================
+// كل حرف مُعرَّف كقائمة "أضلاع" (segments) على شبكة تصميم ثابتة GW×GH (7×10 وحدة)، تُرسَم
+// كخطوط مستقيمة بعد تحجيمها (scale) وإزاحتها إلى موضع الحرف الفعلي داخل الصورة. هذا يكفي
+// لرسم أرقام/حروف لاتينية واضحة تماماً (نفس أسلوب خطوط "stencil/plotter" التقليدية)، ولإعطاء
+// كل حرف عربي شكلاً مميزاً خاصاً به بدل تلوين الخلية كاملة بلون واحد.
+namespace rinfont {
+
+struct Seg { int x0, y0, x1, y1; };
+constexpr int GW = 7;  // عرض شبكة التصميم (وحدات)
+constexpr int GH = 10; // ارتفاع شبكة التصميم (وحدات)
+
+using GlyphList = std::vector<Seg>;
+using GlyphMap = std::unordered_map<char32_t, GlyphList>;
+
+// فك ترميز UTF-8 إلى نقاط كود (code points) — يتعامل بأمان مع أي بايتات غير صالحة بتجاهلها.
+static std::vector<char32_t> utf8Decode(const std::string& s) {
+    std::vector<char32_t> out;
+    size_t i = 0, n = s.size();
+    while (i < n) {
+        unsigned char c0 = static_cast<unsigned char>(s[i]);
+        char32_t cp; int len;
+        if ((c0 & 0x80u) == 0) { cp = c0; len = 1; }
+        else if ((c0 & 0xE0u) == 0xC0u) { cp = c0 & 0x1Fu; len = 2; }
+        else if ((c0 & 0xF0u) == 0xE0u) { cp = c0 & 0x0Fu; len = 3; }
+        else if ((c0 & 0xF8u) == 0xF0u) { cp = c0 & 0x07u; len = 4; }
+        else { i++; continue; } // بايت غير صالح كبداية تسلسل: تجاهله
+        if (i + static_cast<size_t>(len) > n) { i++; continue; }
+        bool ok = true;
+        char32_t acc = cp;
+        for (int k = 1; k < len; k++) {
+            unsigned char cx = static_cast<unsigned char>(s[i + k]);
+            if ((cx & 0xC0u) != 0x80u) { ok = false; break; }
+            acc = (acc << 6) | (cx & 0x3Fu);
+        }
+        if (!ok) { i++; continue; }
+        out.push_back(acc);
+        i += static_cast<size_t>(len);
+    }
+    return out;
+}
+
+static bool isArabicCp(char32_t cp) {
+    return (cp >= 0x0600 && cp <= 0x06FF) || (cp >= 0x0750 && cp <= 0x077F);
+}
+
+// ---- بناء جدول الحروف (يُبنى مرّة واحدة فقط) ----
+static const GlyphMap& glyphTable() {
+    static GlyphMap g = [] {
+        GlyphMap m;
+        // نقاط مرجعية مشتركة: يسار=1، يمين=5، وسط=3 على المحور x؛ أعلى=0، منتصف=4، أسفل=9 على y.
+        // -------- الأرقام (تخطيط 7-segment قياسي) --------
+        m[U'0'] = { {1,0,5,0},{5,0,5,4},{5,4,5,9},{1,9,5,9},{1,4,1,9},{1,0,1,4} };
+        m[U'1'] = { {5,0,5,4},{5,4,5,9} };
+        m[U'2'] = { {1,0,5,0},{5,0,5,4},{1,4,5,4},{1,4,1,9},{1,9,5,9} };
+        m[U'3'] = { {1,0,5,0},{5,0,5,4},{1,4,5,4},{5,4,5,9},{1,9,5,9} };
+        m[U'4'] = { {1,0,1,4},{1,4,5,4},{5,0,5,4},{5,4,5,9} };
+        m[U'5'] = { {1,0,5,0},{1,0,1,4},{1,4,5,4},{5,4,5,9},{1,9,5,9} };
+        m[U'6'] = { {1,0,5,0},{1,0,1,4},{1,4,5,4},{1,4,1,9},{1,9,5,9},{5,4,5,9} };
+        m[U'7'] = { {1,0,5,0},{5,0,5,4},{5,4,5,9} };
+        m[U'8'] = { {1,0,5,0},{5,0,5,4},{5,4,5,9},{1,9,5,9},{1,4,1,9},{1,0,1,4},{1,4,5,4} };
+        m[U'9'] = { {1,0,5,0},{5,0,5,4},{5,4,5,9},{1,9,5,9},{1,0,1,4},{1,4,5,4} };
+        // -------- الحروف اللاتينية الكبيرة (تُستخدَم أيضاً للصغيرة) --------
+        m[U'A'] = { {1,9,1,3},{1,3,3,0},{3,0,5,3},{5,3,5,9},{1,6,5,6} };
+        m[U'B'] = { {1,0,1,9},{1,0,4,0},{4,0,4,4},{1,4,4,4},{4,4,4,9},{1,9,4,9} };
+        m[U'C'] = { {5,0,1,0},{1,0,1,9},{1,9,5,9} };
+        m[U'D'] = { {1,0,4,0},{4,0,4,9},{4,9,1,9},{1,9,1,0} };
+        m[U'E'] = { {1,0,1,9},{1,0,4,0},{1,4,4,4},{1,9,4,9} };
+        m[U'F'] = { {1,0,1,9},{1,0,4,0},{1,4,4,4} };
+        m[U'G'] = { {5,0,1,0},{1,0,1,9},{1,9,5,9},{5,9,5,4},{5,4,3,4} };
+        m[U'H'] = { {1,0,1,9},{5,0,5,9},{1,4,5,4} };
+        m[U'I'] = { {1,0,5,0},{3,0,3,9},{1,9,5,9} };
+        m[U'J'] = { {4,0,4,7},{4,7,2,9},{2,9,1,7} };
+        m[U'K'] = { {1,0,1,9},{1,4,4,0},{1,4,4,9} };
+        m[U'L'] = { {1,0,1,9},{1,9,4,9} };
+        m[U'M'] = { {1,0,1,9},{1,0,3,5},{3,5,5,0},{5,0,5,9} };
+        m[U'N'] = { {1,0,1,9},{1,0,5,9},{5,0,5,9} };
+        m[U'O'] = { {1,0,4,0},{4,0,4,9},{4,9,1,9},{1,9,1,0} };
+        m[U'P'] = { {1,0,1,9},{1,0,4,0},{4,0,4,4},{1,4,4,4} };
+        m[U'Q'] = { {1,0,4,0},{4,0,4,9},{4,9,1,9},{1,9,1,0},{3,6,5,9} };
+        m[U'R'] = { {1,0,1,9},{1,0,4,0},{4,0,4,4},{1,4,4,4},{1,4,4,9} };
+        m[U'S'] = { {4,0,1,0},{1,0,1,4},{1,4,4,4},{4,4,4,9},{4,9,1,9} };
+        m[U'T'] = { {1,0,5,0},{3,0,3,9} };
+        m[U'U'] = { {1,0,1,9},{1,9,4,9},{4,0,4,9} };
+        m[U'V'] = { {1,0,3,9},{3,9,5,0} };
+        m[U'W'] = { {1,0,2,9},{2,9,3,3},{3,3,4,9},{4,9,5,0} };
+        m[U'X'] = { {1,0,5,9},{5,0,1,9} };
+        m[U'Y'] = { {1,0,3,5},{5,0,3,5},{3,5,3,9} };
+        m[U'Z'] = { {1,0,5,0},{5,0,1,9},{1,9,5,9} };
+        // -------- علامات ترقيم/رموز شائعة --------
+        m[U'.'] = { {3,8,3,9} };
+        m[U','] = { {3,8,2,9} };
+        m[U':'] = { {3,3,3,4},{3,6,3,7} };
+        m[U';'] = { {3,3,3,4},{3,6,2,7} };
+        m[U'-'] = { {1,4,5,4} };
+        m[U'_'] = { {1,9,5,9} };
+        m[U'+'] = { {1,4,5,4},{3,1,3,7} };
+        m[U'/'] = { {1,9,5,0} };
+        m[U'\\'] = { {1,0,5,9} };
+        m[U'('] = { {3,0,2,2},{2,2,2,7},{2,7,3,9} };
+        m[U')'] = { {3,0,4,2},{4,2,4,7},{4,7,3,9} };
+        m[U'['] = { {2,0,2,9},{2,0,4,0},{2,9,4,9} };
+        m[U']'] = { {4,0,4,9},{2,0,4,0},{2,9,4,9} };
+        m[U'{'] = m[U'('];
+        m[U'}'] = m[U')'];
+        m[U'='] = { {1,3,5,3},{1,6,5,6} };
+        m[U'*'] = { {2,3,4,6},{4,3,2,6},{3,2,3,7} };
+        m[U'#'] = { {2,0,2,9},{4,0,4,9},{1,3,5,3},{1,6,5,6} };
+        m[U'@'] = { {1,0,4,0},{4,0,4,9},{4,9,1,9},{1,9,1,0},{3,4,3,5} };
+        m[U'!'] = { {3,0,3,6},{3,8,3,9} };
+        m[U'?'] = { {2,0,4,0},{4,0,4,3},{4,3,3,4},{3,4,3,5},{3,8,3,9} };
+        m[U'\''] = { {3,0,3,2} };
+        m[U'"'] = { {2,0,2,2},{4,0,4,2} };
+        m[U'<'] = { {4,0,1,4},{1,4,4,9} };
+        m[U'>'] = { {1,0,4,4},{4,4,1,9} };
+        m[U'|'] = { {3,0,3,9} };
+        m[U'~'] = { {1,5,3,3},{3,3,5,5} };
+        m[U'^'] = { {1,3,3,0},{3,0,5,3} };
+        m[U'$'] = { {4,0,1,0},{1,0,1,4},{1,4,4,4},{4,4,4,9},{4,9,1,9},{3,0,3,9} };
+        // lowercase تُعامَل كـ uppercase (تبسيط مقصود لخط شبكي أحادي الحجم)
+        for (char32_t c = U'a'; c <= U'z'; c++) m[c] = m[U'A' + (c - U'a')];
+        // -------- حروف عربية مبسَّطة (أشكال منفصلة/غير مُشكَّلة — راجع الملاحظة أعلى الملف) --------
+        m[U'ا'] = { {3,0,3,9} };
+        m[U'أ'] = { {3,1,3,9},{4,0,4,1} };
+        m[U'إ'] = { {3,0,3,8},{2,9,3,9} };
+        m[U'آ'] = { {3,0,3,9},{2,0,4,0} };
+        m[U'ب'] = { {1,6,5,6},{3,8,3,9} };
+        m[U'ت'] = { {1,6,5,6},{2,3,2,4},{4,3,4,4} };
+        m[U'ث'] = { {1,6,5,6},{2,3,2,4},{4,3,4,4},{3,1,3,2} };
+        m[U'ج'] = { {1,4,4,4},{4,4,3,7},{3,7,1,7},{2,9,3,9} };
+        m[U'ح'] = { {1,4,4,4},{4,4,3,7},{3,7,1,7} };
+        m[U'خ'] = { {1,4,4,4},{4,4,3,7},{3,7,1,7},{2,1,3,1} };
+        m[U'د'] = { {4,1,2,1},{2,1,2,6},{2,6,4,7} };
+        m[U'ذ'] = { {4,1,2,1},{2,1,2,6},{2,6,4,7},{2,0,3,0} };
+        m[U'ر'] = { {3,2,3,5},{3,5,4,8} };
+        m[U'ز'] = { {3,2,3,5},{3,5,4,8},{3,0,4,0} };
+        m[U'س'] = { {1,7,5,7},{1,5,1,7},{3,5,3,7},{5,5,5,7} };
+        m[U'ش'] = { {1,7,5,7},{1,5,1,7},{3,5,3,7},{5,5,5,7},{2,3,4,3} };
+        m[U'ص'] = { {1,5,4,5},{4,5,4,8},{4,8,1,8},{1,8,1,5},{4,5,5,3} };
+        m[U'ض'] = { {1,5,4,5},{4,5,4,8},{4,8,1,8},{1,8,1,5},{4,5,5,3},{2,2,3,2} };
+        m[U'ط'] = { {3,1,3,8},{1,6,4,6},{4,6,4,8},{4,8,1,8},{1,8,1,6} };
+        m[U'ظ'] = { {3,1,3,8},{1,6,4,6},{4,6,4,8},{4,8,1,8},{1,8,1,6},{2,0,3,0} };
+        m[U'ع'] = { {4,2,2,3},{2,3,2,6},{2,6,4,8} };
+        m[U'غ'] = { {4,2,2,3},{2,3,2,6},{2,6,4,8},{3,0,4,0} };
+        m[U'ف'] = { {2,4,4,4},{4,4,4,6},{4,6,2,6},{2,6,2,4},{3,1,3,2} };
+        m[U'ق'] = { {2,4,4,4},{4,4,4,6},{4,6,2,6},{2,6,2,4},{2,1,4,1},{3,6,3,9} };
+        m[U'ك'] = { {2,1,2,8},{2,1,4,1},{2,5,4,5},{3,5,4,7} };
+        m[U'ل'] = { {3,0,3,7},{3,7,1,8} };
+        m[U'م'] = { {2,3,4,3},{4,3,4,5},{4,5,2,5},{2,5,2,3},{3,5,3,9} };
+        m[U'ن'] = { {1,7,2,6},{2,6,4,6},{4,6,5,7},{3,3,3,4} };
+        m[U'ه'] = { {3,4,4,5},{4,5,3,6},{3,6,2,5},{2,5,3,4} };
+        m[U'و'] = { {2,2,4,2},{4,2,4,4},{4,4,2,4},{2,4,2,2},{3,4,3,8} };
+        m[U'ؤ'] = { {2,2,4,2},{4,2,4,4},{4,4,2,4},{2,4,2,2},{3,4,3,8},{4,1,5,1} };
+        m[U'ي'] = { {1,6,3,7},{3,7,5,6},{2,9,3,9} };
+        m[U'ئ'] = { {1,6,3,7},{3,7,5,6},{2,9,3,9},{3,5,4,5} };
+        m[U'ى'] = { {1,6,3,7},{3,7,5,6} };
+        m[U'ء'] = { {3,3,4,4} };
+        m[U'ة'] = { {2,5,4,5},{4,5,4,7},{4,7,2,7},{2,7,2,5},{2,3,2,4},{4,3,4,4} };
+        m[U'ّ']  = { {2,0,4,1} }; // شدّة (تُعامَل كحرف مستقل مبسَّط، بلا وضع فوق الحرف السابق فعلياً)
+        return m;
+    }();
+    return g;
+}
+
+// رسم خط مستقيم بسماكة (thickness) داخل مخزن RGB بأبعاد width×height.
+static void drawLine(std::vector<unsigned char>& rgb, int width, int height,
+                      int x0, int y0, int x1, int y1, int thickness,
+                      unsigned char r, unsigned char g, unsigned char b) {
+    auto plot = [&](int px, int py) {
+        for (int dy = -(thickness / 2); dy <= thickness / 2; dy++) {
+            for (int dx = -(thickness / 2); dx <= thickness / 2; dx++) {
+                int x = px + dx, y = py + dy;
+                if (x < 0 || y < 0 || x >= width || y >= height) continue;
+                size_t idx = (static_cast<size_t>(y) * width + x) * 3;
+                rgb[idx] = r; rgb[idx + 1] = g; rgb[idx + 2] = b;
+            }
+        }
+    };
+    int dx = std::abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
+    int dy = -std::abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
+    int err = dx + dy;
+    int x = x0, y = y0;
+    while (true) {
+        plot(x, y);
+        if (x == x1 && y == y1) break;
+        int e2 = 2 * err;
+        if (e2 >= dy) { err += dy; x += sx; }
+        if (e2 <= dx) { err += dx; y += sy; }
+    }
+}
+
+// رسم حرف واحد (cp) بحيث تقع زاويته العلوية اليسرى عند (x0px,y0px)، بتحجيم scale وسماكة خط ثابتة.
+static void drawGlyph(std::vector<unsigned char>& rgb, int width, int height,
+                      int x0px, int y0px, int scale, char32_t cp,
+                      unsigned char r, unsigned char g, unsigned char b) {
+    if (cp == U' ' || cp == U'\t') return;
+    int thickness = std::max(1, scale / 2 + 1);
+    const auto& table = glyphTable();
+    auto it = table.find(cp);
+    if (it == table.end()) {
+        // رمز غير معروف: مربع صغير كإشارة صريحة "حرف غير مدعوم" (بدل تجاهله أو تلوينه اعتباطاً).
+        drawLine(rgb, width, height, x0px + 2 * scale, y0px + 4 * scale, x0px + 4 * scale, y0px + 4 * scale, thickness, r, g, b);
+        drawLine(rgb, width, height, x0px + 4 * scale, y0px + 4 * scale, x0px + 4 * scale, y0px + 6 * scale, thickness, r, g, b);
+        drawLine(rgb, width, height, x0px + 4 * scale, y0px + 6 * scale, x0px + 2 * scale, y0px + 6 * scale, thickness, r, g, b);
+        drawLine(rgb, width, height, x0px + 2 * scale, y0px + 6 * scale, x0px + 2 * scale, y0px + 4 * scale, thickness, r, g, b);
+        return;
+    }
+    for (const Seg& seg : it->second) {
+        drawLine(rgb, width, height,
+                  x0px + seg.x0 * scale, y0px + seg.y0 * scale,
+                  x0px + seg.x1 * scale, y0px + seg.y1 * scale,
+                  thickness, r, g, b);
+    }
+}
+
+// إعادة ترتيب نقاط الكود بصرياً (تقريب مبسَّط لخوارزمية bidi): مقاطع عربية متتالية تُعكَس
+// داخلياً وتُبدَّل مواضعها مع مقاطع لاتينية/أرقام متتالية بحيث يظهر النص الناتج بالاتجاه
+// الصحيح تقريبياً حين يحوي السطر مزيجاً من عربي ولاتيني (كما في "مطوّر (Kotlin)" مثلاً).
+static std::vector<char32_t> visualOrder(const std::vector<char32_t>& cps, bool& outHasArabic) {
+    outHasArabic = false;
+    for (char32_t c : cps) if (isArabicCp(c)) { outHasArabic = true; break; }
+    if (!outHasArabic) return cps;
+
+    struct Run { bool arabic; std::vector<char32_t> chars; };
+    std::vector<Run> runs;
+    for (char32_t c : cps) {
+        bool arabic = isArabicCp(c);
+        if (c == U' ' && !runs.empty()) { runs.back().chars.push_back(c); continue; }
+        if (runs.empty() || runs.back().arabic != arabic) runs.push_back({arabic, {}});
+        runs.back().chars.push_back(c);
+    }
+    std::vector<char32_t> out;
+    for (auto it = runs.rbegin(); it != runs.rend(); ++it) {
+        if (it->arabic) out.insert(out.end(), it->chars.rbegin(), it->chars.rend());
+        else out.insert(out.end(), it->chars.begin(), it->chars.end());
+    }
+    return out;
+}
+
+} // namespace rinfont
+
+// ================= ZIP خفيف الوزن (تخزين stored بلا ضغط) — لأجل save/installation عند format=zip =================
+// يبني أرشيف .zip صالحاً قياسياً (يُفتح بأي أداة zip عادية)، كل عنصر بلا ضغط (STORED)، وهو كافٍ
+// تماماً هنا لأن المحتويات أصلاً نصوص/صور صغيرة، بلا حاجة لربط مكتبة ضغط خارجية (zlib) بالمشروع.
+static std::string buildZipArchive(const std::vector<std::pair<std::string, std::string>>& entries) {
+    auto putU16 = [](std::string& s, uint16_t v) { s += static_cast<char>(v & 0xFF); s += static_cast<char>((v >> 8) & 0xFF); };
+    auto putU32 = [](std::string& s, uint32_t v) {
+        s += static_cast<char>(v & 0xFF); s += static_cast<char>((v >> 8) & 0xFF);
+        s += static_cast<char>((v >> 16) & 0xFF); s += static_cast<char>((v >> 24) & 0xFF);
+    };
+
+    std::string out;
+    std::vector<std::string> centralDir;
+    for (auto& entry : entries) {
+        const std::string& name = entry.first;
+        const std::string& data = entry.second;
+        uint32_t crc = pngutil::crc32(reinterpret_cast<const unsigned char*>(data.data()), data.size());
+        uint32_t offset = static_cast<uint32_t>(out.size());
+
+        std::string local;
+        putU32(local, 0x04034b50);
+        putU16(local, 20); putU16(local, 0); putU16(local, 0); putU16(local, 0); putU16(local, 0);
+        putU32(local, crc);
+        putU32(local, static_cast<uint32_t>(data.size()));
+        putU32(local, static_cast<uint32_t>(data.size()));
+        putU16(local, static_cast<uint16_t>(name.size())); putU16(local, 0);
+        local += name; local += data;
+        out += local;
+
+        std::string central;
+        putU32(central, 0x02014b50);
+        putU16(central, 20); putU16(central, 20);
+        putU16(central, 0); putU16(central, 0); putU16(central, 0); putU16(central, 0);
+        putU32(central, crc);
+        putU32(central, static_cast<uint32_t>(data.size()));
+        putU32(central, static_cast<uint32_t>(data.size()));
+        putU16(central, static_cast<uint16_t>(name.size()));
+        putU16(central, 0); putU16(central, 0); putU16(central, 0); putU16(central, 0);
+        putU32(central, 0);
+        putU32(central, offset);
+        central += name;
+        centralDir.push_back(central);
+    }
+
+    auto centralStart = static_cast<uint32_t>(out.size());
+    uint32_t centralSize = 0;
+    for (auto& c : centralDir) { out += c; centralSize += static_cast<uint32_t>(c.size()); }
+
+    std::string end;
+    putU32(end, 0x06054b50);
+    putU16(end, 0); putU16(end, 0);
+    putU16(end, static_cast<uint16_t>(entries.size()));
+    putU16(end, static_cast<uint16_t>(entries.size()));
+    putU32(end, centralSize);
+    putU32(end, centralStart);
+    putU16(end, 0);
+    out += end;
+    return out;
+}
+
+// ================= جسر الجدول مع دوال الحاويات الموجودة أصلاً =================
+// لا دوال جديدة بأسماء table*: الجدول يُقرأ ويُعدَّل عبر نفس دوال اللغة الموجودة
+// (getField/setField/hasField/container.get/set/has/fields/snapshot/fieldNames/fieldType/
+// deleteField/clearFields/info/empty) كحقول افتراضية، ثم تعمل عليها كل دوال المصفوفات الموجودة
+// ودوال عائلة # (#add/#swap/#diff/#sum/#to/#sed) مباشرةً.
+bool Interpreter::isTableContainer(const std::string& name) const {
+    auto k = containerKinds.find(name);
+    return k != containerKinds.end() && k->second == ContainerKind::TABLE;
+}
+
+std::string Interpreter::canonContainer(const std::string& n) const {
+    if (containers.count(n)) return n;
+    auto e = easyKeys.find(n);
+    if (e != easyKeys.end() && containers.count(e->second)) return e->second;
+    if (auto node = nsResolvePath(n)) if (node->kind == NsNode::Kind::Container && containers.count(node->key)) return node->key;
+    return n;
+}
+
+std::string Interpreter::canonGroup(const std::string& n) const {
+    if (groupEnvs.count(n)) return n;
+    auto e = easyGroupKeys.find(n);
+    if (e != easyGroupKeys.end() && groupEnvs.count(e->second)) return e->second;
+    if (auto node = nsResolvePath(n)) if (node->kind == NsNode::Kind::Group && groupEnvs.count(node->key)) return node->key;
+    return n;
+}
+std::string Interpreter::canonVolume(const std::string& n) const {
+    if (volumeEnvs.count(n)) return n;
+    auto e = easyVolumeKeys.find(n);
+    if (e != easyVolumeKeys.end() && volumeEnvs.count(e->second)) return e->second;
+    if (auto node = nsResolvePath(n)) if (node->kind == NsNode::Kind::Volume && volumeEnvs.count(node->key)) return node->key;
+    return n;
+}
+// المفتاح المكتوب فريد على الحاويات والمجموعات والأحجام معاً (ولا يطابق اسم كيان آخر)
+bool Interpreter::easyKeyTaken(const std::string& key, const std::string& kind, const std::string& internal) const {
+    auto owned = [&](const std::unordered_map<std::string, std::string>& m, const char* k) {
+        auto it = m.find(key); return it != m.end() && !(kind == k && it->second == internal);
+    };
+    if (owned(easyKeys, "container") || owned(easyGroupKeys, "group") || owned(easyVolumeKeys, "volume")) return true;
+    if (containers.count(key) && !(kind == "container" && key == internal)) return true;
+    if (groupEnvs.count(key) && !(kind == "group" && key == internal)) return true;
+    if (volumeEnvs.count(key) && !(kind == "volume" && key == internal)) return true;
+    return false;
+}
+
+bool Interpreter::isDatalistContainer(const std::string& name) const {
+    auto k = containerKinds.find(name);
+    return k != containerKinds.end() && k->second == ContainerKind::DATALIST;
+}
+
+// نسخة جدولية من القائمة: الصف الأول = رأس (اتحاد المفاتيح بترتيب ظهورها)، ثم صف لكل سجل.
+void Interpreter::datalistSync(const std::string& name) {
+    auto& slot = tableRows[name];
+    if (!slot) slot = std::make_shared<ArrayData>();
+    slot->clear();
+    auto it = docStore.find(name);
+    if (it == docStore.end() || it->second.empty()) return;
+    std::vector<std::string> hdr;
+    for (auto& e : it->second)
+        if (e.second.type == Value::Type::MAP && e.second.map)
+            for (auto& kv : *e.second.map) {
+                std::string k = kv.first.toDisplayString();
+                if (std::find(hdr.begin(), hdr.end(), k) == hdr.end()) hdr.push_back(k);
+            }
+    auto head = std::make_shared<ArrayData>();
+    for (auto& h : hdr) head->push_back(Value::string(h));
+    slot->push_back(Value::makeArray(head));
+    for (auto& e : it->second) {
+        auto row = std::make_shared<ArrayData>();
+        for (auto& h : hdr) {
+            Value v = Value::nil();
+            if (e.second.type == Value::Type::MAP && e.second.map)
+                for (auto& kv : *e.second.map) if (kv.first.toDisplayString() == h) { v = kv.second; break; }
+            row->push_back(v);
+        }
+        slot->push_back(Value::makeArray(row));
+    }
+}
+
+static Value datalistRecord(const std::string& id, const Value& doc) {
+    auto m = std::make_shared<MapData>();
+    m->push_back({Value::string("_id"), Value::string(id)});
+    if (doc.type == Value::Type::MAP && doc.map) for (auto& kv : *doc.map) m->push_back(kv);
+    return Value::makeMap(m);
+}
+
+bool Interpreter::datalistVirtualGet(const std::string& name, const std::string& key, Value& out) {
+    auto env = containers.find(name);
+    if (env != containers.end() && env->second && env->second->values.count(key)) return false; // متغيّر حقيقي أولاً
+    auto& docs = docStore[name];
+    if (key == "items") { auto a = std::make_shared<ArrayData>(); for (auto& e : docs) a->push_back(datalistRecord(e.first, e.second)); out = Value::makeArray(a); return true; }
+    if (key == "ids") { auto a = std::make_shared<ArrayData>(); for (auto& e : docs) a->push_back(Value::string(e.first)); out = Value::makeArray(a); return true; }
+    if (key == "size") { out = Value::num(static_cast<double>(docs.size())); return true; }
+    if (key == "first") { out = docs.empty() ? Value::nil() : datalistRecord(docs.front().first, docs.front().second); return true; }
+    if (key == "last") { out = docs.empty() ? Value::nil() : datalistRecord(docs.back().first, docs.back().second); return true; }
+    datalistSync(name);
+    std::vector<std::string> hdr;
+    bool named = tableHeader(name, hdr);
+    if (key == "header") { auto a = std::make_shared<ArrayData>(); if (named) for (auto& h : hdr) a->push_back(Value::string(h)); out = Value::makeArray(a); return true; }
+    std::vector<Value> vals;
+    if (named && tableColumnValues(name, key, vals)) { out = Value::makeArray(std::make_shared<ArrayData>(vals.begin(), vals.end())); return true; } // عمود باسمه
+    return false;
+}
+
+// items = استبدال القائمة كاملة بمصفوفة سجلات (قاموس لكل سجل؛ _id اختياري وإلا تلقائي) مع فحص schema
+bool Interpreter::datalistVirtualSet(const std::string& name, const std::string& key, const Value& v, int line) {
+    auto env = containers.find(name);
+    if (env != containers.end() && env->second && env->second->values.count(key)) return false;
+    if (key != "items") {
+        if (key == "ids" || key == "size" || key == "first" || key == "last" || key == "header")
+            throw diagErr(diag::Code::E0004_InvalidType, line, "الحقل '" + key + "' في container.datalist للقراءة فقط (عدّل items أو استعمل insertDoc/updateDoc/deleteDoc)");
+        return false;
+    }
+    if (v.type != Value::Type::ARRAY || !v.array)
+        throw diagErr(diag::Code::E0004_InvalidType, line, "items: يتوقّع مصفوفة سجلات (قواميس)");
+    std::vector<std::pair<std::string, Value>> fresh;
+    for (auto& rec : *v.array) {
+        if (rec.type != Value::Type::MAP || !rec.map)
+            throw diagErr(diag::Code::E0004_InvalidType, line, "items: كل سجل يجب أن يكون قاموساً، وُجد `" + rec.typeName() + "`");
+        std::string id; auto body = std::make_shared<MapData>();
+        for (auto& kv : *rec.map) {
+            if (kv.first.type == Value::Type::STRING && kv.first.str == "_id") id = kv.second.toDisplayString();
+            else body->push_back(kv);
+        }
+        Value doc = Value::makeMap(body);
+        auto errors = schemaErrors(name, doc);
+        if (!errors.empty()) { auto d = diagErr(diag::Code::E0019_SchemaViolation, line, "schema violation in `" + name + "`"); d.diagnostic->withReason(joinErrors(errors)); throw d; }
+        if (id.empty()) { long n = static_cast<long>(fresh.size()) + 1; auto taken = [&](long k) { for (auto& e : fresh) if (e.first == std::to_string(k)) return true; return false; }; while (taken(n)) n++; id = std::to_string(n); }
+        for (auto& e : fresh) if (e.first == id) throw diagErr(diag::Code::E0020_InvalidDocument, line, "items: المعرّف `" + id + "` مكرَّر");
+        fresh.push_back({id, doc});
+    }
+    docStore[name] = std::move(fresh);
+    refreshIndexesForContainer(name);
+    return true;
+}
+
+std::shared_ptr<ArrayData> Interpreter::tableRowsOf(const std::string& name) {
+    if (isDatalistContainer(name)) datalistSync(name);
+    auto& slot = tableRows[name];
+    if (!slot) slot = std::make_shared<ArrayData>();
+    return slot;
+}
+
+std::vector<std::string> Interpreter::tableVirtualKeys(const std::string& name) const {
+    if (isDatalistContainer(name)) return {"items", "ids", "size", "first", "last", "header"};
+    std::vector<std::string> keys{"rows", "header", "body", "records", "columns"};
+    if (containerStyles.count(name)) keys.push_back("style");
+    return keys;
+}
+
+bool Interpreter::tableHeader(const std::string& name, std::vector<std::string>& header) const {
+    header.clear();
+    auto it = tableRows.find(name);
+    size_t width = 0;
+    if (it != tableRows.end() && it->second)
+        for (auto& r : *it->second) if (r.type == Value::Type::ARRAY && r.array) width = std::max(width, r.array->size());
+    bool named = false;
+    if (it != tableRows.end() && it->second && !it->second->empty()) {
+        const Value& first = (*it->second)[0];
+        if (first.type == Value::Type::ARRAY && first.array && !first.array->empty()) {
+            named = true;
+            for (auto& c : *first.array) if (c.type != Value::Type::STRING) { named = false; break; }
+        }
+    }
+    if (named) for (auto& c : *(*it->second)[0].array) header.push_back(c.str);
+    else for (size_t c = 0; c < width; ++c) header.push_back("c" + std::to_string(c + 1));
+    return named;
+}
+
+// صفوف الجسم كمستندات {عمود: خلية} بمعرّف = رقم الصف في الجسم (1-based) — هذا ما تراه استعلامات RCSQL.
+std::vector<std::pair<std::string, Value>> Interpreter::tableAsDocs(const std::string& name) const {
+    std::vector<std::pair<std::string, Value>> docs;
+    if (isDatalistContainer(name)) { auto di = docStore.find(name); if (di != docStore.end()) docs = di->second; return docs; } // معرّفات حقيقية
+    auto it = tableRows.find(name);
+    if (it == tableRows.end() || !it->second) return docs;
+    std::vector<std::string> header;
+    bool named = tableHeader(name, header);
+    for (size_t r = named ? 1 : 0; r < it->second->size(); ++r) {
+        const Value& row = (*it->second)[r];
+        auto m = std::make_shared<MapData>();
+        for (size_t c = 0; c < header.size(); ++c) {
+            bool has = row.type == Value::Type::ARRAY && row.array && c < row.array->size();
+            m->push_back({Value::string(header[c]), has ? (*row.array)[c] : Value::nil()});
+        }
+        docs.push_back({std::to_string(r - (named ? 1 : 0) + 1), Value::makeMap(m)});
+    }
+    return docs;
+}
+
+// rows = مقبض حيّ على صفوف الجدول · columns = أعمدة الجدول كمصفوفة مصفوفات (نسخة، الخلية الناقصة nil)
+// · style = آخر style value=... مسجَّل. المتغيّر الحقيقي بنفس الاسم داخل الحاوية له الأولوية دائماً.
+bool Interpreter::tableVirtualGet(const std::string& name, const std::string& key, Value& out) {
+    if (isDatalistContainer(name)) return datalistVirtualGet(name, key, out);
+    if (!isTableContainer(name)) return false;
+    auto env = containers.find(name);
+    if (env != containers.end() && env->second && env->second->values.count(key)) return false; // متغيّر حقيقي في الجدول نفسه له الأولوية
+    if (key == "rows") { out = Value::makeArray(tableRowsOf(name)); return true; }
+    if (key == "header") {
+        auto rows = tableRowsOf(name);
+        auto h = std::make_shared<ArrayData>();
+        std::vector<std::string> names;
+        if (tableHeader(name, names) && !rows->empty()) *h = *(*rows)[0].array;
+        out = Value::makeArray(h);
+        return true;
+    }
+    if (key == "body") {
+        auto rows = tableRowsOf(name);
+        std::vector<std::string> names;
+        bool named = tableHeader(name, names);
+        auto b = std::make_shared<ArrayData>();
+        for (size_t r = named ? 1 : 0; r < rows->size(); ++r) b->push_back((*rows)[r]);
+        out = Value::makeArray(b);
+        return true;
+    }
+    if (key == "records") {
+        auto recs = std::make_shared<ArrayData>();
+        for (auto& d : tableAsDocs(name)) recs->push_back(d.second);
+        out = Value::makeArray(recs);
+        return true;
+    }
+    if (key == "columns") {
+        auto rows = tableRowsOf(name);
+        size_t width = 0;
+        for (auto& r : *rows) if (r.type == Value::Type::ARRAY && r.array) width = std::max(width, r.array->size());
+        auto cols = std::make_shared<ArrayData>();
+        for (size_t c = 0; c < width; ++c) {
+            auto col = std::make_shared<ArrayData>();
+            for (auto& r : *rows) {
+                bool has = r.type == Value::Type::ARRAY && r.array && c < r.array->size();
+                col->push_back(has ? (*r.array)[c] : Value::nil());
+            }
+            cols->push_back(Value::makeArray(col));
+        }
+        out = Value::makeArray(cols);
+        return true;
+    }
+    if (key == "style") {
+        auto st = containerStyles.find(name);
+        if (st == containerStyles.end()) return false;
+        out = Value::string(st->second);
+        return true;
+    }
+    { // عمود باسمه (من الرأس النصي): قيم الجسم كمصفوفة (نسخة). الأسماء المحجوزة أعلاه تغلب اسم العمود.
+        std::vector<std::string> hdr;
+        std::vector<Value> vals;
+        if (tableHeader(name, hdr) && tableColumnValues(name, key, vals)) {
+            out = Value::makeArray(std::make_shared<ArrayData>(vals.begin(), vals.end()));
+            return true;
+        }
+    }
+    return false;
+}
+
+bool Interpreter::tableVirtualSet(const std::string& name, const std::string& key, const Value& v, int line) {
+    if (isDatalistContainer(name)) return datalistVirtualSet(name, key, v, line);
+    if (!isTableContainer(name)) return false;
+    auto env = containers.find(name);
+    if (env != containers.end() && env->second && env->second->values.count(key)) return false; // متغيّر حقيقي في الجدول نفسه له الأولوية
+    if (key == "rows") {
+        if (v.type != Value::Type::ARRAY || !v.array)
+            throw diagErr(diag::Code::E0004_InvalidType, line, "الحقل 'rows' في الجدول يجب أن يكون مصفوفة صفوف (مثال: [[1, 2], [3, 4]])");
+        for (auto& r : *v.array)
+            if (r.type != Value::Type::ARRAY || !r.array)
+                throw diagErr(diag::Code::E0004_InvalidType, line, "كل صف في 'rows' يجب أن يكون مصفوفة خلايا، وُجد `" + r.typeName() + "`");
+        auto dst = tableRowsOf(name);
+        if (dst != v.array) { std::vector<Value> copy(*v.array); *dst = std::move(copy); } // يبقى أي مقبض rows سابق صالحاً
+        return true;
+    }
+    if (key == "header") {
+        if (v.type != Value::Type::ARRAY || !v.array)
+            throw diagErr(diag::Code::E0004_InvalidType, line, "الحقل 'header' في الجدول يجب أن يكون مصفوفة عناوين نصية");
+        for (auto& c : *v.array)
+            if (c.type != Value::Type::STRING)
+                throw diagErr(diag::Code::E0004_InvalidType, line, "كل عنوان في 'header' يجب أن يكون نصاً، وُجد `" + c.typeName() + "`");
+        auto dst = tableRowsOf(name);
+        std::vector<std::string> names;
+        bool named = tableHeader(name, names);
+        Value row = Value::makeArray(std::make_shared<ArrayData>(*v.array));
+        if (named) (*dst)[0] = row; else dst->insert(dst->begin(), row);
+        return true;
+    }
+    if (key == "records") { // قائمة قواميس -> جدول: الرأس = اتحاد المفاتيح بترتيب ظهورها، والخلية الغائبة nil
+        if (v.type != Value::Type::ARRAY || !v.array)
+            throw diagErr(diag::Code::E0004_InvalidType, line, "الحقل 'records' في الجدول يجب أن يكون مصفوفة قواميس");
+        std::vector<std::string> keys;
+        for (auto& r : *v.array) {
+            if (r.type != Value::Type::MAP || !r.map)
+                throw diagErr(diag::Code::E0004_InvalidType, line, "كل عنصر في 'records' يجب أن يكون قاموساً، وُجد `" + r.typeName() + "`");
+            for (auto& kv : *r.map) {
+                std::string k = kv.first.toDisplayString();
+                if (std::find(keys.begin(), keys.end(), k) == keys.end()) keys.push_back(k);
+            }
+        }
+        std::vector<Value> rows;
+        if (!keys.empty()) {
+            auto h = std::make_shared<ArrayData>();
+            for (auto& k : keys) h->push_back(Value::string(k));
+            rows.push_back(Value::makeArray(h));
+            for (auto& r : *v.array) {
+                auto cells = std::make_shared<ArrayData>();
+                for (auto& k : keys) {
+                    Value cell = Value::nil();
+                    for (auto& kv : *r.map) if (kv.first.toDisplayString() == k) { cell = kv.second; break; }
+                    cells->push_back(cell);
+                }
+                rows.push_back(Value::makeArray(cells));
+            }
+        }
+        *tableRowsOf(name) = std::move(rows);
+        return true;
+    }
+    if (key == "body") { // استبدال صفوف الجسم مع بقاء الرأس (إن وُجد)
+        if (v.type != Value::Type::ARRAY || !v.array)
+            throw diagErr(diag::Code::E0004_InvalidType, line, "الحقل 'body' في الجدول يجب أن يكون مصفوفة صفوف (مثال: [[1, 2], [3, 4]])");
+        for (auto& r : *v.array)
+            if (r.type != Value::Type::ARRAY || !r.array)
+                throw diagErr(diag::Code::E0004_InvalidType, line, "كل صف في 'body' يجب أن يكون مصفوفة خلايا، وُجد `" + r.typeName() + "`");
+        auto dst = tableRowsOf(name);
+        std::vector<std::string> names;
+        bool named = tableHeader(name, names);
+        std::vector<Value> rebuilt;
+        if (named) rebuilt.push_back((*dst)[0]);
+        for (auto& r : *v.array) rebuilt.push_back(Value::makeArray(std::make_shared<ArrayData>(*r.array)));
+        *dst = std::move(rebuilt);
+        return true;
+    }
+    if (key == "style") {
+        if (v.type != Value::Type::STRING)
+            throw diagErr(diag::Code::E0004_InvalidType, line, "الحقل 'style' في الجدول يجب أن يكون نصاً (مثال: \"style://dark\")");
+        containerStyles[name] = v.str;
+        return true;
+    }
+    if (key == "columns") { // مصفوفة أعمدة (عمود = مصفوفة خلايا، أولها عنوانه) -> تُقلَب إلى صفوف؛ بها تُضاف الأعمدة وتُحذف وتُرتَّب
+        if (v.type != Value::Type::ARRAY || !v.array)
+            throw diagErr(diag::Code::E0004_InvalidType, line, "الحقل 'columns' في الجدول يجب أن يكون مصفوفة أعمدة (كل عمود مصفوفة خلايا)");
+        size_t height = 0;
+        for (auto& c : *v.array) {
+            if (c.type != Value::Type::ARRAY || !c.array)
+                throw diagErr(diag::Code::E0004_InvalidType, line, "كل عمود في 'columns' يجب أن يكون مصفوفة خلايا، وُجد `" + c.typeName() + "`");
+            height = std::max(height, c.array->size());
+        }
+        std::vector<Value> rebuilt;
+        for (size_t r = 0; r < height; ++r) {
+            auto cells = std::make_shared<ArrayData>();
+            for (auto& c : *v.array) cells->push_back(r < c.array->size() ? (*c.array)[r] : Value::nil());
+            rebuilt.push_back(Value::makeArray(cells));
+        }
+        *tableRowsOf(name) = std::move(rebuilt);
+        return true;
+    }
+    { // كتابة عمود موجود باسمه: مصفوفة بطول الجسم (أو قيمة مفردة تملأ العمود كله). عمود جديد يُضاف عبر columns/records.
+        std::vector<std::string> hdr;
+        std::vector<Value> cur;
+        if (tableHeader(name, hdr) && tableColumnValues(name, key, cur)) {
+            size_t ci = std::find(hdr.begin(), hdr.end(), key) - hdr.begin();
+            std::vector<Value> vals;
+            if (v.type == Value::Type::ARRAY && v.array) {
+                if (v.array->size() != cur.size())
+                    throw diagErr(diag::Code::E0007_InvalidArguments, line, "العمود '" + key + "': عدد القيم (" + std::to_string(v.array->size()) +
+                                  ") يجب أن يساوي عدد صفوف الجسم (" + std::to_string(cur.size()) + ")");
+                vals.assign(v.array->begin(), v.array->end());
+            } else vals.assign(cur.size(), v);
+            auto rows = tableRowsOf(name);
+            for (size_t i = 0; i < vals.size(); ++i) {
+                auto cells = (*rows)[i + 1].array;
+                while (cells->size() <= ci) cells->push_back(Value::nil());
+                (*cells)[ci] = vals[i];
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
+bool Interpreter::tableVirtualDelete(const std::string& name, const std::string& key) {
+    if (isDatalistContainer(name)) {
+        auto env = containers.find(name);
+        if (env != containers.end() && env->second && env->second->values.count(key)) return false;
+        if (key == "items") { docStore[name].clear(); refreshIndexesForContainer(name); return true; }
+        return false;
+    }
+    if (!isTableContainer(name)) return false;
+    auto env = containers.find(name);
+    if (env != containers.end() && env->second && env->second->values.count(key)) return false; // متغيّر حقيقي في الجدول نفسه له الأولوية
+    if (key == "rows") { tableRowsOf(name)->clear(); return true; }
+    if (key == "style") return containerStyles.erase(name) > 0;
+    { // حذف عمود باسمه: عنوانه وخلاياه من كل الصفوف
+        std::vector<std::string> hdr;
+        if (tableHeader(name, hdr)) {
+            size_t ci = std::find(hdr.begin(), hdr.end(), key) - hdr.begin();
+            if (ci < hdr.size()) {
+                for (auto& r : *tableRowsOf(name))
+                    if (r.type == Value::Type::ARRAY && r.array && ci < r.array->size()) r.array->erase(r.array->begin() + ci);
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+// يرسم الجدول (صفوفه المسجَّلة عبر row + نمطه المسجَّل عبر style إن وُجد) كصورة PNG حقيقية
+// تُظهر نص كل خلية فعلياً (عبر rinfont)، وليس مجرد تلوين اعتباطي للخلايا.
+std::string Interpreter::buildTablePng(const std::string& key) const {
+    auto rowsIt = tableRows.find(key);
+    const std::vector<Value>* rows = (rowsIt != tableRows.end() && rowsIt->second) ? rowsIt->second.get() : nullptr;
+
+    size_t rowCount = rows ? rows->size() : 0;
+    size_t colCount = 1;
+    if (rows) {
+        for (auto& row : *rows) {
+            if (row.type == Value::Type::ARRAY && row.array) colCount = std::max(colCount, row.array->size());
+        }
+    }
+    if (rowCount == 0) rowCount = 1;
+
+    std::string style;
+    auto styleIt = containerStyles.find(key);
+    if (styleIt != containerStyles.end()) style = styleIt->second;
+    bool dark = (style.find("dark") != std::string::npos);
+
+    // نص كل خلية (بالفهرسة [صف][عمود])، مُفكَّكاً مسبقاً إلى نقاط كود بترتيبها البصري الصحيح.
+    struct CellText { std::vector<char32_t> order; bool rtl; };
+    std::vector<std::vector<CellText>> cells(rowCount, std::vector<CellText>(colCount, CellText{{}, false}));
+    for (size_t ry = 0; ry < rowCount; ry++) {
+        const Value* rowVal = (rows && ry < rows->size()) ? &(*rows)[ry] : nullptr;
+        for (size_t cx = 0; cx < colCount; cx++) {
+            std::string text;
+            if (rowVal && rowVal->type == Value::Type::ARRAY && rowVal->array && cx < rowVal->array->size()) {
+                text = (*rowVal->array)[cx].toDisplayString();
+            }
+            auto cps = rinfont::utf8Decode(text);
+            bool rtl = false;
+            cells[ry][cx].order = rinfont::visualOrder(cps, rtl);
+            cells[ry][cx].rtl = rtl;
+        }
+    }
+
+    // ---- أبعاد الخط والخلايا ----
+    const int scale = 2;                              // تحجيم شبكة التصميم (rinfont::GW×GH) إلى بكسل
+    const int glyphAdvance = (rinfont::GW + 1) * scale; // تقدّم أفقي أحادي (monospace) لكل حرف
+    const int glyphHeightPx = rinfont::GH * scale;
+    const int hPad = 8, vPad = 6, gridPx = 2;
+    const int minColWidth = 3 * glyphAdvance + 2 * hPad;
+    const int rowHeight = glyphHeightPx + 2 * vPad;
+
+    std::vector<int> colWidth(colCount, minColWidth);
+    for (size_t ry = 0; ry < rowCount; ry++) {
+        for (size_t cx = 0; cx < colCount; cx++) {
+            int need = static_cast<int>(cells[ry][cx].order.size()) * glyphAdvance + 2 * hPad;
+            colWidth[cx] = std::max(colWidth[cx], need);
+        }
+    }
+
+    int width = gridPx;
+    std::vector<int> colX(colCount + 1, 0);
+    for (size_t cx = 0; cx < colCount; cx++) { colX[cx] = width; width += colWidth[cx] + gridPx; }
+    colX[colCount] = width;
+    int height = static_cast<int>(rowCount) * rowHeight + gridPx;
+
+    // ---- ألوان الثيم ----
+    unsigned char bg = dark ? 22 : 250;
+    unsigned char rowA = dark ? 30 : 250;    // صفوف زوجية
+    unsigned char rowB = dark ? 25 : 242;    // صفوف فردية (تخطيط "zebra" خفيف)
+    unsigned char headerBg = dark ? 55 : 210;
+    unsigned char gridShade = dark ? 70 : 200;
+    unsigned char textR = dark ? 235 : 20, textG = dark ? 235 : 20, textB = dark ? 235 : 20;
+    unsigned char headerTextR = dark ? 255 : 10, headerTextG = dark ? 255 : 10, headerTextB = dark ? 255 : 10;
+
+    std::vector<unsigned char> rgb(static_cast<size_t>(width) * static_cast<size_t>(height) * 3, bg);
+
+    auto fillRect = [&](int x0, int y0, int x1, int y1, unsigned char r, unsigned char g, unsigned char b) {
+        for (int yy = std::max(0, y0); yy < std::min(height, y1); yy++)
+            for (int xx = std::max(0, x0); xx < std::min(width, x1); xx++) {
+                size_t idx = (static_cast<size_t>(yy) * width + xx) * 3;
+                rgb[idx] = r; rgb[idx + 1] = g; rgb[idx + 2] = b;
+            }
+    };
+
+    for (size_t ry = 0; ry < rowCount; ry++) {
+        int y0 = static_cast<int>(ry) * rowHeight + gridPx;
+        int y1 = y0 + rowHeight - gridPx;
+        unsigned char cr, cg, cb;
+        bool isHeader = (ry == 0);
+        if (isHeader) { cr = cg = cb = headerBg; }
+        else { cr = cg = cb = (ry % 2 == 0) ? rowA : rowB; }
+        for (size_t cx = 0; cx < colCount; cx++) {
+            fillRect(colX[cx], y0, colX[cx] + colWidth[cx], y1, cr, cg, cb);
+            unsigned char tr = isHeader ? headerTextR : textR;
+            unsigned char tg = isHeader ? headerTextG : textG;
+            unsigned char tb = isHeader ? headerTextB : textB;
+            const CellText& ct = cells[ry][cx];
+            int textW = static_cast<int>(ct.order.size()) * glyphAdvance;
+            int startX = ct.rtl ? (colX[cx] + colWidth[cx] - hPad - textW) : (colX[cx] + hPad);
+            int startY = y0 + vPad;
+            int cursor = startX;
+            for (char32_t cp : ct.order) {
+                rinfont::drawGlyph(rgb, width, height, cursor, startY, scale, cp, tr, tg, tb);
+                cursor += glyphAdvance;
+            }
+            if (isHeader) { // تأثير شبه-عريض بسيط للعناوين: إعادة رسم بإزاحة بكسل واحد
+                cursor = startX + 1;
+                for (char32_t cp : ct.order) {
+                    rinfont::drawGlyph(rgb, width, height, cursor, startY, scale, cp, tr, tg, tb);
+                    cursor += glyphAdvance;
+                }
+            }
+        }
+    }
+
+    // خطوط الشبكة (رأسية بين الأعمدة + أفقية بين الصفوف) + إطار خارجي.
+    for (size_t cx = 0; cx <= colCount; cx++) {
+        int x0 = colX[cx] - gridPx;
+        for (int yy = 0; yy < height; yy++)
+            for (int t = 0; t < gridPx; t++) {
+                int xx = x0 + t;
+                if (xx < 0 || xx >= width) continue;
+                size_t idx = (static_cast<size_t>(yy) * width + xx) * 3;
+                rgb[idx] = gridShade; rgb[idx + 1] = gridShade; rgb[idx + 2] = gridShade;
+            }
+    }
+    for (size_t ry = 0; ry <= rowCount; ry++) {
+        int y0 = static_cast<int>(ry) * rowHeight;
+        for (int xx = 0; xx < width; xx++)
+            for (int t = 0; t < gridPx; t++) {
+                int yy = y0 + t;
+                if (yy < 0 || yy >= height) continue;
+                size_t idx = (static_cast<size_t>(yy) * width + xx) * 3;
+                rgb[idx] = gridShade; rgb[idx + 1] = gridShade; rgb[idx + 2] = gridShade;
+            }
+    }
+
+    return pngutil::encodeRgbPng(width, height, rgb);
+}
+
+// انظر إعلانها في rin_interpreter.h (بجانب buildTablePng) — نفس أدوات الرسم بالضبط
+// (rinfont::utf8Decode/visualOrder/drawGlyph + pngutil::encodeRgbPng)، مطبَّقة على فقاعات
+// محادثة بدل شبكة جدول: عمود واحد، صفّ واحد لكل رسالة، محاذاة يمين لِـ role=="user" ويسار لغيره.
+std::string Interpreter::buildChatPng(const std::string& key) const {
+    auto histIt = chatHistoryStore.find(key);
+    const std::vector<Value>* msgs = (histIt != chatHistoryStore.end()) ? &histIt->second : nullptr;
+    size_t msgCount = msgs ? msgs->size() : 0;
+    if (msgCount == 0) msgCount = 1; // صف واحد فارغ (مطابقاً لسلوك buildTablePng مع جدول فارغ)
+
+    struct Bubble { std::vector<char32_t> order; bool rtl; bool isUser; };
+    std::vector<Bubble> bubbles(msgCount, Bubble{{}, false, false});
+    for (size_t i = 0; i < msgCount; i++) {
+        std::string role, text;
+        if (msgs && i < msgs->size() && (*msgs)[i].type == Value::Type::MAP && (*msgs)[i].map) {
+            for (auto& kv : *(*msgs)[i].map) {
+                if (kv.first.type != Value::Type::STRING) continue;
+                if (kv.first.str == "role") role = kv.second.toDisplayString();
+                else if (kv.first.str == "text") text = kv.second.toDisplayString();
+                else if (kv.first.str == "kind" && kv.second.toDisplayString() == "attachment") text = "📎 " + text;
+            }
+        }
+        auto cps = rinfont::utf8Decode(role.empty() ? text : (role + ": " + text));
+        bool rtl = false;
+        bubbles[i].order = rinfont::visualOrder(cps, rtl);
+        bubbles[i].rtl = rtl;
+        bubbles[i].isUser = (role == "user");
+    }
+
+    const int scale = 2;
+    const int glyphAdvance = (rinfont::GW + 1) * scale;
+    const int glyphHeightPx = rinfont::GH * scale;
+    const int bubblePadX = 10, bubblePadY = 8;
+    const int outerMargin = 16, bubbleGap = 8;
+
+    int maxBubbleTextW = 0;
+    for (auto& b : bubbles) maxBubbleTextW = std::max(maxBubbleTextW, static_cast<int>(b.order.size()) * glyphAdvance);
+    int maxBubbleW = maxBubbleTextW + 2 * bubblePadX;
+    int width = std::max(360, maxBubbleW + 2 * outerMargin);
+    int bubbleH = glyphHeightPx + 2 * bubblePadY;
+    int height = outerMargin * 2 + static_cast<int>(msgCount) * bubbleH +
+                 static_cast<int>(msgCount > 0 ? msgCount - 1 : 0) * bubbleGap;
+
+    unsigned char bgR = 245, bgG = 245, bgB = 245;
+    unsigned char userR = 220, userG = 248, userB = 198;   // فقاعة المستخدم (أخضر فاتح)
+    unsigned char botR = 255, botG = 255, botB = 255;      // فقاعة الطرف الآخر (أبيض)
+    unsigned char textR = 20, textG = 20, textB = 20;
+
+    std::vector<unsigned char> rgb(static_cast<size_t>(width) * static_cast<size_t>(height) * 3);
+    for (size_t i = 0; i < rgb.size(); i += 3) { rgb[i] = bgR; rgb[i + 1] = bgG; rgb[i + 2] = bgB; }
+
+    auto fillRect = [&](int x0, int y0, int x1, int y1, unsigned char r, unsigned char g, unsigned char b) {
+        for (int yy = std::max(0, y0); yy < std::min(height, y1); yy++)
+            for (int xx = std::max(0, x0); xx < std::min(width, x1); xx++) {
+                size_t idx = (static_cast<size_t>(yy) * width + xx) * 3;
+                rgb[idx] = r; rgb[idx + 1] = g; rgb[idx + 2] = b;
+            }
+    };
+
+    int y = outerMargin;
+    for (size_t i = 0; i < msgCount; i++) {
+        const Bubble& b = bubbles[i];
+        int textW = static_cast<int>(b.order.size()) * glyphAdvance;
+        int bubbleW = textW + 2 * bubblePadX;
+        int x0 = b.isUser ? (width - outerMargin - bubbleW) : outerMargin;
+        int x1 = x0 + bubbleW;
+        int y1 = y + bubbleH;
+        if (b.isUser) fillRect(x0, y, x1, y1, userR, userG, userB);
+        else fillRect(x0, y, x1, y1, botR, botG, botB);
+
+        int textStartX = b.rtl ? (x1 - bubblePadX - textW) : (x0 + bubblePadX);
+        int cursor = textStartX;
+        for (char32_t cp : b.order) {
+            rinfont::drawGlyph(rgb, width, height, cursor, y + bubblePadY, scale, cp, textR, textG, textB);
+            cursor += glyphAdvance;
+        }
+        y = y1 + bubbleGap;
+    }
+
+    return pngutil::encodeRgbPng(width, height, rgb);
+}
+
+std::string Interpreter::buildSaveDocument(const std::string& key, const EnvPtr& containerEnv,
+                                            ContainerKind kind, bool simplified) const {
+    std::string tag = containerTagName(kind);
+    std::string body = serializeEnvBody(containerEnv, simplified);
+
+    // متغيرات env تكفي لأي حاوية عادية، لكن الجدول (TABLE) يخزّن صفوفه ونمطه في بنى منفصلة داخل
+    // المفسّر (tableRows/containerStyles) لا داخل بيئته، فيجب إلحاقها هنا نصياً حتى يبقى الملف المحفوظ
+    // قابلاً لإعادة القراءة كاملاً عبر container.import/loadInstalled (تُعاد صفوفه إلى tableRows تلقائياً
+    // عند إعادة تنفيذ عبارات row/style بداخله).
+    if (kind == ContainerKind::TABLE) {
+        auto rowsIt = tableRows.find(key);
+        if (rowsIt != tableRows.end() && rowsIt->second) {
+            for (auto& row : *rowsIt->second) {
+                std::string cellsLit = serializeValueLiteral(row);
+                body += simplified ? ("row cells=" + cellsLit + ";")
+                                    : ("    row cells=" + cellsLit + ";\n");
+            }
+        }
+    } else if (kind == ContainerKind::DOC || kind == ContainerKind::DATALIST) {
+        // نفس المبدأ: مستندات container.doc/doc مخزَّنة في docStore داخل المفسّر، لا في بيئة الحاوية،
+        // فتُلحَق هنا نصياً كسلسلة عبارات 'document id=... fields=...;' قابلة لإعادة القراءة كاملة.
+        auto docsIt = docStore.find(key);
+        if (docsIt != docStore.end()) {
+            for (auto& entry : docsIt->second) {
+                std::string idLit = "\"" + escapeStringLiteral(entry.first) + "\"";
+                std::string fieldsLit = serializeValueLiteral(entry.second);
+                body += simplified ? ("document id=" + idLit + " fields=" + fieldsLit + ";")
+                                    : ("    document id=" + idLit + " fields=" + fieldsLit + ";\n");
+            }
+        }
+    }
+
+    // 'style' متاحة الآن داخل أي حاوية من هذه الأنواع (وليس container.table/table حصراً)، وهي مخزَّنة
+    // في containerStyles داخل المفسّر لا في بيئة الحاوية، فتُلحَق هنا نصياً حتى يبقى الملف المحفوظ
+    // قابلاً لإعادة القراءة كاملاً (تُعاد إلى containerStyles تلقائياً عند إعادة تنفيذ عبارة style بداخله).
+    auto styleIt = containerStyles.find(key);
+    if (styleIt != containerStyles.end()) {
+        std::string styleLit = "\"" + escapeStringLiteral(styleIt->second) + "\"";
+        body += simplified ? ("style value=" + styleLit + ";")
+                            : ("    style value=" + styleLit + ";\n");
+    }
+
+    std::ostringstream doc;
+    if (simplified) {
+        doc << "@" << tag << "=" << key << " " << body << " .end/" << tag;
+    } else {
+        doc << "// تم توليد هذا الملف تلقائياً بواسطة Rin (save/installation) - قابل لإعادة الاستيراد عبر container.import أو loadInstalled()\n";
+        doc << "@" << tag << "=" << key << "\n";
+        doc << body;
+        doc << ".end/" << tag << "\n";
+    }
+    return doc.str();
+}
+
+void Interpreter::writeRealFile(const std::string& relPath, const std::string& content, int line, const std::string& who) const {
+    std::string fullPath = resolvePath(relPath, line);
+    ensureParentDir(fullPath);
+    std::ofstream out(fullPath, std::ios::binary | std::ios::trunc);
+    if (!out) {
+        throw diagErr(diag::Code::E0036_IOFailure, line, who + ": تعذّر فتح/إنشاء الملف '" + relPath + "' للكتابة الفعلية على القرص");
+    }
+    out << content;
+    if (!out.good()) {
+        throw diagErr(diag::Code::E0036_IOFailure, line, who + ": حدث خطأ أثناء الكتابة الفعلية إلى '" + relPath + "'");
+    }
+}
+
+void Interpreter::loadInstalledIndex() {
+    if (installedIndexLoaded) return;
+    installedIndexLoaded = true;
+    std::string fullPath = resolvePath("rin_installed/index.rininstall");
+    std::ifstream in(fullPath, std::ios::binary);
+    if (!in) return; // لا يوجد فهرس بعد؛ أول تشغيل، لا مشكلة
+    std::string line;
+    while (std::getline(in, line)) {
+        if (line.empty()) continue;
+        size_t tab = line.find('\t');
+        std::string name = (tab == std::string::npos) ? line : line.substr(0, tab);
+        if (!name.empty()) installedNames.insert(name);
+    }
+}
+
+void Interpreter::appendInstalledIndex(const std::string& name, const std::string& relPath, bool simplified) const {
+    std::string fullPath = resolvePath("rin_installed/index.rininstall");
+    ensureParentDir(fullPath);
+    std::ofstream out(fullPath, std::ios::binary | std::ios::app);
+    if (!out) return; // فشل تسجيل الفهرس لا يجب أن يوقف تنفيذ البرنامج بأكمله
+    out << name << "\t" << relPath << "\t" << (simplified ? "1" : "0") << "\t" << static_cast<long long>(std::time(nullptr)) << "\n";
+}
+
+bool Interpreter::callTopLevelFunction(const std::vector<StmtPtr>& program,
+                                        const std::string& fnName,
+                                        std::vector<Value>& args,
+                                        const std::vector<std::string>& paramAliases,
+                                        std::unordered_map<std::string, Value>& globalsInOut,
+                                        std::string& errorOut) {
+    runCache_.clear(); // ما بعد معالج حدث قد تغيّرت الحالة: نتائج indsin.run المخزّنة قديمة
+    CurrentInterpGuard interpGuard(this); // Rin 1.0
+    callDepth = 0;
+
+    // Hoist every top-level function first (mirrors run()'s hoist pass) so the callee -- and
+    // anything it calls in turn -- resolves regardless of source order, and simple recursion works.
+    // Wrapped in try/catch (unlike run()'s own hoist pass) because this function's contract is
+    // bool+errorOut, not an exception -- a name-collision diagnostic thrown by nameCollides()/
+    // registerClassStmt() below must be reported the same way any other RinError here is (see the
+    // existing `catch (RinError& e)` further down), not left to escape uncaught.
+    try {
+        for (const auto& s : program) {
+            if (auto fn = std::dynamic_pointer_cast<FunctionStmt>(s)) {
+                // includeExistingFunction=false: إعادة تعريف نفس الدالة بنفس الاسم مسموحة (آخر
+                // تعريف يفوز) -- فقط نمنع تصادمها مع native/class مختلفين (انظر nameCollides).
+                std::string what;
+                if (nameCollides(fn->name, what, /*includeExistingFunction=*/false)) {
+                    throw errWithReason(diag::Code::E0002_DuplicateVariable, fn->line,
+                                         "function `" + fn->name + "` uses the same name as an existing " + what,
+                                         "`" + fn->name + "` is already defined as a " + what + "; Rin does not "
+                                         "allow a function to share a name with a built-in function or a class, "
+                                         "since calling `" + fn->name + "(...)` would then silently resolve to "
+                                         "only one of them instead of this function");
+                }
+                auto callable = std::make_shared<Callable>();
+                callable->declaration = fn;
+                callable->closure = globals;
+                Value v;
+                v.type = Value::Type::FUNCTION;
+                v.function = callable;
+                globals->define(fn->name, v);
+            }
+            if (auto cls = std::dynamic_pointer_cast<ClassStmt>(s)) registerClassStmt(cls);
+        }
+    } catch (RinError& e) {
+        errorOut = e.message;
+        return false;
+    }
+    // Seed every known Warp cell as a plain global, so a zero-arg handler that mutates a
+    // same-named global directly (rather than via a parameter) also works.
+    for (auto& kv : globalsInOut) globals->define(kv.first, kv.second);
+    // Rin 1.0: خلايا Warp التي غيّرها Indsin (tap/handler) تُسحَب إلى الكائنات المربوطة بـ oop.bindWarp*
+    // قبل تنفيذ المعالج، فيرى المعالج حالة الكائن مطابقة لما على الشاشة.
+    if (linksExist_) {
+        try { syncWarpLinks(0); } catch (RinError& e) { errorOut = e.message; return false; }
+    }
+
+    Value target;
+    if (!globals->get(fnName, target) || target.type != Value::Type::FUNCTION) {
+        errorOut = "no top-level function named '" + fnName + "'";
+        return false;
+    }
+    auto& params = target.function->declaration->params;
+    if (args.size() != params.size()) {
+        errorOut = "'" + fnName + "' expects " + std::to_string(params.size()) +
+                   " argument(s) but got " + std::to_string(args.size());
+        return false;
+    }
+
+    auto callEnv = std::make_shared<Environment>(target.function->closure);
+    for (size_t i = 0; i < args.size(); i++) callEnv->define(params[i], args[i]);
+
+    try {
+        executeBlock(target.function->declaration->body->statements, callEnv);
+    } catch (ReturnSignal&) {
+        // a bare `return;`/`return expr;` inside an onTap handler is fine -- the value isn't used,
+        // any state it already mutated (Warp cells, params) stands as-is.
+    } catch (RinError& e) {
+        errorOut = e.message;
+        return false;
+    }
+
+    // Write back: for every originally-seeded name, prefer its final value from an aliased
+    // parameter (a parameter shadows a same-named global inside callEnv, so plain global
+    // reassignment never reaches it in that case); otherwise read the (possibly reassigned) global.
+    for (auto& kv : globalsInOut) {
+        bool viaParam = false;
+        for (size_t i = 0; i < paramAliases.size() && i < params.size(); i++) {
+            if (paramAliases[i] == kv.first) {
+                auto it = callEnv->values.find(params[i]);
+                if (it != callEnv->values.end()) { kv.second = it->second; viaParam = true; }
+                break;
+            }
+        }
+        if (!viaParam) globals->get(kv.first, kv.second);
+    }
+    return true;
+}
+
+std::string Interpreter::run(const std::vector<StmtPtr>& statements) {
+    CurrentInterpGuard interpGuard(this); // Rin 1.0: لأجل __str__ داخل Value::toDisplayString
+    if (!vmEnabled_) { const char* eng = std::getenv("RIN_ENGINE"); if (eng && std::string(eng) == "vm") vmEnabled_ = true; } // RinVM
+    g_diagFile = sourceFile; // مزامنة نظام Diagnostics: الدوال الحرة/lambdas تستخدم g_diagFile
+    loadInstalledIndex(); // يحمّل أسماء أي تثبيتات فعلية سابقة على نفس basePath (استمرارية عبر التشغيلات)
+    runCache_.clear(); // ذاكرة indsin.run لا تعبر من تشغيل إلى آخر
+    importedPaths.clear(); // كل تشغيل جديد يبدأ بسجل @import نظيف (لا يرث استيرادات تشغيل سابق)
+    callDepth = 0; // كل تشغيل جديد يبدأ بعدّاد عمق استدعاء نظيف (احتياطاً عند إعادة استخدام نفس الكائن)
+    // حالة الفشل خاصة بكل run(): كانت تبقى «عالقة» من تشغيل فاشل سابق على نفس الكائن، فيُبلَغ كل تشغيل
+    // لاحق ناجح بأنه فشل (hadError() == true). يظهر ذلك فقط عند إعادة استخدام Interpreter واحد عبر
+    // عدة run() (الطرفية التفاعلية rin terminal)؛ كل مستهلك آخر ينشئ Interpreter جديداً لكل تشغيل فلا يتأثر.
+    lastDiagnostic_.reset();
+    lastErrorMessage_.reset();
+    lastErrorLine_ = 0;
+    try {
+        // First pass: hoist function declarations so they can be called
+        // regardless of source order (and support simple recursion).
+        for (const auto& s : statements) {
+            if (auto fn = std::dynamic_pointer_cast<FunctionStmt>(s)) {
+                // منع تظليل صامت: دالة بنفس اسم دالة مدمجة (native) أو صنف OOP موجود مسبقاً كانت
+                // تُشلّ بصمت تام (انظر nameCollides وrin-oop-naming-contradiction.md) — الآن تُرفَض
+                // بخطأ تشخيصي واضح عند hoisting بدل الانتظار حتى أول نداء Name(args) مضلِّل.
+                // includeExistingFunction=false: إعادة تعريف نفس الدالة بنفس الاسم مسموحة كما
+                // كانت دائماً (آخر تعريف يفوز) — هنا فقط نمنع تصادمها مع native/class مختلفين.
+                std::string what;
+                if (nameCollides(fn->name, what, /*includeExistingFunction=*/false)) {
+                    throw errWithReason(diag::Code::E0002_DuplicateVariable, fn->line,
+                                         "function `" + fn->name + "` uses the same name as an existing " + what,
+                                         "`" + fn->name + "` is already defined as a " + what + "; Rin does not "
+                                         "allow a function to share a name with a built-in function or a class, "
+                                         "since calling `" + fn->name + "(...)` would then silently resolve to "
+                                         "only one of them instead of this function");
+                }
+                auto callable = std::make_shared<Callable>();
+                callable->declaration = fn;
+                callable->closure = globals;
+                Value v;
+                v.type = Value::Type::FUNCTION;
+                v.function = callable;
+                globals->define(fn->name, v);
+            }
+            if (auto cls = std::dynamic_pointer_cast<ClassStmt>(s)) registerClassStmt(cls);
+        }
+        for (const auto& s : statements) {
+            if (std::dynamic_pointer_cast<FunctionStmt>(s)) continue; // already hoisted
+            if (std::dynamic_pointer_cast<ClassStmt>(s)) continue; // already hoisted (registerClassStmt above)
+            // البث الحي (streamSink_): نلتقط موضع الكتابة *قبل* تنفيذ هذا الـ statement العلوي
+            // و*بعده*، ونمرّر الفرق فقط -- تمامًا ما أضافه هذا الـ statement بالذات، لا أكثر ولا
+            // أقل. هذا يمنح دقة "لكل statement علوي" حقيقية بلا أي تعديل على الـ 40+ موضع طباعة
+            // الداخلية المتناثرة في هذا الملف (كل منها ما زال يكتب إلى نفس [output] كما كان دائماً).
+            const bool streaming = static_cast<bool>(streamSink_);
+            std::streamoff before = streaming ? static_cast<std::streamoff>(output.tellp()) : 0;
+            streamMark_ = before;
+            execute(s, globals);
+            if (streaming) {
+                std::streamoff after = output.tellp();
+                // streamMark_ قد يكون تقدّم أثناء الـ statement (تفريغ ما قبل input())؛ نبثّ الباقي فقط.
+                if (after > streamMark_) {
+                    streamSink_(output.str().substr(static_cast<size_t>(streamMark_), static_cast<size_t>(after - streamMark_)));
+                }
+                streamMark_ = after;
+            }
+        }
+    } catch (RinError& e) {
+        std::string appended;
+        if (e.diagnostic) {
+            lastDiagnostic_ = e.diagnostic;
+            appended = "\n" + diag::renderPlain(*e.diagnostic, diag::globalSourceManager()) + "\n";
+        } else {
+            appended = "\n[Error line " + std::to_string(e.line) + "]: " + e.message + "\n";
+        }
+        output << appended;
+        lastErrorMessage_ = e.message;
+        lastErrorLine_ = e.line;
+        if (streamSink_) streamSink_(appended);
+    } catch (ThrowSignal& e) {
+        std::string msg = "unhandled exception: " + e.value.toDisplayString();
+        std::string appended = "\n[Error line " + std::to_string(e.line) + "]: " + msg + "\n";
+        output << appended;
+        lastErrorMessage_ = msg;
+        lastErrorLine_ = e.line;
+        if (streamSink_) streamSink_(appended);
+    } catch (ReturnSignal&) {
+        const char* appended = "\n[Error]: 'return' used outside of a function\n";
+        output << appended;
+        lastErrorMessage_ = "'return' used outside of a function";
+        lastErrorLine_ = 0;
+        if (streamSink_) streamSink_(appended);
+    }
+    return output.str();
+}
+
+Interpreter::Flow Interpreter::execBlockFlow(const std::vector<StmtPtr>& statements, const EnvPtr& env, Value& ret) {
+    if (vmEnabled_) return vmRunBlock(statements, env, ret); // RinVM
+    for (const auto& s : statements) {
+        Flow f = exec(s, env, ret);
+        if (f != Flow::None) return f;
+    }
+    return Flow::None;
+}
+
+// الواجهة القديمة لكل المستدعين الذين لا يفهمون Flow: تحوّل الإشارة إلى الاستثناء نفسه الذي كان يُرمى
+// دائماً (ReturnSignal/BreakSignal/ContinueSignal)، فيبقى سلوكهم بلا أي تغيير. المسار السريع (بلا
+// استثناءات) يستخدمه callFunction والحلقات/الشروط داخل exec() مباشرة.
+void Interpreter::executeBlock(const std::vector<StmtPtr>& statements, EnvPtr env) {
+    Value ret;
+    Flow f = execBlockFlow(statements, env, ret);
+    if (f == Flow::Return) throw ReturnSignal{ret};
+    if (f == Flow::Break) throw BreakSignal{};
+    if (f == Flow::Continue) throw ContinueSignal{};
+}
+
+void Interpreter::execute(const StmtPtr& stmt, EnvPtr env) {
+    Value ret;
+    Flow f = exec(stmt, env, ret);
+    if (f == Flow::Return) throw ReturnSignal{ret};
+    if (f == Flow::Break) throw BreakSignal{};
+    if (f == Flow::Continue) throw ContinueSignal{};
+}
+
+Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Value& ret) {
+    if (vmEnabled_) { // RinVM: كل عبارة تمرّ على الآلة؛ العبارة المفوَّضة نفسها تُنفَّذ هنا مباشرة مرة واحدة
+        if (vmDirectStmt_ == stmt.get()) vmDirectStmt_ = nullptr;
+        else return vmRunStmt(stmt, std::move(env), ret);
+    }
+    // Live Preview infinite-loop protection (see setExecutionBudget()): every statement --
+    // including each pass through a while/for body, since the loop's body is itself executed via
+    // this same execute() -- counts against the budget. execBudget_ == 0 (the default for every
+    // caller that never calls setExecutionBudget(), i.e. the CLI and all pre-existing callers)
+    // keeps this check a no-op, so nothing changes for anyone but Live Preview.
+    if (execBudget_ > 0 && ++execCount_ > execBudget_) {
+        throw RinError("Execution limit exceeded\nPossible infinite loop", stmt ? stmt->line : 0);
+    }
+    switch (stmt->stmtKind) {
+    case StmtKind::ExpressionStmt: { auto s = std::static_pointer_cast<ExpressionStmt>(stmt);
+        if (s->expr && s->expr->exprKind == ExprKind::Assign &&
+            tryAppendInPlace(std::static_pointer_cast<AssignExpr>(s->expr), env)) return Flow::None;
+        evaluate(s->expr, env);
+        return Flow::None;
+    }
+    case StmtKind::PrintStmt: { auto s = std::static_pointer_cast<PrintStmt>(stmt);
+        // if= : بوابة تنفيذ كاملة — عند falsy، لا يُقيَّم أي شيء آخر إطلاقاً (لا exprs ولا أي سمة
+        // أخرى)، فيبقى أمر print معطَّلاً تماماً بلا أي أثر جانبي، تماماً كأنه لم يُكتب أصلاً.
+        if (s->ifCond) {
+            Value condVal = evaluate(s->ifCond, env);
+            if (!condVal.isTruthy()) return Flow::None;
+        }
+
+        std::string sep = " ";
+        if (s->sep) {
+            Value sepVal = evaluate(s->sep, env);
+            if (sepVal.type != Value::Type::STRING) {
+                throw diagErr(diag::Code::E0004_InvalidType, stmt->line, "'print': 'sep' يجب أن يكون نصاً (string)، لكن وُجد نوع " + sepVal.typeName());
+            }
+            sep = sepVal.str;
+        }
+        std::string end = "\n";
+        if (s->end) {
+            Value endVal = evaluate(s->end, env);
+            if (endVal.type != Value::Type::STRING) {
+                throw diagErr(diag::Code::E0004_InvalidType, stmt->line, "'print': 'end' يجب أن يكون نصاً (string)، لكن وُجد نوع " + endVal.typeName());
+            }
+            end = endVal.str;
+        }
+        bool prettyOn = false;
+        if (s->pretty) prettyOn = evaluate(s->pretty, env).isTruthy();
+
+        // بناء المحتوى الأساسي (القيم مفصولة بـ sep؛ pretty= يوسّع أي array/map متداخلة).
+        std::ostringstream body;
+        for (size_t i = 0; i < s->exprs.size(); i++) {
+            if (i > 0) body << sep;
+            Value v = evaluate(s->exprs[i], env);
+            if (prettyOn && (v.type == Value::Type::ARRAY || v.type == Value::Type::MAP)) {
+                body << prettyPrintValue(v, 0);
+            } else {
+                body << v.toDisplayString();
+            }
+        }
+        std::string content = body.str();
+
+        // upper=/lower= : تحويل حالة الأحرف على المحتوى المُجمَّع بالكامل؛ الاثنان معاً خطأ صريح.
+        bool upperOn = s->upper && evaluate(s->upper, env).isTruthy();
+        bool lowerOn = s->lower && evaluate(s->lower, env).isTruthy();
+        if (upperOn && lowerOn) {
+            throw diagErr(diag::Code::E0035_RuntimeError, stmt->line, "'print': لا يمكن استخدام 'upper' و'lower' معاً في نفس الأمر");
+        }
+        if (upperOn) {
+            std::transform(content.begin(), content.end(), content.begin(),
+                            [](unsigned char c) { return std::toupper(c); });
+        } else if (lowerOn) {
+            std::transform(content.begin(), content.end(), content.begin(),
+                            [](unsigned char c) { return std::tolower(c); });
+        }
+
+        // width=/align= : حشو المحتوى بمسافات لعرض أدنى؛ align بلا width خطأ صريح (لا هدف للمحاذاة).
+        if (s->width) {
+            Value wv = evaluate(s->width, env);
+            if (wv.type != Value::Type::NUMBER) {
+                throw diagErr(diag::Code::E0004_InvalidType, stmt->line, "'print': 'width' يجب أن يكون رقماً، لكن وُجد نوع " + wv.typeName());
+            }
+            std::string alignMode = "left";
+            if (s->align) {
+                Value av = evaluate(s->align, env);
+                if (av.type != Value::Type::STRING) {
+                    throw diagErr(diag::Code::E0004_InvalidType, stmt->line, "'print': 'align' يجب أن يكون نصاً، لكن وُجد نوع " + av.typeName());
+                }
+                if (av.str != "left" && av.str != "right" && av.str != "center") {
+                    throw diagErr(diag::Code::E0004_InvalidType, stmt->line, "'print': 'align' يجب أن يكون \"left\" أو \"right\" أو \"center\"، لكن وُجد \"" + av.str + "\"");
+                }
+                alignMode = av.str;
+            }
+            int w = static_cast<int>(wv.number);
+            int pad = w - static_cast<int>(content.size());
+            if (pad > 0) {
+                if (alignMode == "left") {
+                    content += std::string(static_cast<size_t>(pad), ' ');
+                } else if (alignMode == "right") {
+                    content = std::string(static_cast<size_t>(pad), ' ') + content;
+                } else { // center
+                    int leftPad = pad / 2, rightPad = pad - leftPad;
+                    content = std::string(static_cast<size_t>(leftPad), ' ') + content + std::string(static_cast<size_t>(rightPad), ' ');
+                }
+            }
+        } else if (s->align) {
+            throw diagErr(diag::Code::E0035_RuntimeError, stmt->line, "'print': 'align' يتطلّب تحديد 'width' معه");
+        }
+
+        // level= : رمز تصنيف في بداية السطر (يلتقطه RinConsoleFormatter.kt لتلوين الكونسول).
+        std::string prefix;
+        if (s->level) {
+            Value lvv = evaluate(s->level, env);
+            if (lvv.type != Value::Type::STRING) {
+                throw diagErr(diag::Code::E0004_InvalidType, stmt->line, "'print': 'level' يجب أن يكون نصاً، لكن وُجد نوع " + lvv.typeName());
+            }
+            if (lvv.str == "info") prefix = "\u2139\uFE0F ";
+            else if (lvv.str == "success") prefix = "\u2705 ";
+            else if (lvv.str == "warn" || lvv.str == "warning") prefix = "\u26A0\uFE0F ";
+            else if (lvv.str == "error") prefix = "\u274C ";
+            else if (lvv.str == "debug") prefix = "\U0001F41E ";
+            else throw diagErr(diag::Code::E0035_RuntimeError, stmt->line, "'print': 'level' غير معروف \"" + lvv.str + "\" (المتاح: info, success, warn, error, debug)");
+        }
+        // label= : وسم مخصص "[TAG] " يُضاف بعد رمز level (أو في البداية إن غاب level).
+        if (s->label) {
+            Value lbv = evaluate(s->label, env);
+            if (lbv.type != Value::Type::STRING) {
+                throw diagErr(diag::Code::E0004_InvalidType, stmt->line, "'print': 'label' يجب أن يكون نصاً، لكن وُجد نوع " + lbv.typeName());
+            }
+            prefix += "[" + lbv.str + "] ";
+        }
+
+        // repeat= : يكرر السطر كاملاً (بادئة + محتوى + end) n مرة؛ n=0 لا يطبع شيئاً إطلاقاً.
+        long long times = 1;
+        if (s->repeatN) {
+            Value rv = evaluate(s->repeatN, env);
+            if (rv.type != Value::Type::NUMBER) {
+                throw diagErr(diag::Code::E0004_InvalidType, stmt->line, "'print': 'repeat' يجب أن يكون رقماً، لكن وُجد نوع " + rv.typeName());
+            }
+            if (rv.number < 0) {
+                throw diagErr(diag::Code::E0035_RuntimeError, stmt->line, "'print': 'repeat' يجب ألا يكون سالباً");
+            }
+            times = static_cast<long long>(rv.number);
+        }
+        if (s->fx) {   // سمات الخط (bold/italic/color/...): تُطبَّق على المحتوى بعد upper/width/align
+            Value fv = evaluate(s->fx, env);
+            if (fv.type == Value::Type::STRING && !fv.str.empty()) content = "\x1b[" + fv.str + "m" + content + "\x1b[0m";
+        }
+        for (long long i = 0; i < times; i++) {
+            output << prefix << content << end;
+        }
+        return Flow::None;
+    }
+    // print.log(...) / print.log.info/warn/error/debug(...) -> نظام Log منظَّم (انظر LogStmt في
+    // rin_ast.h وLogEntry في rin_interpreter.h). كل استدعاء يبني LogEntry كاملاً (Time/Level/
+    // Message/Source/Line)، يُراكَمه في logHistory_ (بصرف النظر عن if=)، ثم يطبعه في الكونسول
+    // بصيغة "[LEVEL] message" مسبوقة برمز مطابق تماماً لرموز print level="..." الموجودة أصلاً
+    // (نفس النصوص الحرفية التي يتعرّف عليها RinConsoleFormatter.kt) حتى يُصنَّف/يُلوَّن سطر
+    // print.log.info/warn/error/debug تلقائياً في كونسول التطبيق دون أي تغيير إضافي هناك.
+    case StmtKind::LogStmt: { auto s = std::static_pointer_cast<LogStmt>(stmt);
+        // if= : نفس دلالة print تماماً — عند falsy، لا شيء يُقيَّم إطلاقاً ولا يُنشأ أي سجلّ.
+        if (s->ifCond) {
+            Value condVal = evaluate(s->ifCond, env);
+            if (!condVal.isTruthy()) return Flow::None;
+        }
+
+        std::string sep = " ";
+        if (s->sep) {
+            Value sepVal = evaluate(s->sep, env);
+            if (sepVal.type != Value::Type::STRING) {
+                throw diagErr(diag::Code::E0004_InvalidType, stmt->line, "'print.log': 'sep' يجب أن يكون نصاً (string)، لكن وُجد نوع " + sepVal.typeName());
+            }
+            sep = sepVal.str;
+        }
+
+        std::ostringstream body;
+        for (size_t i = 0; i < s->exprs.size(); i++) {
+            if (i > 0) body << sep;
+            body << evaluate(s->exprs[i], env).toDisplayString();
+        }
+        std::string message = body.str();
+
+        std::string source = sourceFile;
+        if (s->source) {
+            Value srcVal = evaluate(s->source, env);
+            if (srcVal.type != Value::Type::STRING) {
+                throw diagErr(diag::Code::E0004_InvalidType, stmt->line, "'print.log': 'source' يجب أن يكون نصاً (string)، لكن وُجد نوع " + srcVal.typeName());
+            }
+            source = srcVal.str;
+        }
+
+        std::string label;
+        if (s->label) {
+            Value lbv = evaluate(s->label, env);
+            if (lbv.type != Value::Type::STRING) {
+                throw diagErr(diag::Code::E0004_InvalidType, stmt->line, "'print.log': 'label' يجب أن يكون نصاً، لكن وُجد نوع " + lbv.typeName());
+            }
+            label = lbv.str;
+        }
+
+        std::time_t t = std::time(nullptr);
+        std::tm tmv{};
+#if defined(_WIN32)
+        localtime_s(&tmv, &t);
+#else
+        localtime_r(&t, &tmv);
+#endif
+        char timeBuf[16];
+        std::snprintf(timeBuf, sizeof(timeBuf), "%02d:%02d:%02d", tmv.tm_hour, tmv.tm_min, tmv.tm_sec);
+
+        LogEntry entry;
+        entry.time = timeBuf;
+        entry.level = s->level;
+        entry.message = message;
+        entry.source = source;
+        entry.line = stmt->line;
+        logHistory_.push_back(entry);
+
+        std::string icon;
+        if (s->level == "info") icon = "\u2139\uFE0F ";        // ℹ️
+        else if (s->level == "warn") icon = "\u26A0\uFE0F ";    // ⚠️
+        else if (s->level == "error") icon = "\u274C ";         // ❌
+        else if (s->level == "debug") icon = "\U0001F41E ";     // 🐞
+        else icon = "\U0001FAB5 ";                               // 🪵 (مستوى "log" العام)
+
+        std::string upperLevel = s->level;
+        std::transform(upperLevel.begin(), upperLevel.end(), upperLevel.begin(),
+                        [](unsigned char c) { return std::toupper(c); });
+
+        output << icon << "[" << upperLevel << "] ";
+        if (!label.empty()) output << "[" << label << "] ";
+        output << message << "\n";
+        return Flow::None;
+    }
+    // print.image(path, caption=, width=, if=) -> صورة فعلية مُضمَّنة في كونسول تطبيق أندرويد
+    // (انظر PrintImageStmt في rin_ast.h وRinConsoleFormatter.kt/RinJobAdapter.kt). على عكس أي أمر
+    // print آخر، لا يُنشئ أي ملف جديد ولا يكتب شيئاً على القرص — فقط يتحقّق من وجود ملف صورة موجود
+    // بالفعل على القرص ويُصدِر سطر ناتج مميَّز (بادئة 🖨️) يلتقطه RinConsoleFormatter.kt ليعرض
+    // مصغَّرة (thumbnail) فعلية بدل مجرد أيقونة+نص. الصيغة تطابق أسلوب save/installation تماماً:
+    // "🖨️ print.image -> <rawPath> (<حجم> بايت)[ — caption]\n" — الجزء "-> <rawPath> (" يلتقطه
+    // RE_PRINT_IMAGE في RinConsoleFormatter.kt (نفس منطق RE_SAVE_PNG/RE_SAVE_RIN تماماً).
+    case StmtKind::PrintImageStmt: { auto s = std::static_pointer_cast<PrintImageStmt>(stmt);
+        // if= : نفس دلالة print/print.log تماماً — عند falsy لا شيء يُقيَّم إطلاقاً ولا يُطبع سطر.
+        if (s->ifCond) {
+            Value condVal = evaluate(s->ifCond, env);
+            if (!condVal.isTruthy()) return Flow::None;
+        }
+
+        Value pathVal = evaluate(s->path, env);
+        if (pathVal.type != Value::Type::STRING) {
+            throw diagErr(diag::Code::E0004_InvalidType, stmt->line, "'print.image': مسار الصورة يجب أن يكون نصاً (string)، لكن وُجد نوع " + pathVal.typeName());
+        }
+        std::string rawPath = pathVal.str;
+        if (rawPath.empty()) {
+            throw diagErr(diag::Code::E0035_RuntimeError, stmt->line, "'print.image': مسار الصورة فارغ");
+        }
+
+        std::string caption;
+        if (s->caption) {
+            Value capVal = evaluate(s->caption, env);
+            if (capVal.type != Value::Type::STRING) {
+                throw diagErr(diag::Code::E0004_InvalidType, stmt->line, "'print.image': 'caption' يجب أن يكون نصاً، لكن وُجد نوع " + capVal.typeName());
+            }
+            caption = capVal.str;
+        }
+        bool hasWidth = false;
+        double widthDp = 0.0;
+        if (s->width) {
+            Value wv = evaluate(s->width, env);
+            if (wv.type != Value::Type::NUMBER) {
+                throw diagErr(diag::Code::E0004_InvalidType, stmt->line, "'print.image': 'width' يجب أن يكون رقماً، لكن وُجد نوع " + wv.typeName());
+            }
+            if (wv.number <= 0) {
+                throw diagErr(diag::Code::E0035_RuntimeError, stmt->line, "'print.image': 'width' يجب أن يكون أكبر من صفر");
+            }
+            hasWidth = true;
+            widthDp = wv.number;
+        }
+
+        // الملف يجب أن يكون موجوداً بالفعل -- print.image يعرض فقط، لا يكتب (على عكس save/installation).
+        std::string fullPath = resolvePath(rawPath, stmt->line);
+        std::ifstream in(fullPath, std::ios::binary | std::ios::ate);
+        if (!in) {
+            throw diagErr(diag::Code::E0036_IOFailure, stmt->line, "'print.image': تعذّر العثور على ملف الصورة '" + rawPath + "' (تأكّد من حفظه أولاً عبر 'save format=png' أو أنّه موجود ضمن مجلد المشروع)");
+        }
+        std::streamsize sizeBytes = in.tellg();
+        in.close();
+
+        // width= يُضمَّن داخل السطر النصي نفسه (بصيغة "، عرض <رقم>dp" داخل نفس القوسين) بدل أن
+        // يبقى مُتحقَّقاً منه فقط دون أثر -- RinConsoleFormatter.kt (RE_PRINT_IMAGE_WIDTH) يستخرجه
+        // ليحدّد العرض الأقصى الفعلي للمصغّرة المعروضة في الكونسول.
+        output << "\U0001F5A8\uFE0F print.image -> " << rawPath << " (" << sizeBytes << " بايت";
+        if (hasWidth) {
+            std::ostringstream wss;
+            if (widthDp == static_cast<long long>(widthDp)) wss << static_cast<long long>(widthDp);
+            else wss << widthDp;
+            output << "\u060C \u0639\u0631\u0636 " << wss.str() << "dp";
+        }
+        output << ")";
+        if (!caption.empty()) output << " \u2014 " << caption;
+        output << "\n";
+        return Flow::None;
+    }
+    // @view...=name ... .end/view -- Indsintime UI markup. Not executable code (no side effect on
+    // env/output), but observed via viewReachedCb_ if a caller registered one: this is how a
+    // `@view` sitting inside a real `if`/`while`/`for` branch (see setViewReachedCallback()'s
+    // comment) gets identified as "the one real execution actually walked into", instead of a
+    // Live Preview caller having to guess by re-scanning the AST statically afterward.
+    case StmtKind::ViewStmt: { auto s = std::static_pointer_cast<ViewStmt>(stmt);
+        if (viewReachedCb_) viewReachedCb_(s);
+        return Flow::None;
+    }
+    // Container-owned UI event binding: behavior is registered/consumed by the Indsin bridge.
+    // It is intentionally side-effect free here so normal Rin execution remains deterministic.
+    case StmtKind::UiBindingStmt: { auto s = std::static_pointer_cast<UiBindingStmt>(stmt);
+        (void)s;
+        return Flow::None;
+    }
+    case StmtKind::LetStmt: { auto s = std::static_pointer_cast<LetStmt>(stmt);
+        Value v = Value::nil();
+        if (s->initializer) v = copyForBinding(evaluate(s->initializer, env));
+        if (s->elseBlock && v.type == Value::Type::NIL) letRunElse(s->elseBlock, env, s->line, "`" + s->name + "` was nil");
+        if (!s->typeName.empty()) checkDeclaredType(v, s->typeName, "variable `" + s->name + "`", s->line);
+        env->define(s->name, v);
+        return Flow::None;
+    }
+    // let+ (docs/let-plus.md): let [a, b] = ...; | let {x, y} = ...; | let a = 1, b = 2;
+    case StmtKind::LetPatternStmt: letExecPattern(std::static_pointer_cast<LetPatternStmt>(stmt), env); return Flow::None;
+    case StmtKind::LetGroupStmt: {
+        for (auto& item : std::static_pointer_cast<LetGroupStmt>(stmt)->items) execute(item, env);
+        return Flow::None;
+    }
+    // المتغيرات الحيّة (Living Variables): stone/gauge/tape/lens/fuse + bell + trial + undo/redo/rearm/unbell/abort
+    case StmtKind::LiveDeclStmt:   liveExecDecl(std::static_pointer_cast<LiveDeclStmt>(stmt), env); return Flow::None;
+    case StmtKind::BellStmt:       liveExecBell(std::static_pointer_cast<BellStmt>(stmt), env); return Flow::None;
+    case StmtKind::TrialStmt:      liveExecTrial(std::static_pointer_cast<TrialStmt>(stmt), env); return Flow::None;
+    case StmtKind::LiveActionStmt: liveExecAction(std::static_pointer_cast<LiveActionStmt>(stmt), env); return Flow::None;
+    // OOP: class/struct declaration -> تسجيل/استبدال تعريفها في classes (انظر registerClassStmt).
+    // نفس الفلسفة تماماً كـ FunctionStmt أدناه: يُسجَّل أيضاً عبر hoisting في run()/
+    // callTopLevelFunction لأجل استخدام على مستوى أعلى/وراثة أمامية (forward reference)، وهنا مرة
+    // أخرى لأجل تعريفات محلية داخل دالة/كتلة (لا تُحصَد hoisting، بنفس سلوك 'fun' محلية تماماً).
+    case StmtKind::ClassStmt: { auto s = std::static_pointer_cast<ClassStmt>(stmt);
+        registerClassStmt(s);
+        return Flow::None;
+    }
+    // OOP: enum declaration -> يُعرَّف كمتغيّر عادي من نوع map يضم كل الحالات (انظر تعليق EnumStmt
+    // في rin_ast.h)؛ لا حاجة لأي سجل داخلي جديد، فقط map عادية يصل إليها GetExpr كأي map أخرى.
+    case StmtKind::EnumStmt: { auto s = std::static_pointer_cast<EnumStmt>(stmt);
+        auto m = std::make_shared<MapData>();
+        for (auto& c : s->cases) {
+            Value raw = c.value ? evaluate(c.value, env) : Value::nil();
+            auto caseMap = std::make_shared<MapData>();
+            caseMap->push_back({Value::string("__enum__"), Value::string(s->name)});
+            caseMap->push_back({Value::string("name"), Value::string(c.name)});
+            caseMap->push_back({Value::string("value"), raw});
+            m->push_back({Value::string(c.name), Value::makeMap(caseMap)});
+        }
+        env->define(s->name, Value::makeMap(m));
+        return Flow::None;
+    }
+    // reckon name(collection) [where cond] |> fn() ...;  --  see docs/RECKON.md and ReckonStmt in
+    // rin_ast.h. Semantically sugar for exactly the loop+if pattern it replaces: walk `collection`
+    // once, keep the elements where `whereCond` (evaluated with `item` bound) is truthy, then run
+    // that array through the same `|>` dispatch (invokeCallee) already used by ordinary pipelines,
+    // and bind the final value under `name` exactly like `let` would.
+    case StmtKind::ReckonStmt: { auto s = std::static_pointer_cast<ReckonStmt>(stmt);
+        Value collVal = evaluate(s->collection, env);
+        if (collVal.type != Value::Type::ARRAY) {
+            throw diagErr(diag::Code::E0004_InvalidType, s->line,
+                "`reckon " + s->name + "` expects an array/collection, but got a " + collVal.typeName());
+        }
+        Value current;
+        if (s->whereCond) {
+            auto filtered = std::make_shared<ArrayData>();
+            auto itemEnv = std::make_shared<Environment>(env);
+            for (auto& elem : *collVal.array) {
+                itemEnv->define("item", elem);
+                Value cond = evaluate(s->whereCond, itemEnv);
+                if (cond.isTruthy()) filtered->push_back(elem);
+            }
+            current = Value::makeArray(filtered);
+        } else {
+            current = collVal;
+        }
+        for (auto& stage : s->stages) {
+            std::vector<Value> args;
+            args.reserve(stage->args.size() + 1);
+            args.push_back(current);
+            for (auto& a : stage->args) args.push_back(evaluate(a, env));
+            current = invokeCallee(stage->callee, args, stage->line, env);
+        }
+        env->define(s->name, current);
+        return Flow::None;
+    }
+    // warp name = expr;  --  Indsintime's reactive global-state declaration (rin_indsin_pipeline.h /
+    // rin_indsin_needle.h read these back out via exportGlobals()/callTopLevelFunction). Previously
+    // unhandled here entirely (silently skipped by run()), which is exactly why Live Preview had
+    // to hand-evaluate `warp` initializers itself with a separate, simplified expression
+    // evaluator instead of running the program for real. A `warp` cell is semantically just a
+    // `let` that Indsin additionally treats as reactive UI state, so it gets identical runtime
+    // handling -- assignment (`count = count + 1;`), reads, and everything else about it are 100%
+    // ordinary Environment variable semantics, with no special-casing anywhere in the interpreter.
+    case StmtKind::WarpStmt: { auto s = std::static_pointer_cast<WarpStmt>(stmt);
+        Value v = Value::nil();
+        if (s->initializer) v = evaluate(s->initializer, env);
+        env->define(s->name, v);
+        return Flow::None;
+    }
+    case StmtKind::BlockStmt: { auto s = std::static_pointer_cast<BlockStmt>(stmt);
+        auto blockEnv = std::make_shared<Environment>(env);
+        return execBlockFlow(s->statements, blockEnv, ret);
+    }
+    case StmtKind::TryCatchStmt: { auto s = std::static_pointer_cast<TryCatchStmt>(stmt);
+        // ---- Scope Guarantees: try / catch [when] ... / finally ----
+        // كل مسار خروج من try أو من أي catch (إكمال طبيعي، return، break، continue، أو أي استثناء) يمرّ على finally
+        // مرة واحدة بالضبط. لو أنهى finally نفسه بـ return/break/continue فهو يحسم النتيجة (يبتلع الاستثناء المعلَّق) كبقية اللغات.
+        auto runClauses = [&](Flow& result) {
+            auto tryClauses = [&](const Value& errVal, bool isRin, int line, const std::string& message,
+                                  const std::optional<diag::Diagnostic>& dg, const ThrowSignal* ts) -> bool {
+                if (!s->catchBranch) return false; // try/finally بلا catch: لا شيء يعالج الخطأ
+                auto tryOne = [&](const std::string& name, const ExprPtr& guard, const std::shared_ptr<BlockStmt>& body) -> bool {
+                    auto catchEnv = std::make_shared<Environment>(env);
+                    if (!name.empty()) catchEnv->define(name, errVal);
+                    if (guard && !evaluate(guard, catchEnv).isTruthy()) return false;
+                    ActiveCatch ac; ac.isRin = isRin; ac.line = line; ac.message = message; ac.diag = dg;
+                    if (ts) ac.thrown = ts->value;
+                    activeCatches_.push_back(std::move(ac));
+                    struct Pop { std::vector<ActiveCatch>& v; ~Pop() { v.pop_back(); } } pop{activeCatches_};
+                    result = exec(body, catchEnv, ret);
+                    return true;
+                };
+                if (tryOne(s->catchName, s->catchGuard, s->catchBranch)) return true;
+                for (auto& c : s->moreCatches) if (tryOne(c.name, c.guard, c.body)) return true;
+                return false;
+            };
+            try {
+                result = exec(s->tryBranch, env, ret);
+            } catch (ThrowSignal& ex) {
+                auto err = std::make_shared<MapData>();
+                err->push_back({Value::string("value"), ex.value});
+                err->push_back({Value::string("message"), Value::string(ex.value.toDisplayString())});
+                err->push_back({Value::string("line"), Value::num(ex.line)});
+                // توحيد الشكل: لو رُمي قاموس فيه code فـ e.code يعمل كما يعمل مع أخطاء النظام.
+                if (ex.value.type == Value::Type::MAP && ex.value.map)
+                    if (Value* c = ex.value.map->findValue(Value::string("code"))) err->push_back({Value::string("code"), *c});
+                if (!tryClauses(Value::makeMap(err), false, ex.line, ex.value.toDisplayString(), std::nullopt, &ex)) throw;
+            } catch (RinError& ex) {
+                auto err = std::make_shared<MapData>();
+                err->push_back({Value::string("message"), Value::string(ex.message)});
+                err->push_back({Value::string("line"), Value::num(ex.line)});
+                if (ex.diagnostic) err->push_back({Value::string("code"), Value::string(diag::codeString(ex.diagnostic->code))});
+                if (!tryClauses(Value::makeMap(err), true, ex.line, ex.message, ex.diagnostic, nullptr)) throw;
+            }
+        };
+        if (!s->finallyBranch) {
+            Flow result = Flow::None;
+            runClauses(result);
+            return result;
+        }
+        Flow result = Flow::None;
+        std::exception_ptr pending;
+        try { runClauses(result); } catch (...) { pending = std::current_exception(); }
+        Value finRet;
+        Flow ff = exec(s->finallyBranch, env, finRet);
+        if (ff != Flow::None) { if (ff == Flow::Return) ret = finRet; return ff; } // finally يحسم النتيجة
+        if (pending) std::rethrow_exception(pending);
+        return result;
+    }
+    case StmtKind::ThrowStmt: { auto s = std::static_pointer_cast<ThrowStmt>(stmt);
+        if (s->rethrow) {
+            if (activeCatches_.empty()) throw RinError("[E0010] `rethrow` outside a catch block", s->line);
+            const ActiveCatch& ac = activeCatches_.back();
+            if (ac.isRin) { RinError e(ac.message, ac.line); e.diagnostic = ac.diag; throw e; }
+            throw ThrowSignal{ac.thrown, ac.line};
+        }
+        Value v = s->value ? evaluate(s->value, env) : Value::nil();
+        throw ThrowSignal{v, s->line};
+    }
+    case StmtKind::IfStmt: { auto s = std::static_pointer_cast<IfStmt>(stmt);
+        if (evaluate(s->condition, env).isTruthy()) {
+            return exec(s->thenBranch, env, ret);
+        } else if (s->elseBranch) {
+            return exec(s->elseBranch, env, ret);
+        }
+        return Flow::None;
+    }
+    case StmtKind::WhileStmt: { auto s = std::static_pointer_cast<WhileStmt>(stmt);
+        bool broke = false;
+        while (evaluate(s->condition, env).isTruthy()) {
+            Flow f = Flow::None;
+            try {
+                f = exec(s->body, env, ret);
+            } catch (BreakSignal&) {
+                broke = true;
+                break;
+            } catch (ContinueSignal&) {
+                continue;
+            }
+            if (f == Flow::Return) return f;
+            if (f == Flow::Break) { broke = true; break; }
+        }
+        if (!broke && s->doneBlock) execute(s->doneBlock, env); // #done { } — انتهت الحلقة طبيعياً
+        return Flow::None;
+    }
+    // for (initializer; condition; increment) body -> حلقة for على طراز C (إضافة جديدة additive بحتة)
+    // initializer يُنفَّذ مرة واحدة داخل بيئة (Environment) جديدة خاصة بالحلقة كلها، بحيث يبقى أي
+    // متغيّر يُعلَن فيها (let i = 0) محصوراً ضمن نطاق الحلقة تماماً كسلوك for المعتاد. condition
+    // الغائب يُعامل كـ true دائماً. increment يُنفَّذ بعد كل تكرار، بما في ذلك بعد continue.
+    case StmtKind::ForStmt: { auto s = std::static_pointer_cast<ForStmt>(stmt);
+        auto forEnv = std::make_shared<Environment>(env);
+        if (s->initializer) execute(s->initializer, forEnv);
+        bool broke = false;
+        while (!s->condition || evaluate(s->condition, forEnv).isTruthy()) {
+            // Fresh per-iteration environment that snapshots the loop variable(s) declared in
+            // forEnv (e.g. `i` from `for (let i = 0; ...)`), so a closure created inside the body
+            // (`fun() { return i; }`) captures the value `i` had *during that iteration* instead
+            // of the one shared, mutating binding every closure would otherwise alias to (which
+            // would make every closure created in the loop return the same final value once the
+            // loop ends) -- matches modern-language `for` semantics (JS `let`, Swift, Kotlin,
+            // Rust). forEnv itself stays the single "live" environment condition/increment run
+            // against, so a loop body with no closures behaves exactly as before.
+            // Rin For+: بلا closures في الحلقة (s->freshIterScope == false) نُنفّذ الجسم في forEnv نفسها —
+            // لا make_shared<Environment> ولا نسخ map ولا نشر عكسي لكل دورة. السلوك المرئي مطابق تماماً.
+            const bool fresh = s->freshIterScope;
+            std::shared_ptr<Environment> iterEnv;
+            if (fresh) { iterEnv = std::make_shared<Environment>(env); iterEnv->values = forEnv->values; }
+            else iterEnv = forEnv;
+            Flow bodyFlow = Flow::None;
+            try {
+                bodyFlow = exec(s->body, iterEnv, ret);
+                if (bodyFlow == Flow::Return) return bodyFlow;
+                if (bodyFlow == Flow::Break) throw BreakSignal{}; // مسار واحد موحَّد للخروج مع نشر المتغيّرات
+            } catch (BreakSignal&) {
+                // Propagate any in-body mutation of the loop variable(s) before breaking, in case
+                // code after the loop (or the loop condition were it re-checked) relies on it --
+                // mirrors the propagation done after a normal iteration below.
+                if (fresh) for (auto& kv : iterEnv->values) {
+                    if (forEnv->values.count(kv.first)) forEnv->values[kv.first] = kv.second;
+                }
+                broke = true;
+                break;
+            } catch (ContinueSignal&) {
+                // لا شيء إضافي هنا: increment أدناه ينفَّذ دائماً بعد الـ catch، سواء بـ continue أو
+                // بانتهاء الجسم طبيعياً، تماماً كسلوك for القياسي.
+            }
+            // Propagate any change the body made directly to a loop variable (e.g. an explicit
+            // `i = i + 1;` inside the body itself, not just the standard increment clause) back to
+            // forEnv, so the condition/increment clauses still observe it -- without this, mutating
+            // the loop variable from inside the body would appear to silently do nothing once the
+            // iteration ends.
+            if (fresh) for (auto& kv : iterEnv->values) {
+                if (forEnv->values.count(kv.first)) forEnv->values[kv.first] = kv.second;
+            }
+            if (s->increment) evaluate(s->increment, forEnv);
+        }
+        if (!broke && s->doneBlock) execute(s->doneBlock, env); // #done { } — انتهت الحلقة طبيعياً
+        return Flow::None;
+    }
+    // for (let NAME in iterable) { body } -> حلقة تكرار حقيقية (انظر ForInStmt في rin_ast.h).
+    // iterable تُقيَّم مرة واحدة فقط قبل الحلقة (كأي حلقة for/foreach في أي لغة حقيقية). كل تكرار
+    // يحصل على بيئة (Environment) خاصة به من الصفر مع NAME معرَّفة فيها (نفس فكرة إصلاح
+    // per-iteration closures في ForStmt أعلاه)، فأي closure تُنشأ داخل الجسم تلتقط قيمة تلك
+    // التكرارة بشكل صحيح بدل قيمة مشتركة تتغيّر.
+    case StmtKind::ForInStmt: { auto s = std::static_pointer_cast<ForInStmt>(stmt);
+        Value iterableVal = evaluate(s->iterable, env);
+        std::vector<Value> items;
+        if (iterableVal.type == Value::Type::ARRAY) {
+            items = *iterableVal.array;
+        } else if (iterableVal.type == Value::Type::MAP) {
+            items.reserve(iterableVal.map->size());
+            for (auto& kv : *iterableVal.map) items.push_back(kv.first);
+        } else if (iterableVal.type == Value::Type::SET) {
+            if (iterableVal.set) items = iterableVal.set->items; // لقطة: التعديل داخل الحلقة آمن
+        } else if (iterableVal.type == Value::Type::STRING) {
+            items.reserve(iterableVal.str.size());
+            for (char c : iterableVal.str) items.push_back(Value::string(std::string(1, c)));
+        } else if (iterableVal.type == Value::Type::INSTANCE && hasMagic(iterableVal, "__iter__")) {
+            // Rin 1.0: كائن يعرّف __iter__() يُرجع مصفوفة (أو قاموساً -> مفاتيحه) قابل للتكرار بـ for..in.
+            std::vector<Value> noArgs;
+            Value produced = *callMagic(iterableVal, "__iter__", noArgs, s->line);
+            if (produced.type == Value::Type::ARRAY) items = *produced.array;
+            else if (produced.type == Value::Type::MAP) { for (auto& kv : *produced.map) items.push_back(kv.first); }
+            else throw diagErr(diag::Code::E0004_InvalidType, s->line,
+                               "`__iter__` of `" + iterableVal.typeName() + "` must return an array or map, found `" + produced.typeName() + "`");
+        } else {
+            throw diagErr(diag::Code::E0004_InvalidType, s->line,
+                          "`for...in` requires an array, set, map, or string; found a `" +
+                              iterableVal.typeName() + "`");
+        }
+        bool broke = false;
+        for (auto& item : items) {
+            auto iterEnv = std::make_shared<Environment>(env);
+            if (s->pattern) { // let+: for (let [k, v] in pairs)
+                LetBindings binds; std::string why;
+                if (item.type == Value::Type::NIL || !letBindPattern(*s->pattern, item, env, binds, why))
+                    throw diagErr(diag::Code::E0004_InvalidType, s->line,
+                                  "cannot destructure a `for...in` item: " + (item.type == Value::Type::NIL ? std::string("the item is nil") : why));
+                for (auto& b : binds) iterEnv->define(b.first, b.second);
+            } else {
+                iterEnv->define(s->varName, item);
+            }
+            try {
+                Flow bodyFlow = exec(s->body, iterEnv, ret);
+                if (bodyFlow == Flow::Return) return bodyFlow;
+                if (bodyFlow == Flow::Break) { broke = true; break; }
+            } catch (BreakSignal&) {
+                broke = true;
+                break;
+            } catch (ContinueSignal&) {
+                // لا شيء إضافي: ننتقل للعنصر التالي مباشرة، تماماً كـ continue في أي حلقة أخرى.
+            }
+        }
+        if (!broke && s->doneBlock) execute(s->doneBlock, env); // #done { } — انتهت الحلقة طبيعياً
+        return Flow::None;
+    }
+    // plus.condition (condition) { trueBranch } / { falseBranch } -> شرط ثلاثي عام: يقيّم condition
+    // مرة واحدة، وينفّذ إحدى الكتلتين (كل كتلة تنفَّذ عبر execute(BlockStmt) العادية، أي تحصل على
+    // بيئة/نطاق (Environment) خاص بها تماماً كأي كتلة {} أخرى في اللغة).
+    case StmtKind::PlusConditionStmt: { auto s = std::static_pointer_cast<PlusConditionStmt>(stmt);
+        if (evaluate(s->condition, env).isTruthy()) {
+            return exec(s->trueBranch, env, ret);
+        } else {
+            return exec(s->falseBranch, env, ret);
+        }
+    }
+    // match (subject) { case v1, v2 { .. } case v3 { .. } [else { .. }] } -> مطابقة أنماط (انظر
+    // MatchStmt في rin_ast.h). subject يُقيَّم مرة واحدة فقط؛ لكل case بالترتيب، نقارن subject بكل
+    // قيمة في case.values (نفس دلالة == تماماً عبر valuesEqual الموجودة أصلاً)؛ أول case تُطابق
+    // فيها أي قيمة يُنفَّذ جسمها (داخل بيئة/نطاق Environment خاصة به، كأي كتلة {} أخرى) ثم تتوقف
+    // المطابقة فوراً (بلا "fallthrough"). لم تُطابق أي حالة؟ يُنفَّذ elseBranch إن وُجدت، وإلا لا شيء.
+    case StmtKind::MatchStmt: { auto s = std::static_pointer_cast<MatchStmt>(stmt);
+        Value subject = evaluate(s->subject, env);
+        for (auto& mc : s->cases) {
+            bool matched = false;
+            for (auto& valExpr : mc.values) {
+                if (valuesEqual(subject, evaluate(valExpr, env))) { matched = true; break; }
+            }
+            if (matched && mc.guard && !evaluate(mc.guard, env).isTruthy()) matched = false; // case ... when (cond)
+            if (matched) {
+                auto caseEnv = std::make_shared<Environment>(env);
+                executeBlock(mc.body->statements, caseEnv);
+                return Flow::None;
+            }
+        }
+        if (s->elseBranch) {
+            auto elseEnv = std::make_shared<Environment>(env);
+            executeBlock(s->elseBranch->statements, elseEnv);
+        }
+        return Flow::None;
+    }
+    // achieve expr; / achieve; -> ينهي أقرب كتلة goal {..} محيطة (انظر GoalExpr/AchieveStmt في
+    // rin_ast.h وevaluate(GoalExpr) أدناه الذي يلتقط هذه الإشارة). الفحص وقت التحليل (Parser::
+    // achieveStatement) يضمن أصلاً أن هذه العبارة لا تظهر إلا داخل goal، لذا لا حاجة لفحص إضافي هنا.
+    case StmtKind::AchieveStmt: { auto s = std::static_pointer_cast<AchieveStmt>(stmt);
+        Value v = s->value ? evaluate(s->value, env) : Value::nil();
+        throw AchieveSignal{v};
+    }
+    case StmtKind::FunctionStmt: { auto s = std::static_pointer_cast<FunctionStmt>(stmt);
+        // نفس فحص التصادم المطبَّق عند hoisting المستوى الأعلى (انظر run()/callTopLevelFunction
+        // ونameCollides): بلا هذا الفحص، دالة محلية باسم يطابق native/class كانت ستُشلّ بصمت
+        // بنفس الطريقة تماماً -- Name(args) يبحث في natives ثم classes قبل أي بحث في env أصلاً،
+        // بصرف النظر عن النطاق (scope) الذي عُرِّفت به. includeExistingFunction=false: إعادة تعريف
+        // نفس الدالة محلياً (مثلاً كل تكرار حلقة يمرّ على نفس التعريف) تبقى مسموحة كما كانت دائماً.
+        std::string what;
+        if (nameCollides(s->name, what, /*includeExistingFunction=*/false)) {
+            throw errWithReason(diag::Code::E0002_DuplicateVariable, s->line,
+                                 "function `" + s->name + "` uses the same name as an existing " + what,
+                                 "`" + s->name + "` is already defined as a " + what + "; Rin does not "
+                                 "allow a function to share a name with a built-in function or a class, "
+                                 "since calling `" + s->name + "(...)` would then silently resolve to "
+                                 "only one of them instead of this function");
+        }
+        auto callable = std::make_shared<Callable>();
+        callable->declaration = s;
+        callable->closure = env;
+        Value v;
+        v.type = Value::Type::FUNCTION;
+        v.function = callable;
+        env->define(s->name, v);
+        return Flow::None;
+    }
+
+    // RCS-1.0 §3.2 Lifecycle: 'on init/mount/update/destroy/error(...) { .. }' لا يُنفَّذ جسمها
+    // فوراً كعبارة عادية إطلاقاً -- فقط تُسجَّل كدالة (Callable) بداخل containerLifecycle[الحاوية
+    // الحالية] لتُستدعى لاحقاً من نقاط محدَّدة (انظر ContainerStmt أدناه لـ init/mount،
+    // maybeTriggerStateUpdate لـ update، destroyContainer native لـ destroy، fireLifecycleHook
+    // لـ error). "الحاوية الحالية" = قمة containerStack وقت تنفيذ جسم الحاوية (نفس اللحظة التي
+    // تُعرَّف بها أي state/fun أخرى بداخلها) -- إن ظهرت خارج أي حاوية (containerStack فارغة)، لا
+    // شيء يحدث (تُسجَّل بلا مفتاح صالح فتبقى ميتة عملياً، بلا أي خطأ لأن هذا امتداد إضافي بحت).
+    case StmtKind::LifecycleHookStmt: { auto s = std::static_pointer_cast<LifecycleHookStmt>(stmt);
+        if (containerStack.empty()) return Flow::None;
+        auto callable = std::make_shared<Callable>();
+        callable->declaration = s->asFunction;
+        callable->closure = env;
+        Value v; v.type = Value::Type::FUNCTION; v.function = callable;
+        auto& hooks = containerLifecycle[containerStack.back()];
+        if (s->hook == "init") hooks.init = v;
+        else if (s->hook == "mount") hooks.mount = v;
+        else if (s->hook == "update") hooks.update = v;
+        else if (s->hook == "destroy") hooks.destroy = v;
+        else if (s->hook == "error") hooks.error = v;
+        return Flow::None;
+    }
+
+    // RCS-1.0 §3.3 State: 'state IDENT = expr;' -- يُعرَّف الاسم في بيئة الحاوية تماماً كـ `let`
+    // (executeBlock عادي يستطيع قراءته/تحديثه بلا أي فرق سطحي)، والفرق الوحيد الفعلي يُسجَّل هنا:
+    // إضافة اسمه إلى containerStateNames[الحاوية الحالية] حتى يتعرَّف AssignExpr لاحقاً على أي
+    // إسناد لهذا الاسم كـ "تغيّر حالة" يستحق إطلاق on update(prevState) تلقائياً (انظر
+    // maybeTriggerStateUpdate). خارج أي حاوية (containerStack فارغة) يُعامَل تماماً كـ `let` عادية
+    // بلا أي تسجيل إضافي -- امتداد إضافي بحت، لا خطأ.
+    case StmtKind::StateDeclStmt: { auto s = std::static_pointer_cast<StateDeclStmt>(stmt);
+        Value v = Value::nil();
+        if (s->initializer) v = evaluate(s->initializer, env);
+        env->define(s->name, v);
+        if (!containerStack.empty()) containerStateNames[containerStack.back()].insert(s->name);
+        return Flow::None;
+    }
+
+    // RCS-1.0 §3.5 Tree (Phase 2): 'slot IDENT;' -- توثيق بنيوي بحت (انظر SlotDeclStmt في
+    // rin_ast.h): تُسجَّل فقط ضمن containerSlots[الحاوية الحالية] لأجل الاستقصاء عبر native جديدة
+    // slotsOf. خارج أي حاوية (containerStack فارغة) لا شيء يحدث -- امتداد إضافي بحت، لا خطأ.
+    case StmtKind::SlotDeclStmt: { auto s = std::static_pointer_cast<SlotDeclStmt>(stmt);
+        if (!containerStack.empty()) containerSlots[containerStack.back()].push_back(s->name);
+        return Flow::None;
+    }
+
+    // RCS-1.0 §3.14 Dependency (Phase 3): 'requires A, B;' -- فحص إلزامي فوري (لا خيار لتعطيله):
+    // كل اسم يُفحَص عبر containers.count(name) (نفس آلية native hasContainer الموجودة فعلاً)؛ أول
+    // اسم غير مسجَّل بعد يرمي RinError بكود E0041_MissingDependency فوراً، فيتوقف تنفيذ جسم الحاوية
+    // عند هذه النقطة بالضبط -- وضع 'requires' كأول عبارة في الجسم (كما في كل أمثلة §3.14) يحقّق
+    // حرفياً "فحص قبل أي كود آخر". خارج أي حاوية (containerStack فارغة) يبقى الفحص فعّالاً أيضاً
+    // (لا علاقة له بوجود حاوية أب -- يتحقق فقط من وجود الأسماء المطلوبة في سجلّ containers العام).
+    case StmtKind::DependencyStmt: { auto s = std::static_pointer_cast<DependencyStmt>(stmt);
+        for (const auto& depName : s->names) {
+            if (containers.count(depName) == 0) {
+                auto d = diagErr(diag::Code::E0041_MissingDependency, s->line,
+                    "requires: الحاوية المطلوبة '" + depName + "' غير موجودة");
+                d.diagnostic->withReason("RCS-1.0 §3.14 Dependency: 'requires' يفحص وجود كل اعتماد فوراً قبل أي كود آخر")
+                 .withHint("تأكّد أن حاوية باسم '" + depName + "' مُعرَّفة أو تم إنشاؤها (spawn/create) قبل هذه النقطة");
+                throw d;
+            }
+        }
+        return Flow::None;
+    }
+
+    // RCS-1.0 §3.6 Events: 'on.event "name"(...) { .. }' -- تُسجَّل فقط (لا تُنفَّذ فوراً)، بنفس
+    // أسلوب LifecycleHookStmt أعلاه بالضبط: دالة (Callable) تُخزَّن بداخل eventHandlers[الحاوية
+    // الحالية] لتُستدعى لاحقاً من فرع EmitStmt أدناه عند emit في أحد أبنائها (المباشر افتراضياً،
+    // أو أي حفيد إن استُخدمت 'emit ... bubbles;'). خارج أي حاوية (containerStack فارغة) لا شيء
+    // يحدث -- امتداد إضافي بحت، لا خطأ.
+    case StmtKind::EventHandlerStmt: { auto s = std::static_pointer_cast<EventHandlerStmt>(stmt);
+        if (containerStack.empty()) return Flow::None;
+        auto callable = std::make_shared<Callable>();
+        callable->declaration = s->asFunction;
+        callable->closure = env;
+        Value v; v.type = Value::Type::FUNCTION; v.function = callable;
+        eventHandlers[containerStack.back()].push_back({s->nameExpr ? evaluate(s->nameExpr, env).toDisplayString() : s->eventName, v});
+        return Flow::None;
+    }
+
+    // RCS-1.0 §3.6 Events: 'emit "name", payload; [bubbles]' -- يصعد ابتداءً من أب الحاوية التي
+    // نُنفَّذ حالياً بداخلها فعلياً (مُحدَّدة عبر containerKeyForEnv(env)، لا قمة containerStack:
+    // emit يقع غالباً داخل جسم دالة تُستدعى بعد انتهاء التنفيذ التصريحي للحاوية بوقت طويل، حين تكون
+    // containerStack قد فرغت مجدداً بالفعل). بلا 'bubbles': يتوقف عند أول أب فقط (كل معالج مطابق
+    // الاسم عنده يُستدعى). مع 'bubbles': يستمر صعوداً عبر كل سلسلة الأجداد حتى الجذر. لا شيء يحدث
+    // إن لم توجد حاوية أب أصلاً (حاوية جذرية أعلى المستوى)، أو إن استُخدمت emit خارج أي حاوية إطلاقاً.
+    case StmtKind::EmitStmt: { auto s = std::static_pointer_cast<EmitStmt>(stmt);
+        Value payload = Value::nil();
+        if (s->payload) payload = evaluate(s->payload, env);
+        const std::string eventName = s->nameExpr ? evaluate(s->nameExpr, env).toDisplayString() : s->eventName;
+        std::string emitterKey = containerKeyForEnv(env.get());
+        std::string current = emitterKey;
+        while (!current.empty()) {
+            auto parentIt = containerParent.find(current);
+            if (parentIt == containerParent.end()) break; // لا أب (حاوية جذرية) -> توقف بلا أي حدث
+            const std::string parentKey = parentIt->second;
+            auto handlersIt = eventHandlers.find(parentKey);
+            if (handlersIt != eventHandlers.end()) {
+                for (auto& entry : handlersIt->second) {
+                    if (entry.first != eventName) continue;
+                    if (entry.second.type != Value::Type::FUNCTION || !entry.second.function) continue;
+                    std::vector<Value> cbArgs;
+                    if (s->payload) cbArgs.push_back(payload);
+                    callFunction(entry.second.function, cbArgs, s->line);
+                }
+            }
+            if (!s->bubbles) break; // الأب المباشر فقط افتراضياً
+            current = parentKey; // 'bubbles': استمرار صعوداً للجدّ التالي
+        }
+        return Flow::None;
+    }
+
+    case StmtKind::ReturnStmt: { auto s = std::static_pointer_cast<ReturnStmt>(stmt);
+        Value v = Value::nil();
+        if (s->value) v = evaluate(s->value, env);
+        ret = std::move(v);
+        return Flow::Return;
+    }
+    case StmtKind::BreakStmt: {
+        return Flow::Break;
+    }
+    case StmtKind::ContinueStmt: {
+        return Flow::Continue;
+    }
+
+    // ---- لغة الحاويات/البيانات ----
+
+    case StmtKind::TextStmt: { auto s = std::static_pointer_cast<TextStmt>(stmt);
+        Value v = Value::nil();
+        if (s->initializer) v = evaluate(s->initializer, env);
+        if (v.type != Value::Type::STRING) {
+            throw diagErr(diag::Code::E0004_InvalidType, s->line, "'" + s->name + "' من نوع text ويجب أن تكون قيمته نصاً (string)");
+        }
+        env->define(s->name, v);
+        return Flow::None;
+    }
+
+    case StmtKind::ContainerStmt: { auto s = std::static_pointer_cast<ContainerStmt>(stmt);
+        if (auto make = std::dynamic_pointer_cast<MakeStmt>(stmt)) {
+            try {
+                validateMakeUnit(*make);
+            } catch (const std::exception& e) {
+                throw diagErr(diag::Code::E0016_InvalidProperty, make->line, std::string("invalid Make Unit: ") + e.what());
+            }
+        } else if (s->hasPolicy) {
+            // RCS-1.0 §3.13 Security (Phase 0): سياسة عامة على @container عادية — تُنفَّذ فقط
+            // إن استُخدمت فعلاً كلمة واحدة من use/need/allow/deny/strict داخل جسمها؛ أي حاوية
+            // قديمة (hasPolicy == false) لا تمرّ بهذا المسار إطلاقاً (permissive كما كانت دوماً).
+            try {
+                validateContainerPolicy(*s);
+            } catch (const std::exception& e) {
+                throw diagErr(diag::Code::E0016_InvalidProperty, s->line, std::string("invalid container policy: ") + e.what());
+            }
+        }
+        auto containerEnv = std::make_shared<Environment>(env);
+        std::string tag = containerTagName(s->kind);
+        std::string icon = containerIcon(s->kind);
+        if (std::dynamic_pointer_cast<MakeStmt>(stmt)) {
+            auto make = std::dynamic_pointer_cast<MakeStmt>(stmt);
+            tag = "make." + make->makeType;
+            icon = "🛠️";
+        }
+        output << icon << " " << tag << (s->name.empty() ? "" : (" = " + s->name)) << "\n";
+        std::string containerKey = s->name.empty() ? ("#" + std::to_string(containers.size())) : s->name;
+        if (!s->name.empty()) {
+            // Easy_key الافتراضي: إن وُجدت حاوية حيّة بنفس الاسم في مسار أسماء *مختلف* (A.app مقابل B.app) فلا تُدهَس
+            // (docStore/schema/فهارس تُفهرَس بالمفتاح): تأخذ هذه مفتاحاً = مسارها الكامل. إعادة تعريف نفس المسار تستبدل كما كان.
+            std::string pathNow = (nsStack.empty() ? std::string() : nsStack.back()->path() + ".") + s->name;
+            auto po = containerPathOf.find(containerKey);
+            if (containers.count(containerKey) && po != containerPathOf.end() && po->second != pathNow) containerKey = pathNow;
+            containerPathOf[containerKey] = pathNow;
+        }
+        containers[containerKey] = containerEnv;
+        containerKinds[containerKey] = s->kind;
+        if (!s->easyKey.empty()) { // Easy_key المكتوب: فريد على الحاويات والمجموعات والأحجام
+            if (easyKeyTaken(s->easyKey, "container", containerKey))
+                throw diagErr(diag::Code::E0014_InvalidContainer, s->line, "easy_key \"" + s->easyKey + "\" مستعمل أصلاً (مفتاح أو اسم كيان آخر) — اختر مفتاحاً فريداً");
+            if (auto old = easyKeyOfContainer.find(containerKey); old != easyKeyOfContainer.end()) easyKeys.erase(old->second);
+            easyKeys[s->easyKey] = containerKey;
+            easyKeyOfContainer[containerKey] = s->easyKey;
+        }
+        if (!s->mask.empty()) containerMasks[s->mask] = containerKey;
+        if (!groupStack.empty()) {
+            groupMembers[groupStack.back()].push_back(containerKey);
+        }
+        if (!volumeStack.empty() && (openCollectorKinds.empty() || openCollectorKinds.back() == 'V')) {
+            volumeMembers[volumeStack.back()].push_back(containerKey); // انظر شرح openCollectorKinds في الهيدر
+        }
+        // RCS-1.0 §3.5 Tree (Phase 2): تعشيش نصّي حقيقي (@container داخل جسم @container أخرى) هو
+        // بالضبط علاقة الأب/الابن -- تُسجَّل هنا فوراً قبل push على containerStack (أي بينما لا تزال
+        // قمة containerStack الحالية = الحاوية *الأب*، لا هذه الحاوية الجديدة نفسها). حاوية جذرية
+        // أعلى المستوى (containerStack فارغة الآن) لا تُسجَّل في containerParent إطلاقاً -- بلا أب.
+        if (!containerStack.empty()) {
+            containerParent[containerKey] = containerStack.back();
+            containerChildren[containerStack.back()].push_back(containerKey);
+        }
+        std::string savedFilePath = currentFilePath;
+        currentFilePath.clear(); // كل حاوية تبدأ بمسار ملف نظيف حتى لا يرث container.import مساراً من حاوية سابقة
+        // Namespace: a NAMED container is a node in the namespace tree for the whole of its definition
+        // (body + lifecycle hooks + container.import), nested under whichever group/volume/container is open.
+        NsScope nsGuard(this, s->name.empty() ? nullptr : nsOpen(NsNode::Kind::Container, s->name, containerKey, containerEnv));
+        containerStack.push_back(containerKey);
+        executeBlock(s->body, containerEnv);
+        containerStack.pop_back();
+
+        // RIN CONTAINER SQL: حاوية @sql/@container.sql تخزّن نص استعلامها الخام في حقلها
+        // النصي 'text query = "...";' (ضمن containerEnv كأي حقل بيانات عادي) -- نسحبه هنا مرة
+        // واحدة عند إنشاء/تنفيذ الحاوية ونخزّنه في sqlViews[containerKey] لاستدعائه لاحقاً بقناع
+        // هذه الحاوية عبر sql()/sqlOne()/sqlCount() بدل تكرار النص الخام (انظر sqlResolveQueryText).
+        if (s->kind == ContainerKind::SQL) {
+            auto qIt = containerEnv->values.find("query");
+            if (qIt != containerEnv->values.end() && qIt->second.type == Value::Type::STRING) {
+                sqlViews[containerKey] = qIt->second.str;
+            }
+        }
+
+        // RCS-1.0 §3.2 Lifecycle: init() ثم mount() تلقائياً بعد انتهاء الجسم التصريحي للحاوية
+        // (state/fun/on ... كلها سُجِّلت الآن). Phase 1 لا تملك بعد طبقة Tree (§3.5) بتعليق حقيقي
+        // للإرفاق بشجرة أب، لذا mount() تُطلَق فوراً بعد init() -- كل حاوية "مُرفَقة" بمجرد
+        // إنشائها بنفس دلالة التنفيذ الفوري الحالية للغة (سيُعاد ضبط توقيت mount() لاحقاً مرحلة
+        // Tree/Routing إن لزم دون كسر أي برنامج يعتمد على هذا التوقيت اليوم). لا شيء يحدث إن لم
+        // تُعرَّف init/mount لهذه الحاوية (fireLifecycleHook تتجاهل قيمة nil بصمت).
+        {
+            auto hooksIt = containerLifecycle.find(containerKey);
+            if (hooksIt != containerLifecycle.end()) {
+                fireLifecycleHook(containerKey, hooksIt->second.init, {}, s->line);
+                fireLifecycleHook(containerKey, hooksIt->second.mount, {}, s->line);
+            }
+        }
+
+        if (s->kind == ContainerKind::IMPORT) {
+            // ---- استيراد حقيقي: قراءة ملف .rin آخر من القرص، تحليله، وتنفيذه فعلياً ----
+            if (currentFilePath.empty()) {
+                throw diagErr(diag::Code::E0028_ImportError, s->line,
+                          "'container.import' requires a `file path=\"...\";` inside it to specify what to import");
+            }
+            std::ifstream in(resolvePath(currentFilePath), std::ios::binary);
+            if (!in) {
+                throw errWithReason(diag::Code::E0036_IOFailure, s->line,
+                                     "container.import: could not open file `" + currentFilePath + "`",
+                                     "the file does not exist or is not readable at that path");
+            }
+            std::ostringstream buf;
+            buf << in.rdbuf();
+            std::string importedSource = buf.str();
+            try {
+                Lexer importedLexer(importedSource, currentFilePath);
+                auto importedTokens = importedLexer.scanTokens();
+                Parser importedParser(importedTokens, currentFilePath);
+                auto importedStatements = importedParser.parse();
+                // تُنفَّذ عبارات الملف المستورد داخل بيئة حاوية الاستيراد نفسها؛ أي @container بداخله
+                // يُسجَّل عالمياً (متاح لاحقاً عبر link/tying/merge)، وأي let/text أعلى المستوى فيه
+                // يصبح متغيراً داخل حاوية container.import هذه.
+                executeBlock(importedStatements, containerEnv);
+            } catch (RinError& e) {
+                auto d = diagErr(diag::Code::E0028_ImportError, s->line,
+                             "container.import: error inside imported file \"" + currentFilePath + "\"");
+                d.diagnostic->withReason("line " + std::to_string(e.line) + " of \"" + currentFilePath + "\": " + e.message);
+                if (e.diagnostic) d.diagnostic->withCause(diag::renderShort(*e.diagnostic));
+                throw d;
+            }
+            output << "📥 container.import: تم استيراد \"" << currentFilePath << "\" وتنفيذه بنجاح\n";
+        }
+        currentFilePath = savedFilePath;
+
+        output << "✅ .end/" << tag << (s->name.empty() ? "" : (" (" + s->name + ")")) << "\n";
+        return Flow::None;
+    }
+
+    case StmtKind::ImportStmt: { auto s = std::static_pointer_cast<ImportStmt>(stmt);
+        Value pathVal = evaluate(s->path, env);
+        if (pathVal.type != Value::Type::STRING) {
+            throw diagErr(diag::Code::E0028_ImportError, s->line, "'@import' requires a string path/library name");
+        }
+        const std::string& rawPath = pathVal.str;
+
+        // ---- تقوية مفهوم lib/*.og.rin: اسم مكتبة "عارٍ" بلا مسار ولا امتداد (مثل @import "math";
+        //      أو @import "myhelpers";) يُفهم تلقائياً على أنه lib/<name>.og.rin — سواء كانت مكتبة
+        //      مدمجة قياسية أو مكتبة مستخدم حقيقية أنشأها/رفعها المستخدم من قسم "المكتبات" في المحرر
+        //      (تُحفَظ داخل مجلد lib/ الخاص بمشروعه). المسارات الصريحة (تحتوي على '/') تبقى تماماً كما
+        //      كُتبت لضمان التوافق الكامل مع أي شيفرة سابقة تستخدم @import "lib/xxx.og.rin" مباشرة.
+        loaderui::LoadSession importUI(importUISink_, rawPath, importDepth_);
+        importUI.stage(loaderui::LoadStage::Resolving);
+
+        std::string libPath = rawPath;
+        if (libPath.find('/') == std::string::npos) {
+            static const std::string kLibExt = ".og.rin";
+            bool hasExt = libPath.size() >= kLibExt.size() &&
+                          libPath.compare(libPath.size() - kLibExt.size(), kLibExt.size(), kLibExt) == 0;
+            if (!hasExt) libPath += kLibExt;
+            libPath = "lib/" + libPath;
+        }
+
+        importUI.stage(loaderui::LoadStage::Locating);
+
+        // 1) أولاً: هل هذا اسم مكتبة مدمجة داخل المفسّر نفسه (مثل lib/data.og.rin)؟
+        //    هذا يجعل @import يعمل مباشرة على أي منصة (بما فيها أندرويد) دون أي ملفات إضافية على القرص.
+        std::string splitRoot;
+        const bool isSplitLib = findLibraryDir(rawPath, libPath, splitRoot);
+        if (isSplitLib) libPath = splitRoot;
+        LibraryUnit libUnit;
+        const auto& embedded = embeddedRinLibraries();
+        auto libIt = embedded.find(libPath);
+        bool fromEmbedded = !isSplitLib && (libIt != embedded.end());
+
+        std::string source;
+        auto virtIt = virtualFiles_.find(libPath);
+        if (virtIt == virtualFiles_.end()) virtIt = virtualFiles_.find(rawPath);
+        if (isSplitLib) {
+            // مكتبة مقسَّمة (مجلد): تُحمَّل أدناه عبر loadLibraryUnit
+        } else if (virtIt != virtualFiles_.end()) {
+            source = virtIt->second;   // ملف مُضمَّن في صورة rin_vm (له الأولوية على القرص)
+        } else if (fromEmbedded) {
+            source = libIt->second;
+        } else {
+            // 2) وإلا: مكتبة/ملف فعلي على القرص (نسبةً إلى basePath، أي مجلد المشروع الحالي)،
+            //    بنفس أسلوب container.import. هذا هو نفس المسار الذي يكتب فيه قسم "المكتبات" في
+            //    المحرر أي مكتبة ينشئها أو يرفعها المستخدم، فتُستورَد بنفس عبارة @import مباشرة.
+            std::ifstream in(resolvePath(libPath), std::ios::binary);
+            // 2b) استيراد نسبي صريح (./ أو ../) لم يوجد نسبةً إلى CWD: جرّب نسبةً إلى مجلد الملف
+            //     المُستورِد نفسه (عند غياب basePath المعزول فقط، فلا يُمسّ سلوك العزل على أندرويد).
+            if (!in && basePath.empty() && (rawPath.rfind("./", 0) == 0 || rawPath.rfind("../", 0) == 0)) {
+                size_t slash = sourceFile.find_last_of('/');
+                if (slash != std::string::npos) in.open(sourceFile.substr(0, slash + 1) + rawPath, std::ios::binary);
+            }
+            if (in) {
+                std::ostringstream buf;
+                buf << in.rdbuf();
+                source = buf.str();
+            } else {
+                // 3) وإلا: اسم "عارٍ" (بلا '/') قد يكون حزمة RinPM مثبَّتة عبر `rin pkg install`.
+                //    البحث فعلياً في: مانيفست المشروع (rin.toml) لمعرفة اسم الحزمة الحقيقي، ثم
+                //    rin.lock لمعرفة الإصدار المحلول بدقة، ثم الكاش العالمي ~/.rin/packages حيث
+                //    تُخزَّن كل الحزم المثبَّتة فعلياً (RinPM لا يخزّن أي تبعية داخل مجلد المشروع).
+                //    هذا هو نفس ترتيب البحث الموصوف في تكامل الاستيراد: مشروع -> كاش محلي -> registry.
+                bool foundAsPackage = false;
+                if (rawPath.find('/') == std::string::npos) {
+                    std::string pkgSource;
+                    if (tryLoadInstalledPackageEntry(rawPath, pkgSource)) {
+                        source = pkgSource;
+                        foundAsPackage = true;
+                    }
+                }
+                if (!foundAsPackage) {
+                    auto d = diagErr(diag::Code::E0029_ModuleNotFound, s->line, "module not found: `" + rawPath + "`");
+                    d.diagnostic->message = "module not found: `" + rawPath + "`";
+                    d.diagnostic->withReason(
+                        "searched for `" + libPath + "` among embedded libraries, the project's lib/ folder, "
+                        "and RinPM packages installed via `rin pkg install`")
+                     .withHint("create/upload it from the \"Libraries\" section of the editor, "
+                               "or run `rin pkg add " + rawPath + "` if it is meant to be a package");
+                    throw d;
+                }
+            }
+        }
+
+        // منع إعادة استيراد نفس المكتبة بنفس أسلوب الاستيراد (مباشر أو باسم مستعار) أكثر من مرة
+        // في نفس التشغيل، تماماً كأنظمة الوحدات (modules) المعتادة.
+        std::string importKey = libPath + (s->alias.empty() ? "" : ("#as:" + s->alias));
+
+        // Modules: اكتشاف دورة استيراد (A تستورد B وB لا تزال بمنتصف استيراد A نفسها) -- importedPaths
+        // أعلاه وحدها لا تكفي هنا لأنها لا تُملأ إلا *بعد* اكتمال الاستيراد بنجاح، فدورة لم تكتمل بعد
+        // لا تظهر فيها إطلاقاً. importChain (مكدّس نصي بسيط) هو "بيان تبعيات" runtime بأبسط شكل ممكن.
+        if (std::find(importChain.begin(), importChain.end(), importKey) != importChain.end()) {
+            std::string chainDesc;
+            for (auto& k : importChain) chainDesc += k + " -> ";
+            chainDesc += importKey;
+            auto d = diagErr(diag::Code::E0028_ImportError, s->line, "circular import detected");
+            d.diagnostic->withReason("import chain: " + chainDesc)
+             .withHint("break the cycle by moving the shared code into a third module that both sides import instead");
+            throw d;
+        }
+        importChain.push_back(importKey);
+        struct ImportChainGuard {
+            std::vector<std::string>& chain;
+            ~ImportChainGuard() { if (!chain.empty()) chain.pop_back(); }
+        } importChainGuard{importChain};
+
+        if (importedPaths.count(importKey)) {
+            loaderui::LoadOutcome cached;
+            cached.fromCache = true;
+            importUI.finish(cached);
+            output << "↺ @import: \"" << libPath << "\" مستورَدة مسبقاً بالفعل (تم تجاهل التكرار)\n";
+            return Flow::None;
+        }
+
+        importUI.stage(loaderui::LoadStage::Reading);
+
+        std::vector<StmtPtr> importedStatements;
+        try {
+            if (isSplitLib) {
+                loadLibraryUnit(splitRoot, s->line, libUnit);
+                importUI.stage(loaderui::LoadStage::Parsing);
+                importedStatements = libUnit.statements;
+            } else {
+            Lexer importedLexer(source, libPath);
+            auto importedTokens = importedLexer.scanTokens();
+            importUI.stage(loaderui::LoadStage::Parsing);
+            Parser importedParser(importedTokens, libPath);
+            importedStatements = importedParser.parse();
+            }
+        } catch (RinError& e) {
+            if (isSplitLib) {
+                loaderui::LoadOutcome failed; failed.success = false; failed.errorMessage = e.message;
+                importUI.finish(failed);
+                throw;
+            }
+            loaderui::LoadOutcome failed;
+            failed.success = false;
+            failed.errorMessage = e.message;
+            importUI.finish(failed);
+            auto d = diagErr(diag::Code::E0028_ImportError, s->line, "@import: error parsing library \"" + libPath + "\"");
+            d.diagnostic->withReason("line " + std::to_string(e.line) + " of \"" + libPath + "\": " + e.message);
+            if (e.diagnostic) d.diagnostic->withCause(diag::renderShort(*e.diagnostic));
+            throw d;
+        }
+
+        importUI.stage(loaderui::LoadStage::Dependencies);
+
+        try {
+            ++importDepth_;
+            ExecFrameScope frameScope_(*this, libPath, isSplitLib ? &libUnit : nullptr);
+            if (s->alias.empty()) {
+                // دمج مباشر: كل fun/let/text أعلى مستوى في المكتبة تصبح متاحة في النطاق الحالي مباشرة،
+                // تماماً كـ #include. أي @container بداخل المكتبة يُسجَّل عالمياً كأي حاوية عادية.
+                //
+                // Modules: لو استخدمت المكتبة 'export' على أي تصريح أعلى مستوى ولو مرة واحدة، الدمج
+                // يصبح "المُصدَّر فقط" بدل "كل شيء" تلقائياً (بلا أي صياغة إضافية من طرف المستورِد) --
+                // وإلا (لا export إطلاقاً في كامل الملف) يبقى الدمج الكامل القديم تماماً كما كان دائماً،
+                // بتوافقية كاملة للخلف مع كل مكتبة/ملف .rin موجود مسبقاً. class/struct استثناء واحد
+                // مقصود: تسجيلها (classes، انظر registerClassStmt) عالمي دوماً بصرف النظر عن 'export' --
+                // إذ لا يوجد أصلاً مفهوم "نطاق" لصنف في هذا المفسّر يمكن تقييده، فتصديرها هنا توثيقي بحت
+                // (يوضّح أنها جزء من الواجهة العامة للمكتبة) بلا أي أثر إضافي على الوصول الفعلي إليها.
+                bool hasExports = false;
+                for (auto& st : importedStatements) {
+                    if (st->exported) { hasExports = true; break; }
+                }
+                importUI.stage(loaderui::LoadStage::Initializing);
+                if (!hasExports) {
+                    execLibraryBody(importedStatements, isSplitLib ? &libUnit.segments : nullptr, env);
+                } else {
+                    auto libEnv = std::make_shared<Environment>(env);
+                    execLibraryBody(importedStatements, isSplitLib ? &libUnit.segments : nullptr, libEnv);
+                    for (auto& st : importedStatements) {
+                        if (!st->exported) continue;
+                        std::string name;
+                        if (auto ls = std::dynamic_pointer_cast<LetStmt>(st)) name = ls->name;
+                        else if (auto fs = std::dynamic_pointer_cast<FunctionStmt>(st)) name = fs->name;
+                        else if (auto es = std::dynamic_pointer_cast<EnumStmt>(st)) name = es->name;
+                        else if (st->stmtKind == StmtKind::LetGroupStmt || st->stmtKind == StmtKind::LetPatternStmt) {
+                            // let+: export let a = 1, b = 2;  /  export let [x, y] = pair;  -> كل أسماء التصريح
+                            std::vector<std::string> names;
+                            letDeclaredNames(st, names);
+                            for (auto& n : names) { Value nv; if (libEnv->get(n, nv)) env->define(n, nv); }
+                            continue;
+                        }
+                        else continue; // ClassStmt: مسجَّلة عالمياً فعلاً (انظر التعليق أعلاه)، لا شيء يُنسَخ
+                        Value v;
+                        if (libEnv->get(name, v)) env->define(name, v);
+                    }
+                }
+            } else {
+                // استيراد باسم مستعار: يُسجَّل كحاوية باسم alias (بنفس دلالات container.import)،
+                // فيمكن لاحقاً استخدام link/tying/merge معها كأي حاوية أخرى دون تلويث النطاق الحالي.
+                auto libEnv = std::make_shared<Environment>(env);
+                importUI.stage(loaderui::LoadStage::Initializing);
+                execLibraryBody(importedStatements, isSplitLib ? &libUnit.segments : nullptr, libEnv);
+                containers[s->alias] = libEnv;
+                containerKinds[s->alias] = ContainerKind::IMPORT;
+                importUI.stage(loaderui::LoadStage::Registering);
+                if (!groupStack.empty()) groupMembers[groupStack.back()].push_back(s->alias);
+                if (!volumeStack.empty() && (openCollectorKinds.empty() || openCollectorKinds.back() == 'V')) {
+                    volumeMembers[volumeStack.back()].push_back(s->alias); // انظر شرح openCollectorKinds في الهيدر
+                }
+            }
+            --importDepth_;
+        } catch (RinError& e) {
+            --importDepth_;
+            loaderui::LoadOutcome failed;
+            failed.success = false;
+            failed.errorMessage = e.message;
+            importUI.finish(failed);
+            auto d = diagErr(diag::Code::E0028_ImportError, s->line, "@import: error inside library \"" + libPath + "\"");
+            d.diagnostic->withReason("line " + std::to_string(e.line) + " of \"" + libPath + "\": " + e.message);
+            if (e.diagnostic) d.diagnostic->withCause(diag::renderShort(*e.diagnostic));
+            throw d;
+        }
+
+        importedPaths.insert(importKey);
+        loaderui::LoadOutcome ok;
+        ok.success = true;
+        ok.fromEmbedded = fromEmbedded;
+        importUI.stage(loaderui::LoadStage::Completed);
+        importUI.finish(ok);
+        output << (fromEmbedded ? "📦" : "📥") << " @import: تم استيراد \"" << libPath << "\""
+               << (s->alias.empty() ? "" : (" باسم '" + s->alias + "'"))
+               << (fromEmbedded ? std::string(" (مكتبة مدمجة)") : isSplitLib ? libUnit.describe() : std::string(" (من القرص)")) << "\n";
+        return Flow::None;
+    }
+
+    // Modules: 'import { a, b, c } from "path";' -- نفس آلية حلّ/تنفيذ '@import' أعلاه بالضبط
+    // (المكتبات المدمجة، ثم القرص، ثم حزم RinPM، ثم نفس اكتشاف الدورة عبر importChain)، لكن دوماً
+    // بتنفيذ معزول (كـ 'as alias' حتى لو لم يُطلب alias) ثم نسخ انتقائي: فقط الأسماء المطلوبة صراحة،
+    // وفقط لو كانت مُصدَّرة فعلاً عبر 'export' في الملف المستورَد -- بلا أي استثناء توافقية للخلف هنا
+    // (صياغة جديدة كلياً، لا يعتمد عليها أي ملف .rin موجود مسبقاً بعكس @import بلا 'export').
+    case StmtKind::ImportSelectedStmt: { auto s = std::static_pointer_cast<ImportSelectedStmt>(stmt);
+        Value pathVal = evaluate(s->path, env);
+        if (pathVal.type != Value::Type::STRING) {
+            throw diagErr(diag::Code::E0028_ImportError, s->line, "'import { ... } from' requires a string path/library name");
+        }
+        const std::string& rawPath = pathVal.str;
+
+        loaderui::LoadSession importUI(importUISink_, rawPath, importDepth_);
+        importUI.stage(loaderui::LoadStage::Resolving);
+
+        std::string libPath = rawPath;
+        if (libPath.find('/') == std::string::npos) {
+            static const std::string kLibExt = ".og.rin";
+            bool hasExt = libPath.size() >= kLibExt.size() &&
+                          libPath.compare(libPath.size() - kLibExt.size(), kLibExt.size(), kLibExt) == 0;
+            if (!hasExt) libPath += kLibExt;
+            libPath = "lib/" + libPath;
+        }
+
+        importUI.stage(loaderui::LoadStage::Locating);
+
+        std::string splitRoot;
+        const bool isSplitLib = findLibraryDir(rawPath, libPath, splitRoot);
+        if (isSplitLib) libPath = splitRoot;
+        LibraryUnit libUnit;
+        const auto& embedded = embeddedRinLibraries();
+        auto libIt = embedded.find(libPath);
+        bool fromEmbedded = !isSplitLib && (libIt != embedded.end());
+
+        std::string source;
+        auto virtIt = virtualFiles_.find(libPath);
+        if (virtIt == virtualFiles_.end()) virtIt = virtualFiles_.find(rawPath);
+        if (isSplitLib) {
+            // مكتبة مقسَّمة (مجلد): تُحمَّل أدناه عبر loadLibraryUnit
+        } else if (virtIt != virtualFiles_.end()) {
+            source = virtIt->second;   // ملف مُضمَّن في صورة rin_vm
+        } else if (fromEmbedded) {
+            source = libIt->second;
+        } else {
+            std::ifstream in(resolvePath(libPath), std::ios::binary);
+            if (in) {
+                std::ostringstream buf;
+                buf << in.rdbuf();
+                source = buf.str();
+            } else {
+                bool foundAsPackage = false;
+                if (rawPath.find('/') == std::string::npos) {
+                    std::string pkgSource;
+                    if (tryLoadInstalledPackageEntry(rawPath, pkgSource)) {
+                        source = pkgSource;
+                        foundAsPackage = true;
+                    }
+                }
+                if (!foundAsPackage) {
+                    auto d = diagErr(diag::Code::E0029_ModuleNotFound, s->line, "module not found: `" + rawPath + "`");
+                    d.diagnostic->message = "module not found: `" + rawPath + "`";
+                    d.diagnostic->withReason(
+                        "searched for `" + libPath + "` among embedded libraries, the project's lib/ folder, "
+                        "and RinPM packages installed via `rin pkg install`")
+                     .withHint("create/upload it from the \"Libraries\" section of the editor, "
+                               "or run `rin pkg add " + rawPath + "` if it is meant to be a package");
+                    throw d;
+                }
+            }
+        }
+
+        // مفتاح مستقل تماماً عن مفاتيح @import (بادئة "#sel:") -- استيراد نفس الملف مرة بـ @import
+        // ومرة بـ import{...} في نفس التشغيل حالتان مختلفتان تماماً (النطاقات المستهدَفة مختلفة).
+        std::string importKey = libPath + "#sel";
+        if (std::find(importChain.begin(), importChain.end(), importKey) != importChain.end()) {
+            std::string chainDesc;
+            for (auto& k : importChain) chainDesc += k + " -> ";
+            chainDesc += importKey;
+            auto d = diagErr(diag::Code::E0028_ImportError, s->line, "circular import detected");
+            d.diagnostic->withReason("import chain: " + chainDesc)
+             .withHint("break the cycle by moving the shared code into a third module that both sides import instead");
+            throw d;
+        }
+        importChain.push_back(importKey);
+        struct ImportChainGuard {
+            std::vector<std::string>& chain;
+            ~ImportChainGuard() { if (!chain.empty()) chain.pop_back(); }
+        } importChainGuard{importChain};
+
+        importUI.stage(loaderui::LoadStage::Reading);
+
+        std::vector<StmtPtr> importedStatements;
+        try {
+            if (isSplitLib) {
+                loadLibraryUnit(splitRoot, s->line, libUnit);
+                importUI.stage(loaderui::LoadStage::Parsing);
+                importedStatements = libUnit.statements;
+            } else {
+            Lexer importedLexer(source, libPath);
+            auto importedTokens = importedLexer.scanTokens();
+            importUI.stage(loaderui::LoadStage::Parsing);
+            Parser importedParser(importedTokens, libPath);
+            importedStatements = importedParser.parse();
+            }
+        } catch (RinError& e) {
+            if (isSplitLib) {
+                loaderui::LoadOutcome failed; failed.success = false; failed.errorMessage = e.message;
+                importUI.finish(failed);
+                throw;
+            }
+            loaderui::LoadOutcome failed;
+            failed.success = false;
+            failed.errorMessage = e.message;
+            importUI.finish(failed);
+            auto d = diagErr(diag::Code::E0028_ImportError, s->line, "import: error parsing module \"" + libPath + "\"");
+            d.diagnostic->withReason("line " + std::to_string(e.line) + " of \"" + libPath + "\": " + e.message);
+            if (e.diagnostic) d.diagnostic->withCause(diag::renderShort(*e.diagnostic));
+            throw d;
+        }
+
+        importUI.stage(loaderui::LoadStage::Dependencies);
+
+        auto libEnv = std::make_shared<Environment>(env);
+        try {
+            ++importDepth_;
+            ExecFrameScope frameScope_(*this, libPath, isSplitLib ? &libUnit : nullptr);
+            importUI.stage(loaderui::LoadStage::Initializing);
+            execLibraryBody(importedStatements, isSplitLib ? &libUnit.segments : nullptr, libEnv);
+            --importDepth_;
+        } catch (RinError& e) {
+            --importDepth_;
+            loaderui::LoadOutcome failed;
+            failed.success = false;
+            failed.errorMessage = e.message;
+            importUI.finish(failed);
+            auto d = diagErr(diag::Code::E0028_ImportError, s->line, "import: error inside module \"" + libPath + "\"");
+            d.diagnostic->withReason("line " + std::to_string(e.line) + " of \"" + libPath + "\": " + e.message);
+            if (e.diagnostic) d.diagnostic->withCause(diag::renderShort(*e.diagnostic));
+            throw d;
+        }
+
+        // كل اسم مطلوب يجب أن يقابل تصريحاً أعلى مستوى مُصدَّراً صراحة عبر 'export' -- خطأ واضح
+        // فوراً لو غير مُصدَّر (privacy) أو غير موجود إطلاقاً (typo)، بدل الاستمرار بقيمة nil صامتة.
+        for (auto& requestedName : s->names) {
+            StmtPtr found = nullptr;
+            for (auto& st : importedStatements) {
+                std::string name;
+                if (auto ls = std::dynamic_pointer_cast<LetStmt>(st)) name = ls->name;
+                else if (auto fs = std::dynamic_pointer_cast<FunctionStmt>(st)) name = fs->name;
+                else if (auto es = std::dynamic_pointer_cast<EnumStmt>(st)) name = es->name;
+                else if (auto cs = std::dynamic_pointer_cast<ClassStmt>(st)) name = cs->name;
+                else if (st->stmtKind == StmtKind::LetGroupStmt || st->stmtKind == StmtKind::LetPatternStmt) {
+                    std::vector<std::string> names; letDeclaredNames(st, names); // let+
+                    for (auto& n : names) if (n == requestedName) { name = n; break; }
+                }
+                if (name == requestedName) { found = st; break; }
+            }
+            if (!found) {
+                throw errWithReason(diag::Code::E0028_ImportError, s->line,
+                                     "`" + requestedName + "` is not defined in \"" + libPath + "\"",
+                                     "no top-level `let`/`fun`/`class`/`struct`/`enum` named `" + requestedName + "` "
+                                     "was found in this module");
+            }
+            if (!found->exported) {
+                throw errWithReason(diag::Code::E0028_ImportError, s->line,
+                                     "`" + requestedName + "` is not exported from \"" + libPath + "\"",
+                                     "`" + requestedName + "` is defined in this module but not marked `export`, "
+                                     "so it is private to that module");
+            }
+            if (std::dynamic_pointer_cast<ClassStmt>(found)) continue; // مسجَّلة عالمياً فعلاً، لا شيء يُنسَخ
+            Value v;
+            if (libEnv->get(requestedName, v)) env->define(requestedName, v);
+        }
+
+        importedPaths.insert(importKey);
+        loaderui::LoadOutcome ok;
+        ok.success = true;
+        ok.fromEmbedded = fromEmbedded;
+        importUI.stage(loaderui::LoadStage::Completed);
+        importUI.finish(ok);
+        output << (fromEmbedded ? "📦" : "📥") << " import: تم استيراد ";
+        for (size_t i = 0; i < s->names.size(); i++) {
+            if (i) output << ", ";
+            output << s->names[i];
+        }
+        output << " من \"" << libPath << "\"" << (fromEmbedded ? std::string(" (مكتبة مدمجة)") : isSplitLib ? libUnit.describe() : std::string(" (من القرص)")) << "\n";
+        return Flow::None;
+    }
+
+    case StmtKind::ContainerGroupStmt: { auto s = std::static_pointer_cast<ContainerGroupStmt>(stmt);
+        if (s->hasPolicy) {
+            // RCS-1.0 §3.13 Security (Phase 1): سياسة عامة على @Containers.Group — تُنفَّذ فقط
+            // إن استُخدمت فعلاً كلمة واحدة من use/need/allow/deny/strict مباشرة داخل جسم المجموعة؛
+            // أي مجموعة قديمة (hasPolicy == false) لا تمرّ بهذا المسار إطلاقاً (permissive كما
+            // كانت دوماً). تُفحَص *قبل* تنفيذ الجسم (بنفس مبدأ @container/@make.(name)) حتى تُرفض
+            // مجموعة تخالف سياستها فوراً، لا بعد إنشاء حاوياتها الفعلية جزئياً.
+            try {
+                validateContainerGroupPolicy(*s);
+            } catch (const std::exception& e) {
+                throw diagErr(diag::Code::E0016_InvalidProperty, s->line, std::string("invalid Containers.Group policy: ") + e.what());
+            }
+        }
+        // مفتاح داخلي للمجموعات المجهولة الاسم، بنفس أسلوب الحاويات المجهولة.
+        std::string groupKey = s->name.empty() ? ("#group" + std::to_string(groupEnvs.size())) : s->name;
+        if (!s->name.empty()) { // Easy_key الافتراضي: تعارض اسم مجموعتين في مسارين مختلفين => مفتاح الثانية = مسارها
+            std::string pathNow = (nsStack.empty() ? std::string() : nsStack.back()->path() + ".") + s->name;
+            auto po = groupPathOf.find(groupKey);
+            if (groupEnvs.count(groupKey) && po != groupPathOf.end() && po->second != pathNow) groupKey = pathNow;
+            groupPathOf[groupKey] = pathNow;
+        }
+        auto groupEnv = std::make_shared<Environment>(env); // نطاق خاص بالمجموعة (بدل التنفيذ المباشر داخل البيئة الأب)
+        groupEnvs[groupKey] = groupEnv;
+        groupMembers.emplace(groupKey, std::vector<std::string>{});
+        if (!s->easyKey.empty()) {
+            if (easyKeyTaken(s->easyKey, "group", groupKey))
+                throw diagErr(diag::Code::E0014_InvalidContainer, s->line, "easy_key \"" + s->easyKey + "\" مستعمل أصلاً — اختر مفتاحاً فريداً");
+            for (auto it2 = easyGroupKeys.begin(); it2 != easyGroupKeys.end();) { if (it2->second == groupKey) it2 = easyGroupKeys.erase(it2); else ++it2; }
+            easyGroupKeys[s->easyKey] = groupKey;
+        }
+        if (!s->mask.empty()) groupMasks[s->mask] = groupKey; // تضمن وجود مُدخَل حتى لو بقيت فارغة
+        // نفس مبدأ sectionOrder/volumeOrder: يُسجَّل مرة واحدة فقط بترتيب أول ظهور، حتى لو أُعيد
+        // تنفيذ نفس المجموعة (مثلاً داخل حلقة) -- عندها تُحدَّث بيئتها/أعضاؤها لأحدث تنفيذ بلا
+        // تكرار اسمها هنا.
+        bool isFirstAppearance = std::find(groupOrder.begin(), groupOrder.end(), groupKey) == groupOrder.end();
+        if (isFirstAppearance) groupOrder.push_back(groupKey);
+
+        // مجموعة متداخلة داخل مجموعة أخرى: سجّلها كعضو في المجموعة الأب أيضاً، واحفظ اتجاه العلاقة
+        // المعاكس (groupParentOf) لأجل groupParent()/groupPath() أدناه.
+        if (!groupStack.empty()) {
+            groupMembers[groupStack.back()].push_back(groupKey);
+            groupParentOf[groupKey] = groupStack.back();
+        } else {
+            groupParentOf.erase(groupKey); // إعادة تنفيذ مجموعة كانت متداخلة سابقاً كمجموعة جذر الآن (حالة نادرة، لكن نبقيها متّسقة)
+        }
+        // مجموعة معرَّفة داخل Volume مفتوحة: سجّلها كعضو مباشر في تلك Volume أيضاً، فيراها
+        // volumeContainers/volumeSnapshot مفلطحة عبر منطق collectGroupContainerNames الخاص بها
+        // (انظر collectVolumeContainerNames أعلى الملف) -- هذا ما يجعل Volume قادرة فعلياً على
+        // احتواء Group كعضو من أعضائها، لا فقط حاويات مفردة.
+        if (!volumeStack.empty()) {
+            volumeMembers[volumeStack.back()].push_back(groupKey);
+        }
+
+        output << "🗂️ Containers.Group" << (s->name.empty() ? "" : (" = " + s->name)) << "\n";
+        {
+        NsScope nsGuard(this, s->name.empty() ? nullptr : nsOpen(NsNode::Kind::Group, s->name, groupKey, groupEnv));
+        groupStack.push_back(groupKey);
+        openCollectorKinds.push_back('G');
+        executeBlock(s->body, groupEnv);
+        openCollectorKinds.pop_back();
+        groupStack.pop_back();
+        }
+
+        auto& members = groupMembers[groupKey];
+        output << "✅ .end/Containers.Group" << (s->name.empty() ? "" : (" (" + s->name + ")"));
+        if (!members.empty()) {
+            output << " [تحتوي: ";
+            for (size_t i = 0; i < members.size(); i++) {
+                if (i) output << ", ";
+                { auto pp = containerPathOf.find(members[i]); std::string dn = members[i]; // اسم العرض (المفتاح الافتراضي قد يكون المسار)
+                  if (pp != containerPathOf.end()) { auto dot = pp->second.rfind('.'); dn = dot == std::string::npos ? pp->second : pp->second.substr(dot + 1); }
+                  output << dn; }
+            }
+            output << "]";
+        }
+        output << "\n";
+        return Flow::None;
+    }
+
+    case StmtKind::VolumeStmt: { auto s = std::static_pointer_cast<VolumeStmt>(stmt);
+        // Volume كانت سابقاً زخرفية بحتة: executeBlock(s->body, env) مباشرة -- بلا بيئة خاصة (كل
+        // متغيّر مُعلَن بداخلها يسرّب فوراً إلى بيئة الأب)، وبلا أي تسجيل عضوية إطلاقاً. الآن بنفس
+        // دلالات Containers.Group تماماً: بيئة خاصة بها (volumeEnv)، مفتاح داخلي للأحجام المجهولة
+        // الاسم بنفس أسلوب الحاويات/المجموعات المجهولة، تسجيل عضوية كاملة (volumeMembers)، ترتيب
+        // أول ظهور (volumeOrder، بنفس مبدأ sectionOrder/الآن groupOrder)، ودعم تعشيش حقيقي عبر
+        // volumeStack: Volume داخل Volume أخرى تُسجَّل أباً/ابناً (volumeParentOf) وكعضو مباشر في
+        // أبيها، تماماً كمجموعة متداخلة داخل مجموعة أخرى أعلاه.
+        std::string volumeKey = s->name.empty() ? ("#volume" + std::to_string(volumeEnvs.size())) : s->name;
+        if (!s->name.empty()) {
+            std::string pathNow = (nsStack.empty() ? std::string() : nsStack.back()->path() + ".") + s->name;
+            auto po = volumePathOf.find(volumeKey);
+            if (volumeEnvs.count(volumeKey) && po != volumePathOf.end() && po->second != pathNow) volumeKey = pathNow;
+            volumePathOf[volumeKey] = pathNow;
+        }
+        auto volumeEnv = std::make_shared<Environment>(env); // نطاق خاص بـ Volume (بدل التنفيذ المباشر داخل البيئة الأب)
+        volumeEnvs[volumeKey] = volumeEnv;
+        volumeMembers.emplace(volumeKey, std::vector<std::string>{});
+        if (!s->easyKey.empty()) {
+            if (easyKeyTaken(s->easyKey, "volume", volumeKey))
+                throw diagErr(diag::Code::E0014_InvalidContainer, s->line, "easy_key \"" + s->easyKey + "\" مستعمل أصلاً — اختر مفتاحاً فريداً");
+            for (auto it2 = easyVolumeKeys.begin(); it2 != easyVolumeKeys.end();) { if (it2->second == volumeKey) it2 = easyVolumeKeys.erase(it2); else ++it2; }
+            easyVolumeKeys[s->easyKey] = volumeKey;
+        }
+        if (!s->mask.empty()) volumeMasks[s->mask] = volumeKey;
+
+        // بنفس مبدأ groupOrder: يُسجَّل مرة واحدة فقط بترتيب أول ظهور، حتى لو أُعيد تنفيذ نفس
+        // الـ Volume (مثلاً داخل حلقة) -- عندها تُحدَّث بيئتها/أعضاؤها لأحدث تنفيذ بلا تكرار اسمها هنا.
+        bool isFirstAppearance = std::find(volumeOrder.begin(), volumeOrder.end(), volumeKey) == volumeOrder.end();
+        if (isFirstAppearance) volumeOrder.push_back(volumeKey);
+
+        // Volume متداخلة داخل Volume أخرى: سجّلها كعضو في الـ Volume الأب أيضاً، واحفظ اتجاه
+        // العلاقة المعاكس (volumeParentOf) لأجل volumeParent()/volumePath() أدناه. مقيَّدة بنفس
+        // حارس openCollectorKinds: إن كانت هذه الـ Volume معرَّفة داخل Group مفتوحة (تلك بدورها
+        // داخل Volume أب)، فلا تُسجَّل عضواً مباشراً في الـ Volume الأب (ستبقى مرئية عبر Group فقط،
+        // بنفس منطق الحاويات أعلاه) -- حالة نادرة، لكن نبقيها متّسقة بلا ازدواج.
+        if (!volumeStack.empty() && (openCollectorKinds.empty() || openCollectorKinds.back() == 'V')) {
+            volumeMembers[volumeStack.back()].push_back(volumeKey);
+            volumeParentOf[volumeKey] = volumeStack.back();
+        } else {
+            volumeParentOf.erase(volumeKey); // إعادة تنفيذ Volume كانت متداخلة سابقاً كـ Volume جذر الآن (حالة نادرة، لكن نبقيها متّسقة)
+        }
+
+        output << "📚 Volume" << (s->name.empty() ? "" : (" = " + s->name)) << "\n";
+        {
+        NsScope nsGuard(this, s->name.empty() ? nullptr : nsOpen(NsNode::Kind::Volume, s->name, volumeKey, volumeEnv));
+        volumeStack.push_back(volumeKey);
+        openCollectorKinds.push_back('V');
+        executeBlock(s->body, volumeEnv);
+        openCollectorKinds.pop_back();
+        volumeStack.pop_back();
+        }
+
+        auto& members = volumeMembers[volumeKey];
+        output << "✅ .end/Volume" << (s->name.empty() ? "" : (" (" + s->name + ")"));
+        if (!members.empty()) {
+            output << " [تحتوي: ";
+            for (size_t i = 0; i < members.size(); i++) {
+                if (i) output << ", ";
+                { auto pp = containerPathOf.find(members[i]); std::string dn = members[i]; // اسم العرض (المفتاح الافتراضي قد يكون المسار)
+                  if (pp != containerPathOf.end()) { auto dot = pp->second.rfind('.'); dn = dot == std::string::npos ? pp->second : pp->second.substr(dot + 1); }
+                  output << dn; }
+            }
+            output << "]";
+        }
+        output << "\n";
+        return Flow::None;
+    }
+
+    case StmtKind::SectionStmt: { auto s = std::static_pointer_cast<SectionStmt>(stmt);
+        auto sectionEnv = std::make_shared<Environment>(env);
+        output << "🔹 Section" << (s->name.empty() ? "" : (" = " + s->name)) << "\n";
+        executeBlock(s->body, sectionEnv);
+        output << "◽ .end/Section" << (s->name.empty() ? "" : (" (" + s->name + ")")) << "\n";
+        // يُحفَظ فقط إن كان للقسم اسم (الأقسام المجهولة تبقى زخرفية كالسابق، لا شيء يمكن الرجوع
+        // إليه باسمها). إعادة تنفيذ نفس الاسم (مثلاً داخل حلقة) يستبدل بيئته المحفوظة بأحدث تنفيذ،
+        // لكن لا يُكرَّر اسمه في sectionOrder.
+        if (!s->name.empty()) {
+            if (!sectionEnvs.count(s->name)) sectionOrder.push_back(s->name);
+            sectionEnvs[s->name] = sectionEnv;
+        }
+        return Flow::None;
+    }
+
+    case StmtKind::TranslationsStmt: { auto s = std::static_pointer_cast<TranslationsStmt>(stmt);
+        output << "🌐 Translations\n";
+        executeBlock(s->body, env);
+        output << "◽ .end/Translations\n";
+        return Flow::None;
+    }
+
+    case StmtKind::TranslationStmt: { auto s = std::static_pointer_cast<TranslationStmt>(stmt);
+        const std::string lang = s->langExpr ? evaluate(s->langExpr, env).toDisplayString() : s->lang;
+        const std::string text = s->textExpr ? evaluate(s->textExpr, env).toDisplayString() : s->text;
+        translations[lang] = text;
+        output << "🌍 translation [" << lang << "] = \"" << text << "\"\n";
+        return Flow::None;
+    }
+
+    case StmtKind::LinkIdDeclStmt: { auto s = std::static_pointer_cast<LinkIdDeclStmt>(stmt);
+        if (containerStack.empty())
+            throw diagErr(diag::Code::E0014_InvalidContainer, s->line, "لا يمكن استخدام 'link.id=' خارج جسم حاوية (container)");
+        const std::string& cur = containerStack.back();
+        linkIdToContainer[s->id] = cur;
+        output << "🏷️ link.id=\"" << s->id << "\" -> " << cur << "\n";
+        return Flow::None;
+    }
+
+    case StmtKind::ObjectLiteralStmt: { auto s = std::static_pointer_cast<ObjectLiteralStmt>(stmt);
+        auto m = std::make_shared<MapData>();
+        for (const auto& f : s->fields) {
+            Value v = f.value ? evaluate(f.value, env) : Value::nil();
+            m->push_back({Value::string(f.name), v});
+        }
+        Value objVal = Value::makeMap(m);
+        env->define(s->id, objVal);
+        if (s->linkToContainer) {
+            objectRegistry[s->id] = objVal;
+        }
+        output << "🧩 .object(\"" << s->id << "\") -> " << objVal.toDisplayString()
+               << (s->linkToContainer ? "  (🔗 container.())" : "") << "\n";
+        return Flow::None;
+    }
+
+    case StmtKind::ViewPrintObjectStmt: { auto s = std::static_pointer_cast<ViewPrintObjectStmt>(stmt);
+        Value target = evaluate(s->target, env);
+        Value objVal;
+        std::string label;
+        if (target.type == Value::Type::STRING) {
+            auto it = objectRegistry.find(target.str);
+            if (it == objectRegistry.end()) {
+                throw diagErr(diag::Code::E0035_RuntimeError, s->line,
+                    "لا يمكن تنفيذ view.print/object(\"" + target.str + "\"): لا يوجد كائن مسجَّل "
+                    "بهذا المعرّف — يجب أن يحتوي جسم '.object(\"" + target.str + "\")' على 'container.();'");
+            }
+            objVal = it->second;
+            label = target.str;
+        } else if (target.type == Value::Type::MAP) {
+            objVal = target;
+        } else {
+            throw diagErr(diag::Code::E0004_InvalidType, s->line,
+                "'view.print/object': يتوقّع معرّفاً نصياً (مسجَّلاً عبر container.();) أو كائناً "
+                "(map) مباشرة، لكن وُجد نوع " + target.typeName());
+        }
+        output << "🖼️ ┌─ object preview" << (label.empty() ? "" : (" \"" + label + "\"")) << "\n";
+        if (objVal.type == Value::Type::MAP) {
+            for (const auto& kv : *objVal.map) {
+                output << "🖼️ │ " << kv.first.toDisplayString() << ": " << kv.second.toDisplayString() << "\n";
+            }
+        } else {
+            output << "🖼️ │ " << objVal.toDisplayString() << "\n";
+        }
+        output << "🖼️ └─\n";
+        return Flow::None;
+    }
+
+    case StmtKind::LinkStmt: { auto s = std::static_pointer_cast<LinkStmt>(stmt);
+        std::string target = s->target;
+        bool byId = !s->byId.empty();
+        if (byId) {
+            auto it = linkIdToContainer.find(s->byId);
+            if (it == linkIdToContainer.end())
+                throw diagErr(diag::Code::E0035_RuntimeError, s->line, "لا يمكن تنفيذ link id=\"" + s->byId + "\": لا توجد حاوية مسجَّلة بهذا المعرّف عبر 'link.id='");
+            target = it->second;
+        }
+        bool isContainer = containers.count(target) > 0;
+        bool isGroup = groupMembers.count(target) > 0;
+        if (!isContainer && !isGroup) {
+            throw diagErr(diag::Code::E0014_InvalidContainer, s->line, "لا يمكن تنفيذ link: '" + target + "' غير معرَّف كحاوية أو كمجموعة (Containers.Group)");
+        }
+        output << "🔗 link -> " << target << (byId ? (" (id=\"" + s->byId + "\")") : "") << (isGroup ? " (Containers.Group)" : "") << "\n";
+        return Flow::None;
+    }
+
+    case StmtKind::TyingStmt: { auto s = std::static_pointer_cast<TyingStmt>(stmt);
+        bool isGroup = copyTargetIntoCurrentContainer(s->target, s->line);
+        output << "🪢 tying <-> " << s->target << (isGroup ? " (Containers.Group)" : "") << "\n";
+        return Flow::None;
+    }
+
+    case StmtKind::MergeStmt: { auto s = std::static_pointer_cast<MergeStmt>(stmt);
+        bool isGroup = copyTargetIntoCurrentContainer(s->target, s->line);
+        output << "🧬 merge <- " << s->target << (isGroup ? " (Containers.Group)" : "") << "\n";
+        return Flow::None;
+    }
+
+    case StmtKind::InstallationStmt: { auto s = std::static_pointer_cast<InstallationStmt>(stmt);
+        installedNames.insert(s->target);
+        bool isContainer = containers.count(s->target) > 0;
+        bool isGroup = !isContainer && groupMembers.count(s->target) > 0;
+        std::string relPath;
+
+        // installation name format=zip; -> أرشيف zip حقيقي، يعمل لكل المفاهيم: حاوية مفردة (عنصر
+        // واحد بداخله)، أو مجموعة كاملة (Containers.Group) حيث تُغلَّف كل حاوية عضو بصيغتها
+        // المناسبة (جداول -> .png ، وأي نوع آخر -> .rin). هذا هو "Container.group/Table.zip".
+        if (s->format == "zip" && (isContainer || isGroup)) {
+            std::vector<std::pair<std::string, std::string>> entries;
+            if (isContainer) {
+                ContainerKind kind = containerKinds.count(s->target) ? containerKinds[s->target] : ContainerKind::PLAIN;
+                if (kind == ContainerKind::TABLE) entries.push_back({s->target + ".png", buildTablePng(s->target)});
+                else entries.push_back({s->target + ".rin", buildSaveDocument(s->target, containers[s->target], kind, s->simplified)});
+            } else {
+                std::vector<std::string> members;
+                collectGroupContainerNames(groupMembers, s->target, members);
+                for (auto& m : members) {
+                    if (!containers.count(m)) continue;
+                    ContainerKind kind = containerKinds.count(m) ? containerKinds[m] : ContainerKind::PLAIN;
+                    if (kind == ContainerKind::TABLE) entries.push_back({m + ".png", buildTablePng(m)});
+                    else entries.push_back({m + ".rin", buildSaveDocument(m, containers[m], kind, s->simplified)});
+                }
+            }
+            relPath = "rin_installed/" + s->target + ".zip";
+            std::string zip = buildZipArchive(entries);
+            writeRealFile(relPath, zip, s->line, "installation (zip)");
+            appendInstalledIndex(s->target, relPath, s->simplified);
+            output << "🗜️ installation (zip): " << s->target << " -> " << relPath
+                   << " (" << zip.size() << " بايت، " << entries.size() << " عنصر)\n";
+            return Flow::None;
+        }
+
+        if (isContainer) {
+            ContainerKind kind = containerKinds.count(s->target) ? containerKinds[s->target] : ContainerKind::PLAIN;
+            std::string doc = buildSaveDocument(s->target, containers[s->target], kind, s->simplified);
+            relPath = "rin_installed/" + s->target + (s->simplified ? ".min.rin" : ".rin");
+            writeRealFile(relPath, doc, s->line, "installation");
+        } else if (isGroup) {
+            std::vector<std::string> members;
+            collectGroupContainerNames(groupMembers, s->target, members);
+            std::ostringstream doc;
+            for (auto& m : members) {
+                if (!containers.count(m)) continue;
+                ContainerKind kind = containerKinds.count(m) ? containerKinds[m] : ContainerKind::PLAIN;
+                doc << buildSaveDocument(m, containers[m], kind, s->simplified);
+                if (!s->simplified) doc << "\n";
+            }
+            relPath = "rin_installed/" + s->target + (s->simplified ? ".min.rin" : ".rin");
+            writeRealFile(relPath, doc.str(), s->line, "installation");
+        }
+        appendInstalledIndex(s->target, relPath, s->simplified);
+        output << "⚙️ installation" << (s->simplified ? " (simplified)" : "") << ": " << s->target;
+        if (!relPath.empty()) output << " -> " << relPath << " (تم الحفظ فعلياً على القرص، قابل للتحميل لاحقاً عبر loadInstalled(\"" << s->target << "\"))";
+        else output << " (تسجيل اسم فقط، بلا بيانات حاوية مرتبطة به)";
+        output << "\n";
+        return Flow::None;
+    }
+
+    case StmtKind::SaveStmt: { auto s = std::static_pointer_cast<SaveStmt>(stmt);
+        if (containerStack.empty() || !containers.count(containerStack.back())) {
+            throw diagErr(diag::Code::E0014_InvalidContainer, s->line, "'save' يجب أن تُستخدم داخل حاوية (container) حالية لحفظ متغيراتها فعلياً");
+        }
+        std::string key = containerStack.back();
+        ContainerKind kind = containerKinds.count(key) ? containerKinds[key] : ContainerKind::PLAIN;
+
+        // table.save/png : تصدير حقيقي لصورة PNG تمثّل الجدول، متاح فقط لحاويات الجدول
+        // (@container.table أو @table)، ويعمل بغضّ النظر عن الشكل الذي فُتحت به.
+        if (s->format == "png") {
+            if (kind != ContainerKind::TABLE) {
+                throw diagErr(diag::Code::E0014_InvalidContainer, s->line, "save format=png متاحة فقط لحاوية جدول (@container.table أو @table)، وليس لـ '" +
+                                containerTagName(kind) + "'");
+            }
+            std::string rawPath;
+            if (s->path) rawPath = evaluate(s->path, env).toDisplayString();
+            else if (!currentFilePath.empty()) rawPath = currentFilePath;
+            else rawPath = key + ".png";
+            std::string png = buildTablePng(key);
+            writeRealFile(rawPath, png, s->line, "save (png)");
+            output << "🖼️ save (png) -> " << rawPath << " (" << png.size() << " بايت)\n";
+            return Flow::None;
+        }
+
+        // table.save/csv|json|md|html|txt : تصدير نصي حقيقي للصفوف الحالية (نفس مبدأ png: للجدول فقط)
+        if (s->format == "csv" || s->format == "json" || s->format == "md" || s->format == "html" || s->format == "txt") {
+            if (kind != ContainerKind::TABLE) {
+                throw diagErr(diag::Code::E0014_InvalidContainer, s->line, "save format=" + s->format + " متاحة فقط لحاوية جدول (@container.table أو @table)، وليس لـ '" +
+                                containerTagName(kind) + "'");
+            }
+            std::string rawPath = s->path ? evaluate(s->path, env).toDisplayString() : key + "." + s->format;
+            std::string text = tableExport(key, s->format, s->line);
+            writeRealFile(rawPath, text, s->line, "save (" + s->format + ")");
+            output << "📄 save (" << s->format << ") -> " << rawPath << " (" << text.size() << " بايت)\n";
+            return Flow::None;
+        }
+
+        // save format=zip : يعمل لجميع المفاهيم (أي نوع حاوية)، ويُغلِّف نسخة حاوية واحدة كأرشيف zip.
+        if (s->format == "zip") {
+            std::string rawPath;
+            if (s->path) rawPath = evaluate(s->path, env).toDisplayString();
+            else rawPath = key + ".zip";
+            std::vector<std::pair<std::string, std::string>> entries;
+            if (kind == ContainerKind::TABLE) {
+                entries.push_back({key + ".png", buildTablePng(key)});
+            } else {
+                entries.push_back({key + ".rin", buildSaveDocument(key, containers[key], kind, s->simplified)});
+            }
+            std::string zip = buildZipArchive(entries);
+            writeRealFile(rawPath, zip, s->line, "save (zip)");
+            output << "🗜️ save (zip) -> " << rawPath << " (" << zip.size() << " بايت، " << entries.size() << " عنصر)\n";
+            return Flow::None;
+        }
+
+        std::string rawPath;
+        if (s->path) rawPath = evaluate(s->path, env).toDisplayString();
+        else if (!currentFilePath.empty()) rawPath = currentFilePath;
+        else rawPath = key + (s->simplified ? ".min.rin" : ".rin"); // مسار افتراضي معتمد على اسم الحاوية
+
+        std::string doc = buildSaveDocument(key, containers[key], kind, s->simplified);
+        writeRealFile(rawPath, doc, s->line, "save");
+
+        output << "💾 save" << (s->simplified ? " (simplified)" : "") << " -> " << rawPath
+               << " (تم الحفظ فعلياً على القرص، " << doc.size() << " بايت)\n";
+        return Flow::None;
+    }
+
+    case StmtKind::FileStmt: { auto s = std::static_pointer_cast<FileStmt>(stmt);
+        currentFilePath = evaluate(s->path, env).toDisplayString();
+        output << "📄 file path = \"" << currentFilePath << "\"\n";
+        return Flow::None;
+    }
+
+    case StmtKind::RouteStmt: { auto s = std::static_pointer_cast<RouteStmt>(stmt);
+        if (containerStack.empty()) {
+            throw diagErr(diag::Code::E0014_InvalidContainer, s->line, "عبارة 'route' يجب أن تُستخدم داخل @container.api");
+        }
+        Value methodVal = evaluate(s->method, env);
+        if (methodVal.type != Value::Type::STRING) {
+            throw diagErr(diag::Code::E0004_InvalidType, s->line, "route: قيمة 'method' يجب أن تكون نصاً (مثال: \"GET\")");
+        }
+        Value pathVal = evaluate(s->path, env);
+        if (pathVal.type != Value::Type::STRING) {
+            throw diagErr(diag::Code::E0004_InvalidType, s->line, "route: قيمة 'path' يجب أن تكون نصاً (مثال: \"/users/1\")");
+        }
+        Value statusVal = evaluate(s->status, env);
+        if (statusVal.type != Value::Type::NUMBER) {
+            throw diagErr(diag::Code::E0004_InvalidType, s->line, "route: قيمة 'status' يجب أن تكون رقماً (مثال: 200)");
+        }
+        Value bodyVal = evaluate(s->body, env);
+
+        ApiRoute route;
+        route.method = toUpperAscii(methodVal.str);
+        route.path = pathVal.str;
+        route.status = statusVal.number;
+        route.body = bodyVal;
+        apiRoutes[containerStack.back()].push_back(route);
+
+        output << "🌐 route [" << route.method << " " << route.path << "] -> " << statusVal.toDisplayString() << "\n";
+        return Flow::None;
+    }
+
+    case StmtKind::RowStmt: { auto s = std::static_pointer_cast<RowStmt>(stmt);
+        if (containerStack.empty() || containerKinds[containerStack.back()] != ContainerKind::TABLE) {
+            throw diagErr(diag::Code::E0014_InvalidContainer, s->line, "عبارة 'row' يجب أن تُستخدم داخل @container.table أو @table");
+        }
+        Value cells = evaluate(s->cells, env);
+        if (cells.type == Value::Type::MAP && cells.map) cells = tableOrderRecord(containerStack.back(), cells, s->line); // row cells={عمود: قيمة}
+        if (cells.type != Value::Type::ARRAY) {
+            throw diagErr(diag::Code::E0004_InvalidType, s->line, "row: قيمة 'cells' يجب أن تكون مصفوفة (مثال: row cells=[1, 2, 3];)");
+        }
+        tableRowsOf(containerStack.back())->push_back(cells);
+        output << "▦ row -> " << cells.toDisplayString() << "\n";
+        return Flow::None;
+    }
+
+    case StmtKind::StyleStmt: { auto s = std::static_pointer_cast<StyleStmt>(stmt);
+        // 'style' كانت خاصة بالجدول (container.table/table) فقط، وعُمِّمت الآن (مفاهيم التنسيق
+        // والستايل) لتعمل أيضاً داخل container.object/Object، container.portal/portal، و
+        // container.block/block.
+        ContainerKind currentKind = containerStack.empty() ? ContainerKind::PLAIN
+                                                            : containerKinds[containerStack.back()];
+        bool allowed = currentKind == ContainerKind::TABLE || currentKind == ContainerKind::OBJECT ||
+                        currentKind == ContainerKind::PORTAL || currentKind == ContainerKind::BLOCK ||
+                        currentKind == ContainerKind::STICKER || currentKind == ContainerKind::AUKT;
+        if (containerStack.empty() || !allowed) {
+            throw diagErr(diag::Code::E0014_InvalidContainer, s->line, "عبارة 'style' يجب أن تُستخدم داخل @container.table/@table أو "
+                            "@container.object/@Object أو @container.portal/@portal أو @container.block/@block "
+                            "أو @container.sticker/@sticker أو @AUKT");
+        }
+        Value v = evaluate(s->value, env);
+        if (v.type != Value::Type::STRING) {
+            throw diagErr(diag::Code::E0004_InvalidType, s->line, "style: قيمة 'value' يجب أن تكون نصاً (مثال: style value=\"style://dark\";)");
+        }
+        containerStyles[containerStack.back()] = v.str;
+        output << "🎨 style -> " << v.str << "\n";
+        return Flow::None;
+    }
+
+    case StmtKind::DocumentStmt: { auto s = std::static_pointer_cast<DocumentStmt>(stmt);
+        if (containerStack.empty() || (containerKinds[containerStack.back()] != ContainerKind::DOC && containerKinds[containerStack.back()] != ContainerKind::DATALIST)) {
+            throw diagErr(diag::Code::E0014_InvalidContainer, s->line, "عبارة 'document' يجب أن تُستخدم داخل @container.doc أو @doc أو @container.datalist");
+        }
+        Value idVal;
+        if (!s->id) {
+            // document fields={...}; بلا id: معرّف تلقائي تصاعدي — لـ container.datalist فقط
+            if (containerKinds[containerStack.back()] != ContainerKind::DATALIST)
+                throw diagErr(diag::Code::E0004_InvalidType, s->line, "document: 'id' مطلوب في container.doc (المعرّف التلقائي لـ container.datalist فقط)");
+            auto& cur = docStore[containerStack.back()];
+            long n = static_cast<long>(cur.size()) + 1;
+            auto taken = [&](long k) { for (auto& e : cur) if (e.first == std::to_string(k)) return true; return false; };
+            while (taken(n)) n++;
+            idVal = Value::string(std::to_string(n));
+        } else idVal = evaluate(s->id, env);
+        if (idVal.type != Value::Type::STRING) {
+            throw diagErr(diag::Code::E0004_InvalidType, s->line, "document: قيمة 'id' يجب أن تكون نصاً (مثال: document id=\"u1\" fields={...};)");
+        }
+        Value fieldsVal = evaluate(s->fields, env);
+        if (fieldsVal.type != Value::Type::MAP) {
+            throw diagErr(diag::Code::E0004_InvalidType, s->line, "document: قيمة 'fields' يجب أن تكون كائناً/قاموساً (مثال: fields={ name: \"Ali\" };)");
+        }
+        std::string containerName = containerStack.back();
+        auto errors = schemaErrors(containerName, fieldsVal);
+        if (!errors.empty()) {
+            {
+                auto d = diagErr(diag::Code::E0019_SchemaViolation, s->line, "schema violation in `" + containerName + "`");
+                d.diagnostic->withReason(joinErrors(errors));
+                throw d;
+            }
+        }
+        auto& docs = docStore[containerName];
+        bool updated = false;
+        for (auto& entry : docs) {
+            if (entry.first == idVal.str) { entry.second = fieldsVal; updated = true; break; }
+        }
+        if (!updated) docs.push_back({idVal.str, fieldsVal});
+        refreshIndexesForContainer(containerName);
+        notifyWatchers(containerName, idVal.str, fieldsVal, updated ? "update" : "insert", s->line);
+        output << (updated ? "🔄 document (تحديث) -> " : "🧾 document (إدراج) -> ")
+               << idVal.str << " = " << fieldsVal.toDisplayString() << "\n";
+        return Flow::None;
+    }
+    default: break;
+    }
+    return Flow::None;
+}
+
+bool Interpreter::copyTargetIntoCurrentContainer(const std::string& target, int line) {
+    bool isContainer = containers.count(target) > 0;
+    bool isGroup = groupMembers.count(target) > 0;
+    if (!isContainer && !isGroup) {
+        throw diagErr(diag::Code::E0014_InvalidContainer, line, "لا يمكن تنفيذ tying/merge: '" + target + "' غير معرَّف كحاوية أو كمجموعة (Containers.Group)");
+    }
+    if (containerStack.empty() || !containers.count(containerStack.back())) {
+        return isGroup; // لا توجد حاوية حالية لنسخ المتغيرات إليها (نادراً ما يحدث هذا خارج أي container)
+    }
+    auto currentEnv = containers[containerStack.back()];
+    if (isContainer) {
+        auto otherEnv = containers[target];
+        for (auto& kv : otherEnv->values) currentEnv->values[kv.first] = kv.second;
+        return false;
+    }
+    // target مجموعة (Containers.Group): انسخ متغيرات كل الحاويات الأعضاء بداخلها،
+    // بما فيها أعضاء أي مجموعات فرعية متداخلة، بترتيب الإدخال.
+    std::vector<std::string> memberContainers;
+    collectGroupContainerNames(groupMembers, target, memberContainers);
+    for (auto& memberName : memberContainers) {
+        if (!containers.count(memberName)) continue;
+        auto otherEnv = containers[memberName];
+        for (auto& kv : otherEnv->values) currentEnv->values[kv.first] = kv.second;
+    }
+    return true;
+}
+
+// انظر إعلانها في rin_interpreter.h (قسم schema) للشرح الكامل.
+std::vector<std::string> Interpreter::schemaErrors(const std::string& container, const Value& fields) const {
+    std::vector<std::string> errors;
+    auto it = schemaStore.find(container);
+    if (it == schemaStore.end()) return errors;
+    for (auto& fieldType : it->second) {
+        const std::string& field = fieldType.first;
+        const std::string& type = fieldType.second;
+        bool found = false;
+        Value val;
+        if (fields.type == Value::Type::MAP && fields.map) {
+            for (auto& kv : *fields.map) {
+                if (kv.first.type == Value::Type::STRING && kv.first.str == field) { found = true; val = kv.second; break; }
+            }
+        }
+        if (!found) { errors.push_back("الحقل '" + field + "' مفقود"); continue; }
+        if (!valueMatchesSchemaType(val, type)) {
+            errors.push_back("الحقل '" + field + "' يجب أن يكون من نوع " + type + " لكنه " + val.typeName());
+        }
+    }
+    return errors;
+}
+
+// انظر إعلانها في rin_interpreter.h (قسم index) للشرح الكامل. تُعاد بناء كل الحقول المفهرسة
+// لهذه الحاوية من الصفر انطلاقاً من docStore الحالي.
+void Interpreter::refreshIndexesForContainer(const std::string& container) {
+    auto cIt = indexStore.find(container);
+    if (cIt == indexStore.end()) return;
+    auto docIt = docStore.find(container);
+    for (auto& fieldEntry : cIt->second) {
+        auto& buckets = fieldEntry.second;
+        buckets.clear();
+        if (docIt == docStore.end()) continue;
+        for (auto& entry : docIt->second) {
+            const Value& doc = entry.second;
+            if (doc.type != Value::Type::MAP || !doc.map) continue;
+            for (auto& kv : *doc.map) {
+                if (kv.first.type == Value::Type::STRING && kv.first.str == fieldEntry.first) {
+                    buckets[reprValue(kv.second)].push_back(entry.first);
+                    break;
+                }
+            }
+        }
+    }
+}
+
+// انظر إعلانها في rin_interpreter.h (قسم watch/subscribe) للشرح الكامل.
+void Interpreter::notifyWatchers(const std::string& container, const std::string& id, const Value& doc,
+                                  const std::string& event, int line) {
+    auto it = docWatchers.find(container);
+    if (it == docWatchers.end()) return;
+    for (auto& fn : it->second) {
+        if (fn.type != Value::Type::FUNCTION || !fn.function) continue;
+        std::vector<Value> cbArgs{Value::string(id), doc, Value::string(event)};
+        callFunction(fn.function, cbArgs, line);
+    }
+}
+
+// انظر إعلانها في rin_interpreter.h (قسم container.chatbot) للشرح الكامل.
+void Interpreter::fireChatEvent(const std::string& container, const std::string& event, std::vector<Value> args, int line) {
+    auto it = chatHandlers.find(container);
+    if (it == chatHandlers.end()) return;
+    for (auto& entry : it->second) {
+        if (entry.first != event) continue;
+        const Value& fn = entry.second;
+        if (fn.type != Value::Type::FUNCTION || !fn.function) continue;
+        std::vector<Value> cbArgs = args; // كل معالج يستقبل نسخته الخاصة (قد تُعدَّل داخل callFunction)
+        callFunction(fn.function, cbArgs, line);
+    }
+}
+
+// ---- RCS-1.0 §3.2 Lifecycle + §3.3 State (Phase 1) ----
+
+// انظر إعلانها في rin_interpreter.h للشرح الكامل: يستدعي hookFn (إن كانت دالة فعلاً) ويوجِّه أي
+// RinError يقع أثناء الاستدعاء إلى on error(err) لنفس الحاوية إن وُجد، وإلا يُعاد رميه كما هو.
+void Interpreter::fireLifecycleHook(const std::string& containerKey, const Value& hookFn,
+                                     std::vector<Value> args, int line) {
+    if (hookFn.type != Value::Type::FUNCTION || !hookFn.function) return;
+    try {
+        callFunction(hookFn.function, args, line);
+    } catch (RinError& e) {
+        auto it = containerLifecycle.find(containerKey);
+        if (it != containerLifecycle.end() && it->second.error.type == Value::Type::FUNCTION &&
+            it->second.error.function) {
+            // err = { message: "..." } -- نفس شكل الخطأ الموصوف في RCS-1.0 §3.2 (مثال on error).
+            // نستدعي on error مباشرة (لا عبر fireLifecycleHook نفسها) حتى لا نُطلِق حلقة لا نهائية
+            // إن كان on error نفسها ترمي خطأً آخر -- في تلك الحالة يُعاد رمي الخطأ الجديد كما هو.
+            auto errMap = std::make_shared<MapData>();
+            errMap->push_back({Value::string("message"), Value::string(e.message)});
+            std::vector<Value> errArgs{Value::makeMap(errMap)};
+            callFunction(it->second.error.function, errArgs, line);
+            return;
+        }
+        throw; // لا خُطّاف on error مُعرَّف لهذه الحاوية -> نفس سلوك أي خطأ Rin عادي بلا كتم صامت
+    }
+}
+
+// انظر إعلانها في rin_interpreter.h للشرح الكامل.
+// تحسين: العبارة  s = s + <تعبير>  (كعبارة مستقلة، حيث لا تُستعمل قيمة الإسناد) حين s نص عادي:
+// بدل نسخ النص كاملاً مرتين لكل تكرار (O(n²) في الحلقات الكبيرة) نُلحق مباشرة في مكانه (O(1) مُستهلَك).
+// تُطبَّق فقط حين لا يمكن لتقييم الطرف الأيمن أن يغيّر s (حرفي/متغيّر/جمع منها)، ولا توجد متغيّرات حيّة،
+// وs ليس حقلاً في حاوية (لئلا نتجاوز on update/الروابط) — وإلا يرجع false فيُنفَّذ المسار الأصلي بلا تغيير.
+static bool appendRhsPure(const Expr* x, int depth = 0) {
+    if (!x || depth > 8) return false;
+    switch (x->exprKind) {
+        case ExprKind::Literal:
+        case ExprKind::Variable: return true;
+        case ExprKind::Binary: {
+            auto b = static_cast<const BinaryExpr*>(x);
+            return b->op == TokenType::PLUS && appendRhsPure(b->left.get(), depth + 1) && appendRhsPure(b->right.get(), depth + 1);
+        }
+        default: return false;
+    }
+}
+
+bool Interpreter::tryAppendInPlace(const std::shared_ptr<AssignExpr>& e, const EnvPtr& env) {
+    if (liveActive_ || !e->value || e->value->exprKind != ExprKind::Binary) return false;
+    auto b = static_cast<BinaryExpr*>(e->value.get());
+    if (b->op != TokenType::PLUS || !b->left || b->left->exprKind != ExprKind::Variable) return false;
+    if (static_cast<VariableExpr*>(b->left.get())->name != e->name) return false;
+    if (!appendRhsPure(b->right.get())) return false;
+    Environment* owner = nullptr;
+    Value* slot = nullptr;
+    for (Environment* cur = env.get(); cur; cur = cur->parent.get()) {
+        auto it = cur->values.find(e->name);
+        if (it != cur->values.end()) { owner = cur; slot = &it->second; break; }
+    }
+    if (!owner || slot->type != Value::Type::STRING) return false;
+    for (auto& kv : containers) if (kv.second.get() == owner) return false;
+    Value r = evaluate(b->right, env);
+    if (slot->type != Value::Type::STRING) return false; // دفاعي (لا يحدث مع طرف أيمن نقي)
+    slot->str += r.toDisplayString();
+    return true;
+}
+
+void Interpreter::assignStateAware(Environment* owner, const std::string& name, const Value& newValue, int line) {
+    // يبحث عن الحاوية التي تملك بيئة owner فعلاً (نفس المؤشر بالضبط) -- بحث خطي مقبول التكلفة
+    // لعدد الحاويات المتوقَّع في مفسّر Rin، ولا يُنفَّذ إطلاقاً إن لم تكن owner بيئة حاوية أصلاً
+    // (أي متغيّر عادي داخل دالة/حلقة عادية لا يمر بهذا المسار إطلاقاً بفضل الفحص الأول أدناه).
+    std::string containerKey;
+    for (auto& kv : containers) {
+        if (kv.second.get() == owner) { containerKey = kv.first; break; }
+    }
+    if (containerKey.empty()) { owner->values[name] = newValue; return; }
+
+    // Rin 1.0: روابط OOP/Indsin — نلتقط القيمة السابقة قبل الكتابة (فقط حين توجد روابط، فكلفة صفر قبلها).
+    Value linkOld;
+    if (linksExist_) { auto lit = owner->values.find(name); if (lit != owner->values.end()) linkOld = lit->second; }
+
+    auto namesIt = containerStateNames.find(containerKey);
+    bool isState = namesIt != containerStateNames.end() && namesIt->second.count(name) > 0;
+    if (!isState) {
+        owner->values[name] = newValue;
+        if (linksExist_) onContainerWrite(containerKey, name, linkOld, newValue, line);
+        return;
+    }
+
+    auto hooksIt = containerLifecycle.find(containerKey);
+    bool hasUpdateHook = hooksIt != containerLifecycle.end() &&
+                          hooksIt->second.update.type == Value::Type::FUNCTION && hooksIt->second.update.function;
+
+    Value prevSnapshot;
+    if (hasUpdateHook) {
+        // prevState = خريطة (map) بكل حقول state الحالية لهذه الحاوية *قبل* هذا الإسناد بالذات
+        // (لا فقط قيمة الحقل الواحد الذي تغيَّر) -- أكثر فائدة عملياً عند وجود أكثر من حقل state.
+        auto prevState = std::make_shared<MapData>();
+        for (auto& fieldName : namesIt->second) {
+            Value v;
+            if (owner->values.count(fieldName)) v = owner->values[fieldName];
+            prevState->push_back({Value::string(fieldName), v});
+        }
+        prevSnapshot = Value::makeMap(prevState);
+    }
+
+    owner->values[name] = newValue;
+
+    if (hasUpdateHook) {
+        std::vector<Value> args{prevSnapshot};
+        fireLifecycleHook(containerKey, hooksIt->second.update, args, line);
+    }
+    if (linksExist_) onContainerWrite(containerKey, name, linkOld, newValue, line);
+}
+
+// ============================================================================
+// Namespaces: container / Containers.Group / Volume as nestable name scopes (see NsNode in the header)
+// ============================================================================
+
+std::shared_ptr<NsNode> Interpreter::nsOpen(NsNode::Kind kind, const std::string& name, const std::string& key, const EnvPtr& env) {
+    auto node = std::make_shared<NsNode>();
+    node->kind = kind; node->name = name; node->key = key; node->env = env;
+    env->ns = node;
+    auto replaceIn = [&](std::vector<std::pair<std::string, std::shared_ptr<NsNode>>>& list) {
+        for (auto& c : list) if (c.first == name) { c.second = node; return; } // re-executed definition replaces the old one
+        list.emplace_back(name, node);
+    };
+    if (!nsStack.empty()) { node->parent = nsStack.back(); replaceIn(nsStack.back()->children); }
+    else replaceIn(nsRoots);
+    return node;
+}
+
+Interpreter::NsScope::NsScope(Interpreter* i, std::shared_ptr<NsNode> n) : in(i), active(n != nullptr) {
+    if (active) in->nsStack.push_back(std::move(n));
+}
+Interpreter::NsScope::~NsScope() { if (active && !in->nsStack.empty()) in->nsStack.pop_back(); }
+
+// Lexical lookup of the FIRST segment of a qualified name: walk the scope chain outwards; every
+// namespace scope on the way contributes itself and its children (so siblings are visible by plain
+// name, and a namespace can name itself). Root namespaces are the last resort.
+std::shared_ptr<NsNode> Interpreter::nsResolveHead(const std::string& name, const EnvPtr& env) const {
+    for (Environment* e = env.get(); e; e = e->parent.get()) {
+        if (auto n = e->ns.lock()) {
+            if (n->name == name) return n;
+            if (auto c = n->child(name)) return c;
+        }
+    }
+    for (auto& r : nsRoots) if (r.first == name) return r.second;
+    // Easy_key المكتوب كرأس مسار: cfg.theme / grp.app.v
+    if (auto it = easyKeys.find(name); it != easyKeys.end()) { auto c = containers.find(it->second); if (c != containers.end() && c->second) if (auto n = c->second->ns.lock()) return n; }
+    if (auto it = easyGroupKeys.find(name); it != easyGroupKeys.end()) { auto c = groupEnvs.find(it->second); if (c != groupEnvs.end() && c->second) if (auto n = c->second->ns.lock()) return n; }
+    if (auto it = easyVolumeKeys.find(name); it != easyVolumeKeys.end()) { auto c = volumeEnvs.find(it->second); if (c != volumeEnvs.end() && c->second) if (auto n = c->second->ns.lock()) return n; }
+    return nullptr;
+}
+
+std::shared_ptr<NsNode> Interpreter::nsResolveExpr(const ExprPtr& obj, const EnvPtr& env) const {
+    if (nsRoots.empty() || !obj) return nullptr;
+    if (obj->exprKind == ExprKind::Variable) {
+        auto ve = std::static_pointer_cast<VariableExpr>(obj);
+        if (env->lookup(ve->name)) return nullptr; // a real variable always shadows a namespace of the same name
+        return nsResolveHead(ve->name, env);
+    }
+    if (obj->exprKind == ExprKind::Get) {
+        auto ge = std::static_pointer_cast<GetExpr>(obj);
+        auto parent = nsResolveExpr(ge->object, env);
+        return parent ? parent->child(ge->name) : nullptr;
+    }
+    return nullptr;
+}
+
+std::shared_ptr<NsNode> Interpreter::nsResolvePath(const std::string& dotted) const {
+    std::shared_ptr<NsNode> cur;
+    size_t st = 0;
+    bool first = true;
+    while (true) {
+        size_t d = dotted.find('.', st);
+        std::string seg = dotted.substr(st, d == std::string::npos ? std::string::npos : d - st);
+        if (seg.empty()) return nullptr;
+        if (first) {
+            for (auto& r : nsRoots) if (r.first == seg) { cur = r.second; break; }
+            first = false;
+        } else cur = cur ? cur->child(seg) : nullptr;
+        if (!cur) return nullptr;
+        if (d == std::string::npos) return cur;
+        st = d + 1;
+    }
+}
+
+Value Interpreter::nsSnapshot(const std::shared_ptr<NsNode>& n) const {
+    auto m = std::make_shared<MapData>();
+    std::vector<std::string> names;
+    for (auto& kv : n->env->values) if (kv.second.type != Value::Type::FUNCTION) names.push_back(kv.first);
+    std::sort(names.begin(), names.end());
+    for (auto& k : names) m->push_back({Value::string(k), n->env->values.find(k)->second});
+    for (auto& c : n->children) m->push_back({Value::string(c.first), nsSnapshot(c.second)});
+    return Value::makeMap(m);
+}
+
+static RinError nsNoMemberErr(const std::shared_ptr<NsNode>& n, const std::string& member, int line,
+                              const std::string& file, const char* what) {
+    diag::Diagnostic d(diag::Code::E0001_UndefinedVariable,
+                       std::string("namespace `") + n->path() + "` has no " + what + " `" + member + "`",
+                       diag::SourceLocation::point(file, line, 1));
+    d.withReason(std::string("`") + n->path() + "` is a " + n->kindName() + " namespace; it only exposes names declared directly inside it");
+    std::vector<std::string> candidates;
+    for (auto& kv : n->env->values) candidates.push_back(kv.first);
+    for (auto& c : n->children) candidates.push_back(c.first);
+    auto matches = diag::nearestMatches(member, candidates, 2, 3);
+    for (auto& m : matches) d.withSuggestion(m);
+    if (!matches.empty()) d.withHint("did you mean `" + n->path() + "." + matches.front() + "`?");
+    return RinError(std::move(d));
+}
+
+Value Interpreter::nsGet(const std::shared_ptr<NsNode>& n, const std::string& member, int line) {
+    if (auto c = n->child(member)) return nsSnapshot(c); // a bare namespace reads as a snapshot map of its fields
+    auto it = n->env->values.find(member);
+    if (it == n->env->values.end()) throw nsNoMemberErr(n, member, line, sourceFile, "member");
+    if (liveActive_ && !n->env->live.empty()) {
+        auto lit = n->env->live.find(member);
+        if (lit != n->env->live.end()) return liveRead(n->env.get(), lit->second, member, line);
+    }
+    return it->second;
+}
+
+Value Interpreter::nsSet(const std::shared_ptr<NsNode>& n, const std::string& member, const Value& v, int line) {
+    if (!n->canWrite()) {
+        throw errWithReason(diag::Code::E0035_RuntimeError, line,
+                            "cannot write `" + n->path() + "." + member + "`: a Volume is read-only",
+                            "Volume is the read-only organisation layer; keep mutable data in a Containers.Group (shared fields) or a container");
+    }
+    if (n->child(member)) {
+        throw diagErr(diag::Code::E0004_InvalidType, line,
+                      "cannot assign to `" + n->path() + "." + member + "`: it is a nested namespace, not a variable");
+    }
+    if (!n->env->values.count(member)) throw nsNoMemberErr(n, member, line, sourceFile, "variable");
+    Value stored = copyForBinding(v);
+    if (liveActive_) return liveAssign(n->env.get(), member, stored, line);
+    assignStateAware(n->env.get(), member, stored, line); // fires `on update(prev)` for `state` fields of containers
+    return stored;
+}
+
+Value Interpreter::nsCall(const std::shared_ptr<NsNode>& n, const std::string& member, std::vector<Value>& args, int line) {
+    if (!n->canCall()) {
+        throw errWithReason(diag::Code::E0035_RuntimeError, line,
+                            std::string("cannot call `") + n->path() + "." + member + "()`: a " + n->kindName() + " does not expose functions",
+                            "only a container can be called through its qualified name; put the function in a container");
+    }
+    auto it = n->env->values.find(member);
+    if (it == n->env->values.end()) throw nsNoMemberErr(n, member, line, sourceFile, "function");
+    if (it->second.type != Value::Type::FUNCTION) {
+        throw diagErr(diag::Code::E0006_UnknownFunction, line, "`" + n->path() + "." + member + "` is not a function");
+    }
+    Value fn = it->second; // copy: the call may mutate the namespace
+    return callFunction(fn.function, args, line);
+}
+
+void Interpreter::nsCollectPaths(const std::shared_ptr<NsNode>& n, std::vector<std::string>& out) const {
+    out.push_back(n->path());
+    for (auto& c : n->children) nsCollectPaths(c.second, out);
+}
+
+// `a.b.fn(args)` arrives from the parser as one dotted callee string. Resolve it through the
+// namespace tree first; returns false (and touches nothing) when the head is not a namespace.
+bool Interpreter::nsTryCallDotted(const std::string& callee, std::vector<Value>& args, int line, const EnvPtr& env, Value& out) {
+    std::vector<std::string> segs;
+    for (size_t st = 0;;) {
+        size_t d = callee.find('.', st);
+        if (d == std::string::npos) { segs.push_back(callee.substr(st)); break; }
+        segs.push_back(callee.substr(st, d - st));
+        st = d + 1;
+    }
+    if (segs.size() < 2 || env->lookup(segs[0])) return false;
+    auto n = nsResolveHead(segs[0], env);
+    for (size_t i = 1; n && i + 1 < segs.size(); ++i) n = n->child(segs[i]);
+    if (!n) return false;
+    const std::string& member = segs.back();
+    auto it = n->env->values.find(member);
+    if (it == n->env->values.end()) {
+        if (natives.count(callee)) return false; // e.g. a namespace that happens to be named like a built-in family
+        throw nsNoMemberErr(n, member, line, sourceFile, "function");
+    }
+    if (it->second.type != Value::Type::FUNCTION) return false; // a map/array member: let the normal `.method()` path handle it
+    out = nsCall(n, member, args, line);
+    return true;
+}
+
+// ---- RCS-1.0 §3.5 Tree (Phase 2) ----
+
+// انظر إعلانها في rin_interpreter.h للشرح الكامل: تمشي صعوداً من startEnv عبر Environment::parent
+// حتى تجد بيئة تطابق (بالمؤشر) إحدى قيم `containers`، أو تصل لجذر السلسلة بلا أي تطابق.
+std::string Interpreter::containerKeyForEnv(Environment* startEnv) const {
+    for (Environment* cur = startEnv; cur != nullptr; cur = cur->parent.get()) {
+        for (auto& kv : containers) {
+            if (kv.second.get() == cur) return kv.first;
+        }
+    }
+    return "";
+}
+
+// ---- OOP: class/struct/enum runtime ----
+
+// يتحقق تصادم [name] مع أي مساحة أسماء أخرى قابلة للنداء: دالة مدمجة (natives)، صنف OOP آخر
+// (classes)، أو دالة عرَّفها المستخدم في النطاق العالمي (globals، من نوع FUNCTION تحديداً — قيمة
+// عادية بنفس الاسم مثل رقم/نص ليست "تصادماً قابلاً للنداء" بنفس هذا المعنى). لا يفحص إعادة تعريف
+// *نفس* الصنف بنفس الاسم (تُعامَل كتحديث تعريف عادي، بنفس سلوك classes[name] = ... الحالي)، فقط
+// تصادمه مع نوع كيان *مختلف*.
+bool Interpreter::nameCollides(const std::string& name, std::string& whatOut, bool includeExistingFunction) const {
+    // استثناء مقصود: `time` أصبحت دالة مدمجة جديدة (docs/TIME.md) وقد يكون في برامج موجودة `fun time()`/`class time`؛
+    // نسمح بتعريف المستخدم وتغلب في نطاقها (invokeCallee لا يحجبها بالأصلية) بدل كسر كودٍ كان يعمل.
+    if (natives.count(name) && name != "time") { whatOut = "built-in function"; return true; }
+    if (classes.count(name)) { whatOut = "class"; return true; }
+    if (includeExistingFunction && globals && globals->values.count(name)) {
+        const Value& existing = globals->values.at(name);
+        if (existing.type == Value::Type::FUNCTION) { whatOut = "function"; return true; }
+    }
+    return false;
+}
+
+void Interpreter::registerClassStmt(const std::shared_ptr<ClassStmt>& s) {
+    // منع تظليل صامت لدالة مدمجة أو دالة مُعرَّفة من المستخدم بصنف بنفس الاسم (انظر nameCollides
+    // أعلاه وrin-oop-naming-contradiction.md): بدون هذا الفحص، Name(args) كان يفوز فيه الكيان
+    // الأسبق في ترتيب البحث الثابت داخل evaluate(CallExpr) (natives ثم classes ثم env) بصرف النظر
+    // عن أيّهما عرَّفه المبرمج أخيراً أو قصده فعلاً، بلا أي تحذير عند التعريف. إعادة تعريف *نفس*
+    // الصنف (نفس الاسم موجود مسبقاً في classes فقط) مسموحة كما كانت دائماً — هذا يستبدلها فحسب.
+    if (!classes.count(s->name)) {
+        std::string what;
+        if (nameCollides(s->name, what)) {
+            throw errWithReason(diag::Code::E0002_DuplicateVariable, s->line,
+                                 "class `" + s->name + "` uses the same name as an existing " + what,
+                                 "`" + s->name + "` is already defined as a " + what + "; Rin does not "
+                                 "allow a class to share a name with a built-in function or another "
+                                 "user-defined function, since calling `" + s->name + "(...)` would "
+                                 "then silently resolve to only one of them instead of the class");
+        }
+    }
+    // Rin 1.0: وراثة صنف final تُرفَض فوراً إن كان الأب مسجَّلاً (وإلا يلتقطها validateInstantiable لاحقاً).
+    if (s->kind == ClassKind::Class && !s->superclass.empty()) {
+        auto pit = classes.find(s->superclass);
+        if (pit != classes.end() && pit->second.isFinal) {
+            throw errWithReason(diag::Code::E0035_RuntimeError, s->line,
+                                 "class `" + s->name + "` cannot extend final class `" + s->superclass + "`",
+                                 "`" + s->superclass + "` is declared `final class`, so it can never be extended");
+        }
+    }
+    ClassDef def;
+    def.name = s->name;
+    def.superclass = s->superclass;
+    def.isStruct = s->isStruct;
+    def.line = s->line;
+    def.kind = s->kind;
+    def.isAbstract = s->isAbstract;
+    def.isFinal = s->isFinal;
+    def.interfaces = s->interfaces;
+    def.traits = s->traits;
+    for (auto& f : s->fields) {
+        ClassDef::MemberMeta mm;
+        mm.access = f.access;
+        mm.isFinal = f.isFinal;
+        if (!f.access.empty() || f.isFinal) restrictedMembers_ = true;
+        if (f.isStatic) {
+            def.staticFieldDefs.push_back({f.name, f.initializer});
+            def.staticMeta[f.name] = mm;
+            def.staticOrder.push_back(f.name);
+        } else {
+            def.fieldDefs.push_back({f.name, f.initializer});
+            def.fieldMeta[f.name] = mm;
+        }
+    }
+    for (auto& m : s->methods) {
+        if (!m->access.empty()) restrictedMembers_ = true;
+        if (m->accessorKind == 1) { def.getters[m->name] = m; accessorsExist_ = true; }
+        else if (m->accessorKind == 2) { def.setters[m->name] = m; accessorsExist_ = true; }
+        else if (m->isStatic) def.staticMethods[m->name] = m;
+        else def.methods[m->name] = m;
+    }
+    classes[s->name] = std::move(def);
+    validatedClasses_.clear(); // أي تعريف/إعادة تعريف يُبطِل نتائج فحص abstract/interface/final السابقة
+}
+
+// ---- Rin 1.0: أدوات البحث داخل ClassDef/السمات (traits) ----
+// kind: 0 = method، 1 = getter، 2 = setter. الدوال abstract (توقيعات بلا جسم) تُتجاهَل دائماً هنا:
+// البحث يريد التنفيذ الفعلي فقط؛ التحقق من أن كل abstract لها تنفيذ يتم في validateInstantiable.
+static std::shared_ptr<FunctionStmt> oopPickFn(const ClassDef& d, const std::string& n, int kind) {
+    const auto& m = kind == 0 ? d.methods : (kind == 1 ? d.getters : d.setters);
+    auto it = m.find(n);
+    if (it != m.end() && !it->second->isAbstract) return it->second;
+    return nullptr;
+}
+static std::shared_ptr<FunctionStmt> oopFindInTraits(const std::unordered_map<std::string, ClassDef>& classes,
+                                                      const ClassDef& d, const std::string& n, int kind,
+                                                      std::unordered_set<std::string>& seen) {
+    for (auto& t : d.traits) {
+        if (!seen.insert(t).second) continue;
+        auto it = classes.find(t);
+        if (it == classes.end()) continue;
+        if (auto f = oopPickFn(it->second, n, kind)) return f;
+        if (auto f = oopFindInTraits(classes, it->second, n, kind, seen)) return f;
+    }
+    return nullptr;
+}
+
+std::shared_ptr<FunctionStmt> Interpreter::findMethod(const std::string& className, const std::string& methodName, std::string* ownerOut) const {
+    std::string cur = className;
+    std::unordered_set<std::string> seen;
+    while (!cur.empty()) {
+        auto it = classes.find(cur);
+        if (it == classes.end()) break;
+        if (!seen.insert(cur).second) break; // وراثة دائرية: توقّف بلا خطأ هنا (يُكتشف صراحة في instantiateClass)
+        if (auto f = oopPickFn(it->second, methodName, 0)) {
+            if (ownerOut) *ownerOut = cur;
+            return f;
+        }
+        // Rin 1.0: دوال السمات (uses) تأتي بعد دوال الصنف نفسه وقبل دوال الأب. owner = الصنف المستخدِم
+        // (فيعمل super.method() داخلها نسبةً إليه، وتُفحَص صلاحياتها نسبةً إليه).
+        if (!it->second.traits.empty()) {
+            std::unordered_set<std::string> seenTraits;
+            if (auto f = oopFindInTraits(classes, it->second, methodName, 0, seenTraits)) {
+                if (ownerOut) *ownerOut = cur;
+                return f;
+            }
+        }
+        cur = it->second.superclass;
+    }
+    return nullptr;
+}
+
+Value Interpreter::bindMethod(const Value& receiver, const std::shared_ptr<FunctionStmt>& method, const std::string& ownerClass) {
+    auto callable = std::make_shared<Callable>();
+    callable->declaration = method;
+    auto closureEnv = std::make_shared<Environment>(globals);
+    closureEnv->define("self", receiver);
+    if (!ownerClass.empty()) closureEnv->define("__class__", Value::string(ownerClass));
+    // Rin 1.0: اسم الدالة الجارية — يلزم لحقول final (تُكتب داخل init فقط) ولمنع التكرار اللانهائي داخل get/set.
+    closureEnv->define("__method__", Value::string(
+        (method->accessorKind == 1 ? "get " : method->accessorKind == 2 ? "set " : "") + method->name));
+    callable->closure = closureEnv;
+    Value v;
+    v.type = Value::Type::FUNCTION;
+    v.function = callable;
+    return v;
+}
+
+Value Interpreter::evaluateSuperGet(const std::string& name, const EnvPtr& env, int line) {
+    Value selfVal;
+    Value classVal;
+    if (!env->get("self", selfVal) || !env->get("__class__", classVal) || classVal.type != Value::Type::STRING) {
+        throw errWithReason(diag::Code::E0035_RuntimeError, line,
+                             "`super` used outside a class method",
+                             "`super` can only be used inside the body of a method defined on a class");
+    }
+    auto classIt = classes.find(classVal.str);
+    if (classIt == classes.end() || classIt->second.superclass.empty()) {
+        throw errWithReason(diag::Code::E0035_RuntimeError, line,
+                             "`" + classVal.str + "` has no superclass",
+                             "`super` requires the class the current method is defined on to be "
+                             "declared with `extends`");
+    }
+    const std::string& superName = classIt->second.superclass;
+    // الحقول ليست "مُطبقة" لكل مستوى وراثة على حدة (نفس القاموس fields يُملأ من الأب حتى الابن عند
+    // الإنشاء، انظر instantiateClass) — فـ super.field تقرأ ببساطة قيمة self الحالية لنفس الحقل.
+    if (selfVal.type == Value::Type::INSTANCE) {
+        auto fIt = selfVal.instance->fields.find(name);
+        if (fIt != selfVal.instance->fields.end()) return fIt->second;
+    }
+    std::string owner;
+    auto method = findMethod(superName, name, &owner);
+    if (method) return bindMethod(selfVal, method, owner);
+    throw errWithReason(diag::Code::E0001_UndefinedVariable, line,
+                         "no field or method named `" + name + "` on `" + superName + "`",
+                         "`" + superName + "` (and its own ancestors) has neither a field nor a "
+                         "method called `" + name + "`");
+}
+
+// ---------------------------------------------------------------------------------------------
+// مسار سريع للتعابير العددية الصرفة (C++23).
+// Value ثقيلة (~150 بايت: نص + 5 مؤشرات ذكية) وكل عملية ثنائية كانت تبني وتهدم قيمتين كاملتين.
+// هذه الدالة تقيّم، بلا أي أثر جانبي وبلا بناء Value، تعبيراً مكوَّناً فقط من: أرقام حرفية + متغيّرات
+// تحمل أعداداً + (+ - * / %) متداخلة. أي شيء آخر (نص، كائن، قسمة على صفر، متغيّر حيّ، تحميل عوامل
+// مُعرَّفة من المستخدم...) يعيد false فيُكمل evaluate() المسار الأصلي حرفياً، فتبقى الرسائل والدلالات
+// كما هي بالضبط. لا تغيّر السلوك المرصود إطلاقاً، فقط تُسرّعه.
+// ---------------------------------------------------------------------------------------------
+static bool fastNumeric(const Expr* x, Environment* env, double& out, int depth = 0) noexcept {
+    if (depth > 64) return false;
+    switch (x->exprKind) {
+        case ExprKind::Literal: {
+            auto* l = static_cast<const LiteralExpr*>(x);
+            if (l->kind != LiteralExpr::Kind::NUMBER) return false;
+            out = l->number;
+            return true;
+        }
+        case ExprKind::Variable: {
+            auto* v = static_cast<const VariableExpr*>(x);
+            const Value* f = env->lookup(v->name);
+            if (!f || f->type != Value::Type::NUMBER) return false;
+            out = f->number;
+            return true;
+        }
+        case ExprKind::Binary: {
+            auto* b = static_cast<const BinaryExpr*>(x);
+            if (b->op != TokenType::PLUS && b->op != TokenType::MINUS && b->op != TokenType::STAR &&
+                b->op != TokenType::SLASH && b->op != TokenType::PERCENT) return false;
+            double l, r;
+            if (!fastNumeric(b->left.get(), env, l, depth + 1) || !fastNumeric(b->right.get(), env, r, depth + 1)) return false;
+            switch (b->op) {
+                case TokenType::PLUS:  out = l + r; return true;
+                case TokenType::MINUS: out = l - r; return true;
+                case TokenType::STAR:  out = l * r; return true;
+                case TokenType::SLASH:   if (r == 0) return false; out = l / r; return true;
+                case TokenType::PERCENT: if (r == 0) return false; out = std::fmod(l, r); return true;
+                default: std::unreachable();
+            }
+        }
+        default: return false;
+    }
+}
+
+Value Interpreter::copyForBinding(const Value& v) const {
+    if (v.type == Value::Type::INSTANCE && v.instance && v.instance->isStruct) {
+        auto copy = std::make_shared<InstanceData>();
+        copy->className = v.instance->className;
+        copy->isStruct = true;
+        copy->fieldOrder = v.instance->fieldOrder;
+        for (auto& kv : v.instance->fields) {
+            copy->fields[kv.first] = copyForBinding(kv.second); // استنساخ متكرر لأي حقل struct متداخل
+        }
+        return Value::makeInstance(copy);
+    }
+    return v;
+}
+
+// ---- Type System: أبسط تحقق ممكن ----
+// الأنواع البدائية المدعومة (Any/Number/Int/String/Bool/Array/Map/Function) بالإضافة لأي اسم
+// صنف/بنية مُعرَّف عبر class/struct. Int ليس نوعاً منفصلاً في التخزين (Rin لا تملك أعداداً صحيحة
+// منفصلة عن الأعداد العشرية أصلاً -- كل الأرقام double) بل فحص إضافي فوق Number: العدد الفعلي بلا
+// جزء كسري ومنتهٍ (ليس NaN/Infinity).
+void Interpreter::checkDeclaredType(const Value& v, const std::string& typeName, const std::string& context, int line) const {
+    if (typeName.empty()) return; // بلا نوع معلَن -- بلا أي فحص، تماماً كما كانت اللغة قبل هذه الميزة
+
+    static const std::unordered_set<std::string> builtins = {
+        "Any", "Number", "Int", "String", "Bool", "Array", "Map", "Set", "Function"
+    };
+    if (!builtins.count(typeName) && !classes.count(typeName)) {
+        throw errWithReason(diag::Code::E0001_UndefinedVariable, line,
+                             "unknown type `" + typeName + "`",
+                             "`" + typeName + "` is not a built-in type (Any, Number, Int, String, "
+                             "Bool, Array, Map, Set, Function) and no class or struct with that name is "
+                             "defined");
+    }
+
+    if (v.type == Value::Type::NIL) return; // كل نوع قابل لـ nil ضمنياً -- لا Optional/nullable منفصل
+
+    bool ok;
+    if (typeName == "Any") ok = true;
+    else if (typeName == "Number") ok = v.type == Value::Type::NUMBER;
+    else if (typeName == "Int") ok = v.type == Value::Type::NUMBER && std::isfinite(v.number) && v.number == std::floor(v.number);
+    else if (typeName == "String") ok = v.type == Value::Type::STRING;
+    else if (typeName == "Bool") ok = v.type == Value::Type::BOOL;
+    else if (typeName == "Array") ok = v.type == Value::Type::ARRAY;
+    else if (typeName == "Map") ok = v.type == Value::Type::MAP;
+    else if (typeName == "Set") ok = v.type == Value::Type::SET;
+    else if (typeName == "Function") ok = v.type == Value::Type::FUNCTION;
+    else {
+        // اسم صنف/بنية: مطابقة "is-a" عبر سلسلة الوراثة -- نفس منطق findMethod بالضبط، فأي كائن من
+        // صنف فرعي (Dog) يمرّ فحص نوع أبيه (Animal) بلا الحاجة لأي قواعد subtyping إضافية.
+        // Rin 1.0: الآن "is-a" تشمل أيضاً الواجهات (implements) والسمات (uses) وليس سلسلة extends فقط.
+        ok = isInstanceOf(v, typeName);
+    }
+
+    if (!ok) {
+        auto d = diagErr(diag::Code::E0004_InvalidType, line,
+                          context + " declared as `" + typeName + "` but got a value of type `" + v.typeName() + "`");
+        d.diagnostic->expected = typeName;
+        d.diagnostic->found = v.typeName();
+        throw d;
+    }
+}
+
+std::optional<Value> Interpreter::tryOperatorOverload(const std::string& magicName, const Value& left,
+                                                        const Value& right, int line) {
+    if (left.type == Value::Type::INSTANCE && left.instance) {
+        std::string owner;
+        auto method = findMethod(left.instance->className, magicName, &owner);
+        if (method) {
+            std::vector<Value> args{right};
+            Value bound = bindMethod(left, method, owner);
+            return callFunction(bound.function, args, line);
+        }
+    }
+    if (right.type == Value::Type::INSTANCE && right.instance) {
+        std::string owner;
+        auto method = findMethod(right.instance->className, magicName, &owner);
+        if (method) {
+            std::vector<Value> args{left};
+            Value bound = bindMethod(right, method, owner);
+            return callFunction(bound.function, args, line);
+        }
+    }
+    return std::nullopt;
+}
+
+Value Interpreter::instantiateClass(const std::string& className, std::vector<Value>& args, int line, const EnvPtr& callerEnv) {
+    const bool skipInit = skipInit_; // oop.fromMap: إنشاء بلا استدعاء init (يُصفَّر فوراً حتى لا يتسرّب للتداخل)
+    skipInit_ = false;
+    // يبني سلسلة الوراثة من الجذر (الأب الأبعد) إلى الصنف نفسه، فيكتشف أي وراثة دائرية أو صنفاً
+    // أباً غير معرَّف بخطأ واضح بدل الدخول في حلقة لا نهائية أو تجاهل صامت.
+    std::vector<const ClassDef*> chain;
+    std::string cur = className;
+    std::unordered_set<std::string> seen;
+    bool first = true;
+    while (!cur.empty()) {
+        auto cIt = classes.find(cur);
+        if (cIt == classes.end()) {
+            if (first) throw unknownFunctionErr(className, line); // لا يجب أن يحدث؛ المستدعي يتحقق مسبقاً
+            throw errWithReason(diag::Code::E0001_UndefinedVariable, line,
+                                 "class `" + className + "` extends unknown class `" + cur + "`",
+                                 "no class or struct named `" + cur + "` is defined");
+        }
+        if (!seen.insert(cur).second) {
+            throw errWithReason(diag::Code::E0035_RuntimeError, line,
+                                 "circular inheritance detected for class `" + className + "`",
+                                 "class `" + cur + "` ends up inheriting from itself, directly or indirectly");
+        }
+        chain.push_back(&cIt->second);
+        cur = cIt->second.superclass;
+        first = false;
+    }
+    std::reverse(chain.begin(), chain.end()); // الجذر أولاً، الصنف المطلوب أخيراً
+
+    // Rin 1.0: abstract/interface/trait/final/override — يُفحَص مرة واحدة لكل صنف (نتيجة مخزَّنة).
+    validateInstantiable(className, line);
+
+    auto inst = std::make_shared<InstanceData>();
+    inst->className = className;
+    inst->isStruct = chain.back()->isStruct;
+    Value instVal = Value::makeInstance(inst);
+
+    // بيئة تقييم قيم الحقول الافتراضية: تسمح لأي تعبير تهيئة حقل بقراءة حقول أخرى عُرِّفت قبله
+    // (عبر self) — بترتيب من الأب إلى الابن، فيطغى تعريف الابن على الأب عند تكرار نفس الاسم.
+    auto fieldEnv = std::make_shared<Environment>(globals);
+    fieldEnv->define("self", instVal);
+    auto applyFields = [&](const ClassDef& d) {
+        for (auto& fd : d.fieldDefs) {
+            Value fv = fd.second ? copyForBinding(evaluate(fd.second, fieldEnv)) : Value::nil();
+            if (!inst->fields.count(fd.first)) inst->fieldOrder.push_back(fd.first);
+            inst->fields[fd.first] = fv;
+        }
+    };
+    // حقول السمات (uses) تُهيَّأ قبل حقول الصنف المستخدِم (فيطغى الصنف عند تكرار الاسم)، والسمات المتداخلة أولاً.
+    std::function<void(const ClassDef&, std::unordered_set<std::string>&)> applyTraitFields =
+        [&](const ClassDef& d, std::unordered_set<std::string>& seenTraits) {
+            for (auto& t : d.traits) {
+                if (!seenTraits.insert(t).second) continue;
+                auto tit = classes.find(t);
+                if (tit == classes.end()) continue;
+                applyTraitFields(tit->second, seenTraits);
+                applyFields(tit->second);
+            }
+        };
+    for (auto* def : chain) {
+        fieldEnv->define("__class__", Value::string(def->name));
+        std::unordered_set<std::string> seenTraits;
+        applyTraitFields(*def, seenTraits);
+        applyFields(*def);
+    }
+
+    std::string initOwner;
+    auto initMethod = findMethod(className, "init", &initOwner);
+    // Rin 1.0: مُنشئ private/protected (مثلاً Singleton) — يُفحَص سياق المستدعي.
+    if (initMethod && restrictedMembers_ && callerEnv && !initMethod->access.empty()) {
+        checkMemberAccess(initOwner, initMethod->access, "init", "constructor", callerEnv, line);
+    }
+    if (skipInit) {
+        // لا شيء: الكائن يحمل حقوله الافتراضية فقط (يُكمل المستدعي ملأها)
+    } else if (initMethod) {
+        Value bound = bindMethod(instVal, initMethod, initOwner);
+        callFunction(bound.function, args, line);
+    } else if (!args.empty()) {
+        auto d = diagErr(diag::Code::E0007_InvalidArguments, line,
+                          "`" + className + "` has no constructor accepting arguments");
+        d.diagnostic->expected = "0 argument(s)";
+        d.diagnostic->found = std::to_string(args.size()) + " argument(s)";
+        d.diagnostic->withReason("`" + className + "` does not define an `init` method, so it can only be created with no arguments");
+        throw d;
+    }
+    return instVal;
+}
+
+Value Interpreter::callFunction(const std::shared_ptr<Callable>& fn, std::vector<Value>& args, int line) {
+    if (args.size() != fn->declaration->params.size()) {
+        auto d = diagErr(diag::Code::E0007_InvalidArguments, line,
+                     "invalid number of arguments for `" + fn->declaration->name + "`");
+        d.diagnostic->expected = std::to_string(fn->declaration->params.size()) + " argument(s)";
+        d.diagnostic->found = std::to_string(args.size()) + " argument(s)";
+        d.diagnostic->withReason("function `" + fn->declaration->name + "` expects " +
+                                  std::to_string(fn->declaration->params.size()) + " parameter(s)");
+        throw d;
+    }
+    // حارس عمق الاستدعاء: بلا هذا الفحص، دالة تتكرّر ذاتياً بلا حالة توقّف (نسيان شرط الإنهاء —
+    // خطأ برمجي شائع جداً، وليس فقط سيناريو هجوم) تُسبِّب Stack Overflow حقيقياً في مكدّس C++ الأصلي
+    // (segmentation fault لا يمكن لأي try/catch اعتراضه)، فيُسقِط التطبيق كاملاً. الآن يُحوَّل هذا إلى
+    // RinError عادي وقابل للعرض في الكونسول، تماماً كأي خطأ Rin آخر.
+    if (callDepth >= maxCallDepth_) {
+        auto d = diagErr(diag::Code::E0035_RuntimeError, line,
+                     "maximum function call depth exceeded (" + std::to_string(maxCallDepth_) + ")");
+        d.diagnostic->withReason("this is almost always unbounded recursion (a missing base case)")
+         .withHint("check that every recursive path in this function eventually returns without calling itself again");
+        throw d;
+    }
+    callDepth++;
+    struct DepthGuard {
+        int& depth;
+        ~DepthGuard() { depth--; }
+    } guard{callDepth};
+    CurrentInterpGuard interpGuard(this); // Rin 1.0: لأجل __str__ داخل Value::toDisplayString
+
+    auto callEnv = std::make_shared<Environment>(fn->closure);
+    callEnv->values.reserve(args.size() + 2); // يتفادى إعادة التجزئة (rehash) أثناء ربط المعاملات
+    for (size_t i = 0; i < args.size(); i++) {
+        // struct بدلالة قيمة: كل استدعاء دالة/method يستقبل نسخته الخاصة من أي وسيط struct (انظر
+        // copyForBinding) — بلا أي تغيير على class/array/map/الأنواع البدائية (تبقى مرجعية كالمعتاد).
+        Value bound = copyForBinding(args[i]);
+        // Type System: فحص كل وسيط له نوع معلَن (paramTypes[i] غير فارغة) -- انظر checkDeclaredType.
+        if (i < fn->declaration->paramTypes.size() && !fn->declaration->paramTypes[i].empty()) {
+            checkDeclaredType(bound, fn->declaration->paramTypes[i],
+                               "parameter `" + fn->declaration->params[i] + "` of `" + fn->declaration->name + "`", line);
+        }
+        callEnv->define(fn->declaration->params[i], std::move(bound));
+    }
+    try {
+        Value fastRet;
+        Flow fl = execBlockFlow(fn->declaration->body->statements, callEnv, fastRet);
+        if (fl == Flow::Return) {
+            if (!fn->declaration->returnType.empty())
+                checkDeclaredType(fastRet, fn->declaration->returnType,
+                                   "return value of `" + fn->declaration->name + "`", line);
+            return fastRet;
+        }
+        if (fl == Flow::Break) throw BreakSignal{};
+        if (fl == Flow::Continue) throw ContinueSignal{};
+    } catch (ReturnSignal& r) {
+        if (!fn->declaration->returnType.empty()) {
+            checkDeclaredType(r.value, fn->declaration->returnType,
+                               "return value of `" + fn->declaration->name + "`", line);
+        }
+        return r.value;
+    }
+    if (!fn->declaration->returnType.empty()) {
+        checkDeclaredType(Value::nil(), fn->declaration->returnType,
+                           "return value of `" + fn->declaration->name + "`", line);
+    }
+    return Value::nil();
+}
+
+// استُخرِجت حرفياً من حالة CallExpr داخل evaluate() القديمة (نفس الترتيب: builtinOps الصريحة، ثم
+// natives، ثم دالة Rin مُعرَّفة) بلا أي تغيير سلوكي، لتُشارَك مع evaluatePipelineFlow (RinFlow) أدناه
+// دون تكرار نفس منطق الفرز/الأخطاء مرتين (قسم 17: توافقية كاملة مع كل الكود القديم الذي يعتمد على
+// هذا الترتيب بالضبط).
+Value Interpreter::invokeCallee(const std::string& callee, std::vector<Value>& args, int line, const EnvPtr& env) {
+    static const std::unordered_set<std::string> builtinOps = {
+        "Addition", "Subtraction", "Multiplication", "Equal"
+    };
+    if (builtinOps.count(callee)) {
+        if (args.size() != 2) {
+            auto d = diagErr(diag::Code::E0007_InvalidArguments, line, "`" + callee + "` requires exactly 2 arguments");
+            d.diagnostic->expected = "2 argument(s)";
+            d.diagnostic->found = std::to_string(args.size()) + " argument(s)";
+            throw d;
+        }
+        Value a = args[0];
+        Value b = args[1];
+        if (callee == "Equal") {
+            return Value::boolean_(valuesEqual(a, b));
+        }
+        if (callee == "Addition" && (a.type == Value::Type::STRING || b.type == Value::Type::STRING)) {
+            return Value::string(a.toDisplayString() + b.toDisplayString());
+        }
+        if (a.type != Value::Type::NUMBER || b.type != Value::Type::NUMBER) {
+            throw diagErr(diag::Code::E0004_InvalidType, line, "`" + callee + "` requires two numbers");
+        }
+        if (callee == "Addition") return Value::num(a.number + b.number);
+        if (callee == "Subtraction") return Value::num(a.number - b.number);
+        if (callee == "Multiplication") return Value::num(a.number * b.number);
+    }
+
+    // library.import(path) وحدها بين natives CLC تحتاج env (لتنفّذ كل ملف .rin مُستخرَج من الحاوية
+    // بنفس مسار @import العادي، الذي يدمج التعريفات في نطاق نداء library.import نفسه) — فتُعترَض هنا
+    // صراحة قبل خريطة natives العامة (نفس مكان اعتراض builtinOps أعلاه)، بدل أن تكون NativeFn عادية
+    // (توقيعها الثابت std::function<Value(std::vector<Value>&, int)> لا يحمل env). باقي natives CLC
+    // (container.open/close، library.export) مسجَّلة عادياً في registerNatives() لأنها لا تحتاج env.
+    if (callee == "libraryImport") {
+        return doLibraryImport(args, line, env);
+    }
+    if (callee == "libraryImportUrl") {
+        return doLibraryImportUrl(args, line, env);
+    }
+
+    if (!nsRoots.empty() && callee.find('.') != std::string::npos) { // namespaces: shop.users.add(x)
+        Value nsOut;
+        if (nsTryCallDotted(callee, args, line, env, nsOut)) return nsOut;
+    }
+
+    auto nativeIt = natives.find(callee);
+    // صنف من المستخدم باسم Set يغلب المُنشئ/الدوال الأصلية Set / Set.* (توافق مع الكود الموجود).
+    // `time` / `time.*` أسماء أصلية جديدة: لا تحجب ما يعرّفه المستخدم نفسه (دالة/كائن/خريطة/صنف باسم time) في نطاقه.
+    if (nativeIt != natives.end() && (callee == "time" || callee.compare(0, 5, "time.") == 0)) {
+        Value userTime;
+        if ((env->get("time", userTime) && (userTime.type == Value::Type::FUNCTION || userTime.type == Value::Type::MAP ||
+                                            userTime.type == Value::Type::INSTANCE || userTime.type == Value::Type::SET)) ||
+            (callee == "time" && classes.count("time")))
+            nativeIt = natives.end();
+    }
+    if (nativeIt != natives.end() && !(!classes.empty() && classes.count("Set") && (callee == "Set" || callee.compare(0, 4, "Set.") == 0))) {
+        // حاجز الاستثناءات: أي استثناء C++ قياسي يهرب من دالة أصلية (std::bad_alloc من طلب ضخم، std::out_of_range،
+        // std::length_error، ...) كان يصل إلى أعلى المستوى كـ "خطأ داخلي" ويقتل البرنامج حتى لو كان النداء داخل
+        // try/catch. الآن يتحوّل إلى RinError عادي قابل للالتقاط، وإشارات اللغة (RinError/ThrowSignal/Return...)
+        // ليست std::exception فتمرّ كما هي.
+        try {
+            return nativeIt->second(args, line);
+        } catch (const std::bad_alloc&) {
+            throw errWithReason(diag::Code::E0035_RuntimeError, line, "out of memory in `" + callee + "`",
+                                "the requested size is too large to allocate");
+        } catch (const std::exception& ex) {
+            throw errWithReason(diag::Code::E0035_RuntimeError, line, "internal error in `" + callee + "`: " + ex.what(),
+                                "a built-in function failed on these arguments");
+        }
+    }
+
+    // OOP: ClassName(args...) -> إنشاء كائن جديد (instantiateClass)، بنفس صياغة نداء دالة عادية
+    // تماماً (call() في الـ parser لا يفرّق بين اسم دالة واسم صنف، كلاهما مجرد IDENT قبل '(').
+    auto classIt = classes.find(callee);
+    if (classIt != classes.end()) {
+        return instantiateClass(callee, args, line, env);
+    }
+
+    // OOP fix: `obj.method(args...)` where `obj` is a plain variable (e.g. `let a = Animal();
+    // a.speak();`) is parsed by call() in rin_parser.cpp as a dotted-string CallExpr callee
+    // ("a.speak") — the exact same representation used for namespace natives like `make.qr()` —
+    // because the parser cannot tell at parse time whether the identifier before the '.' is a
+    // namespace root or an ordinary variable holding a class instance / map. Natives and classes
+    // above didn't match, so before giving up as "unknown function", check whether the part
+    // before the single '.' really is a variable bound to an INSTANCE or MAP and dispatch the
+    // call exactly like MethodCallExpr does (see evaluate(MethodCallExpr) below) instead of
+    // incorrectly reporting a perfectly valid method call as an unknown function.
+    {
+        size_t dot = callee.find('.');
+        if (dot != std::string::npos) {
+            // Rin 1.0: مسار نقطي بأي طول: root.seg1.seg2...method(args). كان يُدعم فقط مقطع واحد (a.m())،
+            // فكان `self.engine.start()` يفشل بـ "is not a function". الآن تُقرأ المقاطع الوسيطة كحقول/خصائص
+            // (بنفس readMember المستعمل في GetExpr) ثم تُنادى الدالة الأخيرة على القيمة الناتجة.
+            std::vector<std::string> segs;
+            for (size_t st = 0;;) {
+                size_t d = callee.find('.', st);
+                if (d == std::string::npos) { segs.push_back(callee.substr(st)); break; }
+                segs.push_back(callee.substr(st, d - st));
+                st = d + 1;
+            }
+            const std::string root = segs.front();
+            const std::string method = segs.back();
+            // super.method(args...): 'super' ليس متغيّراً حقيقياً أبداً في env، فيُفحَص أولاً وبلا شرط.
+            if (segs.size() == 2 && root == "super") {
+                Value bound = evaluateSuperGet(method, env, line);
+                if (bound.type != Value::Type::FUNCTION) {
+                    throw diagErr(diag::Code::E0004_InvalidType, line,
+                                  "`super." + method + "` is not a method");
+                }
+                return callFunction(bound.function, args, line);
+            }
+            Value cur;
+            bool haveRoot = false;
+            size_t i = 1;
+            if (env->get(root, cur)) {
+                haveRoot = true;
+            } else if (!classes.empty() && classes.count(root)) {
+                // ClassName.staticMethod(args) | ClassName.staticField.method(args)
+                if (segs.size() == 2) return callStatic(root, method, args, env, line);
+                cur = staticGet(root, segs[1], env, line);
+                haveRoot = true;
+                i = 2;
+            }
+            if (haveRoot) {
+                for (; i + 1 < segs.size(); ++i) cur = readMember(cur, segs[i], env, line);
+                if (cur.type == Value::Type::SET) {
+                    Value out;
+                    if (tryCallSetMethod(cur, method, args, line, out)) return out;
+                }
+                if (cur.type == Value::Type::INSTANCE) {
+                    return callMethodOn(cur, method, args, env, line);
+                }
+                if (cur.type == Value::Type::MAP) {
+                    for (auto& kv : *cur.map) {
+                        if (kv.first.type == Value::Type::STRING && kv.first.str == method && kv.second.type == Value::Type::FUNCTION) {
+                            return callFunction(kv.second.function, args, line);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Value calleeVal;
+    if (!env->get(callee, calleeVal) ||
+        (calleeVal.type != Value::Type::FUNCTION &&
+         !(calleeVal.type == Value::Type::INSTANCE && hasMagic(calleeVal, "__call__")))) {
+        throw unknownFunctionErr(callee, line);
+    }
+    return callValue(calleeVal, args, line); // دالة، أو كائن يعرّف __call__
+}
+
+// executeLibraryContainerBytes: منطق مشترك بث حقيقي بلا قرص — يأخذ بايتات حاوية .rcl (أياً كان
+// مصدرها) ويستخرج+ينفّذ كل ملف .rin بداخلها مباشرة من الذاكرة عبر clc::*FromMemory (clc_container.h)،
+// بلا أي ملف مؤقت على القرص في أي خطوة (بعكس السلوك القديم الذي كان يكتب كل ملف مستخرَج فعلياً إلى
+// .rin_clc_tmp/ على القرص ثم يعيد فتحه وقراءته، فقط ليحذفه بعد ذلك). نفس بالضبط منطق '@import'
+// العادي للتنفيذ (Lexer -> Parser -> executeBlock داخل نفس env نطاق النداء) — إعادة استخدام كاملة.
+// انظر ملاحظة الأمان أعلى قسم natives CLC في registerNatives(): هذا يمنح ملفات .rin المستورَدة من
+// حاوية .rcl نفس ثقة أي '@import' عادي (بلا sandbox إضافي على ما تفعله بعد التنفيذ) — وهذا سلوك
+// @import الحالي نفسه، وليس تراجعاً جديداً في الحماية أُدخِل هنا خصيصاً.
+Value Interpreter::executeLibraryContainerBytes(const std::vector<uint8_t>& bytes, const std::string& sourceLabel,
+                                                 int line, const EnvPtr& env) {
+    clc::ContainerInfo info;
+    try {
+        info = clc::readContainerInfoFromMemory(bytes);
+    } catch (const clc::ClcFormatError& e) {
+        throw errWithReason(diag::Code::E0028_ImportError, line,
+                             "library.import: تعذّرت قراءة الحاوية '" + sourceLabel + "'", e.what());
+    }
+
+    auto arr = std::make_shared<ArrayData>();
+    for (auto& f : info.files) {
+        if (f.flags & clc::FILE_FLAG_IS_DIR) continue;
+        if (f.path.size() < 4 || f.path.compare(f.path.size() - 4, 4, ".rin") != 0) continue; // .og.rin ينتهي بـ .rin أيضاً فيُغطّى
+
+        std::vector<uint8_t> content;
+        try {
+            content = clc::extractOneFileToMemory(bytes, f.path); // فك ضغط في الذاكرة فقط، بلا أي كتابة على القرص
+        } catch (const clc::ClcFormatError& e) {
+            throw errWithReason(diag::Code::E0028_ImportError, line,
+                                 "library.import: فشل استخراج '" + f.path + "' من '" + sourceLabel + "'", e.what());
+        }
+        std::string source(reinterpret_cast<const char*>(content.data()), content.size());
+
+        std::string importedName = sourceLabel + "::" + f.path;
+        try {
+            Lexer importedLexer(source, importedName);
+            auto importedTokens = importedLexer.scanTokens();
+            Parser importedParser(importedTokens, importedName);
+            auto importedStatements = importedParser.parse();
+            // نفس دلالات '@import' المباشر (بلا alias): تُدمَج كل التعريفات أعلى المستوى داخل env
+            // نطاق نداء library.import نفسه، تماماً كـ #include.
+            executeBlock(importedStatements, env);
+        } catch (RinError& e) {
+            auto d = diagErr(diag::Code::E0028_ImportError, line,
+                              "library.import: error inside \"" + importedName + "\"");
+            d.diagnostic->withReason("line " + std::to_string(e.line) + " of \"" + importedName + "\": " + e.message);
+            if (e.diagnostic) d.diagnostic->withCause(diag::renderShort(*e.diagnostic));
+            throw d;
+        }
+
+        arr->push_back(Value::string(f.path));
+    }
+
+    return Value::makeArray(arr);
+}
+
+// library.import(path) -> حاوية .rcl محلية على القرص (المسار نفسه يمرّ عبر resolvePath() فيبقى
+// معزولاً داخل basePath كالمعتاد). تُقرَأ بايتات الملف مرة واحدة فقط إلى الذاكرة، ثم يُستخرَج وينفَّذ
+// كل شيء من هناك عبر executeLibraryContainerBytes أعلاه — بلا أي مجلد/ملف مؤقت وسيط على القرص.
+Value Interpreter::doLibraryImport(std::vector<Value>& args, int line, const EnvPtr& env) {
+    expectArgs("libraryImport", args, 1, line);
+    std::string rawPath = asString(args[0], "libraryImport", line);
+    std::string rclPath = resolvePath(rawPath, line);
+
+    std::ifstream in(rclPath, std::ios::binary);
+    if (!in) {
+        throw errWithReason(diag::Code::E0028_ImportError, line,
+                             "library.import: تعذّر فتح '" + rawPath + "'",
+                             "الملف غير موجود أو تعذّرت قراءته");
+    }
+    std::ostringstream raw;
+    raw << in.rdbuf();
+    in.close();
+    std::string rawStr = raw.str();
+    std::vector<uint8_t> bytes(rawStr.begin(), rawStr.end());
+
+    return executeLibraryContainerBytes(bytes, rawPath, line, env);
+}
+
+// libraryImportUrl(url) -> بث حقيقي كامل عبر الشبكة، بلا أي تخزين على القرص في أي مرحلة: يُنزِّل
+// حاوية .rcl عبر rin::http::performRequest() (نفس عميل HTTP الحقيقي المستخدَم لـ httpGet/httpPost —
+// اتصال شبكة فعلي، وليس محاكاة) مباشرة إلى الذاكرة (body هنا std::string يحمل بايتات خام فقط)، ثم
+// يمرّرها لنفس executeLibraryContainerBytes. هذا هو المسار الكامل لخط أنابيب Rin Runtime بالضبط كما
+// في المخطط: Downloader (rin::http) -> Reader/Extractor (clc::*FromMemory، بث حقيقي بلا قرص) ->
+// RinParser/SymbolRegistry/PackageInitializer/Runtime (Lexer/Parser/executeBlock الموجودة أصلاً).
+Value Interpreter::doLibraryImportUrl(std::vector<Value>& args, int line, const EnvPtr& env) {
+    expectArgs("libraryImportUrl", args, 1, line);
+    std::string url = asString(args[0], "libraryImportUrl", line);
+
+    auto res = rin::http::performRequest("GET", url, {}, "", 0);
+    if (!res.ok) {
+        throw errWithReason(diag::Code::E0028_ImportError, line,
+                             "libraryImportUrl: فشل الاتصال بـ '" + url + "'",
+                             res.error.empty() ? "تعذّر الاتصال (DNS/timeout/رفض الاتصال)" : res.error);
+    }
+    if (res.status < 200 || res.status >= 300) {
+        throw errWithReason(diag::Code::E0028_ImportError, line,
+                             "libraryImportUrl: رد الخادوم بحالة غير ناجحة من '" + url + "'",
+                             "HTTP " + std::to_string(res.status));
+    }
+    std::vector<uint8_t> bytes(res.body.begin(), res.body.end()); // بايتات في الذاكرة فقط، لا كتابة على القرص إطلاقاً
+
+    return executeLibraryContainerBytes(bytes, url, line, env);
+}
+
+Value Interpreter::evaluate(const ExprPtr& expr, const EnvPtr& env) {
+    if (vmEnabled_) return vmRunExpr(expr, env); // RinVM
+    return evaluateTree(expr, env);
+}
+
+Value Interpreter::evaluateTree(const ExprPtr& expr, const EnvPtr& env) {
+    switch (expr->exprKind) {
+    case ExprKind::Literal: { auto e = std::static_pointer_cast<LiteralExpr>(expr);
+        switch (e->kind) {
+            case LiteralExpr::Kind::NUMBER: return Value::num(e->number);
+            case LiteralExpr::Kind::STRING: return Value::string(e->str);
+            case LiteralExpr::Kind::BOOL: return Value::boolean_(e->boolean);
+            case LiteralExpr::Kind::NIL: return Value::nil();
+        }
+    }
+    // fun(params) { body } literal -> بناء Callable مربوط بنفس env الحالية وقت الوصول إلى موضع
+    // الـ literal (closure حقيقي، بنفس منطق execute(FunctionStmt) تماماً)، مباشرة كقيمة FUNCTION
+    // بلا أي تسمية/تعريف في أي نطاق -- فرق اللامبدا الوحيد عن دالة مُسمّاة عادية.
+    case ExprKind::Lambda: { auto e = std::static_pointer_cast<LambdaExpr>(expr);
+        auto callable = std::make_shared<Callable>();
+        callable->declaration = e->decl;
+        callable->closure = env;
+        Value v;
+        v.type = Value::Type::FUNCTION;
+        v.function = callable;
+        return v;
+    }
+    case ExprKind::Variable: { auto e = std::static_pointer_cast<VariableExpr>(expr);
+        if (liveActive_) { // المتغيرات الحيّة: lens/fuse/عدّادات القراءة (كلفة صفر قبل أول استعمال)
+            Environment* liveOwner = findLiveOwner(env, e->name);
+            if (liveOwner && !liveOwner->live.empty()) {
+                auto lit = liveOwner->live.find(e->name);
+                if (lit != liveOwner->live.end()) return liveRead(liveOwner, lit->second, e->name, e->line);
+            }
+        }
+        // lookup بلا نسخة وسيطة: نسخة واحدة فقط من القيمة (كانت get() تنسخ إلى out ثم تُعاد).
+        if (const Value* found = env->lookup(e->name)) return *found;
+        if (e->name == "RINTWIST") return rintwistValue();   // متغيّر مضمَّن حيّ (قراءة فقط)
+        throw undefinedVariableErr(e->name, e->line, env);
+    }
+    case ExprKind::Assign: { auto e = std::static_pointer_cast<AssignExpr>(expr);
+        Value v = evaluate(e->value, env);
+        // RCS-1.0 §3.3 State: نجد أولاً البيئة (Environment) التي تملك هذا الاسم فعلاً -- بالضبط
+        // نفس المسار الذي يتبعه Environment::assign (تصعيد عبر parent حتى إيجاد أول تعريف) -- ثم
+        // نُفوِّض الكتابة الفعلية إلى assignStateAware() التي تكتب القيمة وتُطلق تلقائياً
+        // on update(prevState) إن كان هذا الاسم أحد حقول `state` لحاوية معروفة. لا تغيير في
+        // السلوك لأي متغيّر عادي (let/معاملات دالة/إلخ): يبقى الإسناد يعمل تماماً كما كان
+        // (undefinedVariableErr عند الفشل).
+        Environment* owner = nullptr;
+        for (Environment* cur = env.get(); cur; cur = cur->parent.get()) {
+            if (cur->values.count(e->name)) { owner = cur; break; }
+        }
+        if (!owner) {
+            throw undefinedVariableErr(e->name, e->line, env);
+        }
+        Value stored = copyForBinding(v);
+        if (liveActive_) return liveAssign(owner, e->name, stored, e->line); // stone/gauge/tape/lens/fuse/bell + trial
+        assignStateAware(owner, e->name, stored, e->line);
+        return stored;
+    }
+    case ExprKind::PatternAssign: return letPatternAssign(std::static_pointer_cast<PatternAssignExpr>(expr), env);
+    case ExprKind::Conditional: { auto e = std::static_pointer_cast<ConditionalExpr>(expr);
+        if (evaluate(e->condition, env).isTruthy()) return evaluate(e->whenTrue, env);
+        return evaluate(e->whenFalse, env);
+    }
+    // goal { ... } -> ينفّذ الجسم تتابعياً (كأي كتلة {} عادية، داخل بيئة/نطاق Environment خاصة به)؛
+    // إن رُميت AchieveSignal بداخله (عبر 'achieve expr;')، تصبح قيمة التعبير هي تلك القيمة فوراً؛
+    // وإلا (اكتمل الجسم بالكامل بلا أي achieve) تكون قيمة التعبير nil. انظر GoalExpr/AchieveStmt في
+    // rin_ast.h للشرح الكامل، وexecute(AchieveStmt) أعلاه لجهة الرمي.
+    case ExprKind::Goal: { auto e = std::static_pointer_cast<GoalExpr>(expr);
+        auto goalEnv = std::make_shared<Environment>(env);
+        try {
+            executeBlock(e->body->statements, goalEnv);
+        } catch (AchieveSignal& a) {
+            return a.value;
+        }
+        return Value::nil();
+    }
+    case ExprKind::Logical: { auto e = std::static_pointer_cast<LogicalExpr>(expr);
+        Value left = evaluate(e->left, env);
+        if (e->op == TokenType::OR) {
+            if (left.isTruthy()) return left;
+        } else { // AND
+            if (!left.isTruthy()) return left;
+        }
+        return evaluate(e->right, env);
+    }
+    case ExprKind::Unary: { auto e = std::static_pointer_cast<UnaryExpr>(expr);
+        Value right = evaluate(e->right, env);
+        if (e->op == TokenType::MINUS) {
+            // RMF §33/§41: -vector إلخ عبر __neg__ (صنف يعرّفها كدالة بلا وسائط — self فقط).
+            if (right.type == Value::Type::INSTANCE && right.instance) {
+                std::string owner;
+                auto method = findMethod(right.instance->className, "__neg__", &owner);
+                if (method) {
+                    std::vector<Value> noArgs;
+                    Value bound = bindMethod(right, method, owner);
+                    return callFunction(bound.function, noArgs, e->line);
+                }
+            }
+            if (right.type != Value::Type::NUMBER)
+                throw diagErr(diag::Code::E0004_InvalidType, e->line, "unary `-` operand must be a number, found `" + right.typeName() + "`");
+            return Value::num(-right.number);
+        }
+        if (e->op == TokenType::BANG) return Value::boolean_(!right.isTruthy());
+    }
+    case ExprKind::Binary: { auto e = std::static_pointer_cast<BinaryExpr>(expr);
+        if (!liveActive_) { // المتغيرات الحيّة لها دلالات قراءة خاصة (lens/fuse/عدّادات) فلا تُختصر
+            double fl, fr;
+            if (fastNumeric(e->left.get(), env.get(), fl) && fastNumeric(e->right.get(), env.get(), fr)) {
+                switch (e->op) {
+                    case TokenType::PLUS:          return Value::num(fl + fr);
+                    case TokenType::MINUS:         return Value::num(fl - fr);
+                    case TokenType::STAR:          return Value::num(fl * fr);
+                    case TokenType::SLASH:         if (fr != 0) return Value::num(fl / fr); break;
+                    case TokenType::PERCENT:       if (fr != 0) return Value::num(std::fmod(fl, fr)); break;
+                    case TokenType::LESS:          return Value::boolean_(fl < fr);
+                    case TokenType::LESS_EQUAL:    return Value::boolean_(fl <= fr);
+                    case TokenType::GREATER:       return Value::boolean_(fl > fr);
+                    case TokenType::GREATER_EQUAL: return Value::boolean_(fl >= fr);
+                    case TokenType::EQUAL_EQUAL:   return Value::boolean_(fl == fr);
+                    case TokenType::BANG_EQUAL:    return Value::boolean_(fl != fr);
+                    default: break;
+                }
+            }
+        }
+        Value left = evaluate(e->left, env);
+        Value right = evaluate(e->right, env);
+        switch (e->op) {
+            case TokenType::PLUS:
+                if (left.type == Value::Type::STRING || right.type == Value::Type::STRING) {
+                    return Value::string(left.toDisplayString() + right.toDisplayString());
+                }
+                if (left.type == Value::Type::NUMBER && right.type == Value::Type::NUMBER)
+                    return Value::num(left.number + right.number);
+                if (left.type == Value::Type::SET || right.type == Value::Type::SET) return setops::binary(e->op, left, right, e->line);
+                // RMF §7/§8/§33/§41: vector + vector، matrix + matrix، إلخ عبر __add__ (انظر
+                // tryOperatorOverload) -- الأساس اللي كل نوع رياضي إضافي (Vector/Matrix/...) يُبنى
+                // فوقه بدل توسيع هذا المفسّر بحالة خاصة لكل نوع رياضي جديد يُضاف مستقبلاً.
+                if (left.type == Value::Type::INSTANCE || right.type == Value::Type::INSTANCE) {
+                    if (auto r = tryOperatorOverload("__add__", left, right, e->line)) return *r;
+                }
+                throw diagErr(diag::Code::E0004_InvalidType, e->line,
+                          "`+` operands must be numbers or strings, found `" + left.typeName() + "` and `" + right.typeName() + "`");
+            case TokenType::MINUS:
+                if (left.type == Value::Type::SET || right.type == Value::Type::SET) return setops::binary(e->op, left, right, e->line);
+                if (left.type == Value::Type::INSTANCE || right.type == Value::Type::INSTANCE) {
+                    if (auto r = tryOperatorOverload("__sub__", left, right, e->line)) return *r;
+                }
+                requireNumbers(left, right, "-", e->line);
+                return Value::num(left.number - right.number);
+            case TokenType::STAR:
+                if (left.type == Value::Type::SET || right.type == Value::Type::SET) return setops::binary(e->op, left, right, e->line);
+                if (left.type == Value::Type::INSTANCE || right.type == Value::Type::INSTANCE) {
+                    if (auto r = tryOperatorOverload("__mul__", left, right, e->line)) return *r;
+                }
+                requireNumbers(left, right, "*", e->line);
+                return Value::num(left.number * right.number);
+            case TokenType::SLASH:
+                if (left.type == Value::Type::INSTANCE || right.type == Value::Type::INSTANCE) {
+                    if (auto r = tryOperatorOverload("__div__", left, right, e->line)) return *r;
+                }
+                requireNumbers(left, right, "/", e->line);
+                if (right.number == 0) throw errWithReason(diag::Code::E0035_RuntimeError, e->line,
+                                                            "division by zero", "the right-hand side of `/` evaluated to 0");
+                return Value::num(left.number / right.number);
+            case TokenType::PERCENT:
+                if (left.type == Value::Type::INSTANCE || right.type == Value::Type::INSTANCE) {
+                    if (auto r = tryOperatorOverload("__mod__", left, right, e->line)) return *r;
+                }
+                requireNumbers(left, right, "%", e->line);
+                if (right.number == 0) throw errWithReason(diag::Code::E0035_RuntimeError, e->line,
+                                                            "division by zero", "the right-hand side of `%` evaluated to 0");
+                return Value::num(std::fmod(left.number, right.number));
+            case TokenType::GREATER:
+                if (left.type == Value::Type::SET || right.type == Value::Type::SET) return setops::binary(e->op, left, right, e->line);
+                if (left.type == Value::Type::INSTANCE || right.type == Value::Type::INSTANCE) {
+                    if (auto r = tryCompareOverload(e->op, left, right, e->line)) return *r; // __lt__/__le__/__gt__/__ge__/__cmp__
+                }
+                requireNumbers(left, right, ">", e->line);
+                return Value::boolean_(left.number > right.number);
+            case TokenType::GREATER_EQUAL:
+                if (left.type == Value::Type::SET || right.type == Value::Type::SET) return setops::binary(e->op, left, right, e->line);
+                if (left.type == Value::Type::INSTANCE || right.type == Value::Type::INSTANCE) {
+                    if (auto r = tryCompareOverload(e->op, left, right, e->line)) return *r; // __lt__/__le__/__gt__/__ge__/__cmp__
+                }
+                requireNumbers(left, right, ">=", e->line);
+                return Value::boolean_(left.number >= right.number);
+            case TokenType::LESS:
+                if (left.type == Value::Type::SET || right.type == Value::Type::SET) return setops::binary(e->op, left, right, e->line);
+                if (left.type == Value::Type::INSTANCE || right.type == Value::Type::INSTANCE) {
+                    if (auto r = tryCompareOverload(e->op, left, right, e->line)) return *r; // __lt__/__le__/__gt__/__ge__/__cmp__
+                }
+                requireNumbers(left, right, "<", e->line);
+                return Value::boolean_(left.number < right.number);
+            case TokenType::LESS_EQUAL:
+                if (left.type == Value::Type::SET || right.type == Value::Type::SET) return setops::binary(e->op, left, right, e->line);
+                if (left.type == Value::Type::INSTANCE || right.type == Value::Type::INSTANCE) {
+                    if (auto r = tryCompareOverload(e->op, left, right, e->line)) return *r; // __lt__/__le__/__gt__/__ge__/__cmp__
+                }
+                requireNumbers(left, right, "<=", e->line);
+                return Value::boolean_(left.number <= right.number);
+            case TokenType::EQUAL_EQUAL:
+                // Rin 1.0: __eq__ بين كائنين (مقارنة مع nil/أنواع أخرى لا تستدعي كود المستخدم أبداً).
+                if (left.type == Value::Type::INSTANCE && right.type == Value::Type::INSTANCE) {
+                    if (auto r = tryEqOverload(left, right, false, e->line)) return Value::boolean_(*r);
+                }
+                return Value::boolean_(valuesEqual(left, right));
+            case TokenType::BANG_EQUAL:
+                if (left.type == Value::Type::INSTANCE && right.type == Value::Type::INSTANCE) {
+                    if (auto r = tryEqOverload(left, right, true, e->line)) return Value::boolean_(*r);
+                }
+                return Value::boolean_(!valuesEqual(left, right));
+            case TokenType::NOT_SAME:   // =/=  ليس نفس الكائن (القيم القيمية تُقارَن بالقيمة)
+                return Value::boolean_(!sameReference(left, right));
+            case TokenType::COPY_OF:    // =/   متساويان بالقيمة لكنهما كائنان مختلفان (نسخة)
+                return Value::boolean_(valuesEqual(left, right) && !sameReference(left, right));
+            case TokenType::SAME_SHAPE: // =::= متطابقان في الشكل (البنية والأنواع) مهما اختلفت القيم
+                return Value::boolean_(sameShape(left, right));
+            default: break;
+        }
+    }
+    case ExprKind::Call: { auto e = std::static_pointer_cast<CallExpr>(expr);
+        // RinFlow: سلسلة |> كاملة (جذرها هنا) مع جلسة Flow نشطة فعلاً -> تُنفَّذ عبر محرّك RinFlow
+        // (Flow Graph حقيقي + Execution Events + تتبّع Node بالكامل)، بدل التقييم العادي أدناه. بلا
+        // جلسة نشطة (الحالة الافتراضية دائماً لِـ run() العادي) هذا الفرع لا يُؤخَذ أبداً، فتبقى
+        // نفس السلسلة تُقيَّم بنفس الطريقة العادية تماماً كما كانت قبل RinFlow (توافقية كاملة).
+        if (e->isPipelineRoot && activeFlowSession_) {
+            return evaluatePipelineFlow(e, env);
+        }
+
+        std::vector<Value> args;
+        for (auto& a : e->args) args.push_back(evaluate(a, env));
+        return invokeCallee(e->callee, args, e->line, env);
+    }
+    // callee_expr(args...) where callee_expr isn't a plain name (see CallValueExpr in rin_ast.h):
+    // evaluate the callee expression to a VALUE first (e.g. an IndexExpr like `arr[0]`, a
+    // parenthesized/lambda expression, or another call's result), then call it if it's a function.
+    case ExprKind::CallValue: { auto e = std::static_pointer_cast<CallValueExpr>(expr);
+        Value callee = evaluate(e->callee, env);
+        std::vector<Value> args;
+        args.reserve(e->args.size());
+        for (auto& a : e->args) args.push_back(evaluate(a, env));
+        if (callee.type == Value::Type::INSTANCE && hasMagic(callee, "__call__")) {
+            return callValue(callee, args, e->line);
+        }
+        if (callee.type != Value::Type::FUNCTION || !callee.function) {
+            throw diagErr(diag::Code::E0004_InvalidType, e->line,
+                          "cannot call a value of type `" + callee.typeName() + "`");
+        }
+        return callFunction(callee.function, args, e->line);
+    }
+    case ExprKind::Array: { auto e = std::static_pointer_cast<ArrayExpr>(expr);
+        auto arr = std::make_shared<ArrayData>();
+        arr->reserve(e->elements.size());
+        for (auto& el : e->elements) arr->push_back(evaluate(el, env));
+        return Value::makeArray(arr);
+    }
+    case ExprKind::Map: { auto e = std::static_pointer_cast<MapExpr>(expr);
+        auto m = std::make_shared<MapData>();
+        for (auto& entry : e->entries) {
+            Value key = evaluate(entry.key, env);
+            Value val = evaluate(entry.value, env);
+            m->put(key, val);
+        }
+        return Value::makeMap(m);
+    }
+    case ExprKind::Index: { auto e = std::static_pointer_cast<IndexExpr>(expr);
+        Value obj = evaluate(e->object, env);
+        Value idx = evaluate(e->index, env);
+        if (obj.type == Value::Type::ARRAY) {
+            if (idx.type != Value::Type::NUMBER) {
+                throw errWithReason(diag::Code::E0021_InvalidIndex, e->line,
+                                     "array index must be a number", "found a `" + idx.typeName() + "` index instead");
+            }
+            long i = static_cast<long>(idx.number);
+            if (i < 0 || static_cast<size_t>(i) >= obj.array->size()) {
+                auto d = diagErr(diag::Code::E0021_InvalidIndex, e->line, "index out of range: " + std::to_string(i));
+                d.diagnostic->withReason("this array has " + std::to_string(obj.array->size()) + " element(s) (valid indices: 0.." +
+                                          (obj.array->empty() ? std::string("-") : std::to_string(obj.array->size() - 1)) + ")");
+                throw d;
+            }
+            return (*obj.array)[static_cast<size_t>(i)];
+        }
+        if (obj.type == Value::Type::MAP) {
+            if (const Value* hit = obj.map->findValue(idx)) return *hit;
+            return Value::nil();
+        }
+        if (obj.type == Value::Type::STRING) {
+            if (idx.type != Value::Type::NUMBER) {
+                throw errWithReason(diag::Code::E0021_InvalidIndex, e->line,
+                                     "string index must be a number", "found a `" + idx.typeName() + "` index instead");
+            }
+            long i = static_cast<long>(idx.number);
+            if (i < 0 || static_cast<size_t>(i) >= obj.str.size()) {
+                auto d = diagErr(diag::Code::E0021_InvalidIndex, e->line, "index out of range: " + std::to_string(i));
+                d.diagnostic->withReason("this string has " + std::to_string(obj.str.size()) + " character(s)");
+                throw d;
+            }
+            return Value::string(std::string(1, obj.str[static_cast<size_t>(i)]));
+        }
+        if (obj.type == Value::Type::INSTANCE && hasMagic(obj, "__getitem__")) {
+            std::vector<Value> a{idx};
+            return *callMagic(obj, "__getitem__", a, e->line); // Rin 1.0: obj[i]
+        }
+        if (obj.type == Value::Type::SET) {
+            auto d = diagErr(diag::Code::E0004_InvalidType, e->line, "cannot index a `set`: it has no positions");
+            d.diagnostic->withHint("use `s.has(x)` to test membership, or `s.toArray()[i]` to read by position");
+            throw d;
+        }
+        throw diagErr(diag::Code::E0004_InvalidType, e->line, "cannot index a value of type `" + obj.typeName() + "`");
+    }
+    case ExprKind::IndexSet: { auto e = std::static_pointer_cast<IndexSetExpr>(expr);
+        if (liveActive_) liveGuardWrite(env, e->object, e->line);
+        Value obj = evaluate(e->object, env);
+        Value idx = evaluate(e->index, env);
+        Value val = evaluate(e->value, env);
+        if (obj.type == Value::Type::ARRAY) {
+            if (idx.type != Value::Type::NUMBER) {
+                throw errWithReason(diag::Code::E0021_InvalidIndex, e->line,
+                                     "array index must be a number", "found a `" + idx.typeName() + "` index instead");
+            }
+            long i = static_cast<long>(idx.number);
+            if (i == static_cast<long>(obj.array->size())) {
+                obj.array->push_back(val); // السماح بالتوسّع عبر arr[len(arr)] = value
+            } else if (i < 0 || static_cast<size_t>(i) >= obj.array->size()) {
+                auto d = diagErr(diag::Code::E0021_InvalidIndex, e->line, "index out of range: " + std::to_string(i));
+                d.diagnostic->withReason("this array has " + std::to_string(obj.array->size()) + " element(s)")
+                 .withHint("use `arr[" + std::to_string(obj.array->size()) + "] = value` to append instead");
+                throw d;
+            } else {
+                (*obj.array)[static_cast<size_t>(i)] = val;
+            }
+            return val;
+        }
+        if (obj.type == Value::Type::MAP) {
+            obj.map->put(idx, val);
+            return val;
+        }
+        if (obj.type == Value::Type::INSTANCE && hasMagic(obj, "__setitem__")) {
+            std::vector<Value> a{idx, val};
+            callMagic(obj, "__setitem__", a, e->line); // Rin 1.0: obj[i] = v
+            return val;
+        }
+        throw diagErr(diag::Code::E0004_InvalidType, e->line, "cannot assign into a value of type `" + obj.typeName() + "` via `[]`");
+    }
+    // OOP: object.name -> قراءة حقل/دالة مرتبطة (class/struct instance) أو قيمة مفتاح (map؛ يشمل
+    // Name.CaseA لقيم enum، لأن Name نفسها مجرد map عادية — انظر execute(EnumStmt) أعلاه).
+    case ExprKind::Get: { auto e = std::static_pointer_cast<GetExpr>(expr);
+        // super.name -> يبحث عن 'name' بدءاً من *أب* الصنف الذي عُرِّفت بداخله الدالة الحالية (لا
+        // من صنف self وقت التشغيل) — هذا وحده الفرق عن self.name العادية (توزيع ديناميكي/virtual).
+        // 'super' هنا ليست متغيّراً حقيقياً أبداً (بخلاف 'self')؛ نتعرّف عليها بفحص شكل e->object
+        // مباشرة *قبل* تقييمه، لأن تقييمها كـ VariableExpr عادية كان سيرمي دائماً "متغيّر غير معرَّف".
+        if (auto ve = std::dynamic_pointer_cast<VariableExpr>(e->object)) {
+            if (ve->name == "super") return evaluateSuperGet(e->name, env, e->line);
+            // Rin 1.0: ClassName.member -> عضو static (إن لم يكن هناك متغيّر محلي بنفس الاسم يظلّله).
+            if (!classes.empty() && classes.count(ve->name)) {
+                Value shadow;
+                if (!env->get(ve->name, shadow)) return staticGet(ve->name, e->name, env, e->line);
+            }
+            if (liveActive_) { // x.fill / x.past / x.vitals ... على متغيّر حيّ
+                Value liveProp;
+                if (livePropertyGet(env, ve->name, e->name, e->line, liveProp)) return liveProp;
+            }
+        }
+        if (!nsRoots.empty()) { // namespaces: shop.users.count  (container / group / Volume, any nesting)
+            if (auto ns = nsResolveExpr(e->object, env)) return nsGet(ns, e->name, e->line);
+        }
+        Value obj = evaluate(e->object, env);
+        if (obj.type == Value::Type::INSTANCE) {
+            return readMember(obj, e->name, env, e->line); // خصائص get + صلاحيات + حقول + دوال مربوطة
+        }
+        if (obj.type == Value::Type::MAP) {
+            for (auto& kv : *obj.map) {
+                if (kv.first.type == Value::Type::STRING && kv.first.str == e->name) return kv.second;
+            }
+            return Value::nil();
+        }
+        throw diagErr(diag::Code::E0004_InvalidType, e->line,
+                      "cannot access property `." + e->name + "` on a value of type `" + obj.typeName() + "`");
+    }
+    // OOP: object.name = value -> كتابة/تعديل حقل (class/struct instance) أو مفتاح (map).
+    case ExprKind::Set: { auto e = std::static_pointer_cast<SetExpr>(expr);
+        if (liveActive_) liveGuardWrite(env, e->object, e->line);
+        // Rin 1.0: ClassName.field = value -> كتابة حقل static.
+        if (auto sve = std::dynamic_pointer_cast<VariableExpr>(e->object)) {
+            if (!classes.empty() && classes.count(sve->name)) {
+                Value shadow;
+                if (!env->get(sve->name, shadow)) {
+                    Value sval = evaluate(e->value, env);
+                    return staticSet(sve->name, e->name, sval, env, e->line);
+                }
+            }
+        }
+        if (!nsRoots.empty()) { // namespaces: shop.users.count = 3;
+            if (auto ns = nsResolveExpr(e->object, env)) {
+                Value nval = evaluate(e->value, env);
+                return nsSet(ns, e->name, nval, e->line);
+            }
+        }
+        Value obj = evaluate(e->object, env);
+        Value val = evaluate(e->value, env);
+        if (obj.type == Value::Type::INSTANCE) {
+            return writeMember(obj, e->name, val, env, e->line); // خصائص set + final + صلاحيات + freeze
+        }
+        if (obj.type == Value::Type::MAP) {
+            for (auto& kv : *obj.map) {
+                if (kv.first.type == Value::Type::STRING && kv.first.str == e->name) { kv.second = val; return val; }
+            }
+            obj.map->push_back({Value::string(e->name), val});
+            return val;
+        }
+        throw diagErr(diag::Code::E0004_InvalidType, e->line,
+                      "cannot set property `." + e->name + "` on a value of type `" + obj.typeName() + "`");
+    }
+    // OOP: object.method(args...) -> نداء دالة مرتبطة (class/struct instance، مع 'self' مربوطة
+    // تلقائياً) أو نداء حقل يحمل قيمة دالة (callback عادي مخزَّن في حقل).
+    case ExprKind::MethodCall: { auto e = std::static_pointer_cast<MethodCallExpr>(expr);
+        // super.method(args...) -> نفس فكرة super.name (evaluateSuperGet)، لكن لنداء دالة مباشرة.
+        if (auto ve = std::dynamic_pointer_cast<VariableExpr>(e->object)) {
+            if (ve->name == "super") {
+                std::vector<Value> superArgs;
+                superArgs.reserve(e->args.size());
+                for (auto& a : e->args) superArgs.push_back(evaluate(a, env));
+                Value bound = evaluateSuperGet(e->method, env, e->line);
+                if (bound.type != Value::Type::FUNCTION) {
+                    throw diagErr(diag::Code::E0004_InvalidType, e->line,
+                                  "`super." + e->method + "` is not a method");
+                }
+                return callFunction(bound.function, superArgs, e->line);
+            }
+        }
+        if (!nsRoots.empty()) {
+            if (auto ns = nsResolveExpr(e->object, env)) {
+                std::vector<Value> nargs;
+                nargs.reserve(e->args.size());
+                for (auto& a : e->args) nargs.push_back(evaluate(a, env));
+                return nsCall(ns, e->method, nargs, e->line);
+            }
+        }
+        Value obj = evaluate(e->object, env);
+        std::vector<Value> args;
+        args.reserve(e->args.size());
+        for (auto& a : e->args) args.push_back(evaluate(a, env));
+        if (obj.type == Value::Type::SET) {
+            Value out;
+            if (tryCallSetMethod(obj, e->method, args, e->line, out)) return out;
+        }
+        if (obj.type == Value::Type::INSTANCE) {
+            return callMethodOn(obj, e->method, args, env, e->line);
+        }
+        if (obj.type == Value::Type::MAP) {
+            for (auto& kv : *obj.map) {
+                if (kv.first.type == Value::Type::STRING && kv.first.str == e->method && kv.second.type == Value::Type::FUNCTION) {
+                    return callFunction(kv.second.function, args, e->line);
+                }
+            }
+        }
+        throw diagErr(diag::Code::E0004_InvalidType, e->line,
+                      "cannot call method `." + e->method + "` on a value of type `" + obj.typeName() + "`");
+    }
+    default: break;
+    }
+    return Value::nil();
+}
+
+// يبحث عن أول route مطابق (method + path) مسجَّل داخل container.api صاحب المفتاح المُعطى، ويُعيد
+// قيمة map حقيقية {status, ok, body}. إن لم يوجد تطابق، يُعيد {status: 404, ok: false, error: ...}
+// دون رمي استثناء — تماماً كما يتصرف عميل HTTP حقيقي أمام رد 404.
+Value Interpreter::performApiCall(const std::string& containerKey, const std::string& method,
+                                   const std::string& path, int line) {
+    (void)line;
+    std::string wantMethod = toUpperAscii(method);
+    auto it = apiRoutes.find(containerKey);
+    if (it != apiRoutes.end()) {
+        for (auto& route : it->second) {
+            if (route.method == wantMethod && route.path == path) {
+                auto result = std::make_shared<MapData>();
+                result->push_back({Value::string("status"), Value::num(route.status)});
+                result->push_back({Value::string("ok"), Value::boolean_(route.status >= 200 && route.status < 300)});
+                result->push_back({Value::string("body"), route.body});
+                return Value::makeMap(result);
+            }
+        }
+    }
+    auto result = std::make_shared<MapData>();
+    result->push_back({Value::string("status"), Value::num(404)});
+    result->push_back({Value::string("ok"), Value::boolean_(false)});
+    result->push_back({Value::string("body"), Value::nil()});
+    result->push_back({Value::string("error"),
+                        Value::string("لا يوجد route مطابق لـ " + wantMethod + " " + path +
+                                      " داخل container.api = " + containerKey)});
+    return Value::makeMap(result);
+}
+
+// ================= أدوات HTTP الحقيقي: تحويل Value <-> نوع الشبكة الفعلي =================
+
+// map (نص -> نص) قادم من كود Rin -> قائمة ترويسات HTTP حقيقية. nil = بلا ترويسات إضافية.
+static http::HeaderList headersFromValue(const Value& v, const std::string& fn, int line) {
+    http::HeaderList out;
+    if (v.type == Value::Type::NIL) return out;
+    if (v.type != Value::Type::MAP) throw diagErr(diag::Code::E0004_InvalidType, line, "'" + fn + "' يتوقّع الترويسات كقاموس {مفتاح: قيمة} أو nil");
+    for (auto& kv : *v.map) out.push_back({kv.first.toDisplayString(), kv.second.toDisplayString()});
+    return out;
+}
+
+// جسم الطلب: نص يُرسَل كما هو حرفياً؛ أي نوع آخر (map/array/رقم/bool) يُرمَّز تلقائياً JSON حقيقياً
+// (ergonomics: apiPost(name, path, { title: "x" }) يعمل مباشرة بلا jsonEncode يدوي)، ويُضاف
+// Content-Type: application/json تلقائياً حين لا توجد ترويسة Content-Type مذكورة أصلاً.
+static std::string bodyToString(const Value& v, http::HeaderList& headers) {
+    if (v.type == Value::Type::NIL) return "";
+    if (v.type == Value::Type::STRING) return v.str;
+    bool hasContentType = false;
+    for (auto& h : headers) if (toUpperAscii(h.first) == "CONTENT-TYPE") { hasContentType = true; break; }
+    if (!hasContentType) headers.push_back({"Content-Type", "application/json"});
+    return json::encode(v);
+}
+
+// رد HTTP حقيقي (rin_http.h) -> Value(map) يستهلكه برنامج Rin مباشرة:
+// { ok, status, body (نص خام), json (مُحلَّل تلقائياً إن كان JSON صالحاً، وإلا نفس body)، error }
+static Value httpResultToValue(const http::HttpResult& r) {
+    auto m = std::make_shared<MapData>();
+    m->push_back({Value::string("ok"), Value::boolean_(r.ok)});
+    m->push_back({Value::string("status"), Value::num((double)r.status)});
+    m->push_back({Value::string("body"), Value::string(r.body)});
+    m->push_back({Value::string("json"), json::decodeOrRaw(r.body)});
+    m->push_back({Value::string("error"), Value::string(r.error)});
+    return Value::makeMap(m);
+}
+
+// يستدعي API حقيقياً مسجَّلاً بالاسم [endpointName] (عبر apiRegister/apiHeader): يبني الرابط
+// الكامل (baseUrl + path)، يدمج ترويسات النقطة المسجَّلة (مفتاح API الخاص بالمبرمج ضمنها)، ويُجري
+// طلب شبكة حقيقياً فعلياً. يرمي RinError واضحاً إن لم يُسجَّل API بهذا الاسم أصلاً.
+Value Interpreter::performRealApiCall(const std::string& endpointName, const std::string& method,
+                                       const std::string& path, const Value& bodyValue, int line) {
+    auto it = apiEndpoints.find(endpointName);
+    if (it == apiEndpoints.end()) {
+        throw diagErr(diag::Code::E0037_NetworkError, line, "لا يوجد API حقيقي مسجَّل باسم '" + endpointName +
+                        "' — سجِّله أولاً: apiRegister(\"" + endpointName + "\", \"https://...\");");
+    }
+    std::string url = it->second.baseUrl;
+    if (!path.empty()) {
+        bool baseEndsSlash = !url.empty() && url.back() == '/';
+        bool pathStartsSlash = !path.empty() && path.front() == '/';
+        if (baseEndsSlash && pathStartsSlash) url += path.substr(1);
+        else if (!baseEndsSlash && !pathStartsSlash) url += "/" + path;
+        else url += path;
+    }
+    http::HeaderList headers = it->second.headers; // نسخة: bodyToString قد تضيف Content-Type محلياً فقط لهذا الطلب
+    std::string body = bodyToString(bodyValue, headers);
+    auto result = http::performRequest(toUpperAscii(method), url, headers, body, defaultHttpTimeoutMs);
+    return httpResultToValue(result);
+}
+
+// ============================================================================
+// RinFlow — Execution Flow Engine (implementation)
+// ============================================================================
+// انظر التوثيق الكامل عند تعريف الأنواع في rin_interpreter.h (namespace flow) وعند نقطة الدخول
+// evaluate()'s CallExpr branch أعلاه. كل شيء هنا إضافي بحت: run() العادي بلا أي `|>` أو بلا جلسة
+// Flow نشِطة لا يمرّ إطلاقاً من هذا الكود.
+namespace flow {
+
+std::string nodeTypeName(NodeType t) {
+    switch (t) {
+        case NodeType::INPUT: return "INPUT";
+        case NodeType::OUTPUT: return "OUTPUT";
+        case NodeType::FILTER: return "FILTER";
+        case NodeType::MAP: return "MAP";
+        case NodeType::TRANSFORM: return "TRANSFORM";
+        case NodeType::SORT: return "SORT";
+        case NodeType::REDUCE: return "REDUCE";
+        case NodeType::CONTAINER: return "CONTAINER";
+        case NodeType::FILE: return "FILE";
+        case NodeType::NETWORK: return "NETWORK";
+        case NodeType::PIPELINE: return "PIPELINE";
+        case NodeType::CUSTOM: return "CUSTOM";
+    }
+    return "CUSTOM";
+}
+
+std::string nodeStatusName(NodeStatus s) {
+    switch (s) {
+        case NodeStatus::QUEUED: return "QUEUED";
+        case NodeStatus::RUNNING: return "RUNNING";
+        case NodeStatus::SUCCESS: return "SUCCESS";
+        case NodeStatus::ERROR: return "ERROR";
+        case NodeStatus::SKIPPED: return "SKIPPED";
+        case NodeStatus::CANCELLED: return "CANCELLED";
+        case NodeStatus::TIMEOUT: return "TIMEOUT";
+    }
+    return "ERROR";
+}
+
+std::string eventTypeName(EventType t) {
+    switch (t) {
+        case EventType::FLOW_STARTED: return "FLOW_STARTED";
+        case EventType::NODE_QUEUED: return "NODE_QUEUED";
+        case EventType::NODE_STARTED: return "NODE_STARTED";
+        case EventType::NODE_OUTPUT: return "NODE_OUTPUT";
+        case EventType::NODE_FINISHED: return "NODE_FINISHED";
+        case EventType::NODE_ERROR: return "NODE_ERROR";
+        case EventType::FLOW_FINISHED: return "FLOW_FINISHED";
+        case EventType::FLOW_CANCELLED: return "FLOW_CANCELLED";
+        case EventType::FLOW_TIMEOUT: return "FLOW_TIMEOUT";
+    }
+    return "FLOW_FINISHED";
+}
+
+std::string sessionStatusName(SessionStatus s) {
+    switch (s) {
+        case SessionStatus::RUNNING: return "RUNNING";
+        case SessionStatus::SUCCESS: return "SUCCESS";
+        case SessionStatus::ERROR: return "ERROR";
+        case SessionStatus::CANCELLED: return "CANCELLED";
+        case SessionStatus::TIMEOUT: return "TIMEOUT";
+    }
+    return "ERROR";
+}
+
+DataPreview makeDataPreview(const Value& v, int maxPreviewChars, int maxRecordsPreview) {
+    DataPreview p;
+    p.available = true;
+    if (v.type == Value::Type::ARRAY && v.array) {
+        p.recordCount = static_cast<long long>(v.array->size());
+        std::ostringstream os;
+        os << "[";
+        size_t shown = std::min(v.array->size(), static_cast<size_t>(std::max(0, maxRecordsPreview)));
+        for (size_t i = 0; i < shown; ++i) {
+            if (i > 0) os << ", ";
+            os << (*v.array)[i].toDisplayString();
+        }
+        if (v.array->size() > shown) {
+            os << ", ... (+" << (v.array->size() - shown) << " more)";
+            p.truncated = true;
+        }
+        os << "]";
+        p.preview = os.str();
+    } else {
+        p.preview = v.toDisplayString();
+    }
+    if (maxPreviewChars > 0 && static_cast<int>(p.preview.size()) > maxPreviewChars) {
+        p.preview = p.preview.substr(0, static_cast<size_t>(maxPreviewChars)) + "...";
+        p.truncated = true;
+    }
+    return p;
+}
+
+long long PipelineTracer::nowMs() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+}
+
+void PipelineTracer::emit(EventType type, int nodeId, const std::string& message, int line,
+                            long long durationMs, std::unordered_map<std::string, std::string> metadata) {
+    FlowEvent ev;
+    ev.sequence = seq_.fetch_add(1, std::memory_order_relaxed) + 1;
+    ev.timestamp = nowMs();
+    ev.flowId = flowId_;
+    ev.nodeId = nodeId;
+    ev.type = type;
+    ev.message = message;
+    ev.line = line;
+    ev.column = 1; // انظر تعليق FlowEvent::column في rin_interpreter.h
+    ev.durationMs = durationMs;
+    ev.metadata = std::move(metadata);
+
+    EventSink sinkCopy;
+    {
+        std::lock_guard<std::mutex> lk(mu_);
+        events_.push_back(ev);
+        if (events_.size() > kMaxEvents) events_.erase(events_.begin()); // قسم 25: لا تراكم بلا حدود
+        sinkCopy = sink_;
+    }
+    if (sinkCopy) sinkCopy(ev); // خارج القفل: sink قد يستدعي كوتلن/JNI (نفس فلسفة StreamSink)
+}
+
+void PipelineTracer::updateMetricsLocked() {
+    FlowMetrics m;
+    m.totalNodes = static_cast<int>(graph_.nodes.size());
+    for (auto& n : graph_.nodes) {
+        switch (n.status) {
+            case NodeStatus::SUCCESS: m.completedNodes++; break;
+            case NodeStatus::ERROR: m.failedNodes++; break;
+            case NodeStatus::SKIPPED: m.skippedNodes++; break;
+            case NodeStatus::CANCELLED: m.cancelledNodes++; break;
+            case NodeStatus::TIMEOUT: m.timeoutNodes++; break;
+            default: break;
+        }
+        m.totalDurationMs += n.durationMs;
+        if (n.input.available && n.input.recordCount >= 0) m.totalInputRecords += n.input.recordCount;
+        if (n.output.available && n.output.recordCount >= 0) m.totalOutputRecords += n.output.recordCount;
+    }
+    metrics_ = m;
+}
+
+int PipelineTracer::queueNode(NodeType type, const std::string& name, int line) {
+    int id;
+    {
+        std::lock_guard<std::mutex> lk(mu_);
+        FlowNode node;
+        node.id = static_cast<int>(graph_.nodes.size());
+        node.type = type;
+        node.name = name;
+        node.status = NodeStatus::QUEUED;
+        node.line = line;
+        if (!graph_.nodes.empty()) graph_.edges.push_back({graph_.nodes.back().id, node.id});
+        id = node.id;
+        graph_.nodes.push_back(std::move(node));
+        updateMetricsLocked();
+    }
+    emit(EventType::NODE_QUEUED, id, name, line, 0);
+    return id;
+}
+
+void PipelineTracer::startNode(int nodeId) {
+    int line = 0;
+    {
+        std::lock_guard<std::mutex> lk(mu_);
+        if (nodeId < 0 || nodeId >= static_cast<int>(graph_.nodes.size())) return;
+        auto& n = graph_.nodes[nodeId];
+        n.status = NodeStatus::RUNNING;
+        n.startedAt = nowMs();
+        line = n.line;
+        updateMetricsLocked();
+    }
+    emit(EventType::NODE_STARTED, nodeId, "", line, 0);
+}
+
+void PipelineTracer::recordInput(int nodeId, const Value& v, int maxPreviewChars, int maxRecordsPreview) {
+    std::lock_guard<std::mutex> lk(mu_);
+    if (nodeId < 0 || nodeId >= static_cast<int>(graph_.nodes.size())) return;
+    graph_.nodes[nodeId].input = makeDataPreview(v, maxPreviewChars, maxRecordsPreview);
+    updateMetricsLocked();
+}
+
+void PipelineTracer::recordOutput(int nodeId, const Value& v, int maxPreviewChars, int maxRecordsPreview) {
+    int line = 0;
+    {
+        std::lock_guard<std::mutex> lk(mu_);
+        if (nodeId < 0 || nodeId >= static_cast<int>(graph_.nodes.size())) return;
+        graph_.nodes[nodeId].output = makeDataPreview(v, maxPreviewChars, maxRecordsPreview);
+        line = graph_.nodes[nodeId].line;
+        updateMetricsLocked();
+    }
+    emit(EventType::NODE_OUTPUT, nodeId, "", line, 0);
+}
+
+void PipelineTracer::finishNode(int nodeId) {
+    long long dur = 0; int line = 0;
+    {
+        std::lock_guard<std::mutex> lk(mu_);
+        if (nodeId < 0 || nodeId >= static_cast<int>(graph_.nodes.size())) return;
+        auto& n = graph_.nodes[nodeId];
+        n.status = NodeStatus::SUCCESS;
+        n.finishedAt = nowMs();
+        n.durationMs = n.startedAt > 0 ? (n.finishedAt - n.startedAt) : 0;
+        dur = n.durationMs; line = n.line;
+        updateMetricsLocked();
+    }
+    emit(EventType::NODE_FINISHED, nodeId, "SUCCESS", line, dur);
+}
+
+void PipelineTracer::failNode(int nodeId, const NodeError& err) {
+    long long dur = 0; int line = err.line;
+    {
+        std::lock_guard<std::mutex> lk(mu_);
+        if (nodeId < 0 || nodeId >= static_cast<int>(graph_.nodes.size())) return;
+        auto& n = graph_.nodes[nodeId];
+        n.status = NodeStatus::ERROR;
+        n.finishedAt = nowMs();
+        n.durationMs = n.startedAt > 0 ? (n.finishedAt - n.startedAt) : 0;
+        n.error = err;
+        dur = n.durationMs;
+        updateMetricsLocked();
+    }
+    std::unordered_map<std::string, std::string> meta = {{"code", err.code}};
+    emit(EventType::NODE_ERROR, nodeId, err.message, line, dur, meta);
+}
+
+void PipelineTracer::skipNode(int nodeId) {
+    int line = 0;
+    {
+        std::lock_guard<std::mutex> lk(mu_);
+        if (nodeId < 0 || nodeId >= static_cast<int>(graph_.nodes.size())) return;
+        graph_.nodes[nodeId].status = NodeStatus::SKIPPED;
+        line = graph_.nodes[nodeId].line;
+        updateMetricsLocked();
+    }
+    emit(EventType::NODE_FINISHED, nodeId, "SKIPPED", line, 0);
+}
+
+void PipelineTracer::cancelNode(int nodeId) {
+    int line = 0;
+    {
+        std::lock_guard<std::mutex> lk(mu_);
+        if (nodeId < 0 || nodeId >= static_cast<int>(graph_.nodes.size())) return;
+        graph_.nodes[nodeId].status = NodeStatus::CANCELLED;
+        graph_.nodes[nodeId].finishedAt = nowMs();
+        line = graph_.nodes[nodeId].line;
+        updateMetricsLocked();
+    }
+    emit(EventType::NODE_FINISHED, nodeId, "CANCELLED", line, 0);
+}
+
+void PipelineTracer::timeoutNode(int nodeId) {
+    int line = 0;
+    {
+        std::lock_guard<std::mutex> lk(mu_);
+        if (nodeId < 0 || nodeId >= static_cast<int>(graph_.nodes.size())) return;
+        graph_.nodes[nodeId].status = NodeStatus::TIMEOUT;
+        graph_.nodes[nodeId].finishedAt = nowMs();
+        line = graph_.nodes[nodeId].line;
+        updateMetricsLocked();
+    }
+    emit(EventType::NODE_FINISHED, nodeId, "TIMEOUT", line, 0);
+}
+
+void PipelineTracer::emitFlowStarted() { emit(EventType::FLOW_STARTED, -1, flowId_, 0, 0); }
+
+void PipelineTracer::emitFlowFinished(SessionStatus status) {
+    long long total = 0;
+    { std::lock_guard<std::mutex> lk(mu_); total = metrics_.totalDurationMs; }
+    EventType t = EventType::FLOW_FINISHED;
+    if (status == SessionStatus::CANCELLED) t = EventType::FLOW_CANCELLED;
+    else if (status == SessionStatus::TIMEOUT) t = EventType::FLOW_TIMEOUT;
+    emit(t, -1, sessionStatusName(status), 0, total);
+}
+
+std::shared_ptr<FlowSession> RinFlowEngine::createSession(const std::string& id) {
+    auto session = std::make_shared<FlowSession>();
+    session->id = id;
+    session->tracer = std::make_shared<PipelineTracer>(id);
+    std::lock_guard<std::mutex> lk(mu_);
+    sessions_[id] = session;
+    order_.push_back(id);
+    while (order_.size() > kMaxSessions) {
+        // لا تحذف جلسات ما تزال RUNNING (قسم 25: لا تفقد جلسة نشطة أثناء التقليم)
+        auto it = sessions_.find(order_.front());
+        if (it != sessions_.end() && it->second->status == SessionStatus::RUNNING) break;
+        sessions_.erase(order_.front());
+        order_.erase(order_.begin());
+    }
+    return session;
+}
+
+std::shared_ptr<FlowSession> RinFlowEngine::getSession(const std::string& id) const {
+    std::lock_guard<std::mutex> lk(mu_);
+    auto it = sessions_.find(id);
+    return it == sessions_.end() ? nullptr : it->second;
+}
+
+bool RinFlowEngine::requestCancel(const std::string& id) {
+    std::shared_ptr<FlowSession> session;
+    {
+        std::lock_guard<std::mutex> lk(mu_);
+        auto it = sessions_.find(id);
+        if (it == sessions_.end()) return false;
+        session = it->second;
+    }
+    if (session->status != SessionStatus::RUNNING) return false;
+    session->cancelFlag->store(true, std::memory_order_relaxed);
+    return true;
+}
+
+std::vector<std::string> RinFlowEngine::listSessionIds() const {
+    std::lock_guard<std::mutex> lk(mu_);
+    return order_;
+}
+
+} // namespace flow
+
+flow::NodeType Interpreter::inferFlowNodeType(const std::string& fnName) const {
+    auto it = flowNodeTypeOverrides_.find(fnName);
+    if (it != flowNodeTypeOverrides_.end()) return it->second;
+    // جدول تخمين افتراضي بأسماء شائعة لمراحل |> -- قابل للتوسع بالكامل عبر
+    // Interpreter::registerFlowNodeType دون الحاجة لتعديل هذا الجدول نفسه (قسم 1).
+    static const std::unordered_map<std::string, flow::NodeType> defaults = {
+        {"filter", flow::NodeType::FILTER},
+        {"map", flow::NodeType::MAP},
+        {"transform", flow::NodeType::TRANSFORM},
+        {"sort", flow::NodeType::SORT},
+        {"sortBy", flow::NodeType::SORT},
+        {"reduce", flow::NodeType::REDUCE},
+        {"fold", flow::NodeType::REDUCE},
+        {"sum", flow::NodeType::REDUCE},
+        {"mean", flow::NodeType::REDUCE},
+        {"output", flow::NodeType::OUTPUT},
+        {"print", flow::NodeType::OUTPUT},
+        {"save", flow::NodeType::CONTAINER},
+        {"insertDoc", flow::NodeType::CONTAINER},
+        {"updateDoc", flow::NodeType::CONTAINER},
+        {"table", flow::NodeType::CONTAINER},
+        {"file", flow::NodeType::FILE},
+        {"readFile", flow::NodeType::FILE},
+        {"writeFile", flow::NodeType::FILE},
+        {"httpGet", flow::NodeType::NETWORK},
+        {"httpPost", flow::NodeType::NETWORK},
+        {"apiCall", flow::NodeType::NETWORK},
+        {"apiGet", flow::NodeType::NETWORK},
+        {"apiPost", flow::NodeType::NETWORK},
+        {"fetchImage", flow::NodeType::NETWORK},
+        {"fetchIcon", flow::NodeType::NETWORK},
+        {"pipe", flow::NodeType::PIPELINE},
+    };
+    auto d = defaults.find(fnName);
+    return d == defaults.end() ? flow::NodeType::CUSTOM : d->second;
+}
+
+void Interpreter::flattenPipelineChain(const std::shared_ptr<CallExpr>& root,
+                                        ExprPtr& outOriginalInput,
+                                        std::vector<std::shared_ptr<CallExpr>>& outStages) const {
+    // كل CallExpr ناتج عن |> يضع الإدخال القادم من يساره في args[0] (انظر Parser::pipeline في
+    // rin_parser.cpp)؛ ننزل بهذا حتى نصل لتعبير ليس CallExpr::isPipelineNode -- وهذا هو الإدخال
+    // الأصلي الحقيقي (قد يكون متغيراً، حرفياً، أو أي تعبير آخر).
+    std::vector<std::shared_ptr<CallExpr>> reversed;
+    std::shared_ptr<CallExpr> cur = root;
+    ExprPtr originalInput;
+    while (cur && cur->isPipelineNode) {
+        reversed.push_back(cur);
+        if (cur->args.empty()) { originalInput = nullptr; break; }
+        auto prevCall = std::dynamic_pointer_cast<CallExpr>(cur->args[0]);
+        if (prevCall && prevCall->isPipelineNode) {
+            cur = prevCall;
+        } else {
+            originalInput = cur->args[0];
+            cur = nullptr;
+        }
+    }
+    outOriginalInput = originalInput;
+    outStages.assign(reversed.rbegin(), reversed.rend());
+}
+
+Value Interpreter::evaluatePipelineFlow(const std::shared_ptr<CallExpr>& root, EnvPtr env) {
+    auto& session = *activeFlowSession_;
+    auto tracer = session.tracer;
+    const auto& opts = activeFlowOptions_;
+
+    // نتذكّر آخر سلسلة/بيئة نُفِّذت في هذه الجلسة (قسم 11: Replay) بلا أي تعديل على الجلسات الأخرى.
+    session.lastRootExpr = root;
+    session.lastEnv = env;
+
+    ExprPtr originalInputExpr;
+    std::vector<std::shared_ptr<CallExpr>> stages;
+    flattenPipelineChain(root, originalInputExpr, stages);
+
+    // إلغاء طُلِب فعلاً *قبل* بدء أي شيء من هذه السلسلة بالذات -> لا تُنشأ أي Node جديدة إطلاقاً
+    // (قسم 9: "لا تستمر Nodes الجديدة بعد الإلغاء" -- يشمل هذا أي سلسلة |> لاحقة في نفس البرنامج).
+    if (session.isCancelled()) return Value::nil();
+    if (session.isTimedOut()) return Value::nil();
+
+    // ---- Node الإدخال (INPUT) ----
+    int inputLine = originalInputExpr ? originalInputExpr->line : root->line;
+    int inputNodeId = tracer->queueNode(flow::NodeType::INPUT, "input", inputLine);
+    tracer->startNode(inputNodeId);
+    Value currentValue = originalInputExpr ? evaluate(originalInputExpr, env) : Value::nil();
+    tracer->recordOutput(inputNodeId, currentValue, opts.maxPreviewChars, opts.maxRecordsPreview);
+    tracer->finishNode(inputNodeId);
+
+    // ---- مراحل |> بالترتيب الحقيقي ----
+    for (size_t i = 0; i < stages.size(); ++i) {
+        auto& stageCall = stages[i];
+        flow::NodeType type = inferFlowNodeType(stageCall->callee);
+        // آخر مرحلة تُسمَّى output صراحة إن لم يكن اسمها نفسه يوحي بنوع أدقّ (مثال: آخر مرحلة اسمها
+        // "save" تبقى CONTAINER لأن هذا أدقّ من OUTPUT العام).
+        if (i + 1 == stages.size() && type == flow::NodeType::CUSTOM) type = flow::NodeType::OUTPUT;
+
+        if (session.isCancelled()) {
+            int nid = tracer->queueNode(type, stageCall->callee, stageCall->line);
+            tracer->cancelNode(nid);
+            for (size_t j = i + 1; j < stages.size(); ++j) {
+                int skipId = tracer->queueNode(inferFlowNodeType(stages[j]->callee), stages[j]->callee, stages[j]->line);
+                tracer->skipNode(skipId);
+            }
+            return Value::nil();
+        }
+        if (session.isTimedOut()) {
+            int nid = tracer->queueNode(type, stageCall->callee, stageCall->line);
+            tracer->timeoutNode(nid);
+            for (size_t j = i + 1; j < stages.size(); ++j) {
+                int skipId = tracer->queueNode(inferFlowNodeType(stages[j]->callee), stages[j]->callee, stages[j]->line);
+                tracer->skipNode(skipId);
+            }
+            return Value::nil();
+        }
+
+        int nodeId = tracer->queueNode(type, stageCall->callee, stageCall->line);
+        tracer->startNode(nodeId);
+        tracer->recordInput(nodeId, currentValue, opts.maxPreviewChars, opts.maxRecordsPreview);
+
+        // args[0] هو تعبير المدخل القادم من السلسلة (لا يُعاد تقييمه -- currentValue هو ناتجه
+        // الفعلي المُحسَب أعلاه بالفعل)؛ باقي args[1..] هي وسائط إضافية حقيقية مكتوبة صراحة في
+        // الكود، كل واحد يُقيَّم في نفس env تماماً كأي CallExpr عادي.
+        std::vector<Value> callArgs;
+        callArgs.push_back(currentValue);
+        for (size_t k = 1; k < stageCall->args.size(); ++k) {
+            callArgs.push_back(evaluate(stageCall->args[k], env));
+        }
+
+        try {
+            currentValue = invokeCallee(stageCall->callee, callArgs, stageCall->line, env);
+        } catch (RinError& e) {
+            flow::NodeError nerr;
+            nerr.line = e.line;
+            nerr.message = e.message;
+            // كود RinFlow داخلي (RIN-Fxxxx) مستقل عن diag::Code اللغوي -- قسم 8: Flow Diagnostics.
+            nerr.code = e.diagnostic ? ("RIN-F-" + diag::codeString(e.diagnostic->code)) : "RIN-F2000";
+            tracer->failNode(nodeId, nerr);
+            for (size_t j = i + 1; j < stages.size(); ++j) {
+                int skipId = tracer->queueNode(inferFlowNodeType(stages[j]->callee), stages[j]->callee, stages[j]->line);
+                tracer->skipNode(skipId);
+            }
+            throw; // نفس RinError يصعد كما كان دائماً؛ run() العادي يعالجه بنفس الطريقة تماماً
+        }
+
+        tracer->recordOutput(nodeId, currentValue, opts.maxPreviewChars, opts.maxRecordsPreview);
+        tracer->finishNode(nodeId);
+    }
+
+    return currentValue;
+}
+
+Interpreter::FlowRunResult Interpreter::runProgramAsFlow(const std::vector<StmtPtr>& statements,
+                                                           const flow::FlowRunOptions& opts,
+                                                           flow::EventSink sink) {
+    static std::atomic<long long> counter{0};
+    std::string sessionId = "flow-" + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count()) + "-" + std::to_string(counter.fetch_add(1));
+    auto session = flowEngine_.createSession(sessionId);
+    if (sink) session->tracer->setSink(std::move(sink));
+    if (opts.timeoutMs > 0) {
+        session->deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(opts.timeoutMs);
+    }
+
+    activeFlowSession_ = session;
+    activeFlowOptions_ = opts;
+    session->tracer->emitFlowStarted();
+
+    FlowRunResult result;
+    result.sessionId = sessionId;
+    result.output = run(statements); // نفس run() العادي بالضبط -- hoisting/output/lastDiagnostic كلها كما هي
+
+    flow::SessionStatus finalStatus;
+    if (session->isCancelled()) finalStatus = flow::SessionStatus::CANCELLED;
+    else if (session->isTimedOut()) finalStatus = flow::SessionStatus::TIMEOUT;
+    else if (hadError()) finalStatus = flow::SessionStatus::ERROR;
+    else finalStatus = flow::SessionStatus::SUCCESS;
+    session->status = finalStatus;
+    session->tracer->emitFlowFinished(finalStatus);
+
+    result.status = finalStatus;
+    result.graph = session->tracer->snapshotGraph();
+    result.metrics = session->tracer->snapshotMetrics();
+
+    activeFlowSession_.reset();
+    return result;
+}
+
+std::optional<Interpreter::FlowRunResult> Interpreter::replayFlow(const std::string& previousSessionId,
+                                                                    const flow::FlowRunOptions& opts,
+                                                                    flow::EventSink sink) {
+    auto previous = flowEngine_.getSession(previousSessionId);
+    if (!previous || !previous->lastRootExpr || !previous->lastEnv) return std::nullopt;
+
+    static std::atomic<long long> counter{0};
+    std::string sessionId = "flow-replay-" + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count()) + "-" + std::to_string(counter.fetch_add(1));
+    auto session = flowEngine_.createSession(sessionId);
+    if (sink) session->tracer->setSink(std::move(sink));
+    if (opts.timeoutMs > 0) {
+        session->deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(opts.timeoutMs);
+    }
+
+    activeFlowSession_ = session;
+    activeFlowOptions_ = opts;
+    session->tracer->emitFlowStarted();
+
+    FlowRunResult result;
+    result.sessionId = sessionId;
+    flow::SessionStatus finalStatus = flow::SessionStatus::SUCCESS;
+    try {
+        evaluatePipelineFlow(previous->lastRootExpr, previous->lastEnv);
+    } catch (RinError&) {
+        finalStatus = flow::SessionStatus::ERROR;
+    }
+    if (session->isCancelled()) finalStatus = flow::SessionStatus::CANCELLED;
+    else if (session->isTimedOut()) finalStatus = flow::SessionStatus::TIMEOUT;
+
+    session->status = finalStatus;
+    session->tracer->emitFlowFinished(finalStatus);
+    result.status = finalStatus;
+    result.graph = session->tracer->snapshotGraph();
+    result.metrics = session->tracer->snapshotMetrics();
+
+    activeFlowSession_.reset();
+    return result;
+}
+
+
+
+// ============================================================================
+// let+ — تفكيك الأنماط، عدة تصريحات، let ... else، وإسناد تفكيكي. الشرح: docs/let-plus.md
+// ----------------------------------------------------------------------------
+// المبدأ: نجمع كل الارتباطات أولاً في قائمة (LetBindings) ولا نعرّف شيئًا إلا بعد نجاح النمط كاملاً،
+// فلا يبقى نصف-ارتباط إن فشلت مطابقة الشكل في منتصف النمط.
+// ============================================================================
+bool Interpreter::letBindPattern(const LetPattern& p, const Value& vIn, const EnvPtr& env, LetBindings& out, std::string& why) {
+    Value v = vIn;
+    if (p.defaultValue && v.type == Value::Type::NIL) { // القيمة الافتراضية: عند الغياب أو nil، وترى ما رُبط قبلها
+        EnvPtr dEnv = env;
+        if (!out.empty()) {
+            dEnv = std::make_shared<Environment>(env);
+            for (auto& b : out) dEnv->define(b.first, b.second);
+        }
+        v = copyForBinding(evaluate(p.defaultValue, dEnv));
+    }
+    switch (p.kind) {
+        case LetPattern::Kind::Skip: return true;
+        case LetPattern::Kind::Name:
+            // هدف arr[i] / obj.f في إسناد تفكيكي: اسم داخلي فريد يُحلّ في letPatternAssign
+            out.push_back({p.assignExpr ? "\x01" + std::to_string(reinterpret_cast<uintptr_t>(&p)) : p.name, copyForBinding(v)});
+            return true;
+        case LetPattern::Kind::Array: {
+            if (v.type != Value::Type::ARRAY || !v.array) {
+                why = "expected an array to take apart with `[...]`, but got " + (v.type == Value::Type::NIL ? std::string("nil") : "`" + v.typeName() + "`");
+                return false;
+            }
+            const ArrayData& arr = *v.array;
+            for (size_t i = 0; i < p.items.size(); ++i) {
+                Value elem = i < arr.size() ? arr[i] : Value::nil();
+                if (!letBindPattern(p.items[i], elem, env, out, why)) return false;
+            }
+            if (p.hasRest && !p.restName.empty()) {
+                auto rest = std::make_shared<ArrayData>();
+                for (size_t i = p.items.size(); i < arr.size(); ++i) rest->push_back(arr[i]);
+                out.push_back({p.restName, Value::makeArray(rest)});
+            }
+            return true;
+        }
+        case LetPattern::Kind::Map: {
+            bool isMap = v.type == Value::Type::MAP && v.map;
+            bool isInst = v.type == Value::Type::INSTANCE && v.instance;
+            if (!isMap && !isInst) {
+                why = "expected a map or object to take apart with `{...}`, but got " + (v.type == Value::Type::NIL ? std::string("nil") : "`" + v.typeName() + "`");
+                return false;
+            }
+            std::unordered_set<std::string> used;
+            for (auto& item : p.items) {
+                Value got = Value::nil();
+                if (isMap) {
+                    for (auto& kv : *v.map)
+                        if (kv.first.type == Value::Type::STRING && kv.first.str == item.key) { got = kv.second; break; }
+                } else {
+                    auto it = v.instance->fields.find(item.key);
+                    if (it != v.instance->fields.end()) got = it->second;
+                }
+                used.insert(item.key);
+                if (!letBindPattern(item, got, env, out, why)) return false;
+            }
+            if (p.hasRest && !p.restName.empty()) {
+                if (!isMap) { why = "`...rest` in a `{...}` pattern needs a map (an object has no 'remaining keys')"; return false; }
+                auto rest = std::make_shared<MapData>();
+                for (auto& kv : *v.map)
+                    if (!(kv.first.type == Value::Type::STRING && used.count(kv.first.str))) rest->push_back(kv);
+                out.push_back({p.restName, Value::makeMap(rest)});
+            }
+            return true;
+        }
+    }
+    return true;
+}
+
+void Interpreter::letRunElse(const std::shared_ptr<BlockStmt>& blk, const EnvPtr& env, int line, const std::string& what) {
+    execute(blk, env); // return/break/continue/throw/abort تخرج هنا كاستثناءات التحكم المعتادة
+    throw diagErr(diag::Code::E0048_LetElseFallthrough, line,
+                  "the `else` block of `let` must leave the current scope, but it finished normally (" + what + ")");
+}
+
+void Interpreter::letExecPattern(const std::shared_ptr<LetPatternStmt>& s, const EnvPtr& env) {
+    Value v = evaluate(s->initializer, env);
+    LetBindings binds;
+    std::string why;
+    bool ok = v.type != Value::Type::NIL && letBindPattern(s->pattern, v, env, binds, why);
+    if (!ok) {
+        if (s->elseBlock) letRunElse(s->elseBlock, env, s->line, "the value was nil or did not match the pattern");
+        throw diagErr(diag::Code::E0004_InvalidType, s->line,
+                      "cannot destructure: " + (v.type == Value::Type::NIL ? std::string("the value is nil") : why));
+    }
+    for (auto& b : binds) env->define(b.first, b.second);
+}
+
+Value Interpreter::letPatternAssign(const std::shared_ptr<PatternAssignExpr>& e, const EnvPtr& env) {
+    Value v = evaluate(e->value, env); // الطرف الأيمن كاملاً أولاً: هذا ما يجعل [a, b] = [b, a] تبديلاً صحيحاً
+    LetBindings binds;
+    std::string why;
+    if (v.type == Value::Type::NIL || !letBindPattern(e->pattern, v, env, binds, why))
+        throw diagErr(diag::Code::E0004_InvalidType, e->line,
+                      "cannot destructure: " + (v.type == Value::Type::NIL ? std::string("the value is nil") : why));
+    std::unordered_map<std::string, const LetPattern*> targets; // arr[i] / obj.f
+    std::function<void(const LetPattern&)> collect = [&](const LetPattern& p) {
+        if (p.assignExpr) targets["\x01" + std::to_string(reinterpret_cast<uintptr_t>(&p))] = &p;
+        for (auto& sub : p.items) collect(sub);
+    };
+    collect(e->pattern);
+    for (auto& b : binds) {
+        auto tg = targets.find(b.first);
+        if (tg != targets.end()) {
+            auto tmpEnv = std::make_shared<Environment>(env);
+            tmpEnv->define("__pa_value", copyForBinding(b.second));
+            evaluate(tg->second->assignExpr, tmpEnv);
+            continue;
+        }
+        Environment* owner = findLiveOwner(env, b.first);
+        if (!owner) throw undefinedVariableErr(b.first, e->line, env);
+        Value stored = copyForBinding(b.second);
+        if (liveActive_) liveAssign(owner, b.first, stored, e->line); // stone/gauge/tape/bell/trial تعمل هنا أيضًا
+        else assignStateAware(owner, b.first, stored, e->line);
+    }
+    return v;
+}
+
+// ============================================================================
+// المتغيرات الحيّة (Living Variables) — التنفيذ. الشرح الكامل: docs/living-variables.md
+// ----------------------------------------------------------------------------
+// المبدأ: لا نغيّر نموذج القيم إطلاقاً. بيانات "حياة" المتغيّر (LiveMeta) تُعلَّق باسمه داخل
+// Environment::live، وتُستشار في أربع نقاط فقط: قراءة متغيّر (ExprKind::Variable)، إسناد (ExprKind::Assign)،
+// قراءة خاصية (x.fill ...)، وكتابة داخل المحتوى (x[i]=.. / x.f=..). وكلها خلف الراية liveActive_ التي لا
+// تصير true قبل أول stone/gauge/tape/lens/fuse/bell/trial، فبرنامج لا يستعملها لا يدفع أي كلفة.
+// ============================================================================
+namespace {
+struct LiveAbortSignal {}; // abort; داخل trial — يلتقطها liveExecTrial فقط
+
+RinError liveErr(diag::Code code, int line, const std::string& msg, const std::string& hint = "") {
+    diag::Diagnostic d(code, msg, diag::SourceLocation::point(g_diagFile, line, 1));
+    if (!hint.empty()) d.withHint(hint);
+    return RinError(std::move(d));
+}
+std::string liveNum(double x) { return Value::num(x).toDisplayString(); }
+} // namespace
+
+Environment* Interpreter::findLiveOwner(const EnvPtr& env, const std::string& name) const {
+    for (Environment* cur = env.get(); cur; cur = cur->parent.get())
+        if (cur->values.count(name)) return cur;
+    return nullptr;
+}
+
+Value Interpreter::liveApplyRange(const LiveMeta& m, const std::string& name, const Value& v, int line) const {
+    if (v.type != Value::Type::NUMBER || std::isnan(v.number))
+        throw liveErr(diag::Code::E0044_RangeViolation, line,
+                      "gauge `" + name + "` holds numbers only, but got " + (v.type == Value::Type::NUMBER ? std::string("NaN") : "a " + v.typeName()),
+                      "assign a number; a gauge keeps it between " + liveNum(m.lo) + " and " + liveNum(m.hi));
+    double x = v.number;
+    if (m.rangeMode == 1) { // strict
+        if (x < m.lo || x > m.hi)
+            throw liveErr(diag::Code::E0044_RangeViolation, line,
+                          "gauge `" + name + "` accepts " + liveNum(m.lo) + " to " + liveNum(m.hi) + ", but got " + liveNum(x),
+                          "drop `strict` to clamp automatically, or use `wrap` if values should loop around");
+        return v;
+    }
+    if (m.rangeMode == 2) { // wrap: نصف مفتوح [lo, hi)
+        if (!std::isfinite(x)) throw liveErr(diag::Code::E0044_RangeViolation, line, "gauge `" + name + "` cannot wrap a non-finite number");
+        double span = m.hi - m.lo;
+        double r = std::fmod(x - m.lo, span);
+        if (r < 0) r += span;
+        return Value::num(m.lo + r);
+    }
+    return Value::num(std::min(std::max(x, m.lo), m.hi)); // clamp
+}
+
+bool Interpreter::liveCheckAccept(LiveMeta& m, const std::string& name, Value& v, int line, bool initial) {
+    EnvPtr scope = m.scope.lock();
+    if (!scope) throw liveErr(diag::Code::E0046_LiveMisuse, line, "accept `" + name + "` outlived the scope it was declared in");
+    // الشرط يُقيَّم في نطاق التصريح، واسم المتغيّر نفسه يشير إلى القيمة المرشّحة (لا إلى القيمة الحالية).
+    auto test = [&](const Value& cand) {
+        auto candEnv = std::make_shared<Environment>(scope);
+        candEnv->define(name, cand);
+        return evaluate(m.rule, candEnv);
+    };
+    if (test(v).isTruthy()) { m.accepted++; m.lastOk = true; return true; }
+    m.rejected++; m.lastOk = false; m.refused = v;
+    if (m.fallback) { // else VALUE: يحلّ محلّ القيمة المرفوضة، وعليه هو نفسه أن يمرّ من الشرط
+        auto candEnv = std::make_shared<Environment>(scope);
+        candEnv->define(name, v);
+        Value fb = copyForBinding(evaluate(m.fallback, candEnv));
+        if (!test(fb).isTruthy())
+            throw liveErr(diag::Code::E0049_AcceptRejected, line,
+                          "accept `" + name + "` rejected " + v.toDisplayString() + ", and its `else` fallback " + fb.toDisplayString() + " is rejected too",
+                          "the fallback must satisfy the same rule it stands in for");
+        v = fb;
+        return true;
+    }
+    if (m.strictAccept || initial)
+        throw liveErr(diag::Code::E0049_AcceptRejected, line,
+                      std::string(initial ? "the first value of accept `" : "accept `") + name + (initial ? "` was rejected: " : "` rejected ") + v.toDisplayString(),
+                      initial ? "give it a starting value its rule accepts, or add `else VALUE` as a fallback"
+                              : "drop `strict` to ignore rejected assignments quietly (check `" + name + ".ok` afterwards), or add `else VALUE` to substitute a value");
+    return false; // تجاهل صامت: تبقى القيمة القديمة، وx.ok تصير false
+}
+
+bool Interpreter::liveGateEval(LiveMeta& m, const ExprPtr& rule, const std::string& name, const Value& oldV, const Value& newV, bool asPost, int line) {
+    EnvPtr scope = m.scope.lock();
+    if (!scope) throw liveErr(diag::Code::E0046_LiveMisuse, line, std::string(asPost ? "post" : "pre") + " `" + name + "` outlived the scope it was declared in");
+    auto env = std::make_shared<Environment>(scope);
+    env->define("old", oldV);
+    env->define("new", newV);
+    env->define(name, asPost ? newV : oldV); // آخراً: لو سُمّي المتغيّر old أو new يغلب اسمه
+    return evaluate(rule, env).isTruthy();
+}
+
+void Interpreter::liveGateRefuse(LiveMeta& m, const std::string& name, const Value& oldV, const Value& newV, bool post, int line) {
+    m.rejected++; m.lastOk = false; m.refused = newV;
+    if (!m.strictAccept) return; // الصامت: تبقى القيمة القديمة، وx.ok تصير false
+    throw liveErr(diag::Code::E0051_ContractViolated, line,
+                  std::string(post ? "post" : "pre") + " `" + name + "`: " + (post ? "the new state" : "the change") + " " + oldV.toDisplayString() + " -> " + newV.toDisplayString() +
+                      (post ? " breaks its `post` rule" : " is not allowed by its `pre` rule"),
+                  post ? "the write was rolled back; drop `strict` to roll back quietly (check `" + name + ".ok` afterwards)"
+                       : "nothing was written; drop `strict` to ignore blocked writes quietly (check `" + name + ".ok` afterwards)");
+}
+
+void Interpreter::liveJournal(Environment* owner, const std::string& name) {
+    if (trialStack_.empty()) return;
+    EnvPtr keep = owner->weak_from_this().lock();
+    if (!keep) return;
+    TrialEntry te;
+    te.env = keep; te.name = name;
+    auto vit = owner->values.find(name);
+    if (vit != owner->values.end()) te.oldValue = vit->second;
+    auto lit = owner->live.find(name);
+    if (lit != owner->live.end()) te.metaSnapshot = std::make_shared<LiveMeta>(*lit->second);
+    trialStack_.back().push_back(std::move(te));
+}
+
+void Interpreter::liveFireBells(const std::shared_ptr<LiveMeta>& m, const Value& oldV, const Value& newV, int line) {
+    struct DepthGuard { int& d; explicit DepthGuard(int& x) : d(x) { ++d; } ~DepthGuard() { --d; } } guard(bellDepth_);
+    if (bellDepth_ > 16)
+        throw liveErr(diag::Code::E0047_BellLoop, line, "a bell keeps re-triggering itself (nested more than 16 levels)",
+                      "a bell that assigns to the variable it watches must stop at some value");
+    std::vector<Value> bells = m->bells; // نسخة: قد يُسجِّل جرس جرساً آخر أثناء الرنين
+    for (auto& b : bells) {
+        if (b.type != Value::Type::FUNCTION || !b.function) continue;
+        size_t n = b.function->declaration ? b.function->declaration->params.size() : 0;
+        std::vector<Value> args;
+        if (n == 1) args = {newV};
+        else if (n >= 2) args = {oldV, newV};
+        callFunction(b.function, args, line);
+    }
+}
+
+Value Interpreter::liveRead(Environment* owner, const std::shared_ptr<LiveMeta>& m, const std::string& name, int line) {
+    m->reads++;
+    if (m->derived) { // lens: يُحسب من جديد عند كل قراءة داخل البيئة التي صُرِّح فيها
+        if (m->evaluating)
+            throw liveErr(diag::Code::E0045_DerivedReadOnly, line, "lens `" + name + "` depends on itself",
+                          "a lens may read other variables, but never itself (directly or through another lens)");
+        EnvPtr scope = m->scope.lock();
+        if (!scope) throw liveErr(diag::Code::E0045_DerivedReadOnly, line, "lens `" + name + "` outlived the scope it was declared in");
+        m->evaluating = true;
+        Value r;
+        try { r = evaluate(m->expr, scope); } catch (...) { m->evaluating = false; throw; }
+        m->evaluating = false;
+        owner->values[name] = r; // مرآة لمن يقرأ الـ Environment مباشرة (exportGlobals ...)
+        return r;
+    }
+    auto it = owner->values.find(name);
+    Value cur = it != owner->values.end() ? it->second : Value::nil();
+    if (m->fused) {
+        if (m->burnt || m->left <= 0) return Value::nil();
+        if (--m->left <= 0) { m->burnt = true; owner->values[name] = Value::nil(); }
+        return cur;
+    }
+    return cur;
+}
+
+Value Interpreter::liveAssign(Environment* owner, const std::string& name, Value v, int line) {
+    std::shared_ptr<LiveMeta> m;
+    if (!owner->live.empty()) { auto it = owner->live.find(name); if (it != owner->live.end()) m = it->second; }
+    if (m) {
+        if (m->frozen)
+            throw liveErr(diag::Code::E0043_FrozenVariable, line,
+                          "cannot assign to `" + name + "`: it is " + (m->kind == "banned" ? "banned (#ban)" : "a stone"),
+                          m->kind == "banned" ? "`#ban " + name + ";` froze it for good; remove the `#ban` if it must change"
+                                              : "a stone is frozen at its declaration; declare `" + name + "` with `let` (or `tape`) if it must change");
+        if (m->derived)
+            throw liveErr(diag::Code::E0045_DerivedReadOnly, line, "cannot assign to `" + name + "`: it is a lens (computed from other variables)",
+                          "change the variables `" + name + "` is computed from instead");
+        if (m->ranged) v = liveApplyRange(*m, name, v, line);
+        if (m->guarded) liveJournal(owner, name); // العدّادات تتغيّر حتى عند الرفض: تُسجَّل قبلها كي يعيدها trial إلى حالها
+        if (m->guarded && !liveCheckAccept(*m, name, v, line, false)) { // accept: رُفضت القيمة => لا كتابة ولا جرس ولا تاريخ
+            auto cur = owner->values.find(name);
+            return cur != owner->values.end() ? cur->second : Value::nil();
+        }
+    }
+    liveJournal(owner, name); // قبل أي تغيير (قيمة + تاريخ tape + عدّادات pre/post حتى عند الرفض)
+    Value old;
+    { auto it = owner->values.find(name); if (it != owner->values.end()) old = it->second; }
+    bool changed = !valuesEqual(old, v);
+    if (m && m->gated) { // pre/post (docs/pre-post.md)
+        m->lastPre = old; m->lastPost = v;
+        // «قبل»: يُسأل والعالم ما زال على القيمة القديمة؛ الجواب لا => لا كتابة ولا جرس ولا تاريخ
+        if (m->preRule && !liveGateEval(*m, m->preRule, name, old, v, false, line)) {
+            liveGateRefuse(*m, name, old, v, false, line);
+            return old;
+        }
+        // «بعد»: يُسأل والعالم يحمل القيمة الجديدة فعلاً (كتابة مؤقتة خام بلا خطّافات/روابط)؛ الجواب لا => تراجع كامل
+        if (m->postRule) {
+            owner->values[name] = v;
+            bool ok = false;
+            try { ok = liveGateEval(*m, m->postRule, name, old, v, true, line); }
+            catch (...) { owner->values[name] = old; throw; }
+            owner->values[name] = old; // الكتابة الحقيقية (مع خطّافات state/الروابط) تتمّ أدناه فقط عند النجاح
+            if (!ok) {
+                liveGateRefuse(*m, name, old, v, true, line);
+                return old;
+            }
+        }
+        m->accepted++; m->lastOk = true;
+    }
+    if (m) {
+        m->writes++;
+        if (m->taped && changed) {
+            m->past.push_back(old);
+            if (m->past.size() > m->keep) m->past.erase(m->past.begin());
+            m->future.clear(); // كتابة جديدة تقطع مسار redo (كأي محرّر)
+        }
+        if (m->fused) { m->armed = v; m->left = m->burns; m->burnt = false; }
+    }
+    assignStateAware(owner, name, v, line);
+    if (m && changed && !m->bells.empty()) liveFireBells(m, old, v, line);
+    return v;
+}
+
+void Interpreter::liveGuardWrite(const EnvPtr& env, const ExprPtr& objectExpr, int line) const {
+    auto ve = std::dynamic_pointer_cast<VariableExpr>(objectExpr);
+    if (!ve) return;
+    Environment* owner = findLiveOwner(env, ve->name);
+    if (!owner || owner->live.empty()) return;
+    auto it = owner->live.find(ve->name);
+    if (it == owner->live.end()) return;
+    if (it->second->frozen)
+        throw liveErr(diag::Code::E0043_FrozenVariable, line,
+                      "cannot modify the contents of `" + ve->name + "`: it is " + (it->second->kind == "banned" ? "banned (#ban)" : "a stone"),
+                      "a stone/#ban protects both the variable and its direct contents (`x[i] = ..`, `x.field = ..`)");
+    if (it->second->derived)
+        throw liveErr(diag::Code::E0045_DerivedReadOnly, line, "cannot modify `" + ve->name + "`: it is a lens (read-only)");
+}
+
+void Interpreter::liveExecDecl(const std::shared_ptr<LiveDeclStmt>& s, const EnvPtr& env) {
+    liveActive_ = true;
+    auto m = std::make_shared<LiveMeta>();
+    Value v = Value::nil();
+    auto evalNumber = [&](const ExprPtr& e, const char* what) -> double {
+        Value x = evaluate(e, env);
+        if (x.type != Value::Type::NUMBER || std::isnan(x.number))
+            throw liveErr(diag::Code::E0004_InvalidType, s->line, std::string(what) + " of `" + s->name + "` must be a number, got " + x.typeName());
+        return x.number;
+    };
+    auto evalCount = [&](const ExprPtr& e, const char* what, long dflt) -> long {
+        if (!e) return dflt;
+        double n = evalNumber(e, what);
+        if (n < 1 || n > 100000 || n != std::floor(n))
+            throw liveErr(diag::Code::E0046_LiveMisuse, s->line, std::string(what) + " of `" + s->name + "` must be a whole number from 1 to 100000, got " + liveNum(n));
+        return static_cast<long>(n);
+    };
+    if (s->kind != LiveKind::Lens && s->initializer) v = copyForBinding(evaluate(s->initializer, env));
+    switch (s->kind) {
+        case LiveKind::Stone: m->kind = "stone"; m->frozen = true; break;
+        case LiveKind::Gauge: {
+            m->kind = "gauge"; m->ranged = true;
+            m->lo = evalNumber(s->lo, "the lower end"); m->hi = evalNumber(s->hi, "the upper end");
+            if (!(m->lo < m->hi))
+                throw liveErr(diag::Code::E0044_RangeViolation, s->line, "gauge `" + s->name + "` has an empty range: " + liveNum(m->lo) + " to " + liveNum(m->hi),
+                              "the lower end must be smaller than the upper end");
+            m->rangeMode = s->rangeMode == "strict" ? 1 : s->rangeMode == "wrap" ? 2 : 0;
+            if (s->keep) { m->taped = true; m->keep = static_cast<size_t>(evalCount(s->keep, "`keep`", 10)); }
+            v = liveApplyRange(*m, s->name, v, s->line);
+            break;
+        }
+        case LiveKind::Tape:
+            m->kind = "tape"; m->taped = true; m->keep = static_cast<size_t>(evalCount(s->keep, "`keep`", 10)); break;
+        case LiveKind::Lens:
+            m->kind = "lens"; m->derived = true; m->expr = s->initializer; m->scope = env; v = Value::nil(); break;
+        case LiveKind::Fuse:
+            m->kind = "fuse"; m->fused = true; m->burns = evalCount(s->burns, "`burns`", 1); m->left = m->burns; m->armed = v; break;
+        case LiveKind::Base: { // عائلة الشروط: خط أساس يُقاس منه (docs/base-accept.md)
+            m->kind = "base"; m->based = true; m->baseVal = v;
+            if (s->step) {
+                m->step = evalNumber(s->step, "the `step`");
+                if (!std::isfinite(m->step) || m->step == 0)
+                    throw liveErr(diag::Code::E0050_BaseMisuse, s->line, "the `step` of base `" + s->name + "` must be a non-zero number, got " + liveNum(m->step),
+                                  "use `dec` to go down; the step itself is always the size of one move");
+            }
+            if (s->goal) { m->hasGoal = true; m->goal = evaluate(s->goal, env); }
+            break;
+        }
+        case LiveKind::Label:
+        case LiveKind::Define: { // تسمية وتعريف: بيانات وصفية بحتة، لا تمسّ الإسناد (docs/label-define.md)
+            m->kind = s->kind == LiveKind::Label ? "label" : "define"; m->named = true; m->ident = s->name;
+            auto text = [&](const ExprPtr& e, const char* what) -> Value {
+                if (!e) return Value::nil();
+                Value t = evaluate(e, env);
+                if (t.type != Value::Type::STRING)
+                    throw liveErr(diag::Code::E0004_InvalidType, s->line, std::string("the ") + what + " of `" + s->name + "` must be text, got " + t.typeName());
+                return t;
+            };
+            m->metaLabel = text(s->metaLabel, "label"); m->metaAbout = text(s->metaAbout, "description"); m->metaUnit = text(s->metaUnit, "unit");
+            break;
+        }
+        case LiveKind::Pre:
+        case LiveKind::Post: { // عقد انتقال: «قبل» يحرس الخروج من القيمة القديمة، «بعد» يتحقّق من الحالة الجديدة (docs/pre-post.md)
+            m->kind = s->kind == LiveKind::Pre ? "pre" : "post"; m->gated = true;
+            m->preRule = s->preRule; m->postRule = s->postRule; m->strictAccept = s->strictAccept; m->scope = env;
+            m->lastPost = v;
+            // القيمة الابتدائية ليست انتقالاً فلا تُسأل عنها «قبل»؛ أما «بعد» فتُسأل عنها بلا فرق (old = new)
+            if (m->postRule && !liveGateEval(*m, m->postRule, s->name, v, v, true, s->line))
+                throw liveErr(diag::Code::E0051_ContractViolated, s->line,
+                              "the first value of post `" + s->name + "` breaks its own `post` rule: " + v.toDisplayString(),
+                              "give it a starting value its `post` rule accepts (while checking the first value, `old` and `new` are the same value)");
+            break;
+        }
+        case LiveKind::Accept: { // عائلة الشروط: لا يدخل إلا ما يقبله الشرط (docs/base-accept.md)
+            m->kind = "accept"; m->guarded = true; m->rule = s->rule; m->fallback = s->fallback;
+            m->strictAccept = s->strictAccept; m->scope = env;
+            liveCheckAccept(*m, s->name, v, s->line, true); // القيمة الابتدائية تخضع للشرط نفسه (قد تُستبدل ببديل else)
+            break;
+        }
+    }
+    env->define(s->name, v);       // define() يمحو أي حياة سابقة بنفس الاسم في هذه البيئة
+    env->live[s->name] = m;
+}
+
+void Interpreter::liveExecBell(const std::shared_ptr<BellStmt>& s, const EnvPtr& env) {
+    Environment* owner = findLiveOwner(env, s->target);
+    if (!owner) throw undefinedVariableErr(s->target, s->line, env);
+    liveActive_ = true;
+    auto& slot = owner->live[s->target];
+    if (!slot) { slot = std::make_shared<LiveMeta>(); }
+    if (slot->derived)
+        throw liveErr(diag::Code::E0046_LiveMisuse, s->line, "cannot ring a bell on `" + s->target + "`: it is a lens",
+                      "a lens is recomputed on every read, so it never 'changes'; put the bell on the variables it is computed from");
+    auto callable = std::make_shared<Callable>();
+    callable->declaration = s->handler;
+    callable->closure = env;
+    Value fn; fn.type = Value::Type::FUNCTION; fn.function = callable;
+    slot->bells.push_back(fn);
+}
+
+void Interpreter::liveExecTrial(const std::shared_ptr<TrialStmt>& s, const EnvPtr& env) {
+    liveActive_ = true;
+    trialStack_.emplace_back();
+    auto rollback = [&]() {
+        auto journal = std::move(trialStack_.back());
+        trialStack_.pop_back();
+        for (auto it = journal.rbegin(); it != journal.rend(); ++it) {
+            it->env->values[it->name] = it->oldValue;
+            if (it->metaSnapshot) {
+                auto f = it->env->live.find(it->name);
+                if (f != it->env->live.end()) *f->second = *it->metaSnapshot;
+            }
+        }
+    };
+    auto commit = [&]() {
+        auto journal = std::move(trialStack_.back());
+        trialStack_.pop_back();
+        if (!trialStack_.empty())  // trial متداخلة: ما ثبّتناه يبقى قابلاً للتراجع مع الأب
+            for (auto& e : journal) trialStack_.back().push_back(std::move(e));
+    };
+    try {
+        execute(s->body, env);
+    } catch (LiveAbortSignal&) {
+        rollback();
+        if (s->elseBranch) execute(s->elseBranch, env);
+        return;
+    } catch (RinError&) {
+        rollback();
+        if (s->elseBranch) { execute(s->elseBranch, env); return; }
+        throw;
+    } catch (ThrowSignal&) {
+        rollback();
+        if (s->elseBranch) { execute(s->elseBranch, env); return; }
+        throw;
+    } catch (...) { // return/break/continue/achieve: خروج عادي من التجربة => نُثبّت التغييرات
+        commit();
+        throw;
+    }
+    commit();
+}
+
+void Interpreter::liveExecAction(const std::shared_ptr<LiveActionStmt>& s, const EnvPtr& env) {
+    if (s->action == "abort") {
+        if (trialStack_.empty())
+            throw liveErr(diag::Code::E0046_LiveMisuse, s->line, "`abort` can only be used inside a `trial { ... }` block",
+                          "wrap the risky assignments in `trial { ... }` so there is something to roll back");
+        throw LiveAbortSignal{};
+    }
+    Environment* owner = findLiveOwner(env, s->target);
+    if (!owner) throw undefinedVariableErr(s->target, s->line, env);
+    // #ban x; — يمنع أي كتابة لاحقة على متغيّر موجود (الإسناد وتعديل محتواه المباشر x[i]= / x.f=)؛
+    // القراءة تبقى كما هي. نفس آلية stone (E0043) لكن على متغيّر صُرِّح به مسبقاً، ولا رجعة فيه.
+    if (s->action == "ban") {
+        liveActive_ = true;
+        auto& slot = owner->live[s->target];
+        if (!slot) slot = std::make_shared<LiveMeta>();
+        if (slot->derived) return; // lens للقراءة فقط أصلاً
+        if (!slot->frozen && slot->kind == "plain") slot->kind = "banned";
+        slot->frozen = true;
+        return;
+    }
+    std::shared_ptr<LiveMeta> m;
+    { auto it = owner->live.find(s->target); if (it != owner->live.end()) m = it->second; }
+    // عائلة الشروط: inc/dec (على أي متغيّر رقمي، وتمرّ من كل حرّاسه) + rebase/rewind (base فقط).
+    if (s->action == "inc" || s->action == "dec") {
+        Value cur = owner->values[s->target];
+        if (cur.type != Value::Type::NUMBER)
+            throw liveErr(diag::Code::E0050_BaseMisuse, s->line, "`" + s->action + " " + s->target + "` needs a number, but `" + s->target + "` holds a " + cur.typeName(),
+                          "`inc` / `dec` move a numeric variable by a step (default 1, or the `step` of its base)");
+        double n = (m && m->based) ? m->step : 1;
+        if (s->count) {
+            Value c = evaluate(s->count, env);
+            if (c.type != Value::Type::NUMBER || !std::isfinite(c.number))
+                throw liveErr(diag::Code::E0050_BaseMisuse, s->line, "the amount of `" + s->action + " " + s->target + "` must be a finite number, got " + c.typeName());
+            n = c.number;
+        }
+        liveAssign(owner, s->target, Value::num(s->action == "inc" ? cur.number + n : cur.number - n), s->line);
+        return;
+    }
+    if (s->action == "rebase" || s->action == "rewind") {
+        if (!(m && m->based))
+            throw liveErr(diag::Code::E0050_BaseMisuse, s->line, "`" + s->action + " " + s->target + "` needs a base variable, but `" + s->target + "` is " +
+                          (m ? "a " + m->kind : std::string("a plain variable")),
+                          "declare it with `base " + s->target + " = ...;`");
+        if (s->action == "rebase") { m->baseVal = owner->values[s->target]; return; } // القيمة الحالية تصير خط الأساس الجديد
+        liveAssign(owner, s->target, m->baseVal, s->line);                            // الرجوع إلى خط الأساس (يمرّ من الحرّاس والأجراس)
+        return;
+    }
+    auto need = [&](bool ok, const std::string& what) {
+        if (!ok) throw liveErr(diag::Code::E0046_LiveMisuse, s->line,
+                               "`" + s->action + " " + s->target + "` needs " + what + ", but `" + s->target + "` is " +
+                               (m ? "a " + m->kind : std::string("a plain variable")),
+                               s->action == "rearm" ? "declare it with `fuse " + s->target + " = ...;`"
+                               : s->action == "unbell" ? "ring one first with `bell " + s->target + " { ... }`"
+                               : "declare it with `tape " + s->target + " = ...;` (or add `keep N` to a gauge)");
+    };
+    if (s->action == "unbell") { need(m && !m->bells.empty(), "a bell"); m->bells.clear(); return; }
+    if (s->action == "rearm") {
+        need(m && m->fused, "a fuse");
+        liveJournal(owner, s->target);
+        m->left = m->burns; m->burnt = false;
+        assignStateAware(owner, s->target, m->armed, s->line);
+        return;
+    }
+    // undo / redo
+    need(m && m->taped, "a tape");
+    long n = 1;
+    if (s->count) {
+        Value c = evaluate(s->count, env);
+        if (c.type != Value::Type::NUMBER || c.number < 1 || c.number != std::floor(c.number))
+            throw liveErr(diag::Code::E0046_LiveMisuse, s->line, "`" + s->action + "` count must be a whole number >= 1");
+        n = static_cast<long>(c.number);
+    }
+    bool isUndo = s->action == "undo";
+    auto& from = isUndo ? m->past : m->future;
+    auto& to = isUndo ? m->future : m->past;
+    if (from.empty()) return; // لا شيء للتراجع/الإعادة: لا أثر (x.canUndo / x.canRedo للاستعلام)
+    liveJournal(owner, s->target);
+    Value before = owner->values[s->target];
+    Value cur = before;
+    while (n-- > 0 && !from.empty()) {
+        to.push_back(cur);
+        if (to.size() > m->keep) to.erase(to.begin());
+        cur = from.back(); from.pop_back();
+        m->writes++;
+    }
+    assignStateAware(owner, s->target, cur, s->line);
+    if (!m->bells.empty() && !valuesEqual(before, cur)) liveFireBells(m, before, cur, s->line);
+}
+
+bool Interpreter::livePropertyGet(const EnvPtr& env, const std::string& name, const std::string& prop, int line, Value& out) {
+    static const std::unordered_set<std::string> props = {
+        "kind", "reads", "writes", "bells", "vitals", "past", "undone", "canUndo", "canRedo", "keep",
+        "min", "max", "mode", "fill", "full", "empty", "left", "burnt",
+        "base", "delta", "up", "down", "same", "changed", "goal", "reached", "togo", "progress", "step", // base
+        "ok", "accepted", "rejected", "refused",                                                        // accept (و pre/post)
+        "pre", "post", "label", "about", "unit", "id", "info"};                                                                                 // pre/post
+    if (!props.count(prop)) return false;
+    Environment* owner = findLiveOwner(env, name);
+    if (!owner || owner->live.empty()) return false;
+    auto mit = owner->live.find(name);
+    if (mit == owner->live.end()) return false;
+    const auto& m = mit->second;
+    Value cur = owner->values[name];
+    // حقل بيانات حقيقي بنفس الاسم يغلب الخاصية الحيّة (قاموس/كائن يحمل مفتاح "kind" مثلاً)
+    if (cur.type == Value::Type::MAP && cur.map)
+        for (auto& kv : *cur.map) if (kv.first.type == Value::Type::STRING && kv.first.str == prop) return false;
+    if (cur.type == Value::Type::INSTANCE && cur.instance && cur.instance->fields.count(prop)) return false;
+
+    auto only = [&](bool ok, const char* kinds) {
+        if (!ok) throw liveErr(diag::Code::E0046_LiveMisuse, line,
+                               "`" + name + "." + prop + "` is only available on " + kinds + " variables, but `" + name + "` is " +
+                               (m->kind == "plain" ? std::string("a plain variable (with a bell)") : "a " + m->kind));
+    };
+    auto arr = [](const std::vector<Value>& src) {
+        auto a = std::make_shared<ArrayData>(src.begin(), src.end());
+        return Value::makeArray(a);
+    };
+    auto modeName = [&]() { return std::string(m->rangeMode == 1 ? "strict" : m->rangeMode == 2 ? "wrap" : "clamp"); };
+    if (prop == "kind")   { out = Value::string(m->kind); return true; }
+    if (prop == "reads")  { out = Value::num(static_cast<double>(m->reads)); return true; }
+    if (prop == "writes") { out = Value::num(static_cast<double>(m->writes)); return true; }
+    if (prop == "bells")  { out = Value::num(static_cast<double>(m->bells.size())); return true; }
+    if (prop == "past")    { only(m->taped, "tape (or gauge ... keep)"); out = arr(m->past); return true; }
+    if (prop == "undone")  { only(m->taped, "tape (or gauge ... keep)"); out = arr(m->future); return true; }
+    if (prop == "canUndo") { only(m->taped, "tape (or gauge ... keep)"); out = Value::boolean_(!m->past.empty()); return true; }
+    if (prop == "canRedo") { only(m->taped, "tape (or gauge ... keep)"); out = Value::boolean_(!m->future.empty()); return true; }
+    if (prop == "keep")    { only(m->taped, "tape (or gauge ... keep)"); out = Value::num(static_cast<double>(m->keep)); return true; }
+    if (prop == "min")  { only(m->ranged, "gauge"); out = Value::num(m->lo); return true; }
+    if (prop == "max")  { only(m->ranged, "gauge"); out = Value::num(m->hi); return true; }
+    if (prop == "mode") { only(m->ranged, "gauge"); out = Value::string(modeName()); return true; }
+    if (prop == "fill") { only(m->ranged, "gauge"); out = Value::num(cur.type == Value::Type::NUMBER ? (cur.number - m->lo) / (m->hi - m->lo) : 0); return true; }
+    if (prop == "full") { only(m->ranged, "gauge"); out = Value::boolean_(cur.type == Value::Type::NUMBER && cur.number >= m->hi); return true; }
+    if (prop == "empty"){ only(m->ranged, "gauge"); out = Value::boolean_(cur.type == Value::Type::NUMBER && cur.number <= m->lo); return true; }
+    // ---- base: خط أساس يُقاس منه (docs/base-accept.md) ----
+    auto numbers = [&](const char* what) {
+        if (cur.type != Value::Type::NUMBER || m->baseVal.type != Value::Type::NUMBER)
+            throw liveErr(diag::Code::E0050_BaseMisuse, line, "`" + name + "." + prop + "` " + what + ", but `" + name + "` or its base is not a number",
+                          "`" + prop + "` compares numbers; for other values use `" + name + ".same` / `" + name + ".changed`");
+    };
+    if (prop == "base")    { only(m->based, "base"); out = m->baseVal; return true; }
+    if (prop == "same")    { only(m->based, "base"); out = Value::boolean_(valuesEqual(cur, m->baseVal)); return true; }
+    if (prop == "changed") { only(m->based, "base"); out = Value::boolean_(!valuesEqual(cur, m->baseVal)); return true; }
+    if (prop == "delta")   { only(m->based, "base"); numbers("measures the distance from the base"); out = Value::num(cur.number - m->baseVal.number); return true; }
+    if (prop == "up")      { only(m->based, "base"); numbers("asks whether the value is above the base"); out = Value::boolean_(cur.number > m->baseVal.number); return true; }
+    if (prop == "down")    { only(m->based, "base"); numbers("asks whether the value is below the base"); out = Value::boolean_(cur.number < m->baseVal.number); return true; }
+    if (prop == "step")    { only(m->based, "base"); out = Value::num(m->step); return true; }
+    if (prop == "goal")    { only(m->based, "base"); out = m->hasGoal ? m->goal : Value::nil(); return true; }
+    if (prop == "reached") {
+        only(m->based, "base");
+        if (!m->hasGoal) { out = Value::boolean_(false); return true; }
+        if (cur.type == Value::Type::NUMBER && m->baseVal.type == Value::Type::NUMBER && m->goal.type == Value::Type::NUMBER)
+            out = Value::boolean_(m->goal.number >= m->baseVal.number ? cur.number >= m->goal.number : cur.number <= m->goal.number); // الاتجاه يحدّده خط الأساس
+        else out = Value::boolean_(valuesEqual(cur, m->goal));
+        return true;
+    }
+    if (prop == "togo" || prop == "progress") {
+        only(m->based && m->hasGoal, "base ... to GOAL");
+        if (cur.type != Value::Type::NUMBER || m->goal.type != Value::Type::NUMBER || m->baseVal.type != Value::Type::NUMBER)
+            throw liveErr(diag::Code::E0050_BaseMisuse, line, "`" + name + "." + prop + "` needs numbers (value, base and goal)");
+        double span = m->goal.number - m->baseVal.number;
+        out = Value::num(prop == "togo" ? m->goal.number - cur.number : (span == 0 ? 1.0 : (cur.number - m->baseVal.number) / span));
+        return true;
+    }
+    // ---- accept: حارس قبول (docs/base-accept.md) ----
+    if (prop == "ok")       { only(m->guarded || m->gated, "accept, pre or post"); out = Value::boolean_(m->lastOk); return true; }
+    if (prop == "accepted") { only(m->guarded || m->gated, "accept, pre or post"); out = Value::num(static_cast<double>(m->accepted)); return true; }
+    if (prop == "rejected") { only(m->guarded || m->gated, "accept, pre or post"); out = Value::num(static_cast<double>(m->rejected)); return true; }
+    if (prop == "refused")  { only(m->guarded || m->gated, "accept, pre or post"); out = m->refused; return true; }
+    // ---- label/define: تسمية وتعريف (docs/label-define.md) — خصائص صامتة على غير هذين النوعين كي لا تحجب أسماء طرق عادية ----
+    if (prop == "label" || prop == "about" || prop == "unit" || prop == "id" || prop == "info") {
+        if (!m->named) return false;
+        Value lbl = m->metaLabel.type == Value::Type::STRING ? m->metaLabel : Value::string(m->ident);
+        Value abt = m->metaAbout.type == Value::Type::STRING ? m->metaAbout : Value::string("");
+        if (prop == "label") out = lbl;
+        else if (prop == "about") out = abt;
+        else if (prop == "unit") out = m->metaUnit;
+        else if (prop == "id") out = Value::string(m->ident);
+        else {
+            auto vm = std::make_shared<MapData>();
+            auto put2 = [&](const char* k, Value v) { vm->push_back({Value::string(k), std::move(v)}); };
+            put2("id", Value::string(m->ident)); put2("label", lbl); put2("about", abt); put2("unit", m->metaUnit); put2("value", cur);
+            out = Value::makeMap(vm);
+        }
+        return true;
+    }
+    // ---- pre/post: آخر محاولة كتابة = (قبل ← بعد)؛ نجحت فـ x.post == x، أو رُفضت فـ x.pre == x و x.post هي المرفوضة (docs/pre-post.md) ----
+    if (prop == "pre")      { only(m->gated, "pre or post"); out = m->lastPre; return true; }
+    if (prop == "post")     { only(m->gated, "pre or post"); out = m->lastPost; return true; }
+    if (prop == "left")  { only(m->fused, "fuse"); out = Value::num(m->burnt ? 0 : static_cast<double>(m->left)); return true; }
+    if (prop == "burnt") { only(m->fused, "fuse"); out = Value::boolean_(m->burnt); return true; }
+    // vitals: خريطة بكل ما يخص هذا المتغيّر
+    auto vm = std::make_shared<MapData>();
+    auto put = [&](const char* k, Value v) { vm->push_back({Value::string(k), std::move(v)}); };
+    put("kind", Value::string(m->kind));
+    put("reads", Value::num(static_cast<double>(m->reads)));
+    put("writes", Value::num(static_cast<double>(m->writes)));
+    put("bells", Value::num(static_cast<double>(m->bells.size())));
+    if (m->frozen) put("frozen", Value::boolean_(true));
+    if (m->derived) put("derived", Value::boolean_(true));
+    if (m->ranged) {
+        put("min", Value::num(m->lo)); put("max", Value::num(m->hi)); put("mode", Value::string(modeName()));
+        put("fill", Value::num(cur.type == Value::Type::NUMBER ? (cur.number - m->lo) / (m->hi - m->lo) : 0));
+    }
+    if (m->taped) {
+        put("keep", Value::num(static_cast<double>(m->keep)));
+        put("past", Value::num(static_cast<double>(m->past.size())));
+        put("undone", Value::num(static_cast<double>(m->future.size())));
+    }
+    if (m->based) {
+        put("base", m->baseVal); put("step", Value::num(m->step));
+        if (m->hasGoal) put("goal", m->goal);
+    }
+    if (m->guarded) {
+        put("accepted", Value::num(static_cast<double>(m->accepted))); put("rejected", Value::num(static_cast<double>(m->rejected)));
+        put("ok", Value::boolean_(m->lastOk)); if (m->strictAccept) put("strict", Value::boolean_(true));
+    }
+    if (m->named) {
+        put("id", Value::string(m->ident));
+        put("label", m->metaLabel.type == Value::Type::STRING ? m->metaLabel : Value::string(m->ident));
+        put("about", m->metaAbout.type == Value::Type::STRING ? m->metaAbout : Value::string("")); put("unit", m->metaUnit);
+    }
+    if (m->gated) {
+        put("pre", m->lastPre); put("post", m->lastPost);
+        put("accepted", Value::num(static_cast<double>(m->accepted))); put("rejected", Value::num(static_cast<double>(m->rejected)));
+        put("ok", Value::boolean_(m->lastOk)); if (m->strictAccept) put("strict", Value::boolean_(true));
+        put("hasPre", Value::boolean_(m->preRule != nullptr)); put("hasPost", Value::boolean_(m->postRule != nullptr));
+    }
+    if (m->fused) { put("burns", Value::num(static_cast<double>(m->burns))); put("left", Value::num(m->burnt ? 0 : static_cast<double>(m->left))); put("burnt", Value::boolean_(m->burnt)); }
+    out = Value::makeMap(vm);
+    return true;
+}
+
+
+} // namespace rin
+
+// ---- Rin 1.0: دوال إضافية (core helpers + container API) — انظر رأس الملف لسبب التضمين المباشر ----
+#ifndef RIN_EXTRA_NATIVES_SEPARATE
+#include "rin_extra_natives.cpp"
+#include "rin_extra_natives2.cpp"
+#include "rin_extra_natives3.cpp"
+#include "rin_extra_natives4.cpp"
+#include "rin_extra_natives5.cpp"
+#include "rin_extra_natives6.cpp" // make.video/audio/api/image/ocr (docs/MAKE_MEDIA.md)
+#include "rin_extra_natives7.cpp" // مفهوم time (docs/TIME.md)
+#include "rin_extra_natives8.cpp" // مفهوم token (docs/TOKEN.md)
+#include "rin_extra_natives9.cpp" // مفهوم number (docs/NUMBER.md)
+#include "rin_extra_natives10.cpp" // مفهوم linalg (docs/LINALG.md)
+#include "rin_extra_natives11.cpp" // مفهوم algo (docs/ALGO.md)
+#include "rin_extra_natives12.cpp" // ملفات وقواعد بيانات: fileSync/fileLock/fileRename/fileSize/findByRange (docs/FILEDB.md)
+#include "rin_libdir.cpp" // مكتبات Rin المقسَّمة (docs/split-libraries.md)
+#include "rin_rintwist.cpp" // RINTWIST: سياق التنفيذ (docs/rintwist.md)
+#include "rin_table.cpp" // توسعة الجدول: دوال اللغة الموجودة تفهم الجدول (انظر رأس الملف)
+#include "rin_conditions.cpp" // متغيّرات الشروط الموسّعة (docs/key_terms_and_builtins.md)
+#include "rin_image_ansi.cpp" // صور داخل الـ terminal كنص (docs/image-terminal.md)
+#include "rin_image_draw.cpp" // إنشاء الصور والرسم والحفظ PNG وlog كصورة (docs/image-draw.md)
+#include "rin_env.cpp"   // ربط ملف .env (docs/env.md)
+#include "rin_set.cpp"   // نوع Set الأساسي (docs/set.md)
+#include "rin_expr_host.cpp" // واجهة التقييم المعزول لـ indsin (docs/indsin_rin.md)
+#endif
+
+// ---- Rin 1.0: OOP الموسَّع (interface/trait/abstract/static/private/get-set + دوال oop.*) ----
+// نفس أسلوب التضمين المباشر أعلاه: لا حاجة لتعديل أي قائمة ملفات في CMake/Gradle/CI.
+#include "rin_oop.cpp"
+#include "rin_oop_natives.cpp"
+#include "rin_oop_bind.cpp"
+#include "rin_oop_link.cpp"
+
+// ---- Rin 1.0: محرّك نماذج الإدخال (مفسِّر + مترجم + منفِّذ مخصّص لـ input) — انظر rin_input.h ----
+#include "rin_input.cpp"
+#include "rin_bcvm_compiler.cpp" // RinVM: مترجم AST -> بايتكود + مفكّك
+#include "rin_bcvm_exec.cpp"     // RinVM: حلقة التنفيذ

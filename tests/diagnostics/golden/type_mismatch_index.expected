@@ -1,0 +1,10 @@
+
+error[E0021]: index out of range: 10
+  --> type_mismatch_index.rin:2:1
+
+ 2 | print arr[10];
+   | ^
+
+reason:
+  this array has 3 element(s) (valid indices: 0..2)
+

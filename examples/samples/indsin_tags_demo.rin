@@ -1,0 +1,35 @@
+<!-- indsin_tags_demo.rin — نفس concept_app.rin لكن بصيغة الوسوم <> بدل @view / .end/view.
+     كل شيء يُترجَم تلقائياً قبل التحليل، فيعمل مع المحرّك والمعاينة الحيّة كما هو. -->
+
+<warp pressed={false} />
+<warp dark={false} />
+<warp visible={true} />
+<warp zoom={96} />
+<warp posX={20} />
+<warp posY={20} />
+
+<Column#root gap=16 padding=20>
+
+  <!-- كل خاصية تعبير Rin بين { } يُعاد تقييمه عند كل تغيّر في warp -->
+  <Box#card
+       width={zoom} height={zoom}
+       background={dark ? "#1b1f2a" : (pressed ? "#2f7dc4" : "#3498db")}
+       radius=16
+       margin_left={posX} margin_top={posY}
+       visible={visible}
+       onTap={toggle(pressed)} />
+
+  <!-- النص كابن: الأقواس { } داخله تُدمَج في سلسلة واحدة -->
+  <Text#state size=12 color=#8b899c>
+    pressed={pressed}  zoom={zoom}  x={posX}  y={posY}
+  </Text>
+
+  <Row#controls gap=8>
+    <Button#zoomIn  onTap={increment(zoom, 12)}>+</Button>
+    <Button#zoomOut onTap={decrement(zoom, 12)}>-</Button>
+    <Button#right   onTap={increment(posX, 20)}>سحب →</Button>
+    <Button#down    onTap={increment(posY, 20)}>سحب ↓</Button>
+    <Button#colorBtn onTap={toggle(dark)}>لون</Button>
+    <Button#visBtn  onTap={toggle(visible)}>إظهار/إخفاء</Button>
+  </Row>
+</Column>

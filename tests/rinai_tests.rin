@@ -1,0 +1,192 @@
+// rinai_tests.rin — اختبارات مكتبات الذكاء الاصطناعي وتحليل البيانات (rinml / rindf / rinai)
+//   rin run tests/rinai_tests.rin        (شغّله من جذر المستودع)
+@import "rintest";
+@import "lib/rinai.og.rin";
+
+rt_describe("rinml: جبر خطي", fun() {
+    rt_test("dot / norm / softmax", fun() {
+        rt_expect(nd_dot([1, 2, 3], [4, 5, 6])).toBe(32);
+        rt_expect(nd_norm([3, 4])).toBe(5);
+        rt_expect(nd_sum(nd_softmax([1, 2, 3]))).toBeCloseTo(1, 0.000001);
+    });
+    rt_test("nd_solve يحلّ نظاماً 2x2", fun() {
+        let x = nd_solve([[2, 1], [1, 3]], [3, 5]);
+        rt_expect(x[0]).toBeCloseTo(0.8, 0.000001);
+        rt_expect(x[1]).toBeCloseTo(1.4, 0.000001);
+    });
+    rt_test("nd_solve يعيد nil للمصفوفة الشاذّة", fun() {
+        rt_expect(nd_solve([[1, 2], [2, 4]], [1, 2])).toBeNil();
+    });
+    rt_test("دوال آمنة: ln(0) و exp الكبيرة لا ترمي", fun() {
+        rt_expect(type(nd_ln(0))).toBe("number");
+        rt_expect(type(nd_exp(1000))).toBe("number");
+    });
+});
+
+rt_describe("rinml: النماذج", fun() {
+    rt_test("الانحدار الخطي المغلق يسترجع المعاملات", fun() {
+        let X = [[1, 2], [2, 1], [3, 5], [4, 3], [5, 8], [6, 2]];
+        let y = [];
+        let i = 0;
+        while (i < len(X)) { push(y, 2 * X[i][0] + 3 * X[i][1] + 1); i = i + 1; }
+        let m = ml_linreg_fit(X, y, 0);
+        rt_expect(m["b"]).toBeCloseTo(1, 0.0001);
+        rt_expect(m["w"][0]).toBeCloseTo(2, 0.0001);
+        rt_expect(m["w"][1]).toBeCloseTo(3, 0.0001);
+        rt_expect(ml_r2(y, ml_predict_all(m, X))).toBeCloseTo(1, 0.0001);
+    });
+    rt_test("الانحدار اللوجستي يفصل فئتين", fun() {
+        let X = [[1], [2], [3], [4], [6], [7], [8], [9]];
+        let y = [0, 0, 0, 0, 1, 1, 1, 1];
+        let m = ml_logreg_fit(X, y, 0.5, 1500, 0);
+        rt_expect(ml_predict(m, [2])).toBe(0);
+        rt_expect(ml_predict(m, [8])).toBe(1);
+    });
+    rt_test("kNN / NB / شجرة", fun() {
+        let X = [[1], [2], [3], [4], [6], [7], [8], [9]];
+        let y = ["a", "a", "a", "a", "b", "b", "b", "b"];
+        rt_expect(ml_predict(ml_knn_fit(X, y, 3, "class"), [7.5])).toBe("b");
+        rt_expect(ml_predict(ml_nb_fit(X, y), [2])).toBe("a");
+        rt_expect(ml_predict(ml_tree_fit(X, y, 3, 2), [8])).toBe("b");
+    });
+    rt_test("k-means يجد مركزين", fun() {
+        let X = [[1], [2], [3], [4], [6], [7], [8], [9]];
+        let m = ml_kmeans_fit(X, 2, 20, 1);
+        let c = sort([m["centroids"][0][0], m["centroids"][1][0]]);
+        rt_expect(c[0]).toBeCloseTo(2.5, 0.001);
+        rt_expect(c[1]).toBeCloseTo(7.5, 0.001);
+    });
+    rt_test("MLP يتعلّم XOR", fun() {
+        let X = [[0, 0], [0, 1], [1, 0], [1, 1]];
+        let net = ml_mlp_init([2, 4, 1], "tanh", "sigmoid", 7);
+        ml_mlp_fit(net, X, [[0], [1], [1], [0]], 0.5, 1500);
+        rt_expect(ml_predict_all(net, X)).toEqual([0, 1, 1, 0]);
+    });
+    rt_test("مصنّف نصوص عربي", fun() {
+        let docs = ["الفريق فاز بالمباراة اليوم", "اللاعب سجل هدفا رائعا", "الحكومة أعلنت ميزانية جديدة", "الوزير ناقش قانون الضرائب"];
+        let m = ml_textnb_fit(docs, ["رياضة", "رياضة", "سياسة", "سياسة"]);
+        rt_expect(ml_predict(m, "هدف في المباراة")).toBe("رياضة");
+        rt_expect(ml_predict(m, "قانون الميزانية")).toBe("سياسة");
+    });
+    rt_test("المقاييس", fun() {
+        rt_expect(ml_accuracy([1, 0, 1], [1, 1, 1])).toBeCloseTo(0.666667, 0.0001);
+        rt_expect(ml_f1([1, 0, 1, 1], [1, 1, 0, 1], 1)).toBeCloseTo(0.666667, 0.0001);
+        rt_expect(ml_rmse([1, 2, 3], [1, 2, 3])).toBe(0);
+    });
+    rt_test("حفظ وتحميل نموذج JSON", fun() {
+        let m = ml_nb_fit([[1], [2], [8], [9]], ["a", "a", "b", "b"]);
+        ml_save(m, "/tmp/__rinml_test.json");
+        let m2 = ml_load("/tmp/__rinml_test.json");
+        rt_expect(ml_predict(m2, [8.5])).toBe("b");
+    });
+    rt_test("train/test split ثابت مع نفس البذرة", fun() {
+        let X = [[1], [2], [3], [4], [5], [6], [7], [8]];
+        let y = [1, 2, 3, 4, 5, 6, 7, 8];
+        let a = ml_train_test_split(X, y, 0.25, 5);
+        let b = ml_train_test_split(X, y, 0.25, 5);
+        rt_expect(a["yte"]).toEqual(b["yte"]);
+        rt_expect(len(a["yte"])).toBe(2);
+        rt_expect(len(a["ytr"])).toBe(6);
+    });
+});
+
+rt_describe("rindf: إطار البيانات", fun() {
+    let csv = "name,city,age,score\nسارة,\"Riyadh, KSA\",25,88.5\nyusuf,Cairo,31,92\nلينا,Cairo,,75\nomar,Riyadh,40,NA\nhana,Cairo,22,60.25\n";
+    rt_test("CSV: اقتباس + أنواع + مفقودات", fun() {
+        let df = df_parse_csv(csv, ",");
+        rt_expect(df_shape(df)).toEqual([5, 4]);
+        rt_expect(df_col(df, "city")[0]).toBe("Riyadh, KSA");
+        rt_expect(df_col(df, "age")[0]).toBe(25);
+        rt_expect(df_col(df, "age")[2]).toBeNil();
+        rt_expect(df_isna(df)["score"]).toBe(1);
+    });
+    rt_test("describe يحسب الأرباع", fun() {
+        let d = df_describe(df_parse_csv(csv, ","));
+        rt_expect(df_col(d, "column")).toEqual(["age", "score"]);
+        rt_expect(df_col(d, "q25")[0]).toBeCloseTo(24.25, 0.0001);
+        rt_expect(df_col(d, "mean")[0]).toBeCloseTo(29.5, 0.0001);
+    });
+    rt_test("fill_mean + sort + where", fun() {
+        let df = df_fill_mean(df_parse_csv(csv, ","), "age");
+        rt_expect(df_col(df, "age")[2]).toBeCloseTo(29.5, 0.0001);
+        rt_expect(df_col(df_sort(df, "age", true), "name")[0]).toBe("omar");
+        rt_expect(df_rows_count(df_where(df, "city", "==", "Cairo"))).toBe(3);
+    });
+    rt_test("groupby + join", fun() {
+        let df = df_fill_mean(df_fill_mean(df_parse_csv(csv, ","), "age"), "score");
+        let g = df_groupby(df, "city", "score", "mean");
+        rt_expect(df_col(g, "score_mean")[1]).toBeCloseTo(75.75, 0.0001);
+        let b = df_from_records([{"city": "Cairo", "country": "EG"}]);
+        let j = df_join(df, b, "city", "inner");
+        rt_expect(df_rows_count(j)).toBe(3);
+        rt_expect(df_col(j, "country")[0]).toBe("EG");
+    });
+    rt_test("CSV ذهاباً وإياباً", fun() {
+        let df = df_parse_csv(csv, ",");
+        let again = df_parse_csv(df_to_csv(df), ",");
+        rt_expect(df_to_records(again)).toEqual(df_to_records(df));
+    });
+    rt_test("one-hot و to_matrix", fun() {
+        let df = df_from_records([{"c": "x", "n": 1}, {"c": "y", "n": 2}]);
+        let oh = df_one_hot(df, "c");
+        rt_expect(df_names(oh)).toEqual(["n", "c_x", "c_y"]);
+        rt_expect(df_to_matrix(oh, ["n", "c_x", "c_y"])).toEqual([[1, 1, 0], [2, 0, 1]]);
+    });
+    rt_test("df_to_matrix يرفض قيمة غير رقمية", fun() {
+        let df = df_from_records([{"a": "oops"}]);
+        rt_expectThrows(fun() { df_to_matrix(df, ["a"]); }, "df_to_matrix");
+    });
+});
+
+rt_describe("rinai: الحاويات", fun() {
+    rt_test("مجموعة بيانات تُخزَّن في حاوية جدول وتُقرأ", fun() {
+        let df = df_from_records([{"a": 1, "b": "x"}, {"a": 2, "b": "y"}]);
+        let tbl = ai_put_dataset("t_ws", "d", df);
+        rt_expect(container.kind(tbl)).toBe("table");
+        rt_expect(df_to_records(ai_get_dataset("t_ws", "d"))).toEqual(df_to_records(df));
+        rt_expect(ai_datasets("t_ws")).toEqual(["d"]);
+    });
+    rt_test("AutoML + تخزين نموذج + تنبّؤ من سجلّ", fun() {
+        seed(9);
+        let recs = [];
+        let c = 0;
+        let names = ["lo", "mid", "hi"];
+        while (c < 3) {
+            let i = 0;
+            while (i < 25) {
+                push(recs, {"f1": c * 3 + random(), "f2": 10 - c * 3 + random(), "k": names[c]});
+                i = i + 1;
+            }
+            c = c + 1;
+        }
+        let res = ai_auto_classify(df_from_records(recs), "k", ["f1", "f2"], 4);
+        rt_expect(df_col(res["leaderboard"], "accuracy")[0]).toBeGreaterThan(0.9);
+        ai_put_model("t_ws", "m", res["best"], {"acc": 1});
+        rt_expect(ai_models("t_ws")).toEqual(["m"]);
+        rt_expect(ai_predict("t_ws", "m", {"f1": 0.5, "f2": 10.5})).toBe("lo");
+        rt_expect(ai_predict("t_ws", "m", {"f1": 6.5, "f2": 4.5})).toBe("hi");
+    });
+    rt_test("حفظ/تحميل مساحة العمل كاملة", fun() {
+        ai_save_workspace("t_ws", "/tmp/__rinai_ws.json");
+        ai_load_workspace("t_ws2", "/tmp/__rinai_ws.json");
+        rt_expect(ai_models("t_ws2")).toEqual(["m"]);
+        rt_expect(ai_predict("t_ws2", "m", {"f1": 6.5, "f2": 4.5})).toBe("hi");
+        rt_expect(df_rows_count(ai_get_dataset("t_ws2", "d"))).toBe(2);
+    });
+    rt_test("الأنبوب يسجّل خطواته", fun() {
+        let df = df_from_records([{"v": 1}, {"v": 5}, {"v": 9}]);
+        let out = ai_run_pipeline("t_ws", [
+            {"name": "big", "fn": fun(x) { return df_where(x, "v", ">", 2); }},
+            {"name": "first", "fn": fun(x) { return df_head(x, 1); }}
+        ], df);
+        rt_expect(df_col(out, "v")).toEqual([5]);
+        let log = ai_experiments("t_ws");
+        rt_expect(log[len(log) - 1]["trace"][1]["rows"]).toBe(1);
+    });
+    rt_test("الجسر البعيد لا يرمي عند فشل الشبكة", fun() {
+        let r = ai_remote_predict("http://127.0.0.1:9/predict", {"x": 1});
+        rt_expect(r["ok"]).toBeFalse();
+    });
+});
+
+rt_done();

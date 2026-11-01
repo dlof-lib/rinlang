@@ -1,0 +1,8 @@
+# أضف هذا السطر داخل grammars.yml في مستودع github-linguist/linguist
+# (هذا الملف يربط كل tm_scope بمستودع Git عام يحوي ملف الـTextMate grammar)
+#
+# الشرط: يجب أن يكون مستودع الگرامر عاماً (public) ومنفصلاً — يمكن استخدام نفس مستودع
+# rinlang أو نشر vscode-rinlang في مستودع خاص به على GitHub تحت منظمة dlof-lib.
+
+source.rin:
+- https://github.com/dlof-lib/rinlang

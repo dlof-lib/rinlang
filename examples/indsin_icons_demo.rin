@@ -1,0 +1,32 @@
+// examples/indsin_icons_demo.rin — جولة في مكتبة الأيقونات المتجهية      rin examples/indsin_icons_demo.rin
+@import "lib/indsinicons.og.rin";
+
+print `مكتبة indsin للأيقونات v${ic_version()} — ${ic_count()} أيقونة`;
+
+// 1) الفئات وعدد أيقونات كل منها
+let cats = ic_categories();
+let i = 0;
+while (i < len(cats)) {
+    print `  ${ic_categoryName(cats[i], "ar")} (${cats[i]}): ${len(ic_byCategory(cats[i]))}`;
+    i = i + 1;
+}
+
+// 2) بحث (يشمل الأسماء البديلة) وتدقيق أسماء قبل استعمالها في واجهة
+print ic_search("gear");                                   // ["settings"]
+print ic_audit(["home", "trash", "nope"]);                 // unknown: ["nope"]
+
+// 3) توليد SVG جاهز للصق (WebView / html=) وسطر indsin جاهز
+print ic_svg("heart", {"size": 32, "color": "#e11d48", "filled": true});
+print ic_snippet("settings", {"size": "lg"});
+
+// 4) أيقونتك الخاصة تدخل البحث والفئات مثل المدمجة
+ic_register("rin-box", "brand", "M4 6H20V18H4ZM4 10H20M9 6V18");
+print ic_has("rin-box");                                   // true
+print ic_html("rin-box", {"size": 20, "color": "#16a34a"});
+
+// 5) صفحة HTML كاملة بكل أيقونات فئة واحدة (تُكتب إلى ملف ثم تُفتح في أي متصفح)
+let html = "<!doctype html><meta charset=utf-8><body style='font-family:sans-serif'><h3>arrows</h3>";
+let names = ic_byCategory("arrows");
+let j = 0;
+while (j < len(names)) { html = html + ic_html(names[j], {"size": 28, "color": "#5b4be0"}) + " "; j = j + 1; }
+print `صفحة arrows: ${len(html)} حرفاً`;

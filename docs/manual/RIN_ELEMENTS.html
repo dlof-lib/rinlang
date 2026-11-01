@@ -1,0 +1,341 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>دليل `@element.*` الكامل — Rin</title>
+<meta name="description" content="توثيق لغة البرمجة Rin"><link rel="icon" href="../assets/brand/icon-32.png">
+<link rel="stylesheet" href="assets/style.css"></head><body>
+<header><button id="mn" aria-label="القائمة">☰</button><a class="logo" href="index.html"><img src="../assets/brand/icon-48.png" alt="" width="26">Rin</a>
+<input id="q" type="search" placeholder="ابحث في التوثيق…" autocomplete="off"><button id="th" aria-label="الوضع">◐</button>
+<a class="gh" href="https://github.com/dlof-lib/rinlang">GitHub</a><div id="res"></div></header>
+<div class="wrap"><nav id="sb"><details ><summary>ابدأ هنا</summary><a href="getting-started.html">البداية</a><a href="syntax.html">القواعد النحوية العامة</a><a href="variables.html">let`، مصفوفات، قواميس، نطاق</a><a href="template-strings.html">النصوص القالبية (متغيّرات داخل النص)</a><a href="input.html">إدخال المستخدم (Input)</a><a href="control-flow.html">الشروط، الحلقات، `goal`/`achieve</a><a href="loops.html">حلقات Rin — Loops v2</a><a href="functions.html">fun`/`return`، التكرار الذاتي</a><a href="enums.html">enum`: قوائم اختيار مغلقة</a></details><details ><summary>اللغة</summary><a href="language-reference.html">المرجع الشامل وخريطة ترابط المفاهيم</a><a href="objects.html">class`/`struct`، `.object()`، `@Object`، `document</a><a href="oop.html">البرمجة الكائنية الموسَّعة (Rin 1.0)</a><a href="containers.html">دليل `@container` / `@element` / `@loop</a><a href="table.html">الجدول (`@table` / `@container.table`) ودوال اللغة عليه</a><a href="set.html">Set`: نوع المجموعة الأساسي</a><a href="pipelines.html">عامل الأنابيب `|&gt;</a><a href="RECKON.html">reckon`: مفهوم حسابي بسطرين</a><a href="let-plus.html">let` المطوَّر</a><a href="living-variables.html">المتغيرات الحيّة (Living Variables)</a><a href="label-define.html">label` و`define` (تسمية وتعريف)</a><a href="block-frames.html">بداية الكتل ونهايتها (Block Frames)</a><a href="compare_ops.html">معاملات المقارنة `/=` و `=/=` و `=/</a><a href="max_min.html">max / min family</a><a href="scope-guarantees.html">ضمانات النطاق: `finally` · `defer` · `catch … when` · `rethrow</a><a href="key_terms_and_builtins.html">Rin KEY_TERMS and Built-in Conditions</a><a href="number_builtins.html">Rin Number Built-ins</a></details><details open><summary>الواجهات (Indsin)</summary><a href="indsin.html">Indsin — Interface Design</a><a href="indsin_rin.html">indsin يعتمد على لغة Rin</a><a href="indsin_expansion.html">Indsin — التوسعة الاحترافية (Design System v2)</a><a href="indsin_object.html">indsin-object — API reference</a><a href="indsin_media.html">Indsin Media — اختيار الوسائط ورفعها</a><a href="indsin_icons.html">مكتبة أيقونات indsin (متجهية)</a><a href="indsin_tooling.html">indsin tooling — icon, file association, syntax highlighting</a><a href="indsinweb.html">IndsinWeb — مكتبة WebView والروابط لـ indsin</a><a href="RIN_ELEMENTS.html" class=on>دليل `@element.*` الكامل</a><a href="events-effects.html">الأحداث والتأثيرات (Events &amp; Effects) — محرك Indsin UI</a><a href="banner.html">Banner: إشعار شريطي</a><a href="simple-style.html">Rin Simple Style</a></details><details ><summary>بيئة التشغيل</summary><a href="runtime.html">وقت تشغيل Rin (Rin Runtime) · المرجع الرسمي</a><a href="standard-library.html">المكتبة القياسية (`lib/*.og.rin`)</a><a href="errors.html">نظام الأخطاء: أكواد، `try`/`catch`/`throw</a><a href="ERROR_SYSTEM.html">نظام التشخيص: البنية الداخلية + جدول الأكواد الكامل</a><a href="storage.html">تخزين دائم</a><a href="http.html">شبكات</a><a href="env.html">ربط Rin بملف `.env</a><a href="terminal.html">الطرفية التفاعلية — `rin terminal</a><a href="vm.html">RinVM — آلة Rin الافتراضية (بايتكود)</a><a href="rinflow.html">RinFlow: طبقة تنفيذ التدفّق المهيكل</a><a href="MAKE_UNIT.html">@make.(name)`: وحدة بسياسة قدرات صريحة</a><a href="MAKE_MEDIA.html">فيديو · صوت · API · إزالة الخلفية · قراءة النص من الصور</a><a href="TIME.html">مفهوم `time`: الزمن كقيمة من الدرجة الأولى</a><a href="native-additions.html">دوال Rin الأصلية الجديدة (Rin 1.0)</a></details><details ><summary>الحاويات وقواعد البيانات</summary><a href="container_advanced.html">Rin Container Advanced Built-ins</a><a href="container_pro.html">Rin Container Pro</a><a href="container_sql.html">RIN CONTAINER SQL (RCSQL)</a><a href="cross-file-containers.html">استدعاء إعلانات من ملف آخر</a></details><details ><summary>الحزم والتكامل</summary><a href="api.html">واجهة C المسطَّحة (Embedding API)</a><a href="android.html">استضافة Rin على أندرويد</a><a href="packages-and-interop.html">Rin 1.0 — المكتبات والحزم وجسر C++ وJSON واختبارات rintest</a><a href="rinpak-format.html">RinPak — حزمة مشروع Rin (`.rinpak`)</a><a href="html-projects.html">مشاريع HTML في Rin — الربط بين index.html وملف الحاوية</a><a href="project-og-urin.html">project.og.urin` — البيانات الوصفية لمشروع Rin</a><a href="CONTENT_PACKS.html">حزم المحتوى القابلة للتنزيل (Content Packs)</a><a href="previewkit.html">previewkit — معاينة حيّة لملفات PDF / Markdown / TypeScript</a></details><details ><summary>المكتبات المتخصصة</summary><a href="rinml.html">RinML / RinDF / RinAI — الذكاء الاصطناعي وتحليل البيانات في Rin</a><a href="STATS.html">RinStat — التحليل الإحصائي (`lib/rinstat.og.rin`)</a><a href="STATS_ADV.html">RinStat المتقدّم + RinAuto</a><a href="LINALG.html">الجبر الخطي للمهندسين — `mat*` و`vec*</a><a href="PLOT.html">RinPlot — الرسوم البيانية الإحصائية (`lib/rinplot.og.rin`)</a><a href="ALGO.html">تطوير الخوارزميات والحساب العددي — `algo*</a><a href="NUMBER.html">مفهوم `number` في Rin</a><a href="boat.html">&quot;Boat&quot;: مفاهيم أساسية مجمَّعة</a><a href="passkit.html">passkit — passwords, encryption, databases and a tag language</a><a href="passkit-crypto-db.html">Passkit feature catalog: encryption, databases and container linking</a><a href="hash-family.html">عائلة `#` — مفاهيم ودوال جديدة تبدأ بعلامة `#</a><a href="image-draw.html">إنشاء الصور في Rin — رسم وحفظ PNG وlog كصورة</a><a href="image-terminal.html">طباعة الصور في الـ terminal — `printImage` / `imageAnsi` / `imageInfo</a></details><details ><summary>المشروع</summary><a href="CONTRIBUTING.html">المساهمة في Rin</a><a href="CODE_OF_CONDUCT.html">قواعد السلوك</a><a href="SECURITY.html">سياسة الأمان</a><a href="SUPPORT.html">الحصول على المساعدة</a><a href="TRADEMARKS.html">سياسة العلامة التجارية — Trademark Policy</a><a href="THIRD_PARTY_NOTICES.html">إشعارات المكوّنات الخارجية — Third-Party Notices</a></details><details ><summary>مراجع إضافية</summary><a href="ANDROID_VERSIONS.html">حزم RinStudio لكل إصدار أندرويد</a><a href="TOKEN.html">مفهوم `token` في Rin</a><a href="TOOLCHAIN.html">Rin Professional Language Toolchain</a><a href="TOOLCHAIN_UPGRADE.html">Toolchain Upgrade — 2026-09</a><a href="architecture.html">المعمارية وبنية المستودع</a><a href="base-accept.html">base` و`accept`: متغيّران يخدمان `if</a><a href="channel47.html">channel47 — لغة وصف البيانات والإعدادات</a><a href="ci.html">CI وأدوات المستودع</a><a href="loop-templates.html">قوالب الحلقات `@tmpl</a><a href="pre-post.html">pre` و`post` (ما قبل / ما بعد): عقد انتقال حول الإسناد</a><a href="print-fonts.html">خطوط `print` — bold / italic / underline وغيرها</a><a href="print-image-terminal.html">طباعة الصور كنص في الطرفية</a><a href="print-templates.html">قوالب الطباعة `@tmpl ... print` — قوالب نصية خطية وتنسيقية</a><a href="rdoc.html">rdoc — Documentation Container</a><a href="rdoc-reference.html">وثيقة rdoc الشاملة — Documentation Container</a><a href="screenshots.html">لقطات من RinStudio</a></details></nav>
+<main><article><h1 id="rin_elementsmd-element">RIN_ELEMENTS.md — دليل <code>@element.*</code> الكامل<a class="headerlink" href="#rin_elementsmd-element" title="Permanent link">#</a></h1>
+<blockquote>
+<p>هذا الملف كان مُشارًا إليه من عدة تعليقات في الكود (<code>rin_indsin_strand.h</code>،
+<code>examples/elements_extended_demo.rin</code>) على أنه المرجع الكامل لعناصر <code>@element.*</code>،
+لكنه لم يكن موجودًا فعليًا. كل جدول هنا مبنيّ على قراءة فعلية لـ
+<code>strandKindFromTag()</code> (<code>app/src/main/cpp/indsin/rin_indsin_strand.h</code>) — أسماء
+الوسوم والبدائل (aliases) هنا هي نفسها المقبولة في الكود حرفيًا، وليست تخمينًا.</p>
+</blockquote>
+<h2 id="_1">الفكرة الأساسية<a class="headerlink" href="#_1" title="Permanent link">#</a></h2>
+<p><code>@element.&lt;kind&gt;=&lt;name&gt;</code> ... <code>.end/element</code> يصف <strong>عنصر واجهة وظيفيًا بحتًا</strong> — بلا أي
+تنسيق بصري مدمج في مصدره. أي محاولة لكتابة <code>color=</code>/<code>radius=</code>/<code>padding=</code>/<code>size=</code>
+(وأخواتها، انظر القائمة الكاملة أدناه) داخل <code>@element</code> تُحذَف فعليًا عند البناء عبر
+<code>sanitizeElements()</code> — التنسيق البصري مكانه <code>@loop</code> (عبر خصائص <code>element_*</code> التي
+تُورَّث لكل عنصر بداخله) لا <code>@element</code> نفسه. راجع
+<a href="containers.html#element-و-loop-و-التنسيق-البصري"><code>containers.md</code></a> لشرح كامل لهذا
+الفصل الثلاثي (<code>@container</code> يملك السلوك، <code>@loop</code> يملك الشكل، <code>@element</code> يملك الوظيفة
+فقط).</p>
+<p><code>@element</code> يعمل الآن <strong>كجذر شاشة مستقل</strong> أيضًا (وليس فقط متداخلاً داخل <code>@view</code>/<code>@loop</code>)
+— انظر قسم "دمج @element بـ indsin" في <a href="indsin.html"><code>indsin.md</code></a>.</p>
+<pre><code class="language-kotlin">@element.button=run
+  text=&quot;Run&quot;;
+.end/element
+</code></pre>
+<p>الوسم بعد <code>@element.</code> غير حسّاس لحالة الأحرف تمامًا مثل <code>@view.</code> (<code>Button</code>/<code>button</code>
+كلاهما يُقبَل). كل صف في الجداول أدناه يسرد كل الأسماء البديلة (aliases) المقبولة
+لنفس العنصر، كما يقبلها <code>strandKindFromTag()</code> فعليًا.</p>
+<h2 id="_2">الفئة الأساسية<a class="headerlink" href="#_2" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الوسم (وبدائله)</th>
+<th>الوصف</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>text</code></td>
+<td>نص.</td>
+</tr>
+<tr>
+<td><code>image</code></td>
+<td>صورة.</td>
+</tr>
+<tr>
+<td><code>button</code></td>
+<td>زر.</td>
+</tr>
+<tr>
+<td><code>card</code></td>
+<td>بطاقة (حاوية بصرية).</td>
+</tr>
+<tr>
+<td><code>column</code></td>
+<td>تكديس عمودي.</td>
+</tr>
+<tr>
+<td><code>row</code></td>
+<td>تكديس أفقي.</td>
+</tr>
+<tr>
+<td><code>stack</code></td>
+<td>تكديس فوق بعضه (Z-order).</td>
+</tr>
+<tr>
+<td><code>divider</code></td>
+<td>خط فاصل.</td>
+</tr>
+<tr>
+<td><code>box</code> / <code>container</code> / <code>panel</code> / <code>frame</code></td>
+<td>حاوية تخطيط عامة عديمة الشكل.</td>
+</tr>
+<tr>
+<td><code>grid</code></td>
+<td>شبكة أعمدة/صفوف.</td>
+</tr>
+<tr>
+<td><code>wrap</code></td>
+<td>صف يلتف تلقائيًا عند نفاد العرض.</td>
+</tr>
+<tr>
+<td><code>spacer</code></td>
+<td>مسافة مرنة فارغة (لا يرسم شيئًا).</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="_3">هيكل التطبيق والوسائط<a class="headerlink" href="#_3" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الوسم</th>
+<th>الوصف</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>header</code> / <code>topbar</code> / <code>bottombar</code></td>
+<td>أشرطة أعلى/أسفل الشاشة.</td>
+</tr>
+<tr>
+<td><code>drawer</code> / <code>sidebar</code></td>
+<td>درج جانبي منزلق (<code>sidebar</code> بديل اسمي لـ<code>drawer</code>).</td>
+</tr>
+<tr>
+<td><code>menu</code>, <code>menuitem</code></td>
+<td>قائمة منسدلة وعناصرها.</td>
+</tr>
+<tr>
+<td><code>table</code>, <code>tablerow</code></td>
+<td>جدول وصفوفه.</td>
+</tr>
+<tr>
+<td><code>video</code>, <code>audio</code>, <code>webview</code></td>
+<td>وسائط ومتصفّح مضمَّن.</td>
+</tr>
+<tr>
+<td><code>scaffold</code></td>
+<td>حاوية الصفحة الكاملة (شريط علوي + محتوى + شريط سفلي + درج).</td>
+</tr>
+<tr>
+<td><code>splash</code></td>
+<td>شاشة بداية.</td>
+</tr>
+<tr>
+<td><code>banner</code></td>
+<td>شريط إشعار قابل للإغلاق (<code>closable=true</code> يُصنِّع زر إغلاق حقيقيًا).</td>
+</tr>
+<tr>
+<td><code>dialog</code> / <code>popup</code></td>
+<td>نافذة حوار منبثقة (<code>popup</code> بديل اسمي لـ<code>dialog</code>).</td>
+</tr>
+<tr>
+<td><code>tooltip</code></td>
+<td>تلميح صغير.</td>
+</tr>
+<tr>
+<td><code>object</code></td>
+<td>بطاقة عرض حيّة لقيمة <code>.object(...)</code> مُسجَّلة (<code>source=</code>).</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="_4">الحقول والإدخال<a class="headerlink" href="#_4" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الوسم</th>
+<th>الوصف</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>input</code></td>
+<td>حقل إدخال سطر واحد.</td>
+</tr>
+<tr>
+<td><code>textarea</code></td>
+<td>حقل إدخال متعدد الأسطر.</td>
+</tr>
+<tr>
+<td><code>badge</code></td>
+<td>شارة صغيرة (Badge).</td>
+</tr>
+<tr>
+<td><code>progress</code></td>
+<td>شريط تقدّم.</td>
+</tr>
+<tr>
+<td><code>checkbox</code></td>
+<td>مربّع اختيار.</td>
+</tr>
+<tr>
+<td><code>switch</code></td>
+<td>مفتاح تبديل.</td>
+</tr>
+<tr>
+<td><code>avatar</code></td>
+<td>صورة رمزية دائرية/مربّعة.</td>
+</tr>
+<tr>
+<td><code>tabs</code>, <code>tabitem</code></td>
+<td>تبويبات وعناصرها.</td>
+</tr>
+<tr>
+<td><code>icon</code>, <code>iconbutton</code></td>
+<td>أيقونة، وزر يحمل أيقونة.</td>
+</tr>
+<tr>
+<td><code>link</code></td>
+<td>نص قابل للنقر (يُقاس كصندوق Text).</td>
+</tr>
+<tr>
+<td><code>radio</code></td>
+<td>زر اختيار دائري (نسخة دائرية من Checkbox).</td>
+</tr>
+<tr>
+<td><code>slider</code></td>
+<td>شريط تمرير قيمة (Progress بمقبض).</td>
+</tr>
+<tr>
+<td><code>search</code>, <code>select</code>, <code>file</code>, <code>date</code>, <code>time</code></td>
+<td>نفس صندوق Field الحدودي الذي يستخدمه Input/TextArea، بدلالات مختلفة.</td>
+</tr>
+<tr>
+<td><code>code_editor</code></td>
+<td>محرّر أكواد (صندوق Field متعدد الأسطر بخط أحادي المسافة).</td>
+</tr>
+<tr>
+<td><code>calculator</code></td>
+<td>آلة حاسبة تفاعلية جاهزة.</td>
+</tr>
+<tr>
+<td><code>list</code>, <code>listitem</code></td>
+<td>قائمة وصفوفها.</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="uiux">توسعة مكتبة UI/UX (الأحدث)<a class="headerlink" href="#uiux" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الوسم (وبدائله)</th>
+<th>الوصف</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tag</code> / <code>chip</code></td>
+<td>شريحة (Chip) نصّية، <code>removable=true</code> يُصنِّع زر إغلاق حقيقيًا.</td>
+</tr>
+<tr>
+<td><code>kbd</code> / <code>key</code></td>
+<td>صندوق مفتاح لوحة مفاتيح صغير.</td>
+</tr>
+<tr>
+<td><code>rating</code></td>
+<td>تقييم نجوم (<code>max=</code>, <code>value=</code>)، للقراءة فقط.</td>
+</tr>
+<tr>
+<td><code>skeleton</code></td>
+<td>صندوق نائب تحميل ثابت.</td>
+</tr>
+<tr>
+<td><code>spinner</code> / <code>loader</code></td>
+<td>حلقة تحميل (قوس حقيقي — انظر §القوس أدناه).</td>
+</tr>
+<tr>
+<td><code>steps</code> / <code>stepper</code>, و<code>stepitem</code> / <code>step</code></td>
+<td>مؤشّر خطوات (<code>current=</code> على الأب يُحدِّد حالة كل StepItem تلقائيًا).</td>
+</tr>
+<tr>
+<td><code>timeline</code>, و<code>timelineitem</code> / <code>timelineevent</code></td>
+<td>خط زمني عمودي (<code>date=</code>/<code>title=</code>/<code>desc=</code> لكل عنصر).</td>
+</tr>
+<tr>
+<td><code>breadcrumb</code> / <code>breadcrumbs</code></td>
+<td>مسار تنقّل (<code>items="A,B,C"</code>).</td>
+</tr>
+<tr>
+<td><code>pagination</code> / <code>pager</code></td>
+<td>ترقيم صفحات تفاعلي (<code>current=</code>/<code>total=</code>).</td>
+</tr>
+<tr>
+<td><code>donutchart</code> / <code>donut</code> / <code>piechart</code></td>
+<td>مخطط دائري حقيقي (<code>data="Label:Value,..."</code>, <code>colors=</code>, <code>centerLabel=</code>).</td>
+</tr>
+</tbody>
+</table></div>
+<blockquote>
+<p><strong>ملاحظة أمانة على القوس/المنحنى</strong>: راسم المحرّك (Dye) يملك الآن عملية قوس حقيقية
+(<code>DrawOp::STROKE_ARC</code>) تستخدمها <code>spinner</code>/<code>donutchart</code> — لم تعد تقريبًا بمربعات.
+الدوران الفعلي في Spinner مصدره مضيف العرض (مثلًا <code>IndsinFabricView.kt</code> على
+أندرويد عبر <code>Canvas.drawArc</code> الحقيقي + مؤقّت دوران)، بينما محرّك C++ نفسه (Dye)
+ينتج إطارًا ثابتًا واحدًا فقط في كل استدعاء (لا يوجد أنيميشن داخل Dye نفسه).</p>
+</blockquote>
+<h2 id="element">ما لا يُقبَل داخل <code>@element</code><a class="headerlink" href="#element" title="Permanent link">#</a></h2>
+<p>هذه المفاتيح تُحذَف تلقائيًا من أي <code>@element</code> (سواء كان جذر شاشة أو متداخلاً) —
+ضعها على <code>@loop</code> الأب بدلًا من ذلك (عبر <code>element_&lt;key&gt;=</code> لتوريثها لكل عنصر، أو
+مباشرة على <code>@loop</code> نفسه لخصائص الشاشة العامة مثل <code>width=</code>/<code>height=</code>/<code>background=</code>):</p>
+<pre><code>x, y, width, height, min_width, max_width, min_height, max_height,
+color, background, border, radius, padding, margin, opacity, shadow,
+font, font_size, text_size, size, align, valign,
+margin_left, margin_top, margin_right, margin_bottom, screen
+</code></pre>
+<h2 id="_5">مثال حقيقي (مُتحقَّق منه: يبني ويُصمَّم فعليًا)<a class="headerlink" href="#_5" title="Permanent link">#</a></h2>
+<pre><code class="language-kotlin">@container=app
+    @element.button=run
+        text=&quot;Run&quot;;
+    .end/element
+
+    on.run.click=runCode();
+.end/container
+
+fun runCode() {
+    print &quot;Rin UI&quot;;
+}
+
+@loop=canvas
+    width=390;
+    height=700;
+    background=&quot;#ffffff&quot;;
+    element_color=&quot;#111111&quot;;
+    element_text_size=16;
+
+    @element.text=title
+        text=&quot;Rin Elements&quot;;
+    .end/element
+
+    @element.donutchart=usage
+        data=&quot;Design:40,Development:60&quot;;
+    .end/element
+.end/loop
+</code></pre>
+<h2 id="_6">انظر أيضًا<a class="headerlink" href="#_6" title="Permanent link">#</a></h2>
+<ul>
+<li><a href="containers.html"><code>containers.md</code></a> — <code>@container</code>/<code>@element</code>/<code>@loop</code> بالتفصيل، والفصل
+  الثلاثي بين السلوك/الشكل/الوظيفة.</li>
+<li><a href="indsin.html"><code>../indsin.md</code></a> — محرّك التنفيذ الذي يحوّل هذه العناصر إلى بكسلات فعلية.</li>
+</ul></article>
+<div class="pnav"><a class="pn" href="indsinweb.html">→ IndsinWeb — مكتبة WebView والروابط لـ indsin</a><a class="pn" href="events-effects.html">الأحداث والتأثيرات (Events &amp; Effects) — محرك Indsin UI ←</a></div><p class="edit"><a href="https://github.com/dlof-lib/rinlang/edit/main/docs/RIN_ELEMENTS.md">✎ عدّل هذه الصفحة على GitHub</a></p>
+<footer>Rin 1.0.0 · رخصة MIT</footer></main>
+<aside id="toc"><b>في هذه الصفحة</b><div class="toc">
+<ul>
+<li><a href="#_1">الفكرة الأساسية</a></li>
+<li><a href="#_2">الفئة الأساسية</a></li>
+<li><a href="#_3">هيكل التطبيق والوسائط</a></li>
+<li><a href="#_4">الحقول والإدخال</a></li>
+<li><a href="#uiux">توسعة مكتبة UI/UX (الأحدث)</a></li>
+<li><a href="#element">ما لا يُقبَل داخل @element</a></li>
+<li><a href="#_5">مثال حقيقي (مُتحقَّق منه: يبني ويُصمَّم فعليًا)</a></li>
+<li><a href="#_6">انظر أيضًا</a></li>
+</ul>
+</div>
+</aside></div>
+<script src="assets/app.js"></script></body></html>

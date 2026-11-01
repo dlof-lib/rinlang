@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- بلاطة أيقونة teal لمكتبات الذكاء الاصطناعي (RinDF/RinML/RinAI) — نفس شكل bg_icon_gradient_green
+     (زاوية 135، نصف قطر 13dp). مولَّدة بـ tools/gen_ai_lib_icons.py. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <gradient android:type="linear" android:angle="135" android:startColor="#2DD4BF" android:endColor="#0F766E" />
+    <corners android:radius="13dp" />
+</shape>

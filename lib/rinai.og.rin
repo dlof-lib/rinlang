@@ -1,0 +1,277 @@
+// ============================================================================
+//  lib/rinai.og.rin — RinAI: مساحة عمل ذكاء اصطناعي داخل حاويات Rin (@container)
+//
+//  @version 1.0.0
+//  @category ai
+//  @prefix ai_
+//
+//  تربط rindf (تحليل البيانات) + rinml (التعلّم الآلي) بنظام الحاويات:
+//    • مساحة العمل  = حاوية kind=data  اسمها ws   (تحمل النماذج + سجلّ التجارب + فهرس البيانات)
+//    • كل مجموعة بيانات = حاوية kind=table  اسمها  <ws>__ds_<name>  (حقل records)
+//    • النماذج تُخزَّن كـ "حزمة" bundle قابلة للتحويل إلى JSON (نموذج + معايِر + أسماء الميزات)
+//
+//  مساحة العمل:   ai_workspace · ai_put_dataset · ai_get_dataset · ai_datasets
+//  النماذج:        ai_put_model · ai_get_model · ai_models · ai_predict · ai_bundle_predict
+//  التجارب:        ai_log · ai_experiments
+//  AutoML:         ai_auto_classify · ai_auto_regress
+//  خطوط الأنابيب:  ai_run_pipeline
+//  الحفظ/التحميل:  ai_save_workspace · ai_load_workspace
+//  خدمة بعيدة:     ai_remote_predict   (POST JSON إلى أي نموذج مُستضاف: Docker / FastAPI / ...)
+//
+//  استيراد:  @import "lib/rinai.og.rin";   (يستورد rindf و rinml تلقائياً)
+// ============================================================================
+@import "lib/rindf.og.rin";
+@import "lib/rinml.og.rin";
+
+// ---------------------------------------------------------------------------
+//  مساحة العمل
+// ---------------------------------------------------------------------------
+// ينشئ المساحة إن لم تكن موجودة (وإلا يعيد اسمها). آمن للاستدعاء المتكرر.
+fun ai_workspace(ws) {
+    container.ensure("data", ws);
+    if (!container.has(ws, "datasets")) { container.set(ws, "datasets", []); }
+    if (!container.has(ws, "models")) { container.set(ws, "models", []); }
+    if (!container.has(ws, "log")) { container.set(ws, "log", []); }
+    return ws;
+}
+
+fun ai_ds_name(ws, name) { return ws + "__ds_" + name; }
+
+fun ai_list_add(ws, field, name) {
+    let cur = container.get(ws, field);
+    let i = 0;
+    while (i < len(cur)) { if (cur[i] == name) { return false; } i = i + 1; }
+    push(cur, name);
+    container.set(ws, field, cur);
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+//  مجموعات البيانات (DataFrame <-> حاوية جدول)
+// ---------------------------------------------------------------------------
+fun ai_put_dataset(ws, name, df) {
+    ai_workspace(ws);
+    let tbl = ai_ds_name(ws, name);
+    container.ensure("table", tbl);
+    container.set(tbl, "records", df_to_records(df));
+    ai_list_add(ws, "datasets", name);
+    return tbl;
+}
+
+fun ai_get_dataset(ws, name) {
+    let tbl = ai_ds_name(ws, name);
+    if (!container.exists(tbl)) { fail("ai_get_dataset: لا توجد مجموعة بيانات باسم '" + name + "' في '" + ws + "'"); }
+    return df_from_records(container.get(tbl, "records"));
+}
+
+fun ai_datasets(ws) { return deepCopy(container.get(ws, "datasets")); }
+
+// ---------------------------------------------------------------------------
+//  حزم النماذج (bundle): نموذج + ميزات + معايِر + فئات
+// ---------------------------------------------------------------------------
+// أدنى حزمة: ai_make_bundle(model, features, scaler, classes) — scaler/classes يمكن أن تكون nil
+fun ai_make_bundle(model, features, scaler, classes) {
+    return {"type": "bundle", "model": model, "features": features, "scaler": scaler, "classes": classes};
+}
+
+fun ai_put_model(ws, name, bundle, metrics) {
+    ai_workspace(ws);
+    container.set(ws, "model_" + name, {"bundle": bundle, "metrics": metrics, "t": now()});
+    ai_list_add(ws, "models", name);
+    return name;
+}
+
+fun ai_get_model(ws, name) {
+    if (!container.has(ws, "model_" + name)) { fail("ai_get_model: لا يوجد نموذج باسم '" + name + "' في '" + ws + "'"); }
+    return deepCopy(container.get(ws, "model_" + name)["bundle"]);
+}
+
+fun ai_models(ws) { return deepCopy(container.get(ws, "models")); }
+
+fun ai_model_metrics(ws, name) { return deepCopy(container.get(ws, "model_" + name)["metrics"]); }
+
+// تنبّؤ من سجلّ (قاموس بأسماء الميزات) — يطبّق المعايرة ويحوّل فهرس الفئة إلى تسمية
+fun ai_bundle_predict(b, rec) {
+    let x = [];
+    let j = 0;
+    while (j < len(b["features"])) { push(x, rec[b["features"][j]]); j = j + 1; }
+    if (b["scaler"] != nil) { x = ml_scaler_row(b["scaler"], x); }
+    let p = ml_predict(b["model"], x);
+    if (b["model"]["type"] == "mlp" and b["classes"] != nil and len(b["classes"]) > 0) { return b["classes"][p]; }
+    return p;
+}
+
+fun ai_predict(ws, name, rec) { return ai_bundle_predict(ai_get_model(ws, name), rec); }
+
+// ---------------------------------------------------------------------------
+//  سجلّ التجارب
+// ---------------------------------------------------------------------------
+fun ai_log(ws, event) {
+    ai_workspace(ws);
+    let cur = container.get(ws, "log");
+    event["t"] = now();
+    push(cur, event);
+    container.set(ws, "log", cur);
+    return len(cur);
+}
+
+fun ai_experiments(ws) { return deepCopy(container.get(ws, "log")); }
+
+// ---------------------------------------------------------------------------
+//  AutoML خفيف: يجرّب عدّة نماذج على نفس التقسيم ويعيد لوحة ترتيب + أفضل حزمة
+// ---------------------------------------------------------------------------
+fun ai_auto_classify(df, target, features, sd) {
+    let X = df_to_matrix(df, features);
+    let y = deepCopy(df_col(df, target));
+    let sp = ml_train_test_split(X, y, 0.25, sd);
+    let sc = ml_scaler_fit(sp["Xtr"]);
+    let Xtr = ml_scaler_transform(sc, sp["Xtr"]);
+    let Xte = ml_scaler_transform(sc, sp["Xte"]);
+    let oh = ml_onehot(sp["ytr"]);
+    let classes = ml_onehot(y)["classes"];
+    let board = df_new(["model", "accuracy"]);
+    let bundles = {};
+
+    let knn = ml_knn_fit(Xtr, sp["ytr"], 5, "class");
+    let nb = ml_nb_fit(Xtr, sp["ytr"]);
+    let tr = ml_tree_fit(Xtr, sp["ytr"], 5, 2);
+    let cand = {"knn": knn, "naive_bayes": nb, "tree": tr};
+    let names = ["knn", "naive_bayes", "tree"];
+
+    // شبكة عصبية softmax
+    let nCls = len(classes);
+    let net = ml_mlp_init([len(features), 8, nCls], "tanh", "softmax", sd);
+    let Ytr = [];
+    let i = 0;
+    while (i < len(sp["ytr"])) {
+        let t = nd_zeros(nCls);
+        t[nd_index_of(classes, sp["ytr"][i])] = 1;
+        push(Ytr, t);
+        i = i + 1;
+    }
+    ml_mlp_fit(net, Xtr, Ytr, 0.05, 120);
+    cand["mlp"] = net;
+    push(names, "mlp");
+
+    i = 0;
+    while (i < len(names)) {
+        let m = cand[names[i]];
+        let raw = ml_predict_all(m, Xte);
+        let pred = raw;
+        if (m["type"] == "mlp") {
+            pred = [];
+            let q = 0;
+            while (q < len(raw)) { push(pred, classes[raw[q]]); q = q + 1; }
+        }
+        push(board["cols"]["model"], names[i]);
+        push(board["cols"]["accuracy"], ml_accuracy(sp["yte"], pred));
+        bundles[names[i]] = ai_make_bundle(m, features, sc, classes);
+        i = i + 1;
+    }
+    board = df_sort(board, "accuracy", true);
+    let bestName = board["cols"]["model"][0];
+    return {"leaderboard": board, "best_name": bestName, "best": bundles[bestName], "bundles": bundles, "task": "classification"};
+}
+
+fun ai_auto_regress(df, target, features, sd) {
+    let X = df_to_matrix(df, features);
+    let y = deepCopy(df_col(df, target));
+    let sp = ml_train_test_split(X, y, 0.25, sd);
+    let sc = ml_scaler_fit(sp["Xtr"]);
+    let Xtr = ml_scaler_transform(sc, sp["Xtr"]);
+    let Xte = ml_scaler_transform(sc, sp["Xte"]);
+    let board = df_new(["model", "rmse", "r2"]);
+    let bundles = {};
+    let cand = {};
+    let names = [];
+
+    let ols = ml_linreg_fit(Xtr, sp["ytr"], 0);
+    if (ols != nil) { cand["linear"] = ols; push(names, "linear"); }
+    let rdg = ml_linreg_fit(Xtr, sp["ytr"], 1);
+    if (rdg != nil) { cand["ridge"] = rdg; push(names, "ridge"); }
+    cand["knn"] = ml_knn_fit(Xtr, sp["ytr"], 5, "reg");
+    push(names, "knn");
+
+    let i = 0;
+    while (i < len(names)) {
+        let pred = ml_predict_all(cand[names[i]], Xte);
+        push(board["cols"]["model"], names[i]);
+        push(board["cols"]["rmse"], ml_rmse(sp["yte"], pred));
+        push(board["cols"]["r2"], ml_r2(sp["yte"], pred));
+        bundles[names[i]] = ai_make_bundle(cand[names[i]], features, sc, nil);
+        i = i + 1;
+    }
+    board = df_sort(board, "r2", true);
+    let bestName = board["cols"]["model"][0];
+    return {"leaderboard": board, "best_name": bestName, "best": bundles[bestName], "bundles": bundles, "task": "regression"};
+}
+
+// ---------------------------------------------------------------------------
+//  خطوط الأنابيب: steps = [{"name": "clean", "fn": fun(x){...}}, ...]
+//  كل خطوة تأخذ ناتج السابقة؛ يُسجَّل اسم كل خطوة وعدد الصفوف (إن كانت إطار بيانات) في سجلّ المساحة.
+// ---------------------------------------------------------------------------
+fun ai_run_pipeline(ws, steps, input) {
+    ai_workspace(ws);
+    let cur = input;
+    let trace = [];
+    let i = 0;
+    while (i < len(steps)) {
+        let fn = steps[i]["fn"];
+        cur = fn(cur);
+        let info = {"step": steps[i]["name"]};
+        if (type(cur) == "map" and has(cur, "names") and has(cur, "cols")) {
+            info["rows"] = df_rows_count(cur);
+            info["cols"] = len(cur["names"]);
+        }
+        push(trace, info);
+        i = i + 1;
+    }
+    ai_log(ws, {"event": "pipeline", "trace": trace});
+    return cur;
+}
+
+// ---------------------------------------------------------------------------
+//  الحفظ / التحميل (ملف JSON واحد لمساحة العمل كاملة)
+// ---------------------------------------------------------------------------
+fun ai_save_workspace(ws, path) {
+    let dsNames = container.get(ws, "datasets");
+    let datasets = {};
+    let i = 0;
+    while (i < len(dsNames)) {
+        datasets[dsNames[i]] = container.get(ai_ds_name(ws, dsNames[i]), "records");
+        i = i + 1;
+    }
+    let mNames = container.get(ws, "models");
+    let models = {};
+    i = 0;
+    while (i < len(mNames)) { models[mNames[i]] = container.get(ws, "model_" + mNames[i]); i = i + 1; }
+    writeFile(path, jsonEncode({"rinai": 1, "workspace": ws, "datasets": datasets, "models": models, "log": container.get(ws, "log")}));
+    return path;
+}
+
+fun ai_load_workspace(ws, path) {
+    let data = jsonDecode(readFile(path));
+    ai_workspace(ws);
+    let dk = keys(data["datasets"]);
+    let i = 0;
+    while (i < len(dk)) { ai_put_dataset(ws, dk[i], df_from_records(data["datasets"][dk[i]])); i = i + 1; }
+    let mk = keys(data["models"]);
+    i = 0;
+    while (i < len(mk)) {
+        let entry = data["models"][mk[i]];
+        container.set(ws, "model_" + mk[i], entry);
+        ai_list_add(ws, "models", mk[i]);
+        i = i + 1;
+    }
+    container.set(ws, "log", data["log"]);
+    return ws;
+}
+
+// ---------------------------------------------------------------------------
+//  جسر الخدمات البعيدة (نموذج داخل Docker/خادم): POST JSON ويعيد {ok, status, json, error}
+//  لا يرمي عند فشل الشبكة؛ افحص result["ok"].
+// ---------------------------------------------------------------------------
+fun ai_remote_predict(url, payload) {
+    let r = httpRequest("POST", url, {"Content-Type": "application/json"}, jsonEncode(payload));
+    return {"ok": r["ok"], "status": r["status"], "json": r["json"], "error": r["error"]};
+}

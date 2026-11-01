@@ -1,0 +1,99 @@
+// tests/verification/rindb_lib.rin — rindb: a database engine written in Rin itself
+// (spawn("doc") + insertDoc/findDoc/... + RCSQL + WAL files). No new natives.
+@import "rindb";
+
+// ---- 1) in-memory database, tables created at run time -------------------------------
+let db = rdb_open("shop", nil);
+rdb_createTableWith(db, "users", {"schema": {"name": "string", "age": "number"}, "indexes": ["name"]});
+rdb_createTable(db, "orders");
+print "tables=" + rdb_tables(db) + " kind=" + container.kind("shop__users");
+
+rdb_put(db, "users", "u1", {"name": "Sara", "age": 30});
+rdb_insert(db, "users", "u2", {"name": "Omar", "age": 41});
+print "auto=" + rdb_add(db, "users", {"name": "Lina", "age": 25});
+print "count=" + rdb_count(db, "users") + " has=" + rdb_has(db, "users", "u2") + "/" + rdb_has(db, "users", "zz");
+rdb_update(db, "users", "u1", {"age": 31});
+print "incr=" + rdb_incr(db, "users", "u1", "age", 4);
+print "find=" + rdb_find(db, "users", "name", "Omar")[0]["_id"];
+print "sql=" + rdb_queryCount(db, "users&age:gt(30)");
+
+try { rdb_insert(db, "users", "u1", {"name": "X", "age": 1}); } catch (e) { print "caught: duplicate"; }
+try { rdb_put(db, "users", "u9", {"name": "Bad", "age": "old"}); } catch (e) { print "caught: schema"; }
+print "after errors=" + rdb_count(db, "users") + " u9=" + rdb_has(db, "users", "u9");
+
+// ---- 2) transactions -------------------------------------------------------------------------
+rdb_begin(db);
+rdb_put(db, "users", "u3", {"name": "Temp", "age": 1});
+rdb_delete(db, "users", "u2");
+print "inside tx=" + rdb_count(db, "users");
+rdb_rollback(db);
+print "after rollback=" + rdb_count(db, "users") + " u2=" + rdb_has(db, "users", "u2");
+try { rdb_transaction(db, fun() { rdb_put(db, "orders", "o1", {"t": 1}); throw "boom"; }); } catch (e) { print "tx failed: " + e["message"]; }
+print "orders after failed tx=" + rdb_count(db, "orders");
+print "bulk=" + rdb_bulk(db, "orders", [{"t": 5}, {"_id": "x", "t": 7}]);
+print "orders=" + rdb_count(db, "orders");
+
+// ---- 3) drop ----------------------------------------------------------------------------------------
+rdb_dropTable(db, "orders");
+print "tables=" + rdb_tables(db) + " exists=" + hasContainer("shop__orders");
+print "catalog open=" + RinDB.catalog.openCount;
+rdb_close(db);
+print "open after close=" + rdb_list() + " catalog=" + RinDB.catalog.openCount;
+
+// ---- 4) persistent: WAL, reopen, checkpoint, verify, backup, read-only ------------------------------
+let path = "rindb_lib_test.rdb";
+try { deleteFile(path); } catch (e) { }
+let p = rdb_open("library", path);
+rdb_createTableWith(p, "books", {"schema": {"title": "string", "year": "number"}, "indexes": ["title"]});
+rdb_put(p, "books", "b1", {"title": "Rin Guide", "year": 2026});
+rdb_put(p, "books", "b2", {"title": "Databases", "year": 2020});
+let first = rdb_add(p, "books", {"title": "Third", "year": 2000});
+rdb_transaction(p, fun() { rdb_update(p, "books", "b2", {"year": 2021}); rdb_delete(p, "books", first); });
+rdb_close(p);
+
+let q = rdb_open("library", path);
+print "reopened docs=" + rdb_info(q)["documents"] + " b2=" + rdb_get(q, "books", "b2")["year"] + " gone=" + rdb_has(q, "books", first);
+print "indexed find=" + rdb_find(q, "books", "title", "Rin Guide")[0]["_id"];
+try { rdb_put(q, "books", "b3", {"title": 5, "year": 1}); } catch (e) { print "schema kept"; }
+print "auto id continues=" + first + " -> " + rdb_add(q, "books", {"title": "Next", "year": 1});
+rdb_checkpoint(q);
+print "checkpoints=" + rdb_info(q)["checkpoints"] + " verify=" + rdb_verify(path)["ok"];
+rdb_backup(q, path + ".bak");
+print "backup ok=" + rdb_verify(path + ".bak")["ok"];
+rdb_close(q);
+
+let r = rdb_openWith("library", path, {"readonly": true});
+print "readonly count=" + rdb_count(r, "books");
+try { rdb_put(r, "books", "z", {"title": "No", "year": 1}); } catch (e) { print "caught: read-only"; }
+rdb_close(r);
+try { rdb_open("other", path); } catch (e) { print "caught: wrong name"; }
+
+let z = rdb_open("library", path);
+rdb_dropDatabase(z, true);
+try { deleteFile(path + ".bak"); } catch (e) { }
+print "final=" + rdb_list() + " file=" + fileExists(path);
+
+// ---- 5) used inside a Volume / Group / container (state lives in the namespace) ---------------------
+@Volume=Store
+    @Containers.Group=Shop
+        @container=app
+            let db = rdb_connect("inside", nil);
+            let users = nil;
+            fun setup() {
+                db.createTable("users", {"schema": {"name": "string"}, "indexes": ["name"]});
+                users = db.table("users");
+                users.put("u1", {"name": "Sara"});
+                let id = users.add({"name": "Omar"});
+                db.transaction(fun() { users.update("u1", {"name": "Sara K"}); users.delete(id); });
+                return users.count();
+            }
+        .end/container
+    .end/Containers.Group
+.end/Volume
+print "inside setup=" + Store.Shop.app.setup();
+let su = Store.Shop.app.users;
+let sd = Store.Shop.app.db;
+print su.get("u1");
+print su.query("name:like(sara)");
+print "inside docs=" + sd.info()["documents"] + " tables=" + sd.tables();
+sd.close();

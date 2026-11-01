@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8"/>
+<title>RinHTML — مثال العدّاد</title>
+<style>
+  body{font-family:system-ui,sans-serif;background:#0a0a10;color:#eceef7;
+    display:flex;align-items:center;justify-content:center;height:100vh;margin:0}
+  .card{background:#14141c;padding:32px 40px;border-radius:16px;text-align:center;min-width:260px}
+  h1{font-size:16px;color:#9a9ab0;font-weight:normal;margin:0 0 16px}
+  .count{font-size:48px;font-weight:bold;margin:12px 0}
+  button{background:#7c5cff;color:#fff;border:none;border-radius:8px;padding:10px 20px;
+    font-size:16px;cursor:pointer;margin:0 4px}
+  button:hover{filter:brightness(1.1)}
+  button.secondary{background:#2a2a38}
+</style>
+</head>
+<body>
+
+  <!-- محرك Rin (WASM) ثم مكتبة RinHTML -->
+  <script src="../rin_engine.js"></script>
+  <script src="../rinhtml/rinhtml.js"></script>
+
+  <!-- تشغيل main.rin — بلا أي جافاسكربت مكتوب من المستخدم -->
+  <rin-app src="main.rin" allow="dom"></rin-app>
+
+  <div class="card">
+    <h1>RinHTML — main.rin يشغّل هذه الصفحة</h1>
+    <div class="count" rin-text="count">0</div>
+    <button rin-click="add()">+1</button>
+    <button class="secondary" rin-click="reset()">تصفير</button>
+  </div>
+
+</body>
+</html>

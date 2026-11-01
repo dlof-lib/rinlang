@@ -1,0 +1,10 @@
+// Rin Pagination Pro.
+fun page_count(total,size){if(size<=0){return 0;}return ceil(total/size);}
+fun page_start(page,size){return (page-1)*size;}
+fun page_end(page,size,total){let e=page*size;if(e>total){return total;}return e;}
+fun page_slice(arr,page,size){if(page<1 or size<=0){return [];}let start=page_start(page,size);let out=[];let i=start;while(i<len(arr) and i<start+size){push(out,arr[i]);i=i+1;}return out;}
+fun page_hasNext(page,total,size){return page<page_count(total,size);}
+fun page_hasPrev(page){return page>1;}
+fun page_next(page,total,size){if(page_hasNext(page,total,size)){return page+1;}return page;}
+fun page_prev(page){if(page>1){return page-1;}return 1;}
+fun page_meta(total,page,size){return {"total":total,"page":page,"size":size,"pages":page_count(total,size),"start":page_start(page,size),"end":page_end(page,size,total),"hasNext":page_hasNext(page,total,size),"hasPrev":page_hasPrev(page)};}

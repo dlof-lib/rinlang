@@ -1,0 +1,4 @@
+let s = "";
+let i = 0;
+while (i < 60000) { s = s + "x"; i = i + 1; }
+print len(s);

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- خط — الشعار/الرمز المعروف بلون هويته؛ المسارات من Simple Icons (CC0) أو Material Design Icons / Font Awesome Free. محلي بلا شبكة. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <group
+        android:scaleX="0.03906"
+        android:scaleY="0.03906"
+        android:translateX="2.000"
+        android:translateY="2.000">
+        <path android:fillColor="#A78BFA"
+            android:pathData="M285.1 50.7C279.9 39.3 268.5 32 256 32s-23.9 7.3-29.1 18.7L59.5 416H48c-17.7 0-32 14.3-32 32s14.3 32 32 32h88c17.7 0 32-14.3 32-32s-14.3-32-32-32h-6.1l22-48h208.3l22 48h-6.1c-17.7 0-32 14.3-32 32s14.3 32 32 32h88c17.7 0 32-14.3 32-32s-14.3-32-32-32h-11.5L285.2 50.7zM330.8 304H181.2L256 140.8z" />
+    </group>
+</vector>

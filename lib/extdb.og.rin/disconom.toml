@@ -1,0 +1,16 @@
+# extdb — اتصال حاويات Rin بقواعد بيانات خارجية عبر «مزوّد اتصال» مسمّى: rtdb أو pgrest.
+# بلغة Rin الصرفة فوق httpRequest/jsonEncode/spawn("doc")/insertDoc/findDoc — لا دوال أصلية جديدة.
+disconom = 2
+name = "extdb"
+version = "1.0.0"
+description = "قواعد بيانات خارجية لحاويات Rin و indsin عبر مزوّد اتصال مسمّى (rtdb / pgrest): CRUD ودفعات واستعلامات بعوامل، جلسات مستخدمين، كاش وإعادة محاولة وطابور دون اتصال، مخطط محلي، مراقبة تغييرات، مزامنة حاويات doc، تصدير/استيراد"
+authors = ["Rin"]
+license = "MIT"
+keywords = ["database", "rtdb", "pgrest", "external", "قاعدة بيانات"]
+categories = ["data", "network"]
+rin = ">=1.0.0"
+main = "main.zpp"
+parts = ["main.zpp", "core/common.zpp", "core/net.zpp", "core/auth.zpp", "core/schema.zpp", "core/rtdb.zpp", "core/pgrest.zpp", "core/api.zpp", "core/watch.zpp", "core/tools.zpp", "core/ui.zpp", "core/bind.zpp"]
+
+[scripts]
+test = "cd ../.. && rin tests/verification/extdb_lib.rin"

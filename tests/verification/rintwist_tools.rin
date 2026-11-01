@@ -1,0 +1,21 @@
+// RINTWIST (v2): stack / get / fmt وحقول date/run/env/app الجديدة
+@import "tests/verification/libsplit/twist.og.rin";
+print rintwist.get("lib.active");
+print rintwist.get("no.such.field", "dflt");
+print rintwist.get("stack.0.kind");
+print len(rintwist.stack());
+print len(TW_STACK);
+print TW_STACK[0].kind + " > " + TW_STACK[1].kind + ":" + TW_STACK[1].name + " " + TW_STACK[1].version + " " + TW_STACK[1].part;
+print TW_FMT;
+print rintwist.fmt("{{literal}} {app.name}-{app.version}");
+print rintwist.fmt("{user}@{app.name}", {user: "jo"});
+print len(RINTWIST.date.utc);
+print RINTWIST.date.dayOfYear >= 1;
+print len(RINTWIST.date.weekdayName) > 5;
+print RINTWIST.run.uptimeMs >= 0;
+print type(RINTWIST.run.args);
+print type(RINTWIST.env.lang);
+print len(RINTWIST.app.compiler) > 0;
+print type(RINTWIST.app.debug);
+try { rintwist.fmt("{nope.x}"); } catch (e) { print e.message; }
+try { rintwist.fmt("{open"); } catch (e) { print e.message; }

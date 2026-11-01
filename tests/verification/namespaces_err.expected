@@ -1,0 +1,11 @@
+📦 container = conf
+📦 container = db
+✅ .end/container (db)
+✅ .end/container (conf)
+30
+h
+caught: [E0001] namespace `conf` has no member `timeot` (`conf` is a container namespace; it only exposes names declared directly inside it)
+caught: [E0001] namespace `conf` has no variable `nothing` (`conf` is a container namespace; it only exposes names declared directly inside it)
+caught: [E0004] cannot assign to `conf.db`: it is a nested namespace, not a variable
+caught: [E0001] namespace `conf` has no function `run` (`conf` is a container namespace; it only exposes names declared directly inside it)
+caught: [E0006] `conf.timeout` is not a function (no function (built-in or user-defined) named `conf.timeout` is callable here)

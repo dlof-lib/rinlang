@@ -1,0 +1,303 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>RinPak — حزمة مشروع Rin (`.rinpak`) — Rin</title>
+<meta name="description" content="توثيق لغة البرمجة Rin"><link rel="icon" href="../assets/brand/icon-32.png">
+<link rel="stylesheet" href="assets/style.css"></head><body>
+<header><button id="mn" aria-label="القائمة">☰</button><a class="logo" href="index.html"><img src="../assets/brand/icon-48.png" alt="" width="26">Rin</a>
+<input id="q" type="search" placeholder="ابحث في التوثيق…" autocomplete="off"><button id="th" aria-label="الوضع">◐</button>
+<a class="gh" href="https://github.com/dlof-lib/rinlang">GitHub</a><div id="res"></div></header>
+<div class="wrap"><nav id="sb"><details ><summary>ابدأ هنا</summary><a href="getting-started.html">البداية</a><a href="syntax.html">القواعد النحوية العامة</a><a href="variables.html">let`، مصفوفات، قواميس، نطاق</a><a href="template-strings.html">النصوص القالبية (متغيّرات داخل النص)</a><a href="input.html">إدخال المستخدم (Input)</a><a href="control-flow.html">الشروط، الحلقات، `goal`/`achieve</a><a href="loops.html">حلقات Rin — Loops v2</a><a href="functions.html">fun`/`return`، التكرار الذاتي</a><a href="enums.html">enum`: قوائم اختيار مغلقة</a></details><details ><summary>اللغة</summary><a href="language-reference.html">المرجع الشامل وخريطة ترابط المفاهيم</a><a href="objects.html">class`/`struct`، `.object()`، `@Object`، `document</a><a href="oop.html">البرمجة الكائنية الموسَّعة (Rin 1.0)</a><a href="containers.html">دليل `@container` / `@element` / `@loop</a><a href="table.html">الجدول (`@table` / `@container.table`) ودوال اللغة عليه</a><a href="set.html">Set`: نوع المجموعة الأساسي</a><a href="pipelines.html">عامل الأنابيب `|&gt;</a><a href="RECKON.html">reckon`: مفهوم حسابي بسطرين</a><a href="let-plus.html">let` المطوَّر</a><a href="living-variables.html">المتغيرات الحيّة (Living Variables)</a><a href="label-define.html">label` و`define` (تسمية وتعريف)</a><a href="block-frames.html">بداية الكتل ونهايتها (Block Frames)</a><a href="compare_ops.html">معاملات المقارنة `/=` و `=/=` و `=/</a><a href="max_min.html">max / min family</a><a href="scope-guarantees.html">ضمانات النطاق: `finally` · `defer` · `catch … when` · `rethrow</a><a href="key_terms_and_builtins.html">Rin KEY_TERMS and Built-in Conditions</a><a href="number_builtins.html">Rin Number Built-ins</a></details><details ><summary>الواجهات (Indsin)</summary><a href="indsin.html">Indsin — Interface Design</a><a href="indsin_rin.html">indsin يعتمد على لغة Rin</a><a href="indsin_expansion.html">Indsin — التوسعة الاحترافية (Design System v2)</a><a href="indsin_object.html">indsin-object — API reference</a><a href="indsin_media.html">Indsin Media — اختيار الوسائط ورفعها</a><a href="indsin_icons.html">مكتبة أيقونات indsin (متجهية)</a><a href="indsin_tooling.html">indsin tooling — icon, file association, syntax highlighting</a><a href="indsinweb.html">IndsinWeb — مكتبة WebView والروابط لـ indsin</a><a href="RIN_ELEMENTS.html">دليل `@element.*` الكامل</a><a href="events-effects.html">الأحداث والتأثيرات (Events &amp; Effects) — محرك Indsin UI</a><a href="banner.html">Banner: إشعار شريطي</a><a href="simple-style.html">Rin Simple Style</a></details><details ><summary>بيئة التشغيل</summary><a href="runtime.html">وقت تشغيل Rin (Rin Runtime) · المرجع الرسمي</a><a href="standard-library.html">المكتبة القياسية (`lib/*.og.rin`)</a><a href="errors.html">نظام الأخطاء: أكواد، `try`/`catch`/`throw</a><a href="ERROR_SYSTEM.html">نظام التشخيص: البنية الداخلية + جدول الأكواد الكامل</a><a href="storage.html">تخزين دائم</a><a href="http.html">شبكات</a><a href="env.html">ربط Rin بملف `.env</a><a href="terminal.html">الطرفية التفاعلية — `rin terminal</a><a href="vm.html">RinVM — آلة Rin الافتراضية (بايتكود)</a><a href="rinflow.html">RinFlow: طبقة تنفيذ التدفّق المهيكل</a><a href="MAKE_UNIT.html">@make.(name)`: وحدة بسياسة قدرات صريحة</a><a href="MAKE_MEDIA.html">فيديو · صوت · API · إزالة الخلفية · قراءة النص من الصور</a><a href="TIME.html">مفهوم `time`: الزمن كقيمة من الدرجة الأولى</a><a href="native-additions.html">دوال Rin الأصلية الجديدة (Rin 1.0)</a></details><details ><summary>الحاويات وقواعد البيانات</summary><a href="container_advanced.html">Rin Container Advanced Built-ins</a><a href="container_pro.html">Rin Container Pro</a><a href="container_sql.html">RIN CONTAINER SQL (RCSQL)</a><a href="cross-file-containers.html">استدعاء إعلانات من ملف آخر</a></details><details open><summary>الحزم والتكامل</summary><a href="api.html">واجهة C المسطَّحة (Embedding API)</a><a href="android.html">استضافة Rin على أندرويد</a><a href="packages-and-interop.html">Rin 1.0 — المكتبات والحزم وجسر C++ وJSON واختبارات rintest</a><a href="rinpak-format.html" class=on>RinPak — حزمة مشروع Rin (`.rinpak`)</a><a href="html-projects.html">مشاريع HTML في Rin — الربط بين index.html وملف الحاوية</a><a href="project-og-urin.html">project.og.urin` — البيانات الوصفية لمشروع Rin</a><a href="CONTENT_PACKS.html">حزم المحتوى القابلة للتنزيل (Content Packs)</a><a href="previewkit.html">previewkit — معاينة حيّة لملفات PDF / Markdown / TypeScript</a></details><details ><summary>المكتبات المتخصصة</summary><a href="rinml.html">RinML / RinDF / RinAI — الذكاء الاصطناعي وتحليل البيانات في Rin</a><a href="STATS.html">RinStat — التحليل الإحصائي (`lib/rinstat.og.rin`)</a><a href="STATS_ADV.html">RinStat المتقدّم + RinAuto</a><a href="LINALG.html">الجبر الخطي للمهندسين — `mat*` و`vec*</a><a href="PLOT.html">RinPlot — الرسوم البيانية الإحصائية (`lib/rinplot.og.rin`)</a><a href="ALGO.html">تطوير الخوارزميات والحساب العددي — `algo*</a><a href="NUMBER.html">مفهوم `number` في Rin</a><a href="boat.html">&quot;Boat&quot;: مفاهيم أساسية مجمَّعة</a><a href="passkit.html">passkit — passwords, encryption, databases and a tag language</a><a href="passkit-crypto-db.html">Passkit feature catalog: encryption, databases and container linking</a><a href="hash-family.html">عائلة `#` — مفاهيم ودوال جديدة تبدأ بعلامة `#</a><a href="image-draw.html">إنشاء الصور في Rin — رسم وحفظ PNG وlog كصورة</a><a href="image-terminal.html">طباعة الصور في الـ terminal — `printImage` / `imageAnsi` / `imageInfo</a></details><details ><summary>المشروع</summary><a href="CONTRIBUTING.html">المساهمة في Rin</a><a href="CODE_OF_CONDUCT.html">قواعد السلوك</a><a href="SECURITY.html">سياسة الأمان</a><a href="SUPPORT.html">الحصول على المساعدة</a><a href="TRADEMARKS.html">سياسة العلامة التجارية — Trademark Policy</a><a href="THIRD_PARTY_NOTICES.html">إشعارات المكوّنات الخارجية — Third-Party Notices</a></details><details ><summary>مراجع إضافية</summary><a href="ANDROID_VERSIONS.html">حزم RinStudio لكل إصدار أندرويد</a><a href="TOKEN.html">مفهوم `token` في Rin</a><a href="TOOLCHAIN.html">Rin Professional Language Toolchain</a><a href="TOOLCHAIN_UPGRADE.html">Toolchain Upgrade — 2026-09</a><a href="architecture.html">المعمارية وبنية المستودع</a><a href="base-accept.html">base` و`accept`: متغيّران يخدمان `if</a><a href="channel47.html">channel47 — لغة وصف البيانات والإعدادات</a><a href="ci.html">CI وأدوات المستودع</a><a href="loop-templates.html">قوالب الحلقات `@tmpl</a><a href="pre-post.html">pre` و`post` (ما قبل / ما بعد): عقد انتقال حول الإسناد</a><a href="print-fonts.html">خطوط `print` — bold / italic / underline وغيرها</a><a href="print-image-terminal.html">طباعة الصور كنص في الطرفية</a><a href="print-templates.html">قوالب الطباعة `@tmpl ... print` — قوالب نصية خطية وتنسيقية</a><a href="rdoc.html">rdoc — Documentation Container</a><a href="rdoc-reference.html">وثيقة rdoc الشاملة — Documentation Container</a><a href="screenshots.html">لقطات من RinStudio</a></details></nav>
+<main><article><h1 id="rinpak-rin-rinpak">RinPak — حزمة مشروع Rin (<code>.rinpak</code>)<a class="headerlink" href="#rinpak-rin-rinpak" title="Permanent link">#</a></h1>
+<div class="tw"><table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>الاسم</td>
+<td><strong>RinPak</strong> (Rin Project Package)</td>
+</tr>
+<tr>
+<td>الامتداد</td>
+<td><code>.rinpak</code></td>
+</tr>
+<tr>
+<td>نوع MIME</td>
+<td><code>application/vnd.rin.pak</code></td>
+</tr>
+<tr>
+<td>الإصدار الحالي</td>
+<td><code>specVersion = 1</code></td>
+</tr>
+<tr>
+<td>الحاوية</td>
+<td>ZIP قياسي بترتيب عناصر ثابت (على نمط EPUB/ODF)</td>
+</tr>
+<tr>
+<td>الأيقونة</td>
+<td><code>assets/branding/rinpak/</code> (SVG / PNG / ICO / ICNS) + <code>ic_rinpak_file.xml</code> داخل التطبيق</td>
+</tr>
+<tr>
+<td>يحل محل</td>
+<td><code>.rinproj</code> (يبقى مدعوماً <strong>للاستيراد فقط</strong>)</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="1">1) لماذا صيغة جديدة؟<a class="headerlink" href="#1" title="Permanent link">#</a></h2>
+<p><code>.rinproj</code> كان ZIP عادياً مع <code>rin.project.json</code>: لا بصمات تحقق، لا ترتيب مضمون، ويختلط المانيفست مع ملفات المشروع في الجذر. RinPak يضيف:</p>
+<ul>
+<li><strong>تعريف فوري للنوع</strong>: أول عنصر <code>mimetype</code> غير مضغوط (يعمل مع <code>file</code> وأدوات الفحص).</li>
+<li><strong>فصل واضح</strong>: الوصف في <code>META-INF/</code>، والمشروع كاملاً تحت <code>content/</code>.</li>
+<li><strong>سلامة</strong>: SHA-256 لكل ملف + بصمة جذرية (<code>root</code>) — أي تعديل/قطع/ملف زائد يُرفض.</li>
+<li><strong>أمان</strong>: حماية Zip Slip، حدود للحجم والعدد، رفض التكرار والعناصر غير المعلنة.</li>
+<li><strong>حتمية</strong>: نفس المشروع ينتج نفس الحزمة (ترتيب ثابت، تواريخ ثابتة، ضغط حسب النوع).</li>
+</ul>
+<h2 id="2">2) هيكل الحزمة (التكديس)<a class="headerlink" href="#2" title="Permanent link">#</a></h2>
+<pre><code>MyApp.rinpak                         ← ZIP
+├── mimetype                         [1] أول عنصر — STORED: application/vnd.rin.pak
+├── META-INF/
+│   ├── manifest.json                [2] ثاني عنصر — الهوية + قائمة الملفات + SHA-256
+│   ├── signature.json               [3] (اختياري) توقيع Ed25519 على manifest.json
+│   └── icon.png                     (اختياري) PNG ≤ 512KB — بصمتها SHA-256 في المانيفست فيغطيها التوقيع
+└── content/                         شجرة المشروع كما هي، مرتبة بحسب بايتات UTF-8 للمسار
+    ├── main.rin                     نقطة الدخول (إلزامية)
+    ├── project.og.urin              البيانات الوصفية للمشروع (انظر docs/project-og-urin.md)
+    ├── lib/…                        المكتبات
+    └── assets/…                     الصور والوسائط وأي ملفات ثنائية
+</code></pre>
+<p>قواعد التكديس عند التصدير:</p>
+<ol>
+<li><code>mimetype</code> أولاً، <code>manifest.json</code> ثانياً — ثم <code>signature.json</code> إن وُجد (ثالثاً حصراً) — ثم <code>icon.png</code> إن أُعلنت (مباشرة بعد ما سبق: الثالثة أو الرابعة) — ثم ملفات <code>content/</code>. أي موضع آخر للتوقيع/الأيقونة ⇒ رفض.</li>
+<li>المسارات بفاصل <code>/</code> فقط، نسبية، بلا <code>..</code> ولا <code>\</code> ولا <code>:</code> ولا مقاطع فارغة.</li>
+<li><strong>تُستثنى</strong> الملفات/المجلدات المخفية (أي مقطع يبدأ بنقطة، مثل <code>.rin_state/</code>) وملف <code>rin.project.json</code> القديم و<strong>الروابط الرمزية</strong>.</li>
+<li>الضغط: <code>STORED</code> للامتدادات المضغوطة أصلاً (png/jpg/mp4/zip/woff2/…)، و<code>DEFLATED</code> لغيرها.</li>
+<li>المجلدات الفارغة لا تُحفظ.</li>
+</ol>
+<h2 id="3-meta-infmanifestjson">3) المانيفست <code>META-INF/manifest.json</code><a class="headerlink" href="#3-meta-infmanifestjson" title="Permanent link">#</a></h2>
+<pre><code class="language-json">{
+  &quot;format&quot;: &quot;rinpak&quot;,
+  &quot;specVersion&quot;: 1,
+  &quot;name&quot;: &quot;MyApp&quot;,
+  &quot;type&quot;: &quot;container&quot;,
+  &quot;entry&quot;: &quot;main.rin&quot;,
+  &quot;contentRoot&quot;: &quot;content/&quot;,
+  &quot;created&quot;: &quot;2026-10-11T12:10:40Z&quot;,
+  &quot;generator&quot;: { &quot;name&quot;: &quot;RinStudio&quot;, &quot;version&quot;: &quot;1.0.0&quot; },
+  &quot;id&quot;: &quot;my-app&quot;,
+  &quot;icon&quot;: { &quot;path&quot;: &quot;META-INF/icon.png&quot;, &quot;size&quot;: 8726, &quot;sha256&quot;: &quot;ab12…&quot; },   // أو null
+  &quot;stats&quot;: { &quot;files&quot;: 4, &quot;bytes&quot;: 150 },
+  &quot;integrity&quot;: {
+    &quot;algorithm&quot;: &quot;SHA-256&quot;,
+    &quot;root&quot;: &quot;0ad09448…25c7&quot;,
+    &quot;files&quot;: [
+      { &quot;path&quot;: &quot;main.rin&quot;, &quot;size&quot;: 15, &quot;sha256&quot;: &quot;b8079233…8180&quot; }
+    ]
+  }
+}
+</code></pre>
+<ul>
+<li>حقول وصفية اختيارية: <code>id</code> (<code>[a-z0-9._-]</code> حتى 64، معرّف مستقر عبر الإصدارات)، <code>version</code>، <code>description</code>، <code>author</code>، <code>license</code>، <code>tags[]</code> (≤16)، <code>minRinVersion</code>، <code>permissions[]</code>، <code>dependencies[]</code> — تُعرض في معاينة الاستيراد، وتُملأ تلقائياً من <code>project.og.urin</code>.</li>
+<li><strong>الأيقونة</strong>: <code>icon</code> كائن <code>{path,size,sha256}</code>؛ تُتحقق بصمتها وحجمها وموضعها عند الفحص والفك (تعديلها يُرفض، ويغطيها التوقيع لأن المانيفست موقَّع).</li>
+<li><code>type</code> ∈ <code>container | table | ui | free | illust | html | html_js</code> (انظر <code>ProjectType</code>).</li>
+<li><strong><code>root</code></strong> = SHA-256 لسلسلة أسطر <code>"&lt;path&gt;\0&lt;size&gt;\0&lt;sha256&gt;\n"</code> مرتّبة بحسب بايتات UTF-8 للمسار.</li>
+<li>المخطط الرسمي: <code>schemas/rinpak-manifest.schema.json</code>.</li>
+</ul>
+<h3 id="_1">الحدود والتصلّب الأمني<a class="headerlink" href="#_1" title="Permanent link">#</a></h3>
+<ul>
+<li>≤ 10 000 عنصر، ≤ 64MB للملف الواحد، ≤ 256MB للمحتوى كله — تُفحص من المانيفست <strong>قبل</strong> الفك، وأثناء الفك أيضاً.</li>
+<li>مسارات مرفوضة: مطلقة، <code>..</code>، <code>\</code>، <code>:</code>، مقاطع فارغة، محارف تحكم أو <code>&lt;&gt;"|?*</code>، مقطع ينتهي بنقطة/مسافة.</li>
+<li><strong>تصادم الأسماء</strong> بين الحروف الكبيرة والصغيرة (<code>Lib.rin</code> ≙ <code>lib.rin</code>) يُرفض لأنه يفسد الفك على ويندوز/macOS.</li>
+<li>لا يُقبل عنصر غير معلن في المانيفست، ولا ملف معلن ومفقود، ولا أيقونة غير معلنة أو معلنة ومفقودة.</li>
+</ul>
+<h2 id="analyze">التحليل الأمني (<code>analyze</code>)<a class="headerlink" href="#analyze" title="Permanent link">#</a></h2>
+<p>يُحسب من المانيفست وحده (دون فك أي ملف) ويظهر في معاينة الاستيراد:</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الرمز</th>
+<th>المستوى</th>
+<th>المعنى</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>NATIVE_CODE</code></td>
+<td>عالٍ</td>
+<td>ملفات <code>.so/.dex/.exe/.dll/.dylib/.msi/.scr</code></td>
+</tr>
+<tr>
+<td><code>BIDI_SPOOF</code></td>
+<td>عالٍ</td>
+<td>اسم ملف يحوي محارف اتجاه (RLO…) تُخفي الامتداد الحقيقي</td>
+</tr>
+<tr>
+<td><code>NEWER_RIN_REQUIRED</code></td>
+<td>عالٍ + <strong>يمنع الاستيراد</strong></td>
+<td><code>minRinVersion</code> أحدث من إصدار التطبيق</td>
+</tr>
+<tr>
+<td><code>EMBEDDED_PACKAGE</code></td>
+<td>متوسط</td>
+<td><code>.apk/.jar/.aab/.xapk</code></td>
+</tr>
+<tr>
+<td><code>SHELL_SCRIPT</code></td>
+<td>متوسط</td>
+<td><code>.sh/.bat/.cmd/.ps1/.vbs</code></td>
+</tr>
+<tr>
+<td><code>SENSITIVE_PERMISSIONS</code></td>
+<td>متوسط</td>
+<td>صلاحيات مثل <code>exec/shell/install/sms/contacts/location/camera/microphone/accessibility/overlay/files-all/phone/calendar</code></td>
+</tr>
+<tr>
+<td><code>UNSIGNED</code> / <code>PERMISSIONS</code> / <code>LARGE_PACKAGE</code></td>
+<td>معلومة</td>
+<td>لا تُرفع بها درجة الخطر</td>
+</tr>
+</tbody>
+</table></div>
+<p>درجة الخطر = أعلى مستوى. الحزمة <strong>العالية</strong> تحتاج تأكيداً ثانياً صريحاً في التطبيق. الأسماء العربية والرموز العادية لا تُنبِّه.</p>
+<h2 id="ed25519">التوقيع الرقمي (Ed25519)<a class="headerlink" href="#ed25519" title="Permanent link">#</a></h2>
+<p><code>META-INF/signature.json</code>:</p>
+<pre><code class="language-json">{ &quot;algorithm&quot;: &quot;Ed25519&quot;, &quot;signs&quot;: &quot;META-INF/manifest.json&quot;,
+  &quot;keyId&quot;: &quot;25cc1f60f722132c&quot;, &quot;publicKey&quot;: &quot;&lt;base64 32B&gt;&quot;, &quot;signature&quot;: &quot;&lt;base64 64B&gt;&quot; }
+</code></pre>
+<ul>
+<li>الرسالة الموقَّعة = <code>"RinPak-v1\0"</code> + <strong>بايتات manifest.json كما هي</strong> (والمانيفست يضم <code>root</code> الذي يغطي كل الملفات، فالتوقيع يغطي الحزمة كلها).</li>
+<li><code>keyId</code> = أول 16 خانة hex من SHA-256 للمفتاح العام الخام.</li>
+<li><strong>التوقيع الموجود وغير الصالح ⇒ رفض الاستيراد.</strong> الحزمة غير الموقّعة تُقبل لكن المعاينة تحذّر «غير موقّعة».</li>
+<li>التوقيع يثبت <strong>السلامة وهوية المفتاح</strong>، لا «الثقة»: قارن <code>keyId</code> بمفتاح الناشر المعروف. (حزمة مجرَّدة من توقيعها تبدو غير موقّعة — لذا لا تعتمد غياب التحذير كدليل ثقة.)</li>
+<li>الأندرويد: مفتاح خاص بالجهاز يُنشأ عند أول تصدير داخل التخزين الخاص (<code>RinPakSigner</code>)، ويُوقَّع كل تصدير تلقائياً. المرجع: <code>rinpak.py keygen</code> ثم <code>pack --sign</code>.</li>
+<li><strong>الثقة</strong>: انظر «ثقة الناشر (TOFU)» أدناه (<code>RinPakTrust</code>: OWN / TRUSTED / KNOWN / NEW / KEY_CHANGED / SIGNATURE_REMOVED). التحليل الأمني أعلاه مستقل عنها ويظهر في المعاينة نفسها.</li>
+</ul>
+<h2 id="4-rinpak">4) التصدير (المشروع → <code>.rinpak</code>)<a class="headerlink" href="#4-rinpak" title="Permanent link">#</a></h2>
+<pre><code>مجلد المشروع ──► جمع الملفات (بلا المخفي) ──► ترتيب حتمي
+   ──► حساب SHA-256 + CRC32 + الحجم ──► بناء المانيفست + root
+   ──► توقيع Ed25519 على المانيفست (إن وُجد مفتاح)
+   ──► كتابة: mimetype → manifest → signature? → icon? → content/*  ──► MyApp.rinpak
+</code></pre>
+<ul>
+<li>الكود: <code>RinPak.write()</code> ← <code>ProjectManager.exportProject()</code>؛ الواجهة: «تصدير .rinpak» في المشاريع/الملفات.</li>
+<li>الملف يُنشأ في <code>cache/project_exports/</code> ثم يُنسخ إلى «التنزيلات» بنوع <code>application/vnd.rin.pak</code> (حتى لا يضيف النظام لاحقة <code>.zip</code>).</li>
+</ul>
+<h2 id="5-rinpak">5) الاستيراد (<code>.rinpak</code> → المشروع)<a class="headerlink" href="#5-rinpak" title="Permanent link">#</a></h2>
+<pre><code>اختيار الملف / فتحه من مدير الملفات (alias: RinPakFileViewer)
+   ──► الكشف: أول عنصر mimetype؟  نعم → RinPak | لا → .rinproj القديم
+   ──► inspect: قراءة أول 3–4 عناصر فقط (مانيفست + توقيع + أيقونة) ← حوار معاينة (الأيقونة، الاسم/الإصدار/المعرّف، الوصف، المؤلف، الوسوم، الصلاحيات، حالة التوقيع والثقة، التحليل الأمني، بصمة الجذر)
+   ──► موافقة المستخدم
+   ──► extract (يتحقق من التوقيع أيضاً) إلى مجلد مؤقت .import_*/ مع التحقق أثناء الفك:
+         • ترتيب العناصر + mimetype + المانيفست وإصداره + root
+         • كل ملف مُدرج في المانيفست، وحجمه وSHA-256 يطابقان، بلا زيادة ولا نقص ولا تكرار
+         • مسار آمن داخل الجذر، حدود: 10 000 عنصر / 256MB
+   ──► وجود main.rin
+   ──► اسم فريد (MyApp, MyApp_2, …) ثم rename ذري إلى projects/
+   ──► project.og.urin: يُدمج مع المانيفست المتحقَّق منه (المانيفست يتقدّم) ويُكتب بالاسم النهائي
+</code></pre>
+<p>أي فشل ⇒ يُحذف المجلد المؤقت ولا يظهر مشروع نصف مستورد. بنية المشروع المستورد على القرص تساوي محتوى <code>content/</code> حرفياً:</p>
+<pre><code>filesDir/projects/MyApp/
+├── main.rin
+├── project.og.urin
+├── lib/…
+└── assets/…
+</code></pre>
+<h2 id="6-rinproj">6) التوافق مع <code>.rinproj</code><a class="headerlink" href="#6-rinproj" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th></th>
+<th><code>.rinproj</code> (قديم)</th>
+<th><code>.rinpak</code> (جديد)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>تصدير</td>
+<td>✗ (أُوقف)</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>استيراد</td>
+<td>✓ (يظهر في المعاينة «صيغة قديمة — بلا بصمات»)</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>تحقق SHA-256</td>
+<td>✗</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>توقيع رقمي Ed25519</td>
+<td>✗</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>بيانات وصفية (إصدار/مؤلف/صلاحيات…)</td>
+<td>✗</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>ترتيب ثابت / mimetype</td>
+<td>✗</td>
+<td>✓</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="7">7) ربط الملف بالنظام<a class="headerlink" href="#7" title="Permanent link">#</a></h2>
+<ul>
+<li><strong>أندرويد</strong> (<code>AndroidManifest.xml</code>، أيقونة وتسمية الـalias هي ما يظهر في «فتح باستخدام»):</li>
+<li><code>RinPakFileViewer</code>: <code>VIEW</code> على <code>*.rinpak</code> (أي MIME، <code>content://</code> أو <code>file://</code>) <strong>و</strong>على MIME <code>application/vnd.rin.pak</code> / <code>application/x-rinpak</code> (حين يخفي المزوّد اسم الملف).</li>
+<li>نفس الـalias <code>RinPakFileViewer</code> يستقبل أيضاً <code>SEND</code>/<code>SEND_MULTIPLE</code> ⇒ «مشاركة ← Rin» (يقبل <code>application/octet-stream</code> و<code>application/zip</code> لأن تطبيقات المحادثة تصنّف الامتدادات المجهولة هكذا؛ غير الحزم تُرفض برسالة واضحة). عند تعدد الملفات تُعالج الأولى.</li>
+<li><code>RinPakLauncher</code>: أيقونة تطبيق «RinPak» مستقلة في قائمة التطبيقات (Adaptive + أحادية اللون) تفتح منتقي الحزم.</li>
+<li>داخل التطبيق: أيقونة <code>ic_rinpak_file</code> في الملفات والمشاريع؛ الضغط على <code>.rinpak</code> داخل مشروع يفتح المعاينة/الاستيراد؛ وبعد التصدير زر «مشاركة» (<code>FileProvider</code> + MIME الرسمي).</li>
+<li>ملاحظة: أيقونة الملف في <strong>مدير ملفات خارجي</strong> يقررها ذلك المدير بحسب MIME؛ التطبيق يضمن تسجيل النوع واسم/أيقونة التطبيق المرتبط به.</li>
+<li><strong>لينكس</strong>: <code>packaging/rinpak/rinpak-mime.xml</code>  •  <strong>ويندوز</strong>: <code>packaging/rinpak/rinpak.reg</code>  •  <strong>macOS</strong>: <code>packaging/rinpak/Info.plist.fragment.xml</code>.</li>
+<li>الأيقونات: <code>assets/branding/rinpak/rinpak_file.{ico,icns}</code> (أيقونة الملف) و<code>rinpak.{ico,icns}</code> (أيقونة التطبيق).</li>
+</ul>
+<h2 id="7-rinpak">7-ب) RinPak على الجوال (أندرويد)<a class="headerlink" href="#7-rinpak" title="Permanent link">#</a></h2>
+<p>الصيغة نفسها لا تتغيّر (<code>specVersion = 1</code>)؛ ما أُضيف هو سلوك التطبيق حول الصيغة:</p>
+<p><strong>الاستقبال</strong> — يظهر Rin في خيارات الفتح والمشاركة:
+- <code>ACTION_VIEW</code> على <code>*.rinpak</code> أو MIME <code>application/vnd.rin.pak</code> (مدير الملفات/البريد).
+- <code>ACTION_SEND</code> («مشاركة» من واتساب/تيليجرام/Nearby Share/Drive…) بأنواع <code>application/vnd.rin.pak</code> و<code>application/octet-stream</code> و<code>application/zip</code>؛ كثير من التطبيقات ترسل <code>.rinpak</code> بنوع عام، لذا <strong>المحتوى هو الحَكَم</strong>: يُكشف <code>mimetype</code> داخل الحزمة، والملف غير الصالح يُرفض برسالة واضحة.
+- الحزمة تُنسخ <strong>مرة واحدة</strong> إلى <code>cache/rinpak_incoming/</code> (حد 300MB للمضغوط) ثم تُفحص وتُفك من النسخة المحلية، فلا يتعطل الاستيراد إذا لم تعد الصلاحية على <code>content://</code> قائمة. كل ذلك في خيط خلفي مع شريط تقدّم (لا ANR).</p>
+<p><strong>معاينة الاستيراد</strong> — الاسم، النوع، عدد الملفات والحجم، الإصدار/المؤلف/الصلاحيات، وحالة التوقيع وثقة الناشر، ثم:
+- <strong>متابعة…</strong> ← استيراد كمشروع جديد، أو <strong>استبدال</strong> المشروع الحالي بنفس الاسم (ينتقل القديم جانباً أولاً ويُعاد إن فشل التثبيت)، أو استيراد + <strong>الوثوق بهذا الناشر</strong>.
+- <strong>تحقق فقط</strong> ← <code>RinPak.verify()</code>: تحقق كامل (ترتيب، مانيفست، SHA-256 لكل ملف، التوقيع، الحدود) <strong>دون كتابة أي ملف</strong> على التخزين.</p>
+<p><strong>ثقة الناشر (TOFU)</strong> — التوقيع يثبت السلامة ومفتاحاً بعينه، لا هوية صاحبه. <code>RinPakTrust</code> يتذكّر المفتاح الذي وقّع كل حزمة استوردتها، ويحذّر عند: مفتاح مختلف لحزمة بنفس الاسم (<code>KEY_CHANGED</code>)، أو حزمة كانت موقّعة وصارت بلا توقيع (<code>SIGNATURE_REMOVED</code>)؛ ويميّز حزمتك أنت (<code>OWN</code>) والناشرين الموثوقين صراحةً (<code>TRUSTED</code>).</p>
+<p><strong>التصدير</strong> — حوار بيانات وصفية (إصدار/مؤلف/وصف/رخصة؛ تُحفظ في <code>project.og.urin</code> داخل المشروع فتنتقل معه ومع الحزمة، والمعرّف/الوسوم/الصلاحيات/الاعتماديات تؤخذ منه أيضاً، والأيقونة من <code>icon</code> أو الشعار الافتراضي) ثم <strong>مشاركة</strong> عبر قائمة النظام (<code>FileProvider</code> + <code>ACTION_SEND</code> بنوع <code>application/vnd.rin.pak</code>) أو <strong>حفظ في التنزيلات</strong>.</p>
+<p><strong>المتانة</strong> — المجلدات المؤقتة <code>.import_*</code>/<code>.replaced_*</code> مخفية من قائمة المشاريع وتُكنَّس إن بقيت أكثر من ساعة بعد انقطاع؛ ملف مقطوع/تالف يعطي «الحزمة تالفة أو غير مكتملة» بدل رسالة JVM.</p>
+<h2 id="8">8) الأدوات والاختبار<a class="headerlink" href="#8" title="Permanent link">#</a></h2>
+<pre><code class="language-bash">python3 tools/rinpak.py keygen key.pem
+python3 tools/rinpak.py pack   MyApp -o MyApp.rinpak --type container --sign key.pem --version 1.0.0 --author &quot;me&quot;
+python3 tools/rinpak.py info   MyApp.rinpak [--app-version 1.0.0]   # يطبع التحليل الأمني أيضاً
+python3 tools/rinpak.py verify MyApp.rinpak --require-signature --trust 25cc1f60f722132c --max-risk medium --app-version 1.0.0
+python3 tools/rinpak.py unpack MyApp.rinpak out/
+python3 tools/rinpak.py meta   MyApp --set version=1.1.0 --set tags=demo,ui      # تحرير project.og.urin
+python3 tests/rinpak_test.py        # ترتيب، حتمية، عبث بالمحتوى، Zip Slip، تزوير root، التوقيع، الأيقونة الموثّقة، التحليل الأمني، project.og.urin، سياسات verify…
+</code></pre>
+<p><code>tools/rinpak.py</code> مرجع بايثون لنفس القواعد المطبّقة في <code>app/src/main/java/com/dlof/rinlang/RinPak.kt</code>.</p>
+<p>تم التحقق أيضاً من التشغيل البيني: حزمة موقّعة بالمرجع البايثوني تُفتح ويُتحقق توقيعها بـ <code>java.security</code> (Ed25519) بنفس خطوات <code>RinPak.kt</code> (بادئة SPKI + فاصل النطاق).</p></article>
+<div class="pnav"><a class="pn" href="packages-and-interop.html">→ Rin 1.0 — المكتبات والحزم وجسر C++ وJSON واختبارات rintest</a><a class="pn" href="html-projects.html">مشاريع HTML في Rin — الربط بين index.html وملف الحاوية ←</a></div><p class="edit"><a href="https://github.com/dlof-lib/rinlang/edit/main/docs/rinpak-format.md">✎ عدّل هذه الصفحة على GitHub</a></p>
+<footer>Rin 1.0.0 · رخصة MIT</footer></main>
+<aside id="toc"><b>في هذه الصفحة</b><div class="toc">
+<ul>
+<li><a href="#1">1) لماذا صيغة جديدة؟</a></li>
+<li><a href="#2">2) هيكل الحزمة (التكديس)</a></li>
+<li><a href="#3-meta-infmanifestjson">3) المانيفست META-INF/manifest.json</a><ul>
+<li><a href="#_1">الحدود والتصلّب الأمني</a></li>
+</ul>
+</li>
+<li><a href="#analyze">التحليل الأمني (analyze)</a></li>
+<li><a href="#ed25519">التوقيع الرقمي (Ed25519)</a></li>
+<li><a href="#4-rinpak">4) التصدير (المشروع → .rinpak)</a></li>
+<li><a href="#5-rinpak">5) الاستيراد (.rinpak → المشروع)</a></li>
+<li><a href="#6-rinproj">6) التوافق مع .rinproj</a></li>
+<li><a href="#7">7) ربط الملف بالنظام</a></li>
+<li><a href="#7-rinpak">7-ب) RinPak على الجوال (أندرويد)</a></li>
+<li><a href="#8">8) الأدوات والاختبار</a></li>
+</ul>
+</div>
+</aside></div>
+<script src="assets/app.js"></script></body></html>

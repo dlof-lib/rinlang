@@ -1,0 +1,18 @@
+@import "compose_schema";
+class User { let name = ""; let age = 0; }
+let schema = {"type": "map", "fields": {"name": {"type": "string", "min": 2}, "age": {"type": "number", "min": 0, "max": 150}, "role": Set(["admin", "user"]), "tags": ["string"], "nick": {"type": "string", "default": "anon"}}};
+print schemaCheck(schema, {"name": "Rin", "age": 5, "role": "admin", "tags": ["a"]});
+print schemaErrors(schemaCheck(schema, {"name": "R", "age": 200, "role": "x", "tags": ["a", 5]}));
+print schemaErrors(schemaCheck(schema, {}));
+print schemaConform(schema, {"name": "Rin", "age": 5, "role": "user", "tags": []});
+print schemaConform({"age": {"type": "number", "coerce": true}, "on": {"type": "bool", "coerce": true}}, {"age": "42", "on": "yes"});
+print isValid("number", 3); print isValid("number", "3"); print isValid(Set([1, 2]), 2); print isValid(fun(v){ return v > 5; }, 3);
+print isValid({"oneOf": ["number", "string"]}, "s"); print isValid({"oneOf": ["number", "string"]}, true);
+print isValid({"name": "string", "age": "number"}, User());
+print schemaOf({"a": 1, "b": [true], "c": {"d": "x"}});
+print schemaErrors(schemaCheck({"type": "string", "length": 3}, "ab"));
+print isValid({"type": "number", "nullable": true}, nil); print isValid("number", nil);
+print schemaAssert("number", 5);
+try { schemaAssert("string", 5); } catch (e) { print e["message"]; }
+print schemaConform({"type": "array", "items": {"type": "number", "coerce": true}, "coerce": true}, ["1", "2"]);
+print isValid({"type": "set", "items": "number"}, Set([1, 2]));

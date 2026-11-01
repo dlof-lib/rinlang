@@ -1,0 +1,12 @@
+P> name: [Ali] P> age: [30] [أدخل رقماً صالحاً] P> age: [30] [أدخل رقماً صالحاً] P> age: [30] [أدخل رقماً صالحاً] P> age: [30] [أدخل رقماً صالحاً] P> age: [30] Q> age: [30] Q> name: [Ali] Q> score: [0] [أدخل رقماً صالحاً] Q> score: [0] [أدخل رقماً صالحاً] Q> score: [0] [أدخل رقماً صالحاً] Q> score: [0] [أدخل رقماً صالحاً] Q> score: [0] M> host: [localhost] M> port: [80] M> tls: 
+obj: true|Ali|30|false
+📦 container = Profile
+✅ .end/container (Profile)
+[hook] Ali/31
+[hook] Sara/31
+[hook] Ali/31
+[hook] Ali/30
+
+cont: true|Ali|30|0
+
+map: true|2|localhost|80

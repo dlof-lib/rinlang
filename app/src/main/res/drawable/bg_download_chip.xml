@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- خلفية "شريحة" ملف ناتج قابل للتنزيل الفعلي إلى مجلد Downloads -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/rin_job_card_bg_hover" />
+            <stroke android:width="1dp" android:color="@color/rin_accent" />
+            <corners android:radius="10dp" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/rin_download_chip_bg" />
+            <stroke android:width="1dp" android:color="@color/rin_download_chip_border" />
+            <corners android:radius="10dp" />
+        </shape>
+    </item>
+</selector>

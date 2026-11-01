@@ -1,0 +1,13 @@
+found 1
+missing b
+1:x
+bad shape
+bad shape
+9
+3
+no exit
+E0048 [E0048] the `else` block of `let` must leave the current scope, but it finished normally (`v` was nil)
+E0004 [E0004] cannot destructure: the value is nil
+E0004 [E0004] cannot destructure: expected a map or object to take apart with `{...}`, but got `array`
+E0004 [E0004] cannot destructure: expected an array to take apart with `[...]`, but got `map`
+plain throw still ok

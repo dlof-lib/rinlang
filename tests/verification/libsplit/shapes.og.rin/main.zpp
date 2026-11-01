@@ -1,0 +1,4 @@
+let SHAPES_LOADED = [];
+fun shapes_register(n) { push(SHAPES_LOADED, n); }
+shapes_register("main");
+fun shapes_version() { return rinlib.info("shapes").version; }

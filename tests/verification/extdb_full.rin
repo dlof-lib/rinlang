@@ -1,0 +1,116 @@
+// tests/verification/extdb_full.rin — extdb 1.0.0 complete feature set: sessions (sign in/up/refresh/out),
+// local schema, offline queue, watch/diff, write batches (tx), export/import/backup, aggregates, paging,
+// request logger, classified errors. Needs tests/tools/extdb_mock.py on :8765.
+@import "extdb";
+
+let H = "http://127.0.0.1:8765";
+let rt = xdb_connect("rtdb", "rt", {"url": H + "/rt", "auth": "SECRET", "authUrl": H + "/idt", "apiKey": "APIKEY", "refreshUrl": H + "/idt/token", "retryDelayMs": 5});
+let pg = xdb_connect("pgrest", "pg", {"url": H, "key": "ANON", "retryDelayMs": 5});
+
+// ---- 1) sessions: sign in / token used on every request / refresh / sign out --------------------
+print "pg signedIn before=" + xdb_isSignedIn(pg);
+let u1 = xdb_signIn(pg, "sara@example.com", "pw123");
+print "pg user=" + u1 + " signedIn=" + xdb_isSignedIn(pg);
+print "pg bearer=" + xdb_raw(pg, "GET", "_whoami", nil, nil)["auth"];
+try { xdb_signIn(pg, "sara@example.com", "wrong"); } catch (e) { print "caught: pg bad password -> " + xdb_errKind(e) + " " + xdb_errStatus(e); }
+pg["session"]["expires"] = 0;     // simulate an expired token: the next request refreshes first
+print "pg after auto-refresh=" + xdb_raw(pg, "GET", "_whoami", nil, nil)["auth"];
+print "pg signUp=" + xdb_signUp(pg, "new@example.com", "pw9")["email"];
+xdb_signOut(pg);
+print "pg bearer after signOut=" + xdb_raw(pg, "GET", "_whoami", nil, nil)["auth"] + " signedIn=" + xdb_isSignedIn(pg);
+
+let r1 = xdb_signIn(rt, "sara@example.com", "pw123");
+print "rt user=" + r1 + " auth=" + xdb_raw(rt, "GET", "_whoami", nil, nil);
+rt["session"]["expires"] = 0;
+print "rt after auto-refresh=" + xdb_raw(rt, "GET", "_whoami", nil, nil);
+xdb_signOut(rt);
+print "rt auth after signOut=" + xdb_raw(rt, "GET", "_whoami", nil, nil);
+let noauth = xdb_connect("rtdb", "noauth", {"url": H + "/rt", "auth": "SECRET"});
+try { xdb_signIn(noauth, "a@b.c", "x"); } catch (e) { print "caught: rtdb auth needs config"; }
+
+// ---- 2) local schema -------------------------------------------------------------------------------------
+for (let c in [rt, pg]) {
+    xdb_schema(c, "people", {"name": "string!", "age": "number", "tags": "array"});
+    try { xdb_put(c, "people", "p1", {"age": 3}); } catch (e) { print c["provider"] + " caught: " + xdb_msg(e) + " [" + xdb_errKind(e) + "]"; }
+    try { xdb_put(c, "people", "p1", {"name": "A", "age": "old"}); } catch (e) { print c["provider"] + " caught: " + xdb_msg(e); }
+    try { xdb_update(c, "people", "p1", {"tags": 5}); } catch (e) { print c["provider"] + " caught partial: " + xdb_msg(e); }
+    xdb_put(c, "people", "p1", {"name": "Ann", "age": 31, "tags": ["x"]});
+    print c["provider"] + " valid put ok=" + xdb_has(c, "people", "p1") + " update ok=" + xdb_update(c, "people", "p1", {"age": 32});
+}
+
+// ---- 3) offline queue (writes survive a dead server, then flush) ----------------------------------------------
+let qf = "extdb_queue_test.json";
+if (fileExists(qf)) { deleteFile(qf); }
+let off = xdb_connect("pgrest", "off", {"url": "http://127.0.0.1:1", "key": "ANON", "retries": 0, "offlineQueue": true, "queueFile": qf});
+print "queued=" + xdb_put(off, "orders", "o1", {"n": 1}) + "," + xdb_put(off, "orders", "o2", {"n": 2}) + "," + xdb_update(off, "orders", "o1", {"n": 11}) + "," + xdb_delete(off, "orders", "o2");
+print "queue size=" + xdb_queueSize(off) + " file=" + fileExists(qf);
+print "flush while offline=" + xdb_flushQueue(off);
+let off2 = xdb_connect("pgrest", "off2", {"url": "http://127.0.0.1:1", "key": "ANON", "retries": 0, "offlineQueue": true, "queueFile": qf});
+print "restored from file=" + xdb_queueSize(off2);
+off2["base"] = pg["base"];     // the network came back
+print "flush online=" + xdb_flushQueue(off2) + " o1=" + xdb_get(off2, "orders", "o1")["n"] + " o2=" + xdb_has(off2, "orders", "o2");
+deleteFile(qf);
+let bad = xdb_connect("pgrest", "bad", {"url": H, "key": "WRONG", "offlineQueue": true});
+try { xdb_put(bad, "orders", "x", {"n": 1}); } catch (e) { print "server rejections are not queued: " + xdb_errStatus(e) + " queue=" + xdb_queueSize(bad); }
+
+// ---- 4) watch / diff --------------------------------------------------------------------------------------------------------
+let events = [];
+for (let c in [rt, pg]) {
+    xdb_putMany(c, "feed", {"a": {"v": 1}, "b": {"v": 2}});
+    events = [];
+    let w = xdb_watch(c, "feed", fun(ev) { push(events, ev["type"] + ":" + ev["id"]); }, nil);
+    print c["provider"] + " baseline events=" + xdb_tick(c);
+    xdb_put(c, "feed", "c", {"v": 3});
+    xdb_update(c, "feed", "a", {"v": 10});
+    xdb_delete(c, "feed", "b");
+    print c["provider"] + " tick events=" + xdb_tick(c) + " " + events;
+    print c["provider"] + " quiet tick=" + xdb_tick(c) + " unwatch=" + xdb_unwatch(c, w) + "/" + xdb_unwatch(c, w);
+}
+print "diff=" + xdb_diff({"x": {"a": 1}, "y": {"a": 2}}, {"y": {"a": 3}, "z": {"a": 4}});
+
+// ---- 5) write batches (tx) --------------------------------------------------------------------------------------------------------
+for (let c in [rt, pg]) {
+    let tx = xdb_tx(c);
+    tx.put("ledger", "l1", {"amt": 10});
+    tx.put("ledger", "l2", {"amt": 20});
+    tx.put("ledger", "l3", {"amt": 30});
+    tx.delete("ledger", "l2");
+    tx.put("notes", "n1", {"t": "hi"});
+    print c["provider"] + " tx size=" + tx.size() + " commit=" + tx.commit() + " left=" + xdb_ids(c, "ledger") + " pending=" + len(tx.pending());
+    let t2 = xdb_tx(c); t2.put("ledger", "zz", {"amt": 1}); t2.rollback();
+    print c["provider"] + " rollback size=" + t2.size();
+}
+
+// ---- 6) export / import / backup / aggregates / paging ------------------------------------------------------------------------------
+for (let c in [rt, pg]) {
+    xdb_putMany(c, "nums", [{"_id": "k1", "x": 4}, {"_id": "k2", "x": 8}, {"_id": "k3", "x": 12}, {"_id": "k4", "name": "no-x"}]);
+    print c["provider"] + " agg=" + xdb_agg(c, "nums", "x", nil) + " filtered=" + xdb_agg(c, "nums", "x", {"where": {"x": {"gt": 5}}});
+    let seen = [];
+    print c["provider"] + " each=" + xdb_each(c, "nums", 2, fun(d) { push(seen, d["_id"]); }, nil) + " " + seen;
+    print c["provider"] + " each stop=" + xdb_each(c, "nums", 2, fun(d) { return false; }, nil);
+    let f = "extdb_export_test.json";
+    print c["provider"] + " export=" + xdb_export(c, "nums", f);
+    xdb_deleteMany(c, "nums", ["k1", "k2", "k3", "k4"]);
+    print c["provider"] + " after delete=" + xdb_count(c, "nums") + " import=" + xdb_import(c, "nums", f, {"chunk": 3}) + " count=" + xdb_count(c, "nums");
+    deleteFile(f);
+}
+print "backup=" + xdb_backup(pg, ["nums", "notes"], ".") ;
+deleteFile("nums.json"); deleteFile("notes.json");
+
+// ---- 7) logger (secrets redacted), health, info ------------------------------------------------------------------------------------------
+let log = [];
+xdb_setLogger(rt, fun(e) { push(log, e["method"] + " " + e["url"] + " -> " + e["status"]); });
+xdb_get(rt, "people", "p1");
+print "log=" + log;
+print "health ok=" + xdb_health(pg)["ok"] + " dead=" + xdb_health(strictDead())["ok"];
+fun strictDead() { return xdb_connect("pgrest", "dead", {"url": "http://127.0.0.1:1", "key": "ANON", "retries": 0}); }
+let info = xdb_info(pg);
+print "info version=" + info["version"] + " provider=" + info["provider"] + " queued=" + info["queued"];
+
+// ---- 8) bound object exposes the same surface ------------------------------------------------------------------------------------------------
+let db = xdb_open("pgrest", "bound", {"url": H, "key": "ANON"});
+db.signIn("sara@example.com", "pw123");
+let people = db.table("people");
+print "bound user=" + db.user() + " agg=" + people.agg("age", nil) + " health=" + db.health()["ok"];
+db.signOut();
+print "connections=" + xdb_connections();

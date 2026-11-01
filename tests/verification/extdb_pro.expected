@@ -1,0 +1,34 @@
+🗂️ Containers.Group = ExtDB
+📦 container = catalog
+✅ .end/container (catalog)
+✅ .end/Containers.Group (ExtDB) [تحتوي: catalog]
+📥 @import: تم استيراد "lib/extdb.og.rin" (مكتبة: extdb 1.0.0 — 12 أجزاء)
+↺ @import: "lib/extdb.og.rin" مستورَدة مسبقاً بالفعل (تم تجاهل التكرار)
+cache hit=true hits=1
+cache is isolated=Sara
+write invalidates=31
+rtdb gt=2 range=2 in=2 ne=2 like=1
+rtdb select=[{"_id": "u3", "name": "Lina"}, {"_id": "u1", "name": "Sara"}]
+rtdb findOne=u2 none=nil
+pgrest gt=2 range=2 in=2 ne=2 like=1
+pgrest select=[{"id": "u3", "name": "Lina", "_id": "u3"}, {"id": "u1", "name": "Sara", "_id": "u1"}]
+pgrest findOne=u2 none=nil
+caught: bad operator
+rtdb putMany=3
+rtdb incr=11,1
+rtdb deleteMany=2 left=["i1", "new"]
+pgrest putMany=3
+pgrest incr=11,1
+pgrest deleteMany=2 left=["i1", "new"]
+rt retry=[] retries=2
+pg retry=f1 retries=2
+caught: unreachable after 1 retry
+sync remote-wins={"pulled": 1, "pushed": 1, "conflicts": 1, "same": 2} u2.age=42 u9 remote=true
+sync local-wins={"pulled": 0, "pushed": 1, "conflicts": 1, "same": 3} remote u2=77
+sync again={"pulled": 0, "pushed": 0, "conflicts": 0, "same": 4}
+cell=Lina|||
+page=2 len=4 len(nil)=0
+msg=pgrest HTTP 404: relation does not exist
+session count=4/4 registered=["sb", "rt", "strict"]
+dynamic key calls=2
+openCount=4

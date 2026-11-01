@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    شاشة الإعدادات: هيكل ثابت فقط (شريط علوي + عنوان + حاوية + زر الاستعادة).
+    الأقسام والصفوف تُبنى في SettingsActivity من مخطط واحد باستخدام
+    item_setting_{section,switch,choice,slider,link}.xml بدل تكرار الصف نفسه عشرين مرة هنا.
+-->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/rin_background"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <include layout="@layout/toolbar_app" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingStart="18dp"
+            android:paddingTop="18dp"
+            android:paddingEnd="18dp"
+            android:paddingBottom="32dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/settings_hero_title"
+                android:textColor="@color/rin_on_toolbar"
+                android:textSize="25sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:layout_marginBottom="4dp"
+                android:text="@string/settings_hero_hint"
+                android:textColor="@color/rin_editor_hint"
+                android:textSize="12.5sp" />
+
+            <LinearLayout
+                android:id="@+id/settingsContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+
+            <Button
+                android:id="@+id/btnResetDefaults"
+                style="@style/Widget.RinLang.Button.OutlineDanger"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="20dp"
+                android:text="@string/action_reset_defaults" />
+        </LinearLayout>
+    </LinearLayout>
+</ScrollView>

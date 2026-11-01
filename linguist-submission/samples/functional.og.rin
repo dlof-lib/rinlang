@@ -1,0 +1,133 @@
+// ============================================================================
+//  lib/functional.og.rin — دوال ترتيبية عليا (higher-order functions) على المصفوفات
+//  تستفيد من أن الدوال في Rin قيم من الدرجة الأولى (first-class): يمكن تمرير اسم أي
+//  دالة fn معرَّفة بـ fun كوسيط عادي، ثم استدعاؤها بداخل الدالة المستقبِلة.
+//
+//  استيراد:
+//    @import "lib/functional.og.rin";
+//    @import "lib/functional.og.rin" as fx;
+//
+//  مثال:
+//    fun double(x) { return x * 2; }
+//    print mapArr([1, 2, 3], double);      // [2, 4, 6]
+//    print filterArr([1, 2, 3, 4], isEven); // [2, 4]  (isEven مُعرَّفة أدناه)
+// ============================================================================
+
+// يطبّق fn على كل عنصر من arr ويُعيد مصفوفة جديدة بالنتائج
+fun mapArr(arr, fn) {
+    let result = [];
+    let i = 0;
+    while (i < len(arr)) {
+        push(result, fn(arr[i]));
+        i = i + 1;
+    }
+    return result;
+}
+
+// يُبقي فقط العناصر التي تُعيد fn(element) قيمة true من أجلها
+fun filterArr(arr, fn) {
+    let result = [];
+    let i = 0;
+    while (i < len(arr)) {
+        if (fn(arr[i])) {
+            push(result, arr[i]);
+        }
+        i = i + 1;
+    }
+    return result;
+}
+
+// يُلخّص arr إلى قيمة واحدة عبر تطبيق fn(accumulator, element) تتابعياً بدءاً من initial
+fun reduceArr(arr, fn, initial) {
+    let acc = initial;
+    let i = 0;
+    while (i < len(arr)) {
+        acc = fn(acc, arr[i]);
+        i = i + 1;
+    }
+    return acc;
+}
+
+// ينفّذ fn(element, index) على كل عنصر من أجل تأثير جانبي (side effect) مثل print، بلا نتيجة مُرجعة
+fun forEachArr(arr, fn) {
+    let i = 0;
+    while (i < len(arr)) {
+        fn(arr[i], i);
+        i = i + 1;
+    }
+    return nil;
+}
+
+// أول عنصر يحقق fn(element) == true، أو nil إن لم يوجد
+fun findArr(arr, fn) {
+    let i = 0;
+    while (i < len(arr)) {
+        if (fn(arr[i])) { return arr[i]; }
+        i = i + 1;
+    }
+    return nil;
+}
+
+// فهرس أول عنصر يحقق fn(element) == true، أو -1 إن لم يوجد
+fun findIndexArr(arr, fn) {
+    let i = 0;
+    while (i < len(arr)) {
+        if (fn(arr[i])) { return i; }
+        i = i + 1;
+    }
+    return -1;
+}
+
+// هل كل عناصر arr تحقق fn(element) == true؟
+fun everyArr(arr, fn) {
+    let i = 0;
+    while (i < len(arr)) {
+        if (!fn(arr[i])) { return false; }
+        i = i + 1;
+    }
+    return true;
+}
+
+// هل يوجد عنصر واحد على الأقل يحقق fn(element) == true؟
+fun someArr(arr, fn) {
+    let i = 0;
+    while (i < len(arr)) {
+        if (fn(arr[i])) { return true; }
+        i = i + 1;
+    }
+    return false;
+}
+
+// يستدعي fn(i) لكل i من 0 إلى n-1، ويجمع النتائج في مصفوفة (مفيد لتوليد بيانات)
+fun timesRun(n, fn) {
+    let result = [];
+    let i = 0;
+    while (i < n) {
+        push(result, fn(i));
+        i = i + 1;
+    }
+    return result;
+}
+
+// يركّب دالتين: composeTwo(f, g)(x) تُعيد دالة... (Rin لا تدعم إرجاع دوال مجهولة الاسم مباشرة،
+// لذا composeApply تُطبّق التركيب فوراً بدل إعادة دالة جديدة): composeApply(f, g, x) = f(g(x))
+fun composeApply(f, g, x) {
+    return f(g(x));
+}
+
+// دوال شرطية جاهزة يمكن تمريرها مباشرة إلى filterArr/everyArr/someArr/findArr
+fun isEven(x) {
+    return x % 2 == 0;
+}
+
+fun isOdd(x) {
+    return x % 2 != 0;
+}
+
+fun isPositive(x) {
+    return x > 0;
+}
+
+fun isNegative(x) {
+    return x < 0;
+}

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- خصائص XML اختيارية لـRinSpinner: سُمك القوس ولونه (افتراضياً تدرّج rin_run_gradient
+         نفسه المستخدم في RinProgressBar، حفاظاً على هوية موحّدة لكل مؤشرات التحميل). -->
+    <declare-styleable name="RinSpinner">
+        <attr name="rinSpinnerStrokeWidth" format="dimension" />
+        <attr name="rinSpinnerColor" format="color" />
+    </declare-styleable>
+
+    <!-- عدد نقاط الذيل ونصف قطرها لـRinSnakeLoadingView (لعبة الدودة). -->
+    <declare-styleable name="RinSnakeLoadingView">
+        <attr name="rinSnakeSegments" format="integer" />
+        <attr name="rinSnakeDotRadius" format="dimension" />
+    </declare-styleable>
+</resources>

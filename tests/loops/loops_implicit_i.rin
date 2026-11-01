@@ -1,0 +1,26 @@
+// i الضمني: رقم الدورة من 0 بلا as/second var
+repeat 3 { print i; }
+each x in ["a", "b", "c"] { print i + ":" + x; }
+each k in {"p": 1, "q": 2} { print i; }
+each x in [5, 6, 7] where x > 5 { print i; }
+// من يعرّف i بنفسه يبقى كما كان
+let j = 0;
+repeat 2 { j = j + 1; }
+print j;
+// إغلاق يلتقط قيمة دورته
+let fs = [];
+each x in [1, 2, 3] { push(fs, fun() { return i; }); }
+print fs[0]() + "," + fs[2]();
+// تداخل: i للداخلية
+each a in [1, 2] { each b in [1, 2] { print i; } }
+// صريح يغلب
+repeat 2 as i { print "e" + i; }
+each x, i in ["z"] { print i; }
+
+let i = 10;
+repeat 2 { i = i + 1; }
+print i;
+// i معرَّف قبل الحلقة: قراءته تبقى للخارج (لا تغيّر)
+for (let i = 0; i < 2; i = i + 1) { each j in [7, 8] { print i + "," + j; } }
+fun f(i) { each x in [1, 2] { print i; } }
+f(9);

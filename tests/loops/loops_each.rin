@@ -1,0 +1,16 @@
+// each: basic, index, map pairs, where, reversed, range, pattern, #done
+each x in [10, 20, 30] { print x; }
+each x, i in ["a", "b", "c"] { print i + ":" + x; }
+each k, v in {"p": 1, "q": 2} { print k + "=" + v; }
+each n in [1, 2, 3, 4, 5, 6] where n % 2 == 0 { print "even " + n; }
+each n in [1, 2, 3] reversed { print "rev " + n; }
+each i in 1 to 7 step 3 { print "r " + i; }
+each [a, b] in [[1, 2], [3, 4]] { print a + b; }
+each ch in "hey" { print ch; }
+each x in [1, 2, 3] { if (x == 2) { continue; } print "c" + x; }
+each x in [1, 2, 3] { if (x == 2) { break; } } #done { print "never"; }
+each x in [1, 2] { } #done { print "each done"; }
+each n in [1, 2, 3, 4, 5] where n > 1 reversed { print "wr " + n; }
+let fs = [];
+each x in [1, 2, 3] { push(fs, fun() { return x; }); }
+print fs[0]() + fs[1]() + fs[2]();

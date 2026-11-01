@@ -1,0 +1,271 @@
+// ============================================================================
+//  lib/compose_schema.og.rin — مخططات تحقّق وتطبيع على أي بنية (مساعدة لـ compose)
+//
+//  المخطّط (schema) map عادية، وله اختصارات:
+//      "number"                      نوع فقط            (valueKind: nil bool number string
+//                                                         array map set function instance any)
+//      Set(["a", "b"])               قيمة من مجموعة (enum)
+//      fun(v) { return v > 0; }      شرط مخصّص
+//      [مخطّط]                       array كل عناصرها بهذا المخطّط
+//      {"name": "string", "age": ...}  map لها هذه الحقول (كلها مطلوبة)
+//
+//  المفاتيح الكاملة:
+//      type  nullable  required(مصفوفة أسماء)  fields(map)  items  min  max  length
+//      enum  equals  check(دالة)  oneOf(مصفوفة مخططات)  allOf  default  coerce  message
+//
+//    schemaCheck(schema, value)   -> {"ok": bool, "errors": [{"path": "a.b", "message": "..."}]}
+//    schemaConform(schema, value) -> Result: {"ok": true, "value": المُطبَّعة} أو {"ok": false, "errors": [...]}
+//                                    يملأ default ويحوّل الأنواع عند coerce:true
+//    schemaAssert(schema, value)  -> value أو يرمي نص الأخطاء
+//    schemaOf(value)              -> مخطّط مُستنتَج من قيمة نموذجية
+//    isValid(schema, value)       -> bool
+//    schemaErrors(result)         -> نصوص الأخطاء "path: message"
+//
+//  استيراد:  @import "lib/compose_schema.og.rin";   (تستورد compose + compose_path)
+// ============================================================================
+@import "compose";
+@import "compose_path";
+
+fun _schemaKeys() {
+    return Set(["type", "nullable", "required", "fields", "items", "min", "max", "length",
+                "enum", "equals", "check", "oneOf", "allOf", "default", "coerce", "message"]);
+}
+
+// توحيد الاختصارات إلى map كاملة
+fun schemaNormalize(s) {
+    let k = valueKind(s);
+    if (k == "string") { return {"type": s}; }
+    if (k == "set") { return {"enum": s}; }
+    if (k == "function") { return {"check": s}; }
+    if (k == "array") {
+        if (len(s) == 0) { return {"type": "array"}; }
+        return {"type": "array", "items": s[0]};
+    }
+    if (k == "map") {
+        let ks = keys(s);
+        let i = 0;
+        while (i < len(ks)) {
+            if (_schemaKeys().has(ks[i])) { return s; }
+            i = i + 1;
+        }
+        // map بلا أي مفتاح مخطّط: اختصار الحقول
+        return {"type": "map", "fields": s};
+    }
+    return {"type": "any"};
+}
+
+fun _fail(path, message) { return {"path": _joinSegs(path, "."), "message": message}; }
+
+fun _lenOf(v) {
+    let k = valueKind(v);
+    if (k == "string" or k == "array") { return len(v); }
+    if (k == "map") { return len(v); }
+    if (k == "set") { return v.size(); }
+    return nil;
+}
+
+// تحويل قيمة لنوع مطلوب عند coerce:true (يُرجع القيمة نفسها إن تعذّر)
+fun _coerceTo(want, v) {
+    let have = valueKind(v);
+    if (have == want) { return v; }
+    if (want == "number" and have == "string") {
+        let out = v;
+        try { out = number(trim(v)); } catch (e) { out = v; }
+        return out;
+    }
+    if (want == "string" and (have == "number" or have == "bool")) { return str(v); }
+    if (want == "bool" and have == "string") {
+        let t = lower(trim(v));
+        if (t == "true" or t == "yes" or t == "1") { return true; }
+        if (t == "false" or t == "no" or t == "0") { return false; }
+        return v;
+    }
+    if (want == "bool" and have == "number") { return v != 0; }
+    if (want == "array" and have != "nil") { return asArray(v); }
+    if (want == "set" and have == "array") { return Set(v); }
+    return v;
+}
+
+// الفحص الأساسي: يُرجع قائمة أخطاء، ويبني value المُطبَّعة في out["value"] إن طُلب conform
+fun _run(schema, value, path, conform, out) {
+    let s = schemaNormalize(schema);
+    let errors = [];
+    let v = value;
+    let msg = nil;
+    if (has(s, "message")) { msg = s["message"]; }
+
+    if (v == nil and has(s, "default")) { v = s["default"]; }
+    if (v == nil) {
+        if (has(s, "nullable") and s["nullable"] == true) { out["value"] = v; return errors; }
+        if (has(s, "default")) { out["value"] = v; return errors; }
+        if (has(s, "type") and s["type"] == "nil") { out["value"] = v; return errors; }
+        if (has(s, "type") and s["type"] == "any" and !has(s, "fields") and !has(s, "check")) {
+            out["value"] = v;
+            return errors;
+        }
+        push(errors, _fail(path, msg == nil ? "القيمة مطلوبة" : msg));
+        out["value"] = v;
+        return errors;
+    }
+
+    if (has(s, "type") and s["type"] != "any") {
+        if (conform and has(s, "coerce") and s["coerce"] == true) { v = _coerceTo(s["type"], v); }
+        let sameKind = valueKind(v) == s["type"] or (s["type"] == "map" and valueKind(v) == "instance");
+        if (!sameKind) {
+            push(errors, _fail(path, msg == nil ? "النوع المتوقع " + s["type"] + " لكن وُجد " + valueKind(v) : msg));
+            out["value"] = v;
+            return errors;
+        }
+    }
+
+    let kind = valueKind(v);
+
+    if (has(s, "equals") and v != s["equals"]) {
+        push(errors, _fail(path, msg == nil ? "يجب أن تساوي " + str(s["equals"]) : msg));
+    }
+    if (has(s, "enum")) {
+        let allowed = asSet(s["enum"]);
+        if (!allowed.has(v)) { push(errors, _fail(path, msg == nil ? "قيمة غير مسموحة: " + str(v) : msg)); }
+    }
+    if (has(s, "min")) {
+        let measure = kind == "number" ? v : _lenOf(v);
+        if (measure != nil and measure < s["min"]) {
+            push(errors, _fail(path, msg == nil ? "أصغر من الحد الأدنى " + str(s["min"]) : msg));
+        }
+    }
+    if (has(s, "max")) {
+        let measure = kind == "number" ? v : _lenOf(v);
+        if (measure != nil and measure > s["max"]) {
+            push(errors, _fail(path, msg == nil ? "أكبر من الحد الأقصى " + str(s["max"]) : msg));
+        }
+    }
+    if (has(s, "length")) {
+        let n = _lenOf(v);
+        if (n != nil and n != s["length"]) {
+            push(errors, _fail(path, msg == nil ? "الطول يجب أن يكون " + str(s["length"]) : msg));
+        }
+    }
+    if (has(s, "check")) {
+        let ok = true;
+        try { ok = s["check"](v); } catch (e) { ok = false; }
+        if (!ok) { push(errors, _fail(path, msg == nil ? "فشل الشرط المخصّص" : msg)); }
+    }
+    if (has(s, "allOf")) {
+        let i = 0;
+        while (i < len(s["allOf"])) {
+            let sub = {};
+            let errs = _run(s["allOf"][i], v, path, conform, sub);
+            let j = 0;
+            while (j < len(errs)) { push(errors, errs[j]); j = j + 1; }
+            if (conform and len(errs) == 0) { v = sub["value"]; }
+            i = i + 1;
+        }
+    }
+    if (has(s, "oneOf")) {
+        let matched = false;
+        let i = 0;
+        while (i < len(s["oneOf"]) and !matched) {
+            let sub = {};
+            let errs = _run(s["oneOf"][i], v, path, conform, sub);
+            if (len(errs) == 0) { matched = true; if (conform) { v = sub["value"]; } }
+            i = i + 1;
+        }
+        if (!matched) { push(errors, _fail(path, msg == nil ? "لا يطابق أي مخطّط من oneOf" : msg)); }
+    }
+
+    // الحقول (map / كائن)
+    if (has(s, "fields") and (kind == "map" or kind == "instance")) {
+        let m = asMap(v);
+        let fields = s["fields"];
+        let required = nil;
+        if (has(s, "required")) { required = Set(s["required"]); }
+        let result = conform ? mergeWith({}, m, "override") : m;
+        let names = keys(fields);
+        let i = 0;
+        while (i < len(names)) {
+            let name = names[i];
+            let present = has(m, name);
+            let fs = schemaNormalize(fields[name]);
+            let isRequired = required == nil ? !(has(fs, "default") or (has(fs, "nullable") and fs["nullable"] == true)) : required.has(name);
+            if (!present and !isRequired and !has(fs, "default")) { i = i + 1; continue; }
+            let sub = {};
+            let errs = _run(fields[name], present ? m[name] : nil, concat(path, [name]), conform, sub);
+            let j = 0;
+            while (j < len(errs)) { push(errors, errs[j]); j = j + 1; }
+            if (conform and len(errs) == 0) { result[name] = sub["value"]; }
+            i = i + 1;
+        }
+        if (conform) { v = result; }
+    }
+
+    // العناصر (array / Set)
+    if (has(s, "items") and (kind == "array" or kind == "set")) {
+        let list = asArray(v);
+        let outList = [];
+        let i = 0;
+        while (i < len(list)) {
+            let sub = {};
+            let errs = _run(s["items"], list[i], concat(path, [i]), conform, sub);
+            let j = 0;
+            while (j < len(errs)) { push(errors, errs[j]); j = j + 1; }
+            push(outList, len(errs) == 0 ? sub["value"] : list[i]);
+            i = i + 1;
+        }
+        if (conform) { v = kind == "set" ? Set(outList) : outList; }
+    }
+
+    out["value"] = v;
+    return errors;
+}
+
+fun schemaCheck(schema, value) {
+    let sink = {};
+    let errors = _run(schema, value, [], false, sink);
+    return {"ok": len(errors) == 0, "errors": errors};
+}
+
+fun isValid(schema, value) { return schemaCheck(schema, value)["ok"]; }
+
+// schemaConform: يطبّق default والتحويلات (coerce) ويُرجع Result
+fun schemaConform(schema, value) {
+    let sink = {};
+    let errors = _run(schema, value, [], true, sink);
+    if (len(errors) > 0) { return {"ok": false, "errors": errors}; }
+    return {"ok": true, "value": sink["value"]};
+}
+
+fun schemaErrors(result) {
+    let out = [];
+    if (!has(result, "errors")) { return out; }
+    let i = 0;
+    while (i < len(result["errors"])) {
+        let e = result["errors"][i];
+        push(out, (e["path"] == "" ? "(root)" : e["path"]) + ": " + e["message"]);
+        i = i + 1;
+    }
+    return out;
+}
+
+fun schemaAssert(schema, value) {
+    let r = schemaCheck(schema, value);
+    if (!r["ok"]) { throw join(schemaErrors(r), "; "); }
+    return value;
+}
+
+// مخطّط مُستنتَج: map -> حقولها، array -> أول عنصر، غير ذلك -> نوعها
+fun schemaOf(value) {
+    let k = valueKind(value);
+    if (k == "map" or k == "instance") {
+        let m = asMap(value);
+        let fields = {};
+        let ks = keys(m);
+        let i = 0;
+        while (i < len(ks)) { fields[ks[i]] = schemaOf(m[ks[i]]); i = i + 1; }
+        return {"type": k, "fields": fields};
+    }
+    if (k == "array") {
+        if (len(value) == 0) { return {"type": "array"}; }
+        return {"type": "array", "items": schemaOf(value[0])};
+    }
+    return {"type": k};
+}

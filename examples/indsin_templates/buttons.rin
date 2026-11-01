@@ -1,0 +1,28 @@
+// indsin/main.indsin — قالب "أزرار" جاهز (محرّك indsin، @view.*)
+
+warp tapCount = 0;
+
+fun bump() { tapCount = tapCount + 1; }
+
+@view.Column=root
+    padding=16;
+    gap=14;
+
+    @view.Text=heading text="معرض الأزرار"; size="title"; .end/view
+
+    @view.Text=lbl1 text="زر أساسي (Filled)"; size=12; .end/view
+    @view.Button=btnPrimary label="زر أساسي"; bg="#7c5cff"; color="#ffffff"; radius=12; .end/view
+
+    @view.Text=lbl2 text="زر بإطار (Outline)"; size=12; .end/view
+    @view.Button=btnOutline label="زر بإطار"; variant="outline"; tone="primary"; radius=12; .end/view
+
+    @view.Text=lbl3 text="زر مُعطَّل (Disabled)"; size=12; .end/view
+    @view.Button=btnDisabled label="زر معطّل"; state="disabled"; radius=12; .end/view
+
+    @view.Text=lbl4 text="زر أيقونة"; size=12; .end/view
+    @view.Button=btnIcon label="🔔 تنبيه"; radius=20; .end/view
+
+    @view.Text=lbl5 text="زر عدّاد تفاعلي"; size=12; .end/view
+    @view.Button=btnCounter label="اضغط هنا"; onTap=bump(); radius=12; .end/view
+    @view.Text=counterOut text="تم الضغط " + tapCount + " مرة"; size=14; .end/view
+.end/view

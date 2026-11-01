@@ -1,0 +1,10 @@
+// y الضمني: قيمة الدورة السابقة (nil في الأولى)
+each x in [1, 4, 9, 16] { if (y != nil) { print x - y; } }
+each x in ["a", "b", "c"] { print i + (y == nil ? "-" : y); }
+each k in {"p": 1, "q": 2} { print y; }
+each x in [1, 2, 3] where x != 2 { print y; }
+// continue لا يكسر التتبّع
+each x in [1, 2, 3] { if (x == 2) { continue; } print y; }
+// y معرَّف قبل الحلقة يبقى له
+let y = 100;
+each x in [1, 2] { print y; }

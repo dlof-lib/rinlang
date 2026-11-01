@@ -1,0 +1,2712 @@
+package com.dlof.rinlang
+
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
+import android.animation.ValueAnimator
+import android.app.AlertDialog
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Rect
+import android.graphics.drawable.GradientDrawable
+import android.os.Handler
+import android.os.Looper
+import android.text.Editable
+import android.text.InputType
+import android.text.Selection
+import android.text.SpannableStringBuilder
+import android.text.TextWatcher
+import android.util.AttributeSet
+import android.util.TypedValue
+import android.view.ActionMode
+import android.view.Gravity
+import android.view.GestureDetector
+import android.view.KeyEvent
+import android.view.Menu
+import android.view.MenuItem
+import android.view.MotionEvent
+import android.view.ScaleGestureDetector
+import android.view.View
+import android.view.inputmethod.BaseInputConnection
+import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputConnection
+import android.widget.ArrayAdapter
+import android.widget.EditText
+import android.widget.LinearLayout
+import android.widget.PopupWindow
+import android.widget.TextView
+import android.widget.Toast
+import androidx.core.content.ContextCompat
+import androidx.core.content.res.ResourcesCompat
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.roundToInt
+
+/**
+ * محرر Rin احترافي مبني فوق [View]/Canvas. واجهة الرسم وIME في Kotlin، بينما حالة المستند
+ * وكل عمليات التحرير والتراجع/الإعادة والتلوين والإكمال تُنفّذ فعلياً في C++17 عبر JNI.
+ * التلوين لا ينسخ قواعد Rin إلى Kotlin: RinCodeEditorView يستهلك tokens التي ينتجها
+ * rin::Lexer الحقيقي من مصدر اللغة نفسه.
+ *
+ * هذا الصنف مسؤول فقط عن: القياس/الرسم (Canvas)، اللمس (وضع المؤشر/السحب للتحديد)، والربط
+ * بلوحة المفاتيح الافتراضية (IME) عبر [InputConnection] حقيقي مبني على [BaseInputConnection]
+ * فوق "مرآة" [Editable] تُبقى متزامنة مع المحرك في الاتجاهين.
+ *
+ * كل الإحداثيات المتبادلة مع المحرك هي (سطر, عمود-حرف UTF-16) مباشرة — بلا أي طبقة تحويل
+ * بايت/حرف وسيطة (خلافاً للمحرك القديم المبني على C++).
+ */
+class RinCodeEditorView @JvmOverloads constructor(
+    context: Context,
+    attrs: AttributeSet? = null
+) : View(context, attrs) {
+
+    /** المصدر الوحيد للحقيقة: محرك C++17 الأصلي المربوط عبر JNI. */
+    val engine = RinNativeEditor()
+
+    // --- إعداد الرسم ---------------------------------------------------
+
+    private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        typeface = loadCodeFont(R.font.rin_code_regular) ?: android.graphics.Typeface.MONOSPACE
+        textSize = spToPx(AppSettings.DEFAULT_FONT_SIZE_SP) // يُستبدَل فورًا بالقيمة المحفوظة عبر applyStoredEditorSettings()، ويبقى هذا فقط توافقًا مبدئيًا قبل أول تطبيق للإعدادات
+        color = ContextCompat.getColor(context, R.color.rin_editor_text)
+        isSubpixelText = true
+        isLinearText = false
+    }
+    private val cursorPaint = Paint().apply { color = ContextCompat.getColor(context, R.color.rin_editor_text) }
+    private val currentLinePaint = Paint().apply { color = ContextCompat.getColor(context, R.color.rin_current_line_bg) }
+    private val selectionPaint = Paint().apply { color = 0x553D7EFF.toInt() }
+    private val bracketMatchPaint = Paint().apply { color = ContextCompat.getColor(context, R.color.rin_bracket_match_bg) }
+    private val bracketErrorPaint = Paint().apply { color = ContextCompat.getColor(context, R.color.rin_bracket_error_bg) }
+    private val findMatchPaint = Paint().apply { color = ContextCompat.getColor(context, R.color.rin_find_match_bg) }
+    // خط متعرّج (wavy underline) لتشخيص أخطاء الصياغة الحي — أحمر للأخطاء، ذهبي/برتقالي للتحذيرات
+    // (نفس لون log_kind_warning المستخدَم أصلاً في وحدة تحكّم التنفيذ، لتناسق بصري عبر التطبيق).
+    private val diagnosticErrorPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = ContextCompat.getColor(context, R.color.syntax_error)
+        style = Paint.Style.STROKE
+        strokeWidth = resources.displayMetrics.density * 1.4f
+    }
+    private val diagnosticWarningPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = ContextCompat.getColor(context, R.color.log_kind_warning)
+        style = Paint.Style.STROKE
+        strokeWidth = resources.displayMetrics.density * 1.4f
+    }
+    // "شريحة" مؤشر الطيّ "⋯" المرسومة بعد نص سطر بداية كتلة مطويّة (انظر onDraw).
+    private val foldChipBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#33888888") }
+    private val foldChipPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = ContextCompat.getColor(context, R.color.syntax_comment)
+        textSize = textPaint.textSize
+        isFakeBoldText = true
+    }
+    // علامات المسافات/التبويبات (إعداد "Whitespace markers"): نقطة للمسافة وسهم للتبويب بلون التعليقات الباهت.
+    private val whitespacePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = ContextCompat.getColor(context, R.color.syntax_comment)
+        alpha = 110
+        strokeWidth = max(1f, resources.displayMetrics.density)
+    }
+
+    // --- نظام تلوين الصيغة النحوية الموحَّد (Unified Syntax Palette) --------------------
+    // ست هويات لونية ثابتة فقط، كل واحدة تمثّل "مفهوماً" واحداً في الكود، معرَّفة مركزياً في
+    // colors.xml (وظليلها الداكن في values-night/colors.xml) بدل تشتّت الألوان هنا:
+    //   أزرق → تحكّم/كلمات مفتاحية · بنفسجي → أنواع/حاويات/سياسات · أخضر → نصوص حرفية
+    //   برتقالي → أرقام/حقول ستايل · ذهبي → دوال مُستدعاة ووسوم @ · أبيض(محايد) → تعليقات
+    // كل HighlightKind القادم من محرك rin::Lexer الحقيقي (عبر JNI) يُطابَق هنا بلون واحد
+    // فقط من هذه الستة — انظر resolveColor(kind) أسفله لخريطة المطابقة الكاملة.
+    private val colorKeyword = ContextCompat.getColor(context, R.color.syntax_keyword)       // أزرق
+    private val colorString = ContextCompat.getColor(context, R.color.syntax_string)         // أخضر
+    private val colorNumber = ContextCompat.getColor(context, R.color.syntax_number)         // برتقالي
+    private val colorAt = ContextCompat.getColor(context, R.color.syntax_tag)                // ذهبي (وسوم @)
+    private val colorCall = ContextCompat.getColor(context, R.color.syntax_builtin)          // ذهبي (دوال)
+    private val colorComment = ContextCompat.getColor(context, R.color.syntax_comment)       // أبيض/محايد
+    private val colorType = ContextCompat.getColor(context, R.color.syntax_container_keyword) // بنفسجي
+    private val colorPreprocessor = ContextCompat.getColor(context, R.color.syntax_make_directive) // بنفسجي
+    private val colorDefault = ContextCompat.getColor(context, R.color.rin_editor_text)
+    // مفاهيم Rin الدلالية (HighlightKind 20..26)
+    private val colorControl = ContextCompat.getColor(context, R.color.syntax_control)
+    private val colorConstant = ContextCompat.getColor(context, R.color.syntax_constant)
+    private val colorFunctionDef = ContextCompat.getColor(context, R.color.syntax_function_def)
+    private val colorModifier = ContextCompat.getColor(context, R.color.syntax_modifier)
+    private val colorLabel = ContextCompat.getColor(context, R.color.syntax_label)
+    private val colorClass = ContextCompat.getColor(context, R.color.syntax_class)
+    private val colorProperty = ContextCompat.getColor(context, R.color.syntax_property)
+    // قوالب الحلقات @tmpl (HighlightKind 27..29)
+    private val colorTemplate = ContextCompat.getColor(context, R.color.syntax_template)
+    private val colorTemplateKw = ContextCompat.getColor(context, R.color.syntax_template_kw)
+    private val colorParameter = ContextCompat.getColor(context, R.color.syntax_parameter)
+    // الرموز (HighlightKind 30..35)
+    private val colorOperator = ContextCompat.getColor(context, R.color.syntax_operator)
+    private val colorCompare = ContextCompat.getColor(context, R.color.syntax_compare)
+    private val colorPunct = ContextCompat.getColor(context, R.color.syntax_punct)
+    private val colorFlow = ContextCompat.getColor(context, R.color.syntax_flow)
+    private val colorBracket0 = ContextCompat.getColor(context, R.color.syntax_bracket0)
+    private val colorBracket1 = ContextCompat.getColor(context, R.color.syntax_bracket1)
+    private val colorBracket2 = ContextCompat.getColor(context, R.color.syntax_bracket2)
+    // ---- عائلة خطوط الكود: JetBrains Mono NL (OFL، بلا ligatures، عرض الحرف 0.6em لكل الأوزان) ----
+    // كل مفهوم دلالي له وزنه ونمطه الحقيقي (لا تشويه اصطناعي). العرض ثابت في كل الأوزان فتبقى الخلايا
+    // والمؤشر والتحديد وعلامات الأخطاء مضبوطة. إن تعذّر تحميل الخطوط يعود الرسم للنمط الاصطناعي السابق.
+    private fun loadCodeFont(id: Int): android.graphics.Typeface? =
+        try { ResourcesCompat.getFont(context, id) } catch (e: Exception) { null }
+    private val fontRegular = loadCodeFont(R.font.rin_code_regular)
+    private val fontMedium = loadCodeFont(R.font.rin_code_medium)
+    private val fontSemiBold = loadCodeFont(R.font.rin_code_semibold)
+    private val fontBold = loadCodeFont(R.font.rin_code_bold)
+    private val fontExtraBold = loadCodeFont(R.font.rin_code_extrabold)
+    private val fontItalic = loadCodeFont(R.font.rin_code_italic)
+    private val fontMediumItalic = loadCodeFont(R.font.rin_code_medium_italic)
+    private val fontBoldItalic = loadCodeFont(R.font.rin_code_bold_italic)
+    private val fontLightItalic = loadCodeFont(R.font.rin_code_light_italic)
+    // خطوط الرموز: JetBrains Mono (بـ ligatures) — == != <= >= |> =/= تُرسم كرمز واحد بعرض خليتين بالضبط
+    private val symMedium = loadCodeFont(R.font.rin_sym_medium) ?: fontMedium
+    private val symSemiBold = loadCodeFont(R.font.rin_sym_semibold) ?: fontSemiBold
+    private val symBold = loadCodeFont(R.font.rin_sym_bold) ?: fontBold
+    private val codeFontsReady = listOf(fontRegular, fontMedium, fontSemiBold, fontBold, fontExtraBold,
+        fontItalic, fontMediumItalic, fontBoldItalic, fontLightItalic).all { it != null }
+
+    /** الخط المناسب لكل مفهوم:
+     *  كلمات التحكم/الأنواع/الأصناف Bold · تعريف الدالة ExtraBold · الكلمات المفتاحية/الثوابت/@ SemiBold · النداءات/الأرقام Medium ·
+     *  المعدِّلات Italic · المعاملات Medium Italic · التسميات وأسماء القوالب Bold Italic · @tmpl/@body ExtraBold ·
+     *  التعليقات Light Italic · النصوص/المعرّفات/الخصائص/الفواصل Regular · الأقواس Medium ·
+     *  الرموز (+ - = / == != <= >= |> ?) بخط ligatures: Medium للحساب، SemiBold للمقارنة، Bold للتدفق. */
+    private fun codeFontFor(kind: Int): android.graphics.Typeface? = when (kind) {
+        HighlightKind.CONTROL, HighlightKind.TYPE, HighlightKind.CLASS -> fontBold
+        HighlightKind.FUNCTION_DEF, HighlightKind.TEMPLATE_KW -> fontExtraBold
+        HighlightKind.KEYWORD, HighlightKind.CONSTANT, HighlightKind.AT, HighlightKind.PREPROCESSOR -> fontSemiBold
+        HighlightKind.IX_TAG, HighlightKind.IX_TAG_CUSTOM, HighlightKind.IX_STRUCT, HighlightKind.IX_STATE, HighlightKind.IX_ID -> fontSemiBold
+        HighlightKind.IX_EVENT, HighlightKind.IX_BRACE, HighlightKind.IX_COLOR, HighlightKind.IX_LENGTH -> fontMedium
+        HighlightKind.CALL, HighlightKind.NUMBER, HighlightKind.ERROR -> fontMedium
+        HighlightKind.MODIFIER -> fontItalic
+        HighlightKind.PARAMETER -> fontMediumItalic
+        HighlightKind.LABEL, HighlightKind.TEMPLATE -> fontBoldItalic
+        HighlightKind.COMMENT, HighlightKind.PK_COMMENT -> fontLightItalic
+        HighlightKind.OPERATOR -> symMedium
+        HighlightKind.COMPARE -> symSemiBold
+        HighlightKind.FLOW -> symBold
+        HighlightKind.BRACKET0, HighlightKind.BRACKET1, HighlightKind.BRACKET2 -> fontMedium
+        else -> fontRegular
+    }
+
+    // --- ستايل كتل الحاويات (@container.* / Containers.Group / Section / make ...) ------------------
+    // مظهر هادئ: خط إرشاد رأسي رفيع بلون العائلة بزاويتي ┌ └، ووسم الفتح/الإغلاق بلون العائلة مع
+    // خط شعري تحت وسم الفتح. بلا تعبئة ولا كبسولات. الكتلة غير المغلقة (قيد الكتابة) تمتد للنهاية بخط أخفّ وبلا زاوية سفلية.
+    // بصري بحت: لا يمسّ النص/الطيّ/IME. يُعطَّل من الإعدادات (CONTAINER_STYLE).
+    private val containerPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val containerRect = android.graphics.RectF()
+    private var containerBlocks: List<RinContainerTags.ContainerBlock> = emptyList()
+    /** سطر 0-based -> الكتل التي تغطّيه من الخارجية أولاً ثم الأعمق. */
+    private var containerBlocksByLine: Map<Int, List<RinContainerTags.ContainerBlock>> = emptyMap()
+
+    private fun containerAccent(family: RinContainerTags.ContainerFamily): Int = ContextCompat.getColor(
+        context,
+        when (family) {
+            RinContainerTags.ContainerFamily.CORE -> R.color.container_accent_core
+            RinContainerTags.ContainerFamily.PIPE -> R.color.container_accent_pipe
+            RinContainerTags.ContainerFamily.DATA -> R.color.container_accent_data
+            RinContainerTags.ContainerFamily.API -> R.color.container_accent_api
+            RinContainerTags.ContainerFamily.IO -> R.color.container_accent_io
+            RinContainerTags.ContainerFamily.GROUP -> R.color.container_accent_group
+        }
+    )
+    private val containerAccentCache = HashMap<RinContainerTags.ContainerFamily, Int>()
+    private fun accentOf(family: RinContainerTags.ContainerFamily): Int =
+        containerAccentCache.getOrPut(family) { containerAccent(family) }
+
+    private fun recomputeContainerBlocks(text: String) {
+        val blocks = RinContainerTags.buildContainerBlocks(text).sortedWith(compareBy({ it.startLine }, { it.depth }))
+        val byLine = HashMap<Int, ArrayList<RinContainerTags.ContainerBlock>>()
+        for (b in blocks) for (l in b.startLine..b.endLine) byLine.getOrPut(l) { ArrayList(2) }.add(b)
+        for (list in byLine.values) list.sortBy { it.depth }
+        containerBlocks = blocks
+        containerBlocksByLine = byLine
+    }
+
+    /** يرسم خط الحاوية للسطر [line] الذي يبدأ عند [y] (قبل النص): خط رأسي رفيع بلون العائلة
+     *  بزاويتين ┌ عند الفتح و└ عند الإغلاق. بلا تعبئة خلفية — مظهر هادئ يشبه خطوط الإرشاد
+     *  (guides) في IDEs الاحترافية. الكتلة غير المغلقة تُرسم بخط متقطّع وبلا زاوية سفلية. */
+    private fun drawContainerBands(canvas: Canvas, line: Int, y: Float) {
+        val blocks = containerBlocksByLine[line] ?: return
+        val density = resources.displayMetrics.density
+        val stroke = max(1f, density * 1.3f)
+        val tick = charWidth * 0.45f // زاوية قصيرة تشير نحو الوسم
+        containerPaint.style = Paint.Style.STROKE
+        containerPaint.strokeWidth = stroke
+        containerPaint.strokeCap = Paint.Cap.ROUND
+        for (b in blocks) {
+            val x0 = paddingLeft + b.indent * charWidth
+            val lx = x0 - charWidth * 0.6f
+            val isFirst = line == b.startLine
+            val folded = isFirst && line in foldedStartLines
+            val isLast = (line == b.endLine && b.closed) || folded
+            val bottom = y + lineHeight
+            val mid = y + lineHeight / 2f
+            containerPaint.color = accentOf(b.family)
+            containerPaint.alpha = if (b.closed) 170 else 100
+            val top = if (isFirst) mid else y
+            val bot = if (isLast) mid else bottom
+            if (bot > top) canvas.drawLine(lx, top, lx, bot, containerPaint)
+            // زاوية ┌ / └ بالمنتصف الرأسي لسطر الفتح/الإغلاق، تشير نحو النص
+            if (isFirst || isLast) canvas.drawLine(lx, mid, lx + tick, mid, containerPaint)
+            // علامة نقطة صغيرة بنهاية الخط عند الطيّ، توحي بأن الكتلة مطويّة لا مغلقة فقط
+            if (folded) {
+                containerPaint.style = Paint.Style.FILL
+                canvas.drawCircle(lx, mid, stroke * 1.4f, containerPaint)
+                containerPaint.style = Paint.Style.STROKE
+            }
+        }
+        containerPaint.style = Paint.Style.FILL
+    }
+
+    /** يغطّي نصاً مرسوماً بلون خلفية المحرر (مع الحفاظ على تظليل السطر الحالي) تمهيداً لإعادة رسمه
+     *  بنمط الحاوية. لا يُستدعى أبداً على سطر فيه تحديد حتى لا يمحو لون التحديد. */
+    private fun coverCells(canvas: Canvas, rect: android.graphics.RectF, radius: Float, onCurrentLine: Boolean) {
+        containerPaint.style = Paint.Style.FILL
+        containerPaint.color = ContextCompat.getColor(context, R.color.rin_editor_bg)
+        containerPaint.alpha = 255
+        canvas.drawRoundRect(rect, radius, radius, containerPaint)
+        if (onCurrentLine && AppSettings.isCurrentLineHighlight(context)) {
+            canvas.drawRoundRect(rect, radius, radius, currentLinePaint)
+        }
+    }
+
+    /** يرسم [text] من [from] إلى [to] بخط [face] ولون [color] ابتداءً من عمود [col]. إن مُرّر [gradientTo]
+     *  يُرسَم النص بتدرّج أفقي من [color] إلى [gradientTo] على عرض المقطع (زخرفة بلا تغيير لعرض الخلايا). */
+    private fun drawStyledRun(
+        canvas: Canvas, text: String, from: Int, to: Int, col: Int, baseline: Float,
+        color: Int, face: android.graphics.Typeface?, gradientTo: Int? = null
+    ) {
+        if (to <= from) return
+        val savedColor = textPaint.color
+        val savedFace = textPaint.typeface
+        val x = paddingLeft + col * charWidth
+        textPaint.color = color
+        textPaint.typeface = face ?: savedFace
+        if (gradientTo != null) {
+            textPaint.shader = android.graphics.LinearGradient(
+                x, 0f, x + (to - from) * charWidth, 0f, color, gradientTo, android.graphics.Shader.TileMode.CLAMP
+            )
+        }
+        canvas.drawText(text, from, to, x, baseline, textPaint)
+        textPaint.shader = null
+        textPaint.color = savedColor
+        textPaint.typeface = savedFace
+    }
+
+    /** درجة قريبة من لون العائلة (إزاحة Hue بنحو 38°) لنهاية تدرّج كلمة الحاوية. */
+    private val containerAltCache = HashMap<Int, Int>()
+    private fun accentAlt(accent: Int): Int = containerAltCache.getOrPut(accent) {
+        val hsv = FloatArray(3)
+        Color.colorToHSV(accent, hsv)
+        hsv[0] = (hsv[0] + 38f) % 360f
+        Color.HSVToColor(Color.alpha(accent), hsv)
+    }
+
+    /** نهاية الكلمة الأساسية للوسم (قبل أول '.' لاحقة النوع): "container" في container.pipe. */
+    private fun mainWordEnd(text: String, from: Int, limit: Int): Int {
+        val dot = text.indexOf('.', from)
+        return if (dot in from until limit) dot else limit
+    }
+
+    /** سطر فتح الحاوية (يُستدعى بعد رسم النص) بأسلوب هادئ: الوسم (`@container.pipe`) بلون العائلة:
+     *  الـ"@" ExtraBold، وكلمة `container` مزخرفة بتدرّج لوني (لون العائلة ← درجة مزاحة الـHue) بوزن
+     *  ExtraBold، ولاحقة النوع (`.pipe`) Medium؛ وتحته خط شعري يتلاشى تدريجياً، و"=" بلون الترقيم الباهت، واسم
+     *  الحاوية SemiBold بلون نص المحرر. بلا كبسولات ولا تعبئة. تُغطّى الكلمات بلون الخلفية ثم تُعاد
+     *  بنفس عرض الخلايا (لا انزياح للمؤشر/التحديد). `.object("..")` تكتفي بالخط الجانبي. */
+    private fun drawContainerBadge(canvas: Canvas, line: Int, lineText: String, y: Float, baseline: Float, onCurrentLine: Boolean) {
+        val b = containerBlocksByLine[line]?.firstOrNull { it.startLine == line } ?: return
+        val from = b.indent
+        val tagEnd = (b.indent + b.tagCols).coerceAtMost(lineText.length)
+        if (from >= tagEnd || lineText[from] == '.') return
+        val density = resources.displayMetrics.density
+        val accent = accentOf(b.family)
+        val end = lineText.trimEnd().length
+        val x = paddingLeft + from * charWidth
+        val trim = density * 1.5f
+        containerRect.set(x, y + trim, paddingLeft + end * charWidth, y + lineHeight - trim)
+        coverCells(canvas, containerRect, 0f, onCurrentLine)
+
+        var col = from
+        if (lineText[from] == '@') {
+            drawStyledRun(canvas, lineText, from, from + 1, col, baseline, accent, fontExtraBold ?: fontBold)
+            col++
+        }
+        val mainEnd = mainWordEnd(lineText, col, tagEnd)
+        drawStyledRun(canvas, lineText, col, mainEnd, col, baseline, accent, fontExtraBold ?: fontBold, accentAlt(accent))
+        drawStyledRun(canvas, lineText, mainEnd, tagEnd, mainEnd, baseline, accent, fontMedium)
+        if (tagEnd < end && lineText[tagEnd] == '=') {
+            drawStyledRun(canvas, lineText, tagEnd, tagEnd + 1, tagEnd, baseline, colorPunct, fontRegular)
+            drawStyledRun(canvas, lineText, tagEnd + 1, end, tagEnd + 1, baseline, colorDefault, fontSemiBold)
+        } else if (tagEnd < end) {
+            drawStyledRun(canvas, lineText, tagEnd, end, tagEnd, baseline, colorDefault, fontRegular)
+        }
+
+        // خط شعري تحت الوسم
+        containerPaint.style = Paint.Style.STROKE
+        containerPaint.strokeWidth = max(1f, density * 1f)
+        containerPaint.strokeCap = Paint.Cap.ROUND
+        containerPaint.color = accent
+        val ux2 = paddingLeft + tagEnd * charWidth
+        containerPaint.shader = android.graphics.LinearGradient(
+            x, 0f, ux2, 0f, (accent and 0x00FFFFFF) or (200 shl 24), accent and 0x00FFFFFF, android.graphics.Shader.TileMode.CLAMP
+        )
+        val uy = y + lineHeight - trim - containerPaint.strokeWidth
+        canvas.drawLine(x, uy, ux2, uy, containerPaint)
+        containerPaint.shader = null
+        containerPaint.style = Paint.Style.FILL
+    }
+
+    /** سطر الإغلاق `.end/<tag>`: `.end/` بلون الترقيم الباهت والوسم بلون العائلة Medium، بلا زخارف —
+     *  يكفي الخط الجانبي (└) ولون الوسم لربط الإغلاق بالفتح. */
+    private fun drawContainerClosing(canvas: Canvas, line: Int, lineText: String, y: Float, baseline: Float, onCurrentLine: Boolean) {
+        val b = containerBlocksByLine[line]?.firstOrNull { it.endLine == line && it.closed } ?: return
+        val start = lineText.length - lineText.trimStart().length
+        val end = lineText.trimEnd().length
+        if (end <= start + 5 || !lineText.startsWith(".end/", start)) return
+        val trim = resources.displayMetrics.density * 1.5f
+        containerRect.set(paddingLeft + start * charWidth, y + trim, paddingLeft + end * charWidth, y + lineHeight - trim)
+        coverCells(canvas, containerRect, 0f, onCurrentLine)
+        drawStyledRun(canvas, lineText, start, start + 5, start, baseline, colorPunct, fontRegular)
+        val accent = accentOf(b.family)
+        val mainEnd = mainWordEnd(lineText, start + 5, end)
+        drawStyledRun(canvas, lineText, start + 5, mainEnd, start + 5, baseline, accent, fontBold, accentAlt(accent))
+        drawStyledRun(canvas, lineText, mainEnd, end, mainEnd, baseline, accent, fontMedium)
+    }
+
+    private val tmplPillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val tmplPillRect = android.graphics.RectF()
+    private val tmplUnderlinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        strokeWidth = resources.displayMetrics.density * 1.2f
+        strokeCap = Paint.Cap.ROUND
+    }
+
+    /** "حبة" مستديرة شفافة خلف @tmpl/@body بلون الكلمة (حبة واحدة تشمل @ و tmpl). */
+    private fun drawTemplatePill(canvas: Canvas, x: Float, baseline: Float, cells: Int, color: Int) {
+        val fm = textPaint.fontMetrics
+        val pad = charWidth * 0.18f
+        tmplPillPaint.color = color
+        tmplPillPaint.alpha = 38
+        tmplPillRect.set(x - pad, baseline + fm.ascent * 0.92f, x + cells * charWidth + pad, baseline + fm.descent * 0.9f)
+        canvas.drawRoundRect(tmplPillRect, charWidth * 0.35f, charWidth * 0.35f, tmplPillPaint)
+    }
+
+    /** خط سفلي ناعم تحت اسم القالب. */
+    private fun drawTemplateUnderline(canvas: Canvas, x: Float, baseline: Float, cells: Int, color: Int) {
+        val fm = textPaint.fontMetrics
+        tmplUnderlinePaint.color = color
+        tmplUnderlinePaint.alpha = 140
+        val y = baseline + fm.descent * 0.55f
+        canvas.drawLine(x, y, x + cells * charWidth, y, tmplUnderlinePaint)
+    }
+    // ألوان passkit الرسمية (colors.xml / values-night) — تُستخدَم فقط لأنواع التلوين 13..19.
+    private val colorPkBracket = ContextCompat.getColor(context, R.color.passkit_bracket)
+    private val colorPkTag = ContextCompat.getColor(context, R.color.passkit_tag)
+    private val colorPkCustomTag = ContextCompat.getColor(context, R.color.passkit_tag_custom)
+    private val colorPkAttr = ContextCompat.getColor(context, R.color.passkit_attr)
+    private val colorPkVariable = ContextCompat.getColor(context, R.color.passkit_variable)
+    private val colorPkString = ContextCompat.getColor(context, R.color.passkit_string)
+    private val colorPkComment = ContextCompat.getColor(context, R.color.passkit_comment)
+    // ألوان مستندات indsin (36..47) — انظر rin_indsin_highlight.h؛ تتبدّل تلقائياً مع الوضع الليلي.
+    private val colorIxBracket = ContextCompat.getColor(context, R.color.ix_bracket)
+    private val colorIxTag = ContextCompat.getColor(context, R.color.ix_tag)
+    private val colorIxTagCustom = ContextCompat.getColor(context, R.color.ix_tag_custom)
+    private val colorIxId = ContextCompat.getColor(context, R.color.ix_id)
+    private val colorIxAttr = ContextCompat.getColor(context, R.color.ix_attr)
+    private val colorIxEvent = ContextCompat.getColor(context, R.color.ix_event)
+    private val colorIxToken = ContextCompat.getColor(context, R.color.ix_token)
+    private val colorIxColor = ContextCompat.getColor(context, R.color.ix_color)
+    private val colorIxLength = ContextCompat.getColor(context, R.color.ix_length)
+    private val colorIxState = ContextCompat.getColor(context, R.color.ix_state)
+    private val colorIxBrace = ContextCompat.getColor(context, R.color.ix_brace)
+    private val colorIxStruct = ContextCompat.getColor(context, R.color.ix_struct)
+    // أحمر — خارج المنظومة الست عمداً: حالة تنبيه (خطأ نحوي) لا مفهوم لغوي، ويجب أن يبقى
+    // قابلاً للتمييز الفوري عن الستة جميعاً بلا التباس.
+    private val colorError = ContextCompat.getColor(context, R.color.syntax_error)
+
+    private var lineHeight = 0f
+    private var charWidth = 0f
+    private var ascent = 0f
+
+    /** ارتفاع السطر الحالي بالبكسل (يتغيّر مع تكبير/تصغير الخط) — يستهلكه عمود أرقام الأسطر
+     *  الخارجي ([RinCodeEditorController]) لحساب أي صفّ عرض يقابل نقرة على مؤشر ▾/▸ بجانبه،
+     *  حتى يبقى متطابقاً تمامًا مع ما يرسمه [onDraw] هنا بلا أي حساب مستقلّ قد ينحرف عنه. */
+    val lineHeightPx: Float get() = lineHeight
+    private fun recomputeMetrics() {
+        val fm = textPaint.fontMetrics
+        lineHeight = (fm.descent - fm.ascent) * 1.15f
+        ascent = fm.ascent
+        charWidth = textPaint.measureText("0")
+    }
+
+    // --- أبعاد المحتوى المخزَّنة (للقياس فقط) --------------------------------
+    // onMeasure كان يمسح كل أسطر المستند (measureText لكل سطر عبر JNI) في كل مرة يُستدعى فيها —
+    // وهو ما كان يحدث بعد *كل* تعديل في afterEngineMutation، بما فيها تحريك المؤشر وحده (أسهم،
+    // نقر) بلا أي تغيّر في النص أو الأبعاد فعليًا. هذا سبب رئيسي لبطء/عدم سلاسة الحركة خصوصًا في
+    // الملفات الطويلة. الحل: نُعيد حساب الأبعاد فقط عندما يتغيّر النص فعليًا أو حجم الخط
+    // (recomputeContentSize)، ويكتفي onMeasure بقراءة القيم المخزَّنة.
+    private var cachedMaxLineWidth = 0f
+    private var cachedLineCount = 1
+    private fun recomputeContentSize() {
+        var maxW = 0f
+        val lc = engine.lineCount()
+        for (i in 0 until lc) {
+            val w = textPaint.measureText(engine.getLine(i))
+            if (w > maxW) maxW = w
+        }
+        cachedMaxLineWidth = maxW
+        cachedLineCount = lc
+    }
+
+    // --- حالة نص الظل (Shadow Editable) لأجل IME فقط ---------------------
+
+    private val shadowEditable = SpannableStringBuilder()
+    private var lastKnownText: String = ""
+    private var suppressForward = false
+
+    // ذاكرة مؤقتة للتلوين النحوي ومطابقة الأقواس — تُحدَّث فقط داخل [afterEngineMutation]،
+    // ويقرأها [onDraw] مباشرة بلا أي إعادة حساب.
+    private var cachedHighlightsByLine: Map<Int, List<RinNativeEditor.Highlight>> = emptyMap()
+    private var cachedBracketInfo: Quad? = null
+    // تشخيص أخطاء الصياغة الحي — يُحدَّث في نفس نقطة تحديث [cachedHighlightsByLine] (انظر
+    // [rebuildHighlightAndDiagnosticCaches])، ويقرأه [onDraw] لرسم خط أحمر/برتقالي متعرّج، وتقرأه
+    // [updateDiagnosticPopup] لعرض نص الرسالة عندما يقف المؤشر داخل نطاق تشخيص.
+    private var cachedDiagnosticsByLine: Map<Int, List<RinNativeEditor.Diagnostic>> = emptyMap()
+
+    // --- طي الكود (code folding) ---------------------------------------------------------
+    // النطاق: كتل '{'..'}' الحقيقية (بحسب التلوين النحوي الفعلي، لا مسح نصّي ساذج — فلا تُطابَق
+    // أقواس داخل نصوص/تعليقات) — وهي التي تُشكّل أجسام fun/if/while/for/when — بالإضافة إلى كتل
+    // "وسوم" Rin الخاصة (@container/@section/@view/@element/@loop/@theme/make/... حتى
+    // `.end/<tag>` المطابق فعلياً، عبر [RinContainerTags.buildFoldRegions]، بنفس خوارزمية المكدّس
+    // المستخدَمة أصلاً في "بنية الملف"/فحص توازن الوسوم) بامتداد سطرين فأكثر. الطيّ بصري بحت:
+    // shadowEditable/IME ومنطق الـundo/redo لا يعرفان عنه إطلاقًا — كل ما يتغيّر هو *أي الأسطر
+    // تُرسَم* (onDraw)، *ارتفاع المحتوى* (onMeasure)، و*تحويل اللمس/المؤشر من وإلى y*
+    // (offsetForTouch/yOfLine).
+    /**
+     * كتلة واحدة قابلة للطيّ. [startLine]/[endLine] 0-based لأسطر المحرك الفعلية. [kind] كلمة/وسم
+     * يفهمه Rin نفسه (مثال: "fun"، "if"، "while"، "container"، "view.Column") — مُشتقّ من بنية
+     * الكود الحقيقية لا من تخمين نصّي. [name] اسم العنصر إن أمكن استخراجه (اسم الدالة، اسم
+     * الحاوية...)، وإلا null. [braceCol] غير null فقط لكتل '{' الحقيقية (عمود القوس المفتوح على
+     * [startLine]) — يُستخدَم حصراً لتقييد نقطة تفعيل النقر المزدوج بعد القوس (كتل الوسوم بلا قوس
+     * تسمح بالنقر المزدوج في أي مكان من سطر الوسم نفسه).
+     */
+    private data class FoldRegion(val startLine: Int, val endLine: Int, val kind: String, val name: String?, val braceCol: Int? = null)
+
+    private var foldRegions: Map<Int, FoldRegion> = emptyMap()
+    private var foldedStartLines: MutableSet<Int> = mutableSetOf()
+    /** فهارس أسطر المحرك الفعلية بترتيب العرض من الأعلى للأسفل (تُخفي أسطر أي طيّة مفعَّلة). */
+    private var visibleLines: List<Int> = listOf(0)
+    /** الخريطة العكسية لـ[visibleLines]: رقم سطر فعلي (لا بد أن يكون ظاهرًا) -> رقم صفّه المرسوم. */
+    private var lineToRow: Map<Int, Int> = mapOf(0 to 0)
+
+    /** مستمعو "تغيّر حالة العرض" (Fold/Unfold أو تعديل نصّي يُغيّر عدد/ترتيب الأسطر الظاهرة) —
+     *  نقطة الإعلام الوحيدة التي يعتمد عليها عمود أرقام الأسطر الخارجي ([RinCodeEditorController])
+     *  ليبقى متزامناً تماماً مع أي طيّة (لا يملك هذا الـView عمود الأسطر نفسه). */
+    private val visibleLinesChangeListeners = mutableListOf<() -> Unit>()
+    fun addVisibleLinesChangeListener(listener: () -> Unit) { visibleLinesChangeListeners.add(listener) }
+    private fun notifyVisibleLinesChanged() { for (l in visibleLinesChangeListeners) l() }
+
+    /** مستمعو "تغيّر حالة المؤشر/التحديد" — يُستدعَون من [afterEngineMutation] في كل تعديل/تحريك
+     *  مؤشر، ليعرض المستدعي (مثال: شريط حالة "Ln X, Col Y") الموضع الحالي بلا استقصاء مستمر. */
+    private val cursorStateChangeListeners = mutableListOf<() -> Unit>()
+    fun addCursorStateChangeListener(listener: () -> Unit) { cursorStateChangeListeners.add(listener) }
+    private fun notifyCursorStateChanged() { for (l in cursorStateChangeListeners) l() }
+
+    /** يعيد بناء ذاكرتي التلوين والتشخيص معًا من المحرك — نقطة واحدة بدل تكرار نفس الحلقتين
+     *  في init/afterEngineMutation/setLanguage (كانت التشخيصات غائبة تمامًا سابقًا). [text] يُمرَّر
+     *  من المستدعي إن كان محفوظاً أصلاً (afterEngineMutation) لتفادي استدعاء JNI مكرِّر لجلب نص
+     *  المستند كاملاً؛ عند غيابه (مثال: setLanguage) يُجلَب هنا مرّة واحدة فقط. */
+    private fun rebuildHighlightAndDiagnosticCaches(text: String = engine.getText()) {
+        val highlights = engine.getHighlights()
+        val byLine = HashMap<Int, MutableList<RinNativeEditor.Highlight>>()
+        for (h in highlights) byLine.getOrPut(h.line) { mutableListOf() }.add(h)
+        cachedHighlightsByLine = byLine
+
+        if (AppSettings.isLiveDiagnostics(context)) {
+            val diagByLine = HashMap<Int, MutableList<RinNativeEditor.Diagnostic>>()
+            for (d in engine.getDiagnostics()) diagByLine.getOrPut(d.line) { mutableListOf() }.add(d)
+            cachedDiagnosticsByLine = diagByLine
+        } else {
+            cachedDiagnosticsByLine = emptyMap()
+        }
+
+        recomputeFoldRegions(highlights, text)
+    }
+
+    // كلمات مفتاحية Rin الحقيقية التي تفتتح كتلة '{'..'}' — تُستخدَم فقط لتسمية شريحة الطيّ
+    // (عرض بحت، لا تؤثر على المطابقة نفسها التي تعتمد كلياً على تلوين الـlexer الحقيقي أعلاه).
+    // "fun" يُلتقَط اسمه أيضاً لعرضه في الشريحة؛ البقية بلا اسم قابل للاستخراج نصّياً بأمان.
+    private val braceHeaderPatterns = listOf(
+        "fun" to Regex("""^fun\s+([A-Za-z_][A-Za-z0-9_]*)\s*\("""),
+        "if" to Regex("""^if\s*\("""),
+        "while" to Regex("""^while\s*\("""),
+        "for" to Regex("""^for\s*\("""),
+        "when" to Regex("""^when\s*\("""),
+        "otherwise" to Regex("""^\}?\s*otherwise\b"""),
+        "else" to Regex("""^\}?\s*else\b""")
+    )
+
+    /** يستنتج (كلمة الكتلة، اسمها إن وُجد) من نص سطر بداية كتلة '{' — عرض بحت لشريحة الطيّ. */
+    private fun braceHeaderInfo(lineText: String): Pair<String, String?> {
+        val trimmed = lineText.trimStart()
+        for ((kind, regex) in braceHeaderPatterns) {
+            val m = regex.find(trimmed) ?: continue
+            return kind to (if (kind == "fun") m.groupValues.getOrNull(1)?.takeIf { it.isNotEmpty() } else null)
+        }
+        return "block" to null
+    }
+
+    /**
+     * يبني خريطة الكتل القابلة للطيّ من مصدرين مستقلّين تماماً (لا تعارض ممكن بينهما: سطر فتح
+     * وسم Rin لا يحوي أبداً '{' بداية كتلة في نفس الوقت في أي صياغة رسمية للغة):
+     *  1) كتل '{'..'}' الحقيقية (fun/if/while/for/when وأي كتلة عامة أخرى) — عبر مطابقة-كومة
+     *     (stack) على [RinNativeEditor.Highlight] المصنَّفة BRACKET من الـlexer الحقيقي فقط
+     *     (فلا تُطابَق أقواس داخل نصوص/تعليقات إطلاقاً).
+     *  2) كتل وسوم Rin (@container/@section/@view/...) — عبر [RinContainerTags.buildFoldRegions]
+     *     (نفس خوارزمية المكدّس المستخدَمة في "بنية الملف"/فحص توازن الوسوم بالضبط).
+     * أي طيّة محفوظة سابقاً لسطر لم يعد بداية كتلة صالحة بعد التعديل تُزال تلقائياً. كود غير
+     * مكتمل أو أقواس/وسوم غير مغلقة: كلا المصدرين يتجاهلان بصمت أي فتح بلا إغلاق مطابق حتى نهاية
+     * المستند (لا استثناء، لا تخمين) — فلا تُصدَر له أي كتلة طيّ إطلاقاً.
+     */
+    private fun recomputeFoldRegions(highlights: List<RinNativeEditor.Highlight>, text: String) {
+        val stack = ArrayDeque<Pair<Int, Int>>() // (line, col) لكل '{' غير مُطابَق بعد
+        val regions = HashMap<Int, FoldRegion>()
+        for (h in highlights) {
+            if (h.kind != HighlightKind.BRACKET) continue
+            val lineText = engine.getLine(h.line)
+            val col = h.startCol
+            if (col !in lineText.indices) continue
+            when (lineText[col]) {
+                '{' -> stack.addLast(h.line to col)
+                '}' -> {
+                    val open = stack.removeLastOrNull() ?: continue
+                    if (h.line > open.first) {
+                        val (kind, name) = braceHeaderInfo(engine.getLine(open.first))
+                        regions[open.first] = FoldRegion(open.first, h.line, kind, name, braceCol = open.second)
+                    }
+                }
+            }
+        }
+        for (tagRegion in RinContainerTags.buildFoldRegions(text)) {
+            if (tagRegion.endLine > tagRegion.startLine) {
+                regions[tagRegion.startLine] = FoldRegion(tagRegion.startLine, tagRegion.endLine, tagRegion.displayKind, tagRegion.name)
+            }
+        }
+        foldRegions = regions
+        foldedStartLines.retainAll(regions.keys)
+        recomputeContainerBlocks(text)
+        recomputeVisibleLines()
+    }
+
+    /** يبني قائمة الأسطر الظاهرة الفعلية بترتيب العرض — كل سطر بداية طيّة مفعَّلة يظهر هو
+     *  نفسه (ليحمل شريحة الطيّ المرسومة في [onDraw])، وتُخفى كل الأسطر من (بدايتها+1) حتى نهايتها.
+     *  حالة الطيّ نفسها ([foldedStartLines]) تبقى محفوظة بلا مساس خلال هذا الاستدعاء — فتُحافَظ
+     *  تلقائياً أثناء أي تنقّل/بحث/تمرير داخل نفس الملف، وتُمسَح صراحةً فقط عند فتح مستند آخر
+     *  بالكامل (انظر [setText]). */
+    private fun recomputeVisibleLines() {
+        val lc = engine.lineCount()
+        val list = ArrayList<Int>(lc)
+        val reverse = HashMap<Int, Int>(lc)
+        var line = 0
+        while (line < lc) {
+            reverse[line] = list.size
+            list.add(line)
+            val closeLine = if (line in foldedStartLines) foldRegions[line]?.endLine else null
+            line = if (closeLine != null) closeLine + 1 else line + 1
+        }
+        visibleLines = list
+        lineToRow = reverse
+        notifyVisibleLinesChanged()
+    }
+
+    /** يُلغي طيّ أي كتلة يقع [line] داخل جسدها المخفي (وليس سطر بدايتها) — يُستدعى من
+     *  [afterEngineMutation] عند كل تحريك/تعديل مؤشر (أسهم، بحث، الذهاب لسطر، تراجع...) حتى لا
+     *  يستقر المؤشر أبدًا داخل نص غير مرئي بصمت. رخيصة الثمن: عدد الطيّات المفتوحة عادة صغير جدًا. */
+    private fun autoUnfoldContaining(line: Int) {
+        if (foldedStartLines.isEmpty()) return
+        var anyChanged = false
+        val it = foldedStartLines.iterator()
+        while (it.hasNext()) {
+            val start = it.next()
+            val end = foldRegions[start]?.endLine ?: continue
+            if (line in (start + 1)..end) { it.remove(); anyChanged = true }
+        }
+        if (anyChanged) recomputeVisibleLines()
+    }
+
+    /** يبدّل حالة طيّ الكتلة التي يبدأ عندها [line] (لا تفعل شيئًا إن لم يكن [line] بداية كتلة
+     *  قابلة للطيّ). تُستدعى من الإيماءة في [gestureDetector.onDoubleTap] ومن عمود أرقام الأسطر
+     *  الخارجي عبر [toggleFoldAtVisibleRow]. تطيّ *هذه* الكتلة فقط بمستواها الحالي — أي كتل
+     *  متداخلة بداخلها تحتفظ بحالة طيّها الخاصة (تُخفى فقط مؤقتاً مع طيّ والدها، لا تُطوى/تُفكّ
+     *  قسراً)، وأي كتل والدة تبقى كما هي أيضاً؛ هذا بالضبط سلوك "طيّ المستوى الحالي فقط". */
+    private fun toggleFold(line: Int) {
+        if (line !in foldRegions) return
+        if (!foldedStartLines.add(line)) foldedStartLines.remove(line)
+        // إن أصبح المؤشر الآن داخل جسد مخفي (كان قبل الطيّ على سطر انكشف الآن ضمنها)، أعده لسطر
+        // البداية الظاهر، تمامًا كسلوك المحررات الاحترافية عند طيّ كتلة يقف المؤشر داخلها.
+        val cur = engine.getCursor()
+        val end = foldRegions[line]?.endLine
+        if (line in foldedStartLines && end != null && cur.line in (line + 1)..end) {
+            engine.setCursor(line, engine.getLine(line).length, false)
+        }
+        recomputeVisibleLines()
+        requestLayout()
+        invalidate()
+    }
+
+    /** يبدّل حالة طيّ صفّ العرض [row] (0-based من أعلى المحتوى الظاهر حالياً) — يُستخدَم من عمود
+     *  أرقام الأسطر الخارجي عند النقر على مؤشر ▾/▸ بجانب سطر. يُرجع true إن كان [row] فعلاً بداية
+     *  كتلة قابلة للطيّ (وبالتالي تغيّرت الحالة)، و false غير ذلك (لا شيء يحدث). */
+    fun toggleFoldAtVisibleRow(row: Int): Boolean {
+        val line = visibleLines.getOrNull(row) ?: return false
+        if (line !in foldRegions) return false
+        if (AppSettings.isHapticFeedback(context)) performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
+        toggleFold(line)
+        return true
+    }
+
+    /** يطوي كل الكتل القابلة للطيّ في المستند بكل مستوياتها (Fold All) — لا شيء إن لم توجد أي
+     *  كتلة قابلة للطيّ أو كانت جميعها مطويّة أصلاً. */
+    fun foldAll() {
+        if (foldRegions.isEmpty() || foldedStartLines.containsAll(foldRegions.keys)) return
+        foldedStartLines.addAll(foldRegions.keys)
+        // المؤشر قد يستقر الآن داخل جسد مخفي (كان ظاهراً قبل الطيّ)؛ أعده لأقرب سطر بداية كتلة
+        // ظاهر يحتويه، بنفس منطق toggleFold أعلاه.
+        val cur = engine.getCursor()
+        val enclosing = enclosingFoldStart(cur.line)
+        if (enclosing != null) engine.setCursor(enclosing, engine.getLine(enclosing).length, false)
+        recomputeVisibleLines()
+        requestLayout()
+        invalidate()
+    }
+
+    /** يفكّ كل الطيّات الحالية دفعة واحدة (Unfold All). */
+    fun unfoldAll() {
+        if (foldedStartLines.isEmpty()) return
+        foldedStartLines.clear()
+        recomputeVisibleLines()
+        requestLayout()
+        invalidate()
+    }
+
+    /**
+     * يطوي "المستوى الحالي" فقط: الكتلة التي يبدأ عندها المؤشر إن كان واقفاً على سطر بداية كتلة
+     * قابلة للطيّ بالضبط، وإلا أقرب/أضيق كتلة تحتوي سطر المؤشر حالياً (لا كل الكتل الوالدة معها
+     * دفعة واحدة كما يفعل [foldAll]) — تماماً مطلب "السماح بطي المستوى الحالي فقط". لا شيء إن لم
+     * توجد أي كتلة تحتوي المؤشر، أو كانت تلك الكتلة مطويّة أصلاً.
+     */
+    fun foldCurrentLevel() {
+        val cur = engine.getCursor()
+        val target = if (cur.line in foldRegions) cur.line else enclosingFoldStart(cur.line) ?: return
+        if (target in foldedStartLines) return
+        toggleFold(target)
+    }
+
+    /** أضيق كتلة قابلة للطيّ يقع [line] داخل جسدها (وليس بداية أي كتلة) — null إن لم توجد. */
+    private fun enclosingFoldStart(line: Int): Int? {
+        var best: Int? = null
+        var bestSpan = Int.MAX_VALUE
+        for ((start, region) in foldRegions) {
+            if (line in (start + 1)..region.endLine) {
+                val span = region.endLine - start
+                if (span < bestSpan) { bestSpan = span; best = start }
+            }
+        }
+        return best
+    }
+
+    /** أرقام الأسطر الفعلية الظاهرة حالياً (1-based)، بترتيب العرض من الأعلى للأسفل — يستهلكها
+     *  عمود أرقام الأسطر الخارجي (لا يملكه هذا الـView) ليبقى متزامناً تماماً مع أي طيّة نشطة،
+     *  بدل توليد 1..lineCount() تسلسلياً بلا اعتبار للأسطر المخفية. */
+    fun visibleLineNumbers(): List<Int> = visibleLines.map { it + 1 }
+
+    /** مؤشر ▾ (كتلة قابلة للطيّ وظاهرة/مفتوحة)، ▸ (مطويّة)، أو مسافة (سطر عادي بلا كتلة) لكل
+     *  صفّ في [visibleLineNumbers] بنفس الترتيب — يستهلكه عمود أرقام الأسطر الخارجي لرسم "مؤشر
+     *  واضح ▾/▸ بجانب السطر" ملاصقاً لرقمه مباشرةً. */
+    fun visibleFoldMarkers(): List<Char> = visibleLines.map { line ->
+        when {
+            line in foldedStartLines -> '▸'
+            line in foldRegions -> '▾'
+            else -> ' '
+        }
+    }
+
+    /** نص شريحة كتلة مطويّة عند [line]: "⋯ <kind> [<name>] · <عدد الأسطر المخفية>" — مثال:
+     *  "⋯ fun greet · 5" أو "⋯ container my_data · 12" أو "⋯ if · 3" (بلا اسم للكتل الشرطية
+     *  التي لا تحمل اسماً أصلاً). [name] يُقصَّر إن كان طويلاً جداً حتى لا تطغى الشريحة على عرض
+     *  شاشة هاتف ضيّقة. */
+    private fun foldChipLabel(line: Int, region: FoldRegion): String {
+        val hidden = region.endLine - line
+        val name = region.name?.let { truncateForChip(it) }
+        val base = if (name != null) "${region.kind} $name" else region.kind
+        return "⋯ $base · $hidden"
+    }
+
+    private fun truncateForChip(s: String, max: Int = 24): String =
+        if (s.length <= max) s else s.take(max - 1) + "…"
+
+    // بيانات التعديل المُلتقَطة في onTextChanged وتُنفَّذ فعليًا في afterTextChanged (انظر
+    // الشرح أسفل shadowWatcher). pendingEditStart = -1 يعني "لا تعديل معلَّق حاليًا".
+    private var pendingEditStart = -1
+    private var pendingEditBefore = 0
+    private var pendingEditText = ""
+
+    private val shadowWatcher = object : TextWatcher {
+        override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+        override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+            if (suppressForward || s == null) return
+            // مهم جدًا: لا نستدعي routeShadowEdit (وبالتالي afterEngineMutation، الذي يعيد كتابة
+            // shadowEditable كاملاً عبر replace()) من هنا. onTextChanged يُستدعى من *منتصف*
+            // عملية replace() الأصلية القادمة من IME (BaseInputConnection.commitText/
+            // deleteSurroundingText) على نفس shadowEditable — أي أن استدعاء .replace() آخر على
+            // نفس الكائن الآن هو تعديل متداخل (reentrant) في منتصف تعديل لم يكتمل بعد. هذا بالضبط
+            // ما كان يسبب "الكل": حذف أكثر/أقل من حرف، كتابة تتكرر أو حروف تنقلب، وتجمّد/إغلاق
+            // التطبيق أحيانًا — لأن SpannableStringBuilder وBaseInputConnection لا يضمنان سلوكًا
+            // صحيحًا عند تعديل الأمتداد (spans) للكائن نفسه أثناء تعديله. الحل القياسي في Android:
+            // نلتقط بيانات التغيير هنا فقط (قراءة، بلا أي كتابة)، ونُنفّذ التوجيه الفعلي للمحرك في
+            // afterTextChanged، بعد أن يكون Android قد أنهى تعديله الأصلي بالكامل.
+            pendingEditStart = start
+            pendingEditBefore = before
+            pendingEditText = s.subSequence(start, start + count).toString()
+        }
+        override fun afterTextChanged(s: Editable?) {
+            if (suppressForward || pendingEditStart < 0) return
+            val start = pendingEditStart
+            val before = pendingEditBefore
+            val insertedPiece = pendingEditText
+            pendingEditStart = -1
+            routeShadowEdit(insertedPiece, start, before)
+        }
+    }
+
+    // --- مستمعو تغيّر النص الخارجيون (تطابقًا مع addTextChangedListener على EditText قديمًا) ---
+
+    private val externalWatchers = mutableListOf<TextWatcher>()
+    fun addTextChangedListener(watcher: TextWatcher) { externalWatchers.add(watcher) }
+    fun removeTextChangedListener(watcher: TextWatcher) { externalWatchers.remove(watcher) }
+
+    private fun notifyExternalWatchers(old: String, new: String) {
+        for (w in externalWatchers) {
+            w.beforeTextChanged(old, 0, old.length, new.length)
+            w.onTextChanged(new, 0, old.length, new.length)
+            w.afterTextChanged(shadowEditable)
+        }
+    }
+
+    /**
+     * يطبّق [newText] على [target] بأقل تعديل ممكن (بادئة/لاحقة مشتركة تبقى بلا مساس) بدل محو
+     * النص بالكامل واستبداله دومًا. كان الكود القديم يستدعي `shadowEditable.replace(0, length,
+     * newText)` عند *كل* ضغطة مفتاح — أي إعادة كتابة المستند بأكمله من الصفر مهما كانت ضخامته
+     * وحجم التعديل الفعلي (حرف واحد غالبًا). هذا يُبطل أي composing span فعّال يتتبّعه IME
+     * (تصحيح تلقائي/إكمال Gboard) لأنه ببساطة span على *نفس* الكائن يُمحى بالكامل، فيضطر IME أحيانًا
+     * لإعادة إرسال جزء من الحرف/الكلمة الأخيرة من جديد — وهذا أصل شكوى الكتابة "تتكرر"/تنسخ نفسها
+     * وغير السلسة، خصوصًا في الملفات الأطول (نسخ SpannableStringBuilder كامل عند كل حرف مكلف
+     * فعليًا). حساب بادئة/لاحقة مشتركة يجعل النطاق المُعدَّل فعليًا بحجم التغيير الحقيقي فقط
+     * (عادة حرف واحد)، فيبقى باقي الكائن (وأي حالة IME مرتبطة به) مستقرًا بلا مساس.
+     */
+    private fun applyMinimalDiff(target: Editable, oldText: String, newText: String) {
+        if (oldText == newText) return
+        if (target.length != oldText.length) {
+            // شبكة أمان: لا يُفترض حدوث هذا بعد تصحيح afterEngineMutation لتمرير محتوى target
+            // الفعلي بدل lastKnownText (انظر تعليق تلك النقطة) — لكن لو انحرف target عن oldText
+            // لأي سبب مستقبلي غير متوقَّع، نُعيد كتابته بالكامل بدل حساب نطاق [prefix, oldEnd) قد
+            // يتجاوز طول target الفعلي ويرمي IndexOutOfBoundsException ويُغلق التطبيق بالكامل (هذا
+            // بالضبط ما حدث في تقرير عطل "replace ends beyond length" أثناء عملية القص). أسوأ نتيجة
+            // هنا فقدان composing span نشط لضغطة واحدة، بدل عطل كامل للتطبيق.
+            target.replace(0, target.length, newText)
+            return
+        }
+        val maxCommon = min(oldText.length, newText.length)
+        var prefix = 0
+        while (prefix < maxCommon && oldText[prefix] == newText[prefix]) prefix++
+        var oldEnd = oldText.length
+        var newEnd = newText.length
+        while (oldEnd > prefix && newEnd > prefix && oldText[oldEnd - 1] == newText[newEnd - 1]) {
+            oldEnd--; newEnd--
+        }
+        target.replace(prefix, oldEnd, newText.substring(prefix, newEnd))
+    }
+
+    // --- تزامن ثنائي الاتجاه بين محرك C++ وواجهة Android/shadow -----------------
+
+    /** يُستدعى بعد أي عملية تُغيّر حالة المحرك مباشرة (لمس، مفاتيح، أوامر المتحكم...). */
+    private fun afterEngineMutation() {
+        val newText = engine.getText()
+        val old = lastKnownText
+        val changed = newText != old
+        if (changed) {
+            suppressForward = true
+            // نقارن ضد محتوى shadowEditable الفعلي الحالي (toString())، لا ضد lastKnownText
+            // المخزَّن: عند الوصول من routeShadowEdit يكون IME قد عدَّل shadowEditable هذا مباشرة
+            // *قبل* هذا الاستدعاء (لأن getEditable() تُعيد shadowEditable نفسه لـ InputConnection)،
+            // فيصبح lastKnownText (نص المحرك القديم قبل التعديل) غير مطابق إطلاقًا لمحتوى
+            // shadowEditable الفعلي في تلك اللحظة. حساب الفرق ضد lastKnownText وتطبيقه على
+            // shadowEditable في هذه الحالة كان يُعيد تطبيق تعديل IME نفسه فوق تعديل IME الأصلي
+            // (ازدواج)، فيُدخل حروفًا مكرَّرة أو يحذف حروفًا زائدة بصمت — والخطأ يتراكم مع كل ضغطة
+            // مفتاح حتى ينحرف طول shadowEditable الفعلي عن الطول الذي يتوقّعه هذا الكود، فتنفجر
+            // IndexOutOfBoundsException لاحقًا في عملية غير ذات صلة إطلاقًا (كما حدث هنا عند القص:
+            // applyMinimalDiff استخدمت طول lastKnownText المنحرف أصلاً من ضغطات سابقة). المقارنة
+            // ضد shadowEditable.toString() نفسه تبقى صحيحة في كل الحالات: لم يُعدَّل بعد (أزرار
+            // شريط الأدوات/قص/لصق/الانتقال لسطر) فيطابق lastKnownText تمامًا فيُعطي نفس النتيجة
+            // كالسابق، أو عُدِّل بالفعل من IME فيطابق newText جزئيًا (مثل إغلاق قوس تلقائي أضافه
+            // المحرّك ولم يكتبه IME) فيُكمِّل الفرق الناقص فقط بدل إعادة كتابة ما كُتب أصلاً.
+            applyMinimalDiff(shadowEditable, shadowEditable.toString(), newText)
+            suppressForward = false
+            lastKnownText = newText
+            // التلوين النحوي يمسح كامل المستند (مكلف نسبيًا على ملف ضخم) — نُعيد حسابه فقط عندما
+            // يتغيّر النص فعليًا، لا عند كل رسم (وميض المؤشر مثلاً يستدعي invalidate() مرتين
+            // بالثانية بلا أي تغيير نصّي، فيقرأ القيمة المخزَّنة مباشرة بلا أي تكلفة). نُمرِّر
+            // newText مباشرة (بدل ترك rebuildHighlightAndDiagnosticCaches تجلبه من جديد عبر JNI)
+            // لأنه محفوظ أصلاً هنا فوق.
+            rebuildHighlightAndDiagnosticCaches(newText)
+            recomputeContentSize()
+        }
+        // مطابقة الأقواس تعتمد على موضع المؤشر (يتغيّر أيضًا بلا تعديل نصّي، كالأسهم)، فتُحسَب في
+        // كل استدعاء لهذه الدالة (رخيصة الثمن)، لكن أبدًا داخل onDraw نفسها.
+        cachedBracketInfo = computeBracketMatchForDraw()
+
+        val cur = engine.getCursor()
+        autoUnfoldContaining(cur.line)
+        val flat = flatOffsetOf(newText, cur.line, cur.col).coerceIn(0, shadowEditable.length)
+        Selection.setSelection(shadowEditable, flat)
+        if (changed) {
+            notifyExternalWatchers(old, newText)
+            updateSuggestionPopup()
+            dismissHoverDoc()
+        } else {
+            intelliPopup.dismiss()
+            updateSignatureHelp()
+        }
+        updateDiagnosticPopup()
+        // requestLayout() يعيد تشغيل onMeasure (ومسح المستند بالكامل)؛ لا داعٍ له إطلاقًا عند
+        // تغيّر المؤشر/التحديد فقط بلا تغيّر في النص — invalidate() وحدها تكفي لإعادة الرسم.
+        if (changed) requestLayout()
+        invalidate()
+        scrollCursorIntoView()
+        notifyCursorStateChanged()
+    }
+
+    /**
+     * يطلب من أسلاف هذا الـView القابلين للتمرير (HorizontalScrollView الأفقي وScrollView
+     * العمودي المحيطين به في activity_main.xml) تمرير أنفسهم تلقائيًا حتى يبقى المؤشر ظاهرًا —
+     * تمامًا كما يفعل أي محرر نصوص طبيعي عند الكتابة أو التنقّل بالأسهم يمينًا/يسارًا قرب حافة
+     * الشاشة. لم يكن هناك أي منطق كهذا سابقًا (لا عمودي إلا عند "goToLine"/البحث، ولا أفقي
+     * إطلاقًا)، فكان المؤشر يخرج عن حدود الرؤية بصمت أثناء الكتابة العادية — وهذا هو أصل شكوى
+     * "عدم سلاسة الحركة يمينًا ويسارًا". يُستخدم requestRectangleOnScreen القياسي في Android بدل
+     * التمرير اليدوي لأنه يتعاون تلقائيًا مع أي عدد من الحاويات القابلة للتمرير المتداخلة.
+     */
+    private fun scrollCursorIntoView() {
+        if (dragging) return // لا نُحرّك الشاشة تحت إصبع المستخدم أثناء السحب الفعلي لتحديد نص
+        val cur = engine.getCursor()
+        val lineText = engine.getLine(cur.line)
+        val cx = paddingLeft + textPaint.measureText(lineText, 0, cur.col.coerceIn(0, lineText.length))
+        val cyTop = yOfLine(cur.line)
+        val margin = charWidth * 2f // هامش أمان صغير حتى لا يلتصق المؤشر بحافة الشاشة تمامًا
+        val rect = android.graphics.Rect(
+            (cx - margin).toInt().coerceAtLeast(0),
+            cyTop,
+            (cx + margin).toInt(),
+            (cyTop + lineHeight).toInt()
+        )
+        requestRectangleOnScreen(rect, false)
+    }
+
+    /**
+     * يوجّه تعديلاً وصل من IME (عبر [shadowWatcher]) إلى المحرك بأذكى طريقة ممكنة.
+     * يُستدعى الآن من afterTextChanged (بعد اكتمال تعديل shadowEditable الأصلي بالكامل)، لا من
+     * onTextChanged — انظر التعليق أعلى [shadowWatcher] لسبب ذلك. [insertedPiece] هو النص الملتقَط
+     * مسبقًا في onTextChanged (قراءة فقط، قبل أي كتابة)، و[count] بات مشتقًا من طوله مباشرة.
+     */
+    private fun routeShadowEdit(insertedPiece: String, start: Int, before: Int) {
+        val oldText = lastKnownText
+        val count = insertedPiece.length
+        val cursorFlatBefore = flatOffsetOf(oldText, engine.getCursor().line, engine.getCursor().col)
+
+        if (before == 0 && count == 1 && start == cursorFlatBefore) {
+            // كتابة حرف واحد عند المؤشر مباشرة: مرّرها عبر المسار "الذكي" (إغلاق أقواس/مسافة تلقائية)
+            engine.insertText(insertedPiece, smart = AppSettings.isAutoCloseBrackets(context) || AppSettings.isAutoIndent(context))
+        } else if (before == 1 && count == 0 && start + before == cursorFlatBefore) {
+            // حذف حرف واحد قبل المؤشر مباشرة: Backspace ذكي (يحذف زوج قوس تلقائي بالكامل عند اللزوم)
+            engine.deleteBackward()
+        } else if (before == 1 && count == 0 && start == cursorFlatBefore) {
+            // حذف حرف واحد بعد المؤشر مباشرة: Delete للأمام
+            engine.deleteForward()
+        } else {
+            // حالة عامة: لصق، إكمال تلقائي/تصحيح تلقائي من IME، أو استبدال تحديد
+            val (l1, c1) = flatOffsetToPos(oldText, start)
+            val (l2, c2) = flatOffsetToPos(oldText, start + before)
+            engine.replaceRange(l1, c1, l2, c2, insertedPiece)
+        }
+        afterEngineMutation()
+    }
+
+    /** فهرس مسطّح (flat) داخل نص كامل يفصل أسطره بـ'\n' لموضع (line, charCol) — لا تحويل بايتات هنا. */
+    private fun flatOffsetOf(text: String, line: Int, col: Int): Int {
+        val lines = text.split("\n")
+        var offset = 0
+        val clampedLine = line.coerceIn(0, max(0, lines.size - 1))
+        for (i in 0 until clampedLine) offset += lines[i].length + 1
+        val lineText = lines.getOrElse(clampedLine) { "" }
+        offset += col.coerceIn(0, lineText.length)
+        return offset
+    }
+
+    private fun flatOffsetToPos(text: String, flatOffset: Int): Pair<Int, Int> {
+        val lines = text.split("\n")
+        var remaining = flatOffset.coerceIn(0, text.length)
+        for ((i, l) in lines.withIndex()) {
+            if (remaining <= l.length) return i to remaining
+            remaining -= (l.length + 1)
+        }
+        val lastIdx = max(0, lines.size - 1)
+        val lastLine = lines.getOrElse(lastIdx) { "" }
+        return lastIdx to lastLine.length
+    }
+
+    // --- واجهة عامة متوافقة مع الاستخدام القديم (android.widget.EditText-like) -------------
+
+    /** نص المحرر الحالي (مطابق لـ `EditText.text.toString()` قديمًا). */
+    val text: CharSequence get() = shadowEditable
+
+    fun setText(newText: CharSequence) {
+        engine.setText(newText.toString())
+        // مستند جديد بالكامل (فتح ملف آخر): أي طيّة محفوظة من المستند السابق تخصّ سطورًا مختلفة
+        // تمامًا دلاليًا حتى لو تطابقت أرقامها صدفةً مع كتل صالحة في المستند الجديد — امسحها
+        // صراحةً بدل ترك retainAll في [recomputeFoldRegions] تُبقيها خطأً بحكم تطابق رقمي عرضي.
+        foldedStartLines.clear()
+        afterEngineMutation()
+    }
+
+    /** يبدّل لغة التلوين النحوي الحالية (يُستدعى عند فتح ملف جديد بامتداد مختلف، مثال: "kt"، "cpp"). */
+    fun setLanguage(extension: String) {
+        // .indsin محتواه صياغة Rin نفسها (يمرّ بنفس Lexer) فيُعامَل كـ Rin في الإكمال.
+        fenceLang = extension.lowercase().removePrefix(".").ifEmpty { "rin" }
+        suggestionLanguage = if (extension.lowercase().removePrefix(".") == "indsin") SyntaxLanguage.RIN
+        else SyntaxLanguage.forExtension(extension)
+        engine.setLanguage(extension)
+        rebuildHighlightAndDiagnosticCaches()
+        invalidate()
+    }
+
+    fun selectAll() {
+        val lastLine = engine.lineCount() - 1
+        engine.setSelection(0, 0, lastLine, engine.getLine(lastLine).length)
+        afterEngineMutation()
+    }
+
+    fun setTextSize(unit: Int, size: Float) {
+        textPaint.textSize = TypedValue.applyDimension(unit, size, resources.displayMetrics)
+        foldChipPaint.textSize = textPaint.textSize
+        recomputeMetrics()
+        recomputeContentSize() // أبعاد كل الأسطر تتغيّر مع حجم الخط، لا فقط عند تعديل النص
+        requestLayout()
+        invalidate()
+    }
+
+    /** بالبكسل، تطابقًا مع `EditText.textSize` قديمًا. */
+    val textSize: Float get() = textPaint.textSize
+
+    private fun spToPx(sp: Float): Float = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, sp, resources.displayMetrics)
+
+    // --- تهيئة ----------------------------------------------------------
+
+    init {
+        isFocusable = true
+        isFocusableInTouchMode = true
+        isClickable = true
+        recomputeMetrics()
+        lastKnownText = engine.getText()
+        shadowEditable.replace(0, shadowEditable.length, lastKnownText)
+        Selection.setSelection(shadowEditable, 0)
+        // هذه هي الطريقة القياسية التي يسجّل بها Android نفسه TextWatcher على Editable
+        // (انظر TextView.addTextChangedListener): الـwatcher يُرفَق كـ span عادي بامتداد
+        // (0, length) وبعلامة SPAN_INCLUSIVE_INCLUSIVE، فيستدعيه SpannableStringBuilder
+        // تلقائيًا عند أي replace() — بلا حاجة لأي آلية أخرى.
+        shadowEditable.setSpan(shadowWatcher, 0, shadowEditable.length, Editable.SPAN_INCLUSIVE_INCLUSIVE)
+        // تعبئة أولية للذاكرة المؤقتة (cache) قبل أول onDraw، حتى لا يُرسَم بلا تلوين للحظة.
+        rebuildHighlightAndDiagnosticCaches(lastKnownText)
+        cachedBracketInfo = computeBracketMatchForDraw()
+        recomputeContentSize()
+    }
+
+    // --- القياس والرسم ----------------------------------------------------
+
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        // لا مسح للمستند هنا — القيم مُحدَّثة مسبقًا في recomputeContentSize() (تُستدعى فقط عند
+        // تغيّر النص أو حجم الخط فعليًا، انظر afterEngineMutation/setTextSize).
+        val desiredWidth = (cachedMaxLineWidth + paddingLeft + paddingRight + charWidth).roundToInt()
+        val desiredHeight = ((visibleLines.size * lineHeight) + paddingTop + paddingBottom).roundToInt()
+        setMeasuredDimension(
+            resolveSizeAndState(desiredWidth, widthMeasureSpec, 0),
+            resolveSizeAndState(desiredHeight, heightMeasureSpec, 0)
+        )
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        super.onDraw(canvas)
+        val cur = engine.getCursor()
+        val sel = engine.getSelection()
+        val highlightsByLine = cachedHighlightsByLine
+        val bracketInfo = if (AppSettings.isBracketMatching(context)) cachedBracketInfo else null
+        val showWhitespace = AppSettings.isShowWhitespace(context)
+        val clip = canvas.clipBounds
+        val containerStyleOn = AppSettings.isContainerStyle(context)
+
+        var y = paddingTop.toFloat()
+        for (line in visibleLines) {
+            val lineText = engine.getLine(line)
+            val baseline = y - ascent
+
+            // ستايل كتل الحاويات (أسفل كل شيء: السطر الحالي والتحديد والنص تُرسم فوقه)
+            if (containerStyleOn) drawContainerBands(canvas, line, y)
+
+            // تظليل السطر الحالي
+            if (line == cur.line && !sel.hasSelection && AppSettings.isCurrentLineHighlight(context)) {
+                canvas.drawRect(0f, y, width.toFloat(), y + lineHeight, currentLinePaint)
+            }
+
+            // تظليل التحديد
+            if (sel.hasSelection && line in sel.start.line..sel.end.line) {
+                val fromCol = if (line == sel.start.line) sel.start.col else 0
+                val toCol = if (line == sel.end.line) sel.end.col else lineText.length
+                val x1 = paddingLeft + textPaint.measureText(lineText, 0, fromCol.coerceIn(0, lineText.length))
+                val x2 = paddingLeft + (if (line == sel.end.line) textPaint.measureText(lineText, 0, toCol.coerceIn(0, lineText.length)) else textPaint.measureText(lineText) + charWidth)
+                canvas.drawRect(x1, y, max(x1, x2), y + lineHeight, selectionPaint)
+            }
+
+            // وميض لحظي للنص الملصوق (يتلاشى خلال ~0.5 ث) ليُرى بوضوح ما الذي أُدرج
+            val ff = flashFrom; val ft = flashTo
+            if (ff != null && ft != null && line in ff.line..ft.line) {
+                val fFrom = if (line == ff.line) ff.col else 0
+                val fTo = if (line == ft.line) ft.col else lineText.length
+                val fx1 = paddingLeft + textPaint.measureText(lineText, 0, fFrom.coerceIn(0, lineText.length))
+                val fx2 = paddingLeft + (if (line == ft.line) textPaint.measureText(lineText, 0, fTo.coerceIn(0, lineText.length)) else textPaint.measureText(lineText) + charWidth)
+                if (fx2 > fx1) canvas.drawRect(fx1, y, fx2, y + lineHeight, flashPaint)
+            }
+
+            // تظليل القوس المطابق/الخاطئ
+            bracketInfo?.let { (aLine, aCharCol, bLineOrNeg, bCharCol, matched) ->
+                if (line == aLine) {
+                    val x1 = paddingLeft + textPaint.measureText(lineText, 0, aCharCol)
+                    val x2 = paddingLeft + textPaint.measureText(lineText, 0, aCharCol + 1)
+                    canvas.drawRect(x1, y, x2, y + lineHeight, if (matched) bracketMatchPaint else bracketErrorPaint)
+                }
+                if (matched && line == bLineOrNeg) {
+                    val bLineText = engine.getLine(bLineOrNeg)
+                    val x1 = paddingLeft + textPaint.measureText(bLineText, 0, bCharCol)
+                    val x2 = paddingLeft + textPaint.measureText(bLineText, 0, bCharCol + 1)
+                    canvas.drawRect(x1, y, x2, y + lineHeight, bracketMatchPaint)
+                }
+            }
+
+            // تظليل تطابقات البحث
+            findMatches?.let { matches ->
+                for (m in matches) {
+                    if (m.line != line) continue
+                    val x1 = paddingLeft + textPaint.measureText(lineText, 0, m.startCol.coerceIn(0, lineText.length))
+                    val x2 = paddingLeft + textPaint.measureText(lineText, 0, m.endCol.coerceIn(0, lineText.length))
+                    canvas.drawRect(x1, y, x2, y + lineHeight, findMatchPaint)
+                }
+            }
+
+            // النص الملوَّن نحويًا
+            drawHighlightedLine(canvas, lineText, if (AppSettings.isSyntaxHighlighting(context)) highlightsByLine[line] else null, paddingLeft.toFloat(), baseline)
+            if (containerStyleOn && !(sel.hasSelection && line in sel.start.line..sel.end.line)) {
+                val onCur = line == cur.line && !sel.hasSelection
+                drawContainerBadge(canvas, line, lineText, y, baseline, onCur)
+                drawContainerClosing(canvas, line, lineText, y, baseline, onCur)
+            }
+
+            // علامات المسافات (للأسطر الظاهرة فقط، حتى لا يكلّف الملف الكبير رسمًا لا يراه أحد)
+            if (showWhitespace && lineText.isNotEmpty() && y + lineHeight >= clip.top && y <= clip.bottom) {
+                drawWhitespaceMarkers(canvas, lineText, y)
+            }
+
+            // خط تشخيص الأخطاء الحي المتعرّج (تحت النص مباشرة، فوق تظليلات الخلفية أعلاه ولا يغطّي الحروف)
+            cachedDiagnosticsByLine[line]?.let { diags ->
+                for (d in diags) {
+                    val from = d.startCol.coerceIn(0, lineText.length)
+                    val to = d.endCol.coerceIn(from, lineText.length)
+                    val x1 = paddingLeft + textPaint.measureText(lineText, 0, from)
+                    val x2 = paddingLeft + textPaint.measureText(lineText, 0, to)
+                    val paint = if (d.severity == RinNativeEditor.DiagnosticSeverity.ERROR) diagnosticErrorPaint else diagnosticWarningPaint
+                    drawWavyUnderline(canvas, x1, max(x2, x1 + charWidth * 0.4f), y + lineHeight - paint.strokeWidth, paint)
+                }
+            }
+
+            // شريحة كتلة مطويّة (تحلّ محل جسدها المخفي بصريًا: السطر الرئيسي يبقى ظاهرًا كالعادة
+            // بجانب هذه الشريحة، التي تُظهر بدورها اسم العنصر (إن أمكن استخراجه من بنية Rin
+            // الفعلية) وعدد الأسطر المخفية خلفه — انظر foldChipLabel).
+            val foldRegion = foldRegions[line]
+            if (foldRegion != null && line in foldedStartLines) {
+                val chipStartX = paddingLeft + textPaint.measureText(lineText) + charWidth * 0.4f
+                val chipText = foldChipLabel(line, foldRegion)
+                val chipPadding = charWidth * 0.5f
+                val chipTextWidth = foldChipPaint.measureText(chipText)
+                val chipRect = android.graphics.RectF(
+                    chipStartX, y + lineHeight * 0.16f,
+                    chipStartX + chipTextWidth + chipPadding * 2f, y + lineHeight * 0.84f
+                )
+                canvas.drawRoundRect(chipRect, chipRect.height() / 2f, chipRect.height() / 2f, foldChipBgPaint)
+                canvas.drawText(chipText, chipRect.left + chipPadding, baseline, foldChipPaint)
+            }
+
+            // مؤشر الكتابة (يومض)
+            if (line == cur.line && !sel.hasSelection && cursorVisible && hasFocus()) {
+                val cx = paddingLeft + textPaint.measureText(lineText, 0, cur.col.coerceIn(0, lineText.length))
+                canvas.drawRect(cx, y, cx + max(2f, resources.displayMetrics.density * 1.5f), y + lineHeight, cursorPaint)
+            }
+
+            y += lineHeight
+        }
+    }
+
+    /** نقطة صغيرة وسط كل مسافة، وسهم أفقي لكل تبويب (الخط أحادي العرض، فموضع الخلية = العمود × charWidth). */
+    private fun drawWhitespaceMarkers(canvas: Canvas, lineText: String, top: Float) {
+        val centerY = top + lineHeight / 2f
+        val dotRadius = max(1f, charWidth * 0.11f)
+        for (col in lineText.indices) {
+            val cellLeft = paddingLeft + col * charWidth
+            when (lineText[col]) {
+                ' ' -> canvas.drawCircle(cellLeft + charWidth / 2f, centerY, dotRadius, whitespacePaint)
+                '\t' -> {
+                    val from = cellLeft + charWidth * 0.15f
+                    val to = cellLeft + charWidth * 0.85f
+                    val head = charWidth * 0.2f
+                    canvas.drawLine(from, centerY, to, centerY, whitespacePaint)
+                    canvas.drawLine(to - head, centerY - head, to, centerY, whitespacePaint)
+                    canvas.drawLine(to - head, centerY + head, to, centerY, whitespacePaint)
+                }
+            }
+        }
+    }
+
+    private fun drawHighlightedLine(
+        canvas: Canvas,
+        lineText: String,
+        spans: List<RinNativeEditor.Highlight>?,
+        startX: Float,
+        baseline: Float
+    ) {
+        if (lineText.isEmpty()) return
+        val styled = AppSettings.isSyntaxFontStyles(context) // مرة لكل سطر (SharedPreferences مخزّنة في الذاكرة)
+        if (spans.isNullOrEmpty()) {
+            textPaint.color = colorDefault
+            canvas.drawText(lineText, startX, baseline, textPaint)
+            return
+        }
+        // رتّب الامتدادات وارسم كل جزء بلونه، وما بينها بلون افتراضي
+        val sorted = spans.sortedBy { it.startCol }
+        var cursor = 0
+        var cursorX = startX
+        var pillSkipUntil = -1 // نهاية حبة @tmpl المرسومة مسبقاً (@ و tmpl امتدادان متجاوران)
+        for ((idx, h) in sorted.withIndex()) {
+            val from = h.startCol.coerceIn(0, lineText.length)
+            val to = h.endCol.coerceIn(0, lineText.length)
+            val gapFrom = cursor.coerceIn(0, lineText.length)
+            if (from > gapFrom) {
+                textPaint.color = colorDefault
+                canvas.drawText(lineText, gapFrom, from, cursorX, baseline, textPaint)
+                cursorX += textPaint.measureText(lineText, gapFrom, from)
+            }
+            if (to > from) {
+                textPaint.color = colorForKind(h.kind)
+                val face = if (styled && codeFontsReady) codeFontFor(h.kind) else null
+                if (face != null) {
+                    if (h.kind == HighlightKind.TEMPLATE_KW && from >= pillSkipUntil) {
+                        var pillTo = to
+                        var k = idx + 1
+                        while (k < sorted.size && sorted[k].kind == HighlightKind.TEMPLATE_KW && sorted[k].startCol == pillTo) {
+                            pillTo = sorted[k].endCol.coerceIn(0, lineText.length); k++
+                        }
+                        pillSkipUntil = pillTo
+                        drawTemplatePill(canvas, cursorX, baseline, pillTo - from, textPaint.color)
+                    }
+                    textPaint.typeface = face
+                    textPaint.isFakeBoldText = false
+                    textPaint.textSkewX = 0f
+                    val ligFace = face === symMedium || face === symSemiBold || face === symBold
+                    if (ligFace) textPaint.fontFeatureSettings = "calt, liga"
+                    canvas.drawText(lineText, from, to, cursorX, baseline, textPaint)
+                    val w = textPaint.measureText(lineText, from, to)
+                    if (ligFace) textPaint.fontFeatureSettings = null
+                    textPaint.typeface = fontRegular
+                    if (h.kind == HighlightKind.TEMPLATE) drawTemplateUnderline(canvas, cursorX, baseline, to - from, textPaint.color)
+                    cursorX += w
+                } else {
+                    applyFontStyle(h.kind, styled)
+                    canvas.drawText(lineText, from, to, cursorX, baseline, textPaint)
+                    cursorX += textPaint.measureText(lineText, from, to)
+                }
+                resetFontStyle()
+            }
+            cursor = h.endCol
+        }
+        val tailFrom = cursor.coerceIn(0, lineText.length)
+        if (tailFrom < lineText.length) {
+            textPaint.color = colorDefault
+            canvas.drawText(lineText, tailFrom, lineText.length, cursorX, baseline, textPaint)
+        }
+    }
+
+    /** يرسم خطًا متعرّجًا (نصف دوائر متتالية صغيرة) من x1 إلى x2 عند ارتفاع baselineY — أسلوب
+     *  المحررات الاحترافية (VS Code/Android Studio) للإشارة إلى خطأ/تحذير دون تغطية النص نفسه. */
+    private fun drawWavyUnderline(canvas: Canvas, x1: Float, x2: Float, baselineY: Float, paint: Paint) {
+        if (x2 <= x1) return
+        val amplitude = resources.displayMetrics.density * 1.1f
+        val step = resources.displayMetrics.density * 2.2f
+        val path = android.graphics.Path()
+        var x = x1
+        var up = true
+        path.moveTo(x, baselineY)
+        while (x < x2) {
+            val nextX = min(x + step, x2)
+            path.quadTo(x + (nextX - x) / 2f, baselineY + (if (up) -amplitude else amplitude), nextX, baselineY)
+            up = !up
+            x = nextX
+        }
+        canvas.drawPath(path, paint)
+    }
+
+    /** نمط الخط لكل مفهوم: عريض للكلمات المفتاحية/التحكّم/الأنواع/الأصناف/تعريف الدوال والوسوم،
+     *  مائل للتعليقات والمعدِّلات والتسميات. يُنفَّذ بـ isFakeBoldText + textSkewX (لا خط بديل) حتى تبقى
+     *  عروض الأحرف مطابقة تماماً لعرض الخلية — فلا ينحرف المؤشر ولا التحديد ولا مواضع الأخطاء. */
+    private fun applyFontStyle(kind: Int, styled: Boolean) {
+        if (!styled) { resetFontStyle(); return }
+        val bold: Boolean
+        val italic: Boolean
+        when (kind) {
+            HighlightKind.KEYWORD, HighlightKind.CONTROL, HighlightKind.TYPE, HighlightKind.CLASS,
+            HighlightKind.FUNCTION_DEF, HighlightKind.AT, HighlightKind.PREPROCESSOR,
+            HighlightKind.IX_TAG, HighlightKind.IX_TAG_CUSTOM, HighlightKind.IX_STRUCT, HighlightKind.IX_STATE -> { bold = true; italic = false }
+            HighlightKind.LABEL, HighlightKind.TEMPLATE -> { bold = true; italic = true }
+            HighlightKind.TEMPLATE_KW -> { bold = true; italic = false }
+            HighlightKind.PARAMETER -> { bold = false; italic = true }
+            HighlightKind.COMMENT, HighlightKind.PK_COMMENT, HighlightKind.MODIFIER -> { bold = false; italic = true }
+            else -> { bold = false; italic = false }
+        }
+        textPaint.isFakeBoldText = bold
+        textPaint.textSkewX = if (italic) -0.22f else 0f
+    }
+
+    private fun resetFontStyle() {
+        textPaint.isFakeBoldText = false
+        textPaint.textSkewX = 0f
+    }
+
+    private fun colorForKind(kind: Int): Int = when (kind) {
+        HighlightKind.KEYWORD -> colorKeyword
+        HighlightKind.STRING -> colorString
+        HighlightKind.NUMBER -> colorNumber
+        HighlightKind.AT -> colorAt
+        HighlightKind.ERROR -> colorError
+        HighlightKind.CALL -> colorCall
+        HighlightKind.COMMENT -> colorComment
+        HighlightKind.TYPE -> colorType
+        HighlightKind.PREPROCESSOR -> colorPreprocessor
+        HighlightKind.CONTROL -> colorControl
+        HighlightKind.CONSTANT -> colorConstant
+        HighlightKind.FUNCTION_DEF -> colorFunctionDef
+        HighlightKind.MODIFIER -> colorModifier
+        HighlightKind.LABEL -> colorLabel
+        HighlightKind.CLASS -> colorClass
+        HighlightKind.PROPERTY -> colorProperty
+        HighlightKind.TEMPLATE -> colorTemplate
+        HighlightKind.TEMPLATE_KW -> colorTemplateKw
+        HighlightKind.PARAMETER -> colorParameter
+        HighlightKind.OPERATOR -> colorOperator
+        HighlightKind.COMPARE -> colorCompare
+        HighlightKind.PUNCT -> colorPunct
+        HighlightKind.FLOW -> colorFlow
+        HighlightKind.BRACKET0 -> colorBracket0
+        HighlightKind.BRACKET1 -> colorBracket1
+        HighlightKind.BRACKET2 -> colorBracket2
+        HighlightKind.PK_BRACKET -> colorPkBracket
+        HighlightKind.PK_TAG -> colorPkTag
+        HighlightKind.PK_CUSTOM_TAG -> colorPkCustomTag
+        HighlightKind.PK_ATTR -> colorPkAttr
+        HighlightKind.PK_VARIABLE -> colorPkVariable
+        HighlightKind.PK_STRING -> colorPkString
+        HighlightKind.PK_COMMENT -> colorPkComment
+        HighlightKind.IX_BRACKET -> colorIxBracket
+        HighlightKind.IX_TAG -> colorIxTag
+        HighlightKind.IX_TAG_CUSTOM -> colorIxTagCustom
+        HighlightKind.IX_ID -> colorIxId
+        HighlightKind.IX_ATTR -> colorIxAttr
+        HighlightKind.IX_EVENT -> colorIxEvent
+        HighlightKind.IX_TOKEN -> colorIxToken
+        HighlightKind.IX_COLOR -> colorIxColor
+        HighlightKind.IX_LENGTH -> colorIxLength
+        HighlightKind.IX_STATE -> colorIxState
+        HighlightKind.IX_BRACE -> colorIxBrace
+        HighlightKind.IX_STRUCT -> colorIxStruct
+        else -> colorDefault
+    }
+
+    /** يُرجع (سطر أ, عمود-حرف أ, سطر ب أو -1, عمود-حرف ب, هل تطابق) للرسم فقط، أو null إن لا قوس عند المؤشر. */
+    private fun computeBracketMatchForDraw(): Quad? {
+        val cur = engine.getCursor()
+        if (engine.getSelection().hasSelection) return null
+        val lineText = engine.getLine(cur.line)
+        val charCol = cur.col.coerceIn(0, lineText.length)
+        val before: Char? = if (charCol > 0) lineText[charCol - 1] else null
+        val at: Char? = if (charCol < lineText.length) lineText[charCol] else null
+        val opens = setOf('(', '[', '{')
+        val closes = setOf(')', ']', '}')
+        val (bracketChar, bracketCharCol) = when {
+            before != null && (before in opens || before in closes) -> before to (charCol - 1)
+            at != null && (at in opens || at in closes) -> at to charCol
+            else -> return null
+        }
+        val fullLines = (0 until engine.lineCount()).map { engine.getLine(it) }
+        val target = findMatchingBracketAcrossLines(fullLines, cur.line, bracketCharCol, bracketChar, opens, closes)
+        return if (target != null) Quad(cur.line, bracketCharCol, target.first, target.second, true)
+        else Quad(cur.line, bracketCharCol, -1, -1, false)
+    }
+
+    private data class Quad(val a: Int, val b: Int, val c: Int, val d: Int, val matched: Boolean)
+
+    private fun findMatchingBracketAcrossLines(
+        lines: List<String>, line: Int, charCol: Int, bracket: Char,
+        opens: Set<Char>, closes: Set<Char>
+    ): Pair<Int, Int>? {
+        val pairs = mapOf('(' to ')', '[' to ']', '{' to '}')
+        val reversed = mapOf(')' to '(', ']' to '[', '}' to '{')
+        if (bracket in opens) {
+            var depth = 0
+            var l = line; var c = charCol
+            while (l < lines.size) {
+                val lineTxt = lines[l]
+                while (c < lineTxt.length) {
+                    val ch = lineTxt[c]
+                    if (ch == bracket) depth++
+                    else if (ch == pairs[bracket]) { depth--; if (depth == 0) return l to c }
+                    c++
+                }
+                l++; c = 0
+            }
+            return null
+        } else {
+            var depth = 0
+            var l = line; var c = charCol
+            while (l >= 0) {
+                val lineTxt = lines[l]
+                while (c >= 0) {
+                    if (c < lineTxt.length) {
+                        val ch = lineTxt[c]
+                        if (ch == bracket) depth++
+                        else if (ch == reversed[bracket]) { depth--; if (depth == 0) return l to c }
+                    }
+                    c--
+                }
+                l--; c = if (l >= 0) lines[l].length - 1 else -1
+            }
+            return null
+        }
+    }
+
+    // --- وميض المؤشر ------------------------------------------------------
+
+    private var cursorVisible = true
+    private val blinkHandler = Handler(Looper.getMainLooper())
+    private val blinkRunnable = object : Runnable {
+        override fun run() {
+            cursorVisible = !cursorVisible
+            invalidate()
+            if (AppSettings.isSmoothCursor(context)) blinkHandler.postDelayed(this, 420L) else blinkHandler.postDelayed(this, 550L)
+        }
+    }
+
+    override fun onFocusChanged(gainFocus: Boolean, direction: Int, previouslyFocusedRect: android.graphics.Rect?) {
+        super.onFocusChanged(gainFocus, direction, previouslyFocusedRect)
+        blinkHandler.removeCallbacks(blinkRunnable)
+        if (gainFocus) {
+            cursorVisible = true
+            blinkHandler.postDelayed(blinkRunnable, 500L)
+        } else {
+            dismissSuggestionPopup()
+            dismissDiagnosticPopup()
+            dismissHoverDoc()
+            actionMode?.finish()
+        }
+        invalidate()
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        attachClipboardWatcher()
+    }
+
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        detachClipboardWatcher()
+        blinkHandler.removeCallbacks(blinkRunnable)
+        dismissSuggestionPopup()
+        dismissDiagnosticPopup()
+        dismissHoverDoc()
+        actionMode?.finish()
+        engine.destroy()
+    }
+
+    override fun onCheckIsTextEditor(): Boolean = true
+
+    // --- اللمس: وضع المؤشر بالنقر، السحب للتحديد، الضغط الطويل لتحديد كلمة ------------
+
+    private fun offsetForTouch(x: Float, y: Float): RinNativeEditor.Pos {
+        val row = (((y - paddingTop) / lineHeight).toInt()).coerceIn(0, max(0, visibleLines.size - 1))
+        val line = visibleLines[row]
+        val lineText = engine.getLine(line)
+        val relX = x - paddingLeft
+        var bestChar = 0
+        var bestDist = Float.MAX_VALUE
+        for (i in 0..lineText.length) {
+            val w = textPaint.measureText(lineText, 0, i)
+            val d = kotlin.math.abs(w - relX)
+            if (d < bestDist) { bestDist = d; bestChar = i }
+        }
+        return RinNativeEditor.Pos(line, bestChar)
+    }
+
+    private val gestureDetector = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
+        override fun onSingleTapUp(e: MotionEvent): Boolean {
+            if (AppSettings.isHapticFeedback(context)) performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
+            requestFocus()
+            showKeyboard()
+            dismissHoverDoc()
+            val p = offsetForTouch(e.x, e.y)
+            // النقر على نفس نقطة المؤشر الحالية بالضبط أثناء ظهور تظليل قوس مطابق (bracketInfo)
+            // يُفسَّر كـ"اذهب للقوس المطابق" بدل عدم فعل شيء — نقرة ثانية على نفس القوس تُنقل
+            // المؤشر لشريكه (يمينًا وشمالًا كتبديل)، تمامًا كأمر "Go to Bracket" في المحررات
+            // الاحترافية، لكن بلمسة عادية بدل زر/اختصار مخصَّص غير عملي على لوحة مفاتيح افتراضية.
+            val cur = engine.getCursor()
+            val info = cachedBracketInfo
+            val hadSelection = engine.getSelection().hasSelection
+            val sameCaret = !hadSelection && p.line == cur.line && p.col == cur.col
+            if (!hadSelection && info != null && info.matched &&
+                p.line == cur.line && p.col == cur.col && info.a == cur.line
+            ) {
+                engine.setCursor(info.c, info.d, false)
+                actionMode?.finish()
+            } else {
+                engine.setCursor(p.line, p.col, false)
+                if (!sameCaret) actionMode?.finish()
+            }
+            afterEngineMutation()
+            // نقرة ثانية على المؤشر نفسه (بلا قوس مطابق) = شريط «لصق/تحديد الكل/سجل الحافظة» كما في Android.
+            if (sameCaret && !(info != null && info.matched && info.a == cur.line)) showTextActionMode()
+            return true
+        }
+
+        override fun onLongPress(e: MotionEvent) {
+            // الضغط الطويل يبدأ "وضع التحديد بالسحب": من الآن حتى رفع الإصبع، أي تحريك يُوسِّع
+            // التحديد بدل تمرير الشاشة (لذا نمنع الأب [ScrollView/HorizontalScrollView] من
+            // اعتراض اللمسة). قبل الضغط الطويل — أي سحب بإصبع واحد عادي — يبقى تمريرًا حرًّا
+            // للأب، تمامًا مثل أي محرر نصوص حقيقي (وهو ما كان مفقودًا: كان كل سحب، حتى بلا ضغط
+            // طويل، يُعامَل فورًا كسحب-تحديد ويمنع الأب من التمرير، فتظهر الشاشة وكأنها "تقفز"
+            // يمينًا ويسارًا بدل التمرير السلس عبر الأسطر الطويلة).
+            isSelectingDrag = true
+            parent?.requestDisallowInterceptTouchEvent(true)
+            if (AppSettings.isHapticFeedback(context)) performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+            requestFocus()
+            showKeyboard()
+            val word = selectWordAt(e.x, e.y)
+            showTextActionMode()
+            showHoverDocIfKeyword(word)
+        }
+
+        override fun onDoubleTap(e: MotionEvent): Boolean {
+            // النقر المزدوج على سطر بداية كتلة قابلة للطيّ يبدّل حالة الطيّ بدل تحديد كلمة —
+            // لكتل '{' الحقيقية (fun/if/while/...) فقط عند/بعد القوس المفتوح نفسه (تحديد الكلمة
+            // يبقى يعمل عاديًا فيما قبله على نفس السطر، مثال: اسم الدالة)؛ ولكتل وسوم Rin
+            // (@container/@section/...، بلا قوس على الإطلاق) في أي مكان من سطر الوسم نفسه.
+            val p = offsetForTouch(e.x, e.y)
+            val fold = foldRegions[p.line]
+            if (fold != null && (fold.braceCol == null || p.col >= fold.braceCol)) {
+                if (AppSettings.isHapticFeedback(context)) performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
+                toggleFold(p.line)
+                return true
+            }
+            val word = selectWordAt(e.x, e.y)
+            showTextActionMode()
+            showHoverDocIfKeyword(word)
+            return true
+        }
+    })
+
+    // --- تكبير/تصغير الخط بحركة القرص (Pinch-to-zoom) ------------------------------------
+    // إعلام اختياري للمستدعي (MainActivity) عند تغيّر حجم الخط أثناء القرص، ليُزامن عمود أرقام
+    // الأسطر (لا يملكه هذا الـView) ويحفظ القيمة الجديدة — تمامًا كما يفعل مع أزرار +/- الحالية.
+    var onFontSizeChangeListener: ((Float) -> Unit)? = null
+
+    private val scaleGestureDetector = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+        override fun onScale(detector: ScaleGestureDetector): Boolean {
+            val currentSp = textPaint.textSize / resources.displayMetrics.scaledDensity
+            val newSp = (currentSp * detector.scaleFactor).coerceIn(AppSettings.MIN_FONT_SIZE_SP, AppSettings.MAX_FONT_SIZE_SP)
+            if (kotlin.math.abs(newSp - currentSp) > 0.01f) {
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, newSp)
+                onFontSizeChangeListener?.invoke(newSp)
+            }
+            return true
+        }
+    })
+
+    // --- لمسات متعدّدة الأصابع: نقرة بإصبعين = تراجع، نقرة بثلاثة أصابع = إعادة -------------
+    // نمط شائع في محررات الأكواد كاختصار سريع بلا الحاجة لأزرار شريط الأدوات. نُميّزها عن
+    // القرص (pinch) والسحب بأنها لمسة قصيرة (بلا حركة تُذكر) ترفع كل أصابعها بسرعة.
+    private var multiTouchStartTime = 0L
+    private var multiTouchStartX = 0f
+    private var multiTouchStartY = 0f
+    private var multiTouchMaxPointers = 1
+    private var multiTouchExceededSlop = false
+    private val multiTapSlopPx by lazy { resources.displayMetrics.density * 18f }
+    private val multiTapMaxDurationMs = 250L
+
+    private fun trackMultiTouchStart(event: MotionEvent) {
+        multiTouchStartTime = System.currentTimeMillis()
+        multiTouchStartX = event.x; multiTouchStartY = event.y
+        multiTouchMaxPointers = event.pointerCount
+        multiTouchExceededSlop = false
+    }
+
+    private fun trackMultiTouchMove(event: MotionEvent) {
+        multiTouchMaxPointers = max(multiTouchMaxPointers, event.pointerCount)
+        if (kotlin.math.abs(event.x - multiTouchStartX) > multiTapSlopPx ||
+            kotlin.math.abs(event.y - multiTouchStartY) > multiTapSlopPx) {
+            multiTouchExceededSlop = true
+        }
+    }
+
+    private fun maybeHandleMultiFingerTap() {
+        if (multiTouchExceededSlop) return
+        if (System.currentTimeMillis() - multiTouchStartTime > multiTapMaxDurationMs) return
+        when (multiTouchMaxPointers) {
+            2 -> { if (AppSettings.isHapticFeedback(context)) performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP); undo() }
+            3 -> { if (AppSettings.isHapticFeedback(context)) performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP); redo() }
+        }
+    }
+
+    private var dragging = false
+    private var isSelectingDrag = false
+
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        gestureDetector.onTouchEvent(event)
+        scaleGestureDetector.onTouchEvent(event)
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                dragging = false
+                isSelectingDrag = false
+                trackMultiTouchStart(event)
+                // لا نمنع الأب من الاعتراض هنا: نمنحه فرصة تولّي التمرير الطبيعي إن كانت هذه
+                // بداية سحب-تمرير وليست سحب-تحديد (الذي يُفعَّل فقط بعد onLongPress أعلاه).
+            }
+            MotionEvent.ACTION_POINTER_DOWN -> trackMultiTouchMove(event)
+            MotionEvent.ACTION_MOVE -> {
+                if (event.pointerCount == 1) {
+                    if (isSelectingDrag) {
+                        if (!dragging) actionMode?.hide(ActionMode.DEFAULT_HIDE_DURATION.toLong())
+                        dragging = true
+                        val p = offsetForTouch(event.x, event.y)
+                        engine.setCursor(p.line, p.col, true)
+                        afterEngineMutation()
+                    }
+                    // وإلا (سحب عادي بلا ضغط طويل): لا نستهلك الحركة كتحديد نص إطلاقًا، فيبقى
+                    // بإمكان ScrollView/HorizontalScrollView الأب اعتراضها وتمرير الشاشة بسلاسة.
+                } else {
+                    trackMultiTouchMove(event)
+                }
+            }
+            MotionEvent.ACTION_POINTER_UP -> trackMultiTouchMove(event)
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                val wasDragging = dragging
+                dragging = false
+                isSelectingDrag = false
+                parent?.requestDisallowInterceptTouchEvent(false)
+                if (wasDragging && engine.getSelection().hasSelection) showTextActionMode()
+                if (!wasDragging && event.actionMasked == MotionEvent.ACTION_UP) maybeHandleMultiFingerTap()
+            }
+        }
+        return true
+    }
+
+    /** يحدّد كلمة عند نقطة اللمس ويُعيد نصّها (أو null إن لم تكن هناك كلمة، مثلًا نقر على مسافة
+     *  فارغة) — القيمة المُعادة تُستخدَم لعرض تلميح توثيق سريع (hover doc) إن كانت كلمة محجوزة. */
+    private fun selectWordAt(x: Float, y: Float): String? {
+        val p = offsetForTouch(x, y)
+        val lineText = engine.getLine(p.line)
+        fun isWordChar(c: Char) = c.isLetterOrDigit() || c == '_'
+        var start = p.col
+        var end = p.col
+        while (start > 0 && isWordChar(lineText[start - 1])) start--
+        while (end < lineText.length && isWordChar(lineText.getOrElse(end) { ' ' })) end++
+        if (start == end) return null
+        engine.setSelection(p.line, start, p.line, end)
+        afterEngineMutation()
+        return lineText.substring(start, end)
+    }
+
+    private fun showKeyboard() {
+        val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
+        imm?.showSoftInput(this, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
+    }
+
+    // --- نسخ/قص/لصق (لم يكن مُنفَّذًا إطلاقًا سابقًا: لا ClipboardManager ولا قائمة تحديد) -----
+    // View مخصّص فوق Canvas مثل هذا لا يحصل تلقائيًا على شريط "نسخ/قص/لصق" الذي يوفّره Android
+    // مجانًا لأي EditText — يجب استدعاء startActionMode يدويًا وتوفير القائمة العائمة بأنفسنا.
+
+    private var actionMode: ActionMode? = null
+
+    private fun clipboardManager(): ClipboardManager =
+        context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+
+    /** لغة سياج Markdown عند «نسخ كـ Markdown» (تتبع امتداد الملف الحالي). */
+    private var fenceLang: String = "rin"
+
+    // --- مراقبة حافظة النظام: كل ما يُنسخ (من هنا أو من تطبيق آخر) يدخل سجلّ الحافظة الداخلي -----
+
+    private val systemClipListener = ClipboardManager.OnPrimaryClipChangedListener { captureSystemClip() }
+    private var clipWatcherAttached = false
+
+    private fun attachClipboardWatcher() {
+        if (clipWatcherAttached) return
+        try { clipboardManager().addPrimaryClipChangedListener(systemClipListener); clipWatcherAttached = true } catch (_: Throwable) {}
+    }
+
+    private fun detachClipboardWatcher() {
+        if (!clipWatcherAttached) return
+        try { clipboardManager().removePrimaryClipChangedListener(systemClipListener) } catch (_: Throwable) {}
+        clipWatcherAttached = false
+    }
+
+    /** يقرأ نص حافظة النظام الحالي بأمان (قد تمنع المنصة القراءة بلا تركيز أو تُرمى SecurityException). */
+    private fun readSystemClip(): Pair<String, Boolean>? = try {
+        val clip = clipboardManager().primaryClip
+        if (clip == null || clip.itemCount == 0) null
+        else {
+            val text = clip.getItemAt(0).coerceToText(context)?.toString()
+            if (text.isNullOrEmpty()) null else text to (clip.description?.label?.toString() == CLIP_LABEL_LINES)
+        }
+    } catch (_: Throwable) { null }
+
+    private fun captureSystemClip() {
+        val (text, whole) = readSystemClip() ?: return
+        ClipboardHistory.add(text, whole)
+    }
+
+    private fun putClip(text: String, wholeLines: Boolean) {
+        clipboardManager().setPrimaryClip(ClipData.newPlainText(if (wholeLines) CLIP_LABEL_LINES else CLIP_LABEL_TEXT, text))
+        ClipboardHistory.add(text, wholeLines)
+    }
+
+    private fun tap() {
+        if (AppSettings.isHapticFeedback(context)) performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
+    }
+
+    private fun toast(resId: Int) = Toast.makeText(context, resId, Toast.LENGTH_SHORT).show()
+
+    // --- نطاق الأسطر المعنيّ بعمليات «السطر» ---------------------------------------------------
+
+    /** (أول سطر، آخر سطر) تغطيهما عملية سطرية: السطر الحالي، أو الأسطر التي يلمسها التحديد
+     *  (تحديد ينتهي عند العمود 0 من سطر لاحق لا يشمل ذلك السطر، كما في VS Code). */
+    private fun affectedLineRange(): Pair<Int, Int> {
+        val sel = engine.getSelection()
+        if (!sel.hasSelection) { val l = engine.getCursor().line; return l to l }
+        val e = if (sel.end.col == 0 && sel.end.line > sel.start.line) sel.end.line - 1 else sel.end.line
+        return sel.start.line to e
+    }
+
+    private fun linesText(from: Int, to: Int): String {
+        val sb = StringBuilder()
+        for (l in from..to) sb.append(engine.getLine(l)).append('\n')
+        return sb.toString()
+    }
+
+    private fun deleteLines(from: Int, to: Int) {
+        val last = engine.lineCount() - 1
+        val oldCol = engine.getCursor().col
+        when {
+            to < last -> {
+                engine.replaceRange(from, 0, to + 1, 0, "")
+                engine.setCursor(from, min(oldCol, engine.getLine(from).length), false)
+            }
+            from > 0 -> engine.replaceRange(from - 1, engine.getLine(from - 1).length, to, engine.getLine(to).length, "")
+            else -> engine.replaceRange(0, 0, to, engine.getLine(to).length, "")
+        }
+    }
+
+    private fun isEffectivelyEmptyDocument() = engine.lineCount() == 1 && engine.getLine(0).isEmpty()
+
+    // --- نسخ / قص -------------------------------------------------------------------------------
+
+    /** نسخ التحديد؛ بلا تحديد ينسخ السطر الحالي كاملًا (وسم «أسطر كاملة» يجعل لصقه فوق السطر الحالي). */
+    fun copy(): Boolean {
+        val sel = engine.getSelection()
+        if (sel.hasSelection) { putClip(textOfSelection(sel), false); tap(); return true }
+        return copyLines()
+    }
+
+    /** قص التحديد؛ بلا تحديد يقصّ السطر الحالي كاملًا. */
+    fun cut(): Boolean {
+        val sel = engine.getSelection()
+        if (!sel.hasSelection) return cutLines()
+        putClip(textOfSelection(sel), false)
+        engine.replaceRange(sel.start.line, sel.start.col, sel.end.line, sel.end.col, "")
+        tap(); afterEngineMutation()
+        return true
+    }
+
+    /** ينسخ الأسطر الكاملة (السطر الحالي أو الأسطر التي يلمسها التحديد) مهما كان التحديد جزئيًا. */
+    fun copyLines(): Boolean {
+        if (isEffectivelyEmptyDocument()) return false
+        val (from, to) = affectedLineRange()
+        putClip(linesText(from, to), true)
+        tap()
+        return true
+    }
+
+    fun cutLines(): Boolean {
+        if (isEffectivelyEmptyDocument()) return false
+        val (from, to) = affectedLineRange()
+        putClip(linesText(from, to), true)
+        deleteLines(from, to)
+        tap(); afterEngineMutation()
+        return true
+    }
+
+    /** ينسخ التحديد (أو السطر الحالي) داخل سياج Markdown بلغة الملف — جاهز للصق في مسألة/محادثة. */
+    fun copyAsMarkdown(): Boolean {
+        val sel = engine.getSelection()
+        val text = if (sel.hasSelection) textOfSelection(sel) else {
+            if (isEffectivelyEmptyDocument()) return false
+            val (f, t) = affectedLineRange(); linesText(f, t)
+        }
+        // حتى لو كان التحديد جزئيًا نُزيل الإزاحة المشتركة ليبدو المقتطف مرتّبًا.
+        putClip(ClipboardText.toMarkdown(ClipboardText.reindentLines(text, "").removeSuffix("\n").ifEmpty { text }, fenceLang), false)
+        tap()
+        return true
+    }
+
+    // --- لصق -----------------------------------------------------------------------------------
+
+    /** لصق ذكي: يوحّد نهايات الأسطر/التبويبات/الأحرف الخفية ويُعيد إزاحة النص متعدد الأسطر ليلتحم بموضع المؤشر. */
+    fun paste(): Boolean = pasteFromSystem(asIs = false)
+
+    /** لصق «كما هو» بلا إعادة إزاحة ولا تحويل تبويبات (فقط توحيد نهايات الأسطر). */
+    fun pasteAsIs(): Boolean = pasteFromSystem(asIs = true)
+
+    private fun pasteFromSystem(asIs: Boolean): Boolean {
+        val (raw, whole) = readSystemClip() ?: run { toast(R.string.clip_empty); return false }
+        return pasteText(raw, whole, asIs)
+    }
+
+    private fun pasteText(raw: String, wholeLines: Boolean, asIs: Boolean, confirmed: Boolean = false): Boolean {
+        if (raw.isEmpty()) return false
+        if (!confirmed && raw.length > LARGE_PASTE_CHARS) {
+            confirmLargePaste(raw, wholeLines, asIs)
+            return false
+        }
+        val tab = AppSettings.getTabSize(context)
+        var text = if (asIs) raw.replace("\r\n", "\n").replace('\r', '\n') else ClipboardText.normalize(raw, tab)
+        val sel = engine.getSelection()
+        val cur = engine.getCursor()
+        val flashFromPos: RinNativeEditor.Pos
+        val flashToPos: RinNativeEditor.Pos
+
+        if (wholeLines && !sel.hasSelection) {
+            // أسطر كاملة بلا تحديد: تُدرج فوق السطر الحالي ويبقى المؤشر في مكانه المنطقي (ينزل مع سطره).
+            if (!text.endsWith("\n")) text += "\n"
+            if (!asIs) text = ClipboardText.reindentLines(text, ClipboardText.leadingWhitespace(engine.getLine(cur.line)))
+            val n = ClipboardText.lineCount(text)
+            engine.replaceRange(cur.line, 0, cur.line, 0, text)
+            engine.setCursor(cur.line + n, cur.col, false)
+            flashFromPos = RinNativeEditor.Pos(cur.line, 0)
+            flashToPos = RinNativeEditor.Pos(cur.line + n, 0)
+        } else {
+            val start = if (sel.hasSelection) sel.start else cur
+            val lineText = engine.getLine(start.line)
+            val before = lineText.substring(0, start.col.coerceIn(0, lineText.length))
+            if (!asIs) text = ClipboardText.reindentForPaste(text, before, ClipboardText.leadingWhitespace(lineText))
+            val end = if (sel.hasSelection)
+                engine.replaceRange(sel.start.line, sel.start.col, sel.end.line, sel.end.col, text)
+            else
+                engine.replaceRange(cur.line, cur.col, cur.line, cur.col, text)
+            engine.setCursor(end.line, end.col, false)
+            flashFromPos = start
+            flashToPos = end
+        }
+        tap()
+        afterEngineMutation()
+        dismissSuggestionPopup()
+        flashRange(flashFromPos, flashToPos)
+        return true
+    }
+
+    private fun confirmLargePaste(raw: String, wholeLines: Boolean, asIs: Boolean) {
+        val lines = ClipboardText.lineCount(raw)
+        val kb = raw.length / 1024
+        AlertDialog.Builder(context)
+            .setTitle(R.string.clip_large_title)
+            .setMessage(context.getString(R.string.clip_large_message_fmt, lines, kb))
+            .setPositiveButton(R.string.clip_large_confirm) { _, _ -> pasteText(raw, wholeLines, asIs, confirmed = true) }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    // --- وميض النص الملصوق ----------------------------------------------------------------------
+
+    private var flashFrom: RinNativeEditor.Pos? = null
+    private var flashTo: RinNativeEditor.Pos? = null
+    private val flashPaint = Paint().apply { color = 0xFF3D7EFF.toInt(); alpha = 0 }
+    private var flashAnimator: ValueAnimator? = null
+
+    private fun flashRange(from: RinNativeEditor.Pos, to: RinNativeEditor.Pos) {
+        if (from.line == to.line && from.col == to.col) return
+        flashAnimator?.cancel()
+        flashFrom = from
+        flashTo = to
+        flashAnimator = ValueAnimator.ofInt(95, 0).apply {
+            duration = 520L
+            addUpdateListener { flashPaint.alpha = it.animatedValue as Int; invalidate() }
+            addListener(object : AnimatorListenerAdapter() {
+                private var cancelled = false
+                override fun onAnimationCancel(animation: Animator) { cancelled = true }
+                override fun onAnimationEnd(animation: Animator) {
+                    if (!cancelled) { flashFrom = null; flashTo = null; invalidate() }
+                }
+            })
+            start()
+        }
+    }
+
+    // --- تحديد/تكرار -----------------------------------------------------------------------------
+
+    /** يحدّد السطر الحالي كاملًا (مع فاصله)؛ تكرار الأمر يوسّع التحديد سطرًا لأسفل. */
+    fun selectLine() {
+        val sel = engine.getSelection()
+        val last = engine.lineCount() - 1
+        val (from, rawTo) = affectedLineRange()
+        var to = rawTo
+        val alreadyWholeLines = sel.hasSelection && sel.start.col == 0 &&
+            ((sel.end.col == 0 && sel.end.line == to + 1) || (to == last && sel.end.line == to && sel.end.col == engine.getLine(to).length))
+        if (alreadyWholeLines && to < last) to += 1
+        if (to < last) engine.setSelection(from, 0, to + 1, 0) else engine.setSelection(from, 0, to, engine.getLine(to).length)
+        afterEngineMutation()
+    }
+
+    /** يكرّر التحديد مباشرة بعده ويحدّد النسخة الجديدة؛ بلا تحديد يكرّر السطر الحالي. */
+    fun duplicateSelectionOrLine() {
+        val sel = engine.getSelection()
+        if (!sel.hasSelection) { engine.duplicateCurrentLine(); afterEngineMutation(); return }
+        val text = textOfSelection(sel)
+        val end = sel.end
+        val after = engine.replaceRange(end.line, end.col, end.line, end.col, text)
+        engine.setSelection(end.line, end.col, after.line, after.col)
+        afterEngineMutation()
+    }
+
+    // --- سجلّ الحافظة -----------------------------------------------------------------------------
+
+    /** نافذة بآخر النصوص المنسوخة (الأحدث أولًا): نقرة = لصق، ضغطة مطوّلة = حذف العنصر. */
+    fun showClipboardHistory() {
+        captureSystemClip()
+        val items = ClipboardHistory.snapshot().toMutableList()
+        if (items.isEmpty()) { toast(R.string.clip_history_empty); return }
+        val themed = android.view.ContextThemeWrapper(context, com.google.android.material.R.style.ThemeOverlay_MaterialComponents_Dark)
+        val dm = resources.displayMetrics
+        fun dp(v: Int) = (v * dm.density).toInt()
+        val adapter = object : ArrayAdapter<ClipboardHistory.Entry>(themed, 0, items) {
+            override fun getView(position: Int, convertView: View?, parent: android.view.ViewGroup): View {
+                val e = getItem(position)!!
+                val row = (convertView as? LinearLayout) ?: LinearLayout(themed).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(dp(20), dp(10), dp(20), dp(10))
+                    addView(TextView(themed).apply {
+                        typeface = android.graphics.Typeface.MONOSPACE
+                        textSize = 13.5f
+                        setTextColor(Color.parseColor("#E8EAED"))
+                        maxLines = 1
+                        ellipsize = android.text.TextUtils.TruncateAt.END
+                        textDirection = View.TEXT_DIRECTION_LTR
+                    })
+                    addView(TextView(themed).apply {
+                        textSize = 11f
+                        setTextColor(Color.parseColor("#9AA0A6"))
+                    })
+                }
+                (row.getChildAt(0) as TextView).text = ClipboardText.preview(e.text)
+                val lines = ClipboardText.lineCount(e.text).coerceAtLeast(1)
+                val meta = context.getString(R.string.clip_history_meta_fmt, lines, e.text.length)
+                (row.getChildAt(1) as TextView).text = if (e.wholeLines) meta + " · " + context.getString(R.string.clip_history_whole_lines) else meta
+                return row
+            }
+        }
+        val dialog = AlertDialog.Builder(themed)
+            .setTitle(R.string.clip_history_title)
+            .setAdapter(adapter) { _, which -> items.getOrNull(which)?.let { pasteText(it.text, it.wholeLines, asIs = false) } }
+            .setNeutralButton(R.string.clip_history_clear) { _, _ -> ClipboardHistory.clear() }
+            .setNegativeButton(android.R.string.cancel, null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.listView?.setOnItemLongClickListener { _, _, position, _ ->
+                val entry = items.getOrNull(position) ?: return@setOnItemLongClickListener true
+                ClipboardHistory.remove(entry)
+                adapter.remove(entry)
+                if (items.isEmpty()) dialog.dismiss()
+                true
+            }
+        }
+        dialog.show()
+    }
+
+    // --- اختصارات لوحة المفاتيح الفعلية ------------------------------------------------------------
+
+    private fun handleClipboardShortcut(keyCode: Int, event: KeyEvent): Boolean {
+        val ctrl = event.isCtrlPressed
+        val shift = event.isShiftPressed
+        val alt = event.isAltPressed
+        when {
+            ctrl && keyCode == KeyEvent.KEYCODE_C -> copy()
+            ctrl && keyCode == KeyEvent.KEYCODE_INSERT -> copy()
+            ctrl && keyCode == KeyEvent.KEYCODE_X -> cut()
+            shift && !ctrl && keyCode == KeyEvent.KEYCODE_FORWARD_DEL -> cut()
+            ctrl && alt && keyCode == KeyEvent.KEYCODE_V -> showClipboardHistory()
+            ctrl && shift && keyCode == KeyEvent.KEYCODE_V -> pasteAsIs()
+            ctrl && keyCode == KeyEvent.KEYCODE_V -> paste()
+            shift && !ctrl && keyCode == KeyEvent.KEYCODE_INSERT -> paste()
+            ctrl && keyCode == KeyEvent.KEYCODE_A -> selectAll()
+            ctrl && keyCode == KeyEvent.KEYCODE_D -> duplicateSelectionOrLine()
+            ctrl && keyCode == KeyEvent.KEYCODE_L -> selectLine()
+            else -> return false
+        }
+        return true
+    }
+
+    // --- إعادة تسمية رمز (Rename symbol) --------------------------------------------------
+    // نطاق واقعي بلا جدول رموز/تحليل نطاقات (scope) فعلي: نُعيد تسمية كل ظهور لنفس النص عبر
+    // *كل توكنات المستند* المصنَّفة معرِّفًا (IDENT) أو استدعاء دالة (CALL) بحسب lexer/highlighter
+    // الحقيقيين — لا مجرد بحث/استبدال نصّي أعمى، فلا نلمس الظهور نفسه داخل نص أو تعليق. هذا يعني
+    // عمليًا "أعد تسمية كل متغيّر/دالة بهذا الاسم في هذا الملف"، لا "في هذا النطاق فقط" — قيد
+    // معقول ومُصرَّح به بوضوح في نص الحوار أدناه بدل الادّعاء بدقّة أكبر مما هو متاح فعليًا.
+
+    /** يعيد اسم المعرِّف (identifier) المحدَّد حاليًا إن كان تحديدًا صالحًا لإعادة التسمية:
+     *  ضمن سطر واحد، ومطابقًا تمامًا لحدود توكن IDENT/CALL حقيقي (لا كلمة محجوزة، ولا جزء من
+     *  نص/تعليق/رقم) — وإلا null فتُخفى خانة "إعادة تسمية" من قائمة النسخ/اللصق. */
+    private fun selectedIdentifierName(): String? {
+        val sel = engine.getSelection()
+        if (!sel.hasSelection || sel.start.line != sel.end.line) return null
+        val spans = cachedHighlightsByLine[sel.start.line] ?: return null
+        val isIdent = spans.any {
+            it.startCol == sel.start.col && it.endCol == sel.end.col &&
+                (it.kind == HighlightKind.IDENT || it.kind == HighlightKind.CALL)
+        }
+        if (!isIdent) return null
+        return textOfSelection(sel)
+    }
+
+    private fun showRenameDialog(oldName: String) {
+        val input = EditText(context).apply {
+            setText(oldName)
+            setSelection(0, oldName.length)
+            isSingleLine = true
+            val pad = (16 * resources.displayMetrics.density).toInt()
+            setPadding(pad, pad / 2, pad, pad / 2)
+        }
+        AlertDialog.Builder(context)
+            .setTitle(context.getString(R.string.rename_dialog_title))
+            .setView(input)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                val newName = input.text.toString().trim()
+                if (newName.isNotEmpty() && newName != oldName && newName.matches(IDENTIFIER_REGEX)) {
+                    renameAllOccurrences(oldName, newName)
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    /** يستبدل كل توكن IDENT/CALL في المستند نصّه الحرفي == [oldName] بالاسم [newName]، من نهاية
+     *  المستند للبداية (حتى لا تُزيح الاستبدالات السابقة إحداثيات الاستبدالات اللاحقة). */
+    private fun renameAllOccurrences(oldName: String, newName: String) {
+        val occurrences = engine.getHighlights()
+            .asSequence()
+            .filter { (it.kind == HighlightKind.IDENT || it.kind == HighlightKind.CALL) && it.endCol - it.startCol == oldName.length }
+            .filter { h ->
+                val lineText = engine.getLine(h.line)
+                val s = h.startCol.coerceIn(0, lineText.length)
+                val e = h.endCol.coerceIn(s, lineText.length)
+                e - s == oldName.length && lineText.regionMatches(s, oldName, 0, oldName.length)
+            }
+            .sortedWith(compareByDescending<RinNativeEditor.Highlight> { it.line }.thenByDescending { it.startCol })
+            .toList()
+        if (occurrences.isEmpty()) return
+        for (h in occurrences) {
+            engine.replaceRange(h.line, h.startCol, h.line, h.endCol, newName)
+        }
+        afterEngineMutation()
+    }
+
+    private val actionModeCallback = object : ActionMode.Callback2() {
+        override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
+            // الثلاثة الأولى تظهر مباشرة في الشريط العائم، والبقية تحت «⋮».
+            menu.add(0, ACTION_CUT, 0, android.R.string.cut)
+            menu.add(0, ACTION_COPY, 1, android.R.string.copy)
+            menu.add(0, ACTION_PASTE, 2, android.R.string.paste)
+            menu.add(0, ACTION_SELECT_ALL, 3, android.R.string.selectAll)
+            menu.add(0, ACTION_COPY_LINE, 4, R.string.action_copy_line)
+            menu.add(0, ACTION_CUT_LINE, 5, R.string.action_cut_line)
+            menu.add(0, ACTION_PASTE_PLAIN, 6, R.string.action_paste_plain)
+            menu.add(0, ACTION_HISTORY, 7, R.string.action_clip_history)
+            menu.add(0, ACTION_DUPLICATE, 8, R.string.action_duplicate)
+            menu.add(0, ACTION_SELECT_LINE, 9, R.string.action_select_line)
+            menu.add(0, ACTION_COPY_MD, 10, R.string.action_copy_markdown)
+            menu.add(0, ACTION_RENAME, 11, R.string.action_rename_symbol)
+            return true
+        }
+
+        override fun onPrepareActionMode(mode: ActionMode, menu: Menu): Boolean {
+            val hasSelection = engine.getSelection().hasSelection
+            val hasClip = try { clipboardManager().hasPrimaryClip() } catch (_: Throwable) { false }
+            menu.findItem(ACTION_CUT)?.isVisible = hasSelection
+            menu.findItem(ACTION_COPY)?.isVisible = hasSelection
+            menu.findItem(ACTION_PASTE)?.isVisible = hasClip
+            menu.findItem(ACTION_COPY_LINE)?.isVisible = !hasSelection || engine.getSelection().let { it.start.line == it.end.line }
+            menu.findItem(ACTION_CUT_LINE)?.isVisible = !hasSelection || engine.getSelection().let { it.start.line == it.end.line }
+            menu.findItem(ACTION_PASTE_PLAIN)?.isVisible = hasClip
+            menu.findItem(ACTION_HISTORY)?.isVisible = ClipboardHistory.snapshot().isNotEmpty() || hasClip
+            menu.findItem(ACTION_COPY_MD)?.isVisible = hasSelection
+            menu.findItem(ACTION_RENAME)?.isVisible = selectedIdentifierName() != null
+            return true
+        }
+
+        override fun onActionItemClicked(mode: ActionMode, item: MenuItem): Boolean {
+            when (item.itemId) {
+                ACTION_SELECT_ALL -> { selectAll(); mode.invalidate(); mode.invalidateContentRect(); return true }
+                ACTION_SELECT_LINE -> { selectLine(); mode.invalidate(); mode.invalidateContentRect(); return true }
+                ACTION_CUT -> { cut(); mode.finish() }
+                ACTION_COPY -> { copy(); mode.finish() }
+                ACTION_COPY_LINE -> { copyLines(); mode.finish() }
+                ACTION_CUT_LINE -> { cutLines(); mode.finish() }
+                ACTION_PASTE -> { mode.finish(); paste() }
+                ACTION_PASTE_PLAIN -> { mode.finish(); pasteAsIs() }
+                ACTION_HISTORY -> { mode.finish(); showClipboardHistory() }
+                ACTION_DUPLICATE -> { duplicateSelectionOrLine(); mode.finish() }
+                ACTION_COPY_MD -> { copyAsMarkdown(); mode.finish() }
+                ACTION_RENAME -> {
+                    val name = selectedIdentifierName()
+                    mode.finish()
+                    if (name != null) showRenameDialog(name)
+                }
+            }
+            return true
+        }
+
+        override fun onDestroyActionMode(mode: ActionMode) {
+            actionMode = null
+        }
+
+        /** يثبّت الشريط العائم عند موضع التحديد/المؤشر بدل موضعه الافتراضي (إحداثيات هذا الـView). */
+        override fun onGetContentRect(mode: ActionMode, view: View, outRect: Rect) {
+            val sel = engine.getSelection()
+            val cur = engine.getCursor()
+            val sLine = if (sel.hasSelection) sel.start.line else cur.line
+            val eLine = if (sel.hasSelection) sel.end.line else cur.line
+            val top = yOfLine(sLine)
+            val bottom = yOfLine(eLine) + lineHeight.roundToInt()
+            val x1: Int
+            val x2: Int
+            if (sel.hasSelection && sLine != eLine) {
+                x1 = paddingLeft
+                x2 = max(paddingLeft + 1, view.width - paddingRight)
+            } else {
+                val t = engine.getLine(sLine)
+                val c1 = if (sel.hasSelection) sel.start.col else cur.col
+                val c2 = if (sel.hasSelection) sel.end.col else cur.col
+                x1 = paddingLeft + textPaint.measureText(t, 0, c1.coerceIn(0, t.length)).roundToInt()
+                x2 = paddingLeft + textPaint.measureText(t, 0, c2.coerceIn(0, t.length)).roundToInt()
+            }
+            outRect.set(x1, top, max(x1 + 1, x2), max(top + 1, bottom))
+        }
+    }
+
+    private fun showTextActionMode() {
+        val existing = actionMode
+        if (existing == null) {
+            actionMode = startActionMode(actionModeCallback, ActionMode.TYPE_FLOATING)
+        } else {
+            existing.invalidate()
+            existing.invalidateContentRect()
+        }
+    }
+
+    companion object {
+        private const val ACTION_SELECT_ALL = 1
+        private const val ACTION_CUT = 2
+        private const val ACTION_COPY = 3
+        private const val ACTION_PASTE = 4
+        private const val ACTION_RENAME = 5
+        private const val ACTION_COPY_LINE = 6
+        private const val ACTION_CUT_LINE = 7
+        private const val ACTION_PASTE_PLAIN = 8
+        private const val ACTION_HISTORY = 9
+        private const val ACTION_DUPLICATE = 10
+        private const val ACTION_SELECT_LINE = 11
+        private const val ACTION_COPY_MD = 12
+        private const val CLIP_LABEL_TEXT = "rin_code"
+        /** وسم ClipData يدلّ على أن النسخ كان لأسطر كاملة (بلا تحديد) فيُلصق فوق السطر الحالي. */
+        private const val CLIP_LABEL_LINES = "rin_lines"
+        /** فوق هذا الحجم نطلب تأكيدًا قبل اللصق (لصق ملف ضخم قد يجمّد المحرر ثوانيَ). */
+        private const val LARGE_PASTE_CHARS = 300_000
+        private val IDENTIFIER_REGEX = Regex("^[A-Za-z_][A-Za-z0-9_]*$")
+    }
+
+    // --- لوحة المفاتيح (IME) عبر InputConnection حقيقي ------------------------
+
+    override fun onCreateInputConnection(outAttrs: EditorInfo): InputConnection {
+        outAttrs.inputType = InputType.TYPE_CLASS_TEXT or
+            InputType.TYPE_TEXT_FLAG_MULTI_LINE or
+            InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+        outAttrs.imeOptions = EditorInfo.IME_FLAG_NO_EXTRACT_UI or EditorInfo.IME_ACTION_NONE
+        outAttrs.initialSelStart = Selection.getSelectionStart(shadowEditable)
+        outAttrs.initialSelEnd = Selection.getSelectionEnd(shadowEditable)
+        return object : BaseInputConnection(this, true) {
+            override fun getEditable(): Editable = shadowEditable
+        }
+    }
+
+    // --- مفاتيح فعلية (لوحة مفاتيح خارجية): أسهم + Tab كإضافة للمسار الذكي عبر IME -----
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        if (handleIntelliKey(keyCode, event)) return true
+        if (handleClipboardShortcut(keyCode, event)) return true
+        val cur = engine.getCursor()
+        when (keyCode) {
+            KeyEvent.KEYCODE_DPAD_LEFT -> {
+                if (cur.col > 0) engine.setCursor(cur.line, cur.col - 1, event.isShiftPressed)
+                else if (cur.line > 0) { val prevLen = engine.getLine(cur.line - 1).length; engine.setCursor(cur.line - 1, prevLen, event.isShiftPressed) }
+                afterEngineMutation(); return true
+            }
+            KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                val lineText = engine.getLine(cur.line)
+                if (cur.col < lineText.length) engine.setCursor(cur.line, cur.col + 1, event.isShiftPressed)
+                else if (cur.line + 1 < engine.lineCount()) engine.setCursor(cur.line + 1, 0, event.isShiftPressed)
+                afterEngineMutation(); return true
+            }
+            KeyEvent.KEYCODE_DPAD_UP -> { engine.setCursor(cur.line - 1, cur.col, event.isShiftPressed); afterEngineMutation(); return true }
+            KeyEvent.KEYCODE_DPAD_DOWN -> { engine.setCursor(cur.line + 1, cur.col, event.isShiftPressed); afterEngineMutation(); return true }
+            KeyEvent.KEYCODE_MOVE_HOME -> { engine.setCursor(cur.line, 0, event.isShiftPressed); afterEngineMutation(); return true }
+            KeyEvent.KEYCODE_MOVE_END -> {
+                val len = engine.getLine(cur.line).length
+                engine.setCursor(cur.line, len, event.isShiftPressed); afterEngineMutation(); return true
+            }
+            KeyEvent.KEYCODE_TAB -> {
+                if (engine.getSelection().hasSelection) engine.indentSelection() else engine.insertText(" ".repeat(AppSettings.getTabSize(context)), smart = false)
+                afterEngineMutation(); return true
+            }
+            // Enter/Return: كان بلا أي معالجة هنا إطلاقًا. لوحات المفاتيح الافتراضية (خصوصًا
+            // Gboard) عندما يكون inputType مضبوطًا TYPE_TEXT_FLAG_MULTI_LINE مع IME_ACTION_NONE
+            // (كما هنا) تُرسل مفتاح Enter كـKeyEvent فعلي عبر dispatchKeyEvent (تمامًا مثل
+            // Backspace/Delete أعلاه)، وليس عبر commitText("\n") على الـInputConnection. وبما أن
+            // onKeyDown لم يكن يتعامل مع KEYCODE_ENTER إطلاقًا، كان يصل إلى super.onKeyDown()
+            // فلا يحدث شيء — هذا بالضبط سبب "Enter لا ينزلني للسطر الأسفل ولا يفتح سطرًا جديدًا".
+            // نمرّره عبر نفس مسار "الذكي" الذي يستخدمه IME عند إدراج حرف واحد فعليًا، حتى يستفيد
+            // من المسافة البادئة التلقائية بعد '{'/':' ونحوها إن كانت مفعّلة.
+            KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> {
+                engine.insertText("\n", smart = AppSettings.isAutoIndent(context))
+                afterEngineMutation(); return true
+            }
+            // Backspace/Delete: يصلان عادةً عبر IME (BaseInputConnection.deleteSurroundingText
+            // على shadowEditable) ويُوجَّهان تلقائيًا في routeShadowEdit. لكن هذا View هو View
+            // خام (ليس EditText)، وبعض لوحات المفاتيح (ولوحات المفاتيح الفعلية/بلوتوث دومًا)
+            // تُرسل هذين المفتاحين كـKeyEvent مباشر عبر dispatchKeyEvent بدل InputConnection —
+            // وبما أن onKeyDown لم يكن يتعامل معهما إطلاقًا، كانا يصلان إلى super.onKeyDown()
+            // (سلوك View الافتراضي، أي لا شيء) فتبدو الكتابة تعمل والحذف لا يعمل تمامًا.
+            // نتعامل معهما هنا مباشرة عبر نفس مسارات المحرك التي يستخدمها routeShadowEdit.
+            KeyEvent.KEYCODE_DEL -> { engine.deleteBackward(); afterEngineMutation(); return true }
+            KeyEvent.KEYCODE_FORWARD_DEL -> { engine.deleteForward(); afterEngineMutation(); return true }
+        }
+        return super.onKeyDown(keyCode, event)
+    }
+
+    // --- دعم البحث (يُستدعى من RinCodeEditorController) -----------------------
+
+    private var findMatches: List<RinNativeEditor.FindMatch>? = null
+    fun setFindHighlights(matches: List<RinNativeEditor.FindMatch>?) { findMatches = matches; invalidate() }
+
+    /** إحداثيات y (بالبكسل، ضمن هذا الـView) لبداية [line] — تُستخدم للتمرير الحالي إلى المؤشر.
+     *  يحوّل عبر [lineToRow] (لا `line * lineHeight` مباشرة) حتى يبقى صحيحًا مع أسطر مخفيّة
+     *  بسبب طيّ الكود؛ كل مستدعٍ حالي يستدعي [afterEngineMutation] (الذي يفتح أي طيّة يقع
+     *  [line] داخلها) قبل هذه الدالة، فالسطر ظاهر دومًا عمليًا — الاحتياط أدناه لأي مستدعٍ مستقبلي. */
+    fun yOfLine(line: Int): Int {
+        val row = lineToRow[line] ?: run {
+            var l = line
+            var r: Int? = null
+            while (l >= 0 && r == null) { r = lineToRow[l]; l-- }
+            r ?: 0
+        }
+        return (paddingTop + row * lineHeight).roundToInt()
+    }
+
+    // --- عمليات تحرير عامة تُستدعى من [RinCodeEditorController] ------------------------
+    // كل واحدة: تُغيّر حالة المحرك مباشرة، ثم تُزامن الـshadow/الرسم عبر [afterEngineMutation].
+
+    fun undo(): Boolean { val r = engine.undo() != null; afterEngineMutation(); return r }
+    fun redo(): Boolean { val r = engine.redo() != null; afterEngineMutation(); return r }
+    fun duplicateCurrentLine() { engine.duplicateCurrentLine(); afterEngineMutation() }
+    fun deleteCurrentLine() { engine.deleteCurrentLine(); afterEngineMutation() }
+    fun moveLineUp() { engine.moveLineUp(); afterEngineMutation() }
+    fun moveLineDown() { engine.moveLineDown(); afterEngineMutation() }
+    fun toggleLineComment() { engine.toggleLineComment(); afterEngineMutation() }
+    fun indentSelection() { engine.indentSelection(); afterEngineMutation() }
+    fun unindentSelection() { engine.unindentSelection(); afterEngineMutation() }
+    fun checkBracketBalance(): Int = engine.checkBracketBalance()
+
+    /** إعادة محاذاة المستند كاملاً (Format Document). true إن تغيّر النص. */
+    fun formatDocument(indentWidth: Int = 4): Boolean {
+        val changed = engine.reindentDocument(indentWidth)
+        if (changed) afterEngineMutation()
+        return changed
+    }
+
+    /** هيكل الملف (دوال/أصناف/متغيرات/تسميات) لقائمة "الانتقال إلى". */
+    fun getOutline(): List<RinNativeEditor.OutlineItem> = engine.getOutline()
+
+    /** نطاقات الطيّ الصالحة حالياً. */
+    fun getFoldRanges(): List<RinNativeEditor.FoldRange> = engine.getFoldRanges()
+    fun lineCount(): Int = engine.lineCount()
+
+    /** موضع المؤشر الحالي (1-based للعرض) وطول التحديد الحالي إن وُجد — لشريط الحالة. */
+    data class StatusInfo(val line: Int, val col: Int, val totalLines: Int, val selectedChars: Int)
+    fun statusInfo(): StatusInfo {
+        val cur = engine.getCursor()
+        val sel = engine.getSelection()
+        val selected = if (sel.hasSelection) textOfSelection(sel).length else 0
+        return StatusInfo(cur.line + 1, cur.col + 1, engine.lineCount(), selected)
+    }
+
+    /**
+     * يرتّب الأسطر التي يشملها التحديد الحالي أبجديًا تصاعديًا (أو كل أسطر المستند إن لم يوجد
+     * تحديد متعدد الأسطر) — استبدال كامل عبر [RinNativeEditor.replaceRange] فيبقى قابلاً للتراجع
+     * كأي تعديل آخر. يُرجع false إن لم يتغيّر الترتيب أصلاً (لتفادي إدخال غير ضروري في سجل التراجع).
+     */
+    fun sortLines(): Boolean {
+        val sel = engine.getSelection()
+        val totalLines = engine.lineCount()
+        val (from, to) = if (sel.hasSelection && sel.end.line > sel.start.line) sel.start.line to sel.end.line
+                          else 0 to totalLines - 1
+        if (to <= from) return false
+        val original = (from..to).map { engine.getLine(it) }
+        val sorted = original.sorted()
+        if (sorted == original) return false
+        val lastLineLen = engine.getLine(to).length
+        engine.replaceRange(from, 0, to, lastLineLen, sorted.joinToString("\n"))
+        afterEngineMutation()
+        return true
+    }
+
+    /**
+     * يدمج السطر التالي في نهاية سطر المؤشر الحالي (حذف فاصل السطر بينهما)، ويقلّص المسافات
+     * البادئة للسطر المدموج إلى مسافة واحدة فقط — تمامًا كأمر "Join Lines" المعتاد في محررات الكود.
+     */
+    fun joinCurrentLine(): Boolean {
+        val cur = engine.getCursor()
+        if (cur.line >= engine.lineCount() - 1) return false
+        val currentLine = engine.getLine(cur.line)
+        val nextLine = engine.getLine(cur.line + 1)
+        val trimmedNext = nextLine.trimStart()
+        val joiner = if (currentLine.isNotEmpty() && trimmedNext.isNotEmpty()) " " else ""
+        val joinCol = currentLine.length
+        engine.replaceRange(cur.line, currentLine.length, cur.line + 1, nextLine.length, joiner + trimmedNext)
+        engine.setCursor(cur.line, joinCol, false)
+        afterEngineMutation()
+        return true
+    }
+
+    /** يطبّق [transform] على كامل نص المستند عبر استبدال واحد قابل للتراجع؛ false إن لم يتغيّر شيء. */
+    private fun applyDocumentTransform(transform: (String) -> String): Boolean {
+        val original = engine.getText()
+        val transformed = transform(original)
+        if (transformed == original) return false
+        val lastLine = engine.lineCount() - 1
+        val lastLineLen = engine.getLine(lastLine).length
+        engine.replaceRange(0, 0, lastLine, lastLineLen, transformed)
+        afterEngineMutation()
+        return true
+    }
+
+    /** حذف فوري للمسافات الزائدة في نهاية كل سطر (بخلاف الإعداد المكافئ، هذا يعمل الآن فورًا بضغطة قائمة). */
+    fun trimTrailingWhitespaceNow(): Boolean = applyDocumentTransform { EditorTextTransforms.trimTrailingWhitespace(it) }
+
+    /** تحويل فوري لكل التبويبات البادئة في المستند إلى مسافات حسب [tabSize]. */
+    fun convertTabsToSpacesNow(tabSize: Int): Boolean = applyDocumentTransform { EditorTextTransforms.leadingTabsToSpaces(it, tabSize) }
+
+    /** يُدرج [textToInsert] عند المؤشر (مستبدلاً أي تحديد حالي) بلا سلوك "ذكي" (بلا إغلاق أقواس تلقائي). */
+    fun insertAtCursor(textToInsert: String) {
+        engine.insertText(textToInsert, smart = false)
+        afterEngineMutation()
+    }
+
+    /** يحرّك المؤشر إلى بداية [oneBasedLine] (مُقيَّد ضمن الحدود) ويعيد y بالبكسل لأجل التمرير. */
+    fun goToLine(oneBasedLine: Int): Int {
+        val pos = engine.lineStartPosition(oneBasedLine)
+        requestFocus()
+        engine.setCursor(pos.line, pos.col, false)
+        afterEngineMutation()
+        return yOfLine(pos.line)
+    }
+
+    /**
+     * كل مطابقة نص للبحث: إمّا مباشرة عبر محرك C++ (بحث حرفي)، أو محسوبة هنا بـ[Regex] كوتلن على
+     * كل سطر — لا حاجة لتعديل المحرك الأصلي لدعم التعابير النمطية. نمط غير صالح يُعيد قائمة فارغة
+     * بدل رمي استثناء يُسقط المحرر (انظر [isValidPattern] لتمييز "غير صالح" عن "لا تطابقات").
+     */
+    private fun computeMatches(query: String, caseSensitive: Boolean, regex: Boolean): List<RinNativeEditor.FindMatch> {
+        if (query.isEmpty()) return emptyList()
+        if (!regex) return engine.findAll(query, caseSensitive)
+        val pattern = compileRegex(query, caseSensitive) ?: return emptyList()
+        val out = ArrayList<RinNativeEditor.FindMatch>()
+        for (line in 0 until engine.lineCount()) {
+            val lineText = engine.getLine(line)
+            for (m in pattern.findAll(lineText)) {
+                if (m.range.isEmpty() && m.value.isEmpty()) continue // تطابق فارغ (مثال: "a*") لا معنى لتحديده
+                out.add(RinNativeEditor.FindMatch(line, m.range.first, m.range.last + 1))
+            }
+        }
+        return out
+    }
+
+    private fun compileRegex(query: String, caseSensitive: Boolean): Regex? = try {
+        Regex(query, if (caseSensitive) emptySet() else setOf(RegexOption.IGNORE_CASE))
+    } catch (e: java.util.regex.PatternSyntaxException) {
+        null
+    }
+
+    /** true إن كان [query] (في وضع regex) نمطًا صالحًا أو نصًا حرفيًا عاديًا (دائمًا صالح). لعرض تنبيه فوري في الشريط. */
+    fun isValidPattern(query: String, regex: Boolean): Boolean =
+        query.isEmpty() || !regex || compileRegex(query, false) != null
+
+    /** واجهة عامة لـ[computeMatches] لأجل تظليل كل التطابقات (المتحكم لا يصل إلى [engine] مباشرة في وضع regex). */
+    fun findAllForHighlight(query: String, caseSensitive: Boolean, regex: Boolean): List<RinNativeEditor.FindMatch> =
+        computeMatches(query, caseSensitive, regex)
+
+    /** يحدّد التطابق التالي لـ[query] بعد المؤشر (بحث دائري)؛ يُرجع النجاح، ويعيد y بالبكسل عند النجاح. */
+    fun findNext(query: String, caseSensitive: Boolean, regex: Boolean = false): Int? {
+        val matches = computeMatches(query, caseSensitive, regex)
+        if (matches.isEmpty()) return null
+        val cur = engine.getCursor()
+        val next = matches.firstOrNull { it.line > cur.line || (it.line == cur.line && it.startCol >= cur.col) } ?: matches.first()
+        engine.setSelection(next.line, next.startCol, next.line, next.endCol)
+        requestFocus()
+        afterEngineMutation()
+        return yOfLine(next.line)
+    }
+
+    fun findPrevious(query: String, caseSensitive: Boolean, regex: Boolean = false): Int? {
+        val matches = computeMatches(query, caseSensitive, regex)
+        if (matches.isEmpty()) return null
+        val cur = engine.getCursor()
+        val prev = matches.lastOrNull { it.line < cur.line || (it.line == cur.line && it.endCol <= cur.col) } ?: matches.last()
+        engine.setSelection(prev.line, prev.startCol, prev.line, prev.endCol)
+        requestFocus()
+        afterEngineMutation()
+        return yOfLine(prev.line)
+    }
+
+    /** يستبدل التحديد الحالي إن كان يطابق [query] بالضبط، ثم ينتقل للتطابق التالي. */
+    fun replaceOne(query: String, replacement: String, caseSensitive: Boolean, regex: Boolean = false) {
+        if (query.isEmpty()) return
+        val sel = engine.getSelection()
+        if (sel.hasSelection) {
+            val selectedText = textOfSelection(sel)
+            val matchesQuery = if (regex) {
+                compileRegex(query, caseSensitive)?.matches(selectedText) == true
+            } else if (caseSensitive) selectedText == query else selectedText.equals(query, ignoreCase = true)
+            if (matchesQuery) {
+                engine.replaceRange(sel.start.line, sel.start.col, sel.end.line, sel.end.col, replacement)
+                afterEngineMutation()
+            }
+        }
+        findNext(query, caseSensitive, regex)
+    }
+
+    /** يستبدل كل تطابقات [query] بـ[replacement]؛ يُرجع عدد الاستبدالات. */
+    fun replaceAll(query: String, replacement: String, caseSensitive: Boolean, regex: Boolean = false): Int {
+        val matches = computeMatches(query, caseSensitive, regex)
+        // طبّق من الأخير للأول حتى لا تتغيّر إحداثيات التطابقات السابقة مع كل استبدال
+        for (m in matches.asReversed()) {
+            engine.replaceRange(m.line, m.startCol, m.line, m.endCol, replacement)
+        }
+        if (matches.isNotEmpty()) afterEngineMutation()
+        return matches.size
+    }
+
+    /** فهرس (1-based) التطابق عند/بعد المؤشر، وإجمالي عدد التطابقات — لعرض "N/M". */
+    fun matchInfo(query: String, caseSensitive: Boolean, regex: Boolean = false): Pair<Int, Int> {
+        val matches = computeMatches(query, caseSensitive, regex)
+        if (matches.isEmpty()) return 0 to 0
+        val cur = engine.getCursor()
+        val idx = matches.indexOfFirst { it.line > cur.line || (it.line == cur.line && it.startCol >= cur.col) }
+            .let { if (it == -1) 0 else it }
+        return (idx + 1) to matches.size
+    }
+
+    private fun textOfSelection(sel: RinNativeEditor.Selection): String {
+        if (sel.start.line == sel.end.line) {
+            val lineText = engine.getLine(sel.start.line)
+            return lineText.substring(sel.start.col.coerceIn(0, lineText.length), sel.end.col.coerceIn(0, lineText.length))
+        }
+        val sb = StringBuilder()
+        for (l in sel.start.line..sel.end.line) {
+            val lineText = engine.getLine(l)
+            when (l) {
+                sel.start.line -> sb.append(lineText.substring(sel.start.col.coerceIn(0, lineText.length)))
+                sel.end.line -> sb.append(lineText.substring(0, sel.end.col.coerceIn(0, lineText.length)))
+                else -> sb.append(lineText)
+            }
+            if (l != sel.end.line) sb.append('\n')
+        }
+        return sb.toString()
+    }
+
+    // --- IntelliSense احترافي: إكمال سياقي + توقيع الدالة (محرك C++: rin_intellisense.h) ---------
+
+    /** لغة ملف المحرر الحالية (تتبع [setLanguage]؛ الافتراضي Rin). */
+    private var suggestionLanguage: SyntaxLanguage = SyntaxLanguage.RIN
+
+    private val intelliPopup: RinCompletionPopup by lazy {
+        RinCompletionPopup(this, colorDefault, colorKeyword, ::completionKindColor, ::applyCompletion)
+    }
+
+    /** لون شارة كل نوع اقتراح — من نفس لوحة ألوان التلوين النحوي فيبقى الشكل متسقاً. */
+    private fun completionKindColor(kind: Int): Int = when (kind) {
+        RinNativeEditor.CompletionKind.KEYWORD -> colorKeyword
+        RinNativeEditor.CompletionKind.FUNCTION, RinNativeEditor.CompletionKind.METHOD -> colorCall
+        RinNativeEditor.CompletionKind.VARIABLE -> Color.parseColor("#3B82F6")
+        RinNativeEditor.CompletionKind.CONSTANT -> colorConstant
+        RinNativeEditor.CompletionKind.CLASS, RinNativeEditor.CompletionKind.ENUM, RinNativeEditor.CompletionKind.INTERFACE -> colorClass
+        RinNativeEditor.CompletionKind.SNIPPET -> colorControl
+        RinNativeEditor.CompletionKind.NAMESPACE, RinNativeEditor.CompletionKind.MODULE -> colorType
+        RinNativeEditor.CompletionKind.PROPERTY, RinNativeEditor.CompletionKind.ENUM_MEMBER -> colorProperty
+        RinNativeEditor.CompletionKind.TEMPLATE, RinNativeEditor.CompletionKind.TAG -> colorTemplate
+        RinNativeEditor.CompletionKind.LABEL -> colorLabel
+        RinNativeEditor.CompletionKind.PARAMETER -> colorParameter
+        else -> Color.parseColor("#6B7785")
+    }
+
+    /** موضع على الشاشة لعمود [col] من سطر المؤشر. */
+    private fun anchorForCol(col: Int): RinCompletionPopup.Anchor {
+        val cur = engine.getCursor()
+        val loc = IntArray(2)
+        getLocationOnScreen(loc)
+        val lineText = engine.getLine(cur.line)
+        val x = loc[0] + paddingLeft + textPaint.measureText(lineText, 0, col.coerceIn(0, lineText.length))
+        val top = loc[1] + yOfLine(cur.line)
+        return RinCompletionPopup.Anchor(x.toInt(), top, top + lineHeight.roundToInt())
+    }
+
+    /** يُستدعى بعد كل تعديل نصّي: يحدّث قائمة الاقتراحات وتلميح التوقيع. */
+    private fun updateSuggestionPopup() {
+        if (!AppSettings.isAutocomplete(context) || !hasFocus() || !isAttachedToWindow) { dismissSuggestionPopup(); return }
+        val res = engine.complete(explicitInvoke = false)
+        if (res == null) intelliPopup.dismiss() else intelliPopup.show(res, anchorForCol(res.startCol))
+        updateSignatureHelp()
+    }
+
+    /** Ctrl+Space: إكمال صريح (يسمح ببادئة فارغة). متاح للاستدعاء من شريط الأدوات أيضاً. */
+    fun triggerCompletion() {
+        if (!hasFocus() || !isAttachedToWindow) return
+        val res = engine.complete(explicitInvoke = true)
+        if (res == null) intelliPopup.dismiss() else intelliPopup.show(res, anchorForCol(res.startCol))
+        updateSignatureHelp()
+    }
+
+    /** تلميح توقيع الدالة التي يقف المؤشر داخل استدعائها (يتبع المؤشر أيضاً دون تعديل نصّي). */
+    private fun updateSignatureHelp() {
+        if (!AppSettings.isAutocomplete(context) || !hasFocus() || !isAttachedToWindow ||
+            engine.getSelection().hasSelection) { intelliPopup.dismissSignature(); return }
+        val info = engine.signatureHelp()
+        if (info == null) { intelliPopup.dismissSignature(); return }
+        intelliPopup.showSignature(info, anchorForCol(engine.getCursor().col))
+    }
+
+    /** يُدرج الاقتراح المختار: يستبدل النص المطابق، يضع المؤشر داخل الأقواس، ويوسّع القوالب. */
+    private fun applyCompletion(res: RinNativeEditor.CompletionResult, item: RinNativeEditor.CompletionItem) {
+        val cur = engine.getCursor()
+        val end = max(res.endCol, cur.col)
+        val after = engine.replaceRange(cur.line, res.startCol, cur.line, end, item.insertText)
+        engine.recordCompletionUse(item.label)
+        if (item.snippet && suggestionLanguage == SyntaxLanguage.RIN && RinNativeEditor.isSnippetTrigger(item.insertText)) {
+            engine.expandSnippetAtCursor()
+        } else if (item.cursorBack > 0) {
+            engine.setCursor(after.line, (after.col - item.cursorBack).coerceAtLeast(0), false)
+        }
+        afterEngineMutation()
+    }
+
+    private fun dismissSuggestionPopup() {
+        intelliPopup.dismissAll()
+    }
+
+    /** معالجة مفاتيح القائمة المفتوحة (أسهم/Tab/Enter/Esc) وCtrl+Space. true إن استُهلك المفتاح. */
+    private fun handleIntelliKey(keyCode: Int, event: KeyEvent): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_SPACE && event.isCtrlPressed) { triggerCompletion(); return true }
+        if (intelliPopup.isShowing) {
+            when (keyCode) {
+                KeyEvent.KEYCODE_DPAD_DOWN -> { intelliPopup.moveSelection(1); return true }
+                KeyEvent.KEYCODE_DPAD_UP -> { intelliPopup.moveSelection(-1); return true }
+                KeyEvent.KEYCODE_TAB -> { if (intelliPopup.accept()) return true }
+                KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER ->
+                    // Enter يقبل الاقتراح فقط بعد أن حرّك المستخدم التحديد؛ وإلا يبقى سطراً جديداً عادياً
+                    if (intelliPopup.userNavigated && intelliPopup.accept()) return true
+                KeyEvent.KEYCODE_ESCAPE -> { intelliPopup.dismissAll(); return true }
+            }
+        } else if (keyCode == KeyEvent.KEYCODE_ESCAPE && intelliPopup.isSignatureShowing) {
+            intelliPopup.dismissSignature(); return true
+        }
+        return false
+    }
+
+    // --- تشخيص أخطاء الصياغة الحي — تلميح نصّي عند وقوف المؤشر داخل نطاق خطأ/تحذير ---------
+
+    private var diagnosticPopup: PopupWindow? = null
+
+    /** يُستدعى من [afterEngineMutation] بعد كل تعديل/تحريك مؤشر؛ يعرض رسالة أول تشخيص يقع
+     *  المؤشر ضمن نطاقه على سطره الحالي (أو يخفي النافذة إن لم يكن هناك تطابق). لا يظهر أثناء
+     *  وجود تحديد نشط (قد يغطّي التلميح ما يحدّده المستخدم) ولا فوق قائمة الإكمال التلقائي معًا. */
+    private fun updateDiagnosticPopup() {
+        if (!AppSettings.isLiveDiagnostics(context) || !hasFocus() || !isAttachedToWindow ||
+            engine.getSelection().hasSelection || intelliPopup.isShowing
+        ) {
+            dismissDiagnosticPopup(); return
+        }
+        val cur = engine.getCursor()
+        val diag = cachedDiagnosticsByLine[cur.line]?.firstOrNull { cur.col in it.startCol..it.endCol }
+        if (diag == null) { dismissDiagnosticPopup(); return }
+        showDiagnosticPopup(diag)
+    }
+
+    private fun showDiagnosticPopup(diag: RinNativeEditor.Diagnostic) {
+        val isError = diag.severity == RinNativeEditor.DiagnosticSeverity.ERROR
+        val accent = if (isError) diagnosticErrorPaint.color else diagnosticWarningPaint.color
+        val label = TextView(context).apply {
+            text = "${diag.code}  ${diag.message}"
+            typeface = android.graphics.Typeface.MONOSPACE
+            setTextColor(colorDefault)
+            textSize = 12.5f
+            val padH = (12 * resources.displayMetrics.density).toInt()
+            val padV = (8 * resources.displayMetrics.density).toInt()
+            setPadding(padH, padV, padH, padV)
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#2A2D31"))
+                cornerRadius = 6 * resources.displayMetrics.density
+                setStroke((resources.displayMetrics.density * 1.4f).toInt().coerceAtLeast(1), accent)
+            }
+        }
+
+        val popup = diagnosticPopup ?: PopupWindow(
+            label, LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply {
+            isOutsideTouchable = false
+            isFocusable = false
+            elevation = 12f
+            diagnosticPopup = this
+        }
+        popup.contentView = label
+
+        label.measure(
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        )
+        val popupWidth = label.measuredWidth
+        val popupHeight = label.measuredHeight
+
+        val cur = engine.getCursor()
+        val loc = IntArray(2)
+        getLocationOnScreen(loc)
+        val dm = resources.displayMetrics
+        val screenWidth = dm.widthPixels
+        val screenHeight = dm.heightPixels
+
+        val cursorLocalX = paddingLeft
+        val cursorLocalY = yOfLine(cur.line)
+        val rawX = loc[0] + cursorLocalX
+        val screenX = rawX.coerceIn(0, (screenWidth - popupWidth).coerceAtLeast(0))
+
+        // فوق السطر افتراضيًا (حتى لا يغطّي التلميح السطر التالي أثناء الكتابة)، أو أسفله إن لم
+        // تكن هناك مساحة كافية أعلى (مثال: أول سطر في المستند).
+        val aboveY = loc[1] + cursorLocalY - popupHeight
+        val belowY = loc[1] + cursorLocalY + lineHeight.roundToInt()
+        val screenY = if (aboveY >= 0) aboveY else belowY.coerceAtMost((screenHeight - popupHeight).coerceAtLeast(0))
+
+        if (popup.isShowing) {
+            popup.update(screenX, screenY, -1, -1)
+        } else {
+            popup.showAtLocation(this, Gravity.NO_GRAVITY, screenX, screenY)
+        }
+    }
+
+    private fun dismissDiagnosticPopup() {
+        diagnosticPopup?.let { if (it.isShowing) it.dismiss() }
+    }
+
+    // --- تلميح توثيق سريع (hover/quick-doc) عند الضغط الطويل على كلمة محجوزة -----------------
+
+    private var hoverDocPopup: PopupWindow? = null
+
+    /** يعرض تلميح توثيق [RinKeywordDocs] لكلمة [word] فوق السطر الحالي — لا شيء إن كانت
+     *  [word] فارغة (لا كلمة عند نقطة اللمس) أو ليست كلمة محجوزة موثَّقة. يُستدعى من
+     *  onLongPress/onDoubleTap بعد [selectWordAt] مباشرة. */
+    private fun showHoverDocIfKeyword(word: String?) {
+        // IntelliSense أولاً (متغيرات/دوال المستخدم مع تعليقاتها، الدوال المدمجة، الكلمات المحجوزة)،
+        // ثم التوثيق الثابت القديم كاحتياط.
+        val sel = engine.getSelection()
+        val symbol = if (word == null) null else try { engine.describeAt(sel.start.line, sel.start.col + 1) } catch (_: Throwable) { null }
+        val doc = when {
+            symbol != null && (symbol.doc.isNotEmpty() || symbol.signature.isNotEmpty()) ->
+                (if (symbol.signature.isNotEmpty()) symbol.signature else symbol.name) +
+                    (if (symbol.doc.isNotEmpty()) "\n" + symbol.doc else "")
+            else -> word?.let { RinKeywordDocs.lookup(it)?.let { d -> "$it — $d" } }
+        }
+        if (doc == null) { dismissHoverDoc(); return }
+        val label = TextView(context).apply {
+            text = doc
+            setTextColor(colorDefault)
+            textSize = 12.5f
+            val padH = (12 * resources.displayMetrics.density).toInt()
+            val padV = (8 * resources.displayMetrics.density).toInt()
+            setPadding(padH, padV, padH, padV)
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#2A2D31"))
+                cornerRadius = 6 * resources.displayMetrics.density
+                setStroke((resources.displayMetrics.density * 1.4f).toInt().coerceAtLeast(1), colorType)
+            }
+        }
+        val popup = hoverDocPopup ?: PopupWindow(
+            label, LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply {
+            isOutsideTouchable = true
+            isFocusable = false
+            elevation = 12f
+            hoverDocPopup = this
+        }
+        popup.contentView = label
+        label.measure(
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        )
+        val popupWidth = label.measuredWidth
+        val popupHeight = label.measuredHeight
+
+        val cur = engine.getCursor()
+        val loc = IntArray(2)
+        getLocationOnScreen(loc)
+        val dm = resources.displayMetrics
+        val rawX = loc[0] + paddingLeft
+        val screenX = rawX.coerceIn(0, (dm.widthPixels - popupWidth).coerceAtLeast(0))
+        val lineY = loc[1] + yOfLine(cur.line)
+        val aboveY = lineY - popupHeight
+        val screenY = if (aboveY >= 0) aboveY else (lineY + lineHeight.roundToInt()).coerceAtMost((dm.heightPixels - popupHeight).coerceAtLeast(0))
+
+        if (popup.isShowing) popup.update(screenX, screenY, -1, -1) else popup.showAtLocation(this, Gravity.NO_GRAVITY, screenX, screenY)
+    }
+
+    private fun dismissHoverDoc() {
+        hoverDocPopup?.let { if (it.isShowing) it.dismiss() }
+    }
+}

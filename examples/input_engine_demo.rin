@@ -1,0 +1,28 @@
+// input_engine_demo.rin — محرّك النماذج: حاوية + كائنات OOP متداخلة + مُدقِّق للنموذج كله + معاملة
+// التشغيل:  printf 'Sara\nJeddah\n21442\nsara@x.org\nsara@x.org\n' | rin run examples/input_engine_demo.rin
+class Address { let city = "Riyadh"; let zip = 11564; }
+class User     { let name = "Ali"; let home = nil; }
+
+@container=Signup
+    state email = "";
+    state email2 = "";
+    on update(prev) { print "  [signup] " + getField("Signup", "email"); }
+.end/container
+
+// مُدقِّق النموذج: كائن OOP يستلم لقطة الحاوية بعد ملئها
+class SameEmail {
+    fun __call__(s) {
+        if (s.email != s.email2) { return "البريدان مختلفان"; }
+        return true;
+    }
+}
+
+let u = User();
+u.home = Address();
+input("U> ", u, {"home": u.home});               // كائن داخل كائن، يُملأ في مكانه
+print "";
+print u.name + " @ " + u.home.city + " " + u.home.zip;
+
+let snap = input("S> ", SameEmail(), "Signup");   // يعيد الأسئلة حتى يتطابق البريدان
+print "";
+print "email=" + snap.email;

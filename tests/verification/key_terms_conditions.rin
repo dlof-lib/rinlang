@@ -1,0 +1,24 @@
+// KEY_TERMS + key conditions + built-in condition helpers
+let score = 85;
+
+=if=(score >= 80) { print "if:ok"; }
+=unless=(score < 80) { print "unless:ok"; }
+=when=(typeIs(score, "number")) { print "when:ok"; }
+
+.KEY_TERMS = {
+    "when": "if",
+    "unless": "if"
+};
+
+print is(score, 85);
+print empty("");
+print has([1, 2, 3], 2);
+print between(score, 80, 90);
+print all([true, 1, "ok"]);
+print any([false, 0, "ok"]);
+print none([false, 0, nil]);
+
+.KEY_TERMS == {
+    "when": "if",
+    "unless": "if"
+};

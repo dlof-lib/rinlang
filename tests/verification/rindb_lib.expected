@@ -1,0 +1,43 @@
+🗂️ Containers.Group = RinDB
+📦 container = catalog
+✅ .end/container (catalog)
+✅ .end/Containers.Group (RinDB) [تحتوي: catalog]
+📥 @import: تم استيراد "lib/rindb.og.rin" (مكتبة: rindb 1.0.0 — 5 أجزاء)
+tables=["users", "orders"] kind=doc
+auto=1
+count=3 has=true/false
+incr=35
+find=u2
+sql=2
+caught: duplicate
+caught: schema
+after errors=3 u9=false
+inside tx=3
+after rollback=3 u2=true
+tx failed: boom
+orders after failed tx=0
+bulk=["1", "x"]
+orders=2
+tables=["users"] exists=false
+catalog open=1
+open after close=[] catalog=0
+reopened docs=2 b2=2021 gone=false
+indexed find=b1
+schema kept
+auto id continues=1 -> 2
+checkpoints=1 verify=true
+backup ok=true
+readonly count=3
+caught: read-only
+caught: wrong name
+final=[] file=false
+📚 Volume = Store
+🗂️ Containers.Group = Shop
+📦 container = app
+✅ .end/container (app)
+✅ .end/Containers.Group (Shop) [تحتوي: app]
+✅ .end/Volume (Store) [تحتوي: Shop]
+inside setup=1
+{"_id": "u1", "name": "Sara K"}
+[{"_id": "u1", "name": "Sara K"}]
+inside docs=1 tables=["users"]

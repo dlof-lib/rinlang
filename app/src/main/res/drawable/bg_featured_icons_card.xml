@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- بطاقة «مكتبة الأيقونات» المميّزة أعلى شاشة المكتبات: تدرّج بنفسجي→أزرق مخضر يميّزها عن بقية البطاقات. -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="#33FFFFFF">
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:type="linear"
+                android:angle="135"
+                android:startColor="#7C5CFF"
+                android:endColor="#18B6C9" />
+            <corners android:radius="20dp" />
+        </shape>
+    </item>
+</ripple>

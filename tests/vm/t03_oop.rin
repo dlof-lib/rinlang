@@ -1,0 +1,25 @@
+class Animal {
+  let name = "x";
+  fun init(n) { self.name = n; }
+  fun speak() { return self.name + " makes a sound"; }
+  static fun make(n) { return Animal(n); }
+}
+class Dog extends Animal {
+  fun speak() { return super.speak() + " (woof)"; }
+  fun __add__(o) { return self.name + "&" + o.name; }
+}
+let d = Dog("rex");
+print d.speak();
+print d + Dog("fido");
+print Animal.make("gen").speak();
+d.name = "max";
+print d.name;
+struct P { let x = 1; let y = 2; }
+let p1 = P(); let p2 = p1; p2.x = 9; print p1.x, p2.x;
+enum Color { Red, Green = 5 }
+print Color.Red.name, Color.Green.value;
+class Counter { let n = 0; fun inc() { self.n = self.n + 1; return self; } }
+let c = Counter(); c.inc().inc().inc(); print c.n;
+print [1,2,3] |> sum();
+let arr = [3,1,2]; sort(arr); print arr;
+let s = Set(1,2,2,3); print len(s);

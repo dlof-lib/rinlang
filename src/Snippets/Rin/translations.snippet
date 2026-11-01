@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<CodeSnippets xmlns="http://schemas.microsoft.com/VisualStudio/2005/CodeSnippet">
+  <CodeSnippet Format="1.0.0">
+    <Header>
+      <Title>Translations</Title>
+      <Shortcut>translations</Shortcut>
+      <Description>كتلة ترجمات متعددة اللغات</Description>
+      <SnippetTypes>
+        <SnippetType>Expansion</SnippetType>
+      </SnippetTypes>
+    </Header>
+    <Snippet>
+      <Declarations>
+        <Literal>
+          <ID>p1</ID>
+          <ToolTip>p1</ToolTip>
+          <Default>نص عربي</Default>
+        </Literal>
+      </Declarations>
+      <Code Language="Rin"><![CDATA[Translations
+	translation lang="ar" text="$p1$";
+	translation lang="en" text="$end$";
+.end/Translations]]></Code>
+    </Snippet>
+  </CodeSnippet>
+</CodeSnippets>

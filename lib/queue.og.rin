@@ -1,0 +1,10 @@
+// Rin Queue Pro — FIFO queue.
+fun queue_new(){return [];}
+fun queue_push(q,v){push(q,v);return q;}
+fun queue_peek(q){if(len(q)==0){return nil;}return q[0];}
+fun queue_pop(q){if(len(q)==0){return nil;}let v=q[0];let i=1;while(i<len(q)){q[i-1]=q[i];i=i+1;}pop(q);return v;}
+fun queue_size(q){return len(q);}
+fun queue_empty(q){return len(q)==0;}
+fun queue_pushMany(q,arr){let i=0;while(i<len(arr)){push(q,arr[i]);i=i+1;}return q;}
+fun queue_toArray(q){let out=[];let i=0;while(i<len(q)){push(out,q[i]);i=i+1;}return out;}
+fun queue_clear(q){while(len(q)>0){pop(q);}return q;}

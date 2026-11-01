@@ -1,0 +1,632 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>وثيقة rdoc الشاملة — Documentation Container — Rin</title>
+<meta name="description" content="توثيق لغة البرمجة Rin"><link rel="icon" href="../assets/brand/icon-32.png">
+<link rel="stylesheet" href="assets/style.css"></head><body>
+<header><button id="mn" aria-label="القائمة">☰</button><a class="logo" href="index.html"><img src="../assets/brand/icon-48.png" alt="" width="26">Rin</a>
+<input id="q" type="search" placeholder="ابحث في التوثيق…" autocomplete="off"><button id="th" aria-label="الوضع">◐</button>
+<a class="gh" href="https://github.com/dlof-lib/rinlang">GitHub</a><div id="res"></div></header>
+<div class="wrap"><nav id="sb"><details ><summary>ابدأ هنا</summary><a href="getting-started.html">البداية</a><a href="syntax.html">القواعد النحوية العامة</a><a href="variables.html">let`، مصفوفات، قواميس، نطاق</a><a href="template-strings.html">النصوص القالبية (متغيّرات داخل النص)</a><a href="input.html">إدخال المستخدم (Input)</a><a href="control-flow.html">الشروط، الحلقات، `goal`/`achieve</a><a href="loops.html">حلقات Rin — Loops v2</a><a href="functions.html">fun`/`return`، التكرار الذاتي</a><a href="enums.html">enum`: قوائم اختيار مغلقة</a></details><details ><summary>اللغة</summary><a href="language-reference.html">المرجع الشامل وخريطة ترابط المفاهيم</a><a href="objects.html">class`/`struct`، `.object()`، `@Object`، `document</a><a href="oop.html">البرمجة الكائنية الموسَّعة (Rin 1.0)</a><a href="containers.html">دليل `@container` / `@element` / `@loop</a><a href="table.html">الجدول (`@table` / `@container.table`) ودوال اللغة عليه</a><a href="set.html">Set`: نوع المجموعة الأساسي</a><a href="pipelines.html">عامل الأنابيب `|&gt;</a><a href="RECKON.html">reckon`: مفهوم حسابي بسطرين</a><a href="let-plus.html">let` المطوَّر</a><a href="living-variables.html">المتغيرات الحيّة (Living Variables)</a><a href="label-define.html">label` و`define` (تسمية وتعريف)</a><a href="block-frames.html">بداية الكتل ونهايتها (Block Frames)</a><a href="compare_ops.html">معاملات المقارنة `/=` و `=/=` و `=/</a><a href="max_min.html">max / min family</a><a href="scope-guarantees.html">ضمانات النطاق: `finally` · `defer` · `catch … when` · `rethrow</a><a href="key_terms_and_builtins.html">Rin KEY_TERMS and Built-in Conditions</a><a href="number_builtins.html">Rin Number Built-ins</a></details><details ><summary>الواجهات (Indsin)</summary><a href="indsin.html">Indsin — Interface Design</a><a href="indsin_rin.html">indsin يعتمد على لغة Rin</a><a href="indsin_expansion.html">Indsin — التوسعة الاحترافية (Design System v2)</a><a href="indsin_object.html">indsin-object — API reference</a><a href="indsin_media.html">Indsin Media — اختيار الوسائط ورفعها</a><a href="indsin_icons.html">مكتبة أيقونات indsin (متجهية)</a><a href="indsin_tooling.html">indsin tooling — icon, file association, syntax highlighting</a><a href="indsinweb.html">IndsinWeb — مكتبة WebView والروابط لـ indsin</a><a href="RIN_ELEMENTS.html">دليل `@element.*` الكامل</a><a href="events-effects.html">الأحداث والتأثيرات (Events &amp; Effects) — محرك Indsin UI</a><a href="banner.html">Banner: إشعار شريطي</a><a href="simple-style.html">Rin Simple Style</a></details><details ><summary>بيئة التشغيل</summary><a href="runtime.html">وقت تشغيل Rin (Rin Runtime) · المرجع الرسمي</a><a href="standard-library.html">المكتبة القياسية (`lib/*.og.rin`)</a><a href="errors.html">نظام الأخطاء: أكواد، `try`/`catch`/`throw</a><a href="ERROR_SYSTEM.html">نظام التشخيص: البنية الداخلية + جدول الأكواد الكامل</a><a href="storage.html">تخزين دائم</a><a href="http.html">شبكات</a><a href="env.html">ربط Rin بملف `.env</a><a href="terminal.html">الطرفية التفاعلية — `rin terminal</a><a href="vm.html">RinVM — آلة Rin الافتراضية (بايتكود)</a><a href="rinflow.html">RinFlow: طبقة تنفيذ التدفّق المهيكل</a><a href="MAKE_UNIT.html">@make.(name)`: وحدة بسياسة قدرات صريحة</a><a href="MAKE_MEDIA.html">فيديو · صوت · API · إزالة الخلفية · قراءة النص من الصور</a><a href="TIME.html">مفهوم `time`: الزمن كقيمة من الدرجة الأولى</a><a href="native-additions.html">دوال Rin الأصلية الجديدة (Rin 1.0)</a></details><details ><summary>الحاويات وقواعد البيانات</summary><a href="container_advanced.html">Rin Container Advanced Built-ins</a><a href="container_pro.html">Rin Container Pro</a><a href="container_sql.html">RIN CONTAINER SQL (RCSQL)</a><a href="cross-file-containers.html">استدعاء إعلانات من ملف آخر</a></details><details ><summary>الحزم والتكامل</summary><a href="api.html">واجهة C المسطَّحة (Embedding API)</a><a href="android.html">استضافة Rin على أندرويد</a><a href="packages-and-interop.html">Rin 1.0 — المكتبات والحزم وجسر C++ وJSON واختبارات rintest</a><a href="rinpak-format.html">RinPak — حزمة مشروع Rin (`.rinpak`)</a><a href="html-projects.html">مشاريع HTML في Rin — الربط بين index.html وملف الحاوية</a><a href="project-og-urin.html">project.og.urin` — البيانات الوصفية لمشروع Rin</a><a href="CONTENT_PACKS.html">حزم المحتوى القابلة للتنزيل (Content Packs)</a><a href="previewkit.html">previewkit — معاينة حيّة لملفات PDF / Markdown / TypeScript</a></details><details ><summary>المكتبات المتخصصة</summary><a href="rinml.html">RinML / RinDF / RinAI — الذكاء الاصطناعي وتحليل البيانات في Rin</a><a href="STATS.html">RinStat — التحليل الإحصائي (`lib/rinstat.og.rin`)</a><a href="STATS_ADV.html">RinStat المتقدّم + RinAuto</a><a href="LINALG.html">الجبر الخطي للمهندسين — `mat*` و`vec*</a><a href="PLOT.html">RinPlot — الرسوم البيانية الإحصائية (`lib/rinplot.og.rin`)</a><a href="ALGO.html">تطوير الخوارزميات والحساب العددي — `algo*</a><a href="NUMBER.html">مفهوم `number` في Rin</a><a href="boat.html">&quot;Boat&quot;: مفاهيم أساسية مجمَّعة</a><a href="passkit.html">passkit — passwords, encryption, databases and a tag language</a><a href="passkit-crypto-db.html">Passkit feature catalog: encryption, databases and container linking</a><a href="hash-family.html">عائلة `#` — مفاهيم ودوال جديدة تبدأ بعلامة `#</a><a href="image-draw.html">إنشاء الصور في Rin — رسم وحفظ PNG وlog كصورة</a><a href="image-terminal.html">طباعة الصور في الـ terminal — `printImage` / `imageAnsi` / `imageInfo</a></details><details ><summary>المشروع</summary><a href="CONTRIBUTING.html">المساهمة في Rin</a><a href="CODE_OF_CONDUCT.html">قواعد السلوك</a><a href="SECURITY.html">سياسة الأمان</a><a href="SUPPORT.html">الحصول على المساعدة</a><a href="TRADEMARKS.html">سياسة العلامة التجارية — Trademark Policy</a><a href="THIRD_PARTY_NOTICES.html">إشعارات المكوّنات الخارجية — Third-Party Notices</a></details><details open><summary>مراجع إضافية</summary><a href="ANDROID_VERSIONS.html">حزم RinStudio لكل إصدار أندرويد</a><a href="TOKEN.html">مفهوم `token` في Rin</a><a href="TOOLCHAIN.html">Rin Professional Language Toolchain</a><a href="TOOLCHAIN_UPGRADE.html">Toolchain Upgrade — 2026-09</a><a href="architecture.html">المعمارية وبنية المستودع</a><a href="base-accept.html">base` و`accept`: متغيّران يخدمان `if</a><a href="channel47.html">channel47 — لغة وصف البيانات والإعدادات</a><a href="ci.html">CI وأدوات المستودع</a><a href="loop-templates.html">قوالب الحلقات `@tmpl</a><a href="pre-post.html">pre` و`post` (ما قبل / ما بعد): عقد انتقال حول الإسناد</a><a href="print-fonts.html">خطوط `print` — bold / italic / underline وغيرها</a><a href="print-image-terminal.html">طباعة الصور كنص في الطرفية</a><a href="print-templates.html">قوالب الطباعة `@tmpl ... print` — قوالب نصية خطية وتنسيقية</a><a href="rdoc.html">rdoc — Documentation Container</a><a href="rdoc-reference.html" class=on>وثيقة rdoc الشاملة — Documentation Container</a><a href="screenshots.html">لقطات من RinStudio</a></details></nav>
+<main><article><h1 id="rdoc-documentation-container">وثيقة rdoc الشاملة — Documentation Container<a class="headerlink" href="#rdoc-documentation-container" title="Permanent link">#</a></h1>
+<p>المرجع الكامل للغة توثيق الحزم <code>README.rdoc</code>. للاطلاع السريع على الصيغ راجع <a href="rdoc.html"><code>rdoc.md</code></a>، ولنموذج يعمل <a href="https://github.com/dlof-lib/rinlang/blob/main/docs/rdoc/README.rdoc"><code>rdoc/README.rdoc</code></a>.</p>
+<h2 id="1">1. المفهوم<a class="headerlink" href="#1" title="Permanent link">#</a></h2>
+<p>rdoc لهجة توثيق مستقلة عن Markdown تُعرَض داخل Rin عبر <code>DocumentationContainer</code>. تضيف لـMarkdown حاويات تخطيط، بلوكات بيانات، استدعاء روابط، دفع وتبرّع، فيديو، أقواس بأنواع، إعدادات صفحة، شريطاً متحركاً، وميزات خاصة بالحزم وتوثيق الدوال.</p>
+<p>مبادئ ثابتة:</p>
+<ul>
+<li><strong>الفتح والإغلاق متناظران:</strong> كل رمز له بداية ونهاية.</li>
+<li><strong>الخطأ مرئي:</strong> أي قيمة أو بنية غير صالحة تظهر شريحة حمراء بدل أن تُبتلع.</li>
+<li><strong>آمن افتراضياً:</strong> https فقط للدفع والوسائط، وتأكيد قبل أي رابط دفع، وحدود صارمة (القسم 12).</li>
+<li><strong>متوافق للخلف:</strong> بدون الترويسة يبقى المستند Markdown خالصاً.</li>
+</ul>
+<h2 id="2">2. التفعيل<a class="headerlink" href="#2" title="Permanent link">#</a></h2>
+<p>يبدأ المستند بترويسة، وتُضاف تلقائياً لأي <code>README.rdoc</code> داخل الحزم:</p>
+<pre><code class="language-text">؛؛؛ rdoc
+title: اسم المكتبة
+version: 1.0.0
+؛؛؛
+</code></pre>
+<p>مفاتيح هذا البلوك (<code>title</code> و<code>version</code>…) تصبح متغيّرات <code>{{title}}</code> و<code>{{version}}</code>. في حزمة تحتوي README.md وREADME.rdoc معاً يتقدّم <code>README.rdoc</code>.</p>
+<h2 id="3">3. الرموز<a class="headerlink" href="#3" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الرمز</th>
+<th>الوظيفة</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>:::</code> … <code>:::</code></td>
+<td>حاويات تخطيط متداخلة</td>
+</tr>
+<tr>
+<td><code>؛؛؛</code> … <code>؛؛؛</code></td>
+<td>بلوكات بيانات</td>
+</tr>
+<tr>
+<td><code>*"…"*</code></td>
+<td>استدعاء رابط عنصر</td>
+</tr>
+<tr>
+<td><code>؛:</code> … <code>:؛</code></td>
+<td>دفع وتبرّع</td>
+</tr>
+<tr>
+<td><code>:;</code> … <code>;:</code></td>
+<td>فيديو وويب فيو</td>
+</tr>
+<tr>
+<td><code>[نوع: قيمة]</code></td>
+<td>أقواس بأنواع وستايل</td>
+</tr>
+<tr>
+<td><code>{{مفتاح}}</code></td>
+<td>متغيّر من بلوك <code>meta</code> (<code>\{{x}}</code> حرفية)</td>
+</tr>
+<tr>
+<td><code>؛؛ نص</code></td>
+<td>تعليق سطر كامل لا يُعرض</td>
+</tr>
+<tr>
+<td><code>== عنوان</code></td>
+<td>عناوين بديلة عن <code>#</code> (من <code>=</code> إلى <code>======</code>)</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="4">4. الحاويات <code>:::</code><a class="headerlink" href="#4" title="Permanent link">#</a></h2>
+<p>الصيغة: <code>::: نوع عنوان</code> ثم الجسم ثم <code>:::</code>. أي <code>:::</code> (بثلاث نقاط رأسية أو أكثر) يغلق أقرب حاوية، فيمكن استخدام <code>:::::</code> للخارجية للوضوح. عمق التعشيش الأقصى 4.</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>النوع (وأسماؤه)</th>
+<th>الاستخدام</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>note</code>/ملاحظة · <code>tip</code>/نصيحة · <code>important</code>/مهم · <code>warning</code>/تحذير · <code>danger</code>/خطر · <code>success</code>/نجاح · <code>quote</code>/اقتباس</td>
+<td>بطاقات تنبيه ملوّنة</td>
+</tr>
+<tr>
+<td><code>card</code>/بطاقة</td>
+<td>بطاقة محايدة؛ نوع مجهول يظهر كبطاقة مع علامة خطأ</td>
+</tr>
+<tr>
+<td><code>steps</code>/خطوات</td>
+<td>قائمة تُرقَّم تلقائياً</td>
+</tr>
+<tr>
+<td><code>spoiler</code>/مخفي/طي</td>
+<td>قسم قابل للطي</td>
+</tr>
+<tr>
+<td><code>toc</code>/فهرس</td>
+<td>فهرس تلقائي من عناوين المستند (<code>#</code> و<code>=</code>)</td>
+</tr>
+<tr>
+<td><code>changelog</code>/تغييرات</td>
+<td>سطر <code>+</code> أضيف · <code>~</code> عُدّل · <code>!</code> أُصلح · <code>-</code> حُذف</td>
+</tr>
+<tr>
+<td><code>timeline</code>/جدول-زمني</td>
+<td>سطر <code>تاريخ: نص</code> أو <code>مرحلة \| نص</code></td>
+</tr>
+<tr>
+<td><code>faq</code>/أسئلة</td>
+<td><code>س:</code> سؤال و<code>ج:</code> جواب (أو <code>Q:</code> و<code>A:</code>)</td>
+</tr>
+<tr>
+<td><code>api</code>/دالة/صنف · <code>api-index</code>/فهرس-الدوال · <code>install</code>/تثبيت · <code>example</code>/مثال</td>
+<td>توثيق الحزم (القسم 9)</td>
+</tr>
+<tr>
+<td><code>marquee</code>/شريط</td>
+<td>الشريط المتحرك (القسم 8)</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="5">5. بلوكات البيانات <code>؛؛؛</code><a class="headerlink" href="#5" title="Permanent link">#</a></h2>
+<p>يُغلق البلوك بـ<code>؛؛؛</code> أو بأول سطر فارغ (فلا يبتلع نسيانُ الإغلاق بقية المستند). أسطر تبدأ بـ<code>؛؛</code> تُهمَل داخله.</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>البلوك</th>
+<th>المحتوى</th>
+<th>الظهور</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>rdoc</code> / <code>meta</code> / <code>بيانات</code></td>
+<td><code>مفتاح: قيمة</code> — يغذّي <code>{{مفتاح}}</code></td>
+<td>صامت</td>
+</tr>
+<tr>
+<td><code>مراجع</code> / <code>refs</code></td>
+<td><code>معرّف = رابط \| تسمية</code> — تعريفات لـ<code>*"معرّف"*</code></td>
+<td>صامت</td>
+</tr>
+<tr>
+<td><code>صفحة</code> / <code>page</code></td>
+<td>إعدادات الصفحة (القسم 7)</td>
+<td>صامت</td>
+</tr>
+<tr>
+<td><code>حقائق</code></td>
+<td><code>مفتاح: قيمة</code></td>
+<td>بطاقة</td>
+</tr>
+<tr>
+<td><code>روابط</code></td>
+<td><code>تسمية = رابط أو معرّف \| أيقونة</code></td>
+<td>أزرار</td>
+</tr>
+<tr>
+<td><code>شارات</code></td>
+<td><code>تسمية: قيمة \| لون</code></td>
+<td>شارات ثنائية</td>
+</tr>
+<tr>
+<td><code>دعم</code></td>
+<td>سطر دفع/تبرّع لكل بند</td>
+<td>أزرار دفع</td>
+</tr>
+<tr>
+<td><code>حزمة</code> / <code>package</code></td>
+<td>بطاقة الحزمة (القسم 9)</td>
+<td>بطاقة</td>
+</tr>
+<tr>
+<td><code>تبعيات</code> / <code>deps</code></td>
+<td>تبعيات بقيود إصدار (القسم 9)</td>
+<td>بطاقة</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="6">6. العناصر السطرية<a class="headerlink" href="#6" title="Permanent link">#</a></h2>
+<h3 id="_1">استدعاء العنصر <code>*"…"*</code><a class="headerlink" href="#_1" title="Permanent link">#</a></h3>
+<p>يستدعي رابطاً معرَّفاً في مكان آخر: بـ<code>id=(…)</code> داخل <code>[* *]</code>، أو في بلوك <code>مراجع</code>، أو مباشرة <code>@user</code> / <code>@user/lib</code> (روابط Rin القانونية).</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الصيغة</th>
+<th>الناتج</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>*"repo"*</code></td>
+<td>رابط بتسمية العنصر</td>
+</tr>
+<tr>
+<td><code>*"repo\|نص"*</code></td>
+<td>رابط بنص مخصص</td>
+</tr>
+<tr>
+<td><code>*"repo\|نص\|button"*</code></td>
+<td>زر (<code>button</code> أو <code>soft</code> أو <code>outline</code> أو <code>solid</code>)</td>
+</tr>
+</tbody>
+</table></div>
+<p>معرّف غير معروف يظهر «مرجع مفقود».</p>
+<h3 id="_2">الدفع والتبرّع <code>؛: … :؛</code><a class="headerlink" href="#_2" title="Permanent link">#</a></h3>
+<p><code>مزوّد|هدف[|مبلغ عملة][|نص][|type=(donate|pay|subscribe)]</code> — الهدف اسم مستخدم أو رابط https. المزوّدون: <code>paypal</code> <code>patreon</code> <code>kofi</code> <code>coffee</code> <code>github</code> <code>liberapay</code> <code>opencollective</code> <code>wise</code> و<code>url</code> (أي رابط https). مزوّدو نسخ العنوان <code>btc eth usdt ltc sol xmr iban copy</code>: بلا شبكة، والنقر ينسخ القيمة.</p>
+<p>يعمل داخل <code>[* … *]</code> أيضاً: <code>[*ادعمنا/؛:paypal|user|5 USD:؛*]</code> أو <code>[*تبرّع/donate=(patreon|user)*]</code>. الزر يعرض المضيف الحقيقي، والنقر يفتح نافذة تأكيد.</p>
+<h3 id="_3">الفيديو <code>:; … ;:</code><a class="headerlink" href="#_3" title="Permanent link">#</a></h3>
+<p><code>[video|web] https://…[|عنوان][|key=(قيمة)…]</code>. على سطر مستقل: مشغّل بملصق تشغيل (لا شبكة قبل النقر)، وداخل فقرة: زر يفتح الرابط. JavaScript مسموح لمضيفي الفيديو الموثوقين فقط (YouTube وVimeo وDailymotion)، والتنقل الرئيسي محصور بمضيف التضمين.</p>
+<p><strong>يوتيوب الاحترافي</strong> (تفاصيل كل الخيارات في <a href="rdoc.html"><code>rdoc.md</code></a>):</p>
+<ul>
+<li>صيغ الروابط: <code>watch</code> · <code>youtu.be</code> · <code>shorts</code> · <code>live</code> · <code>embed</code> · <code>playlist</code> · <code>music.youtube.com</code>؛ وقت البدء من الرابط (<code>?t=1m30s</code>).</li>
+<li>خيارات: <code>start</code> <code>end</code> <code>autoplay</code> <code>mute</code> <code>loop</code> <code>captions</code> <code>lang</code> <code>related</code> <code>controls</code> <code>privacy</code> <code>thumb</code> <code>ratio</code> <code>height</code>.</li>
+<li>نسبة أبعاد حقيقية (16:9، وshorts بـ9:16)، وملصق بزر تشغيل أحمر، وصورة مصغّرة اختيارية (<code>thumb=(true)</code>).</li>
+<li>↗ فتح في يوتيوب، ✕ إغلاق، ملء الشاشة، وإيقاف المشغّل عند مغادرة الشاشة.</li>
+<li>الخصوصية افتراضياً عبر <code>youtube-nocookie.com</code>، وتحميل عبر iframe بأصل https صحيح.</li>
+<li>معرّف غير صالح، <code>end</code> قبل <code>start</code>، أو خيار يوتيوب على رابط آخر: خطأ مرئي ويلتقطه <code>validate()</code>.</li>
+</ul>
+<h2 id="7">7. الأقواس <code>[نوع: قيمة]</code><a class="headerlink" href="#7" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الفئة</th>
+<th>الأنواع</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>وسوم وأشخاص</td>
+<td><code>tag</code>/وسم · <code>user</code>/مستخدم · <code>lib</code>/مكتبة · <code>author</code>/ناشر</td>
+</tr>
+<tr>
+<td>نصوص وأوامر</td>
+<td><code>key</code>/مفتاح (<code>Ctrl+S</code> تُقسم) · <code>cmd</code>/أمر · <code>copy</code>/نسخ · <code>file</code>/ملف · <code>abbr</code>/اختصار · <code>note</code>/ملاحظة</td>
+</tr>
+<tr>
+<td>معلومات</td>
+<td><code>date</code> · <code>time</code> · <code>size</code> (حجم أو أبعاد) · <code>version</code> · <code>license</code> · <code>price</code> · <code>lang</code> · <code>platform</code> · <code>hash</code> · <code>icon</code> · <code>count</code> · <code>color</code> · <code>rating</code> · <code>progress</code></td>
+</tr>
+<tr>
+<td>حالات</td>
+<td><code>status</code> + اختصارات <code>ok</code> <code>warn</code> <code>error</code> <code>info</code> <code>new</code> <code>beta</code> <code>stable</code> <code>deprecated</code></td>
+</tr>
+<tr>
+<td>روابط</td>
+<td><code>link</code> · <code>download</code> · <code>email</code> · <code>phone</code> · <code>video</code> · <code>web</code> · <code>pay</code> · <code>repo</code> · <code>badge</code></td>
+</tr>
+<tr>
+<td>أماكن وقياسات</td>
+<td><code>place</code>/<code>coords</code> (📍 OpenStreetMap) · <code>flag</code>/<code>country</code> · <code>address</code> · <code>zone</code> · <code>dim</code> · <code>distance</code> · <code>weight</code> · <code>temp</code> · <code>percent</code></td>
+</tr>
+<tr>
+<td>حزم</td>
+<td><code>since</code> · <code>requires</code> · <code>dep</code> · <code>install</code></td>
+</tr>
+<tr>
+<td>حركة</td>
+<td><code>marquee</code>/شريط</td>
+</tr>
+</tbody>
+</table></div>
+<p>كل نوع له أسماء عربية (مثل <code>وسم</code> و<code>مكان</code> و<code>أبعاد</code>). قيمة غير صالحة لنوع معروف تظهر شريحة حمراء؛ نوع غير معروف يبقى نصاً.</p>
+<h3 id="_4">ستايل الأقواس<a class="headerlink" href="#_4" title="Permanent link">#</a></h3>
+<p>بعد القيمة: <code>|key=(قيمة)</code>.</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>المفتاح</th>
+<th>القيم</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>size</code></td>
+<td><code>xs</code> <code>sm</code> <code>md</code> <code>lg</code> <code>xl</code> <code>xxl</code> أو <code>50%</code>–<code>300%</code></td>
+</tr>
+<tr>
+<td><code>style</code></td>
+<td><code>soft</code> <code>outline</code> <code>solid</code> <code>ghost</code></td>
+</tr>
+<tr>
+<td><code>color</code></td>
+<td>hex أو اسم لون</td>
+</tr>
+<tr>
+<td><code>shape</code></td>
+<td><code>pill</code> <code>round</code> <code>square</code></td>
+</tr>
+<tr>
+<td><code>icon</code> · <code>pos</code></td>
+<td>اسم أيقونة · <code>start</code>/<code>end</code></td>
+</tr>
+</tbody>
+</table></div>
+<p>مثال: <code>[tag: rin|size=(lg)|style=(solid)|color=(#7C5CFF)|shape=(pill)]</code>. الحجم يعمل على كل الأنواع؛ البقية على الأنواع المرسومة كشرائح.</p>
+<h2 id="8">8. الصفحة والشريط المتحرك<a class="headerlink" href="#8" title="Permanent link">#</a></h2>
+<h3 id="_5">إعدادات الصفحة <code>؛؛؛ صفحة</code><a class="headerlink" href="#_5" title="Permanent link">#</a></h3>
+<pre><code class="language-text">؛؛؛ صفحة
+background: #0F1115,#1C1E25
+bg-dir: diag
+theme: dark
+font-size: lg
+line-height: 1.7
+padding: 20 16
+radius: 24
+border: #7C5CFF 1
+max-width: 720
+؛؛؛
+</code></pre>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>المفتاح</th>
+<th>القيم</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>background</code></td>
+<td>لون، أو 2–6 ألوان، أو <code>forest</code>/<code>harbor</code>/<code>lagoon</code></td>
+</tr>
+<tr>
+<td><code>bg-dir</code></td>
+<td><code>down</code> <code>up</code> <code>right</code> <code>left</code> <code>diag</code> <code>diag-rev</code></td>
+</tr>
+<tr>
+<td><code>theme</code></td>
+<td><code>light</code> <code>dark</code> <code>auto</code></td>
+</tr>
+<tr>
+<td><code>text-color</code> <code>heading-color</code> <code>link-color</code></td>
+<td>ألوان</td>
+</tr>
+<tr>
+<td><code>font-size</code></td>
+<td><code>xs</code>–<code>xxl</code> أو <code>10</code>–<code>32</code> أو <code>70%</code>–<code>200%</code></td>
+</tr>
+<tr>
+<td><code>line-height</code> · <code>letter-spacing</code></td>
+<td><code>1.0</code>–<code>3.0</code> · <code>-0.05</code>–<code>0.5</code></td>
+</tr>
+<tr>
+<td><code>padding</code></td>
+<td>1–4 قيم <code>0</code>–<code>64</code> (كـCSS)</td>
+</tr>
+<tr>
+<td><code>radius</code> · <code>border</code></td>
+<td><code>0</code>–<code>48</code> · <code>لون سماكة</code></td>
+</tr>
+<tr>
+<td><code>max-width</code></td>
+<td><code>240</code>–<code>1200</code></td>
+</tr>
+<tr>
+<td><code>align</code> · <code>direction</code> · <code>font</code></td>
+<td><code>start/center/end/justify</code> · <code>rtl/ltr/auto</code> · <code>sans/serif/mono</code></td>
+</tr>
+</tbody>
+</table></div>
+<p>للمفاتيح أسماء عربية (خلفية، مساحة، حجم-الخط، محاذاة…) وتُقبل أيضاً داخل <code>؛؛؛ rdoc</code>.</p>
+<h3 id="_6">الشريط المتحرك<a class="headerlink" href="#_6" title="Permanent link">#</a></h3>
+<pre><code class="language-text">::: شريط speed=(60) style=(solid) color=(#7C5CFF) icon=(star)
+إصدار جديد متاح الآن
+دعم أكثر من 10 منصات
+:::
+
+::: شريط dir=(up) height=(72) style=(outline)
+خبر 1
+خبر 2
+:::
+
+[marquee: نص 1|نص 2|dir=(down)|mode=(step)|hold=(2)]
+</code></pre>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الخيار</th>
+<th>القيم</th>
+<th>الافتراضي</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>speed</code></td>
+<td><code>5</code>–<code>400</code> dp/ث</td>
+<td><code>50</code></td>
+</tr>
+<tr>
+<td><code>dir</code></td>
+<td>أفقي <code>left</code>/<code>right</code> · رأسي <code>up</code>/<code>down</code></td>
+<td><code>left</code></td>
+</tr>
+<tr>
+<td><code>style</code> <code>color</code> <code>icon</code> <code>size</code></td>
+<td>كستايل الأقواس</td>
+<td><code>soft</code></td>
+</tr>
+<tr>
+<td><code>sep</code></td>
+<td>فاصل (حتى 6 محارف)</td>
+<td><code>•</code></td>
+</tr>
+<tr>
+<td><code>width</code></td>
+<td><code>120</code>–<code>1200</code></td>
+<td>عرض الصفحة</td>
+</tr>
+<tr>
+<td><code>height</code> <code>mode</code> <code>hold</code></td>
+<td>رأسي فقط: <code>24</code>–<code>400</code> · <code>scroll</code>/<code>step</code> · <code>0.5</code>–<code>30</code> ث</td>
+<td>تلقائي · <code>scroll</code> · <code>2</code></td>
+</tr>
+<tr>
+<td><code>pause</code></td>
+<td><code>tap</code> (نقر يوقف/يستأنف) · <code>none</code></td>
+<td><code>tap</code></td>
+</tr>
+<tr>
+<td><code>link</code></td>
+<td>رابط https أو معرّف عنصر (يعطّل الإيقاف)</td>
+<td>—</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="9">9. توثيق الحزم والدوال<a class="headerlink" href="#9" title="Permanent link">#</a></h2>
+<h3 id="_7">بطاقة الحزمة<a class="headerlink" href="#_7" title="Permanent link">#</a></h3>
+<pre><code class="language-text">؛؛؛ حزمة
+name: example-lib
+version: 1.0.0
+description: وصف قصير.
+author: @example
+license: MIT
+requires: rin&gt;=1.0
+platforms: android, linux, web
+keywords: media, embed
+repo: https://github.com/dlof-lib/rinlang
+؛؛؛
+</code></pre>
+<p><code>name</code> و<code>version</code> إلزاميان (<code>version</code> بصيغة <code>1.2.3</code> أو <code>v2</code> أو <code>1.0.0-beta.1</code>). <code>repo</code> و<code>homepage</code> https فقط. إن غاب <code>install</code> يُستنتج <code>rin install &lt;name&gt;</code>. المفاتيح تصبح متغيّرات: <code>{{name}}</code> <code>{{version}}</code>.</p>
+<h3 id="_8">التبعيات<a class="headerlink" href="#_8" title="Permanent link">#</a></h3>
+<pre><code class="language-text">؛؛؛ تبعيات
+@example/core = ^1.2 | النواة
+json-utils = &gt;=1.0
+؛؛؛
+</code></pre>
+<p>القيود: <code>*</code> أو <code>1.2.3</code> أو مع <code>^</code> <code>~</code> <code>&gt;=</code> <code>&lt;=</code> <code>&gt;</code> <code>&lt;</code> <code>=</code>. أسماء <code>@user/lib</code> تصبح روابط.</p>
+<h3 id="_9">توثيق دالة<a class="headerlink" href="#_9" title="Permanent link">#</a></h3>
+<pre><code class="language-text">::: دالة example_open(url, title)
+تفتح رابط وسائط وتعيد صفحة HTML.
+
+@param url (نص): رابط الوسائط
+@param title: عنوان الصفحة
+@return: نص HTML
+@throws: unsupported
+@since: 1.0
+@example
+```kotlin
+warp page = example_open(link, &quot;عرض&quot;);
+```
+:::
+</code></pre>
+<p>التوجيهات: <code>@param</code> (<code>اسم (نوع): وصف</code>) · <code>@return</code>/<code>@returns</code> · <code>@throws</code> · <code>@since</code> · <code>@deprecated</code> · <code>@see معرّف</code> · <code>@example</code> (ولها أسماء عربية: معامل، يعيد، يرمي، منذ، متوقف، انظر، مثال). يقارن الفحص <code>@param</code> بمعاملات التوقيع. <code>::: فهرس-الدوال</code> يجمع كل التواقيع، و<code>::: تثبيت</code> يعرض أوامر قابلة للنسخ.</p>
+<h2 id="10-validate">10. الفحص <code>validate()</code><a class="headerlink" href="#10-validate" title="Permanent link">#</a></h2>
+<p>يعيد <code>List&lt;RdocIssue&gt;</code> بحقول <code>line</code> و<code>severity</code> (<code>error</code>/<code>warning</code>) و<code>message</code>، ويغطي:</p>
+<ul>
+<li>أسوار: <code>:::</code> أو <code>؛؛؛</code> غير مغلقة أو زائدة، أنواع مجهولة، عمق يتجاوز 4، حجم المستند.</li>
+<li>مراجع <code>*"…"*</code> مفقودة، ومعرّفات <code>id</code> مكرّرة.</li>
+<li>دفع ووسائط غير صالحة أو غير https، وأقواس بقيم غير صالحة أو خيارات ستايل خاطئة.</li>
+<li>إعدادات الصفحة (قيمة خاطئة، مفتاح مجهول أو مكرّر) وخيارات الشريط.</li>
+<li>الحزمة والتبعيات وتوثيق الدوال (القسم 9).</li>
+</ul>
+<h2 id="11">11. الدمج البرمجي<a class="headerlink" href="#11" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الدالة</th>
+<th>الغرض</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>isRdocDocument(text)</code> · <code>ensureRdocHeader(text)</code></td>
+<td>كشف اللهجة وإضافة الترويسة</td>
+</tr>
+<tr>
+<td><code>splitReadmeSegments(md)</code></td>
+<td>يقسّم المستند لنصوص وجداول ومعاينات ووسائط</td>
+</tr>
+<tr>
+<td><code>applyTo(textView, md, …, rdoc = true)</code></td>
+<td>يرسم مقطعاً نصياً</td>
+</tr>
+<tr>
+<td><code>buildTableView(ctx, table, top, rdoc)</code> · <code>buildMediaView(ctx, media, top)</code></td>
+<td>جداول ومشغّل الوسائط</td>
+</tr>
+<tr>
+<td><code>extractMeta(md)</code> · <code>extractPageSettings(md)</code> · <code>applyPageContainer(view, page)</code></td>
+<td>بيانات الصفحة وتطبيقها على الحاوية</td>
+</tr>
+<tr>
+<td><code>extractPackageInfo(md)</code> · <code>crossCheckPackage(md, name, version)</code></td>
+<td>معلومات الحزمة ومقارنتها بـ<code>package.rin.json</code></td>
+</tr>
+<tr>
+<td><code>validate(md)</code></td>
+<td>الفحص الكامل</td>
+</tr>
+</tbody>
+</table></div>
+<p>شاشة الحزمة تفعّل rdoc تلقائياً عند وجود الترويسة، وتطبّق <code>؛؛؛ صفحة</code> على بطاقة README.</p>
+<h2 id="12">12. الحدود والأمان<a class="headerlink" href="#12" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>الحد</th>
+<th>القيمة</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>عمق الحاويات</td>
+<td>4</td>
+</tr>
+<tr>
+<td>حجم المستند</td>
+<td>400,000 حرف (ما زاد يُقتطع مع تنبيه)</td>
+</tr>
+<tr>
+<td>الدفع والوسائط</td>
+<td>https فقط؛ مزوّد معروف يجب أن يطابق مضيف رابطه</td>
+</tr>
+<tr>
+<td>رابط الدفع</td>
+<td>يعرض المضيف الحقيقي وتأكيداً قبل الفتح</td>
+</tr>
+<tr>
+<td>الفيديو</td>
+<td>لا شبكة قبل النقر؛ WebView بلا وصول ملفات أو محتوى مختلط؛ التنقل محصور بمضيف التضمين</td>
+</tr>
+<tr>
+<td>الأخطاء</td>
+<td>شريحة حمراء مرئية، لا صمت</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="13-markdown-rdoc">13. من Markdown إلى rdoc<a class="headerlink" href="#13-markdown-rdoc" title="Permanent link">#</a></h2>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>Markdown</th>
+<th>rdoc</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&gt; **Note**</code></td>
+<td><code>::: ملاحظة</code> … <code>:::</code></td>
+</tr>
+<tr>
+<td>قائمة مرقّمة للتثبيت</td>
+<td><code>::: خطوات</code> أو <code>::: تثبيت</code></td>
+</tr>
+<tr>
+<td>جدول للدوال</td>
+<td><code>::: دالة توقيع</code> مع <code>@param</code></td>
+</tr>
+<tr>
+<td><code>[نص](رابط)</code> مكرر</td>
+<td><code>*"id"*</code> مرة واحدة التعريف</td>
+</tr>
+<tr>
+<td>صورة شارات shields</td>
+<td><code>؛؛؛ شارات</code> أو <code>[badge: a\|b\|green]</code></td>
+</tr>
+<tr>
+<td>رابط تبرع عادي</td>
+<td><code>؛:paypal\|user:؛</code></td>
+</tr>
+<tr>
+<td>رابط يوتيوب</td>
+<td><code>:;video https://youtu.be/ID;:</code></td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="14">14. مثال كامل<a class="headerlink" href="#14" title="Permanent link">#</a></h2>
+<p>انظر <a href="https://github.com/dlof-lib/rinlang/blob/main/docs/rdoc/README.rdoc"><code>rdoc/README.rdoc</code></a>: ترويسة وصفحة داكنة، حزمة وتبعيات، توثيق دوال، حاويات، أقواس بأنواع وستايل، أماكن وقياسات، وشريط متحرك أفقي ورأسي.</p></article>
+<div class="pnav"><a class="pn" href="rdoc.html">→ rdoc — Documentation Container</a><a class="pn" href="screenshots.html">لقطات من RinStudio ←</a></div><p class="edit"><a href="https://github.com/dlof-lib/rinlang/edit/main/docs/rdoc-reference.md">✎ عدّل هذه الصفحة على GitHub</a></p>
+<footer>Rin 1.0.0 · رخصة MIT</footer></main>
+<aside id="toc"><b>في هذه الصفحة</b><div class="toc">
+<ul>
+<li><a href="#1">1. المفهوم</a></li>
+<li><a href="#2">2. التفعيل</a></li>
+<li><a href="#3">3. الرموز</a></li>
+<li><a href="#4">4. الحاويات :::</a></li>
+<li><a href="#5">5. بلوكات البيانات ؛؛؛</a></li>
+<li><a href="#6">6. العناصر السطرية</a><ul>
+<li><a href="#_1">استدعاء العنصر *"…"*</a></li>
+<li><a href="#_2">الدفع والتبرّع ؛: … :؛</a></li>
+<li><a href="#_3">الفيديو :; … ;:</a></li>
+</ul>
+</li>
+<li><a href="#7">7. الأقواس [نوع: قيمة]</a><ul>
+<li><a href="#_4">ستايل الأقواس</a></li>
+</ul>
+</li>
+<li><a href="#8">8. الصفحة والشريط المتحرك</a><ul>
+<li><a href="#_5">إعدادات الصفحة ؛؛؛ صفحة</a></li>
+<li><a href="#_6">الشريط المتحرك</a></li>
+</ul>
+</li>
+<li><a href="#9">9. توثيق الحزم والدوال</a><ul>
+<li><a href="#_7">بطاقة الحزمة</a></li>
+<li><a href="#_8">التبعيات</a></li>
+<li><a href="#_9">توثيق دالة</a></li>
+</ul>
+</li>
+<li><a href="#10-validate">10. الفحص validate()</a></li>
+<li><a href="#11">11. الدمج البرمجي</a></li>
+<li><a href="#12">12. الحدود والأمان</a></li>
+<li><a href="#13-markdown-rdoc">13. من Markdown إلى rdoc</a></li>
+<li><a href="#14">14. مثال كامل</a></li>
+</ul>
+</div>
+</aside></div>
+<script src="assets/app.js"></script></body></html>
