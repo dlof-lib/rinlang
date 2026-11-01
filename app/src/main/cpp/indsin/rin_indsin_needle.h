@@ -20,6 +20,7 @@
 #include "rin_indsin_strand.h"
 #include "rin_indsin_tokens.h"
 #include "rin_indsin_overlay.h" // OverlayLayer / hitTestOverlayLayer -- see dispatchTapWithOverlay below
+#include "rin_indsin_imagesrc.h" // Image Sources: downloadImage() request + validation
 #include "rin_indsin_actions.h" // Action Engine -- built-in Warp-cell verb registry (spec §5/§36)
 #include "rin_indsin_navigation.h" // NavigationManager -- navigate()/back()/replace()/reload() (spec §19)
 #include "rin_indsin_paint.h"      // Dye + exportFabricToPNG() -- exportPNG()/screenshot()/exportImage() (spec §21-23)
@@ -89,6 +90,8 @@ struct TapResult {
     media::PickRequest pick;
     bool mediaUpload = false;
     media::UploadRequest upload;
+    bool imageDownload = false;            // downloadImage(src[, name[, cell]]): a request to the host (see rin_indsin_imagesrc.h)
+    imagesrc::DownloadRequest download;
     bool mediaCancel = false;
     std::string cancelCell;
 };
@@ -275,6 +278,28 @@ inline TapResult executeHandlerExpr(const rin::ExprPtr& handlerExpr, const Stran
 
     // pickMedia("image", photo [, multiple [, maxMb]]) / uploadMedia(photo, "https://...", ["file"]):
     // التحقق هنا، والتنفيذ الفعلي (المنتقي/الشبكة) عند المضيف عبر TapResult.pick / .upload.
+    if (callee == "uploadImage") callee = "uploadMedia"; // Image Sources: same engine, image-flavoured name
+    if (callee == "downloadImage") {
+        // downloadImage(src [, filename [, cell]]): the host saves the image; with a cell, progress lands in
+        // <cell>_status / _progress / _error exactly like uploads. Validation happens here, I/O at the host.
+        if (argExprs.empty()) { result.error = "downloadImage(src [, filename [, cell]]) needs an image source"; return result; }
+        imagesrc::DownloadRequest req;
+        req.url = evalAttrValue(argExprs[0], warp, nullptr).asString();
+        std::string err;
+        if (!imagesrc::validateDownload(req.url, err)) { result.error = err; return result; }
+        req.filename = argExprs.size() > 1 ? imagesrc::safeFilename(evalAttrValue(argExprs[1], warp, nullptr).asString()) : "";
+        if (req.filename.empty()) req.filename = imagesrc::defaultFilename(req.url);
+        if (argExprs.size() > 2) {
+            auto cellVar = std::dynamic_pointer_cast<rin::VariableExpr>(argExprs[2]);
+            if (!cellVar) { result.error = "downloadImage(): the third argument must be a media-cell name"; return result; }
+            req.cell = cellVar->name;
+            media::seedCells(warp, req.cell);
+            result.changedWarpNames = media::applyProgress(warp, req.cell, "uploading", 0, ""); // same status vocabulary as uploads
+        }
+        result.imageDownload = true;
+        result.download = req;
+        return result;
+    }
     if (callee == "pickMedia") {
         auto cellVar = argExprs.size() > 1 ? std::dynamic_pointer_cast<rin::VariableExpr>(argExprs[1]) : nullptr;
         if (argExprs.empty() || !cellVar) {
