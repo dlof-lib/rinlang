@@ -3,6 +3,16 @@
 > مجمَّع آلياً من ملفات `CHANGES_*.md` المتفرّقة (انظر `cleanup-project.yml`). أضف الجديد هنا مباشرةً.
 
 
+## SAME SHAPE `=::=`
+
+- معامل مقارنة جديد **`a =::= b`** (تطابق الشكل): نفس البنية والأنواع مع تجاهل القيم الورقية — مصفوفات بنفس الطول وقواميس بنفس المفاتيح وكائنات بنفس الصنف والحقول. بنفس أولوية `==`، في المفسّر وRinVM، مع تلوين (VS Code/أندرويد/المحرّر). الدليل: [`docs/compare_ops.md`](../docs/compare_ops.md)، الاختبار: `tests/verification/same_shape.rin`. أقوى: الدوال بعدد المعاملات، المجموعات بأشكال العناصر، حماية الدوران الذاتي، ودالتان جديدتان **`shapeOf(v)`** (وصف الشكل نصاً) و**`shapeDiff(value, model)`** (كل مخالفات الشكل بمساراتها `$.a.b[1]` وأسبابها).
+
+## TYPOGRAPHY · TEXT MOTION · ACCESSIBILITY
+
+- **الخطوط**: `FontLoad` · `FontDisplay` · `FontVariant` · `FontFeature` · `VariableFont` · `SystemFont` · `CustomFont` عبر `<Font#Name src=…>`/`@font` و`font=` وسائر `font_*` (وراثة من الأسلاف) — `rin_indsin_typography.h`.
+- **الحركة**: `TextAnimation` · `TypeWriter` · `FadeText` · `TextTransition` · `TextReveal` · `TextRotate` · `TextTransform` · `TextShadowAnimation` — `rin_indsin_textfx.h` (يحترم ReduceMotion؛ العربية بوحدات كلمات).
+- **الوصول**: `AriaLabel` · `AltText` · `AccessibleName` · `ScreenReader` · `SemanticText` · `LanguageTag` · `ReadingOrder` — `rin_indsin_a11y.h`، قواعد تدقيق `A11Y-006..012` و`TYPO-*` و`TXTFX-001`، ودوال C API جديدة. الدليل: [`docs/indsin_typography_motion_a11y.md`](../docs/indsin_typography_motion_a11y.md).
+
 ## IMAGE SOURCES
 
 - **مصادر الصور**: `Src` · `SrcSet` · `URL` · `RemotePath` · `LocalPath` · `Base64` · `DataURI` · `Blob` · `Upload` · `Download` (`rin_indsin_imagesrc.h`): تصنيف/تحقق/توحيد المصدر إلى `src` واحدة + `src_kind/src_from/src_mime/src_bytes/src_error`، اكتشاف MIME من البايتات، اختيار `srcset` بالعرض والكثافة، رفض `javascript:`/`..`/`data:` غير الصور. الأوامر `downloadImage()` و`uploadImage()`. إعادة تصنيف تلقائية عند تغيّر `src=<cell>`. الدليل: [`docs/indsin_image_sources.md`](../docs/indsin_image_sources.md).
