@@ -20,8 +20,8 @@ const html = (tree, o) => IO.translate(tree, o).html;
 const fixture = (n) => fs.readFileSync(path.join(__dirname, 'fixtures', n), 'utf8');
 
 /* ── catalog & coverage ── */
-test('65 kinds (64 built-ins + Custom)', () => { eq(IO.kinds().length, 65); ok(IO.kinds().includes('Custom')); });
-test('built-in self-test passes', () => { const r = IO.selfTest(); ok(r.ok, JSON.stringify(r)); eq(r.rendered, 65); });
+test('72 kinds (71 built-ins + Custom)', () => { eq(IO.kinds().length, 72); ok(IO.kinds().includes('Custom')); });
+test('built-in self-test passes', () => { const r = IO.selfTest(); ok(r.ok, JSON.stringify(r)); eq(r.rendered, 72); });
 test('every alias accepted by strandKindFromTag resolves', () => {
   const al = { Container: 'Box', Panel: 'Box', Frame: 'Box', TextField: 'Input', Modal: 'Dialog', Popup: 'Dialog', Range: 'Slider', Dropdown: 'Select',
     FilePicker: 'File', DatePicker: 'Date', TimePicker: 'Time', SearchBar: 'Search', Sidebar: 'Drawer', Chip: 'Tag', Key: 'Kbd', Loader: 'Spinner',
@@ -191,7 +191,7 @@ test('CLI converts a frame and validates', () => {
   const bin = path.join(__dirname, '..', 'bin', 'indsin-object.js'), fx = path.join(__dirname, 'fixtures', 'showcase.frame.json');
   let r = spawnSync(process.execPath, [bin, fx, '--theme', 'light', '--no-script'], { encoding: 'utf8' }); eq(r.status, 0, r.stderr); has(r.stdout, '<!doctype html>'); lacks(r.stdout, '<script>');
   r = spawnSync(process.execPath, [bin, '--validate', fx], { encoding: 'utf8' }); eq(r.status, 0); has(r.stdout, '"ok": true');
-  r = spawnSync(process.execPath, [bin, '--kinds'], { encoding: 'utf8' }); eq(r.stdout.trim().split('\n').length, 65);
+  r = spawnSync(process.execPath, [bin, '--kinds'], { encoding: 'utf8' }); eq(r.stdout.trim().split('\n').length, 72);
   r = spawnSync(process.execPath, [bin, '--self-test'], { encoding: 'utf8' }); eq(r.status, 0);
   r = spawnSync(process.execPath, [bin, 'nope.json'], { encoding: 'utf8' }); eq(r.status, 2);
   r = spawnSync(process.execPath, [bin, '-'], { input: '{"kind":"Text","attrs":{"text":"hi"}}', encoding: 'utf8' }); eq(r.status, 0); has(r.stdout, 'hi');
@@ -211,7 +211,7 @@ test('highlighter classifies indsin constructs', () => {
 test('highlighter escapes HTML', () => { const h = HL.highlight('@view.Text=a\n  text="<script>x</script>";\n.end/view'); lacks(h, '<script>x'); has(h, '&lt;script&gt;'); });
 test('every translator kind is in the highlighter lexicon and grammar', () => {
   const g = fs.readFileSync(path.join(root, 'syntaxes', 'indsin.tmLanguage.json'), 'utf8'), lex = require(path.join(root, 'syntaxes', 'indsin-lexicon.json'));
-  eq(lex.kinds.length, 65); IO.kinds().forEach((k) => { ok(HL.lexicon.kinds.includes(k), k); ok(g.indexOf(k) >= 0, 'grammar ' + k); });
+  eq(lex.kinds.length, 72); IO.kinds().forEach((k) => { ok(HL.lexicon.kinds.includes(k), k); ok(g.indexOf(k) >= 0, 'grammar ' + k); });
 });
 test('TextMate grammar is valid JSON and every regex compiles', () => {
   const gr = JSON.parse(fs.readFileSync(path.join(root, 'syntaxes', 'indsin.tmLanguage.json'), 'utf8')); eq(gr.scopeName, 'source.indsin');
