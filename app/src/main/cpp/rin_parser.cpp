@@ -406,7 +406,14 @@ StmtPtr Parser::declaration() {
         current + 1 < tokens.size() && tokens[current + 1].lexeme == "effect") {
         advance(); // '@'
         advance(); // 'effect'
-        return themeDeclaration(true);
+        return themeDeclaration(1);
+    }
+    // '@font=Family src=...; .end/font' -> تعريف خط مخصّص (CustomFont/FontLoad) بنفس بنية @theme.
+    if (check(TokenType::AT) && checkNext(TokenType::IDENT) &&
+        current + 1 < tokens.size() && tokens[current + 1].lexeme == "font") {
+        advance(); // '@'
+        advance(); // 'font'
+        return themeDeclaration(2);
     }
     // 'view.print/object(expr);' -> معاينة حيّة لكائن في الكونسول (امتداد إضافي، لا علاقة بـ
     // '@view.<Kind>' أعلاه رغم تشابه الاسم). كلمة سياقية غير محجوزة: 'view' تُقرأ IDENT عادي، فلا
@@ -2993,13 +3000,14 @@ StmtPtr Parser::warpDeclaration() {
 // @theme=<Name>  key=expr; ...  .end/theme
 // يُستدعى بعد أن يكون declaration() قد استهلك بالفعل '@' و'theme'، بنفس أسلوب viewDeclaration()
 // أعلاه تماماً لكن بلا كتل متداخلة (Theme مسطّح: أدوار لونية + العلم الاختياري 'active' فقط).
-StmtPtr Parser::themeDeclaration(bool isEffect) {
+StmtPtr Parser::themeDeclaration(int kind) {
+    const bool isEffect = kind == 1;
     Token themeTok = previous(); // 'theme' | 'effect'
-    const std::string kw = isEffect ? "effect" : "theme";
+    const std::string kw = kind == 2 ? "font" : (isEffect ? "effect" : "theme");
     consume(TokenType::EQUAL, "Expected '=' after '@" + kw + "' (e.g. @" + kw + "=Name ... .end/" + kw + ")");
     Token nameTok = consume(TokenType::IDENT, "Expected a name after '@" + kw + "='");
 
-    std::shared_ptr<ThemeStmt> s = isEffect ? std::make_shared<EffectStmt>() : std::make_shared<ThemeStmt>();
+    std::shared_ptr<ThemeStmt> s = kind == 2 ? std::make_shared<FontStmt>() : (isEffect ? std::make_shared<EffectStmt>() : std::make_shared<ThemeStmt>());
     s->name = nameTok.lexeme;
     s->line = themeTok.line;
 
@@ -3971,7 +3979,7 @@ ExprPtr Parser::logicAnd() {
 
 ExprPtr Parser::equality() {
     auto expr = comparison();
-    while (match({TokenType::EQUAL_EQUAL, TokenType::BANG_EQUAL, TokenType::NOT_SAME, TokenType::COPY_OF})) {
+    while (match({TokenType::EQUAL_EQUAL, TokenType::BANG_EQUAL, TokenType::NOT_SAME, TokenType::COPY_OF, TokenType::SAME_SHAPE})) {
         auto op = previous().type;
         auto right = comparison();
         auto b = std::make_shared<BinaryExpr>();
