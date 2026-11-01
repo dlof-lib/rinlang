@@ -4,6 +4,7 @@
 // first (cold) build.
 #pragma once
 #include "rin_indsin_strand.h"
+#include "rin_indsin_imagesrc.h"
 
 namespace indsin {
 
@@ -88,8 +89,10 @@ struct Shuttle {
                 Value newVal = evalAttrExprKeyed(a.key, a.rawExpr, warp, nullptr);
                 if (!(newVal == a.value)) { a.value = newVal; changed.push_back(a.key); }
             }
-            if (!changed.empty())
+            if (!changed.empty()) {
+                imagesrc::normalizeStrand(s); // src=<cell> changed: re-classify (url / base64 / data URI …)
                 patches.push_back({PatchKind::UpdateAttrs, s->id, s->name, changed});
+            }
         }
     }
 };
