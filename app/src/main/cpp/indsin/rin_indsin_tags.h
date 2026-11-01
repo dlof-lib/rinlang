@@ -1086,6 +1086,11 @@ private:
             if (id.empty()) fail("<Effect#name …> needs a name, e.g. <Effect#wobble duration=900>", startLine);
             kw = "effect"; closer = ".end/effect";
             stmt = "@effect=" + id;
+        } else if (hl == "font") {
+            // <Font#Brand src="fonts/brand.woff2" weight="100 900" display=swap />  →  @font=Brand …; .end/font   (CustomFont/FontLoad)
+            if (id.empty()) fail("<Font#Family …> needs a family name, e.g. <Font#Brand src=\"fonts/brand.woff2\" />", startLine);
+            kw = "font"; closer = ".end/font";
+            stmt = "@font=" + id;
         } else if (hl == "keyframe") {
             // <Keyframe at=50% x=6 opacity=.8 />  →  at50="x:6,opacity:.8";   (قيم {expr} تُقيَّم وقت التسجيل)
             if (!selfClose) fail("<Keyframe> must be self-closing: <Keyframe at=50% y=-8 />", startLine);
