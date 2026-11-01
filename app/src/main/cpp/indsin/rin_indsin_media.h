@@ -472,7 +472,8 @@ inline void collectMediaCells(const std::shared_ptr<rin::ViewStmt>& v, std::vect
         if (!call) continue;
         size_t cellArg;
         if (call->callee == "pickMedia") cellArg = 1;
-        else if (call->callee == "uploadMedia" || call->callee == "clearMedia" || call->callee == "removeMedia" || call->callee == "cancelUpload") cellArg = 0;
+        else if (call->callee == "downloadImage") cellArg = 2; // downloadImage(src[, name[, cell]])
+        else if (call->callee == "uploadImage" || call->callee == "uploadMedia" || call->callee == "clearMedia" || call->callee == "removeMedia" || call->callee == "cancelUpload") cellArg = 0;
         else continue;
         if (cellArg < call->args.size())
             if (auto var = std::dynamic_pointer_cast<rin::VariableExpr>(call->args[cellArg]))
