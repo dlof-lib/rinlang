@@ -1197,6 +1197,11 @@ struct ThemeStmt : Stmt { ThemeStmt() { stmtKind = StmtKind::ThemeStmt; }
 // انظر indsin/rin_indsin_effects.h (registerEffectsFromProgram).
 struct EffectStmt : ThemeStmt { EffectStmt() {} };
 
+// ---- Rin Indsin: Font declaration (CustomFont / FontLoad) ----
+// @font=<Family>  src="fonts/brand.woff2"; weight="100 900"; style="normal"; display="swap"; axes="wght 100 900"; .end/font
+// نفس شكل @theme/@effect (سمات مسطّحة) فيرث ThemeStmt؛ يُسجَّل في FontRegistry (indsin/rin_indsin_typography.h).
+struct FontStmt : ThemeStmt { FontStmt() {} };
+
 // ---- Call-style object literal ----
 // .object("user01")
 //     name("ABOO");
