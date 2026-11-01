@@ -98,6 +98,11 @@
 | `breadcrumb` / `breadcrumbs` | مسار تنقّل (`items="A,B,C"`). |
 | `pagination` / `pager` | ترقيم صفحات تفاعلي (`current=`/`total=`). |
 | `donutchart` / `donut` / `piechart` | مخطط دائري حقيقي (`data="Label:Value,..."`, `colors=`, `centerLabel=`). |
+| `image` / `avatar` (مصادر) | `src` · `srcset` · `url` · `remotePath`+`base` · `localPath` · `base64`(+`mime`) · `dataUri` · `blob` · `fallback`؛ و`uploadImage()`/`downloadImage()` — انظر [indsin_image_sources.md](indsin_image_sources.md). |
+| `accordion`, و`accordionitem` / `collapsible` / `details` | أكورديون: أقسام بعنوان قابل للنقر (`title=`/`subtitle=`/`badge=`/`open=`)، قسم واحد مفتوح أو `multiple=true`. |
+| `expandablelist` / `expandable` | قائمة قابلة للطي (`items=`، `limit=N` مع زر «Show more»). |
+| `treeview` / `tree`, و`treenode` | شجرة هرمية (`paths="a/b.rin"` أو عقد متداخلة، اختيار `*_selected`). |
+| `nestedlist` / `outline`, و`nesteditem` | قائمة متداخلة (`items="A,-B,--C"`، `marker=`, `collapsible=true`). |
 
 > **ملاحظة أمانة على القوس/المنحنى**: راسم المحرّك (Dye) يملك الآن عملية قوس حقيقية
 > (`DrawOp::STROKE_ARC`) تستخدمها `spinner`/`donutchart` — لم تعد تقريبًا بمربعات.
