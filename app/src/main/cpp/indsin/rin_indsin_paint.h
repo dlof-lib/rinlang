@@ -1,6 +1,7 @@
 // indsin/rin_indsin_paint.h — Dye: paint engine (Strand geometry -> DrawList -> raster/JSON).
 #pragma once
 #include "rin_indsin_font.h"
+#include "rin_indsin_typography.h" // الخطوط/الطباعة: FontLoad/FontDisplay/FontVariant/FontFeature/VariableFont/SystemFont/CustomFont + TextTransform/TextShadow/LanguageTag
 #include "rin_indsin_strand.h"
 #include "rin_indsin_tokens.h"
 #include "rin_indsin_webconcepts.h" // مفاهيم تخطيط الويب: z/overflow/visibility/scroll في الرسم
@@ -186,7 +187,24 @@ struct DrawCommand { DrawOp op; Rect bounds; Color color; std::string text; Stra
     bool isGradient() const { return stops.size() >= 2; }
     // Drop shadow under a FILL_RECT (box-shadow semantics): blur radius px, y offset, spread, color (alpha = strength). 0 blur / a=0 => none.
     double shadowBlur = 0, shadowDy = 0, shadowSpread = 0; Color shadowColor{0, 0, 0, 0};
-    bool hasShadow() const { return shadowBlur > 0 && shadowColor.a > 0; } };
+    bool hasShadow() const { return shadowBlur > 0 && shadowColor.a > 0; }
+    // ---- Typography / Text-FX (TEXT_RUN فقط؛ كلها افتراضياً "غير مضبوطة" فلا يتغيّر شيء لمن لا يستعملها) ----
+    // يملؤها Dye::paintInto (طباعة ثابتة) و TextFxRuntime (حركة)؛ انظر rin_indsin_typography.h / rin_indsin_textfx.h.
+    std::string fontFamily;            // حزمة CSS كاملة ("" = افتراضي المضيف)
+    int fontWeight = 0;                // 1..1000 (0 = غير مضبوط؛ bold يبقى true عند >= 600)
+    bool italic = false; double oblique = 0; // oblique: درجات ميل (CSS)
+    std::string fontCss;               // قواعد إضافية: font-variant/feature-settings/variation-settings/stretch/kerning
+    std::string fontFeatures, fontVariations; // قيم CSS الجاهزة (للمضيفات التي تمرّرها كما هي)
+    std::string fontStatus;            // idle|loading|loaded|error للخط المخصّص ("" = لا خط مخصّص)
+    bool fontBlocked = false;          // FontDisplay: فترة الحجب — تتجاهل المُرسِمات الأصلية هذا النص (HTML يترك القرار للمتصفح)
+    std::string lang, dir;             // وسم اللغة وLTR/RTL/auto
+    std::string textTransform;         // text_transform المطبَّق على text ("" = none) — لإعادة تطبيقه عند استبدال النص (TextFx)
+    double rotateDeg = 0;              // دوران النص حول مركز صندوقه
+    std::vector<TextShadow> textShadows;
+    std::vector<GlyphFx> glyphFx;      // تأثير لكل وحدة (حرف/كلمة)؛ فارغ = موحّد
+    int glyphUnit = 0;                 // 0 لا شيء · 1 حروف · 2 كلمات
+    double clipL = 0, clipT = 0, clipR = 0, clipB = 0; // كسور مقصوصة من كل جهة (TextReveal)
+};
 using DrawList = std::vector<DrawCommand>;
 
 // The scrim's color, ~55% black — a fixed near-black rather than a Theme role, since a scrim
@@ -280,7 +298,9 @@ inline CanvasInfo resolveCanvas(const StrandPtr& root, const HostBackground& hos
 
 struct Dye {
     bool canvasHandlesRoot = false; // set by paintFrame(): the root's default fill is replaced by the canvas
-    DrawList paint(const StrandPtr& s) { DrawList list; paintInto(s, list); return list; }
+    // وراثة الطباعة (font/lang/text_transform/text_shadow/…): الأسلاف الحاليون أثناء النزول + الجذر كافتراضي للطبقات المنبثقة.
+    std::vector<const Strand*> anc_; const Strand* rootDefaults_ = nullptr;
+    DrawList paint(const StrandPtr& s) { DrawList list; rootDefaults_ = s.get(); anc_.clear(); paintInto(s, list); return list; }
 
     // Full frame: the canvas fill (screen background, W x H) first, then the document + overlay layer.
     DrawList paintFrame(const StrandPtr& root, OverlayLayer& layer, double W, double H, const HostBackground& host) {
@@ -304,6 +324,7 @@ struct Dye {
     // every entry, exactly like a native overlay compositor draws a dimmed backdrop then its sheet.
     DrawList paintWithOverlay(const StrandPtr& root, OverlayLayer& layer) {
         DrawList list;
+        rootDefaults_ = root.get(); anc_.clear();
         paintInto(root, list);
         for (auto& entry : layer.entries) {
             if (entry.scrim) list.push_back({DrawOp::SCRIM_RECT, entry.scrimRect, scrimColor(), "", entry.strand ? entry.strand->id : 0, 0, 0});
@@ -444,6 +465,29 @@ struct Dye {
             }
         }
     }
+    // القرار الطباعي لعنصر أثناء الرسم (يرث من الأسلاف). الأسلاف = المكدّس الحالي دون العنصر نفسه (آخر عنصر فيه).
+    typo::TextTypography typographyOf(const StrandPtr& s) {
+        std::vector<const Strand*> a;
+        if (!anc_.empty()) a.assign(anc_.begin(), anc_.end() - (anc_.back() == s.get() ? 1 : 0));
+        typo::AttrScope sc; sc.self = s.get(); sc.ancestors = &a; sc.rootDefaults = rootDefaults_;
+        return typo::resolveTypography(sc);
+    }
+    static void applyTypographyToRun(DrawCommand& d, const typo::TextTypography& t, StrandKind kind) {
+        d.fontFamily = t.family; d.fontWeight = t.weight; if (t.weight >= 600) d.bold = true;
+        d.italic = t.italic; d.oblique = t.oblique;
+        std::string css;
+        if (!t.variant.empty()) css += "font-variant:" + t.variant + ";";
+        if (!t.features.empty()) css += "font-feature-settings:" + t.features + ";";
+        if (!t.variations.empty()) css += "font-variation-settings:" + t.variations + ";";
+        if (!t.stretch.empty()) css += "font-stretch:" + t.stretch + ";";
+        if (!t.kerning.empty()) css += "font-kerning:" + t.kerning + ";";
+        if (!t.opticalSizing.empty()) css += "font-optical-sizing:" + t.opticalSizing + ";";
+        d.fontCss = css;
+        d.fontFeatures = typo::featuresToCss(t.featureList); d.fontVariations = t.variations;
+        d.fontStatus = t.status; d.fontBlocked = t.blocked;
+        d.lang = t.lang; d.dir = t.dir; d.rotateDeg = t.rotate; d.textShadows = t.shadows;
+        if (t.transform != "none" && kind != StrandKind::CODE_EDITOR) { d.text = typo::applyTextTransform(d.text, t.transform, t.lang); d.textTransform = t.transform; }
+    }
     // Post-pass wrapper: every TEXT_RUN a strand emits gets the strand's real text style so no backend
     // (native rasterizer, HTML export) has to guess font size / alignment / weight from the box height.
     // ZIndex/Layer: الأبناء يُرسمون بترتيب z تصاعدي (ثابت)، لا بترتيب المصدر فقط. لا يغيّر التخطيط.
@@ -457,7 +501,9 @@ struct Dye {
         if (s->kind != StrandKind::BANNER && s->kind != StrandKind::TAG && s->attrStr("visible", "true") == "false") return; // مخفي
         if (webCollapsed(*s) || webInvisible(*s)) return; // display=none / hidden / visibility=hidden / media / collision hide
         size_t first = list.size();
+        anc_.push_back(s.get());
         paintIntoImpl(s, list);
+        anc_.pop_back();
         // Shadow (elevation=/shadow=/shadowColor=): attached to this strand's own box fill, drawn right under it.
         {
             ShadowSpec sp;
@@ -485,6 +531,7 @@ struct Dye {
                         s->kind == StrandKind::BADGE || s->kind == StrandKind::AVATAR || s->kind == StrandKind::TAG;
         bool single = centered || s->kind == StrandKind::INPUT || s->kind == StrandKind::SEARCH || s->kind == StrandKind::SELECT ||
                       s->kind == StrandKind::LINK;
+        bool typoReady = false; typo::TextTypography tp;
         for (size_t i = first; i < list.size(); i++) {
             auto& d = list[i];
             if (d.op != DrawOp::TEXT_RUN || d.owner != s->id || d.fontSize > 0) continue;
@@ -495,6 +542,9 @@ struct Dye {
             std::string wt = s->attrStr("weight", s->attrStr("fontWeight", ""));
             d.bold = centered || wt == "bold" || wt == "700" || wt == "600" || s->attrStr("bold", "") == "true";
             d.singleLine = single;
+            // Typography (additive): family/weight/italic/variant/feature/variation + TextTransform/TextShadow/lang/dir/rotate.
+            if (!typoReady) { tp = typographyOf(s); typoReady = true; }
+            if (tp.any) applyTypographyToRun(d, tp, s->kind);
         }
         // Overflow/Clip: قصّ ما رسمه الأحفاد خارج صندوق هذا العنصر (هندسياً — انظر webClipDrawList).
         if (int axes = webClipAxes(*s)) webClipDrawList(list, first, *s, axes, DrawOp::TEXT_RUN);
@@ -1203,8 +1253,10 @@ inline std::vector<unsigned char> rasterizeToBuffer(const DrawList& list, int W,
     if (W <= 0 || H <= 0) return buf;
     // Coverage-based compositing: `cov` (0..1, from anti-aliasing) times the color's own alpha,
     // blended through rincolor::alphaBlend so opacity=/rgba()/scrims compose exactly as before.
+    double clipX0 = -1e18, clipY0 = -1e18, clipX1 = 1e18, clipY1 = 1e18; // قصّ اختياري (TextReveal) — يُضبَط أثناء رسم نص واحد فقط
     auto plot = [&](int x, int y, Color c, double cov) {
         if (x<0||y<0||x>=W||y>=H || cov <= 0.0 || c.a == 0) return;
+        if (x + 0.5 < clipX0 || x + 0.5 > clipX1 || y + 0.5 < clipY0 || y + 0.5 > clipY1) return;
         size_t i=((size_t)y*W+x)*3;
         double a = cov * (c.a / 255.0);
         if (a >= 0.999) { buf[i]=c.r; buf[i+1]=c.g; buf[i+2]=c.b; return; }
@@ -1300,14 +1352,15 @@ inline std::vector<unsigned char> rasterizeToBuffer(const DrawList& list, int W,
         }
         return -1;
     };
-    auto drawGlyph = [&](int ascii, double gx, double gy, double unit, Color c, bool bold) {
+    auto drawGlyph = [&](int ascii, double gx, double gy, double unit, Color c, bool bold, double skew = 0.0) {
         const uint8_t* g = font::glyph5x7((unsigned char)ascii);
         if (!g) return;
-        int px0=(int)std::floor(gx), px1=(int)std::ceil(gx + 5*unit + (bold?unit*0.5:0)), py0=(int)std::floor(gy), py1=(int)std::ceil(gy + 7*unit);
+        int px0=(int)std::floor(gx - (skew > 0 ? 0 : 3.5*skew*unit)), px1=(int)std::ceil(gx + 5*unit + (bold?unit*0.5:0) + (skew > 0 ? 3.5*skew*unit : 0)), py0=(int)std::floor(gy), py1=(int)std::ceil(gy + 7*unit);
         for (int y=py0;y<py1;y++) for (int x=px0;x<px1;x++) {
             int hit=0;
             for (int sy=0;sy<4;sy++) for (int sx=0;sx<4;sx++) {
-                double u=((x+(sx+0.5)/4.0)-gx)/unit, v=((y+(sy+0.5)/4.0)-gy)/unit;
+                double v=((y+(sy+0.5)/4.0)-gy)/unit;
+                double u=((x+(sx+0.5)/4.0)-gx)/unit + (skew != 0.0 ? (v - 3.5) * skew : 0.0); // italic: الصفوف العليا تنزاح لليمين
                 for (int pass=0; pass<(bold?2:1); pass++) {
                     double uu = u - pass*0.5;
                     int col=(int)std::floor(uu), row=(int)std::floor(v);
@@ -1317,58 +1370,90 @@ inline std::vector<unsigned char> rasterizeToBuffer(const DrawList& list, int W,
             if (hit) plot(x,y,c,hit/16.0);
         }
     };
-    auto drawText = [&](const DrawCommand& cmd) {
-        if (cmd.text.empty() || cmd.bounds.w <= 0 || cmd.bounds.h <= 0) return;
+    // نص واحد: ox/oy إزاحة (للظل) · col اللون · fx تفعيل glyphFx (الظل يتبع نفس الشفافية) · نفس خط 5x7 والالتفاف كما كان.
+    auto drawTextPass = [&](const DrawCommand& cmd, double ox, double oy, Color col, bool honorClip) {
         double fs = cmd.fontSize > 0 ? cmd.fontSize : std::min(28.0, std::max(8.0, cmd.bounds.h * 0.35));
         double unit = font::unitFor(fs), adv = font::advanceFor(fs), lineH = fs * 1.4, pad = (cmd.align == 1 ? 4.0 : 1.0);
         double avail = std::max(4.0, cmd.bounds.w - pad*2);
         bool rtl = font::isRtlText(cmd.text);
         auto cps = font::decodeUtf8(cmd.text);
-        // Split into words (on space / newline) and greedily wrap by the real advance.
-        std::vector<std::vector<uint32_t>> lines; std::vector<uint32_t> cur;
+        // وحدة التأثير لكل رمز: حرف = موقعه · كلمة = رقم الكلمة (المسافات تتبع الكلمة السابقة).
+        std::vector<int> unitOf(cps.size(), 0);
+        if (cmd.glyphUnit == 1) for (size_t i = 0; i < cps.size(); i++) unitOf[i] = (int)i;
+        else if (cmd.glyphUnit == 2) { int w = -1; bool inWord = false; for (size_t i = 0; i < cps.size(); i++) { bool sp = cps[i] == ' ' || cps[i] == '\n'; if (!sp && !inWord) { w++; inWord = true; } if (sp) inWord = false; unitOf[i] = std::max(0, w); } }
+        struct G { uint32_t cp; int u; };
+        std::vector<std::vector<G>> lines; std::vector<G> cur;
         auto width = [&](size_t n){ return n * adv; };
         size_t maxLines = cmd.singleLine ? 1 : std::max<size_t>(1, (size_t)(cmd.bounds.h / lineH + 0.0001));
-        std::vector<uint32_t> word;
+        std::vector<G> word;
         auto flushWord = [&]() {
             if (word.empty()) return;
             size_t need = cur.empty() ? word.size() : cur.size() + 1 + word.size();
             if (!cmd.singleLine && !cur.empty() && width(need) > avail) { lines.push_back(cur); cur.clear(); }
-            if (!cur.empty()) cur.push_back(' ');
+            if (!cur.empty()) cur.push_back(G{' ', -1});
             cur.insert(cur.end(), word.begin(), word.end()); word.clear();
         };
-        for (uint32_t cp : cps) {
+        for (size_t i = 0; i < cps.size(); i++) {
+            uint32_t cp = cps[i];
             if (cp == '\n') { flushWord(); lines.push_back(cur); cur.clear(); }
             else if (cp == ' ') flushWord();
-            else word.push_back(cp);
+            else word.push_back(G{cp, unitOf[i]});
         }
         flushWord(); lines.push_back(cur);
-        if (lines.size() > maxLines) { lines.resize(maxLines); lines.back().push_back(0x2026); }
+        if (lines.size() > maxLines) { lines.resize(maxLines); lines.back().push_back(G{0x2026, -1}); }
+        const double skew = cmd.italic ? 0.22 : (cmd.oblique != 0 ? std::min(0.5, std::fabs(cmd.oblique) / 45.0) * (cmd.oblique > 0 ? 1 : -1) : 0.0);
         for (size_t li=0; li<lines.size(); li++) {
             auto& ln = lines[li];
             if (width(ln.size()) > avail) { // ellipsize with "..." so long single lines don't spill
                 size_t keep = (size_t)std::max(0.0, std::floor(avail/adv) - 3);
-                if (keep < ln.size()) { ln.resize(keep); ln.push_back('.'); ln.push_back('.'); ln.push_back('.'); }
+                if (keep < ln.size()) { ln.resize(keep); ln.push_back(G{'.', -1}); ln.push_back(G{'.', -1}); ln.push_back(G{'.', -1}); }
             }
             double w = width(ln.size());
-            double x = cmd.bounds.x + pad;
+            double x = cmd.bounds.x + pad + ox;
             int al = cmd.align == 0 && rtl ? 2 : cmd.align;
-            if (al == 1) x = cmd.bounds.x + (cmd.bounds.w - w)/2; else if (al == 2) x = cmd.bounds.x + cmd.bounds.w - pad - w;
-            double blockH = cmd.singleLine ? lineH : lineH * lines.size();
-            double top = cmd.singleLine ? cmd.bounds.y + (cmd.bounds.h - lineH)/2 : cmd.bounds.y;
-            (void)blockH;
-            double gy = top + li*lineH + (lineH - 7*unit)/2;
+            if (al == 1) x = cmd.bounds.x + (cmd.bounds.w - w)/2 + ox; else if (al == 2) x = cmd.bounds.x + cmd.bounds.w - pad - w + ox;
+            double top = (cmd.singleLine ? cmd.bounds.y + (cmd.bounds.h - lineH)/2 : cmd.bounds.y) + oy;
+            double gy0 = top + li*lineH + (lineH - 7*unit)/2;
             for (size_t k=0;k<ln.size();k++) {
-                uint32_t cp = ln[k]; int a = asciiFor(cp);
-                double gx = x + k*adv;
-                if (cp == 0x2026) { for (int d=0;d<3;d++) drawGlyph('.', gx + d*adv, gy, unit, cmd.color, false); continue; }
-                if (a > 0) drawGlyph(a, gx, gy, unit, cmd.color, cmd.bold);
+                uint32_t cp = ln[k].cp; int a = asciiFor(cp);
+                double gx = x + k*adv, gy = gy0; Color gc = col;
+                if (!cmd.glyphFx.empty() && ln[k].u >= 0 && (size_t)ln[k].u < cmd.glyphFx.size()) {
+                    const GlyphFx& gf = cmd.glyphFx[(size_t)ln[k].u];
+                    gx += gf.dx; gy += gf.dy; gc.a = (unsigned char)std::lround(std::max(0.0, std::min(255.0, gc.a * (double)gf.alpha)));
+                    if (gc.a == 0) continue;
+                }
+                if (cp == 0x2026) { for (int d=0;d<3;d++) drawGlyph('.', gx + d*adv, gy, unit, gc, false); continue; }
+                if (a > 0) drawGlyph(a, gx, gy, unit, gc, cmd.bold, skew);
                 else { // no embedded glyph (Arabic/CJK/emoji...): soft "skeleton" bar so layout stays readable
                     Rect bar{gx + adv*0.12, gy + 7*unit*0.38, adv*0.76, std::max(1.5, 7*unit*0.3)};
-                    Color sc = cmd.color; sc.a = (unsigned char)(sc.a * 0.55);
+                    Color sc = gc; sc.a = (unsigned char)(sc.a * 0.55);
                     fillRound(bar, bar.h/2, sc);
                 }
             }
         }
+        (void)honorClip;
+    };
+    auto drawText = [&](const DrawCommand& cmd) {
+        if (cmd.text.empty() || cmd.bounds.w <= 0 || cmd.bounds.h <= 0) return;
+        if (cmd.fontBlocked) return; // FontDisplay=block: الخط المخصّص لم يصل بعد — لا نص (HTML يترك القرار للمتصفح)
+        const bool clipped = cmd.clipL > 0 || cmd.clipT > 0 || cmd.clipR > 0 || cmd.clipB > 0;
+        if (clipped) {
+            clipX0 = cmd.bounds.x + cmd.bounds.w * cmd.clipL; clipX1 = cmd.bounds.x + cmd.bounds.w * (1.0 - cmd.clipR);
+            clipY0 = cmd.bounds.y + cmd.bounds.h * cmd.clipT; clipY1 = cmd.bounds.y + cmd.bounds.h * (1.0 - cmd.clipB);
+        }
+        // TextShadow: نسخ بإزاحة (التمويه يُقرَّب بثلاث طبقات خافتة حول الإزاحة؛ الدقة الكاملة في HTML/أندرويد).
+        for (auto it = cmd.textShadows.rbegin(); it != cmd.textShadows.rend(); ++it) {
+            if (it->color.a == 0) continue;
+            if (it->blur <= 0.5) drawTextPass(cmd, it->dx, it->dy, it->color, clipped);
+            else {
+                double r = std::min(3.0, it->blur / 4.0); Color c = it->color; c.a = (unsigned char)(c.a * 0.38);
+                drawTextPass(cmd, it->dx, it->dy, c, clipped);
+                drawTextPass(cmd, it->dx - r, it->dy, c, clipped); drawTextPass(cmd, it->dx + r, it->dy, c, clipped);
+                drawTextPass(cmd, it->dx, it->dy - r, c, clipped); drawTextPass(cmd, it->dx, it->dy + r, c, clipped);
+            }
+        }
+        drawTextPass(cmd, 0, 0, cmd.color, clipped);
+        if (clipped) { clipX0 = clipY0 = -1e18; clipX1 = clipY1 = 1e18; }
     };
     for (auto& cmd : list) {
         switch (cmd.op) {
@@ -1497,7 +1582,33 @@ inline std::string jsonEscape(const std::string& s) {
     }
     return out;
 }
-inline void fabricToJson(const StrandPtr& s, std::ostringstream& os) {
+// كتلة "typo" الإضافية (تُكتب فقط حين يستعمل العنصر خطاً/طباعة/لغة): تستهلكها المضيفات التي ترسم من Fabric JSON (أندرويد).
+inline void appendTypoJson(std::ostringstream& os, const typo::TextTypography& t) {
+    os << ",\"typo\":{";
+    bool f = true; auto sep = [&]() { os << (f ? "" : ","); f = false; };
+    if (!t.family.empty()) { sep(); os << "\"family\":\"" << jsonEscape(t.family) << "\",\"primary\":\"" << jsonEscape(t.primary) << "\",\"generic\":\"" << t.generic << "\",\"android\":\"" << t.androidFamily << "\""; }
+    if (t.custom) { sep(); os << "\"custom\":\"" << jsonEscape(t.customFamily) << "\",\"status\":\"" << t.status << "\",\"display\":\"" << t.display << "\",\"blocked\":" << (t.blocked ? "true" : "false") << ",\"fallbackActive\":" << (t.fallbackActive ? "true" : "false"); }
+    if (t.weight) { sep(); os << "\"weight\":" << t.weight; }
+    if (t.italic) { sep(); os << "\"italic\":true"; }
+    if (t.oblique != 0) { sep(); os << "\"oblique\":" << t.oblique; }
+    if (!t.variant.empty()) { sep(); os << "\"variant\":\"" << jsonEscape(t.variant) << "\""; }
+    if (!t.featureList.empty()) { sep(); os << "\"features\":\"" << jsonEscape(typo::featuresToCss(t.featureList)) << "\""; }
+    if (!t.variations.empty()) { sep(); os << "\"variations\":\"" << jsonEscape(t.variations) << "\""; }
+    if (!t.stretch.empty()) { sep(); os << "\"stretch\":\"" << t.stretch << "\""; }
+    if (!t.kerning.empty()) { sep(); os << "\"kerning\":\"" << t.kerning << "\""; }
+    if (t.transform != "none") { sep(); os << "\"transform\":\"" << t.transform << "\""; }
+    if (!t.shadows.empty()) {
+        sep(); os << "\"textShadow\":[";
+        for (size_t i = 0; i < t.shadows.size(); i++) os << (i ? "," : "") << "{\"dx\":" << t.shadows[i].dx << ",\"dy\":" << t.shadows[i].dy << ",\"blur\":" << t.shadows[i].blur << ",\"color\":\"" << colorToHex(t.shadows[i].color) << "\",\"alpha\":" << colorAlphaUnit(t.shadows[i].color) << "}";
+        os << "]";
+    }
+    if (!t.lang.empty()) { sep(); os << "\"lang\":\"" << jsonEscape(t.lang) << "\""; }
+    if (!t.dir.empty()) { sep(); os << "\"dir\":\"" << t.dir << "\""; }
+    if (t.rotate != 0) { sep(); os << "\"rotate\":" << t.rotate; }
+    if (!t.warnings.empty()) { sep(); os << "\"warnings\":["; for (size_t i = 0; i < t.warnings.size(); i++) os << (i ? "," : "") << "\"" << jsonEscape(t.warnings[i]) << "\""; os << "]"; }
+    os << "}";
+}
+inline void fabricToJson(const StrandPtr& s, std::ostringstream& os, std::vector<const Strand*>* anc = nullptr) {
     Color resolvedFill = resolveColor(s); // computed once, reused for both JSON fields below
     os << "{\"kind\":\"" << strandKindName(s->kind) << "\",\"name\":\"" << jsonEscape(s->name) << "\""
        << ",\"role\":\"" << uiRoleName(s->role) << "\""
@@ -1528,7 +1639,13 @@ inline void fabricToJson(const StrandPtr& s, std::ostringstream& os) {
        << ",\"name\":\"" << jsonEscape(accessibleName(*s)) << "\""
        << ",\"state\":\"" << stateName(resolveState(*s)) << "\""
        << ",\"disabled\":" << (resolveState(*s) == StrandState::DISABLED ? "true" : "false")
-       << "},\"interaction\":{\"clickable\":"
+       << "}";
+    { // typo (additive): فقط إن كان للعنصر خطّ/طباعة/لغة (وراثة من الأسلاف)
+        typo::AttrScope sc; sc.self = s.get(); sc.ancestors = anc;
+        typo::TextTypography tp = typo::resolveTypography(sc);
+        if (tp.any || !tp.warnings.empty()) appendTypoJson(os, tp);
+    }
+    os << ",\"interaction\":{\"clickable\":"
        << ((s->attr("onTap") || (s->kind == StrandKind::LINK && !s->attrStr("href", "").empty())) ? "true" : "false")
        << ",\"onTap\":\"" << jsonEscape(s->attr("onTap") ? s->attr("onTap")->asString() : "") << "\""
        << ",\"href\":\"" << jsonEscape(s->attrStr("href", "")) << "\""
@@ -1545,7 +1662,8 @@ inline void fabricToJson(const StrandPtr& s, std::ostringstream& os) {
        << ",\"onHoverEnter\":\"" << jsonEscape(s->attr("onHoverEnter") ? s->attr("onHoverEnter")->asString() : "") << "\""
        << ",\"onHoverExit\":\"" << jsonEscape(s->attr("onHoverExit") ? s->attr("onHoverExit")->asString() : "") << "\""
        << "},\"children\":[";
-    for (size_t i=0;i<s->children.size();i++) { if (i) os << ","; fabricToJson(s->children[i], os); }
+    std::vector<const Strand*> own; if (anc) own = *anc; own.push_back(s.get());
+    for (size_t i=0;i<s->children.size();i++) { if (i) os << ","; fabricToJson(s->children[i], os, &own); }
     os << "]}";
 }
 inline const char* drawOpName(DrawOp op) {
@@ -1557,6 +1675,36 @@ inline const char* drawOpName(DrawOp op) {
         case DrawOp::STROKE_ARC: return "stroke_arc";
         default: return "unknown";
     }
+}
+
+// حقول الطباعة/الحركة للنص — تُكتب فقط حين تُضبَط (JSON القديم يبقى كما هو حرفياً لمن لا يستعملها).
+inline void appendTextStyleJson(std::ostringstream& os, const DrawCommand& d) {
+    if (!d.fontFamily.empty()) os << ",\"fontFamily\":\"" << jsonEscape(d.fontFamily) << "\"";
+    if (d.fontWeight) os << ",\"fontWeight\":" << d.fontWeight;
+    if (d.italic) os << ",\"italic\":true";
+    if (d.oblique != 0) os << ",\"oblique\":" << d.oblique;
+    if (!d.fontCss.empty()) os << ",\"fontCss\":\"" << jsonEscape(d.fontCss) << "\"";
+    if (!d.fontFeatures.empty()) os << ",\"fontFeatures\":\"" << jsonEscape(d.fontFeatures) << "\"";
+    if (!d.fontVariations.empty()) os << ",\"fontVariations\":\"" << jsonEscape(d.fontVariations) << "\"";
+    if (!d.fontStatus.empty()) os << ",\"fontStatus\":\"" << d.fontStatus << "\"";
+    if (d.fontBlocked) os << ",\"fontBlocked\":true";
+    if (!d.lang.empty()) os << ",\"lang\":\"" << jsonEscape(d.lang) << "\"";
+    if (!d.dir.empty()) os << ",\"dir\":\"" << d.dir << "\"";
+    if (d.rotateDeg != 0) os << ",\"rotate\":" << d.rotateDeg;
+    if (!d.textShadows.empty()) {
+        os << ",\"textShadow\":[";
+        for (size_t i = 0; i < d.textShadows.size(); i++) {
+            const auto& t = d.textShadows[i];
+            os << (i ? "," : "") << "{\"dx\":" << t.dx << ",\"dy\":" << t.dy << ",\"blur\":" << t.blur << ",\"color\":\"" << colorToHex(t.color) << "\",\"alpha\":" << colorAlphaUnit(t.color) << "}";
+        }
+        os << "]";
+    }
+    if (!d.glyphFx.empty()) {
+        os << ",\"glyphUnit\":\"" << (d.glyphUnit == 2 ? "words" : "chars") << "\",\"glyphFx\":[";
+        for (size_t i = 0; i < d.glyphFx.size(); i++) os << (i ? "," : "") << "[" << d.glyphFx[i].alpha << "," << d.glyphFx[i].dx << "," << d.glyphFx[i].dy << "]";
+        os << "]";
+    }
+    if (d.clipL > 0 || d.clipT > 0 || d.clipR > 0 || d.clipB > 0) os << ",\"clip\":[" << d.clipL << "," << d.clipT << "," << d.clipR << "," << d.clipB << "]";
 }
 
 // Serializes the exact Dye output, not a second approximation made by the host UI. This makes
@@ -1586,6 +1734,7 @@ inline std::string drawListToJsonString(const DrawList& list) {
         }
         if (d.op == DrawOp::STROKE_ARC) os << ",\"start\":" << d.startAngleDeg << ",\"sweep\":" << d.sweepAngleDeg;
         if (d.op == DrawOp::TEXT_RUN) os << ",\"fontSize\":" << d.fontSize << ",\"align\":" << d.align << ",\"bold\":" << (d.bold?"true":"false") << ",\"singleLine\":" << (d.singleLine?"true":"false");
+        if (d.op == DrawOp::TEXT_RUN) appendTextStyleJson(os, d);
         if (!d.text.empty()) os << ",\"text\":\"" << jsonEscape(d.text) << "\"";
         os << "}";
     }
