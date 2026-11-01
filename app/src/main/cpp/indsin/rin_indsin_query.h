@@ -61,9 +61,11 @@ inline KindCategory kindCategoryOf(StrandKind k) {
             return KindCategory::FEEDBACK;
         case StrandKind::TABS: case StrandKind::BREADCRUMB: case StrandKind::PAGINATION: case StrandKind::STEPS:
         case StrandKind::STEPITEM: case StrandKind::MENU:
+        case StrandKind::ACCORDION: case StrandKind::ACCORDION_ITEM: case StrandKind::TREE_VIEW: case StrandKind::TREE_NODE:
             return KindCategory::NAVIGATION;
         case StrandKind::TABLE: case StrandKind::TABLEROW: case StrandKind::LIST: case StrandKind::LISTITEM:
         case StrandKind::TIMELINE: case StrandKind::TIMELINEITEM: case StrandKind::DONUT_CHART: case StrandKind::OBJECT:
+        case StrandKind::EXPANDABLE_LIST: case StrandKind::NESTED_LIST: case StrandKind::NESTED_ITEM:
             return KindCategory::DATA;
         case StrandKind::DIALOG:
             return KindCategory::OVERLAY;
