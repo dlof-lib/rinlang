@@ -93,6 +93,7 @@ inline const std::unordered_set<std::string>& knownTags() {
         "File", "Date", "Time", "CodeEditor", "Calculator", "Search", "Tag", "Kbd", "Rating",
         "Skeleton", "Spinner", "Steps", "StepItem", "Timeline", "TimelineItem", "Breadcrumb",
         "Pagination", "DonutChart", "Custom",
+        "Accordion", "AccordionItem", "ExpandableList", "TreeView", "TreeNode", "NestedList", "NestedItem",
         "Screen", "Scroll", "Hero", "Section", "LoginForm", "Field", "PasswordField", "Stat",
         "Alert", "ListTile", "EmptyState", "ProfileCard", "ConfirmCard", "Toggle", "Stepper",
         "breadcrumbs", "chip", "container", "datepicker", "donut", "dropdown", "element",
