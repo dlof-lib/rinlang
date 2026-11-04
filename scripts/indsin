@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# indsin — نقطة دخول واحدة لكل أدوات Indsin (بدل أدوات متفرقة بأسماء مختلفة).
+#   indsin web     <file> [-o out.html] [opts]   ترجمة إلى HTML/CSS/JS (tools/indsin2web.cpp)
+#   indsin check   <file> [--strict]             فحص المصدر وتحذيرات التغطية بلا ناتج
+#   indsin tags    <file>                        إظهار لهجة @view الناتجة من صيغة الوسوم <>
+#   indsin preview <file> [opts]                 معاينة PNG/HTML من المحرّك الأصلي (rin_indsin_preview)
+#   indsin live    [args]                        خادم المعاينة الحيّة (tools/indsin-live)
+#   indsin desktop                               نافذة X11 (تُبنى عبر build_all.sh desktop)
+#   indsin test                                  اختبارات المترجم
+# الأدوات تُبنى عند أول استعمال إلى build/ ولا تُعاد ما لم يتغيّر المصدر.
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"; C="$ROOT/app/src/main/cpp"; B="$ROOT/build"; CXX="${CXX:-g++}"
+need_web() { bash "$ROOT/scripts/build_indsin2web.sh" >/dev/null; }
+need_preview() {
+  local out="$B/rin_indsin_preview"; mkdir -p "$B"
+  [ -x "$out" ] && [ "$out" -nt "$ROOT/tools/rin_indsin_preview.cpp" ] && return 0
+  echo "indsin: بناء المعاينة الأصلية (مرة واحدة، قد يستغرق دقائق)…" >&2
+  local srcs=(indsin/rin_indsin_c_api rin_c_api rin_lexer rin_parser rin_make rin_container_sql rin_artifact rin_interpreter
+    binfmt/elf_format binfmt/ar_format binfmt/pe_format binfmt/macho_format binfmt/coff_obj loader_ui/library_loader_ui rin_http
+    diagnostics/diagnostic diagnostics/source_manager diagnostics/diagnostic_engine diagnostics/diagnostic_renderer
+    clc/clc_container clc/clc_compress clc/clc_security clc/clc_rin_opt clc/clc_zip_import clc/sha256)
+  local files=(); for s in "${srcs[@]}"; do files+=("$C/$s.cpp"); done
+  "$CXX" -std=c++23 -O1 -w -I"$C" -o "$out" "$ROOT/tools/rin_indsin_preview.cpp" "${files[@]}" -lz
+}
+cmd="${1:-help}"; [ $# -gt 0 ] && shift
+case "$cmd" in
+  web)     need_web; exec "$B/indsin2web" "$@" ;;
+  check)   need_web; exec "$B/indsin2web" "$@" --check ;;
+  tags)    need_web; exec "$B/indsin2web" "$@" --desugar ;;
+  preview) need_preview; exec "$B/rin_indsin_preview" "$@" ;;
+  live)    OUT="$B/live" bash "$ROOT/tools/indsin-live/build.sh" && exec "$B/live/"* "$@" ;;
+  desktop) exec bash "$ROOT/scripts/build_all.sh" desktop ;;
+  test)    exec bash "$ROOT/tests/indsin2web/run.sh" ;;
+  help|-h|--help) sed -n 2,11p "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' ;;
+  *) echo "indsin: أمر غير معروف: $cmd (جرّب: indsin help)" >&2; exit 64 ;;
+esac
