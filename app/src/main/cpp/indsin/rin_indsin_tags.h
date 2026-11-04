@@ -54,6 +54,15 @@
 
 namespace indsin {
 namespace tags {
+// اسم عنصر يطابق كلمة محجوزة في Rin (save/text/file/link/…) لا يُقبل بعد '=' إلا مقتبساً: `@element.button="save"`.
+inline std::string nameToken(const std::string& id) {
+    static const char* kw[] = {"let","print","if","else","while","fun","return","true","false","nil","and","or","break","continue",
+        "rinopen","for","text","container","containers","group","volume","section","translations","translation","link","tying",
+        "merge","installation","simplified","save","file","end","pipe"};
+    for (const char* k : kw) if (id == k) return "\"" + id + "\"";
+    return id;
+}
+
 
 struct TagError {
     std::string message;
@@ -1061,7 +1070,7 @@ private:
         } else if (hl == "loop" || hl == "container") {
             kw = hl; closer = ".end/" + hl;
             if (id.empty()) id = hl + "_" + std::to_string(++ctx.autoId);
-            stmt = "@" + hl + "=" + id;
+            stmt = "@" + hl + "=" + nameToken(id);
         } else if (hl == "theme" || hl == "palette") {
             // <Theme#Brand primary=#6C5CE7 background=#0B1020 active />  →  @theme=Brand …; .end/theme
             // <Palette seed=#6C5CE7 dark />  → theme مشتقّ من لون واحد (WCAG)، يُفعَّل تلقائياً.
@@ -1118,7 +1127,7 @@ private:
             if (sub.empty()) fail("<Element.Kind#name> needs a kind, e.g. <Element.Button#ok>", startLine);
             kw = "element"; closer = ".end/element";
             if (id.empty()) id = lower(sub) + "_" + std::to_string(++ctx.autoId);
-            stmt = "@element." + sub + "=" + id;
+            stmt = "@element." + sub + "=" + nameToken(id);
         } else {
             std::string kind = hl == "view" ? sub : tagName;
             // <Screen size=phone|"390x844" width=… height=… bg=#fff>: جذر الشاشة = Column + لوحة (canvas) بحجم ولون حرّين.
@@ -1136,7 +1145,7 @@ private:
             if (kind.find('.') != std::string::npos) fail("unexpected '.' in element name <" + tagName + ">", startLine);
             kw = "view"; closer = ".end/view";
             if (id.empty()) id = lower(kind) + "_" + std::to_string(++ctx.autoId);
-            stmt = "@view." + kind + "=" + id;
+            stmt = "@view." + kind + "=" + nameToken(id);
         }
 
         if (!isStatement) {
