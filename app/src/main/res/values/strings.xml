@@ -328,6 +328,7 @@ print \"Hello, \" + name + \"!\";
     <string name="indsin_error_format">Error: %1$s</string>
     <string name="indsin_error_line_format">Snag on line %1$d: %2$s — still showing the last good frame</string>
     <string name="indsin_stats_error_only">No good frame yet — fix the error above and keep typing.</string>
+    <string name="indsin_empty_screen_hint">The screen is empty: the root has no children. Put elements inside the root (between @view and .end/view, or inside &lt;Column&gt;).</string>
     <string name="indsin_stats_idle">Waiting for the first render…</string>
     <string name="indsin_stats_format">%1$d strands · rendered in %2$dms · cache hits %3$d · long-press an element to inspect it</string>
     <string name="indsin_inspector_title_format">%1$s · %2$s (line %3$d)</string>
