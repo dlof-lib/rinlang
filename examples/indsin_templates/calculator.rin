@@ -1,21 +1,18 @@
-// indsin/main.indsin — قالب "آلة حاسبة" جاهز (محرّك indsin، @view.*)
-
-warp display = "0";
-warp stored = 0;
-warp pendingOp = "";
-warp freshEntry = true;
-
+<!-- indsin/main.indsin — قالب "آلة حاسبة" جاهز (محرّك indsin، @view.*) -->
+<warp display={"0"} />
+<warp stored={0} />
+<warp pendingOp={""} />
+<warp freshEntry={true} />
+<Rin>
 fun inputDigit(d) {
     if (freshEntry) { display = d; freshEntry = false; }
     else if (display == "0") { display = d; }
     else { display = display + d; }
 }
-
 fun inputDot() {
     if (freshEntry) { display = "0."; freshEntry = false; }
     else if (!contains(display, ".")) { display = display + "."; }
 }
-
 fun applyPending() {
     let current = toNumber(display);
     if (pendingOp == "+") { stored = stored + current; }
@@ -26,63 +23,50 @@ fun applyPending() {
     }
     else { stored = current; }
 }
-
 fun chooseOp(op) {
     applyPending();
     pendingOp = op;
     freshEntry = true;
     display = toString(stored);
 }
-
 fun pressEquals() {
     applyPending();
     display = toString(stored);
     pendingOp = "";
     freshEntry = true;
 }
-
 fun clearAll() {
     display = "0"; stored = 0; pendingOp = ""; freshEntry = true;
 }
-
-@view.Column=root
-    padding=16;
-    gap=10;
-
-    @view.Text=heading text="Calculator App"; size="title"; .end/view
-
-    @view.Card=screen
-        padding=18;
-        @view.Text=out text=display; size=32; .end/view
-    .end/view
-
-    @view.Row=row1 gap=8;
-        @view.Button=b7 label="7"; sizing="expand"; onTap=inputDigit("7"); .end/view
-        @view.Button=b8 label="8"; sizing="expand"; onTap=inputDigit("8"); .end/view
-        @view.Button=b9 label="9"; sizing="expand"; onTap=inputDigit("9"); .end/view
-        @view.Button=bDiv label="÷"; sizing="expand"; onTap=chooseOp("/"); .end/view
-    .end/view
-
-    @view.Row=row2 gap=8;
-        @view.Button=b4 label="4"; sizing="expand"; onTap=inputDigit("4"); .end/view
-        @view.Button=b5 label="5"; sizing="expand"; onTap=inputDigit("5"); .end/view
-        @view.Button=b6 label="6"; sizing="expand"; onTap=inputDigit("6"); .end/view
-        @view.Button=bMul label="×"; sizing="expand"; onTap=chooseOp("*"); .end/view
-    .end/view
-
-    @view.Row=row3 gap=8;
-        @view.Button=b1 label="1"; sizing="expand"; onTap=inputDigit("1"); .end/view
-        @view.Button=b2 label="2"; sizing="expand"; onTap=inputDigit("2"); .end/view
-        @view.Button=b3 label="3"; sizing="expand"; onTap=inputDigit("3"); .end/view
-        @view.Button=bSub label="-"; sizing="expand"; onTap=chooseOp("-"); .end/view
-    .end/view
-
-    @view.Row=row4 gap=8;
-        @view.Button=bClear label="C"; sizing="expand"; onTap=clearAll(); .end/view
-        @view.Button=b0 label="0"; sizing="expand"; onTap=inputDigit("0"); .end/view
-        @view.Button=bDot label="."; sizing="expand"; onTap=inputDot(); .end/view
-        @view.Button=bAdd label="+"; sizing="expand"; onTap=chooseOp("+"); .end/view
-    .end/view
-
-    @view.Button=bEquals label="="; onTap=pressEquals(); .end/view
-.end/view
+</Rin>
+<Column#root padding=16 gap=10>
+  <Text#heading text="Calculator App" size="title" />
+  <Card#screen padding=18>
+    <Text#out text={display} size=32 />
+  </Card>
+  <Row#row1 gap=8>
+    <Button#b7 label="7" sizing="expand" onTap={inputDigit("7")} />
+    <Button#b8 label="8" sizing="expand" onTap={inputDigit("8")} />
+    <Button#b9 label="9" sizing="expand" onTap={inputDigit("9")} />
+    <Button#bDiv label="÷" sizing="expand" onTap={chooseOp("/")} />
+  </Row>
+  <Row#row2 gap=8>
+    <Button#b4 label="4" sizing="expand" onTap={inputDigit("4")} />
+    <Button#b5 label="5" sizing="expand" onTap={inputDigit("5")} />
+    <Button#b6 label="6" sizing="expand" onTap={inputDigit("6")} />
+    <Button#bMul label="×" sizing="expand" onTap={chooseOp("*")} />
+  </Row>
+  <Row#row3 gap=8>
+    <Button#b1 label="1" sizing="expand" onTap={inputDigit("1")} />
+    <Button#b2 label="2" sizing="expand" onTap={inputDigit("2")} />
+    <Button#b3 label="3" sizing="expand" onTap={inputDigit("3")} />
+    <Button#bSub label="-" sizing="expand" onTap={chooseOp("-")} />
+  </Row>
+  <Row#row4 gap=8>
+    <Button#bClear label="C" sizing="expand" onTap={clearAll()} />
+    <Button#b0 label="0" sizing="expand" onTap={inputDigit("0")} />
+    <Button#bDot label="." sizing="expand" onTap={inputDot()} />
+    <Button#bAdd label="+" sizing="expand" onTap={chooseOp("+")} />
+  </Row>
+  <Button#bEquals label="=" onTap={pressEquals()} />
+</Column>
