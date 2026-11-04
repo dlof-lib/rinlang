@@ -328,6 +328,7 @@ print \"Hello, \" + name + \"!\";
     <string name="indsin_error_format">خطأ: %1$s</string>
     <string name="indsin_error_line_format">خلل (Snag) في السطر %1$d: %2$s — ما زال يُعرض آخر إطار سليم</string>
     <string name="indsin_stats_error_only">لا يوجد إطار سليم بعد — أصلح الخطأ أعلاه وتابع الكتابة.</string>
+    <string name="indsin_empty_screen_hint">الواجهة فارغة: الجذر لا يحوي أي عنصر. ضع العناصر داخل الجذر (بين @view و .end/view أو داخل &lt;Column&gt;).</string>
     <string name="indsin_stats_idle">في انتظار أول عرض…</string>
     <string name="indsin_stats_format">%1$d عنصر · تم العرض خلال %2$d مللي ثانية · إصابات الذاكرة المؤقتة %3$d · اضغط مطوّلاً على أي عنصر لفحصه</string>
     <string name="indsin_inspector_title_format">%1$s · %2$s (السطر %3$d)</string>
