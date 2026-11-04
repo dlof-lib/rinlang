@@ -225,7 +225,10 @@ class IndsinLivePanel(
         val canvasW = canvasInfo?.optInt("width", deviceWidth)?.takeIf { it > 0 } ?: deviceWidth
         fabricView.setFabric(fabric, canvasW, h, result.optJSONArray("overlays"), canvasInfo)
 
-        if (result.has("snag") || result.has("error")) showError(formatError(result)) else hideError()
+        if (result.has("snag") || result.has("error")) showError(formatError(result))
+        else if ((fabric.optJSONArray("children")?.length() ?: 0) == 0 && fabric.optString("kind") != "TEXT")
+            showError(activity.getString(R.string.indsin_empty_screen_hint)) // إطار أسود بلا تفسير → أخبر المستخدم السبب
+        else hideError()
 
         val measured = result.optInt("strandsMeasured", -1)
         val cache = result.optInt("cacheHits", -1)
