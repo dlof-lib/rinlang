@@ -139,3 +139,23 @@ rin_indsin_preview file.rin --width 390 --png out.png --html out.html --tap 60,1
 ---
 ## مصادر الصور (جديد)
 `src`/`srcset`/URL/RemotePath/LocalPath/Base64/DataURI/Blob + `uploadImage()`/`downloadImage()` — راجع [docs/indsin_image_sources.md](docs/indsin_image_sources.md).
+
+---
+## الترجمة إلى الويب (جديد)
+`tools/indsin2web.cpp` مترجم رسمي يحوّل أي واجهة Indsin (وسوم أو `@view`) إلى صفحة HTML/CSS/JS تفاعلية مستقلة
+فوق نفس `desugar` والـ lexer/parser — راجع [docs/indsin2web.md](docs/indsin2web.md).
+
+---
+## أداة واحدة: `scripts/indsin`
+كل أدوات Indsin خلف أمر واحد بدل أسماء متفرقة (`rin_indsin_preview`, `indsinc`, `indsin2web`, `indsin-live`…):
+
+| الأمر | يفعل | المصدر |
+|---|---|---|
+| `indsin web f.rin -o f.html` | ترجمة إلى HTML/CSS/JS تفاعلي | `tools/indsin2web.cpp` |
+| `indsin check f.rin [--strict]` | فحص وتحذيرات التغطية | نفسه |
+| `indsin tags f.rin` | عرض لهجة `@view` الناتجة من الوسوم | `indsin/rin_indsin_tags.h` |
+| `indsin preview f.rin --png o.png` | معاينة من المحرّك الأصلي | `tools/rin_indsin_preview.cpp` |
+| `indsin live` · `indsin desktop` | معاينة حيّة · نافذة X11 | `tools/indsin-live/` · `tools/rin_indsin_desktop.cpp` |
+| `indsin test` | اختبارات المترجم | `tests/indsin2web/` |
+
+الاسم الوحيد للمحرّك والماركة هو **Indsin**؛ لم يبقَ "Loom" إلا في جدول إعادة التسمية أعلاه وسكربت تنظيف CI (`delete_loom.sh`).
