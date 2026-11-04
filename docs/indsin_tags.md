@@ -125,3 +125,19 @@ g++ -std=c++17 -I app/src/main/cpp tests/indsin_tags/tags_test.cpp -o /tmp/tags_
 ```
 
 المثال الكامل: `examples/samples/indsin_tags_demo.rin`، وإضافة VS Code تلوّن الوسوم وتوفّر snippets (`<column`, `<text`, `<warp` …).
+
+## الوسوم بديل كامل لـ `@view … .end/view`
+
+كل ما يُكتب بلهجة `@view` له مقابل بالوسوم، وبالتحويل الآلي يبقى الرسم مطابقاً بايتاً ببايت:
+
+| `@view` | الوسوم |
+|---|---|
+| `@view.Kind=name a=1; .end/view` | `<Kind#name a=1 />` |
+| `@element.Kind=name` … `.end/element` | `<Element.Kind#name>` … `</Element.Kind>` |
+| `@loop=name` / `@container=name` | `<Loop#name>` / `<Container#name>` |
+| نوع Strand خام يطابق اسمه مكوّناً مدمجاً (`TopBar` `Header` `Tabs` `Badge` `Breadcrumb` `Pagination` `TextField`…) | `<View.Kind#name>` … `</View.Kind>` — بدونه يُستعمل المكوّن المدمج |
+| اسم عنصر كلمة محجوزة (`save` `text` `file` `link`…) | `<Element.button#save>` — يُقتبس تلقائياً في الناتج |
+| كود Rin الخارجي (`fun` `let` `print` `@theme`…) | `<Rin> … </Rin>` حرفياً · `warp x = e;` ← `<warp x={e} />` |
+
+التحويل: `python3 tools/view2tags.py file.rin -o file.rin` · للتحقق من تطابق الرسم مع الأصل: `INDSIN_DUMP=<أداة dump> python3 tools/view2tags.py --verify file.rin`.
+حاويات البيانات (`@container.api/.doc/…`) وصيغة الأقواس `{ … };` تبقى كوداً خاماً/ترفض بأمان بدل تحويل خاطئ.
