@@ -468,7 +468,7 @@ class PackageDetailActivity : BaseConnectivityActivity() {
     }
 
     /**
-     * يحاول تشغيل [code] فعلياً كوجهة/صفحة Loom عبر [RinEngine.renderView]
+     * يحاول تشغيل [code] فعلياً كوجهة/صفحة Indsin عبر [RinEngine.renderView]
      * (نفس مسار المعاينة الحيّة الحقيقي في المحرّر) ويرسمها كمعاينة حقيقية داخل [frame] عبر
      * [com.dlof.rinlang.IndsinFabricView] عند وجود `@view` قابل للعرض. إن لم يوجد (حاوية
      * `@container` بلا واجهة، كود جدولة/منطق عادي...) ينزل إلى [renderExecutionOutput] لعرض
