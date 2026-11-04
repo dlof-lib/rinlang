@@ -1,38 +1,18 @@
-@container=app
-    @element.button=run
-        text="Run";
-    .end/element
-
-    @element.input=name
-        placeholder="Your name";
-    .end/element
-
+<Container#app>
+  <Element.button#run text="Run" />
+  <Element.input#name placeholder="Your name" />
+  <Rin>
     on.run.click=runCode();
-.end/container
-
+  </Rin>
+</Container>
+<Rin>
 fun runCode() {
     print "Rin UI";
 }
-
-@loop=canvas
-    width=390;
-    height=700;
-    background="#ffffff";
-
-    @element.text=title
-        text="Rin Elements";
-    .end/element
-
-    @element.button=run
-        text="Run";
-    .end/element
-
-    @element.input=name
-        placeholder="Name";
-    .end/element
-
-    @element.progress=download
-        value=50;
-        max=100;
-    .end/element
-.end/loop
+</Rin>
+<Loop#canvas width=390 height=700 background="#ffffff">
+  <Element.text#title text="Rin Elements" />
+  <Element.button#run text="Run" />
+  <Element.input#name placeholder="Name" />
+  <Element.progress#download value=50 max=100 />
+</Loop>
