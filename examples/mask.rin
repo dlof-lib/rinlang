@@ -1,29 +1,22 @@
-@container="app"
-mask = "app-root";
-.end/container
-
+<Container#app mask="app-root" />
+<Rin>
 @Containers.Group="ui"
 mask = "ui-root";
 .end/Containers.Group
-
 @Volume="assets"
 mask = "assets-root";
 .end/Volume
-
 // Note: mask= on a @view element is accepted syntactically but is NOT registered
 // anywhere -- only @container/@Containers.Group/@Volume masks are (see findMask/
 // maskOf/maskExists in app/src/main/cpp/rin_interpreter.cpp). findMask("screen-root")
 // will therefore always return nil; this is a known engine limitation, not a bug here.
-@view.Column="screen"
-mask="screen-root";
-.end/view
-
+</Rin>
+<Column#screen mask="screen-root" />
+<Rin>
 print findMask("app-root");
 print findMask("ui-root");
 print findMask("assets-root");
 print maskOf("app");
-
-
 // Advanced Mask API
 print maskExists("app-root");
 print maskTarget("app-root");
@@ -34,12 +27,10 @@ print maskNames("container");
 print maskMembers("ui-root");
 print maskParent("child-root");
 print maskChildren("app-root");
-
-@container="toolbar"
-mask="save-button";
-.end/container
-
-// Mask v1
+</Rin>
+<Container#toolbar mask="save-button" />
+<!-- Mask v1 -->
+<Rin>
 maskAlias("save", "save-button");
 maskTag("save-button", "primary");
 maskTag("save-button", "action");
@@ -48,12 +39,10 @@ print maskResolve("save");
 print maskTags("save-button");
 print maskRefs("save-button");
 print maskSummary("save");
-
 // Mask v1 registry demo
-@container="mainApp"
-mask="app.main";
-.end/container
-
+</Rin>
+<Container#mainApp mask="app.main" />
+<Rin>
 let m = "app.main";
 print maskExists(m);
 maskNamespace(m, "ui/app");
@@ -65,3 +54,4 @@ print maskByNamespace("ui/app");
 maskDisable(m);
 print maskActive(m);
 maskEnable(m);
+</Rin>
