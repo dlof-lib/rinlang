@@ -4,7 +4,7 @@
 
 SHELL := /usr/bin/env bash
 
-.PHONY: help apk apk-release web desktop all clean
+.PHONY: help apk apk-release web desktop all clean indsin2web test-indsin2web
 
 help:
 	@bash scripts/build_all.sh
@@ -26,3 +26,10 @@ all:
 
 clean:
 	@bash scripts/build_all.sh clean
+
+# مترجم Indsin → HTML/CSS/JS (tools/indsin2web.cpp) — يحتاج g++ فقط. انظر docs/indsin2web.md
+indsin2web:
+	@bash scripts/build_indsin2web.sh
+
+test-indsin2web:
+	@bash tests/indsin2web/run.sh
