@@ -118,12 +118,23 @@ inline void attachContainerUiBindings(const std::vector<rin::StmtPtr>& stmts,
 // visual attrs either way, so an @element used as a root stays exactly as "functional-only" as
 // one nested inside a @view always was -- this only changes whether it's *accepted* as a root,
 // not what it's allowed to look like once it is one.
+// جذر فارغ + عناصر أخرى مُعلَنة بجانبه على المستوى الأعلى (مثل examples/candle.rin): كان الناتج إطاراً أسود
+// فارغاً بلا تفسير لأن العناصر الشقيقة تُهمَل بصمت. الآن تُتبنّى أبناءً للجذر الفارغ. لا أثر على أي جذر له أبناء
+// (السلوك القديم حرفياً)، ولا على ما كان يُرسَم فارغاً أصلاً.
+inline void adoptTopLevelSiblings(const std::shared_ptr<rin::ViewStmt>& root, const std::vector<rin::StmtPtr>& program) {
+    if (!root || !root->children.empty()) return;
+    for (auto& other : program) {
+        auto o = std::dynamic_pointer_cast<rin::ViewStmt>(other);
+        if (o && o != root) root->children.push_back(o);
+    }
+}
+
 inline std::shared_ptr<rin::ViewStmt> pickRootFromProgram(const std::vector<rin::StmtPtr>& program) {
     std::shared_ptr<rin::ViewStmt> elementFallback;
     for (auto& stmt : program) {
         auto v = std::dynamic_pointer_cast<rin::ViewStmt>(stmt);
         if (!v) continue;
-        if (v->role != rin::UiRole::ELEMENT) return v; // a real @view/@loop always wins outright
+        if (v->role != rin::UiRole::ELEMENT) { adoptTopLevelSiblings(v, program); return v; } // a real @view/@loop always wins outright
         if (!elementFallback) elementFallback = v;
     }
     return elementFallback; // null if the program has no top-level ViewStmt of any role
@@ -255,6 +266,7 @@ inline PipelineResult runColdPipelineWithRuntime(const std::string& source, rin:
         registerGroupsFromProgram(program, result.warp); // §21b: Group/Volume as Object Inspector source
 
         std::shared_ptr<rin::ViewStmt> root = reachedRoot ? reachedRoot : reachedElementFallback;
+        if (reachedRoot) adoptTopLevelSiblings(root, program);
         if (!root) {
             // Defensive fallback only -- e.g. a program with a top-level @view that for some
             // reason execute() didn't reach (shouldn't happen: top-level statements always run
@@ -409,6 +421,7 @@ inline PipelineResult runColdPipelineForContainerWithRuntime(const std::string& 
         registerObjectsFromProgram(*body, result.warp); // §21: Object Inspector source
         registerGroupsFromProgram(*body, result.warp); // §21b: Group/Volume as Object Inspector source
         std::shared_ptr<rin::ViewStmt> root = reachedRoot ? reachedRoot : reachedElementFallback;
+        if (reachedRoot) adoptTopLevelSiblings(root, *body);
         if (!root) root = pickRootFromProgram(*body); // defensive fallback -- see runColdPipelineWithRuntime's equivalent above
         if (!root) throw rin::RinError("no '@view...=name' or '@loop...=name' root found inside container '" + containerName + "'", 1);
 
