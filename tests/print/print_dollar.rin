@@ -1,0 +1,14 @@
+// `$` = مرادف كامل لـ print/show (docs/shorthand.md)
+let name = "رين";
+let n = 3;
+$ "مرحبا";
+$ "a", "b", "c" sep="-";
+$ name, n;
+$ `قيمة n = ${n}`;
+$ "x" if=(n > 5);
+$ "y" if=(n < 5);
+$ ("paren");
+for (let i = 0; i < 2; i = i + 1) { $ i; }
+$ "no newline" end="|";
+$ "";
+$ "done";
