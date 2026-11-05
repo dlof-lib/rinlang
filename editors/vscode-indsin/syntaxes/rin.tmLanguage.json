@@ -215,7 +215,7 @@
     "keyword-print": {
       "comment": "'show' is a full lexer-level synonym for 'print' (rin_lexer.cpp keywords table -> same TokenType::PRINT), part of the simplified-English keyword family alongside `make`/`@make`.",
       "name": "keyword.other.print.rin",
-      "match": "\\b(print|show)\\b"
+      "match": "\\b(print|show)\\b|\\$(?!\\{)"
     },
 
     "make-unit": {
