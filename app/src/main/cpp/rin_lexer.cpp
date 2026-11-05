@@ -459,6 +459,11 @@ void Lexer::scanToken() {
         case '*': addToken(TokenType::STAR); break;
         case '%': addToken(TokenType::PERCENT); break;
         case '#': scanHashWord(); break;
+        // عائلة الرموز المختصرة (docs/shorthand.md): `$` = مرادف حرفي كامل لـ print/show (نفس TokenType::PRINT)،
+        // فيرث كل صيغه: `$ x, y sep="-";` · `$.log.info(..)` · `$.image(..)` · `$ x if=cond;`.
+        // `$` وحدها كانت خطأ E0011 خارج النصوص (و`${...}` داخل القوالب تُعالَج في scanString/scanTemplate قبل الوصول هنا)،
+        // فلا تعارض مع أي كود موجود.
+        case '$': addToken(TokenType::PRINT); break;
         case '@': addToken(TokenType::AT); break;
         case '.': addToken(TokenType::DOT); break;
         case '?': addToken(TokenType::QUESTION); break;
