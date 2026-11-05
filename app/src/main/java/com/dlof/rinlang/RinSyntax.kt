@@ -387,6 +387,8 @@ private object RinLexer {
                         }
                         out.add(hl(li, start, i, kind))
                     }
+                    // `$` = مرادف print (docs/shorthand.md)
+                    c == '$' -> { out.add(hl(li, i, i + 1, HighlightKind.KEYWORD)); i++ }
                     c.isDigit() -> { val end = scanNumber(text, i); out.add(hl(li, i, end, HighlightKind.NUMBER)); i = end }
                     c.isLetter() || c == '_' -> {
                         val start = i
