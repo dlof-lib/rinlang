@@ -406,7 +406,10 @@ struct ReckonStmt : Stmt { ReckonStmt() { stmtKind = StmtKind::ReckonStmt; }
 //   --- val (docs/val.md): قيمة تفاعلية (reactive) — مشتقّ مخزَّن يُحدَّث دفعياً عند تغيّر ما يقرؤه ---
 //   val x = expr [lazy] [when COND] [keep N] [within A to B [strict|wrap]] [as TITLE] [about TEXT] [unit TEXT];
 //   touch x;  unval x;     أفعال val (إعادة حساب قسرية / فكّ التفاعل وإبقاء القيمة كمتغيّر عادي).
-enum class LiveKind { Stone, Gauge, Tape, Lens, Fuse, Base, Accept, Pre, Post, Label, Define, Val };
+//   --- dialog (docs/dialog.md): حوار متغيّر للـ container — رسالته val تتحدّث مع حقول الحاوية، وله حالة (مفتوح/مغلق) ونتيجة ---
+//   dialog x = MESSAGE [title T] [buttons LIST] [tone T] [focus N] [lazy] [when COND] [keep N];
+//   open x;  close x [RESULT];  ask x;  reply x (r) { ... }     (x قد يكون مساراً: shop.confirm)
+enum class LiveKind { Stone, Gauge, Tape, Lens, Fuse, Base, Accept, Pre, Post, Label, Define, Val, Dialog };
 struct LiveDeclStmt : Stmt { LiveDeclStmt() { stmtKind = StmtKind::LiveDeclStmt; }
     LiveKind kind = LiveKind::Stone;
     std::string name;
@@ -423,10 +426,13 @@ struct LiveDeclStmt : Stmt { LiveDeclStmt() { stmtKind = StmtKind::LiveDeclStmt;
     ExprPtr metaLabel, metaAbout, metaUnit; // label/define: التسمية والوصف والوحدة (نصوص؛ nullable)
     bool lazy = false;        // val: لا يُحسب إلا عند القراءة (ويُعلَّم stale عند تغيّر الاعتماد)
     ExprPtr when;             // val: شرط التحديث — ما دام كاذباً تبقى القيمة كما هي (held)
+    ExprPtr dTrigger;         // dialog: `opens when COND` — يُفتح الحوار تلقائياً كلما انتقل الشرط من كاذب إلى صادق
+    ExprPtr dTitle, dButtons, dTone, dFocus; // dialog: العنوان/الأزرار (قائمة نصوص)/النغمة (info|warn|error|success|ask)/الزر المؤشَّر عليه — تُقيَّم عند القراءة (متغيّرة)
     ExprPtr preRule, postRule; // pre/post: شرط «قبل» (x = القديمة) وشرط «بعد» (x = الجديدة)؛ كلاهما يرى old و new — يكفي واحد منهما
 };
 struct BellStmt : Stmt { BellStmt() { stmtKind = StmtKind::BellStmt; }
     std::string target;
+    bool reply = false;       // `reply DIALOG (r) { ... }`: معالج إغلاق حوار dialog (وسيط واحد = النتيجة) بدل جرس تغيّر القيمة
     std::shared_ptr<struct FunctionStmt> handler; // يُبنى داخلياً كدالة عادية (0 وسائط، 1 = new، 2 = old,new)
 };
 struct TrialStmt : Stmt { TrialStmt() { stmtKind = StmtKind::TrialStmt; }
@@ -434,9 +440,9 @@ struct TrialStmt : Stmt { TrialStmt() { stmtKind = StmtKind::TrialStmt; }
     StmtPtr elseBranch;       // nullable: يُنفَّذ بعد التراجع إن فشلت التجربة أو أُجهضت
 };
 struct LiveActionStmt : Stmt { LiveActionStmt() { stmtKind = StmtKind::LiveActionStmt; }
-    std::string action;       // "undo" | "redo" | "rearm" | "unbell" | "abort" | "ban" | "inc" | "dec" | "rebase" | "rewind"
+    std::string action;       // "undo" | "redo" | "rearm" | "unbell" | "abort" | "ban" | "inc" | "dec" | "rebase" | "rewind" | "touch" | "unval" | "open" | "close" | "ask"
     std::string target;       // اسم المتغيّر (فارغ لـ abort)
-    ExprPtr count;            // undo/redo/inc/dec فقط (nullable = 1، أو step الخاص بـ base)
+    ExprPtr count;            // undo/redo/inc/dec فقط (nullable = 1، أو step الخاص بـ base)؛ و close: نتيجة الحوار (رقم الزر أو نصه)
 };
 
 struct BlockStmt : Stmt { BlockStmt() { stmtKind = StmtKind::BlockStmt; } std::vector<StmtPtr> statements; };
