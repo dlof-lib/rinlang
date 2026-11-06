@@ -1,0 +1,19 @@
+🧾 container.doc = users
+🧾 document (إدراج) -> u1 = {"name": "سارة", "age": 28}
+🧾 document (إدراج) -> u2 = {"name": "أحمد", "age": 35}
+✅ .end/container.doc (users)
+🧾 container.doc = orders
+🧾 document (إدراج) -> o1 = {"user": "u1", "total": 120}
+✅ .end/container.doc (orders)
+🧾 container.doc = old
+🧾 document (إدراج) -> x1 = {"k": 1}
+✅ .end/container.doc (old)
+🗂️ container.data = team
+✅ .end/container.data (team)
+2 1 1
+سارة
+true true
+🧾 container.doc = legacy
+🧾 document (إدراج) -> l1 = {"v": 1}
+✅ .end/container.doc (legacy)
+1
