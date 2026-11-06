@@ -1,0 +1,34 @@
+// val: lazy / when / keep / within / as-about-unit (docs/val.md)
+// lazy / when / keep / within / as-about-unit
+let n = 1;
+val sq = n * n lazy;
+$ sq.stale, sq.runs;
+n = 3; n = 4;
+$ sq.stale, sq.runs;       // لم تُحسب بعد
+$ sq, sq.stale, sq.runs;   // تُحسب عند القراءة: 16 مرة واحدة
+bell sq (o, nw) { $ "lazy rang:", o, "->", nw; }
+n = 5; $ sq;
+
+let on = true; let v = 1;
+val shown = v * 100 when on;
+v = 2; $ shown;
+on = false; v = 3; $ shown, shown.held;   // مجمّدة على 200
+on = true; $ shown, shown.held;            // تستيقظ: 300
+
+let raw = 5;
+val hp = raw * 20 within 0 to 100 keep 3;
+$ hp, hp.min, hp.max;
+raw = 3; $ hp;  raw = 1; $ hp; raw = 9; $ hp;
+$ hp.past;
+val wrapped = raw * 40 within 0 to 100 wrap;
+$ wrapped;
+raw = 4; $ wrapped;
+raw = 1;
+val capped = raw * 100 within 0 to 100 strict;
+$ capped;
+try { raw = 4; $ "no error?"; } catch (e) { $ "strict:", e.message; }
+
+let celsius = 20;
+val fahr = celsius * 9 / 5 + 32 as "Fahrenheit" about "درجة الحرارة" unit "F";
+$ fahr, fahr.label, fahr.unit, fahr.about, fahr.info;
+celsius = 100; $ fahr;
