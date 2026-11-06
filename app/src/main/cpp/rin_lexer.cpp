@@ -469,7 +469,55 @@ void Lexer::scanToken() {
     switch (c) {
         case '(': addToken(TokenType::LPAREN); break;
         case ')': addToken(TokenType::RPAREN); break;
-        case '{': addToken(TokenType::LBRACE); break;
+        // توجيه `{{%s-t%}}` : يرسم صورة بطاقة للحاوية ثم يطبعها فوراً (docs/container_image.md).
+        //   {{%s-t%}}                    الحاوية المفتوحة حالياً          {{%s-t users%}}   حاوية بالاسم (معرّف أو "نص")
+        //   {{%s-t users cols=60 save="u.png"%}}  خيارات (key=قيمة رقم/نص/true/false) — تُمرَّر كخريطة خيارات
+        // يُختزل إلى `printContainer(name?, {opts});` بتوكنات عادية. لا تعارض: `{{%` لم تكن تركيباً صالحاً.
+        case '{':
+            if (peek() == '{' && peekNext() == '%' && src.compare(current + 2, 3, "s-t") == 0) {
+                size_t endPos = src.find("%}}", current + 5);
+                size_t nl = src.find('\n', current);
+                if (endPos != std::string::npos && (nl == std::string::npos || endPos < nl)) {
+                    const int ln = line, c0 = columnOf(start), c1 = columnOf(endPos + 3);
+                    std::string body = src.substr(current + 5, endPos - (current + 5));
+                    current = endPos + 3;
+                    auto P = [&](TokenType t, const std::string& lx) { pushToken(t, lx, ln, c0, c1); };
+                    P(TokenType::IDENT, "printContainer"); P(TokenType::LPAREN, "(");
+                    // رموز الجسم مفصولة بمسافات (نص بين "..." قد يحوي مسافات)
+                    std::vector<std::string> parts; size_t i = 0;
+                    while (i < body.size()) {
+                        while (i < body.size() && (body[i] == ' ' || body[i] == '\t')) ++i;
+                        if (i >= body.size()) break;
+                        size_t j = i; bool q = false;
+                        while (j < body.size() && (q || (body[j] != ' ' && body[j] != '\t'))) { if (body[j] == '"') q = !q; ++j; }
+                        parts.push_back(body.substr(i, j - i)); i = j;
+                    }
+                    bool first = true, openedMap = false;
+                    auto comma = [&]() { if (!first) P(TokenType::COMMA, ","); first = false; };
+                    auto emitVal = [&](const std::string& v) {
+                        if (v.size() >= 2 && v.front() == '"' && v.back() == '"') P(TokenType::STRING, v.substr(1, v.size() - 2));
+                        else if (v == "true") P(TokenType::TRUE, "true");
+                        else if (v == "false") P(TokenType::FALSE, "false");
+                        else if (!v.empty() && (std::isdigit(static_cast<unsigned char>(v[0])) || v[0] == '-' || v[0] == '.')) { P(TokenType::NUMBER, v); tokens.back().number = std::atof(v.c_str()); }
+                        else P(TokenType::STRING, v);
+                    };
+                    for (auto& part : parts) {
+                        size_t eq = part.find('=');
+                        if (eq == std::string::npos) {                       // اسم الحاوية
+                            if (openedMap) continue;
+                            comma(); emitVal(part.size() >= 2 && part.front() == '"' ? part : "\"" + part + "\"");
+                        } else {                                             // key=value
+                            if (!openedMap) { comma(); P(TokenType::LBRACE, "{"); openedMap = true; first = true; }
+                            comma(); P(TokenType::IDENT, part.substr(0, eq)); P(TokenType::COLON, ":"); emitVal(part.substr(eq + 1));
+                        }
+                    }
+                    if (openedMap) P(TokenType::RBRACE, "}");
+                    P(TokenType::RPAREN, ")"); P(TokenType::SEMICOLON, ";");
+                    break;
+                }
+            }
+            addToken(TokenType::LBRACE);
+            break;
         case '}': addToken(TokenType::RBRACE); break;
         case '[': addToken(TokenType::LBRACKET); brkStack.push_back('L'); break;
         case ']':
