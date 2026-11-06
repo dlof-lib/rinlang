@@ -1,0 +1,7 @@
+// `&` = let · `^` = return (docs/shorthand.md)
+fun add(a, b) { ^ a + b; }
+fun fact(n) { if (n <= 1) { ^ 1; } ^ n * fact(n - 1); }
+& x = add(2, 3);
+$ x;
+$ fact(5);
+for (& i = 0; i < 2; i = i + 1) { $ i; }
