@@ -211,7 +211,7 @@ private object RinLexer {
         "if", "else", "while", "for", "return", "break", "continue", "rinopen", "and", "or", "let",
         "fun", "text", "print", "show", "true", "false", "nil", "reckon", "where",
         // Living Variables (docs/living-variables.md): contextual words, highlighted like `reckon`.
-        "stone", "gauge", "tape", "lens", "fuse", "bell", "trial", "undo", "redo", "rearm", "unbell", "abort",
+        "stone", "gauge", "tape", "lens", "fuse", "bell", "trial", "undo", "redo", "rearm", "unbell", "abort", "val", "touch", "unval",
         // base/accept (docs/base-accept.md): variables that help `if`, plus their actions
         "base", "accept", "inc", "dec", "rebase", "rewind",
         // pre/post (docs/pre-post.md): ما قبل / ما بعد — عقد انتقال حول الإسناد
@@ -296,7 +296,7 @@ private object RinLexer {
         "splitSentences", "sql", "sqlAvg", "sqlCount", "sqlDelete", "sqlExists", "sqlExplain",
         "sqlGroupBy", "sqlGroupSum", "sqlIds", "sqlMax", "sqlMin", "sqlOne", "sqlPluck", "sqlSum",
         "sqlUpdate", "sqlValidate", "sqrt", "stddev", "str", "streamReply", "subscribe", "substr",
-        "sum", "tan", "tap", "validateContainer", "printContainer", "newContainer", "isContainerType", "txDepth", "toBool", "toHex", "toNumber", "toString", "tokenType", "tokenizeWords",
+        "sum", "tan", "validateContainer", "printContainer", "newContainer", "isContainerType", "txDepth", "toBool", "toHex", "toNumber", "toString", "tokenType", "tokenizeWords",
         "tokens",
         "number", "numberApprox", "numberChange", "numberCheck", "numberDigits", "numberDivisors", "numberFactors", "numberFormat", "numberFromBase", "numberGcd", "numberIsPrime", "numberKind", "numberLcm", "numberMap", "numberParts", "numberPercent", "numberRound", "numberStats", "numberSum", "numberToBase", "numberWrap",
         "matZeros", "matOnes", "matEye", "matDiag", "matBuild", "matRandom", "matHilbert", "matVandermonde", "matShape", "matCheck", "matIs", "matAdd", "matSub", "matHadamard", "matScale", "matMul", "matTranspose", "matTrace", "matPow", "matKron", "matMap", "matNorm", "matApprox", "matFormat", "matLU", "matQR", "matCholesky", "matEig", "matEigSym", "matEigvals", "matSVD", "matSolve", "matInv", "matDet", "matRank", "matCond", "matPinv", "matLstsq", "matNull", "matRref", "matSolveIter", "matPowerIter", "vecDot", "vecNorm", "vecCross", "vecNormalize", "vecAngle", "vecProject", "vecAdd", "vecSub", "vecScale", "vecDist", "vecLinspace", "vecSum", "algoRoot", "algoBracket", "algoMinimize", "algoNewton", "algoDiff", "algoGrad", "algoJacobian", "algoIntegrate", "algoTrapz", "algoOde", "algoInterp", "algoPolyFit", "algoPolyEval", "algoPolyRoots", "algoFFT", "algoRandom", "algoBench", "algoComplexity", "algoCompare", "algoCheck", "algoGraphMatrix", "algoDijkstra", "algoFloyd",
