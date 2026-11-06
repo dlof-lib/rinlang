@@ -1,0 +1,23 @@
+// تعليق/استئناف الحرّاس + إخفاء extras الحسّاسة عن pending (docs/guarded_actions.md)
+// يُشغَّل مع stdin: "1\n2\n"  (تأكيد بعد الاستئناف · رفض الانتقال بعد الاستئناف)
+@vault.container
+    let balance = 100;
+    let pending = nil;
+    dialog sure = "سحب " + (pending == nil ? "؟" : pending["data"]) + "؟" title "تأكيد" buttons ["نعم", "لا"] focus 2;
+    dialog leave = "مغادرة؟" buttons ["نعم", "لا"] focus 2;
+    fun withdraw(extras) { balance = balance - extras["amount"]; return balance; }
+.end;
+
+Intent.guard("vault", "withdraw", "sure");
+Navigation.guard("vault", "leave");
+$ Intent.pause("vault", "withdraw"), Intent.pause("vault", "withdraw"), Intent.guards("vault")[0]["paused"];
+let r = Intent.send(Intent.core("vault", "withdraw", {"amount": 10}));    // معلَّق: بلا سؤال
+$ r.ok, r.confirmed, vault.balance;
+$ Navigation.pause("vault"), Navigation.re("vault", "a.rin").ok, Navigation.guardInfo("vault")["paused"];
+Intent.resume("vault");
+let i = Intent.hide(Intent.add(Intent.core("vault", "withdraw", {"amount": 10}), "pin", 1234), "pin");
+let r2 = Intent.send(i);                                                  // "1" => رسالة الحوار لا تكشف pin
+$ r2.confirmed, vault.balance;
+Navigation.resume("vault");
+$ Navigation.re("vault", "b.rin").blocked;                                // "2" => مُنع
+$ Intent.resume("vault");                                                  // لا شيء معلَّق الآن => 0
