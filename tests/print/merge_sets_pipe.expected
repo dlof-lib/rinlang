@@ -1,0 +1,21 @@
+🧾 container.doc = users
+🧾 document (إدراج) -> u1 = {"name": "سارة", "city": "بيروت"}
+🧾 document (إدراج) -> u2 = {"name": "أحمد", "city": "صيدا"}
+🧾 document (إدراج) -> u3 = {"name": "ليلى", "city": "بيروت"}
+✅ .end/container.doc (users)
+🧾 container.doc = orders
+🧾 document (إدراج) -> o1 = {"user": "u1", "total": 120}
+🧾 document (إدراج) -> o2 = {"user": "u1", "total": 30}
+🧾 document (إدراج) -> o3 = {"user": "u3", "total": 75}
+✅ .end/container.doc (orders)
+Set{"u1", "u2", "u3"}
+Set{"u1", "u3"}
+Set{"u2"}
+Set{"u1", "u3"}
+Set{"بيروت", "صيدا"}
+2
+طلبات u1: 2
+2
+tap fn: [1, 2, 3]
+3
+runtime err; users = 3
