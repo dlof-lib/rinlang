@@ -41,3 +41,6 @@ action غير موجود ← خطأ E0006 يعرض الإجراءات المتا
 - السجل مشترك على مستوى العملية (مفتاحه اسم الحاوية)، وليس لكل مفسّر.
 - لا تحميل تلقائي لملف `.rin` للمسار: الاستبدال الفعلي للواجهة يبقى في المضيف (`IndsinPreviewActivity`) كما في `rin_indsin_navigation.h`.
 - `rinc` وRinVM لا يدعمانهما بعد.
+
+## حرّاس التأكيد
+`Intent.guard` و`Intent.confirm` و`Navigation.guard` و`Navigation.confirm` تربط النيّة/التنقّل بحوار `dialog` فلا يُنفَّذ الخطِر قبل موافقة المستخدم. انظر [`guarded_actions.md`](./guarded_actions.md).
