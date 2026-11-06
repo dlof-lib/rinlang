@@ -1,0 +1,9 @@
+set 3 true false
+Set{1, 2, 3, 4}
+Set{3}
+Set{1, 2}
+Set{}
+2
+Set{[1, 2]}
+2 2
+2 array map
