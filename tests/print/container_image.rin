@@ -1,0 +1,16 @@
+// `{{%s-t%}}` = ارسم بطاقة صورة للحاوية ثم اطبعها فوراً · containerImage/printContainer (docs/container_image.md)
+@users.doc
+    document id="u1" fields={ name: "Sara", age: 28 };
+.end/doc
+@bank.container
+    let owner = "Sara";
+    let bal = 150.5;
+    {{%s-t cols=36 mode="ascii"%}}
+.end;
+{{%s-t bank cols=36 mode="ascii"%}}
+{{%s-t "users" cols=36 mode="ascii" save="container_image_users.png"%}}
+$ imageInfo("container_image_users.png").format;
+let id = containerImage("bank");
+$ imgSize(id).width > 0;
+printContainer("bank", {cols: 24, mode: "ascii"});
+try { {{%s-t nosuch cols=10%}} } catch (e) { $ "خطأ:", e.message; }
