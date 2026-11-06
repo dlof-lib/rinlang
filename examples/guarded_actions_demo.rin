@@ -1,0 +1,36 @@
+// حرّاس التأكيد: dialog + Intent + Navigation  (docs/guarded_actions.md)
+// شغّله:  printf '1\n2\n' | rin examples/guarded_actions_demo.rin   (احذف · ابقَ)
+@notes.container
+    let items = ["أ", "ب", "ج"];
+    let dirty = false;
+    let pending = nil;
+
+    // حوار حيّ: رسالته تتحدّث بعدد العناصر وبما ينتظر التأكيد
+    dialog wipe = "سيُحذف " + len(items) + " عنصر نهائياً" title "حذف الكل" tone "error"
+        buttons ["احذف", "إلغاء"] focus 2;
+    dialog leave = "لديك تغييرات غير محفوظة. المغادرة إلى " + (pending == nil ? "؟" : pending["target"]) + "؟"
+        title "مغادرة" tone "warn" buttons ["غادر", "ابقَ"] focus 2;
+
+    fun edit(extras) { items[len(items)] = extras["text"]; dirty = true; return len(items); }   // لا يحتاج تأكيداً
+    fun wipeAll() { items = []; dirty = true; return 0; }                                  // خطِر
+    fun commit() { dirty = false; return "saved"; }
+.end;
+
+// 1) نيّة خطِرة تمرّ بحوار، ونيّة آمنة لا تُسأل
+Intent.guard("notes", "wipeAll", "wipe");
+$ "تعديل:", Intent.send(Intent.core("notes", "edit", {"text": "د"})).result;
+let r = Intent.send(Intent.core("notes", "wipeAll"));      // stdin: 1 => احذف
+$ "حُذف؟", r.confirmed, notes.items;
+
+// 2) تنقّل لا يفلت من تغييرات غير محفوظة
+Navigation.re("notes", "list.rin");
+Navigation.guard("notes", "leave", {"when": "dirty", "confirm": "غادر"});
+let n1 = Navigation.re("notes", "settings.rin");           // stdin: 2 => ابقَ
+$ "ذهبنا؟", n1.ok, "المسار:", notes.route;
+Intent.send(Intent.core("notes", "commit"));                 // حفظ => dirty=false
+let n2 = Navigation.re("notes", "settings.rin");           // لا سؤال
+$ "ذهبنا؟", n2.ok, "المسار:", notes.route;
+
+// 3) سجل المراجعة: كم مرة سُئل وكم قُبل/رُفض
+let g = Intent.guards("notes")[0];
+$ g["target"], "سُئل", g["asked"], "قُبل", g["confirmed"], "رُفض", g["declined"];
