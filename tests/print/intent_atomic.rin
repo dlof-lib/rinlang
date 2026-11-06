@@ -1,0 +1,38 @@
+// النيّات الذرّية (Intent + @tx + dialog): كلها أو لا شيء، بسؤال واحد (docs/atomic_intents.md)
+// يُشغَّل مع stdin: "1\n2\n"  (تأكيد الدفعة · رفضها)
+@bank.container
+    let a = 100;
+    let b = 50;
+    let pending = nil;
+    dialog sure = "تنفيذ " + (pending == nil ? "؟" : pending["target"]) + "؟" title "تأكيد الدفعة" tone "ask" buttons ["نفّذ", "ألغِ"] focus 2;
+    fun take(x) { if (x["n"] > a) { !? "رصيد غير كافٍ"; } a = a - x["n"]; return a; }
+    fun give(x) { b = b + x["n"]; return b; }
+    fun check(x) { return a >= x["min"]; }
+.end;
+
+// 1) نجاح: تُنفَّذ كلها بالترتيب
+let ok = Intent.atomic([Intent.core("bank", "take", {"n": 30}), Intent.core("bank", "give", {"n": 30})]);
+$ ok.ok, ok.count, ok.results, bank.a, bank.b;
+
+// 2) فشل في الوسط: يُستعاد كل شيء (give الأولى أيضاً تتراجع)
+let bad = Intent.atomic([Intent.core("bank", "give", {"n": 5}), Intent.core("bank", "take", {"n": 999}), Intent.core("bank", "give", {"n": 1})]);
+$ bad.ok, bad.rolledBack, bad.failedAt, bad.action, bad.results, bank.a, bank.b;
+
+// 3) failOnFalse: نتيجة false تعني فشلاً وتراجعاً
+let f = Intent.atomic([Intent.core("bank", "take", {"n": 10}), Intent.core("bank", "check", {"min": 1000})], {"failOnFalse": true});
+$ f.ok, f.rolledBack, f.failedAt, bank.a;
+
+// 4) throw: يعيد رمي الخطأ بعد التراجع
+try { Intent.atomic([Intent.core("bank", "take", {"n": 1}), Intent.core("bank", "take", {"n": 999})], {"throw": true}); } catch (e) { $ "threw", bank.a; }
+
+// 5) سؤال واحد للدفعة كلها
+let c = Intent.atomic([Intent.core("bank", "take", {"n": 20}), Intent.core("bank", "give", {"n": 20})], {"dialog": "sure"});   // "1"
+$ c.ok, c.confirmed, bank.a, bank.b;
+let d = Intent.atomic([Intent.core("bank", "take", {"n": 20}), Intent.core("bank", "give", {"n": 20})], {"dialog": "sure"});   // "2"
+$ d.ok, d.blocked, d.kind, bank.a, bank.b;
+
+// 6) أخطاء التحقق المسبق: لا لقطة ولا تنفيذ
+try { Intent.atomic([]); } catch (e) { $ "empty"; }
+try { Intent.atomic([Intent.core("bank", "take", {"n": 1}), {"kind": "x"}]); } catch (e) { $ "not intent"; }
+try { Intent.atomic([Intent.core("bank", "take", {"n": 1})], {"zzz": 1}); } catch (e) { $ "bad option"; }
+$ bank.a, txDepth();
