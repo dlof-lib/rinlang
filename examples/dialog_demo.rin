@@ -1,0 +1,32 @@
+// dialog — حوار متغيّر للحاوية (docs/dialog.md)
+// الحاوية تعلن حوارها بجانب حقولها: رسالته تتحدّث مع الحقول، ويُفتح تلقائياً بشرط، ويُجاب عنه بـ reply.
+@shop.container
+    let name = "قلم";
+    let stock = 10;
+    let reorders = 0;
+
+    dialog low = "المخزون من " + name + " منخفض: " + stock + " قطع"
+        title "تنبيه المخزون" tone "warn"
+        buttons ["إعادة طلب", "تجاهل"] focus 1
+        opens when stock < 5;
+
+    reply low (choice) {
+        if (choice == "إعادة طلب") { stock = stock + 20; reorders = reorders + 1; }
+    }
+
+    fun sell(n) { stock = stock - n; }
+.end;
+
+shop.sell(3);
+$ "المخزون:", shop.stock, "| الحوار مفتوح؟", shop.low.open;     // 7 | false
+
+shop.sell(4);                                                  // 3 < 5 => يُفتح تلقائياً
+$ "الحوار مفتوح؟", shop.low.open, "|", shop.low.text;
+
+$ shop.low.buttons;
+close shop.low "إعادة طلب";                                    // يرنّ reply => المخزون +20
+$ "بعد الرد:", shop.stock, "| طلبات:", shop.reorders, "|", shop.low.result;
+
+// من خارج الحاوية بالدوال
+$ dialogs("shop");
+$ dialogInfo("shop", "low").opens, "مرّات فُتح";
