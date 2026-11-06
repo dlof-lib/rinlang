@@ -1,0 +1,145 @@
+// ============================================================================
+// data_types_demo.rin — نظام مخزون وطلبات بأنواع بيانات صارمة
+// يوضّح: containerType بأنواع موسّعة · الوراثة · setFieldType · isType · معالجة الأخطاء
+// المرجع: docs/data_types.md
+// ============================================================================
+
+// ---------- 1) تعريف الأنواع ----------
+defineContainerType("Entity", {
+    id:      {type: "uint", required: true},
+    created: {type: "date", required: true}
+}, {strict: true});
+
+defineContainerType("Product", {
+    name:     {type: "string", required: true, min: 2, max: 40},
+    sku:      {type: "string", required: true, min: 4},
+    price:    {type: "float", required: true, min: 0},
+    stock:    {type: "uint", default: 0},
+    category: {type: "enum(food,tools,books,other)", default: "other"},
+    tags:     {type: "set<string>?"},
+    color:    {type: "color?"}
+}, {extends: "Entity"});
+
+defineContainerType("Customer", {
+    name:  {type: "string", required: true, min: 2},
+    email: {type: "email", required: true},
+    phone: {type: "phone?"},
+    ip:    {type: "ip?"},
+    notes: {type: "array<string>", default: [], max: 5}
+}, {extends: "Entity"});
+
+defineContainerType("Order", {
+    customer: {type: "string", required: true},
+    lines:    {type: "array<map<string,int>>", default: []},
+    status:   {type: "enum(new,paid,shipped,cancelled)", default: "new"},
+    total:    {type: "float", default: 0}
+}, {extends: "Entity", onCreate: fun(n) { print("  + طلب جديد:", n); }});
+
+// ---------- 2) أدوات مساعدة ----------
+fun tryCreate(label, type, name, data) {
+    try {
+        newContainer(type, name, data);
+        print("✔", label);
+        return true;
+    } catch (e) {
+        print("✘", label, "→", e.message);
+        return false;
+    }
+}
+
+fun trySet(label, target, field, value) {
+    try {
+        setField(target, field, value);
+        print("✔", label);
+        return true;
+    } catch (e) {
+        print("✘", label, "→", e.message);
+        return false;
+    }
+}
+
+// ---------- 3) إنشاء الكيانات ----------
+print("== إنشاء المنتجات ==");
+tryCreate("منتج صحيح", "Product", "p1", {
+    id: 1, created: "2026-01-15", name: "قهوة", sku: "COF-001", price: 12.5,
+    stock: 40, category: "food", tags: #["مشروبات" "ساخن"], color: "#6f4e37"
+});
+tryCreate("منتج بلا سعر", "Product", "p2", {id: 2, created: "2026-01-15", name: "مطرقة", sku: "TL-100"});
+tryCreate("سعر سالب", "Product", "p3", {id: 3, created: "2026-01-15", name: "كتاب", sku: "BK-200", price: -1});
+tryCreate("فئة غير مسموحة", "Product", "p4", {id: 4, created: "2026-01-15", name: "حذاء", sku: "SH-300", price: 50, category: "shoes"});
+tryCreate("تاريخ غير صالح", "Product", "p5", {id: 5, created: "2026-02-30", name: "مفتاح", sku: "TL-101", price: 8});
+tryCreate("معرّف كسري", "Product", "p6", {id: 6.5, created: "2026-01-15", name: "قلم", sku: "BK-201", price: 2});
+tryCreate("حقل غير معرّف (strict)", "Product", "p7", {id: 7, created: "2026-01-15", name: "ورق", sku: "BK-202", price: 3, weight: 5});
+
+print("");
+print("== إنشاء العملاء ==");
+tryCreate("عميل صحيح", "Customer", "c1", {
+    id: 1, created: "2026-02-01", name: "سارة", email: "sara@example.com",
+    phone: "+966 50 123 4567", ip: "192.168.1.10"
+});
+tryCreate("بريد خاطئ", "Customer", "c2", {id: 2, created: "2026-02-01", name: "عمر", email: "omar-at-example"});
+tryCreate("هاتف خاطئ", "Customer", "c3", {id: 3, created: "2026-02-01", name: "ليلى", email: "l@x.io", phone: "12"});
+tryCreate("IP خاطئ", "Customer", "c4", {id: 4, created: "2026-02-01", name: "خالد", email: "k@x.io", ip: "300.1.1.1"});
+
+// ---------- 4) تحديثات مفحوصة ----------
+print("");
+print("== التحديث ==");
+trySet("زيادة المخزون", "p1", "stock", 55);
+trySet("مخزون سالب", "p1", "stock", -5);
+trySet("مخزون نصي", "p1", "stock", "كثير");
+trySet("لون خاطئ", "p1", "color", "brown");
+trySet("وسوم بنوع خاطئ", "p1", "tags", #[1 2]);
+trySet("ملاحظات أكثر من الحد", "c1", "notes", ["a", "b", "c", "d", "e", "f"]);
+
+// ---------- 5) الطلبات ----------
+print("");
+print("== الطلبات ==");
+tryCreate("طلب صحيح", "Order", "o1", {
+    id: 1, created: "2026-03-01", customer: "c1",
+    lines: [{"p1": 2}, {"p1": 1}], total: 37.5
+});
+tryCreate("سطر بنوع خاطئ", "Order", "o2", {
+    id: 2, created: "2026-03-01", customer: "c1", lines: [{"p1": "اثنان"}]
+});
+trySet("تغيير الحالة", "o1", "status", "paid");
+trySet("حالة غير مسموحة", "o1", "status", "lost");
+
+// ---------- 6) حاوية عادية بأنواع مُعلنة ----------
+print("");
+print("== حاوية عادية: إعدادات التطبيق ==");
+@container=settings
+    state theme = "dark";
+    state retries = 3;
+    state endpoint = "https://api.example.com";
+.end/container
+setFieldType("settings", "theme", "enum(dark,light)");
+setFieldType("settings", "retries", "uint");
+setFieldType("settings", "endpoint", "url");
+trySet("ثيم صحيح", "settings", "theme", "light");
+trySet("ثيم خاطئ", "settings", "theme", "blue");
+trySet("محاولات سالبة", "settings", "retries", -1);
+trySet("رابط خاطئ", "settings", "endpoint", "not a url");
+print("الأنواع المُعلنة:", fieldTypes("settings"));
+
+// ---------- 7) استعلامات وتقرير ----------
+print("");
+print("== تقرير ==");
+print("المنتجات:", containersOfType("Product"));
+print("العملاء:", containersOfType("Customer"));
+print("كيانات (بالوراثة):", containersOfType("Entity"));
+print("p1 من Entity؟", isContainerType("p1", "Entity"));
+print("مشاكل p1:", validateContainer("p1"));
+print("مشاكل settings:", validateContainer("settings"));
+
+let inventoryValue = getField("p1", "price") * getField("p1", "stock");
+print("قيمة مخزون القهوة:", inventoryValue);
+
+// فحص قيم حرّة بلا حاوية
+let samples = [
+    [42, "int"], [-3, "uint"], ["2026-12-31", "date"], ["12:30:00", "time"],
+    ["550e8400-e29b-41d4-a716-446655440000", "uuid"], [[1, 2, 3], "array<int>"],
+    ["x", "int|string"], [nil, "float?"]
+];
+each s in samples {
+    print(s[0], "→", s[1], ":", isType(s[0], s[1]));
+}
