@@ -259,7 +259,7 @@ private object RinLexer {
         "colorIsLight", "colorLighten", "colorLuminance", "colorMix", "colorParse", "colorRgb",
         "colorRgba", "colorTextOn", "colorToHsl", "colorToHslaString", "colorToRgbaString",
         "colorValid", "colorWithAlpha", "commitTransaction", "concat", "confirm", "containerNames",
-        "containerType", "containerTypeInfo", "containerTypes", "containersOfType", "contains", "cos", "count", "countDocs", "crc32", "create", "createIndex", "cumulativeSum",
+        "containerImage", "containerType", "containerTypeInfo", "containerTypes", "containersOfType", "contains", "cos", "count", "countDocs", "crc32", "create", "createIndex", "cumulativeSum",
         "deepCopy", "deepMerge", "defineContainerType", "defineMigration", "defineRelation", "defineSchema", "deleteDoc",
         "deleteFile", "destroyContainer", "detectScript", "docFieldSet", "docIdSet", "docIds", "docsWhereIn", "dropIndex", "dropSchema", "empty",
         "entries", "exp", "exportChat", "extinguish", "extinguishAll", "fail", "fetchIcon",
@@ -296,7 +296,7 @@ private object RinLexer {
         "splitSentences", "sql", "sqlAvg", "sqlCount", "sqlDelete", "sqlExists", "sqlExplain",
         "sqlGroupBy", "sqlGroupSum", "sqlIds", "sqlMax", "sqlMin", "sqlOne", "sqlPluck", "sqlSum",
         "sqlUpdate", "sqlValidate", "sqrt", "stddev", "str", "streamReply", "subscribe", "substr",
-        "sum", "tan", "tap", "validateContainer", "newContainer", "isContainerType", "txDepth", "toBool", "toHex", "toNumber", "toString", "tokenType", "tokenizeWords",
+        "sum", "tan", "tap", "validateContainer", "printContainer", "newContainer", "isContainerType", "txDepth", "toBool", "toHex", "toNumber", "toString", "tokenType", "tokenizeWords",
         "tokens",
         "number", "numberApprox", "numberChange", "numberCheck", "numberDigits", "numberDivisors", "numberFactors", "numberFormat", "numberFromBase", "numberGcd", "numberIsPrime", "numberKind", "numberLcm", "numberMap", "numberParts", "numberPercent", "numberRound", "numberStats", "numberSum", "numberToBase", "numberWrap",
         "matZeros", "matOnes", "matEye", "matDiag", "matBuild", "matRandom", "matHilbert", "matVandermonde", "matShape", "matCheck", "matIs", "matAdd", "matSub", "matHadamard", "matScale", "matMul", "matTranspose", "matTrace", "matPow", "matKron", "matMap", "matNorm", "matApprox", "matFormat", "matLU", "matQR", "matCholesky", "matEig", "matEigSym", "matEigvals", "matSVD", "matSolve", "matInv", "matDet", "matRank", "matCond", "matPinv", "matLstsq", "matNull", "matRref", "matSolveIter", "matPowerIter", "vecDot", "vecNorm", "vecCross", "vecNormalize", "vecAngle", "vecProject", "vecAdd", "vecSub", "vecScale", "vecDist", "vecLinspace", "vecSum", "algoRoot", "algoBracket", "algoMinimize", "algoNewton", "algoDiff", "algoGrad", "algoJacobian", "algoIntegrate", "algoTrapz", "algoOde", "algoInterp", "algoPolyFit", "algoPolyEval", "algoPolyRoots", "algoFFT", "algoRandom", "algoBench", "algoComplexity", "algoCompare", "algoCheck", "algoGraphMatrix", "algoDijkstra", "algoFloyd",
@@ -342,6 +342,10 @@ private object RinLexer {
                     // معاملات المقارنة (docs/compare_ops.md): =/= (ليس نفس الكائن) · =/ (نسخة) · /= (≠)
                     // `=//` تبقى = ثم تعليقاً، و `=/*` كذلك (لا تُعدّ =/)
                     text.startsWith("=::=", i) -> { out.add(hl(li, i, i + 4, HighlightKind.OPERATOR)); i += 4 } // =::= نفس الشكل
+                    // الأسهم (docs/arrows.md): <== ==> <=>  و {{"[, ]"}} (شكل طباعة القوائم)
+                    text.startsWith("<==", i) || text.startsWith("==>", i) || text.startsWith("<=>", i) -> { out.add(hl(li, i, i + 3, HighlightKind.OPERATOR)); i += 3 }
+                    text.startsWith("{{\"", i) && text.indexOf("\"}}", i + 3).let { it != -1 && text.indexOf('\n', i).let { nl -> nl == -1 || it < nl } } ->
+                        { val e = text.indexOf("\"}}", i + 3) + 3; out.add(hl(li, i, e, HighlightKind.OPERATOR)); i = e }
                     text.startsWith("=/=", i) -> { out.add(hl(li, i, i + 3, HighlightKind.OPERATOR)); i += 3 }
                     c == '=' && i + 1 < n && text[i + 1] == '/' && (i + 2 >= n || (text[i + 2] != '/' && text[i + 2] != '*')) ->
                         { out.add(hl(li, i, i + 2, HighlightKind.OPERATOR)); i += 2 }
