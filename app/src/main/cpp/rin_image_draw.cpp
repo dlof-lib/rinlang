@@ -862,6 +862,84 @@ void Interpreter::registerNativesImageDraw() {
         } else use = logHistory_;
         return adopt(renderLog(use, st, optBool(opts, "source", true), optStr(opts, "level", "", "imgFromLog", line), (int)optNum(opts, "last", 0, "imgFromLog", line)), "imgFromLog", line);
     };
+
+    // ---- containerImage / printContainer : رسم الحاوية كصورة بطاقة ثم طباعتها فوراً (docs/container_image.md) ----
+    // يُستدعى أيضاً من توجيه `{{%s-t%}}` (المحلّل اللغوي يحوّله إلى printContainer).
+    //   containerImage(name?, opts?)  -> معرّف لوحة (img id): بطاقة بعنوان (اسم + نوع) وسطر لكل حقل بلون حسب نوع قيمته
+    //                                    ثم مستندات المجموعة (docs) إن وُجدت. بلا name = الحاوية المفتوحة حالياً.
+    //   printContainer(name?, opts?)  -> يرسم ثم يطبع في الطرفية فوراً ثم يحرّر اللوحة؛ يعيد nil (أو المعرّف مع keep:true)
+    //   opts: كل خيارات imgFromText (size/padding/fg/bg/wrap/minWidth) + cols (عرض الطباعة) · mode · save:"x.png" · keep · docs(12) · maxValue(60)
+    auto containerCard = [=, this](std::vector<Value>& a, const char* fn, int line) -> Value {
+        count(a, fn, 0, 2, line);
+        std::string name; Value opts = Value::nil();
+        for (auto& v : a) {
+            if (v.type == Value::Type::STRING) name = v.str;
+            else if (v.type == Value::Type::MAP) opts = v;
+            else if (v.type != Value::Type::NIL) throw diagErr(diag::Code::E0004_InvalidType, line, std::string("'") + fn + "': expected a container name and/or an options map");
+        }
+        if (name.empty()) {
+            if (containerStack.empty()) throw diagErr(diag::Code::E0014_InvalidContainer, line, std::string("'") + fn + "': no open container here — pass a container name");
+            name = containerStack.back();
+        }
+        name = canonContainer(name);
+        auto cit = containers.find(name);
+        if (cit == containers.end()) throw diagErr(diag::Code::E0014_InvalidContainer, line, std::string("'") + fn + "': '" + name + "' is not a known container");
+        TextStyle st = styleFrom(opts, fn, line);
+        std::string kind;
+        { auto cs = containerCustomKind.find(name);
+          if (cs != containerCustomKind.end()) kind = cs->second;
+          else { auto k = containerKinds.find(name); kind = containerTagName(k != containerKinds.end() ? k->second : ContainerKind::PLAIN); } }
+        if (st.title.empty() && !optGet(opts, "title")) st.title = name + "  [" + kind + "]";
+        const size_t maxVal = (size_t)std::max(8.0, optNum(opts, "maxValue", 60, fn, line));
+        const size_t maxDocs = (size_t)std::max(0.0, optNum(opts, "docs", 12, fn, line));
+        auto clip = [maxVal](std::string t) { return t.size() > maxVal ? t.substr(0, maxVal - 1) + "~" : t; };
+        const Color kCol{0x79, 0xc0, 0xff, 255}, numC{0xff, 0xa6, 0x57, 255}, strC{0xa5, 0xd6, 0xa7, 255},
+                    boolC{0xd2, 0xa8, 0xff, 255}, compC{0xe3, 0xb3, 0x41, 255}, dimC{0x8b, 0x94, 0x9e, 255};
+        auto colFor = [&](const Value& v) {
+            switch (v.type) { case Value::Type::NUMBER: return numC; case Value::Type::STRING: return strC; case Value::Type::BOOL: return boolC;
+                              case Value::Type::NIL: case Value::Type::FUNCTION: return dimC; default: return compC; }
+        };
+        std::vector<std::pair<std::string, Value>> fields;
+        for (auto& kv : cit->second->values) fields.push_back({kv.first, kv.second});
+        std::sort(fields.begin(), fields.end(), [](auto& x, auto& y) { return x.first < y.first; });
+        size_t kw = 0; for (auto& f : fields) kw = std::max(kw, f.first.size());
+        std::vector<StyledLine> lines;
+        size_t shown = 0;
+        for (auto& f : fields) {
+            if (f.second.type == Value::Type::FUNCTION) continue;      // الدوال لا تُرسم كحقول
+            std::string key = f.first; while (key.size() < kw) key += ' ';
+            std::string val = f.second.type == Value::Type::STRING ? "\"" + f.second.str + "\"" : f.second.toDisplayString();
+            lines.push_back({{key, kCol}, {" = ", dimC}, {clip(val), colFor(f.second)}});
+            ++shown;
+        }
+        if (!shown) lines.push_back({{"(no fields)", dimC}});
+        auto dit = docStore.find(name);
+        if (dit != docStore.end() && !dit->second.empty()) {
+            lines.push_back({{"", dimC}});
+            lines.push_back({{"docs (" + std::to_string(dit->second.size()) + ")", kCol}});
+            size_t n = 0;
+            for (auto& d : dit->second) {
+                if (n++ >= maxDocs) { lines.push_back({{"  ... +" + std::to_string(dit->second.size() - maxDocs) + " more", dimC}}); break; }
+                lines.push_back({{"  " + d.first, strC}, {" : ", dimC}, {clip(d.second.toDisplayString()), compC}});
+            }
+        }
+        return adopt(renderStyled(lines, st), fn, line);
+    };
+    natives["containerImage"] = [=](std::vector<Value>& a, int line) -> Value { return containerCard(a, "containerImage", line); };
+    natives["printContainer"] = [=, this](std::vector<Value>& a, int line) -> Value {
+        Value opts = Value::nil();
+        for (auto& v : a) if (v.type == Value::Type::MAP) opts = v;
+        Value id = containerCard(a, "printContainer", line);
+        std::string save = optStr(opts, "save", "", "printContainer", line);
+        if (!save.empty()) { std::vector<Value> sa{id, Value::string(save)}; natives["imgSave"](sa, line); }
+        std::vector<Value> pa{id};
+        if (const Value* c = optGet(opts, "cols")) { if (c->type != Value::Type::NIL) pa.push_back(*c); else pa.push_back(Value::nil()); }
+        if (const Value* m = optGet(opts, "mode")) { if (pa.size() == 1) pa.push_back(Value::nil()); pa.push_back(*m); }
+        natives["imgPrint"](pa, line);                      // رسم ثم طباعة فورية
+        if (optBool(opts, "keep", false)) return id;
+        std::vector<Value> fa{id}; natives["imgFree"](fa, line);
+        return Value::nil();
+    };
 }
 
 } // namespace rin
