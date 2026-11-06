@@ -2984,8 +2984,9 @@ void Interpreter::registerNatives() {
         if (!a.empty()) ia.prompt = a[0].type == Value::Type::STRING ? a[0].str : a[0].toDisplayString();
         size_t i = firstExtra;
         if (allowValidator && i < a.size() &&
-            (a[i].type == Value::Type::FUNCTION || (a[i].type == Value::Type::INSTANCE && hasMagic(a[i], "__call__")))) {
-            ia.hasValidator = true; ia.validator = a[i]; ++i;
+            (a[i].type == Value::Type::FUNCTION || a[i].type == Value::Type::SET ||
+             (a[i].type == Value::Type::INSTANCE && hasMagic(a[i], "__call__")))) {
+            ia.hasValidator = true; ia.validator = a[i]; ++i;   // Set = قائمة القيم المسموحة (دمج Set مع الإدخال)
         }
         size_t rest = a.size() > i ? a.size() - i : 0;
         if (rest == 0) return ia;
@@ -3028,6 +3029,13 @@ void Interpreter::registerNatives() {
     auto validate = [this](const InArgs& ia, const Value& v, std::string& why, int line) -> bool {
         why.clear();
         if (!ia.hasValidator) return true;
+        if (ia.validator.type == Value::Type::SET) {   // عضوية في Set: القبول إن وُجدت القيمة فيه
+            if (ia.validator.set && ia.validator.set->contains(v)) return true;
+            std::string opts;
+            if (ia.validator.set) for (auto& it : ia.validator.set->items) opts += (opts.empty() ? "" : " | ") + it.toDisplayString();
+            why = "القيمة غير مسموحة (المتاح: " + opts + ")";
+            return false;
+        }
         std::vector<Value> args{v};
         Value r = callValue(ia.validator, args, line);
         if (r.type == Value::Type::STRING) { why = r.str; return false; }
@@ -3097,6 +3105,10 @@ void Interpreter::registerNatives() {
                         throw diagErr(diag::Code::E0007_InvalidArguments, line,
                                       "input: نوع غير معروف '" + v.str + "' للحقل '" + k + "' (المتاح: number · bool · string)");
                     ty = v.str == "text" ? "string" : v.str;
+                } else if (v.type == Value::Type::SET && v.set) {   // Set = خيارات (يُحوَّل إلى مصفوفة لـ choose)
+                    auto arr = std::make_shared<ArrayData>(v.set->items.begin(), v.set->items.end());
+                    callNat("choose", {lbl, Value::makeArray(arr), ia.target, kk}, line);
+                    continue;
                 } else if (v.type == Value::Type::ARRAY || v.type == Value::Type::MAP) {
                     callNat("choose", {lbl, v, ia.target, kk}, line);
                     continue;
@@ -4630,6 +4642,115 @@ void Interpreter::registerNatives() {
         if (it != docStore.end()) for (auto& entry : it->second) result->push_back(Value::string(entry.first));
         return Value::makeArray(result);
     };
+
+    // docIdSet(collection) -> Set بأسماء (ids) المستندات — يدمج الحاويات مع Set فتعمل + (اتحاد) * (تقاطع) - (فرق) على الحاويات
+    natives["docIdSet"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("docIdSet", a, 1, line);
+        std::string container = canonContainer(asString(a[0], "docIdSet", line));
+        auto st = std::make_shared<SetData>();
+        auto it = docStore.find(container);
+        if (it != docStore.end()) for (auto& entry : it->second) st->add(Value::string(entry.first));
+        return Value::makeSet(st);
+    };
+    // docFieldSet(collection, field) -> Set بالقيم المميّزة للحقل عبر كل مستندات المجموعة (يتخطى nil/الغائب)
+    natives["docFieldSet"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("docFieldSet", a, 2, line);
+        std::string container = canonContainer(asString(a[0], "docFieldSet", line));
+        std::string field = asString(a[1], "docFieldSet", line);
+        auto st = std::make_shared<SetData>();
+        auto it = docStore.find(container);
+        if (it != docStore.end()) for (auto& entry : it->second) {
+            if (entry.second.type != Value::Type::MAP || !entry.second.map) continue;
+            for (auto& kv : *entry.second.map)
+                if (kv.first.type == Value::Type::STRING && kv.first.str == field && kv.second.type != Value::Type::NIL) st->add(kv.second);
+        }
+        return Value::makeSet(st);
+    };
+    // docsWhereIn(collection, field, set) -> مصفوفة المستندات التي قيمة حقلها ∈ set (ربط Set باستعلام الحاوية)
+    natives["docsWhereIn"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("docsWhereIn", a, 3, line);
+        std::string container = canonContainer(asString(a[0], "docsWhereIn", line));
+        std::string field = asString(a[1], "docsWhereIn", line);
+        if (a[2].type != Value::Type::SET || !a[2].set)
+            throw diagErr(diag::Code::E0004_InvalidType, line, "'docsWhereIn' expects a Set as its third argument");
+        auto result = std::make_shared<ArrayData>();
+        auto it = docStore.find(container);
+        if (it != docStore.end()) for (auto& entry : it->second) {
+            if (entry.second.type != Value::Type::MAP || !entry.second.map) continue;
+            for (auto& kv : *entry.second.map)
+                if (kv.first.type == Value::Type::STRING && kv.first.str == field && a[2].set->contains(kv.second)) { result->push_back(entry.second); break; }
+        }
+        return Value::makeArray(result);
+    };
+
+    // ---- tap(v, spec?) : sink للأنابيب `x |> $` ≡ `tap(x)` — يمرّر القيمة كما هي (لا يكسر السلسلة) ----
+    //   tap(v)         يطبع v ثم يعيدها          tap(v, "وسم")  يطبع "وسم: v"
+    //   tap(v, fn)     يستدعي fn(v) ويعيد v      (للتتبّع/التسجيل داخل السلسلة)
+    natives["tap"] = [this](std::vector<Value>& a, int line) -> Value {
+        if (a.empty() || a.size() > 2) throw diagErr(diag::Code::E0007_InvalidArguments, line, "'tap' expects 1 or 2 argument(s) but got " + std::to_string(a.size()));
+        if (a.size() == 2 && (a[1].type == Value::Type::FUNCTION || a[1].type == Value::Type::INSTANCE)) {
+            std::vector<Value> args{a[0]};
+            callValue(a[1], args, line);
+        } else if (a.size() == 2) {
+            output << a[1].toDisplayString() << ": " << a[0].toDisplayString() << "\n";
+        } else {
+            output << a[0].toDisplayString() << "\n";
+        }
+        return a[0];
+    };
+
+    // ---- @tx : معاملة موحَّدة (حقول الحاويات + مستندات docStore) — انظر docs/merge_concepts.md ----
+    // __tx_begin([أسماء حاويات]?) يأخذ لقطة عميقة: مستندات كل المجموعات + حقول الحاويات المسمّاة (غير الدوال).
+    natives["__tx_begin"] = [this](std::vector<Value>& a, int line) -> Value {
+        TxFrame fr;
+        for (auto& kv : docStore) {
+            std::vector<std::pair<std::string, Value>> docs;
+            docs.reserve(kv.second.size());
+            for (auto& e : kv.second) docs.push_back({e.first, deepCloneValue(e.second)});
+            fr.docs[kv.first] = std::move(docs);
+        }
+        if (!a.empty() && a[0].type == Value::Type::ARRAY && a[0].array) {
+            for (auto& nv : *a[0].array) {
+                std::string n = canonContainer(asString(nv, "@tx", line));
+                auto it = containers.find(n);
+                if (it == containers.end())
+                    throw diagErr(diag::Code::E0013_InvalidExpression, line, "@tx: no such container: " + n);
+                MapData snap;
+                for (auto& kv : it->second->values) {
+                    if (kv.second.type == Value::Type::FUNCTION) continue;
+                    snap.push_back({Value::string(kv.first), deepCloneValue(kv.second)});
+                }
+                fr.fields.push_back({n, std::move(snap)});
+            }
+        }
+        txFrames.push_back(std::move(fr));
+        return Value::nil();
+    };
+    natives["__tx_fail"] = [this](std::vector<Value>&, int) -> Value {
+        if (!txFrames.empty()) txFrames.back().failed = true;
+        return Value::nil();
+    };
+    // __tx_end(): يُستدعى في finally — يُغلق الإطار؛ إن فشل (خطأ داخل الكتلة) يستعيد المستندات والحقول معاً.
+    natives["__tx_end"] = [this](std::vector<Value>&, int) -> Value {
+        if (txFrames.empty()) return Value::nil();
+        TxFrame fr = std::move(txFrames.back());
+        txFrames.pop_back();
+        if (!fr.failed) return Value::nil();
+        docStore = std::move(fr.docs);
+        for (auto& kv : indexStore) refreshIndexesForContainer(kv.first);
+        for (auto& sn : fr.fields) {
+            auto it = containers.find(sn.first);
+            if (it == containers.end()) continue;
+            auto& vals = it->second->values;
+            for (auto vi = vals.begin(); vi != vals.end();) {
+                if (vi->second.type == Value::Type::FUNCTION) ++vi; else vi = vals.erase(vi);
+            }
+            for (auto& kv : sn.second) vals[kv.first.toDisplayString()] = kv.second;
+        }
+        return Value::nil();
+    };
+    // txDepth() -> عدد كتل @tx المفتوحة حالياً (للاختبار/التتبّع)
+    natives["txDepth"] = [this](std::vector<Value>&, int) -> Value { return Value::num(static_cast<double>(txFrames.size())); };
 
     // allDocs(collection) -> مصفوفة كل المستندات (كل عنصر map) بترتيب الإدخال
     natives["allDocs"] = [this](std::vector<Value>& a, int line) -> Value {
