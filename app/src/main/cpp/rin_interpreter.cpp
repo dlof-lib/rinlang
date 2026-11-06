@@ -1,6 +1,7 @@
 #include <utility>
 #include <exception> // std::exception_ptr / current_exception (libc++ على NDK يتطلبه صراحةً)
 #include "rin_interpreter.h"
+#include <chrono>
 #include "rin_version.h"
 #include "rin_make.h"
 #include "rin_artifact.h"
@@ -75,6 +76,13 @@ bool getRgba(int id, int& w, int& h, std::vector<uint8_t>& px);
 // يُضبَط من Interpreter::run()/setSourceFile() قبل أي تنفيذ، ومن قِبل معالجة container.import/@import
 // أثناء الدخول إلى ملف/مكتبة مستوردة، بحيث تشير أخطاء تلك الدوال الحرة إلى الملف الصحيح فعلياً.
 std::string g_diagFile = "<input>";
+// @end { } (docs/shorthand.md): أسماء دوال __end_N المسجَّلة عبر __atexit، تُنفَّذ في آخر run() بترتيب عكسي حتى عند الخطأ.
+static std::vector<std::pair<std::string, int>> g_atExitNames; // (اسم الدالة، وضع: 0 دائماً · 1 @ok عند النجاح · 2 @fail عند الفشل)
+static bool g_exitFailed = false;
+static std::string g_exitError;
+static int g_exitCode = 0;
+static std::chrono::steady_clock::time_point g_runStart = std::chrono::steady_clock::now();
+struct ExitSignal { int code; }; // exit(n): إنهاء البرنامج فوراً، مع تنفيذ كتل @end/@ok/@fail أولاً
 
 // يبني RinError غنياً (Diagnostic كامل: كود + موقع من رقم السطر + رسالة) بلا حاجة لِـ `this` —
 // يُستخدم من كل الدوال الحرة و lambdas التي لا تلتقط Interpreter (natives أغلبها [this] فعلاً، لكن
@@ -1887,6 +1895,28 @@ void Interpreter::registerNatives() {
     // core syntax stable. Key-condition forms (`=if=`, `=unless=`, `=when=`) are
     // parser sugar over the existing IfStmt.
     // ========================================================================
+    natives["__atexit"] = [](std::vector<Value>& a, int line) -> Value {
+        if (a.empty() || a.size() > 2 || a[0].type != Value::Type::STRING)
+            throw RinError("__atexit expects the name of an @end function", line);
+        g_atExitNames.push_back({a[0].str, a.size() == 2 && a[1].type == Value::Type::NUMBER ? static_cast<int>(a[1].number) : 0});
+        return Value();
+    };
+    // متاحة في أي مكان: exit(code?) ينهي البرنامج فوراً (code 0 = نجاح، غيره فشل) بعد تنفيذ كتل النهاية.
+    natives["exit"] = [](std::vector<Value>& a, int line) -> Value {
+        int code = 0;
+        if (!a.empty()) {
+            if (a[0].type != Value::Type::NUMBER) throw RinError("exit expects a number (exit code)", line);
+            code = static_cast<int>(a[0].number);
+        }
+        throw ExitSignal{code};
+    };
+    // متاحة داخل @end/@ok/@fail: حالة البرنامج (قبل التنفيذ: false / "" / 0 / الزمن المنقضي)
+    natives["programFailed"] = [](std::vector<Value>&, int) -> Value { return Value::boolean_(g_exitFailed); };
+    natives["programError"] = [](std::vector<Value>&, int) -> Value { return Value::string(g_exitError); };
+    natives["programExitCode"] = [](std::vector<Value>&, int) -> Value { return Value::num(g_exitCode); };
+    natives["programTime"] = [](std::vector<Value>&, int) -> Value { // بالميلي ثانية منذ بدء run()
+        return Value::num(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - g_runStart).count());
+    };
     natives["__key_terms.set"] = [this](std::vector<Value>& a, int line) -> Value {
         expectArgs("__key_terms.set", a, 1, line);
         if (a[0].type != Value::Type::MAP)
@@ -8662,6 +8692,7 @@ std::string Interpreter::run(const std::vector<StmtPtr>& statements) {
     lastDiagnostic_.reset();
     lastErrorMessage_.reset();
     lastErrorLine_ = 0;
+    g_atExitNames.clear(); g_exitFailed = false; g_exitError.clear(); g_exitCode = 0; g_runStart = std::chrono::steady_clock::now();
     try {
         // First pass: hoist function declarations so they can be called
         // regardless of source order (and support simple recursion).
@@ -8730,12 +8761,49 @@ std::string Interpreter::run(const std::vector<StmtPtr>& statements) {
         lastErrorMessage_ = msg;
         lastErrorLine_ = e.line;
         if (streamSink_) streamSink_(appended);
+    } catch (ExitSignal& e) {
+        g_exitCode = e.code;
+        if (e.code != 0) { lastErrorMessage_ = "exit code " + std::to_string(e.code); lastErrorLine_ = 0; } // فشل صامت (بلا نص خطأ)
     } catch (ReturnSignal&) {
         const char* appended = "\n[Error]: 'return' used outside of a function\n";
         output << appended;
         lastErrorMessage_ = "'return' used outside of a function";
         lastErrorLine_ = 0;
         if (streamSink_) streamSink_(appended);
+    }
+    // @end { }: تنفيذ كتل النهاية بترتيب عكسي (LIFO)، حتى لو انتهى البرنامج بخطأ؛ خطأ داخل كتلة لا يمنع بقية الكتل.
+    if (!g_atExitNames.empty()) {
+        auto names = std::move(g_atExitNames);
+        g_atExitNames.clear();
+        g_exitFailed = hadError();
+        if (g_exitFailed && g_exitCode == 0) g_exitCode = 1;
+        g_exitError = lastErrorMessage_ ? *lastErrorMessage_ : (lastDiagnostic_ ? lastDiagnostic_->message : std::string());
+        for (auto it = names.rbegin(); it != names.rend(); ++it) {
+            if ((it->second == 1 && g_exitFailed) || (it->second == 2 && !g_exitFailed)) continue; // @ok / @fail
+            try {
+                Value* fnp = globals->lookup(it->first);
+                if (!fnp) continue;
+                Value fnv = *fnp;
+                std::vector<Value> noArgs;
+                callValue(fnv, noArgs, 0);
+            } catch (RinError& e) {
+                std::string appended = e.diagnostic ? "\n" + diag::renderPlain(*e.diagnostic, diag::globalSourceManager()) + "\n"
+                                                    : "\n[Error line " + std::to_string(e.line) + "]: " + e.message + "\n";
+                output << appended;
+                if (!lastErrorMessage_) { lastErrorMessage_ = e.message; lastErrorLine_ = e.line; }
+                if (streamSink_) streamSink_(appended);
+            } catch (ThrowSignal& e) {
+                std::string appended = "\n[Error line " + std::to_string(e.line) + "]: unhandled exception: " + e.value.toDisplayString() + "\n";
+                output << appended;
+                if (!lastErrorMessage_) { lastErrorMessage_ = "unhandled exception: " + e.value.toDisplayString(); lastErrorLine_ = e.line; }
+                if (streamSink_) streamSink_(appended);
+            } catch (ReturnSignal&) {
+                // `^`/return داخل @end = إنهاء تلك الكتلة فقط
+            } catch (ExitSignal& e) {
+                g_exitCode = e.code; // exit() داخل @end: يُحدّث رمز الخروج ويُكمل بقية الكتل
+                if (e.code != 0) g_exitFailed = true;
+            }
+        }
     }
     return output.str();
 }
