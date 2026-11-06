@@ -1,0 +1,27 @@
+// `@اسم.نوع` ≡ `@container.نوع=اسم` (docs/shorthand.md)
+@users.doc
+    document id="u1" fields={ name: "سارة", age: 28 };
+    document id="u2" fields={ name: "أحمد", age: 35 };
+.end/container.doc
+
+@orders.doc {
+    document id="o1" fields={ user: "u1", total: 120 };
+}
+
+@old.doc
+    document id="x1" fields={ k: 1 };
+.end/doc
+
+@team.data
+    let name = "rin";
+.end;
+
+$ len(allDocs("users")), len(allDocs("orders")), len(allDocs("old"));
+$ allDocs("users")[0].name;
+$ hasContainer("team"), hasContainer("users");
+
+// الصيغة القديمة تعمل كما هي
+@container.doc=legacy
+    document id="l1" fields={ v: 1 };
+.end/container.doc
+$ len(allDocs("legacy"));
