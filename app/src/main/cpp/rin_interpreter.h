@@ -326,6 +326,11 @@ struct LiveMeta {
     // ---- pre/post (docs/pre-post.md): عقد انتقال؛ يعيد استعمال strictAccept/accepted/rejected/lastOk/refused/scope أعلاه ----
     bool gated = false; ExprPtr preRule, postRule;                           // شرط «قبل» (يُسأل قبل الكتابة) وشرط «بعد» (يُسأل بعد الكتابة)
     bool named = false; std::string ident; Value metaLabel, metaAbout, metaUnit;  // label/define (docs/label-define.md): تسمية/وصف/وحدة
+    // ---- val: قيمة تفاعلية (docs/val.md) ----
+    bool reactive = false, lazy = false, stale = false, held = false, computing = false;
+    ExprPtr whenExpr; size_t vkeep = 0; std::vector<Value> vhist; long runs = 0;       // شرط التحديث + ذاكرة القيم السابقة (keep N) + عدد الحسابات
+    std::vector<std::pair<std::weak_ptr<Environment>, std::string>> deps;              // (للـ val) ما يقرؤه: بيئة + اسم
+    std::vector<std::pair<std::weak_ptr<Environment>, std::string>> dependents;        // (لأي متغيّر) الـ vals التي تقرؤه
     Value lastPre, lastPost;                                                  // آخر محاولة كتابة: القيمة قبلها والقيمة التي حاولت أن تضعها
 };
 
@@ -1484,6 +1489,17 @@ public: // Rin 1.0: واجهة OOP الموسَّعة (يستدعيها Value::t
     struct TrialEntry { EnvPtr env; std::string name; Value oldValue; std::shared_ptr<LiveMeta> metaSnapshot; };
     std::vector<std::vector<TrialEntry>> trialStack_; // سجل تراجع لكل trial نشِطة (الأعمق في النهاية)
     int bellDepth_ = 0;                       // حماية من جرس يعيد تفعيل نفسه بلا نهاية
+    // ---- val (docs/val.md) — التنفيذ في آخر rin_interpreter.cpp ----
+    struct DepRec { Environment* env; std::string name; };
+    std::vector<DepRec>* depTracker_ = nullptr; // غير null أثناء حساب val: كل قراءة متغيّر/حقل تُسجَّل كاعتماد
+    int valDepth_ = 0;                          // حماية من تحديثات متسلسلة لا تنتهي
+    bool valCompute(Environment* owner, const std::string& name, const std::shared_ptr<LiveMeta>& m, Value& out, int line);
+    void valResubscribe(Environment* owner, const std::string& name, const std::shared_ptr<LiveMeta>& m, const std::vector<DepRec>& deps);
+    void valUnsubscribe(Environment* owner, const std::string& name, const std::shared_ptr<LiveMeta>& m);
+    bool valApply(Environment* owner, const std::string& name, const std::shared_ptr<LiveMeta>& m, const Value& nv, int line); // يكتب القيمة (journal+نطاق+تاريخ+جرس)؛ true إن تغيّرت
+    void valMutated(const EnvPtr& env, const ExprPtr& objectExpr, int line);     // x[i]=.. / x.f=.. على متغيّر يقرؤه val
+    void valPropagate(Environment* srcOwner, const std::string& srcName, int line); // مصدر تغيّر -> حدّث كل ما يعتمد عليه بترتيب طوبولوجي
+    void valTrack(Environment* owner, const std::string& name) { if (depTracker_ && owner) depTracker_->push_back({owner, name}); }
     Environment* findLiveOwner(const EnvPtr& env, const std::string& name) const; // أول بيئة تملك الاسم (أو nullptr)
     Value liveRead(Environment* owner, const std::shared_ptr<LiveMeta>& m, const std::string& name, int line);
     Value liveAssign(Environment* owner, const std::string& name, Value v, int line);
@@ -1495,6 +1511,7 @@ public: // Rin 1.0: واجهة OOP الموسَّعة (يستدعيها Value::t
     // يسجّل رفض الانتقال (العدّادات + refused)؛ وفي strict يرمي E0051.
     void liveGateRefuse(LiveMeta& m, const std::string& name, const Value& oldV, const Value& newV, bool post, int line);
     void liveFireBells(const std::shared_ptr<LiveMeta>& m, const Value& oldV, const Value& newV, int line);
+    void liveResyncVals(const std::vector<std::pair<EnvPtr, std::string>>& restored); // بعد تراجع trial: أعِد اشتراكات الـ vals المستعادة
     void liveJournal(Environment* owner, const std::string& name); // يلتقط (قيمة + بيانات وصفية) قبل أي تغيير داخل trial نشِطة
     bool livePropertyGet(const EnvPtr& env, const std::string& name, const std::string& prop, int line, Value& out);
     void liveExecDecl(const std::shared_ptr<LiveDeclStmt>& s, const EnvPtr& env);
