@@ -1,0 +1,24 @@
+📦 container = cart
+✅ .end/container (cart)
+2 5 15
+1 2.5
+1 8
+7 70
+5 3
+102
+20 5
+gift gone gone
+["secret"] 99 12
+{"price": 10, "qty": 2} 20
+{"price": 10, "qty": 2, "secret": 99}
+[] [] []
+div0
+mod0
+missing
+not number
+bad operand
+exists
+no key
+no key hide
+lo>hi
+not intent
