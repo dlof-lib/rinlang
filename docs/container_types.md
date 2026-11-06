@@ -20,7 +20,7 @@ setField("sara", "salary", -5);       // خطأ E0004: الراتب يجب أن 
 ```
 
 ## `defineContainerType(name, spec, opts?)`
-**مواصفة الحقل:** نص نوع (`"number"` `"string"` `"bool"` `"array"` `"map"` `"set"` `"any"`) · أو قيمة = افتراضية (يُستنتج نوعها) ·
+**مواصفة الحقل:** نص نوع (`"number"` `"string"` `"bool"` `"array"` `"map"` `"set"` `"any"` + أنواع البيانات الموسّعة `"int"` `"uint"` `"float"` `"email"` `"date"` `"array<int>"` `"int?"` `"enum(a,b)"` ... انظر [data_types.md](./data_types.md)) · أو قيمة = افتراضية (يُستنتج نوعها) ·
 أو `{type, default, required, min, max, check}`. لقيمة افتراضية من نوع `map` اكتب `{default: {...}}`.
 `check` = `Set` (قيم مسموحة) أو `fun(v)` تعيد `true` أو `false` أو **نصاً** (= سبب الرفض).
 **الخيارات:** `extends:"Base"` (وراثة، الحقول والقواعد و`onCreate` تُورَّث) · `strict:true` (يُرفض أي حقل غير معرَّف، يشمل الأنواع الوارثة) · `onCreate: fun(name)`.
