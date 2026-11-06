@@ -1312,6 +1312,7 @@ inline const char* const kContainerWords[] = {
 inline const char* const kLivingWords[] = {
   "stone",
   "gauge",
+  "dialog",
   "tape",
   "lens",
   "fuse",
