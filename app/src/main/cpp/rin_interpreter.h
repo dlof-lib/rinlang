@@ -331,6 +331,9 @@ struct LiveMeta {
     ExprPtr whenExpr; size_t vkeep = 0; std::vector<Value> vhist; long runs = 0;       // شرط التحديث + ذاكرة القيم السابقة (keep N) + عدد الحسابات
     std::vector<std::pair<std::weak_ptr<Environment>, std::string>> deps;              // (للـ val) ما يقرؤه: بيئة + اسم
     std::vector<std::pair<std::weak_ptr<Environment>, std::string>> dependents;        // (لأي متغيّر) الـ vals التي تقرؤه
+    // ---- dialog: حوار متغيّر للحاوية (docs/dialog.md). الرسالة = قيمة val تفاعلية (reactive أعلاه)؛ والباقي حالة الحوار ----
+    bool dialog = false, dOpen = false, trigPrev = false; ExprPtr dTrigger, dTitle, dButtons, dTone, dFocus;      // العنوان/الأزرار/النغمة/الزر الافتراضي: تعابير تُقيَّم عند كل قراءة (فتتبع الحاوية)
+    Value dResult; long dChoice = 0, dOpens = 0, dCloses = 0; std::vector<Value> replies; // آخر نتيجة (نص الزر أو nil) + رقمه (0 = أُغلق بلا اختيار) + العدّادات + معالجات reply
     Value lastPre, lastPost;                                                  // آخر محاولة كتابة: القيمة قبلها والقيمة التي حاولت أن تضعها
 };
 
@@ -1516,6 +1519,16 @@ public: // Rin 1.0: واجهة OOP الموسَّعة (يستدعيها Value::t
     bool livePropertyGet(const EnvPtr& env, const std::string& name, const std::string& prop, int line, Value& out);
     void liveExecDecl(const std::shared_ptr<LiveDeclStmt>& s, const EnvPtr& env);
     void liveExecBell(const std::shared_ptr<BellStmt>& s, const EnvPtr& env);
+    // ---- dialog (docs/dialog.md) — التنفيذ في آخر rin_interpreter.cpp ----
+    struct DialogSpec { std::string title, tone; std::vector<std::string> buttons; long focus = 1; };
+    bool dialogLocate(const EnvPtr& env, const std::string& path, int line, Environment*& owner, std::string& name, std::shared_ptr<LiveMeta>& m, bool mustExist = true);
+    bool dialogLocateIn(const std::string& container, const std::string& name, int line, Environment*& owner, std::shared_ptr<LiveMeta>& m);
+    DialogSpec dialogSpec(const std::string& name, const std::shared_ptr<LiveMeta>& m, int line);
+    void dialogDoOpen(Environment* owner, const std::string& name, const std::shared_ptr<LiveMeta>& m, int line);
+    void dialogDoClose(Environment* owner, const std::string& name, const std::shared_ptr<LiveMeta>& m, const Value* result, int line);
+    Value dialogDoAsk(Environment* owner, const std::string& name, const std::shared_ptr<LiveMeta>& m, int line);
+    Value dialogInfoMap(Environment* owner, const std::string& name, const std::shared_ptr<LiveMeta>& m, int line);
+    void dialogAction(const std::shared_ptr<LiveActionStmt>& s, const EnvPtr& env);
     void liveExecTrial(const std::shared_ptr<TrialStmt>& s, const EnvPtr& env);
     void liveExecAction(const std::shared_ptr<LiveActionStmt>& s, const EnvPtr& env);
     void liveGuardWrite(const EnvPtr& env, const ExprPtr& objectExpr, int line) const; // stone/lens: منع x[i]=.. وx.f=..
