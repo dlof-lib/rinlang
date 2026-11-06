@@ -1,0 +1,13 @@
+🧾 container.doc = users
+🧾 document (إدراج) -> u1 = {"name": "سارة", "age": 28}
+🧾 document (إدراج) -> u2 = {"name": "أحمد", "age": 35}
+✅ .end/container.doc (users)
+📦 container = bank
+✅ .end/container (bank)
+2 100 0
+داخل: 1 3
+3 150 0
+التقط: فشل التحويل
+3 150 28 0
+داخلي فشل: 200
+200
