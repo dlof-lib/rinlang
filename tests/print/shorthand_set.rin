@@ -1,0 +1,14 @@
+// `#[ ... ]` = Set حرفية · `[ ]` قائمة · `{ }` قاموس (docs/shorthand.md)
+let s = #[1 2 2 3];
+let t = #[3, 4];
+$ type(s), len(s), s.has(2), s.has(9);
+$ s + t;
+$ s * t;
+$ s - t;
+$ #[];
+$ len(#["a" "b" "a"]);
+$ #[[1 2] [1 2]];
+let box = {tags: #["x" "y" "x"] list: [1 2]};
+$ len(box.tags), len(box.list);
+let a = [1 2 3];
+$ a[1], type(a), type({});
