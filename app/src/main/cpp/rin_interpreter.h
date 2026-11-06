@@ -1,5 +1,6 @@
 #pragma once
 #include "rin_ast.h"
+#include "rin_datatypes.h" // أنواع البيانات المشتركة (docs/data_types.md)
 #include "diagnostics/diagnostic.h"
 #include "diagnostics/diagnostic_engine.h"
 #include "clc/clc_io.h" // ClcFormatError (يُستخدَم في معالجة أخطاء natives CLC أدناه) — clc_container.h
@@ -1236,10 +1237,12 @@ private:
 
     // ---- أنواع الحاويات المعرَّفة من المستخدم (containerType) — docs/container_types.md ----
     struct CTField {
-        std::string name, type = "any";
+        std::string name, type = "any";   // type = الشكل القياسي لنوع البيانات (int, email, array<int>, int|string, enum(a,b) ...)
         bool hasDefault = false, required = false, hasMin = false, hasMax = false;
         Value def, check;              // check: Set (قيم مسموحة) أو fun(v) -> true | false | "سبب"
-        double mn = 0, mx = 0;
+        double mn = 0, mx = 0;         // min/max: للأرقام = القيمة، وللنص/المصفوفة/المجموعة/الخريطة = الطول/العدد
+        dt::DT dtype;                  // نوع البيانات المُحلَّل
+        bool dtOk = false;             // false: نوع مستنتج لا يُحلَّل (اسم class لنسخة) فيُقارَن بالاسم كما قبل
     };
     struct CTType {
         std::string name, parent;
@@ -1250,6 +1253,10 @@ private:
     std::unordered_map<std::string, CTType> containerTypes;
     std::vector<std::string> containerTypeOrder;
     std::unordered_map<std::string, std::string> containerTypeOf; // اسم الحاوية -> اسم نوعها المعرَّف
+    // ---- أنواع بيانات الحقول في الحاويات العادية (setFieldType) — docs/data_types.md ----
+    // container -> [(حقل، نوع بيانات)] بترتيب التعريف. تُفحَص كل كتابة عبر setField/setState/container.set.
+    std::unordered_map<std::string, std::vector<std::pair<std::string, dt::DT>>> fieldTypeStore;
+    std::string fieldTypeCheck(const std::string& container, const std::string& field, const Value& v) const;
     std::vector<CTField> ctAllFields(const std::string& type, int line) const;  // حقول الأب أولاً (الابن يطغى بالاسم)
     bool ctIsA(const std::string& type, const std::string& base) const;
     std::string ctCheckField(const std::string& type, const std::string& field, const Value& v, bool isCreate, int line);
