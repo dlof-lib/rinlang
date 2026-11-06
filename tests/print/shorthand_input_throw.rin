@@ -1,0 +1,14 @@
+// `?!` = input · `!?` = throw (docs/shorthand.md)  — يُشغَّل مع stdin: "سارة\n21\n"
+let a = ?!("");
+$ "مرحبا " + a;
+let n = toNumber(?!(""));
+$ n * 2;
+let f = false;
+let r = f ?!f : 5;
+$ r;
+let k = 1;
+let q = k ?!f : 7;
+$ q;
+try { !? "خطأ مخصص"; } catch (e) { $ "التقط:", e.message; }
+let c = 0;
+try { !? "مشروط" when (c == 0); } catch (e) { $ "شرط:", e.message; }
