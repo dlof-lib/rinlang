@@ -1,0 +1,42 @@
+// جبر النيّة: add/remove/hide/unhide + sum/sub/mul/div/mod/pow/min/max/clamp/total (docs/intent_algebra.md)
+@cart.container
+    let total = 0;
+    let seen = nil;
+    fun buy(extras) { seen = extras; total = total + extras["price"] * extras["qty"]; return total; }
+.end;
+
+let i = Intent.core("cart", "buy", {"price": 10, "qty": 2});
+let i2 = Intent.sum(i, "qty", 3);              // 5
+let i3 = Intent.mul(i2, "price", 1.5);         // 15
+$ Intent.extra(i, "qty"), Intent.extra(i2, "qty"), Intent.extra(i3, "price");   // الأصل لا يتغيّر
+$ Intent.extra(Intent.sub(i, "qty", 1), "qty"), Intent.extra(Intent.div(i, "price", 4), "price");
+$ Intent.extra(Intent.mod(i, "price", 3), "price"), Intent.extra(Intent.pow(i, "qty", 3), "qty");
+$ Intent.extra(Intent.min(i, "price", 7), "price"), Intent.extra(Intent.max(i, "price", 70), "price");
+$ Intent.extra(Intent.clamp(i, "price", 0, 5), "price"), Intent.extra(Intent.clamp(i, "qty", 3, 9), "qty");
+$ Intent.extra(Intent.sum(i, "tip", 2, 100), "tip");          // مفتاح مفقود + default
+$ Intent.total(i3), Intent.total(i3, ["qty"]);
+
+// add (مفتاح جديد فقط) · remove/delete
+let a = Intent.add(i, "note", "gift");
+$ Intent.extra(a, "note"), Intent.extra(Intent.remove(a, "note"), "note", "gone"), Intent.extra(Intent.delete(a, "note"), "note", "gone");
+
+// hide/unhide: تبقى في النيّة لكنها لا تُمرَّر للإجراء
+let h = Intent.hide(Intent.add(i, "secret", 99), "secret");
+$ Intent.hidden(h), Intent.extra(h, "secret"), Intent.total(h);
+Intent.send(h);
+$ cart.seen, cart.total;
+Intent.send(Intent.unhide(h, "secret"));
+$ cart.seen;
+$ Intent.hidden(Intent.unhide(h)), Intent.hidden(Intent.reveal(h, "secret")), Intent.hidden(i);
+
+// أخطاء
+try { Intent.div(i, "qty", 0); } catch (e) { $ "div0"; }
+try { Intent.mod(i, "qty", 0); } catch (e) { $ "mod0"; }
+try { Intent.sum(i, "zzz", 1); } catch (e) { $ "missing"; }
+try { Intent.sum(Intent.add(i, "s", "x"), "s", 1); } catch (e) { $ "not number"; }
+try { Intent.sum(i, "qty", "a"); } catch (e) { $ "bad operand"; }
+try { Intent.add(i, "qty", 1); } catch (e) { $ "exists"; }
+try { Intent.remove(i, "zzz"); } catch (e) { $ "no key"; }
+try { Intent.hide(i, "zzz"); } catch (e) { $ "no key hide"; }
+try { Intent.clamp(i, "qty", 9, 3); } catch (e) { $ "lo>hi"; }
+try { Intent.sum({"a": 1}, "a", 1); } catch (e) { $ "not intent"; }
