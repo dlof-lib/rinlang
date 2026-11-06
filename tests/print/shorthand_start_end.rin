@@ -1,0 +1,16 @@
+// `@start` بداية · `@end` نهاية دائماً · `@ok` عند النجاح · `@fail` عند الفشل · exit(code) (docs/shorthand.md)
+@start {
+    let counter = 10;
+    fun tag(s) { ^ "[" + s + "]"; }
+    $ "1) بداية";
+}
+
+@end  { $ "7) @end A (آخر كتلة): counter =", counter, "failed =", programFailed(); }
+@ok   { $ "6) @ok: نجح البرنامج"; }
+@fail { $ "X) @fail: لن تظهر عند النجاح"; }
+@end  { $ "5) @end B (LIFO: قبل A) — زمن موجب؟", programTime() >= 0; }
+
+$ "2) الجسم";
+counter = counter + 1;
+$ "3)", tag("دالة من @start"), counter;
+$ "4) نهاية الجسم";
