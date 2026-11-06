@@ -1958,14 +1958,59 @@ StmtPtr Parser::printStatement() {
     // ضمن قائمة القيم بدل تركه للحلقة اللاحقة التي تتعرّف على سمات print — فتُبتلع السمة بأكملها
     // كقيمة يُحاول تنفيذها وقت التشغيل (وتفشل: "Undefined variable 'sep'"), ولا تصل أبداً لتُفعَّل
     // كسمة فعلية. إسناد صريح كقيمة print ما زال ممكناً عبر أقواس: print (x = 5);
-    stmt->exprs.push_back(pipeline());
-    while (match({TokenType::COMMA})) {
-        stmt->exprs.push_back(pipeline());
-    }
     static const std::unordered_set<std::string> printAttrs = {
         "sep", "level", "label", "repeat", "pretty", "upper", "lower", "width", "align",
         "bold", "italic", "underline", "strike", "dim", "reverse", "blink", "color", "bg"   // تنسيق الخط (docs/print-fonts.md)
     };
+    // لهجة الاستدعاء (docs/print_dialects.md):  print(a, b, sep="-");  — بجانب اللهجة الكلاسيكية  print a, b sep="-";
+    // نجرّب الاستدعاء أولاً: '(' [قيم وسمات key=value بفواصل] ')' ثم ';' أو سمة كلاسيكية. إن لم يتطابق الشكل
+    // (مثل print (a + b) * 2;) نعيد المؤشّر ونقرأ بالطريقة الكلاسيكية بلا أي تغيير في السلوك القديم.
+    bool callDialect = false;
+    std::vector<std::pair<std::string, ExprPtr>> callAttrs;
+    if (check(TokenType::LPAREN)) {
+        const size_t saved = current;
+        try {
+            advance(); // '('
+            std::vector<ExprPtr> items;
+            std::vector<std::pair<std::string, ExprPtr>> attrs;
+            std::unordered_set<std::string> seenCall;
+            bool okShape = true;
+            if (!check(TokenType::RPAREN)) {
+                for (;;) {
+                    std::string attr;
+                    if (check(TokenType::END) && checkNext(TokenType::EQUAL)) attr = "end";
+                    else if (check(TokenType::IF) && checkNext(TokenType::EQUAL)) attr = "if";
+                    else if (check(TokenType::IDENT) && printAttrs.count(peek().lexeme) && checkNext(TokenType::EQUAL)) attr = peek().lexeme;
+                    if (!attr.empty()) {
+                        advance(); advance(); // اسم السمة و'='
+                        if (seenCall.count(attr)) { okShape = false; break; }
+                        seenCall.insert(attr);
+                        attrs.push_back({attr, expression()});
+                    } else {
+                        items.push_back(pipeline());
+                    }
+                    if (!match({TokenType::COMMA})) break;
+                    if (check(TokenType::RPAREN)) break; // فاصلة أخيرة مسموحة
+                }
+            }
+            if (okShape && match({TokenType::RPAREN})) {
+                bool attrNext = check(TokenType::END) || check(TokenType::IF) ||
+                                (check(TokenType::IDENT) && printAttrs.count(peek().lexeme) && checkNext(TokenType::EQUAL));
+                if (check(TokenType::SEMICOLON) || attrNext) {
+                    callDialect = true;
+                    stmt->exprs = std::move(items);
+                    callAttrs = std::move(attrs);
+                }
+            }
+        } catch (...) { callDialect = false; }
+        if (!callDialect) current = saved;
+    }
+    if (!callDialect) {
+        stmt->exprs.push_back(pipeline());
+        while (match({TokenType::COMMA})) {
+            stmt->exprs.push_back(pipeline());
+        }
+    }
     static const char* fxNames[9] = {"bold", "italic", "underline", "strike", "dim", "reverse", "blink", "color", "bg"};
     ExprPtr fxArgs[9];
     bool anyFx = false;
@@ -2010,6 +2055,34 @@ StmtPtr Parser::printStatement() {
             else { auto nl = std::make_shared<LiteralExpr>(); nl->kind = LiteralExpr::Kind::NIL; nl->line = tok.line; call->args.push_back(nl); }
         }
         stmt->fx = call;
+    }
+    if (callDialect) {   // سمات داخل القوسين: print(a, b, sep="-", end="")
+        for (auto& ca : callAttrs) {
+            const std::string& attr = ca.first; ExprPtr value = ca.second;
+            if (seen.count(attr)) throw err(diag::Code::E0016_InvalidProperty, tok, "'print': `" + attr + "` attribute repeated");
+            seen.insert(attr);
+            if (attr == "sep") stmt->sep = value;
+            else if (attr == "end") stmt->end = value;
+            else if (attr == "if") stmt->ifCond = value;
+            else if (attr == "level") stmt->level = value;
+            else if (attr == "label") stmt->label = value;
+            else if (attr == "repeat") stmt->repeatN = value;
+            else if (attr == "pretty") stmt->pretty = value;
+            else if (attr == "upper") stmt->upper = value;
+            else if (attr == "lower") stmt->lower = value;
+            else if (attr == "width") stmt->width = value;
+            else if (attr == "align") stmt->align = value;
+            else for (int fi = 0; fi < 9; fi++) if (attr == fxNames[fi]) { fxArgs[fi] = value; anyFx = true; }
+        }
+        if (anyFx) {
+            auto call = std::make_shared<CallExpr>();
+            call->callee = "__fxcode"; call->line = tok.line;
+            for (int fi = 0; fi < 9; fi++) {
+                if (fxArgs[fi]) call->args.push_back(fxArgs[fi]);
+                else { auto nl = std::make_shared<LiteralExpr>(); nl->kind = LiteralExpr::Kind::NIL; nl->line = tok.line; call->args.push_back(nl); }
+            }
+            stmt->fx = call;
+        }
     }
     consume(TokenType::SEMICOLON, "Expected ';' after print statement");
     stmt->line = tok.line;
