@@ -41,6 +41,8 @@ enum class TokenType {
     NOT_SAME,   // =/=  ليس نفس الكائن (هوية مرجعية)
     COPY_OF,    // =/   مساوٍ بالقيمة لكن كائن مختلف (نسخة)
     SAME_SHAPE, // =::= متطابقان في الشكل: نفس البنية والأنواع (القيم الورقية تُتجاهل)
+    ARROW_R,    // ==>  إسناد من اليسار إلى اليمين:  expr ==> target   (docs/arrows.md)
+    SWAP,       // <=>  تبديل قيمتين:  a <=> b  ·  {a <=> b}
     LESS, LESS_EQUAL, GREATER, GREATER_EQUAL,
     LPAREN, RPAREN, LBRACE, RBRACE,
     LBRACKET, RBRACKET, // [ ]  (مصفوفات وفهرسة arr[i])
