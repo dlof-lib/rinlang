@@ -1,0 +1,37 @@
+🧾 container.doc = users
+🧾 document (إدراج) -> u1 = {"name": "سارة", "city": "بيروت", "age": 30}
+🧾 document (إدراج) -> u2 = {"name": "علي", "city": "صيدا", "age": 25}
+🧾 document (إدراج) -> u3 = {"name": "منى", "city": "بيروت", "age": 41}
+✅ .end/container.doc (users)
+🗂️ container.data = team
+✅ .end/container.data (team)
+📊 container.table = tb
+▦ row -> ["a", 1]
+▦ row -> ["b", 2]
+✅ .end/container.table (tb)
+-- docs
+0 u1 سارة
+1 u2 علي
+2 u3 منى
+-- where/sorted
+0 منى
+1 سارة
+-- fields
+lead = rin
+size = 3
+-- table
+0 ["a", 1]
+1 ["b", 2]
+-- for forms
+0:سارة
+1:علي
+2:منى
+30
+25
+41
+-- comprehension / reduce
+["سارة", "منى"]
+96
+-- missing
+[E0035] no container named `usres` to loop over (`@usres` as a loop source must name a container declared before the loop runs)
+array 3
