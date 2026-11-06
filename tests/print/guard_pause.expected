@@ -1,0 +1,18 @@
+› [1-2] (2): › [1-2] (2): 📦 container = vault
+✅ .end/container (vault)
+1 0 true
+true nil 90
+true true true
+╭─ ℹ تأكيد
+│ سحب {"amount": 10}؟
+│
+│ [1] نعم   [2] لا
+╰─
+true 80
+╭─ ℹ
+│ مغادرة؟
+│
+│ [1] نعم   [2] لا
+╰─
+true
+0
