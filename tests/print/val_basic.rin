@@ -1,0 +1,32 @@
+// val: قيمة تفاعلية — أساسيات، ماسي بلا glitch، أجراس، touch/unval (docs/val.md)
+// أساسيات + الماسي (glitch-free) + أجراس
+let price = 10;
+let qty = 2;
+val total = price * qty;
+val label2 = "total=" + total;
+$ total, label2, total.kind, total.deps, total.runs;
+bell total (old, new) { $ "جرس total:", old, "->", new; }
+price = 15;
+$ total, label2, total.runs;
+qty = 3;
+$ total;
+price = 15;                 // نفس القيمة: لا حساب
+$ total.runs;
+// ماسي: a -> b, c -> d (d تُحسب مرة واحدة بعد b وc)
+let x = 1;
+val b = x + 1;
+val c = x * 10;
+val d = b + c;
+bell d (o, n) { $ "d:", o, "->", n; }
+x = 2;
+$ d, d.runs;
+// للقراءة فقط
+try { total = 1; } catch (e) { $ "رفض:", e.message; }
+// touch / unval
+touch total;
+$ total.runs;
+unval total;
+price = 100;
+$ total, total.kind;
+// dependents على المصدر
+$ x.dependents;
