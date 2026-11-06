@@ -4694,9 +4694,9 @@ void Interpreter::registerNatives() {
         return Value::makeArray(result);
     };
 
-    // ---- tap(v, spec?) : sink للأنابيب `x |> $` ≡ `tap(x)` — يمرّر القيمة كما هي (لا يكسر السلسلة) ----
-    //   tap(v)         يطبع v ثم يعيدها          tap(v, "وسم")  يطبع "وسم: v"
-    //   tap(v, fn)     يستدعي fn(v) ويعيد v      (للتتبّع/التسجيل داخل السلسلة)
+    // ---- __tap(v, spec?) : sink للأنابيب `x |> $` ≡ `__tap(x)` (اسم داخلي كي لا يصطدم بـ `fun tap` في lib/compose.og.rin) — يمرّر القيمة كما هي (لا يكسر السلسلة) ----
+    //   __tap(v)       يطبع v ثم يعيدها          __tap(v, "وسم")  يطبع "وسم: v"
+    //   __tap(v, fn)     يستدعي fn(v) ويعيد v      (للتتبّع/التسجيل داخل السلسلة)
     // listFormat("[, ]") | listFormat(open, sep, close) | listFormat() = الافتراضي. النص الواحد: الفتح قبل أول فاصلة،
     // ثم الفاصلة (مع المسافات التي تليها) فاصلاً، والباقي إغلاقاً. تعيد الشكل السابق كنص.
     natives["listFormat"] = [this](std::vector<Value>& a, int line) -> Value {
@@ -4716,8 +4716,8 @@ void Interpreter::registerNatives() {
         Value r; r.type = Value::Type::STRING; r.str = prev; return r;
     };
 
-    natives["tap"] = [this](std::vector<Value>& a, int line) -> Value {
-        if (a.empty() || a.size() > 2) throw diagErr(diag::Code::E0007_InvalidArguments, line, "'tap' expects 1 or 2 argument(s) but got " + std::to_string(a.size()));
+    natives["__tap"] = [this](std::vector<Value>& a, int line) -> Value {
+        if (a.empty() || a.size() > 2) throw diagErr(diag::Code::E0007_InvalidArguments, line, "'__tap' expects 1 or 2 argument(s) but got " + std::to_string(a.size()));
         if (a.size() == 2 && (a[1].type == Value::Type::FUNCTION || a[1].type == Value::Type::INSTANCE)) {
             std::vector<Value> args{a[0]};
             callValue(a[1], args, line);
@@ -4776,6 +4776,11 @@ void Interpreter::registerNatives() {
                 if (vi->second.type == Value::Type::FUNCTION) ++vi; else vi = vals.erase(vi);
             }
             for (auto& kv : sn.second) vals[kv.first.toDisplayString()] = kv.second;
+            if (liveActive_) for (auto& kv : sn.second) {   // val: حدّث ما يقرأ الحقول المستعادة (القيم المخزَّنة لا تدخل لقطة @tx)
+                std::string fk = kv.first.toDisplayString();
+                auto lm = it->second->live.find(fk);
+                if (lm != it->second->live.end() && !lm->second->dependents.empty()) valPropagate(it->second.get(), fk, 0);
+            }
         }
         return Value::nil();
     };
@@ -6451,6 +6456,10 @@ for(auto& kv:maskParents) if(maskResolve4(kv.second)==parent && !maskResolve4(kv
                 if (!why.empty()) throw diagErr(diag::Code::E0004_InvalidType, line, why);
             }
         }
+        if (liveActive_ && !it->second->live.empty() && it->second->live.count(key)) { // حقل حيّ (stone/gauge/val-source...): مرّ بمسار الإسناد الحيّ كي لا تُمحى حياته ويتحدّث ما يعتمد عليه
+            liveAssign(it->second.get(), key, a[2], line);
+            return Value::boolean_(true);
+        }
         Value linkOld;
         if (linksExist_) it->second->get(key, linkOld);
         it->second->define(key, a[2]);
@@ -6481,6 +6490,7 @@ for(auto& kv:maskParents) if(maskResolve4(kv.second)==parent && !maskResolve4(kv
                 if (!why.empty()) throw diagErr(diag::Code::E0004_InvalidType, line, why);
             }
         }
+        if (liveActive_ && !it->second->live.empty() && it->second->live.count(key)) { liveAssign(it->second.get(), key, a[2], line); return Value::boolean_(true); }
         assignStateAware(it->second.get(), key, a[2], line);
         return Value::boolean_(true);
     };
@@ -6508,7 +6518,7 @@ for(auto& kv:maskParents) if(maskResolve4(kv.second)==parent && !maskResolve4(kv
         }
         Value out;
         auto own = it->second->values.find(key);
-        if (own != it->second->values.end()) return own->second;
+        if (own != it->second->values.end()) { if (depTracker_) valTrack(it->second.get(), key); return own->second; }
         if (tableVirtualGet(name, key, out)) return out; // rows/columns/style لحاوية الجدول (قبل البيئة الأم)
         if (it->second->get(key, out)) return out;
         return Value::nil();
@@ -11509,6 +11519,7 @@ Value Interpreter::nsGet(const std::shared_ptr<NsNode>& n, const std::string& me
     if (auto c = n->child(member)) return nsSnapshot(c); // a bare namespace reads as a snapshot map of its fields
     auto it = n->env->values.find(member);
     if (it == n->env->values.end()) throw nsNoMemberErr(n, member, line, sourceFile, "member");
+    if (depTracker_) valTrack(n->env.get(), member);
     if (liveActive_ && !n->env->live.empty()) {
         auto lit = n->env->live.find(member);
         if (lit != n->env->live.end()) return liveRead(n->env.get(), lit->second, member, line);
@@ -12332,6 +12343,7 @@ Value Interpreter::evaluateTree(const ExprPtr& expr, const EnvPtr& env) {
         return v;
     }
     case ExprKind::Variable: { auto e = std::static_pointer_cast<VariableExpr>(expr);
+        if (depTracker_) valTrack(findLiveOwner(env, e->name), e->name); // val: كل قراءة أثناء الحساب = اعتماد
         if (liveActive_) { // المتغيرات الحيّة: lens/fuse/عدّادات القراءة (كلفة صفر قبل أول استعمال)
             Environment* liveOwner = findLiveOwner(env, e->name);
             if (liveOwner && !liveOwner->live.empty()) {
@@ -12637,15 +12649,18 @@ Value Interpreter::evaluateTree(const ExprPtr& expr, const EnvPtr& env) {
             } else {
                 (*obj.array)[static_cast<size_t>(i)] = val;
             }
+            if (liveActive_) valMutated(env, e->object, e->line);
             return val;
         }
         if (obj.type == Value::Type::MAP) {
             obj.map->put(idx, val);
+            if (liveActive_) valMutated(env, e->object, e->line);
             return val;
         }
         if (obj.type == Value::Type::INSTANCE && hasMagic(obj, "__setitem__")) {
             std::vector<Value> a{idx, val};
             callMagic(obj, "__setitem__", a, e->line); // Rin 1.0: obj[i] = v
+            if (liveActive_) valMutated(env, e->object, e->line);
             return val;
         }
         throw diagErr(diag::Code::E0004_InvalidType, e->line, "cannot assign into a value of type `" + obj.typeName() + "` via `[]`");
@@ -12707,13 +12722,16 @@ Value Interpreter::evaluateTree(const ExprPtr& expr, const EnvPtr& env) {
         Value obj = evaluate(e->object, env);
         Value val = evaluate(e->value, env);
         if (obj.type == Value::Type::INSTANCE) {
-            return writeMember(obj, e->name, val, env, e->line); // خصائص set + final + صلاحيات + freeze
+            Value wr = writeMember(obj, e->name, val, env, e->line); // خصائص set + final + صلاحيات + freeze
+            if (liveActive_) valMutated(env, e->object, e->line);
+            return wr;
         }
         if (obj.type == Value::Type::MAP) {
             for (auto& kv : *obj.map) {
-                if (kv.first.type == Value::Type::STRING && kv.first.str == e->name) { kv.second = val; return val; }
+                if (kv.first.type == Value::Type::STRING && kv.first.str == e->name) { kv.second = val; if (liveActive_) valMutated(env, e->object, e->line); return val; }
             }
             obj.map->push_back({Value::string(e->name), val});
+            if (liveActive_) valMutated(env, e->object, e->line);
             return val;
         }
         throw diagErr(diag::Code::E0004_InvalidType, e->line,
@@ -13664,6 +13682,14 @@ Value Interpreter::liveRead(Environment* owner, const std::shared_ptr<LiveMeta>&
         owner->values[name] = r; // مرآة لمن يقرأ الـ Environment مباشرة (exportGlobals ...)
         return r;
     }
+    if (m->reactive && m->computing)
+        throw liveErr(diag::Code::E0045_DerivedReadOnly, line, "val `" + name + "` depends on itself",
+                      "a val may read other variables, but never itself (directly or through another val)");
+    if (m->reactive && m->lazy && m->stale && !m->computing) { // val lazy: احسب عند القراءة إن كان قديماً
+        Value nv;
+        m->stale = false;
+        if (valCompute(owner, name, m, nv, line)) valApply(owner, name, m, nv, line);
+    }
     auto it = owner->values.find(name);
     Value cur = it != owner->values.end() ? it->second : Value::nil();
     if (m->fused) {
@@ -13683,6 +13709,9 @@ Value Interpreter::liveAssign(Environment* owner, const std::string& name, Value
                           "cannot assign to `" + name + "`: it is " + (m->kind == "banned" ? "banned (#ban)" : "a stone"),
                           m->kind == "banned" ? "`#ban " + name + ";` froze it for good; remove the `#ban` if it must change"
                                               : "a stone is frozen at its declaration; declare `" + name + "` with `let` (or `tape`) if it must change");
+        if (m->reactive)
+            throw liveErr(diag::Code::E0045_DerivedReadOnly, line, "cannot assign to `" + name + "`: it is a val (reactive, computed from what it reads)",
+                          "change the variables `" + name + "` reads instead; use `touch " + name + ";` to force a recompute or `unval " + name + ";` to turn it into a plain variable");
         if (m->derived)
             throw liveErr(diag::Code::E0045_DerivedReadOnly, line, "cannot assign to `" + name + "`: it is a lens (computed from other variables)",
                           "change the variables `" + name + "` is computed from instead");
@@ -13729,6 +13758,7 @@ Value Interpreter::liveAssign(Environment* owner, const std::string& name, Value
     }
     assignStateAware(owner, name, v, line);
     if (m && changed && !m->bells.empty()) liveFireBells(m, old, v, line);
+    if (m && changed && !m->dependents.empty()) valPropagate(owner, name, line); // val: حدّث كل ما يقرؤه بترتيب طوبولوجي
     return v;
 }
 
@@ -13745,6 +13775,8 @@ void Interpreter::liveGuardWrite(const EnvPtr& env, const ExprPtr& objectExpr, i
                       "a stone/#ban protects both the variable and its direct contents (`x[i] = ..`, `x.field = ..`)");
     if (it->second->derived)
         throw liveErr(diag::Code::E0045_DerivedReadOnly, line, "cannot modify `" + ve->name + "`: it is a lens (read-only)");
+    if (it->second->reactive)
+        throw liveErr(diag::Code::E0045_DerivedReadOnly, line, "cannot modify `" + ve->name + "`: it is a val (reactive, read-only)");
 }
 
 void Interpreter::liveExecDecl(const std::shared_ptr<LiveDeclStmt>& s, const EnvPtr& env) {
@@ -13764,7 +13796,7 @@ void Interpreter::liveExecDecl(const std::shared_ptr<LiveDeclStmt>& s, const Env
             throw liveErr(diag::Code::E0046_LiveMisuse, s->line, std::string(what) + " of `" + s->name + "` must be a whole number from 1 to 100000, got " + liveNum(n));
         return static_cast<long>(n);
     };
-    if (s->kind != LiveKind::Lens && s->initializer) v = copyForBinding(evaluate(s->initializer, env));
+    if (s->kind != LiveKind::Lens && s->kind != LiveKind::Val && s->initializer) v = copyForBinding(evaluate(s->initializer, env));
     switch (s->kind) {
         case LiveKind::Stone: m->kind = "stone"; m->frozen = true; break;
         case LiveKind::Gauge: {
@@ -13780,6 +13812,30 @@ void Interpreter::liveExecDecl(const std::shared_ptr<LiveDeclStmt>& s, const Env
         }
         case LiveKind::Tape:
             m->kind = "tape"; m->taped = true; m->keep = static_cast<size_t>(evalCount(s->keep, "`keep`", 10)); break;
+        case LiveKind::Val: { // قيمة تفاعلية (docs/val.md): مشتقّ مخزَّن يُحدَّث دفعياً
+            m->kind = "val"; m->reactive = true; m->lazy = s->lazy; m->expr = s->initializer; m->whenExpr = s->when; m->scope = env;
+            if (s->keep) { m->vkeep = static_cast<size_t>(evalCount(s->keep, "`keep`", 10)); }
+            if (s->lo) {
+                m->ranged = true; m->lo = evalNumber(s->lo, "the lower end"); m->hi = evalNumber(s->hi, "the upper end");
+                if (!(m->lo < m->hi))
+                    throw liveErr(diag::Code::E0044_RangeViolation, s->line, "val `" + s->name + "` has an empty range: " + liveNum(m->lo) + " to " + liveNum(m->hi),
+                                  "the lower end must be smaller than the upper end");
+                m->rangeMode = s->rangeMode == "strict" ? 1 : s->rangeMode == "wrap" ? 2 : 0;
+            }
+            if (s->metaLabel || s->metaAbout || s->metaUnit) { // as/about/unit: بيانات وصفية كـ label/define
+                m->named = true; m->ident = s->name;
+                auto text = [&](const ExprPtr& e, const char* what) -> Value {
+                    if (!e) return Value::nil();
+                    Value t = evaluate(e, env);
+                    if (t.type != Value::Type::STRING)
+                        throw liveErr(diag::Code::E0004_InvalidType, s->line, std::string("the ") + what + " of `" + s->name + "` must be text, got " + t.typeName());
+                    return t;
+                };
+                m->metaLabel = text(s->metaLabel, "label"); m->metaAbout = text(s->metaAbout, "description"); m->metaUnit = text(s->metaUnit, "unit");
+            }
+            v = Value::nil();
+            break;
+        }
         case LiveKind::Lens:
             m->kind = "lens"; m->derived = true; m->expr = s->initializer; m->scope = env; v = Value::nil(); break;
         case LiveKind::Fuse:
@@ -13829,6 +13885,10 @@ void Interpreter::liveExecDecl(const std::shared_ptr<LiveDeclStmt>& s, const Env
     }
     env->define(s->name, v);       // define() يمحو أي حياة سابقة بنفس الاسم في هذه البيئة
     env->live[s->name] = m;
+    if (m->reactive) { // الحساب الأول: دفعي فوراً (lazy: عند أول قراءة). لا رنين (لا قيمة سابقة).
+        if (m->lazy) m->stale = true;
+        else { Value nv; if (valCompute(env.get(), s->name, m, nv, s->line)) { if (m->ranged) nv = liveApplyRange(*m, s->name, nv, s->line); env->values[s->name] = nv; } }
+    }
 }
 
 void Interpreter::liveExecBell(const std::shared_ptr<BellStmt>& s, const EnvPtr& env) {
@@ -13853,13 +13913,16 @@ void Interpreter::liveExecTrial(const std::shared_ptr<TrialStmt>& s, const EnvPt
     auto rollback = [&]() {
         auto journal = std::move(trialStack_.back());
         trialStack_.pop_back();
+        std::vector<std::pair<EnvPtr, std::string>> restored;
         for (auto it = journal.rbegin(); it != journal.rend(); ++it) {
             it->env->values[it->name] = it->oldValue;
             if (it->metaSnapshot) {
                 auto f = it->env->live.find(it->name);
                 if (f != it->env->live.end()) *f->second = *it->metaSnapshot;
+                if (it->metaSnapshot->reactive) restored.push_back({it->env, it->name});
             }
         }
+        if (!restored.empty()) liveResyncVals(restored); // val: القيم المخزَّنة استُعيدت مع مصادرها؛ أعِد الاشتراكات فقط (بلا رنين)
     };
     auto commit = [&]() {
         auto journal = std::move(trialStack_.back());
@@ -13886,6 +13949,165 @@ void Interpreter::liveExecTrial(const std::shared_ptr<TrialStmt>& s, const EnvPt
         throw;
     }
     commit();
+}
+
+// ============================================================================
+// val — قيمة تفاعلية (docs/val.md)
+// ============================================================================
+void Interpreter::valUnsubscribe(Environment* owner, const std::string& name, const std::shared_ptr<LiveMeta>& m) {
+    for (auto& d : m->deps) {
+        auto de = d.first.lock();
+        if (!de) continue;
+        auto it = de->live.find(d.second);
+        if (it == de->live.end()) continue;
+        auto& list = it->second->dependents;
+        for (size_t i = 0; i < list.size();) {
+            auto le = list[i].first.lock();
+            if (!le || (le.get() == owner && list[i].second == name)) list.erase(list.begin() + static_cast<long>(i)); else ++i;
+        }
+    }
+    m->deps.clear();
+}
+
+void Interpreter::valResubscribe(Environment* owner, const std::string& name, const std::shared_ptr<LiveMeta>& m, const std::vector<DepRec>& deps) {
+    valUnsubscribe(owner, name, m);
+    std::weak_ptr<Environment> self = owner->weak_from_this();
+    std::vector<std::pair<Environment*, std::string>> seen;
+    for (auto& d : deps) {
+        if (!d.env || (d.env == owner && d.name == name)) continue;                  // لا اعتماد على النفس (يُكشف كحلقة وقت الحساب)
+        bool dup = false;
+        for (auto& sn : seen) if (sn.first == d.env && sn.second == d.name) { dup = true; break; }
+        if (dup) continue;
+        seen.push_back({d.env, d.name});
+        std::weak_ptr<Environment> dw = d.env->weak_from_this();
+        if (dw.expired() || self.expired()) continue;
+        auto& slot = d.env->live[d.name];
+        if (!slot) slot = std::make_shared<LiveMeta>();                               // متغيّر عادي يصير «plain» حيّاً ليحمل قائمة معتمديه (كالجرس)
+        slot->dependents.push_back({self, name});
+        m->deps.push_back({dw, d.name});
+    }
+}
+
+// يحسب تعبير val (وشرط when) مع تتبّع ما يُقرأ. يعيد false إن كان when كاذباً (القيمة تبقى كما هي).
+bool Interpreter::valCompute(Environment* owner, const std::string& name, const std::shared_ptr<LiveMeta>& m, Value& out, int line) {
+    if (m->computing)
+        throw liveErr(diag::Code::E0045_DerivedReadOnly, line, "val `" + name + "` depends on itself",
+                      "a val may read other variables, but never itself (directly or through another val)");
+    EnvPtr scope = m->scope.lock();
+    if (!scope) throw liveErr(diag::Code::E0045_DerivedReadOnly, line, "val `" + name + "` outlived the scope it was declared in");
+    std::vector<DepRec> deps;
+    auto* prev = depTracker_;
+    depTracker_ = &deps;
+    m->computing = true;
+    Value r; bool hold = false;
+    try {
+        if (m->whenExpr) hold = !evaluate(m->whenExpr, scope).isTruthy();
+        if (!hold) r = evaluate(m->expr, scope);
+    } catch (...) { depTracker_ = prev; m->computing = false; throw; }
+    depTracker_ = prev;
+    m->computing = false;
+    if (hold) { // أبقِ اشتراكات الشرط فقط كي يستيقظ عند تغيّره، وأبقِ القيمة
+        valResubscribe(owner, name, m, deps);
+        m->held = true; m->runs++;
+        return false;
+    }
+    valResubscribe(owner, name, m, deps);
+    m->held = false; m->runs++;
+    out = copyForBinding(r);
+    return true;
+}
+
+// يكتب نتيجة val: نطاق (within) ثم journal (لـ trial) ثم تاريخ (keep) ثم assignStateAware ثم الأجراس. true إن تغيّرت.
+bool Interpreter::valApply(Environment* owner, const std::string& name, const std::shared_ptr<LiveMeta>& m, const Value& nvIn, int line) {
+    Value nv = nvIn;
+    if (m->ranged) nv = liveApplyRange(*m, name, nv, line);
+    Value old;
+    { auto it = owner->values.find(name); if (it != owner->values.end()) old = it->second; }
+    if (valuesEqual(old, nv)) return false;
+    liveJournal(owner, name);
+    if (m->vkeep > 0) { m->vhist.push_back(old); if (m->vhist.size() > m->vkeep) m->vhist.erase(m->vhist.begin()); }
+    m->writes++;
+    assignStateAware(owner, name, nv, line);
+    if (!m->bells.empty()) liveFireBells(m, old, nv, line);
+    return true;
+}
+
+// مصدر (متغيّر/حقل/val) تغيّر: حدّث كل الـ vals المعتمدة عليه (مباشرة أو عبر vals أخرى) بترتيب طوبولوجي:
+// كل val تُحسب مرة واحدة بعد اكتمال ما تعتمد عليه (لا glitches في المعيّن الماسي)، ولا تُحسب إن لم يتغيّر أي من اعتماداتها.
+void Interpreter::valPropagate(Environment* srcOwner, const std::string& srcName, int line) {
+    struct DepthGuard { int& d; explicit DepthGuard(int& x) : d(x) { ++d; } ~DepthGuard() { --d; } } guard(valDepth_);
+    if (valDepth_ > 64)
+        throw liveErr(diag::Code::E0047_BellLoop, line, "vals keep re-triggering each other (nested more than 64 levels)",
+                      "a bell or val that writes to a variable it (indirectly) reads must stop at some value");
+    struct Node { std::shared_ptr<Environment> env; std::string name; };
+    std::vector<Node> post;
+    std::vector<std::pair<Environment*, std::string>> visited;
+    auto isVisited = [&](Environment* e, const std::string& n) { for (auto& v : visited) if (v.first == e && v.second == n) return true; return false; };
+    std::function<void(Environment*, const std::string&)> dfs = [&](Environment* e, const std::string& n) {
+        auto mi = e->live.find(n);
+        if (mi == e->live.end()) return;
+        auto dependents = mi->second->dependents; // نسخة: قد تتبدّل أثناء الحساب
+        for (auto& d : dependents) {
+            auto de = d.first.lock();
+            if (!de) continue;
+            auto vi = de->live.find(d.second);
+            if (vi == de->live.end() || !vi->second->reactive) continue;
+            if (isVisited(de.get(), d.second)) continue;
+            visited.push_back({de.get(), d.second});
+            dfs(de.get(), d.second);
+            post.push_back({de, d.second});
+        }
+    };
+    dfs(srcOwner, srcName);
+    std::vector<std::pair<Environment*, std::string>> changed{{srcOwner, srcName}};
+    auto isChanged = [&](Environment* e, const std::string& n) { for (auto& c : changed) if (c.first == e && c.second == n) return true; return false; };
+    for (auto it = post.rbegin(); it != post.rend(); ++it) {          // عكس post-order = ترتيب طوبولوجي
+        auto mi = it->env->live.find(it->name);
+        if (mi == it->env->live.end() || !mi->second->reactive) continue;
+        auto m = mi->second;
+        bool affected = false;
+        for (auto& d : m->deps) { auto de = d.first.lock(); if (de && isChanged(de.get(), d.second)) { affected = true; break; } }
+        if (!affected) continue;
+        if (m->lazy) { m->stale = true; changed.push_back({it->env.get(), it->name}); continue; } // lazy: علّم فقط، وانشر «قد تغيّر» لمن يعتمد عليه
+        Value nv;
+        if (!valCompute(it->env.get(), it->name, m, nv, line)) continue;   // when كاذب: تبقى القيمة
+        if (valApply(it->env.get(), it->name, m, nv, line)) changed.push_back({it->env.get(), it->name});
+    }
+}
+
+// تعديل في المكان (x[i] = .. / x.f = ..) على متغيّر يقرؤه val: الربط لم يتغيّر لكن محتواه تغيّر، فأعد حساب ما يعتمد عليه.
+void Interpreter::valMutated(const EnvPtr& env, const ExprPtr& objectExpr, int line) {
+    auto ve = std::dynamic_pointer_cast<VariableExpr>(objectExpr);
+    if (!ve) return;
+    Environment* owner = findLiveOwner(env, ve->name);
+    if (!owner || owner->live.empty()) return;
+    auto it = owner->live.find(ve->name);
+    if (it == owner->live.end() || it->second->dependents.empty()) return;
+    valPropagate(owner, ve->name, line);
+}
+
+// بعد تراجع trial: القيم المخزَّنة والبيانات الوصفية استُعيدت مع مصادرها، فنعيد بناء الاشتراكات من قوائم deps المستعادة فقط.
+void Interpreter::liveResyncVals(const std::vector<std::pair<EnvPtr, std::string>>& restored) {
+    for (auto& r : restored) {
+        auto mi = r.first->live.find(r.second);
+        if (mi == r.first->live.end() || !mi->second->reactive) continue;
+        auto m = mi->second;
+        std::vector<DepRec> deps;
+        std::vector<std::shared_ptr<Environment>> keepAlive;
+        for (auto& d : m->deps) if (auto e = d.first.lock()) { keepAlive.push_back(e); deps.push_back({e.get(), d.second}); }
+        m->deps.clear();
+        // أزل أي اشتراك قديم لهذه الـ val ثم أعد بناءه
+        for (auto& d : deps) {
+            auto it = d.env->live.find(d.name);
+            if (it == d.env->live.end()) continue;
+            auto& list = it->second->dependents;
+            for (size_t i = 0; i < list.size();) {
+                auto le = list[i].first.lock();
+                if (!le || (le.get() == r.first.get() && list[i].second == r.second)) list.erase(list.begin() + static_cast<long>(i)); else ++i;
+            }
+        }
+        valResubscribe(r.first.get(), r.second, m, deps);
+    }
 }
 
 void Interpreter::liveExecAction(const std::shared_ptr<LiveActionStmt>& s, const EnvPtr& env) {
@@ -13944,6 +14166,28 @@ void Interpreter::liveExecAction(const std::shared_ptr<LiveActionStmt>& s, const
                                : "declare it with `tape " + s->target + " = ...;` (or add `keep N` to a gauge)");
     };
     if (s->action == "unbell") { need(m && !m->bells.empty(), "a bell"); m->bells.clear(); return; }
+    if (s->action == "touch" || s->action == "unval") { // أفعال val (docs/val.md)
+        if (!(m && m->reactive))
+            throw liveErr(diag::Code::E0046_LiveMisuse, s->line, "`" + s->action + " " + s->target + "` needs a val, but `" + s->target + "` is " +
+                          (m ? "a " + m->kind : std::string("a plain variable")), "declare it with `val " + s->target + " = <expression>;`");
+        if (s->action == "unval") { // فكّ التفاعل: تبقى القيمة الحالية كمتغيّر عادي (الأجراس تبقى)
+            liveJournal(owner, s->target);
+            valUnsubscribe(owner, s->target, m);
+            Value cur = owner->values[s->target];
+            if (m->lazy && m->stale) { Value nv; m->stale = false; if (valCompute(owner, s->target, m, nv, s->line)) { owner->values[s->target] = nv; } valUnsubscribe(owner, s->target, m); }
+            m->reactive = false; m->lazy = false; m->stale = false; m->held = false; m->expr = nullptr; m->whenExpr = nullptr;
+            m->kind = m->bells.empty() && m->dependents.empty() ? "plain" : "plain";
+            return;
+        }
+        // touch: إعادة حساب قسرية (حتى لو lazy أو held أو لم يتغيّر شيء)؛ ترنّ الأجراس إن تغيّرت القيمة
+        Value nv; m->stale = false;
+        bool wasHeld = m->held;
+        if (!valCompute(owner, s->target, m, nv, s->line)) {            // when ما زال كاذباً: touch لا يتجاوزه
+            (void)wasHeld; return;
+        }
+        if (valApply(owner, s->target, m, nv, s->line) && !m->dependents.empty()) valPropagate(owner, s->target, s->line);
+        return;
+    }
     if (s->action == "rearm") {
         need(m && m->fused, "a fuse");
         liveJournal(owner, s->target);
@@ -13975,6 +14219,7 @@ void Interpreter::liveExecAction(const std::shared_ptr<LiveActionStmt>& s, const
     }
     assignStateAware(owner, s->target, cur, s->line);
     if (!m->bells.empty() && !valuesEqual(before, cur)) liveFireBells(m, before, cur, s->line);
+    if (!m->dependents.empty() && !valuesEqual(before, cur)) valPropagate(owner, s->target, s->line);
 }
 
 bool Interpreter::livePropertyGet(const EnvPtr& env, const std::string& name, const std::string& prop, int line, Value& out) {
@@ -13983,7 +14228,8 @@ bool Interpreter::livePropertyGet(const EnvPtr& env, const std::string& name, co
         "min", "max", "mode", "fill", "full", "empty", "left", "burnt",
         "base", "delta", "up", "down", "same", "changed", "goal", "reached", "togo", "progress", "step", // base
         "ok", "accepted", "rejected", "refused",                                                        // accept (و pre/post)
-        "pre", "post", "label", "about", "unit", "id", "info"};                                                                                 // pre/post
+        "pre", "post", "label", "about", "unit", "id", "info",
+        "deps", "runs", "stale", "lazy", "held", "dependents"};                                       // val                                                                                 // pre/post
     if (!props.count(prop)) return false;
     Environment* owner = findLiveOwner(env, name);
     if (!owner || owner->live.empty()) return false;
@@ -14010,6 +14256,24 @@ bool Interpreter::livePropertyGet(const EnvPtr& env, const std::string& name, co
     if (prop == "reads")  { out = Value::num(static_cast<double>(m->reads)); return true; }
     if (prop == "writes") { out = Value::num(static_cast<double>(m->writes)); return true; }
     if (prop == "bells")  { out = Value::num(static_cast<double>(m->bells.size())); return true; }
+    // ---- val: خصائص التفاعل (docs/val.md) ----
+    if (prop == "deps" || prop == "runs" || prop == "stale" || prop == "lazy" || prop == "held" || prop == "dependents") {
+        if (prop == "dependents") { // لأي متغيّر: أسماء الـ vals التي تقرؤه
+            std::vector<Value> names;
+            for (auto& d : m->dependents) if (auto e = d.first.lock()) names.push_back(Value::string(d.second));
+            std::sort(names.begin(), names.end(), [](const Value& x, const Value& y) { return x.str < y.str; });
+            out = arr(names); return true;
+        }
+        only(m->reactive, "val");
+        if (prop == "runs") out = Value::num(static_cast<double>(m->runs));
+        else if (prop == "stale") out = Value::boolean_(m->stale);
+        else if (prop == "lazy") out = Value::boolean_(m->lazy);
+        else if (prop == "held") out = Value::boolean_(m->held);
+        else { std::vector<Value> names; for (auto& d : m->deps) if (auto e = d.first.lock()) names.push_back(Value::string(d.second));
+               std::sort(names.begin(), names.end(), [](const Value& x, const Value& y) { return x.str < y.str; }); out = arr(names); }
+        return true;
+    }
+    if (prop == "past" && m->reactive) { only(m->vkeep > 0, "val ... keep N"); out = arr(m->vhist); return true; }
     if (prop == "past")    { only(m->taped, "tape (or gauge ... keep)"); out = arr(m->past); return true; }
     if (prop == "undone")  { only(m->taped, "tape (or gauge ... keep)"); out = arr(m->future); return true; }
     if (prop == "canUndo") { only(m->taped, "tape (or gauge ... keep)"); out = Value::boolean_(!m->past.empty()); return true; }
@@ -14087,6 +14351,11 @@ bool Interpreter::livePropertyGet(const EnvPtr& env, const std::string& name, co
     put("bells", Value::num(static_cast<double>(m->bells.size())));
     if (m->frozen) put("frozen", Value::boolean_(true));
     if (m->derived) put("derived", Value::boolean_(true));
+    if (m->reactive) {
+        put("reactive", Value::boolean_(true)); put("runs", Value::num(static_cast<double>(m->runs)));
+        put("lazy", Value::boolean_(m->lazy)); put("stale", Value::boolean_(m->stale)); put("held", Value::boolean_(m->held));
+        { std::vector<Value> dn; for (auto& d : m->deps) if (auto e = d.first.lock()) dn.push_back(Value::string(d.second)); put("deps", arr(dn)); }
+    }
     if (m->ranged) {
         put("min", Value::num(m->lo)); put("max", Value::num(m->hi)); put("mode", Value::string(modeName()));
         put("fill", Value::num(cur.type == Value::Type::NUMBER ? (cur.number - m->lo) / (m->hi - m->lo) : 0));
