@@ -1,0 +1,22 @@
+› [1-2] (2): › [1-2] (2): 📦 container = bank
+✅ .end/container (bank)
+true 2 [70, 80] 70 80
+false true 1 take [85] 70 80
+false true 1 70
+threw 70
+╭─ ؟ تأكيد الدفعة
+│ تنفيذ take, give؟
+│
+│ [1] نفّذ   [2] ألغِ
+╰─
+true true 50 100
+╭─ ؟ تأكيد الدفعة
+│ تنفيذ take, give؟
+│
+│ [1] نفّذ   [2] ألغِ
+╰─
+false true batch 50 100
+empty
+not intent
+bad option
+50 0
