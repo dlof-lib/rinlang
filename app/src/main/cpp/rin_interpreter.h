@@ -1376,6 +1376,7 @@ private:
     void registerNativesExtra9(); // rin_extra_natives9.cpp — مفهوم number: number/numberRound/numberFormat/... (docs/NUMBER.md)
     void registerNativesImageDraw(); // rin_image_draw.cpp — imgNew/imgLine/imgText/imgSave/imgFromLog…: إنشاء صور ورسمها وحفظها PNG (docs/image-draw.md)
     void registerNativesImage();  // rin_image_ansi.cpp — printImage/imageAnsi/imageInfo: صور داخل الـ terminal كنص (docs/image-terminal.md)
+    void registerNativesIntentNav(); // rin_intent_nav.cpp — Intent.core/send/... و Navigation.re/back/... (docs/intent_navigation.md)
     void registerNativesEnv();   // rin_env.cpp — Env.load/get/require/... لربط Rin بملف .env (docs/env.md)
     void registerNativesConditions(); // rin_conditions.cpp — متغيّرات الشروط الموسّعة (notNil/present/oneOf/inRange/matches/...) (docs/key_terms_and_builtins.md)
     void registerNativesSet();    // rin_set.cpp — نوع Set الأساسي: Set(...) و Set.* + جعل len/contains/has/remove/sum/... تفهمه (docs/set.md)
