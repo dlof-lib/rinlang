@@ -1,0 +1,42 @@
+// dialog: حوار متغيّر — رسالته تتحدّث مع ما تقرؤه، وله حالة ونتيجة (docs/dialog.md)
+let name = "ليلى";  let n = 3;
+dialog hi = "مرحباً " + name + "، لديك " + n + " رسائل" title "إشعار" buttons ["حسناً", "لاحقاً"];
+$ hi;
+$ hi.kind, hi.open, hi.title, hi.buttons, hi.tone, hi.focus;
+
+// الرسالة تتحدّث تلقائياً (كـ val)، والجرس يرنّ عند تغيّرها
+bell hi (o, nw) { $ "تغيّرت:", nw; }
+n = 5;
+$ hi.text;
+
+// الأفعال: open / close [نتيجة] — والنتيجة رقم الزر أو نصه
+reply hi (r) { $ "ردّ:", r; }
+open hi;
+$ hi.open, hi.opens;
+close hi 2;
+$ hi.open, hi.choice, hi.result, hi.closes;
+open hi;  close hi "حسناً";
+$ hi.choice, hi.result;
+open hi;  close hi;                 // إغلاق بلا اختيار = تجاهل
+$ hi.choice, hi.result;
+close hi;                           // إغلاق حوار مغلق: لا أثر
+$ hi.closes;
+
+// أخطاء واضحة
+try { hi = "x"; } catch (e) { $ "مرفوض: الرسالة للقراءة فقط"; }
+open hi;
+try { close hi 9; } catch (e) { $ "رقم زر غير موجود"; }
+try { close hi "لا يوجد"; } catch (e) { $ "نص زر غير موجود"; }
+close hi 1;
+
+// الأوصاف الكاملة
+$ hi.info;
+// نغمات وأزرار افتراضية
+dialog sure = "هل تحذف الملف؟" tone "ask";
+$ sure.buttons, sure.tone;
+dialog fine = "تم الحفظ" tone "success" focus 1;
+$ fine.buttons, fine.focus;
+try { dialog bad = "x" tone "loud"; $ bad.tone; } catch (e) { $ "نغمة غير معروفة"; }
+
+// trial: فتح الحوار يتراجع مع التجربة
+trial { open sure; $ sure.open; abort; } else { $ "بعد التراجع:", sure.open; }
