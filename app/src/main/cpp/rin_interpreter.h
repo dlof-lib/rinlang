@@ -1226,6 +1226,26 @@ private:
     };
     std::vector<TxFrame> txFrames;
 
+    // ---- أنواع الحاويات المعرَّفة من المستخدم (containerType) — docs/container_types.md ----
+    struct CTField {
+        std::string name, type = "any";
+        bool hasDefault = false, required = false, hasMin = false, hasMax = false;
+        Value def, check;              // check: Set (قيم مسموحة) أو fun(v) -> true | false | "سبب"
+        double mn = 0, mx = 0;
+    };
+    struct CTType {
+        std::string name, parent;
+        bool strict = false;           // strict: يُرفض أي حقل غير معرَّف في النوع
+        std::vector<CTField> fields;
+        Value onCreate;                // fun(name) تُستدعى بعد إنشاء الحاوية
+    };
+    std::unordered_map<std::string, CTType> containerTypes;
+    std::vector<std::string> containerTypeOrder;
+    std::unordered_map<std::string, std::string> containerTypeOf; // اسم الحاوية -> اسم نوعها المعرَّف
+    std::vector<CTField> ctAllFields(const std::string& type, int line) const;  // حقول الأب أولاً (الابن يطغى بالاسم)
+    bool ctIsA(const std::string& type, const std::string& base) const;
+    std::string ctCheckField(const std::string& type, const std::string& field, const Value& v, bool isCreate, int line);
+
     // ---- relation: علاقات معرَّفة بين مجموعتَي مستندات (انظر RelationDef أعلاه) ----
     std::unordered_map<std::string, RelationDef> relationStore;
     std::vector<std::string> relationOrder; // أسماء العلاقات بترتيب أول تعريف (listRelations)
