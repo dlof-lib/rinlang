@@ -1,0 +1,17 @@
+// @اسم.Type : إنشاء حاوية من نوع معرَّف (docs/container_types.md)
+defineContainerType("Person", {
+    name: {type: "string", required: true},
+    age:  {type: "number", default: 0, min: 0, max: 150},
+    role: {default: "user", check: #["user" "admin"]}
+});
+defineContainerType("Employee", {
+    salary: {default: 100, check: fun(v) { return v > 0 or "الراتب يجب أن يكون موجباً"; }}
+}, {extends: "Person", onCreate: fun(n) { $ "أُنشئت", n; }});
+
+@sara.Employee { name: "سارة" salary: 500 }
+$ containerType("sara"), getField("sara", "salary"), getField("sara", "role");
+@omar.Employee { name: "عمر", age: 30 };
+$ getField("omar", "salary"), isContainerType("omar", "Person");
+try { @bad.Employee { name: "x" salary: -5 } } catch (e) { $ "خطأ:", e.message; }
+try { @bad2.Employee { age: 3 } } catch (e) { $ "خطأ:", e.message; }
+$ containersOfType("Employee");
