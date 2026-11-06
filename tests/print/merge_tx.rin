@@ -1,0 +1,37 @@
+// @tx: معاملة موحَّدة (مستندات + حقول حاويات) — تتراجع كلها عند !? أو خطأ تنفيذ، وتتداخل (docs/merge_concepts.md)
+@users.doc
+    document id="u1" fields={ name: "سارة", age: 28 };
+    document id="u2" fields={ name: "أحمد", age: 35 };
+.end/doc
+@bank.container
+    let bal = 100;
+.end;
+$ countDocs("users"), getField("bank", "bal"), txDepth();
+
+// نجاح: يُعتمد
+@tx bank {
+    setField("bank", "bal", 150);
+    insertDoc("users", "u3", {name: "ليلى", age: 41});
+    $ "داخل:", txDepth(), countDocs("users");
+}
+$ countDocs("users"), getField("bank", "bal"), txDepth();
+
+// فشل بـ !? : يتراجع كل شيء (مستندات + حقول) ويُعاد رمي الخطأ
+try {
+    @tx bank {
+        setField("bank", "bal", 0);
+        insertDoc("users", "u4", {name: "x", age: 1});
+        updateDoc("users", "u1", {age: 99});
+        !? "فشل التحويل";
+    }
+} catch (e) { $ "التقط:", e.message; }
+$ countDocs("users"), getField("bank", "bal"), findDoc("users", "u1").age, txDepth();
+
+// متداخلة: الداخلية تتراجع فقط، والخارجية تُعتمد
+@tx bank {
+    setField("bank", "bal", 200);
+    try {
+        @tx bank { setField("bank", "bal", 1); !? "داخلي"; }
+    } catch (e) { $ "داخلي فشل:", getField("bank", "bal"); }
+}
+$ getField("bank", "bal");
