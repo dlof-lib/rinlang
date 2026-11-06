@@ -898,6 +898,61 @@ static bool valueMatchesSchemaType(const Value& v, const std::string& type) {
     return true; // اسم نوع غير معروف: يُتجاهَل التحقق منه بدل رفض الإدراج بلا سبب واضح للمستخدم
 }
 
+// ---- أنواع البيانات (docs/data_types.md): جسر بين Value ومحرّك rin_datatypes.h ----
+static dt::Probe makeProbe(const Value& v) {
+    dt::Probe p;
+    Value c = v;
+    p.typeName = [c]() -> std::string {
+        switch (c.type) {
+            case Value::Type::NIL: return "nil";
+            case Value::Type::NUMBER: return "number";
+            case Value::Type::STRING: return "string";
+            case Value::Type::BOOL: return "bool";
+            case Value::Type::FUNCTION: return "function";
+            case Value::Type::ARRAY: return "array";
+            case Value::Type::MAP: return "map";
+            case Value::Type::SET: return "set";
+            case Value::Type::INSTANCE: return "instance";
+        }
+        return "nil";
+    };
+    p.number = [c]() { return c.number; };
+    p.str = [c]() { return c.str; };
+    p.boolean = [c]() { return c.boolean; };
+    p.items = [c]() {
+        std::vector<dt::Probe> out;
+        if (c.type == Value::Type::ARRAY && c.array) for (auto& x : *c.array) out.push_back(makeProbe(x));
+        else if (c.type == Value::Type::SET && c.set) for (auto& x : c.set->items) out.push_back(makeProbe(x));
+        return out;
+    };
+    p.pairs = [c]() {
+        std::vector<std::pair<dt::Probe, dt::Probe>> out;
+        if (c.type == Value::Type::MAP && c.map) for (auto& kv : *c.map) out.push_back({makeProbe(kv.first), makeProbe(kv.second)});
+        return out;
+    };
+    return p;
+}
+// نص قيمة في مواصفة حقل containerType: هل هو «نوع» (وإلا فهو قيمة افتراضية)؟ الأسماء القديمة + أسماء الأنواع الجديدة
+// القياسية + أي صيغة مركّبة (array<int> · int? · a|b · enum(...)). الأسماء المستعارة (num/str/null...) داخل {type:...} فقط.
+static bool isBareDataTypeSpec(const std::string& s) {
+    static const std::unordered_set<std::string> plain = {
+        "number", "string", "bool", "boolean", "array", "map", "set", "any", "text",
+        "int", "uint", "float", "email", "url", "uuid", "date", "time", "datetime", "phone", "color", "ip", "char"};
+    if (plain.count(s)) return true;
+    if (s.find_first_of("<?|") == std::string::npos && s.rfind("enum(", 0) != 0) return false;
+    return dt::isSpec(s);
+}
+// طول القيمة لمدى min/max على النص/المصفوفة/المجموعة/الخريطة (نص = عدد المحارف لا البايتات)؛ -1 لغير ذلك
+static long long lengthOfValue(const Value& v) {
+    switch (v.type) {
+        case Value::Type::STRING: return (long long)dt::utf8Len(v.str);
+        case Value::Type::ARRAY: return v.array ? (long long)v.array->size() : 0;
+        case Value::Type::SET: return v.set ? (long long)v.set->items.size() : 0;
+        case Value::Type::MAP: return v.map ? (long long)v.map->size() : 0;
+        default: return -1;
+    }
+}
+
 // يدمج رسائل أخطاء schemaErrors في سطر واحد لرسالة RinError واضحة.
 static std::string joinErrors(const std::vector<std::string>& errs) {
     std::string out;
@@ -5692,7 +5747,6 @@ void Interpreter::registerNatives() {
         }
         if (!t.parent.empty() && !containerTypes.count(t.parent))
             throw diagErr(diag::Code::E0014_InvalidContainer, line, "defineContainerType: النوع الأب غير معرَّف '" + t.parent + "'");
-        static const std::unordered_set<std::string> tnames = {"number", "string", "bool", "boolean", "array", "map", "set", "any", "text"};
         static const std::unordered_set<std::string> detailKeys = {"type", "default", "required", "min", "max", "check"};
         for (auto& kv : *a[1].map) {
             CTField f;
@@ -5709,8 +5763,9 @@ void Interpreter::registerNatives() {
                     const Value& dv = dk.second;
                     if (k == "type") {
                         std::string ty = asString(dv, "defineContainerType", line);
-                        if (!tnames.count(ty)) throw diagErr(diag::Code::E0007_InvalidArguments, line, "defineContainerType: نوع غير معروف '" + ty + "' للحقل '" + f.name + "'");
-                        f.type = ty == "boolean" ? "bool" : ty == "text" ? "string" : ty;
+                        dt::DT d; std::string perr;
+                        if (!dt::parse(ty, d, perr)) throw diagErr(diag::Code::E0007_InvalidArguments, line, "defineContainerType: نوع غير معروف '" + ty + "' للحقل '" + f.name + "' (" + perr + ")");
+                        f.type = d.canon; f.dtype = d; f.dtOk = true;
                     }
                     else if (k == "default") { f.hasDefault = true; f.def = dv; }
                     else if (k == "required") f.required = dv.isTruthy();
@@ -5718,12 +5773,21 @@ void Interpreter::registerNatives() {
                     else if (k == "max") { f.hasMax = true; f.mx = asNumber(dv, "defineContainerType", line); }
                     else if (k == "check") f.check = dv;
                 }
-                if (f.hasDefault && f.def.type != Value::Type::NIL && f.type == "any") f.type = f.def.typeName();
-            } else if (v.type == Value::Type::STRING && tnames.count(v.str)) {
-                f.type = v.str == "boolean" ? "bool" : v.str == "text" ? "string" : v.str;
+                if (!f.dtOk && f.hasDefault && f.def.type != Value::Type::NIL && f.type == "any") f.type = f.def.typeName();
+            } else if (v.type == Value::Type::STRING && isBareDataTypeSpec(v.str)) {
+                dt::DT d; std::string perr; dt::parse(v.str, d, perr);
+                f.type = d.canon; f.dtype = d; f.dtOk = true;
             } else {
                 f.hasDefault = true; f.def = v;
                 f.type = v.type == Value::Type::NIL ? "any" : v.typeName();
+            }
+            if (!f.dtOk) {   // نوع مستنتج من القيمة الافتراضية: حلّله إن أمكن (وإلا اسم class فيُقارَن بالاسم)
+                dt::DT d; std::string perr;
+                if (dt::parse(f.type, d, perr)) { f.dtype = d; f.dtOk = true; }
+            }
+            if (f.dtOk && f.hasDefault && f.def.type != Value::Type::NIL) {
+                std::string why = dt::check(f.dtype, makeProbe(f.def));
+                if (!why.empty()) throw diagErr(diag::Code::E0007_InvalidArguments, line, "defineContainerType: القيمة الافتراضية لا تطابق نوع الحقل '" + f.name + "' (" + f.type + "): " + why);
             }
             if (f.required && f.hasDefault && f.def.type != Value::Type::NIL)
                 throw diagErr(diag::Code::E0007_InvalidArguments, line, "defineContainerType: الحقل '" + f.name + "' إلزامي وله قيمة افتراضية (متناقضان)");
@@ -5847,6 +5911,15 @@ void Interpreter::registerNatives() {
         auto out = std::make_shared<ArrayData>();
         auto t = containerTypeOf.find(name);
         auto c = containers.find(name);
+        if (c != containers.end()) {   // setFieldType: أنواع بيانات الحاوية العادية
+            auto ft = fieldTypeStore.find(name);
+            if (ft != fieldTypeStore.end()) for (auto& p : ft->second) {
+                Value v; auto vi = c->second->values.find(p.first);
+                if (vi != c->second->values.end()) v = vi->second;
+                std::string why = fieldTypeCheck(name, p.first, v);
+                if (!why.empty()) out->push_back(Value::string(why));
+            }
+        }
         if (t == containerTypeOf.end() || c == containers.end()) return Value::makeArray(out);
         std::unordered_set<std::string> seen;
         for (auto& f : ctAllFields(t->second, line)) {
@@ -5861,6 +5934,78 @@ void Interpreter::registerNatives() {
             std::string why = ctCheckField(t->second, kv.first, kv.second, false, line);
             if (!why.empty()) out->push_back(Value::string(why));
         }
+        return Value::makeArray(out);
+    };
+
+    // ---- أنواع البيانات (docs/data_types.md) ----
+    // isType(value, type) -> bool: هل القيمة من نوع البيانات (int, uint, float, email, date, array<int>, int?, a|b, enum(x,y) ...)
+    natives["isType"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("isType", a, 2, line);
+        dt::DT d; std::string perr;
+        if (!dt::parse(asString(a[1], "isType", line), d, perr)) throw diagErr(diag::Code::E0007_InvalidArguments, line, "isType: " + perr);
+        return Value::boolean_(dt::check(d, makeProbe(a[0])).empty());
+    };
+    // typeError(value, type) -> nil إن طابقت، وإلا نص السبب
+    natives["typeError"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("typeError", a, 2, line);
+        dt::DT d; std::string perr;
+        if (!dt::parse(asString(a[1], "typeError", line), d, perr)) throw diagErr(diag::Code::E0007_InvalidArguments, line, "typeError: " + perr);
+        std::string why = dt::check(d, makeProbe(a[0]));
+        return why.empty() ? Value::nil() : Value::string(why);
+    };
+    // setFieldType(container, field, type) -> يعلن نوع بيانات لحقل في حاوية عادية؛ كل كتابة لاحقة تُفحَص (E0004).
+    // يفشل (بلا تغيير) إن كانت القيمة الحالية للحقل لا تطابق النوع. إعادة الإعلان تستبدل النوع.
+    natives["setFieldType"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("setFieldType", a, 3, line);
+        std::string name = canonContainer(asString(a[0], "setFieldType", line));
+        std::string field = asString(a[1], "setFieldType", line);
+        auto c = containers.find(name);
+        if (c == containers.end()) throw diagErr(diag::Code::E0014_InvalidContainer, line, "setFieldType: حاوية غير معروفة '" + name + "'");
+        dt::DT d; std::string perr;
+        if (!dt::parse(asString(a[2], "setFieldType", line), d, perr)) throw diagErr(diag::Code::E0007_InvalidArguments, line, "setFieldType: " + perr + " للحقل '" + field + "'");
+        auto vi = c->second->values.find(field);
+        if (vi != c->second->values.end()) {
+            std::string why = dt::check(d, makeProbe(vi->second));
+            if (!why.empty()) throw diagErr(diag::Code::E0004_InvalidType, line, "setFieldType: القيمة الحالية لا تطابق النوع في " + name + "." + field + ": " + why);
+        }
+        auto& vec = fieldTypeStore[name];
+        bool found = false;
+        for (auto& p : vec) if (p.first == field) { p.second = d; found = true; break; }
+        if (!found) vec.push_back({field, d});
+        return Value::boolean_(true);
+    };
+    // removeFieldType(container, field) -> true إن كان للحقل نوع مُعلَن فأُزيل
+    natives["removeFieldType"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("removeFieldType", a, 2, line);
+        std::string name = canonContainer(asString(a[0], "removeFieldType", line));
+        std::string field = asString(a[1], "removeFieldType", line);
+        auto it = fieldTypeStore.find(name);
+        if (it == fieldTypeStore.end()) return Value::boolean_(false);
+        auto& vec = it->second;
+        auto before = vec.size();
+        vec.erase(std::remove_if(vec.begin(), vec.end(), [&](const std::pair<std::string, dt::DT>& p) { return p.first == field; }), vec.end());
+        bool removed = vec.size() != before;
+        if (vec.empty()) fieldTypeStore.erase(it);
+        return Value::boolean_(removed);
+    };
+    // fieldTypes(container) -> map {حقل: نوع} للحقول التي أُعلن لها نوع: عبر setFieldType، أو من containerType (مع الموروث)
+    natives["fieldTypes"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("fieldTypes", a, 1, line);
+        std::string name = canonContainer(asString(a[0], "fieldTypes", line));
+        auto m = std::make_shared<MapData>();
+        auto t = containerTypeOf.find(name);
+        if (t != containerTypeOf.end()) for (auto& f : ctAllFields(t->second, line)) m->put(Value::string(f.name), Value::string(f.type));
+        auto ft = fieldTypeStore.find(name);
+        if (ft != fieldTypeStore.end()) for (auto& p : ft->second) m->put(Value::string(p.first), Value::string(p.second.canon));
+        return Value::makeMap(m);
+    };
+    // dataTypes() -> أسماء أنواع البيانات المدعومة
+    natives["dataTypes"] = [](std::vector<Value>& a, int line) -> Value {
+        expectArgs("dataTypes", a, 0, line);
+        static const char* names[] = {"any", "nil", "number", "int", "uint", "float", "string", "char", "bool", "array", "map", "set", "function",
+                                      "email", "url", "uuid", "date", "time", "datetime", "phone", "color", "ip"};
+        auto out = std::make_shared<ArrayData>();
+        for (auto n : names) out->push_back(Value::string(n));
         return Value::makeArray(out);
     };
 
@@ -5883,6 +6028,7 @@ void Interpreter::registerNatives() {
         containerKinds.erase(name);
         containerCustomKind.erase(name);
         containerTypeOf.erase(name);
+        fieldTypeStore.erase(name);
         containerLifecycle.erase(name);
         containerStateNames.erase(name);
         // RCS-1.0 §3.5 Tree + §3.6 Events (Phase 2): تنظيف كل أثر لهذه الحاوية من سجلات الشجرة
@@ -6456,6 +6602,10 @@ for(auto& kv:maskParents) if(maskResolve4(kv.second)==parent && !maskResolve4(kv
                 if (!why.empty()) throw diagErr(diag::Code::E0004_InvalidType, line, why);
             }
         }
+        if (!fieldTypeStore.empty()) {   // setFieldType: نوع بيانات مُعلَن لحقل في حاوية عادية
+            std::string why = fieldTypeCheck(name, key, a[2]);
+            if (!why.empty()) throw diagErr(diag::Code::E0004_InvalidType, line, why);
+        }
         if (liveActive_ && !it->second->live.empty() && it->second->live.count(key)) { // حقل حيّ (stone/gauge/val-source...): مرّ بمسار الإسناد الحيّ كي لا تُمحى حياته ويتحدّث ما يعتمد عليه
             liveAssign(it->second.get(), key, a[2], line);
             return Value::boolean_(true);
@@ -6489,6 +6639,10 @@ for(auto& kv:maskParents) if(maskResolve4(kv.second)==parent && !maskResolve4(kv
                 std::string why = ctCheckField(tIt->second, key, a[2], false, line);
                 if (!why.empty()) throw diagErr(diag::Code::E0004_InvalidType, line, why);
             }
+        }
+        if (!fieldTypeStore.empty()) {   // setFieldType: نوع بيانات مُعلَن لحقل في حاوية عادية
+            std::string why = fieldTypeCheck(name, key, a[2]);
+            if (!why.empty()) throw diagErr(diag::Code::E0004_InvalidType, line, why);
         }
         if (liveActive_ && !it->second->live.empty() && it->second->live.count(key)) { liveAssign(it->second.get(), key, a[2], line); return Value::boolean_(true); }
         assignStateAware(it->second.get(), key, a[2], line);
@@ -9327,11 +9481,17 @@ std::string Interpreter::ctCheckField(const std::string& type, const std::string
         return strict ? "حقل غير معرَّف في النوع (strict): " + where : "";
     }
     if (v.type == Value::Type::NIL) return f->required ? "الحقل إلزامي ولا يقبل nil: " + where : "";
-    if (f->type != "any" && v.typeName() != f->type)
+    if (f->dtOk) {
+        std::string why = dt::check(f->dtype, makeProbe(v));
+        if (!why.empty()) return "نوع خاطئ في " + where + ": " + why;
+    } else if (f->type != "any" && v.typeName() != f->type)
         return "نوع خاطئ في " + where + ": المتوقع " + f->type + " والموجود " + v.typeName();
     if (v.type == Value::Type::NUMBER) {
         if (f->hasMin && v.number < f->mn) return "القيمة أقل من الحد الأدنى " + Value::num(f->mn).toDisplayString() + " في " + where;
         if (f->hasMax && v.number > f->mx) return "القيمة أكبر من الحد الأعلى " + Value::num(f->mx).toDisplayString() + " في " + where;
+    } else if (long long len = lengthOfValue(v); len >= 0) {   // نص/مصفوفة/مجموعة/خريطة: min/max = الطول
+        if (f->hasMin && (double)len < f->mn) return "الطول " + std::to_string(len) + " أقل من الحد الأدنى " + Value::num(f->mn).toDisplayString() + " في " + where;
+        if (f->hasMax && (double)len > f->mx) return "الطول " + std::to_string(len) + " أكبر من الحد الأعلى " + Value::num(f->mx).toDisplayString() + " في " + where;
     }
     if (f->check.type == Value::Type::SET && f->check.set) {
         if (!f->check.set->contains(v)) {
@@ -9344,6 +9504,17 @@ std::string Interpreter::ctCheckField(const std::string& type, const std::string
         Value r = callValue(f->check, args, line);
         if (r.type == Value::Type::STRING) return r.str;
         if (!r.isTruthy()) return "فشل التحقق في " + where;
+    }
+    return "";
+}
+
+// يفحص كتابة حقل في حاوية عادية أُعلن له نوع بيانات عبر setFieldType ("" = سليم أو بلا نوع مُعلَن)
+std::string Interpreter::fieldTypeCheck(const std::string& container, const std::string& field, const Value& v) const {
+    auto it = fieldTypeStore.find(container);
+    if (it == fieldTypeStore.end()) return "";
+    for (auto& p : it->second) if (p.first == field) {
+        std::string why = dt::check(p.second, makeProbe(v));
+        return why.empty() ? "" : "نوع خاطئ في " + container + "." + field + ": " + why;
     }
     return "";
 }
