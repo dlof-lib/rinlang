@@ -282,6 +282,10 @@ StmtPtr Parser::declaration() {
         if (kw == "pre" || kw == "post") return liveDeclaration();
         // label/define (docs/label-define.md): تسمية وتعريف — كلمتان سياقيتان بنفس القاعدة.
         if (kw == "label" || kw == "define") return liveDeclaration();
+        // dialog (docs/dialog.md): حوار متغيّر للحاوية — dialog/open/close/ask/reply كلمات سياقية بنفس القاعدة (كلمة + IDENT)
+        if (kw == "dialog") return liveDeclaration();
+        if (kw == "reply") return bellDeclaration();
+        if (kw == "open" || kw == "close" || kw == "ask") return liveActionStatement();
         if (kw == "bell") return bellDeclaration();
         if (kw == "undo" || kw == "redo" || kw == "rearm" || kw == "unbell" ||
             kw == "inc" || kw == "dec" || kw == "rebase" || kw == "rewind" ||
@@ -915,10 +919,12 @@ StmtPtr Parser::liveDeclaration() {
              : kind == "tape" ? LiveKind::Tape : kind == "lens" ? LiveKind::Lens
              : kind == "base" ? LiveKind::Base : kind == "accept" ? LiveKind::Accept
              : kind == "pre" ? LiveKind::Pre : kind == "post" ? LiveKind::Post
-             : kind == "label" ? LiveKind::Label : kind == "define" ? LiveKind::Define : kind == "val" ? LiveKind::Val : LiveKind::Fuse;
+             : kind == "label" ? LiveKind::Label : kind == "define" ? LiveKind::Define : kind == "val" ? LiveKind::Val : kind == "dialog" ? LiveKind::Dialog : LiveKind::Fuse;
     const bool isMeta = st->kind == LiveKind::Label || st->kind == LiveKind::Define;
     const bool isGate = st->kind == LiveKind::Pre || st->kind == LiveKind::Post;
+    const bool isDialog = st->kind == LiveKind::Dialog;
     const bool isVal = st->kind == LiveKind::Val;
+    const bool isRx = isVal || isDialog;   // يشتركان في lazy/when/keep (الرسالة قيمة تفاعلية)
 
     if (match({TokenType::EQUAL})) {
         st->initializer = expression();
@@ -950,10 +956,23 @@ StmtPtr Parser::liveDeclaration() {
             if (slot) throw reject("`" + mod + "` is given twice");
             advance();
             slot = expression();
-        } else if (isVal && mod == "lazy") {
+        } else if (isDialog && (mod == "title" || mod == "buttons" || mod == "tone" || mod == "focus")) {
+            ExprPtr& slot = mod == "title" ? st->dTitle : mod == "buttons" ? st->dButtons : mod == "tone" ? st->dTone : st->dFocus;
+            if (slot) throw reject("`" + mod + "` is given twice");
+            advance();
+            slot = expression();
+        } else if (isDialog && mod == "opens") {   // opens when COND: فتح تلقائي عند انتقال الشرط من كاذب إلى صادق
+            if (st->dTrigger) throw reject("a dialog takes only one `opens when` condition; join conditions with `and` / `or`");
+            advance();
+            if (!(check(TokenType::IDENT) && peek().lexeme == "when"))
+                throw errRich(diag::Code::E0012_MissingToken, peek(), "expected 'when' after 'opens'", "the automatic opening condition is written `opens when COND`",
+                              "e.g. `dialog low = \"..\" opens when stock < 5;`", "'when'");
+            advance();
+            st->dTrigger = expression();
+        } else if (isRx && mod == "lazy") {
             if (st->lazy) throw reject("`lazy` is given twice");
             advance(); st->lazy = true;
-        } else if (isVal && mod == "when") {
+        } else if (isRx && mod == "when") {
             if (st->when) throw reject("a val takes only one `when` condition; join conditions with `and` / `or`");
             advance(); st->when = expression();
         } else if (isMeta && (mod == "as" || mod == "label" || mod == "about" || mod == "unit")) {
@@ -985,8 +1004,8 @@ StmtPtr Parser::liveDeclaration() {
             advance();
             st->rangeMode = mod;
         } else if (mod == "keep") {
-            if (st->kind != LiveKind::Tape && st->kind != LiveKind::Gauge && !isVal)
-                throw reject("only `tape`, `gauge` and `val` keep a history");
+            if (st->kind != LiveKind::Tape && st->kind != LiveKind::Gauge && !isRx)
+                throw reject("only `tape`, `gauge`, `val` and `dialog` keep a history");
             advance();
             st->keep = expression();
         } else if (mod == "burns") {
@@ -1066,6 +1085,8 @@ StmtPtr Parser::liveDeclaration() {
                           "add `if <condition>` (inside it `old` is the previous value, `new` the written one, and `" + name.lexeme + "` is the " +
                           (isPre ? "old" : "new") + " one), e.g. `" + kind + " " + name.lexeme + " = 0 if " + (isPre ? "old" : "new") + " >= 0;`", "'if'");
     }
+    if (isDialog && st->dTrigger && st->lazy) throw errRich(diag::Code::E0013_InvalidExpression, peek(), "a dialog cannot be both `lazy` and `opens when`", "`opens when` must watch its condition all the time, a lazy dialog only recomputes when read", "remove `lazy`", "");
+    if (isDialog && st->lo) throw errRich(diag::Code::E0013_InvalidExpression, peek(), "a dialog has no range", "a dialog holds a message, not a number", "remove `within`", "");
     if (isVal && (st->lo != nullptr) != (st->hi != nullptr)) throw errRich(diag::Code::E0012_MissingToken, peek(), "val '" + name.lexeme + "' has an incomplete range", "a range has two ends", "write `within <min> to <max>`", "'to'");
     if (st->rangeMode.empty()) st->rangeMode = "clamp";
     consume(TokenType::SEMICOLON, "Expected ';' after '" + kind + "' declaration");
@@ -1074,8 +1095,10 @@ StmtPtr Parser::liveDeclaration() {
 
 // bell NAME [ (old, new) ] { body }  — 0 وسائط، أو 1 (= القيمة الجديدة)، أو 2 (= القديمة ثم الجديدة).
 StmtPtr Parser::bellDeclaration() {
-    advance(); // 'bell'
-    Token target = consume(TokenType::IDENT, "Expected the variable to watch after 'bell'");
+    const bool isReply = peek().lexeme == "reply";
+    advance(); // 'bell' | 'reply'
+    Token target = consume(TokenType::IDENT, isReply ? "Expected the dialog after 'reply'" : "Expected the variable to watch after 'bell'");
+    if (isReply) while (check(TokenType::DOT) && checkNext(TokenType::IDENT)) { advance(); target.lexeme += "." + advance().lexeme; }
     std::vector<std::string> params;
     if (match({TokenType::LPAREN})) {
         if (!check(TokenType::RPAREN)) {
@@ -1084,6 +1107,9 @@ StmtPtr Parser::bellDeclaration() {
         }
         consume(TokenType::RPAREN, "Expected ')' after bell parameters");
     }
+    if (isReply && params.size() > 1)
+        throw errRich(diag::Code::E0013_InvalidExpression, target, "a reply takes at most one parameter (the result)",
+                      "a reply is told which button closed the dialog", "use `reply d (result) { ... }`", "");
     if (params.size() > 2)
         throw errRich(diag::Code::E0013_InvalidExpression, target, "a bell takes at most two parameters (old, new)",
                       "a bell is told what the value was and what it became", "use `bell x (old, new) { ... }`", "");
@@ -1094,12 +1120,13 @@ StmtPtr Parser::bellDeclaration() {
     auto body = block();
     loopDepth = savedLoopDepth; goalDepth = savedGoalDepth; loopStack = std::move(savedLS_); labels = std::move(savedLB_);
     auto fn = std::make_shared<FunctionStmt>();
-    fn->name = "bell " + target.lexeme;
+    fn->name = (isReply ? "reply " : "bell ") + target.lexeme;
     fn->params = params;
     fn->body = body;
     fn->line = target.line;
     auto st = std::make_shared<BellStmt>();
     st->target = target.lexeme;
+    st->reply = isReply;
     st->handler = fn;
     st->line = target.line;
     return st;
@@ -1127,6 +1154,12 @@ StmtPtr Parser::liveActionStatement() {
     st->line = kw.line;
     if (kw.lexeme != "abort") {
         st->target = consume(TokenType::IDENT, "Expected a variable name after '" + kw.lexeme + "'").lexeme;
+        // dialog: مسار مؤهَّل `shop.confirm` (حاوية.حوار) للأفعال open/close/ask
+        if (kw.lexeme == "open" || kw.lexeme == "close" || kw.lexeme == "ask") {
+            while (check(TokenType::DOT) && checkNext(TokenType::IDENT)) { advance(); st->target += "." + advance().lexeme; }
+            // close x [RESULT]: رقم الزر أو نصه؛ ask/open لا يأخذان وسيطاً
+            if (kw.lexeme == "close" && !check(TokenType::SEMICOLON)) st->count = expression();
+        }
         if ((kw.lexeme == "undo" || kw.lexeme == "redo") && !check(TokenType::SEMICOLON)) st->count = expression();
         // inc/dec: `inc x;` | `inc x by 5;` | `inc x 5;` — الخطوة اختيارية (الافتراضي: step الخاص بـ base أو 1).
         if ((kw.lexeme == "inc" || kw.lexeme == "dec") && !check(TokenType::SEMICOLON)) {
