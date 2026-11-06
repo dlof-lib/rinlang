@@ -1,0 +1,46 @@
+// containerType: أنواع حاويات معرَّفة من المستخدم (docs/container_types.md)
+defineContainerType("Person", {
+    name: {type: "string", required: true},
+    age: {type: "number", default: 0, min: 0, max: 150},
+    role: {default: "user", check: #["user" "admin"]},
+    tags: []
+});
+defineContainerType("Employee", {
+    salary: {type: "number", default: 100, check: fun(v) { return v > 0 or "الراتب يجب أن يكون موجباً"; }},
+    role: {default: "staff", check: #["staff" "manager"]}
+}, {extends: "Person", onCreate: fun(n) { $ "onCreate:", n; }});
+defineContainerType("Strict", {id: {type: "number", required: true}}, {strict: true});
+
+newContainer("Person", "ali", {name: "علي", age: 30});
+newContainer("Employee", "sara", {name: "سارة"});
+$ containerType("ali"), containerType("sara"), containerType("nope"), kindOf("ali");
+$ getField("ali", "role"), getField("sara", "role"), getField("sara", "salary"), getField("sara", "age");
+$ isContainerType("sara", "Person"), isContainerType("ali", "Employee"), isContainerType("ali", "Person");
+$ containerTypes(), containersOfType("Person"), containersOfType("Employee");
+$ container.byKind("Employee");
+
+// تحقق عند الكتابة
+for (let t in [ ["ali","age",200], ["ali","age","x"], ["ali","name",nil], ["ali","role","god"], ["sara","salary",-5], ["sara","role","user"] ]) {
+    try { setField(t[0], t[1], t[2]); $ "ok؟؟"; } catch (e) { $ "رفض:", e.message; }
+}
+setField("ali", "age", 31); $ getField("ali", "age");
+
+// إنشاء خاطئ: لا يترك حاوية ناقصة
+for (let args in [ ["Person","bad1",{}], ["Person","bad2",{name: "x", age: -1}], ["Strict","bad3",{id: 1, extra: 2}], ["Nope","bad4",{}], ["Person","ali",{name:"d"}] ]) {
+    try { newContainer(args[0], args[1], args[2]); $ "ok؟؟"; } catch (e) { $ "رفض:", e.message; }
+}
+$ hasContainer("bad1"), hasContainer("bad2"), hasContainer("bad3");
+newContainer("Strict", "s1", {id: 7});
+try { setField("s1", "zzz", 1); } catch (e) { $ "strict:", e.message; }
+
+// معلومات وفحص
+$ containerTypeInfo("Employee").parent, len(containerTypeInfo("Employee").fields);
+$ validateContainer("ali"), validateContainer("sara");
+
+// تكامل مع @tx: التراجع يعيد قيم النوع، والفحص يعمل داخلها
+try { @tx ali { setField("ali", "age", 99); setField("ali", "role", "admin"); !? "تراجع"; } } catch (e) {}
+$ getField("ali", "age"), getField("ali", "role");
+
+// تكامل مع Set/إدخال: input مع هدف حاوية مُنوَّعة يمرّ عبر setState فيُفحص
+destroyContainer("ali");
+$ containerType("ali"), containersOfType("Person");
