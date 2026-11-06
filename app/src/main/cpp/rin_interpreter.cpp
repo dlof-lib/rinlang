@@ -7788,6 +7788,7 @@ for(auto& kv:maskParents) if(maskResolve4(kv.second)==parent && !maskResolve4(kv
     registerNativesConditions(); // متغيّرات الشروط الموسّعة (rin_conditions.cpp)
     registerNativesImageDraw(); // imgNew/imgLine/imgText/imgSave/imgFromLog… (rin_image_draw.cpp)
     registerNativesImage(); // printImage/imageAnsi/imageInfo (rin_image_ansi.cpp)
+    registerNativesIntentNav();   // Intent.* و Navigation.* (rin_intent_nav.cpp)
     registerNativesEnv();   // ربط .env: Env.* (rin_env.cpp)
     registerNativesSet();   // نوع Set الأساسي: Set(...) و Set.* وتوسعة len/contains/has/remove/sum... (rin_set.cpp) — أخيراً كي تلفّ ما سبقها
 }
@@ -14700,6 +14701,7 @@ void Interpreter::dialogAction(const std::shared_ptr<LiveActionStmt>& s, const E
 #include "rin_conditions.cpp" // متغيّرات الشروط الموسّعة (docs/key_terms_and_builtins.md)
 #include "rin_image_ansi.cpp" // صور داخل الـ terminal كنص (docs/image-terminal.md)
 #include "rin_image_draw.cpp" // إنشاء الصور والرسم والحفظ PNG وlog كصورة (docs/image-draw.md)
+#include "rin_intent_nav.cpp"   // Intent.core / Navigation.re (docs/intent_navigation.md)
 #include "rin_env.cpp"   // ربط ملف .env (docs/env.md)
 #include "rin_set.cpp"   // نوع Set الأساسي (docs/set.md)
 #include "rin_expr_host.cpp" // واجهة التقييم المعزول لـ indsin (docs/indsin_rin.md)
