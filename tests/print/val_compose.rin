@@ -1,0 +1,55 @@
+// val مع tape/gauge/accept/pre/lens/trial والدوال والدورة (docs/val.md)
+// تكامل مع tape / gauge / accept / pre / trial / lens
+tape score = 0 keep 5;
+val doubled = score * 2;
+score = 10; score = 20;
+$ doubled;
+undo score; $ score, doubled;       // undo يحدّث doubled
+redo score; $ doubled;
+
+gauge hp = 50 within 0 to 100;
+val status = hp > 70 ? "قوي" : hp > 30 ? "عادي" : "ضعيف";
+hp = hp + 80; $ hp, status;          // clamp 100
+hp = 10;      $ status;
+
+accept age = 20 if age >= 0;
+val adult = age >= 18;
+age = -5; $ age, adult;              // رُفضت: لا تحديث
+age = 10; $ adult;
+
+pre lvl = 1 if new >= old;
+val title = "L" + lvl;
+lvl = 5; $ title;
+lvl = 2; $ lvl, title;               // رفض pre
+
+lens lenseTotal = hp + 1;            // lens كاعتماد (تتبّع داخلها)
+val viaLens = lenseTotal * 2;
+hp = 40; $ viaLens;
+
+// trial: التراجع يعيد المصدر والـ val معاً
+let a = 100; let b = 0;
+val sum = a + b;
+bell sum (o, n) { $ "sum:", o, "->", n; }
+trial { a = a - 30; b = b + 30; abort; }
+$ a, b, sum;
+a = 1; $ sum;                         // ما زال تفاعلياً بعد التراجع
+trial { a = 50; fail(); } else { $ "rolled back", a, sum; }
+a = 2; $ sum, sum.deps;
+
+// دوال تقرأ متغيّرات
+let k = 2;
+fun scaled(x) { return x * k; }
+val viaFn = scaled(10);
+k = 5; $ viaFn;
+
+// حلقة يعتمد عليها val
+let items = [1, 2, 3];
+val count = len(items);
+items[len(items)] = 4;
+$ count;     // x[i]=.. تعديل في المكان: يُعاد حساب ما يقرأ x
+items = [1, 2, 3, 4, 5]; $ count;
+push(items, 6); $ count;   // push() دالة تعدّل في المكان ولا تمرّ بالإسناد: لا تحديث (حدّ معروف)
+touch count; $ count;
+
+// دورة
+try { val z = z + 1; } catch (e) { $ "cycle:", e.message; }
