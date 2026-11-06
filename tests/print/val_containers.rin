@@ -1,0 +1,47 @@
+// val مع التعديل في المكان والحاويات وsetField و@tx وcontainerType (docs/val.md)
+// تعديل في المكان
+let items = [1, 2, 3];
+val count = len(items);
+val first = items[0];
+items[len(items)] = 4;  $ count;
+items[0] = 99;          $ first;
+let cfg = {"mode": "dark"};
+val modeUpper = upper(cfg["mode"]);
+cfg["mode"] = "light";  $ modeUpper;
+cfg.mode = "blue";      $ modeUpper;
+
+// حاويات: حقول داخلية + من الخارج + setField + @tx
+@shop.container
+    let stock = 10;
+    let price = 5;
+    val value = stock * price;
+    val low = stock < 5;
+    bell low (o, n) { $ "تنبيه مخزون:", n; }
+.end;
+$ shop.value, shop.low;
+shop.stock = 3;
+$ shop.value, shop.low;
+setField("shop", "stock", 8);
+$ shop.value, shop.low;
+
+// val خارجية تقرأ حقول الحاوية (getField / member)
+val shopValue = getField("shop", "stock") * getField("shop", "price");
+val viaMember = shop.stock + shop.price;
+setField("shop", "price", 10);
+$ shopValue, viaMember;
+shop.price = 20; $ shopValue, viaMember;
+
+// @tx: التراجع يحدّث val التي تقرأ الحقول المستعادة
+try { @tx shop { setField("shop", "stock", 1); $ "داخل tx:", shopValue; !? "تراجع"; } } catch (e) {}
+$ getField("shop", "stock"), shopValue, viaMember;
+
+// containerType + val
+defineContainerType("Acc", {bal: {type: "number", default: 0, min: 0}});
+newContainer("Acc", "acc1", {bal: 50});
+val rich = getField("acc1", "bal") >= 100;
+setField("acc1", "bal", 150); $ rich;
+try { setField("acc1", "bal", -1); } catch (e) { $ "نوع رفض:", rich; }
+
+// dependents / vitals
+$ "skip";
+$ rich.vitals;
