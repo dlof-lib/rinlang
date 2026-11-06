@@ -491,6 +491,14 @@ RinError Interpreter::undefinedVariableErr(const std::string& name, int line, co
     diag::Diagnostic d(diag::Code::E0001_UndefinedVariable, "undefined variable `" + name + "`",
                         diag::SourceLocation::point(sourceFile, line, 1));
     d.withReason("no variable named `" + name + "` exists in this scope");
+    if (name == "i" || name == "y") {   // i/y الضمنيان: لا يوجدان إلا داخل حلقة ذكرتهما (docs/loops.md)
+        d.withReason("no variable named `" + name + "` exists in this scope; the implicit loop " +
+                     std::string(name == "i" ? "index `i`" : "previous value `y`") + " exists only inside a loop body that reads it");
+        d.withHint(name == "i"
+                   ? "inside repeat/each/while/for/loop/retry `i` is the 0-based iteration number; outside a loop declare it: `let i = 0;`"
+                   : "`y` is the previous item inside `each`; outside a loop declare it: `let y = ...;`");
+        return RinError(std::move(d));
+    }
     if (env) {
         std::unordered_set<std::string> visible;
         env->collectVisibleNames(visible);
@@ -4761,6 +4769,59 @@ void Interpreter::registerNatives() {
         auto it = docStore.find(container);
         if (it != docStore.end()) for (auto& entry : it->second) result->push_back(entry.second);
         return Value::makeArray(result);
+    };
+
+    // #items(name) — مصدر الحلقات: `each x in @name` / `for (let x in @name)` / `[each x in @name yield ..]` (docs/loops.md "حلقات الحاويات").
+    //   doc/datalist -> مصفوفة المستندات (نسخ سطحية + _id)، table -> مصفوفة الصفوف، حاوية بيانات -> قاموس الحقول (each k, v in @cfg)،
+    //   حاوية بلا حقول وبأبناء -> مصفوفة أسماء الأبناء. حاوية غير موجودة = خطأ يقترح الأسماء الأقرب.
+    natives["#items"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("@container", a, 1, line);
+        const std::string raw = asString(a[0], "@container", line);
+        const std::string name = canonContainer(raw);
+        auto ci = containers.find(name);
+        auto di = docStore.find(name);
+        if (ci == containers.end() && di == docStore.end()) {
+            diag::Diagnostic d(diag::Code::E0035_RuntimeError, "no container named `" + raw + "` to loop over",
+                               diag::SourceLocation::point(sourceFile, line, 1));
+            d.withReason("`@" + raw + "` as a loop source must name a container declared before the loop runs");
+            std::vector<std::string> cands;
+            for (auto& kv : containers) cands.push_back(kv.first);
+            for (auto& kv : docStore) cands.push_back(kv.first);
+            auto m = diag::nearestMatches(raw, cands, 2, 3);
+            for (auto& x : m) d.withSuggestion(x);
+            d.withHint(m.empty() ? "declare it first, e.g. `@" + raw + ".doc ... .end/doc`" : "did you mean `@" + m.front() + "`?");
+            throw RinError(std::move(d));
+        }
+        if (ci != containers.end() && isTableContainer(name)) return Value::makeArray(tableRowsOf(name));
+        if (di != docStore.end() && (ci == containers.end() || !di->second.empty() || isDatalistContainer(name) ||
+                                     (containerKinds.count(name) && containerKinds.at(name) == ContainerKind::DOC))) {
+            auto out = std::make_shared<ArrayData>();
+            for (auto& entry : di->second) {
+                if (entry.second.type != Value::Type::MAP || !entry.second.map) { out->push_back(entry.second); continue; }
+                auto cp = std::make_shared<MapData>();
+                bool hasId = false;
+                for (auto& kv : *entry.second.map) { if (kv.first.type == Value::Type::STRING && kv.first.str == "_id") hasId = true; cp->push_back(kv); }
+                if (!hasId) cp->push_back({Value::string("_id"), Value::string(entry.first)});
+                out->push_back(Value::makeMap(cp));
+            }
+            return Value::makeArray(out);
+        }
+        if (ci != containers.end() && ci->second->values.empty()) {
+            auto ch = containerChildren.find(name);
+            if (ch != containerChildren.end() && !ch->second.empty()) {
+                auto out = std::make_shared<ArrayData>();
+                for (auto& c : ch->second) out->push_back(Value::string(c));
+                return Value::makeArray(out);
+            }
+        }
+        auto m = std::make_shared<MapData>();
+        if (ci != containers.end()) {   // ترتيب أبجدي ثابت (الحقول مخزَّنة غير مرتّبة)
+            std::vector<std::string> keys;
+            for (auto& kv : ci->second->values) keys.push_back(kv.first);
+            std::sort(keys.begin(), keys.end());
+            for (auto& k : keys) m->push_back({Value::string(k), ci->second->values.at(k)});
+        }
+        return Value::makeMap(m);
     };
 
     // countDocs(collection) -> عدد المستندات
