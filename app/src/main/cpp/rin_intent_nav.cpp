@@ -21,7 +21,10 @@
 //  ── جبر النيّة (Intent algebra): عمليات على extras تعيد نيّة جديدة (الأصل لا يتغيّر) ──
 //  Intent.add(i,k,v) (يضيف مفتاحاً جديداً) · Intent.remove/delete(i,k) · Intent.hide(i,k) / Intent.unhide|reveal(i [,k]) / Intent.hidden(i)
 //  Intent.sum/sub/mul/div/mod/pow/min/max(i,k,n [,default]) · Intent.clamp(i,k,lo,hi [,default]) · Intent.total(i [,keys])
-//  الشرح: docs/intent_navigation.md و docs/guarded_actions.md و docs/intent_algebra.md
+//
+//  ── النيّات الذرّية = Intent + @tx + dialog ──
+//  Intent.atomic(list [, {dialog, confirm, when, container, failOnFalse, throw}])  كلها أو لا شيء، بسؤال واحد
+//  الشرح: docs/intent_navigation.md و docs/guarded_actions.md و docs/intent_algebra.md و docs/atomic_intents.md
 // ============================================================================
 #include "rin_interpreter.h"
 #include "indsin/rin_indsin_navigation.h"
@@ -521,6 +524,96 @@ void Interpreter::registerNativesIntentNav() {
         if (ex.type == Value::Type::MAP && ex.map)
             for (auto& kv : *ex.map) if (kv.second.type == Value::Type::NUMBER && (!filter || std::find(only.begin(), only.end(), kv.first.toDisplayString()) != only.end())) t += kv.second.number;
         return Value::num(t);
+    };
+
+
+    // ======================= النيّات الذرّية: Intent + @tx + dialog =======================
+    // Intent.atomic(list [, {dialog, confirm, when, container, failOnFalse, throw}])
+    //   ينفّذ قائمة نيّات «كلها أو لا شيء»: لقطة عميقة (مستندات + حقول كل الحاويات المعنيّة) ثم تنفيذ بالترتيب؛
+    //   عند أول فشل يُستعاد كل شيء. إن أُعطي dialog سُئل المستخدم **مرة واحدة** عن الدفعة كلها.
+    natives["Intent.atomic"] = [this, needContainer, parseGuard, consult, blockedMap, withConfirmed, sendCore](Args& a, int line) -> Value {
+        argc("Intent.atomic", a, 1, 2, line);
+        if (a[0].type != Value::Type::ARRAY || !a[0].array || a[0].array->empty())
+            throw diagErr(diag::Code::E0004_InvalidType, line, "Intent.atomic: expected a non-empty array of intents");
+        Value opts = a.size() > 1 ? a[1] : Value::nil();
+        bool failOnFalse = false, rethrow = false; std::string dlgContainer; Value dlg;
+        Value gopts = emptyMap();
+        if (opts.type != Value::Type::NIL) {
+            if (opts.type != Value::Type::MAP || !opts.map) throw diagErr(diag::Code::E0004_InvalidType, line, "Intent.atomic: options must be a map but got " + opts.typeName());
+            for (auto& kv : *opts.map) {
+                std::string k = kv.first.toDisplayString();
+                if (k != "dialog" && k != "confirm" && k != "when" && k != "container" && k != "failOnFalse" && k != "throw")
+                    throw errWithReason(diag::Code::E0007_InvalidArguments, line, "Intent.atomic: unknown option '" + k + "'", "allowed options: dialog, confirm, when, container, failOnFalse, throw");
+            }
+            failOnFalse = mapGet(opts, "failOnFalse").isTruthy();
+            rethrow = mapGet(opts, "throw").isTruthy();
+            dlg = mapGet(opts, "dialog");
+            if (Value c = mapGet(opts, "container"); c.type == Value::Type::STRING) dlgContainer = c.str;
+            auto g2 = std::make_shared<MapData>();
+            for (const char* k : {"confirm", "when"}) { Value v = mapGet(opts, k); if (v.type != Value::Type::NIL) g2->emplace_back(Value::string(k), v); }
+            gopts = Value::makeMap(g2);
+        }
+        // تحقّق مسبق من كل النيّات (قبل أي سؤال أو لقطة)
+        std::vector<Value> list(a[0].array->begin(), a[0].array->end());
+        std::vector<std::string> cnames; std::string actions;
+        for (size_t i = 0; i < list.size(); ++i) {
+            Value cv = mapGet(list[i], "container"), av = mapGet(list[i], "action");
+            if (mapGet(list[i], "kind").type != Value::Type::STRING || cv.type != Value::Type::STRING || av.type != Value::Type::STRING)
+                throw diagErr(diag::Code::E0004_InvalidType, line, "Intent.atomic: item " + std::to_string(i) + " is not an intent");
+            std::string c = needContainer(cv, "Intent.atomic", line);
+            auto own = containers[c]->values.find(av.str);
+            if (own == containers[c]->values.end() || own->second.type != Value::Type::FUNCTION)
+                throw errWithReason(diag::Code::E0006_UnknownFunction, line, "Intent.atomic: item " + std::to_string(i) + ": '" + c + "' has no action '" + av.str + "'", "use Intent.actions(\"" + c + "\")");
+            if (std::find(cnames.begin(), cnames.end(), c) == cnames.end()) cnames.push_back(c);
+            actions += (actions.empty() ? "" : ", ") + av.str;
+        }
+        // سؤال واحد عن الدفعة كلها
+        bool asked = false;
+        if (dlg.type != Value::Type::NIL) {
+            std::string dc = dlgContainer.empty() ? cnames[0] : needContainer(Value::string(dlgContainer), "Intent.atomic", line);
+            Guard g = parseGuard("Intent.atomic", dc, dlg, gopts, {"confirm", "when"}, line);
+            auto datas = std::make_shared<ArrayData>(); for (auto& it : list) datas->push_back(visibleExtras(it));
+            Verdict v = consult(dc, g, "b|" + dc, "batch", "atomic", actions, Value::makeArray(datas), nullptr, line);
+            if (v.asked && !v.proceed) return blockedMap("batch", dc, actions, v);
+            asked = v.asked;
+        }
+        // التنفيذ داخل معاملة
+        auto cn = std::make_shared<ArrayData>(); for (auto& n : cnames) cn->push_back(Value::string(n));
+        Args tb{Value::makeArray(cn)};
+        natives["__tx_begin"](tb, line);
+        auto results = std::make_shared<ArrayData>();
+        size_t failedAt = 0; std::string failMsg; bool failed = false;
+        try {
+            for (size_t i = 0; i < list.size() && !failed; ++i) {
+                failedAt = i;
+                Value r = sendCore(list[i], line, nullptr);
+                Value res = mapGet(r, "result");
+                if (failOnFalse && res.type == Value::Type::BOOL && !res.boolean) { failed = true; failMsg = "action '" + mapGet(list[i], "action").str + "' returned false"; break; }
+                results->push_back(res);
+            }
+        } catch (const RinError& e) {
+            failed = true; failMsg = e.message;
+            Args none; natives["__tx_fail"](none, line); natives["__tx_end"](none, line);
+            if (rethrow) throw;
+            return mkMap({{"ok", Value::boolean_(false)}, {"rolledBack", Value::boolean_(true)}, {"failedAt", Value::num(static_cast<double>(failedAt))},
+                          {"action", mapGet(list[failedAt], "action")}, {"error", Value::string(failMsg)}, {"results", Value::makeArray(results)}});
+        } catch (const ThrowSignal& e) {                                   // `!? "..."` / throw داخل الإجراء
+            failed = true; failMsg = e.value.toDisplayString();
+            Args none; natives["__tx_fail"](none, line); natives["__tx_end"](none, line);
+            if (rethrow) throw;
+            return mkMap({{"ok", Value::boolean_(false)}, {"rolledBack", Value::boolean_(true)}, {"failedAt", Value::num(static_cast<double>(failedAt))},
+                          {"action", mapGet(list[failedAt], "action")}, {"error", Value::string(failMsg)}, {"results", Value::makeArray(results)}});
+        } catch (...) { Args none; natives["__tx_end"](none, line); throw; }   // exit/return... : لا يُعدّ فشلاً
+        Args none;
+        if (failed) {
+            natives["__tx_fail"](none, line); natives["__tx_end"](none, line);
+            if (rethrow) throw errWithReason(diag::Code::E0035_RuntimeError, line, "Intent.atomic: " + failMsg, "all changes were rolled back");
+            return mkMap({{"ok", Value::boolean_(false)}, {"rolledBack", Value::boolean_(true)}, {"failedAt", Value::num(static_cast<double>(failedAt))},
+                          {"action", mapGet(list[failedAt], "action")}, {"error", Value::string(failMsg)}, {"results", Value::makeArray(results)}});
+        }
+        natives["__tx_end"](none, line);
+        Value out = mkMap({{"ok", Value::boolean_(true)}, {"count", Value::num(static_cast<double>(list.size()))}, {"results", Value::makeArray(results)}});
+        return asked ? withConfirmed(out) : out;
     };
 
     // ---------------- Navigation ----------------
