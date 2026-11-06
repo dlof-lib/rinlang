@@ -1,0 +1,32 @@
+// Intent.core + Navigation.re على حاوية (docs/intent_navigation.md)
+@shop.container
+    let stock = 10;
+    let log = [];
+    fun sell(extras) { stock = stock - extras["n"]; push(log, "sell " + extras["n"]); return stock; }
+    fun ping() { return "pong"; }
+.end;
+
+let i = Intent.core("shop", "sell", {"n": 3});
+$ i["kind"], i["container"], i["action"], Intent.extra(i, "n"), Intent.extra(i, "zz", "dflt");
+$ Intent.valid(i), Intent.valid({"kind": "x"});
+$ Intent.actions("shop");
+let r = Intent.send(i);
+$ r.ok, r.result, shop.stock;
+let i2 = Intent.with(i, "n", 5);
+$ Intent.extra(i2, "n"), Intent.extra(i, "n");
+$ Intent.send(Intent.core("shop", "ping")).result;
+try { Intent.send(Intent.core("shop", "nope")); } catch (e) { $ "no action"; }
+try { Intent.core("ghost", "x"); } catch (e) { $ "no container"; }
+
+$ Navigation.current("shop"), Navigation.canBack("shop");
+let a = Navigation.re("shop", "home.rin");
+$ a.route, a.depth, a.canBack, shop.route;
+Navigation.re("shop", "cart.rin", {"id": 7});
+$ shop.route, Navigation.params("shop")["id"], Navigation.history("shop");
+Navigation.replace("shop", "cart2.rin");
+$ Navigation.history("shop");
+$ Navigation.back("shop"), shop.route, Navigation.back("shop"), Navigation.canBack("shop");
+Navigation.re("shop", "new.rin");          // يقصّ فرع الأمام
+$ Navigation.history("shop"), Navigation.reload("shop");
+Navigation.clear("shop");
+$ Navigation.current("shop");
