@@ -71,4 +71,4 @@ unval NAME;      // فكّ التفاعل: تبقى القيمة الحالية 
 - مترجم `rinc` (Rin → C) وRinVM لا يدعمان هذه الصيغة بعد (كباقي المتغيرات الحيّة).
 
 ## انظر أيضاً
-[`living-variables.md`](./living-variables.md) · [`variables.md`](./variables.md) · [`label-define.md`](./label-define.md) · [`base-accept.md`](./base-accept.md) · [`pre-post.md`](./pre-post.md) · [`container_types.md`](./container_types.md) · `examples/val_demo.rin`
+[`dialog.md`](./dialog.md) · [`living-variables.md`](./living-variables.md) · [`variables.md`](./variables.md) · [`label-define.md`](./label-define.md) · [`base-accept.md`](./base-accept.md) · [`pre-post.md`](./pre-post.md) · [`container_types.md`](./container_types.md) · `examples/val_demo.rin`
