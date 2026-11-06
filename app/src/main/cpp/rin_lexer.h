@@ -19,6 +19,8 @@ private:
     int columnOf(size_t offset) const { return static_cast<int>(offset - lineStartOffset) + 1; }
 
     bool isAtEnd() const;
+    std::vector<char> brkStack; // لكل `[` مفتوحة: 'S' إن كانت `#[` (مجموعة Set) وإلا 'L' — لإغلاق قوس Set(...) عند `]` المطابقة
+    bool prevEndsValue() const; // هل ينتهي آخر توكن بقيمة؟ (لتمييز ?! الإدخال عن الشرط الثلاثي)
     char advance();
     char peek() const;
     char peekNext() const;
