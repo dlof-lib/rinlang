@@ -211,7 +211,7 @@ private object RinLexer {
         "if", "else", "while", "for", "return", "break", "continue", "rinopen", "and", "or", "let",
         "fun", "text", "print", "show", "true", "false", "nil", "reckon", "where",
         // Living Variables (docs/living-variables.md): contextual words, highlighted like `reckon`.
-        "stone", "gauge", "tape", "lens", "fuse", "bell", "trial", "undo", "redo", "rearm", "unbell", "abort", "val", "touch", "unval",
+        "stone", "gauge", "tape", "lens", "fuse", "bell", "trial", "undo", "redo", "rearm", "unbell", "abort", "val", "touch", "unval", "dialog",
         // base/accept (docs/base-accept.md): variables that help `if`, plus their actions
         "base", "accept", "inc", "dec", "rebase", "rewind",
         // pre/post (docs/pre-post.md): ما قبل / ما بعد — عقد انتقال حول الإسناد
