@@ -16,6 +16,7 @@
 | متوسط | `lens x = expr;` | مشتق يُحسب عند كل قراءة |
 | متوسط | `fuse x = v [burns N];` | يحترق (`nil`) بعد N قراءة |
 | متوسط | `val x = expr [lazy] [when C] [keep N] [within A to B] [as T]` | **قيمة تفاعلية**: مشتقّ مخزَّن يتحدّث دفعياً ([val.md](./val.md)) |
+| متوسط | `dialog x = msg [title T] [buttons L] [tone T] [opens when C]` | **حوار متغيّر** للحاوية: رسالة تفاعلية + حالة مفتوح/مغلق + نتيجة ([dialog.md](./dialog.md)) |
 | عميق | `bell x [(old, new)] { ... }` | يرنّ عند كل تغيّر فعلي |
 | عميق | `trial { ... } [else { ... }]` | معاملة: تراجع تلقائي |
 
