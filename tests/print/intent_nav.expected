@@ -1,0 +1,17 @@
+📦 container = shop
+✅ .end/container (shop)
+intent shop sell 3 dflt
+true false
+["ping", "sell"]
+true 7 7
+5 3
+pong
+no action
+no container
+nil false
+home.rin 1 false home.rin
+cart.rin 7 ["home.rin", "cart.rin"]
+["home.rin", "cart2.rin"]
+true home.rin false false
+["home.rin", "new.rin"] new.rin
+nil
