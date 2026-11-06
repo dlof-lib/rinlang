@@ -1,0 +1,12 @@
+// ask: يفتح الحوار ويرسمه ويقرأ الاختيار (Enter = الزر المؤشَّر عليه) ثم يغلقه (docs/dialog.md)
+// يُشغَّل مع stdin: "1\n\nإلغاء\nxx\nyy\nzz\n"  (رقم · Enter · نص الزر · ثلاث محاولات غير صالحة)
+dialog confirm = "هل تريد حذف المشروع؟" title "تأكيد الحذف" tone "warn" buttons ["حذف", "إلغاء"] focus 2;
+reply confirm (r) { $ "اخترت:", r; }
+ask confirm;
+$ confirm.choice, confirm.open;
+ask confirm;
+$ confirm.result;
+ask confirm;
+$ confirm.result;
+ask confirm;
+$ confirm.result, confirm.choice;
