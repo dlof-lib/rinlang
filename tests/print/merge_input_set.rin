@@ -1,0 +1,5 @@
+// Set كمُدقِّق إدخال (عضوية) — يُشغَّل مع stdin: "blue\nred\n9\n2\n" (docs/merge_concepts.md)
+let c = ?!("لون؟ ", #["red" "green"]);
+$ "got", c;
+let n = inputNumber("رقم؟ ", #[1 2 3]);
+$ "num", n;
