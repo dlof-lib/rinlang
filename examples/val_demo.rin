@@ -1,0 +1,43 @@
+// val_demo.rin — قيمة تفاعلية تتكامل مع tape/gauge/accept/containerType/@tx/trial
+//   rin examples/val_demo.rin
+
+// 1) سلة مشتريات: مصادر عادية + مشتقات تتحدّث وحدها
+let price = 10;  let qty = 2;  let discount = 0;
+val subtotal = price * qty;
+val total    = subtotal - discount as "الإجمالي" unit "$";
+val summary  = "x" + qty + " = " + total;
+bell total (old, new) { $ "الإجمالي تغيّر:", old, "->", new; }
+qty = 3;
+discount = 5;
+$ summary, total.label, total.deps;
+
+// 2) مصدر tape: undo يحدّث المشتق
+tape score = 0 keep 5;
+val rank = score >= 100 ? "ذهبي" : score >= 50 ? "فضي" : "برونزي" keep 3;
+score = 60; score = 120;
+$ rank;  undo score;  $ rank, rank.past;
+
+// 3) gauge + when + lazy
+gauge hp = 80 within 0 to 100;
+let alive = true;
+val bar = hp / 100 * 20 when alive;        // يتجمّد حين alive = false
+val report = "HP=" + hp lazy;              // لا يُحسب حتى يُقرأ
+hp = hp - 50;  $ bar, report.stale;
+alive = false;  hp = 0;  $ bar, bar.held;
+alive = true;   $ bar;  $ report, report.runs;
+
+// 4) حاوية بنوع + val تقرؤها + @tx
+defineContainerType("Account", {balance: {type: "number", default: 0, min: 0}});
+newContainer("Account", "acc", {balance: 100});
+val rich = getField("acc", "balance") >= 1000;
+val tier = rich ? "VIP" : "عادي";
+try {
+    @tx acc { setField("acc", "balance", 5000); $ "داخل tx:", tier; !? "تراجع"; }
+} catch (e) { $ "بعد التراجع:", getField("acc", "balance"), tier; }
+setField("acc", "balance", 2500);  $ tier;
+
+// 5) trial يعيد المصدر والمشتق معاً
+let a = 100;  let b = 0;
+val sum = a + b;
+trial { a = 0; b = 999; abort; }
+$ a, b, sum;
