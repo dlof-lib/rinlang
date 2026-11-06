@@ -1,0 +1,55 @@
+== إنشاء المنتجات ==
+✔ منتج صحيح
+✘ منتج بلا سعر → [E0004] newContainer(Product, p2): الحقل إلزامي ولا يقبل nil: Product.price
+✘ سعر سالب → [E0004] newContainer(Product, p3): القيمة أقل من الحد الأدنى 0 في Product.price
+✘ فئة غير مسموحة → [E0004] newContainer(Product, p4): نوع خاطئ في Product.category: قيمة غير مسموحة (المتاح: food | tools | books | other)
+✘ تاريخ غير صالح → [E0004] newContainer(Product, p5): نوع خاطئ في Product.created: قيمة '2026-02-30' ليست date صالحاً
+✘ معرّف كسري → [E0004] newContainer(Product, p6): نوع خاطئ في Product.id: القيمة 6.5 ليست uint (عدد صحيح)
+✘ حقل غير معرّف (strict) → [E0004] newContainer(Product, p7): حقل غير معرَّف في النوع (strict): Product.weight
+
+== إنشاء العملاء ==
+✔ عميل صحيح
+✘ بريد خاطئ → [E0004] newContainer(Customer, c2): نوع خاطئ في Customer.email: قيمة 'omar-at-example' ليست email صالحاً
+✘ هاتف خاطئ → [E0004] newContainer(Customer, c3): نوع خاطئ في Customer.phone: قيمة '12' ليست phone صالحاً
+✘ IP خاطئ → [E0004] newContainer(Customer, c4): نوع خاطئ في Customer.ip: قيمة '300.1.1.1' ليست ip صالحاً
+
+== التحديث ==
+✔ زيادة المخزون
+✘ مخزون سالب → [E0004] نوع خاطئ في Product.stock: القيمة -5 ليست uint (صحيح غير سالب)
+✘ مخزون نصي → [E0004] نوع خاطئ في Product.stock: المتوقع uint والموجود string
+✘ لون خاطئ → [E0004] نوع خاطئ في Product.color: قيمة 'brown' ليست color صالحاً
+✘ وسوم بنوع خاطئ → [E0004] نوع خاطئ في Product.tags: [0] المتوقع string والموجود number
+✘ ملاحظات أكثر من الحد → [E0004] الطول 6 أكبر من الحد الأعلى 5 في Customer.notes
+
+== الطلبات ==
+  + طلب جديد: o1
+✔ طلب صحيح
+✘ سطر بنوع خاطئ → [E0004] newContainer(Order, o2): نوع خاطئ في Order.lines: [0.p1] المتوقع int والموجود string
+✔ تغيير الحالة
+✘ حالة غير مسموحة → [E0004] نوع خاطئ في Order.status: قيمة غير مسموحة (المتاح: new | paid | shipped | cancelled)
+
+== حاوية عادية: إعدادات التطبيق ==
+📦 container = settings
+✅ .end/container (settings)
+✔ ثيم صحيح
+✘ ثيم خاطئ → [E0004] نوع خاطئ في settings.theme: قيمة غير مسموحة (المتاح: dark | light)
+✘ محاولات سالبة → [E0004] نوع خاطئ في settings.retries: القيمة -1 ليست uint (صحيح غير سالب)
+✘ رابط خاطئ → [E0004] نوع خاطئ في settings.endpoint: قيمة 'not a url' ليست url صالحاً
+الأنواع المُعلنة: {"theme": "enum(dark,light)", "retries": "uint", "endpoint": "url"}
+
+== تقرير ==
+المنتجات: ["p1"]
+العملاء: ["c1"]
+كيانات (بالوراثة): ["c1", "o1", "p1"]
+p1 من Entity؟ true
+مشاكل p1: []
+مشاكل settings: []
+قيمة مخزون القهوة: 687.5
+42 → int : true
+-3 → uint : false
+2026-12-31 → date : true
+12:30:00 → time : true
+550e8400-e29b-41d4-a716-446655440000 → uuid : true
+[1, 2, 3] → array<int> : true
+x → int|string : true
+nil → float? : true
