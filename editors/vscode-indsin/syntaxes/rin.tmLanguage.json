@@ -395,7 +395,7 @@
         },
         {
           "name": "keyword.operator.comparison.rin",
-          "match": "(=::=|=/=|=/(?![/*])|/=|==|!=|<=|>=|<|>)"
+          "match": "(<==|==>|<=>|=::=|=/=|=/(?![/*])|/=|==|!=|<=|>=|<|>)"
         },
         {
           "name": "keyword.operator.assignment.rin",
