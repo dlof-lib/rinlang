@@ -1,0 +1,32 @@
+@users.doc
+    document id="u1" fields={ name: "سارة", city: "بيروت", age: 30 };
+    document id="u2" fields={ name: "علي", city: "صيدا", age: 25 };
+    document id="u3" fields={ name: "منى", city: "بيروت", age: 41 };
+.end/doc
+@team.data
+    let lead = "rin";
+    let size = 3;
+.end;
+@tb.table
+    row cells=["a", 1];
+    row cells=["b", 2];
+.end/table
+$ "-- docs";
+each d in @users { $ i, d._id, d.name; }
+$ "-- where/sorted";
+each d in @users where d.city == "بيروت" sorted by d.age desc { $ i, d.name; }
+$ "-- fields";
+each k, v in @team { $ k, "=", v; }
+$ "-- table";
+each r in @tb { $ i, r; }
+$ "-- for forms";
+for (let d in @users) { $ i + ":" + d.name; }
+for d in @users { $ d.age; }
+$ "-- comprehension / reduce";
+$ [each d in @users where d.age > 26 yield d.name];
+$ sum each d in @users yield d.age;
+let n = 0;
+while (n < 1) { n = n + 1; each d in @users { n = n + 0; } }
+$ "-- missing";
+try { each d in @usres { $ d; } } catch (e) { $ e.message; }
+$ type(@"users"), len(@users);
