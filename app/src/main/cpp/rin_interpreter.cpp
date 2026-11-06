@@ -399,6 +399,9 @@ std::string Value::typeName() const {
     return "nil";
 }
 
+// شكل طباعة القوائم (docs/arrows.md):  {{"[, ]"}}  ≡ listFormat("[, ]")
+static std::string g_listOpen = "[", g_listSep = ", ", g_listClose = "]";
+
 std::string Value::toDisplayString() const {
     switch (type) {
         case Type::NIL: return "nil";
@@ -416,12 +419,12 @@ std::string Value::toDisplayString() const {
         }
         case Type::ARRAY: {
             std::ostringstream ss;
-            ss << "[";
+            ss << g_listOpen;
             for (size_t i = 0; i < array->size(); i++) {
-                if (i) ss << ", ";
+                if (i) ss << g_listSep;
                 ss << reprValue((*array)[i]);
             }
-            ss << "]";
+            ss << g_listClose;
             return ss.str();
         }
         case Type::MAP: {
@@ -4694,6 +4697,25 @@ void Interpreter::registerNatives() {
     // ---- tap(v, spec?) : sink للأنابيب `x |> $` ≡ `tap(x)` — يمرّر القيمة كما هي (لا يكسر السلسلة) ----
     //   tap(v)         يطبع v ثم يعيدها          tap(v, "وسم")  يطبع "وسم: v"
     //   tap(v, fn)     يستدعي fn(v) ويعيد v      (للتتبّع/التسجيل داخل السلسلة)
+    // listFormat("[, ]") | listFormat(open, sep, close) | listFormat() = الافتراضي. النص الواحد: الفتح قبل أول فاصلة،
+    // ثم الفاصلة (مع المسافات التي تليها) فاصلاً، والباقي إغلاقاً. تعيد الشكل السابق كنص.
+    natives["listFormat"] = [this](std::vector<Value>& a, int line) -> Value {
+        std::string prev = g_listOpen + g_listSep + g_listClose;
+        std::string o = "[", s = ", ", c = "]";
+        if (a.size() == 3) { o = a[0].toDisplayString(); s = a[1].toDisplayString(); c = a[2].toDisplayString(); }
+        else if (a.size() == 1) {
+            std::string f = a[0].toDisplayString();
+            size_t p = f.find(',');
+            if (p == std::string::npos) throw diagErr(diag::Code::E0007_InvalidArguments, line, "'listFormat' text needs a comma, e.g. \"[, ]\"");
+            o = f.substr(0, p);
+            size_t q = p + 1; while (q < f.size() && f[q] == ' ') ++q;
+            if (q >= f.size() && f.size() > p + 1) q = p + 1; // "(,  " بلا إغلاق
+            s = f.substr(p, q - p); c = f.substr(q);
+        } else if (!a.empty()) throw diagErr(diag::Code::E0007_InvalidArguments, line, "'listFormat' expects 0, 1 or 3 argument(s) but got " + std::to_string(a.size()));
+        g_listOpen = o; g_listSep = s; g_listClose = c;
+        Value r; r.type = Value::Type::STRING; r.str = prev; return r;
+    };
+
     natives["tap"] = [this](std::vector<Value>& a, int line) -> Value {
         if (a.empty() || a.size() > 2) throw diagErr(diag::Code::E0007_InvalidArguments, line, "'tap' expects 1 or 2 argument(s) but got " + std::to_string(a.size()));
         if (a.size() == 2 && (a[1].type == Value::Type::FUNCTION || a[1].type == Value::Type::INSTANCE)) {
