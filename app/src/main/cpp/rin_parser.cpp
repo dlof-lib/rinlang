@@ -1757,7 +1757,26 @@ StmtPtr Parser::statement() {
     }
     if (match({TokenType::RINOPEN})) return rinopenStatement();
     if (check(TokenType::DOT) && checkNext(TokenType::IDENT) && current + 2 < tokens.size() && tokens[current + 1].lexeme == "object") return objectFieldStatement();
-    if (check(TokenType::LBRACE)) { advance(); return block(); }
+    if (check(TokenType::LBRACE)) {
+        // `{a <=> b}` : تبديل بين قوسين (بلا `;` داخلية) — وإلا فهي كتلة عادية.
+        { int depth = 0; bool swap = false, semi = false;
+          for (size_t k = current + 1; k < tokens.size() && !semi; ++k) {
+              TokenType t = tokens[k].type;
+              if (t == TokenType::LPAREN || t == TokenType::LBRACKET || t == TokenType::LBRACE) depth++;
+              else if (t == TokenType::RPAREN || t == TokenType::RBRACKET) depth--;
+              else if (t == TokenType::RBRACE) { if (depth == 0) break; depth--; }
+              else if (depth == 0 && t == TokenType::SEMICOLON) semi = true;
+              else if (depth == 0 && t == TokenType::SWAP) swap = true;
+              else if (t == TokenType::END_OF_FILE) break; }
+          if (swap && !semi) {
+              advance();
+              auto st = std::make_shared<ExpressionStmt>(); st->expr = expression();
+              consume(TokenType::RBRACE, "Expected '}' after swap `{a <=> b}`");
+              match({TokenType::SEMICOLON});
+              return st;
+          } }
+        advance(); return block();
+    }
     return expressionStatement();
 }
 
@@ -3372,6 +3391,36 @@ StmtPtr Parser::atBlock() {
             advance(); advance(); advance(); // الاسم . النوع
         }
     }
+    // حاوية من نوع عرّفه المستخدم (docs/container_types.md): `@sara.Employee;` · `@sara.Employee { name: "سارة" salary: 5 }`
+    // ≡ `newContainer("Employee", "sara", {...});` — تُفحَص الحقول عند الإنشاء كما في newContainer.
+    // لا تعارض: `@اسم.كلمة` حيث الكلمة ليست نوعاً مبنياً كانت خطأ بناء.
+    if (!shortForm && (check(TokenType::IDENT) || check(TokenType::STRING)) && current + 2 < tokens.size() &&
+        tokens[current + 1].type == TokenType::DOT && tokens[current + 2].type == TokenType::IDENT) {
+        static const std::unordered_set<std::string> builtinTypes = {
+            "doc", "table", "data", "api", "sql", "list", "datalist", "object", "portal", "block", "sticker", "aukt",
+            "chatbot", "make", "pipe", "import", "open", "everything", "container", "Group", "make"};
+        static const std::unordered_set<std::string> builtinNames = {
+            "Rin", "import", "view", "doc", "table", "data", "api", "sql", "list", "datalist", "object", "portal",
+            "block", "sticker", "aukt", "chatbot", "make", "Object", "AUKT", "Everything", "Volume", "element",
+            "start", "end", "ok", "fail", "tx", "container", "Containers"};
+        const Token& a = tokens[current];
+        const Token& dot = tokens[current + 1];
+        const Token& b = tokens[current + 2];
+        bool tight = a.line == dot.line && dot.line == b.line && a.endCol == dot.col && dot.endCol == b.col;
+        bool nameOk = a.type == TokenType::STRING || !builtinNames.count(a.lexeme);
+        if (tight && nameOk && !builtinTypes.count(b.lexeme)) {
+            advance(); advance(); advance();
+            auto call = std::make_shared<CallExpr>();
+            call->callee = "newContainer"; call->line = atTok.line;
+            auto lt = std::make_shared<LiteralExpr>(); lt->kind = LiteralExpr::Kind::STRING; lt->str = b.lexeme; lt->line = b.line;
+            auto ln = std::make_shared<LiteralExpr>(); ln->kind = LiteralExpr::Kind::STRING; ln->str = a.lexeme; ln->line = a.line;
+            call->args.push_back(lt); call->args.push_back(ln);
+            if (check(TokenType::LBRACE)) call->args.push_back(expression());
+            match({TokenType::SEMICOLON});
+            auto st = std::make_shared<ExpressionStmt>(); st->expr = call; st->line = atTok.line;
+            return st;
+        }
+    }
     if (!shortForm) tag = readTagKeyword();
     static const std::vector<std::string> validTags = {
         "container", "container.pipe", "container.data", "container.api", "container.import", "container.table",
@@ -3987,6 +4036,20 @@ static bool exprToAssignPattern(const ExprPtr& e, LetPattern& out, std::string& 
     return false;
 }
 
+// ==> و <=> (docs/arrows.md): بناء كتابة إلى هدف (متغيّر / arr[i] / obj.field) من قيمة جاهزة؛ nullptr إن لم يصلح الهدف.
+static ExprPtr rinMakeStore(const ExprPtr& target, const ExprPtr& value, int line) {
+    if (auto var = std::dynamic_pointer_cast<VariableExpr>(target)) {
+        auto a = std::make_shared<AssignExpr>(); a->name = var->name; a->value = value; a->line = line; return a;
+    }
+    if (auto idx = std::dynamic_pointer_cast<IndexExpr>(target)) {
+        auto s = std::make_shared<IndexSetExpr>(); s->object = idx->object; s->index = idx->index; s->value = value; s->line = line; return s;
+    }
+    if (auto get = std::dynamic_pointer_cast<GetExpr>(target)) {
+        auto s = std::make_shared<SetExpr>(); s->object = get->object; s->name = get->name; s->value = value; s->line = line; return s;
+    }
+    return nullptr;
+}
+
 ExprPtr Parser::assignment() {
     auto expr = pipeline();
     if (match({TokenType::QUESTION})) {
@@ -4021,6 +4084,31 @@ ExprPtr Parser::assignment() {
         }
         auto get = std::dynamic_pointer_cast<GetExpr>(expr);
         auto set = std::make_shared<SetExpr>(); set->object = get->object; set->name = get->name; set->value = value; set->line = opTok.line; return set;
+    }
+    // `a <=> b` تبديل (≡ [a, b] = [b, a]) · `expr ==> target` إسناد معكوس (≡ target = expr)، وتتسلسل: `1 ==> a ==> b`.
+    if (check(TokenType::SWAP)) {
+        Token sw = advance();
+        auto rhs = pipeline();
+        auto L = std::make_shared<ArrayExpr>(); L->elements = {expr, rhs}; L->line = sw.line;
+        auto R = std::make_shared<ArrayExpr>(); R->elements = {rhs, expr}; R->line = sw.line;
+        LetPattern pat; std::string why;
+        if (!exprToAssignPattern(L, pat, why))
+            throw errRich(diag::Code::E0003_InvalidAssignment, sw, "invalid swap target", why,
+                          "swap variables, `arr[i]` or `obj.field`, e.g. `a <=> b;` or `{a <=> b}`", "a variable name, an index expression, or a property");
+        checkPatternDuplicates(pat, sw);
+        auto pa = std::make_shared<PatternAssignExpr>();
+        pa->pattern = std::move(pat); pa->value = R; pa->line = sw.line;
+        return pa;
+    }
+    while (check(TokenType::ARROW_R)) {
+        Token ar = advance();
+        auto target = pipeline();
+        auto st = rinMakeStore(target, expr, ar.line);
+        if (!st)
+            throw errRich(diag::Code::E0003_InvalidAssignment, ar, "invalid target after `==>`",
+                          "only a plain variable, an index expression (`x[i]`), or a property (`x.name`) can receive a value",
+                          "write e.g. `5 ==> x;` or `a + 1 ==> arr[0];`", "a variable name, an index expression, or a property");
+        expr = st;
     }
     if (match({TokenType::EQUAL})) {
         Token eq = previous();
@@ -4502,6 +4590,15 @@ ExprPtr Parser::primary() {
         if (!check(TokenType::RBRACE)) {
             do {
                 if (check(TokenType::RBRACE)) break; // allow trailing comma
+                // اختصار الخريطة: {X, A} ≡ {X: X, A: A} (اسم المتغيّر مفتاحاً وقيمة) — كان خطأ (ينقص ':')، فلا تعارض.
+                if (check(TokenType::IDENT) && (checkNext(TokenType::COMMA) || checkNext(TokenType::RBRACE))) {
+                    Token nm = advance();
+                    auto kl = std::make_shared<LiteralExpr>(); kl->kind = LiteralExpr::Kind::STRING; kl->str = nm.lexeme; kl->line = nm.line;
+                    auto vv = std::make_shared<VariableExpr>(); vv->name = nm.lexeme; vv->line = nm.line;
+                    map->entries.push_back({kl, vv});
+                    if (match({TokenType::COMMA})) continue;
+                    break;
+                }
                 ExprPtr keyExpr;
                 if (check(TokenType::STRING)) {
                     auto lit = std::make_shared<LiteralExpr>();
