@@ -274,6 +274,8 @@ StmtPtr Parser::declaration() {
     if (check(TokenType::IDENT) && checkNext(TokenType::IDENT)) {
         const std::string& kw = peek().lexeme;
         if (kw == "stone" || kw == "gauge" || kw == "tape" || kw == "lens" || kw == "fuse") return liveDeclaration();
+        // val (docs/val.md): قيمة تفاعلية — كلمة سياقية بنفس القاعدة (val + IDENT)؛ touch/unval أفعالها.
+        if (kw == "val") return liveDeclaration();
         // عائلة الشروط (docs/base-accept.md): base/accept + inc/dec/rebase/rewind — كلها كلمات سياقية بنفس القاعدة.
         if (kw == "base" || kw == "accept") return liveDeclaration();
         // pre/post (docs/pre-post.md): ما قبل / ما بعد — عقد انتقال حول الإسناد، كلمتان سياقيتان بنفس القاعدة.
@@ -282,7 +284,8 @@ StmtPtr Parser::declaration() {
         if (kw == "label" || kw == "define") return liveDeclaration();
         if (kw == "bell") return bellDeclaration();
         if (kw == "undo" || kw == "redo" || kw == "rearm" || kw == "unbell" ||
-            kw == "inc" || kw == "dec" || kw == "rebase" || kw == "rewind") return liveActionStatement();
+            kw == "inc" || kw == "dec" || kw == "rebase" || kw == "rewind" ||
+            kw == "touch" || kw == "unval") return liveActionStatement();
     }
     if (check(TokenType::IDENT) && peek().lexeme == "trial" && checkNext(TokenType::LBRACE)) return trialStatement();
     if (check(TokenType::IDENT) && peek().lexeme == "abort" && checkNext(TokenType::SEMICOLON)) return liveActionStatement();
@@ -912,9 +915,10 @@ StmtPtr Parser::liveDeclaration() {
              : kind == "tape" ? LiveKind::Tape : kind == "lens" ? LiveKind::Lens
              : kind == "base" ? LiveKind::Base : kind == "accept" ? LiveKind::Accept
              : kind == "pre" ? LiveKind::Pre : kind == "post" ? LiveKind::Post
-             : kind == "label" ? LiveKind::Label : kind == "define" ? LiveKind::Define : LiveKind::Fuse;
+             : kind == "label" ? LiveKind::Label : kind == "define" ? LiveKind::Define : kind == "val" ? LiveKind::Val : LiveKind::Fuse;
     const bool isMeta = st->kind == LiveKind::Label || st->kind == LiveKind::Define;
     const bool isGate = st->kind == LiveKind::Pre || st->kind == LiveKind::Post;
+    const bool isVal = st->kind == LiveKind::Val;
 
     if (match({TokenType::EQUAL})) {
         st->initializer = expression();
@@ -941,7 +945,18 @@ StmtPtr Parser::liveDeclaration() {
                            "'" + mod + "' cannot be used with '" + kind + "'", why,
                            "remove `" + mod + "` or pick the variable kind that supports it", "");
         };
-        if (isMeta && (mod == "as" || mod == "label" || mod == "about" || mod == "unit")) {
+        if (isVal && (mod == "as" || mod == "about" || mod == "unit")) {   // val يحمل تسمية/وصفاً/وحدة (كـ label/define) بلا تغيير سلوكه
+            ExprPtr& slot = mod == "as" ? st->metaLabel : mod == "about" ? st->metaAbout : st->metaUnit;
+            if (slot) throw reject("`" + mod + "` is given twice");
+            advance();
+            slot = expression();
+        } else if (isVal && mod == "lazy") {
+            if (st->lazy) throw reject("`lazy` is given twice");
+            advance(); st->lazy = true;
+        } else if (isVal && mod == "when") {
+            if (st->when) throw reject("a val takes only one `when` condition; join conditions with `and` / `or`");
+            advance(); st->when = expression();
+        } else if (isMeta && (mod == "as" || mod == "label" || mod == "about" || mod == "unit")) {
             // as: الحقل الأساسي لنوعه (label ← التسمية، define ← الوصف)؛ والباقي حقول مساعدة من الجهة الأخرى
             const bool isLabel = st->kind == LiveKind::Label;
             ExprPtr* slot = nullptr;
@@ -953,7 +968,7 @@ StmtPtr Parser::liveDeclaration() {
             advance();
             *slot = expression();
         } else if (mod == "within") {
-            if (st->kind != LiveKind::Gauge) throw reject("only `gauge` has a range (`within A to B`)");
+            if (st->kind != LiveKind::Gauge && !isVal) throw reject("only `gauge` (and `val`) has a range (`within A to B`)");
             advance();
             st->lo = expression();
             Token to = peek();
@@ -965,13 +980,13 @@ StmtPtr Parser::liveDeclaration() {
             st->hi = expression();
             sawWithin = true;
         } else if ((mod == "strict" && st->kind != LiveKind::Accept && !isGate) || mod == "wrap") {
-            if (st->kind != LiveKind::Gauge) throw reject("only `gauge` has an out-of-range policy (strict/wrap)");
+            if (st->kind != LiveKind::Gauge && !isVal) throw reject("only `gauge` (and `val`) has an out-of-range policy (strict/wrap)");
             if (!st->rangeMode.empty()) throw reject("a gauge takes only one of `strict` / `wrap`");
             advance();
             st->rangeMode = mod;
         } else if (mod == "keep") {
-            if (st->kind != LiveKind::Tape && st->kind != LiveKind::Gauge)
-                throw reject("only `tape` (and `gauge`) keep a history");
+            if (st->kind != LiveKind::Tape && st->kind != LiveKind::Gauge && !isVal)
+                throw reject("only `tape`, `gauge` and `val` keep a history");
             advance();
             st->keep = expression();
         } else if (mod == "burns") {
@@ -1019,6 +1034,7 @@ StmtPtr Parser::liveDeclaration() {
             break; // ليس مُعدِّلاً: اتركه لـ consume(';') ليُبلِّغ الخطأ الطبيعي
         }
     }
+    (void)sawWithin;
     if (st->kind == LiveKind::Gauge && !sawWithin)
         throw errRich(diag::Code::E0012_MissingToken, peek(),
                       "gauge '" + name.lexeme + "' needs a range", "a gauge exists to keep a value inside a range",
@@ -1050,6 +1066,7 @@ StmtPtr Parser::liveDeclaration() {
                           "add `if <condition>` (inside it `old` is the previous value, `new` the written one, and `" + name.lexeme + "` is the " +
                           (isPre ? "old" : "new") + " one), e.g. `" + kind + " " + name.lexeme + " = 0 if " + (isPre ? "old" : "new") + " >= 0;`", "'if'");
     }
+    if (isVal && (st->lo != nullptr) != (st->hi != nullptr)) throw errRich(diag::Code::E0012_MissingToken, peek(), "val '" + name.lexeme + "' has an incomplete range", "a range has two ends", "write `within <min> to <max>`", "'to'");
     if (st->rangeMode.empty()) st->rangeMode = "clamp";
     consume(TokenType::SEMICOLON, "Expected ';' after '" + kind + "' declaration");
     return st;
@@ -4174,13 +4191,13 @@ ExprPtr Parser::pipeline() {
     int stageCount = 0; // عدد مراحل |> في هذه السلسلة (لأجل RinFlow -- انظر CallExpr::pipelineStageCount)
     while (match({TokenType::PIPE})) {
         Token opTok = previous();
-        // `x |> $` / `x |> $ "وسم"` : `$` (print) كمصبّ داخل الأنبوب ≡ tap(x[, "وسم"]) — يطبع ويمرّر القيمة كما هي
+        // `x |> $` / `x |> $ "وسم"` : `$` (print) كمصبّ داخل الأنبوب ≡ __tap(x[, "وسم"]) — يطبع ويمرّر القيمة كما هي
         // فتتابع السلسلة. (كانت `$` هنا خطأ بناء، فلا تعارض.)  docs/merge_concepts.md
         ExprPtr rhs;
         if (check(TokenType::PRINT)) {
             Token pt = advance();
             auto tapCall = std::make_shared<CallExpr>();
-            tapCall->callee = "tap";
+            tapCall->callee = "__tap";
             tapCall->line = pt.line;
             if (!check(TokenType::PIPE) && !check(TokenType::SEMICOLON) && !check(TokenType::RPAREN) &&
                 !check(TokenType::COMMA) && !check(TokenType::RBRACKET) && !check(TokenType::RBRACE) && !isAtEnd())
