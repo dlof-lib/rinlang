@@ -403,7 +403,10 @@ struct ReckonStmt : Stmt { ReckonStmt() { stmtKind = StmtKind::ReckonStmt; }
 //   --- label/define (docs/label-define.md): متغيّران للتسمية والتعريف — بيانات وصفية لا تغيّر سلوك الإسناد ---
 //   label  x = v as TITLE [about TEXT] [unit TEXT];    تسمية: اسم عرض للمتغيّر (x.label) إلى جانب معرّفه الحقيقي (x.id).
 //   define x = v as TEXT  [label TITLE] [unit TEXT];   تعريف: وصف المتغيّر (x.about) ووحدته (x.unit)، وتسمية اختيارية.
-enum class LiveKind { Stone, Gauge, Tape, Lens, Fuse, Base, Accept, Pre, Post, Label, Define };
+//   --- val (docs/val.md): قيمة تفاعلية (reactive) — مشتقّ مخزَّن يُحدَّث دفعياً عند تغيّر ما يقرؤه ---
+//   val x = expr [lazy] [when COND] [keep N] [within A to B [strict|wrap]] [as TITLE] [about TEXT] [unit TEXT];
+//   touch x;  unval x;     أفعال val (إعادة حساب قسرية / فكّ التفاعل وإبقاء القيمة كمتغيّر عادي).
+enum class LiveKind { Stone, Gauge, Tape, Lens, Fuse, Base, Accept, Pre, Post, Label, Define, Val };
 struct LiveDeclStmt : Stmt { LiveDeclStmt() { stmtKind = StmtKind::LiveDeclStmt; }
     LiveKind kind = LiveKind::Stone;
     std::string name;
@@ -418,6 +421,8 @@ struct LiveDeclStmt : Stmt { LiveDeclStmt() { stmtKind = StmtKind::LiveDeclStmt;
     ExprPtr fallback;         // accept: بديل عند الرفض (else FB) — nullable
     bool strictAccept = false; // accept/pre/post: الرفض خطأ بدل تجاهل الإسناد بصمت (E0049 لـ accept، E0051 لـ pre/post)
     ExprPtr metaLabel, metaAbout, metaUnit; // label/define: التسمية والوصف والوحدة (نصوص؛ nullable)
+    bool lazy = false;        // val: لا يُحسب إلا عند القراءة (ويُعلَّم stale عند تغيّر الاعتماد)
+    ExprPtr when;             // val: شرط التحديث — ما دام كاذباً تبقى القيمة كما هي (held)
     ExprPtr preRule, postRule; // pre/post: شرط «قبل» (x = القديمة) وشرط «بعد» (x = الجديدة)؛ كلاهما يرى old و new — يكفي واحد منهما
 };
 struct BellStmt : Stmt { BellStmt() { stmtKind = StmtKind::BellStmt; }
