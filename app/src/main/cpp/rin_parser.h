@@ -198,6 +198,10 @@ private:
     StmtPtr buildEachImplicit(EachHdr& h, StmtPtr body, int line, ExprPtr lim, size_t from, size_t to);
     bool nameDeclaredBefore(const std::string& nm, size_t at) const;
     bool implicitWanted(const std::string& nm, size_t from, size_t to) const;
+    // i الضمني لحلقات الشرط/for/for-in/#do/retry/loop: implicitIBegin تلفّ الجسم وتعيد اسم العدّاد المخفي (أو "" إن لم يُفعَّل)،
+    // و implicitIEnd تغلّف الحلقة المكتملة بإعلان العدّاد. انظر docs/loops.md ("i الضمني في كل الحلقات").
+    std::string implicitIBegin(StmtPtr& body, size_t from, size_t to, int line);
+    StmtPtr implicitIEnd(StmtPtr loop, const std::string& cnt, int line);
     std::unordered_set<std::string> labelFlagUsed;
     int loopDepth = 0; // >0 داخل جسم حلقة while؛ يُستخدم للتحقق من صحة break/continue وقت التحليل
     int goalDepth = 0; // >0 داخل جسم 'goal { .. }'؛ يُستخدم للتحقق من صحة 'achieve' وقت التحليل
