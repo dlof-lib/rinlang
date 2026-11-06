@@ -1,0 +1,25 @@
+40
+10 20
+40
+100 قوي
+ضعيف
+20 true
+false
+L5
+5 L5
+82
+sum: 100 -> 70
+sum: 70 -> 100
+100 0 100
+sum: 100 -> 1
+1
+sum: 1 -> 50
+rolled back 1 1
+sum: 1 -> 2
+2 ["a", "b"]
+50
+4
+5
+5
+6
+cycle: [E0045] val `z` depends on itself
