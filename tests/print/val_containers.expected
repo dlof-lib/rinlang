@@ -1,0 +1,20 @@
+4
+99
+LIGHT
+BLUE
+📦 container = shop
+✅ .end/container (shop)
+50 false
+تنبيه مخزون: true
+15 true
+تنبيه مخزون: false
+40 false
+80 18
+160 28
+تنبيه مخزون: true
+داخل tx: 20
+8 160 28
+true
+نوع رفض: true
+skip
+{"kind": "val", "reads": 2, "writes": 1, "bells": 0, "reactive": true, "runs": 2, "lazy": false, "stale": false, "held": false, "deps": ["bal"]}
