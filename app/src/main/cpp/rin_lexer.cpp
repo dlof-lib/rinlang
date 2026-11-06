@@ -474,6 +474,20 @@ void Lexer::scanToken() {
         //   {{%s-t users cols=60 save="u.png"%}}  خيارات (key=قيمة رقم/نص/true/false) — تُمرَّر كخريطة خيارات
         // يُختزل إلى `printContainer(name?, {opts});` بتوكنات عادية. لا تعارض: `{{%` لم تكن تركيباً صالحاً.
         case '{':
+            // توجيه `{{"[, ]"}}` : يضبط شكل طباعة القوائم (فتح، فاصل، إغلاق) ≡ `listFormat("[, ]");` (docs/arrows.md).
+            if (peek() == '{' && peekNext() == '"') {
+                size_t endPos = src.find("\"}}", current + 2);
+                size_t nl = src.find('\n', current);
+                if (endPos != std::string::npos && (nl == std::string::npos || endPos < nl)) {
+                    const int ln = line, c0 = columnOf(start), c1 = columnOf(endPos + 3);
+                    std::string body = src.substr(current + 2, endPos - (current + 2));
+                    current = endPos + 3;
+                    pushToken(TokenType::IDENT, "listFormat", ln, c0, c1); pushToken(TokenType::LPAREN, "(", ln, c0, c1);
+                    pushToken(TokenType::STRING, body, ln, c0, c1); pushToken(TokenType::RPAREN, ")", ln, c0, c1);
+                    pushToken(TokenType::SEMICOLON, ";", ln, c0, c1);
+                    break;
+                }
+            }
             if (peek() == '{' && peekNext() == '%' && src.compare(current + 2, 3, "s-t") == 0) {
                 size_t endPos = src.find("%}}", current + 5);
                 size_t nl = src.find('\n', current);
@@ -574,6 +588,7 @@ void Lexer::scanToken() {
             break;
         case '=':
             if (match('=')) {
+                if (peek() == '>') { advance(); addToken(TokenType::ARROW_R); break; } // `==>`  (كانت `== >` خطأ بناء)
                 addToken(TokenType::EQUAL_EQUAL);
             } else if (peek() == ':' && peekNext() == ':' && (current + 2 < src.size() && src[current + 2] == '=')) {
                 advance(); advance(); advance();
@@ -595,6 +610,9 @@ void Lexer::scanToken() {
             addToken(match('=') ? TokenType::BANG_EQUAL : TokenType::BANG);
             break;
         case '<':
+            // `<=>` تبديل · `<==` مرادف حرفي لـ `=` (إسناد من اليمين إلى اليسار). كلاهما كان خطأ بناء (`<= =` / `<= >`) فلا تعارض.
+            if (peek() == '=' && peekNext() == '>') { advance(); advance(); addToken(TokenType::SWAP); break; }
+            if (peek() == '=' && peekNext() == '=') { advance(); advance(); addToken(TokenType::EQUAL, "<=="); break; }
             addToken(match('=') ? TokenType::LESS_EQUAL : TokenType::LESS);
             break;
         case '>':
