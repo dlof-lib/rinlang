@@ -1775,14 +1775,16 @@ StmtPtr Parser::rinopenStatement() {
     ExprPtr condition = expression();
     consume(TokenType::RPAREN, "Expected ')' after rinopen condition");
     consume(TokenType::LBRACE, "Expected '{' before rinopen body");
+    const size_t bodyFrom = current;
     enterLoop();
-    auto body = block();
+    StmtPtr body = block();
     exitLoop();
+    const std::string ici = implicitIBegin(body, bodyFrom, current, tok.line);
     auto st = std::make_shared<WhileStmt>();
     st->condition = condition;
     st->body = body;
     st->line = tok.line;
-    return finishLoop(st);
+    return implicitIEnd(finishLoop(st), ici, tok.line);
 }
 
 StmtPtr Parser::objectFieldStatement() {
@@ -2219,15 +2221,17 @@ StmtPtr Parser::keyConditionStatement(bool asElseIf) {
 
     // ---- loops ----
     if (term == "while" || term == "until") {
+        const size_t bodyFrom = current;
         enterLoop();
-        auto body = statement();
+        StmtPtr body = statement();
         exitLoop();
+        const std::string ici = implicitIBegin(body, bodyFrom, current, line);
         auto w = std::make_shared<WhileStmt>();
         w->condition = condition;
         w->body = body;
         attachDoneBlock(w->doneBlock);
         w->line = line;
-        return finishLoop(w);
+        return implicitIEnd(finishLoop(w), ici, line);
     }
 
     // ---- branches ----
@@ -2294,14 +2298,16 @@ StmtPtr Parser::whileStatement() {
     auto condition = expression();
     consume(TokenType::RPAREN, "Expected ')' after while condition");
     ExprPtr lim = limitClause();
+    const size_t bodyFrom = current;
     enterLoop();
-    auto body = statement();
+    StmtPtr body = statement();
     exitLoop();
+    const std::string ici = implicitIBegin(body, bodyFrom, current, condition ? condition->line : 0);
     auto stmt = std::make_shared<WhileStmt>();
     stmt->condition = condition;
     stmt->body = body;
     attachDoneBlock(stmt->doneBlock);
-    return finishLoop(stmt, lim);
+    return implicitIEnd(finishLoop(stmt, lim), ici, stmt->line);
 }
 
 // for (initializer; condition; increment) body
@@ -2350,16 +2356,18 @@ StmtPtr Parser::forStatement() {
             auto iterable = maybeHashRange(expression());
             consume(TokenType::RPAREN, "Expected ')' after 'for...in' iterable");
             ExprPtr lim = limitClause();
+            const size_t bodyFrom = current;
             enterLoop();
-            auto body = statement();
+            StmtPtr body = statement();
             exitLoop();
+            const std::string ici = implicitIBegin(body, bodyFrom, current, forTok.line);
             auto stmt = std::make_shared<ForInStmt>();
             stmt->pattern = std::make_shared<LetPattern>(std::move(pat));
             stmt->iterable = iterable;
             stmt->body = body;
             stmt->line = forTok.line;
             attachDoneBlock(stmt->doneBlock);
-            return finishLoop(stmt, lim);
+            return implicitIEnd(finishLoop(stmt, lim), ici, forTok.line);
         }
         current = save;
     }
@@ -2372,16 +2380,18 @@ StmtPtr Parser::forStatement() {
         auto iterable = maybeHashRange(expression());
         consume(TokenType::RPAREN, "Expected ')' after 'for...in' iterable");
         ExprPtr lim = limitClause();
+        const size_t bodyFrom = current;
         enterLoop();
-        auto body = statement();
+        StmtPtr body = statement();
         exitLoop();
+        const std::string ici = (nameTok.lexeme == "i") ? std::string() : implicitIBegin(body, bodyFrom, current, forTok.line);
         auto stmt = std::make_shared<ForInStmt>();
         stmt->varName = nameTok.lexeme;
         stmt->iterable = iterable;
         stmt->body = body;
         stmt->line = forTok.line;
         attachDoneBlock(stmt->doneBlock);
-        return finishLoop(stmt, lim);
+        return implicitIEnd(finishLoop(stmt, lim), ici, forTok.line);
     }
 
     StmtPtr initializer = nullptr;
@@ -2410,9 +2420,11 @@ StmtPtr Parser::forStatement() {
     if (!parenless) consume(TokenType::RPAREN, "Expected ')' after 'for' clauses");
 
     ExprPtr lim = limitClause();
+    const size_t bodyFrom = current;
     enterLoop();
-    auto body = statement();
+    StmtPtr body = statement();
     exitLoop();
+    const std::string ici = implicitIBegin(body, bodyFrom, current, forTok.line);
 
     auto stmt = std::make_shared<ForStmt>();
     stmt->initializer = initializer;
@@ -2422,7 +2434,7 @@ StmtPtr Parser::forStatement() {
     stmt->line = forTok.line;
     stmt->freshIterScope = tokensMayCapture(scanFrom, current); // بلا closures => مسار سريع في المفسّر
     attachDoneBlock(stmt->doneBlock);
-    return finishLoop(stmt, lim);
+    return implicitIEnd(finishLoop(stmt, lim), ici, forTok.line);
 }
 
 // plus.condition (condition) { trueBranch } / { falseBranch }
@@ -2508,9 +2520,11 @@ StmtPtr Parser::hashStatement() {
 // (فتعمل continue بالضبط كما في do-while الحقيقية: تنتقل إلى فحص الشرط، لا إلى أول الجسم).
 StmtPtr Parser::hashDoStatement() {
     Token doTok = advance(); // #do
+    const size_t bodyFrom = current;
     enterLoop();
-    auto body = statement();
+    StmtPtr body = statement();
     exitLoop();
+    const std::string ici = implicitIBegin(body, bodyFrom, current, doTok.line);
     if (!check(TokenType::WHILE))
         throw errRich(diag::Code::E0012_MissingToken, peek(), "expected '#while' after the '#do' body",
                       "a do-loop is written `#do { ... } #while (condition);`",
@@ -2533,7 +2547,7 @@ StmtPtr Parser::hashDoStatement() {
     auto st = std::make_shared<ForStmt>();
     st->initializer = init; st->condition = orExpr; st->increment = inc; st->body = body; st->line = doTok.line;
     attachDoneBlock(st->doneBlock);
-    return finishLoop(st);
+    return implicitIEnd(finishLoop(st), ici, doTok.line);
 }
 
 // #ban x;  #ban x, y;  -> يمنع الكتابة على متغيّرات موجودة (E0043) | #ban x = expr; -> يعلن متغيّراً ممنوع التعديل.
@@ -4346,6 +4360,17 @@ static bool startsLiteralItem(TokenType t); // تعريفها أدناه (فاص
 
 ExprPtr Parser::primary() {
     if (atReducer(current)) return reduceComprehension(); // sum each x in xs yield e  (Loops v3)
+    // @name / @"a.b" في موضع تعبير = عناصر الحاوية كمصدر للحلقات: each d in @users where .. { }  ≡ each d in #items("users")
+    // (الحاوية المعلنة `@users.doc` عبارة لا تعبير، فلا تعارض: هنا `@` بعدها اسم/نص وليست بداية عبارة).
+    if (check(TokenType::AT) && current + 1 < tokens.size() &&
+        (tokens[current + 1].type == TokenType::IDENT || tokens[current + 1].type == TokenType::STRING)) {
+        Token at = advance(); Token nm = advance();
+        auto nameLit = std::make_shared<LiteralExpr>();
+        nameLit->kind = LiteralExpr::Kind::STRING; nameLit->str = nm.lexeme; nameLit->line = at.line;
+        auto call = std::make_shared<CallExpr>();
+        call->callee = "#items"; call->args.push_back(nameLit); call->line = at.line;
+        return call;
+    }
     if (match({TokenType::FALSE})) {
         auto e = std::make_shared<LiteralExpr>();
         e->kind = LiteralExpr::Kind::BOOL; e->boolean = false; return e;
@@ -4726,13 +4751,15 @@ StmtPtr Parser::loopsV2Statement() {
             advance();
             ExprPtr lim = limitClause();
             consume(TokenType::LBRACE, "Expected '{' after 'loop'");
+            const size_t bodyFrom = current;
             enterLoop();
-            auto body = block();
+            StmtPtr body = block();
             exitLoop();
+            const std::string ici = implicitIBegin(body, bodyFrom, current, line);
             auto w = std::make_shared<WhileStmt>();
             w->condition = lBool(true, line); w->body = body; w->line = line;
             attachDoneBlock(w->doneBlock);
-            return finishLoop(w, lim);
+            return implicitIEnd(finishLoop(w, lim), ici, line);
         }
         bool until = current + 2 < tokens.size() && tokens[current + 1].type == TokenType::IDENT && tokens[current + 1].lexeme == "until" && tokens[current + 2].type == TokenType::LPAREN;
         size_t lp = until ? current + 2 : current + 1;
@@ -4745,13 +4772,15 @@ StmtPtr Parser::loopsV2Statement() {
                 consume(TokenType::RPAREN, "Expected ')' after loop condition");
                 if (until) { auto n = std::make_shared<UnaryExpr>(); n->op = TokenType::BANG; n->right = cond; n->line = line; cond = n; }
                 ExprPtr lim = limitClause();
+                const size_t bodyFrom = current;
                 enterLoop();
-                auto body = statement();
+                StmtPtr body = statement();
                 exitLoop();
+                const std::string ici = implicitIBegin(body, bodyFrom, current, line);
                 auto w = std::make_shared<WhileStmt>();
                 w->condition = cond; w->body = body; w->line = line;
                 attachDoneBlock(w->doneBlock);
-                return finishLoop(w, lim);
+                return implicitIEnd(finishLoop(w, lim), ici, line);
             }
         }
         return nullptr;
@@ -4819,13 +4848,21 @@ StmtPtr Parser::loopsV2Statement() {
         else if (check(TokenType::IDENT)) { Token t = advance(); count = lVar(t.lexeme, t.line); }
         else { consume(TokenType::LPAREN, "Expected '('"); count = expression(); consume(TokenType::RPAREN, "Expected ')'"); }
         std::string att = "#ra" + std::to_string(loopSeq++);
-        if (check(TokenType::IDENT) && peek().lexeme == "as") { advance(); att = consume(TokenType::IDENT, "Expected attempt name after 'as'").lexeme; }
+        bool namedAtt = false;
+        if (check(TokenType::IDENT) && peek().lexeme == "as") { advance(); att = consume(TokenType::IDENT, "Expected attempt name after 'as'").lexeme; namedAtt = true; }
         const std::string id = std::to_string(loopSeq++);
         const std::string n = "#rn" + id, okv = "#rok" + id, err = "#rer" + id, cnt = "#rc" + id;
         consume(TokenType::LBRACE, "Expected '{' after 'retry'");
+        const size_t bodyFrom = current;
         enterLoop();
         auto body = block();
         exitLoop();
+        std::string ici;                       // retry 3 { ... i ... }  — i = رقم المحاولة من 0
+        if (!namedAtt) {
+            StmtPtr wrapped = body;
+            ici = implicitIBegin(wrapped, bodyFrom, current, line);
+            if (!ici.empty()) body = std::static_pointer_cast<BlockStmt>(wrapped);
+        }
         // for (let att = 1; !ok; att = att + 1) { try { body; ok = true; } catch (e) { err = e; if (att >= n) throw e; } }
         auto tc = std::make_shared<TryCatchStmt>();
         tc->line = line;
@@ -4839,7 +4876,7 @@ StmtPtr Parser::loopsV2Statement() {
         f->condition = lUnaryNot(lVar(okv, line), line);
         f->increment = lAssign(att, lBin(lVar(att, line), TokenType::PLUS, lNum(1, line), line), line);
         f->body = lBlock({tc}, line); f->line = line;
-        StmtPtr loop = finishLoop(f);
+        StmtPtr loop = implicitIEnd(finishLoop(f), ici, line);
         return lBlock({lLet(n, count, line), lLet(okv, lBool(false, line), line), loop}, line);
     }
 
@@ -5299,6 +5336,34 @@ StmtPtr Parser::buildEachImplicit(EachHdr& h, StmtPtr body, int line, ExprPtr li
     pre.push_back(body);
     out.push_back(buildEach(h, lBlock(std::move(pre), line), line, lim));
     return lBlock(std::move(out), line);
+}
+
+// ---- i الضمني لبقية الحلقات (while · until · loop · for(;;) · for(let x in ..) · #do/#while · retry · rinopen) ----
+// القواعد نفسها تماماً في repeat/each: يُفعَّل فقط إن قرأ الجسم `i` ولم يعرّفه/يسنده، ولم يكن `i` معرَّفاً قبل الجسم في نطاق مرئي
+// (بما فيه ترويسة الحلقة: for (let i ..)). i = رقم الدورة المنفَّذة من 0 ويُحسب عند بداية الجسم، فلا يكسره continue.
+// لكل دورة `i` خاصة بها (let داخل الجسم) فتلتقطها الإغلاقات. بدونه لا يتغيّر شيء في الشجرة المولَّدة.
+std::string Parser::implicitIBegin(StmtPtr& body, size_t from, size_t to, int line) {
+    if (!body || !implicitWanted("i", from, to) || nameDeclaredBefore("i", from)) return "";
+    // ترويسة الحلقة نفسها لا تذكر `i` (while (i < n) · for (let [i, v] in ..) · for (;i<3;)): حينها `i` للخارج لا للعدّاد.
+    {
+        int depth = 0;
+        for (size_t j = std::min(from, tokens.size()); j-- > 0 && from - j < 400;) {
+            const auto t = tokens[j].type;
+            if (t == TokenType::RPAREN) { depth++; continue; }
+            if (t == TokenType::LPAREN) { if (depth > 0) depth--; continue; }
+            if (depth == 0 && (t == TokenType::SEMICOLON || t == TokenType::RBRACE || t == TokenType::LBRACE)) break;
+            if (t == TokenType::IDENT && tokens[j].lexeme == "i" && !(j > 0 && tokens[j - 1].type == TokenType::DOT)) return "";
+        }
+    }
+    const std::string cnt = "#ci" + std::to_string(loopSeq++);
+    body = lBlock({lExpr(lAssign(cnt, lBin(lVar(cnt, line), TokenType::PLUS, lNum(1, line), line), line), line),
+                   lLet("i", lVar(cnt, line), line), body}, line);
+    return cnt;
+}
+
+StmtPtr Parser::implicitIEnd(StmtPtr loop, const std::string& cnt, int line) {
+    if (cnt.empty()) return loop;
+    return lBlock({lLet(cnt, lNum(-1, line), line), loop}, line);
 }
 
 // [each x in xs where c yield expr]  ->  goal { let acc = []; each ... { push(acc, expr); } achieve acc; }
