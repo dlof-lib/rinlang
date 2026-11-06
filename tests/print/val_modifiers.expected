@@ -1,0 +1,19 @@
+true 0
+true 0
+16 false 1
+lazy rang: 16 -> 25
+25
+200
+200 true
+300 false
+100 0 100
+60
+20
+100
+[100, 60, 20]
+60
+60
+100
+strict: [E0044] gauge `capped` accepts 0 to 100, but got 400
+68 Fahrenheit F درجة الحرارة {"id": "fahr", "label": "Fahrenheit", "about": "درجة الحرارة", "unit": "F", "value": 68}
+212
