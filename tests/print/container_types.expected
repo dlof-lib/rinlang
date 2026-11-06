@@ -1,0 +1,24 @@
+onCreate: sara
+Person Employee nil Person
+user staff 100 0
+true false true
+["Person", "Employee", "Strict"] ["ali", "sara"] ["sara"]
+["sara"]
+رفض: [E0004] القيمة أكبر من الحد الأعلى 150 في Person.age
+رفض: [E0004] نوع خاطئ في Person.age: المتوقع number والموجود string
+رفض: [E0004] الحقل إلزامي ولا يقبل nil: Person.name
+رفض: [E0004] قيمة غير مسموحة في Person.role (المتاح: user | admin)
+رفض: [E0004] الراتب يجب أن يكون موجباً
+رفض: [E0004] قيمة غير مسموحة في Employee.role (المتاح: staff | manager)
+31
+رفض: [E0004] newContainer(Person, bad1): الحقل إلزامي ولا يقبل nil: Person.name
+رفض: [E0004] newContainer(Person, bad2): القيمة أقل من الحد الأدنى 0 في Person.age
+رفض: [E0004] newContainer(Strict, bad3): حقل غير معرَّف في النوع (strict): Strict.extra
+رفض: [E0014] containerType: نوع غير معرَّف 'Nope'
+رفض: [E0014] newContainer: الحاوية موجودة مسبقاً 'ali'
+false false false
+strict: [E0004] حقل غير معرَّف في النوع (strict): Strict.zzz
+Person 5
+[] []
+31 user
+nil ["sara"]
