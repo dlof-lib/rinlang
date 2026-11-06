@@ -1,0 +1,48 @@
+// حرّاس التأكيد (dialog + Intent): Intent.guard / Intent.confirm / force / when (docs/guarded_actions.md)
+// يُشغَّل مع stdin: "1\n2\n\n1\n2\n"  (تأكيد · رفض · Enter = الزر الآمن focus · تأكيد لمرة واحدة · رفض لمرة واحدة)
+@shop.container
+    let stock = 10;
+    let big = false;
+    let pending = nil;                                    // يحمل وصف ما ينتظر التأكيد، فتتحدّث الرسالة به
+    dialog sure = "بيع " + (pending == nil ? "؟" : pending["data"]["n"]) + " قطعة؟ (المخزون " + stock + ")"
+        title "تأكيد البيع" tone "ask" buttons ["بيع", "إلغاء"] focus 2;
+    fun sell(extras) { stock = stock - extras["n"]; return stock; }
+    fun ping() { return "pong"; }
+.end;
+
+Intent.guard("shop", "sell", "sure");
+$ Intent.guards("shop");
+let r = Intent.send(Intent.core("shop", "sell", {"n": 3}));          // "1" = بيع
+$ r.ok, r.confirmed, r.result, shop.stock;
+let r2 = Intent.send(Intent.core("shop", "sell", {"n": 2}));         // "2" = إلغاء
+$ r2.ok, r2.blocked, r2.answer, r2.choice, shop.stock;
+let r3 = Intent.send(Intent.core("shop", "sell", {"n": 1}));         // Enter = focus 2 = إلغاء (الفشل مغلق)
+$ r3.blocked, shop.stock;
+$ Intent.send(Intent.core("shop", "ping")).result;                   // إجراء غير محروس: بلا سؤال
+let r4 = Intent.send(Intent.core("shop", "sell", {"n": 4}), {"force": true});
+$ r4.ok, r4.confirmed, shop.stock;                                   // force يتجاوز الحارس
+$ shop.pending;                                                      // نُظِّف بعد السؤال
+let g = Intent.guards("shop")[0];
+$ g["target"], g["dialog"], g["asked"], g["confirmed"], g["declined"];
+
+// تأكيد لمرة واحدة بلا حارس دائم
+Intent.unguard("shop");
+$ Intent.guards("shop");
+let c1 = Intent.confirm(Intent.core("shop", "sell", {"n": 1}), "sure");   // "1"
+$ c1.ok, c1.confirmed, shop.stock;
+let c2 = Intent.confirm(Intent.core("shop", "sell", {"n": 1}), "sure");   // "2"
+$ c2.blocked, shop.stock;
+
+// when: لا يسأل إلا إذا كان الحقل/الدالة صادقاً
+Intent.guard("shop", "*", "sure", {"when": "big"});
+let q = Intent.send(Intent.core("shop", "ping"));
+$ q.ok, q.confirmed;                                                 // big=false: لا سؤال
+Intent.unguard("shop", "*");
+
+// أخطاء واضحة
+try { Intent.guard("shop", "nope", "sure"); } catch (e) { $ "no action"; }
+try { Intent.guard("shop", "sell", "stock"); } catch (e) { $ "not a dialog"; }
+try { Intent.guard("shop", "sell", "sure", {"confirm": 9}); } catch (e) { $ "no button"; }
+try { Intent.guard("shop", "sell", "sure", {"zzz": 1}); } catch (e) { $ "bad option"; }
+try { Intent.guard("shop", "sell", "sure", {"when": "ghost"}); } catch (e) { $ "bad when"; }
+try { Intent.guard("ghost", "sell", "sure"); } catch (e) { $ "no container"; }
