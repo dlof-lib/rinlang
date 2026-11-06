@@ -374,6 +374,58 @@ StmtPtr Parser::declaration() {
         empty->line = atT.line;
         return empty;
     }
+    // '@tx [أسماء حاويات] { ... }' — معاملة موحَّدة تدمج: مستندات docStore + حقول الحاويات المسمّاة + try/finally + `!?`:
+    // عند أي خطأ (`!?` أو خطأ تنفيذ) تُستعاد المستندات والحقول معاً ثم يُعاد رمي الخطأ نفسه؛ عند النجاح تُعتمد.
+    // تُختزل إلى عقد موجودة (دالات __tx_* + TryCatchStmt بـ finally) فلا مسار تنفيذ جديد. docs/merge_concepts.md
+    if (check(TokenType::AT) && current + 1 < tokens.size() && tokens[current + 1].type == TokenType::IDENT &&
+        tokens[current + 1].lexeme == "tx" && current + 2 < tokens.size() &&
+        (tokens[current + 2].type == TokenType::LBRACE || tokens[current + 2].type == TokenType::STRING ||
+         (tokens[current + 2].type == TokenType::IDENT))) {
+        Token atT = advance(); // '@'
+        advance();             // 'tx'
+        auto names = std::make_shared<ArrayExpr>();
+        names->line = atT.line;
+        while (!check(TokenType::LBRACE) && !isAtEnd()) {
+            Token nt = advance();
+            if (nt.type != TokenType::IDENT && nt.type != TokenType::STRING)
+                throw err(diag::Code::E0011_UnexpectedToken, nt, "`@tx` expects container names (identifiers or strings) before '{'");
+            auto lit = std::make_shared<LiteralExpr>();
+            lit->kind = LiteralExpr::Kind::STRING;
+            lit->str = nt.type == TokenType::STRING ? nt.lexeme : nt.lexeme;
+            lit->line = nt.line;
+            names->elements.push_back(lit);
+            match({TokenType::COMMA});
+        }
+        consume(TokenType::LBRACE, "Expected '{' after `@tx`");
+        auto body = block();
+        auto mkCall = [&](const char* fnName, ExprPtr arg) {
+            auto call = std::make_shared<CallExpr>();
+            call->callee = fnName;
+            call->line = atT.line;
+            if (arg) call->args.push_back(arg);
+            auto es = std::make_shared<ExpressionStmt>();
+            es->expr = call; es->line = atT.line;
+            return es;
+        };
+        auto tc = std::make_shared<TryCatchStmt>();
+        tc->line = atT.line;
+        tc->tryBranch = body;
+        tc->catchName = "__tx_err";
+        auto cb = std::make_shared<BlockStmt>(); cb->line = atT.line;
+        cb->statements.push_back(mkCall("__tx_fail", nullptr));
+        auto rt = std::make_shared<ThrowStmt>(); rt->rethrow = true; rt->line = atT.line;
+        cb->statements.push_back(rt);
+        tc->catchBranch = cb;
+        auto fb = std::make_shared<BlockStmt>(); fb->line = atT.line;
+        fb->statements.push_back(mkCall("__tx_end", nullptr));
+        tc->finallyBranch = fb;
+        tc->needsInterp = true;
+        auto outer = std::make_shared<BlockStmt>(); outer->line = atT.line;
+        outer->statements.push_back(mkCall("__tx_begin", names));
+        outer->statements.push_back(tc);
+        if (check(TokenType::SEMICOLON) && peek().line == previous().line) advance();
+        return outer;
+    }
     // '@import "..."' هو عبارة مستقلة وأبسط من كتل '@container...': نتحقق من الشكل قبل تفويض
     // الأمر لـ atBlock() (الذي يتعامل حصراً مع container/Containers.Group/Volume). 'import' هنا
     // كلمة سياقية غير محجوزة (تُقرأ IDENT عادي)، فنميّزها بالنظر خطوتين للأمام: '@' ثم IDENT("import").
@@ -4020,7 +4072,21 @@ ExprPtr Parser::pipeline() {
     int stageCount = 0; // عدد مراحل |> في هذه السلسلة (لأجل RinFlow -- انظر CallExpr::pipelineStageCount)
     while (match({TokenType::PIPE})) {
         Token opTok = previous();
-        auto rhs = logicOr();
+        // `x |> $` / `x |> $ "وسم"` : `$` (print) كمصبّ داخل الأنبوب ≡ tap(x[, "وسم"]) — يطبع ويمرّر القيمة كما هي
+        // فتتابع السلسلة. (كانت `$` هنا خطأ بناء، فلا تعارض.)  docs/merge_concepts.md
+        ExprPtr rhs;
+        if (check(TokenType::PRINT)) {
+            Token pt = advance();
+            auto tapCall = std::make_shared<CallExpr>();
+            tapCall->callee = "tap";
+            tapCall->line = pt.line;
+            if (!check(TokenType::PIPE) && !check(TokenType::SEMICOLON) && !check(TokenType::RPAREN) &&
+                !check(TokenType::COMMA) && !check(TokenType::RBRACKET) && !check(TokenType::RBRACE) && !isAtEnd())
+                tapCall->args.push_back(logicOr());
+            rhs = tapCall;
+        } else {
+            rhs = logicOr();
+        }
 
         std::shared_ptr<CallExpr> callExpr = std::dynamic_pointer_cast<CallExpr>(rhs);
         if (!callExpr) {
