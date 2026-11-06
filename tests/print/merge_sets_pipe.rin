@@ -1,4 +1,4 @@
-// دمج الحاويات مع Set ومع الأنابيب: docIdSet/docFieldSet/docsWhereIn + `|> $` + tap (docs/merge_concepts.md)
+// دمج الحاويات مع Set ومع الأنابيب: docIdSet/docFieldSet/docsWhereIn + `|> $` + __tap (docs/merge_concepts.md)
 @users.doc
     document id="u1" fields={ name: "سارة", city: "بيروت" };
     document id="u2" fields={ name: "أحمد", city: "صيدا" };
@@ -16,7 +16,7 @@ $ docIdSet("users") * docFieldSet("orders", "user");     // لديهم طلبا�
 $ docFieldSet("users", "city");
 $ len(docsWhereIn("users", "city", #["بيروت"]));
 $ docsWhereIn("orders", "user", docIdSet("users") * #["u1" "u9"]) |> len |> $ "طلبات u1";
-let n = [1 2 3] |> tap(fun(v) { $ "tap fn:", v; }) |> len;
+let n = [1 2 3] |> __tap(fun(v) { $ "tap fn:", v; }) |> len;
 $ n;
 // خطأ تنفيذ (ليس !?) داخل @tx يتراجع أيضاً
 try { @tx { insertDoc("users", "u9", {name: "z"}); nosuchfn(); } } catch (e) { $ "runtime err; users =", countDocs("users"); }
