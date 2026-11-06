@@ -6524,6 +6524,53 @@ for(auto& kv:maskParents) if(maskResolve4(kv.second)==parent && !maskResolve4(kv
         return Value::nil();
     };
 
+    // ---- dialog (docs/dialog.md): التحكم بحوارات حاوية من الخارج ----
+    // dialogs(container) -> أسماء الحوارات المعرَّفة فيها · dialogOpen/dialogClose(c, name[, result])/dialogAsk(c, name) · dialogInfo(c, name) -> خريطة بكل حالة الحوار
+    natives["dialogs"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("dialogs", a, 1, line);
+        std::string cn = canonContainer(asString(a[0], "dialogs", line));
+        auto it = containers.find(cn);
+        if (it == containers.end())
+            throw errWithReason(diag::Code::E0014_InvalidContainer, line, "'" + cn + "' is not a known container",
+                                "create it first via `@container=" + cn + "` or `spawn(kind, \"" + cn + "\")`");
+        std::vector<std::string> names;
+        for (auto& kv : it->second->live) if (kv.second && kv.second->dialog) names.push_back(kv.first);
+        std::sort(names.begin(), names.end());
+        auto arr = std::make_shared<ArrayData>();
+        for (auto& n : names) arr->push_back(Value::string(n));
+        return Value::makeArray(arr);
+    };
+    natives["dialogOpen"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("dialogOpen", a, 2, line);
+        Environment* o = nullptr; std::shared_ptr<LiveMeta> m;
+        std::string n = asString(a[1], "dialogOpen", line);
+        dialogLocateIn(asString(a[0], "dialogOpen", line), n, line, o, m);
+        dialogDoOpen(o, n, m, line);
+        return Value::boolean_(m->dOpen);
+    };
+    natives["dialogClose"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("dialogClose", a, 2, 3, line);
+        Environment* o = nullptr; std::shared_ptr<LiveMeta> m;
+        std::string n = asString(a[1], "dialogClose", line);
+        dialogLocateIn(asString(a[0], "dialogClose", line), n, line, o, m);
+        dialogDoClose(o, n, m, a.size() > 2 ? &a[2] : nullptr, line);
+        return m->dResult;
+    };
+    natives["dialogAsk"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("dialogAsk", a, 2, line);
+        Environment* o = nullptr; std::shared_ptr<LiveMeta> m;
+        std::string n = asString(a[1], "dialogAsk", line);
+        dialogLocateIn(asString(a[0], "dialogAsk", line), n, line, o, m);
+        return dialogDoAsk(o, n, m, line);
+    };
+    natives["dialogInfo"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("dialogInfo", a, 2, line);
+        Environment* o = nullptr; std::shared_ptr<LiveMeta> m;
+        std::string n = asString(a[1], "dialogInfo", line);
+        dialogLocateIn(asString(a[0], "dialogInfo", line), n, line, o, m);
+        return dialogInfoMap(o, n, m, line);
+    };
+
     // hasField(container, key) -> true إن كان الحقل key معرَّفاً (مباشرة أو عبر أي بيئة أب) بداخل container
     // ------------------------------------------------------------------------------------------
     // candle — علاقة موجَّهة id -> id (انظر docs/candle.md). لا تستبدل mask ولا id: تضيف طبقة
@@ -12684,6 +12731,16 @@ Value Interpreter::evaluateTree(const ExprPtr& expr, const EnvPtr& env) {
                 if (livePropertyGet(env, ve->name, e->name, e->line, liveProp)) return liveProp;
             }
         }
+        if (liveActive_ && !nsRoots.empty()) { // خاصية حيّة عبر مسار namespace: shop.confirm.open / shop.total.runs
+            if (auto g = std::dynamic_pointer_cast<GetExpr>(e->object)) {
+                if (auto pn = nsResolveExpr(g->object, env)) {
+                    if (!pn->child(g->name) && pn->env->values.count(g->name)) {
+                        Value liveProp;
+                        if (livePropertyGet(pn->env, g->name, e->name, e->line, liveProp)) return liveProp;
+                    }
+                }
+            }
+        }
         if (!nsRoots.empty()) { // namespaces: shop.users.count  (container / group / Volume, any nesting)
             if (auto ns = nsResolveExpr(e->object, env)) return nsGet(ns, e->name, e->line);
         }
@@ -13710,7 +13767,7 @@ Value Interpreter::liveAssign(Environment* owner, const std::string& name, Value
                           m->kind == "banned" ? "`#ban " + name + ";` froze it for good; remove the `#ban` if it must change"
                                               : "a stone is frozen at its declaration; declare `" + name + "` with `let` (or `tape`) if it must change");
         if (m->reactive)
-            throw liveErr(diag::Code::E0045_DerivedReadOnly, line, "cannot assign to `" + name + "`: it is a val (reactive, computed from what it reads)",
+            throw liveErr(diag::Code::E0045_DerivedReadOnly, line, "cannot assign to `" + name + "`: it is " + (m->dialog ? "a dialog (its message is reactive, computed from what it reads)" : "a val (reactive, computed from what it reads)"),
                           "change the variables `" + name + "` reads instead; use `touch " + name + ";` to force a recompute or `unval " + name + ";` to turn it into a plain variable");
         if (m->derived)
             throw liveErr(diag::Code::E0045_DerivedReadOnly, line, "cannot assign to `" + name + "`: it is a lens (computed from other variables)",
@@ -13776,7 +13833,7 @@ void Interpreter::liveGuardWrite(const EnvPtr& env, const ExprPtr& objectExpr, i
     if (it->second->derived)
         throw liveErr(diag::Code::E0045_DerivedReadOnly, line, "cannot modify `" + ve->name + "`: it is a lens (read-only)");
     if (it->second->reactive)
-        throw liveErr(diag::Code::E0045_DerivedReadOnly, line, "cannot modify `" + ve->name + "`: it is a val (reactive, read-only)");
+        throw liveErr(diag::Code::E0045_DerivedReadOnly, line, "cannot modify `" + ve->name + "`: it is " + (it->second->dialog ? "a dialog" : "a val") + " (reactive, read-only)");
 }
 
 void Interpreter::liveExecDecl(const std::shared_ptr<LiveDeclStmt>& s, const EnvPtr& env) {
@@ -13796,7 +13853,7 @@ void Interpreter::liveExecDecl(const std::shared_ptr<LiveDeclStmt>& s, const Env
             throw liveErr(diag::Code::E0046_LiveMisuse, s->line, std::string(what) + " of `" + s->name + "` must be a whole number from 1 to 100000, got " + liveNum(n));
         return static_cast<long>(n);
     };
-    if (s->kind != LiveKind::Lens && s->kind != LiveKind::Val && s->initializer) v = copyForBinding(evaluate(s->initializer, env));
+    if (s->kind != LiveKind::Lens && s->kind != LiveKind::Val && s->kind != LiveKind::Dialog && s->initializer) v = copyForBinding(evaluate(s->initializer, env));
     switch (s->kind) {
         case LiveKind::Stone: m->kind = "stone"; m->frozen = true; break;
         case LiveKind::Gauge: {
@@ -13833,6 +13890,13 @@ void Interpreter::liveExecDecl(const std::shared_ptr<LiveDeclStmt>& s, const Env
                 };
                 m->metaLabel = text(s->metaLabel, "label"); m->metaAbout = text(s->metaAbout, "description"); m->metaUnit = text(s->metaUnit, "unit");
             }
+            v = Value::nil();
+            break;
+        }
+        case LiveKind::Dialog: { // حوار متغيّر (docs/dialog.md): الرسالة val تفاعلية + حالة (مفتوح/مغلق/نتيجة)؛ العنوان/الأزرار/النغمة تعابير تُقيَّم عند القراءة
+            m->kind = "dialog"; m->dialog = true; m->reactive = true; m->lazy = s->lazy; m->expr = s->initializer; m->whenExpr = s->when; m->scope = env;
+            m->dTitle = s->dTitle; m->dButtons = s->dButtons; m->dTone = s->dTone; m->dFocus = s->dFocus; m->dTrigger = s->dTrigger;
+            if (s->keep) { m->vkeep = static_cast<size_t>(evalCount(s->keep, "`keep`", 10)); }
             v = Value::nil();
             break;
         }
@@ -13892,6 +13956,16 @@ void Interpreter::liveExecDecl(const std::shared_ptr<LiveDeclStmt>& s, const Env
 }
 
 void Interpreter::liveExecBell(const std::shared_ptr<BellStmt>& s, const EnvPtr& env) {
+    if (s->reply) { // reply DIALOG (r) { ... } — معالج يُستدعى عند كل إغلاق للحوار (docs/dialog.md)
+        Environment* o = nullptr; std::string nm; std::shared_ptr<LiveMeta> dm;
+        dialogLocate(env, s->target, s->line, o, nm, dm);
+        auto callable = std::make_shared<Callable>();
+        callable->declaration = s->handler;
+        callable->closure = env;
+        Value fn; fn.type = Value::Type::FUNCTION; fn.function = callable;
+        dm->replies.push_back(fn);
+        return;
+    }
     Environment* owner = findLiveOwner(env, s->target);
     if (!owner) throw undefinedVariableErr(s->target, s->line, env);
     liveActive_ = true;
@@ -14000,12 +14074,18 @@ bool Interpreter::valCompute(Environment* owner, const std::string& name, const 
     depTracker_ = &deps;
     m->computing = true;
     Value r; bool hold = false;
+    bool openNow = false;   // dialog ... opens when COND: انتقال الشرط من كاذب إلى صادق يفتح الحوار (الشرط يُتتبَّع كاعتماد كالرسالة)
     try {
+        if (m->dialog && m->dTrigger) { bool now = evaluate(m->dTrigger, scope).isTruthy(); openNow = now && !m->trigPrev; m->trigPrev = now; }
         if (m->whenExpr) hold = !evaluate(m->whenExpr, scope).isTruthy();
         if (!hold) r = evaluate(m->expr, scope);
     } catch (...) { depTracker_ = prev; m->computing = false; throw; }
     depTracker_ = prev;
     m->computing = false;
+    if (openNow) { // بعد استعادة المتتبّع: الفتح يكتب في journal ولا يقرأ اعتمادات
+        auto di = owner->live.find(name);
+        if (di != owner->live.end() && di->second.get() == m.get()) dialogDoOpen(owner, name, m, line);
+    }
     if (hold) { // أبقِ اشتراكات الشرط فقط كي يستيقظ عند تغيّره، وأبقِ القيمة
         valResubscribe(owner, name, m, deps);
         m->held = true; m->runs++;
@@ -14117,6 +14197,7 @@ void Interpreter::liveExecAction(const std::shared_ptr<LiveActionStmt>& s, const
                           "wrap the risky assignments in `trial { ... }` so there is something to roll back");
         throw LiveAbortSignal{};
     }
+    if (s->action == "open" || s->action == "close" || s->action == "ask") { dialogAction(s, env); return; } // docs/dialog.md
     Environment* owner = findLiveOwner(env, s->target);
     if (!owner) throw undefinedVariableErr(s->target, s->line, env);
     // #ban x; — يمنع أي كتابة لاحقة على متغيّر موجود (الإسناد وتعديل محتواه المباشر x[i]= / x.f=)؛
@@ -14176,7 +14257,7 @@ void Interpreter::liveExecAction(const std::shared_ptr<LiveActionStmt>& s, const
             Value cur = owner->values[s->target];
             if (m->lazy && m->stale) { Value nv; m->stale = false; if (valCompute(owner, s->target, m, nv, s->line)) { owner->values[s->target] = nv; } valUnsubscribe(owner, s->target, m); }
             m->reactive = false; m->lazy = false; m->stale = false; m->held = false; m->expr = nullptr; m->whenExpr = nullptr;
-            m->kind = m->bells.empty() && m->dependents.empty() ? "plain" : "plain";
+            if (!m->dialog) m->kind = "plain";
             return;
         }
         // touch: إعادة حساب قسرية (حتى لو lazy أو held أو لم يتغيّر شيء)؛ ترنّ الأجراس إن تغيّرت القيمة
@@ -14229,7 +14310,8 @@ bool Interpreter::livePropertyGet(const EnvPtr& env, const std::string& name, co
         "base", "delta", "up", "down", "same", "changed", "goal", "reached", "togo", "progress", "step", // base
         "ok", "accepted", "rejected", "refused",                                                        // accept (و pre/post)
         "pre", "post", "label", "about", "unit", "id", "info",
-        "deps", "runs", "stale", "lazy", "held", "dependents"};                                       // val                                                                                 // pre/post
+        "deps", "runs", "stale", "lazy", "held", "dependents",
+        "open", "title", "text", "buttons", "tone", "choice", "result", "opens", "closes", "focus"};   // dialog (docs/dialog.md)                                       // val                                                                                 // pre/post
     if (!props.count(prop)) return false;
     Environment* owner = findLiveOwner(env, name);
     if (!owner || owner->live.empty()) return false;
@@ -14252,6 +14334,26 @@ bool Interpreter::livePropertyGet(const EnvPtr& env, const std::string& name, co
         return Value::makeArray(a);
     };
     auto modeName = [&]() { return std::string(m->rangeMode == 1 ? "strict" : m->rangeMode == 2 ? "wrap" : "clamp"); };
+    // ---- dialog: خصائص صامتة على غير الحوارات (لا تحجب أسماء حقول/طرق عادية) ----
+    if (prop == "open" || prop == "title" || prop == "text" || prop == "buttons" || prop == "tone" || prop == "choice" ||
+        prop == "result" || prop == "opens" || prop == "closes" || prop == "focus" || (prop == "info" && m->dialog)) {
+        if (!m->dialog) { if (prop != "info") return false; }
+        else {
+            if (prop == "open")   { out = Value::boolean_(m->dOpen); return true; }
+            if (prop == "choice") { out = Value::num(static_cast<double>(m->dChoice)); return true; }
+            if (prop == "result") { out = m->dResult; return true; }
+            if (prop == "opens")  { out = Value::num(static_cast<double>(m->dOpens)); return true; }
+            if (prop == "closes") { out = Value::num(static_cast<double>(m->dCloses)); return true; }
+            if (prop == "text")   { out = Value::string(liveRead(owner, m, name, line).toDisplayString()); return true; }
+            if (prop == "info")   { out = dialogInfoMap(owner, name, m, line); return true; }
+            DialogSpec sp = dialogSpec(name, m, line);
+            if (prop == "title")  { out = Value::string(sp.title); return true; }
+            if (prop == "tone")   { out = Value::string(sp.tone); return true; }
+            if (prop == "focus")  { out = Value::num(static_cast<double>(sp.focus)); return true; }
+            std::vector<Value> bs; for (auto& b : sp.buttons) bs.push_back(Value::string(b));
+            out = arr(bs); return true;
+        }
+    }
     if (prop == "kind")   { out = Value::string(m->kind); return true; }
     if (prop == "reads")  { out = Value::num(static_cast<double>(m->reads)); return true; }
     if (prop == "writes") { out = Value::num(static_cast<double>(m->writes)); return true; }
@@ -14356,6 +14458,10 @@ bool Interpreter::livePropertyGet(const EnvPtr& env, const std::string& name, co
         put("lazy", Value::boolean_(m->lazy)); put("stale", Value::boolean_(m->stale)); put("held", Value::boolean_(m->held));
         { std::vector<Value> dn; for (auto& d : m->deps) if (auto e = d.first.lock()) dn.push_back(Value::string(d.second)); put("deps", arr(dn)); }
     }
+    if (m->dialog) {
+        put("open", Value::boolean_(m->dOpen)); put("opens", Value::num(static_cast<double>(m->dOpens))); put("closes", Value::num(static_cast<double>(m->dCloses)));
+        put("choice", Value::num(static_cast<double>(m->dChoice))); put("result", m->dResult); put("replies", Value::num(static_cast<double>(m->replies.size())));
+    }
     if (m->ranged) {
         put("min", Value::num(m->lo)); put("max", Value::num(m->hi)); put("mode", Value::string(modeName()));
         put("fill", Value::num(cur.type == Value::Type::NUMBER ? (cur.number - m->lo) / (m->hi - m->lo) : 0));
@@ -14389,6 +14495,188 @@ bool Interpreter::livePropertyGet(const EnvPtr& env, const std::string& name, co
     return true;
 }
 
+
+// ============================================================================
+// dialog — حوار متغيّر للحاوية (docs/dialog.md)
+// الرسالة قيمة val تفاعلية (تتحدّث مع حقول الحاوية)؛ العنوان/الأزرار/النغمة تعابير تُقيَّم عند القراءة؛ والحالة (مفتوح/نتيجة) تُسجَّل في journal فيتراجع trial عنها.
+// ============================================================================
+bool Interpreter::dialogLocateIn(const std::string& container, const std::string& name, int line, Environment*& owner, std::shared_ptr<LiveMeta>& m) {
+    std::string cn = canonContainer(container);
+    auto it = containers.find(cn);
+    if (it == containers.end())
+        throw errWithReason(diag::Code::E0014_InvalidContainer, line, "'" + cn + "' is not a known container",
+                            "create it first via `@container=" + cn + "` or `spawn(kind, \"" + cn + "\")`");
+    owner = it->second.get();
+    auto lit = owner->live.find(name);
+    if (lit == owner->live.end() || !lit->second || !lit->second->dialog)
+        throw liveErr(diag::Code::E0046_LiveMisuse, line, "`" + name + "` is not a dialog of container `" + cn + "`",
+                      "declare it inside the container with `dialog " + name + " = \"message\";`");
+    m = lit->second;
+    return true;
+}
+
+bool Interpreter::dialogLocate(const EnvPtr& env, const std::string& path, int line, Environment*& owner, std::string& name, std::shared_ptr<LiveMeta>& m, bool mustExist) {
+    size_t dot = path.rfind('.');
+    if (dot != std::string::npos) {
+        name = path.substr(dot + 1);
+        return dialogLocateIn(path.substr(0, dot), name, line, owner, m);
+    }
+    name = path;
+    owner = findLiveOwner(env, path);
+    if (!owner) { if (!mustExist) return false; throw undefinedVariableErr(path, line, env); }
+    auto lit = owner->live.find(path);
+    if (lit == owner->live.end() || !lit->second || !lit->second->dialog) {
+        if (!mustExist) return false;
+        throw liveErr(diag::Code::E0046_LiveMisuse, line, "`" + path + "` is not a dialog (it is " +
+                      (lit != owner->live.end() && lit->second ? "a " + lit->second->kind : std::string("a plain variable")) + ")",
+                      "declare it with `dialog " + path + " = \"message\";`");
+    }
+    m = lit->second;
+    return true;
+}
+
+Interpreter::DialogSpec Interpreter::dialogSpec(const std::string& name, const std::shared_ptr<LiveMeta>& m, int line) {
+    EnvPtr scope = m->scope.lock();
+    if (!scope) throw liveErr(diag::Code::E0045_DerivedReadOnly, line, "dialog `" + name + "` outlived the scope it was declared in");
+    DialogSpec sp;
+    sp.tone = "info";
+    if (m->dTone) {
+        Value t = evaluate(m->dTone, scope);
+        if (t.type != Value::Type::STRING)
+            throw liveErr(diag::Code::E0004_InvalidType, line, "the `tone` of dialog `" + name + "` must be text, got " + t.typeName());
+        std::string k = t.str;
+        if (k == "warning") k = "warn"; else if (k == "danger") k = "error"; else if (k == "ok") k = "success"; else if (k == "confirm") k = "ask";
+        if (k != "info" && k != "warn" && k != "error" && k != "success" && k != "ask")
+            throw liveErr(diag::Code::E0046_LiveMisuse, line, "unknown tone \"" + t.str + "\" for dialog `" + name + "`",
+                          "use one of: info, warn, error, success, ask");
+        sp.tone = k;
+    }
+    if (m->dTitle) sp.title = evaluate(m->dTitle, scope).toDisplayString();
+    if (m->dButtons) {
+        Value b = evaluate(m->dButtons, scope);
+        if (b.type != Value::Type::ARRAY || !b.array)
+            throw liveErr(diag::Code::E0004_InvalidType, line, "the `buttons` of dialog `" + name + "` must be a list of texts, got " + b.typeName(),
+                          "e.g. `buttons [\"نعم\", \"لا\"]`");
+        for (auto& x : *b.array) sp.buttons.push_back(x.toDisplayString());
+    } else if (sp.tone == "ask") { sp.buttons = {"نعم", "لا"}; }
+    else sp.buttons = {"حسناً"};
+    sp.focus = sp.buttons.empty() ? 0 : 1;
+    if (m->dFocus) {
+        Value f = evaluate(m->dFocus, scope);
+        if (f.type != Value::Type::NUMBER || f.number != std::floor(f.number) || f.number < 1 || f.number > static_cast<double>(sp.buttons.size()))
+            throw liveErr(diag::Code::E0046_LiveMisuse, line, "the `focus` of dialog `" + name + "` must be a button number from 1 to " + std::to_string(sp.buttons.size()),
+                          "focus is the button chosen when the user just presses Enter");
+        sp.focus = static_cast<long>(f.number);
+    }
+    return sp;
+}
+
+void Interpreter::dialogDoOpen(Environment* owner, const std::string& name, const std::shared_ptr<LiveMeta>& m, int line) {
+    if (m->lazy && m->stale) liveRead(owner, m, name, line);   // رسالة lazy قديمة: احسبها الآن كي يراها من يفتح الحوار
+    if (m->dOpen) return;                                      // فتح حوار مفتوح لا أثر له
+    liveJournal(owner, name);
+    m->dOpen = true; m->dOpens++; m->dChoice = 0; m->dResult = Value::nil();
+}
+
+void Interpreter::dialogDoClose(Environment* owner, const std::string& name, const std::shared_ptr<LiveMeta>& m, const Value* result, int line) {
+    if (!m->dOpen) return;                                     // إغلاق حوار مغلق لا أثر له
+    DialogSpec sp = dialogSpec(name, m, line);
+    long choice = 0;
+    if (result && result->type != Value::Type::NIL) {
+        if (result->type == Value::Type::NUMBER) {
+            double n = result->number;
+            if (n == 0) choice = 0;
+            else if (n == std::floor(n) && n >= 1 && n <= static_cast<double>(sp.buttons.size())) choice = static_cast<long>(n);
+            else throw liveErr(diag::Code::E0046_LiveMisuse, line, "`close " + name + " " + result->toDisplayString() + "`: there is no button number " + result->toDisplayString(),
+                               "dialog `" + name + "` has " + std::to_string(sp.buttons.size()) + " button(s); use 1.." + std::to_string(sp.buttons.size()) + " (or 0 to dismiss)");
+        } else if (result->type == Value::Type::STRING) {
+            for (size_t i = 0; i < sp.buttons.size(); ++i) if (sp.buttons[i] == result->str) { choice = static_cast<long>(i + 1); break; }
+            if (choice == 0)
+                throw liveErr(diag::Code::E0046_LiveMisuse, line, "`close " + name + " \"" + result->str + "\"`: no button has that text",
+                              "dialog `" + name + "` has the buttons: " + [&]{ std::string j; for (auto& b : sp.buttons) j += (j.empty() ? "" : " | ") + b; return j; }());
+        } else {
+            throw liveErr(diag::Code::E0004_InvalidType, line, "the result of `close " + name + "` must be a button number or its text, got " + result->typeName());
+        }
+    }
+    liveJournal(owner, name);
+    m->dOpen = false; m->dCloses++; m->dChoice = choice;
+    m->dResult = choice > 0 ? Value::string(sp.buttons[static_cast<size_t>(choice - 1)]) : Value::nil();
+    if (!m->replies.empty()) {
+        struct DepthGuard { int& d; explicit DepthGuard(int& x) : d(x) { ++d; } ~DepthGuard() { --d; } } guard(bellDepth_);
+        if (bellDepth_ > 16)
+            throw liveErr(diag::Code::E0047_BellLoop, line, "a reply keeps re-opening its own dialog (nested more than 16 levels)",
+                          "a `reply` that re-opens the dialog it answers must stop at some point");
+        std::vector<Value> rs = m->replies;                    // نسخة: قد يُسجِّل معالج معالجاً آخر
+        for (auto& r : rs) {
+            if (r.type != Value::Type::FUNCTION || !r.function) continue;
+            size_t n = r.function->declaration ? r.function->declaration->params.size() : 0;
+            std::vector<Value> args;
+            if (n >= 1) args = {m->dResult};
+            callFunction(r.function, args, line);
+        }
+    }
+}
+
+Value Interpreter::dialogDoAsk(Environment* owner, const std::string& name, const std::shared_ptr<LiveMeta>& m, int line) {
+    dialogDoOpen(owner, name, m, line);
+    DialogSpec sp = dialogSpec(name, m, line);
+    std::string msg = liveRead(owner, m, name, line).toDisplayString();
+    const std::string icon = sp.tone == "warn" ? "⚠" : sp.tone == "error" ? "✖" : sp.tone == "success" ? "✔" : sp.tone == "ask" ? "؟" : "ℹ";
+    output << "╭─ " << icon << (sp.title.empty() ? "" : " " + sp.title) << "\n";
+    { size_t st = 0; while (true) { size_t nl = msg.find('\n', st); output << "│ " << msg.substr(st, nl == std::string::npos ? std::string::npos : nl - st) << "\n"; if (nl == std::string::npos) break; st = nl + 1; } }
+    if (!sp.buttons.empty()) {
+        output << "│\n│ ";
+        for (size_t i = 0; i < sp.buttons.size(); ++i) output << (i ? "   " : "") << "[" << (i + 1) << "] " << sp.buttons[i];
+        output << "\n";
+    }
+    output << "╰─\n";
+    long choice = 0;
+    if (!sp.buttons.empty()) {
+        auto inp = natives.find("input");
+        const std::string prompt = "› [1-" + std::to_string(sp.buttons.size()) + "] (" + std::to_string(sp.focus) + "): ";
+        for (int attempt = 0; attempt < 3 && inp != natives.end(); ++attempt) {
+            std::vector<Value> args{Value::string(prompt)};
+            Value ans = inp->second(args, line);
+            std::string t = ans.toDisplayString();
+            size_t b = t.find_first_not_of(" \t\r\n"), e = t.find_last_not_of(" \t\r\n");
+            t = b == std::string::npos ? std::string() : t.substr(b, e - b + 1);
+            if (t.empty()) { choice = sp.focus; break; }                       // Enter (أو نهاية الإدخال) = الزر الافتراضي
+            bool numeric = t.find_first_not_of("0123456789") == std::string::npos;
+            if (numeric) { long n = std::strtol(t.c_str(), nullptr, 10); if (n >= 1 && n <= static_cast<long>(sp.buttons.size())) { choice = n; break; } }
+            else for (size_t i = 0; i < sp.buttons.size(); ++i) if (sp.buttons[i] == t) { choice = static_cast<long>(i + 1); break; }
+            if (choice) break;
+            output << "  (غير صالح)\n";
+        }
+    }
+    Value r = Value::num(static_cast<double>(choice));
+    dialogDoClose(owner, name, m, &r, line);
+    return m->dResult;
+}
+
+Value Interpreter::dialogInfoMap(Environment* owner, const std::string& name, const std::shared_ptr<LiveMeta>& m, int line) {
+    DialogSpec sp = dialogSpec(name, m, line);
+    auto vm = std::make_shared<MapData>();
+    auto put = [&](const char* k, Value v) { vm->push_back({Value::string(k), std::move(v)}); };
+    std::vector<Value> bs; for (auto& b : sp.buttons) bs.push_back(Value::string(b));
+    put("name", Value::string(name));
+    put("text", Value::string(liveRead(owner, m, name, line).toDisplayString()));
+    put("title", Value::string(sp.title)); put("tone", Value::string(sp.tone));
+    put("buttons", Value::makeArray(std::make_shared<ArrayData>(bs.begin(), bs.end())));
+    put("focus", Value::num(static_cast<double>(sp.focus)));
+    put("open", Value::boolean_(m->dOpen)); put("choice", Value::num(static_cast<double>(m->dChoice))); put("result", m->dResult);
+    put("opens", Value::num(static_cast<double>(m->dOpens))); put("closes", Value::num(static_cast<double>(m->dCloses)));
+    return Value::makeMap(vm);
+}
+
+void Interpreter::dialogAction(const std::shared_ptr<LiveActionStmt>& s, const EnvPtr& env) {
+    Environment* owner = nullptr; std::string name; std::shared_ptr<LiveMeta> m;
+    dialogLocate(env, s->target, s->line, owner, name, m);
+    if (s->action == "open") { dialogDoOpen(owner, name, m, s->line); return; }
+    if (s->action == "ask")  { dialogDoAsk(owner, name, m, s->line); return; }
+    Value r; bool has = false;
+    if (s->count) { r = evaluate(s->count, env); has = true; }
+    dialogDoClose(owner, name, m, has ? &r : nullptr, s->line);
+}
 
 } // namespace rin
 
