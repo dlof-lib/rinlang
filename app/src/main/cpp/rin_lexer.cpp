@@ -425,6 +425,16 @@ void Lexer::scanIdentifier() {
 //                                 فيمكن استعماله اسم دالة أصلية أو كلمة سياقية في المحلل النحوي
 //                                 أو اسم متغيّر عادي (let #total = 0;).
 void Lexer::scanHashWord() {
+    // `#[ ... ]` = مجموعة Set حرفية (docs/shorthand.md): تُفكَّك إلى Set([ ... ]) فتعمل كل مزايا القوائم الحرفية
+    // (فاصلة اختيارية، تداخل) و`Set(...)` نفسها. `#` متبوعة مباشرة بـ `[` كانت خطأ E0011، فلا تعارض.
+    if (peek() == '[') {
+        advance(); // '['
+        pushToken(TokenType::IDENT, "Set", line, columnOf(start), columnOf(start) + 1);
+        pushToken(TokenType::LPAREN, "(", line, columnOf(start), columnOf(start) + 1);
+        pushToken(TokenType::LBRACKET, "[", line, columnOf(start) + 1, columnOf(current));
+        brkStack.push_back('S');
+        return;
+    }
     if (!(isalpha((unsigned char)peek()) || peek() == '_')) {
         diag::Diagnostic d(diag::Code::E0011_UnexpectedToken, "unexpected character `#`",
                             diag::SourceLocation::point(file, line, columnOf(start)));
@@ -442,6 +452,18 @@ void Lexer::scanHashWord() {
     addToken(TokenType::IDENT, text);
 }
 
+// هل ينتهي التوكن السابق بقيمة (فيكون `?` التالية معامل شرط ثلاثي/افتراضي لا بداية تعبير)؟
+bool Lexer::prevEndsValue() const {
+    if (tokens.empty()) return false;
+    switch (tokens.back().type) {
+        case TokenType::IDENT: case TokenType::NUMBER: case TokenType::STRING:
+        case TokenType::RPAREN: case TokenType::RBRACKET:
+        case TokenType::TRUE: case TokenType::FALSE: case TokenType::NIL:
+            return true;
+        default: return false;
+    }
+}
+
 void Lexer::scanToken() {
     char c = advance();
     switch (c) {
@@ -449,8 +471,14 @@ void Lexer::scanToken() {
         case ')': addToken(TokenType::RPAREN); break;
         case '{': addToken(TokenType::LBRACE); break;
         case '}': addToken(TokenType::RBRACE); break;
-        case '[': addToken(TokenType::LBRACKET); break;
-        case ']': addToken(TokenType::RBRACKET); break;
+        case '[': addToken(TokenType::LBRACKET); brkStack.push_back('L'); break;
+        case ']':
+            addToken(TokenType::RBRACKET);
+            if (!brkStack.empty()) {
+                char k = brkStack.back(); brkStack.pop_back();
+                if (k == 'S') pushToken(TokenType::RPAREN, ")", line, columnOf(current) - 1, columnOf(current));
+            }
+            break;
         case ':': addToken(TokenType::COLON); break;
         case ',': addToken(TokenType::COMMA); break;
         case ';': addToken(TokenType::SEMICOLON); break;
@@ -464,9 +492,18 @@ void Lexer::scanToken() {
         // `$` وحدها كانت خطأ E0011 خارج النصوص (و`${...}` داخل القوالب تُعالَج في scanString/scanTemplate قبل الوصول هنا)،
         // فلا تعارض مع أي كود موجود.
         case '$': addToken(TokenType::PRINT); break;
+        // `^` = مرادف return · `&` = مرادف let (docs/shorthand.md). كلاهما كان خطأ E0011 خارج النصوص — لا تعارض.
+        case '^': addToken(TokenType::RETURN); break;
+        case '&': addToken(TokenType::LET); break;
         case '@': addToken(TokenType::AT); break;
         case '.': addToken(TokenType::DOT); break;
-        case '?': addToken(TokenType::QUESTION); break;
+        // `?!` = مرادف input (إدخال المستخدم): `let n = ?!("اسمك؟ ");` ≡ `input("اسمك؟ ")` — يمرّ كاستدعاء دالة عادي
+        // فيرث كل توقيعاته (prompt, validator, target, key). لا يُفسَّر كذلك إلا حيث لا يمكن أن يكون الشرط الثلاثي
+        // `cond ?!x : y` (أي عندما لا يسبقه توكن ينتهي بقيمة)، فلا يتغيّر أي كود موجود.
+        case '?':
+            if (peek() == '!' && !prevEndsValue()) { advance(); addToken(TokenType::IDENT, "input"); break; }
+            addToken(TokenType::QUESTION);
+            break;
         case '|':
             if (match('>')) {
                 addToken(TokenType::PIPE);
@@ -504,6 +541,9 @@ void Lexer::scanToken() {
             }
             break;
         case '!':
+            // `!?` = مرادف throw: `!? "خطأ";` · `!? err when (c);` — `!` متبوعة مباشرة بـ `?` لم تكن صالحة أصلاً
+            // (`?` لا تبدأ تعبيراً)، فلا تعارض مع أي كود موجود. تُنتج نفس توكن throw السياقي (IDENT "throw").
+            if (peek() == '?') { advance(); addToken(TokenType::IDENT, "throw"); break; }
             addToken(match('=') ? TokenType::BANG_EQUAL : TokenType::BANG);
             break;
         case '<':
