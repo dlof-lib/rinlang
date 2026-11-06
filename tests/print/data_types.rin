@@ -1,0 +1,44 @@
+// أنواع البيانات في containerType والحاويات العادية (docs/data_types.md)
+print(isType(5, "int"), isType(5.5, "int"), isType(-1, "uint"), isType(2.5, "float"));
+print(isType("a@b.co", "email"), isType("nope", "email"), isType("2024-02-29", "date"), isType("2023-02-29", "date"));
+print(isType([1, 2], "array<int>"), isType([1, "x"], "array<int>"), isType(nil, "int?"), isType(nil, "int"));
+print(isType("x", "int|string"), isType(true, "int|string"), isType("b", "enum(a,b)"), isType("z", "enum(a,b)"));
+print(typeError([1, "x"], "array<int>"));
+print(typeError(7, "int"));
+
+defineContainerType("User", {
+    id:    {type: "uint", required: true},
+    email: {type: "email", required: true},
+    born:  "date",
+    tags:  {type: "array<string>", default: [], max: 2},
+    nick:  {type: "string?", min: 2},
+    level: {type: "int|string", default: 1}
+});
+newContainer("User", "u1", {id: 1, email: "a@b.com", born: "2000-01-31"});
+print(containerType("u1"), getField("u1", "level"), fieldTypes("u1").id, fieldTypes("u1").tags);
+try { setField("u1", "id", 1.5); } catch (e) { print("خطأ:", e.message); }
+try { setField("u1", "email", "nope"); } catch (e) { print("خطأ:", e.message); }
+try { setField("u1", "tags", ["a", 2]); } catch (e) { print("خطأ:", e.message); }
+try { setField("u1", "tags", ["a", "b", "c"]); } catch (e) { print("خطأ:", e.message); }
+try { setField("u1", "nick", "x"); } catch (e) { print("خطأ:", e.message); }
+setField("u1", "nick", nil);
+setField("u1", "level", "gold");
+print(getField("u1", "level"), getField("u1", "nick"));
+try { defineContainerType("Bad", {n: {type: "int", default: 1.5}}); } catch (e) { print("خطأ:", e.message); }
+try { defineContainerType("Bad2", {n: {type: "colour"}}); } catch (e) { print("خطأ:", e.message); }
+
+// حاوية عادية: setFieldType
+@container=shop
+    state price = 10;
+.end/container
+setFieldType("shop", "price", "float");
+setFieldType("shop", "tags", "set<string>?");
+setFieldType("shop", "color", "color");
+setField("shop", "color", "#ff8800");
+try { setField("shop", "price", "free"); } catch (e) { print("خطأ:", e.message); }
+try { setField("shop", "color", "red"); } catch (e) { print("خطأ:", e.message); }
+try { setFieldType("shop", "price", "int"); setFieldType("shop", "price", "bool"); } catch (e) { print("خطأ:", e.message); }
+print(fieldTypes("shop"));
+print(removeFieldType("shop", "color"), removeFieldType("shop", "color"));
+setField("shop", "color", "red");
+print(getField("shop", "color"), validateContainer("shop"));
