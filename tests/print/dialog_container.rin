@@ -1,0 +1,35 @@
+// dialog داخل حاوية: يقرأ حقولها فيتحدّث، ويُفتح تلقائياً بشرط، ويُتحكَّم به من الخارج (docs/dialog.md)
+@shop.container
+    let stock = 10;
+    let name = "قلم";
+    dialog low = "المخزون من " + name + " منخفض: " + stock title "تنبيه المخزون" tone "warn"
+        buttons ["إعادة طلب", "تجاهل"] focus 1 opens when stock < 5;
+    dialog bye = "إغلاق المتجر؟" tone "ask";
+    reply low (r) { $ "قرار المخزون:", r; }
+.end;
+
+$ dialogs("shop");
+$ shop.low.open, shop.low.text;
+shop.stock = 8;
+$ shop.low.open;
+shop.stock = 3;                       // الشرط صدق الآن => يُفتح تلقائياً
+$ shop.low.open, shop.low.opens, shop.low.text;
+shop.stock = 2;                       // ما زال صادقاً: لا فتح جديد
+$ shop.low.opens;
+close shop.low 1;                     // مسار مؤهَّل من الخارج
+$ shop.low.open, shop.low.result;
+shop.stock = 20; shop.stock = 1;      // خرج من الشرط ثم عاد => يُفتح من جديد
+$ shop.low.open, shop.low.opens;
+dialogClose("shop", "low", "تجاهل");
+$ dialogInfo("shop", "low").result;
+$ getField("shop", "low");
+
+// فتح وإغلاق عبر الدوال
+dialogOpen("shop", "bye");
+$ shop.bye.open, shop.bye.buttons;
+close shop.bye 1;
+$ dialogInfo("shop", "bye").choice;
+
+// حوار ليس موجوداً
+try { open shop.nothing; } catch (e) { $ "ليس حواراً"; }
+try { dialogOpen("shop", "stock"); } catch (e) { $ "stock ليس حواراً"; }
