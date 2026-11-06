@@ -134,8 +134,31 @@ static void applyDefers(std::vector<StmtPtr>& stmts) {
     }
 }
 
+// ---- @start { } / @end { } : بداية ونهاية الكود (docs/shorthand.md) ----
+// عبارات @start تُنقل لأول البرنامج (بترتيبها)، وعبارات @end لآخره (بترتيبها). تُدمَج عباراتها مباشرة في النطاق
+// الأعلى بلا كتلة، فتبقى متغيراتها ودوالها مرئية لبقية البرنامج. @end تعمل عند انتهاء الملف طبيعياً.
+static thread_local std::vector<StmtPtr> g_startStmts;
+static thread_local std::vector<StmtPtr> g_endFns;   // دوال __end_N (تُرفَع hoisting فتُعرَّف أولاً)
+static thread_local std::vector<StmtPtr> g_endRegs;  // استدعاءات __atexit("__end_N") — تُسجَّل بعد @start وقبل الجسم
+static thread_local int g_endCounter = 0;            // فريد عبر الملفات المستوردة فلا تتصادم أسماء __end_N
+static thread_local int g_declDepth = 0;
+struct DeclDepthGuard { DeclDepthGuard() { ++g_declDepth; } ~DeclDepthGuard() { --g_declDepth; } };
+
+static void applyStartEnd(std::vector<StmtPtr>& statements) {
+    if (g_startStmts.empty() && g_endFns.empty()) return;
+    std::vector<StmtPtr> out;
+    out.reserve(statements.size() + g_startStmts.size() + g_endFns.size() * 2);
+    for (auto& st : g_endFns) out.push_back(st);
+    for (auto& st : g_startStmts) out.push_back(st);
+    for (auto& st : g_endRegs) out.push_back(st);
+    for (auto& st : statements) out.push_back(st);
+    statements = std::move(out);
+    g_startStmts.clear(); g_endFns.clear(); g_endRegs.clear();
+}
+
 std::vector<StmtPtr> Parser::parseCollectingDiagnostics(diag::DiagnosticEngine& engine) {
     std::vector<StmtPtr> statements;
+    g_startStmts.clear(); g_endFns.clear(); g_endRegs.clear();
     try {
         expandLoopTemplates();
     } catch (RinError& e) {
@@ -155,21 +178,27 @@ std::vector<StmtPtr> Parser::parseCollectingDiagnostics(diag::DiagnosticEngine& 
         }
     }
     applyDefers(statements);
+    applyStartEnd(statements);
     return statements;
 }
 
 std::vector<StmtPtr> Parser::parse() {
     std::vector<StmtPtr> statements;
+    g_startStmts.clear(); g_endFns.clear(); g_endRegs.clear();
     expandLoopTemplates();
     while (!isAtEnd()) statements.push_back(declaration());
     applyDefers(statements);
+    applyStartEnd(statements);
     return statements;
 }
 
 // مكدّس بنود catch الجاري تحليلها (لـ `rethrow;` وتعليم needsInterp) -- محلي للخيط، بلا تغيير في rin_parser.h.
 static thread_local std::vector<TryCatchStmt*> g_catchStack;
+// > 0 أثناء قراءة عنصر داخل [ ] أو { } حرفية: `[` تسبقها مسافة تبدأ عنصراً جديداً لا فهرسة (فاصلة اختيارية، docs/shorthand.md)
+static thread_local int g_litItemDepth = 0;
 
 StmtPtr Parser::declaration() {
+    DeclDepthGuard declDepthGuard_;
     if (auto lv2 = loopsV2Statement()) return lv2; // each / repeat / loop / retry / name: loop
     // Modules: 'export let/fun/class/struct/enum ...' -- 'export' كلمة سياقية غير محجوزة (نفس
     // أسلوب class/struct/enum أدناه بالضبط)، مُميَّزة بالنظر خطوة إضافية للأمام: يجب أن يتبعها
@@ -294,6 +323,57 @@ StmtPtr Parser::declaration() {
         return stmt;
     }
     if (check(TokenType::DOT) && checkNext(TokenType::IDENT) && current + 2 < tokens.size() && tokens[current + 1].lexeme == "object") return objectFieldStatement();
+    // '@start { ... }' / '@end { ... }' — بداية ونهاية الكود (انظر applyStartEnd أعلاه). مستوى الملف الأعلى فقط.
+    if (check(TokenType::AT) && current + 2 < tokens.size() && tokens[current + 2].type == TokenType::LBRACE &&
+        ((tokens[current + 1].type == TokenType::IDENT &&
+          (tokens[current + 1].lexeme == "start" || tokens[current + 1].lexeme == "ok" || tokens[current + 1].lexeme == "fail")) ||
+         tokens[current + 1].type == TokenType::END)) {
+        Token atT = peek();
+        // @start | @end (دائماً) | @ok (عند النجاح فقط) | @fail (عند الفشل فقط) — الثلاث الأخيرة كتل نهاية
+        const std::string endKind = tokens[current + 1].type == TokenType::END ? "end" : tokens[current + 1].lexeme;
+        bool isStart = endKind == "start";
+        const int endMode = endKind == "ok" ? 1 : endKind == "fail" ? 2 : 0;
+        if (g_declDepth != 1) {
+            throw err(diag::Code::E0011_UnexpectedToken, atT,
+                      std::string("`@") + endKind + " { }` must be at the top level of the file");
+        }
+        advance(); advance(); advance(); // '@' 'start|end' '{'
+        StmtPtr blk = block();
+        if (auto bs = std::dynamic_pointer_cast<BlockStmt>(blk)) {
+            if (isStart) {
+                for (auto& st : bs->statements) g_startStmts.push_back(st);
+            } else {
+                // @end -> دالة __end_N (تقرأ/تكتب متغيرات الملف العلوي عبر الإغلاق) + تسجيلها بـ __atexit؛ ينفّذها المفسّر
+                // في آخر run() حتى عند الخطأ، بترتيب عكسي (LIFO). انظر Interpreter::run.
+                auto fn = std::make_shared<FunctionStmt>();
+                fn->name = "__end_" + std::to_string(++g_endCounter);
+                fn->body = bs;
+                fn->line = atT.line;
+                g_endFns.push_back(fn);
+                auto lit = std::make_shared<LiteralExpr>();
+                lit->kind = LiteralExpr::Kind::STRING;
+                lit->str = fn->name;
+                lit->line = atT.line;
+                auto call = std::make_shared<CallExpr>();
+                call->callee = "__atexit";
+                call->args.push_back(lit);
+                auto modeLit = std::make_shared<LiteralExpr>();
+                modeLit->kind = LiteralExpr::Kind::NUMBER;
+                modeLit->number = endMode;
+                modeLit->line = atT.line;
+                call->args.push_back(modeLit);
+                call->line = atT.line;
+                auto es = std::make_shared<ExpressionStmt>();
+                es->expr = call;
+                es->line = atT.line;
+                g_endRegs.push_back(es);
+            }
+        }
+        if (check(TokenType::SEMICOLON) && peek().line == previous().line) advance();
+        auto empty = std::make_shared<BlockStmt>();
+        empty->line = atT.line;
+        return empty;
+    }
     // '@import "..."' هو عبارة مستقلة وأبسط من كتل '@container...': نتحقق من الشكل قبل تفويض
     // الأمر لـ atBlock() (الذي يتعامل حصراً مع container/Containers.Group/Volume). 'import' هنا
     // كلمة سياقية غير محجوزة (تُقرأ IDENT عادي)، فنميّزها بالنظر خطوتين للأمام: '@' ثم IDENT("import").
@@ -2767,7 +2847,7 @@ void Parser::consumeEndTag(const std::string& expectedTag, int openLine, const s
                                "matching '@" + expectedTag + "' opened at line " + std::to_string(openLine));
     Token beforeTag = peek();
     std::string closingTag = readTagKeyword();
-    if (closingTag != expectedTag) {
+    if (closingTag != expectedTag && "container." + closingTag != expectedTag) { // '.end/doc' تُقبل لـ container.doc (اختصار الاسم.النوع)
         auto d = err(diag::Code::E0011_UnexpectedToken, beforeTag,
                      "closing tag `.end/" + closingTag + "` does not match the opening `@" + expectedTag + "`");
         d.diagnostic->withReason("`@" + expectedTag + "` was opened at line " + std::to_string(openLine) +
@@ -3197,7 +3277,36 @@ StmtPtr Parser::makeUnitBlock() {
 
 StmtPtr Parser::atBlock() {
     Token atTok = previous(); // '@'
-    std::string tag = readTagKeyword();
+    // اختصار الاسم والنوع (docs/shorthand.md): '@app.doc' ≡ '@container.doc=app' — الاسم أولاً ثم '.' ثم النوع، بلا مسافات.
+    // الأنواع: doc table data api pipe sql list datalist object portal block sticker aukt chatbot make · container (عامة).
+    // لا يُفعَّل إن كان الاسم نفسه كلمة وسم معروفة (doc/table/make/Rin/...) كي لا يتغيّر معنى '@Rin.make' و'@table.doc' القديمة؛
+    // لاسم يطابق كلمة وسم اكتبه نصاً: '@"data".doc'.
+    std::string tag;
+    std::string shortName;
+    bool shortForm = false;
+    if ((check(TokenType::IDENT) || check(TokenType::STRING)) && current + 2 < tokens.size() &&
+        tokens[current + 1].type == TokenType::DOT) {
+        static const std::unordered_set<std::string> shortTypes = {
+            "doc", "table", "data", "api", "sql", "list", "datalist", "object", "portal", "block",
+            "sticker", "aukt", "chatbot", "make"};
+        static const std::unordered_set<std::string> reservedNames = {
+            "Rin", "import", "view", "doc", "table", "data", "api", "sql", "list", "datalist", "object", "portal",
+            "block", "sticker", "aukt", "chatbot", "make", "Object", "AUKT", "Everything", "Volume", "element"};
+        const Token& a = tokens[current];
+        const Token& dot = tokens[current + 1];
+        const Token& b = tokens[current + 2];
+        bool tight = a.line == dot.line && dot.line == b.line && a.endCol == dot.col && dot.endCol == b.col;
+        bool typeOk = (b.type == TokenType::IDENT && shortTypes.count(b.lexeme)) ||
+                      b.type == TokenType::PIPE_KW || b.type == TokenType::CONTAINER;
+        bool nameOk = a.type == TokenType::STRING || !reservedNames.count(a.lexeme);
+        if (tight && typeOk && nameOk) {
+            shortForm = true;
+            shortName = a.lexeme;
+            tag = b.type == TokenType::CONTAINER ? "container" : "container." + b.lexeme;
+            advance(); advance(); advance(); // الاسم . النوع
+        }
+    }
+    if (!shortForm) tag = readTagKeyword();
     static const std::vector<std::string> validTags = {
         "container", "container.pipe", "container.data", "container.api", "container.import", "container.table",
         "container.doc", "Containers.Group", "Volume", "table", "doc", "container.datalist", "datalist", "container.list",
@@ -3237,7 +3346,7 @@ StmtPtr Parser::atBlock() {
         }
         throw d;
     }
-    std::string name = readOptionalName("a `@" + tag + "` block");
+    std::string name = shortForm ? shortName : readOptionalName("a `@" + tag + "` block");
     std::vector<StmtPtr> body;
     std::string mask;
     std::string easyKey;
@@ -4087,7 +4196,9 @@ ExprPtr Parser::call() {
             }
             consume(TokenType::RPAREN, "Expected ')' after arguments");
             expr = c;
-        } else if (match({TokenType::LBRACKET})) {
+        } else if (check(TokenType::LBRACKET) &&
+                   !(g_litItemDepth > 0 && (peek().line != previous().line || peek().col > previous().endCol)) &&
+                   match({TokenType::LBRACKET})) {
             Token bracket = previous();
             auto index = expression();
             consume(TokenType::RBRACKET, "Expected ']' after index");
@@ -4164,6 +4275,8 @@ ExprPtr Parser::call() {
     }
     return expr;
 }
+
+static bool startsLiteralItem(TokenType t); // تعريفها أدناه (فاصلة اختيارية في القوائم)
 
 ExprPtr Parser::primary() {
     if (atReducer(current)) return reduceComprehension(); // sum each x in xs yield e  (Loops v3)
@@ -4271,9 +4384,17 @@ ExprPtr Parser::primary() {
             return comp;
         }
         if (!check(TokenType::RBRACKET)) {
-            do {
-                arr->elements.push_back(expression());
-            } while (match({TokenType::COMMA}));
+            // الفاصلة اختيارية (docs/shorthand.md): [1 2 3] ≡ [1, 2, 3] — يبدأ عنصر جديد مباشرة بعد عنصر بلا فاصلة
+            // إن كان التوكن التالي يبدأ قيمة (رقم/نص/معرّف/true/false/nil/[/{/!). بداية بـ - أو ( تُقرأ تتمّةً للعنصر السابق
+            // كما كانت دائماً (a -b = طرح، f (x) = استدعاء) — لهذه الحالات اكتب فاصلة أو أقواساً.
+            for (;;) {
+                g_litItemDepth++;
+                try { arr->elements.push_back(expression()); } catch (...) { g_litItemDepth--; throw; }
+                g_litItemDepth--;
+                if (match({TokenType::COMMA})) continue;
+                if (!check(TokenType::RBRACKET) && startsLiteralItem(peek().type)) continue;
+                break;
+            }
         }
         consume(TokenType::RBRACKET, "Expected ']' after array elements");
         return arr;
@@ -4312,9 +4433,16 @@ ExprPtr Parser::primary() {
                                   "an identifier or string literal");
                 }
                 consume(TokenType::COLON, "Expected ':' after map key");
-                auto valueExpr = expression();
+                g_litItemDepth++;
+                ExprPtr valueExpr;
+                try { valueExpr = expression(); } catch (...) { g_litItemDepth--; throw; }
+                g_litItemDepth--;
                 map->entries.push_back({keyExpr, valueExpr});
-            } while (match({TokenType::COMMA}));
+                if (match({TokenType::COMMA})) continue;
+                // الفاصلة اختيارية: {a: 1 b: 2} ≡ {a: 1, b: 2} — المفتاح التالي (معرّف/نص) يلي قيمة مباشرة
+                if ((check(TokenType::IDENT) || check(TokenType::STRING)) && checkNext(TokenType::COLON)) continue;
+                break;
+            } while (true);
         }
         consume(TokenType::RBRACE, "Expected '}' after map entries");
         return map;
@@ -4328,6 +4456,17 @@ ExprPtr Parser::primary() {
                   "a literal, variable, '(', '[', or '{'");
 }
 
+
+// هل يمكن لهذا التوكن أن يبدأ عنصراً جديداً في قائمة بلا فاصلة؟ (انظر docs/shorthand.md)
+static bool startsLiteralItem(TokenType t) {
+    switch (t) {
+        case TokenType::NUMBER: case TokenType::STRING: case TokenType::IDENT:
+        case TokenType::TRUE: case TokenType::FALSE: case TokenType::NIL:
+        case TokenType::LBRACKET: case TokenType::LBRACE: case TokenType::BANG:
+            return true;
+        default: return false;
+    }
+}
 
 // ============================================================================
 // Loops v2 — each / repeat / loop / retry / labels (`outer:` + `break outer;`) / `limit N` / [each ... => e]
