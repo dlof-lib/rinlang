@@ -1,0 +1,19 @@
+// الفاصلة اختيارية في القوائم والقواميس (docs/shorthand.md)
+let a = [1 2 3];
+let b = ["x" "y" "z"];
+let c = [1, 2 3, 4];
+let d = {name: "Ali" age: 30 ok: true};
+let e = {"k1": 1 "k2": [4 5] nested: {p: 1 q: 2}};
+let m = [[1 2] [3 4]];
+let n = [1, -2, (3 - 1)];
+$ a, b, c;
+$ d.name, d.age, d.ok;
+$ e.k1, e.k2, e.nested.q;
+$ m[1][0], n[1], n[2];
+$ len(a), len(c), len(m);
+let x = 5;
+let y = 6;
+$ [x y x];
+$ {x: x y: y};
+$ [];
+$ {};
