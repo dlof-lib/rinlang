@@ -3,6 +3,16 @@
 > مجمَّع آلياً من ملفات `CHANGES_*.md` المتفرّقة (انظر `cleanup-project.yml`). أضف الجديد هنا مباشرةً.
 
 
+## LOOP I ALL — `i` الضمني في كل الحلقات
+
+- `i` (رقم الدورة من 0) كان في `repeat`/`each` فقط؛ صار يعمل أيضاً في **`while` · `=while=`/`=until=` · `loop` (كل صيغها) · `for` C-style · `for (let x in ..)`/`for (let [a,b] in ..)` · `#do…#while` · `retry` · `rinopen`**.
+- بالقواعد نفسها: يُفعَّل فقط إن قرأ الجسم `i` ولم يعرّفه/يسنده، ولم يكن معرَّفاً قبل الحلقة في نطاق مرئي. **جديد:** إن ذكرت ترويسة الحلقة `i` (`while (i < n)` · `for (let [i, v] in ..)`) لا يُفعَّل أبداً — حمايةً للشيفرة القديمة.
+- التنفيذ كله في المحلل (`implicitIBegin`/`implicitIEnd` في `rin_parser.cpp|.h`): عدّاد مخفي `#ciN` يزيد في بداية الجسم + `let i` لكل دورة، فيعمل على المفسّر وRinVM معاً ولا يلمس المفسّر ولا الـ VM. بلا `i` تبقى الشجرة المولَّدة كما كانت حرفياً.
+- رسالة E0001 لـ `i`/`y` خارج الحلقات تشرح أنهما ضمنيان للحلقات فقط (`rin_interpreter.cpp`، `undefinedVariableErr`).
+- **حلقات الحاويات:** `@اسم` في موضع تعبير = عناصر الحاوية (مستندات/صفوف/حقول/أبناء) مصدراً لأي `each`/`for`/فهم/اختزال، مع كل المعدِّلات و`i`/`y`: `each d in @users where d.age > 20 sorted by d.name { }`. دالة داخلية `#items` في المفسّر + `primary()` في المحلل؛ خطأ E0035 بأقرب الأسماء لحاوية غير موجودة. الاختبار `tests/loops/loops_containers.rin`.
+- الملفات: `rin_parser.cpp` · `rin_parser.h` · `rin_interpreter.cpp` · `docs/loops.md` · `tests/loops/loops_implicit_i_all.rin|.expected` · `loops_implicit_i_labels.rin|.expected`.
+- التحقق (g++ 13 لينكس، -O0): الاختبار الجديد متطابق على `rin run` و`rin --vm`؛ كل `tests/loops` و`tests/print` و`rintests` و`wesscode_tests` و`template_concepts` و`examples` مطابقة للمحرّك السابق (الفروق توقيتات فقط). لم يُشغَّل: APK/الويب/verification.
+
 ## SAME SHAPE `=::=`
 
 - معامل مقارنة جديد **`a =::= b`** (تطابق الشكل): نفس البنية والأنواع مع تجاهل القيم الورقية — مصفوفات بنفس الطول وقواميس بنفس المفاتيح وكائنات بنفس الصنف والحقول. بنفس أولوية `==`، في المفسّر وRinVM، مع تلوين (VS Code/أندرويد/المحرّر). الدليل: [`docs/compare_ops.md`](../docs/compare_ops.md)، الاختبار: `tests/verification/same_shape.rin`. أقوى: الدوال بعدد المعاملات، المجموعات بأشكال العناصر، حماية الدوران الذاتي، ودالتان جديدتان **`shapeOf(v)`** (وصف الشكل نصاً) و**`shapeDiff(value, model)`** (كل مخالفات الشكل بمساراتها `$.a.b[1]` وأسبابها).
