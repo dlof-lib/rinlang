@@ -1,0 +1,45 @@
+› [1-2] (2): › [1-2] (2): › [1-2] (2): › [1-2] (2): › [1-2] (2): 📦 container = shop
+✅ .end/container (shop)
+[{"target": "sell", "dialog": "sure", "confirm": 1, "when": nil, "on": [], "asked": 0, "confirmed": 0, "declined": 0, "paused": false}]
+╭─ ؟ تأكيد البيع
+│ بيع 3 قطعة؟ (المخزون 10)
+│
+│ [1] بيع   [2] إلغاء
+╰─
+true true 7 7
+╭─ ؟ تأكيد البيع
+│ بيع 2 قطعة؟ (المخزون 7)
+│
+│ [1] بيع   [2] إلغاء
+╰─
+false true إلغاء 2 7
+╭─ ؟ تأكيد البيع
+│ بيع 1 قطعة؟ (المخزون 7)
+│
+│ [1] بيع   [2] إلغاء
+╰─
+true 7
+pong
+true nil 3
+nil
+sell sure 3 1 2
+[]
+╭─ ؟ تأكيد البيع
+│ بيع 1 قطعة؟ (المخزون 3)
+│
+│ [1] بيع   [2] إلغاء
+╰─
+true true 2
+╭─ ؟ تأكيد البيع
+│ بيع 1 قطعة؟ (المخزون 2)
+│
+│ [1] بيع   [2] إلغاء
+╰─
+true 2
+true nil
+no action
+not a dialog
+no button
+bad option
+bad when
+no container
