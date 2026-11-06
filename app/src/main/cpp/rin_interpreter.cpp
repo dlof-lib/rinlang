@@ -5580,6 +5580,202 @@ void Interpreter::registerNatives() {
     // الكلمات السهلة المرافقة لمفهوم make: "create something executable or usable" وقت التشغيل.
     natives["create"] = natives["spawn"];
 
+    // ======== containerType: أنواع حاويات يعرّفها المستخدم (docs/container_types.md) ========
+    // defineContainerType(name, {حقل: مواصفة}, {extends:"Base", strict:true, onCreate:fun(name)})
+    //   مواصفة الحقل: نص نوع ("number"/"string"/"bool"/"array"/"map"/"set"/"any") | قيمة (= افتراضية، يُستنتج نوعها)
+    //                 | {type, default, required, min, max, check(Set أو fun)}  (استعمل {default: ...} لقيمة افتراضية map)
+    natives["defineContainerType"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("defineContainerType", a, 2, 3, line);
+        CTType t;
+        t.name = asString(a[0], "defineContainerType", line);
+        if (t.name.empty()) throw diagErr(diag::Code::E0007_InvalidArguments, line, "defineContainerType: اسم النوع فارغ");
+        if (a[1].type != Value::Type::MAP || !a[1].map)
+            throw diagErr(diag::Code::E0004_InvalidType, line, "defineContainerType: المواصفة يجب أن تكون map (حقل: مواصفة)");
+        if (a.size() == 3) {
+            if (a[2].type != Value::Type::MAP || !a[2].map)
+                throw diagErr(diag::Code::E0004_InvalidType, line, "defineContainerType: الخيارات يجب أن تكون map");
+            for (auto& kv : *a[2].map) {
+                std::string k = kv.first.toDisplayString();
+                if (k == "extends") { t.parent = kv.second.type == Value::Type::NIL ? "" : asString(kv.second, "defineContainerType", line); }
+                else if (k == "strict") t.strict = kv.second.isTruthy();
+                else if (k == "onCreate") t.onCreate = kv.second;
+                else throw diagErr(diag::Code::E0007_InvalidArguments, line, "defineContainerType: خيار غير معروف '" + k + "' (المتاح: extends · strict · onCreate)");
+            }
+        }
+        if (!t.parent.empty() && !containerTypes.count(t.parent))
+            throw diagErr(diag::Code::E0014_InvalidContainer, line, "defineContainerType: النوع الأب غير معرَّف '" + t.parent + "'");
+        static const std::unordered_set<std::string> tnames = {"number", "string", "bool", "boolean", "array", "map", "set", "any", "text"};
+        static const std::unordered_set<std::string> detailKeys = {"type", "default", "required", "min", "max", "check"};
+        for (auto& kv : *a[1].map) {
+            CTField f;
+            f.name = kv.first.toDisplayString();
+            const Value& v = kv.second;
+            bool isDetail = false;
+            if (v.type == Value::Type::MAP && v.map && !v.map->empty()) {
+                isDetail = true;
+                for (auto& dk : *v.map) if (!detailKeys.count(dk.first.toDisplayString())) { isDetail = false; break; }
+            }
+            if (isDetail) {
+                for (auto& dk : *v.map) {
+                    std::string k = dk.first.toDisplayString();
+                    const Value& dv = dk.second;
+                    if (k == "type") {
+                        std::string ty = asString(dv, "defineContainerType", line);
+                        if (!tnames.count(ty)) throw diagErr(diag::Code::E0007_InvalidArguments, line, "defineContainerType: نوع غير معروف '" + ty + "' للحقل '" + f.name + "'");
+                        f.type = ty == "boolean" ? "bool" : ty == "text" ? "string" : ty;
+                    }
+                    else if (k == "default") { f.hasDefault = true; f.def = dv; }
+                    else if (k == "required") f.required = dv.isTruthy();
+                    else if (k == "min") { f.hasMin = true; f.mn = asNumber(dv, "defineContainerType", line); }
+                    else if (k == "max") { f.hasMax = true; f.mx = asNumber(dv, "defineContainerType", line); }
+                    else if (k == "check") f.check = dv;
+                }
+                if (f.hasDefault && f.def.type != Value::Type::NIL && f.type == "any") f.type = f.def.typeName();
+            } else if (v.type == Value::Type::STRING && tnames.count(v.str)) {
+                f.type = v.str == "boolean" ? "bool" : v.str == "text" ? "string" : v.str;
+            } else {
+                f.hasDefault = true; f.def = v;
+                f.type = v.type == Value::Type::NIL ? "any" : v.typeName();
+            }
+            if (f.required && f.hasDefault && f.def.type != Value::Type::NIL)
+                throw diagErr(diag::Code::E0007_InvalidArguments, line, "defineContainerType: الحقل '" + f.name + "' إلزامي وله قيمة افتراضية (متناقضان)");
+            t.fields.push_back(std::move(f));
+        }
+        const bool existed = containerTypes.count(t.name) > 0;
+        containerTypes[t.name] = std::move(t);
+        if (!existed) containerTypeOrder.push_back(a[0].str);
+        return Value::boolean_(true);
+    };
+    // newContainer(type, name, init?) -> name. ينشئ حاوية من النوع: الافتراضيات ثم init، ويفحص الإلزامي وكل القواعد.
+    natives["newContainer"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgsRange("newContainer", a, 2, 3, line);
+        std::string type = asString(a[0], "newContainer", line);
+        std::string name = asString(a[1], "newContainer", line);
+        auto fields = ctAllFields(type, line);
+        if (containers.count(name))
+            throw diagErr(diag::Code::E0014_InvalidContainer, line, "newContainer: الحاوية موجودة مسبقاً '" + name + "'");
+        const MapData* init = nullptr;
+        if (a.size() == 3) {
+            if (a[2].type != Value::Type::MAP || !a[2].map) throw diagErr(diag::Code::E0004_InvalidType, line, "newContainer: init يجب أن تكون map");
+            init = a[2].map.get();
+        }
+        // ابنِ القيم أولاً وافحصها كلها قبل إنشاء أي شيء (لا حاوية نصف مكتملة عند الخطأ)
+        std::vector<std::pair<std::string, Value>> vals;
+        for (auto& f : fields) {
+            Value v = f.hasDefault ? deepCloneValue(f.def) : Value::nil();
+            if (init) for (auto& kv : *init) if (kv.first.toDisplayString() == f.name) v = kv.second;
+            std::string why = ctCheckField(type, f.name, v, true, line);
+            if (!why.empty()) throw diagErr(diag::Code::E0004_InvalidType, line, "newContainer(" + type + ", " + name + "): " + why);
+            if (v.type != Value::Type::NIL || f.hasDefault || f.required) vals.push_back({f.name, v});
+        }
+        if (init) for (auto& kv : *init) {
+            std::string k = kv.first.toDisplayString();
+            bool known = false; for (auto& f : fields) if (f.name == k) { known = true; break; }
+            if (known) continue;
+            std::string why = ctCheckField(type, k, kv.second, true, line);   // يرفضه strict فقط
+            if (!why.empty()) throw diagErr(diag::Code::E0004_InvalidType, line, "newContainer(" + type + ", " + name + "): " + why);
+            vals.push_back({k, kv.second});
+        }
+        auto env = std::make_shared<Environment>(globals);
+        containers[name] = env;
+        containerKinds[name] = ContainerKind::PLAIN;
+        containerCustomKind[name] = type;
+        containerTypeOf[name] = type;
+        for (auto& kv : vals) env->define(kv.first, kv.second);
+        // onCreate لكل نوع في السلسلة (الأب أولاً)
+        std::vector<std::string> chain;
+        for (std::string c = type; !c.empty(); c = containerTypes.at(c).parent) chain.push_back(c);
+        for (auto c = chain.rbegin(); c != chain.rend(); ++c) {
+            const Value& oc = containerTypes.at(*c).onCreate;
+            if (oc.type == Value::Type::FUNCTION || oc.type == Value::Type::INSTANCE) { std::vector<Value> args{Value::string(name)}; callValue(oc, args, line); }
+        }
+        return Value::string(name);
+    };
+    // containerType(name) -> نوع الحاوية: النوع المعرَّف من المستخدم إن وُجد، وإلا نوعها المبني (doc/table/...)، وnil إن لم توجد.
+    natives["containerType"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("containerType", a, 1, line);
+        std::string name = canonContainer(asString(a[0], "containerType", line));
+        if (!containers.count(name)) return Value::nil();
+        auto t = containerTypeOf.find(name);
+        if (t != containerTypeOf.end()) return Value::string(t->second);
+        auto cs = containerCustomKind.find(name);
+        if (cs != containerCustomKind.end()) return Value::string(cs->second);
+        auto k = containerKinds.find(name);
+        return Value::string(containerTagName(k != containerKinds.end() ? k->second : ContainerKind::PLAIN));
+    };
+    // isContainerType(name, type) -> true إن كانت الحاوية من النوع أو من نوع يرثه
+    natives["isContainerType"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("isContainerType", a, 2, line);
+        std::string name = canonContainer(asString(a[0], "isContainerType", line));
+        std::string type = asString(a[1], "isContainerType", line);
+        auto t = containerTypeOf.find(name);
+        return Value::boolean_(t != containerTypeOf.end() && ctIsA(t->second, type));
+    };
+    natives["containerTypes"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("containerTypes", a, 0, line);
+        auto out = std::make_shared<ArrayData>();
+        for (auto& n : containerTypeOrder) out->push_back(Value::string(n));
+        return Value::makeArray(out);
+    };
+    // containersOfType(type) -> أسماء الحاويات من النوع (تشمل الأنواع الوارثة)، بترتيب أبجدي
+    natives["containersOfType"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("containersOfType", a, 1, line);
+        std::string type = asString(a[0], "containersOfType", line);
+        std::vector<std::string> names;
+        for (auto& kv : containerTypeOf) if (containers.count(kv.first) && ctIsA(kv.second, type)) names.push_back(kv.first);
+        std::sort(names.begin(), names.end());
+        auto out = std::make_shared<ArrayData>();
+        for (auto& n : names) out->push_back(Value::string(n));
+        return Value::makeArray(out);
+    };
+    // containerTypeInfo(type) -> {name, parent, strict, fields:[{name,type,required,default?,min?,max?}]} (الحقول الموروثة مشمولة)
+    natives["containerTypeInfo"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("containerTypeInfo", a, 1, line);
+        std::string type = asString(a[0], "containerTypeInfo", line);
+        auto it = containerTypes.find(type);
+        if (it == containerTypes.end()) return Value::nil();
+        auto m = std::make_shared<MapData>();
+        m->push_back({Value::string("name"), Value::string(type)});
+        m->push_back({Value::string("parent"), it->second.parent.empty() ? Value::nil() : Value::string(it->second.parent)});
+        m->push_back({Value::string("strict"), Value::boolean_(it->second.strict)});
+        auto fl = std::make_shared<ArrayData>();
+        for (auto& f : ctAllFields(type, line)) {
+            auto fm = std::make_shared<MapData>();
+            fm->push_back({Value::string("name"), Value::string(f.name)});
+            fm->push_back({Value::string("type"), Value::string(f.type)});
+            fm->push_back({Value::string("required"), Value::boolean_(f.required)});
+            if (f.hasDefault) fm->push_back({Value::string("default"), f.def});
+            if (f.hasMin) fm->push_back({Value::string("min"), Value::num(f.mn)});
+            if (f.hasMax) fm->push_back({Value::string("max"), Value::num(f.mx)});
+            fl->push_back(Value::makeMap(fm));
+        }
+        m->push_back({Value::string("fields"), Value::makeArray(fl)});
+        return Value::makeMap(m);
+    };
+    // validateContainer(name) -> مصفوفة مشاكل (فارغة = سليمة). مفيدة بعد تعديلات مباشرة داخل @container تتجاوز setField.
+    natives["validateContainer"] = [this](std::vector<Value>& a, int line) -> Value {
+        expectArgs("validateContainer", a, 1, line);
+        std::string name = canonContainer(asString(a[0], "validateContainer", line));
+        auto out = std::make_shared<ArrayData>();
+        auto t = containerTypeOf.find(name);
+        auto c = containers.find(name);
+        if (t == containerTypeOf.end() || c == containers.end()) return Value::makeArray(out);
+        std::unordered_set<std::string> seen;
+        for (auto& f : ctAllFields(t->second, line)) {
+            seen.insert(f.name);
+            Value v; auto vi = c->second->values.find(f.name);
+            if (vi != c->second->values.end()) v = vi->second;
+            std::string why = ctCheckField(t->second, f.name, v, false, line);
+            if (!why.empty()) out->push_back(Value::string(why));
+        }
+        for (auto& kv : c->second->values) {
+            if (seen.count(kv.first) || kv.second.type == Value::Type::FUNCTION) continue;
+            std::string why = ctCheckField(t->second, kv.first, kv.second, false, line);
+            if (!why.empty()) out->push_back(Value::string(why));
+        }
+        return Value::makeArray(out);
+    };
+
     // destroyContainer(name) -> يحذف حاوية أُنشئت عبر spawn (أو أي حاوية أخرى) بالكامل من containers/
     // containerKinds. true إن كانت موجودة فحُذفت، false إن لم تكن موجودة أصلاً.
     // RCS-1.0 §3.2 Lifecycle: on destroy() (إن كانت مُعرَّفة لهذه الحاوية) يُستدعى أولاً، قبل أي
@@ -5598,6 +5794,7 @@ void Interpreter::registerNatives() {
         tableForget(name); // جدول: صفوفه ونمطه
         containerKinds.erase(name);
         containerCustomKind.erase(name);
+        containerTypeOf.erase(name);
         containerLifecycle.erase(name);
         containerStateNames.erase(name);
         // RCS-1.0 §3.5 Tree + §3.6 Events (Phase 2): تنظيف كل أثر لهذه الحاوية من سجلات الشجرة
@@ -6164,6 +6361,13 @@ for(auto& kv:maskParents) if(maskResolve4(kv.second)==parent && !maskResolve4(kv
                                  "create it first via `@container=" + name + "` or `spawn(kind, \"" + name + "\")`");
         }
         if (tableVirtualSet(name, key, a[2], line)) return Value::boolean_(true); // rows/style لحاوية الجدول
+        if (!containerTypeOf.empty()) {   // containerType: تحقّق النوع/الإلزام/المدى/check قبل الكتابة
+            auto tIt = containerTypeOf.find(name);
+            if (tIt != containerTypeOf.end()) {
+                std::string why = ctCheckField(tIt->second, key, a[2], false, line);
+                if (!why.empty()) throw diagErr(diag::Code::E0004_InvalidType, line, why);
+            }
+        }
         Value linkOld;
         if (linksExist_) it->second->get(key, linkOld);
         it->second->define(key, a[2]);
@@ -6186,6 +6390,13 @@ for(auto& kv:maskParents) if(maskResolve4(kv.second)==parent && !maskResolve4(kv
             throw errWithReason(diag::Code::E0014_InvalidContainer, line,
                                  "'" + name + "' is not a known container",
                                  "create it first via `@container=" + name + "` or `spawn(kind, \"" + name + "\")`");
+        }
+        if (!containerTypeOf.empty()) {
+            auto tIt = containerTypeOf.find(name);
+            if (tIt != containerTypeOf.end()) {
+                std::string why = ctCheckField(tIt->second, key, a[2], false, line);
+                if (!why.empty()) throw diagErr(diag::Code::E0004_InvalidType, line, why);
+            }
         }
         assignStateAware(it->second.get(), key, a[2], line);
         return Value::boolean_(true);
@@ -8927,6 +9138,73 @@ std::string Interpreter::run(const std::vector<StmtPtr>& statements) {
         }
     }
     return output.str();
+}
+
+// ---- containerType: أنواع حاويات معرَّفة من المستخدم (docs/container_types.md) ----
+std::vector<Interpreter::CTField> Interpreter::ctAllFields(const std::string& type, int line) const {
+    std::vector<std::string> chain; // من النوع صعوداً للأب
+    std::string cur = type;
+    while (!cur.empty()) {
+        if (std::find(chain.begin(), chain.end(), cur) != chain.end())
+            throw diagErr(diag::Code::E0035_RuntimeError, line, "containerType: دورة وراثة عند '" + cur + "'");
+        chain.push_back(cur);
+        auto it = containerTypes.find(cur);
+        if (it == containerTypes.end()) throw diagErr(diag::Code::E0014_InvalidContainer, line, "containerType: نوع غير معرَّف '" + cur + "'");
+        cur = it->second.parent;
+    }
+    std::vector<CTField> out;
+    for (auto c = chain.rbegin(); c != chain.rend(); ++c) {
+        for (const auto& f : containerTypes.at(*c).fields) {
+            bool replaced = false;
+            for (auto& o : out) if (o.name == f.name) { o = f; replaced = true; break; }
+            if (!replaced) out.push_back(f);
+        }
+    }
+    return out;
+}
+bool Interpreter::ctIsA(const std::string& type, const std::string& base) const {
+    std::string cur = type;
+    for (int guard = 0; !cur.empty() && guard < 64; ++guard) {
+        if (cur == base) return true;
+        auto it = containerTypes.find(cur);
+        if (it == containerTypes.end()) return false;
+        cur = it->second.parent;
+    }
+    return false;
+}
+// يعيد نص الخطأ ("" = سليم) لقيمة v في حقل field من نوع type. isCreate: القيمة nil لحقل إلزامي مرفوضة دوماً.
+std::string Interpreter::ctCheckField(const std::string& type, const std::string& field, const Value& v, bool, int line) {
+    auto fields = ctAllFields(type, line);
+    const CTField* f = nullptr;
+    for (auto& x : fields) if (x.name == field) { f = &x; break; }
+    const std::string where = type + "." + field;
+    if (!f) {
+        auto it = containerTypes.find(type);
+        // strict على النوع أو أي أب
+        bool strict = false;
+        for (std::string c = type; !c.empty() && it != containerTypes.end(); ) { if (it->second.strict) strict = true; c = it->second.parent; it = containerTypes.find(c); }
+        return strict ? "حقل غير معرَّف في النوع (strict): " + where : "";
+    }
+    if (v.type == Value::Type::NIL) return f->required ? "الحقل إلزامي ولا يقبل nil: " + where : "";
+    if (f->type != "any" && v.typeName() != f->type)
+        return "نوع خاطئ في " + where + ": المتوقع " + f->type + " والموجود " + v.typeName();
+    if (v.type == Value::Type::NUMBER) {
+        if (f->hasMin && v.number < f->mn) return "القيمة أقل من الحد الأدنى " + Value::num(f->mn).toDisplayString() + " في " + where;
+        if (f->hasMax && v.number > f->mx) return "القيمة أكبر من الحد الأعلى " + Value::num(f->mx).toDisplayString() + " في " + where;
+    }
+    if (f->check.type == Value::Type::SET && f->check.set) {
+        if (!f->check.set->contains(v)) {
+            std::string opts;
+            for (auto& it : f->check.set->items) opts += (opts.empty() ? "" : " | ") + it.toDisplayString();
+            return "قيمة غير مسموحة في " + where + " (المتاح: " + opts + ")";
+        }
+    } else if (f->check.type == Value::Type::FUNCTION || f->check.type == Value::Type::INSTANCE) {
+        std::vector<Value> args{v};
+        Value r = callValue(f->check, args, line);
+        if (r.type == Value::Type::STRING) return r.str;
+        if (!r.isTruthy()) return "فشل التحقق في " + where;
+    }
+    return "";
 }
 
 Interpreter::Flow Interpreter::execBlockFlow(const std::vector<StmtPtr>& statements, const EnvPtr& env, Value& ret) {
