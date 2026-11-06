@@ -1,0 +1,10 @@
+// تسميات break مع i، وlimit
+let a = 0;
+outer: while (a < 3) {
+  a = a + 1;
+  let b = 0;
+  while (b < 3) { b = b + 1; if (b == 2 and a == 2) { break outer; } print "x" + i; }
+}
+print "after:" + a;
+let lc = 0;
+try { while (lc < 100) limit 3 { lc = lc + 1; print "L" + i; } } catch (e) { print "limit"; }
