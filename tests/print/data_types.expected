@@ -1,0 +1,23 @@
+true false false true
+true false true false
+true false true false
+true false true false
+[1] المتوقع int والموجود string
+nil
+User 1 uint array<string>
+خطأ: [E0004] نوع خاطئ في User.id: القيمة 1.5 ليست uint (عدد صحيح)
+خطأ: [E0004] نوع خاطئ في User.email: قيمة 'nope' ليست email صالحاً
+خطأ: [E0004] نوع خاطئ في User.tags: [1] المتوقع string والموجود number
+خطأ: [E0004] الطول 3 أكبر من الحد الأعلى 2 في User.tags
+خطأ: [E0004] الطول 1 أقل من الحد الأدنى 2 في User.nick
+gold nil
+خطأ: [E0007] defineContainerType: القيمة الافتراضية لا تطابق نوع الحقل 'n' (int): القيمة 1.5 ليست int (عدد صحيح)
+خطأ: [E0007] defineContainerType: نوع غير معروف 'colour' للحقل 'n' (نوع بيانات غير معروف 'colour')
+📦 container = shop
+✅ .end/container (shop)
+خطأ: [E0004] نوع خاطئ في shop.price: المتوقع float والموجود string
+خطأ: [E0004] نوع خاطئ في shop.color: قيمة 'red' ليست color صالحاً
+خطأ: [E0004] setFieldType: القيمة الحالية لا تطابق النوع في shop.price: المتوقع bool والموجود number
+{"price": "int", "tags": "set<string>?", "color": "color"}
+true false
+red []
