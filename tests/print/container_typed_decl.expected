@@ -1,0 +1,7 @@
+أُنشئت sara
+Employee 500 user
+أُنشئت omar
+100 true
+خطأ: [E0004] newContainer(Employee, bad): الراتب يجب أن يكون موجباً
+خطأ: [E0004] newContainer(Employee, bad2): الحقل إلزامي ولا يقبل nil: Employee.name
+["omar", "sara"]
