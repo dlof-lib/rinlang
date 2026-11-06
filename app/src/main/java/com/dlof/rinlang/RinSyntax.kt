@@ -375,6 +375,8 @@ private object RinLexer {
                         while (i < n && (text[i].isLetterOrDigit() || text[i] == '_' || text[i] == '/' || text[i] == '.')) i++
                         out.add(hl(li, start, i, HighlightKind.AT))
                     }
+                    // `#[` = مجموعة Set حرفية (docs/shorthand.md)
+                    c == '#' && i + 1 < n && text[i + 1] == '[' -> { out.add(hl(li, i, i + 2, HighlightKind.TYPE)); i += 2 }
                     // عائلة # (docs/hash-family.md): #sed #for #in #done #while #sum #do #swap #return #diff #add #ban #to #ignorance
                     c == '#' && i + 1 < n && (text[i + 1].isLetter() || text[i + 1] == '_') -> {
                         val start = i; i++
@@ -387,6 +389,13 @@ private object RinLexer {
                         }
                         out.add(hl(li, start, i, kind))
                     }
+                    // `!?` = throw · `?!` = input (docs/shorthand.md) — `?!` لا تُلوَّن بعد قيمة (ذاك شرط ثلاثي `cond ?!x : y`)
+                    c == '!' && i + 1 < n && text[i + 1] == '?' -> { out.add(hl(li, i, i + 2, HighlightKind.KEYWORD)); i += 2 }
+                    c == '?' && i + 1 < n && text[i + 1] == '!' &&
+                        text.substring(0, i).trimEnd().lastOrNull().let { p -> p == null || !(p.isLetterOrDigit() || p == '_' || p == ')' || p == ']' || p == '"') } ->
+                        { out.add(hl(li, i, i + 2, HighlightKind.CALL)); i += 2 }
+                    // `^` = return · `&` = let (docs/shorthand.md)
+                    c == '^' || c == '&' -> { out.add(hl(li, i, i + 1, HighlightKind.KEYWORD)); i++ }
                     // `$` = مرادف print (docs/shorthand.md)
                     c == '$' -> { out.add(hl(li, i, i + 1, HighlightKind.KEYWORD)); i++ }
                     c.isDigit() -> { val end = scanNumber(text, i); out.add(hl(li, i, end, HighlightKind.NUMBER)); i = end }
