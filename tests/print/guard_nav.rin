@@ -1,0 +1,34 @@
+// حرّاس التأكيد (dialog + Navigation): «تغييرات غير محفوظة» (docs/guarded_actions.md)
+// يُشغَّل مع stdin: "2\n1\n1\n2\n1\n"  (ابقَ · غادر · غادر(back) · ابقَ(replace) · غادر(confirm))
+@editor.container
+    let dirty = false;
+    let pending = nil;
+    dialog leave = "تغييرات غير محفوظة — المغادرة إلى " + (pending == nil ? "؟" : pending["target"]) + "؟"
+        title "مغادرة الصفحة" tone "warn" buttons ["غادر", "ابقَ"] focus 2;
+.end;
+
+Navigation.re("editor", "home.rin");
+Navigation.guard("editor", "leave", {"when": "dirty", "confirm": "غادر"});
+$ Navigation.guardInfo("editor")["dialog"], Navigation.guardInfo("editor")["when"];
+let a = Navigation.re("editor", "page2.rin");                         // dirty=false: بلا سؤال
+$ a.ok, a.confirmed, editor.route;
+editor.dirty = true;
+let b = Navigation.re("editor", "page3.rin");                         // "2" = ابقَ => مُنع
+$ b.ok, b.blocked, b.answer, editor.route, Navigation.history("editor");
+let c = Navigation.re("editor", "page3.rin", {"id": 5});              // "1" = غادر
+$ c.ok, c.confirmed, editor.route, Navigation.params("editor")["id"];
+$ Navigation.back("editor"), editor.route;                            // "1" = غادر
+$ Navigation.guardInfo("editor")["asked"], Navigation.guardInfo("editor")["confirmed"], Navigation.guardInfo("editor")["declined"];
+
+// on: احرس عمليات محدّدة فقط
+Navigation.guard("editor", "leave", {"when": "dirty", "on": ["replace"]});
+$ Navigation.re("editor", "free.rin").ok;                             // re غير محروسة
+$ Navigation.replace("editor", "r.rin");                              // replace محروسة ("2" = ابقَ) => nil
+Navigation.unguard("editor");
+$ Navigation.guardInfo("editor");
+
+// تأكيد لمرة واحدة
+let d = Navigation.confirm("editor", "x.rin", "leave", {"params": {"k": 1}, "confirm": 1});   // "1"... يُستهلك ما تبقّى
+$ d["ok"];
+try { Navigation.guard("editor", "leave", {"on": ["fly"]}); } catch (e) { $ "bad op"; }
+try { Navigation.guard("editor", "nodlg"); } catch (e) { $ "no dialog"; }
