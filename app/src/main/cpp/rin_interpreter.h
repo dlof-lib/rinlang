@@ -1218,6 +1218,13 @@ private:
     // لقطة عميقة إلزامية (لا يكفي نسخ Value الضحلة) لأن updateDoc يُعدِّل MapData داخل MapPtr
     // القائم مكانه أحياناً (دمج جزئي/patch)، فيؤثّر ذلك على أي نسخة ضحلة تشارك نفس المؤشّر.
     std::vector<std::unordered_map<std::string, std::vector<std::pair<std::string, Value>>>> txStack;
+    // ---- @tx الموحَّدة (docs/merge_concepts.md): لقطة مستندات + حقول حاويات مسمّاة، تُستعاد معاً عند الفشل ----
+    struct TxFrame {
+        std::unordered_map<std::string, std::vector<std::pair<std::string, Value>>> docs;
+        std::vector<std::pair<std::string, MapData>> fields;
+        bool failed = false;
+    };
+    std::vector<TxFrame> txFrames;
 
     // ---- relation: علاقات معرَّفة بين مجموعتَي مستندات (انظر RelationDef أعلاه) ----
     std::unordered_map<std::string, RelationDef> relationStore;
