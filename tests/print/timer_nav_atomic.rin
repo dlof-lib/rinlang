@@ -1,0 +1,24 @@
+// timer ✕ navigation ✕ atomic: انتقال مؤجَّل (شاشة افتتاحية) ودفعة ذرّية مؤجَّلة — بلا كلمات جديدة
+time.freeze();
+@app.container
+    let coins = 100;
+    fun take(x) { coins = coins - x["n"]; return coins; }
+    fun give(x) { coins = coins + x["n"]; return coins; }
+.end;
+
+Navigation.re("app", "splash.rin");
+let r = Navigation.re("app", "home.rin", {}, {after: 3s});
+print r.ok, r.scheduled, r.kind, r.target, r.in;
+print Navigation.current("app");
+time.advance(2s); print Navigation.current("app");
+time.advance(1s); print Navigation.current("app");
+
+let a = Intent.atomic([Intent.core("app", "take", {"n": 30}), Intent.core("app", "give", {"n": 10})], {after: 10s});
+print a.ok, a.scheduled, a.kind, a.target, app.coins;
+time.advance(9s); print app.coins;
+time.advance(1s); print app.coins;
+print timers.pending();
+try { Navigation.re("app", "x.rin", {}, {after: 1s, at: 5}); } catch (e) { print "after او at وليس معاً"; }
+try { Navigation.re("app", "x.rin", {}, {bogus: 1}); } catch (e) { print "خيار مجهول"; }
+destroyContainer("app");
+time.unfreeze();
