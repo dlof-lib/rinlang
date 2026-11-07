@@ -33,6 +33,7 @@
 //    * اللغة الافتراضية en حتى تُغيَّر بـ time.config (حتميّة للاختبارات).
 // ============================================================================
 #include "rin_interpreter.h"
+#include "rin_clock.h"
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -137,8 +138,8 @@ static i64 composeEpoch(i64 y, int mo, int d, int h, int mi, int s, int ms, int 
            static_cast<i64>(offMin) * 60000LL;
 }
 
-static i64 nowMs() {
-    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+static i64 nowMs() {   // الساعة المشتركة (rin_clock.h): حقيقية، أو مُجمَّدة بـ time.freeze لاختبارات حتمية
+    return static_cast<i64>(clk::epochMs());
 }
 // إزاحة توقيت الجهاز (بالدقائق) عند لحظة معيّنة — بلا tm_gmtoff ليعمل على ويندوز/أندرويد/WASM بالمثل.
 static int localOffsetMin(i64 epochMs) {
@@ -1472,37 +1473,36 @@ void Interpreter::registerNativesExtra7() {
     };
 
     // ---- التوقيت والانتظار
-    natives["time.sleep"] = [](Args& a, int line) -> Value {
+    natives["time.sleep"] = [this](Args& a, int line) -> Value {
         argc7("time.sleep", a, 1, 2, line);
         double ms;
         if (a[0].type == Value::Type::NUMBER) ms = a.size() == 2 ? a[0].number * static_cast<double>(std::max<i64>(1, fixedMs(needUnit(a[1], "time.sleep", line)))) : a[0].number;
         else ms = durationMs(durationParts(a[0], nullptr, line, "time.sleep"));
         if (std::isnan(ms) || ms < 0) throw badArgs(line, "'time.sleep': the duration cannot be negative");
         if (ms > 600000.0) throw badArgs(line, "'time.sleep': the maximum is 10 minutes (600000 ms)");
-        i64 left = static_cast<i64>(ms);
-        while (left > 0) { const i64 c = std::min<i64>(left, 50); std::this_thread::sleep_for(std::chrono::milliseconds(c)); left -= c; }
+        timersSleep(ms, line);   // ساعة مُجمَّدة: يتقدّم الزمن فوراً؛ وفي الحالتين تُطلَق المؤقّتات المستحقّة أثناء النوم (docs/TIMER.md)
         return B7(true);
     };
     natives["time.stopwatch"] = [](Args& a, int line) -> Value {
         argc7("time.stopwatch", a, 0, 0, line);
-        const double mono = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count();
+        const double mono = clk::monoMs();
         return M7({{"type", S7("stopwatch")}, {"startedAt", N7(mono)}, {"startedEpoch", N7(static_cast<double>(nowMs()))}});
     };
     natives["time.elapsed"] = [](Args& a, int line) -> Value {
         argc7("time.elapsed", a, 1, 2, line);
         const Value* st = mget(a[0], "startedAt");
         if (!st || st->type != Value::Type::NUMBER) throw badType(line, "'time.elapsed' expects a stopwatch from time.stopwatch()");
-        const double mono = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count();
+        const double mono = clk::monoMs();
         double ms = mono - st->number;
         if (a.size() == 2) { const U u = needUnit(a[1], "time.elapsed", line); if (fixedMs(u) == 0) throw badArgs(line, "'time.elapsed': use ms/s/m/h/d/w"); return N7(ms / static_cast<double>(fixedMs(u))); }
         return N7(ms);
     };
     natives["time.measure"] = [this](Args& a, int line) -> Value {
         if (a.empty() || a[0].type != Value::Type::FUNCTION || !a[0].function) throw badType(line, "'time.measure' expects a function: time.measure(fn[, args...])");
-        const auto t0 = std::chrono::steady_clock::now();
+        const double t0 = clk::monoMs();
         Args callArgs(a.begin() + 1, a.end());
         Value result = callFunction(a[0].function, callArgs, line);
-        const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+        const double ms = clk::monoMs() - t0;
         const Value sp = mkSpan(ms);
         return M7({{"result", result}, {"ms", N7(ms)}, {"seconds", N7(ms / 1000.0)}, {"text", *mget(sp, "text")}});
     };
