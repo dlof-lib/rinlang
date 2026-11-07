@@ -1,0 +1,19 @@
+📦 container = shop
+✅ .end/container (shop)
+60000 running ينتهي العرض بعد 01:00
+tick 1 ينتهي العرض بعد 00:40
+paused 00:40
+40000
+tick 2 ينتهي العرض بعد 00:20
+tick 3 ينتهي العرض بعد 00:00
+رنّ: complete
+true
+false 1 done
+["promo"] done
+running
+1 paused
+1 running
+shop 1 2m 6s 0ms
+0ms
+1 stopped
+0
