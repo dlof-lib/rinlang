@@ -68,3 +68,12 @@ Warp cell تغيّرت نتيجة تشغيله؛ `error` يظهر فقط إن و
 - [`android.md`](./android.md) — `RinEngine.kt`، الجسر عبر JNI فوق هذه الواجهة بالضبط.
 - [`indsin.md`](../indsin.md) — المحرّك الذي تُشغِّله كل دوال `rin_indsin_*`.
 - [`rinflow.md`](./rinflow.md) — طبقة Flow (لم تُعرَض هنا عبر C API مباشرة، فقط عبر `Interpreter::runProgramAsFlow` بلغة C++، ثم `RinEngine.kt` في Kotlin).
+
+## `callApi` ✕ timer
+`callApi(c, "GET", "/p", {cache: 30s, after: 5s, every: 1m, times: 3, then: fn})` — كاش وجدولة واستطلاع بلا كلمات جديدة؛ التفاصيل في [`TIMER.md`](./TIMER.md).
+
+## الـ API الحقيقي ✕ timer
+`apiGet("name", "/p", {retry: 3, backoff: 2s, timeout: 5s, cache: 30s, every: 1m, then: fn})` — إعادة محاولة وكاش واستطلاع دوري؛ التفاصيل في [`TIMER.md`](./TIMER.md).
+
+## `container.api` الحقيقي
+حقل `baseUrl` داخل `@container.api=…` يجعلها تنفّذ طلبات حقيقية مع `headers/token/retry/backoff/timeout/cache/mock` كحقول — انظر [`api_container.md`](./api_container.md).
