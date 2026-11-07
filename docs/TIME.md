@@ -71,3 +71,7 @@ warp clock = time.ms();
   على المضيف أن يستدعي `rin_indsin_session_tick` كل ثانية ما دام الغلاف فيه `"ticking":true`
   (أندرويد: `IndsinPreviewActivity` يفعل ذلك). الاختبار: `tests/tools/test_indsin_time.cpp`، المثال: `examples/samples/indsin_time_demo.rin`.
 - القيمة التي تُقرأ من `time()` مباشرة داخل خاصية تُحسب لحظة البناء ولا تتجدد وحدها؛ استعمل `clock` للتحديث الحيّ.
+
+## الساعة والمؤقّتات
+`time.freeze()` · `time.advance(مدّة)` · `time.unfreeze()` · `time.frozen()` للتحكّم بالساعة (اختبارات حتمية)،
+والمدد المباشرة `30s` `1h30m` في أي تعبير، و`timer` و`timers.*` لجدولة الأحداث — انظر `TIMER.md`.
