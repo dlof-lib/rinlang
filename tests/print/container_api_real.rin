@@ -1,0 +1,35 @@
+// container.api الحقيقي والكامل: baseUrl/headers/token/retry/backoff/timeout/mock كحقول، params/query، apiInfo — حتمي بلا شبكة خارجية
+time.freeze();
+@container.api=svc
+    let baseUrl = "http://127.0.0.1:9";                  // نقطة غير متاحة عمداً (رفض اتصال)
+    let headers = {"X-App": "rin"};
+    let token = "T1";
+    let timeout = 1s;
+    let retry = 2;
+    let backoff = 3s;
+    let mock = false;
+    route method="GET" path="/items" status=200 body={"mock": true};
+.end/container.api
+let info = apiInfo("svc");
+print info["name"], info["mode"], info["baseUrl"], info["routes"], info["calls"], info["headers"];
+let ticks = 0;
+fun tick() { ticks = ticks + 1; }
+timers.every(1s, tick);
+let r = callApi("svc", "GET", "/items");
+print r["ok"], r["attempts"], ticks;                     // retry/backoff من الحقول: 3 محاولات ونوم 6 ثوانٍ
+print apiInfo("svc")["calls"], apiInfo("svc")["failed"];
+svc.retry = 0;                                           // الحقول تُقرأ وقت كل استدعاء
+print callApi("svc", "GET", "/items", {params: {}, query: {a: 1}})["attempts"];
+try { callApi("svc", "GET", "/items/:id"); } catch (e) { print "param ناقص"; }
+try { callApi("svc", "GET", "/items", {}, {}); } catch (e) { print "GET بلا body"; }
+try { callApi("svc", "GET", "/items", {bogus: 1}); } catch (e) { print "خيار مجهول"; }
+svc.mock = true;                                         // يفرض route الوهمية بنفس الكود
+let m = callApi("svc", "GET", "/items");
+print m["status"], m["body"]["mock"], apiInfo("svc")["mode"], apiInfo("svc")["baseUrl"];
+@container.api=plain
+    route method="GET" path="/a" status=201 body=1;
+.end/container.api
+print callApi("plain", "GET", "/a")["status"], apiInfo("plain")["mode"];   // بلا baseUrl: محاكاة كالسابق
+try { apiInfo("nope"); } catch (e) { print "لا api بهذا الاسم"; }
+timers.clear();
+time.unfreeze();
