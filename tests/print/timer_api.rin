@@ -1,0 +1,29 @@
+// timer ✕ api: كاش بمدّة، استدعاء مؤجَّل، واستطلاع دوري then — بلا كلمات جديدة (docs/TIMER.md)
+time.freeze();
+@container.api=users
+    route method="GET" path="/list" status=200 body={"n": 3};
+.end/container.api
+print callApi("users", "GET", "/list")["status"];                      // السلوك القديم كما هو
+let r1 = callApi("users", "GET", "/list", {cache: 30s});
+let r2 = callApi("users", "GET", "/list", {cache: 30s});
+print r1["ok"], r2["cached"];
+time.advance(31s);
+let r3 = callApi("users", "GET", "/list", {cache: 30s});
+print r3["cached"], callApi("users", "GET", "/list", {cache: 0})["ok"];   // cache:0 يتجاوز الكاش
+let miss = callApi("users", "GET", "/none", {cache: 30s});
+print miss["status"], callApi("users", "GET", "/none", {cache: 30s})["cached"];   // الفشل لا يُخزَّن
+
+let hits = 0;
+fun onReply(res) { hits = hits + 1; }
+let s = callApi("users", "GET", "/list", {after: 10s, then: onReply});
+print s.ok, s.scheduled, s.kind, s.target, s.in, hits;
+time.advance(10s); print hits;
+callApi("users", "GET", "/list", {every: 5s, times: 3, then: onReply});
+time.advance(1m); print hits, timers.pending();
+let p = callApi("users", "GET", "/list", {every: 1m, then: onReply});
+print timers.pending();
+destroyContainer("users");
+print timers.pending();                                               // حذف الحاوية يلغي الاستطلاع
+try { callApi("users", "GET", "/list", {times: 2}); } catch (e) { print "times تحتاج every"; }
+try { callApi("users", "GET", "/list", {bogus: 1}); } catch (e) { print "خيار مجهول"; }
+time.unfreeze();
