@@ -5710,7 +5710,7 @@ void Interpreter::registerNatives() {
         std::string name = (a.size() > 1) ? asString(a[1], "spawn", line) : "";
         if (name.empty()) name = "#" + std::to_string(containers.size());
         auto env = std::make_shared<Environment>(globals);
-        containers[name] = env;
+        containers[name] = env; noteContainerBorn(name);
         containerKinds[name] = resolveContainerKindName(kindRaw);
         containerCustomKind[name] = kindRaw;
         if (!groupStack.empty()) groupMembers[groupStack.back()].push_back(name);
@@ -5829,7 +5829,7 @@ void Interpreter::registerNatives() {
             vals.push_back({k, kv.second});
         }
         auto env = std::make_shared<Environment>(globals);
-        containers[name] = env;
+        containers[name] = env; noteContainerBorn(name);
         containerKinds[name] = ContainerKind::PLAIN;
         containerCustomKind[name] = type;
         containerTypeOf[name] = type;
@@ -6023,6 +6023,8 @@ void Interpreter::registerNatives() {
                 fireLifecycleHook(name, hooksIt->second.destroy, {}, line);
             }
         }
+        { auto ce = containers.find(name); if (ce != containers.end()) schedCancelOwner(ce->second.get()); } // مؤقّتات الحاوية تُلغى مع حذفها
+        containerStamp_.erase(name);
         containers.erase(name);
         tableForget(name); // جدول: صفوفه ونمطه
         containerKinds.erase(name);
@@ -7943,6 +7945,7 @@ for(auto& kv:maskParents) if(maskResolve4(kv.second)==parent && !maskResolve4(kv
     registerNativesImageDraw(); // imgNew/imgLine/imgText/imgSave/imgFromLog… (rin_image_draw.cpp)
     registerNativesImage(); // printImage/imageAnsi/imageInfo (rin_image_ansi.cpp)
     registerNativesIntentNav();   // Intent.* و Navigation.* (rin_intent_nav.cpp)
+    registerNativesTimer();       // time.freeze/advance + timers.* + timerXxx + containerTime (rin_timer.cpp، docs/TIMER.md)
     registerNativesEnv();   // ربط .env: Env.* (rin_env.cpp)
     registerNativesSet();   // نوع Set الأساسي: Set(...) و Set.* وتوسعة len/contains/has/remove/sum... (rin_set.cpp) — أخيراً كي تلفّ ما سبقها
 }
@@ -9869,6 +9872,13 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
         if (s->elseBlock && v.type == Value::Type::NIL) letRunElse(s->elseBlock, env, s->line, "`" + s->name + "` was nil");
         if (!s->typeName.empty()) checkDeclaredType(v, s->typeName, "variable `" + s->name + "`", s->line);
         env->define(s->name, v);
+        if (s->ttl) {   // timer ✕ let: `let x = v ttl 30s;` — يعمل داخل حاوية فقط
+            std::string key;
+            for (auto& kv : containers) if (kv.second.get() == env.get()) { key = kv.first; break; }
+            if (key.empty()) throw errWithReason(diag::Code::E0007_InvalidArguments, s->line, "`ttl` on `let " + s->name + "` works only for a container field", "declare it inside `@name.container … .end;`");
+            std::vector<Value> ta{Value::string(key), Value::string(s->name), evaluate(s->ttl, env)};
+            natives["timers.expire"](ta, s->line);
+        }
         return Flow::None;
     }
     // let+ (docs/let-plus.md): let [a, b] = ...; | let {x, y} = ...; | let a = 1, b = 2;
@@ -10397,7 +10407,7 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
             if (containers.count(containerKey) && po != containerPathOf.end() && po->second != pathNow) containerKey = pathNow;
             containerPathOf[containerKey] = pathNow;
         }
-        containers[containerKey] = containerEnv;
+        containers[containerKey] = containerEnv; noteContainerBorn(containerKey);
         containerKinds[containerKey] = s->kind;
         if (!s->easyKey.empty()) { // Easy_key المكتوب: فريد على الحاويات والمجموعات والأحجام
             if (easyKeyTaken(s->easyKey, "container", containerKey))
@@ -11597,6 +11607,7 @@ void Interpreter::assignStateAware(Environment* owner, const std::string& name, 
         if (kv.second.get() == owner) { containerKey = kv.first; break; }
     }
     if (containerKey.empty()) { owner->values[name] = newValue; return; }
+    if (!stampSuppress_) noteContainerWrite(containerKey, name);   // عمر الحاوية/آخر تعديل/انتهاء صلاحية الحقل (docs/TIMER.md)
 
     // Rin 1.0: روابط OOP/Indsin — نلتقط القيمة السابقة قبل الكتابة (فقط حين توجد روابط، فكلفة صفر قبلها).
     Value linkOld;
@@ -13898,6 +13909,7 @@ void Interpreter::liveFireBells(const std::shared_ptr<LiveMeta>& m, const Value&
 
 Value Interpreter::liveRead(Environment* owner, const std::shared_ptr<LiveMeta>& m, const std::string& name, int line) {
     m->reads++;
+    if (m->timer) return timerNow(m);   // timer: القيمة الحيّة من الساعة (الخلية نفسها تُحدَّث عند كل tick لمن يعتمد عليها)
     if (m->derived) { // lens: يُحسب من جديد عند كل قراءة داخل البيئة التي صُرِّح فيها
         if (m->evaluating)
             throw liveErr(diag::Code::E0045_DerivedReadOnly, line, "lens `" + name + "` depends on itself",
@@ -13938,6 +13950,9 @@ Value Interpreter::liveAssign(Environment* owner, const std::string& name, Value
                           "cannot assign to `" + name + "`: it is " + (m->kind == "banned" ? "banned (#ban)" : "a stone"),
                           m->kind == "banned" ? "`#ban " + name + ";` froze it for good; remove the `#ban` if it must change"
                                               : "a stone is frozen at its declaration; declare `" + name + "` with `let` (or `tape`) if it must change");
+        if (m->timer)
+            throw liveErr(diag::Code::E0045_DerivedReadOnly, line, "cannot assign to `" + name + "`: it is a timer (its value comes from the clock)",
+                          "control it with `start`, `pause`, `resume`, `stop`, `reset`, `restart` or `extend " + name + " 10s;`");
         if (m->reactive)
             throw liveErr(diag::Code::E0045_DerivedReadOnly, line, "cannot assign to `" + name + "`: it is " + (m->dialog ? "a dialog (its message is reactive, computed from what it reads)" : "a val (reactive, computed from what it reads)"),
                           "change the variables `" + name + "` reads instead; use `touch " + name + ";` to force a recompute or `unval " + name + ";` to turn it into a plain variable");
@@ -14025,7 +14040,7 @@ void Interpreter::liveExecDecl(const std::shared_ptr<LiveDeclStmt>& s, const Env
             throw liveErr(diag::Code::E0046_LiveMisuse, s->line, std::string(what) + " of `" + s->name + "` must be a whole number from 1 to 100000, got " + liveNum(n));
         return static_cast<long>(n);
     };
-    if (s->kind != LiveKind::Lens && s->kind != LiveKind::Val && s->kind != LiveKind::Dialog && s->initializer) v = copyForBinding(evaluate(s->initializer, env));
+    if (s->kind != LiveKind::Lens && s->kind != LiveKind::Val && s->kind != LiveKind::Dialog && s->kind != LiveKind::Timer && s->initializer) v = copyForBinding(evaluate(s->initializer, env));
     switch (s->kind) {
         case LiveKind::Stone: m->kind = "stone"; m->frozen = true; break;
         case LiveKind::Gauge: {
@@ -14067,11 +14082,12 @@ void Interpreter::liveExecDecl(const std::shared_ptr<LiveDeclStmt>& s, const Env
         }
         case LiveKind::Dialog: { // حوار متغيّر (docs/dialog.md): الرسالة val تفاعلية + حالة (مفتوح/مغلق/نتيجة)؛ العنوان/الأزرار/النغمة تعابير تُقيَّم عند القراءة
             m->kind = "dialog"; m->dialog = true; m->reactive = true; m->lazy = s->lazy; m->expr = s->initializer; m->whenExpr = s->when; m->scope = env;
-            m->dTitle = s->dTitle; m->dButtons = s->dButtons; m->dTone = s->dTone; m->dFocus = s->dFocus; m->dTrigger = s->dTrigger;
+            m->dTitle = s->dTitle; m->dButtons = s->dButtons; m->dTone = s->dTone; m->dFocus = s->dFocus; m->dTrigger = s->dTrigger; m->dTimeout = s->dTimeout;
             if (s->keep) { m->vkeep = static_cast<size_t>(evalCount(s->keep, "`keep`", 10)); }
             v = Value::nil();
             break;
         }
+        case LiveKind::Timer: timerSetup(s, env, m, v); break;   // مؤقّت حيّ (docs/TIMER.md): المدّة/الخطوة/التأخير + القيمة الابتدائية
         case LiveKind::Lens:
             m->kind = "lens"; m->derived = true; m->expr = s->initializer; m->scope = env; v = Value::nil(); break;
         case LiveKind::Fuse:
@@ -14121,6 +14137,7 @@ void Interpreter::liveExecDecl(const std::shared_ptr<LiveDeclStmt>& s, const Env
     }
     env->define(s->name, v);       // define() يمحو أي حياة سابقة بنفس الاسم في هذه البيئة
     env->live[s->name] = m;
+    if (m->timer && !s->tIdle) timerBegin(env.get(), s->name, m, s->line);   // timer يبدأ فور التصريح ما لم يُكتب `idle`
     if (m->reactive) { // الحساب الأول: دفعي فوراً (lazy: عند أول قراءة). لا رنين (لا قيمة سابقة).
         if (m->lazy) m->stale = true;
         else { Value nv; if (valCompute(env.get(), s->name, m, nv, s->line)) { if (m->ranged) nv = liveApplyRange(*m, s->name, nv, s->line); env->values[s->name] = nv; } }
@@ -14128,6 +14145,14 @@ void Interpreter::liveExecDecl(const std::shared_ptr<LiveDeclStmt>& s, const Env
 }
 
 void Interpreter::liveExecBell(const std::shared_ptr<BellStmt>& s, const EnvPtr& env) {
+    if (s->role == "tick" || s->role == "ring") { // tick/ring TIMER (..) { ... } — معالجا مؤقّت (docs/TIMER.md)
+        auto callable = std::make_shared<Callable>();
+        callable->declaration = s->handler;
+        callable->closure = env;
+        Value fn; fn.type = Value::Type::FUNCTION; fn.function = callable;
+        timerAddHandler(s->target, s->role, env, fn, s->line);
+        return;
+    }
     if (s->reply) { // reply DIALOG (r) { ... } — معالج يُستدعى عند كل إغلاق للحوار (docs/dialog.md)
         Environment* o = nullptr; std::string nm; std::shared_ptr<LiveMeta> dm;
         dialogLocate(env, s->target, s->line, o, nm, dm);
@@ -14370,6 +14395,15 @@ void Interpreter::liveExecAction(const std::shared_ptr<LiveActionStmt>& s, const
         throw LiveAbortSignal{};
     }
     if (s->action == "open" || s->action == "close" || s->action == "ask") { dialogAction(s, env); return; } // docs/dialog.md
+    if (s->action == "start" || s->action == "pause" || s->action == "resume" || s->action == "stop" || s->action == "reset" || // docs/TIMER.md
+        s->action == "restart" || s->action == "lap" || s->action == "extend") {
+        Environment* to = nullptr; std::string tn; std::shared_ptr<LiveMeta> tm;
+        timerLocate(env, s->target, s->line, to, tn, tm);
+        Value arg; bool hasArg = false;
+        if (s->count) { arg = evaluate(s->count, env); hasArg = true; }
+        timerAction(s->action, to, tn, tm, hasArg ? &arg : nullptr, s->line);
+        return;
+    }
     Environment* owner = findLiveOwner(env, s->target);
     if (!owner) throw undefinedVariableErr(s->target, s->line, env);
     // #ban x; — يمنع أي كتابة لاحقة على متغيّر موجود (الإسناد وتعديل محتواه المباشر x[i]= / x.f=)؛
@@ -14483,7 +14517,9 @@ bool Interpreter::livePropertyGet(const EnvPtr& env, const std::string& name, co
         "ok", "accepted", "rejected", "refused",                                                        // accept (و pre/post)
         "pre", "post", "label", "about", "unit", "id", "info",
         "deps", "runs", "stale", "lazy", "held", "dependents",
-        "open", "title", "text", "buttons", "tone", "choice", "result", "opens", "closes", "focus"};   // dialog (docs/dialog.md)                                       // val                                                                                 // pre/post
+        "open", "title", "text", "buttons", "tone", "choice", "result", "opens", "closes", "focus",    // dialog (docs/dialog.md)
+        "elapsed", "total", "percent", "state", "running", "paused", "armed", "stopped", "done", "idle", "ready",
+        "fires", "cycles", "starts", "every", "laps", "eta", "reason", "started", "finished"};      // timer (docs/TIMER.md)                                       // val                                                                                 // pre/post
     if (!props.count(prop)) return false;
     Environment* owner = findLiveOwner(env, name);
     if (!owner || owner->live.empty()) return false;
@@ -14496,6 +14532,12 @@ bool Interpreter::livePropertyGet(const EnvPtr& env, const std::string& name, co
         for (auto& kv : *cur.map) if (kv.first.type == Value::Type::STRING && kv.first.str == prop) return false;
     if (cur.type == Value::Type::INSTANCE && cur.instance && cur.instance->fields.count(prop)) return false;
 
+    if (m->timer) { if (depTracker_) valTrack(owner, name); if (timerProp(owner, name, m, prop, out, line)) return true; }   // timer: خصائصه أولاً (left/state/text/...)
+    else {   // أسماء خصائص المؤقّت الجديدة صامتة على غير المؤقّتات (لا تحجب حقولاً/طرقاً عادية)
+        static const std::unordered_set<std::string> timerOnly = {"elapsed", "total", "percent", "state", "running", "paused", "armed", "stopped", "done", "idle", "ready",
+                                                                  "fires", "cycles", "starts", "every", "laps", "eta", "reason", "started", "finished"};
+        if (timerOnly.count(prop)) return false;
+    }
     auto only = [&](bool ok, const char* kinds) {
         if (!ok) throw liveErr(diag::Code::E0046_LiveMisuse, line,
                                "`" + name + "." + prop + "` is only available on " + kinds + " variables, but `" + name + "` is " +
@@ -14748,6 +14790,7 @@ void Interpreter::dialogDoOpen(Environment* owner, const std::string& name, cons
     if (m->dOpen) return;                                      // فتح حوار مفتوح لا أثر له
     liveJournal(owner, name);
     m->dOpen = true; m->dOpens++; m->dChoice = 0; m->dResult = Value::nil();
+    if (m->dTimeout) dialogTimeoutArm(owner, name, m, line);   // timeout DUR: إغلاق تلقائي (docs/TIMER.md)
 }
 
 void Interpreter::dialogDoClose(Environment* owner, const std::string& name, const std::shared_ptr<LiveMeta>& m, const Value* result, int line) {
@@ -14771,6 +14814,7 @@ void Interpreter::dialogDoClose(Environment* owner, const std::string& name, con
         }
     }
     liveJournal(owner, name);
+    dialogTimeoutDisarm(m);
     m->dOpen = false; m->dCloses++; m->dChoice = choice;
     m->dResult = choice > 0 ? Value::string(sp.buttons[static_cast<size_t>(choice - 1)]) : Value::nil();
     if (!m->replies.empty()) {
@@ -14837,6 +14881,7 @@ Value Interpreter::dialogInfoMap(Environment* owner, const std::string& name, co
     put("focus", Value::num(static_cast<double>(sp.focus)));
     put("open", Value::boolean_(m->dOpen)); put("choice", Value::num(static_cast<double>(m->dChoice))); put("result", m->dResult);
     put("opens", Value::num(static_cast<double>(m->dOpens))); put("closes", Value::num(static_cast<double>(m->dCloses)));
+    if (m->dTimeout) { EnvPtr sc = m->scope.lock(); put("timeout", sc ? evaluate(m->dTimeout, sc) : Value::nil()); }
     return Value::makeMap(vm);
 }
 
@@ -14873,6 +14918,7 @@ void Interpreter::dialogAction(const std::shared_ptr<LiveActionStmt>& s, const E
 #include "rin_image_ansi.cpp" // صور داخل الـ terminal كنص (docs/image-terminal.md)
 #include "rin_image_draw.cpp" // إنشاء الصور والرسم والحفظ PNG وlog كصورة (docs/image-draw.md)
 #include "rin_intent_nav.cpp"   // Intent.core / Navigation.re (docs/intent_navigation.md)
+#include "rin_timer.cpp"        // الساعة والمجدوِل و timer للحاويات (docs/TIMER.md)
 #include "rin_env.cpp"   // ربط ملف .env (docs/env.md)
 #include "rin_set.cpp"   // نوع Set الأساسي (docs/set.md)
 #include "rin_expr_host.cpp" // واجهة التقييم المعزول لـ indsin (docs/indsin_rin.md)
