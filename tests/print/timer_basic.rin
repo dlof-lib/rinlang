@@ -1,0 +1,25 @@
+// timer: مؤقّت حيّ (docs/TIMER.md) — ساعة مُجمَّدة تجعل كل شيء حتمياً
+time.freeze();
+timer cd = 30s every 10s;                      // عدّ تنازلي 30 ثانية، tick كل 10
+tick cd (n, v) { print "tick", n, "left", v; }
+ring cd (info) { print "ring:", info["reason"], "cycles", info["cycles"]; }
+print cd, cd.left, cd.state, cd.text;
+time.advance(10s);
+print cd, cd.elapsed, cd.state, cd.text, cd.percent;
+time.advance("25s");                           // نص مدّة
+print cd.state, cd.done, cd.text, cd.cycles, cd.reason;
+// المدد المباشرة تعمل في أي تعبير
+print 30s, 500ms, 1.5m, 1h30m, 2d;
+// الأفعال
+timer t = 1m idle;
+print t.state, t.ready;
+start t; time.advance(20s); pause t;
+print t.state, t.left;
+time.advance(5m); print t.left;                 // متوقّف مؤقّتاً: لا يتقدّم
+resume t; time.advance(10s); print t.left;
+extend t 30s; print t.total, t.left;
+restart t; print t.left, t.starts;
+reset t; print t.state, t.left;
+// القيمة للقراءة فقط
+try { cd = 5; } catch (e) { print "مرفوض: القيمة من الساعة"; }
+time.unfreeze();
