@@ -94,6 +94,7 @@ private:
     void checkPatternDuplicates(const LetPattern& p, const Token& at) const;
     // المتغيرات الحيّة (docs/living-variables.md): stone/gauge/tape/lens/fuse + bell + trial + undo/redo/rearm/unbell/abort
     StmtPtr liveDeclaration();
+    ExprPtr durationExpr();   // timer: `30s` / `1h30m` / تعبير (docs/TIMER.md)
     StmtPtr bellDeclaration();
     StmtPtr trialStatement();
     StmtPtr liveActionStatement();
