@@ -1,0 +1,39 @@
+// timer: ساعة إيقاف، loop، times، until، after (docs/TIMER.md)
+time.freeze();
+timer sw up;                                   // ساعة إيقاف مفتوحة
+start sw;
+time.advance(1500ms); lap sw;
+time.advance(2s);     lap sw;
+print sw.laps, sw.elapsed, sw.text;
+stop sw; time.advance(10s);
+print sw.elapsed, sw.state, sw.reason;
+
+timer lp = 3s loop;                            // يكرّر بلا نهاية، كل دورة ring
+let c = 0;
+ring lp (i) { c += 1; }
+time.advance(10s);
+print c, lp.cycles, lp.state;
+stop lp;
+
+timer t3 = 2s times 3;                         // ثلاث دورات ثم ينتهي
+let r = 0;
+ring t3 (i) { r += 1; print "دورة", i["cycles"], "أخرى؟", i["again"]; }
+timers.run();
+print r, t3.state;
+
+timer u = 10s every 1s until u.fires >= 4;     // إنهاء مبكر بشرط
+timers.run();
+print u.state, u.reason, u.fires, u.left;
+
+timer d = 5s after 2s idle;                    // تأخير ثم عدّ
+start d; print d.state;
+time.advance(2s); print d.state;
+extend d 5s; print d.total;
+time.advance(11s); print d.state, d.cycles;
+
+timer cool = 5s idle;                          // نمط cooldown
+let fired = 0;
+fun act() { if (cool.ready) { fired += 1; restart cool; } }
+act(); act(); time.advance(5s); act(); act();
+print fired;
+time.unfreeze();
