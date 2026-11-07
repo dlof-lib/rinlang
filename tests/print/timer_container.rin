@@ -1,0 +1,34 @@
+// timer داخل حاوية: حقل حيّ يتكامل مع val وdialog وعمر الحاوية (docs/TIMER.md)
+time.freeze();
+@shop.container
+    let stock = 10;
+    timer promo = 1m every 20s;
+    val banner = "ينتهي العرض بعد " + promo.text;
+    dialog over = "انتهى العرض" buttons ["حسناً"] timeout 5s;
+    tick promo (n, v) { print "tick", n, banner; }
+    ring promo (i) { print "رنّ:", i["reason"]; open over; }
+.end;
+print shop.promo.left, shop.promo.state, shop.banner;
+time.advance(20s);
+pause shop.promo;
+print shop.promo.state, shop.promo.text;
+time.advance(1m);
+print shop.promo.left;
+resume shop.promo;
+time.advance(40s);
+print shop.over.open;
+time.advance(6s);                              // انتهت مهلة الحوار: يُغلق وحده
+print shop.over.open, shop.over.closes, shop.promo.state;
+print timerList("shop"), timerInfo("shop", "promo")["state"];
+timerRestart("shop", "promo");
+print shop.promo.state;
+print timers.pauseAll("shop"), shop.promo.state;
+print timers.resumeAll("shop"), shop.promo.state;
+let ct = containerTime("shop");
+print ct["name"], ct["timers"], ct["age"]["text"], ct["idle"]["text"];
+shop.stock = 3;
+print containerTime("shop")["idle"]["text"];
+print timers.stopAll("shop"), shop.promo.state;
+destroyContainer("shop");
+print timers.pending();
+time.unfreeze();
