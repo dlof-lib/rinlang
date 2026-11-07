@@ -1,0 +1,32 @@
+// timers.*: مجدوِل داخل المفسّر + انتهاء صلاحية حقول الحاويات (docs/TIMER.md)
+time.freeze();
+let id = timers.after(1s, fun() { print "بعد ثانية"; });
+timers.every(2s, fun(x) { print "كل ثانيتين", x; }, {times: 2, args: [7]});
+print timers.pending(), timers.next();
+print timers.run();
+print timers.pending(), timers.cancel(id);
+let hits = 0;
+let rep = timers.every(500ms, fun() { hits += 1; });
+timers.run(2s);
+print hits;
+print timers.cancel(rep), timers.pending();
+try { timers.run(); timers.every(1s, fun() {}); timers.run(); } catch (e) { print "run بلا نهاية مرفوض"; }
+timers.clear();
+
+@box.container
+    let token = "abc";
+    let n = 1;
+.end;
+timers.expire("box", "token", 5s, "منتهٍ");
+print timers.ttl("box", "token");
+time.advance(2s); print box.token, timers.ttl("box", "token");
+box.n = 2;
+time.advance(4s); print box.token;
+timers.expire("box", "token", 1s);
+box.token = "جديد";                             // كتابة جديدة تُلغي الصلاحية
+print timers.ttl("box", "token"), timers.persist("box", "token");
+timers.expire("box", "n", 1s, fun(old) { print "انتهى n وكان", old; });
+print timers.list("box")[0]["kind"];
+time.advance(1s); print box.n;
+print time.frozen(); time.unfreeze(); print time.frozen();
+try { time.advance(1s); } catch (e) { print "advance يحتاج ساعة مُجمَّدة"; }
