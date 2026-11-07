@@ -10,6 +10,7 @@
                                 // في registerNatives()/invokeCallee() (rin_interpreter.cpp)
                                 // وdocs/RIN_INTEGRATION.md في مستودع rin-clc الأصلي.
 #include "loader_ui/library_loader_ui.h" // rin::loaderui — انظر setImportUISink/setImportUIMode أدناه
+#include "rin_clock.h" // rin::clk — ساعة time/timer المشتركة (حقيقية أو مُجمَّدة)، docs/TIMER.md
 #include "rin_candle.h" // rin::CandleRegistry — طبقة id-to-id غير محدودة فوق mask/id مباشرة، انظر docs/candle.md
 #include "rin_libdir.h" // rin::libdir — مكتبات Rin المقسَّمة (مجلد .og.rin: Disconom + .zpp + .rinz + native/)
 #include "rin_container_sql.h" // rin::sql — RIN CONTAINER SQL (RCSQL): محلّل استعلام /  : & () # فقط، انظر sqlViews/sqlExecute أدناه
@@ -310,7 +311,32 @@ struct CacheEntry {
 // لا يملك أي مُدخَل هنا أبداً، فتكلفته صفر. كل "نوع" (stone/gauge/tape/lens/fuse) مجرّد إعداد مسبق لنفس الحقول
 // القابلة للتركيب (مثلاً gauge + keep = مقياس بذاكرة؛ وأي متغيّر يقبل bell). الحياة مرتبطة بالـ Environment نفسها،
 // فلا تتسرّب بيانات وصفية قديمة إن أُعيد استعمال عنوان بيئة محذوفة.
+// ---- timer: مؤقّت حيّ (docs/TIMER.md) — حالة المؤقّت؛ المجدوِل نفسه في rin_timer.cpp ----
+struct TimerState {
+    enum class St { Idle, Armed, Running, Paused, Done, Stopped } st = St::Idle;
+    bool up = false, loop = false, wasArmed = false;
+    double total = 0;            // المدّة بالميلي ثانية (0 مع up = ساعة إيقاف مفتوحة بلا نهاية)
+    double every = 0;            // خطوة tick (0 = بلا tick)
+    double delay = 0;            // `after`: تأخير قبل أن يبدأ العدّ
+    double delayLeft = 0;        // ما بقي من التأخير عند الإيقاف المؤقّت وهو Armed
+    long times = 1;              // عدد الدورات (loop = بلا نهاية)
+    ExprPtr until;               // شرط إنهاء مبكر يُفحص عند كل tick
+    double base = 0;             // ما انقضى في الدورة الحالية قبل المقطع الجاري
+    double segStart = 0;         // الساعة الرتيبة عند بدء المقطع الجاري
+    double armedAt = 0;          // الساعة الرتيبة عند انتهاء تأخير `after` (لحظة البدء الفعلي)
+    long ticks = 0;              // ticks الدورة الحالية
+    long fires = 0, cycles = 0, starts = 0;  // مجموع ticks · دورات مكتملة في هذا التشغيل · مرات البدء
+    long entryId = 0, gen = 0;   // مدخل المجدوِل الحالي · عدّاد تغيّر الحالة (يكشف أن معالجاً غيّر المؤقّت أثناء المعالجة)
+    double startedEpoch = 0, finishedEpoch = 0; bool hasStarted = false, hasFinished = false;
+    std::string reason;          // سبب آخر انتهاء: complete | until | stopped
+    std::vector<double> laps;    // أزمنة اللفّات (من بداية الدورة)
+    std::vector<Value> tickHandlers, ringHandlers;
+};
+struct TimerHub; // المجدوِل (rin_timer.cpp)
+
 struct LiveMeta {
+    std::shared_ptr<TimerState> timer;        // timer: حالة المؤقّت (nullptr لغيره)
+    ExprPtr dTimeout; long dTimeoutId = 0;    // dialog: `timeout DUR` ومدخل الإغلاق التلقائي الجاري
     std::string kind = "plain";               // "stone" | "gauge" | "tape" | "lens" | "fuse" | "plain" (لمتغيّر عادي عليه bell فقط)
     bool frozen = false;                       // stone
     bool ranged = false; double lo = 0, hi = 0; int rangeMode = 0; // gauge: 0 clamp، 1 strict، 2 wrap
@@ -1383,6 +1409,7 @@ private:
     void registerNativesExtra9(); // rin_extra_natives9.cpp — مفهوم number: number/numberRound/numberFormat/... (docs/NUMBER.md)
     void registerNativesImageDraw(); // rin_image_draw.cpp — imgNew/imgLine/imgText/imgSave/imgFromLog…: إنشاء صور ورسمها وحفظها PNG (docs/image-draw.md)
     void registerNativesImage();  // rin_image_ansi.cpp — printImage/imageAnsi/imageInfo: صور داخل الـ terminal كنص (docs/image-terminal.md)
+    void registerNativesTimer();  // rin_timer.cpp — time.freeze/advance + timers.* + timerXxx(c, name) + containerTime (docs/TIMER.md)
     void registerNativesIntentNav(); // rin_intent_nav.cpp — Intent.core/send/... و Navigation.re/back/... (docs/intent_navigation.md)
     void registerNativesEnv();   // rin_env.cpp — Env.load/get/require/... لربط Rin بملف .env (docs/env.md)
     void registerNativesConditions(); // rin_conditions.cpp — متغيّرات الشروط الموسّعة (notNil/present/oneOf/inRange/matches/...) (docs/key_terms_and_builtins.md)
@@ -1473,6 +1500,9 @@ private:
     // كما هي بلا أي نسخ (سلوك المرجع المعتاد، بلا أي تغيير).
     Value copyForBinding(const Value& v) const;
 
+public: // مؤقّتات (docs/TIMER.md): يستدعيها المضيف (indsin) كل tick لإطلاق ما استحقّ
+    void timersPump(int line = 0);                 // يُطلق كل ما استحقّ الآن (ساعة حقيقية) — بلا نوم
+    bool timersPending() const;                    // هل في المجدوِل ما ينتظر؟
 public: // Rin 1.0: واجهة OOP الموسَّعة (يستدعيها Value::toDisplayString وrin_oop*.cpp)
     // ================= Rin 1.0: OOP الموسَّع (interface / trait / abstract / static / private / get-set ...) =================
     // ينفَّذ في rin_interpreter.cpp (قسم "OOP 1.4") وتُسجَّل دوال oop.* في rin_oop_natives.cpp.
@@ -1537,6 +1567,34 @@ public: // Rin 1.0: واجهة OOP الموسَّعة (يستدعيها Value::t
     Value dialogDoAsk(Environment* owner, const std::string& name, const std::shared_ptr<LiveMeta>& m, int line);
     Value dialogInfoMap(Environment* owner, const std::string& name, const std::shared_ptr<LiveMeta>& m, int line);
     void dialogAction(const std::shared_ptr<LiveActionStmt>& s, const EnvPtr& env);
+    // ---- timer / time للحاويات (docs/TIMER.md) — التنفيذ في rin_timer.cpp ----
+    std::shared_ptr<TimerHub> hub_;
+    TimerHub& hub();
+    struct ContainerStamp { double born = 0, updated = 0; long writes = 0; };
+    std::unordered_map<std::string, ContainerStamp> containerStamp_;   // عمر الحاوية وآخر تعديل (epoch ms)
+    bool stampSuppress_ = false;                                       // كتابات المؤقّت الداخلية لا تُحسب «تعديلاً» للحاوية
+    void noteContainerBorn(const std::string& key);
+    void noteContainerWrite(const std::string& key, const std::string& field);
+    void timersAdvanceTo(double untilMono, int line);                  // يُطلق ما استحقّ حتى هذه اللحظة (ويقدّم الساعة المُجمَّدة إليها)
+    void timersRunFor(double ms, bool untilEmpty, int line);           // timers.run
+    void timersSleep(double ms, int line);                             // time.sleep: يطلق المستحقّ أثناء النوم
+    long schedCallback(double delayMs, double intervalMs, long times, const Value& fn, std::vector<Value> args, const std::string& label, const std::string& owner);
+    long schedAction(double delayMs, double intervalMs, long times, std::function<void(int)> action, const std::string& label, const std::string& owner);  // مدخل مجدوَل بفعل أصلي (Intent.send {after})
+    double timerDurationArg(const Value& v, int line, const std::string& what);   // مدّة (رقم ms/نص/خريطة) — نفس فهم timers.*
+    double timerAtArg(const Value& v, int line, const std::string& what);         // لحظة => ms من الآن (ترفض الماضي)
+    void schedCancelOwner(const Environment* env);                     // عند حذف حاوية: ألغِ مؤقّتاتها
+    void timerBegin(Environment* owner, const std::string& name, const std::shared_ptr<LiveMeta>& m, int line);
+    Value timerAction(const std::string& action, Environment* owner, const std::string& name, const std::shared_ptr<LiveMeta>& m, const Value* arg, int line);
+    void timerSetup(const std::shared_ptr<LiveDeclStmt>& s, const EnvPtr& env, const std::shared_ptr<LiveMeta>& m, Value& initial);
+    void timerAddHandler(const std::string& path, const std::string& role, const EnvPtr& env, const Value& fn, int line);
+    void timerLocateIn(const std::string& container, const std::string& name, int line, Environment*& owner, std::shared_ptr<LiveMeta>& m);
+    friend struct TimerOps;
+    bool timerProp(Environment* owner, const std::string& name, const std::shared_ptr<LiveMeta>& m, const std::string& prop, Value& out, int line);
+    Value timerNow(const std::shared_ptr<LiveMeta>& m) const;          // قيمة المؤقّت الآن (تُحسب من الساعة)
+    Value timerInfoMap(Environment* owner, const std::string& name, const std::shared_ptr<LiveMeta>& m, int line);
+    void timerLocate(const EnvPtr& env, const std::string& path, int line, Environment*& owner, std::string& name, std::shared_ptr<LiveMeta>& m);
+    void dialogTimeoutArm(Environment* owner, const std::string& name, const std::shared_ptr<LiveMeta>& m, int line);
+    void dialogTimeoutDisarm(const std::shared_ptr<LiveMeta>& m);
     void liveExecTrial(const std::shared_ptr<TrialStmt>& s, const EnvPtr& env);
     void liveExecAction(const std::shared_ptr<LiveActionStmt>& s, const EnvPtr& env);
     void liveGuardWrite(const EnvPtr& env, const ExprPtr& objectExpr, int line) const; // stone/lens: منع x[i]=.. وx.f=..
