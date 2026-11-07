@@ -1,0 +1,10 @@
+false 3 6
+false
+true true api GET dead/y 10000
+1
+3
+خيار مجهول
+cache GET فقط
+backoff تحتاج retry
+retry من 0 إلى 20
+times تحتاج every
