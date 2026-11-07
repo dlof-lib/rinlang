@@ -1,0 +1,27 @@
+› [1-2] (1): › [1-2] (1): 📦 container = shop
+✅ .end/container (shop)
+cool
+╭─ ℹ
+│ بيع؟
+│
+│ [1] بيع   [2] إلغاء
+╰─
+true true 19 running
+false true cooldown 5000 19
+cooldown 2000
+╭─ ℹ
+│ بيع؟
+│
+│ [1] بيع   [2] إلغاء
+╰─
+true 18 running
+2
+cooldown يجب أن يكون timer
+true true 10000 18
+18
+13
+Intent.send shop.sell
+10
+1 1 0
+0
+times تحتاج every
