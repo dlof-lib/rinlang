@@ -523,6 +523,8 @@ RIN_API char* rin_indsin_session_tick(void* sessionPtr) {
     // تلقائياً كل خاصية تقرؤها (مثل text=time(clock, "HH:mm:ss")). المضيف يواصل النداء ما دام "ticking":true.
     std::vector<std::string> changed;
     bool ticking = false;
+    // مؤقّتات Rin (docs/TIMER.md): أطلق ما استحقّ قبل إعادة التخطيط، فتُعاد كل خاصية تقرأ timer/val معه؛ ويبقى المضيف ينادي ما دام في المجدوِل ما ينتظر.
+    if (sess->interp) { try { sess->interp->timersPump(); } catch (...) {} if (sess->interp->timersPending()) ticking = true; }
     if (sess->state.warp.has("clock")) {
         ticking = true;
         SessionRinHost rinHost(sess);
