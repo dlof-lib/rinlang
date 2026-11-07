@@ -95,3 +95,6 @@ for (let {id, tag = "-"} in rows) { print id + tag; }
 
 ## انظر أيضًا
 [`variables.md`](./variables.md) · [`living-variables.md`](./living-variables.md) · [`control-flow.md`](./control-flow.md)
+
+## 5) `ttl` — حقل ينتهي (مع timer)
+داخل حاوية: `let token = "abc" ttl 30s;` ⇒ بعد 30 ثانية يصير `nil`. انظر `docs/TIMER.md`.
