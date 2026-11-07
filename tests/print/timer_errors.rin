@@ -1,0 +1,6 @@
+// timer: أخطاء واضحة عند الهدف الخاطئ (docs/TIMER.md)
+time.freeze();
+timer a = 5s;
+try { start nothing; } catch (e) { print "E1"; }
+let x = 3;
+try { start x; } catch (e) { print "E2"; }
