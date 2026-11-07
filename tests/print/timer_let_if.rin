@@ -1,0 +1,35 @@
+// timer ✕ let ✕ if ✕ guard: `let ... ttl`، تفكيك نتائج المؤقّت، و if على حالة المؤقّت — بلا كلمات جديدة (docs/TIMER.md)
+time.freeze();
+@sess.container
+    let user = "sara";
+    let token = "abc" ttl 30s;                     // let + ttl: ينتهي الحقل بعد 30 ثانية
+    let code: String = "1234" ttl 1m;              // مع النوع
+    let a = 1 ttl 5s, b = 2;                       // عدة تصريحات: ttl للأول فقط
+    timer cool = 10s idle;
+.end;
+print sess.token, timers.ttl("sess", "token"), timers.ttl("sess", "code"), timers.ttl("sess", "b");
+time.advance(5s); print sess.a, sess.b;
+time.advance(25s); print sess.token, sess.code;
+time.advance(30s); print sess.code;
+sess.token = "new";                                // الكتابة تُلغي الصلاحية
+setField("sess", "tmp", 1);
+timers.expire("sess", "tmp", 1s);
+sess.tmp = 2; time.advance(5s); print sess.tmp;
+
+// تفكيك let على معلومات المؤقّت + if على حالته
+let {state, left} = timerInfo("sess", "cool");
+print state, left;
+if (sess.cool.ready) print "جاهز"; else print "ليس جاهزاً";
+timerStart("sess", "cool");
+let [s2, l2] = [sess.cool.state, sess.cool.left];
+print s2, l2;
+time.advance(4s);
+if (sess.cool.left > 5s) print "ما زال طويلاً"; else print "قارب الانتهاء";
+time.advance(6s);
+if (sess.cool.ready) print "انتهى"; else print "جارٍ";
+// let ... else على قيمة مؤقّتة التوقيت
+fun remaining(f) { let w = timers.ttl("sess", f) else { return "لا ttl"; }; return w; }
+print remaining("none"), remaining("tmp");
+try { let z = 1 ttl 5s; } catch (e) { print "ttl للحقول فقط"; }
+destroyContainer("sess");
+time.unfreeze();
