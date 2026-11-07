@@ -72,6 +72,8 @@ object RinSyntaxHighlighter {
         "reckon", "where",
         // Living Variables (docs/living-variables.md)
         "stone", "gauge", "tape", "lens", "fuse", "bell", "trial", "undo", "redo", "rearm", "unbell", "abort", "val", "touch", "unval", "dialog",
+        // timer (docs/TIMER.md): مؤقّت حيّ — كلمات سياقية
+        "timer", "tick", "ring", "pause", "resume", "restart", "lap", "extend",
         // base/accept (docs/base-accept.md): variables that help `if`, plus their actions
         "base", "accept", "inc", "dec", "rebase", "rewind",
         // pre/post (docs/pre-post.md): ما قبل / ما بعد — عقد انتقال حول الإسناد
