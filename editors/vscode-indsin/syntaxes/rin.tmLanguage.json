@@ -263,7 +263,17 @@
       "comment": "Living Variables: stone/gauge/tape/lens/fuse declarations, bell, trial, undo/redo/rearm/unbell/abort. See docs/living-variables.md.",
       "patterns": [
         {
-          "match": "\\b(stone|gauge|tape|lens|fuse|bell|base|accept|pre|post|label|define|val|dialog)\\b\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "comment": "timer actions: start/pause/resume/stop/reset/restart/lap/extend NAME (docs/TIMER.md)",
+          "match": "\\b(start|pause|resume|stop|reset|restart|lap|extend)\\b(?=\\s+[A-Za-z_])",
+          "name": "keyword.control.living.rin"
+        },
+        {
+          "comment": "duration literal: 30s 500ms 1.5h 1h30m (docs/TIMER.md)",
+          "match": "\\b\\d+(?:\\.\\d+)?(?:ms|s|m|h|d|w)(?:\\d+(?:\\.\\d+)?(?:ms|s|m|h|d|w))*\\b",
+          "name": "constant.numeric.duration.rin"
+        },
+        {
+          "match": "\\b(stone|gauge|tape|lens|fuse|bell|base|accept|pre|post|label|define|val|dialog|timer|tick|ring)\\b\\s+([A-Za-z_][A-Za-z0-9_]*)",
           "captures": {
             "1": { "name": "keyword.control.living.rin" },
             "2": { "name": "variable.other.living.rin" }
