@@ -1,0 +1,40 @@
+// timer ✕ guard ✕ intent: تبريد الحارس وإرسال النيّة المؤجَّل/الدوري — بلا كلمات جديدة (docs/TIMER.md)
+// الحوار هنا يختار زر focus تلقائياً (نهاية الإدخال) فتُجرَّب كل السيناريوهات بلا إدخال يدوي
+time.freeze();
+@shop.container
+    let stock = 20;
+    timer cool = 5s idle;                                // مؤقّت التبريد: يُعاد تشغيله كلما سُمح بالإجراء
+    dialog sure = "بيع؟" buttons ["بيع", "إلغاء"] focus 1;
+    fun sell(extras) { stock = stock - extras["n"]; return stock; }
+.end;
+
+Intent.guard("shop", "sell", "sure", {cooldown: "cool"});
+print Intent.guards("shop")[0]["cooldown"];
+let r1 = Intent.send(Intent.core("shop", "sell", {"n": 1}));
+print r1.ok, r1.confirmed, shop.stock, shop.cool.state;
+let r2 = Intent.send(Intent.core("shop", "sell", {"n": 1}));       // التبريد جارٍ: مُنع بلا سؤال
+print r2.ok, r2.blocked, r2.reason, r2.left, shop.stock;
+time.advance(3s);
+print Intent.send(Intent.core("shop", "sell", {"n": 1})).reason, shop.cool.left;
+time.advance(2s);
+let r3 = Intent.send(Intent.core("shop", "sell", {"n": 1}));       // انتهى التبريد
+print r3.ok, shop.stock, shop.cool.state;
+print Intent.guards("shop")[0]["asked"];                          // المنع بالتبريد لا يُحسب سؤالاً
+try { Intent.guard("shop", "sell", "sure", {cooldown: "stock"}); } catch (e) { print "cooldown يجب أن يكون timer"; }
+
+// الإرسال المؤجَّل: after / at / every+times — يمرّ كل إرسال بالحارس عند لحظته
+Intent.unguard("shop");
+let s = Intent.send(Intent.core("shop", "sell", {"n": 5}), {after: 10s});
+print s.ok, s.scheduled, s.in, shop.stock;
+time.advance(9s); print shop.stock;
+time.advance(1s); print shop.stock;
+Intent.send(Intent.core("shop", "sell", {"n": 1}), {every: 1s, times: 3});
+print timers.list("shop")[0]["label"];
+time.advance(1m); print shop.stock;
+let s2 = Intent.send(Intent.core("shop", "sell", {"n": 1}), {after: "1h"});
+print timers.pending(), timers.clear("shop"), timers.pending();   // إلغاء كل ما جدولته الحاوية
+Intent.send(Intent.core("shop", "sell", {"n": 1}), {after: 1h});
+destroyContainer("shop");
+print timers.pending();                                           // حذف الحاوية يلغي ما جدولته
+try { Intent.send(Intent.core("shop", "sell"), {times: 2}); } catch (e) { print "times تحتاج every"; }
+time.unfreeze();
