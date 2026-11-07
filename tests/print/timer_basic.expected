@@ -1,0 +1,16 @@
+30000 30000 running 00:30
+tick 1 left 20000
+20000 10000 running 00:20 33.33
+tick 2 left 10000
+tick 3 left 0
+ring: complete cycles 1
+done true 00:00 1 complete
+30000 500 90000 5400000 172800000
+idle true
+paused 40000
+40000
+30000
+90000 60000
+90000 2
+idle 90000
+مرفوض: القيمة من الساعة
