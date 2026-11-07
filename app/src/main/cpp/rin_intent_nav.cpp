@@ -75,6 +75,7 @@ static int& intentCounter() { static int n = 0; return n; }
 struct Guard {
     std::string dialog;            // اسم الحوار (حقل حيّ في الحاوية نفسها)
     Value confirm = Value::num(1); // زر التأكيد: رقم (1..) أو نصه؛ أي اختيار آخر (أو التجاهل) = رفض
+    std::string cooldown;          // اختياري (timer ✕ guard): مؤقّت في الحاوية؛ ما دام جارياً يُمنع الإجراء بلا سؤال، ويُعاد تشغيله كلما سُمح (docs/TIMER.md)
     std::string when;              // اختياري: حقل أو دالة في الحاوية؛ الحارس لا يسأل إلا إن كانت قيمتها صادقة
     std::set<std::string> on;      // للتنقّل: أي العمليات محروسة (re/replace/back/reload)؛ فارغ = الكل
     bool paused = false;           // معلَّق: يبقى مسجَّلاً لكنه لا يسأل (Intent.pause / Navigation.pause)
@@ -84,7 +85,7 @@ static std::map<std::string, std::map<std::string, Guard>>& intentGuards() { sta
 static std::map<std::string, Guard>& navGuards() { static std::map<std::string, Guard> g; return g; }
 static std::set<std::string>& guardBusy() { static std::set<std::string> b; return b; }   // يمنع حلقة: reply يستدعي ما هو محروس
 
-struct Verdict { bool asked = false, proceed = true; long choice = 0; Value answer; };
+struct Verdict { bool asked = false, proceed = true, cooling = false; long choice = 0; double left = 0; Value answer; };   // cooling: مُنع بتبريد المؤقّت (لم يُسأل أحد)
 
 // ---- جبر النيّة: extras المخفيّة تبقى في النيّة لكنها لا تُمرَّر للإجراء ولا تظهر في pending ----
 static std::vector<std::string> hiddenKeys(const Value& intent) {
@@ -159,6 +160,11 @@ void Interpreter::registerNativesIntentNav() {
                     throw errWithReason(diag::Code::E0007_InvalidArguments, line, fn + ": 'when' names '" + g.when + "' which is not a field or function of container '" + c + "'",
                                         "declare it inside the container (a `let` field or a `fun`)");
             }
+            if (const Value* v = opts.map->findValue(Value::string("cooldown"))) {
+                g.cooldown = needStr(*v, fn + " (cooldown)", line);
+                Environment* to = nullptr; std::shared_ptr<LiveMeta> tm;
+                timerLocateIn(c, g.cooldown, line, to, tm);            // E0046 إن لم يكن مؤقّتاً (timer) في هذه الحاوية
+            }
             if (const Value* v = opts.map->findValue(Value::string("on"))) {
                 if (v->type != Value::Type::ARRAY || !v->array) throw diagErr(diag::Code::E0004_InvalidType, line, fn + ": 'on' must be an array of operations but got " + v->typeName());
                 for (auto& e : *v->array) {
@@ -177,11 +183,24 @@ void Interpreter::registerNativesIntentNav() {
                                           const std::string& what, const Value& payload, std::function<Guard*()> relookup, int line) -> Verdict {
         Verdict v;
         if (guardBusy().count(busyKey)) return v;                      // داخل reply/دالة محروسة: لا نكرّر السؤال
+        auto restartCooldown = [&]() {
+            if (g.cooldown.empty()) return;
+            Environment* to = nullptr; std::shared_ptr<LiveMeta> tm;
+            timerLocateIn(c, g.cooldown, line, to, tm);
+            timerAction("restart", to, g.cooldown, tm, nullptr, line);
+        };
+        if (!g.cooldown.empty()) {                                     // timer ✕ guard: مؤقّت التبريد جارٍ => منع بلا سؤال
+            Environment* to = nullptr; std::shared_ptr<LiveMeta> tm;
+            timerLocateIn(c, g.cooldown, line, to, tm);
+            Value rd, lf;
+            timerProp(to, g.cooldown, tm, "ready", rd, line); timerProp(to, g.cooldown, tm, "left", lf, line);
+            if (!rd.isTruthy()) { v.cooling = true; v.proceed = false; v.left = lf.number; return v; }
+        }
         if (!g.when.empty()) {
             Args ga{Value::string(c), Value::string(g.when)};
             Value w = natives["getField"](ga, line);
             if (w.type == Value::Type::FUNCTION && w.function) { Args none; w = callFunction(w.function, none, line); }
-            if (!w.isTruthy()) return v;                               // الشرط كاذب: لا حاجة للتأكيد
+            if (!w.isTruthy()) { restartCooldown(); return v; }        // الشرط كاذب: لا حاجة للتأكيد
         }
         Environment* o = nullptr; std::shared_ptr<LiveMeta> m;
         dialogLocateIn(c, g.dialog, line, o, m);
@@ -202,19 +221,25 @@ void Interpreter::registerNativesIntentNav() {
         clearPending();
         v.asked = true; v.choice = m->dChoice; v.answer = ans; v.proceed = (v.choice == want);   // التجاهل (0) = رفض: الفشل مغلق
         if (relookup) if (Guard* rg = relookup()) { rg->asked++; (v.proceed ? rg->confirmed : rg->declined)++; }
+        if (v.proceed) restartCooldown();
         return v;
     };
     auto blockedMap = [](const char* kind, const std::string& c, const std::string& what, const Verdict& v) -> Value {
+        if (v.cooling) return mkMap({{"ok", Value::boolean_(false)}, {"blocked", Value::boolean_(true)}, {"kind", Value::string(kind)},
+                                     {"container", Value::string(c)}, {"target", Value::string(what)}, {"reason", Value::string("cooldown")},
+                                     {"left", Value::num(v.left)}});
         return mkMap({{"ok", Value::boolean_(false)}, {"blocked", Value::boolean_(true)}, {"kind", Value::string(kind)},
                       {"container", Value::string(c)}, {"target", Value::string(what)},
                       {"choice", Value::num(static_cast<double>(v.choice))}, {"answer", v.answer}});
     };
     auto guardInfo = [](const std::string& key, const Guard& g) -> Value {
         auto on = std::make_shared<ArrayData>(); for (auto& o : g.on) on->push_back(Value::string(o));
-        return mkMap({{"target", Value::string(key)}, {"dialog", Value::string(g.dialog)}, {"confirm", g.confirm},
+        Value out = mkMap({{"target", Value::string(key)}, {"dialog", Value::string(g.dialog)}, {"confirm", g.confirm},
                       {"when", g.when.empty() ? Value::nil() : Value::string(g.when)}, {"on", Value::makeArray(on)},
                       {"asked", Value::num(static_cast<double>(g.asked))}, {"confirmed", Value::num(static_cast<double>(g.confirmed))},
                       {"declined", Value::num(static_cast<double>(g.declined))}, {"paused", Value::boolean_(g.paused)}});
+        if (!g.cooldown.empty()) out.map->emplace_back(Value::string("cooldown"), Value::string(g.cooldown));   // يظهر فقط حين يُستعمل (يحفظ مخرجات الكود القديم)
+        return out;
     };
     // بوّابة التنقّل: true = مُنع الانتقال (v يحمل الحكم)
     auto navBlocked = [consult](const std::string& c, const char* op, const std::string& target, const Value& params, Verdict& v, int line) -> bool {
@@ -224,11 +249,30 @@ void Interpreter::registerNativesIntentNav() {
         Guard g = it->second;                                          // نسخة: قد يُزيل reply الحارس أثناء السؤال
         v = consult(c, g, "n|" + c, "navigation", op, target, params,
                     [c]() -> Guard* { auto x = navGuards().find(c); return x == navGuards().end() ? nullptr : &x->second; }, line);
-        return v.asked && !v.proceed;
+        return (v.asked || v.cooling) && !v.proceed;
     };
     auto withConfirmed = [](Value r) -> Value {
         if (r.type == Value::Type::MAP && r.map) { auto m = std::make_shared<MapData>(*r.map); m->emplace_back(Value::string("confirmed"), Value::boolean_(true)); return Value::makeMap(m); }
         return r;
+    };
+
+    // timer ✕ intent/navigation: خيارا after (مدّة) / at (لحظة) — يعيد true ويملأ delay إن وُجد أحدهما؛ يرفض أي مفتاح آخر
+    auto delayOf = [this](const Value& opts, int line, const std::string& fn, double& delay) -> bool {
+        if (opts.type == Value::Type::NIL) return false;
+        if (opts.type != Value::Type::MAP || !opts.map) throw diagErr(diag::Code::E0004_InvalidType, line, fn + ": options must be a map but got " + opts.typeName());
+        for (auto& kv : *opts.map) {
+            const std::string k = kv.first.toDisplayString();
+            if (k != "after" && k != "at") throw errWithReason(diag::Code::E0007_InvalidArguments, line, fn + ": unknown option '" + k + "'", "allowed options: after, at");
+        }
+        const Value va = mapGet(opts, "after"), vt = mapGet(opts, "at");
+        if (va.type != Value::Type::NIL && vt.type != Value::Type::NIL) throw diagErr(diag::Code::E0007_InvalidArguments, line, fn + ": use `after` or `at`, not both");
+        if (va.type != Value::Type::NIL) { delay = timerDurationArg(va, line, fn + " `after`"); return true; }
+        if (vt.type != Value::Type::NIL) { delay = timerAtArg(vt, line, fn + " `at`"); return true; }
+        return false;
+    };
+    auto scheduledMap = [](long id, double delay, const char* what, const std::string& target) -> Value {
+        return mkMap({{"ok", Value::boolean_(true)}, {"scheduled", Value::boolean_(true)}, {"id", Value::num(static_cast<double>(id))},
+                      {"kind", Value::string(what)}, {"target", Value::string(target)}, {"in", Value::num(std::round(delay))}});
     };
 
     // ---------------- Intent ----------------
@@ -298,7 +342,7 @@ void Interpreter::registerNativesIntentNav() {
         }
         auto fn = own->second.function;
         Verdict v;
-        if (gate) { v = gate(c, av.str); if (v.asked && !v.proceed) return blockedMap("intent", c, av.str, v); }
+        if (gate) { v = gate(c, av.str); if ((v.asked || v.cooling) && !v.proceed) return blockedMap("intent", c, av.str, v); }
         Args args;
         if (fn->declaration && !fn->declaration->params.empty()) args.push_back(visibleExtras(intent));
         Value r = callFunction(fn, args, line);
@@ -310,9 +354,37 @@ void Interpreter::registerNativesIntentNav() {
         bool force = false;
         if (a.size() > 1 && a[1].type != Value::Type::NIL) {
             if (a[1].type != Value::Type::MAP || !a[1].map) throw diagErr(diag::Code::E0004_InvalidType, line, "Intent.send: options must be a map but got " + a[1].typeName());
-            for (auto& kv : *a[1].map) if (kv.first.toDisplayString() != "force")
-                throw errWithReason(diag::Code::E0007_InvalidArguments, line, "Intent.send: unknown option '" + kv.first.toDisplayString() + "'", "allowed options: force");
+            for (auto& kv : *a[1].map) {
+                const std::string k = kv.first.toDisplayString();
+                if (k != "force" && k != "after" && k != "at" && k != "every" && k != "times")
+                    throw errWithReason(diag::Code::E0007_InvalidArguments, line, "Intent.send: unknown option '" + k + "'", "allowed options: force, after, at, every, times");
+            }
             force = mapGet(a[1], "force").isTruthy();                  // {force: true} = يتجاوز الحارس (استدعاء نظام لا مستخدم)
+            // timer ✕ intent: الإرسال المؤجَّل/الدوري — after (مدّة) | at (لحظة) ثم every/times. يمرّ كل إرسال بالحارس عند لحظته.
+            const Value vAfter = mapGet(a[1], "after"), vAt = mapGet(a[1], "at"), vEvery = mapGet(a[1], "every"), vTimes = mapGet(a[1], "times");
+            if (vAfter.type != Value::Type::NIL || vAt.type != Value::Type::NIL || vEvery.type != Value::Type::NIL) {
+                if (vAfter.type != Value::Type::NIL && vAt.type != Value::Type::NIL) throw diagErr(diag::Code::E0007_InvalidArguments, line, "Intent.send: use `after` or `at`, not both");
+                if (vTimes.type != Value::Type::NIL && vEvery.type == Value::Type::NIL) throw diagErr(diag::Code::E0007_InvalidArguments, line, "Intent.send: `times` needs `every`");
+                Args da{vAfter.type != Value::Type::NIL ? vAfter : vAt.type != Value::Type::NIL ? vAt : vEvery};
+                double delay = 0, interval = 0; long times = 1;
+                if (vEvery.type != Value::Type::NIL) { Args ea{vEvery}; interval = timerDurationArg(ea[0], line, "Intent.send `every`"); times = -1; delay = interval; }
+                if (vAfter.type != Value::Type::NIL) delay = timerDurationArg(vAfter, line, "Intent.send `after`");
+                if (vAt.type != Value::Type::NIL) delay = timerAtArg(vAt, line, "Intent.send `at`");
+                if (vTimes.type != Value::Type::NIL) {
+                    if (vTimes.type != Value::Type::NUMBER || vTimes.number < 1 || vTimes.number != std::floor(vTimes.number)) throw diagErr(diag::Code::E0007_InvalidArguments, line, "Intent.send: `times` must be a whole number >= 1");
+                    times = static_cast<long>(vTimes.number);
+                }
+                Value cv = mapGet(a[0], "container"), av = mapGet(a[0], "action");
+                if (mapGet(a[0], "kind").type != Value::Type::STRING || cv.type != Value::Type::STRING || av.type != Value::Type::STRING)
+                    throw diagErr(diag::Code::E0004_InvalidType, line, "Intent.send: argument is not an intent (build it with Intent.core)");
+                Value intent = a[0]; const bool f = force;
+                long id = schedAction(delay, interval, times, [this, intent, f](int ln) {
+                    Args sa{intent}; if (f) sa.push_back(mkMap({{"force", Value::boolean_(true)}}));
+                    natives["Intent.send"](sa, ln);
+                }, "Intent.send " + cv.str + "." + av.str, canonContainer(cv.str));
+                return mkMap({{"ok", Value::boolean_(true)}, {"scheduled", Value::boolean_(true)}, {"id", Value::num(static_cast<double>(id))},
+                              {"container", cv}, {"action", av}, {"in", Value::num(std::round(delay))}});
+            }
         }
         Value extras = visibleExtras(a[0]);
         std::function<Verdict(const std::string&, const std::string&)> gate;
@@ -351,7 +423,7 @@ void Interpreter::registerNativesIntentNav() {
             if (own == containers[c]->values.end() || own->second.type != Value::Type::FUNCTION)
                 throw errWithReason(diag::Code::E0006_UnknownFunction, line, "Intent.guard: '" + c + "' has no action '" + act + "'", "use Intent.actions(\"" + c + "\") to list them, or \"*\" for all");
         }
-        intentGuards()[c][act] = parseGuard("Intent.guard", c, a[2], a.size() > 3 ? a[3] : Value::nil(), {"confirm", "when"}, line);
+        intentGuards()[c][act] = parseGuard("Intent.guard", c, a[2], a.size() > 3 ? a[3] : Value::nil(), {"confirm", "when", "cooldown"}, line);
         return Value::boolean_(true);
     };
     natives["Intent.unguard"] = [needContainer](Args& a, int line) -> Value {
@@ -531,7 +603,7 @@ void Interpreter::registerNativesIntentNav() {
     // Intent.atomic(list [, {dialog, confirm, when, container, failOnFalse, throw}])
     //   ينفّذ قائمة نيّات «كلها أو لا شيء»: لقطة عميقة (مستندات + حقول كل الحاويات المعنيّة) ثم تنفيذ بالترتيب؛
     //   عند أول فشل يُستعاد كل شيء. إن أُعطي dialog سُئل المستخدم **مرة واحدة** عن الدفعة كلها.
-    natives["Intent.atomic"] = [this, needContainer, parseGuard, consult, blockedMap, withConfirmed, sendCore](Args& a, int line) -> Value {
+    natives["Intent.atomic"] = [this, needContainer, parseGuard, consult, blockedMap, withConfirmed, sendCore, delayOf, scheduledMap](Args& a, int line) -> Value {
         argc("Intent.atomic", a, 1, 2, line);
         if (a[0].type != Value::Type::ARRAY || !a[0].array || a[0].array->empty())
             throw diagErr(diag::Code::E0004_InvalidType, line, "Intent.atomic: expected a non-empty array of intents");
@@ -542,8 +614,23 @@ void Interpreter::registerNativesIntentNav() {
             if (opts.type != Value::Type::MAP || !opts.map) throw diagErr(diag::Code::E0004_InvalidType, line, "Intent.atomic: options must be a map but got " + opts.typeName());
             for (auto& kv : *opts.map) {
                 std::string k = kv.first.toDisplayString();
-                if (k != "dialog" && k != "confirm" && k != "when" && k != "container" && k != "failOnFalse" && k != "throw")
-                    throw errWithReason(diag::Code::E0007_InvalidArguments, line, "Intent.atomic: unknown option '" + k + "'", "allowed options: dialog, confirm, when, container, failOnFalse, throw");
+                if (k != "dialog" && k != "confirm" && k != "when" && k != "container" && k != "failOnFalse" && k != "throw" && k != "after" && k != "at")
+                    throw errWithReason(diag::Code::E0007_InvalidArguments, line, "Intent.atomic: unknown option '" + k + "'", "allowed options: dialog, confirm, when, container, failOnFalse, throw, after, at");
+            }
+            {   // timer ✕ atomic: الدفعة كلها تُؤجَّل (after/at) وتُنفَّذ ذرّياً عند لحظتها
+                Value va = mapGet(opts, "after"), vt = mapGet(opts, "at");
+                if (va.type != Value::Type::NIL || vt.type != Value::Type::NIL) {
+                    auto rest = std::make_shared<MapData>();
+                    for (auto& kv : *opts.map) { const std::string k = kv.first.toDisplayString(); if (k != "after" && k != "at") rest->push_back(kv); }
+                    Value timing = mkMap({}); 
+                    if (va.type != Value::Type::NIL) timing.map->emplace_back(Value::string("after"), va); else timing.map->emplace_back(Value::string("at"), vt);
+                    double delay = 0; delayOf(timing, line, "Intent.atomic", delay);
+                    Value first = a[0].array->front();
+                    std::string owner = mapGet(first, "container").type == Value::Type::STRING ? canonContainer(mapGet(first, "container").str) : "";
+                    Args sa{a[0], Value::makeMap(rest)};
+                    long id = schedAction(delay, 0, 1, [this, sa](int ln) { Args x = sa; natives["Intent.atomic"](x, ln); }, "Intent.atomic", owner);
+                    return scheduledMap(id, delay, "atomic", std::to_string(a[0].array->size()) + " intents");
+                }
             }
             failOnFalse = mapGet(opts, "failOnFalse").isTruthy();
             rethrow = mapGet(opts, "throw").isTruthy();
@@ -617,11 +704,20 @@ void Interpreter::registerNativesIntentNav() {
     };
 
     // ---------------- Navigation ----------------
-    natives["Navigation.re"] = [needContainer, setRoute, navBlocked, blockedMap, withConfirmed](Args& a, int line) -> Value {
-        argc("Navigation.re", a, 2, 3, line);
+    natives["Navigation.re"] = [this, needContainer, setRoute, navBlocked, blockedMap, withConfirmed, delayOf, scheduledMap](Args& a, int line) -> Value {
+        argc("Navigation.re", a, 2, 4, line);
         std::string c = needContainer(a[0], "Navigation.re", line);
         std::string route = needStr(a[1], "Navigation.re", line);
         if (route.empty()) throw diagErr(diag::Code::E0007_InvalidArguments, line, "Navigation.re: route must not be empty");
+        if (a.size() > 3) {   // timer ✕ navigation: Navigation.re(c, route, params, {after: 3s}) — انتقال مؤجَّل (شاشة افتتاحية)؛ يمرّ بالحارس عند لحظته
+            double delay = 0;
+            if (delayOf(a[3], line, "Navigation.re", delay)) {
+                Args sa{a[0], a[1], a[2]};
+                long id = schedAction(delay, 0, 1, [this, sa](int ln) { Args x = sa; natives["Navigation.re"](x, ln); }, "Navigation.re " + c + " " + route, c);
+                return scheduledMap(id, delay, "navigation", route);
+            }
+            a.pop_back();
+        }
         Value p = a.size() > 2 ? a[2] : Value::nil();
         if (p.type != Value::Type::NIL && p.type != Value::Type::MAP)
             throw diagErr(diag::Code::E0004_InvalidType, line, "Navigation.re: params must be a map but got " + p.typeName());
@@ -702,7 +798,7 @@ void Interpreter::registerNativesIntentNav() {
     natives["Navigation.guard"] = [needContainer, parseGuard](Args& a, int line) -> Value {
         argc("Navigation.guard", a, 2, 3, line);
         std::string c = needContainer(a[0], "Navigation.guard", line);
-        navGuards()[c] = parseGuard("Navigation.guard", c, a[1], a.size() > 2 ? a[2] : Value::nil(), {"confirm", "when", "on"}, line);
+        navGuards()[c] = parseGuard("Navigation.guard", c, a[1], a.size() > 2 ? a[2] : Value::nil(), {"confirm", "when", "on", "cooldown"}, line);
         return Value::boolean_(true);
     };
     natives["Navigation.unguard"] = [needContainer](Args& a, int line) -> Value {
@@ -723,7 +819,7 @@ void Interpreter::registerNativesIntentNav() {
         Guard g = parseGuard("Navigation.confirm", c, a[2], opts, {"confirm", "when", "params"}, line);
         Value params = mapGet(opts, "params");
         Verdict v = consult(c, g, "n|" + c, "navigation", "re", route, params, nullptr, line);
-        if (v.asked && !v.proceed) return blockedMap("navigation", c, route, v);
+        if ((v.asked || v.cooling) && !v.proceed) return blockedMap("navigation", c, route, v);
         bool mine = guardBusy().insert("n|" + c).second;                // الحارس الدائم لا يسأل مرة ثانية عن الانتقال نفسه
         Args ra{Value::string(c), Value::string(route)};
         if (params.type == Value::Type::MAP) ra.push_back(params);
