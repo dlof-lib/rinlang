@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <cctype>
 #include <unordered_set>
+#include <unordered_map>
+#include <cstdlib>
 #include <functional>
 
 namespace rin {
@@ -287,6 +289,10 @@ StmtPtr Parser::declaration() {
         if (kw == "reply") return bellDeclaration();
         if (kw == "open" || kw == "close" || kw == "ask") return liveActionStatement();
         if (kw == "bell") return bellDeclaration();
+        // timer (docs/TIMER.md): مؤقّت حيّ — timer/tick/ring/start/pause/resume/stop/reset/restart/lap/extend كلمات سياقية بنفس القاعدة (كلمة + IDENT)
+        if (kw == "timer") return liveDeclaration();
+        if (kw == "tick" || kw == "ring") return bellDeclaration();
+        if (kw == "start" || kw == "pause" || kw == "resume" || kw == "stop" || kw == "reset" || kw == "restart" || kw == "lap" || kw == "extend") return liveActionStatement();
         if (kw == "undo" || kw == "redo" || kw == "rearm" || kw == "unbell" ||
             kw == "inc" || kw == "dec" || kw == "rebase" || kw == "rewind" ||
             kw == "touch" || kw == "unval") return liveActionStatement();
@@ -798,8 +804,11 @@ StmtPtr Parser::letDeclarator() {
     }
     ExprPtr initializer = nullptr;
     std::shared_ptr<BlockStmt> elseBlock;
+    ExprPtr ttlExpr;
     if (match({TokenType::EQUAL})) {
         initializer = expression();
+        // timer ✕ let: `ttl` كلمة سياقية (IDENT) بعد القيمة؛ تُقرأ المدّة بـ durationExpr (30s · 1h30m · متغيّر)
+        if (check(TokenType::IDENT) && peek().lexeme == "ttl") { advance(); ttlExpr = durationExpr(); }
         if (match({TokenType::ELSE})) {
             consume(TokenType::LBRACE, "Expected '{' after 'else' of a `let` declaration");
             elseBlock = block();
@@ -810,6 +819,7 @@ StmtPtr Parser::letDeclarator() {
     stmt->initializer = initializer;
     stmt->typeName = typeName;
     stmt->elseBlock = elseBlock;
+    stmt->ttl = ttlExpr;
     stmt->line = name.line;
     return stmt;
 }
@@ -904,6 +914,60 @@ void Parser::checkPatternDuplicates(const LetPattern& p, const Token& at) const 
 }
 
 // ============================================================================
+// مدّة مكتوبة مباشرة (docs/TIMER.md): `30s` · `1.5h` · `1h30m` · `500ms` · `2d` · `5 minutes`؛ وإلا فأي تعبير عادي
+// (رقم = ميلي ثانية، أو نص مدّة مثل "1h30m" يفهمه المفسّر). الصيغة المباشرة تُحوَّل هنا إلى رقم ثابت (ms).
+// ============================================================================
+static bool rinDurUnitMs(const std::string& u, double& ms) {
+    static const std::unordered_map<std::string, double> t = {
+        {"ms", 1}, {"msec", 1}, {"msecs", 1}, {"millisecond", 1}, {"milliseconds", 1},
+        {"s", 1000}, {"sec", 1000}, {"secs", 1000}, {"second", 1000}, {"seconds", 1000},
+        {"m", 60000}, {"min", 60000}, {"mins", 60000}, {"minute", 60000}, {"minutes", 60000},
+        {"h", 3600000}, {"hr", 3600000}, {"hrs", 3600000}, {"hour", 3600000}, {"hours", 3600000},
+        {"d", 86400000}, {"day", 86400000}, {"days", 86400000},
+        {"w", 604800000}, {"wk", 604800000}, {"week", 604800000}, {"weeks", 604800000}};
+    auto it = t.find(u);
+    if (it == t.end()) return false;
+    ms = it->second; return true;
+}
+// ident بعد الرقم الأول: وحدة ثم (رقم وحدة)*؛ مثل "h30m" بعد الرقم 1 => 1h + 30m.
+static bool rinParseDurChain(double first, const std::string& id, double& total) {
+    size_t i = 0; double sum = 0, amount = first;
+    while (true) {
+        size_t j = i;
+        while (j < id.size() && std::isalpha(static_cast<unsigned char>(id[j]))) ++j;
+        if (j == i) return false;
+        double um;
+        if (!rinDurUnitMs(id.substr(i, j - i), um)) return false;
+        sum += amount * um;
+        if (j == id.size()) break;
+        size_t k = j;
+        while (k < id.size() && (std::isdigit(static_cast<unsigned char>(id[k])) || id[k] == '.')) ++k;
+        if (k == j || k == id.size()) return false;   // رقم بلا وحدة بعده
+        amount = std::strtod(id.substr(j, k - j).c_str(), nullptr);
+        i = k;
+    }
+    total = sum; return true;
+}
+ExprPtr Parser::durationExpr() {
+    if (check(TokenType::NUMBER) && current + 1 < tokens.size()) {
+        const Token& n = tokens[current]; const Token& u = tokens[current + 1];
+        if (u.type == TokenType::IDENT && u.line == n.line) {
+            const bool adjacent = u.col == n.endCol;
+            double um = 0, total = 0;
+            // ملتصقة: `30s` `1h30m`؛ مفصولة بمسافة: فقط أسماء الوحدات الكاملة (`5 minutes`) كي لا تُبتلع كلمة عادية
+            const bool fullWord = u.lexeme.size() > 2 && rinDurUnitMs(u.lexeme, um);
+            if ((adjacent || fullWord) && rinParseDurChain(n.number, u.lexeme, total)) {
+                advance(); advance();
+                auto lit = std::make_shared<LiteralExpr>();
+                lit->kind = LiteralExpr::Kind::NUMBER; lit->number = total; lit->line = n.line;
+                return lit;
+            }
+        }
+    }
+    return expression();
+}
+
+// ============================================================================
 // المتغيرات الحيّة (Living Variables) — انظر الشرح الكامل في rin_ast.h (LiveDeclStmt) وdocs/living-variables.md
 // ============================================================================
 // stone|gauge|tape|lens|fuse  NAME = expr [modifiers] ;
@@ -919,16 +983,17 @@ StmtPtr Parser::liveDeclaration() {
              : kind == "tape" ? LiveKind::Tape : kind == "lens" ? LiveKind::Lens
              : kind == "base" ? LiveKind::Base : kind == "accept" ? LiveKind::Accept
              : kind == "pre" ? LiveKind::Pre : kind == "post" ? LiveKind::Post
-             : kind == "label" ? LiveKind::Label : kind == "define" ? LiveKind::Define : kind == "val" ? LiveKind::Val : kind == "dialog" ? LiveKind::Dialog : LiveKind::Fuse;
+             : kind == "label" ? LiveKind::Label : kind == "define" ? LiveKind::Define : kind == "val" ? LiveKind::Val : kind == "dialog" ? LiveKind::Dialog : kind == "timer" ? LiveKind::Timer : LiveKind::Fuse;
     const bool isMeta = st->kind == LiveKind::Label || st->kind == LiveKind::Define;
     const bool isGate = st->kind == LiveKind::Pre || st->kind == LiveKind::Post;
     const bool isDialog = st->kind == LiveKind::Dialog;
     const bool isVal = st->kind == LiveKind::Val;
     const bool isRx = isVal || isDialog;   // يشتركان في lazy/when/keep (الرسالة قيمة تفاعلية)
+    const bool isTimer = st->kind == LiveKind::Timer;
 
     if (match({TokenType::EQUAL})) {
-        st->initializer = expression();
-    } else if (st->kind != LiveKind::Tape) {
+        st->initializer = isTimer ? durationExpr() : expression();   // timer: `30s` / `1h30m` / رقم ms / نص مدّة
+    } else if (st->kind != LiveKind::Tape && !isTimer) {
         throw errRich(diag::Code::E0012_MissingToken, peek(),
                       "'" + kind + " " + name.lexeme + "' needs an initial value",
                       kind == "lens" ? "a lens is defined by the expression it is computed from"
@@ -951,7 +1016,19 @@ StmtPtr Parser::liveDeclaration() {
                            "'" + mod + "' cannot be used with '" + kind + "'", why,
                            "remove `" + mod + "` or pick the variable kind that supports it", "");
         };
-        if (isVal && (mod == "as" || mod == "about" || mod == "unit")) {   // val يحمل تسمية/وصفاً/وحدة (كـ label/define) بلا تغيير سلوكه
+        if (isTimer && (mod == "every" || mod == "after" || mod == "times" || mod == "until")) {
+            ExprPtr& slot = mod == "every" ? st->tEvery : mod == "after" ? st->tAfter : mod == "times" ? st->tTimes : st->tUntil;
+            if (slot) throw reject("`" + mod + "` is given twice");
+            advance();
+            slot = (mod == "every" || mod == "after") ? durationExpr() : expression();
+        } else if (isTimer && (mod == "up" || mod == "loop" || mod == "idle")) {
+            bool& flag = mod == "up" ? st->tUp : mod == "loop" ? st->tLoop : st->tIdle;
+            if (flag) throw reject("`" + mod + "` is given twice");
+            advance(); flag = true;
+        } else if (isDialog && mod == "timeout") {   // timeout DUR: إغلاق تلقائي (بلا اختيار) بعد هذه المدّة من الفتح
+            if (st->dTimeout) throw reject("`timeout` is given twice");
+            advance(); st->dTimeout = durationExpr();
+        } else if (isVal && (mod == "as" || mod == "about" || mod == "unit")) {   // val يحمل تسمية/وصفاً/وحدة (كـ label/define) بلا تغيير سلوكه
             ExprPtr& slot = mod == "as" ? st->metaLabel : mod == "about" ? st->metaAbout : st->metaUnit;
             if (slot) throw reject("`" + mod + "` is given twice");
             advance();
@@ -1085,6 +1162,13 @@ StmtPtr Parser::liveDeclaration() {
                           "add `if <condition>` (inside it `old` is the previous value, `new` the written one, and `" + name.lexeme + "` is the " +
                           (isPre ? "old" : "new") + " one), e.g. `" + kind + " " + name.lexeme + " = 0 if " + (isPre ? "old" : "new") + " >= 0;`", "'if'");
     }
+    if (isTimer) {
+        if (!st->initializer && !st->tUp)
+            throw errRich(diag::Code::E0012_MissingToken, peek(), "timer '" + name.lexeme + "' needs a duration", "a countdown timer counts down from a length of time (a stopwatch counts up: `timer " + name.lexeme + " up;`)",
+                          "write `timer " + name.lexeme + " = 30s;` (units: ms s m h d w, e.g. `1h30m`)", "'='");
+        if (st->tLoop && st->tTimes) throw errRich(diag::Code::E0013_InvalidExpression, peek(), "a timer cannot be both `loop` and `times N`", "`loop` repeats forever, `times N` repeats N cycles", "keep only one of them", "");
+        if (st->tLoop && !st->initializer) throw errRich(diag::Code::E0013_InvalidExpression, peek(), "`loop` needs a duration to restart from", "an open-ended stopwatch has no end to loop at", "give it a duration: `timer " + name.lexeme + " = 10s up loop;`", "");
+    }
     if (isDialog && st->dTrigger && st->lazy) throw errRich(diag::Code::E0013_InvalidExpression, peek(), "a dialog cannot be both `lazy` and `opens when`", "`opens when` must watch its condition all the time, a lazy dialog only recomputes when read", "remove `lazy`", "");
     if (isDialog && st->lo) throw errRich(diag::Code::E0013_InvalidExpression, peek(), "a dialog has no range", "a dialog holds a message, not a number", "remove `within`", "");
     if (isVal && (st->lo != nullptr) != (st->hi != nullptr)) throw errRich(diag::Code::E0012_MissingToken, peek(), "val '" + name.lexeme + "' has an incomplete range", "a range has two ends", "write `within <min> to <max>`", "'to'");
@@ -1095,10 +1179,12 @@ StmtPtr Parser::liveDeclaration() {
 
 // bell NAME [ (old, new) ] { body }  — 0 وسائط، أو 1 (= القيمة الجديدة)، أو 2 (= القديمة ثم الجديدة).
 StmtPtr Parser::bellDeclaration() {
-    const bool isReply = peek().lexeme == "reply";
-    advance(); // 'bell' | 'reply'
-    Token target = consume(TokenType::IDENT, isReply ? "Expected the dialog after 'reply'" : "Expected the variable to watch after 'bell'");
-    if (isReply) while (check(TokenType::DOT) && checkNext(TokenType::IDENT)) { advance(); target.lexeme += "." + advance().lexeme; }
+    const std::string role = peek().lexeme;                    // bell | reply | tick | ring
+    const bool isReply = role == "reply";
+    const bool isTimerRole = role == "tick" || role == "ring";
+    advance(); // 'bell' | 'reply' | 'tick' | 'ring'
+    Token target = consume(TokenType::IDENT, isReply ? "Expected the dialog after 'reply'" : isTimerRole ? "Expected the timer after '" + role + "'" : "Expected the variable to watch after 'bell'");
+    if (isReply || isTimerRole) while (check(TokenType::DOT) && checkNext(TokenType::IDENT)) { advance(); target.lexeme += "." + advance().lexeme; }
     std::vector<std::string> params;
     if (match({TokenType::LPAREN})) {
         if (!check(TokenType::RPAREN)) {
@@ -1110,7 +1196,13 @@ StmtPtr Parser::bellDeclaration() {
     if (isReply && params.size() > 1)
         throw errRich(diag::Code::E0013_InvalidExpression, target, "a reply takes at most one parameter (the result)",
                       "a reply is told which button closed the dialog", "use `reply d (result) { ... }`", "");
-    if (params.size() > 2)
+    if (role == "ring" && params.size() > 1)
+        throw errRich(diag::Code::E0013_InvalidExpression, target, "a ring takes at most one parameter (the info map)",
+                      "a ring is told how the timer ended: its name, cycle, reason", "use `ring t (info) { ... }`", "");
+    if (role == "tick" && params.size() > 2)
+        throw errRich(diag::Code::E0013_InvalidExpression, target, "a tick takes at most two parameters (n, value)",
+                      "a tick is told its number and the timer value at that moment", "use `tick t (n, value) { ... }`", "");
+    if (!isTimerRole && params.size() > 2)
         throw errRich(diag::Code::E0013_InvalidExpression, target, "a bell takes at most two parameters (old, new)",
                       "a bell is told what the value was and what it became", "use `bell x (old, new) { ... }`", "");
     consume(TokenType::LBRACE, "Expected '{' before bell body");
@@ -1120,13 +1212,14 @@ StmtPtr Parser::bellDeclaration() {
     auto body = block();
     loopDepth = savedLoopDepth; goalDepth = savedGoalDepth; loopStack = std::move(savedLS_); labels = std::move(savedLB_);
     auto fn = std::make_shared<FunctionStmt>();
-    fn->name = (isReply ? "reply " : "bell ") + target.lexeme;
+    fn->name = role + " " + target.lexeme;
     fn->params = params;
     fn->body = body;
     fn->line = target.line;
     auto st = std::make_shared<BellStmt>();
     st->target = target.lexeme;
     st->reply = isReply;
+    st->role = role;
     st->handler = fn;
     st->line = target.line;
     return st;
@@ -1155,6 +1248,15 @@ StmtPtr Parser::liveActionStatement() {
     if (kw.lexeme != "abort") {
         st->target = consume(TokenType::IDENT, "Expected a variable name after '" + kw.lexeme + "'").lexeme;
         // dialog: مسار مؤهَّل `shop.confirm` (حاوية.حوار) للأفعال open/close/ask
+        const bool isTimerVerb = kw.lexeme == "start" || kw.lexeme == "pause" || kw.lexeme == "resume" || kw.lexeme == "stop" ||
+                                 kw.lexeme == "reset" || kw.lexeme == "restart" || kw.lexeme == "lap" || kw.lexeme == "extend";
+        if (isTimerVerb) {   // timer: مسار مؤهَّل `shop.promo`؛ extend يأخذ مدّة
+            while (check(TokenType::DOT) && checkNext(TokenType::IDENT)) { advance(); st->target += "." + advance().lexeme; }
+            if (kw.lexeme == "extend") {
+                if (check(TokenType::SEMICOLON)) throw errRich(diag::Code::E0012_MissingToken, peek(), "`extend " + st->target + "` needs a duration", "extend adds time to a running timer", "write `extend " + st->target + " 10s;`", "a duration");
+                st->count = durationExpr();
+            }
+        }
         if (kw.lexeme == "open" || kw.lexeme == "close" || kw.lexeme == "ask") {
             while (check(TokenType::DOT) && checkNext(TokenType::IDENT)) { advance(); st->target += "." + advance().lexeme; }
             // close x [RESULT]: رقم الزر أو نصه؛ ask/open لا يأخذان وسيطاً
@@ -4593,6 +4695,16 @@ ExprPtr Parser::primary() {
     if (match({TokenType::NIL})) {
         auto e = std::make_shared<LiteralExpr>();
         e->kind = LiteralExpr::Kind::NIL; return e;
+    }
+    if (check(TokenType::NUMBER) && current + 1 < tokens.size() && tokens[current + 1].type == TokenType::IDENT &&
+        tokens[current + 1].line == tokens[current].line && tokens[current + 1].col == tokens[current].endCol) {
+        // مدّة مباشرة في أي تعبير (docs/TIMER.md): 30s · 500ms · 1.5h · 1h30m => رقم بالميلي ثانية. الالتصاق شرط، فلا يلتبس مع كود قائم.
+        double total = 0;
+        if (rinParseDurChain(tokens[current].number, tokens[current + 1].lexeme, total)) {
+            int ln = tokens[current].line; advance(); advance();
+            auto e = std::make_shared<LiteralExpr>();
+            e->kind = LiteralExpr::Kind::NUMBER; e->number = total; e->line = ln; return e;
+        }
     }
     if (match({TokenType::NUMBER})) {
         auto e = std::make_shared<LiteralExpr>();
