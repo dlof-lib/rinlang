@@ -1,0 +1,16 @@
+🌐 container.api = svc
+🌐 route [GET /items] -> 200
+✅ .end/container.api (svc)
+svc real http://127.0.0.1:9 1 0 ["X-App", "Authorization"]
+false 3 6
+1 1
+1
+param ناقص
+GET بلا body
+خيار مجهول
+200 true mock nil
+🌐 container.api = plain
+🌐 route [GET /a] -> 201
+✅ .end/container.api (plain)
+201 mock
+لا api بهذا الاسم
