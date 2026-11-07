@@ -1,0 +1,24 @@
+// timer ✕ api حقيقي: retry/backoff/timeout/then/every على نقطة غير متاحة (127.0.0.1:9) — حتمي بلا شبكة خارجية
+time.freeze();
+apiRegister("dead", "http://127.0.0.1:9");
+let ticks = 0;
+fun tick() { ticks = ticks + 1; }
+timers.every(1s, tick);                                   // يرصد تقدّم الساعة أثناء backoff
+let r = apiGet("dead", "/x", {retry: 2, backoff: 3s, timeout: 1s});
+print r["ok"], r["attempts"], ticks;                      // 3 محاولات، نامت 6 ثوانٍ مُجمَّدة
+let plain = apiGet("dead", "/x");
+print plain["ok"];                                        // بلا خيارات: السلوك القديم، لا attempts
+let seen = 0;
+fun onR(res) { seen = seen + 1; }
+let s = apiGet("dead", "/y", {after: 10s, then: onR});
+print s.ok, s.scheduled, s.kind, s.target, s.in;
+time.advance(10s); print seen;
+apiGet("dead", "/y", {every: 5s, times: 2, then: onR});
+time.advance(20s); print seen;
+timers.clear();
+try { apiGet("dead", "/x", {cache: 5s, bogus: 1}); } catch (e) { print "خيار مجهول"; }
+try { apiPost("dead", "/x", {a: 1}, {cache: 5s}); } catch (e) { print "cache GET فقط"; }
+try { apiGet("dead", "/x", {backoff: 1s}); } catch (e) { print "backoff تحتاج retry"; }
+try { apiGet("dead", "/x", {retry: 99}); } catch (e) { print "retry من 0 إلى 20"; }
+try { apiGet("dead", "/x", {times: 2}); } catch (e) { print "times تحتاج every"; }
+time.unfreeze();
