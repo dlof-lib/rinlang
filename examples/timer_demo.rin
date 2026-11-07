@@ -1,0 +1,17 @@
+// timer_demo.rin — عرض كامل لـ timer والزمن في الحاويات (docs/TIMER.md)
+time.freeze();                                   // ساعة مُجمَّدة: نفس المخرجات دائماً
+
+@shop.container
+    let stock = 10;
+    timer promo = 1m every 20s;                  // العرض ينتهي بعد دقيقة
+    val banner = "ينتهي العرض بعد " + promo.text;
+    dialog over = "انتهى العرض!" buttons ["حسناً"] timeout 5s;
+    tick promo (n, left) { print "[" + n + "]", banner; }
+    ring promo (info) { print "رنّ المؤقّت:", info["reason"]; open over; }
+.end;
+
+timers.expire("shop", "stock", 90s, 0);          // الحقل يُصفَّر بعد 90 ثانية
+timers.run(2m);                                  // تقدّم الزمن دقيقتين: كل الأحداث تجري بترتيبها
+
+print "المخزون:", shop.stock, "| حوار العرض مفتوح؟", shop.over.open;
+print "عمر الحاوية:", containerTime("shop")["age"]["text"];
