@@ -1,0 +1,12 @@
+// نسخة معيبة (تخطئ عند 0) ونسخة ترمي خطأ: تُرفضان في الظلّ ولا يرى القارئ أي أثر.
+@import "lib/upgrade.og.rin";
+time.freeze();
+Upgrade.cell("abs", fun(x) { return x < 0 ? -x : x; });
+Upgrade.proposeWith("abs", fun(x) { return x > 0 ? x : -x - 1; }, {need: 5});
+let out = [];
+for (let x in [3, -4, 0, 7]) { push(out, Upgrade.read("abs", x)["value"]); Upgrade.run(1ms); }
+print "القرّاء رأوا:", out, "| الحالة:", Upgrade.state("abs")["stage"], "v" + Upgrade.state("abs")["live"];
+Upgrade.proposeWith("abs", fun(x) { if (x == 9) { throw "boom"; } return x < 0 ? -x : x; }, {need: 5});
+for (let x in [1, 9, 2]) { push(out, Upgrade.read("abs", x)["value"]); Upgrade.run(1ms); }
+print "بعد خطأ المرشّحة:", out, "| rollbacks:", Upgrade.state("abs")["rollbacks"], "| live: v" + Upgrade.state("abs")["live"];
+for (let l in Upgrade.timeline("abs")) { print "  -", l; }
