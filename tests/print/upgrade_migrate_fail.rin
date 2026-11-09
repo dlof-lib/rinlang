@@ -1,0 +1,17 @@
+// الهجرة تفشل في منتصفها ⇒ المعاملة تتراجع كلها: الحاويتان كما كانتا، والترقية مرفوضة، وv1 تخدم.
+@import "lib/upgrade.og.rin";
+time.freeze();
+@db.container
+    let rows = 3;
+    let schema = 1;
+.end;
+Upgrade.cell("calc", fun(x) { return x + 1; });
+Upgrade.proposeWith("calc", fun(x) { return x + 1; }, {
+    need: 1, touch: ["db"],
+    migrate: fun() { setField("db", "schema", 2); setField("db", "rows", 99); throw "تعذّرت هجرة الجدول"; }
+});
+Upgrade.read("calc", 1);
+Upgrade.run(1ms);
+let s = Upgrade.state("calc");
+print "الحالة:", s["stage"], "v" + s["live"], "upgrades=" + s["upgrades"], "| db:", getField("db", "schema"), getField("db", "rows");
+for (let l in Upgrade.timeline("calc")) { print "  -", l; }
