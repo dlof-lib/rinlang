@@ -1,0 +1,14 @@
+<!-- indsin_pro_native.rin — أنواع الرسوم الجديدة في المحرّك الأصلي: Sparkline · BarChart · ProgressRing -->
+<Column#root padding=16 gap=14>
+  <Text#t size=heading>Pro charts</Text>
+  <Row#r1 gap=20>
+    <ProgressRing#p1 value=72 diameter=90 />
+    <ProgressRing#p2 value=35 diameter=90 label="35 / 100" tone=success />
+    <Column#c gap=6>
+      <Text size=small color=text_muted>Weekly trend</Text>
+      <Sparkline#sp data="3,5,4,8,6,9,12,10" width=160 height=48 />
+    </Column>
+  </Row>
+  <Text size=small color=text_muted>Sales per day</Text>
+  <BarChart#bc data="Mon:12,Tue:19,Wed:7,Thu:15,Fri:10" width=300 height=150 values=true />
+</Column>
