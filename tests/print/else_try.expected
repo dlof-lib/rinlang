@@ -1,0 +1,13 @@
+  try 1
+  else 1
+  finally 1
+  catch boom
+  finally 2
+a
+finally الداخلية
+التقطه الخارجي: من else
+رجعت
+i = 0
+  else 0
+x
+else بلا finally
