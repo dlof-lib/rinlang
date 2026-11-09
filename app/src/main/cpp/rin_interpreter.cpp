@@ -4771,6 +4771,27 @@ void Interpreter::registerNatives() {
         Value r; r.type = Value::Type::STRING; r.str = prev; return r;
     };
 
+    // __else(a, fun) — `a else b`: a إن لم تكن nil وإلا نتيجة fun() (كسولة: b لا تُقيَّم إلا عند الحاجة). انظر docs/else.md
+    // __try(fn, fallbackFn|nil) — `try EXPR else FALLBACK`: قيمة fn()، وعند RinError قيمة fallbackFn() (nil إن غابت). docs/merge_else.md
+    natives["__try"] = [this](std::vector<Value>& a, int line) -> Value {
+        if (a.size() != 2) throw diagErr(diag::Code::E0007_InvalidArguments, line, "'__try' expects 2 argument(s) but got " + std::to_string(a.size()));
+        std::vector<Value> none;
+        bool failed = false;
+        try { return callValue(a[0], none, line); }
+        catch (const RinError&) { failed = true; }          // خطأ تشغيل
+        catch (const ThrowSignal&) { failed = true; }       // throw من المستخدم
+        (void)failed;
+        if (a[1].type == Value::Type::NIL) return Value::nil();
+        return callValue(a[1], none, line);
+    };
+
+    natives["__else"] = [this](std::vector<Value>& a, int line) -> Value {
+        if (a.size() != 2) throw diagErr(diag::Code::E0007_InvalidArguments, line, "'__else' expects 2 argument(s) but got " + std::to_string(a.size()));
+        if (a[0].type != Value::Type::NIL) return a[0];
+        std::vector<Value> none;
+        return callValue(a[1], none, line);
+    };
+
     natives["__tap"] = [this](std::vector<Value>& a, int line) -> Value {
         if (a.empty() || a.size() > 2) throw diagErr(diag::Code::E0007_InvalidArguments, line, "'__tap' expects 1 or 2 argument(s) but got " + std::to_string(a.size()));
         if (a.size() == 2 && (a[1].type == Value::Type::FUNCTION || a[1].type == Value::Type::INSTANCE)) {
@@ -10125,7 +10146,14 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
             items = *iterableVal.array;
         } else if (iterableVal.type == Value::Type::MAP) {
             items.reserve(iterableVal.map->size());
-            for (auto& kv : *iterableVal.map) items.push_back(kv.first);
+            // for (let [k, v] in map): نمط مصفوفة على قاموس ⇒ كل عنصر [مفتاح، قيمة] (دمج let+ مع for و map). بدون نمط: المفاتيح كما كانت.
+            const bool entries = s->pattern && s->pattern->kind == LetPattern::Kind::Array;
+            for (auto& kv : *iterableVal.map) {
+                if (entries) {
+                    std::vector<Value> pair; pair.push_back(kv.first); pair.push_back(kv.second);
+                    items.push_back(Value::makeArray(std::make_shared<ArrayData>(std::move(pair))));
+                } else items.push_back(kv.first);
+            }
         } else if (iterableVal.type == Value::Type::SET) {
             if (iterableVal.set) items = iterableVal.set->items; // لقطة: التعديل داخل الحلقة آمن
         } else if (iterableVal.type == Value::Type::STRING) {
