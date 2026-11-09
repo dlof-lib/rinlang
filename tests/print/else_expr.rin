@@ -1,0 +1,66 @@
+// else كتعبير: a else b = a إن لم تكن nil وإلا b (كسولة). و if (c) a else b كتعبير.
+let calls = 0;
+fun costly() { calls = calls + 1; return "بديل"; }
+fun maybe(v) { calls = calls + 100; return v; }
+
+let a = nil else 5;
+let b = 3 else 9;
+let c = 0 else 9;                 // 0 ليست nil
+let d = false else 1;             // false ليست nil
+print a, b, c, d;
+
+let e = b else costly();          // b ليست nil ⇒ costly لا تُستدعى
+print e, "calls =", calls;
+let f = nil else costly();
+print f, "calls =", calls;
+
+calls = 0;
+let g = maybe(7) else 0;          // الطرف الأيسر يُقيَّم مرة واحدة فقط
+print g, "calls =", calls;
+calls = 0;
+let h = maybe(nil) else "x";
+print h, "calls =", calls;
+
+let chain = nil else nil else "الثالثة";
+print chain;
+let m = {"k": 1};
+print m["k"] else 0, m["zz"] else "لا يوجد";
+let cfg = (m["port"] else {"p": 80});     // خريطة افتراضية بين أقواس
+print cfg;
+
+fun port(c) { return c["port"] else 8080; }
+print port({"port": 9}), port({});
+print(nil else "داخل وسيط");
+let arr = [nil else 1, 2 else 3];
+print arr;
+
+// let … else { كتلة } ما زالت تعمل كما كانت (حارس)
+fun get(k) {
+    let v = nil else { return "مفقود " + k; };
+    return v;
+}
+print get("x");
+fun get2(m2, k) {
+    let v = m2[k] else { return "مفقود " + k; };
+    return v;
+}
+print get2({"a": 1}, "a"), get2({"a": 1}, "b");
+// القيمة البديلة ثم الحارس معاً
+fun get3(m3) { let v = m3["a"] else m3["b"] else { return "لا a ولا b"; }; return v; }
+print get3({"b": 2}), get3({});
+let {id, name} = {"id": 1, "name": "س"} else { print "شكل خاطئ"; };
+print id, name;
+
+// accept … else ما زالت بديل accept (لا معامل else)
+accept t = 5 if t > 0 else 100;
+t = -1; print t;
+
+// if كتعبير
+let big = 10;
+let size = if (big > 5) "كبير" else "صغير";
+print size;
+let grade = if (big > 90) "A" else if (big > 5) "B" else "C";
+print grade;
+print(if (big == 10) "عشرة" else "غيرها");
+fun sgn(x) { return if (x < 0) -1 else if (x == 0) 0 else 1; }
+print sgn(-5), sgn(0), sgn(8);
