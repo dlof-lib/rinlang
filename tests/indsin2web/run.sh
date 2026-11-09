@@ -46,9 +46,21 @@ printf '@view.Column=root gap=8;\n  @view.TopBar=bar @view.Text=t text="x"; .end
 python3 "$ROOT/tools/view2tags.py" "$OUT/old.rin" -o "$OUT/new.rin" && ! grep -q "@view" "$OUT/new.rin" && grep -q "<View.TopBar#bar>" "$OUT/new.rin" \
   && "$BIN" "$OUT/new.rin" --check 2>/dev/null && ok "view2tags" || bad "view2tags"
 
+# 5d) ميزات Pro: لاحقة بلا أساس تُحذَّر، --pwa يكتب manifest+sw ويربطهما، SEO meta، الإجراءات الجديدة
+printf '<Column#a padding_md=8>\n<Text#t>x</Text>\n</Column>\n' > "$OUT/sfx.rin"
+"$BIN" "$OUT/sfx.rin" --check --strict 2>"$OUT/sfx.log"; [ $? -eq 2 ] && grep -q "بلا قيمة أساسية" "$OUT/sfx.log" && ok "suffix without base warns" || bad "suffix warning"
+mkdir -p "$OUT/pwa"; "$BIN" "$ROOT/examples/samples/indsin_pro_web.rin" -o "$OUT/pwa/app.html" --pwa --description "d" --theme-color "#112233" 2>/dev/null
+[ -f "$OUT/pwa/manifest.webmanifest" ] && [ -f "$OUT/pwa/sw.js" ] && grep -q 'rel="manifest"' "$OUT/pwa/app.html" && grep -q 'name="description" content="d"' "$OUT/pwa/app.html" \
+  && grep -q 'theme-color" content="#112233"' "$OUT/pwa/app.html" && node -e "JSON.parse(require('fs').readFileSync('$OUT/pwa/manifest.webmanifest','utf8'))" 2>/dev/null && ok "--pwa files + meta" || bad "--pwa"
+"$BIN" "$ROOT/examples/samples/indsin_pro_web.rin" --pwa 2>/dev/null; [ $? -eq 64 ] && ok "--pwa without -o → 64" || bad "--pwa needs -o"
+
 # 6) اختبار متصفح (اختياري: يحتاج node + playwright)
 if command -v node >/dev/null && node -e "require('playwright')" 2>/dev/null; then
   "$BIN" "$ROOT/examples/samples/indsin_tags_demo.rin" -o "$OUT/demo.html" 2>/dev/null
   node "$ROOT/tests/indsin2web/browser.js" "$OUT/demo.html" && ok "browser: reactive state" || bad "browser test"
+  "$BIN" "$ROOT/examples/samples/indsin_pro_web.rin" -o "$OUT/pro.html" --pwa 2>/dev/null
+  node "$ROOT/tests/indsin2web/browser_pro.js" "$OUT/pro.html" && ok "browser: pro features" || bad "browser pro test"
+  "$BIN" "$ROOT/examples/samples/indsin_pro2_showcase.rin" -o "$OUT/pro2.html" 2>/dev/null
+  node "$ROOT/tests/indsin2web/browser_pro2.js" "$OUT/pro2.html" && ok "browser: pro2 features" || bad "browser pro2 test"
 else echo "skip browser test (node/playwright غير متوفر)"; fi
 echo; [ $fail -eq 0 ] && echo "ALL PASSED" || { echo "SOME FAILED"; exit 1; }
