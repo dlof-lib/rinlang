@@ -1,0 +1,22 @@
+// حلقة كتعبير: for/while/loop/retry/repeat تُلفّ في goal؛ قيمتها قيمة أول achieve وإلا nil. مع else = «ابحث وإلا بديل».
+let xs = [1, 2, 3];
+let found = for (let x in xs) { if (x > 1) { achieve x; } } else { achieve "لا شيء"; };
+print found;
+let none = for (let x in xs) { if (x > 9) { achieve x; } } else { achieve "لا شيء"; };
+print none;
+let n = 0;
+let w = while (n < 10) { n = n + 1; if (n == 4) { achieve n * 10; } };
+print w;
+let k = 0;
+let r = retry 3 { k = k + 1; if (k < 2) { throw "x"; } achieve "نجح عند " + k; } else { achieve "فشل"; };
+print r;
+let r2 = retry 2 { throw "x"; } else { achieve "فشل"; };
+print r2;
+let l = loop { achieve 7; };
+print l;
+fun firstNeg(a) { return for (let v in a) { if (v < 0) { achieve v; } } else { achieve nil; }; }
+print firstNeg([3, -2, 5]), firstNeg([1]);
+print first each x in [1,2] where x > 5 yield x else "none";
+print first each x in [1,2] where x > 1 yield x * 10 else "none";
+// for كجملة ما زالت كما هي
+for (let q in [1]) { print "جملة"; }
