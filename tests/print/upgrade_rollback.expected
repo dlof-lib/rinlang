@@ -1,0 +1,11 @@
+📥 @import: تم استيراد "lib/upgrade.og.rin" (من القرص)
+📦 container = store
+✅ .end/container (store)
+بعد الترقية: v2 soaking | store.format = new
+بعد الاكتشاف: v1 steady rollbacks=1 | store.format = old
+القراءة التالية: 2500
+  - v1: أُنشئت
+  - v2: رُشّحت (تُجرَّب في الظلّ)
+  - v1 → v2: رُقّيت (مراقبة 60000ms)
+  - v1 (خلف) على 5000 — اختلاف: 2501 ≠ 2500
+  - v2 → v1: تراجع تلقائي — تراجع مكتشف أثناء المراقبة
