@@ -1,0 +1,17 @@
+each 4
+each 6
+for-in 3
+for-in 4
+for-c 0
+for-c 3
+for-c 6
+while 1
+while 2
+repeat 4
+repeat 5
+loop 1
+loop 2
+loop 3
+do-else 3
+retry ok 3
+expr 40
