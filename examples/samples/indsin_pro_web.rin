@@ -1,0 +1,39 @@
+<!-- indsin_pro_web.rin — ميزات الويب الاحترافية: حالات hover/focus، حركة، لواحق استجابة وداخلي،
+     مكوّنات مركّبة (Accordion/Rating/Steps/Pagination/Breadcrumb/Tabs)، toast، تبديل الثيم -->
+<warp stars={3} />
+<warp page={2} />
+<warp step={1} />
+<warp tab={"a"} />
+<warp opened={false} />
+
+<Column#root gap=16 padding=16 padding_md=32 bg="#f5f5fa" bg_dark="#0b0b14">
+  <Heading#h level=1 text_gradient="#6C5CE7,#2F7DC4,90" animate="slideUp" text="Indsin Pro" />
+
+  <Row#bar gap=8 wrap={true}>
+    <Button#hov hover_bg="#2F7DC4" hover_lift=3 hover_elevation="md" active_scale=0.96 focus_ring=true onTap={toast("تم!")}>Hover me</Button>
+    <Button#theme variant="outline" onTap={toggleTheme()}>Theme</Button>
+    <Button#copy variant="ghost" onTap={copyText("hello")}>Copy</Button>
+  </Row>
+
+  <Grid#cards columns=1 columns_md=2 columns_lg=3 gap=12 stagger=80 animate="fadeIn">
+    <Card#c1 glass={true}><Text>One</Text></Card>
+    <Card#c2 col_span={1}><Text>Two</Text></Card>
+    <Card#c3><Text>Three</Text></Card>
+  </Grid>
+
+  <View.Tabs#tabs>
+    <View.TabItem#ta selected={tab == "a"} onTap={set(tab, "a")} label="A" />
+    <View.TabItem#tb selected={tab == "b"} onTap={set(tab, "b")} label="B" />
+  </View.Tabs>
+  <Text#panel visible={tab == "b"}>Panel B</Text>
+
+  <Accordion#acc title="FAQ" open={opened}><Text>Answer</Text></Accordion>
+  <Rating#rate value={stars} max=5 />
+  <Text#rated>stars={stars}</Text>
+  <Steps#steps items={["Cart", "Pay", "Done"]} current={step} />
+  <View.Breadcrumb#crumbs items="Home,Docs,Pro" />
+  <View.Pagination#pager current={page} total=9 />
+  <Text#pg>page={page}</Text>
+  <View.Alert#al tone="warning" text="Heads up" />
+  <Skeleton#sk />
+</Column>
