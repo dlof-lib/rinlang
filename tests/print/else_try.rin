@@ -1,0 +1,36 @@
+// try … catch … else … finally — else تُنفَّذ إن اكتمل try بلا خطأ، وخارج حماية catch.
+fun attempt(n) {
+    try {
+        if (n == 2) { throw "boom"; }
+        print "  try", n;
+    } catch (e) {
+        print "  catch", e["message"];
+    } else {
+        print "  else", n;
+    } finally {
+        print "  finally", n;
+    }
+}
+attempt(1);
+attempt(2);
+
+// خطأ داخل else لا يلتقطه catch نفسه، بل يصعد (وfinally يعمل)
+try {
+    try { print "a"; } catch (e) { print "لن يصل"; } else { throw "من else"; } finally { print "finally الداخلية"; }
+} catch (outer) {
+    print "التقطه الخارجي:", outer["message"];
+}
+
+// return داخل try يتخطّى else
+fun early() {
+    try { return "رجعت"; } catch (e) { } else { print "لن تظهر"; }
+    return "لا";
+}
+print early();
+
+// break داخل حلقة يتخطّى else
+for (let i = 0; i < 3; i = i + 1) {
+    try { if (i == 1) { break; } print "i =", i; } catch (e) { } else { print "  else", i; }
+}
+// بلا finally
+try { print "x"; } catch (e) { } else { print "else بلا finally"; }
