@@ -1,0 +1,12 @@
+// for (let [k, v] in map): نمط مصفوفة على قاموس ⇒ أزواج [مفتاح، قيمة]؛ بلا نمط تبقى المفاتيح.
+let m = {"a": 1, "b": 2};
+for (let [k, v] in m) { print k, v; }
+for (let k in m) { print k; }
+let total = 0;
+for (let [k, v] in m) { total = total + v; }
+print total;
+for (let [k, v] in m) { if (v == 2) { break; } } else { print "لا"; }
+for (let [k, v] in {}) { } else { print "قاموس فارغ ⇒ else الحلقة"; }
+// يتركّب مع try/else وelse
+let prices = {"tea": "3", "bad": "x"};
+for (let [item, p] in prices) { print item, try number(p) else 0; }
