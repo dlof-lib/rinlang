@@ -1,0 +1,20 @@
+// المرشّحة سليمة على الدخلات الصغيرة فتُرقّى، ثم تنكشف في مراقبة soak على دخل كبير ⇒ تراجع تلقائي ذرّي
+// مع هجرة حالة (migrate/unmigrate) على حاوية خارجية تتراجع معها.
+@import "lib/upgrade.og.rin";
+time.freeze();
+@store.container
+    let format = "old";
+.end;
+Upgrade.cell("half", fun(x) { return x / 2; });
+Upgrade.proposeWith("half", fun(x) { return x < 1000 ? x / 2 : x * 0.5 + 1; }, {
+    need: 2, soak: 1m, touch: ["store"],
+    migrate:   fun() { setField("store", "format", "new"); },
+    unmigrate: fun() { setField("store", "format", "old"); }
+});
+for (let x in [10, 20]) { Upgrade.read("half", x); Upgrade.run(1ms); }
+print "بعد الترقية:", "v" + Upgrade.state("half")["live"], Upgrade.state("half")["stage"], "| store.format =", getField("store", "format");
+let r = Upgrade.read("half", 5000);           // القارئ رأى النسخة الجديدة المعيبة (ثمن المراقبة)
+Upgrade.run(1ms);
+print "بعد الاكتشاف:", "v" + Upgrade.state("half")["live"], Upgrade.state("half")["stage"], "rollbacks=" + Upgrade.state("half")["rollbacks"], "| store.format =", getField("store", "format");
+print "القراءة التالية:", Upgrade.read("half", 5000)["value"];
+for (let l in Upgrade.timeline("half")) { print "  -", l; }
