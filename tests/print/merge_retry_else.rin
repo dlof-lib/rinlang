@@ -1,0 +1,10 @@
+// retry … else: تُنفَّذ else إن فشلت كل المحاولات (بدل إعادة رمي الخطأ الأخير). النجاح لا يلمسها.
+let k = 0;
+retry 3 { k = k + 1; if (k < 3) { throw "x"; } print "نجحت في المحاولة", k; } else { print "لن تظهر"; }
+let g = 0;
+retry 2 { g = g + 1; print "محاولة", g; throw "دائماً"; } else { print "استسلمت بعد", g; }
+// بلا else: السلوك القديم (يُعاد رمي الخطأ)
+try { retry 2 { throw "قديم"; } } catch (e) { print "رُمي:", e["message"]; }
+// retry … else داخل دالة
+fun fetch(ok) { retry 2 { if (!ok) { throw "net"; } return "data"; } else { return "offline"; } }
+print fetch(true), fetch(false);
