@@ -1,0 +1,321 @@
+// upgrade.og.rin — Background of the computational upgrade (BCU)
+// خلفية الترقية الحسابية: يُرقّى الحساب (كوداً أو دقّةً) في الخلفية دون أن يلمس القارئ شيئاً.
+// المواصفة: docs/upgrade.md — إضافة بحتة: لا كلمات جديدة، ولا يتأثر أي كود موجود.
+// الاستعمال:  @import "lib/upgrade.og.rin";   ثم   Upgrade.cell(...) / Upgrade.read(...)
+
+defineContainerType("UpgradeCell", {
+    name:      {type: "string", required: true},
+    live:      {type: "int", default: 1, min: 1},                 // نسخة الحساب التي تخدم القرّاء الآن
+    candidate: {type: "int?", default: nil},                     // نسخة مرشّحة تُجرَّب في الخلفية
+    stage:     {default: "steady", check: #["steady" "shadowing" "soaking"]},
+    agree:     {type: "int", default: 0, min: 0},                // أدلّة قبول
+    disagree:  {type: "int", default: 0, min: 0},                // أدلّة رفض
+    need:      {type: "int", default: 3, min: 1},                // الأدلّة المطلوبة للترقية
+    reads:     {type: "int", default: 0, min: 0},
+    upgrades:  {type: "int", default: 0, min: 0},
+    rollbacks: {type: "int", default: 0, min: 0},
+    previous:  {type: "int?", default: nil},                     // النسخة السابقة أثناء فترة المراقبة (soak)
+    timeline:  []                                                // سجلّ مقروء بكل ما جرى
+}, {strict: true});
+
+defineContainerType("RefineCell", {
+    name:        {type: "string", required: true},
+    tiers:       {type: "int", default: 1, min: 1},
+    entries:     {type: "int", default: 0, min: 0},              // عدد الدخلات المخزَّنة
+    served:      {type: "int", default: 0, min: 0},
+    refinements: {type: "int", default: 0, min: 0},              // كم مرّة رُقّي جواب في الخلفية
+    failures:    {type: "int", default: 0, min: 0},              // مستويات فشلت (الجواب الأقدم بقي سليماً)
+    timeline:    []
+}, {strict: true});
+
+let __UP = {};    // خلايا الترقية:  اسم -> {impls, opts, cfg, accept}
+let __UPR = {};   // خلايا التحسين التدريجي: اسم -> {tiers, cache, opts}
+
+fun __up_c(name) { return "up_" + name; }
+
+fun __up_entry(name) {
+    if (!has(__UP, name)) { throw "E0007: خلية غير معروفة: " + name; }
+    return __UP[name];
+}
+
+fun __up_log(c, msg) {
+    let t = getField(c, "timeline");
+    push(t, msg);
+    setField(c, "timeline", t);
+}
+
+fun __up_eq(opts) {
+    if (has(opts, "eq")) { return opts["eq"]; }
+    let tol = has(opts, "tol") ? opts["tol"] : 0;
+    return fun(a, b, input) {
+        if (type(a) == "number" and type(b) == "number") { return abs(a - b) <= tol; }
+        return str(a) == str(b);
+    };
+}
+
+// حكم القبول: هل تُقبل قيمة المرشّحة قياساً إلى المرجع؟
+fun __up_accept(opts) {
+    if (has(opts, "score")) {                          // وضع «أفضل»: لا تسوء الجودة (مع هامش slack)
+        let sc = opts["score"];
+        let slack = has(opts, "slack") ? opts["slack"] : 0;
+        return fun(ref, cand, input) { return sc(cand, input) >= sc(ref, input) - slack; };
+    }
+    return __up_eq(opts);                              // وضع «مكافئ»: نفس النتيجة ضمن tol
+}
+
+fun __up_names(c, cfg) {
+    let names = [c];
+    if (has(cfg, "touch")) {
+        for (let n in cfg["touch"]) { push(names, n); }
+    }
+    return names;
+}
+
+// ───────── 1) الخلية والقراءة ─────────
+fun __up_cell(name, fn, opts) {
+    if (has(__UP, name)) { throw "E0007: الخلية موجودة: " + name; }
+    let o = opts == nil ? {} : opts;
+    let c = __up_c(name);
+    newContainer("UpgradeCell", c, {name: name, need: has(o, "need") ? o["need"] : 3});
+    __UP[name] = {impls: {"1": fn}, opts: o, cfg: {}, accept: __up_accept(o)};
+    __up_log(c, "v1: أُنشئت");
+    return name;
+}
+
+fun __up_read(name, input) {
+    let e = __up_entry(name);
+    let c = __up_c(name);
+    let live = getField(c, "live");
+    let value = e["impls"][str(live)](input);        // القارئ يدفع ثمن النسخة الحيّة فقط
+    setField(c, "reads", getField(c, "reads") + 1);
+    let stage = getField(c, "stage");
+    if (stage == "shadowing") {
+        let cand = getField(c, "candidate");
+        timers.after(0, fun() { __up_job(name, cand, "forward", input, value); });
+    }
+    if (stage == "soaking") {
+        let prev = getField(c, "previous");
+        timers.after(0, fun() { __up_job(name, prev, "reverse", input, value); });
+    }
+    return {value: value, version: live, stage: stage};
+}
+
+// ───────── 2) ترشيح نسخة جديدة ─────────
+fun __up_propose(name, fn, opts) {
+    let e = __up_entry(name);
+    let c = __up_c(name);
+    if (getField(c, "stage") != "steady") {
+        throw "E0007: ترقية جارية على " + name + " (المرحلة: " + getField(c, "stage") + ")";
+    }
+    let o = opts == nil ? {} : opts;
+    let v = getField(c, "live") + 1;
+    e["impls"][str(v)] = fn;
+    e["cfg"] = o;
+    let judge = (has(o, "score") or has(o, "eq") or has(o, "tol")) ? o : e["opts"];
+    e["accept"] = __up_accept(judge);
+    setField(c, "candidate", v);
+    setField(c, "stage", "shadowing");
+    setField(c, "agree", 0);
+    setField(c, "disagree", 0);
+    if (has(o, "need")) { setField(c, "need", o["need"]); }
+    __up_log(c, "v" + v + ": رُشّحت (تُجرَّب في الظلّ)");
+    return v;
+}
+
+// عمل الخلفية: نفّذ النسخة الأخرى على نفس الدخل وقارن — لا يصل خطؤها للقارئ أبداً
+fun __up_job(name, ver, dir, input, shown) {
+    let e = __up_entry(name);
+    let c = __up_c(name);
+    let stage = getField(c, "stage");
+    if (dir == "forward" and !(stage == "shadowing" and getField(c, "candidate") == ver)) { return nil; }
+    if (dir == "reverse" and !(stage == "soaking" and getField(c, "previous") == ver)) { return nil; }
+
+    let ok = false;
+    let note = "";
+    let other = nil;
+    let failed = false;
+    try { other = e["impls"][str(ver)](input); } catch (err) { failed = true; note = "خطأ: " + err["message"]; }
+    if (!failed) {
+        // forward: المرجع = ما رآه القارئ، المرشّحة = other.  reverse: المرجع = النسخة القديمة، الجديدة = ما رآه القارئ
+        try {
+            ok = dir == "forward" ? e["accept"](shown, other, input) : e["accept"](other, shown, input);
+        } catch (err2) { ok = false; note = "خطأ في الحكم: " + err2["message"]; }
+        if (!ok and note == "") { note = "اختلاف: " + str(shown) + " ≠ " + str(other); }
+    }
+    if (dir == "reverse" and failed) { return nil; }      // فشل القديمة ليس تراجعاً في الجديدة
+    if (ok) { setField(c, "agree", getField(c, "agree") + 1); }
+    else {
+        setField(c, "disagree", getField(c, "disagree") + 1);
+        __up_log(c, "v" + ver + " (" + (dir == "forward" ? "أمام" : "خلف") + ") على " + str(input) + " — " + note);
+    }
+    let cfg = e["cfg"];
+    let maxBad = has(cfg, "maxBad") ? cfg["maxBad"] : 0;
+    if (getField(c, "disagree") > maxBad) {
+        if (dir == "forward") { __up_reject(name, "تجاوزت حدّ الاختلاف (" + maxBad + ")"); }
+        else { __up_rollback(name, "تراجع مكتشف أثناء المراقبة"); }
+        return nil;
+    }
+    if (dir == "forward" and getField(c, "agree") >= getField(c, "need")) { __up_promote(name); }
+    return nil;
+}
+
+fun __up_reject(name, why) {
+    let e = __up_entry(name);
+    let c = __up_c(name);
+    let v = getField(c, "candidate");
+    remove(e["impls"], str(v));
+    setField(c, "candidate", nil);
+    setField(c, "stage", "steady");
+    __up_log(c, "v" + v + ": رُفضت — " + why);
+}
+
+// ───────── 3) الترقية الذرّية ─────────
+fun __up_promote(name) {
+    let e = __up_entry(name);
+    let c = __up_c(name);
+    let cfg = e["cfg"];
+    let from = getField(c, "live");
+    let to = getField(c, "candidate");
+    if (has(cfg, "approve")) {
+        let yes = false;
+        try { yes = cfg["approve"]({name: name, from: from, to: to, agree: getField(c, "agree")}) == true; } catch (e0) { yes = false; }
+        if (!yes) { __up_reject(name, "لم يُوافَق على الترقية"); return false; }
+    }
+    let soak = has(cfg, "soak") ? cfg["soak"] : 0;
+    let done = true;
+    try {
+        container.transaction(__up_names(c, cfg), fun() {
+            if (has(cfg, "migrate")) { cfg["migrate"](); }                 // هجرة الحالة والترقية في معاملة واحدة
+            setField(c, "live", to);
+            setField(c, "candidate", nil);
+            setField(c, "previous", soak > 0 ? from : nil);
+            setField(c, "stage", soak > 0 ? "soaking" : "steady");
+            setField(c, "agree", 0);
+            setField(c, "disagree", 0);
+            setField(c, "upgrades", getField(c, "upgrades") + 1);
+            __up_log(c, "v" + from + " → v" + to + ": رُقّيت" + (soak > 0 ? " (مراقبة " + soak + "ms)" : ""));
+        });
+    } catch (err) {
+        done = false;
+        __up_reject(name, "فشلت الهجرة فتراجع كل شيء: " + err["message"]);
+    }
+    if (done and soak > 0) { timers.after(soak, fun() { __up_settle(name, to, from); }); }
+    if (done and soak == 0) { remove(e["impls"], str(from)); }
+    return done;
+}
+
+// انتهت فترة المراقبة بسلام: ثبّتت النسخة الجديدة وتُترك القديمة
+fun __up_settle(name, to, from) {
+    let e = __up_entry(name);
+    let c = __up_c(name);
+    if (getField(c, "stage") == "soaking" and getField(c, "live") == to) {
+        setField(c, "stage", "steady");
+        setField(c, "previous", nil);
+        remove(e["impls"], str(from));
+        __up_log(c, "v" + to + ": ثبتت بعد المراقبة");
+    }
+}
+
+fun __up_rollback(name, why) {
+    let e = __up_entry(name);
+    let c = __up_c(name);
+    let cfg = e["cfg"];
+    let bad = getField(c, "live");
+    let prev = getField(c, "previous");
+    container.transaction(__up_names(c, cfg), fun() {
+        if (has(cfg, "unmigrate")) { cfg["unmigrate"](); }
+        setField(c, "live", prev);
+        setField(c, "previous", nil);
+        setField(c, "stage", "steady");
+        setField(c, "agree", 0);
+        setField(c, "disagree", 0);
+        setField(c, "rollbacks", getField(c, "rollbacks") + 1);
+        __up_log(c, "v" + bad + " → v" + prev + ": تراجع تلقائي — " + why);
+    });
+    remove(e["impls"], str(bad));
+}
+
+// ───────── 4) التحسين التدريجي (anytime): الجواب نفسه يرتقي دقّةً ─────────
+fun __up_refine(name, tiers, opts) {
+    if (has(__UPR, name)) { throw "E0007: الخلية موجودة: " + name; }
+    if (len(tiers) < 2) { throw "E0007: تحتاج مستويين على الأقل (سريع ثم أدقّ)"; }
+    let o = opts == nil ? {} : opts;
+    newContainer("RefineCell", "rf_" + name, {name: name, tiers: len(tiers)});
+    __UPR[name] = {tiers: tiers, cache: {}, opts: o};
+    return name;
+}
+
+fun __up_get(name, input) {
+    if (!has(__UPR, name)) { throw "E0007: خلية غير معروفة: " + name; }
+    let r = __UPR[name];
+    let c = "rf_" + name;
+    let key = str(input);
+    setField(c, "served", getField(c, "served") + 1);
+    if (!has(r["cache"], key)) {
+        let v = r["tiers"][0](input);                 // المستوى الأسرع فوراً
+        r["cache"][key] = {tier: 1, value: v, input: input};
+        setField(c, "entries", getField(c, "entries") + 1);
+        let step = has(r["opts"], "step") ? r["opts"]["step"] : 100;
+        timers.after(step, fun() { __up_step(name, key); });
+    }
+    let hit = r["cache"][key];
+    return {value: hit["value"], tier: hit["tier"], of: len(r["tiers"]), final: hit["tier"] == len(r["tiers"])};
+}
+
+fun __up_step(name, key) {
+    let r = __UPR[name];
+    let c = "rf_" + name;
+    let hit = r["cache"][key];
+    if (hit["tier"] >= len(r["tiers"])) { return nil; }
+    let next = hit["tier"] + 1;
+    let nv = nil;
+    let failed = false;
+    try { nv = r["tiers"][next - 1](hit["input"]); } catch (err) {
+        failed = true;
+        setField(c, "failures", getField(c, "failures") + 1);
+        __up_log(c, "المستوى " + next + " فشل على " + key + ": " + err["message"] + " — بقي الجواب السابق");
+    }
+    if (failed) { return nil; }                       // عزل الفشل: الجواب الأقدم سليم ولا يُمَسّ
+    let old = hit["value"];
+    r["cache"][key] = {tier: next, value: nv, input: hit["input"]};
+    setField(c, "refinements", getField(c, "refinements") + 1);
+    if (has(r["opts"], "onUpgrade")) {
+        r["opts"]["onUpgrade"]({name: name, input: hit["input"], tier: next, old: old, value: nv, final: next == len(r["tiers"])});
+    }
+    let step = has(r["opts"], "step") ? r["opts"]["step"] : 100;
+    timers.after(step, fun() { __up_step(name, key); });
+    return nil;
+}
+
+// ───────── الواجهة ─────────
+fun __up_state(name) {
+    let c = __up_c(name);
+    if (has(__UP, name)) {
+        let m = {};
+        for (let k in ["live", "candidate", "stage", "agree", "disagree", "need", "reads", "upgrades", "rollbacks", "previous"]) {
+            m[k] = getField(c, k);
+        }
+        return m;
+    }
+    let f = "rf_" + name;
+    let m2 = {};
+    for (let k2 in ["tiers", "entries", "served", "refinements", "failures"]) { m2[k2] = getField(f, k2); }
+    return m2;
+}
+
+fun __up_timeline(name) {
+    return getField(has(__UP, name) ? __up_c(name) : "rf_" + name, "timeline");
+}
+
+let Upgrade = {};
+Upgrade["cell"] = fun(name, fn) { return __up_cell(name, fn, nil); };
+Upgrade["cellWith"] = __up_cell;                       // (name, fn, {need, tol | eq | score, slack})
+Upgrade["read"] = __up_read;
+Upgrade["propose"] = fun(name, fn) { return __up_propose(name, fn, nil); };
+Upgrade["proposeWith"] = __up_propose;                 // (name, fn, {need, maxBad, soak, touch, migrate, unmigrate, approve, ...})
+Upgrade["refine"] = fun(name, tiers) { return __up_refine(name, tiers, nil); };
+Upgrade["refineWith"] = __up_refine;                   // (name, tiers, {step, onUpgrade})
+Upgrade["get"] = __up_get;
+Upgrade["state"] = __up_state;
+Upgrade["timeline"] = __up_timeline;
+Upgrade["run"] = fun(d) { return timers.run(d); };
