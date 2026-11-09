@@ -135,6 +135,16 @@ private:
     StmtPtr hashBanStatement();              // #ban x[, y]; | #ban x = expr;
     StmtPtr hashIgnoranceStatement();        // #ignorance { ... } | #ignorance stmt
     StmtPtr hashSwapStatement();             // #swap a, b;  |  #swap(a, b);   (nullptr إن كانت الصيغة الدالّية ذات 3 وسائط)
+    int noElseExpr = 0;       // >0: `a else b` معطّل (else تخصّ بنية أخرى: let/accept/if-expression)
+    bool bareIfThen = false;  // الفرع الأول لـ if بلا أقواس: else التالية له لا لحلقة بداخله
+    int tryElseSeq = 0;
+    ExprPtr argExpression();
+    ExprPtr makeThunk(ExprPtr value, int line);
+    ExprPtr pipelineElse();
+    StmtPtr thenStatement();
+    StmtPtr elseBranchStatement();   // بعد else: يدعم `else when (c)` و`else unless (c)`
+    ExprPtr makeElseExpr(ExprPtr left, ExprPtr right, int line);
+    ExprPtr ifExpression(const Token& kw);
     void attachDoneBlock(StmtPtr& done);     // يقرأ  #done { ... }  اختيارياً بعد جسم حلقة
     ExprPtr maybeHashRange(ExprPtr first);   // A #to B [step C]  ->  #to(A, B[, C])
     int hashCounter = 0;
@@ -161,7 +171,9 @@ private:
     bool openBraceIfSameLine();        // يستهلك '{' إن وقعت على نفس سطر آخر توكن في الترويسة، ويُرجع هل استُهلكت
     // ---- Loops v2 (docs/loops.md): each / repeat / loop / retry / labels / limit — كلها تفكيك لعقد موجودة ----
     struct LoopProp { std::string flag; int targetDepth; int kind; };
-    struct LoopCtx { int depth = 0; std::string label, flag; std::vector<LoopProp> props; };
+    struct LoopCtx { int depth = 0; std::string label, flag; std::vector<LoopProp> props; std::vector<std::pair<int, ExprPtr>> mods; };
+    std::vector<std::pair<int, ExprPtr>> pendingMods;   // مُعدِّلات رأس الحلقة الجارية (تُنقل إلى LoopCtx في enterLoop)
+    void rewriteParenForIn();
     struct LabelInfo { std::string name, flag; int depth; bool needFlag = false; };
     std::vector<LoopCtx> loopStack, doneStack;
     std::vector<LabelInfo> labels;
