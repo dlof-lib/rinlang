@@ -1,0 +1,15 @@
+// ترقية مكافئة: v1 بطيء (حلقة) ← v2 بصيغة مغلقة. القارئ لا يلحظ شيئاً، والترقية تحدث وحدها في الخلفية.
+@import "lib/upgrade.og.rin";
+time.freeze();
+Upgrade.cell("sum", fun(n) { let s = 0; for (let i = 1; i <= n; i = i + 1) { s = s + i; } return s; });
+Upgrade.proposeWith("sum", fun(n) { return n * (n + 1) / 2; }, {need: 3, soak: 5s});
+for (let n in [10, 20, 30, 40]) {
+    let r = Upgrade.read("sum", n);
+    print "قراءة", n, "=", r["value"], "v" + r["version"], r["stage"];
+    Upgrade.run(10ms);
+}
+let s = Upgrade.state("sum");
+print "بعد 4 قراءات:", s["live"], s["stage"], s["upgrades"];
+Upgrade.run(10s);
+print "بعد المراقبة:", Upgrade.state("sum")["stage"];
+for (let l in Upgrade.timeline("sum")) { print "  -", l; }
