@@ -84,6 +84,8 @@ enum class StrandKind {
     TAG, KBD, RATING, SKELETON, SPINNER,
     STEPS, STEPITEM, TIMELINE, TIMELINEITEM,
     BREADCRUMB, PAGINATION, DONUT_CHART,
+    // Pro charts (docs/indsin_pro_native.md): قيم data= رقمية أو "تسمية:قيمة" (نفس اصطلاح DonutChart)
+    SPARKLINE, BAR_CHART, PROGRESS_RING,
 
     // ---- Collapsible lists (docs/indsin_collapsible.md): Accordion / ExpandableList / TreeView /
     // NestedList. All seven are *structural* kinds: rin_indsin_components_ext.h desugars them into
@@ -184,6 +186,9 @@ inline StrandKind strandKindFromTag(const std::string& tag) {
         return StrandKind::PAGINATION;
     if (tag == "DonutChart" || tag == "donutchart" || tag == "PieChart" || tag == "piechart" ||
         tag == "Donut" || tag == "donut") return StrandKind::DONUT_CHART;
+    if (tag == "Sparkline" || tag == "sparkline") return StrandKind::SPARKLINE;
+    if (tag == "BarChart" || tag == "barchart" || tag == "Bars" || tag == "bars") return StrandKind::BAR_CHART;
+    if (tag == "ProgressRing" || tag == "progressring" || tag == "RingProgress" || tag == "ringprogress") return StrandKind::PROGRESS_RING;
 
     // ---- Collapsible lists ----
     if (tag == "Accordion" || tag == "accordion") return StrandKind::ACCORDION;
@@ -279,6 +284,9 @@ inline std::string strandKindName(StrandKind k) {
         case StrandKind::BREADCRUMB: return "Breadcrumb";
         case StrandKind::PAGINATION: return "Pagination";
         case StrandKind::DONUT_CHART: return "DonutChart";
+        case StrandKind::SPARKLINE: return "Sparkline";
+        case StrandKind::BAR_CHART: return "BarChart";
+        case StrandKind::PROGRESS_RING: return "ProgressRing";
 
         case StrandKind::ACCORDION: return "Accordion";
         case StrandKind::ACCORDION_ITEM: return "AccordionItem";
