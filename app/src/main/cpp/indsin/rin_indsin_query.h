@@ -65,6 +65,7 @@ inline KindCategory kindCategoryOf(StrandKind k) {
             return KindCategory::NAVIGATION;
         case StrandKind::TABLE: case StrandKind::TABLEROW: case StrandKind::LIST: case StrandKind::LISTITEM:
         case StrandKind::TIMELINE: case StrandKind::TIMELINEITEM: case StrandKind::DONUT_CHART: case StrandKind::OBJECT:
+        case StrandKind::SPARKLINE: case StrandKind::BAR_CHART: case StrandKind::PROGRESS_RING:
         case StrandKind::EXPANDABLE_LIST: case StrandKind::NESTED_LIST: case StrandKind::NESTED_ITEM:
             return KindCategory::DATA;
         case StrandKind::DIALOG:
