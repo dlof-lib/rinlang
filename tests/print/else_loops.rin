@@ -1,0 +1,25 @@
+// else بعد الحلقات: تُنفَّذ إن انتهت الحلقة طبيعياً (دون break) — مثل for..else في Python و nobreak في Rin.
+fun find(xs, t) {
+    for (let x in xs) {
+        if (x == t) { print "وُجد", x; break; }
+    } else {
+        print "لم يوجد", t;
+    }
+}
+find([1, 2, 3], 2);
+find([1, 2, 3], 9);
+find([], 1);                       // قائمة فارغة: انتهت طبيعياً ⇒ else
+
+let i = 0;
+while (i < 3) { i = i + 1; } else { print "while انتهت عند", i; }
+let j = 0;
+while (true) { j = j + 1; if (j == 2) { break; } } else { print "لن يظهر"; }
+print "j =", j;
+for (let k = 0; k < 2; k = k + 1) { } else { print "for C-style انتهت"; }
+for (let n in [1, 2]) { } nobreak { print "nobreak ما زالت تعمل"; }
+
+// else المعلّقة: الحلقة المجرَّدة (بلا أقواس) فرع if تبقى else لـ if كما كان دائماً
+if (false) for (let q in [1]) { print "x"; } else { print "else تخصّ if"; }
+if (true) { for (let q in [1]) { } else { print "else تخصّ الحلقة (داخل أقواس)"; } }
+// حلقة داخل else لـ if: else بعدها للحلقة
+if (false) { print "no"; } else for (let q in [1]) { } else { print "else للحلقة داخل else"; }
