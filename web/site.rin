@@ -1,1020 +1,617 @@
 <!-- ============================================================================= -->
-<!-- site.rin — الصفحة الرسمية للغة Rin (إعادة بناء كاملة، احترافية، موسّعة) -->
+<!-- site.rin — الموقع الرسمي للغة Rin (إعادة تصميم كاملة من الصفر) -->
 <!-- ----------------------------------------------------------------------------- -->
-<!-- مكتوبة بالكامل بلغة Rin — صفر أسطر HTML، صفر سلاسل نصية مبنية بالدمج. كل -->
-<!-- عنصر أدناه (@view.Kind=name) هو Strand حقيقي يبنيه ويخطّطه محرك Indsintime -->
-<!-- الرسمي (نفس rin_lexer/rin_parser/rin_interpreter المستخدمة في rin_run -->
-<!-- وتطبيق أندرويد)، ثم يُرسل كشجرة JSON إلى web/index.html (المحمّل العام -->
-<!-- البحت) ليرسمها المتصفح. راجع docs/indsintime/RIN_INDSIN_ENGINE_ARCHITECTURE.md. -->
+<!-- مكتوب بالكامل بلغة Rin + Indsin: صفر HTML وصفر JavaScript في المحتوى. كل وسم أدناه -->
+<!-- هو Strand حقيقي يقيسه محرّك Indsintime الرسمي (نفس rin_lexer/rin_parser/rin_interpreter) -->
+<!-- ثم يُرسَل كشجرة JSON إلى web/index.html (المحمّل العام) ليرسمها المتصفح. -->
 <!--  -->
-<!-- ملاحظة لغوية: داخل @view، قيم السمات تُقيَّم عبر مُقيِّم مصغّر يفهم فقط: -->
-<!-- حرفيات، خلايا warp، عمليات + - * / على نصوص/أرقام، ونداءات onTap=fn(...). -->
-<!-- لذلك لا توجد حلقات/شروط هنا؛ كل بطاقة مكتوبة يدوياً — بالضبط كما تكتب أي -->
-<!-- تطبيق Indsintime حقيقي آخر. -->
+<!-- البنية: الجزء الأول برنامج Rin كامل يُنفَّذ قبل بناء الواجهة (حاويات NoSQL + for/make)، -->
+<!-- والجزء الثاني شجرة Indsin بوسوم الأقواس تقرأ نتائجه عبر خلايا warp. -->
 <!--  -->
-<!-- لكن كل ما *قبل* @view.Scaffold أدناه هو برنامج Rin كامل وحقيقي — يُنفَّذ -->
-<!-- بالكامل عبر rin::Interpreter::run() (@container، for، make، الدوال، كل شيء) -->
-<!-- قبل أن يبني Indsin الشجرة إطلاقاً (انظر runColdPipelineWithRuntime في -->
-<!-- indsin/rin_indsin_pipeline.h). لذلك نستخدمه هنا فعلياً بدل الاكتفاء بعرضه في -->
-<!-- قسم "جولة في اللغة": حاوية container.doc حقيقية تُعدّ أقسام هذه الصفحة، ثم -->
-<!-- حلقة for + make تُنشئ حاويات ديناميكية إضافية وقت التشغيل — والنتيجتان -->
-<!-- تُقرآن حيّاً في warp cells يعرضهما شريط الإحصاءات أدناه (بطاقة رابعة). -->
-<!--  -->
-<!-- خريطة الأقسام: topbar · drawer · hero · stats · features · tour · thisPage · -->
-<!-- rinhtml · quickstart · ecosystem · compare · academy (منهج كامل من الصفر) · -->
-<!-- exercises · projects · errors · glossary · reference · faq · finalCta · footer -->
-<!--  -->
-<!-- المنهج التعليمي (Rin Academy) موسّع بالكامل: 12 درساً من الصفر تغطي اللغة -->
-<!-- الأساسية + Indsin + الحاويات + المكتبات + الويب + مسار التطبيق الحقيقي. -->
+<!-- هوية التصميم: زمرّدي على حبر داكن · عناوين مرقّمة · كود أحادي الخط · مزاج «طرفية». -->
+<!-- الأقسام: hero · stats · why · platforms · tour · indsin · pipeline · learn · -->
+<!--          ecosystem · fit · faq · cta · footer -->
 <!-- ============================================================================= -->
-<!-- ---- برمجة حقيقية قبل أي @view: حاوية NoSQL تُعدّ أقسام هذه الصفحة نفسها ---- -->
 <Rin>
-@container.doc=pageSections
-  document id="s0" fields={ name: "hero",        kind: "section" };
-  document id="s1" fields={ name: "stats",       kind: "section" };
-  document id="s2" fields={ name: "features",    kind: "section" };
-  document id="s3" fields={ name: "tour",        kind: "section" };
-  document id="s4" fields={ name: "code",        kind: "section" };
-  document id="s5" fields={ name: "rinhtml",     kind: "section" };
-  document id="s6" fields={ name: "quickstart",  kind: "section" };
-  document id="s7" fields={ name: "ecosystem",   kind: "section" };
-  document id="s8" fields={ name: "compare",     kind: "section" };
-  document id="s9" fields={ name: "faq",         kind: "section" };
+// ---- برمجة Rin حقيقية تُنفَّذ قبل رسم أي عنصر: حاويات NoSQL تصف هذه الصفحة نفسها ----
+@container.doc=siteSections
+  document id="s0" fields={ name: "hero", kind: "section" };
+  document id="s1" fields={ name: "stats", kind: "section" };
+  document id="s2" fields={ name: "why", kind: "section" };
+  document id="s3" fields={ name: "platforms", kind: "section" };
+  document id="s4" fields={ name: "tour", kind: "section" };
+  document id="s5" fields={ name: "indsin", kind: "section" };
+  document id="s6" fields={ name: "pipeline", kind: "section" };
+  document id="s7" fields={ name: "learn", kind: "section" };
+  document id="s8" fields={ name: "ecosystem", kind: "section" };
+  document id="s9" fields={ name: "fit", kind: "section" };
+  document id="s10" fields={ name: "faq", kind: "section" };
+  document id="s11" fields={ name: "cta", kind: "section" };
 .end/container.doc
-let sectionCount = len(queryDocs("pageSections", "kind", "section"));
-// حلقة for + make + create(): تبني حاوية ديناميكية منفصلة لكل مقتطف كود حقيقي
-// في قسم "جولة في اللغة" (سبعة مقتطفات)، وتكتب عنوانه الحقيقي بـ setField() —
-// بدل عدّها يدوياً أو الاكتفاء برقم فارغ.
-let tourTitles = [
-    "متغيّرات وطباعة",
-    "شرطان متكافئان: if/else وwhen/otherwise",
-    "دوال، تكرار ذاتي، وحلقات",
-    "مصفوفات وقواميس (كائنات)",
-    "الأنابيب |> بدل تعشيش الاستدعاءات",
-    "قاعدة بيانات NoSQL مدمجة",
-    "for + make: حاويات ديناميكية وقت التشغيل"
-];
-for (let i = 0; i < len(tourTitles); i = i + 1) {
-    make kind = "tourSnippet";
-    make name = "tourSnippet_" + i;
+@container.doc=siteTargets
+  document id="t0" fields={ name: "CLI",         kind: "platform" };
+  document id="t1" fields={ name: "Android",     kind: "platform" };
+  document id="t2" fields={ name: "WebAssembly", kind: "platform" };
+.end/container.doc
+let sectionCount = len(queryDocs("siteSections", "kind", "section"));
+let platformCount = len(queryDocs("siteTargets", "kind", "platform"));
+// حلقة for + make: تُنشئ حاوية ديناميكية لكل مرحلة من مسار التنفيذ ثم تقرأها رجوعاً بـ getField()
+let stages = ["Lexer", "Parser", "Interpreter", "Indsin", "Fabric"];
+for (let i = 0; i < len(stages); i = i + 1) {
+    make kind = "pipelineStage";
+    make name = "stage_" + i;
     create(kind, name);
     setField(name, "index", i);
-    setField(name, "title", tourTitles[i]);
+    setField(name, "title", stages[i]);
 }
 let totalContainers = len(containerNames());
-// قراءة حيّة: العناوين السبعة تُجمَع رجوعاً من الحاويات نفسها عبر getField() —
-// وليس من مصفوفة tourTitles مباشرة — لإثبات أن الكتابة والقراءة وقت التشغيل
-// حقيقيتان فعلاً، لا مجرد نسخ نص ثابت. النتيجة تُعرض حرفياً في قسم "معاينة حية".
-let liveTitles = "";
-for (let i = 0; i < len(tourTitles); i = i + 1) {
-    liveTitles = liveTitles + (i + 1) + ") " + getField("tourSnippet_" + i, "title");
-    if (i < len(tourTitles) - 1) { liveTitles = liveTitles + "\n"; }
+let livePipeline = "";
+for (let i = 0; i < len(stages); i = i + 1) {
+    livePipeline = livePipeline + getField("stage_" + i, "title");
+    if (i < len(stages) - 1) { livePipeline = livePipeline + "  →  "; }
 }
 </Rin>
 <warp navOpen={"false"} />
 <warp sectionCountStr={"" + sectionCount} />
+<warp platformCountStr={"" + platformCount} />
 <warp totalContainersStr={"" + totalContainers} />
-<warp liveTitlesStr={liveTitles} />
-<warp copyVars={"false"} />
-<warp copyFlow={"false"} />
-<warp copyFun={"false"} />
-<warp copyData={"false"} />
-<warp copyPipe={"false"} />
-<warp copyDb={"false"} />
-<warp copyMake={"false"} />
-<warp copyPage={"false"} />
-<warp copyHtml={"false"} />
+<warp livePipelineStr={livePipeline} />
+<warp copyTick={"false"} />
+<warp tabBasics={"true"} />
+<warp tabFlow={"false"} />
+<warp tabData={"false"} />
+<warp tabDb={"false"} />
+<warp tabUi={"false"} />
+<warp faq1={"false"} />
+<warp faq2={"false"} />
+<warp faq3={"false"} />
+<warp faq4={"false"} />
+<warp faq5={"false"} />
+<warp faq6={"false"} />
 <Scaffold#page>
-  <View.TopBar#nav role="topbar" padding=14 bg="#0a0c0acc" shadow="true">
-    <Row#navRow gap=10 valign="center">
-      <Text#brand text="⧉ Rin" size=19 weight="800" color="#f4f6f3" />
-      <Button#docsTop label="التوثيق" url="https://github.com/dlof-lib/rinlang/tree/main/docs" bg="#10130f" color="#f4f6f3" />
-      <Button#learnTop label="تعلم Rin" url="#learn" bg="#10130f" color="#22c55e" />
-      <Button#academyTop label="المختبر" url="#exercises" bg="#10130f" color="#f4f6f3" />
-      <Button#ghTop label="GitHub" url="https://github.com/dlof-lib/rinlang" bg="#10130f" color="#f4f6f3" />
-      <Button#menuBtn label="☰" onTap={toggle(navOpen)} bg="#10130f" color="#f4f6f3" />
+  <View.TopBar#nav role="topbar" padding=14 bg="#05080ae6" shadow="true">
+    <Row#navRow gap=8 valign="center">
+      <Text#brand text="rin" size=22 color="#2de08f" weight="900" mono="true" />
+      <Button#navLibs label="المكتبات" bg="#111b17" color="#2de08f" weight="700" url="?view=libraries" />
+      <Button#navDocs label="التوثيق" bg="#111b17" color="#edf5f0" weight="700" url="https://github.com/dlof-lib/rinlang/blob/main/docs/" />
+      <Button#navMenu label="☰" bg="#111b17" color="#edf5f0" weight="700" onTap={toggle(navOpen)} />
     </Row>
   </View.TopBar>
-  <!-- ============================== درج التنقّل (جوال) ============================== -->
-  <Drawer#mobileMenu role="drawer" open={navOpen} width=270 bg="#0d100d">
-    <Column#drawerCol gap=2 padding=20>
-      <Text#drawerLabel text="التنقّل" size=12 color="#5b655d" weight="700" />
-      <MenuItem#dm0 label="📚 مكتبات Rin" url="?view=libraries" onTap={toggle(navOpen)} color="#22c55e" />
-      <MenuItem#dm1 label="لماذا Rin" url="#features" onTap={toggle(navOpen)} color="#f4f6f3" />
-      <MenuItem#dm2 label="جولة في اللغة" url="#tour" onTap={toggle(navOpen)} color="#f4f6f3" />
-      <MenuItem#dmLearn label="🎓 تعلّم من الصفر (منهج كامل)" url="#learn" onTap={toggle(navOpen)} color="#22c55e" />
-      <MenuItem#dmExercises label="🧪 التمارين" url="#exercises" onTap={toggle(navOpen)} color="#f4f6f3" />
-      <MenuItem#dmProjects label="🧩 المشاريع" url="#projects" onTap={toggle(navOpen)} color="#f4f6f3" />
-      <MenuItem#dmErrors label="🛠 تشخيص الأخطاء" url="#errors" onTap={toggle(navOpen)} color="#f4f6f3" />
-      <MenuItem#dm3 label="هذه الصفحة كودها" url="#code" onTap={toggle(navOpen)} color="#f4f6f3" />
-      <MenuItem#dm4 label="Rin في المتصفح" url="#rinhtml" onTap={toggle(navOpen)} color="#f4f6f3" />
-      <MenuItem#dm5 label="البدء السريع" url="#quickstart" onTap={toggle(navOpen)} color="#f4f6f3" />
-      <MenuItem#dm6 label="المنظومة" url="#ecosystem" onTap={toggle(navOpen)} color="#f4f6f3" />
-      <MenuItem#dm7 label="لماذا لا لغة أخرى؟" url="#compare" onTap={toggle(navOpen)} color="#f4f6f3" />
-      <MenuItem#dm8 label="الأسئلة الشائعة" url="#faq" onTap={toggle(navOpen)} color="#f4f6f3" />
-      <Divider#dmDiv height=1 color="#1c231d" />
-      <MenuItem#dm9 label="التوثيق الكامل" url="https://github.com/dlof-lib/rinlang/tree/main/docs" onTap={toggle(navOpen)} color="#9aa39c" />
-      <MenuItem#dm10 label="GitHub" url="https://github.com/dlof-lib/rinlang" onTap={toggle(navOpen)} color="#22c55e" />
+  <Drawer#mobileMenu role="drawer" open={navOpen} width=270 bg="#09100d">
+    <Column#drawerCol gap=2 padding=20 align="stretch">
+      <Text#drawerLabel text="التنقّل" size=12 color="#5a6d62" weight="800" />
+      <MenuItem#dm label="📚 مكتبات Rin" url="?view=libraries" onTap={toggle(navOpen)} color="#2de08f" />
+      <MenuItem#dm2 label="لماذا Rin" url="#why" onTap={toggle(navOpen)} color="#edf5f0" />
+      <MenuItem#dm3 label="المنصّات" url="#platforms" onTap={toggle(navOpen)} color="#edf5f0" />
+      <MenuItem#dm4 label="جولة في اللغة" url="#tour" onTap={toggle(navOpen)} color="#edf5f0" />
+      <MenuItem#dm5 label="Indsin للواجهات" url="#indsin" onTap={toggle(navOpen)} color="#edf5f0" />
+      <MenuItem#dm6 label="مسار التنفيذ" url="#pipeline" onTap={toggle(navOpen)} color="#edf5f0" />
+      <MenuItem#dm7 label="مسار التعلّم" url="#learn" onTap={toggle(navOpen)} color="#edf5f0" />
+      <MenuItem#dm8 label="المنظومة" url="#ecosystem" onTap={toggle(navOpen)} color="#edf5f0" />
+      <MenuItem#dm9 label="متى تناسبك؟" url="#fit" onTap={toggle(navOpen)} color="#edf5f0" />
+      <MenuItem#dm10 label="الأسئلة الشائعة" url="#faq" onTap={toggle(navOpen)} color="#edf5f0" />
+      <Divider#dmDiv height=1 color="#17261f" />
+      <MenuItem#dm11 label="GitHub" url="https://github.com/dlof-lib/rinlang" onTap={toggle(navOpen)} color="#2de08f" />
     </Column>
   </Drawer>
-  <!-- ==================================== المحتوى ==================================== -->
-  <Column#content gap=44 padding=20>
-    <Column#hero gap=16 padding=30 align="center" gradient="#0d100d,#0a140d" radius=20 shadow="true">
-      <Text#heroEyebrow text="لغة برمجة صغيرة، حقيقية بالكامل" size=12 color="#22c55e" weight="700" />
-      <Text#heroTitle text="Rin — لغة واحدة، محرّك C++17 واحد، ثلاث منصّات" size=27 weight="900" color="#f4f6f3" />
-      <Text#heroDesc text="Lexer وParser وInterpreter حقيقية بلا أي إطار خارجي، تعمل كسطر أوامر، داخل IDE أندرويد كامل بـ Kotlin، وداخل المتصفح مباشرة عبر WebAssembly — نفس الملفات الثلاثة، بلا نسخ ولا إعادة كتابة. حتى هذه الصفحة التي تقرأها الآن مكتوبة بها." size=14 color="#9aa39c" />
-      <Wrap#heroBadges gap=8>
-        <Card#badge1 padding=8 bg="#141a15" radius=999>
-          <Text#badge1t text="C++17" size=12 color="#4ade80" mono="true" />
+  <Column#content gap=40 padding=20 bg="#05080a" align="stretch">
+    <Column#hero gap=18 padding=26 gradient="#0b1a13,#06100c" radius=24 shadow="true" align="stretch">
+      <Row#heroTags gap=8>
+        <Card#heroV padding=8 bg="#111b17" radius=999>
+          <Text#heroVt text="v1.0.0" size=12 color="#2de08f" weight="700" mono="true" />
         </Card>
-        <Card#badge2 padding=8 bg="#141a15" radius=999>
-          <Text#badge2t text="Kotlin" size=12 color="#4ade80" mono="true" />
+        <Card#heroL padding=8 bg="#111b17" radius=999>
+          <Text#heroLt text="MIT" size=12 color="#ffc857" weight="700" mono="true" />
         </Card>
-        <Card#badge3 padding=8 bg="#141a15" radius=999>
-          <Text#badge3t text="WebAssembly" size=12 color="#4ade80" mono="true" />
+        <Card#heroE padding=8 bg="#111b17" radius=999>
+          <Text#heroEt text="C++23" size=12 color="#7cc4ff" weight="700" mono="true" />
         </Card>
-        <Card#badge4 padding=8 bg="#141a15" radius=999>
-          <Text#badge4t text="NoSQL" size=12 color="#4ade80" mono="true" />
-        </Card>
-        <Card#badge5 padding=8 bg="#141a15" radius=999>
-          <Text#badge5t text="MIT" size=12 color="#4ade80" mono="true" />
-        </Card>
-      </Wrap>
-      <Column#heroCtas gap=10>
-        <Button#ctaRepo label="افتح المستودع على GitHub" url="https://github.com/dlof-lib/rinlang" bg="#22c55e" color="#0a0c0a" weight="800" />
-        <Button#ctaLibraries label="📚 مكتبات Rin" url="?view=libraries" bg="#22c55e" color="#0a0c0a" weight="800" />
-        <Button#ctaAcademy label="🎓 تعلّم من الصفر" url="#learn" bg="#22c55e" color="#0a0c0a" weight="800" />
-        <Button#ctaQuickstart label="البدء السريع ↓" url="#quickstart" bg="#141a15" color="#f4f6f3" weight="700" />
+      </Row>
+      <Text#heroTitle text={"اكتب أقل.\nشغّل في كل مكان."} size=36 color="#edf5f0" weight="900" />
+      <Text#heroDesc text="Rin لغة برمجة صغيرة وواضحة بمحرّك واحد: تعمل من سطر الأوامر، وعلى الهاتف داخل RinStudio، وفي المتصفح عبر WebAssembly — والنتيجة نفسها في كل مكان." size=14.5 color="#8fa398" />
+      <Card#heroTerm padding=16 bg="#070d0b" radius=16>
+        <Column#heroTermC gap=8 align="stretch">
+          <Text#heroDots text="●  ●  ●" size=11 color="#5a6d62" weight="700" />
+          <Text#heroCmd text="$ rin run hello.rin" size=12.5 color="#2de08f" weight="700" mono="true" />
+          <Text#heroCode text={"fun greet(name) {\n    return \"مرحباً يا \" + name + \"!\";\n}\n\nprint greet(\"Rin\");\nprint 6 * 20;"} size=12.5 color="#cfe9da" mono="true" />
+          <Text#heroOutLbl text="← المخرجات" size=11 color="#5a6d62" weight="700" />
+          <Text#heroOut text={"مرحباً يا Rin!\n120"} size=12.5 color="#ffc857" weight="700" mono="true" />
+        </Column>
+      </Card>
+      <Column#heroCtas gap=10 align="stretch">
+        <Button#ctaTry label="جرّب في المتصفح — بلا تثبيت" bg="#2de08f" color="#04110b" weight="800" url="https://dlof-lib.github.io/rinlang/" />
+        <Button#ctaLibs label="📚 تصفّح مكتبات Rin" bg="#111b17" color="#edf5f0" weight="700" url="?view=libraries" />
+        <Button#ctaStart label="ابدأ من هنا ↓" bg="#111b17" color="#edf5f0" weight="700" url="#tour" />
       </Column>
     </Column>
-    <!-- -------------------------------- شريط إحصاءات --------------------------------- -->
-    <Grid#statsRow columns=2 gap=12>
-      <Card#stat1 padding=16 bg="#10130f" radius=16 shadow="true">
-        <Column#stat1c gap=2>
-          <Text#stat1n text="1" size=22 weight="900" color="#22c55e" />
-          <Text#stat1l text="محرّك C++17 واحد لكل شيء" size=12 color="#9aa39c" />
-        </Column>
-      </Card>
-      <Card#stat2 padding=16 bg="#10130f" radius=16 shadow="true">
-        <Column#stat2c gap=2>
-          <Text#stat2n text="3" size=22 weight="900" color="#22c55e" />
-          <Text#stat2l text="منصّات تشغيل: CLI / Android / Web" size=12 color="#9aa39c" />
-        </Column>
-      </Card>
-      <Card#stat3 padding=16 bg="#10130f" radius=16 shadow="true">
-        <Column#stat3c gap=2>
-          <Text#stat3n text="0" size=22 weight="900" color="#22c55e" />
-          <Text#stat3l text="أسطر جافاسكربت داخل main.rin" size=12 color="#9aa39c" />
-        </Column>
-      </Card>
-      <Card#stat4 padding=16 bg="#10130f" radius=16 shadow="true">
-        <Column#stat4c gap=2>
-          <Text#stat4n text={sectionCountStr} size=22 weight="900" color="#22c55e" />
-          <Text#stat4l text={"قسم في هذه الصفحة — مُحصاة الآن حيّاً عبر container.doc حقيقي (والمجموع مع حاويات for+make الديناميكية: " + totalContainersStr + ")"} size=12 color="#9aa39c" />
-        </Column>
-      </Card>
-    </Grid>
-    <Divider#secDiv1 height=1 color="#1c231d" />
-    <!-- -------------------------------- لماذا Rin -------------------------------- -->
-    <Column#features gap=14>
-      <Text#featuresEyebrow text="لماذا Rin" size=12 color="#22c55e" weight="700" />
-      <Text#featuresTitle text="أكثر من مجرّد لغة برمجة عامة" size=21 weight="800" color="#f4f6f3" />
-      <Card#f1 padding=16 bg="#10130f" radius=16 shadow="true">
-        <Column#f1c gap=4>
-          <Text#f1icon text="🧠 مفسّر C++17 مستقل" size=15 weight="700" color="#f4f6f3" />
-          <Text#f1desc text="Lexer وParser وInterpreter كاملة بلغة C++ نقية، تعمل على أي جهاز فيه g++ بمعزل تام عن أندرويد." size=13 color="#9aa39c" />
-        </Column>
-      </Card>
-      <Card#f2 padding=16 bg="#10130f" radius=16 shadow="true">
-        <Column#f2c gap=4>
-          <Text#f2icon text="📱 IDE أندرويد كامل" size=15 weight="700" color="#f4f6f3" />
-          <Text#f2desc text="محرر أكواد بتلوين نحوي، حفظ وفتح عبر SAF، مشاريع متعددة، وقوائم File/Edit/View/Run احترافية." size=13 color="#9aa39c" />
-        </Column>
-      </Card>
-      <Card#f3 padding=16 bg="#10130f" radius=16 shadow="true">
-        <Column#f3c gap=4>
-          <Text#f3icon text="📦 لغة حاويات بيانات" size=15 weight="700" color="#f4f6f3" />
-          <Text#f3desc text="container وContainers.Group وVolume وSection، مع link وtying وmerge لربط ودمج البيانات." size=13 color="#9aa39c" />
-        </Column>
-      </Card>
-      <Card#f4 padding=16 bg="#10130f" radius=16 shadow="true">
-        <Column#f4c gap=4>
-          <Text#f4icon text="🗄️ قاعدة بيانات NoSQL مدمجة" size=15 weight="700" color="#f4f6f3" />
-          <Text#f4desc text="container.doc مع CRUD كامل: insertDoc وupdateDoc وdeleteDoc وqueryDocs، وعلاقات عبر defineRelation." size=13 color="#9aa39c" />
-        </Column>
-      </Card>
-      <Card#f5 padding=16 bg="#10130f" radius=16 shadow="true">
-        <Column#f5c gap=4>
-          <Text#f5icon text="🔀 خط أنابيب وإحصاء (RinFlow)" size=15 weight="700" color="#f4f6f3" />
-          <Text#f5desc text={"مُشغّل |> يبني Flow Graph حقيقياً قابلاً للبث والإعادة، مع دوال إحصائية جاهزة: mean وstddev وnormalize."} size=13 color="#9aa39c" />
-        </Column>
-      </Card>
-      <Card#f6 padding=16 bg="#10130f" radius=16 shadow="true">
-        <Column#f6c gap=4>
-          <Text#f6icon text="🧵 محرّك واجهات Indsintime" size=15 weight="700" color="#f4f6f3" />
-          <Text#f6desc text="Fabric وIndsin وWarp وShuttle وDye — نفس المحرّك الذي يبني هذه الصفحة بالذات، شجرة @view حقيقية بلا HTML." size=13 color="#9aa39c" />
-        </Column>
-      </Card>
-      <Card#f7 padding=16 bg="#10130f" radius=16 shadow="true">
-        <Column#f7c gap=4>
-          <Text#f7icon text="🩺 نظام تشخيصات (Diagnostics)" size=15 weight="700" color="#f4f6f3" />
-          <Text#f7desc text="أخطاء برمز ومكان دقيق واقتراحات 'did you mean'، بدل رسائل C++ خام عند كتابة برنامج Rin خاطئ." size=13 color="#9aa39c" />
-        </Column>
-      </Card>
-      <Card#f8 padding=16 bg="#10130f" radius=16 shadow="true">
-        <Column#f8c gap=4>
-          <Text#f8icon text="🌐 RinHTML — Rin داخل المتصفح" size=15 weight="700" color="#f4f6f3" />
-          <Text#f8desc text={"عناصر <rin-app> وتوجيهات rin-click/rin-text تشغّل ملف .rin فعلياً كمنطق صفحة HTML، بلا كتابة جافاسكربت."} size=13 color="#9aa39c" />
-        </Column>
-      </Card>
-      <Card#f9 padding=16 bg="#10130f" radius=16 shadow="true">
-        <Column#f9c gap=4>
-          <Text#f9icon text="🗣️ صياغة إنجليزية طبيعية اختيارية" size=15 weight="700" color="#f4f6f3" />
-          <Text#f9desc text={"when (x > 5) { ... } otherwise { ... } مطابقة تماماً لـ if/else — نفس السلوك، صياغة أقرب للمبتدئين، ويمكن مزجهما بحرّية."} size=13 color="#9aa39c" />
-        </Column>
-      </Card>
+    <Column#stats gap=14 align="stretch">
+      <Text#statsEy text="٠١ — بالأرقام" size=12 color="#2de08f" weight="800" />
+      <Grid#statsGrid columns=2 gap=12>
+        <Card#st1 padding=16 bg="#0b1210" radius=16 shadow="true">
+          <Column#st1c gap=8 align="stretch">
+            <Text#st1n text="1" size=26 color="#2de08f" weight="900" mono="true" />
+            <Text#st1l text="محرّك C++23 واحد لكل شيء" size=12 color="#8fa398" />
+          </Column>
+        </Card>
+        <Card#st2 padding=16 bg="#0b1210" radius=16 shadow="true">
+          <Column#st2c gap=8 align="stretch">
+            <Text#st2n text={platformCountStr} size=26 color="#2de08f" weight="900" mono="true" />
+            <Text#st2l text="منصّات تشغيل: CLI · Android · Web" size=12 color="#8fa398" />
+          </Column>
+        </Card>
+        <Card#st3 padding=16 bg="#0b1210" radius=16 shadow="true">
+          <Column#st3c gap=8 align="stretch">
+            <Text#st3n text="80+" size=26 color="#7cc4ff" weight="900" mono="true" />
+            <Text#st3l text="مكتبة رسمية ومدير حزم RinPM" size=12 color="#8fa398" />
+          </Column>
+        </Card>
+        <Card#st4 padding=16 bg="#0b1210" radius=16 shadow="true">
+          <Column#st4c gap=8 align="stretch">
+            <Text#st4n text={sectionCountStr} size=26 color="#ffc857" weight="900" mono="true" />
+            <Text#st4l text="قسماً في هذه الصفحة — مُحصاة الآن من حاوية حيّة" size=12 color="#8fa398" />
+          </Column>
+        </Card>
+      </Grid>
+      <Text#statsNote text={"الرقمان الأخيران يأتيان من برنامج Rin يعمل فعلاً قبل رسم الصفحة (container.doc + queryDocs). مجموع الحاويات المُنشأة وقت التشغيل: " + totalContainersStr} size=12 color="#5a6d62" />
     </Column>
-    <Divider#secDiv2 height=1 color="#1c231d" />
-    <!-- ================================ جولة في اللغة ================================ -->
-    <Column#tour gap=14>
-      <Text#tourEyebrow text="جولة في اللغة" size=12 color="#22c55e" weight="700" />
-      <Text#tourTitle text="سبع بطاقات، كود حقيقي، صفر تبسيط مخلّ" size=21 weight="800" color="#f4f6f3" />
-      <Text#tourDesc text="كل مقتطف أدناه مأخوذ حرفياً من التوثيق الرسمي (docs/) أو من samples/showcase.rin، ويعمل فعلياً عبر rin_run — بلا تبسيط تسويقي." size=13 color="#9aa39c" />
-      <!-- ---- 1) متغيّرات وطباعة ---- -->
-      <Card#tour1 padding=16 bg="#10130f" radius=16 shadow="true">
-        <Column#tour1c gap=8>
-          <Text#tour1t text="1 — متغيّرات وطباعة" size=15 weight="700" color="#f4f6f3" />
-          <Text#tour1d text="let لأي قيمة، وtext لسلسلة نصية مُنمَّطة الاستخدام." size=13 color="#9aa39c" />
-          <Text#tour1code mono="true" size=12.5 color="#cfd6cf" text={"let name = \"Rin\";\nlet x = 10;\n\nprint \"Hello, \" + name + \"!\";\nprint x * 2;"} />
-          <Button#tour1btn label="نسخ الكود" onTap={toggle(copyVars)} copyText={"let name = \"Rin\";\nlet x = 10;\n\nprint \"Hello, \" + name + \"!\";\nprint x * 2;"} bg="#141a15" color="#f4f6f3" />
-        </Column>
-      </Card>
-      <!-- ---- 2) شروط: if/else وwhen/otherwise ---- -->
-      <Card#tour2 padding=16 bg="#10130f" radius=16 shadow="true">
-        <Column#tour2c gap=8>
-          <Text#tour2t text="2 — شرطان متكافئان: if/else وwhen/otherwise" size=15 weight="700" color="#f4f6f3" />
-          <Text#tour2d text="صياغة كلاسيكية وصياغة إنجليزية طبيعية، بنفس المعنى تماماً — اختر ما يناسب من يقرأ الكود." size=13 color="#9aa39c" />
-          <Text#tour2code mono="true" size=12.5 color="#cfd6cf" text={"if (x > 5) {\n    print \"big\";\n} else {\n    print \"small\";\n}\n\nwhen (age >= 18) {\n    print \"بالغ\";\n} otherwise {\n    print \"قاصر\";\n}"} />
-          <Button#tour2btn label="نسخ الكود" onTap={toggle(copyFlow)} copyText={"if (x > 5) {\n    print \"big\";\n} else {\n    print \"small\";\n}\n\nwhen (age >= 18) {\n    print \"بالغ\";\n} otherwise {\n    print \"قاصر\";\n}"} bg="#141a15" color="#f4f6f3" />
-        </Column>
-      </Card>
-      <!-- ---- 3) دوال وتكرار ---- -->
-      <Card#tour3 padding=16 bg="#10130f" radius=16 shadow="true">
-        <Column#tour3c gap=8>
-          <Text#tour3t text="3 — دوال، تكرار ذاتي، وحلقات" size=15 weight="700" color="#f4f6f3" />
-          <Text#tour3d text="fun عادية، تدعم الاستدعاء الذاتي (recursion) بلا قيود اصطناعية." size=13 color="#9aa39c" />
-          <Text#tour3code mono="true" size=12.5 color="#cfd6cf" text={"fun fib(n) {\n    if (n < 2) { return n; }\n    return fib(n - 1) + fib(n - 2);\n}\nprint fib(10);\n\nlet i = 0;\nwhile (i < 5) {\n    print i;\n    i = i + 1;\n}"} />
-          <Button#tour3btn label="نسخ الكود" onTap={toggle(copyFun)} copyText={"fun fib(n) {\n    if (n < 2) { return n; }\n    return fib(n - 1) + fib(n - 2);\n}\nprint fib(10);\n\nlet i = 0;\nwhile (i < 5) {\n    print i;\n    i = i + 1;\n}"} bg="#141a15" color="#f4f6f3" />
-        </Column>
-      </Card>
-      <!-- ---- 4) مصفوفات وقواميس ---- -->
-      <Card#tour4 padding=16 bg="#10130f" radius=16 shadow="true">
-        <Column#tour4c gap=8>
-          <Text#tour4t text="4 — مصفوفات وقواميس (كائنات)" size=15 weight="700" color="#f4f6f3" />
-          <Text#tour4d text={"push وsort جاهزتان للمصفوفات، وفهرسة [\"key\"] عادية للقواميس/الكائنات."} size=13 color="#9aa39c" />
-          <Text#tour4code mono="true" size=12.5 color="#cfd6cf" text={"let arr = [1, 2, 3];\npush(arr, 4);\nprint sort([3, 1, 2]);\n\nlet m = { name: \"Rin\", age: 2 };\nprint m[\"name\"];\nprint keys(m);"} />
-          <Button#tour4btn label="نسخ الكود" onTap={toggle(copyData)} copyText={"let arr = [1, 2, 3];\npush(arr, 4);\nprint sort([3, 1, 2]);\n\nlet m = { name: \"Rin\", age: 2 };\nprint m[\"name\"];\nprint keys(m);"} bg="#141a15" color="#f4f6f3" />
-        </Column>
-      </Card>
-      <!-- ---- 5) الأنابيب |> ---- -->
-      <Card#tour5 padding=16 bg="#10130f" radius=16 shadow="true">
-        <Column#tour5c gap=8>
-          <Text#tour5t text={"5 — الأنابيب |> بدل تعشيش الاستدعاءات"} size=15 weight="700" color="#f4f6f3" />
-          <Text#tour5d text={"يمرّر |> القيمة على يساره كمُدخل ضمني للدالة على يمينه — سلسلة خطوات مقروءة في سطر واحد."} size=13 color="#9aa39c" />
-          <Text#tour5code mono="true" size=12.5 color="#cfd6cf" text={"let data = [10, 20, 30, 40, 50];\nlet result = data |> normalize() |> mean();\nprint result;\n\nif (result > 0) { print \"طبيعي\"; }"} />
-          <Button#tour5btn label="نسخ الكود" onTap={toggle(copyPipe)} copyText={"let data = [10, 20, 30, 40, 50];\nlet result = data |> normalize() |> mean();\nprint result;\n\nif (result > 0) { print \"طبيعي\"; }"} bg="#141a15" color="#f4f6f3" />
-        </Column>
-      </Card>
-      <!-- ---- 6) حاويات NoSQL ---- -->
-      <Card#tour6 padding=16 bg="#10130f" radius=16 shadow="true">
-        <Column#tour6c gap=8>
-          <Text#tour6t text="6 — قاعدة بيانات NoSQL مدمجة" size=15 weight="700" color="#f4f6f3" />
-          <Text#tour6d text="Containers.Group وcontainer.doc يبنيان مستندات JSON حقيقية، تُستعلَم عبر queryDocs بلا أي خادم خارجي." size=13 color="#9aa39c" />
-          <Text#tour6code mono="true" size=12.5 color="#cfd6cf" text={"@Containers.Group=shop_db\n  @container.doc=users\n    document id=\"u1\" fields={ name: \"سارة\", city: \"الرياض\" };\n  .end/container.doc\n.end/Containers.Group\n\nprint queryDocs(\"users\", \"city\", \"الرياض\");"} />
-          <Button#tour6btn label="نسخ الكود" onTap={toggle(copyDb)} copyText={"@Containers.Group=shop_db\n  @container.doc=users\n    document id=\"u1\" fields={ name: \"سارة\", city: \"الرياض\" };\n  .end/container.doc\n.end/Containers.Group\n\nprint queryDocs(\"users\", \"city\", \"الرياض\");"} bg="#141a15" color="#f4f6f3" />
-        </Column>
-      </Card>
-      <!-- ---- 7) حلقة + make + حاويات ديناميكية ---- -->
-      <Card#tour7 padding=16 bg="#10130f" radius=16 shadow="true">
-        <Column#tour7c gap=8>
-          <Text#tour7t text="7 — for + make: إنشاء حاويات ديناميكياً وقت التشغيل" size=15 weight="700" color="#f4f6f3" />
-          <Text#tour7d text="داخل حلقة for عادية، make مرادفة تماماً لـ let، وcreate() (أو spawn) تبني حاوية جديدة بنوع/اسم مُحسوبَين في كل دورة — لا حاجة لمعرفة العدد أو الاسم وقت الكتابة." size=13 color="#9aa39c" />
-          <Text#tour7code mono="true" size=12.5 color="#cfd6cf" text={"for (make i = 0; i < 3; i = i + 1) {\n    make kind = \"table\";\n    if (i == 1) { kind = \"doc\"; }\n    if (i == 2) { kind = \"chatbot\"; }\n    make name = \"dyn_\" + i;\n\n    create(kind, name);\n    setField(name, \"index\", i);\n}\n\nshow containerNames();\nshow kindOf(\"dyn_1\");        // \"doc\"\nshow getField(\"dyn_1\", \"index\"); // 1"} />
-          <Button#tour7btn label="نسخ الكود" onTap={toggle(copyMake)} copyText={"for (make i = 0; i < 3; i = i + 1) {\n    make kind = \"table\";\n    if (i == 1) { kind = \"doc\"; }\n    if (i == 2) { kind = \"chatbot\"; }\n    make name = \"dyn_\" + i;\n\n    create(kind, name);\n    setField(name, \"index\", i);\n}\n\nshow containerNames();\nshow kindOf(\"dyn_1\");\nshow getField(\"dyn_1\", \"index\");"} bg="#141a15" color="#f4f6f3" />
-        </Column>
-      </Card>
-    </Column>
-    <!-- ------------------------------ معاينة حية (هذه الصفحة) ------------------------------ -->
-    <Column#code gap=14>
-      <Text#codeEyebrow text="معاينة حية" size=12 color="#22c55e" weight="700" />
-      <Text#codeTitle text="حلقة for متكاملة: تكتب، ثم تُقرأ، ثم تُعرض" size=21 weight="800" color="#f4f6f3" />
-      <Text#codeDesc text="نسخ حرفي لأعلى هذا الملف: حلقة for + make + create() تبني حاوية لكل مقتطف كود، وsetField() تكتب عنوانه فيها — كلاهما عبر rin::Interpreter::run() قبل أن يبني Indsin أي @view. تحتها مباشرة: نفس العناوين، لكن مقروءة رجوعاً من الحاويات عبر getField() لا من المصفوفة الأصلية — إثبات أن الكتابة والقراءة حقيقيتان وقت التشغيل." size=13 color="#9aa39c" />
-      <Card#codeCard padding=16 bg="#0d100d" radius=16 shadow="true">
-        <Column#codeCardCol gap=10>
-          <Text#codeSnippet mono="true" size=12.5 color="#cfd6cf" text={"let tourTitles = [ \"متغيّرات وطباعة\", ... ]; // سبعة عناوين حقيقية\n\nfor (let i = 0; i < len(tourTitles); i = i + 1) {\n    make kind = \"tourSnippet\";\n    make name = \"tourSnippet_\" + i;\n    create(kind, name);\n    setField(name, \"title\", tourTitles[i]);\n}\n\n// قراءة حيّة رجوعاً من الحاويات نفسها:\nlet liveTitles = \"\";\nfor (let i = 0; i < len(tourTitles); i = i + 1) {\n    liveTitles = liveTitles + (i + 1) + \") \"\n        + getField(\"tourSnippet_\" + i, \"title\");\n}"} />
-          <Button#copyBtn label="نسخ الكود" onTap={toggle(copyPage)} copyText={"for (let i = 0; i < len(tourTitles); i = i + 1) {\n    make kind = \"tourSnippet\";\n    make name = \"tourSnippet_\" + i;\n    create(kind, name);\n    setField(name, \"title\", tourTitles[i]);\n}\n\nlet liveTitles = \"\";\nfor (let i = 0; i < len(tourTitles); i = i + 1) {\n    liveTitles = liveTitles + (i + 1) + \") \" + getField(\"tourSnippet_\" + i, \"title\");\n}"} bg="#141a15" color="#f4f6f3" />
-          <Divider#codeOutDiv height=1 color="#1c231d" />
-          <Text#codeOutLabel text="↓ الخرج الفعلي وقت التشغيل (مقروء عبر getField، وليس نصاً ثابتاً)" size=11 color="#22c55e" weight="700" />
-          <Text#codeOut mono="true" size=12.5 color="#4ade80" text={liveTitlesStr} />
-        </Column>
-      </Card>
-    </Column>
-    <Divider#secDiv4 height=1 color="#1c231d" />
-    <!-- -------------------------------- Rin في المتصفح (RinHTML) -------------------------------- -->
-    <Column#rinhtml gap=14>
-      <Text#rinhtmlEyebrow text="ميزة" size=12 color="#22c55e" weight="700" />
-      <Text#rinhtmlTitle text="RinHTML: تشغيل .rin مباشرة داخل صفحة HTML" size=21 weight="800" color="#f4f6f3" />
-      <Text#rinhtmlDesc text={"HTML يبقى واجهة عرض فقط، وRin هو من ينفّذ المنطق — بلا جافاسكربت وسيط. عنصر <rin-app> يحمّل ملف .rin ويشغّله عبر نفس محرّك C++17 (WebAssembly)، وتوجيهات rin-click / rin-text تربط الحالة مباشرة بعناصر الصفحة."} size=13 color="#9aa39c" />
-      <Card#rinhtmlCard padding=16 bg="#0d100d" radius=16 shadow="true">
-        <Column#rinhtmlCardCol gap=10>
-          <Text#rinhtmlSnippet mono="true" size=12.5 color="#cfd6cf" text={"<rin-app src=\"main.rin\" allow=\"dom\"></rin-app>\n\n<button rin-click=\"add()\">+1</button>\n<div rin-text=\"count\"></div>\n\n// main.rin\nlet count = 0;\nfun add() { count = count + 1; }"} />
-          <Button#copyBtn2 label="نسخ الكود" onTap={toggle(copyHtml)} copyText={"<rin-app src=\"main.rin\" allow=\"dom\"></rin-app>\n\n<button rin-click=\"add()\">+1</button>\n<div rin-text=\"count\"></div>\n\n// main.rin\nlet count = 0;\nfun add() { count = count + 1; }"} bg="#141a15" color="#f4f6f3" />
-        </Column>
-      </Card>
-    </Column>
-    <Divider#secDiv5 height=1 color="#1c231d" />
-    <!-- ------------------------------ البدء السريع ------------------------------- -->
-    <Column#quickstart gap=14>
-      <Text#qsEyebrow text="ابدأ الآن" size=12 color="#22c55e" weight="700" />
-      <Text#qsTitle text="أربع خطوات لتشغيل Rin" size=21 weight="800" color="#f4f6f3" />
-      <Card#s1 padding=16 bg="#10130f" radius=16 shadow="true">
-        <Column#s1c gap=6>
-          <Text#s1t text="1 — استنسخ المستودع" size=15 weight="700" color="#f4f6f3" />
-          <Text#s1d text="احصل على الشيفرة المصدرية الكاملة للغة والمفسّر." size=13 color="#9aa39c" />
-          <Text#s1code mono="true" size=12 color="#4ade80" text="git clone https://github.com/dlof-lib/rinlang.git" />
-        </Column>
-      </Card>
-      <Card#s2 padding=16 bg="#10130f" radius=16 shadow="true">
-        <Column#s2c gap=6>
-          <Text#s2t text="2 — ابنِ المفسّر الرسمي" size=15 weight="700" color="#f4f6f3" />
-          <Text#s2d text="بناء واحد بسيط باستخدام g++ لتفعيل rin_run." size=13 color="#9aa39c" />
-          <Text#s2code mono="true" size=12 color="#4ade80" text={"g++ -O2 -std=c++17 -o rin_run tools/rin_run.cpp \\n  app/src/main/cpp/rin_lexer.cpp \\n  app/src/main/cpp/rin_parser.cpp \\n  app/src/main/cpp/rin_interpreter.cpp \\n  -I app/src/main/cpp"} />
-        </Column>
-      </Card>
-      <Card#s3 padding=16 bg="#10130f" radius=16 shadow="true">
-        <Column#s3c gap=6>
-          <Text#s3t text="3 — شغّل أي ملف Rin" size=15 weight="700" color="#f4f6f3" />
-          <Text#s3d text="نفّذ برنامجك مباشرة عبر سطر الأوامر." size=13 color="#9aa39c" />
-          <Text#s3code mono="true" size=12 color="#4ade80" text="./rin_run your_program.rin" />
-        </Column>
-      </Card>
-      <Card#s4 padding=16 bg="#10130f" radius=16 shadow="true">
-        <Column#s4c gap=6>
-          <Text#s4t text="4 — جرّب الأمثلة الجاهزة" size=15 weight="700" color="#f4f6f3" />
-          <Text#s4d text="مجلد examples/ فيه عشرات ملفات .rin الحقيقية: حاويات، NoSQL، Indsintime، دردشة." size=13 color="#9aa39c" />
-          <Text#s4code mono="true" size=12 color="#4ade80" text="./rin_run examples/container_indsin_api_demo.rin" />
-        </Column>
-      </Card>
-    </Column>
-    <Divider#secDiv6 height=1 color="#1c231d" />
-    <!-- ------------------------------- المنظومة ---------------------------------- -->
-    <Column#ecosystem gap=14>
-      <Text#ecoEyebrow text="منظومة اللغة" size=12 color="#22c55e" weight="700" />
-      <Text#ecoTitle text="مبنية كمنصّة كاملة، لا لغة معزولة" size=21 weight="800" color="#f4f6f3" />
-      <Grid#ecoGrid columns=2 gap=12>
-        <Card#e1 padding=14 bg="#10130f" radius=14 shadow="true">
-          <Text#e1t text="🧩 نظام مكتبات @import + حزم CLC مضغوطة (.rcl)" size=13 color="#cfd6cf" />
+    <Divider#d1 height=1 color="#17261f" />
+    <Column#why gap=14 align="stretch">
+      <Text#whyEy text="٠٢ — لماذا Rin" size=12 color="#2de08f" weight="800" />
+      <Text#whyTitle text="لغة صغيرة، لكنها كاملة" size=25 color="#edf5f0" weight="900" />
+      <Text#whyDesc text="كل ما تحتاجه لبناء أداة أو واجهة أو خدمة صغيرة، دون طبقات من الإطارات والإعدادات." size=13.5 color="#8fa398" />
+      <Grid#whyGrid columns=2 gap=12>
+        <Card#f1 padding=16 bg="#0b1210" radius=16 shadow="true">
+          <Column#f1c gap=8 align="stretch">
+            <Text#f1i text="◇" size=22 color="#2de08f" weight="900" />
+            <Text#f1t text="صياغة واضحة" size=15 color="#edf5f0" weight="800" />
+            <Text#f1d text={"متغيّرات ودوال وenum وmatch وأنابيب |> تُقرأ كما تُكتب."} size=12.5 color="#8fa398" />
+          </Column>
         </Card>
-        <Card#e2 padding=14 bg="#10130f" radius=14 shadow="true">
-          <Text#e2t text="🛍️ متجر حزم داخل التطبيق (RinPM)" size=13 color="#cfd6cf" />
+        <Card#f2 padding=16 bg="#0b1210" radius=16 shadow="true">
+          <Column#f2c gap=8 align="stretch">
+            <Text#f2i text="◈" size=22 color="#2de08f" weight="900" />
+            <Text#f2t text="محرّك واحد" size=15 color="#edf5f0" weight="800" />
+            <Text#f2d text="النتيجة نفسها على CLI وأندرويد والمتصفح، بلا نسخ مكرَّرة." size=12.5 color="#8fa398" />
+          </Column>
         </Card>
-        <Card#e3 padding=14 bg="#10130f" radius=14 shadow="true">
-          <Text#e3t text="🗄️ حاويات بيانات NoSQL (container.doc)" size=13 color="#cfd6cf" />
+        <Card#f3 padding=16 bg="#0b1210" radius=16 shadow="true">
+          <Column#f3c gap=8 align="stretch">
+            <Text#f3i text="▣" size=22 color="#2de08f" weight="900" />
+            <Text#f3t text="واجهات مدمجة" size=15 color="#edf5f0" weight="800" />
+            <Text#f3d text="لغة Indsin ترسم الواجهات وتعرضها بمعاينة حيّة." size=12.5 color="#8fa398" />
+          </Column>
         </Card>
-        <Card#e4 padding=14 bg="#10130f" radius=14 shadow="true">
-          <Text#e4t text="🌐 container.api وroute — محاكاة أو طلب شبكة حقيقي" size=13 color="#cfd6cf" />
+        <Card#f4 padding=16 bg="#0b1210" radius=16 shadow="true">
+          <Column#f4c gap=8 align="stretch">
+            <Text#f4i text="▤" size=22 color="#2de08f" weight="900" />
+            <Text#f4t text="حاويات بيانات" size=15 color="#edf5f0" weight="800" />
+            <Text#f4d text="قواعد NoSQL وSQL مدمجة بصياغة @container." size=12.5 color="#8fa398" />
+          </Column>
         </Card>
-        <Card#e5 padding=14 bg="#10130f" radius=14 shadow="true">
-          <Text#e5t text="🧵 محرّك واجهات Indsintime (هذه الصفحة نفسها)" size=13 color="#cfd6cf" />
+        <Card#f5 padding=16 bg="#0b1210" radius=16 shadow="true">
+          <Column#f5c gap=8 align="stretch">
+            <Text#f5i text="❖" size=22 color="#2de08f" weight="900" />
+            <Text#f5t text="منظومة جاهزة" size=15 color="#edf5f0" weight="800" />
+            <Text#f5d text="أكثر من 80 مكتبة رسمية ومدير حزم ومتجر على الويب." size=12.5 color="#8fa398" />
+          </Column>
         </Card>
-        <Card#e6 padding=14 bg="#10130f" radius=14 shadow="true">
-          <Text#e6t text="🌍 RinHTML — تشغيل .rin كمنطق صفحة HTML مباشرة" size=13 color="#cfd6cf" />
-        </Card>
-        <Card#e7 padding=14 bg="#10130f" radius=14 shadow="true">
-          <Text#e7t text="⚙️ بناء ونشر تلقائي عبر GitHub Actions (native + WASM + هذه الصفحة)" size=13 color="#cfd6cf" />
-        </Card>
-        <Card#e8 padding=14 bg="#10130f" radius=14 shadow="true">
-          <Text#e8t text="🖥️ إضافة Visual Studio لتلوين الصياغة" size=13 color="#cfd6cf" />
-        </Card>
-        <Card#e9 padding=14 bg="#10130f" radius=14 shadow="true">
-          <Text#e9t text="🔤 ربط مع C / Node.js / Python (bindings/)" size=13 color="#cfd6cf" />
-        </Card>
-        <Card#e10 padding=14 bg="#10130f" radius=14 shadow="true">
-          <Text#e10t text="🩺 نظام تشخيصات أخطاء برموز ومواقع دقيقة (diagnostics/)" size=13 color="#cfd6cf" />
+        <Card#f6 padding=16 bg="#0b1210" radius=16 shadow="true">
+          <Column#f6c gap=8 align="stretch">
+            <Text#f6i text="⇄" size=22 color="#2de08f" weight="900" />
+            <Text#f6t text="ربط خارجي" size=15 color="#edf5f0" weight="800" />
+            <Text#f6d text="جسور مع Python وNode.js وC عند الحاجة." size=12.5 color="#8fa398" />
+          </Column>
         </Card>
       </Grid>
     </Column>
-    <Divider#secDiv7 height=1 color="#1c231d" />
-    <!-- ------------------------------ لماذا لا لغة أخرى؟ ------------------------------ -->
-    <Column#compare gap=14>
-      <Text#compareEyebrow text="لماذا Rin تحديداً" size=12 color="#22c55e" weight="700" />
-      <Text#compareTitle text="لماذا لا Python أو JavaScript فقط؟" size=21 weight="800" color="#f4f6f3" />
-      <Text#compareDesc text="Rin لا تنافس هذه اللغات على العمومية — هي تجمع أربعة أشياء نادراً ما تجدها معاً في مكان واحد:" size=13 color="#9aa39c" />
-      <Card#c1 padding=16 bg="#10130f" radius=16 shadow="true">
-        <Column#c1c gap=4>
-          <Text#c1t text="⚡ محرّك واحد، لا ثلاث لغات مختلفة" size=14 weight="700" color="#f4f6f3" />
-          <Text#c1d text="نفس rin_lexer/rin_parser/rin_interpreter يعمل حرفياً على CLI وAndroid وWeb — لا حاجة لكتابة نفس المنطق ثلاث مرات بثلاث لغات مختلفة." size=13 color="#9aa39c" />
+    <Divider#d2 height=1 color="#17261f" />
+    <Column#platforms gap=14 align="stretch">
+      <Text#platEy text="٠٣ — ثلاث منصّات" size=12 color="#2de08f" weight="800" />
+      <Text#platTitle text="اختر مكانك، الكود لا يتغيّر" size=25 color="#edf5f0" weight="900" />
+      <Card#pCli padding=18 bg="#0b1210" radius=18 shadow="true">
+        <Column#pClic gap=8 align="stretch">
+          <Text#pCliT text="سطر الأوامر" size=16 color="#edf5f0" weight="800" />
+          <Text#pCliD text="Linux وmacOS وWindows. يلزم cmake وg++ وzlib للبناء من المصدر." size=13 color="#8fa398" />
+          <Card#pCliCode padding=14 bg="#070d0b" radius=14>
+            <Column#pCliCodec gap=10 align="stretch">
+              <Text#pCliCodesrc text={"git clone https://github.com/dlof-lib/rinlang.git\ncd rinlang/cli/linux && ./build.sh"} size=12.5 color="#cfe9da" mono="true" />
+              <Button#pCliCodecp label="نسخ الكود" bg="#111b17" color="#edf5f0" weight="700" copyText={"git clone https://github.com/dlof-lib/rinlang.git\ncd rinlang/cli/linux && ./build.sh"} onTap={toggle(copyTick)} />
+            </Column>
+          </Card>
+          <Card#pCliCmd padding=14 bg="#070d0b" radius=14>
+            <Column#pCliCmdc gap=10 align="stretch">
+              <Text#pCliCmdsrc text={"rin -c 'print 1 + 1;'\nrin run hello.rin\nrin check hello.rin\nrin new myproj\nrin doctor"} size=12.5 color="#cfe9da" mono="true" />
+              <Button#pCliCmdcp label="نسخ الكود" bg="#111b17" color="#edf5f0" weight="700" copyText={"rin -c 'print 1 + 1;'\nrin run hello.rin\nrin check hello.rin\nrin new myproj\nrin doctor"} onTap={toggle(copyTick)} />
+            </Column>
+          </Card>
         </Column>
       </Card>
-      <Card#c2 padding=16 bg="#10130f" radius=16 shadow="true">
-        <Column#c2c gap=4>
-          <Text#c2t text="🗄️ بيانات وواجهة من نفس اللغة" size=14 weight="700" color="#f4f6f3" />
-          <Text#c2d text="حاويات NoSQL وأنابيب إحصاء ومحرّك واجهات Indsintime كلها امتدادات أصيلة للغة نفسها، لا مكتبات خارجية منفصلة." size=13 color="#9aa39c" />
+      <Card#pAnd padding=18 bg="#0b1210" radius=18 shadow="true">
+        <Column#pAndc gap=8 align="stretch">
+          <Text#pAndT text="RinStudio على أندرويد" size=16 color="#edf5f0" weight="800" />
+          <Text#pAndD text="بيئة تطوير كاملة على الهاتف: محرّر بإكمال ذكي، تشغيل، معاينة حيّة لـ Indsin، ونشر الحزم عبر RinPM." size=13 color="#8fa398" />
+          <Button#pAndB label="دليل أندرويد" bg="#111b17" color="#edf5f0" weight="700" url="https://github.com/dlof-lib/rinlang/blob/main/docs/android.md" />
         </Column>
       </Card>
-      <Card#c3 padding=16 bg="#10130f" radius=16 shadow="true">
-        <Column#c3c gap=4>
-          <Text#c3t text="🪶 بلا أي إطار خارجي (Zero-dependency)" size=14 weight="700" color="#f4f6f3" />
-          <Text#c3d text="المفسّر يبنى بـ g++ فقط، بلا npm ولا pip ولا مدير حزم إلزامي — ملف واحد وأمر بناء واحد يكفيان." size=13 color="#9aa39c" />
-        </Column>
-      </Card>
-      <Card#c4 padding=16 bg="#10130f" radius=16 shadow="true">
-        <Column#c4c gap=4>
-          <Text#c4t text="🗣️ صياغة قابلة للتخصيص للمبتدئين" size=14 weight="700" color="#f4f6f3" />
-          <Text#c4d text="when/otherwise إلى جانب if/else — نفس اللغة، بابان مختلفان لدخولها، بلا تجزئة في السلوك أو الأداء." size=13 color="#9aa39c" />
-        </Column>
-      </Card>
-    </Column>
-    <Divider#secDiv8 height=1 color="#1c231d" />
-    <!-- ------------------------------ الأسئلة الشائعة ------------------------------ -->
-    <Column#faq gap=14>
-      <Text#faqEyebrow text="أسئلة شائعة" size=12 color="#22c55e" weight="700" />
-      <Text#faqTitle text="قبل ما تبدأ" size=21 weight="800" color="#f4f6f3" />
-      <Card#q1 padding=16 bg="#10130f" radius=16 shadow="true">
-        <Column#q1c gap=4>
-          <Text#q1q text="هل Rin مجرد DSL محدود؟" size=14 weight="700" color="#f4f6f3" />
-          <Text#q1a text="لا. لديها متغيرات وشروط وحلقات ودوال ومصفوفات وقواميس كأي لغة عامة، بالإضافة إلى امتدادات حاويات البيانات وIndsintime." size=13 color="#9aa39c" />
-        </Column>
-      </Card>
-      <Card#q2 padding=16 bg="#10130f" radius=16 shadow="true">
-        <Column#q2c gap=4>
-          <Text#q2q text="أين تعمل؟" size=14 weight="700" color="#f4f6f3" />
-          <Text#q2a text="أي جهاز فيه g++ (سطر أوامر Linux/macOS/Windows)، داخل تطبيق أندرويد عبر JNI، وداخل المتصفح عبر WebAssembly — نفس محرك اللغة بلا تعديل." size=13 color="#9aa39c" />
-        </Column>
-      </Card>
-      <Card#q3 padding=16 bg="#10130f" radius=16 shadow="true">
-        <Column#q3c gap=4>
-          <Text#q3q text="ما الرخصة؟" size=14 weight="700" color="#f4f6f3" />
-          <Text#q3a text="MIT — الشيفرة المصدرية كاملة ومفتوحة على GitHub، يمكنك استخدامها وتعديلها بحرية." size=13 color="#9aa39c" />
-        </Column>
-      </Card>
-      <Card#q4 padding=16 bg="#10130f" radius=16 shadow="true">
-        <Column#q4c gap=4>
-          <Text#q4q text="كيف أشغّل Rin داخل موقع HTML بدون جافاسكربت؟" size=14 weight="700" color="#f4f6f3" />
-          <Text#q4a text={"عبر RinHTML: أضف <rin-app src=\"file.rin\"> وربطها بعناصر rin-click/rin-text — انظر قسم 'Rin في المتصفح' أعلاه."} size=13 color="#9aa39c" />
-        </Column>
-      </Card>
-      <Card#q5 padding=16 bg="#10130f" radius=16 shadow="true">
-        <Column#q5c gap=4>
-          <Text#q5q text="هل توجد حزم جاهزة أستخدمها مباشرة؟" size=14 weight="700" color="#f4f6f3" />
-          <Text#q5a text="نعم عبر @import للمكتبات القياسية (مثل math)، وعبر RinPM كمتجر حزم داخل تطبيق أندرويد، بالإضافة إلى حزم CLC مضغوطة (.rcl) قابلة للاستيراد من ملف أو مسار." size=13 color="#9aa39c" />
-        </Column>
-      </Card>
-      <Card#q6 padding=16 bg="#10130f" radius=16 shadow="true">
-        <Column#q6c gap=4>
-          <Text#q6q text="هل يمكنني المساهمة في المشروع؟" size=14 weight="700" color="#f4f6f3" />
-          <Text#q6a text="بالتأكيد — المستودع مفتوح على GitHub، ودليل المساهمة موجود في CONTRIBUTING.md مع قواعد سلوك واضحة في CODE_OF_CONDUCT.md." size=13 color="#9aa39c" />
+      <Card#pWeb padding=18 bg="#0b1210" radius=18 shadow="true">
+        <Column#pWebc gap=8 align="stretch">
+          <Text#pWebT text="المتصفح عبر WebAssembly" size=16 color="#edf5f0" weight="800" />
+          <Text#pWebD text="الموقع الذي تتصفّحه الآن يعمل بنفس المحرّك مُصرَّفاً إلى WASM. وبـ RinHTML تشغّل ملفات .rin داخل أي صفحة." size=13 color="#8fa398" />
+          <Button#pWebB label="جرّب الـ Playground" bg="#2de08f" color="#04110b" weight="800" url="https://dlof-lib.github.io/rinlang/" />
         </Column>
       </Card>
     </Column>
-    <Divider#secDiv9 height=1 color="#1c231d" />
-    <!-- ============================== التعليم الرسمي ============================== -->
-    <!-- منهج تعليمي مدمج في الصفحة نفسها، مبني على ملفات docs الرسمية الحالية. -->
-    <!-- الترتيب مقصود: من أول سطر إلى المشاريع والحاويات وبيئة التشغيل. -->
-    <Column#learn gap=16 padding=22 bg="#0b0f0c" radius=20 shadow="true">
-      <Text#learnEyebrow text="التعليم الرسمي · Rin Academy" size=12 color="#22c55e" weight="800" />
-      <Text#learnTitle text="تعلّم Rin و Indsin من الصفر — منهج كامل" size=25 weight="900" color="#f4f6f3" />
-      <Text#learnIntro text="هذا المنهج مكتوب ليأخذك من الصفر تماماً: من أول print إلى بناء واجهات Indsin وتشغيل برامج حقيقية على CLI وأندرويد والمتصفح. كل درس يحتوي شرحاً، أمثلة جاهزة للنسخ، ونصائح عملية. اتبع الترتيب ولا تتخطَّ الدروس الأولى." size=14 color="#9aa39c" />
-      <Row#learnActions gap=10>
-        <Button#learnStart label="ابدأ الدرس 1 — من الصفر" url="#learn-1" bg="#22c55e" color="#0a0c0a" weight="800" />
-        <Button#learnIndsin label="مسار Indsin" url="#learn-6" bg="#141a15" color="#f4f6f3" />
-        <Button#learnRef label="المرجع الكامل" url="https://github.com/dlof-lib/rinlang/tree/main/docs" bg="#141a15" color="#f4f6f3" />
-      </Row>
-      <Column#lessonLinks gap=10 padding=14 bg="#0f140f" radius=14>
-        <Text#lessonLinksTitle text="خريطة المنهج الكامل (من الصفر)" size=15 weight="850" color="#f4f6f3" />
-        <Wrap#lessonLinksWrap gap=7>
-          <Button#lessonLink1 label="01 البداية المطلقة" url="#learn-1" bg="#141a15" color="#f4f6f3" />
-          <Button#lessonLink2 label="02 المتغيرات والأنواع" url="#learn-2" bg="#141a15" color="#f4f6f3" />
-          <Button#lessonLink3 label="03 الشروط" url="#learn-3" bg="#141a15" color="#f4f6f3" />
-          <Button#lessonLink4 label="04 الحلقات" url="#learn-4" bg="#141a15" color="#f4f6f3" />
-          <Button#lessonLink5 label="05 الدوال" url="#learn-5" bg="#141a15" color="#f4f6f3" />
-          <Button#lessonLink6 label="06 Indsin واجهات" url="#learn-6" bg="#141a15" color="#f4f6f3" />
-          <Button#lessonLink7 label="07 الحاويات NoSQL" url="#learn-7" bg="#141a15" color="#f4f6f3" />
-          <Button#lessonLink8 label="08 المكتبات" url="#learn-8" bg="#141a15" color="#f4f6f3" />
-          <Button#lessonLink9 label="09 الأخطاء" url="#learn-9" bg="#141a15" color="#f4f6f3" />
-          <Button#lessonLink10 label="10 مشاريع" url="#learn-10" bg="#141a15" color="#f4f6f3" />
-          <Button#lessonLink11 label="11 الويب و WASM" url="#learn-11" bg="#141a15" color="#f4f6f3" />
-          <Button#lessonLink12 label="12 التطبيق الكامل" url="#learn-12" bg="#141a15" color="#f4f6f3" />
-        </Wrap>
+    <Divider#d3 height=1 color="#17261f" />
+    <Column#tour gap=14 align="stretch">
+      <Text#tourEy text="٠٤ — جولة في اللغة" size=12 color="#2de08f" weight="800" />
+      <Text#tourTitle text="خمس لقطات، كود حقيقي" size=25 color="#edf5f0" weight="900" />
+      <Text#tourDesc text="المقتطفات مأخوذة من التوثيق الرسمي. اضغط تبويباً لتبديل اللقطة — التبديل نفسه مكتوب بإجراءات Indsin (show/hide/seq)." size=13.5 color="#8fa398" />
+      <Wrap#tourTabs gap=8>
+        <Button#tbBasics label="الأساسيات" bg="#111b17" color="#edf5f0" weight="700" onTap={seq(show(tabBasics), hide(tabFlow), hide(tabData), hide(tabDb), hide(tabUi))} />
+        <Button#tbFlow label="التحكّم والدوال" bg="#111b17" color="#edf5f0" weight="700" onTap={seq(hide(tabBasics), show(tabFlow), hide(tabData), hide(tabDb), hide(tabUi))} />
+        <Button#tbData label="البيانات والأنابيب" bg="#111b17" color="#edf5f0" weight="700" onTap={seq(hide(tabBasics), hide(tabFlow), show(tabData), hide(tabDb), hide(tabUi))} />
+        <Button#tbDb label="الحاويات" bg="#111b17" color="#edf5f0" weight="700" onTap={seq(hide(tabBasics), hide(tabFlow), hide(tabData), show(tabDb), hide(tabUi))} />
+        <Button#tbUi label="الواجهات" bg="#111b17" color="#edf5f0" weight="700" onTap={seq(hide(tabBasics), hide(tabFlow), hide(tabData), hide(tabDb), show(tabUi))} />
+      </Wrap>
+      <Column#paneBasics gap=10 visible={tabBasics} align="stretch">
+        <Text#paneBasicst text="متغيّرات وطباعة" size=16 color="#edf5f0" weight="800" />
+        <Text#paneBasicsd text="let لأي قيمة، وprint للإخراج." size=13 color="#8fa398" />
+        <Card#paneBasicscode padding=14 bg="#070d0b" radius=14>
+          <Column#paneBasicscodec gap=10 align="stretch">
+            <Text#paneBasicscodesrc text={"let name = \"Rin\";\nlet x = 10;\n\nprint \"Hello, \" + name + \"!\";\nprint x * 2;"} size=12.5 color="#cfe9da" mono="true" />
+            <Button#paneBasicscodecp label="نسخ الكود" bg="#111b17" color="#edf5f0" weight="700" copyText={"let name = \"Rin\";\nlet x = 10;\n\nprint \"Hello, \" + name + \"!\";\nprint x * 2;"} onTap={toggle(copyTick)} />
+          </Column>
+        </Card>
       </Column>
-      <Card#learnMap padding=14 bg="#101510" radius=14 shadow="true">
-        <Column#learnMapCol gap=5>
-          <Text#learnMapTitle text="لماذا هذا المنهج؟" size=14 weight="800" color="#f4f6f3" />
-          <Text#learnMapText text="Rin لغة واحدة تعمل على سطر الأوامر + أندرويد + المتصفح بنفس المحرك. تتعلم مرة واحدة وتكتب برامج حقيقية. Indsin هو محرك الواجهات الأصلي للغة — نفس الصياغة التي تبني هذه الصفحة نفسها." size=13 color="#9aa39c" />
-        </Column>
-      </Card>
-      <!-- ------------------------------ الدرس 1 ------------------------------ -->
-      <Card#learn1 id="learn-1" padding=18 bg="#10130f" radius=16 shadow="true">
-        <Column#learn1c gap=10>
-          <Text#learn1n text="01 — البداية المطلقة: أول برنامج Rin" size=18 weight="900" color="#f4f6f3" />
-          <Text#learn1why text="لماذا هذا الدرس؟" size=14 weight="700" color="#22c55e" />
-          <Text#learn1whyT text="قبل أي شيء متقدم، تحتاج أن تفهم كيف تكتب جملة واحدة وتشغّلها. كل برنامج Rin يبدأ من هنا." size=13 color="#9aa39c" />
-          <Text#learn1exTitle text="القاعدة الأولى" size=14 weight="700" color="#f4f6f3" />
-          <Text#learn1exT text="كل عبارة تنتهي بفاصلة منقوطة ;  ·  print تطبع أي قيمة  ·  let يعرّف متغيّراً جديداً  ·  التعليقات تبدأ بـ //" size=13 color="#9aa39c" />
-          <Text#learn1codeTitle text="مثال كامل جاهز للنسخ" size=14 weight="700" color="#f4f6f3" />
-          <Text#learn1code mono="true" size=13 color="#cfd6cf" text={"// أول برنامج Rin\nprint \"مرحباً يا عالم!\";\n\nlet name = \"Rin\";\nlet year = 2026;\n\nprint \"اللغة: \" + name;\nprint \"السنة: \" + year;\nprint 3 + 4 * 2;   // أولوية العمليات"} />
-          <Text#learn1runTitle text="كيف تشغّله؟" size=14 weight="700" color="#f4f6f3" />
-          <Text#learn1run mono="true" size=12.5 color="#79d99a" text={"# احفظ الكود في ملف hello.rin ثم:\nrin run hello.rin\n\n# أو من داخل مجلد المشروع:\n./rin-linux-x64/rin run hello.rin"} />
-          <Text#learn1tipsTitle text="نصائح مهمة للمبتدئين" size=14 weight="700" color="#f4f6f3" />
-          <Text#learn1tips text={"• النصوص بين علامتي اقتباس مزدوجة \"...\"\n• الأرقام بدون اقتباس\n• + يربط النصوص أو يجمع الأرقام حسب السياق\n• الخطأ الشائع: نسيان الفاصلة المنقوطة في نهاية السطر"} size=13 color="#9aa39c" />
-          <Row#learn1btns gap=8>
-            <Button#learn1more label="دليل البداية الرسمي" url="https://github.com/dlof-lib/rinlang/blob/main/docs/getting-started.md" bg="#141a15" color="#f4f6f3" />
-            <Button#learn1next label="الدرس التالي →" url="#learn-2" bg="#22c55e" color="#0a0c0a" weight="700" />
-          </Row>
-        </Column>
-      </Card>
-      <!-- ------------------------------ الدرس 2 ------------------------------ -->
-      <Card#learn2 id="learn-2" padding=18 bg="#10130f" radius=16 shadow="true">
-        <Column#learn2c gap=10>
-          <Text#learn2n text="02 — المتغيرات والأنواع والقيم" size=18 weight="900" color="#f4f6f3" />
-          <Text#learn2why text="لماذا؟" size=14 weight="700" color="#22c55e" />
-          <Text#learn2whyT text="كل برنامج يحتاج تخزين قيم. في Rin المتغير يُعرَّف بـ let فقط. الأنواع اختيارية لكنها مفيدة للقراءة." size=13 color="#9aa39c" />
-          <Text#learn2codeTitle text="أمثلة أساسية" size=14 weight="700" color="#f4f6f3" />
-          <Text#learn2code mono="true" size=13 color="#cfd6cf" text={"let x = 10;                    // رقم\nlet name = \"Rin\";              // نص\nlet ok = true;                 // منطقي\nlet empty = nil;               // قيمة فارغة\n\nlet score: Number = 95;        // نوع معلَن اختياري\nlet items = [1, 2, 3];         // مصفوفة\nlet user = {\"id\": 1, \"name\": \"Ali\"};  // قاموس\n\nprint type(x);                 // number\nprint len(items);              // 3\nprint user[\"name\"];"} />
-          <Text#learn2tips text={"• let يعرّف متغيّراً جديداً في النطاق الحالي\n• يمكن إعادة الإسناد لاحقاً: x = x + 1;\n• المصفوفات والقواميس قابلة للتعديل بالفهرسة\n• type() يُرجع اسم النوع وقت التشغيل بحروف صغيرة"} size=13 color="#9aa39c" />
-          <Row#learn2btns gap=8>
-            <Button#learn2more label="توثيق المتغيرات" url="https://github.com/dlof-lib/rinlang/blob/main/docs/variables.md" bg="#141a15" color="#f4f6f3" />
-            <Button#learn2next label="الدرس التالي →" url="#learn-3" bg="#22c55e" color="#0a0c0a" weight="700" />
-          </Row>
-        </Column>
-      </Card>
-      <!-- ------------------------------ الدرس 3 ------------------------------ -->
-      <Card#learn3 id="learn-3" padding=18 bg="#10130f" radius=16 shadow="true">
-        <Column#learn3c gap=10>
-          <Text#learn3n text="03 — الشروط: if و when" size=18 weight="900" color="#f4f6f3" />
-          <Text#learn3why text="لماذا؟" size=14 weight="700" color="#22c55e" />
-          <Text#learn3whyT text="البرامج تحتاج قرارات. Rin توفر if/else الكلاسيكية وwhen/otherwise بصياغة إنجليزية طبيعية — نفس المعنى تماماً." size=13 color="#9aa39c" />
-          <Text#learn3codeTitle text="مثالان متكافئان" size=14 weight="700" color="#f4f6f3" />
-          <Text#learn3code mono="true" size=13 color="#cfd6cf" text={"let score = 87;\n\n// الطريقة الكلاسيكية\nif (score >= 90) {\n    print \"ممتاز\";\n} else if (score >= 70) {\n    print \"جيد\";\n} else {\n    print \"يحتاج تحسين\";\n}\n\n// الطريقة الإنجليزية الطبيعية\nwhen (score >= 90) {\n    print \"ممتاز\";\n} otherwise {\n    print \"ليس ممتازاً بعد\";\n}"} />
-          <Text#learn3tips text={"• الأقواس حول الشرط إلزامية في if و when\n• else if و otherwise تعملان بشكل طبيعي\n• يمكن استخدام and / or / not داخل الشروط\n• صيغ مختصرة مثل =if=(cond) { ... } موجودة أيضاً"} size=13 color="#9aa39c" />
-          <Row#learn3btns gap=8>
-            <Button#learn3more label="توثيق التحكم" url="https://github.com/dlof-lib/rinlang/blob/main/docs/control-flow.md" bg="#141a15" color="#f4f6f3" />
-            <Button#learn3next label="الدرس التالي →" url="#learn-4" bg="#22c55e" color="#0a0c0a" weight="700" />
-          </Row>
-        </Column>
-      </Card>
-      <!-- ------------------------------ الدرس 4 ------------------------------ -->
-      <Card#learn4 id="learn-4" padding=18 bg="#10130f" radius=16 shadow="true">
-        <Column#learn4c gap=10>
-          <Text#learn4n text="04 — الحلقات: for و while" size=18 weight="900" color="#f4f6f3" />
-          <Text#learn4why text="لماذا؟" size=14 weight="700" color="#22c55e" />
-          <Text#learn4whyT text="تكرار العمل هو أساس معظم البرامج. Rin تدعم for التقليدية و for...in على المصفوفات والقواميس و while." size=13 color="#9aa39c" />
-          <Text#learn4codeTitle text="أمثلة عملية" size=14 weight="700" color="#f4f6f3" />
-          <Text#learn4code mono="true" size=13 color="#cfd6cf" text={"// for تقليدية\nfor (let i = 0; i < 5; i = i + 1) {\n    print i;\n}\n\n// for...in على مصفوفة\nlet names = [\"أحمد\", \"سارة\", \"علي\"];\nfor (let n in names) {\n    print \"مرحباً \" + n;\n}\n\n// while\nlet x = 3;\nwhile (x > 0) {\n    print x;\n    x = x - 1;\n}"} />
-          <Text#learn4tips text={"• break يخرج من الحلقة فوراً\n• continue يتخطى باقي الدورة الحالية\n• for...in يعمل على المصفوفات والقواميس\n• تجنّب الحلقات اللانهائية بتغيير شرط واضح"} size=13 color="#9aa39c" />
-          <Row#learn4btns gap=8>
-            <Button#learn4more label="توثيق التحكم" url="https://github.com/dlof-lib/rinlang/blob/main/docs/control-flow.md" bg="#141a15" color="#f4f6f3" />
-            <Button#learn4next label="الدرس التالي →" url="#learn-5" bg="#22c55e" color="#0a0c0a" weight="700" />
-          </Row>
-        </Column>
-      </Card>
-      <!-- ------------------------------ الدرس 5 ------------------------------ -->
-      <Card#learn5 id="learn-5" padding=18 bg="#10130f" radius=16 shadow="true">
-        <Column#learn5c gap=10>
-          <Text#learn5n text="05 — الدوال: fun وإعادة الاستخدام" size=18 weight="900" color="#f4f6f3" />
-          <Text#learn5why text="لماذا؟" size=14 weight="700" color="#22c55e" />
-          <Text#learn5whyT text="الدوال تحوّل التكرار إلى أدوات قابلة للاستدعاء. في Rin الدوال قيم من الدرجة الأولى ويمكن تمريرها وتخزينها." size=13 color="#9aa39c" />
-          <Text#learn5codeTitle text="تعريف واستدعاء" size=14 weight="700" color="#f4f6f3" />
-          <Text#learn5code mono="true" size=13 color="#cfd6cf" text={"fun greet(name) {\n    return \"مرحباً، \" + name + \"!\";\n}\n\nprint greet(\"Rin\");\n\n// دالة بدون return تُرجع nil\nfun log(msg) {\n    print \"[LOG] \" + msg;\n}\n\n// دوال كقيم (lambda)\nlet square = fun(x) { return x * x; };\nprint square(5);   // 25\n\n// تكرار ذاتي\nfun fact(n) {\n    if (n <= 1) { return 1; }\n    return n * fact(n - 1);\n}\nprint fact(5);     // 120"} />
-          <Text#learn5tips text={"• return يخرج من الدالة ويعيد قيمة\n• بدون return القيمة تكون nil\n• الأنواع الاختيارية: fun add(a: Number, b: Number): Number { ... }\n• يمكن تعريف دوال داخل class كطرق (methods)"} size=13 color="#9aa39c" />
-          <Row#learn5btns gap=8>
-            <Button#learn5more label="توثيق الدوال" url="https://github.com/dlof-lib/rinlang/blob/main/docs/functions.md" bg="#141a15" color="#f4f6f3" />
-            <Button#learn5next label="الدرس التالي →" url="#learn-6" bg="#22c55e" color="#0a0c0a" weight="700" />
-          </Row>
-        </Column>
-      </Card>
-      <!-- ------------------------------ الدرس 6 ------------------------------ -->
-      <Card#learn6 id="learn-6" padding=18 bg="#10130f" radius=16 shadow="true">
-        <Column#learn6c gap=10>
-          <Text#learn6n text="06 — Indsin: بناء واجهات من داخل Rin" size=18 weight="900" color="#f4f6f3" />
-          <Text#learn6why text="هذا هو جوهر القوة" size=14 weight="700" color="#22c55e" />
-          <Text#learn6whyT text="Indsin محرك واجهات أصلي للغة Rin. نفس الملف .rin يبني شجرة عناصر (Strand) تُقاس وتُرسم على أندرويد وسطح المكتب والمتصفح. هذه الصفحة نفسها مكتوبة بـ site.rin عبر Indsin." size=13 color="#9aa39c" />
-          <Text#learn6codeTitle text="أول شاشة Indsin" size=14 weight="700" color="#f4f6f3" />
-          <Text#learn6code mono="true" size=13 color="#cfd6cf" text={"@view.Column=Root\n  gap=12; padding=20; bg=\"#0b0f0c\";\n  @view.Text=title text=\"مرحباً من Indsin\"; size=22; weight=\"800\"; color=\"#f4f6f3\"; .end/view\n  @view.Text=desc text=\"هذا عنصر نص حقيقي\"; size=14; color=\"#9aa39c\"; .end/view\n  @view.Button=btn label=\"اضغطني\"; bg=\"#22c55e\"; color=\"#0a0c0a\"; .end/view\n.end/view"} />
-          <Text#learn6explain text={"شرح سريع:\n• @view.Kind=name يبدأ عنصراً من نوع Kind (Column, Text, Button, Card, Row...)\n• السمات مثل gap= و padding= و bg= و color= تُكتب مباشرة\n• .end/view يغلق العنصر\n• يمكن التعشيش بحرية (Column داخل Card داخل Scaffold)\n• المحرك يحسب المواضع تلقائياً (layout) ثم يرسم (paint)"} size=13 color="#9aa39c" />
-          <Text#learn6moreTitle text="مفاهيم أساسية في Indsin" size=14 weight="700" color="#f4f6f3" />
-          <Text#learn6concepts text={"• Scaffold / TopBar / Drawer للهيكل العام\n• @element.* لعناصر وظيفية إضافية\n• onTap= و url= للتفاعل والروابط\n• mono=\"true\" للنصوص أحادية المسافة (كود)\n• نفس المحرك يعمل على Android (JNI) و Desktop و WASM"} size=13 color="#9aa39c" />
-          <Row#learn6btns gap=8>
-            <Button#learn6more label="معمارية Indsin" url="https://github.com/dlof-lib/rinlang/blob/main/indsin.md" bg="#141a15" color="#f4f6f3" />
-            <Button#learn6docs label="توثيق العناصر" url="https://github.com/dlof-lib/rinlang/blob/main/docs/RIN_ELEMENTS.md" bg="#141a15" color="#f4f6f3" />
-            <Button#learn6next label="الدرس التالي →" url="#learn-7" bg="#22c55e" color="#0a0c0a" weight="700" />
-          </Row>
-        </Column>
-      </Card>
-      <!-- ------------------------------ الدرس 7 ------------------------------ -->
-      <Card#learn7 id="learn-7" padding=18 bg="#10130f" radius=16 shadow="true">
-        <Column#learn7c gap=10>
-          <Text#learn7n text="07 — الحاويات NoSQL المدمجة" size=18 weight="900" color="#f4f6f3" />
-          <Text#learn7why text="لماذا؟" size=14 weight="700" color="#22c55e" />
-          <Text#learn7whyT text="Rin تحتوي محرك بيانات NoSQL أصلي (@container). يمكنك تخزين وثائق، البحث، التحديث، دون قاعدة بيانات خارجية." size=13 color="#9aa39c" />
-          <Text#learn7codeTitle text="مثال حي" size=14 weight="700" color="#f4f6f3" />
-          <Text#learn7code mono="true" size=13 color="#cfd6cf" text={"@container.users=AppUsers\n  document id=\"u1\" fields={ name: \"أحمد\", age: 25 };\n  document id=\"u2\" fields={ name: \"سارة\", age: 30 };\n\n// القراءة والكتابة وقت التشغيل\nlet names = containerNames();\nprint names;\n\n// make لإنشاء حاويات ديناميكية\nmake kind = \"temp\";\nmake name = \"t1\";\ncreate(kind, name);\nsetField(name, \"value\", 42);\nprint getField(\"t1\", \"value\");"} />
-          <Text#learn7tips text={"• @container.name=ID يعرّف حاوية\n• document يضيف وثيقة بحقول\n• setField / getField للتعامل الحي\n• هذه الصفحة نفسها تستخدم @container.doc لعدّ أقسامها"} size=13 color="#9aa39c" />
-          <Row#learn7btns gap=8>
-            <Button#learn7more label="توثيق الحاويات" url="https://github.com/dlof-lib/rinlang/blob/main/docs/containers.md" bg="#141a15" color="#f4f6f3" />
-            <Button#learn7next label="الدرس التالي →" url="#learn-8" bg="#22c55e" color="#0a0c0a" weight="700" />
-          </Row>
-        </Column>
-      </Card>
-      <!-- ------------------------------ الدرس 8 ------------------------------ -->
-      <Card#learn8 id="learn-8" padding=18 bg="#10130f" radius=16 shadow="true">
-        <Column#learn8c gap=10>
-          <Text#learn8n text="08 — المكتبات والاستيراد" size=18 weight="900" color="#f4f6f3" />
-          <Text#learn8whyT text="Rin تأتي مع مكتبات رسمية (إحصاء، رسوم، قواعد بيانات، وسائط...). استوردها بـ @import ثم استخدم دوالها مباشرة." size=13 color="#9aa39c" />
-          <Text#learn8code mono="true" size=13 color="#cfd6cf" text={"@import \"lib/math.og.rin\";\n@import \"lib/stats.og.rin\";\n\nlet nums = [3, 1, 4, 1, 5, 9];\nprint mean(nums);\nprint std(nums);"} />
-          <Text#learn8tips text="المكتبات موجودة في مجلد lib/ و content-packs/. يمكنك كتابة مكتباتك الخاصة بنفس الصياغة." size=13 color="#9aa39c" />
-          <Row#learn8btns gap=8>
-            <Button#learn8more label="استكشف المكتبات" url="https://github.com/dlof-lib/rinlang/tree/main/lib" bg="#141a15" color="#f4f6f3" />
-            <Button#learn8next label="الدرس التالي →" url="#learn-9" bg="#22c55e" color="#0a0c0a" weight="700" />
-          </Row>
-        </Column>
-      </Card>
-      <!-- ------------------------------ الدرس 9 ------------------------------ -->
-      <Card#learn9 id="learn-9" padding=18 bg="#10130f" radius=16 shadow="true">
-        <Column#learn9c gap=10>
-          <Text#learn9n text="09 — تشخيص الأخطاء ونظام diagnostics" size=18 weight="900" color="#f4f6f3" />
-          <Text#learn9whyT text="Rin تملك نظام تشخيصات دقيقاً (رموز أخطاء + مواقع أسطر). استخدم rin check قبل التشغيل." size=13 color="#9aa39c" />
-          <Text#learn9code mono="true" size=13 color="#cfd6cf" text={"# فحص ملف بدون تشغيل\nrin check myfile.rin\n\n# تشغيل مع رسائل واضحة\nrin run myfile.rin"} />
-          <Text#learn9tips text={"الأخطاء الشائعة للمبتدئين:\n• نسيان ; في نهاية العبارة\n• استخدام اسم متغير قبل let\n• خطأ في عدد الأقواس أو .end/view\n• نوع معلَن خاطئ (String وليس Text)"} size=13 color="#9aa39c" />
-          <Row#learn9btns gap=8>
-            <Button#learn9more label="نظام الأخطاء" url="https://github.com/dlof-lib/rinlang/blob/main/docs/ERROR_SYSTEM.md" bg="#141a15" color="#f4f6f3" />
-            <Button#learn9next label="الدرس التالي →" url="#learn-10" bg="#22c55e" color="#0a0c0a" weight="700" />
-          </Row>
-        </Column>
-      </Card>
-      <!-- ------------------------------ الدرس 10 ------------------------------ -->
-      <Card#learn10 id="learn-10" padding=18 bg="#10130f" radius=16 shadow="true">
-        <Column#learn10c gap=10>
-          <Text#learn10n text="10 — مشاريع عملية من الصفر" size=18 weight="900" color="#f4f6f3" />
-          <Text#learn10whyT text="أفضل طريقة للتعلم هي البناء. ابدأ بمشاريع صغيرة ثم زِد التعقيد." size=13 color="#9aa39c" />
-          <Text#learn10projects text={"مقترحات مرتبة:\n1. حاسبة بسيطة (دوال + شروط)\n2. قائمة مهام مع @container\n3. بطاقة تعريف شخصية بـ Indsin\n4. لوحة إحصاءات بسيطة (مكتبة stats)\n5. صفحة ويب صغيرة مثل هذه الصفحة (site.rin)\n6. تطبيق أندرويد مصغّر عبر RinStudio"} size=13 color="#cfd6cf" />
-          <Text#learn10path text="المسار الموصى به: فكرة → ملفات → بيانات → دوال → تحكم → اختبار → واجهة → مكتبات → فحص → تشغيل" size=13 color="#79d99a" weight="700" />
-          <Row#learn10btns gap=8>
-            <Button#learn10ex label="أمثلة المستودع" url="https://github.com/dlof-lib/rinlang/tree/main/examples" bg="#141a15" color="#f4f6f3" />
-            <Button#learn10next label="الدرس التالي →" url="#learn-11" bg="#22c55e" color="#0a0c0a" weight="700" />
-          </Row>
-        </Column>
-      </Card>
-      <!-- ------------------------------ الدرس 11 ------------------------------ -->
-      <Card#learn11 id="learn-11" padding=18 bg="#10130f" radius=16 shadow="true">
-        <Column#learn11c gap=10>
-          <Text#learn11n text="11 — Rin في المتصفح (WebAssembly + RinHTML)" size=18 weight="900" color="#f4f6f3" />
-          <Text#learn11whyT text="نفس محرك C++ يُصرَّف إلى WASM فيعمل داخل المتصفح. هذه الصفحة دليل حي: site.rin → محرك Indsin → DOM." size=13 color="#9aa39c" />
-          <Text#learn11code mono="true" size=13 color="#cfd6cf" text={"// RinHTML: طريقة أخرى لربط Rin بـ HTML\n// انظر مجلد web/rinhtml-demo للأمثلة\n\n// المحرك الرسمي في هذه الصفحة:\n// index.html يحمّل WASM ثم يمرّر site.rin\n// إلى rin_indsin_session_create()"} />
-          <Text#learn11tips text={"• لا تحتاج معرفة WASM لتستخدمه\n• RinHTML يتيح عناصر مثل <rin-app> و rin-click=\n• للتجربة السريعة: افتح هذه الصفحة نفسها كمرجع"} size=13 color="#9aa39c" />
-          <Row#learn11btns gap=8>
-            <Button#learn11demo label="عروض RinHTML" url="https://github.com/dlof-lib/rinlang/tree/main/web/rinhtml-demo" bg="#141a15" color="#f4f6f3" />
-            <Button#learn11arch label="معمارية المحرك" url="https://github.com/dlof-lib/rinlang/blob/main/indsin.md" bg="#141a15" color="#f4f6f3" />
-            <Button#learn11next label="الدرس الأخير →" url="#learn-12" bg="#22c55e" color="#0a0c0a" weight="700" />
-          </Row>
-        </Column>
-      </Card>
-      <!-- ------------------------------ الدرس 12 ------------------------------ -->
-      <Card#learn12 id="learn-12" padding=18 bg="#10130f" radius=16 shadow="true">
-        <Column#learn12c gap=10>
-          <Text#learn12n text="12 — من الصفر إلى تطبيق حقيقي" size=18 weight="900" color="#f4f6f3" />
-          <Text#learn12whyT text="الآن لديك الأدوات. الخطوة التالية هي بناء شيء مفيد لك أو لمجتمعك." size=13 color="#9aa39c" />
-          <Text#learn12steps text={"الخطة العملية:\n1. حدّد فكرة صغيرة واضحة\n2. اكتب المنطق أولاً (دوال + بيانات) بدون واجهة\n3. اختبر بـ rin check و rin run\n4. أضف @container إذا احتجت تخزيناً\n5. ابنِ الواجهة بـ Indsin (@view)\n6. انشر على أندرويد أو كصفحة ويب\n7. اقرأ المزيد من docs/ عند الحاجة"} size=13 color="#cfd6cf" />
-          <Text#learn12final text="هذه الصفحة (site.rin) هي أفضل مثال حي: برنامج Rin حقيقي يبني موقعاً كاملاً. افتح الملف وادرسه سطراً بسطر." size=13 color="#79d99a" weight="700" />
-          <Row#learn12btns gap=8>
-            <Button#learn12ref label="خريطة المرجع الشامل" url="https://github.com/dlof-lib/rinlang/blob/main/docs/language-reference.md" bg="#141a15" color="#f4f6f3" />
-            <Button#learn12repo label="المستودع الكامل" url="https://github.com/dlof-lib/rinlang" bg="#22c55e" color="#0a0c0a" weight="800" />
-          </Row>
-        </Column>
-      </Card>
-      <!-- ------------------------------ ورقة الغش ------------------------------ -->
-      <Card#learnCheat padding=16 bg="#0f1410" radius=16 shadow="true">
-        <Column#learnCheatCol gap=8>
-          <Text#learnCheatTitle text="ورقة مرجعية سريعة" size=16 weight="850" color="#f4f6f3" />
-          <Text#learnCheatText mono="true" size=12.5 color="#cfd6cf" text={"let x = 1;              // متغير\nif (x > 0) { ... }      // شرط\nwhile (x < 5) { ... }  // حلقة\nfun add(a,b) { ... }    // دالة\nclass User { ... }      // كائن\n@container=App ...       // حاوية\n@loop=Root ...            // تنظيم/تنسيق\n@element.Text=Title ...  // عنصر\n@import \"lib/math.og.rin\"; // مكتبة\nrin check file.rin      // فحص\nrin run file.rin        // تشغيل"} />
-          <Button#learnCheatRef label="افتح كل المراجع" url="https://github.com/dlof-lib/rinlang/tree/main/docs" bg="#22c55e" color="#0a0c0a" weight="800" />
-        </Column>
-      </Card>
-      <Card#learnOfficialNote padding=14 bg="#0d120e" radius=14>
-        <Column#learnOfficialNoteCol gap=4>
-          <Text#learnOfficialNoteTitle text="ملاحظة الدقة" size=14 weight="800" color="#f4f6f3" />
-          <Text#learnOfficialNoteText text="هذا المنهج لا يستبدل المرجع؛ هو بوابة تعليمية مرتبة مبنية على التوثيق الموجود في المستودع. عند وجود فرق أو تفصيل إضافي، اتبع ملف المرجع المرتبط في كل درس ثم language-reference.md كخريطة شاملة." size=12.5 color="#8e9991" />
-        </Column>
-      </Card>
-    </Column>
-    <Divider#secDivWhatIs height=1 color="#1c231d" />
-    <!-- ============================== ما هي Rin؟ (تعمّق) ============================== -->
-    <Column#whatIsRin gap=14 padding=22 bg="#0b0f0c" radius=20 shadow="true">
-      <Text#whatIsEyebrow text="السؤال الأول" size=12 color="#22c55e" weight="800" />
-      <Text#whatIsTitle text="ما هي Rin بالضبط؟" size=24 weight="900" color="#f4f6f3" />
-      <Text#whatIsP1 text="Rin ليست تطبيق أندرويد فقط، ولا لغة توصيف واجهات فقط — هي لغة برمجة إجرائية حقيقية (متغيرات، شروط، حلقات، دوال، أصناف) لها مُحلِّل لُغَوي (Lexer) ومحلِّل نحوي (Parser) ومفسِّر (Interpreter) مكتوبة بلغة C++17 خالصة في app/src/main/cpp، تُبنى وتُشغَّل بأربع طرق مختلفة من نفس المصدر بلا تكرار كود: مفسِّر سطر أوامر على لينكس/macOS/ويندوز (cli/)، تطبيق IDE أندرويد كامل، بناء WebAssembly يشغِّل نفس المحرك داخل هذه الصفحة بالذات، وربط C ABI (bindings/) تستدعيه بايثون أو Node.js كمكتبة مُجمَّعة librin.so." size=13.5 color="#9aa39c" />
-      <Text#whatIsP2 text="فوق هذا الجزء الإجرائي تقف طبقة واجهة كاملة اسمها Indsin: بيانات @view/@element يصفها البرنامج بصياغة Rin نفسها (لا HTML ولا XML)، فيحوّلها محرّك القياس والرسم (rin_indsin_layout.h + rin_indsin_paint.h) إلى شجرة Strand مقاسة بإحداثيات فعلية، تُرسَم أندرويدياً عبر Canvas حقيقي، أو تُصدَّر JSON يرسمه هذا المتصفح بالضبط كما ترى الآن — نفس المحرّك، لا محاكاة موازية." size=13.5 color="#9aa39c" />
-      <Row#whatIsFacts gap=10 wrap="true">
-        <Card#wiFact1 padding=13 bg="#101510" radius=13>
-          <Text#wiFact1t text="C++17" size=13 weight="850" color="#4ade80" />
-          <Text#wiFact1d text="المحرّك الحقيقي — الأندرويد/الويب/CLI/bindings كلها واجهات فوقه" size=11.5 color="#8e9991" />
-        </Card>
-        <Card#wiFact2 padding=13 bg="#101510" radius=13>
-          <Text#wiFact2t text="مفسَّرة + مترجَمة جزئياً" size=13 weight="850" color="#4ade80" />
-          <Text#wiFact2d text="rin run يشغّل كل اللغة، rin build (rinc) ينتج تنفيذياً أصلياً لمجموعة فرعية منها فقط" size=11.5 color="#8e9991" />
-        </Card>
-        <Card#wiFact3 padding=13 bg="#101510" radius=13>
-          <Text#wiFact3t text="RTL/عربية كمواطن أول" size=13 weight="850" color="#4ade80" />
-          <Text#wiFact3d text="arabicNormalize/arabicStripDiacritics/utf8* أصلية في المفسِّر، لا إضافة خارجية" size=11.5 color="#8e9991" />
-        </Card>
-      </Row>
-      <Button#whatIsMore label="جولة في اللغة كاملة" url="#tour" bg="#141a15" color="#f4f6f3" />
-    </Column>
-    <Divider#secDivStyle height=1 color="#1c231d" />
-    <!-- ============================== تنسيق Rin (Style) ============================== -->
-    <Column#rinStyle gap=14 padding=22 bg="#0b0f0c" radius=20 shadow="true">
-      <Text#styleEyebrow text="التنسيق والأسلوب" size=12 color="#22c55e" weight="800" />
-      <Text#styleTitle text="قواعد كتابة Rin وأداة rin fmt" size=22 weight="900" color="#f4f6f3" />
-      <Text#styleIntro text={"لا فاصلة اختيارية في Rin: كل عبارة تنتهي بـ ; إلزامياً، والكتلة { ... } لا تحتاج فاصلة بعد }. أداة rin fmt <file> [--write] الرسمية تعيد محاذاة المسافات البادئة لأي ملف (4 مسافات لكل مستوى تعشيش) — جرّبتها فعلياً على كود غير منسّق فأصلحت المحاذاة فوراً، لكنها لا تضيف مسافات حول العوامل ولا تُعيد تسمية شيء."} size=13.5 color="#9aa39c" />
-      <Row#styleBeforeAfter gap=12 wrap="true">
-        <Card#styleBefore padding=14 bg="#10130f" radius=14>
-          <Text#styleBeforeT text="قبل rin fmt" size=13 weight="800" color="#ffb4b4" />
-          <Text#styleBeforeCode mono="true" size=12 color="#cfd6cf" text={"let x=5;\n    if(x>0){\nprint \"pos\";\n      }"} />
-        </Card>
-        <Card#styleAfter padding=14 bg="#10130f" radius=14>
-          <Text#styleAfterT text="بعد rin fmt --write" size=13 weight="800" color="#79d99a" />
-          <Text#styleAfterCode mono="true" size=12 color="#cfd6cf" text={"let x=5;\nif(x>0){\n    print \"pos\";\n}"} />
-        </Card>
-      </Row>
-      <Card#styleConventions padding=15 bg="#101510" radius=14>
-        <Column#styleConvCol gap=7>
-          <Text#styleConvTitle text="اصطلاحات شائعة في الكود الرسمي (docs/ وexamples/)" size=14 weight="800" color="#f4f6f3" />
-          <Text#styleConvL1 text="• متغيرات ودوال: camelCase — myDouble، findFirstEven، sectionCount." size=12.5 color="#9aa39c" />
-          <Text#styleConvL2 text="• أصناف وأنواع وحاويات @view/@element مسمّاة: PascalCase أو اسم وصفي مباشر — Counter، Status، Point." size=12.5 color="#9aa39c" />
-          <Text#styleConvL3 text="• أسماء العناصر داخل @view/@element بلا مسافات (يُستخدَم كمعرِّف id في DOM/التتبّع) — lessonLink1 لا lesson-link-1." size=12.5 color="#9aa39c" />
-          <Text#styleConvL4 text="• كل سمة (attribute) بصيغة key=value; بفاصلة منقوطة بعدها، حتى آخر سمة قبل .end/ — نفس قاعدة ; للغة الإجرائية بلا استثناء." size=12.5 color="#9aa39c" />
-          <Text#styleConvL5 text="• show مرادف تام لـ print، when/otherwise مرادف تام لـ if/else — اختر واحداً والتزم به داخل نفس الملف لقراءة أوضح." size=12.5 color="#9aa39c" />
-        </Column>
-      </Card>
-      <Text#styleCheckNote text="rin check file.rin يفحص الصياغة بلا تشغيل، ويعطي رسالة أربعة أقسام (error/reason/help) — مثال حقيقي: نسيان ; بعد let ينتج E0012 يشير للسطر بالضبط." size=12.5 color="#8e9991" />
-    </Column>
-    <Divider#secDivShots height=1 color="#1c231d" />
-    <!-- ============================== لقطات: المحرر ومعاينة Indsin ============================== -->
-    <Column#rinShots gap=14 padding=22 bg="#0b0f0c" radius=20 shadow="true">
-      <Text#shotsEyebrow text="لقطات توضيحية" size=12 color="#22c55e" weight="800" />
-      <Text#shotsTitle text="محرر Rin ومعاينة Indsin الحيّة" size=22 weight="900" color="#f4f6f3" />
-      <Text#shotsIntro text="رسمان توضيحيان (SVG مُضمَّن مباشرة كـ @view.Image بلا أي ملف خارجي) يشرحان نفس المسار الفعلي: تكتب @container/@element في المحرر، فيقرأه Indsin ويرسمه شجرة Strand حقيقية — على أندرويد عبر Canvas، وهنا في المتصفح عبر renderFabric() بالضبط." size=13 color="#9aa39c" />
-      <Row#shotsRow gap=14 wrap="true">
-        <Card#shotEditorCard padding=10 bg="#0e120e" radius=14 width=175>
-          <Image#shotEditor src="data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgNzYwIDQ2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiBmb250LWZhbWlseT0iJ0pldEJyYWlucyBNb25vJywgdWktbW9ub3NwYWNlLCBDb25zb2xhcywgbW9ub3NwYWNlIj4KICA8cmVjdCB3aWR0aD0iNzYwIiBoZWlnaHQ9IjQ2MCIgcng9IjE4IiBmaWxsPSIjMGIwZjBjIi8+CiAgPCEtLSB0b29sYmFyIC0tPgogIDxyZWN0IHg9IjAiIHk9IjAiIHdpZHRoPSI3NjAiIGhlaWdodD0iNDIiIHJ4PSIxOCIgZmlsbD0iIzEwMTUxMCIvPgogIDxyZWN0IHg9IjAiIHk9IjI0IiB3aWR0aD0iNzYwIiBoZWlnaHQ9IjE4IiBmaWxsPSIjMTAxNTEwIi8+CiAgPGNpcmNsZSBjeD0iMjQiIGN5PSIyMSIgcj0iNiIgZmlsbD0iI2VmNTM1MCIvPgogIDxjaXJjbGUgY3g9IjQ2IiBjeT0iMjEiIHI9IjYiIGZpbGw9IiNmNGM5NWQiLz4KICA8Y2lyY2xlIGN4PSI2OCIgY3k9IjIxIiByPSI2IiBmaWxsPSIjNGFkZTgwIi8+CiAgPHRleHQgeD0iMzgwIiB5PSIyNiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iIzlhYTM5YyIgZm9udC1zaXplPSIxMyI+aGVsbG8ucmluIOKAlCDZhdit2LHYsSBSaW48L3RleHQ+CiAgPHJlY3QgeD0iNjc2IiB5PSI5IiB3aWR0aD0iNjYiIGhlaWdodD0iMjQiIHJ4PSI3IiBmaWxsPSIjMjJjNTVlIi8+CiAgPHRleHQgeD0iNzA5IiB5PSIyNSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iIzBhMGMwYSIgZm9udC1zaXplPSIxMiIgZm9udC13ZWlnaHQ9IjcwMCI+2KrYtNi62YrZhDwvdGV4dD4KCiAgPCEtLSBndXR0ZXIgLS0+CiAgPHJlY3QgeD0iMCIgeT0iNDIiIHdpZHRoPSI0NiIgaGVpZ2h0PSI0MTgiIGZpbGw9IiMwZDExMGUiLz4KICA8ZyBmaWxsPSIjNTg2MTU4IiBmb250LXNpemU9IjEzIj4KICAgIDx0ZXh0IHg9IjMwIiB5PSI3MCIgdGV4dC1hbmNob3I9ImVuZCI+MTwvdGV4dD4KICAgIDx0ZXh0IHg9IjMwIiB5PSI5NiIgdGV4dC1hbmNob3I9ImVuZCI+MjwvdGV4dD4KICAgIDx0ZXh0IHg9IjMwIiB5PSIxMjIiIHRleHQtYW5jaG9yPSJlbmQiPjM8L3RleHQ+CiAgICA8dGV4dCB4PSIzMCIgeT0iMTQ4IiB0ZXh0LWFuY2hvcj0iZW5kIj40PC90ZXh0PgogICAgPHRleHQgeD0iMzAiIHk9IjE3NCIgdGV4dC1hbmNob3I9ImVuZCI+NTwvdGV4dD4KICAgIDx0ZXh0IHg9IjMwIiB5PSIyMDAiIHRleHQtYW5jaG9yPSJlbmQiPjY8L3RleHQ+CiAgICA8dGV4dCB4PSIzMCIgeT0iMjI2IiB0ZXh0LWFuY2hvcj0iZW5kIj43PC90ZXh0PgogICAgPHRleHQgeD0iMzAiIHk9IjI1MiIgdGV4dC1hbmNob3I9ImVuZCI+ODwvdGV4dD4KICAgIDx0ZXh0IHg9IjMwIiB5PSIyNzgiIHRleHQtYW5jaG9yPSJlbmQiPjk8L3RleHQ+CiAgPC9nPgogIDxyZWN0IHg9IjQ2IiB5PSIxMTIiIHdpZHRoPSI3MTQiIGhlaWdodD0iMjQiIGZpbGw9IiMxNDFhMTUiLz4KCiAgPCEtLSBjb2RlIGxpbmVzIC0tPgogIDxnIGZvbnQtc2l6ZT0iMTQiPgogICAgPHRleHQgeD0iNjAiIHk9IjcwIj48dHNwYW4gZmlsbD0iI2M1ODZjMCI+QGNvbnRhaW5lcjwvdHNwYW4+PHRzcGFuIGZpbGw9IiNjZmQ2Y2YiPj08L3RzcGFuPjx0c3BhbiBmaWxsPSIjNGZjMWZmIj5BcHA8L3RzcGFuPjwvdGV4dD4KICAgIDx0ZXh0IHg9Ijc2IiB5PSI5NiI+PHRzcGFuIGZpbGw9IiNjNTg2YzAiPnN0YXRlPC90c3Bhbj48dHNwYW4gZmlsbD0iI2NmZDZjZiI+IGNvdW50ID0gPC90c3Bhbj48dHNwYW4gZmlsbD0iI2QxOWE2NiI+MDwvdHNwYW4+PHRzcGFuIGZpbGw9IiNjZmQ2Y2YiPjs8L3RzcGFuPjwvdGV4dD4KICAgIDx0ZXh0IHg9Ijc2IiB5PSIxMjIiPjx0c3BhbiBmaWxsPSIjY2ZkNmNmIj5vbiBpbml0KCkgeyA8L3RzcGFuPjx0c3BhbiBmaWxsPSIjYzU4NmMwIj5wcmludDwvdHNwYW4+PHRzcGFuIGZpbGw9IiNjZTkxNzgiPiAi2KzYp9mH2LIiOzwvdHNwYW4+PHRzcGFuIGZpbGw9IiNjZmQ2Y2YiPiB9PC90c3Bhbj48L3RleHQ+CiAgICA8dGV4dCB4PSI3NiIgeT0iMTQ4Ij48dHNwYW4gZmlsbD0iI2NmZDZjZiI+ZnVuIGluYygpIHsgY291bnQgPSBjb3VudCArIDwvdHNwYW4+PHRzcGFuIGZpbGw9IiNkMTlhNjYiPjE8L3RzcGFuPjx0c3BhbiBmaWxsPSIjY2ZkNmNmIj47IH08L3RzcGFuPjwvdGV4dD4KICAgIDx0ZXh0IHg9IjYwIiB5PSIxNzQiPjx0c3BhbiBmaWxsPSIjY2ZkNmNmIj4uZW5kL2NvbnRhaW5lcjwvdHNwYW4+PC90ZXh0PgogICAgPHRleHQgeD0iNjAiIHk9IjIyNiI+PHRzcGFuIGZpbGw9IiNjNTg2YzAiPkBlbGVtZW50LmJ1dHRvbjwvdHNwYW4+PHRzcGFuIGZpbGw9IiNjZmQ2Y2YiPj1pbmM8L3RzcGFuPjwvdGV4dD4KICAgIDx0ZXh0IHg9Ijc2IiB5PSIyNTIiPjx0c3BhbiBmaWxsPSIjY2ZkNmNmIj50ZXh0ID0gPC90c3Bhbj48dHNwYW4gZmlsbD0iI2NlOTE3OCI+Itiy2YrYp9iv2KkgKzEiPC90c3Bhbj48dHNwYW4gZmlsbD0iI2NmZDZjZiI+OzwvdHNwYW4+PC90ZXh0PgogICAgPHRleHQgeD0iNjAiIHk9IjI3OCI+PHRzcGFuIGZpbGw9IiNjZmQ2Y2YiPi5lbmQvZWxlbWVudDwvdHNwYW4+PC90ZXh0PgogIDwvZz4KICA8cmVjdCB4PSIxODIiIHk9IjEwNiIgd2lkdGg9IjIiIGhlaWdodD0iMjAiIGZpbGw9IiM0YWRlODAiLz4KCiAgPCEtLSBSaW4ga2V5d29yZCBwYW5lbCByb3cgLS0+CiAgPHJlY3QgeD0iNDYiIHk9IjQwMiIgd2lkdGg9IjcxNCIgaGVpZ2h0PSI1OCIgZmlsbD0iIzBmMTQwZiIvPgogIDxnIGZvbnQtc2l6ZT0iMTIiIGZvbnQtd2VpZ2h0PSI3MDAiPgogICAgPHJlY3QgeD0iNjAiIHk9IjQxNiIgd2lkdGg9IjU4IiBoZWlnaHQ9IjMwIiByeD0iOCIgZmlsbD0iIzE4MjAxNCIvPgogICAgPHRleHQgeD0iODkiIHk9IjQzNSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iIzhmZDM5YSI+Y29udGFpbmVyPC90ZXh0PgogICAgPHJlY3QgeD0iMTI2IiB5PSI0MTYiIHdpZHRoPSI0MiIgaGVpZ2h0PSIzMCIgcng9IjgiIGZpbGw9IiMxODIwMTQiLz4KICAgIDx0ZXh0IHg9IjE0NyIgeT0iNDM1IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjOGZkMzlhIj5mdW48L3RleHQ+CiAgICA8cmVjdCB4PSIxNzYiIHk9IjQxNiIgd2lkdGg9IjUyIiBoZWlnaHQ9IjMwIiByeD0iOCIgZmlsbD0iIzE4MjAxNCIvPgogICAgPHRleHQgeD0iMjAyIiB5PSI0MzUiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9IiM4ZmQzOWEiPndoaWxlPC90ZXh0PgogICAgPHJlY3QgeD0iMjM2IiB5PSI0MTYiIHdpZHRoPSI0MiIgaGVpZ2h0PSIzMCIgcng9IjgiIGZpbGw9IiMxODIwMTQiLz4KICAgIDx0ZXh0IHg9IjI1NyIgeT0iNDM1IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjOGZkMzlhIj5sZXQ8L3RleHQ+CiAgICA8cmVjdCB4PSIyODYiIHk9IjQxNiIgd2lkdGg9IjU2IiBoZWlnaHQ9IjMwIiByeD0iOCIgZmlsbD0iIzE4MjAxNCIvPgogICAgPHRleHQgeD0iMzE0IiB5PSI0MzUiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9IiM4ZmQzOWEiPnJlY2tvbjwvdGV4dD4KICAgIDxyZWN0IHg9IjM1MCIgeT0iNDE2IiB3aWR0aD0iMzQiIGhlaWdodD0iMzAiIHJ4PSI4IiBmaWxsPSIjMjAyNjFmIi8+CiAgICA8dGV4dCB4PSIzNjciIHk9IjQzNSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iI2NmZDZjZiI+eyB9PC90ZXh0PgogICAgPHJlY3QgeD0iMzkyIiB5PSI0MTYiIHdpZHRoPSIzNCIgaGVpZ2h0PSIzMCIgcng9IjgiIGZpbGw9IiMyMDI2MWYiLz4KICAgIDx0ZXh0IHg9IjQwOSIgeT0iNDM1IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjY2ZkNmNmIj47PC90ZXh0PgogIDwvZz4KPC9zdmc+Cg==" alt="محرر Rin: تظليل صياغة، ترقيم أسطر، لوحة كلمات مفتاحية" fit="contain" radius=12 width=155 height=94 />
-          <Text#shotEditorCap text="المحرر: تظليل صياغة + ترقيم أسطر + لوحة كلمات Rin السفلية" size=11.5 color="#8e9991" />
-        </Card>
-        <Card#shotIndsinCard padding=10 bg="#0e120e" radius=14 width=175>
-          <Image#shotIndsin src="data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgNzYwIDQ2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiBmb250LWZhbWlseT0ic3lzdGVtLXVpLCAtYXBwbGUtc3lzdGVtLCAnU2Vnb2UgVUknLCBzYW5zLXNlcmlmIj4KICA8cmVjdCB3aWR0aD0iNzYwIiBoZWlnaHQ9IjQ2MCIgZmlsbD0iIzBiMGYwYyIvPgogIDx0ZXh0IHg9IjIwIiB5PSIzMCIgZmlsbD0iIzlhYTM5YyIgZm9udC1zaXplPSIxMyI+2YXYudin2YrZhtipIEluZHNpbiDYp9mE2K3ZitmR2Kkg4oCUIFN0cmFuZCB0cmVlINmF2LHYs9mI2YXYqSDZgdi52YTZitmL2Kc8L3RleHQ+CgogIDwhLS0gcGhvbmUgZnJhbWUgLS0+CiAgPHJlY3QgeD0iMjcwIiB5PSI0NiIgd2lkdGg9IjIyMCIgaGVpZ2h0PSI0MDAiIHJ4PSIzMCIgZmlsbD0iIzA0MTIwYSIgc3Ryb2tlPSIjMjJjNTVlIiBzdHJva2Utd2lkdGg9IjIiLz4KICA8cmVjdCB4PSIyODIiIHk9IjcwIiB3aWR0aD0iMTk2IiBoZWlnaHQ9IjM1MiIgcng9IjYiIGZpbGw9IiMwZTEzMGYiLz4KICA8cmVjdCB4PSIzMzAiIHk9IjU2IiB3aWR0aD0iNjAiIGhlaWdodD0iMTAiIHJ4PSI1IiBmaWxsPSIjMDQxMjBhIi8+CgogIDwhLS0gdG9wYmFyIHN0cmFuZCAtLT4KICA8cmVjdCB4PSIyODIiIHk9IjcwIiB3aWR0aD0iMTk2IiBoZWlnaHQ9IjM0IiBmaWxsPSIjMTQxYTE1Ii8+CiAgPHRleHQgeD0iMzgwIiB5PSI5MiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iI2Y0ZjZmMyIgZm9udC1zaXplPSIxMiIgZm9udC13ZWlnaHQ9IjcwMCI+QXBwPC90ZXh0PgoKICA8IS0tIGNhcmQgc3RyYW5kIC0tPgogIDxyZWN0IHg9IjI5NiIgeT0iMTIwIiB3aWR0aD0iMTY4IiBoZWlnaHQ9Ijk4IiByeD0iMTIiIGZpbGw9IiMxMDEzMGYiIHN0cm9rZT0iIzFjMjMxZCIvPgogIDx0ZXh0IHg9IjMxMiIgeT0iMTQyIiBmaWxsPSIjZjRmNmYzIiBmb250LXNpemU9IjEyIiBmb250LXdlaWdodD0iNzAwIj7Yp9mE2LnYr9mR2KfYrzwvdGV4dD4KICA8dGV4dCB4PSIzMTIiIHk9IjE2NCIgZmlsbD0iIzIyYzU1ZSIgZm9udC1zaXplPSIyMiIgZm9udC13ZWlnaHQ9IjgwMCI+MzwvdGV4dD4KICA8cmVjdCB4PSIzMTIiIHk9IjE4MCIgd2lkdGg9IjgyIiBoZWlnaHQ9IjI2IiByeD0iNyIgZmlsbD0iIzIyYzU1ZSIvPgogIDx0ZXh0IHg9IjM1MyIgeT0iMTk3IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjMGEwYzBhIiBmb250LXNpemU9IjExIiBmb250LXdlaWdodD0iODAwIj7YstmK2KfYr9ipICsxPC90ZXh0PgoKICA8IS0tIGxpc3Qgc3RyYW5kcyAtLT4KICA8Zz4KICAgIDxyZWN0IHg9IjI5NiIgeT0iMjMwIiB3aWR0aD0iMTY4IiBoZWlnaHQ9IjIwIiByeD0iNiIgZmlsbD0iIzEwMTMwZiIvPgogICAgPHJlY3QgeD0iMjk2IiB5PSIyNTYiIHdpZHRoPSIxNjgiIGhlaWdodD0iMjAiIHJ4PSI2IiBmaWxsPSIjMTAxMzBmIi8+CiAgICA8cmVjdCB4PSIyOTYiIHk9IjI4MiIgd2lkdGg9IjE2OCIgaGVpZ2h0PSIyMCIgcng9IjYiIGZpbGw9IiMxMDEzMGYiLz4KICA8L2c+CgogIDwhLS0gYm90dG9tYmFyIHN0cmFuZCAtLT4KICA8cmVjdCB4PSIyODIiIHk9IjM4OCIgd2lkdGg9IjE5NiIgaGVpZ2h0PSIzNCIgZmlsbD0iIzE0MWExNSIvPgogIDxjaXJjbGUgY3g9IjMzMCIgY3k9IjQwNSIgcj0iNyIgZmlsbD0iIzIyYzU1ZSIvPgogIDxjaXJjbGUgY3g9IjM4MCIgY3k9IjQwNSIgcj0iNyIgZmlsbD0iIzU4NjE1OCIvPgogIDxjaXJjbGUgY3g9IjQzMCIgY3k9IjQwNSIgcj0iNyIgZmlsbD0iIzU4NjE1OCIvPgoKICA8IS0tIHNpZGUgYW5ub3RhdGlvbjogc3RyYW5kIHRyZWUgLS0+CiAgPGcgZm9udC1zaXplPSIxMiIgZmlsbD0iIzlhYTM5YyI+CiAgICA8dGV4dCB4PSI1MzAiIHk9IjEyMCI+U3RyYW5kIHRyZWUgKEpTT04pOjwvdGV4dD4KICAgIDx0ZXh0IHg9IjUzMCIgeT0iMTQ2IiBmaWxsPSIjNGZjMWZmIj5TY2FmZm9sZDwvdGV4dD4KICAgIDx0ZXh0IHg9IjU0OCIgeT0iMTY4Ij7ilJzilIAgVG9wQmFyICJBcHAiPC90ZXh0PgogICAgPHRleHQgeD0iNTQ4IiB5PSIxOTAiPuKUnOKUgCBDYXJkPC90ZXh0PgogICAgPHRleHQgeD0iNTY2IiB5PSIyMTIiPuKUgiAgIOKUnOKUgCBUZXh0ICLYp9mE2LnYr9mR2KfYryI8L3RleHQ+CiAgICA8dGV4dCB4PSI1NjYiIHk9IjIzNCI+4pSCICAg4pSU4pSAIEJ1dHRvbiAi2LLZitin2K/YqSArMSI8L3RleHQ+CiAgICA8dGV4dCB4PSI1NDgiIHk9IjI1NiI+4pSc4pSAIENvbHVtbiAoM8OXIEJveCk8L3RleHQ+CiAgICA8dGV4dCB4PSI1NDgiIHk9IjI3OCI+4pSU4pSAIEJvdHRvbUJhcjwvdGV4dD4KICAgIDx0ZXh0IHg9IjUzMCIgeT0iMzEyIiBmaWxsPSIjNTg2MTU4Ij54L3kvdy9oINmF2LfZhNmC2Kkg2YrYrdiz2KjZh9inPC90ZXh0PgogICAgPHRleHQgeD0iNTMwIiB5PSIzMzAiIGZpbGw9IiM1ODYxNTgiPnJpbl9pbmRzaW5fbGF5b3V0LmjYjCDYq9mFPC90ZXh0PgogICAgPHRleHQgeD0iNTMwIiB5PSIzNDgiIGZpbGw9IiM1ODYxNTgiPnJlbmRlckZhYnJpYygpINmK2LHYs9mF2YfYpyBET00uPC90ZXh0PgogIDwvZz4KPC9zdmc+Cg==" alt="معاينة Indsin: شجرة Strand مرسومة داخل إطار هاتف" fit="contain" radius=12 width=155 height=94 />
-          <Text#shotIndsinCap text="Indsin: نفس شجرة Strand تُرسَم حيّة — أندرويد أو هذا المتصفح" size=11.5 color="#8e9991" />
-        </Card>
-      </Row>
-      <Text#shotsNote text="توضيحيان مرسومان يدوياً لشرح البنية — وليسا لقطة شاشة فعلية من التطبيق." size=11 color="#586158" />
-    </Column>
-    <Divider#secDivContainers height=1 color="#1c231d" />
-    <!-- ============================== تعمّق في @container ============================== -->
-    <Column#containersDeep gap=14 padding=22 bg="#0b0f0c" radius=20 shadow="true">
-      <Text#cdEyebrow text="تعمّق" size=12 color="#22c55e" weight="800" />
-      <Text#cdTitle text="@container من الداخل" size=24 weight="900" color="#f4f6f3" />
-      <Text#cdIntro text="كل واجهة Rin مبنية من فصل ثلاثي مقصود يفرضه المحلِّل والمحرّك فعلياً لا التوثيق فقط: @container يملك السلوك (دوال، حالة، دورة حياة) ولا يملك أي شكل بصري، @loop يملك الشكل (حجم/ألوان/خطوط موروثة) ولا يملك سلوكاً، @element يملك الوظيفة فقط — أي سمة بصرية (color=, radius=, padding=...) تُكتب داخل @element تُحذَف فعلياً عند البناء عبر sanitizeElements()." size=13.5 color="#9aa39c" />
-      <Card#cdStateCard padding=15 bg="#101510" radius=14>
-        <Column#cdStateCol gap=7>
-          <Text#cdStateTitle text="state ودورة الحياة" size=14 weight="800" color="#f4f6f3" />
-          <Text#cdStateD text={"state مثل let تماماً، إلا أن إسناداً لاحقاً لها من داخل الحاوية نفسها (أو دالة معرَّفة بداخلها) يُطلق on update(prev) تلقائياً إن كانت معرَّفة. القراءة/الكتابة من خارج الحاوية تمر عبر getField(\"الاسم\", key)/setField(...) بالاسم كنص — ولا تُطلق update (تحقّقت من هذا فعلياً)."} size=12.5 color="#9aa39c" />
-          <Text#cdStateCode mono="true" size=12 color="#cfd6cf" text={"@container=Counter\n    state count = 0;\n    on update(prev) { print \"count: \" + prev + \" -> \" + count; }\n    fun inc() { count = count + 1; }\n.end/container\n\nsetField(\"Counter\", \"count\", 1);\nprint getField(\"Counter\", \"count\");"} />
-          <Text#cdStateRun mono="true" size=12 color="#79d99a" text="1" />
-        </Column>
-      </Card>
-      <Card#cdKindsCard padding=15 bg="#101510" radius=14>
-        <Column#cdKindsCol gap=7>
-          <Text#cdKindsTitle text={"أنواع الحاويات (@container.<kind>)"} size=14 weight="800" color="#f4f6f3" />
-          <Text#cdKindsD text="pipe · data (بيانات نقية بلا دوال) · api (نقاط وهمية عبر call()) · import (يشغّل ملف .rin آخر فعلياً) · table · doc (NoSQL) · object · portal · block · sticker · aukt · chatbot · sql (استعلام RCSQL مسمّى) · make (Make Unit) · everything." size=12.5 color="#9aa39c" />
-          <Text#cdKindsGroups text="@Containers.Group تجمع عدة حاويات تحت سياسة use/need/allow/deny واحدة. @Volume تعشيش تنظيمي حر بلا قيد إضافي." size=12.5 color="#9aa39c" />
-        </Column>
-      </Card>
-      <Card#cdDocCard padding=15 bg="#101510" radius=14>
-        <Column#cdDocCol gap=7>
-          <Text#cdDocTitle text="@container.doc + RCSQL: قاعدة NoSQL مصغّرة بخمسة رموز" size=14 weight="800" color="#f4f6f3" />
-          <Text#cdDocD text="RCSQL يستعلم بيانات @container.doc الموجودة أصلاً — لا يعرّف تخزيناً جديداً. الصياغة كاملة بخمسة رموز فقط: / : & () # — بالإضافة لعمليات eq/gt/like/has/exists... ومُعدِّلات order/limit/offset/select/distinct." size=12.5 color="#9aa39c" />
-          <Text#cdDocCode mono="true" size=12 color="#cfd6cf" text={"@container.doc=users\n    document id=\"u1\" fields={ name: \"Ali\", role: \"admin\", age: 30 };\n    document id=\"u2\" fields={ name: \"Sara\", role: \"owner\", age: 27 };\n    document id=\"u3\" fields={ name: \"Tom\", role: \"guest\", age: 40 };\n.end/container.doc\n\nprint sql(\"users & or(role:eq(admin) & role:eq(owner)) & order:asc(age)\");"} />
-          <Text#cdDocRun mono="true" size=11.5 color="#79d99a" text={"[{_id: u2, name: Sara, role: owner, age: 27}, {_id: u1, name: Ali, role: admin, age: 30}]"} />
-        </Column>
-      </Card>
-      <Text#cdPolicy text="سياسة اختيارية (use/need/allow/deny/strict/version/description) بنفس صياغة Make Unit تماماً يمكن وضعها على أي @container — لا تُفعَّل validateContainerPolicy إلا إن استُخدمت كلمة واحدة منها فعلياً؛ حاوية بلا سياسة تبقى permissive كما اليوم بلا أي تغيير سلوك." size=12.5 color="#8e9991" />
-      <Row#cdLinks gap=10 wrap="true">
-        <Button#cdLinkContainers label="containers.md كاملاً" url="https://github.com/dlof-lib/rinlang/blob/main/docs/containers.md" bg="#141a15" color="#f4f6f3" />
-        <Button#cdLinkSql label="container_sql.md (RCSQL)" url="https://github.com/dlof-lib/rinlang/blob/main/docs/container_sql.md" bg="#141a15" color="#f4f6f3" />
-        <Button#cdLinkAdvanced label="container_advanced.md" url="https://github.com/dlof-lib/rinlang/blob/main/docs/container_advanced.md" bg="#141a15" color="#f4f6f3" />
-        <Button#cdLinkCross label="cross-file-containers.md" url="https://github.com/dlof-lib/rinlang/blob/main/docs/cross-file-containers.md" bg="#141a15" color="#f4f6f3" />
-      </Row>
-    </Column>
-    <!-- ========================== توسعة الأكاديمية الرسمية ========================== -->
-    <Column#academyPaths gap=16 padding=22 bg="#0b0f0c" radius=20 shadow="true">
-      <Text#pathsEyebrow text="مسارات التعلّم" size=12 color="#22c55e" weight="800" />
-      <Text#pathsTitle text="اختر طريقك داخل Rin" size=22 weight="900" color="#f4f6f3" />
-      <Text#pathsDesc text="يمكنك دراسة اللغة خطيًا، أو الانتقال مباشرة إلى المسار الذي يناسب هدفك. كل مسار يعود إلى المرجع الرسمي بدل تقديم معلومات منفصلة عن التوثيق." size=13 color="#9aa39c" />
-      <Row#pathRow gap=12 wrap="true">
-        <Card#pathBegin padding=16 bg="#101510" radius=16>
-          <Column#pathBeginCol gap=7>
-            <Text#pathBeginTitle text="🌱 المبتدئ" size=16 weight="850" color="#f4f6f3" />
-            <Text#pathBeginText text="ابدأ من الصفر: الصياغة، المتغيرات، التعبيرات، الشروط، الحلقات، الدوال ثم البيانات." size=12.5 color="#9aa39c" />
-            <Text#pathBeginSteps text="01 → 02 → 03 → 04 → 05" size=12 color="#79d99a" weight="700" />
-            <Button#pathBeginBtn label="ابدأ الأساسيات" url="#learn-1" bg="#22c55e" color="#0a0c0a" weight="800" />
+      <Column#paneFlow gap=10 visible={tabFlow} align="stretch">
+        <Text#paneFlowt text="شروط ودوال" size=16 color="#edf5f0" weight="800" />
+        <Text#paneFlowd text="if/else وwhen/otherwise متكافئان — اختر ما يقرؤه فريقك بسهولة." size=13 color="#8fa398" />
+        <Card#paneFlowcode padding=14 bg="#070d0b" radius=14>
+          <Column#paneFlowcodec gap=10 align="stretch">
+            <Text#paneFlowcodesrc text={"fun fib(n) {\n    if (n < 2) { return n; }\n    return fib(n - 1) + fib(n - 2);\n}\nprint fib(10);\n\nwhen (age >= 18) {\n    print \"بالغ\";\n} otherwise {\n    print \"قاصر\";\n}"} size=12.5 color="#cfe9da" mono="true" />
+            <Button#paneFlowcodecp label="نسخ الكود" bg="#111b17" color="#edf5f0" weight="700" copyText={"fun fib(n) {\n    if (n < 2) { return n; }\n    return fib(n - 1) + fib(n - 2);\n}\nprint fib(10);\n\nwhen (age >= 18) {\n    print \"بالغ\";\n} otherwise {\n    print \"قاصر\";\n}"} onTap={toggle(copyTick)} />
           </Column>
         </Card>
-        <Card#pathBuilder padding=16 bg="#101510" radius=16>
-          <Column#pathBuilderCol gap=7>
-            <Text#pathBuilderTitle text="🧩 بناء التطبيقات" size=16 weight="850" color="#f4f6f3" />
-            <Text#pathBuilderText text="بعد اللغة الأساسية: الحاويات، الواجهة، المكتبات، التخزين، HTTP، الاختبارات ودورة التشغيل." size=12.5 color="#9aa39c" />
-            <Text#pathBuilderSteps text="06 → 07 → 08 → 09 → 10 → 12" size=12 color="#79d99a" weight="700" />
-            <Button#pathBuilderBtn label="مسار التطبيقات" url="#projects" bg="#141a15" color="#f4f6f3" />
+      </Column>
+      <Column#paneData gap=10 visible={tabData} align="stretch">
+        <Text#paneDatat text="مصفوفات وقواميس وأنابيب" size=16 color="#edf5f0" weight="800" />
+        <Text#paneDatad text={"الأنبوب |> يُغني عن تعشيش الاستدعاءات."} size=13 color="#8fa398" />
+        <Card#paneDatacode padding=14 bg="#070d0b" radius=14>
+          <Column#paneDatacodec gap=10 align="stretch">
+            <Text#paneDatacodesrc text={"let data = [10, 20, 30, 40, 50];\nlet result = data |> normalize() |> mean();\nprint result;\n\nlet m = { name: \"Rin\", age: 2 };\nprint m[\"name\"];\nprint keys(m);"} size=12.5 color="#cfe9da" mono="true" />
+            <Button#paneDatacodecp label="نسخ الكود" bg="#111b17" color="#edf5f0" weight="700" copyText={"let data = [10, 20, 30, 40, 50];\nlet result = data |> normalize() |> mean();\nprint result;\n\nlet m = { name: \"Rin\", age: 2 };\nprint m[\"name\"];\nprint keys(m);"} onTap={toggle(copyTick)} />
           </Column>
         </Card>
-        <Card#pathWeb padding=16 bg="#101510" radius=16>
-          <Column#pathWebCol gap=7>
-            <Text#pathWebTitle text="🌐 الويب وRinHTML" size=16 weight="850" color="#f4f6f3" />
-            <Text#pathWebText text="تعلم العلاقة بين Rin ومحرك الموقع وRinHTML، ثم انتقل إلى أمثلة الويب والـ DOM والربط مع الصفحة." size=12.5 color="#9aa39c" />
-            <Text#pathWebSteps text="11 → RinHTML → Engine → Web" size=12 color="#79d99a" weight="700" />
-            <Button#pathWebBtn label="مسار الويب" url="https://github.com/dlof-lib/rinlang/tree/main/web" bg="#141a15" color="#f4f6f3" />
+      </Column>
+      <Column#paneDb gap=10 visible={tabDb} align="stretch">
+        <Text#paneDbt text="قاعدة NoSQL مدمجة" size=16 color="#edf5f0" weight="800" />
+        <Text#paneDbd text="حاويات المستندات جزء من اللغة، لا مكتبة خارجية." size=13 color="#8fa398" />
+        <Card#paneDbcode padding=14 bg="#070d0b" radius=14>
+          <Column#paneDbcodec gap=10 align="stretch">
+            <Text#paneDbcodesrc text={"@Containers.Group=shop_db\n  @container.doc=users\n    document id=\"u1\" fields={ name: \"سارة\", city: \"الرياض\" };\n  .end/container.doc\n.end/Containers.Group\n\nprint queryDocs(\"users\", \"city\", \"الرياض\");"} size=12.5 color="#cfe9da" mono="true" />
+            <Button#paneDbcodecp label="نسخ الكود" bg="#111b17" color="#edf5f0" weight="700" copyText={"@Containers.Group=shop_db\n  @container.doc=users\n    document id=\"u1\" fields={ name: \"سارة\", city: \"الرياض\" };\n  .end/container.doc\n.end/Containers.Group\n\nprint queryDocs(\"users\", \"city\", \"الرياض\");"} onTap={toggle(copyTick)} />
           </Column>
         </Card>
-      </Row>
+      </Column>
+      <Column#paneUi gap=10 visible={tabUi} align="stretch">
+        <Text#paneUit text="واجهة تفاعلية بـ Indsin" size=16 color="#edf5f0" weight="800" />
+        <Text#paneUid text="حالة reactive عبر warp، وزر يعدّلها — وكل شيء يُعاد رسمه تلقائياً." size=13 color="#8fa398" />
+        <Card#paneUicode padding=14 bg="#070d0b" radius=14>
+          <Column#paneUicodec gap=10 align="stretch">
+            <Text#paneUicodesrc text={"<warp count={0} />\n<Column#app gap=12 padding=20>\n  <Text#t size=22>Count: {count}</Text>\n  <Button#inc onTap={count = count + 1}>Add</Button>\n</Column>"} size=12.5 color="#cfe9da" mono="true" />
+            <Button#paneUicodecp label="نسخ الكود" bg="#111b17" color="#edf5f0" weight="700" copyText={"<warp count={0} />\n<Column#app gap=12 padding=20>\n  <Text#t size=22>Count: {count}</Text>\n  <Button#inc onTap={count = count + 1}>Add</Button>\n</Column>"} onTap={toggle(copyTick)} />
+          </Column>
+        </Card>
+      </Column>
     </Column>
-    <Column#academyConcepts gap=16 padding=22 bg="#0b0f0c" radius=20 shadow="true">
-      <Text#conceptsEyebrow text="مرجع المفاهيم" size=12 color="#22c55e" weight="800" />
-      <Text#conceptsTitle text="ماذا تتعلم في كل طبقة من Rin؟" size=22 weight="900" color="#f4f6f3" />
-      <Text#conceptsDesc text="هذه خريطة مفاهيم تساعدك على معرفة متى تستخدم كل جزء من اللغة بدل حفظ الصياغة فقط." size=13 color="#9aa39c" />
-      <Card#conceptSyntax padding=15 bg="#10130f" radius=15>
-        <Column#conceptSyntaxCol gap=5>
-          <Text#conceptSyntaxTitle text="01 · اللغة الأساسية" size=15 weight="850" color="#f4f6f3" />
-          <Text#conceptSyntaxText text="النصوص، الأرقام، Bool، nil، المتغيرات، التعبيرات، المقارنات، العمليات، الاستدعاءات، الفهارس والتعليقات." size=12.5 color="#9aa39c" />
-          <Button#conceptSyntaxRef label="syntax.md" url="https://github.com/dlof-lib/rinlang/blob/main/docs/syntax.md" bg="#141a15" color="#f4f6f3" />
+    <Divider#d4 height=1 color="#17261f" />
+    <Column#indsin gap=14 align="stretch">
+      <Text#indsinEy text="٠٥ — Indsin" size=12 color="#7cc4ff" weight="800" />
+      <Text#indsinTitle text="لغة الواجهات: Interface Design" size=25 color="#edf5f0" weight="900" />
+      <Text#indsinDesc text="Indsin هو محرّك عرض الواجهات في Rin. تكتب وسوماً بسيطة، فيقيسها المحرّك ويخطّطها ويرسمها — على أندرويد وسطح المكتب وCLI والمتصفح بالمسار نفسه." size=13.5 color="#8fa398" />
+      <Card#indsinProof padding=18 bg="#08141c" radius=18 shadow="true">
+        <Column#indsinProofc gap=8 align="stretch">
+          <Text#indsinProofT text="هذه الصفحة هي الدليل" size=15 color="#7cc4ff" weight="800" />
+          <Text#indsinProofD text="كل ما تراه هنا — الأزرار والتبويبات والدرج والأسئلة المنسدلة — شجرة Indsin مكتوبة في ملف واحد اسمه site.rin، بلا سطر HTML واحد." size=13 color="#8fa398" />
+          <Button#indsinProofB label="اقرأ دليل Indsin" bg="#111b17" color="#edf5f0" weight="700" url="https://github.com/dlof-lib/rinlang/blob/main/indsin.md" />
         </Column>
       </Card>
-      <Card#conceptControl padding=15 bg="#10130f" radius=15>
-        <Column#conceptControlCol gap=5>
-          <Text#conceptControlTitle text="02 · التحكم" size=15 weight="850" color="#f4f6f3" />
-          <Text#conceptControlText text="if/else، when/otherwise، match/case، while، for، for...in، break وcontinue. الهدف هو جعل تدفق البرنامج قابلًا للقراءة والتوقع." size=12.5 color="#9aa39c" />
-          <Button#conceptControlRef label="control-flow.md" url="https://github.com/dlof-lib/rinlang/blob/main/docs/control-flow.md" bg="#141a15" color="#f4f6f3" />
+      <Grid#indsinGrid columns=2 gap=12>
+        <Card#ig1 padding=16 bg="#0b1210" radius=16 shadow="true">
+          <Column#ig1c gap=8 align="stretch">
+            <Text#ig1i text="⟡" size=22 color="#2de08f" weight="900" />
+            <Text#ig1t text="Warp" size=15 color="#edf5f0" weight="800" />
+            <Text#ig1d text="خلايا حالة تفاعلية؛ تغيّر قيمة فيُعاد رسم ما يرتبط بها فقط." size=12.5 color="#8fa398" />
+          </Column>
+        </Card>
+        <Card#ig2 padding=16 bg="#0b1210" radius=16 shadow="true">
+          <Column#ig2c gap=8 align="stretch">
+            <Text#ig2i text="⟢" size=22 color="#2de08f" weight="900" />
+            <Text#ig2t text="إجراءات" size=15 color="#edf5f0" weight="800" />
+            <Text#ig2d text="toggle وset وshow وhide وseq جاهزة دون كتابة دوال." size=12.5 color="#8fa398" />
+          </Column>
+        </Card>
+        <Card#ig3 padding=16 bg="#0b1210" radius=16 shadow="true">
+          <Column#ig3c gap=8 align="stretch">
+            <Text#ig3i text="⟣" size=22 color="#2de08f" weight="900" />
+            <Text#ig3t text="تخطيط" size=15 color="#edf5f0" weight="800" />
+            <Text#ig3d text="Column وRow وGrid وWrap وCard وDrawer وغيرها." size=12.5 color="#8fa398" />
+          </Column>
+        </Card>
+        <Card#ig4 padding=16 bg="#0b1210" radius=16 shadow="true">
+          <Column#ig4c gap=8 align="stretch">
+            <Text#ig4i text="⟤" size=22 color="#2de08f" weight="900" />
+            <Text#ig4t text="معاينة حيّة" size=15 color="#edf5f0" weight="800" />
+            <Text#ig4d text="تعديل الملف ينعكس فوراً على الهاتف أو المتصفح." size=12.5 color="#8fa398" />
+          </Column>
+        </Card>
+      </Grid>
+      <Button#indsinElems label="كتالوج العناصر الكامل" bg="#111b17" color="#edf5f0" weight="700" url="https://github.com/dlof-lib/rinlang/blob/main/docs/RIN_ELEMENTS.md" />
+    </Column>
+    <Divider#d5 height=1 color="#17261f" />
+    <Column#pipeline gap=14 align="stretch">
+      <Text#pipeEy text="٠٦ — كيف تعمل" size=12 color="#2de08f" weight="800" />
+      <Text#pipeTitle text="خمس مراحل، محرّك واحد" size=25 color="#edf5f0" weight="900" />
+      <Text#pipeDesc text="من السطر الأول في ملفك إلى البكسل على الشاشة." size=13.5 color="#8fa398" />
+      <Card#sg1 padding=14 bg="#0b1210" radius=14 shadow="true">
+        <Column#sg1c gap=8 align="stretch">
+          <Row#sg1h gap=12>
+            <Text#sg1n text="01" size=20 color="#2de08f" weight="900" mono="true" />
+            <Text#sg1t text="Lexer" size=15 color="#edf5f0" weight="800" mono="true" />
+          </Row>
+          <Text#sg1d text="يقطّع المصدر إلى رموز (tokens)." size=12.5 color="#8fa398" />
         </Column>
       </Card>
-      <Card#conceptData padding=15 bg="#10130f" radius=15>
-        <Column#conceptDataCol gap=5>
-          <Text#conceptDataTitle text="03 · البيانات" size=15 weight="850" color="#f4f6f3" />
-          <Text#conceptDataText text="المصفوفات والقواميس والكائنات والأنواع، ثم storage وNoSQL والحاويات عندما يصبح البرنامج أكبر من الذاكرة المحلية أو يحتاج تنظيمًا مستمرًا." size=12.5 color="#9aa39c" />
-          <Button#conceptDataRef label="variables + objects + storage" url="https://github.com/dlof-lib/rinlang/tree/main/docs" bg="#141a15" color="#f4f6f3" />
+      <Card#sg2 padding=14 bg="#0b1210" radius=14 shadow="true">
+        <Column#sg2c gap=8 align="stretch">
+          <Row#sg2h gap=12>
+            <Text#sg2n text="02" size=20 color="#2de08f" weight="900" mono="true" />
+            <Text#sg2t text="Parser" size=15 color="#edf5f0" weight="800" mono="true" />
+          </Row>
+          <Text#sg2d text="يبني شجرة الصياغة AST." size=12.5 color="#8fa398" />
         </Column>
       </Card>
-      <Card#conceptRuntime padding=15 bg="#10130f" radius=15>
-        <Column#conceptRuntimeCol gap=5>
-          <Text#conceptRuntimeTitle text="04 · وقت التشغيل" size=15 weight="850" color="#f4f6f3" />
-          <Text#conceptRuntimeText text="المفسر، الفحص، الأخطاء، المكتبات، الملفات، HTTP، RinFlow، والطبقات التي تحوّل كود Rin إلى برنامج يعمل فعليًا." size=12.5 color="#9aa39c" />
-          <Button#conceptRuntimeRef label="TOOLCHAIN.md" url="https://github.com/dlof-lib/rinlang/blob/main/docs/TOOLCHAIN.md" bg="#141a15" color="#f4f6f3" />
+      <Card#sg3 padding=14 bg="#0b1210" radius=14 shadow="true">
+        <Column#sg3c gap=8 align="stretch">
+          <Row#sg3h gap=12>
+            <Text#sg3n text="03" size=20 color="#2de08f" weight="900" mono="true" />
+            <Text#sg3t text="Interpreter" size=15 color="#edf5f0" weight="800" mono="true" />
+          </Row>
+          <Text#sg3d text="ينفّذ برنامج Rin كاملاً: الحاويات والحلقات وmake." size=12.5 color="#8fa398" />
+        </Column>
+      </Card>
+      <Card#sg4 padding=14 bg="#0b1210" radius=14 shadow="true">
+        <Column#sg4c gap=8 align="stretch">
+          <Row#sg4h gap=12>
+            <Text#sg4n text="04" size=20 color="#2de08f" weight="900" mono="true" />
+            <Text#sg4t text="Indsin" size=15 color="#edf5f0" weight="800" mono="true" />
+          </Row>
+          <Text#sg4d text="يقيس شجرة Strand ويخطّطها." size=12.5 color="#8fa398" />
+        </Column>
+      </Card>
+      <Card#sg5 padding=14 bg="#0b1210" radius=14 shadow="true">
+        <Column#sg5c gap=8 align="stretch">
+          <Row#sg5h gap=12>
+            <Text#sg5n text="05" size=20 color="#2de08f" weight="900" mono="true" />
+            <Text#sg5t text="Fabric" size=15 color="#edf5f0" weight="800" mono="true" />
+          </Row>
+          <Text#sg5d text="يُخرج شجرة العرض ليرسمها المضيف: أندرويد أو CLI أو المتصفح." size=12.5 color="#8fa398" />
+        </Column>
+      </Card>
+      <Card#pipeLive padding=14 bg="#070d0b" radius=14>
+        <Column#pipeLiveC gap=6 align="stretch">
+          <Text#pipeLiveL text="مولَّد الآن بحلقة for + make داخل هذه الصفحة:" size=11.5 color="#5a6d62" weight="700" />
+          <Text#pipeLiveT text={livePipelineStr} size=12.5 color="#2de08f" weight="700" mono="true" />
         </Column>
       </Card>
     </Column>
-    <Column#academyExercises id="exercises" gap=16 padding=22 bg="#0b0f0c" radius=20 shadow="true">
-      <Text#exerciseEyebrow text="مختبر التمارين" size=12 color="#22c55e" weight="800" />
-      <Text#exerciseTitle text="تعلّم بالكتابة، لا بالقراءة فقط" size=22 weight="900" color="#f4f6f3" />
-      <Text#exerciseDesc text="نفّذ كل تمرين في ملف مستقل. لا تنتقل للتمرين التالي قبل أن تستطيع تفسير نتيجة برنامجك بنفسك." size=13 color="#9aa39c" />
-      <Card#ex1 padding=16 bg="#10130f" radius=16>
-        <Column#ex1c gap=7>
-          <Text#ex1title text="تمرين 01 · متغيرات" size=15 weight="850" color="#f4f6f3" />
-          <Text#ex1task text="أنشئ متغيرين لاسم ومجموع نقاط، ثم اطبع جملة تحتوي القيمتين." size=12.5 color="#9aa39c" />
-          <Text#ex1hint mono="true" text="let name = Rin; score = 100; print name; print score;" size=12 color="#cfd6cf" />
-          <Text#ex1goal text="المهارة: let + String + Number + print" size=12 color="#79d99a" />
+    <Divider#d6 height=1 color="#17261f" />
+    <Column#learn gap=14 align="stretch">
+      <Text#learnEy text="٠٧ — تعلّم" size=12 color="#2de08f" weight="800" />
+      <Text#learnTitle text="من الصفر إلى أول تطبيق" size=25 color="#edf5f0" weight="900" />
+      <Text#learnDesc text="ستّ محطات مرتّبة. كل محطة وثيقة رسمية قصيرة." size=13.5 color="#8fa398" />
+      <Card#ln1 padding=18 bg="#0b1210" radius=18 shadow="true">
+        <Column#ln1c gap=8 align="stretch">
+          <Row#ln1h gap=12>
+            <Text#ln1n text="1" size=22 color="#2de08f" weight="900" mono="true" />
+            <Text#ln1t text="التثبيت والأوامر" size=15.5 color="#edf5f0" weight="800" />
+          </Row>
+          <Text#ln1d text="ابنِ rin وجرّب rin doctor." size=13 color="#8fa398" />
+          <Button#ln1b label="افتح" bg="#111b17" color="#edf5f0" weight="700" url="https://github.com/dlof-lib/rinlang/blob/main/docs/getting-started.md" />
         </Column>
       </Card>
-      <Card#ex2 padding=16 bg="#10130f" radius=16>
-        <Column#ex2c gap=7>
-          <Text#ex2title text="تمرين 02 · قرار" size=15 weight="850" color="#f4f6f3" />
-          <Text#ex2task text="اكتب برنامجًا يطبع حالة مختلفة عندما تكون النتيجة أكبر أو تساوي 50." size=12.5 color="#9aa39c" />
-          <Text#ex2hint mono="true" text="let score = 72; if score is at least 50 then print pass, otherwise retry" size=12 color="#cfd6cf" />
-          <Text#ex2goal text="المهارة: comparison + if/else" size=12 color="#79d99a" />
+      <Card#ln2 padding=18 bg="#0b1210" radius=18 shadow="true">
+        <Column#ln2c gap=8 align="stretch">
+          <Row#ln2h gap=12>
+            <Text#ln2n text="2" size=22 color="#2de08f" weight="900" mono="true" />
+            <Text#ln2t text="الصياغة والمتغيّرات" size=15.5 color="#edf5f0" weight="800" />
+          </Row>
+          <Text#ln2d text="let وprint والتعابير والأنواع." size=13 color="#8fa398" />
+          <Button#ln2b label="افتح" bg="#111b17" color="#edf5f0" weight="700" url="https://github.com/dlof-lib/rinlang/blob/main/docs/syntax.md" />
         </Column>
       </Card>
-      <Card#ex3 padding=16 bg="#10130f" radius=16>
-        <Column#ex3c gap=7>
-          <Text#ex3title text="تمرين 03 · دالة" size=15 weight="850" color="#f4f6f3" />
-          <Text#ex3task text="أنشئ دالة تجمع رقمين، ثم استدعها أكثر من مرة واطبع النتائج." size=12.5 color="#9aa39c" />
-          <Text#ex3hint mono="true" text="fun add(a, b) returns a + b; then print add(2, 3);" size=12 color="#cfd6cf" />
-          <Text#ex3goal text="المهارة: fun + parameters + return" size=12 color="#79d99a" />
+      <Card#ln3 padding=18 bg="#0b1210" radius=18 shadow="true">
+        <Column#ln3c gap=8 align="stretch">
+          <Row#ln3h gap=12>
+            <Text#ln3n text="3" size=22 color="#2de08f" weight="900" mono="true" />
+            <Text#ln3t text="الدوال والتحكّم" size=15.5 color="#edf5f0" weight="800" />
+          </Row>
+          <Text#ln3d text="fun وif وwhen وwhile وfor." size=13 color="#8fa398" />
+          <Button#ln3b label="افتح" bg="#111b17" color="#edf5f0" weight="700" url="https://github.com/dlof-lib/rinlang/blob/main/docs/functions.md" />
         </Column>
       </Card>
-      <Card#ex4 padding=16 bg="#10130f" radius=16>
-        <Column#ex4c gap=7>
-          <Text#ex4title text="تمرين 04 · بيانات" size=15 weight="850" color="#f4f6f3" />
-          <Text#ex4task text="أنشئ مصفوفة أرقام، مرّ عليها بحلقة، واحسب مجموعها." size=12.5 color="#9aa39c" />
-          <Text#ex4hint text="ابدأ بـ let total = 0 ثم استخدم for أو for...in. افحص القيمة بعد كل خطوة إذا احتجت." size=12 color="#cfd6cf" />
-          <Text#ex4goal text="المهارة: Array + loop + accumulator" size=12 color="#79d99a" />
+      <Card#ln4 padding=18 bg="#0b1210" radius=18 shadow="true">
+        <Column#ln4c gap=8 align="stretch">
+          <Row#ln4h gap=12>
+            <Text#ln4n text="4" size=22 color="#2de08f" weight="900" mono="true" />
+            <Text#ln4t text="الحاويات" size=15.5 color="#edf5f0" weight="800" />
+          </Row>
+          <Text#ln4d text="@container وقواعد البيانات المدمجة." size=13 color="#8fa398" />
+          <Button#ln4b label="افتح" bg="#111b17" color="#edf5f0" weight="700" url="https://github.com/dlof-lib/rinlang/blob/main/docs/containers.md" />
         </Column>
       </Card>
-      <Card#ex5 padding=16 bg="#10130f" radius=16>
-        <Column#ex5c gap=7>
-          <Text#ex5title text="تمرين 05 · مشروع صغير" size=15 weight="850" color="#f4f6f3" />
-          <Text#ex5task text="ابنِ مدير مهام مصغر: إضافة مهمة، عرض المهام، وتغيير حالة مهمة واحدة على الأقل." size=12.5 color="#9aa39c" />
-          <Text#ex5hint text="قسّم المشروع إلى بيانات + دوال + حلقة عرض + منطق تغيير الحالة. لا تضف الواجهة قبل استقرار منطق البيانات." size=12 color="#cfd6cf" />
-          <Text#ex5goal text="المهارة: تركيب أساسيات Rin في برنامج واحد" size=12 color="#79d99a" />
+      <Card#ln5 padding=18 bg="#0b1210" radius=18 shadow="true">
+        <Column#ln5c gap=8 align="stretch">
+          <Row#ln5h gap=12>
+            <Text#ln5n text="5" size=22 color="#2de08f" weight="900" mono="true" />
+            <Text#ln5t text="الواجهات" size=15.5 color="#edf5f0" weight="800" />
+          </Row>
+          <Text#ln5d text="Indsin والعناصر والمعاينة الحيّة." size=13 color="#8fa398" />
+          <Button#ln5b label="افتح" bg="#111b17" color="#edf5f0" weight="700" url="https://github.com/dlof-lib/rinlang/blob/main/indsin.md" />
+        </Column>
+      </Card>
+      <Card#ln6 padding=18 bg="#0b1210" radius=18 shadow="true">
+        <Column#ln6c gap=8 align="stretch">
+          <Row#ln6h gap=12>
+            <Text#ln6n text="6" size=22 color="#2de08f" weight="900" mono="true" />
+            <Text#ln6t text="مشروعك الأول" size=15.5 color="#edf5f0" weight="800" />
+          </Row>
+          <Text#ln6d text="تصفّح الأمثلة الجاهزة وعدّل عليها." size=13 color="#8fa398" />
+          <Button#ln6b label="افتح الأمثلة" bg="#111b17" color="#edf5f0" weight="700" url="https://github.com/dlof-lib/rinlang/tree/main/examples" />
+        </Column>
+      </Card>
+      <Button#learnRef label="المرجع الشامل للغة" bg="#2de08f" color="#04110b" weight="800" url="https://github.com/dlof-lib/rinlang/blob/main/docs/language-reference.md" />
+    </Column>
+    <Divider#d7 height=1 color="#17261f" />
+    <Column#ecosystem gap=14 align="stretch">
+      <Text#ecoEy text="٠٨ — المنظومة" size=12 color="#2de08f" weight="800" />
+      <Text#ecoTitle text="كل ما حول اللغة" size=25 color="#edf5f0" weight="900" />
+      <Grid#ecoGrid columns=2 gap=12>
+        <Card#e1 padding=14 bg="#0b1210" radius=14 shadow="true">
+          <Column#e1c gap=8 align="stretch">
+            <Text#e1t text="المكتبات" size=14.5 color="#edf5f0" weight="800" />
+            <Text#e1d text="أكثر من 80 مكتبة رسمية." size=12 color="#8fa398" />
+            <Button#e1b label="فتح" bg="#111b17" color="#edf5f0" weight="700" url="?view=libraries" />
+          </Column>
+        </Card>
+        <Card#e2 padding=14 bg="#0b1210" radius=14 shadow="true">
+          <Column#e2c gap=8 align="stretch">
+            <Text#e2t text="RinStudio" size=14.5 color="#edf5f0" weight="800" />
+            <Text#e2d text="IDE كامل على أندرويد." size=12 color="#8fa398" />
+            <Button#e2b label="فتح" bg="#111b17" color="#edf5f0" weight="700" url="https://github.com/dlof-lib/rinlang/blob/main/docs/android.md" />
+          </Column>
+        </Card>
+        <Card#e3 padding=14 bg="#0b1210" radius=14 shadow="true">
+          <Column#e3c gap=8 align="stretch">
+            <Text#e3t text="RinPM" size=14.5 color="#edf5f0" weight="800" />
+            <Text#e3d text="مدير الحزم والمتجر." size=12 color="#8fa398" />
+            <Button#e3b label="فتح" bg="#111b17" color="#edf5f0" weight="700" url="https://github.com/dlof-lib/rinlang/blob/main/lib/README.md" />
+          </Column>
+        </Card>
+        <Card#e4 padding=14 bg="#0b1210" radius=14 shadow="true">
+          <Column#e4c gap=8 align="stretch">
+            <Text#e4t text="الربط" size=14.5 color="#edf5f0" weight="800" />
+            <Text#e4d text="Python وNode.js وC." size=12 color="#8fa398" />
+            <Button#e4b label="فتح" bg="#111b17" color="#edf5f0" weight="700" url="https://github.com/dlof-lib/rinlang/blob/main/bindings/README.md" />
+          </Column>
+        </Card>
+        <Card#e5 padding=14 bg="#0b1210" radius=14 shadow="true">
+          <Column#e5c gap=8 align="stretch">
+            <Text#e5t text="RinHTML" size=14.5 color="#edf5f0" weight="800" />
+            <Text#e5d text="شغّل .rin داخل HTML." size=12 color="#8fa398" />
+            <Button#e5b label="فتح" bg="#111b17" color="#edf5f0" weight="700" url="https://github.com/dlof-lib/rinlang/blob/main/docs/html-projects.md" />
+          </Column>
+        </Card>
+        <Card#e6 padding=14 bg="#0b1210" radius=14 shadow="true">
+          <Column#e6c gap=8 align="stretch">
+            <Text#e6t text="حزم المحتوى" size=14.5 color="#edf5f0" weight="800" />
+            <Text#e6d text="لغات وأصول قابلة للتنزيل." size=12 color="#8fa398" />
+            <Button#e6b label="فتح" bg="#111b17" color="#edf5f0" weight="700" url="https://github.com/dlof-lib/rinlang/blob/main/docs/CONTENT_PACKS.md" />
+          </Column>
+        </Card>
+      </Grid>
+    </Column>
+    <Divider#d8 height=1 color="#17261f" />
+    <Column#fit gap=14 align="stretch">
+      <Text#fitEy text="٠٩ — الصراحة أولاً" size=12 color="#2de08f" weight="800" />
+      <Text#fitTitle text="متى تناسبك Rin؟" size=25 color="#edf5f0" weight="900" />
+      <Card#fitYes padding=18 bg="#0a1f16" radius=18 shadow="true">
+        <Column#fitYesc gap=8 align="stretch">
+          <Text#fitYesT text="✓ اختَرها إذا" size=15 color="#2de08f" weight="800" />
+          <Text#fitYesD text="أردت لغة صغيرة تتعلّمها في أيام · تبني أدوات وواجهات خفيفة · تبرمج من الهاتف · تحتاج النتيجة نفسها على CLI وأندرويد والويب." size=13 color="#8fa398" />
+        </Column>
+      </Card>
+      <Card#fitNo padding=18 bg="#0b1210" radius=18 shadow="true">
+        <Column#fitNoc gap=8 align="stretch">
+          <Text#fitNoT text="✕ ربما لا إذا" size=15 color="#ffc857" weight="800" />
+          <Text#fitNoD text="احتجت منظومة مكتبات ضخمة جاهزة لكل مجال · أو أداءً حرجاً لا يقبل مفسّراً · أو فريقاً كبيراً مرتبطاً بلغة أخرى أصلاً." size=13 color="#8fa398" />
         </Column>
       </Card>
     </Column>
-    <Column#academyProjects id="projects" gap=16 padding=22 bg="#0b0f0c" radius=20 shadow="true">
-      <Text#projectEyebrow text="سُلّم المشاريع" size=12 color="#22c55e" weight="800" />
-      <Text#projectTitle text="من أول ملف إلى تطبيق كامل" size=22 weight="900" color="#f4f6f3" />
-      <Text#projectDesc text="المشروع التالي يضيف مفهومًا واحدًا أو أكثر. هذا يمنعك من القفز إلى مشروع كبير قبل فهم أساسيات اللغة." size=13 color="#9aa39c" />
-      <Text#project1 text="01 · Hello Rin — متغيرات وطباعة" size=13 color="#f4f6f3" weight="750" />
-      <Text#project2 text="02 · Calculator — دوال + شروط + أرقام" size=13 color="#f4f6f3" weight="750" />
-      <Text#project3 text="03 · Todo CLI — Arrays + Objects + Loops" size=13 color="#f4f6f3" weight="750" />
-      <Text#project4 text="04 · Data Store — Containers + Storage" size=13 color="#f4f6f3" weight="750" />
-      <Text#project5 text="05 · Web App — RinHTML + Events" size=13 color="#f4f6f3" weight="750" />
-      <Text#project6 text="06 · Production Project — Modules + Tests + HTTP + Error handling" size=13 color="#f4f6f3" weight="750" />
-      <Card#projectRule padding=15 bg="#101510" radius=15>
-        <Column#projectRuleCol gap=5>
-          <Text#projectRuleTitle text="قاعدة المشروع" size=14 weight="850" color="#f4f6f3" />
-          <Text#projectRuleText text="كل مشروع يجب أن يمر عبر: تصميم البيانات → تقسيم الدوال → التحقق بـ rin check → اختبار الحالات الأساسية → تشغيل فعلي → توثيق ما فعلته." size=12.5 color="#9aa39c" />
+    <Divider#d9 height=1 color="#17261f" />
+    <Column#faq gap=14 align="stretch">
+      <Text#faqEy text="١٠ — أسئلة شائعة" size=12 color="#2de08f" weight="800" />
+      <Text#faqTitle text="إجابات سريعة" size=25 color="#edf5f0" weight="900" />
+      <Card#fq1 padding=12 bg="#0b1210" radius=14 shadow="true">
+        <Column#fq1c gap=8 align="stretch">
+          <Button#fq1q label="ما هي Rin؟" bg="#111b17" color="#edf5f0" weight="700" onTap={toggle(faq1)} />
+          <Column#fq1a gap=6 visible={faq1} align="stretch">
+            <Text#fq1at text="لغة برمجة صغيرة بمحرّك C++23 واحد يعمل من سطر الأوامر وفي IDE أندرويد وفي المتصفح عبر WebAssembly." size=13 color="#8fa398" />
+          </Column>
+        </Column>
+      </Card>
+      <Card#fq2 padding=12 bg="#0b1210" radius=14 shadow="true">
+        <Column#fq2c gap=8 align="stretch">
+          <Button#fq2q label="هل أحتاج إلى تثبيت؟" bg="#111b17" color="#edf5f0" weight="700" onTap={toggle(faq2)} />
+          <Column#fq2a gap=6 visible={faq2} align="stretch">
+            <Text#fq2at text="لا للتجربة: افتح الـ Playground في المتصفح. للاستخدام اليومي ابنِ rin من المصدر أو ثبّت RinStudio على أندرويد." size=13 color="#8fa398" />
+          </Column>
+        </Column>
+      </Card>
+      <Card#fq3 padding=12 bg="#0b1210" radius=14 shadow="true">
+        <Column#fq3c gap=8 align="stretch">
+          <Button#fq3q label="كيف أنشر مكتبتي؟" bg="#111b17" color="#edf5f0" weight="700" onTap={toggle(faq3)} />
+          <Column#fq3a gap=6 visible={faq3} align="stretch">
+            <Text#fq3at text="من RinStudio عبر RinPM؛ تظهر تلقائياً في متجر المكتبات على الموقع مع رابط مباشر لها." size=13 color="#8fa398" />
+          </Column>
+        </Column>
+      </Card>
+      <Card#fq4 padding=12 bg="#0b1210" radius=14 shadow="true">
+        <Column#fq4c gap=8 align="stretch">
+          <Button#fq4q label="ما هو Indsin؟" bg="#111b17" color="#edf5f0" weight="700" onTap={toggle(faq4)} />
+          <Column#fq4a gap=6 visible={faq4} align="stretch">
+            <Text#fq4at text="محرّك واجهات Rin (Interface Design): تكتب الوسوم فيقيسها ويرسمها بالمسار نفسه على كل المنصّات." size=13 color="#8fa398" />
+          </Column>
+        </Column>
+      </Card>
+      <Card#fq5 padding=12 bg="#0b1210" radius=14 shadow="true">
+        <Column#fq5c gap=8 align="stretch">
+          <Button#fq5q label="ما الترخيص؟" bg="#111b17" color="#edf5f0" weight="700" onTap={toggle(faq5)} />
+          <Column#fq5a gap=6 visible={faq5} align="stretch">
+            <Text#fq5at text="رخصة MIT. الاسم والشعار غير مشمولين بالترخيص — راجع TRADEMARKS.md." size=13 color="#8fa398" />
+          </Column>
+        </Column>
+      </Card>
+      <Card#fq6 padding=12 bg="#0b1210" radius=14 shadow="true">
+        <Column#fq6c gap=8 align="stretch">
+          <Button#fq6q label="كيف أساهم؟" bg="#111b17" color="#edf5f0" weight="700" onTap={toggle(faq6)} />
+          <Column#fq6a gap=6 visible={faq6} align="stretch">
+            <Text#fq6at text="اقرأ CONTRIBUTING.md وقواعد السلوك ثم افتح Issue أو Pull Request على GitHub." size=13 color="#8fa398" />
+          </Column>
         </Column>
       </Card>
     </Column>
-    <Column#academyErrors id="errors" gap=16 padding=22 bg="#0b0f0c" radius=20 shadow="true">
-      <Text#errorEyebrow text="مختبر الأخطاء" size=12 color="#22c55e" weight="800" />
-      <Text#errorTitle text="كيف تشخّص مشكلة Rin؟" size=22 weight="900" color="#f4f6f3" />
-      <Text#errorDesc text="لا تبدأ بتعديل عشوائي. حدّد المرحلة التي فشل فيها البرنامج، ثم استخدم الأداة المناسبة." size=13 color="#9aa39c" />
-      <Card#err1 padding=15 bg="#10130f" radius=15>
-        <Column#err1c gap=5>
-          <Text#err1t text="1 · خطأ الصياغة" size=15 weight="850" color="#f4f6f3" />
-          <Text#err1d text="راجع الأقواس والفواصل المنقوطة والكلمات المحجوزة وبنية العبارة. استخدم rin check قبل التشغيل." size=12.5 color="#9aa39c" />
-        </Column>
-      </Card>
-      <Card#err2 padding=15 bg="#10130f" radius=15>
-        <Column#err2c gap=5>
-          <Text#err2t text="2 · اسم أو نوع غير صحيح" size=15 weight="850" color="#f4f6f3" />
-          <Text#err2d text="تأكد أن المتغير أو الدالة معرّفان قبل الاستخدام، وأن القيمة التي تمررها تناسب العملية المطلوبة." size=12.5 color="#9aa39c" />
-        </Column>
-      </Card>
-      <Card#err3 padding=15 bg="#10130f" radius=15>
-        <Column#err3c gap=5>
-          <Text#err3t text="3 · خطأ وقت التشغيل" size=15 weight="850" color="#f4f6f3" />
-          <Text#err3d text="إذا اجتاز الملف الفحص ثم فشل أثناء التنفيذ، ركّز على القيم الفعلية ومسار الدالة والبيانات التي وصلت إليها." size=12.5 color="#9aa39c" />
-        </Column>
-      </Card>
-      <Card#err4 padding=15 bg="#10130f" radius=15>
-        <Column#err4c gap=5>
-          <Text#err4t text="4 · مكتبة أو ملف مفقود" size=15 weight="850" color="#f4f6f3" />
-          <Text#err4d text="تحقق من @import والمسار ووجود الملف أو الحزمة في بيئة المشروع. لا تفترض أن كل مكتبة موجودة تلقائيًا." size=12.5 color="#9aa39c" />
-        </Column>
-      </Card>
-      <Button#errorsRef label="افتح نظام الأخطاء الرسمي" url="https://github.com/dlof-lib/rinlang/blob/main/docs/ERROR_SYSTEM.md" bg="#22c55e" color="#0a0c0a" weight="800" />
-    </Column>
-    <Column#academyGlossary gap=16 padding=22 bg="#0b0f0c" radius=20 shadow="true">
-      <Text#glossaryEyebrow text="قاموس Rin" size=12 color="#22c55e" weight="800" />
-      <Text#glossaryTitle text="مصطلحات يجب أن تعرفها" size=22 weight="900" color="#f4f6f3" />
-      <Text#glossaryText text="مرجع سريع للمصطلحات التي ستتكرر أثناء قراءة وثائق Rin ومشاريعها." size=13 color="#9aa39c" />
-      <Text#g1 text="Interpreter — المفسر: ينفذ كود Rin وفق مسار التشغيل المدعوم." size=12.5 color="#cfd6cf" />
-      <Text#g2 text="Parser — المحلل النحوي: يحوّل الصياغة إلى بنية يفهمها النظام." size=12.5 color="#cfd6cf" />
-      <Text#g3 text="Container — الحاوية: مساحة منظمة للبيانات أو السلوك أو مكوّنات التطبيق بحسب النظام المستخدم." size=12.5 color="#cfd6cf" />
-      <Text#g4 text={"Pipeline — الأنبوب: أسلوب لتمرير نتيجة خطوة إلى الخطوة التالية باستخدام |> ."} size=12.5 color="#cfd6cf" />
-      <Text#g5 text="RinFlow — طبقة مرتبطة بتدفق التنفيذ والرؤية التشغيلية كما توثقه وثائق المشروع." size=12.5 color="#cfd6cf" />
-      <Text#g6 text="RinHTML — تكامل Rin مع عناصر الويب والأحداث والبيانات." size=12.5 color="#cfd6cf" />
-      <Button#glossaryRef label="قاموس الكلمات والدوال الرسمي" url="https://github.com/dlof-lib/rinlang/blob/main/docs/key_terms_and_builtins.md" bg="#141a15" color="#f4f6f3" />
-    </Column>
-    <Column#academyReference gap=16 padding=22 bg="#0b0f0c" radius=20 shadow="true">
-      <Text#refEyebrow text="مركز المرجع" size=12 color="#22c55e" weight="800" />
-      <Text#refTitle text="إذا أردت التفاصيل، اذهب إلى المصدر المناسب" size=22 weight="900" color="#f4f6f3" />
-      <Text#refDesc text="التعليم يشرح الطريق؛ هذه الروابط تقودك إلى الوثائق التي يجب الرجوع إليها عند بناء برنامج فعلي." size=13 color="#9aa39c" />
-      <Button#refLanguage label="Language Reference" url="https://github.com/dlof-lib/rinlang/blob/main/docs/language-reference.md" bg="#141a15" color="#f4f6f3" />
-      <Button#refBuiltins label="Key Terms & Builtins" url="https://github.com/dlof-lib/rinlang/blob/main/docs/key_terms_and_builtins.md" bg="#141a15" color="#f4f6f3" />
-      <Button#refContainers label="Containers" url="https://github.com/dlof-lib/rinlang/blob/main/docs/containers.md" bg="#141a15" color="#f4f6f3" />
-      <Button#refFunctions label="Functions" url="https://github.com/dlof-lib/rinlang/blob/main/docs/functions.md" bg="#141a15" color="#f4f6f3" />
-      <Button#refElements label="UI Elements" url="https://github.com/dlof-lib/rinlang/blob/main/docs/RIN_ELEMENTS.md" bg="#141a15" color="#f4f6f3" />
-      <Button#refToolchain label="Toolchain" url="https://github.com/dlof-lib/rinlang/blob/main/docs/TOOLCHAIN.md" bg="#141a15" color="#f4f6f3" />
-      <Button#refAndroid label="Android" url="https://github.com/dlof-lib/rinlang/blob/main/docs/android.md" bg="#141a15" color="#f4f6f3" />
-    </Column>
-    <!-- -------------------------------- الدعوة الختامية -------------------------------- -->
-    <Card#finalCta padding=22 gradient="#0d100d,#0a1610" radius=20 align="center" shadow="true">
-      <Column#finalCtaCol gap=10 align="center">
-        <Text#finalCtaTitle text="جاهز تكتب أول برنامج Rin؟" size=18 weight="800" color="#f4f6f3" />
-        <Text#finalCtaDesc text="الشيفرة المصدرية كاملة، موثّقة، ومفتوحة تحت رخصة MIT." size=13 color="#9aa39c" />
-        <Button#finalCtaBtn label="افتح المستودع على GitHub" url="https://github.com/dlof-lib/rinlang" bg="#22c55e" color="#0a0c0a" weight="800" />
+    <Card#cta padding=24 gradient="#0b1a13,#071811" radius=22 shadow="true">
+      <Column#ctaCol gap=12 align="stretch">
+        <Text#ctaTitle text="جاهز لأول برنامج Rin؟" size=22 color="#edf5f0" weight="900" />
+        <Text#ctaDesc text="الشيفرة كاملة ومفتوحة ومنشورة تلقائياً بلغة Rin عبر GitHub Actions." size=13.5 color="#8fa398" />
+        <Button#ctaRepo label="افتح المستودع على GitHub" bg="#2de08f" color="#04110b" weight="800" url="https://github.com/dlof-lib/rinlang" />
+        <Button#ctaLibs2 label="📚 مكتبات Rin" bg="#111b17" color="#edf5f0" weight="700" url="?view=libraries" />
       </Column>
     </Card>
-    <!-- --------------------------------- الفوتر ---------------------------------- -->
-    <Divider#footerDiv height=1 color="#1c231d" />
-    <Column#footer gap=10>
-      <Text#footerCopy text="© 2026 Rin — مبنية ومنشورة تلقائياً بلغة Rin عبر GitHub Actions." size=12 color="#5b655d" />
-      <Row#footerLinks1 gap=16>
-        <Text#fl1 text="GitHub" size=12 color="#9aa39c" url="https://github.com/dlof-lib/rinlang" />
-        <Text#fl2 text="التوثيق" size=12 color="#9aa39c" url="https://github.com/dlof-lib/rinlang/tree/main/docs" />
-        <Text#fl3 text="الأمثلة" size=12 color="#9aa39c" url="https://github.com/dlof-lib/rinlang/tree/main/examples" />
+    <Divider#d10 height=1 color="#17261f" />
+    <Column#footer gap=10 align="stretch">
+      <Text#footCopy text="© 2026 Rin Project Contributors — MIT" size=12 color="#5a6d62" />
+      <Row#footL1 gap=16>
+        <Text#fl1 text="GitHub" size=12 color="#8fa398" url="https://github.com/dlof-lib/rinlang" />
+        <Text#fl2 text="التوثيق" size=12 color="#8fa398" url="https://github.com/dlof-lib/rinlang/blob/main/docs/" />
+        <Text#fl3 text="الأمثلة" size=12 color="#8fa398" url="https://github.com/dlof-lib/rinlang/tree/main/examples" />
       </Row>
-      <Row#footerLinks2 gap=16>
-        <Text#fl4 text="الإبلاغ عن مشكلة" size=12 color="#9aa39c" url="https://github.com/dlof-lib/rinlang/issues" />
-        <Text#fl5 text="المساهمة" size=12 color="#9aa39c" url="https://github.com/dlof-lib/rinlang/blob/main/CONTRIBUTING.md" />
-        <Text#fl6 text="الرخصة (MIT)" size=12 color="#9aa39c" url="https://github.com/dlof-lib/rinlang/blob/main/LICENSE" />
+      <Row#footL2 gap=16>
+        <Text#fl4 text="المشاكل" size=12 color="#8fa398" url="https://github.com/dlof-lib/rinlang/issues" />
+        <Text#fl5 text="المساهمة" size=12 color="#8fa398" url="https://github.com/dlof-lib/rinlang/blob/main/CONTRIBUTING.md" />
+        <Text#fl6 text="الأمان" size=12 color="#8fa398" url="https://github.com/dlof-lib/rinlang/blob/main/SECURITY.md" />
+        <Text#fl7 text="العلامة" size=12 color="#8fa398" url="https://github.com/dlof-lib/rinlang/blob/main/TRADEMARKS.md" />
       </Row>
     </Column>
   </Column>
