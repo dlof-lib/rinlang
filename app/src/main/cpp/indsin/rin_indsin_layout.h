@@ -596,6 +596,24 @@ struct Indsin {
             case StrandKind::NESTED_ITEM:
                 size = layoutLinear(s, c2, Axis::Y, originX, originY); break;
             case StrandKind::PAGINATION: size = layoutLinear(s, c2, Axis::X, originX, originY); break;
+            case StrandKind::SPARKLINE: {
+                // مستطيل عريض: 120×32 افتراضياً (width=/height= تتجاوز عبر مسار الأحجام العام).
+                double w = std::min(120.0, c2.maxW), h = std::min(32.0, c2.maxH);
+                size = {0,0, std::max(w,c2.minW), std::max(h,c2.minH)};
+                break;
+            }
+            case StrandKind::BAR_CHART: {
+                double w = std::min(240.0, c2.maxW), h = std::min(140.0, c2.maxH);
+                size = {0,0, std::max(w,c2.minW), std::max(h,c2.minH)};
+                break;
+            }
+            case StrandKind::PROGRESS_RING: {
+                // diameter= (لا size=: الأخيرة تُقرأ كحجم خط عند رسم النصّ المركزي)
+                double sz = s->attr("diameter") ? s->attrNum("diameter", 84.0) : 84.0;
+                sz = std::min(sz, std::min(c2.maxW, c2.maxH));
+                size = {0,0, std::max(sz,c2.minW), std::max(sz,c2.minH)};
+                break;
+            }
             case StrandKind::DONUT_CHART: {
                 // Square, like Spinner/Avatar -- size= (token or number), default 120 (bigger than
                 // Spinner's 24 since a chart needs room for its segments to actually read).
