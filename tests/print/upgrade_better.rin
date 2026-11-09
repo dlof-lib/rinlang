@@ -1,0 +1,20 @@
+// وضع «أفضل»: النسخة الجديدة لا تكافئ القديمة بل تحسّنها (score)، وبموافقة approve.
+@import "lib/upgrade.og.rin";
+time.freeze();
+// تقريب π: v1 = 3 رقم صحيح، v2 = 22/7. الجودة = قرب القيمة من 3.14159
+let pi = 3.14159;
+Upgrade.cell("pi", fun(digits) { return 3; });
+Upgrade.proposeWith("pi", fun(digits) { return 22 / 7; }, {
+    need: 2, score: fun(v, d) { return -abs(v - pi); },
+    approve: fun(info) { print "طلب موافقة:", info["name"], "v" + info["from"], "→ v" + info["to"], "أدلّة=" + info["agree"]; return true; }
+});
+Upgrade.read("pi", 0); Upgrade.run(1ms);
+Upgrade.read("pi", 0); Upgrade.run(1ms);
+print "تقدير:", Upgrade.read("pi", 0)["value"], "v" + Upgrade.state("pi")["live"];
+Upgrade.proposeWith("pi", fun(digits) { return 3.1; }, { need: 1, score: fun(v, d) { return -abs(v - pi); } });   // أسوأ من 22/7
+Upgrade.read("pi", 0); Upgrade.run(1ms);
+print "بعد مرشّحة أسوأ: v" + Upgrade.state("pi")["live"], Upgrade.state("pi")["stage"];
+Upgrade.proposeWith("pi", fun(digits) { return 355 / 113; }, { need: 1, score: fun(v, d) { return -abs(v - pi); }, approve: fun(i) { return false; } });
+Upgrade.read("pi", 0); Upgrade.run(1ms);
+print "بعد رفض الموافقة: v" + Upgrade.state("pi")["live"];
+for (let l in Upgrade.timeline("pi")) { print "  -", l; }
