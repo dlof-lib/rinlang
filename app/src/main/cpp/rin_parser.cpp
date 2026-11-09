@@ -7,6 +7,7 @@
 #include <unordered_map>
 #include <cstdlib>
 #include <functional>
+#include <set>
 
 namespace rin {
 
@@ -634,6 +635,35 @@ StmtPtr Parser::declaration() {
         advance(); // 'when'
         return whenStatement();
     }
+    // unless (c) { ... } [else ...] — عكس when/if؛ تُميَّز عن نداء دالة اسمها unless بأن يلي القوسَ المطابق '{'
+    if (check(TokenType::IDENT) && peek().lexeme == "unless" && checkNext(TokenType::LPAREN)) {
+        size_t rp = current + 1; int dp = 0;
+        for (; rp < tokens.size(); ++rp) {
+            if (tokens[rp].type == TokenType::LPAREN) dp++;
+            else if (tokens[rp].type == TokenType::RPAREN && --dp == 0) break;
+            else if (tokens[rp].type == TokenType::END_OF_FILE) break;
+        }
+        bool startsStmt = false;
+        if (rp + 1 < tokens.size() && tokens[rp].type == TokenType::RPAREN) {
+            const TokenType nt = tokens[rp + 1].type;
+            startsStmt = nt == TokenType::LBRACE || nt == TokenType::PRINT || nt == TokenType::RETURN || nt == TokenType::BREAK ||
+                         nt == TokenType::CONTINUE || nt == TokenType::LET || nt == TokenType::IF || nt == TokenType::FOR || nt == TokenType::WHILE ||
+                         (nt == TokenType::IDENT && tokens[rp + 1].line == tokens[rp].line);
+        }
+        if (startsStmt) {
+            Token kw = advance(); // 'unless'
+            advance();            // '('
+            auto cond = expression();
+            consume(TokenType::RPAREN, "Expected ')' after 'unless' condition");
+            auto neg = std::make_shared<UnaryExpr>();
+            neg->op = TokenType::BANG; neg->right = cond; neg->line = cond->line;
+            auto st = std::make_shared<IfStmt>();
+            st->condition = neg; st->thenBranch = thenStatement(); st->line = kw.line;
+            if (match({TokenType::ELSE})) st->elseBranch = elseBranchStatement();
+            else if (check(TokenType::IDENT) && peek().lexeme == "otherwise") { advance(); st->elseBranch = elseBranchStatement(); }
+            return st;
+        }
+    }
     // 'match' (subject) { case v1, v2 { .. } ... [else { .. }] } -> مطابقة أنماط (pattern
     // matching)، امتداد إضافي فوق if/else (انظر MatchStmt في rin_ast.h للشرح الكامل). 'match'
     // كلمة سياقية غير محجوزة، مُميَّزة عند ظهورها IDENT("match") متبوعة مباشرة بـ '('.
@@ -787,10 +817,16 @@ StmtPtr Parser::letDeclarator() {
         st->pattern = letPattern();
         checkPatternDuplicates(st->pattern, startTok);
         consume(TokenType::EQUAL, "Expected '=' after a destructuring pattern (a pattern needs a value to take apart)");
+        ++noElseExpr;
         st->initializer = expression();
-        if (match({TokenType::ELSE})) {
-            consume(TokenType::LBRACE, "Expected '{' after 'else' of a `let` declaration");
-            st->elseBlock = block();
+        --noElseExpr;
+        while (check(TokenType::ELSE)) {
+            Token e = advance();
+            if (match({TokenType::LBRACE})) { st->elseBlock = block(); break; }
+            ++noElseExpr;
+            auto fb = pipeline();
+            --noElseExpr;
+            st->initializer = makeElseExpr(st->initializer, fb, e.line);
         }
         return st;
     }
@@ -806,12 +842,18 @@ StmtPtr Parser::letDeclarator() {
     std::shared_ptr<BlockStmt> elseBlock;
     ExprPtr ttlExpr;
     if (match({TokenType::EQUAL})) {
+        ++noElseExpr;                                    // else بعد قيمة let: كتلة حارس (`else { }`) أو قيمة بديلة (`else 5`) — تُحسم أدناه
         initializer = expression();
+        --noElseExpr;
         // timer ✕ let: `ttl` كلمة سياقية (IDENT) بعد القيمة؛ تُقرأ المدّة بـ durationExpr (30s · 1h30m · متغيّر)
         if (check(TokenType::IDENT) && peek().lexeme == "ttl") { advance(); ttlExpr = durationExpr(); }
-        if (match({TokenType::ELSE})) {
-            consume(TokenType::LBRACE, "Expected '{' after 'else' of a `let` declaration");
-            elseBlock = block();
+        while (check(TokenType::ELSE)) {
+            Token e = advance();
+            if (match({TokenType::LBRACE})) { elseBlock = block(); break; }   // let v = x else { ... }  (حارس، كما كان)
+            ++noElseExpr;
+            auto fb = pipeline();                                              // let v = x else 5;  (قيمة بديلة)
+            --noElseExpr;
+            initializer = makeElseExpr(initializer, fb, e.line);
         }
     }
     auto stmt = std::make_shared<LetStmt>();
@@ -1116,7 +1158,9 @@ StmtPtr Parser::liveDeclaration() {
             if (st->kind != LiveKind::Accept) throw reject("only `accept`, `pre` and `post` have a rule (`if RULE`)");
             if (st->rule) throw reject("an accept takes only one rule; join conditions with `and` / `or`");
             advance();
+            ++noElseExpr;                                // `accept x = v if RULE else FALLBACK`: else هنا بديل accept لا معامل
             st->rule = expression();
+            --noElseExpr;
         } else if (mod == "else") {
             if (st->kind != LiveKind::Accept) throw reject("only `accept` has a fallback (`else VALUE`)");
             if (st->fallback) throw reject("an accept takes only one fallback");
@@ -1853,10 +1897,55 @@ StmtPtr Parser::statement() {
             if (first) { st->catchName = cc.name; st->catchGuard = cc.guard; st->catchBranch = cc.body; first = false; }
             else st->moreCatches.push_back(std::move(cc));
         }
+        // try { T } catch { C } else { E } finally { F } — E تُنفَّذ إن اكتملت T دون خطأ (ولا return/break/continue)، خارج حماية catch.
+        // اختزال بلا عقدة جديدة:  try { let ok=false; try { T; ok=true } catch { C }  if (ok) { E } } finally { F }
+        std::shared_ptr<BlockStmt> tryElse;
+        if (check(TokenType::ELSE)) {
+            if (!hasCatch)
+                throw errRich(diag::Code::E0013_InvalidExpression, peek(), "`else` after `try` needs a `catch` block",
+                              "`try { } else { }` has no failure path to be the alternative of; `else` runs only when the try body finished without an error",
+                              "write `try { ... } catch (e) { ... } else { ... }`", "'catch'");
+            advance(); // else
+            consume(TokenType::LBRACE, "Expected '{' after 'else' of a `try`");
+            tryElse = block();
+        }
         if (check(TokenType::IDENT) && peek().lexeme == "finally") {
             advance();
             consume(TokenType::LBRACE, "Expected '{' after 'finally'");
             st->finallyBranch = block();
+        }
+        if (tryElse) {
+            const int ln = st->line ? st->line : previous().line;
+            const std::string okName = "__try_ok" + std::to_string(++tryElseSeq);
+            auto inner = std::make_shared<TryCatchStmt>();
+            inner->line = ln;
+            inner->tryBranch = st->tryBranch;
+            inner->catchName = st->catchName; inner->catchGuard = st->catchGuard;
+            inner->catchBranch = st->catchBranch; inner->moreCatches = st->moreCatches;
+            auto tr = std::make_shared<LiteralExpr>(); tr->kind = LiteralExpr::Kind::BOOL; tr->boolean = true; tr->line = ln;
+            auto setOk = std::make_shared<AssignExpr>(); setOk->name = okName; setOk->value = tr; setOk->line = ln;
+            auto setOkStmt = std::make_shared<ExpressionStmt>(); setOkStmt->expr = setOk; setOkStmt->line = ln;
+            auto newTry = std::make_shared<BlockStmt>();
+            newTry->statements = inner->tryBranch->statements;
+            newTry->statements.push_back(setOkStmt);
+            inner->tryBranch = newTry;
+            inner->needsInterp = true;
+            auto fl = std::make_shared<LiteralExpr>(); fl->kind = LiteralExpr::Kind::BOOL; fl->boolean = false; fl->line = ln;
+            auto decl = std::make_shared<LetStmt>(); decl->name = okName; decl->initializer = fl; decl->line = ln;
+            auto okVar = std::make_shared<VariableExpr>(); okVar->name = okName; okVar->line = ln;
+            auto runElse = std::make_shared<IfStmt>(); runElse->condition = okVar; runElse->thenBranch = tryElse; runElse->line = ln;
+            auto body = std::make_shared<BlockStmt>();
+            body->line = ln;
+            body->statements = {decl, inner, runElse};
+            if (st->finallyBranch) {
+                auto outer = std::make_shared<TryCatchStmt>();
+                outer->line = ln;
+                outer->tryBranch = body;
+                outer->finallyBranch = st->finallyBranch;
+                outer->needsInterp = true;
+                return outer;
+            }
+            return body;
         }
         if (st->catchGuard || !st->moreCatches.empty() || st->finallyBranch || !st->catchBranch)
             st->needsInterp = true;
@@ -2089,7 +2178,7 @@ StmtPtr Parser::printStatement() {
                         seenCall.insert(attr);
                         attrs.push_back({attr, expression()});
                     } else {
-                        items.push_back(pipeline());
+                        items.push_back(pipelineElse());
                     }
                     if (!match({TokenType::COMMA})) break;
                     if (check(TokenType::RPAREN)) break; // فاصلة أخيرة مسموحة
@@ -2108,9 +2197,9 @@ StmtPtr Parser::printStatement() {
         if (!callDialect) current = saved;
     }
     if (!callDialect) {
-        stmt->exprs.push_back(pipeline());
+        stmt->exprs.push_back(pipelineElse());
         while (match({TokenType::COMMA})) {
-            stmt->exprs.push_back(pipeline());
+            stmt->exprs.push_back(pipelineElse());
         }
     }
     static const char* fxNames[9] = {"bold", "italic", "underline", "strike", "dim", "reverse", "blink", "color", "bg"};
@@ -2479,11 +2568,11 @@ StmtPtr Parser::keyConditionStatement(bool asElseIf) {
     }
 
     // ---- branches ----
-    auto thenBranch = statement();
+    auto thenBranch = thenStatement();
     StmtPtr elseBranch = nullptr;
     if (check(TokenType::ELSE)) {
         advance();
-        elseBranch = statement();
+        elseBranch = elseBranchStatement();
     } else if (check(TokenType::EQUAL) && current + 3 < tokens.size() &&
                tokens[current + 1].lexeme == "else" && tokens[current + 2].type == TokenType::EQUAL) {
         advance(); advance(); advance(); // = else =
@@ -2507,14 +2596,46 @@ StmtPtr Parser::ifStatement() {
     consume(TokenType::LPAREN, "Expected '(' after 'if'");
     auto condition = expression();
     consume(TokenType::RPAREN, "Expected ')' after if condition");
-    auto thenBranch = statement();
+    StmtPtr thenBranch = thenStatement();
     StmtPtr elseBranch = nullptr;
-    if (match({TokenType::ELSE})) elseBranch = statement();
+    if (match({TokenType::ELSE})) elseBranch = elseBranchStatement();
     auto stmt = std::make_shared<IfStmt>();
     stmt->condition = condition;
     stmt->thenBranch = thenBranch;
     stmt->elseBranch = elseBranch;
     return stmt;
+}
+
+// الفرع الأول لـ if: إن لم يبدأ بـ '{' فهو «مجرَّد» ⇒ else التالية تخصّ الـ if لا حلقة بداخله (انظر attachDoneBlock).
+StmtPtr Parser::thenStatement() {
+    const bool saved = bareIfThen;
+    bareIfThen = !check(TokenType::LBRACE);
+    StmtPtr st = statement();
+    bareIfThen = saved;
+    return st;
+}
+
+// بعد else: `else when (c) S [else ...]` و`else unless (c) S [else ...]` = else if بحارس مقروء (سلسلة مسطّحة).
+StmtPtr Parser::elseBranchStatement() {
+    if (check(TokenType::IDENT) && (peek().lexeme == "when" || peek().lexeme == "unless") && checkNext(TokenType::LPAREN)) {
+        Token kw = advance();
+        consume(TokenType::LPAREN, "Expected '(' after 'else " + kw.lexeme + "'");
+        auto cond = expression();
+        consume(TokenType::RPAREN, "Expected ')' after 'else " + kw.lexeme + "' condition");
+        if (kw.lexeme == "unless") {
+            auto neg = std::make_shared<UnaryExpr>();
+            neg->op = TokenType::BANG; neg->right = cond; neg->line = cond->line;
+            cond = neg;
+        }
+        auto st = std::make_shared<IfStmt>();
+        st->condition = cond;
+        st->thenBranch = thenStatement();
+        st->line = kw.line;
+        if (match({TokenType::ELSE})) st->elseBranch = elseBranchStatement();
+        else if (check(TokenType::IDENT) && peek().lexeme == "otherwise") { advance(); st->elseBranch = elseBranchStatement(); }
+        return st;
+    }
+    return statement();
 }
 
 // when (condition) thenBranch ['otherwise' elseBranch] -> مطابقة تماماً لـ if/else، انظر التعليق
@@ -2524,11 +2645,15 @@ StmtPtr Parser::whenStatement() {
     consume(TokenType::LPAREN, "Expected '(' after 'when'");
     auto condition = expression();
     consume(TokenType::RPAREN, "Expected ')' after 'when' condition");
-    auto thenBranch = statement();
+    auto thenBranch = thenStatement();
     StmtPtr elseBranch = nullptr;
+    // otherwise / else (مترادفتان بعد when) وتدعمان السلسلة: otherwise when (c) {...} otherwise unless (c) {...}
     if (check(TokenType::IDENT) && peek().lexeme == "otherwise") {
         advance(); // 'otherwise'
-        elseBranch = statement();
+        elseBranch = elseBranchStatement();
+    } else if (check(TokenType::ELSE)) {
+        advance(); // 'else'
+        elseBranch = elseBranchStatement();
     }
     auto stmt = std::make_shared<IfStmt>();
     stmt->condition = condition;
@@ -2561,8 +2686,43 @@ StmtPtr Parser::whileStatement() {
 //   - increment: تعبير عادي (يُنفَّذ بعد كل تكرار، حتى بعد continue)؛ اختياري
 // desugaring داخلياً: نبني ForStmt مستقلة (بدل تحويلها فوراً إلى WhileStmt) حتى يبقى initializer
 // محصوراً ضمن بيئة (Environment) خاصة بالحلقة كلها، تماماً كسلوك for القياسي في اللغات المشابهة.
+// for (let x in xs) MODS { }  ⇒  each x in xs MODS { }  — توحيد: كل مُعدِّلات each (where/skip/take/until/reversed/sorted/unique/
+// flat/chain/by/window/every/zip/pairs/from/cross/limit) تعمل على صيغة for بأقواس أيضاً، بإعادة كتابة التوكنات قبل التحليل.
+void Parser::rewriteParenForIn() {
+    if (!check(TokenType::LPAREN) || current + 3 >= tokens.size() || tokens[current + 1].type != TokenType::LET) return;
+    size_t i = current + 2;
+    if (tokens[i].type == TokenType::IDENT) i += 1;
+    else if (tokens[i].type == TokenType::LBRACKET || tokens[i].type == TokenType::LBRACE) {
+        int d = 0;
+        for (; i < tokens.size(); ++i) {
+            if (tokens[i].type == TokenType::LBRACKET || tokens[i].type == TokenType::LBRACE) d++;
+            else if ((tokens[i].type == TokenType::RBRACKET || tokens[i].type == TokenType::RBRACE) && --d == 0) { ++i; break; }
+        }
+    } else return;
+    if (i >= tokens.size() || !(tokens[i].type == TokenType::IDENT && tokens[i].lexeme == "in")) return;
+    int d = 0; size_t rp = current;
+    for (; rp < tokens.size(); ++rp) {
+        if (tokens[rp].type == TokenType::LPAREN) d++;
+        else if (tokens[rp].type == TokenType::RPAREN && --d == 0) break;
+    }
+    if (rp + 1 >= tokens.size() || tokens[rp].type != TokenType::RPAREN || tokens[rp + 1].type != TokenType::IDENT) return;
+    static const std::set<std::string> mods = {"where", "skip", "take", "until", "reversed", "sorted", "unique", "flat", "chain",
+                                               "by", "window", "every", "zip", "pairs", "from", "cross", "limit"};
+    if (!mods.count(tokens[rp + 1].lexeme)) return;
+    const TokenType nx = rp + 2 < tokens.size() ? tokens[rp + 2].type : TokenType::END_OF_FILE;
+    if (nx == TokenType::EQUAL || nx == TokenType::DOT) return;           // عبارة جسم باسم كهذا، لا مُعدِّل
+    for (size_t j = rp + 1; j < tokens.size(); ++j) {                      // يجب أن تأتي '{' قبل أي ';'
+        if (tokens[j].type == TokenType::LBRACE) break;
+        if (tokens[j].type == TokenType::SEMICOLON || tokens[j].type == TokenType::END_OF_FILE) return;
+    }
+    tokens.erase(tokens.begin() + rp);            // ')'
+    tokens.erase(tokens.begin() + current + 1);   // 'let'
+    tokens.erase(tokens.begin() + current);       // '('
+}
+
 StmtPtr Parser::forStatement() {
     Token forTok = previous(); // 'for'
+    rewriteParenForIn();
     if (!check(TokenType::LPAREN) && atEachForm(current - 1, true)) { // for x in xs { }  — صياغة بلا أقواس = each
         EachHdr h = parseEachHdr();
         ExprPtr lim = limitClause();
@@ -2716,6 +2876,14 @@ void Parser::attachDoneBlock(StmtPtr& done) {
         advance(); // #done / nobreak (بديل مقروء، مثل else في for..else بلغة Python)
         advance(); // {
         done = block();
+        return;
+    }
+    // else { ... } بعد حلقة = نفس nobreak (for..else في Python). لا تُفعَّل إن كانت الحلقة هي الفرع المجرَّد (بلا أقواس)
+    // لـ if، كي لا تُسرَق else من الـ if (else المعلّقة): `if (a) while (c) { } else { }` تبقى else لـ if كما كانت.
+    if (check(TokenType::ELSE) && !bareIfThen && checkNext(TokenType::LBRACE)) {
+        advance(); // else
+        advance(); // {
+        done = block();
     }
 }
 
@@ -2777,7 +2945,9 @@ StmtPtr Parser::hashDoStatement() {
     consume(TokenType::LPAREN, "Expected '(' after '#while'");
     auto cond = expression();
     consume(TokenType::RPAREN, "Expected ')' after '#while' condition");
-    consume(TokenType::SEMICOLON, "Expected ';' after '#do ... #while (...)'");
+    if (!(check(TokenType::ELSE) && checkNext(TokenType::LBRACE) && !bareIfThen))
+        consume(TokenType::SEMICOLON, "Expected ';' after '#do ... #while (...)'");
+    else if (false) {}
 
     const std::string flag = "#first" + std::to_string(hashCounter++);
     auto lit = [&](bool b) { auto l = std::make_shared<LiteralExpr>(); l->kind = LiteralExpr::Kind::BOOL; l->boolean = b; l->line = doTok.line; return l; };
@@ -2904,7 +3074,18 @@ StmtPtr Parser::hashSwapStatement() {
 
 StmtPtr Parser::returnStatement() {
     ExprPtr value = nullptr;
-    if (!check(TokenType::SEMICOLON) && !check(TokenType::IF)) value = expression();
+    // `return if (c);` حارس (قديم) ، أما `return if (c) a else b;` فتعبير شرطي: نميّزهما بما يلي القوس المطابق (';' = حارس)
+    bool ifIsGuard = false;
+    if (check(TokenType::IF)) {
+        size_t i = current + 1; int depth = 0;
+        for (; i < tokens.size(); ++i) {
+            if (tokens[i].type == TokenType::LPAREN) depth++;
+            else if (tokens[i].type == TokenType::RPAREN && --depth == 0) { ++i; break; }
+            else if (tokens[i].type == TokenType::END_OF_FILE) break;
+        }
+        ifIsGuard = !(i < tokens.size() && tokens[i].type != TokenType::SEMICOLON && tokens[i].type != TokenType::END_OF_FILE);
+    }
+    if (!check(TokenType::SEMICOLON) && (!check(TokenType::IF) || !ifIsGuard)) value = expression();
     ExprPtr guard = trailingGuard(); // return x when (c);  /  return if (c);
     consume(TokenType::SEMICOLON, "Expected ';' after return value");
     auto stmt = std::make_shared<ReturnStmt>();
@@ -2953,9 +3134,12 @@ StmtPtr Parser::continueStatement() {
 
 std::shared_ptr<BlockStmt> Parser::block() {
     auto blk = std::make_shared<BlockStmt>();
+    const bool savedBare = bareIfThen; const int savedNoElse = noElseExpr;
+    bareIfThen = false; noElseExpr = 0;                 // داخل الأقواس: else الحلقات والتعبيرات تعود مفعَّلة
     while (!check(TokenType::RBRACE) && !isAtEnd()) {
         blk->statements.push_back(declaration());
     }
+    bareIfThen = savedBare; noElseExpr = savedNoElse;
     consume(TokenType::RBRACE, "Expected '}' after block");
     applyDefers(blk->statements);
     return blk;
@@ -4275,8 +4459,75 @@ static ExprPtr rinMakeStore(const ExprPtr& target, const ExprPtr& value, int lin
     return nullptr;
 }
 
+// عنصر print: pipeline + `else` (print a else b;) — يبقى عند مستوى pipeline كي لا تُبتلع سمات sep=/end=
+ExprPtr Parser::pipelineElse() {
+    auto expr = pipeline();
+    while (noElseExpr == 0 && check(TokenType::ELSE)) {
+        Token e = advance();
+        auto rhs = pipeline();
+        expr = makeElseExpr(expr, rhs, e.line);
+    }
+    return expr;
+}
+
+ExprPtr Parser::makeThunk(ExprPtr value, int line) {      // fun() { return value; } — للتقييم الكسول
+    auto ret = std::make_shared<ReturnStmt>(); ret->value = value; ret->line = line;
+    auto body = std::make_shared<BlockStmt>(); body->statements.push_back(ret); body->line = line;
+    auto fn = std::make_shared<FunctionStmt>(); fn->name = ""; fn->body = body; fn->line = line;
+    auto lam = std::make_shared<LambdaExpr>(); lam->decl = fn; lam->line = line;
+    return lam;
+}
+
+ExprPtr Parser::argExpression() {                       // وسيط نداء: داخل الأقواس `a else b` مفعَّلة دائماً
+    const int saved = noElseExpr; noElseExpr = 0;
+    auto e = expression();
+    noElseExpr = saved;
+    return e;
+}
+
+// a else b  ⇒  a إن لم تكن nil وإلا b (b لا تُقيَّم إلا عند الحاجة). تعبير بسيط: a != nil ? a : b ؛ غير ذلك: __else(a, fun() { return b; })
+ExprPtr Parser::makeElseExpr(ExprPtr left, ExprPtr right, int line) {
+    if (isSimpleTarget(left)) {
+        auto nilLit = std::make_shared<LiteralExpr>(); nilLit->kind = LiteralExpr::Kind::NIL; nilLit->line = line;
+        auto cmp = std::make_shared<BinaryExpr>(); cmp->left = left; cmp->op = TokenType::BANG_EQUAL; cmp->right = nilLit; cmp->line = line;
+        auto c = std::make_shared<ConditionalExpr>(); c->condition = cmp; c->whenTrue = left; c->whenFalse = right; c->line = line;
+        return c;
+    }
+    auto ret = std::make_shared<ReturnStmt>(); ret->value = right; ret->line = line;
+    auto body = std::make_shared<BlockStmt>(); body->statements.push_back(ret); body->line = line;
+    auto fn = std::make_shared<FunctionStmt>(); fn->name = ""; fn->body = body; fn->line = line;
+    auto lam = std::make_shared<LambdaExpr>(); lam->decl = fn; lam->line = line;
+    auto call = std::make_shared<CallExpr>(); call->callee = "__else"; call->line = line;
+    call->args.push_back(left); call->args.push_back(lam);
+    return call;
+}
+
+// if (c) a else b — شرط كتعبير (≡ c ? a : b) بصياغة مقروءة؛ else إلزامية، وتتسلسل: if (a) 1 else if (b) 2 else 3
+ExprPtr Parser::ifExpression(const Token& kw) {
+    consume(TokenType::LPAREN, "Expected '(' after 'if' in an if-expression");
+    auto cond = expression();
+    consume(TokenType::RPAREN, "Expected ')' after if-expression condition");
+    ++noElseExpr;                                       // else التالية تخصّ هذا الـ if لا معامِل else
+    auto whenTrue = expression();
+    --noElseExpr;
+    if (!check(TokenType::ELSE))
+        throw errRich(diag::Code::E0013_InvalidExpression, peek(), "an if-expression needs an `else` branch",
+                      "`if (c) a else b` used as a value must produce a value on both paths; without `else` there is nothing to give back when c is false",
+                      "add `else <value>`, or use the statement form `if (c) { ... }` (without `let x =`)", "'else'");
+    advance(); // else
+    auto whenFalse = expression();
+    auto c = std::make_shared<ConditionalExpr>();
+    c->condition = cond; c->whenTrue = whenTrue; c->whenFalse = whenFalse; c->line = kw.line;
+    return c;
+}
+
 ExprPtr Parser::assignment() {
     auto expr = pipeline();
+    while (noElseExpr == 0 && check(TokenType::ELSE)) {      // a else b else c  (من اليسار: أول قيمة غير nil)
+        Token e = advance();
+        auto rhs = pipeline();
+        expr = makeElseExpr(expr, rhs, e.line);
+    }
     if (match({TokenType::QUESTION})) {
         Token q = previous();
         auto whenTrue = expression();
@@ -4572,7 +4823,7 @@ ExprPtr Parser::call() {
                 cv->line = previous().line;
                 if (!check(TokenType::RPAREN)) {
                     do {
-                        cv->args.push_back(expression());
+                        cv->args.push_back(argExpression());
                     } while (match({TokenType::COMMA}));
                 }
                 consume(TokenType::RPAREN, "Expected ')' after arguments");
@@ -4584,7 +4835,7 @@ ExprPtr Parser::call() {
             c->line = previous().line;
             if (!check(TokenType::RPAREN)) {
                 do {
-                    c->args.push_back(expression());
+                    c->args.push_back(argExpression());
                 } while (match({TokenType::COMMA}));
             }
             consume(TokenType::RPAREN, "Expected ')' after arguments");
@@ -4614,7 +4865,7 @@ ExprPtr Parser::call() {
                     auto c = std::make_shared<CallExpr>();
                     c->callee = ns; c->line = dot.line;
                     if (!check(TokenType::RPAREN)) {
-                        do { c->args.push_back(expression()); } while (match({TokenType::COMMA}));
+                        do { c->args.push_back(argExpression()); } while (match({TokenType::COMMA}));
                     }
                     consume(TokenType::RPAREN, "Expected ')' after arguments");
                     expr = c;
@@ -4638,7 +4889,7 @@ ExprPtr Parser::call() {
                     };
                     std::string ns = namespaceName(chain) + "." + nameTok.lexeme;
                     auto c = std::make_shared<CallExpr>(); c->callee = ns; c->line = dot.line;
-                    if (!check(TokenType::RPAREN)) { do { c->args.push_back(expression()); } while (match({TokenType::COMMA})); }
+                    if (!check(TokenType::RPAREN)) { do { c->args.push_back(argExpression()); } while (match({TokenType::COMMA})); }
                     consume(TokenType::RPAREN, "Expected ')' after arguments");
                     expr = c; continue;
                 }
@@ -4650,7 +4901,7 @@ ExprPtr Parser::call() {
                 mc->line = dot.line;
                 if (!check(TokenType::RPAREN)) {
                     do {
-                        mc->args.push_back(expression());
+                        mc->args.push_back(argExpression());
                     } while (match({TokenType::COMMA}));
                 }
                 consume(TokenType::RPAREN, "Expected ')' after method arguments");
@@ -4672,6 +4923,11 @@ ExprPtr Parser::call() {
 static bool startsLiteralItem(TokenType t); // تعريفها أدناه (فاصلة اختيارية في القوائم)
 
 ExprPtr Parser::primary() {
+    if (check(TokenType::IF) && checkNext(TokenType::LPAREN)) { Token kw = advance(); return ifExpression(kw); }
+    if (check(TokenType::ELSE))
+        throw errRich(diag::Code::E0013_InvalidExpression, peek(), "`else` has nothing to attach to",
+                      "`else` follows an `if`/`when` branch, a loop, `try`, `match`, `trial` or `let x = value`, or sits between two values (`a else b`); here it starts a statement or an operand",
+                      "check the braces/`;` of the `if` above it, or write `value else fallback` if you meant a default", "an expression");
     if (atReducer(current)) return reduceComprehension(); // sum each x in xs yield e  (Loops v3)
     // @name / @"a.b" في موضع تعبير = عناصر الحاوية كمصدر للحلقات: each d in @users where .. { }  ≡ each d in #items("users")
     // (الحاوية المعلنة `@users.doc` عبارة لا تعبير، فلا تعارض: هنا `@` بعدها اسم/نص وليست بداية عبارة).
@@ -4764,6 +5020,51 @@ ExprPtr Parser::primary() {
     // الكامل). يجب فحصها *قبل* IDENT العام أدناه وإلا لالتُقِطت "goal" كاسم متغيّر عادي. 'goal'
     // كلمة سياقية غير محجوزة، مُميَّزة فقط عند ظهورها IDENT("goal") متبوعة مباشرة بـ '{' — فاستخدام
     // "goal" اسم متغيّر عادي (goal + 1، goal(x)، let goal = 5، ...) يبقى يعمل بلا أي تغيير.
+    // try EXPR [else FALLBACK] — تعبير: قيمة EXPR، أو عند أي خطأ FALLBACK (nil إن غابت). يدمج try + else + let/args/return.
+    // يُميَّز عن try { } (جملة) بما يلي الكلمة؛ وعن نداء دالة اسمها try بأن لا يلي try القوس '('.
+    if (check(TokenType::IDENT) && peek().lexeme == "try" && current + 1 < tokens.size()) {
+        const TokenType nx = tokens[current + 1].type;
+        if (nx == TokenType::IDENT || nx == TokenType::NUMBER || nx == TokenType::STRING || nx == TokenType::LBRACKET ||
+            nx == TokenType::TRUE || nx == TokenType::FALSE || nx == TokenType::NIL || nx == TokenType::MINUS || nx == TokenType::BANG) {
+            Token kw = advance(); // 'try'
+            ++noElseExpr;
+            auto operand = pipeline();
+            ExprPtr fb;
+            if (check(TokenType::ELSE) && !checkNext(TokenType::LBRACE)) { advance(); fb = pipeline(); }
+            --noElseExpr;
+            auto call = std::make_shared<CallExpr>(); call->callee = "__try"; call->line = kw.line;
+            call->args.push_back(makeThunk(operand, kw.line));
+            if (fb) call->args.push_back(makeThunk(fb, kw.line));
+            else { auto nl = std::make_shared<LiteralExpr>(); nl->kind = LiteralExpr::Kind::NIL; nl->line = kw.line; call->args.push_back(nl); }
+            return call;
+        }
+    }
+    // حلقة كتعبير: let r = for (let x in xs) { if (c) { achieve x; } } else { achieve d; };  (for/while/loop/retry/repeat)
+    // تُلفّ في goal: قيمتها قيمة أول achieve (وإلا nil) — «ابحث وإلا فبديل» بلا متغيّر وسيط ولا دالة.
+    if (check(TokenType::FOR) || check(TokenType::WHILE) ||
+        (check(TokenType::IDENT) && peek().lexeme == "each" && atEachForm(current)) ||
+        (check(TokenType::IDENT) && (peek().lexeme == "loop" || peek().lexeme == "retry" || peek().lexeme == "repeat") && current + 1 < tokens.size() &&
+         (tokens[current + 1].type == TokenType::LBRACE || tokens[current + 1].type == TokenType::NUMBER || tokens[current + 1].type == TokenType::IDENT))) {
+        const int ln = peek().line;
+        goalDepth++;
+        auto lp = declaration();
+        goalDepth--;
+        auto g = std::make_shared<GoalExpr>(); g->line = ln;
+        g->body = std::make_shared<BlockStmt>(); g->body->line = ln;
+        g->body->statements.push_back(lp);
+        return g;
+    }
+    // match (x) { case v { achieve a; } else { achieve b; } } كتعبير: يُلفّ في goal فيعيد قيمة أول achieve (وإلا nil)
+    if (check(TokenType::IDENT) && peek().lexeme == "match" && (checkNext(TokenType::LPAREN) || checkNext(TokenType::LBRACE))) {
+        Token kw = advance(); // 'match'
+        goalDepth++;
+        auto m = matchStatement();
+        goalDepth--;
+        auto g = std::make_shared<GoalExpr>(); g->line = kw.line;
+        g->body = std::make_shared<BlockStmt>(); g->body->line = kw.line;
+        g->body->statements.push_back(m);
+        return g;
+    }
     if (check(TokenType::IDENT) && peek().lexeme == "goal" && checkNext(TokenType::LBRACE)) {
         Token goalTok = advance(); // 'goal'
         advance(); // '{'
@@ -4784,7 +5085,9 @@ ExprPtr Parser::primary() {
         return e;
     }
     if (match({TokenType::LPAREN})) {
+        const int savedNoElse = noElseExpr; noElseExpr = 0;   // الأقواس تعيد تفعيل `a else b` داخلها
         auto expr = expression();
+        noElseExpr = savedNoElse;
         consume(TokenType::RPAREN, "Expected ')' after expression");
         return expr;
     }
@@ -4803,7 +5106,7 @@ ExprPtr Parser::primary() {
             // كما كانت دائماً (a -b = طرح، f (x) = استدعاء) — لهذه الحالات اكتب فاصلة أو أقواساً.
             for (;;) {
                 g_litItemDepth++;
-                try { arr->elements.push_back(expression()); } catch (...) { g_litItemDepth--; throw; }
+                try { arr->elements.push_back(argExpression()); } catch (...) { g_litItemDepth--; throw; }
                 g_litItemDepth--;
                 if (match({TokenType::COMMA})) continue;
                 if (!check(TokenType::RBRACKET) && startsLiteralItem(peek().type)) continue;
@@ -4931,6 +5234,7 @@ StmtPtr* loopBodySlot(const StmtPtr& loop) {
 void Parser::enterLoop() {
     loopDepth++;
     LoopCtx c; c.depth = loopDepth;
+    c.mods = std::move(pendingMods); pendingMods.clear();   // مُعدِّلات رأس الحلقة (where/skip/take/until) تنتقل إلى سياق هذه الحلقة بالذات
     if (!pendingLabel.empty()) {
         c.label = pendingLabel; c.flag = "#j" + std::to_string(loopSeq++);
         LabelInfo li; li.name = pendingLabel; li.flag = c.flag; li.depth = loopDepth;
@@ -4959,6 +5263,32 @@ StmtPtr Parser::finishLoop(StmtPtr loop, ExprPtr limit) {
     int line = loop->line;
     std::vector<StmtPtr> out;
     if (!c.label.empty() && labelFlagUsed.count(c.flag)) out.push_back(lLet(c.flag, lNum(0, line), line));
+    // مُعدِّلات موحَّدة لكل أشكال الحلقات (كما في each): تُطبَّق بالترتيب المكتوب في أول الجسم
+    //   where c  ⇒ if (!c) continue;   until c ⇒ if (c) break;   skip N ⇒ تخطَّ أول N دورة (ممّا مرّ بما قبله)   take N ⇒ break بعد N دورة منفَّذة
+    if (!c.mods.empty()) {
+        if (auto* slot = loopBodySlot(loop)) {
+            std::vector<StmtPtr> pre;
+            for (auto& m : c.mods) {
+                const int kind = m.first; ExprPtr e = m.second;
+                if (kind == 0) pre.push_back(lIf(lUnaryNot(e, line), lBlock({lContinue(line)}, line), nullptr, line));
+                else if (kind == 3) pre.push_back(lIf(e, lBlock({lBreak(line)}, line), nullptr, line));
+                else {
+                    const std::string cnt = "#im" + std::to_string(loopSeq++);
+                    out.push_back(lLet(cnt, lNum(0, line), line));
+                    auto bump = lExpr(lAssign(cnt, lBin(lVar(cnt, line), TokenType::PLUS, lNum(1, line), line), line), line);
+                    if (kind == 1) { // skip N: الدورات 1..N تُتخطّى
+                        pre.push_back(bump);
+                        pre.push_back(lIf(lBin(lVar(cnt, line), TokenType::LESS_EQUAL, e, line), lBlock({lContinue(line)}, line), nullptr, line));
+                    } else {         // take N: عند الدورة N+1 نتوقف (break ⇒ لا تُنفَّذ else/nobreak، كما في each take)
+                        pre.push_back(lIf(lBin(lVar(cnt, line), TokenType::GREATER_EQUAL, e, line), lBlock({lBreak(line)}, line), nullptr, line));
+                        pre.push_back(bump);
+                    }
+                }
+            }
+            pre.push_back(*slot);
+            *slot = lBlock(std::move(pre), line);
+        }
+    }
     if (limit) {
         const std::string cnt = "#lc" + std::to_string(loopSeq++);
         out.push_back(lLet(cnt, lNum(0, line), line));
@@ -4988,28 +5318,57 @@ StmtPtr Parser::finishLoop(StmtPtr loop, ExprPtr limit) {
 
 // limit N  (بين رأس الحلقة وجسمها)، يُميَّز عن عبارة جسم تبدأ باسم limit.
 ExprPtr Parser::limitClause() {
-    if (!(check(TokenType::IDENT) && peek().lexeme == "limit")) return nullptr;
-    size_t k = current + 1;
-    if (k >= tokens.size()) return nullptr;
-    bool ok = false;
-    if (tokens[k].type == TokenType::NUMBER) ok = true;
-    else if (tokens[k].type == TokenType::IDENT && k + 1 < tokens.size() && tokens[k + 1].type == TokenType::LBRACE) ok = true;
-    else if (tokens[k].type == TokenType::LPAREN) {
-        int d = 0; size_t j = k;
-        for (; j < tokens.size(); ++j) {
-            if (tokens[j].type == TokenType::LPAREN) d++;
-            else if (tokens[j].type == TokenType::RPAREN && --d == 0) break;
+    // مُعدِّلات رأس الحلقة بأي ترتيب وتكرار: limit N · where c · skip N · take N · until c — تُجمَع لتُطبَّق في finishLoop.
+    // تُقبل فقط إن تلاها '{' (جسم كتلة) كي لا تلتبس بعبارة جسم تبدأ باسم where/skip/take/until؛ وإلا يُرجَع كل شيء كما كان.
+    const size_t startPos = current;
+    ExprPtr limit;
+    std::vector<std::pair<int, ExprPtr>> mods;
+    auto numArg = [&]() -> ExprPtr {   // عدد: رقم | اسم | (تعبير)
+        if (check(TokenType::NUMBER)) { Token t = advance(); return lNum(t.number, t.line); }
+        if (check(TokenType::IDENT)) { Token t = advance(); return lVar(t.lexeme, t.line); }
+        if (check(TokenType::LPAREN)) { advance(); auto e = expression(); consume(TokenType::RPAREN, "Expected ')' after modifier argument"); return e; }
+        return nullptr;
+    };
+    for (;;) {
+        if (!check(TokenType::IDENT)) break;
+        const std::string kw = peek().lexeme;
+        if (kw == "limit") {
+            size_t k = current + 1;
+            if (k >= tokens.size()) break;
+            bool ok = false;
+            if (tokens[k].type == TokenType::NUMBER) ok = true;
+            else if (tokens[k].type == TokenType::IDENT && k + 1 < tokens.size() &&
+                     (tokens[k + 1].type == TokenType::LBRACE || (tokens[k + 1].type == TokenType::IDENT && (tokens[k + 1].lexeme == "where" || tokens[k + 1].lexeme == "skip" || tokens[k + 1].lexeme == "take" || tokens[k + 1].lexeme == "until" || tokens[k + 1].lexeme == "limit")))) ok = true;
+            else if (tokens[k].type == TokenType::LPAREN) {
+                int d = 0; size_t j = k;
+                for (; j < tokens.size(); ++j) {
+                    if (tokens[j].type == TokenType::LPAREN) d++;
+                    else if (tokens[j].type == TokenType::RPAREN && --d == 0) break;
+                }
+                ok = j + 1 < tokens.size() && (tokens[j + 1].type == TokenType::LBRACE || tokens[j + 1].type == TokenType::IDENT);
+            }
+            if (!ok) break;
+            advance(); // limit
+            limit = numArg();
+            continue;
         }
-        ok = j + 1 < tokens.size() && tokens[j + 1].type == TokenType::LBRACE;
+        if (kw == "where" || kw == "until" || kw == "skip" || kw == "take") {
+            if (current + 1 >= tokens.size()) break;
+            const TokenType nx = tokens[current + 1].type;
+            if (nx == TokenType::EQUAL || nx == TokenType::DOT || nx == TokenType::SEMICOLON || nx == TokenType::COMMA) break; // متغيّر/استدعاء بهذا الاسم
+            const size_t save = current;
+            advance();
+            ExprPtr e;
+            try { e = (kw == "where" || kw == "until") ? expression() : numArg(); } catch (...) { current = save; break; }
+            if (!e) { current = save; break; }
+            mods.push_back({kw == "where" ? 0 : kw == "skip" ? 1 : kw == "take" ? 2 : 3, e});
+            continue;
+        }
+        break;
     }
-    if (!ok) return nullptr;
-    advance(); // limit
-    if (check(TokenType::NUMBER)) { Token t = advance(); return lNum(t.number, t.line); }
-    if (check(TokenType::IDENT)) { Token t = advance(); return lVar(t.lexeme, t.line); }
-    consume(TokenType::LPAREN, "Expected '(' after 'limit'");
-    auto e = expression();
-    consume(TokenType::RPAREN, "Expected ')' after limit expression");
-    return e;
+    if (!mods.empty() && !check(TokenType::LBRACE)) { current = startPos; return nullptr; } // لم تكن مُعدِّلات: أعِد كل شيء
+    pendingMods = std::move(mods);
+    return limit;
 }
 
 // break L; / continue L;
@@ -5044,7 +5403,7 @@ StmtPtr Parser::labeledJump(bool isBreak, const Token& tok) {
 bool Parser::atLoopForm(size_t at) const {
     if (at >= tokens.size()) return false;
     if (tokens[at].type == TokenType::LBRACE) return true;
-    if (tokens[at].type == TokenType::IDENT && (tokens[at].lexeme == "limit" || tokens[at].lexeme == "as")) return true;
+    if (tokens[at].type == TokenType::IDENT && (tokens[at].lexeme == "limit" || tokens[at].lexeme == "as" || tokens[at].lexeme == "where" || tokens[at].lexeme == "skip" || tokens[at].lexeme == "take" || tokens[at].lexeme == "until") && !(at + 1 < tokens.size() && (tokens[at + 1].type == TokenType::EQUAL || tokens[at + 1].type == TokenType::DOT))) return true;
     return false;
 }
 
@@ -5079,7 +5438,7 @@ StmtPtr Parser::loopsV2Statement() {
 
     // ---- loop { } / loop (cond) { } / loop until (cond) { } ----
     if (kw == "loop") {
-        if (checkNext(TokenType::LBRACE) || (current + 1 < tokens.size() && tokens[current + 1].type == TokenType::IDENT && tokens[current + 1].lexeme == "limit" && !(current + 2 < tokens.size() && tokens[current + 2].type == TokenType::EQUAL))) {
+        if (checkNext(TokenType::LBRACE) || (current + 1 < tokens.size() && tokens[current + 1].type == TokenType::IDENT && (tokens[current + 1].lexeme == "limit" || tokens[current + 1].lexeme == "where" || tokens[current + 1].lexeme == "skip" || tokens[current + 1].lexeme == "take") && !(current + 2 < tokens.size() && (tokens[current + 2].type == TokenType::EQUAL || tokens[current + 2].type == TokenType::DOT)))) {
             advance();
             ExprPtr lim = limitClause();
             consume(TokenType::LBRACE, "Expected '{' after 'loop'");
@@ -5184,11 +5543,16 @@ StmtPtr Parser::loopsV2Statement() {
         if (check(TokenType::IDENT) && peek().lexeme == "as") { advance(); att = consume(TokenType::IDENT, "Expected attempt name after 'as'").lexeme; namedAtt = true; }
         const std::string id = std::to_string(loopSeq++);
         const std::string n = "#rn" + id, okv = "#rok" + id, err = "#rer" + id, cnt = "#rc" + id;
+        ExprPtr rlim = limitClause();
         consume(TokenType::LBRACE, "Expected '{' after 'retry'");
         const size_t bodyFrom = current;
         enterLoop();
         auto body = block();
         exitLoop();
+        // retry N { } else { } — else تُنفَّذ إن فشلت كل المحاولات (بدل إعادة رمي الخطأ الأخير)
+        std::shared_ptr<BlockStmt> retryElse;
+        if (check(TokenType::ELSE) && checkNext(TokenType::LBRACE)) { advance(); advance(); retryElse = block(); }
+        const std::string exh = "#rx" + id;
         std::string ici;                       // retry 3 { ... i ... }  — i = رقم المحاولة من 0
         if (!namedAtt) {
             StmtPtr wrapped = body;
@@ -5201,6 +5565,12 @@ StmtPtr Parser::loopsV2Statement() {
         body->statements.push_back(lExpr(lAssign(okv, lBool(true, line), line), line));
         tc->tryBranch = body;
         tc->catchName = "#re" + id;
+        if (retryElse) {
+            // آخر محاولة فاشلة: لا رمي؛ علّم الاستنفاد وأنهِ الحلقة (ok = true) ثم نفّذ else بعدها
+            tc->catchBranch = lBlock({lIf(lBin(lVar(att, line), TokenType::GREATER_EQUAL, lVar(n, line), line),
+                                           lBlock({lExpr(lAssign(exh, lBool(true, line), line), line),
+                                                   lExpr(lAssign(okv, lBool(true, line), line), line)}, line), nullptr, line)}, line);
+        } else
         tc->catchBranch = lBlock({lIf(lBin(lVar(att, line), TokenType::GREATER_EQUAL, lVar(n, line), line),
                                        lBlock({lThrow(([&]() { auto ix = std::make_shared<IndexExpr>(); ix->object = lVar(tc->catchName, line); ix->index = lStr("value", line); ix->line = line; return ExprPtr(ix); })(), line)}, line), nullptr, line)}, line);
         auto f = std::make_shared<ForStmt>();
@@ -5208,7 +5578,11 @@ StmtPtr Parser::loopsV2Statement() {
         f->condition = lUnaryNot(lVar(okv, line), line);
         f->increment = lAssign(att, lBin(lVar(att, line), TokenType::PLUS, lNum(1, line), line), line);
         f->body = lBlock({tc}, line); f->line = line;
-        StmtPtr loop = implicitIEnd(finishLoop(f), ici, line);
+        StmtPtr loop = implicitIEnd(finishLoop(f, rlim), ici, line);
+        if (retryElse) {
+            return lBlock({lLet(n, count, line), lLet(okv, lBool(false, line), line), lLet(exh, lBool(false, line), line), loop,
+                           lIf([&]() { auto lg = std::make_shared<LogicalExpr>(); lg->left = lVar(exh, line); lg->op = TokenType::OR; lg->right = lUnaryNot(lVar(okv, line), line); lg->line = line; return ExprPtr(lg); }(), retryElse, nullptr, line)}, line);
+        }
         return lBlock({lLet(n, count, line), lLet(okv, lBool(false, line), line), loop}, line);
     }
 
@@ -5741,7 +6115,7 @@ ExprPtr Parser::reduceComprehension() {
     const bool hasYield = check(TokenType::IDENT) && peek().lexeme == "yield";
     const size_t exprFrom = current;
     enterLoop();
-    if (hasYield) { advance(); val = expression(); }
+    if (hasYield) { advance(); ++noElseExpr; val = expression(); --noElseExpr; }   // `first each … yield e else d`: else للنتيجة لا للـ yield
     exitLoop();
     const size_t exprTo = current;
     const bool needsVal = kind != "count" && kind != "any";
