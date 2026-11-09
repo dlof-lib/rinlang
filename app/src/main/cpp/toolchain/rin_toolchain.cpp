@@ -52,8 +52,8 @@ void SemanticAnalyzer::expr(const ExprPtr& e){
     else if(auto x=std::dynamic_pointer_cast<ConditionalExpr>(e)){expr(x->condition);expr(x->whenTrue);expr(x->whenFalse);}
     else if(auto x=std::dynamic_pointer_cast<UnaryExpr>(e))expr(x->right);
     else if(auto x=std::dynamic_pointer_cast<CallExpr>(e)){
-        if(!functions_.count(x->callee)) d_.warning("SEM003","call to '"+x->callee+"' is not known statically",e->line,"it may be a native/runtime function");
-        else if(arity_.count(x->callee) && arity_[x->callee]!=x->args.size())
+        if(!functions_.count(x->callee) && x->callee.rfind("__",0)!=0) d_.warning("SEM003","call to '"+x->callee+"' is not known statically",e->line,"it may be a native/runtime function");
+        else if(functions_.count(x->callee) && arity_.count(x->callee) && arity_[x->callee]!=x->args.size())
             d_.error("SEM004","function '"+x->callee+"' expects "+std::to_string(arity_[x->callee])+" argument(s), got "+std::to_string(x->args.size()),e->line);
         for(auto&a:x->args)expr(a);
     } else if(auto x=std::dynamic_pointer_cast<MethodCallExpr>(e)){expr(x->object);for(auto&a:x->args)expr(a);}
