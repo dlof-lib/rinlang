@@ -1,0 +1,18 @@
+// unless (c) {…} else {…} ، و when … otherwise when / else
+let x = 2;
+unless (x > 5) { print "صغير"; } else { print "كبير"; }
+unless (x < 5) { print "no"; } else unless (x == 2) { print "no"; } else { print "x == 2"; }
+unless (false) print "جملة مفردة";
+// when … otherwise when … otherwise
+fun band(n) {
+    when (n >= 90) { print n, "A"; }
+    otherwise when (n >= 80) { print n, "B"; }
+    otherwise unless (n < 50) { print n, "C"; }
+    otherwise { print n, "F"; }
+}
+band(95); band(85); band(60); band(10);
+// when … else (مرادف otherwise)
+when (x > 5) { print "no"; } else { print "when-else"; }
+// unless كاسم دالة عادي ما زال يعمل
+fun unlessf(v) { return v; }
+print unlessf(3);
