@@ -1,0 +1,23 @@
+// try كتعبير: try EXPR else FALLBACK — قيمة EXPR أو (عند أي خطأ، رمياً كان أم خطأ تشغيل) FALLBACK؛ nil إن غابت else.
+fun boom() { throw "x"; }
+let a = try boom() else "fb";
+let b = try boom();
+let c = try 5 else 9;
+print a, b, c;
+print try "abc"[10] else "خارج المدى";
+print(try boom() else 0);
+let m = {"n": "12x", "ok": "42"};
+print try number(m["n"]) else -1, try number(m["ok"]) else -1;
+try boom();                         // جملة: تبتلع الخطأ
+print "بعد";
+// كسول: لا يُقيَّم البديل إلا عند الفشل
+let lazy = 0; fun side() { lazy = lazy + 1; return 1; }
+let f = try 7 else side();
+print f, lazy;
+let h = try boom() else side();
+print h, lazy;
+// يتركّب مع else: أول قيمة غير nil
+let cfg = {"port": nil};
+print (cfg["port"] else 80), (try boom() else nil) else "افتراضي";
+// try كتعبير لا يُربك try كجملة
+try { boom(); } catch (e) { print "catch", e["message"]; } else { print "no"; }
