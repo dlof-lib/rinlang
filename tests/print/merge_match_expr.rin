@@ -1,0 +1,13 @@
+// match كتعبير: يُلفّ في goal، فقيمته قيمة أول achieve (وإلا nil).
+let x = 2;
+let r = match (x) { case 1 { achieve "one"; } case 2, 3 { achieve "two/three"; } else { achieve "other"; } };
+print r;
+let z = match (9) { case 1 { achieve "one"; } };
+print z;
+fun kind(n) { return match { case (n < 0) { achieve "neg"; } case (n == 0) { achieve "zero"; } else { achieve "pos"; } }; }
+print kind(-1), kind(0), kind(5);
+print (match (x) { case 2 { achieve try number("q") else "تركيب"; } else { achieve 0; } });
+let labels = [match (1) { case 1 { achieve "a"; } else { achieve "b"; } }, match (2) { case 1 { achieve "a"; } else { achieve "b"; } }];
+print labels;
+// جملة match العادية لا تتأثر
+match (x) { case 2 { print "جملة"; } else { print "no"; } }
