@@ -76,7 +76,10 @@ Ctx g;
 
 const std::set<std::string> kActions = {
     "increment","decrement","toggle","set","show","hide","enable","disable","select","unselect","focus","blur",
-    "reset","seek","scrollTo","submit","multiply","negate","swap","clamp","cycle","append","backspace","copy","seq"};
+    "reset","seek","scrollTo","submit","multiply","negate","swap","clamp","cycle","append","backspace","copy","seq",
+    "toast","copyText","openUrl","scrollTop","share","setTheme","toggleTheme","navigate","back","downloadText","installApp"};
+// إجراءات وسائطها قيم (لا أسماء خلايا warp)
+const std::set<std::string> kValueActions = {"toast","copyText","openUrl","scrollTop","share","setTheme","toggleTheme","navigate","back","downloadText","installApp"};
 // دوال مضمَّنة يوفّرها الـ runtime (R.*)
 const std::set<std::string> kNatives = {
     "len","str","num","upper","lower","round","floor","ceil","abs","min","max","sqrt","pow","sin","cos","tan",
@@ -122,7 +125,7 @@ std::string callExpr(const std::string& callee, const std::vector<ExprPtr>& a, i
         std::string o = "A." + callee + "(";
         for (size_t i = 0; i < a.size(); i++) {
             if (i) o += ", ";
-            bool cellArg = i == 0 || (i == 1 && (callee == "copy" || callee == "swap"));
+            bool cellArg = !kValueActions.count(callee) && (i == 0 || (i == 1 && (callee == "copy" || callee == "swap")));
             if (cellArg && a[i]->exprKind == ExprKind::Variable && g.warps.count(static_cast<VariableExpr*>(a[i].get())->name))
                 o += jsStr(static_cast<VariableExpr*>(a[i].get())->name);
             else o += expr(a[i]);
@@ -335,16 +338,31 @@ const std::set<std::string> kProps = {
     "size","bold","italic","underline","font","family","line_height","letter_spacing","transform","max_lines","variant","min","max","step",
     "ratio","icon","name","id","class","role","autofocus","readonly","multiline","rows","cursor","overflow","position","left","top","right","bottom","rotate","scale","display",
     "ariaLabel","aria_label","description","tooltip","lang","dir",
-    "canvas","tone","gradient","message","initials","maxlength","secure","loading","error"};
-const std::set<std::string> kEventProps = {"onTap","onClick","onChange","onInput","onSubmit","onFocus","onBlur","onHover","onPress","onLongPress","onKey"};
+    "canvas","tone","gradient","message","initials","maxlength","secure","loading","error",
+    // Pro: تخطيط ومظهر وحالات وحركة ومكوّنات
+    "col_span","row_span","columns_min","align_self","order","sticky","inset","center","overflow_x","overflow_y","snap",
+    "border_top","border_bottom","border_left","border_right","blur","filter","backdrop_blur","glass","outline","outline_color","ring",
+    "text_gradient","clip","truncate","nowrap","text_align","select","pointer_events",
+    "hover_bg","hover_color","hover_scale","hover_opacity","hover_elevation","hover_lift","active_scale","focus_ring","transition",
+    "animate","duration","delay","repeat","stagger","selected","active","level","items","current","total","pages","page",
+    // Pro 2
+    "tip","tip_pos","hover_border","focus_bg","focus_border","scrim","dismissible","reveal","scroll_progress",
+    "count_to","count_prefix","count_suffix","count_decimals","hotkey","route","go","delta","data","labels","page_size","speed","diameter","values"};
+// لواحق الاستجابة/الوضع الداكن: padding_md · bg_dark · width_lg …  (mobile-first، نفس نقاط توقف المحرّك)
+const char* kSuffixes[] = {"_sm","_md","_lg","_xl","_dark","_print"};
+bool splitSuffix(const std::string& k, std::string& base, std::string& sfx) {
+    for (const char* x : kSuffixes) { std::string t = x; if (k.size() > t.size() && k.compare(k.size() - t.size(), t.size(), t) == 0) { base = k.substr(0, k.size() - t.size()); sfx = t; return true; } }
+    return false;
+}
+const std::set<std::string> kEventProps = {"onTap","onClick","onChange","onInput","onSubmit","onFocus","onBlur","onHover","onPress","onLongPress","onKey","onVisible","onClose","onSwipeLeft","onSwipeRight"};
 // خصائص تخص الجذر/الشاشة وتُعالَج خارج جدول P
 const std::set<std::string> kRootProps = {"screen","canvas_width","canvas_height","canvas","bg","background","canvas_bg","dark","theme","mask","style","class","extends"};
 
 struct KindInfo { const char* tag; const char* cls; bool voidEl; };
 KindInfo kindInfo(const std::string& tag) {
     static const std::map<std::string, KindInfo> m = {
-        {"column",{"div","col",false}},{"row",{"div","row",false}},{"stack",{"div","stack",false}},{"box",{"div","box",false}},
-        {"container",{"div","box",false}},{"panel",{"div","box",false}},{"frame",{"div","box",false}},{"card",{"div","card",false}},
+        {"column",{"div","col",false}},{"container",{"div","box",false}},{"row",{"div","row",false}},{"stack",{"div","stack",false}},{"box",{"div","box",false}},
+        {"panel",{"div","box",false}},{"frame",{"div","box",false}},{"card",{"div","card",false}},
         {"grid",{"div","grid",false}},{"wrap",{"div","wrap",false}},{"spacer",{"div","spacer",false}},{"scaffold",{"div","scaffold",false}},
         {"splash",{"div","splash",false}},{"header",{"header","header",false}},{"topbar",{"header","topbar",false}},
         {"bottombar",{"footer","bottombar",false}},{"drawer",{"aside","drawer",false}},{"menu",{"nav","menu",false}},
@@ -359,7 +377,18 @@ KindInfo kindInfo(const std::string& tag) {
         {"slider",{"input","slider",true}},{"radio",{"input","radio",true}},{"list",{"ul","list",false}},{"listitem",{"li","listitem",false}},
         {"icon",{"span","icon",false}},{"search",{"input","input",true}},{"date",{"input","input",true}},{"time",{"input","input",true}},
         {"banner",{"div","banner",false}},{"tabs",{"div","tabs",false}},{"tabitem",{"button","tabitem",false}},{"tooltip",{"span","tooltip",false}},
-        {"skeleton",{"div","skeleton",false}},{"spinner",{"div","spinner",false}},{"loop",{"div","box",false}},{"view",{"div","box",false}}};
+        {"skeleton",{"div","skeleton",false}},{"spinner",{"div","spinner",false}},
+        {"accordion",{"details","accordion",false}},{"section",{"section","section",false}},{"main",{"main","main",false}},
+        {"article",{"article","article",false}},{"sidebar",{"aside","sidebar",false}},{"aside",{"aside","sidebar",false}},
+        {"footer",{"footer","footer",false}},{"nav",{"nav","nav",false}},{"form",{"form","form",false}},{"label",{"label","label",false}},
+        {"heading",{"h2","text",false}},{"paragraph",{"p","text",false}},{"code",{"code","code",false}},{"codeblock",{"pre","code",false}},
+        {"quote",{"blockquote","quote",false}},{"center",{"div","center",false}},{"page",{"div","container",false}},{"hero",{"section","hero",false}},
+        {"emptystate",{"div","empty",false}},{"carousel",{"div","carousel",false}},{"timeline",{"ol","timeline",false}},{"timelineitem",{"li","timelineitem",false}},
+        {"sheet",{"div","sheet",false}},{"fab",{"button","fab",false}},{"meter",{"meter","meter",false}},{"rating",{"div","rating",false}},
+        {"steps",{"ol","steps",false}},{"breadcrumb",{"nav","breadcrumb",false}},{"pagination",{"nav","pagination",false}},{"alert",{"div","banner",false}},
+        {"tabpanel",{"div","box",false}},
+        {"stat",{"div","stat",false}},{"progressring",{"div","progressring",false}},{"sparkline",{"div","sparkline",false}},{"barchart",{"div","barchart",false}},
+        {"donut",{"div","donut",false}},{"datatable",{"div","datatable",false}},{"dropdown",{"details","dropdown",false}},{"marquee",{"div","marquee",false}},{"loop",{"div","box",false}},{"view",{"div","box",false}}};
     std::string k; for (char c : tag) k += (char)tolower((unsigned char)c);
     auto it = m.find(k);
     if (it != m.end()) return it->second;
@@ -467,6 +496,13 @@ void emitView(const std::shared_ptr<ViewStmt>& v, int depth, bool isRoot) {
     if (std::string(ki.cls) == "table") attrs += " role=\"table\"";
     if (std::string(ki.cls) == "tablerow") attrs += " role=\"row\"";
     if (std::string(ki.cls) == "banner") attrs += " role=\"status\"";
+    if (std::string(ki.cls) == "fab") attrs += " type=\"button\"";
+    if (std::string(ki.cls) == "sheet") attrs += " role=\"dialog\" aria-modal=\"true\"";
+    if (std::string(ki.cls) == "carousel") attrs += " role=\"region\" aria-roledescription=\"carousel\"";
+    if (std::string(tagName.size() ? tagName : "") == "TabPanel" || tagName == "tabpanel") attrs += " role=\"tabpanel\"";
+    if (std::string(ki.cls) == "tabs") attrs += " role=\"tablist\"";
+    if (std::string(ki.cls) == "tabitem") attrs += " role=\"tab\"";
+    if (std::string(ki.cls) == "heading") {}
     if (std::string(ki.cls) == "image" && !staticSrc.empty()) attrs += " src=\"" + htmlEsc(staticSrc) + "\"";
     if (std::string(ki.cls) == "image") attrs += " alt=\"\"";
     if (std::string(ki.cls) == "text") {
@@ -480,8 +516,15 @@ void emitView(const std::shared_ptr<ViewStmt>& v, int depth, bool isRoot) {
         if (tagName == "Time" || tagName == "time") attrs += " type=\"time\"";
     }
 
+    if (std::string(ki.tag) == "h2" && std::string(ki.cls) == "text" && (tagName == "Heading" || tagName == "heading")) {   // <Heading level=1..6>
+        for (auto& a : v->attrs) if (a.key == "level") { std::string lv; if (literalString(a.value, lv) && lv.size() == 1 && lv[0] >= '1' && lv[0] <= '6') tag = "h" + lv; }
+    }
     std::string pad((size_t)depth * 2, ' ');
     out.html += pad + "<" + tag + attrs + ">";
+    if (std::string(ki.cls) == "accordion" || std::string(ki.cls) == "dropdown") {   // <Accordion title="…"> → <details><summary>
+        std::string t; for (auto& a : v->attrs) if (a.key == "title") literalString(a.value, t);
+        out.html += (std::string(ki.cls) == "accordion" ? std::string("<summary class=\"in-summary\">") : std::string("<summary>")) + htmlEsc(t) + "</summary>";
+    }
 
     // الخصائص
     for (auto& a : v->attrs) {
@@ -489,7 +532,8 @@ void emitView(const std::shared_ptr<ViewStmt>& v, int depth, bool isRoot) {
         if (kEventProps.count(k)) {
             std::string ev = (k == "onTap" || k == "onClick" || k == "onPress") ? "click" : (k == "onChange") ? "change" :
                 (k == "onInput") ? "input" : (k == "onSubmit") ? "submit" : (k == "onFocus") ? "focus" : (k == "onBlur") ? "blur" :
-                (k == "onHover") ? "mouseenter" : (k == "onLongPress") ? "contextmenu" : "keydown";
+                (k == "onHover") ? "mouseenter" : (k == "onLongPress") ? "contextmenu" :
+                (k == "onVisible") ? "in-visible" : (k == "onClose") ? "in-close" : (k == "onSwipeLeft") ? "in-swipel" : (k == "onSwipeRight") ? "in-swiper" : "keydown";
             std::string code = handlerCode(a.value);
             if (!code.empty()) out.handlers.push_back({id, ev, code});
             continue;
@@ -503,16 +547,20 @@ void emitView(const std::shared_ptr<ViewStmt>& v, int depth, bool isRoot) {
             continue;
         }
         if (k == "mask" || k == "extends" || k == "style") continue;
-        if (!kProps.count(k)) {
+        std::string sBase, sSfx;
+        if (!kProps.count(k) && splitSuffix(k, sBase, sSfx) && kProps.count(sBase)) {
+            bool hasBase = false; for (auto& o : v->attrs) if (o.key == sBase) hasBase = true;
+            if (!hasBase) warn("`" + k + "` على `" + tagName + "` بلا قيمة أساسية `" + sBase + "`: عند عدم تحقق الشرط لن تُستعاد قيمة افتراضية", a.line);
+        } else if (!kProps.count(k)) {
             warn("الخاصية `" + k + "` على `" + tagName + "` غير مدعومة في الترجمة إلى الويب (تُحفَظ كـ data-in-" + k + ")", a.line);
         }
         bool dyn = !isConstExpr(a.value);
         std::string code = expr(a.value);
         out.bindings.push_back({id, k, dyn ? "()=>" + code : code, dyn});
         // ربط ثنائي الاتجاه للحقول: value=cell / checked=cell
-        bool field = std::string(ki.cls) == "input" || std::string(ki.cls) == "checkbox" || std::string(ki.cls) == "switch" ||
+        bool field = std::string(ki.cls) == "rating" || std::string(ki.cls) == "pagination" || std::string(ki.cls) == "input" || std::string(ki.cls) == "checkbox" || std::string(ki.cls) == "switch" ||
                      std::string(ki.cls) == "slider" || std::string(ki.cls) == "radio";
-        if (field && (k == "value" || k == "checked") && a.value && a.value->exprKind == ExprKind::Variable) {
+        if (field && (k == "value" || k == "checked" || k == "page" || (k == "current" && std::string(ki.cls) == "pagination")) && a.value && a.value->exprKind == ExprKind::Variable) {
             const std::string& n = static_cast<VariableExpr*>(a.value.get())->name;
             if (g.warps.count(n) && !g.isLocal(n))
                 out.handlers.push_back({id, "__bind__", jsStr(n) + "," + jsStr(k)});
@@ -596,16 +644,21 @@ std::string readAll(const std::string& p, bool& ok) {
 } // namespace
 
 int main(int argc, char** argv) {
-    std::string in, outPath, title, lang = "en", dir = "", report;
+    std::string in, outPath, title, lang = "en", dir = "", report, desc, themeColor, iconPath, ogImage, embedNative;
+    bool pwa = false;
     bool check = false, strict = false, fragment = false, desugarOnly = false;
     for (int i = 1; i < argc; i++) {
         std::string a = argv[i];
         auto need = [&](const char* n) -> std::string { if (i + 1 >= argc) { fprintf(stderr, "الخيار %s يحتاج قيمة\n", n); exit(64); } return argv[++i]; };
         if (a == "-o") outPath = need("-o"); else if (a == "--check") check = true; else if (a == "--strict") strict = true;
         else if (a == "--title") title = need("--title"); else if (a == "--lang") lang = need("--lang"); else if (a == "--dir") dir = need("--dir");
+        else if (a == "--description") desc = need("--description"); else if (a == "--theme-color") themeColor = need("--theme-color");
+        else if (a == "--pwa") pwa = true; else if (a == "--icon") iconPath = need("--icon"); else if (a == "--og-image") ogImage = need("--og-image");
+        else if (a == "--embed-native") embedNative = need("--embed-native");
         else if (a == "--fragment") fragment = true; else if (a == "--desugar") desugarOnly = true; else if (a == "--report") report = need("--report");
         else if (a == "-h" || a == "--help") {
-            puts("indsin2web — مترجم Indsin إلى HTML/CSS/JS\n  indsin2web input.rin [-o out.html] [--check] [--strict] [--title T] [--lang ar] [--dir rtl|ltr] [--fragment] [--report r.json]");
+            puts("  [--embed-native draw.json]  يضمّن DrawList المحرّك الأصلي مع راسم canvas وزرّ تبديل (web/native/split)\n");
+            puts("indsin2web — مترجم Indsin إلى HTML/CSS/JS\n  indsin2web input.rin [-o out.html] [--check] [--strict] [--title T] [--lang ar] [--dir rtl|ltr] [--fragment] [--report r.json]\n    [--description T] [--theme-color #RRGGBB] [--og-image URL]   وسوم SEO/OpenGraph\n    [--pwa [--icon icon.png]]   يكتب manifest.webmanifest + sw.js بجوار الناتج ويسجّل العامل (يعمل بلا اتصال)");
             return 0;
         } else if (!a.empty() && a[0] == '-') { fprintf(stderr, "خيار غير معروف: %s\n", a.c_str()); return 64; }
         else in = a;
@@ -687,13 +740,47 @@ int main(int argc, char** argv) {
 
     std::string page;
     if (title.empty()) { title = in; auto p = title.find_last_of("/\\"); if (p != std::string::npos) title = title.substr(p + 1); auto d = title.rfind('.'); if (d != std::string::npos) title = title.substr(0, d); }
+    std::string headExtra;
+    if (themeColor.empty()) { auto it = out.theme.find("primary"); themeColor = it != out.theme.end() ? it->second : "#6C5CE7"; }
+    headExtra += "<meta name=\"theme-color\" content=\"" + htmlEsc(themeColor) + "\">\n";
+    if (!desc.empty()) headExtra += "<meta name=\"description\" content=\"" + htmlEsc(desc) + "\">\n<meta property=\"og:description\" content=\"" + htmlEsc(desc) + "\">\n";
+    headExtra += "<meta property=\"og:title\" content=\"" + htmlEsc(title) + "\">\n<meta property=\"og:type\" content=\"website\">\n";
+    if (!ogImage.empty()) headExtra += "<meta property=\"og:image\" content=\"" + htmlEsc(ogImage) + "\">\n";
+    std::string pwaJs;
+    if (pwa) {
+        if (outPath.empty() || outPath == "-" || fragment) { fprintf(stderr, "--pwa يحتاج -o ملف.html (وليس --fragment)\n"); return 64; }
+        std::string dirp = outPath.find_last_of("/\\") == std::string::npos ? "." : outPath.substr(0, outPath.find_last_of("/\\"));
+        std::string base = outPath.find_last_of("/\\") == std::string::npos ? outPath : outPath.substr(outPath.find_last_of("/\\") + 1);
+        auto bgIt = out.theme.find("background"); std::string bgc = bgIt != out.theme.end() ? bgIt->second : "#FFFFFF";
+        std::string icon = iconPath.empty() ? "" : iconPath.substr(iconPath.find_last_of("/\\") == std::string::npos ? 0 : iconPath.find_last_of("/\\") + 1);
+        std::ofstream m(dirp + "/manifest.webmanifest", std::ios::binary);
+        m << "{\n  \"name\": " << jsStr(title) << ",\n  \"short_name\": " << jsStr(title.substr(0, 12)) << ",\n  \"start_url\": " << jsStr("./" + base)
+          << ",\n  \"display\": \"standalone\",\n  \"lang\": " << jsStr(lang) << ",\n  \"dir\": " << jsStr(dir) << ",\n  \"background_color\": " << jsStr(bgc)
+          << ",\n  \"theme_color\": " << jsStr(themeColor) << ",\n  \"icons\": [" << (icon.empty() ? "" : "{\"src\": " + jsStr(icon) + ", \"sizes\": \"any\", \"purpose\": \"any\"}") << "]\n}\n";
+        std::ofstream w(dirp + "/sw.js", std::ios::binary);
+        w << "// service worker: شبكة أولاً ثم الكاش (يعمل بلا اتصال بعد أول زيارة)\nconst C = \"indsin-v1\", F = [\"./\", " << jsStr("./" + base) << ", \"./manifest.webmanifest\"" << (icon.empty() ? "" : ", " + jsStr("./" + icon)) << "];\n"
+          << "self.addEventListener(\"install\", e => { e.waitUntil(caches.open(C).then(c => c.addAll(F)).then(() => self.skipWaiting())); });\n"
+          << "self.addEventListener(\"activate\", e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== C).map(k => caches.delete(k)))).then(() => self.clients.claim())); });\n"
+          << "self.addEventListener(\"fetch\", e => { if (e.request.method !== \"GET\") return; e.respondWith(fetch(e.request).then(r => { const c = r.clone(); caches.open(C).then(x => x.put(e.request, c)); return r; }).catch(() => caches.match(e.request))); });\n";
+        if (!w || !m) { fprintf(stderr, "تعذّرت كتابة ملفات PWA في %s\n", dirp.c_str()); return 1; }
+        headExtra += "<link rel=\"manifest\" href=\"manifest.webmanifest\">\n";
+        if (!icon.empty()) headExtra += "<link rel=\"apple-touch-icon\" href=\"" + htmlEsc(icon) + "\">\n";
+        pwaJs = "if (\"serviceWorker\" in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register(\"sw.js\").catch(() => {});\n";
+    }
+    std::string nativeBlock;
+    if (!embedNative.empty() && !fragment) {   // جسر المحرّك الأصلي: JSON الـ DrawList + راسم canvas + زرّ تبديل العرض
+        bool nok; std::string nj = readAll(embedNative, nok);
+        if (!nok) { fprintf(stderr, "%s: تعذّرت القراءة\n", embedNative.c_str()); return 1; }
+        for (size_t q = 0; (q = nj.find("</", q)) != std::string::npos; q += 2) nj.replace(q, 2, "<\\/");
+        nativeBlock = "<script type=\"application/json\" id=\"indsin-native\">" + nj + "</script>\n<script>\n" + kHybridJs + "</script>\n";
+    }
     if (fragment) {
         page = "<style>" + std::string(kBaseCss) + themeCss + screenCss + "</style>\n<div class=\"in-screen\" id=\"indsin-root\">\n" + out.html + "</div>\n<script>\n" + js + "</script>\n";
     } else {
         page = "<!doctype html>\n<html lang=\"" + htmlEsc(lang) + "\" dir=\"" + htmlEsc(dir) + "\">\n<head>\n<meta charset=\"utf-8\">\n"
-               "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<meta name=\"generator\" content=\"indsin2web\">\n<title>" + htmlEsc(title) + "</title>\n<style>\n" +
+               "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<meta name=\"generator\" content=\"indsin2web\">\n<title>" + htmlEsc(title) + "</title>\n" + headExtra + "<style>\n" +
                kBaseCss + themeCss + screenCss + "\n</style>\n</head>\n<body>\n<div class=\"in-screen\" id=\"indsin-root\">\n" + out.html +
-               "</div>\n<noscript>هذه الصفحة تحتاج JavaScript لتطبيق الأنماط والتفاعل.</noscript>\n<script>\n" + js + "</script>\n</body>\n</html>\n";
+               "</div>\n<noscript>هذه الصفحة تحتاج JavaScript لتطبيق الأنماط والتفاعل.</noscript>\n<script>\n" + js + pwaJs + "</script>\n" + nativeBlock + "</body>\n</html>\n";
     }
     if (outPath.empty() || outPath == "-") std::cout << page;
     else { std::ofstream f(outPath, std::ios::binary); f << page; if (!f) { fprintf(stderr, "تعذّرت الكتابة إلى %s\n", outPath.c_str()); return 1; } }
