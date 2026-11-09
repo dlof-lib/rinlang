@@ -1,10 +1,21 @@
-name: Build Rin site (native check + WASM) & Deploy to GitHub Pages
+name: Rin site — build (Indsin check + WASM) and deploy to GitHub Pages
+
+# =============================================================================
+# pages.yml — خط نشر الموقع الرسمي لـ Rin
+# -----------------------------------------------------------------------------
+# المصدر الوحيد لمحتوى الموقع هو web/site.rin (شجرة Indsin + برنامج Rin، بلا HTML).
+# الخطوات:
+#   1) حارس «Rin الخالصة»: يمنع دخول أي وسم HTML/JS إلى site.rin.
+#   2) فحص أصلي بأداة indsinc (نفس محرّك Indsintime) لإيقاف النشر مبكراً عند أي خطأ.
+#   3) تصريف المحرّك الرسمي إلى WebAssembly ليُنفَّذ site.rin داخل متصفح الزائر.
+#   4) تجميع الحزمة + صفحات معاينة الروابط + حزم المحتوى + sitemap.
+#   5) التحقق من اكتمال الحزمة ثم النشر.
+# =============================================================================
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
     paths:
-      - "site.rin"
       - "web/**"
       - "app/src/main/cpp/rin_lexer.*"
       - "app/src/main/cpp/rin_parser.*"
@@ -14,15 +25,15 @@ on:
       - "app/src/main/cpp/indsin/**"
       - "tools/rin_run.cpp"
       - "scripts/build_share_pages.py"
-      # حزم المحتوى القابلة للتنزيل (لغات + أصول) تُبنى وتُنشر مع الموقع تحت /packs/
+      # حزم المحتوى القابلة للتنزيل (لغات + أصول) تُبنى وتُنشر تحت /packs/
       - "content-packs/**"
       - "scripts/build_content_packs.py"
       - "examples/customlang/illust/**"
       - "app/src/main/res/values/**"
       - ".github/workflows/pages.yml"
   workflow_dispatch: {}
-  # تحديث دوري: صفحات معاينة الروابط تُبنى من Firebase وقت النشر، فنعيد النشر كل 3 ساعات
-  # لتظهر المكتبات/الحسابات الجديدة بمعاينة غنية (GitHub Pages لا يملك rewrite ديناميكياً).
+  # صفحات معاينة الروابط تُبنى من Firebase وقت النشر؛ نعيد النشر كل 3 ساعات
+  # لتظهر المكتبات والحسابات الجديدة بمعاينة غنية.
   schedule:
     - cron: "17 */3 * * *"
 
@@ -32,148 +43,179 @@ permissions:
   id-token: write
 
 concurrency:
-  group: "pages"
+  group: pages
   cancel-in-progress: false
+
+env:
+  SITE_SRC: web/site.rin
+  DESIGN_WIDTH: "420"
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ------------------------------------------------------------------
-      # 1) فحص سلامة سريع بأداة indsinc الأصلية (نفس محرّك Indsintime، مبني
-      #    أصلاً على جهاز التطوير — انظر CMakeLists.txt). هذا لا يُنشر —
-      #    غايته فقط إيقاف الـ workflow مبكراً بخطأ واضح إن كان site.rin
-      #    نفسه فيه خطأ لغوي أو لا يحتوي جذر @view.<Kind>=name، قبل إضاعة
-      #    وقت في بناء WASM لصفحة مكسورة.
-      #    (سابقاً كان هذا يشغّل site.rin بالمفسّر العادي ويتحقق من
-      #    dist/index.html عبر writeFile — لم يعد ذلك المسار موجوداً بعد أن
-      #    أصبحت الصفحة شجرة @view حقيقية بدل مولّد HTML.)
-      # ------------------------------------------------------------------
-      - name: Sanity-check site.rin as a @view program with indsinc
+      # ----------------------------------------------------------------------
+      # 1) حارس «Rin الخالصة»: الموقع يجب أن يبقى Rin + Indsin فقط.
+      #    وسوم Indsin الشرعية (Column/Text/Card/...) تبدأ بحرف كبير، أما وسوم HTML
+      #    فبحروف صغيرة؛ لذلك يُرفض أي وسم HTML معروف خارج النصوص والتعليقات.
+      # ----------------------------------------------------------------------
+      - name: Guard — site.rin must be pure Rin + Indsin
         run: |
-          # نفس قائمة مصادر هدف indsinc في app/src/main/cpp/CMakeLists.txt بالضبط — لازمة كاملة
-          # لأن indsin/indsinc.cpp يتضمّن rin_indsin_pipeline.h الذي يشغّل rin::Interpreter حقيقياً
-          # (runColdPipelineWithRuntime)، وليس مجرّد lex+parse فقط؛ بدون rin_interpreter.cpp وكل ما
-          # يعتمد عليه (diagnostics/, loader_ui/, clc/) يفشل الربط بأخطاء "undefined reference".
-          g++ -O2 -std=c++23 -o indsinc_native_check \
-            app/src/main/cpp/indsin/indsinc.cpp \
-            app/src/main/cpp/rin_lexer.cpp \
-            app/src/main/cpp/rin_parser.cpp \
-            app/src/main/cpp/rin_make.cpp \
-            app/src/main/cpp/rin_container_sql.cpp \
-            app/src/main/cpp/rin_interpreter.cpp \
-            app/src/main/cpp/rin_artifact.cpp \
-            app/src/main/cpp/binfmt/elf_format.cpp \
-            app/src/main/cpp/binfmt/ar_format.cpp \
-            app/src/main/cpp/binfmt/pe_format.cpp \
-            app/src/main/cpp/binfmt/macho_format.cpp \
-            app/src/main/cpp/binfmt/coff_obj.cpp \
-            app/src/main/cpp/loader_ui/library_loader_ui.cpp \
-            app/src/main/cpp/rin_http.cpp \
-            app/src/main/cpp/diagnostics/diagnostic.cpp \
-            app/src/main/cpp/diagnostics/source_manager.cpp \
-            app/src/main/cpp/diagnostics/diagnostic_engine.cpp \
-            app/src/main/cpp/diagnostics/diagnostic_renderer.cpp \
-            app/src/main/cpp/clc/clc_container.cpp \
-            app/src/main/cpp/clc/clc_compress.cpp \
-            app/src/main/cpp/clc/clc_security.cpp \
-            app/src/main/cpp/clc/clc_rin_opt.cpp \
-            app/src/main/cpp/clc/clc_zip_import.cpp \
-            app/src/main/cpp/clc/sha256.cpp \
-            -I app/src/main/cpp \
-            -lz
-          ./indsinc_native_check web/site.rin 420 /tmp/site_check.ppm
-          echo "Native @view/Indsin check OK."
-          rm -f indsinc_native_check /tmp/site_check.ppm
+          test -s "$SITE_SRC"
+          # نستبعد التعليقات <!-- --> وأسطر // ثم نبحث عن وسوم HTML الحقيقية في بداية الوسم
+          if grep -nE '^[[:space:]]*<(html|head|body|div|span|script|style|link|meta|iframe|img|a|p|ul|li|table)[[:space:]>/]' "$SITE_SRC"; then
+            echo "::error file=$SITE_SRC::site.rin يجب أن يكون Rin + Indsin فقط (وُجد وسم HTML)."
+            exit 1
+          fi
+          if grep -nE '(^|[^A-Za-z])(onclick|onload|javascript:)' "$SITE_SRC"; then
+            echo "::error file=$SITE_SRC::ممنوع JavaScript داخل site.rin."
+            exit 1
+          fi
+          # توازن الوسوم الكبيرة: عدد الفتح غير الذاتي الإغلاق = عدد الإغلاق
+          python3 - <<'PY'
+          import re, sys
+          src = open("web/site.rin", encoding="utf-8").read()
+          src = re.sub(r"<!--.*?-->", "", src, flags=re.S)
+          src = re.sub(r"<Rin>.*?</Rin>", "", src, flags=re.S)
+          src = re.sub(r'\{"(?:[^"\\]|\\.)*"\}', "{}", src)   # أزل نصوص {"..."} فيها < >
+          opens = len(re.findall(r"<[A-Z][A-Za-z.]*#[A-Za-z0-9_]+(?:[^<>]|\{[^{}]*\})*?(?<!/)>", src))
+          closes = len(re.findall(r"</[A-Z][A-Za-z.]*>", src))
+          print(f"open={opens} close={closes}")
+          sys.exit(0 if opens == closes else 1)
+          PY
 
-      # ------------------------------------------------------------------
-      # 2) البناء الحقيقي الذي يُنشر: المفسّر الرسمي + محرّك Indsintime (نفس
-      #    ملفات lexer/parser/interpreter/indsin بلا أي تعديل) مُصرَّف إلى
-      #    WebAssembly، ليُنفَّذ site.rin فعلياً (كشجرة @view) داخل متصفح
-      #    الزائر نفسه عبر rin_indsin_session_*.
-      # ------------------------------------------------------------------
+      # ----------------------------------------------------------------------
+      # 2) فحص سلامة سريع بأداة indsinc الأصلية (نفس محرّك Indsintime). لا يُنشر؛
+      #    غايته إيقاف الـ workflow مبكراً بخطأ واضح قبل إضاعة وقت في بناء WASM.
+      #    القائمة مطابقة لهدف indsinc في app/src/main/cpp/CMakeLists.txt.
+      # ----------------------------------------------------------------------
+      - name: Sanity-check site.rin as a Fabric program with indsinc
+        run: |
+          g++ -O2 -std=c++23 -o indsinc_native_check \
+              app/src/main/cpp/indsin/indsinc.cpp \
+              app/src/main/cpp/rin_lexer.cpp \
+              app/src/main/cpp/rin_parser.cpp \
+              app/src/main/cpp/rin_make.cpp \
+              app/src/main/cpp/rin_container_sql.cpp \
+              app/src/main/cpp/rin_interpreter.cpp \
+              app/src/main/cpp/rin_artifact.cpp \
+              app/src/main/cpp/binfmt/elf_format.cpp \
+              app/src/main/cpp/binfmt/ar_format.cpp \
+              app/src/main/cpp/binfmt/pe_format.cpp \
+              app/src/main/cpp/binfmt/macho_format.cpp \
+              app/src/main/cpp/binfmt/coff_obj.cpp \
+              app/src/main/cpp/loader_ui/library_loader_ui.cpp \
+              app/src/main/cpp/rin_http.cpp \
+              app/src/main/cpp/diagnostics/diagnostic.cpp \
+              app/src/main/cpp/diagnostics/source_manager.cpp \
+              app/src/main/cpp/diagnostics/diagnostic_engine.cpp \
+              app/src/main/cpp/diagnostics/diagnostic_renderer.cpp \
+              app/src/main/cpp/clc/clc_container.cpp \
+              app/src/main/cpp/clc/clc_compress.cpp \
+              app/src/main/cpp/clc/clc_security.cpp \
+              app/src/main/cpp/clc/clc_rin_opt.cpp \
+              app/src/main/cpp/clc/clc_zip_import.cpp \
+              app/src/main/cpp/clc/sha256.cpp \
+              -I app/src/main/cpp \
+              -lz
+          ./indsinc_native_check "$SITE_SRC" "$DESIGN_WIDTH" /tmp/site_check.ppm | tee /tmp/site_check.txt
+          # الصفحة الصحيحة تُنتج عدداً معقولاً من الـ Strands؛ صفر يعني جذراً مفقوداً
+          grep -E "^Strands measured: [1-9][0-9]*" /tmp/site_check.txt
+          echo "Native Indsin check OK."
+          rm -f indsinc_native_check /tmp/site_check.ppm /tmp/site_check.txt
+
+      # ----------------------------------------------------------------------
+      # 3) البناء الذي يُنشر: المفسّر الرسمي + Indsintime مُصرَّفين إلى WebAssembly،
+      #    فيُنفَّذ site.rin فعلياً (كشجرة Fabric) داخل المتصفح عبر rin_indsin_session_*.
+      # ----------------------------------------------------------------------
       - name: Set up Emscripten
         uses: mymindstorm/setup-emsdk@v14
         with:
           version: 3.1.61
+          actions-cache-folder: emsdk-cache
 
       - name: Compile the official Rin engine (incl. Indsintime) to WebAssembly
         run: |
           mkdir -p dist
-          # القائمة الكاملة لما يحتاجه rin_interpreter.cpp فعلياً عند الربط (linker) —
-          # مطابقة تماماً لهدف rinengine في app/src/main/cpp/CMakeLists.txt، فقط مع
-          # استبدال rin_http.cpp (fork/exec لـ curl، غير ممكن داخل WASM) بالبديل
-          # web/rin_http_wasm_stub.cpp، وrin_run.cpp/indsinc.cpp بجسر WASM المخصص
-          # web/rin_wasm_bridge.cpp + indsin/rin_indsin_c_api.cpp. بدون rin_make.cpp أو
-          # diagnostics/ أو loader_ui/ أو clc/ يفشل الربط بأخطاء "undefined symbol"
-          # (nearestMatches، validateMakeUnit، validateContainerPolicy، ...).
+          # مطابق لهدف rinengine في CMakeLists.txt، مع استبدال rin_http.cpp (fork/exec لـ curl)
+          # بالبديل web/rin_http_wasm_stub.cpp، وrin_run.cpp/indsinc.cpp بجسر WASM المخصص.
           em++ -O2 -std=c++23 -fexceptions \
-            -I app/src/main/cpp \
-            app/src/main/cpp/rin_lexer.cpp \
-            app/src/main/cpp/rin_parser.cpp \
-            app/src/main/cpp/rin_make.cpp \
-            app/src/main/cpp/rin_container_sql.cpp \
-            app/src/main/cpp/rin_interpreter.cpp \
-            app/src/main/cpp/rin_artifact.cpp \
-            app/src/main/cpp/binfmt/elf_format.cpp \
-            app/src/main/cpp/binfmt/ar_format.cpp \
-            app/src/main/cpp/binfmt/pe_format.cpp \
-            app/src/main/cpp/binfmt/macho_format.cpp \
-            app/src/main/cpp/binfmt/coff_obj.cpp \
-            app/src/main/cpp/rin_c_api.cpp \
-            app/src/main/cpp/indsin/rin_indsin_c_api.cpp \
-            app/src/main/cpp/loader_ui/library_loader_ui.cpp \
-            app/src/main/cpp/diagnostics/diagnostic.cpp \
-            app/src/main/cpp/diagnostics/source_manager.cpp \
-            app/src/main/cpp/diagnostics/diagnostic_engine.cpp \
-            app/src/main/cpp/diagnostics/diagnostic_renderer.cpp \
-            app/src/main/cpp/clc/clc_container.cpp \
-            app/src/main/cpp/clc/clc_compress.cpp \
-            app/src/main/cpp/clc/clc_security.cpp \
-            app/src/main/cpp/clc/clc_rin_opt.cpp \
-            app/src/main/cpp/clc/clc_zip_import.cpp \
-            app/src/main/cpp/clc/sha256.cpp \
-            web/rin_http_wasm_stub.cpp \
-            web/rin_wasm_bridge.cpp \
-            -s MODULARIZE=1 \
-            -s EXPORT_NAME=RinModule \
-            -s EXPORTED_RUNTIME_METHODS='["ccall","FS"]' \
-            -s EXPORTED_FUNCTIONS='["_rin_run_source","_rin_indsin_session_create","_rin_indsin_session_render_json","_rin_indsin_session_tap","_rin_indsin_session_update_source","_rin_indsin_session_free","_rin_free_string","_malloc","_free"]' \
-            -s ALLOW_MEMORY_GROWTH=1 \
-            -s ASYNCIFY=1 \
-            -s STACK_SIZE=8388608 \
-            -s DISABLE_EXCEPTION_CATCHING=0 \
-            -s ENVIRONMENT=web \
-            -s USE_ZLIB=1 \
-            -o dist/rin.js
+              -I app/src/main/cpp \
+              app/src/main/cpp/rin_lexer.cpp \
+              app/src/main/cpp/rin_parser.cpp \
+              app/src/main/cpp/rin_make.cpp \
+              app/src/main/cpp/rin_container_sql.cpp \
+              app/src/main/cpp/rin_interpreter.cpp \
+              app/src/main/cpp/rin_artifact.cpp \
+              app/src/main/cpp/binfmt/elf_format.cpp \
+              app/src/main/cpp/binfmt/ar_format.cpp \
+              app/src/main/cpp/binfmt/pe_format.cpp \
+              app/src/main/cpp/binfmt/macho_format.cpp \
+              app/src/main/cpp/binfmt/coff_obj.cpp \
+              app/src/main/cpp/rin_c_api.cpp \
+              app/src/main/cpp/indsin/rin_indsin_c_api.cpp \
+              app/src/main/cpp/loader_ui/library_loader_ui.cpp \
+              app/src/main/cpp/diagnostics/diagnostic.cpp \
+              app/src/main/cpp/diagnostics/source_manager.cpp \
+              app/src/main/cpp/diagnostics/diagnostic_engine.cpp \
+              app/src/main/cpp/diagnostics/diagnostic_renderer.cpp \
+              app/src/main/cpp/clc/clc_container.cpp \
+              app/src/main/cpp/clc/clc_compress.cpp \
+              app/src/main/cpp/clc/clc_security.cpp \
+              app/src/main/cpp/clc/clc_rin_opt.cpp \
+              app/src/main/cpp/clc/clc_zip_import.cpp \
+              app/src/main/cpp/clc/sha256.cpp \
+              web/rin_http_wasm_stub.cpp \
+              web/rin_wasm_bridge.cpp \
+              -s MODULARIZE=1 \
+              -s EXPORT_NAME=RinModule \
+              -s EXPORTED_RUNTIME_METHODS='["ccall","FS"]' \
+              -s EXPORTED_FUNCTIONS='["_rin_run_source","_rin_indsin_session_create","_rin_indsin_session_render_json","_rin_indsin_session_tap","_rin_indsin_session_update_source","_rin_indsin_session_free","_rin_free_string","_malloc","_free"]' \
+              -s ALLOW_MEMORY_GROWTH=1 \
+              -s ASYNCIFY=1 \
+              -s STACK_SIZE=8388608 \
+              -s DISABLE_EXCEPTION_CATCHING=0 \
+              -s ENVIRONMENT=web \
+              -s USE_ZLIB=1 \
+              -o dist/rin.js
 
+      # ----------------------------------------------------------------------
+      # 4) تجميع الحزمة
+      # ----------------------------------------------------------------------
       - name: Assemble the Pages bundle
         run: |
-          # site.rin يُنسخ كما هو حرفياً — هو المصدر الوحيد لمحتوى الصفحة (شجرة @view).
-          cp web/site.rin dist/site.rin
-          # المحمّل العام (bootloader) الذي يشغّل rin.wasm ويرسم أي Fabric يُعيده.
+          # site.rin يُنسخ حرفياً — هو المصدر الوحيد لمحتوى الصفحة.
+          cp "$SITE_SRC" dist/site.rin
+          # المحمّل العام (bootloader): يشغّل rin.wasm ويرسم أي Fabric يُعيده.
           cp web/index.html dist/index.html
-          # متجر المكتبات (طبقة Firebase/ويب) — نفس التطبيق، بلا صفحات HTML لكل مكتبة.
-          cp web/libraries.js web/libraries.css dist/
+          # متجر المكتبات (طبقة Firebase/ويب) — نفس التطبيق بلا صفحات HTML لكل مكتبة.
+          cp web/libraries.js web/libraries.css web/rin-academy.js dist/
           # 404.html = محوّل SPA لروابط /@user/library.og.rin (GitHub Pages بلا rewrite)
           cp web/404.html dist/404.html
-          # الأيقونات وبيان التطبيق (PWA) — favicon.ico + PNGs + apple-touch + maskable
+          # الأيقونات وبيان التطبيق (PWA) وملف llms.txt
           cp web/og-image.png web/icon-192.png web/icon-512.png web/icon-maskable-512.png \
              web/apple-touch-icon.png web/favicon.ico web/favicon.png web/favicon-16.png web/favicon-32.png \
              web/manifest.webmanifest web/llms.txt dist/
+          # نسخة RinHTML (الجسر الخفيف) والعرض التجريبي
+          mkdir -p dist/rinhtml dist/rinhtml-demo dist/assets
+          cp web/rinhtml/* dist/rinhtml/
+          cp web/rinhtml-demo/* dist/rinhtml-demo/
+          cp web/assets/* dist/assets/
 
-      # ------------------------------------------------------------------
-      # 3) معاينة الروابط (Open Graph) لكل مكتبة/إضافة/حساب: صفحات ثابتة + صورة 1200x630 لكل كيان
-      #    + sitemap.xml + robots.txt. تُقرأ بيانات Firebase العامة عبر REST. إن تعذّر الاتصال يُنشر
-      #    الموقع بلا هذه الصفحات (تحذير) بدل أن يفشل النشر كله.
-      # ------------------------------------------------------------------
+      # ----------------------------------------------------------------------
+      # 5) معاينة الروابط (Open Graph) لكل مكتبة/إضافة/حساب + sitemap.xml + robots.txt.
+      #    إن تعذّر الاتصال بـ Firebase يُنشر الموقع بلا هذه الصفحات (تحذير) بدل فشل النشر.
+      # ----------------------------------------------------------------------
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
+          cache-dependency-path: scripts/build_share_pages.py
 
       - name: Install image dependencies (Pillow + Arabic shaping + fonts)
         run: |
@@ -184,35 +226,35 @@ jobs:
       - name: Build link-preview pages (per library / extension / account)
         run: python3 scripts/build_share_pages.py --out dist
 
-      # ------------------------------------------------------------------
-      # 4) حزم المحتوى القابلة للتنزيل من التطبيق (حزم اللغات + حزمة Illust): zip حتمي لكل حزمة +
-      #    packs/catalog.json (id/حجم/sha256/رابط). يقرؤه التطبيق من
-      #    https://dlof-lib.github.io/rinlang/packs/catalog.json ويتحقق من sha256 قبل التثبيت.
-      #    مصدر الحزم في content-packs/ (انظر docs/CONTENT_PACKS.md) — لا تُشحن داخل الـ APK.
-      # ------------------------------------------------------------------
+      # ----------------------------------------------------------------------
+      # 6) حزم المحتوى القابلة للتنزيل من التطبيق (لغات + أصول Illust): zip حتمي لكل حزمة
+      #    + packs/catalog.json (id/حجم/sha256/رابط). المصدر في content-packs/.
+      # ----------------------------------------------------------------------
       - name: Build downloadable content packs (languages + assets)
         run: python3 scripts/build_content_packs.py --out dist/packs
 
+      # ----------------------------------------------------------------------
+      # 7) التحقق من اكتمال الحزمة وتطابق site.rin المنشور مع المصدر
+      # ----------------------------------------------------------------------
       - name: Verify bundle
         run: |
-          test -f dist/index.html
-          test -f dist/site.rin
-          test -f dist/rin.wasm
-          test -f dist/rin.js
-          test -f dist/libraries.js
-          test -f dist/libraries.css
-          test -f dist/404.html
-          test -f dist/og-image.png
-          test -f dist/favicon-32.png
-          test -f dist/favicon.ico
-          test -f dist/apple-touch-icon.png
-          test -f dist/manifest.webmanifest
-          test -f dist/og-store.png
-          test -f dist/sitemap.xml
-          test -f dist/robots.txt
-          test -f dist/packs/catalog.json
+          for f in index.html site.rin rin.wasm rin.js libraries.js libraries.css rin-academy.js \
+                   404.html og-image.png favicon-32.png favicon.ico apple-touch-icon.png \
+                   manifest.webmanifest og-store.png sitemap.xml robots.txt packs/catalog.json; do
+            test -s "dist/$f" || { echo "::error::missing dist/$f"; exit 1; }
+          done
+          cmp "$SITE_SRC" dist/site.rin
           echo "Bundle contents:"
           ls -la dist
+          {
+            echo "### Rin site bundle"
+            echo ""
+            echo "| file | size |"
+            echo "|---|---|"
+            for f in site.rin index.html rin.js rin.wasm; do
+              echo "| $f | $(stat -c%s "dist/$f") bytes |"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
@@ -225,6 +267,7 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
