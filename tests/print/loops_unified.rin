@@ -1,0 +1,16 @@
+// كل أشكال الحلقات تشترك في where / skip / take / until
+let xs = [1, 2, 3, 4, 5, 6];
+each x in xs where x % 2 == 0 skip 1 { print "each", x; }
+for (let x in xs) where x > 2 take 2 { print "for-in", x; }
+for (let j = 0; j < 8; j = j + 1) where j % 3 == 0 { print "for-c", j; }
+let n = 0;
+while (n < 9) take 2 { n = n + 1; print "while", n; }
+repeat 6 skip 4 { print "repeat", i; }
+let m = 0;
+loop take 3 { m = m + 1; print "loop", m; }
+let k = 0;
+#do { k = k + 1; } #while (k < 3) else { print "do-else", k; }
+let a = 0;
+retry 3 limit 9 { a = a + 1; if (a < 3) { throw "no"; } print "retry ok", a; }
+let r = each x in xs { if (x == 4) { achieve x * 10; } };
+print "expr", r;
