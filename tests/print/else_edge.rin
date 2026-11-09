@@ -1,0 +1,37 @@
+// حالات حدّية: تداخل الحلقات، return من حلقة، try داخل حلقة، أسبقية a else b، else when مع حلقة
+let n = 0;
+for (let i = 0; i < 3; i = i + 1) { continue; } else { print "continue لا يمنع else"; }
+// حلقات متداخلة
+for (let a in [1,2]) { for (let b in [1,2]) { if (b == 5) { break; } } else { print "inner else", a; } } else { print "outer else"; }
+// break في الداخلية لا يمنع else الخارجية
+for (let a in [1]) { for (let b in [1]) { break; } else { print "no"; } } else { print "outer ok"; }
+// return من حلقة
+fun f() { for (let x in [1,2]) { return x; } else { return 99; } }
+print f();
+fun g() { while (false) { } else { return 7; } }
+print g();
+// try داخل حلقة + else
+for (let i = 0; i < 2; i = i + 1) { try { if (i == 1) { throw "e"; } } catch (e) { print "c", i; } else { print "e", i; } }
+// أسبقية
+let x = nil;
+print x else 1 + 2;
+print (x else 1) + 2;
+let y = x else (1 > 0 ? "a" : "b");
+print y;
+let u = true and nil else "z";
+print u;
+// else مع استدعاء وفهرس
+fun mk() { return nil; }
+print mk() else "fallback";
+let arr = [1];
+print {"a":1}["b"] else "nokey";
+let o = {"a": {"b": nil}};
+print o["a"]["b"] else "deep";
+// if تعبير داخل نص ودوال
+print "v=" + (if (n > 1) "many" else "few");
+let lst = [if (n > 1) 1 else 2, if (false) 3 else 4];
+print lst;
+// else when على جمل مفردة بدون أقواس وبحلقة
+if (false) print 1; else when (true) for (let q in [1]) { print "q"; } else { print "loop-else"; }
+// else unless الأخيرة
+if (false) { } else unless (false) { print "unless ok"; }
