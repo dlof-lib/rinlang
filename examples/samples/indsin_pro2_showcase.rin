@@ -1,0 +1,57 @@
+<!-- indsin_pro2_showcase.rin — الجولة الثانية: مسارات، جداول، رسوم، كشف عند التمرير، Tooltip، اختصارات -->
+<warp q={""} />
+<warp n={0} />
+<warp dlg={false} />
+<warp seen={0} />
+
+<Column#root gap=20 padding=16 padding_md=32 bg="#f5f5fa" bg_dark="#0e0e1c">
+  <Progress#sp scroll_progress={true} sticky=0 width="100%" height=4 />
+
+  <Row#nav gap=8 wrap={true}>
+    <Button#n1 go="/" variant="ghost">Home</Button>
+    <Button#n2 go="/data" variant="ghost">Data</Button>
+    <Button#n3 go="/charts" variant="ghost">Charts</Button>
+    <Button#n4 variant="outline" hotkey="ctrl+k" tip="Ctrl+K" tip_pos="bottom" onTap={toggle(dlg)}>Dialog</Button>
+    <View.Dropdown#dd title="Menu">
+      <Button#d1 variant="ghost" onTap={toast("New")}>New</Button>
+      <Button#d2 variant="ghost" onTap={downloadText("hello.txt", "Hello from Indsin")}>Export .txt</Button>
+      <Button#d3 variant="ghost" onTap={toggleTheme()}>Theme</Button>
+    </View.Dropdown>
+  </Row>
+
+  <Column#home route="/" gap=16>
+    <Heading#h level=1 text_gradient="#6C5CE7,#2F7DC4,90" text="Indsin Pro 2" />
+    <Row#stats gap=12 wrap={true}>
+      <View.Stat#s1 label="Revenue" value="$48.2k" delta="12%" />
+      <View.Stat#s2 label="Churn" value="2.1%" delta="-0.4%" />
+      <View.ProgressRing#pr value=72 label="72%" />
+    </Row>
+    <Row#cnt gap=8><Text#c1 size="heading" weight=700 count_to=12840 count_prefix="$" /><Text color="text_muted" text="animated counter" /></Row>
+    <View.Marquee#mq speed=14><Text text="⚡ else موحّدة" /><Text text="🔁 حلقات موحّدة" /><Text text="📊 DataTable" /><Text text="🧭 Router" /><Text text="✨ Reveal" /></View.Marquee>
+    <Text#hint color="text_muted" text="↓ مرّر للأسفل لترى الكشف عند التمرير" />
+    <Box#gap height=800 />
+    <Card#rv1 reveal="slideUp" tip="Reveals on scroll"><Text text="Reveal on scroll ↓" /></Card>
+    <Card#rv2 reveal="scaleIn" onVisible={increment(seen)}><Text text={"visible events: " + seen} /></Card>
+  </Column>
+
+  <Column#data route="/data" gap=12>
+    <Input#flt value={q} placeholder="Filter…" focus_border="#6C5CE7" focus_bg="#fff" />
+    <View.DataTable#tbl columns="Name,Role,Score" rows={[["Lina","Dev",92],["Omar","Design",85],["Sara","PM",78],["Zaid","Dev",88],["Maya","QA",95],["Adam","Ops",70]]} filter={q} page_size=4 />
+  </Column>
+
+  <Column#charts route="/charts" gap=16>
+    <Row#ch1 gap=24 wrap={true}>
+      <View.Sparkline#sl data={[3,5,4,8,6,9,12,10]} />
+      <View.Donut#dn data={[45,30,25]} />
+      <View.BarChart#bc data={[12,19,7,15,10]} labels="Mon,Tue,Wed,Thu,Fri" />
+    </Row>
+  </Column>
+
+  <Dialog#dlgbox open={dlg} dismissible={true} scrim={true} onClose={hide(dlg)}>
+    <Text weight=700 text="Dialog" />
+    <Text text="Esc أو الضغط خارجاً يغلقها (onClose)" />
+    <Button#dc onTap={hide(dlg)}>Close</Button>
+  </Dialog>
+  <Box#spacer height=700 />
+  <Button#up onTap={scrollTop()}>↑ Top</Button>
+</Column>
