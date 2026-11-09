@@ -1,0 +1,7 @@
+📥 @import: تم استيراد "lib/upgrade.og.rin" (من القرص)
+📦 container = db
+✅ .end/container (db)
+الحالة: steady v1 upgrades=0 | db: 1 3
+  - v1: أُنشئت
+  - v2: رُشّحت (تُجرَّب في الظلّ)
+  - v2: رُفضت — فشلت الهجرة فتراجع كل شيء: تعذّرت هجرة الجدول
