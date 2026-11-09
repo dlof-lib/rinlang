@@ -1,0 +1,16 @@
+// تركيب ميزات موجودة معاً: حاوية + ttl + val + try/else + else كتعبير + for على قاموس + حلقة كتعبير
+time.freeze();
+@sess.container
+    let token = "abc" ttl 30s;
+    let raw = "12";
+    val qty = try number(raw) else 0;
+.end;
+print getField("sess", "token") else "منتهي", getField("sess", "qty");
+setField("sess", "raw", "zz");
+print getField("sess", "qty");
+setField("sess", "raw", "7");
+print getField("sess", "qty");
+timers.run(31s);
+print getField("sess", "token") else "منتهي";
+let who = for (let [k, v] in {"a": 1, "b": 5}) { if (v > 3) { achieve k; } } else { achieve "لا أحد"; };
+print who;
