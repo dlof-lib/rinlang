@@ -1,0 +1,26 @@
+// else when (c) / else unless (c): سلسلة شروط مقروءة بلا تداخل.
+fun grade(s) {
+    if (s >= 90) { print s, "A"; }
+    else when (s >= 80) { print s, "B"; }
+    else when (s >= 70) { print s, "C"; }
+    else { print s, "F"; }
+}
+grade(95); grade(85); grade(75); grade(10);
+
+fun access(user) {
+    if (user["banned"]) { print "محظور"; }
+    else unless (user["verified"]) { print "غير موثّق"; }
+    else when (user["admin"]) { print "مدير"; }
+    else { print "مستخدم"; }
+}
+access({"banned": true, "verified": true, "admin": false});
+access({"banned": false, "verified": false, "admin": false});
+access({"banned": false, "verified": true, "admin": true});
+access({"banned": false, "verified": true, "admin": false});
+// بلا else أخيرة
+if (false) { print "no"; } else when (false) { print "no"; }
+print "انتهى";
+// عبارات مفردة وبصياغة when/otherwise
+let n = 5;
+if (n > 10) print "كبير"; else when (n > 3) print "متوسط"; else print "صغير";
+when (n > 10) { print "when1"; } otherwise { print "otherwise"; }
