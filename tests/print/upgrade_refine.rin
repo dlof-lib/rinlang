@@ -1,0 +1,24 @@
+// التحسين التدريجي: الجواب الأول فوري (تقريبي)، ثم يرتقي دقّةً في الخلفية؛ فشل مستوى لا يفسد ما سبقه.
+@import "lib/upgrade.og.rin";
+time.freeze();
+let seen = [];
+Upgrade.refineWith("sqrt", [
+    fun(x) { return x / 2; },                                  // سريع وخشن
+    fun(x) { return (x / 2 + x / (x / 2)) / 2; },              // خطوة نيوتن
+    fun(x) { let g = x / 2; for (let i = 0; i < 20; i = i + 1) { g = (g + x / g) / 2; } return g; }
+], {step: 100ms, onUpgrade: fun(i) { push(seen, "المستوى " + i["tier"]); }});
+let a = Upgrade.get("sqrt", 16);
+print "أول جواب:", a["value"], "مستوى", a["tier"] + "/" + a["of"], "نهائي؟", a["final"];
+Upgrade.run(100ms);
+let b = Upgrade.get("sqrt", 16);
+print "بعد 100ms:", b["value"], "مستوى", b["tier"];
+Upgrade.run(1s);
+let c = Upgrade.get("sqrt", 16);
+print "بعد ثانية:", c["value"], "مستوى", c["tier"], "نهائي؟", c["final"];
+print seen;
+print Upgrade.state("sqrt");
+// فشل المستوى الثاني: يبقى الجواب الخشن سليماً
+Upgrade.refine("flaky", [fun(x) { return x; }, fun(x) { throw "نفدت الذاكرة"; }, fun(x) { return x * 2; }]);
+Upgrade.get("flaky", 5); Upgrade.run(1s);
+print "flaky:", Upgrade.get("flaky", 5)["value"], Upgrade.state("flaky")["failures"], "فشل";
+for (let l in Upgrade.timeline("flaky")) { print "  -", l; }
