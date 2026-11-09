@@ -1,0 +1,105 @@
+<!-- indsin_pro_showcase.rin — معرض كل الإمكانيات الجديدة في indsin2web Pro -->
+<warp stars={4} />
+<warp page={3} />
+<warp step={2} />
+<warp tab={"props"} />
+<warp sheet={false} />
+<warp count={0} />
+<warp name={""} />
+
+<Column#root gap=24 padding=16 padding_md=32 bg="#f5f5fa" bg_dark="#0e0e1c">
+
+  <Column#hero gap=6>
+    <Heading#h1 level=1 text_gradient="#6C5CE7,#2F7DC4,90" animate="slideUp" text="Indsin Pro" />
+    <Text#sub color="text_muted" animate="fadeIn" delay=200 text="كل الإمكانيات الجديدة حيّة — غيّر عرض النافذة أو بدّل الثيم" />
+    <Row#actions gap=8 wrap={true}>
+      <Button#t1 hover_bg="#2F7DC4" hover_lift=3 hover_elevation="md" active_scale=0.95 focus_ring={true} onTap={toast("أهلاً بك 👋")}>Toast</Button>
+      <Button#t2 variant="outline" onTap={toggleTheme()}>Dark / Light</Button>
+      <Button#t3 variant="ghost" onTap={copyText("indsin2web --pwa")}>Copy</Button>
+      <Button#t4 variant="gradient" onTap={toggle(sheet)}>Bottom Sheet</Button>
+      <Button#t5 onTap={scrollTop()}>↑ Top</Button>
+    </Row>
+  </Column>
+
+  <!-- 1) حركات -->
+  <Text#s1 size="title" text="1 · Animations (stagger)" />
+  <Grid#anim columns_min=140 gap=12 stagger=90 animate="scaleIn">
+    <Card#a1 hover_lift=4 hover_elevation="lg"><Text>scaleIn</Text></Card>
+    <Card#a2 hover_lift=4 hover_elevation="lg"><Text>stagger</Text></Card>
+    <Card#a3 hover_lift=4 hover_elevation="lg"><Text>columns_min</Text></Card>
+    <Card#a4 hover_lift=4 hover_elevation="lg"><Text>auto-fill</Text></Card>
+  </Grid>
+  <Row#loops gap=20>
+    <View.Badge#b1 animate="pulse" text="pulse" />
+    <View.Badge#b2 animate="bounce" repeat={true} text="bounce" />
+    <View.Badge#b3 animate="float" text="float" />
+    <View.Badge#b4 animate="blink" text="blink" />
+    <View.Spinner#sp />
+  </Row>
+
+  <!-- 2) مظهر -->
+  <Text#s2 size="title" text="2 · Visual effects" />
+  <Stack#fx height=140 radius=20 bg="#6C5CE7,#2F7DC4,135">
+    <Column#glassbox glass={true} padding=20 margin=24 radius=14><Text weight=700 text="Glass (backdrop blur)" /></Column>
+  </Stack>
+  <Row#fx2 gap=12 wrap={true}>
+    <Box#r1 width=90 height=60 radius=10 bg="#6C5CE7" ring=4 />
+    <Box#r2 width=90 height=60 radius=10 bg="#2EB872" blur=2 />
+    <Box#r3 width=90 height=60 radius=10 bg="#E5A100" outline=3 outline_color="#D14545" />
+    <Text#tr truncate={true} width=140 text="هذا نص طويل جداً يُقتطع بنقاط" />
+  </Row>
+
+  <!-- 3) مكوّنات تفاعلية -->
+  <Text#s3 size="title" text="3 · Interactive components" />
+  <View.Tabs#tabs>
+    <View.TabItem#ta selected={tab == "props"} onTap={set(tab, "props")} label="Props" />
+    <View.TabItem#tb selected={tab == "comps"} onTap={set(tab, "comps")} label="Components" />
+    <View.TabItem#tc selected={tab == "acts"} onTap={set(tab, "acts")} label="Actions" />
+  </View.Tabs>
+  <Text#pa visible={tab == "props"} text="hover_* · animate · glass · ring · columns_min · sticky · snap · _md/_dark suffixes" />
+  <Text#pb visible={tab == "comps"} text="Accordion · Rating · Steps · Breadcrumb · Pagination · Carousel · Timeline · Sheet · Fab" />
+  <Text#pc visible={tab == "acts"} text="toast · copyText · openUrl · share · setTheme · toggleTheme · scrollTop" />
+
+  <Accordion#acc title="Accordion — اضغط للفتح"><Text text="محتوى قابل للطي، يتبع open={…} أيضاً." /></Accordion>
+  <Accordion#acc2 title="Accordion 2"><Text text="يعمل بلا JavaScript إضافي (details/summary)." /></Accordion>
+
+  <Row#rrow gap=12><Rating#rate value={stars} max=5 /><Text#rated text={"stars = " + stars} /></Row>
+  <View.Steps#steps items="Cart,Payment,Review,Done" current={step} />
+  <Row#srow gap=8>
+    <Button#sp1 variant="outline" onTap={decrement(step)} text="◀" />
+    <Button#sp2 variant="outline" onTap={increment(step)} text="▶" />
+  </Row>
+  <View.Breadcrumb#crumbs items="Home,Docs,Indsin,Pro" />
+  <View.Pagination#pager current={page} total=12 />
+  <Text#pg text={"page = " + page} />
+
+  <!-- 4) Carousel / Timeline / Code / Quote / Meter -->
+  <Text#s4 size="title" text="4 · Carousel · Timeline · Code" />
+  <View.Carousel#car>
+    <Card#k1 width=220 bg="#6C5CE7"><Text color="#fff" text="Slide 1" /></Card>
+    <Card#k2 width=220 bg="#2F7DC4"><Text color="#fff" text="Slide 2" /></Card>
+    <Card#k3 width=220 bg="#2EB872"><Text color="#fff" text="Slide 3" /></Card>
+    <Card#k4 width=220 bg="#E5A100"><Text color="#fff" text="Slide 4" /></Card>
+  </View.Carousel>
+  <View.Timeline#tl>
+    <View.TimelineItem#ti1><Text text="v1 — else الموحّدة" /></View.TimelineItem>
+    <View.TimelineItem#ti2><Text text="v2 — الحلقات الموحّدة" /></View.TimelineItem>
+    <View.TimelineItem#ti3><Text text="v3 — Indsin Pro" /></View.TimelineItem>
+  </View.Timeline>
+  <View.CodeBlock#code text="indsin2web app.rin -o dist/app.html --pwa" />
+  <View.Quote#q text="البساطة هي قمة التطور." />
+  <Row#mrow gap=12><View.Meter#mt value={count} min=0 max=10 width=200 /><Button#mb onTap={increment(count)} text="+1" /><Text#mv text={"count = " + count} /></Row>
+  <View.Skeleton#sk />
+
+  <!-- 5) نموذج مع تحقق -->
+  <Text#s5 size="title" text="5 · Form" />
+  <Input#nm value={name} placeholder="اسمك" focus_ring={true} error={name == "" ? "" : (len(name) < 3 ? "قصير" : "")} />
+  <Text#hello visible={len(name) >= 3} animate="fadeIn" text={"مرحباً " + name + " — " + indsin.initials(name)} />
+
+  <View.Sheet#sh open={sheet}>
+    <Text weight=700 text="Bottom Sheet" />
+    <Text text="لوحة سفلية تتبع open={sheet}" />
+    <Button#shc onTap={hide(sheet)} text="إغلاق" />
+  </View.Sheet>
+  <View.Fab#fab onTap={toast("FAB!")} text="＋" />
+</Column>
