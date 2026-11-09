@@ -66,6 +66,8 @@ inline Color colorForKind(StrandKind k) {
         case StrandKind::SKELETON: return themeRegistry().active().border; // muted placeholder block
         case StrandKind::SPINNER:  return themeRegistry().active().primary;
         case StrandKind::DONUT_CHART: return themeRegistry().active().surface; // segments carry their own colors
+        case StrandKind::SPARKLINE: case StrandKind::BAR_CHART: case StrandKind::PROGRESS_RING:
+            return themeRegistry().active().surface; // الرسم نفسه يحمل ألوانه
 
         default: return themeRegistry().active().background;
     }
@@ -634,6 +636,9 @@ struct Dye {
         if (s->kind == StrandKind::SKELETON) { paintSkeleton(s, list); return; }
         if (s->kind == StrandKind::SPINNER) { paintSpinner(s, list); return; }
         if (s->kind == StrandKind::DONUT_CHART) { paintDonutChart(s, list); return; }
+        if (s->kind == StrandKind::SPARKLINE) { paintSparkline(s, list); return; }
+        if (s->kind == StrandKind::BAR_CHART) { paintBarChart(s, list); return; }
+        if (s->kind == StrandKind::PROGRESS_RING) { paintProgressRing(s, list); return; }
         if (s->kind == StrandKind::STEPITEM) { paintStepItem(s, list); return; }
         if (s->kind == StrandKind::STEPS) {
             paintStepsConnector(s, list);
@@ -848,6 +853,74 @@ struct Dye {
             Rect hole{ s->geometry.x, s->geometry.y, s->geometry.w, s->geometry.h };
             list.push_back({DrawOp::TEXT_RUN, hole, th.text, center, s->id, 0, 0});
         }
+    }
+
+    // ---- Pro charts: data= إما أرقام "3,5,4" أو "تسمية:قيمة" (نفس اصطلاح DonutChart) ----
+    static void parseSeries(const std::string& attr, std::vector<std::string>& labels, std::vector<double>& vals) {
+        for (auto& e : splitCsv(attr)) {
+            size_t colon = e.find(':');
+            if (colon == std::string::npos) { labels.push_back(""); vals.push_back(std::atof(e.c_str())); }
+            else { labels.push_back(e.substr(0, colon)); vals.push_back(std::atof(e.c_str() + colon + 1)); }
+        }
+    }
+    // Sparkline: خط مستمر بلا عملية خط في DrawOp ⇒ يُرسم كأعمدة بكسل واحد (ارتفاعها = الخط 2px)
+    // مع منطقة باهتة تحته. `color=`/tone= يحدد اللون. لا تسميات ولا محاور بالتصميم.
+    void paintSparkline(const StrandPtr& s, DrawList& list) {
+        std::vector<std::string> lb; std::vector<double> v; parseSeries(s->attrStr("data", ""), lb, v);
+        const Rect& g = s->geometry; Color c = resolveColor(s);
+        if (c == themeRegistry().active().surface) c = themeRegistry().active().primary;
+        if (v.size() < 2 || g.w < 2 || g.h < 2) {
+            if (!v.empty()) list.push_back({DrawOp::FILL_RECT, {g.x, g.y + g.h/2.0 - 1, g.w, 2}, c, "", s->id, 0, 0});
+            return;
+        }
+        double mn = *std::min_element(v.begin(), v.end()), mx = *std::max_element(v.begin(), v.end()), r = (mx - mn) > 0 ? (mx - mn) : 1.0;
+        int steps = (int)std::min(160.0, std::floor(g.w)); double colW = g.w / steps; double pad = 2.0;
+        Color area = c; area.a = 45;
+        for (int i = 0; i < steps; ++i) {
+            double t = steps == 1 ? 0 : (double)i / (steps - 1) * (v.size() - 1);
+            size_t i0 = (size_t)std::floor(t), i1 = std::min(v.size() - 1, i0 + 1); double f = t - i0;
+            double val = v[i0] + (v[i1] - v[i0]) * f;
+            double y = g.y + pad + (g.h - 2*pad) * (1.0 - (val - mn) / r);
+            list.push_back({DrawOp::FILL_RECT, {g.x + i*colW, y, colW + 0.5, g.y + g.h - y}, area, "", s->id, 0, 0});
+            list.push_back({DrawOp::FILL_RECT, {g.x + i*colW, y - 1, colW + 0.5, 2}, c, "", s->id, 0, 0});
+        }
+    }
+    // BarChart: أعمدة متساوية العرض بارتفاع نسبي لأكبر قيمة، تسمياتها أسفل الأعمدة (TEXT_RUN)،
+    // `colors="#..,#.."` بالموضع وإلا دورة ألوان ثابتة، `values=true` يكتب القيمة فوق كل عمود.
+    void paintBarChart(const StrandPtr& s, DrawList& list) {
+        const Theme& th = themeRegistry().active();
+        static const Color kPalette[] = {{124, 92, 255}, {34, 200, 142}, {232, 178, 61}, {241, 76, 76}, {95, 211, 255}, {145, 152, 163}};
+        std::vector<std::string> lb; std::vector<double> v; parseSeries(s->attrStr("data", ""), lb, v);
+        const Rect& g = s->geometry; if (v.empty()) return;
+        bool anyLabel = false; for (auto& l : lb) if (!l.empty()) anyLabel = true;
+        bool showVals = s->attrStr("values", "false") == "true";
+        double labelH = anyLabel ? 16 : 0, topPad = showVals ? 16 : 0;
+        double plotH = std::max(2.0, g.h - labelH - topPad), mx = *std::max_element(v.begin(), v.end()); if (mx <= 0) mx = 1;
+        double cellW = g.w / v.size(), barW = cellW * 0.7;
+        auto colorList = splitCsv(s->attrStr("colors", ""));
+        for (size_t i = 0; i < v.size(); ++i) {
+            double h = std::max(0.0, v[i] / mx * plotH);
+            Color c = (i < colorList.size()) ? parseHexColor(colorList[i], kPalette[i % 6]) : kPalette[i % 6];
+            Rect bar{g.x + i*cellW + (cellW - barW)/2.0, g.y + topPad + (plotH - h), barW, h};
+            list.push_back({DrawOp::FILL_RECT, bar, c, "", s->id, std::min(4.0, barW/2.0), 0});
+            if (showVals) { std::ostringstream o; o << (long long)std::llround(v[i]); list.push_back({DrawOp::TEXT_RUN, {g.x + i*cellW, g.y + topPad + plotH - h - 16, cellW, 16}, th.text, o.str(), s->id, 0, 0}); }
+            if (anyLabel) list.push_back({DrawOp::TEXT_RUN, {g.x + i*cellW, g.y + g.h - labelH, cellW, labelH}, th.text_muted, lb[i], s->id, 0, 0});
+        }
+    }
+    // ProgressRing: مسار كامل + قوس تقدّم يبدأ من 12 (value= 0..100) ونصّ في المركز (label= أو "N%").
+    void paintProgressRing(const StrandPtr& s, DrawList& list) {
+        const Theme& th = themeRegistry().active();
+        double pct = std::max(0.0, std::min(100.0, s->attrNum("value", 0)));
+        double side = std::min(s->geometry.w, s->geometry.h);   // دائرة دائماً حتى لو مدّد الأب الصندوق
+        double thickness = std::max(4.0, side * 0.11);
+        Rect ring{ s->geometry.x + thickness/2.0, s->geometry.y + thickness/2.0, side - thickness, side - thickness };
+        Color tone = resolveColor(s); if (tone == th.surface) tone = th.primary;
+        list.push_back({DrawOp::STROKE_ARC, ring, th.border, "", s->id, 0, thickness, 0, 360});
+        if (pct > 0) list.push_back({DrawOp::STROKE_ARC, ring, tone, "", s->id, 0, thickness, -90, pct * 3.6});
+        std::string center = s->attrStr("label", "");
+        if (center.empty()) { std::ostringstream o; o << (long long)std::llround(pct) << "%"; center = o.str(); }
+        double fs = std::max(10.0, side * 0.2);   // حجم الخط يُشتقّ من ارتفاع المستطيل ⇒ مستطيل بحجم الخط وسط الحلقة
+        list.push_back({DrawOp::TEXT_RUN, {s->geometry.x, s->geometry.y + (side - fs)/2.0, side, fs}, th.text, center, s->id, 0, 0});
     }
 
     // StepItem: circular marker (state= "done"/"active"/"upcoming", index= 1-based -- both
