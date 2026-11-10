@@ -1,0 +1,10 @@
+// url.* (docs/fetch.md): تحليل/بناء/دمج/ترميز الروابط + أخطاء خيارات fetch (بلا شبكة)
+print url.parse("https://user@Example.com:8443/a/b?x=1&y=2&y=3#top");
+print url.parse("http://x.io")["port"], url.parse("https://x.io")["path"], url.parse("nope")["valid"];
+print url.build({host: "api.test", path: "/v1/items", params: {q: "a b", n: [1, 2]}, fragment: "f"});
+print url.build({scheme: "http", host: "h", port: 81, query: "z=1"});
+print url.join("https://a.com/x/y/z.html", "../q?k=1"), url.join("https://a.com/x/", "/root"), url.join("https://a.com/x", "https://b.com/");
+print url.join("https://a.com/x/y", "//c.com/p"), url.join("https://a.com/x/y?k=1", "#frag");
+print url.encode("a b/é&"), url.decode("a%20b+c"), url.decode("%zz");
+print url.valid("ftp://x"), url.valid("https://x.io"), url.valid(5);
+print url.params("?a=1&b=2&a=3"), url.params("https://h/p?k=v#f"), url.query({a: 1, b: [2, 3], c: nil, d: "x y"});
