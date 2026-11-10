@@ -1,0 +1,83 @@
+// ضغط وفكّ ضغط الحاويات (container.zip / unzip / pack / zipInfo) — docs/container_zip.md
+// يكتب ملفات مؤقتة تحت _czip_tmp/ ويحذفها.
+@container=shop
+    let title = "متجر";
+    let count = 42;
+    let ratio = 3.14159265358979;
+    let tags = #["a" "b"];
+    let nested = {x: [1, 2, {y: nil}], ok: true};
+.end/container
+@container.doc=users
+    document id="u1" fields={ name: "سارة", city: "الرياض" };
+    document id="u2" fields={ name: "عمر", city: "جدة" };
+.end/container.doc
+@table=grid
+    row cells=["a", "b"];
+    row cells=[1, 2];
+.end/table
+
+let r = container.zip("shop", "_czip_tmp/shop.zip", {time: 1700000000});
+print r["ok"], r["files"], r["containers"][0]["name"], r["containers"][0]["fields"];
+print zip.exists("_czip_tmp/shop.zip", "rin-container.json"), zip.exists("_czip_tmp/shop.zip", "containers/shop.json");
+
+// تعديل ثم استعادة: القيم الأصلية بدقة كاملة (Set وnil والرقم العشري)
+container.set("shop", "count", 0);
+container.set("shop", "ratio", 1);
+container.deleteField("shop", "tags");
+let u = container.unzip("shop", "_czip_tmp/shop.zip");
+print u["ok"], u["created"], u["fields"];
+print container.get("shop", "count"), container.get("shop", "ratio") == 3.14159265358979;
+print container.get("shop", "tags"), container.get("shop", "nested");
+
+// overwrite:false يحفظ الموجود ويضيف الناقص فقط
+container.set("shop", "count", 7);
+container.deleteField("shop", "title");
+container.unzip("shop", "_czip_tmp/shop.zip", {overwrite: false});
+print container.get("shop", "count"), container.get("shop", "title");
+
+// مستندات وجدول + عدّة حاويات في ملف واحد + إعادة تسمية عند الاستعادة
+let m = container.zip(["users", "grid"], "_czip_tmp/multi.zip", {time: 1700000000, level: 9});
+print m["containers"][0]["documents"], m["containers"][1]["rows"];
+let info = container.zipInfo("_czip_tmp/multi.zip");
+print info["format"], info["version"], len(info["containers"]), info["containers"][0]["kind"], info["containers"][1]["kind"];
+container.unzip("users2", "_czip_tmp/multi.zip", {from: "users"});
+print container.kind("users2"), len(queryDocs("users2", "city", "جدة")), queryDocs("users2", "city", "جدة")[0]["name"];
+let all = container.unzipAll("_czip_tmp/multi.zip", {prefix: "bk_"});
+print all["count"], container.exists("bk_users"), container.exists("bk_grid"), len(getField("bk_grid", "rows"));
+
+// حاوية وحيدة في الأرشيف تُحمَّل بأي اسم
+container.unzip("copyOfShop", "_czip_tmp/shop.zip");
+print container.get("copyOfShop", "count"), container.get("copyOfShop", "title");
+
+// pack/unpack في الذاكرة بلا ملف
+let bytes = container.pack("shop");
+print len(bytes) > 100, zip.unbytes(bytes)["containers/shop.json"] != nil;
+container.unpack("fromMem", bytes, {from: "shop"});
+print container.get("fromMem", "count");
+
+// only/omit
+container.zip("shop", "_czip_tmp/part.zip", {only: ["count", "title"]});
+container.unzip("part", "_czip_tmp/part.zip");
+print container.fieldNames("part");
+
+// ملفات مرفقة + استخراجها
+writeFile("_czip_tmp/note.txt", "ملاحظة مرفقة");
+container.zip("shop", "_czip_tmp/att.zip", {include: ["_czip_tmp/note.txt"]});
+let e = container.unzip("shop", "_czip_tmp/att.zip", {extract: "_czip_tmp/out"});
+print e["extracted"]["files"], readFile("_czip_tmp/out/note.txt");
+
+// أخطاء واضحة
+try { container.zip("nope", "_czip_tmp/x.zip"); } catch (err) { print "حاوية غائبة"; }
+try { container.unzip("shop", "_czip_tmp/missing.zip"); } catch (err) { print "ملف غائب"; }
+zip.create("_czip_tmp/plain.zip", {"a.txt": "x"});
+try { container.unzip("shop", "_czip_tmp/plain.zip"); } catch (err) { print "ليس أرشيف حاويات"; }
+try { container.unzip("zzz", "_czip_tmp/multi.zip"); } catch (err) { print "اسم غير موجود في الأرشيف"; }
+
+// حماية بكلمة مرور
+container.zip("shop", "_czip_tmp/pw.zip", {password: "k1"});
+try { container.unzip("shop", "_czip_tmp/pw.zip"); } catch (err) { print "كلمة مرور مطلوبة"; }
+try { container.unzip("shop", "_czip_tmp/pw.zip", {password: "bad"}); } catch (err) { print "كلمة مرور خاطئة"; }
+print container.unzip("shop", "_czip_tmp/pw.zip", {password: "k1"})["ok"];
+
+for (let f in ["shop", "multi", "part", "att", "plain", "pw", "x", "note"]) { deleteFile("_czip_tmp/" + f + (f == "note" ? ".txt" : ".zip")); }
+deleteFile("_czip_tmp/out/note.txt");
