@@ -524,6 +524,16 @@ inline void registerThemesFromProgram(const std::vector<rin::StmtPtr>& program, 
             Value v = evalAttrExprKeyed(a.key, a.value, warp, nullptr);
             if (a.key == "active") { makeActive = (v.asString() == "true"); continue; }
             if (a.key == "seed" || a.key == "dark" || a.key == "mode") continue;
+            // شكل الثيم: shape="soft|sharp|pill" أو radius= · cardElevation= · buttonElevation= · hairline=
+            if (a.key == "shape") { const std::string sh = v.asString();
+                if (sh == "soft") { theme.radius = 12; theme.cardElevation = 2; theme.buttonElevation = 1; theme.hairline = true; }
+                else if (sh == "pill") { theme.radius = 24; theme.cardElevation = 2; theme.buttonElevation = 2; theme.hairline = false; }
+                else if (sh == "sharp") { theme.radius = 0; theme.cardElevation = 0; theme.buttonElevation = 0; theme.hairline = false; }
+                continue; }
+            if (a.key == "radius") { theme.radius = v.asNumber(0); continue; }
+            if (a.key == "cardElevation") { theme.cardElevation = (int)v.asNumber(0); continue; }
+            if (a.key == "buttonElevation") { theme.buttonElevation = (int)v.asNumber(0); continue; }
+            if (a.key == "hairline") { theme.hairline = (v.asString() == "true"); continue; }
             if (looksLikeHexColor(v.asString())) theme.setSlot(a.key, parseHexColor(v.asString(), {0,0,0}));
         }
         reg.registerTheme(theme);
