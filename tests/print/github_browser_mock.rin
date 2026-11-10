@@ -1,0 +1,25 @@
+// متصفّح GitHub بلا شبكة: نفس container.api لكن mock=true بمسارات route تحاكي ردود GitHub (users/:u/repos · contents · readme · languages · 404)
+@container.api=github
+    let baseUrl = "https://api.github.com";                    // الحقيقي؛ mock=true يفرض route أدناه
+    let mock = true;
+    let headers = {"Accept": "application/vnd.github+json", "User-Agent": "rinlang-browser"};
+    let data = nil; let status = 0; let error = nil; let loading = false; let preview = nil;
+    route method="GET" path="/users/octo-dev/repos" status=200 body=[{"name": "rinlang", "stargazers_count": 128, "language": "C++", "owner": {"login": "octo-dev", "avatar_url": "https://avatars.example/octo.png"}}, {"name": "dotfiles", "stargazers_count": 0, "language": nil, "owner": {"login": "octo-dev", "avatar_url": "https://avatars.example/octo.png"}}];
+    route method="GET" path="/repos/octo-dev/rinlang/languages" status=200 body={"C++": 800, "Kotlin": 200};
+    route method="GET" path="/repos/octo-dev/rinlang/readme" status=200 body={"encoding": "base64", "content": "IyByaW5sYW5n"};
+    route method="GET" path="/users/nobody/repos" status=404 body={"message": "Not Found"};
+.end/container.api
+
+fun line(r) { let lang = r["language"] else "-"; return r["name"] + " *" + r["stargazers_count"] + " " + lang; }
+let r = callApi("github", "GET", "/users/:u/repos", {params: {u: "octo-dev"}});
+for (let repo in r["body"]) { print line(repo); }
+print github.status, github.preview, len(github.data);
+let lg = callApi("github", "GET", "/repos/:o/:r/languages", {params: {o: "octo-dev", r: "rinlang"}});
+let total = 0;
+for (let [k, v] in lg["body"]) { total = total + v; }
+for (let [k, v] in lg["body"]) { print k, round(v * 100 / total) + "%"; }
+let rd = callApi("github", "GET", "/repos/:o/:r/readme", {params: {o: "octo-dev", r: "rinlang"}});
+print sec.base64Decode(rd["body"]["content"]);
+let bad = callApi("github", "GET", "/users/:u/repos", {params: {u: "nobody"}});
+print bad["status"], github.status, github.error, len(github.data);   // الخطأ لا يمسح آخر بيانات ناجحة
+print apiInfo("github")["mode"], apiInfo("github")["calls"], apiInfo("github")["failed"], apiInfo("github")["lastStatus"];
