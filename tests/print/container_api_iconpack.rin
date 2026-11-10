@@ -1,0 +1,25 @@
+// container.api ✕ حزم أيقونات: iconList يستورد حزمة كاملة من ردّ api (خريطة · {icons} · مصفوفة · sprite)
+@container.api=lib
+    let data = nil;
+    let status = 0;
+    let iconList = nil;
+    let iconPrefix = "fx:";
+    route method="GET" path="/map" status=200 body={"icons": {"star": "M12 2L15 9L22 9Z", "dot": {"svg": "<svg><circle cx='12' cy='12' r='3'/></svg>"}, "bad": "nope"}};
+    route method="GET" path="/arr" status=200 body=[{"name": "a1", "d": "M0 0L1 1"}, {"id": "a2", "path": "M2 2L3 3"}];
+    route method="GET" path="/sprite" status=200 body="<svg><symbol id='sq'><rect x='4' y='4' width='16' height='16'/></symbol><symbol id='ln'><line x1='0' y1='0' x2='5' y2='5'/></symbol></svg>";
+    route method="GET" path="/none" status=200 body={"hello": "world"};
+    route method="GET" path="/err" status=503 body={"message": "down"};
+.end/container.api
+print lib.iconList;
+callApi("lib", "GET", "/map");
+print lib.iconList, icons.has("fx:star"), icons.path("fx:star"), icons.has("fx:bad");
+callApi("lib", "GET", "/arr");
+print lib.iconList, icons.path("fx:a2");
+callApi("lib", "GET", "/sprite");
+print lib.iconList, icons.path("fx:sq");
+callApi("lib", "GET", "/none");
+print lib.iconList;                          // لا حزمة في الردّ ⇒ تبقى آخر قائمة
+callApi("lib", "GET", "/err");
+print lib.status, lib.iconList;              // الفشل لا يمسّها
+print icons.importPack("{\"icons\": {\"j1\": \"M1 1L9 9\"}}"), icons.path("j1");   // نص JSON
+print icons.importPack(5), icons.importPack(nil);
