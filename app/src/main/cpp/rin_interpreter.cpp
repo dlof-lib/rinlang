@@ -7954,6 +7954,7 @@ for(auto& kv:maskParents) if(maskResolve4(kv.second)==parent && !maskResolve4(kv
     registerNativesExtra7(); // مفهوم time: time() و time.* (rin_extra_natives7.cpp، docs/TIME.md)
     registerNativesExtra8(); // مفهوم token: tokenList/tokenStats/tokenAt/... (rin_extra_natives8.cpp، docs/TOKEN.md)
     registerNativesExtra10(); // مفهوم linalg: mat*/vec* (rin_extra_natives10.cpp، docs/LINALG.md)
+    registerNativesContainerZip(); // container.zip/unzip/pack + zip.* (rin_container_zip.cpp، docs/container_zip.md)
     registerNativesExtra12(); // fileSync/fileLock/fileRename/fileSize/findByRange (rin_extra_natives12.cpp، docs/FILEDB.md)
     registerNativesExtra11(); // مفهوم algo: algo* (rin_extra_natives11.cpp، docs/ALGO.md)
     registerNativesRintwist(); // RINTWIST: rintwist.get/fmt/stack (rin_rintwist.cpp، docs/rintwist.md)
@@ -10556,12 +10557,45 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
             libPath = "lib/" + libPath;
         }
 
+        // ---- مكتبة خارجية من رابط: @import "https://host/lib.og.rin"  أو مع تثبيت سلامة "…/lib.og.rin#sha256=<hex>" ----
+        //   https فقط (http مسموح لـ localhost/127.0.0.1 للاختبار)؛ حدّ 2MB؛ نجاح 2xx؛ عند وجود #sha256 يجب أن يطابق المحتوى وإلا يُرفض.
+        //   RIN_REMOTE_IMPORT=0 يعطّل الميزة. المفتاح (importKey) هو الرابط فلا يُجلب مرتين في التشغيل نفسه.
+        const bool isRemote = rawPath.rfind("https://", 0) == 0 || rawPath.rfind("http://", 0) == 0;
+        std::string remoteSource, remotePin;
+        if (isRemote) {
+            std::string url = rawPath; size_t h = url.find("#sha256=");
+            if (h != std::string::npos) { remotePin = url.substr(h + 8); url = url.substr(0, h); }
+            libPath = url;
+            auto remoteFail = [&](const std::string& why) {
+                auto d = diagErr(diag::Code::E0028_ImportError, s->line, "@import: cannot load remote library `" + url + "`");
+                d.diagnostic->withReason(why).withHint("use https://, check the URL, or pin the content with `#sha256=<hex>`");
+                return d;
+            };
+            const char* off = std::getenv("RIN_REMOTE_IMPORT");
+            if (off && std::string(off) == "0") throw remoteFail("remote imports are disabled (RIN_REMOTE_IMPORT=0)");
+            const bool local = url.rfind("http://127.0.0.1", 0) == 0 || url.rfind("http://localhost", 0) == 0;
+            if (url.rfind("https://", 0) != 0 && !local) throw remoteFail("only https:// URLs are allowed (http:// only for localhost)");
+            if (!importedPaths.count(libPath + (s->alias.empty() ? "" : ("#as:" + s->alias)))) {
+                importUI.stage(loaderui::LoadStage::Locating);
+                auto r = http::performRequest("GET", url, {}, "", defaultHttpTimeoutMs);
+                if (!r.ok) throw remoteFail("network error: " + r.error);
+                if (r.status < 200 || r.status >= 300) throw remoteFail("HTTP " + std::to_string(r.status));
+                if (r.body.size() > 2u * 1024 * 1024) throw remoteFail("library is larger than 2MB");
+                if (!remotePin.empty()) {
+                    std::string got = artifact::sha256Hex(r.body);
+                    std::string want = remotePin; for (auto& c : want) c = (char)std::tolower((unsigned char)c);
+                    if (got != want) throw remoteFail("sha256 mismatch (expected " + want + ", got " + got + ")");
+                }
+                remoteSource = r.body;
+            }
+        }
+
         importUI.stage(loaderui::LoadStage::Locating);
 
         // 1) أولاً: هل هذا اسم مكتبة مدمجة داخل المفسّر نفسه (مثل lib/data.og.rin)؟
         //    هذا يجعل @import يعمل مباشرة على أي منصة (بما فيها أندرويد) دون أي ملفات إضافية على القرص.
         std::string splitRoot;
-        const bool isSplitLib = findLibraryDir(rawPath, libPath, splitRoot);
+        const bool isSplitLib = !isRemote && findLibraryDir(rawPath, libPath, splitRoot);
         if (isSplitLib) libPath = splitRoot;
         LibraryUnit libUnit;
         const auto& embedded = embeddedRinLibraries();
@@ -10573,6 +10607,8 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
         if (virtIt == virtualFiles_.end()) virtIt = virtualFiles_.find(rawPath);
         if (isSplitLib) {
             // مكتبة مقسَّمة (مجلد): تُحمَّل أدناه عبر loadLibraryUnit
+        } else if (isRemote) {
+            source = remoteSource;   // فارغ إن كانت مستورَدة مسبقاً (يُتجاهل التكرار أدناه)
         } else if (virtIt != virtualFiles_.end()) {
             source = virtIt->second;   // ملف مُضمَّن في صورة rin_vm (له الأولوية على القرص)
         } else if (fromEmbedded) {
@@ -10759,7 +10795,7 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
         importUI.finish(ok);
         output << (fromEmbedded ? "📦" : "📥") << " @import: تم استيراد \"" << libPath << "\""
                << (s->alias.empty() ? "" : (" باسم '" + s->alias + "'"))
-               << (fromEmbedded ? std::string(" (مكتبة مدمجة)") : isSplitLib ? libUnit.describe() : std::string(" (من القرص)")) << "\n";
+               << (fromEmbedded ? std::string(" (مكتبة مدمجة)") : isRemote ? std::string(" (من رابط)") : isSplitLib ? libUnit.describe() : std::string(" (من القرص)")) << "\n";
         return Flow::None;
     }
 
@@ -13110,13 +13146,44 @@ static std::string bodyToString(const Value& v, http::HeaderList& headers) {
 
 // رد HTTP حقيقي (rin_http.h) -> Value(map) يستهلكه برنامج Rin مباشرة:
 // { ok, status, body (نص خام), json (مُحلَّل تلقائياً إن كان JSON صالحاً، وإلا نفس body)، error }
+// api ✕ صورة معاينة (docs/api_container.md): ردّ صورة (Content-Type image/* أو بصمة PNG/JPEG/GIF/WebP/BMP/SVG) يحصل على
+// image = "data:image/…;base64,…" جاهزة لـ <Image src={…}/> مع contentType و bytes؛ وjson = nil (جسم ثنائي). غير الصور: لا مفاتيح جديدة.
+static std::string rinB64Encode(const std::string& in) {
+    static const char* t = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string o; o.reserve((in.size() + 2) / 3 * 4);
+    size_t i = 0;
+    for (; i + 2 < in.size(); i += 3) { unsigned v = ((unsigned char)in[i] << 16) | ((unsigned char)in[i + 1] << 8) | (unsigned char)in[i + 2]; o += t[v >> 18]; o += t[(v >> 12) & 63]; o += t[(v >> 6) & 63]; o += t[v & 63]; }
+    if (i + 1 == in.size()) { unsigned v = (unsigned char)in[i] << 16; o += t[v >> 18]; o += t[(v >> 12) & 63]; o += "=="; }
+    else if (i + 2 == in.size()) { unsigned v = ((unsigned char)in[i] << 16) | ((unsigned char)in[i + 1] << 8); o += t[v >> 18]; o += t[(v >> 12) & 63]; o += t[(v >> 6) & 63]; o += '='; }
+    return o;
+}
+static std::string rinImageMime(const std::string& b, const std::string& contentType) {
+    auto starts = [&](const char* m, size_t n) { return b.size() >= n && b.compare(0, n, m, n) == 0; };
+    if (starts("\x89PNG", 4)) return "image/png";
+    if (starts("\xFF\xD8\xFF", 3)) return "image/jpeg";
+    if (starts("GIF8", 4)) return "image/gif";
+    if (b.size() >= 12 && b.compare(0, 4, "RIFF") == 0 && b.compare(8, 4, "WEBP") == 0) return "image/webp";
+    if (starts("BM", 2) && b.size() > 14) return "image/bmp";
+    std::string ct; for (char c : contentType) ct += (char)std::tolower((unsigned char)c);
+    if (ct.rfind("image/", 0) == 0) { size_t sc = ct.find(';'); return sc == std::string::npos ? ct : ct.substr(0, sc); }
+    return "";
+}
 static Value httpResultToValue(const http::HttpResult& r) {
     auto m = std::make_shared<MapData>();
+    std::string ctype;
+    for (auto& h : r.headers) { std::string k; for (char c : h.first) k += (char)std::tolower((unsigned char)c); if (k == "content-type") ctype = h.second; }
+    const std::string mime = (r.ok && r.status >= 200 && r.status < 300 && !r.body.empty()) ? rinImageMime(r.body, ctype) : "";
     m->push_back({Value::string("ok"), Value::boolean_(r.ok)});
     m->push_back({Value::string("status"), Value::num((double)r.status)});
     m->push_back({Value::string("body"), Value::string(r.body)});
-    m->push_back({Value::string("json"), json::decodeOrRaw(r.body)});
+    m->push_back({Value::string("json"), mime.empty() ? json::decodeOrRaw(r.body) : Value::nil()});
     m->push_back({Value::string("error"), Value::string(r.error)});
+    if (!mime.empty()) {
+        m->push_back({Value::string("contentType"), Value::string(mime)});
+        m->push_back({Value::string("bytes"), Value::num((double)r.body.size())});
+        if (r.body.size() <= 10u * 1024 * 1024) m->push_back({Value::string("image"), Value::string("data:" + mime + ";base64," + rinB64Encode(r.body))});
+        else m->push_back({Value::string("error"), Value::string("image larger than 10MB: no preview")});
+    }
     return Value::makeMap(m);
 }
 
@@ -13141,6 +13208,14 @@ Value Interpreter::performRealApiCall(const std::string& endpointName, const std
     http::HeaderList headers = it->second.headers; // نسخة: bodyToString قد تضيف Content-Type محلياً فقط لهذا الطلب
     std::string body = bodyToString(bodyValue, headers);
     auto result = http::performRequest(toUpperAscii(method), url, headers, body, defaultHttpTimeoutMs);
+    // ردّ صورة عبر جسر نصّي (أندرويد/jstring) قد تفسد بايتاته: إن قال Content-Type إنه صورة وفسدت البصمة أعد جلب GET بمسار ثنائي آمن.
+    if (result.ok && toUpperAscii(method) == "GET" && result.status >= 200 && result.status < 300) {
+        std::string ct; for (auto& h : result.headers) { std::string k; for (char c : h.first) k += (char)std::tolower((unsigned char)c); if (k == "content-type") for (char c : h.second) ct += (char)std::tolower((unsigned char)c); }
+        if (ct.rfind("image/", 0) == 0 && ct.find("svg") == std::string::npos) {
+            const std::string magicMime = rinImageMime(result.body, "");
+            if (magicMime.empty()) { auto bin = http::performBinaryGet(url, defaultHttpTimeoutMs); if (bin.ok) { if (bin.headers.empty()) bin.headers = result.headers; result = bin; } }
+        }
+    }
     return httpResultToValue(result);
 }
 
@@ -14939,6 +15014,7 @@ void Interpreter::dialogAction(const std::shared_ptr<LiveActionStmt>& s, const E
 #include "rin_extra_natives10.cpp" // مفهوم linalg (docs/LINALG.md)
 #include "rin_extra_natives11.cpp" // مفهوم algo (docs/ALGO.md)
 #include "rin_extra_natives12.cpp" // ملفات وقواعد بيانات: fileSync/fileLock/fileRename/fileSize/findByRange (docs/FILEDB.md)
+#include "rin_container_zip.cpp" // ضغط/فكّ ضغط الحاويات + zip.* (docs/container_zip.md)
 #include "rin_libdir.cpp" // مكتبات Rin المقسَّمة (docs/split-libraries.md)
 #include "rin_rintwist.cpp" // RINTWIST: سياق التنفيذ (docs/rintwist.md)
 #include "rin_table.cpp" // توسعة الجدول: دوال اللغة الموجودة تفهم الجدول (انظر رأس الملف)
