@@ -59,6 +59,12 @@ struct Theme {
     std::string name;
     Color primary, secondary, success, danger, warning, info, neutral;
     Color surface, background, text, text_muted, border;
+    // «الشكل» (shape tokens) — افتراضاتها كلها 0/false فتبقى الثيمات القديمة كما كانت بالضبط؛ الثيمات الحديثة (Aurora) وأي `<Theme shape="soft">`
+    // تملؤها فتصير الأزرار/البطاقات/الصور/الحقول مستديرة وللبطاقات ظلّ ناعم وحدّ شعري، بلا كتابة radius/elevation على كل عنصر.
+    double radius = 0;           // نصف القطر الأساسي (الزر 0.8× · البطاقة 1× · الحقل 0.7× · الصورة 1×)
+    int cardElevation = 0;       // 0..5 (نفس جدول elevation) للبطاقات
+    int buttonElevation = 0;     // 0..5 للأزرار الممتلئة
+    bool hairline = false;       // حدّ 1px بلون border حول البطاقات
 
     const Color* slot(const std::string& roleName) const {
         static const std::unordered_map<std::string, const Color Theme::*> table = {
@@ -215,6 +221,32 @@ inline Theme builtinForestTheme() {
     t.border    = {38, 58, 48};
     return t;
 }
+// Aurora — الثيم الحديث: ليلي دافئ بنفسجي/فيروزي، حواف مستديرة (12)، ظلّ ناعم للبطاقات والأزرار، وحدّ شعري للبطاقات.
+inline Theme builtinAuroraTheme() {
+    Theme t; t.name = "Aurora";
+    t.primary   = {139, 108, 255}; t.secondary = {45, 212, 191};
+    t.success   = {52, 211, 153};  t.danger    = {251, 113, 133};
+    t.warning   = {251, 191, 36};  t.info      = {96, 165, 250};
+    t.neutral   = {112, 116, 140};
+    t.surface   = {30, 32, 48};    t.background= {17, 18, 30};
+    t.text      = {238, 240, 252}; t.text_muted= {148, 153, 182};
+    t.border    = {50, 54, 80};
+    t.radius = 12; t.cardElevation = 2; t.buttonElevation = 1; t.hairline = true;
+    return t;
+}
+// Aurora Light — نفس الشكل بألوان فاتحة هادئة.
+inline Theme builtinAuroraLightTheme() {
+    Theme t; t.name = "AuroraLight";
+    t.primary   = {108, 78, 245};  t.secondary = {13, 148, 136};
+    t.success   = {22, 163, 74};   t.danger    = {225, 29, 72};
+    t.warning   = {202, 138, 4};   t.info      = {37, 99, 235};
+    t.neutral   = {107, 114, 128};
+    t.surface   = {255, 255, 255}; t.background= {245, 246, 252};
+    t.text      = {22, 24, 38};    t.text_muted= {100, 106, 130};
+    t.border    = {226, 229, 242};
+    t.radius = 12; t.cardElevation = 2; t.buttonElevation = 1; t.hairline = true;
+    return t;
+}
 inline Theme builtinRoseTheme() {
     Theme t; t.name = "Rose";
     t.primary   = {205, 30, 105}; t.secondary = {126, 34, 206};
@@ -244,6 +276,8 @@ struct ThemeRegistry {
         themes["Sepia"] = builtinSepiaTheme();
         themes["Forest"] = builtinForestTheme();
         themes["Rose"] = builtinRoseTheme();
+        themes["Aurora"] = builtinAuroraTheme();
+        themes["AuroraLight"] = builtinAuroraLightTheme();
     }
     void registerTheme(Theme t) { std::string n = t.name; themes[n] = std::move(t); }
     void setActive(const std::string& n) { if (themes.count(n)) activeName = n; }
@@ -448,9 +482,19 @@ inline bool resolveRadiusToken(const std::string& name, double& out) {
     if (name == "pill")  { out = 9999; return true; } // clamped to half the strand's own size at paint time
     return false;
 }
+inline double themeShapeRadius(const Strand& s) {   // نصف قطر الثيم النشط لهذا النوع (0 = لا شيء: الثيمات القديمة)
+    const double r = themeRegistry().active().radius;
+    if (r <= 0) return 0;
+    switch (s.kind) {
+        case StrandKind::BUTTON: case StrandKind::ICONBUTTON: case StrandKind::TABITEM: return r * 0.8;
+        case StrandKind::CARD: case StrandKind::IMAGE: return r;
+        case StrandKind::INPUT: case StrandKind::SEARCH: case StrandKind::SELECT: return r * 0.7;
+        default: return 0;
+    }
+}
 inline double resolveRadius(const Strand& s, double def = 0) {
     const Value* v = s.attr("radius");
-    if (!v) return def;
+    if (!v) return def > 0 ? def : themeShapeRadius(s);
     if (v->kind == Value::Kind::NUMBER) return v->number;
     double t;
     if (resolveRadiusToken(v->str, t)) return t;
