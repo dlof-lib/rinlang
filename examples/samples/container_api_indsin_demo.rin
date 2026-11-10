@@ -1,0 +1,18 @@
+<!-- container.api ✕ indsin (docs/api_container.md): حقول data/status/error/loading/updated في حاوية api تنشرها كل استدعاءاتها، فتقرؤها الواجهة مباشرة؛ الاستدعاءات المجدولة (after/every) تُحدِّث الواجهة عبر rin_indsin_session_tick -->
+<Rin>
+@container.api=shop
+    let data = nil;
+    let status = 0;
+    let error = nil;
+    let loading = false;
+    let updated = 0;
+    route method="GET" path="/n" status=200 body={"n": 3};
+.end/container.api
+fun load() { callApi("shop", "GET", "/n"); }
+</Rin>
+<Column#Root padding={comfortable} gap={normal}>
+  <Text#St text={"s=" + shop.status} />
+  <Text#Dt text={"d=" + shop.data} />
+  <Text#Ld text={"l=" + shop.loading} />
+  <Button#Go text="load" onTap={load()} />
+</Column>
