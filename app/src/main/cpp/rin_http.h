@@ -93,5 +93,30 @@ DownloadResult performDownload(const DownloadRequest& req);
 
 void setAndroidDownloadBridge(std::function<DownloadResult(const DownloadRequest&)> bridge);
 
+// ---------------------------------------------------------------------------------------------
+// performRequestEx — عميل HTTP الكامل لـ fetch(): ترويسات تُمرَّر عبر ملف مؤقت (لا تظهر في argv/ps)، تحويلات قابلة للضبط،
+//   multipart، كوكيز (ملف jar)، ضغط، مهلة اتصال، حدّ حجم، بروتوكولات http/https فقط (لا file:// ولا غيرها)،
+//   وإحصاءات: الرابط النهائي · عدد التحويلات · الزمن الكلي · نوع المحتوى · رمز خروج curl. على أندرويد/ويندوز يتراجع إلى performRequest
+//   (دون جزء من الميزات: يُملأ finalUrl=url وredirects=0).
+// ---------------------------------------------------------------------------------------------
+struct RequestEx {
+    struct Part { std::string name, value, file, filename, type; };   // file غير فارغ ⇒ رفع ملف
+    std::string method = "GET", url, body;
+    HeaderList headers;
+    std::vector<Part> parts;                 // غير فارغ ⇒ multipart/form-data (يتجاهل body)
+    int timeoutMs = 0, connectTimeoutMs = 0; // <= 0: الافتراضي
+    bool follow = true; int maxRedirects = 5;
+    bool compressed = true;
+    std::string cookieJar;                   // مسار ملف jar (يُقرأ ويُكتب)
+    std::string proxy;
+    long long maxBytes = 0;                  // <= 0: بلا حدّ
+};
+struct ResultEx : HttpResult {
+    std::string finalUrl, contentType;
+    long redirects = 0, sizeDownload = 0; double timeMs = 0;
+    int exitCode = 0;                        // رمز curl (28 = مهلة، 6 = DNS، 7 = رفض اتصال، 60 = TLS، 63 = حجم…)
+};
+ResultEx performRequestEx(const RequestEx& req);
+
 } // namespace http
 } // namespace rin
