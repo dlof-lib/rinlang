@@ -1,0 +1,35 @@
+// أمان ZIP: Zip-Slip، حدود الحجم، أسماء خطرة — docs/container_zip.md
+fun rep(s, n) { let o = ""; for (let i = 0; i < n; i = i + 1) { o = o + s; } return o; }
+// أرشيف خبيث مبني يدوياً بالبايتات: اسمه "../evil.txt"
+fun le16(n) { return chr(n % 256) + chr(floor(n / 256) % 256); }
+fun le32(n) { return le16(n % 65536) + le16(floor(n / 65536)); }
+fun evil(name, body) {
+    let crc = crc32(body);
+    let local = "PK" + chr(3) + chr(4) + le16(10) + le16(0) + le16(0) + le16(0) + le16(33) + le32(crc) + le32(len(body)) + le32(len(body)) + le16(len(name)) + le16(0) + name + body;
+    let cd = "PK" + chr(1) + chr(2) + le16(20) + le16(10) + le16(0) + le16(0) + le16(0) + le16(33) + le32(crc) + le32(len(body)) + le32(len(body)) + le16(len(name)) + le16(0) + le16(0) + le16(0) + le16(0) + le32(0) + le32(0) + name;
+    let eocd = "PK" + chr(5) + chr(6) + le16(0) + le16(0) + le16(1) + le16(1) + le32(len(cd)) + le32(len(local)) + le16(0);
+    return local + cd + eocd;
+}
+writeFile("_czip_tmp/evil.zip", evil("../evil.txt", "pwned"));
+let t = zip.test("_czip_tmp/evil.zip");
+print t["ok"], len(t["errors"]);
+try { zip.extract("_czip_tmp/evil.zip", "_czip_tmp/safe"); } catch (e) { print "رُفض الاستخراج"; }
+print fileExists("_czip_tmp/evil.txt"), fileExists("evil.txt");
+writeFile("_czip_tmp/ok.zip", evil("good.txt", "fine"));
+print zip.read("_czip_tmp/ok.zip", "good.txt");
+// حدود
+try { zip.list("_czip_tmp/ok.zip", {maxFiles: 0}); print "حد 0 = افتراضي"; } catch (e) { print "خطأ"; }
+try { zip.read("_czip_tmp/ok.zip", "good.txt", {maxFileSize: 2}); } catch (e) { print "ملف أكبر من الحد"; }
+try { zip.list("_czip_tmp/ok.zip", {maxSize: 2}); } catch (e) { print "حجم كلي أكبر من الحد"; }
+// أسماء خطرة عند الإنشاء
+try { zip.create("_czip_tmp/x.zip", {"../a": "x"}); } catch (e) { print "اسم .. مرفوض"; }
+try { zip.create("_czip_tmp/x.zip", {"/abs": "x"}); } catch (e) { print "اسم مطلق مرفوض"; }
+// بايتات تالفة داخل الأرشيف
+zip.create("_czip_tmp/c.zip", {"a.txt": rep("x", 500)}, {time: 1700000000});
+let raw = readFile("_czip_tmp/c.zip");
+writeFile("_czip_tmp/c2.zip", slice(raw, 0, 36) + "Z" + slice(raw, 37, len(raw)));
+let ct = zip.test("_czip_tmp/c2.zip");
+print ct["ok"], len(ct["errors"]);
+writeFile("_czip_tmp/trunc.zip", slice(raw, 0, 30));
+print zip.test("_czip_tmp/trunc.zip")["ok"];
+for (let f in ["evil.zip", "ok.zip", "x.zip", "c.zip", "c2.zip", "trunc.zip"]) { deleteFile("_czip_tmp/" + f); }
