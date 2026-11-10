@@ -1,0 +1,99 @@
+<!-- github_browser.rin — متصفّح مستودعات GitHub: container.api (حقيقي) + indsin. بدّل baseUrl إلى https://api.github.com للحقيقي. -->
+<Rin>
+@theme=Aurora active=true;
+.end/theme
+// ملاحظة indsin: تعتمد خصائص الواجهة على المتغيّرات المذكورة في تعبيرها، فتُمرَّر الحالة وسائط (repoLine(k, repos)) كي تُعاد الخاصية عند تغيّرها.
+@container.api=github
+    let baseUrl = "http://127.0.0.1:8790";                       // https://api.github.com
+    let headers = {"Accept": "application/vnd.github+json", "User-Agent": "rinlang-browser"};
+    // let token = "ghp_...";                                    // يصير Authorization: Bearer (يرفع حدّ المعدّل)
+    let timeout = 5s;
+    let retry = 1;
+    let backoff = 500ms;
+    let cache = 60s;                                             // GET فقط
+    let data = nil; let status = 0; let error = nil; let loading = false; let preview = nil; let updated = 0;
+.end/container.api
+
+let user = "octo-dev";
+let repos = [];
+let sel = -1;
+let files = [];
+let readme = "";
+let langs = "";
+let avatar = nil;
+let msg = "اضغط «تحميل المستودعات»";
+
+fun errText(r) {
+    let m = r["json"]["message"] else r["error"];
+    return "خطأ " + r["status"] + ": " + m;
+}
+fun repoLine(k, repos) {
+    if (k >= len(repos)) { return ""; }
+    let r = repos[k];
+    let lang = r["language"] else "—";
+    return r["name"] + "   ★" + r["stargazers_count"] + "   " + lang;
+}
+fun fileLine(i, files) {
+    if (i >= len(files)) { return ""; }
+    let f = files[i];
+    if (f["type"] == "dir") { return "[dir] " + f["name"]; }
+    return "      " + f["name"] + "  (" + f["size"] + " B)";
+}
+fun load() {
+    msg = "جارٍ التحميل…";
+    let r = callApi("github", "GET", "/users/:u/repos", {params: {u: user}, query: {per_page: 4, sort: "updated"}});
+    sel = -1; files = []; readme = ""; langs = "";
+    if (r["ok"] and r["status"] == 200) {
+        repos = r["json"];
+        avatar = github.preview;                                 // owner.avatar_url يُلتقط تلقائياً في preview
+        msg = user + " — " + len(repos) + " مستودعات";
+    } else {
+        repos = [];
+        msg = errText(r);
+    }
+}
+fun pick(k) {
+    if (k >= len(repos)) { return; }
+    sel = k;
+    let name = repos[k]["name"];
+    let c = callApi("github", "GET", "/repos/:o/:r/contents", {params: {o: user, r: name}});
+    files = [];
+    if (c["ok"] and c["status"] == 200) { files = c["json"]; } else { msg = errText(c); }
+    let rd = callApi("github", "GET", "/repos/:o/:r/readme", {params: {o: user, r: name}});
+    readme = "(لا README)";
+    if (rd["ok"] and rd["status"] == 200) { readme = sec.base64Decode(rd["json"]["content"]); }
+    let lg = callApi("github", "GET", "/repos/:o/:r/languages", {params: {o: user, r: name}});
+    langs = "";
+    if (lg["ok"] and lg["status"] == 200) {
+        let total = 0;
+        for (let [k2, v] in lg["json"]) { total = total + v; }
+        for (let [k2, v] in lg["json"]) { langs = langs + k2 + " " + round(v * 100 / total) + "%  "; }
+    }
+}
+fun detailTitle(sel, repos) { if (sel < 0) { return ""; } return repos[sel]["full_name"] + "  ·  " + repos[sel]["default_branch"]; }
+fun detailDesc(sel, repos) {
+    if (sel < 0) { return ""; }
+    let d = repos[sel]["description"] else "(بلا وصف)";
+    return d;
+}
+</Rin>
+<Column#Root padding={comfortable} gap={normal}>
+  <Row#Head gap={normal}>
+    <Image#Avatar src={avatar} width={48} height={48} radius={24} />
+    <Text#Title text={"GitHub · " + user} size={heading} />
+  </Row>
+  <Text#Msg text={msg} />
+  <Button#Load text="تحميل المستودعات" onTap={load()} />
+  <Repeat times=4 as=k>
+    <Button#row text={repoLine(k, repos)} visible={k < len(repos)} onTap={pick(k)} />
+  </Repeat>
+  <Card#Detail visible={sel >= 0} padding={comfortable} gap={normal}>
+    <Text#DTitle text={detailTitle(sel, repos)} size={title} />
+    <Text#DDesc text={detailDesc(sel, repos)} />
+    <Text#DLangs text={langs} />
+    <Repeat times=5 as=i>
+      <Text#file text={fileLine(i, files)} visible={i < len(files)} />
+    </Repeat>
+    <Text#Readme text={readme} />
+  </Card>
+</Column>
