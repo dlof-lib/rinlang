@@ -1,0 +1,21 @@
+// container.api ✕ صورة معاينة: الحقل preview يُملأ تلقائياً من الردّ (data URI صورة، أو رابط image/thumbnail/avatar/icon/picture/photo في JSON)
+@container.api=cards
+    let data = nil;
+    let status = 0;
+    let preview = nil;
+    route method="GET" path="/user" status=200 body={"name": "sara", "avatar": "https://cdn.example.com/sara.png"};
+    route method="GET" path="/pic" status=200 body="data:image/png;base64,iVBORw0KGgo=";
+    route method="GET" path="/plain" status=200 body={"name": "omar"};
+    route method="GET" path="/thumb" status=200 body={"title": "t", "thumbnail": "https://cdn.example.com/t.jpg", "image": 5};
+.end/container.api
+print cards.preview;                                  // nil قبل أي استدعاء
+callApi("cards", "GET", "/user");
+print cards.preview, cards.data["name"];              // رابط avatar من JSON
+callApi("cards", "GET", "/pic");
+print cards.preview, cards.data == cards.preview;     // data URI مباشرة
+callApi("cards", "GET", "/plain");
+print cards.preview;                                  // لا صورة في الردّ ⇒ nil
+callApi("cards", "GET", "/thumb");
+print cards.preview;                                  // image ليست رابطاً فيُتجاوَز إلى thumbnail
+callApi("cards", "GET", "/missing");
+print cards.status, cards.preview;                    // الفشل لا يمسّ آخر معاينة
