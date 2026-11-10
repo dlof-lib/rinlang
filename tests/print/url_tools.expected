@@ -1,0 +1,9 @@
+{"valid": true, "scheme": "https", "user": "user", "host": "example.com", "port": 8443, "path": "/a/b", "query": "x=1&y=2&y=3", "params": {"x": "1", "y": ["2", "3"]}, "fragment": "top", "origin": "https://example.com:8443", "href": "https://user@Example.com:8443/a/b?x=1&y=2&y=3#top"}
+80 / false
+https://api.test/v1/items?q=a%20b&n=1&n=2#f
+http://h:81/?z=1
+https://a.com/x/q?k=1 https://a.com/root https://b.com/
+https://c.com/p https://a.com/x/y?k=1#frag
+a%20b%2F%C3%A9%26 a b c %zz
+false true false
+{"a": ["1", "3"], "b": "2"} {"k": "v"} a=1&b=2&b=3&d=x%20y
