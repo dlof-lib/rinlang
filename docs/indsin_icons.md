@@ -37,7 +37,7 @@ ic_audit ic_register ic_validPath`. خيارات `opts`: `size color stroke fill
 الأسماء القديمة (27 اسماً في سجل المحرّك + أسماء معاينة الويب) كلها محفوظة وتُحلّ إلى أيقونات.
 
 ## حدود معروفة
-الـrasterizer الأصلي في C++ ما زال بلا عملية رسم مسارات، فيبقى الرسم الأصلي على الرموز النصية؛
+الـrasterizer الأصلي يرسم المسارات الآن (انظر «رسم المسارات الأصلي» أدناه)؛ الأيقونات المدمجة تبقى بالرمز النصي افتراضياً حفاظاً على التوافق؛
 الجدول جاهز لتلك العملية. لم يُبنَ APK/WASM.
 
 ## الاختبارات
@@ -53,3 +53,49 @@ ic_audit ic_register ic_validPath`. خيارات `opts`: `size color stroke fill
   وتفاصيل مع «إدراج في الكود» (يُدرج سطر `@view.Icon` عند المؤشر).
 - **أيقونة المكتبة:** `res/drawable/ic_lib_indsinicons.xml` (شبكة 2×2 من البلاطات) و`assets/branding/indsinicons_icon.svg`.
 - لم يُبنَ APK هنا (لا Android SDK ولا مترجم Kotlin في بيئة العمل): تحقّق من البناء والشكل على جهاز قبل الإصدار.
+
+## استيراد أيقونة من api
+يمكن جلب أيقونة من ردّ api وتسجيلها في سجلّ indsin وقت التشغيل (المصدر: SVG كامل، أو مسار `d`، أو `data:image/svg+xml` base64/مرمَّز).
+يُستخرج كل `d` وتُحوَّل `circle/rect/line/polyline/polygon` إلى مسارات، ويُرفض أي مصدر غير صالح (سكربت، أوامر مجهولة، أكبر من 20000 حرف).
+
+**تلقائياً مع container.api:** عرِّف في الحاوية `icon` (و/أو `svg`)، واختيارياً `iconName` و`iconGlyph`:
+```
+@container.api=pack
+    let data = nil; let icon = nil; let svg = nil;
+    let iconName = "bolt"; let iconGlyph = "⚡";
+    route method="GET" path="/bolt" status=200 body={"svg": "<svg><path d='M13 2L3 14H12L11 22L21 10H12Z'/></svg>"};
+.end/container.api
+callApi("pack", "GET", "/bolt");     // يسجّل "bolt" ويملأ pack.icon و pack.svg
+```
+```
+<Icon icon={pack.icon} />            // أو <IconButton icon={pack.icon} .../>
+```
+الاسم: `iconName` ثم `name`/`id` في الردّ ثم اسم الحاوية. الردّ الفاشل (غير 2xx) أو غير الصالح لا يمسّ الأيقونة المسجَّلة.
+
+**يدوياً:** `icons.import(name, src[, glyph])` · `icons.fromApi(container, name[, glyph])` (من آخر `data` ناجحة) ·
+`icons.has(name)` · `icons.path(name)` · `icons.svg(name[, size, color])` · `icons.names()`.
+
+## رسم المسارات الأصلي (DrawOp::STROKE_PATH)
+الـrasterizer الأصلي صار يرسم المسارات فعلاً: `M L H V C S Q T A Z` (مطلقة ونسبية) تُسطَّح ثم تُرسم خطاً بأطراف ومفاصل دائرية
+(مع anti-aliasing)، والتصدير: `"op":"stroke_path"` في JSON، و`<svg><path>` في HTML.
+- الأيقونات **المستوردة** تُرسم متجهة افتراضياً. المدمجة تبقى بالرمز النصي كما كانت، إلا مع `vector="true"`
+  (`<Icon icon="home" vector="true" />`)؛ و`vector="false"` يفرض الرمز النصي. `stroke="2"` سماكة الخط بوحدات الشبكة 24.
+- `iconRegistry().vectorDefault = true` يجعل كل أيقونة لها متجه تُرسم متجهة.
+- لم يُنفَّذ بعدُ: `IconButton` ما زال يرسم رمزه النصي (يُرسم داخل نص الزرّ)، ولا يوجد fill للمسارات (خطّ فقط).
+
+## حزم أيقونات خارجية (api وروابط)
+```
+icons.importPack(pack[, prefix])      // يعيد أسماء ما سُجِّل
+icons.fromUrl(url[, nameOrPrefix])    // https:// (أو localhost)؛ SVG واحد (يلزم name) أو حزمة
+```
+صيغ الحزمة: خريطة `{اسم: مصدر}` · `{"icons": خريطة|مصفوفة}` · مصفوفة `{name|id, svg|path|d}` · نص JSON · sprite (`<symbol id="x">…</symbol>`).
+الإدخالات غير الصالحة تُتجاوَز، والحدّ 2000 أيقونة. مع container.api عرّف الحقل `iconList` (و`iconPrefix` اختيارياً)
+فيُستورد كل ردّ ناجح كحزمة ويُملأ `iconList` بأسماء ما سُجِّل.
+
+## مكتبات Rin من رابط
+```
+@import "https://example.com/libs/utils.og.rin";
+@import "https://example.com/libs/utils.og.rin#sha256=<hex>";    // تثبيت السلامة (موصى به)
+```
+https فقط (http لـ localhost/127.0.0.1 للاختبار)، حدّ 2MB، نجاح 2xx، وعدم تطابق `#sha256` يُرفض. `RIN_REMOTE_IMPORT=0` يعطّل الميزة.
+تُحمَّل مرة واحدة لكل رابط في التشغيل. **تنبيه أمان:** المكتبة تُنفَّذ بصلاحيات برنامجك — ثبّت sha256 ولا تستورد إلا من مصدر تثق به.
