@@ -1,5 +1,6 @@
 #include "rin_http.h"
 #include <sstream>
+#include <vector>
 #include <cstdio>
 #include <cstring>
 #include <algorithm>
@@ -454,6 +455,106 @@ DownloadResult performDownload(const DownloadRequest& req) {
     return r;
 }
 
+#endif
+
+
+// ================================================================================================
+// performRequestEx (انظر rin_http.h)
+// ================================================================================================
+#if defined(__ANDROID__) || defined(_WIN32)
+ResultEx performRequestEx(const RequestEx& q) {
+    ResultEx r; HeaderList h = q.headers; h.push_back({kCaptureHeadersKey, "1"});
+    HttpResult base = performRequest(q.method, q.url, h, q.body, q.timeoutMs);
+    static_cast<HttpResult&>(r) = base; r.finalUrl = q.url;
+    for (auto& kv : base.headers) { std::string k; for (char c : kv.first) k += (char)std::tolower((unsigned char)c); if (k == "content-type") r.contentType = kv.second; }
+    r.sizeDownload = (long)base.body.size();
+    return r;
+}
+#else
+static std::string exTempFile(const std::string& content, bool& ok) {
+    char tmpl[] = "/tmp/rin_http_XXXXXX"; int fd = mkstemp(tmpl); ok = fd >= 0; if (!ok) return "";
+    fchmod(fd, 0600);
+    size_t off = 0; while (off < content.size()) { ssize_t n = write(fd, content.data() + off, content.size() - off); if (n <= 0) break; off += (size_t)n; }
+    close(fd); return tmpl;
+}
+static const char* curlExitText(int c) {
+    switch (c) {
+        case 3: return "malformed URL"; case 5: case 6: return "could not resolve host (DNS)"; case 7: return "connection refused / unreachable";
+        case 22: return "HTTP error"; case 28: return "timed out"; case 35: case 51: case 58: case 60: case 77: case 83: return "TLS/SSL error";
+        case 47: return "too many redirects"; case 52: return "empty reply from server"; case 55: case 56: return "network send/receive failure";
+        case 63: return "response larger than the size limit"; case 1: return "protocol not supported (only http/https)"; default: return "request failed";
+    }
+}
+ResultEx performRequestEx(const RequestEx& q) {
+    ResultEx r;
+    std::vector<std::string> tmp;               // ملفات مؤقتة تُحذف في النهاية
+    auto cleanup = [&] { for (auto& f : tmp) unlink(f.c_str()); };
+    const std::string M = q.method.empty() ? "GET" : q.method;
+    std::vector<std::string> a = {"curl", "-s", "-S", "--proto", "=http,https", "--proto-redir", "=http,https"};
+    if (q.follow) { a.push_back("-L"); a.push_back("--max-redirs"); a.push_back(std::to_string(q.maxRedirects < 0 ? 0 : q.maxRedirects)); }
+    if (M == "HEAD") a.push_back("-I"); else { a.push_back("-X"); a.push_back(M); a.push_back("-D"); a.push_back("-"); }
+    char tb[32];
+    snprintf(tb, sizeof tb, "%.3f", (q.timeoutMs > 0 ? q.timeoutMs : 15000) / 1000.0); a.push_back("--max-time"); a.push_back(tb);
+    if (q.connectTimeoutMs > 0) { snprintf(tb, sizeof tb, "%.3f", q.connectTimeoutMs / 1000.0); a.push_back("--connect-timeout"); a.push_back(tb); }
+    if (q.compressed) a.push_back("--compressed");
+    if (q.maxBytes > 0) { a.push_back("--max-filesize"); a.push_back(std::to_string(q.maxBytes)); }
+    if (!q.proxy.empty()) { a.push_back("-x"); a.push_back(q.proxy); }
+    if (!q.cookieJar.empty()) { a.push_back("-b"); a.push_back(q.cookieJar); a.push_back("-c"); a.push_back(q.cookieJar); }
+    if (!q.headers.empty()) {
+        std::string hs; for (auto& h : q.headers) { std::string v = h.second; for (char& c : v) if (c == '\r' || c == '\n') c = ' '; hs += h.first + ": " + v + "\n"; }
+        bool ok; std::string f = exTempFile(hs, ok); if (!ok) { r.error = "cannot create a temp file for headers"; return r; }
+        tmp.push_back(f); a.push_back("-H"); a.push_back("@" + f);
+    }
+    if (!q.parts.empty()) {
+        for (auto& p : q.parts) {
+            if (!p.file.empty()) { std::string spec = p.name + "=@" + p.file; if (!p.type.empty()) spec += ";type=" + p.type; if (!p.filename.empty()) spec += ";filename=" + p.filename; a.push_back("-F"); a.push_back(spec); }
+            else { a.push_back("--form-string"); a.push_back(p.name + "=" + p.value); }
+        }
+    } else if (!q.body.empty()) {
+        if (q.body.size() > 32768) { bool ok; std::string f = exTempFile(q.body, ok); if (!ok) { cleanup(); r.error = "cannot create a temp file for the body"; return r; } tmp.push_back(f); a.push_back("--data-binary"); a.push_back("@" + f); }
+        else { a.push_back("--data-binary"); a.push_back(q.body); }
+    }
+    a.push_back("-w"); a.push_back("<<<RIN_EX:%{http_code}|%{num_redirects}|%{time_total}|%{size_download}|%{content_type}|%{url_effective}>>>");
+    a.push_back("--"); a.push_back(q.url);
+
+    int outPipe[2];
+    if (pipe(outPipe) != 0) { cleanup(); r.error = "pipe() failed"; return r; }
+    pid_t pid = fork();
+    if (pid < 0) { close(outPipe[0]); close(outPipe[1]); cleanup(); r.error = "fork() failed"; return r; }
+    if (pid == 0) {
+        close(outPipe[0]); dup2(outPipe[1], STDOUT_FILENO);
+        int dn = open("/dev/null", O_WRONLY); if (dn >= 0) { dup2(dn, STDERR_FILENO); close(dn); }
+        close(outPipe[1]);
+        std::vector<char*> argv; for (auto& s : a) argv.push_back(const_cast<char*>(s.c_str())); argv.push_back(nullptr);
+        execvp("curl", argv.data()); _exit(127);
+    }
+    close(outPipe[1]);
+    std::string out; char buf[8192]; ssize_t n;
+    while ((n = read(outPipe[0], buf, sizeof buf)) > 0) out.append(buf, (size_t)n);
+    close(outPipe[0]);
+    int st = 0; waitpid(pid, &st, 0); cleanup();
+    r.exitCode = WIFEXITED(st) ? WEXITSTATUS(st) : -1;
+    if (r.exitCode == 127) { r.error = "curl is not installed on this machine (required for real HTTP requests)"; return r; }
+    const std::string mk = "<<<RIN_EX:"; size_t mp = out.rfind(mk);
+    if (mp != std::string::npos) {
+        size_t me = out.find(">>>", mp);
+        if (me != std::string::npos) {
+            std::string f = out.substr(mp + mk.size(), me - mp - mk.size()); out.erase(mp);
+            std::vector<std::string> p; size_t s0 = 0;
+            for (int k = 0; k < 5; ++k) { size_t b = f.find('|', s0); if (b == std::string::npos) break; p.push_back(f.substr(s0, b - s0)); s0 = b + 1; }
+            p.push_back(f.substr(s0));
+            if (p.size() >= 6) {
+                r.status = atol(p[0].c_str()); r.redirects = atol(p[1].c_str()); r.timeMs = atof(p[2].c_str()) * 1000.0;
+                r.sizeDownload = atol(p[3].c_str()); r.contentType = p[4]; r.finalUrl = p[5];
+            }
+        }
+    }
+    parseHeaderBlocks(out, r.headers);
+    r.body = out;
+    r.ok = r.status > 0 && (r.exitCode == 0 || r.exitCode == 22);
+    if (!r.ok) r.error = std::string(curlExitText(r.exitCode)) + " (curl " + std::to_string(r.exitCode) + ")";
+    return r;
+}
 #endif
 
 } // namespace http
