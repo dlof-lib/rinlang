@@ -1,0 +1,22 @@
+🌐 container.api = pack
+🌐 route [GET /svg] -> 200
+🌐 route [GET /shapes] -> 200
+🌐 route [GET /d] -> 200
+🌐 route [GET /b64] -> 200
+🌐 route [GET /bad] -> 200
+🌐 route [GET /err] -> 500
+✅ .end/container.api (pack)
+false nil
+logo true M13 2L3 14H12L11 22L21 10H12Z
+M7 12A5 5 0 1 0 17 12A5 5 0 1 0 7 12Z M2 2H6V6H2Z M0 0L4 4
+M4 4H20V20H4Z <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4H20V20H4Z"/></svg>
+M1 1L5 5
+M1 1L5 5
+500 logo
+true true M1 1L2 2
+false false
+true M0 0L4 0L4 4Z
+false false
+true M4 4H20V20H4Z
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="red" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1L2 2"/></svg>
+true true
