@@ -14,6 +14,7 @@
 // ============================================================================
 #include "rin_interpreter.h"
 #include "rin_clock.h"
+#include "indsin/rin_indsin_icons.h"   // سجلّ الأيقونات (استيراد أيقونة من ردّ api)
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -50,6 +51,53 @@ bool Interpreter::timersPending() const { return hub_ && !hub_->q.empty(); }
 static const double kInf = std::numeric_limits<double>::infinity();
 static const size_t kMaxEntries = 10000;
 static const long kMaxEvents = 1000000;
+
+// ---- api ✕ icons: استخراج مصدر أيقونة (SVG/مسار/data URI) من قيمة ردّ، واسمها المقترح ----------------
+//  القيمة نصّ ⇒ هو المصدر. خريطة ⇒ svg | path | d | icon | body | content (النصّي)، والاسم من name | id. مصفوفة ⇒ أول عنصر.
+static bool iconSourceOf(const Value& v, std::string& src, std::string& name, std::string& glyph) {
+    if (v.type == Value::Type::STRING) { src = v.str; return !src.empty(); }
+    const Value* m = &v;
+    if (v.type == Value::Type::ARRAY && v.array && !v.array->empty()) m = &(*v.array)[0];
+    if (m->type != Value::Type::MAP || !m->map) return false;
+    for (auto& kv : *m->map) {
+        const std::string k = kv.first.toDisplayString();
+        if (kv.second.type != Value::Type::STRING) continue;
+        if ((k == "name" || k == "id") && name.empty()) name = kv.second.str;
+        else if (k == "glyph" && glyph.empty()) glyph = kv.second.str;
+    }
+    for (const char* k : {"svg", "path", "d", "icon", "body", "content"})
+        for (auto& kv : *m->map) if (kv.second.type == Value::Type::STRING && kv.first.toDisplayString() == k && !indsin::IconRegistry::sourcePath(kv.second.str).empty()) { src = kv.second.str; return true; }
+    return false;
+}
+
+// ---- حزم أيقونات خارجية: خريطة اسم→مصدر · {icons: خريطة|مصفوفة} · مصفوفة {name,svg|path|d} · نص sprite (<symbol id=…>) · نص JSON ----
+static void iconPackEntries(const Value& v0, std::vector<std::pair<std::string, std::string>>& out, int depth = 0) {
+    if (depth > 3) return;
+    if (v0.type == Value::Type::STRING) {
+        const std::string& t = v0.str; size_t a = t.find_first_not_of(" \t\r\n");
+        if (a != std::string::npos && (t[a] == '{' || t[a] == '[')) { Value d = json::decodeOrRaw(t); if (d.type != Value::Type::STRING) iconPackEntries(d, out, depth + 1); return; }
+        for (auto& e : indsin::IconRegistry::symbols(t)) out.push_back(e);
+        return;
+    }
+    if (v0.type == Value::Type::ARRAY && v0.array) {
+        for (auto& el : *v0.array) { std::string src, nm, gl; if (el.type == Value::Type::MAP && iconSourceOf(el, src, nm, gl) && !nm.empty()) out.emplace_back(nm, src); }
+        return;
+    }
+    if (v0.type != Value::Type::MAP || !v0.map) return;
+    for (auto& kv : *v0.map) if (kv.first.toDisplayString() == "icons" && (kv.second.type == Value::Type::MAP || kv.second.type == Value::Type::ARRAY || kv.second.type == Value::Type::STRING)) { iconPackEntries(kv.second, out, depth + 1); return; }
+    for (auto& kv : *v0.map) {
+        std::string src, nm, gl; const std::string k = kv.first.toDisplayString();
+        if (kv.second.type == Value::Type::STRING) { if (!indsin::IconRegistry::sourcePath(kv.second.str).empty()) out.emplace_back(k, kv.second.str); }
+        else if (kv.second.type == Value::Type::MAP && iconSourceOf(kv.second, src, nm, gl)) out.emplace_back(k, src);
+    }
+}
+// يسجّل كل أيقونة صالحة (مع بادئة اختيارية) ويعيد أسماءها؛ الأعداد محدودة (2000) لمنع حزمة ضخمة.
+static std::vector<std::string> iconPackImport(const Value& v, const std::string& prefix) {
+    std::vector<std::pair<std::string, std::string>> es; iconPackEntries(v, es);
+    std::vector<std::string> names;
+    for (auto& e : es) { if (names.size() >= 2000) break; std::string n = prefix + e.first; if (indsin::iconRegistry().importSource(n, e.second)) names.push_back(n); }
+    return names;
+}
 
 struct TimerOps {
     using St = TimerState::St;
@@ -654,16 +702,83 @@ void Interpreter::registerNativesTimer() {
             throw diagErr(diag::Code::E0007_InvalidArguments, line, std::string("'") + fn + "' expects " + (lo == hi ? std::to_string(lo) : std::to_string(lo) + " to " + std::to_string(hi)) + " argument(s) but got " + std::to_string(a.size()));
     };
 
+    // ---- api ✕ indsin: كل استدعاء api (متزامن أو مجدوَل) ينشر حالته في حقول الحاوية المعرَّفة فيها: data · status · error · updated · loading ----
+    //   (فتقرؤها خصائص الواجهة مباشرة: <Text text=<<shop.status>> />). غير المعرَّف من هذه الحقول يُتجاهل. المرحلة nil = بدء الطلب (loading=true).
+    auto apiPublish = std::make_shared<std::function<void(const std::string&, const Value&, bool)>>([this](const std::string& key, const Value& res, bool begin) {
+        auto it = containers.find(key);
+        if (it == containers.end() || !it->second) return;
+        auto& vals = it->second->values;
+        auto set = [&](const char* f, const Value& v) { auto x = vals.find(f); if (x != vals.end()) x->second = v; };
+        if (begin) { set("loading", Value::boolean_(true)); return; }
+        set("loading", Value::boolean_(false));
+        if (res.type != Value::Type::MAP || !res.map) return;
+        Value data = Value::nil(), status = Value::nil(), error = Value::nil(); bool ok = false, haveJson = false;
+        for (auto& kv : *res.map) {
+            const std::string k = kv.first.toDisplayString();
+            if (k == "json") { data = kv.second; haveJson = true; } else if (k == "body" && !haveJson) data = kv.second;
+            else if (k == "status") status = kv.second; else if (k == "ok") ok = kv.second.isTruthy();
+            else if (k == "error" && kv.second.type == Value::Type::STRING && !kv.second.str.empty()) error = kv.second;
+        }
+        // صورة معاينة: ردّ صورة ⇒ data = data URI؛ وإلا أول رابط/URI في json (image · thumbnail · avatar · icon · picture · photo · preview) أو جسم mock نصّي data:image/
+        Value preview = Value::nil();
+        for (auto& kv : *res.map) if (kv.first.toDisplayString() == "image" && kv.second.type == Value::Type::STRING) { preview = kv.second; data = kv.second; }
+        if (preview.type == Value::Type::NIL) {
+            auto urlish = [](const Value& v) { return v.type == Value::Type::STRING && (v.str.rfind("http://", 0) == 0 || v.str.rfind("https://", 0) == 0 || v.str.rfind("data:image/", 0) == 0); };
+            if (urlish(data)) { const std::string& d = data.str; if (d.rfind("data:image/", 0) == 0) preview = data; }
+            else {
+                // خريطة، أو أول عنصر خريطة في مصفوفة؛ وإن لم يُوجد مفتاح صورة مباشر فابحث في `owner`/`user`/`author` (مثل GitHub: owner.avatar_url)
+                const Value* m = &data;
+                if (data.type == Value::Type::ARRAY && data.array && !data.array->empty()) m = &(*data.array)[0];
+                if (m->type == Value::Type::MAP && m->map) {
+                    auto scan = [&](const Value& mv) {
+                        for (const char* k : {"preview", "image", "thumbnail", "avatar", "icon", "picture", "photo", "avatar_url", "image_url", "thumbnail_url", "icon_url"}) {
+                            for (auto& kv : *mv.map) if (kv.first.toDisplayString() == k && urlish(kv.second)) { preview = kv.second; return; }
+                        }
+                    };
+                    scan(*m);
+                    if (preview.type == Value::Type::NIL) for (auto& kv : *m->map) { const std::string k = kv.first.toDisplayString(); if ((k == "owner" || k == "user" || k == "author") && kv.second.type == Value::Type::MAP && kv.second.map) { scan(kv.second); if (preview.type != Value::Type::NIL) break; } }
+                }
+            }
+        }
+        long st = status.type == Value::Type::NUMBER ? static_cast<long>(status.number) : 0;
+        const bool good = ok && st >= 200 && st < 300;            // «ok» = تمّ الاتصال؛ النجاح الفعلي = 2xx
+        if (!good && error.type == Value::Type::NIL && st >= 300) {   // خطأ HTTP: رسالة الخادم (json.message) أو "HTTP <status>"
+            std::string msg = "HTTP " + std::to_string(st);
+            for (auto& kv : *res.map) if ((kv.first.toDisplayString() == "json" || kv.first.toDisplayString() == "body") && kv.second.type == Value::Type::MAP && kv.second.map)
+                for (auto& m : *kv.second.map) if (m.first.toDisplayString() == "message" && m.second.type == Value::Type::STRING) msg += ": " + m.second.str;
+            error = Value::string(msg);
+        }
+        if (good) { set("data", data); set("preview", preview); error = Value::nil(); }     // الفشل يُبقي آخر بيانات ناجحة (stale) ويضع error
+        // أيقونة: إن عرّفت الحاوية الحقل icon (أو svg) والردّ يحوي SVG/مسار/data URI صالحاً ⇒ يُسجَّل في سجلّ indsin
+        //   ويُملأ icon باسمه (iconName إن عُرّف، وإلا name/id من الردّ، وإلا اسم الحاوية) وsvg بوسم SVG كامل — فيعمل <Icon icon=<<c.icon>> />.
+        if (good && vals.count("iconList")) {        // حزمة كاملة: iconList ← أسماء ما سُجِّل (iconPrefix اختيارية)
+            std::string pre; auto ip = vals.find("iconPrefix"); if (ip != vals.end() && ip->second.type == Value::Type::STRING) pre = ip->second.str;
+            std::vector<Value> names; for (auto& n : iconPackImport(data, pre)) names.push_back(Value::string(n));
+            if (!names.empty()) set("iconList", Value::makeArray(std::make_shared<ArrayData>(std::move(names))));
+        }
+        if (good && (vals.count("icon") || vals.count("svg"))) {
+            std::string src, nm, gl;
+            auto inm = vals.find("iconName"); if (inm != vals.end() && inm->second.type == Value::Type::STRING) nm = inm->second.str;
+            auto ig = vals.find("iconGlyph"); if (ig != vals.end() && ig->second.type == Value::Type::STRING) gl = ig->second.str;
+            std::string rn, rg; if (iconSourceOf(data, src, rn, rg)) {
+                if (nm.empty()) nm = rn.empty() ? key : rn;
+                if (gl.empty()) gl = rg;
+                if (indsin::iconRegistry().importSource(nm, src, gl)) { set("icon", Value::string(nm)); set("svg", Value::string(indsin::iconRegistry().svg(nm))); }
+            }
+        }
+        set("status", status); set("error", error); set("updated", Value::num(clk::epochMs()));
+    });
+
     // ---- api ✕ timer: callApi(c, method, path, opts) و call(method, path, opts) — خيارات اختيارية بلا كلمات جديدة ----
     //   cache: مدّة  → يعيد آخر ردّ ناجح للمسار نفسه (مع cached:true) حتى تنتهي المدّة؛ cache: 0 يتجاوز الكاش ويحذفه
     //   after / at / every [+ times] → يجدوِل الاستدعاء (ملك الحاوية فيُلغى بحذفها أو timers.clear)؛ يعيد {ok, scheduled, id, kind:"api", target, in}
     //   then: دالة(ردّ) → تُستدعى بالردّ بعد كل استدعاء (فيصير every+then استطلاعاً دورياً poll)
     {
         auto cache = std::make_shared<std::unordered_map<std::string, std::pair<double, Value>>>();
-        auto wrap = [this, cache](const char* fnName, size_t baseArgs) {
+        auto wrap = [this, cache, apiPublish](const char* fnName, size_t baseArgs) {
             auto base = natives[fnName];
             const std::string fn = fnName;
-            natives[fnName] = [this, cache, base, fn, baseArgs](Args& a, int line) -> Value {
+            natives[fnName] = [this, cache, apiPublish, base, fn, baseArgs](Args& a, int line) -> Value {
                 if (a.size() != baseArgs + 1 || a.back().type == Value::Type::NIL) { if (a.size() == baseArgs + 1) a.pop_back(); return base(a, line); }   // بلا خيارات = السلوك القديم حرفياً
                 Value opts = a.back(); a.pop_back();
                 if (opts.type != Value::Type::MAP || !opts.map) throw TO::badArg(line, fn + ": options must be a map but got " + opts.typeName());
@@ -687,7 +802,7 @@ void Interpreter::registerNativesTimer() {
                 double cacheMs = -1;
                 if (!isNil(vCache)) cacheMs = TO::dur(vCache, line, fn + " `cache`", true);
                 Value thenFn = vThen;
-                auto doCall = [this, cache, base, key, method, path, cacheMs, thenFn](int ln) -> Value {
+                auto doCall = [this, cache, apiPublish, base, key, method, path, cacheMs, thenFn](int ln) -> Value {
                     const std::string ck = key + "|" + toUpperAscii(method) + "|" + path;
                     Value res; bool hit = false;
                     if (cacheMs == 0) cache->erase(ck);
@@ -704,6 +819,7 @@ void Interpreter::registerNativesTimer() {
                     } else {
                         auto m = std::make_shared<MapData>(*res.map); m->push_back({Value::string("cached"), Value::boolean_(true)}); res = Value::makeMap(m);
                     }
+                    (*apiPublish)(key, res, false);
                     if (thenFn.type == Value::Type::FUNCTION) { std::vector<Value> ta{res}; callValue(thenFn, ta, ln); }
                     return res;
                 };
@@ -738,10 +854,10 @@ void Interpreter::registerNativesTimer() {
     {
         auto cache = std::make_shared<std::unordered_map<std::string, std::pair<double, Value>>>();
         struct Shape { const char* fn; size_t baseArgs; const char* method; int pathIdx; int bodyIdx; };   // method=nullptr: من الوسيط 1
-        auto wrapReal = [this, cache](Shape sh) {
+        auto wrapReal = [this, cache, apiPublish](Shape sh) {
             auto base = natives[sh.fn];
             const std::string fn = sh.fn;
-            natives[sh.fn] = [this, cache, base, fn, sh](Args& a, int line) -> Value {
+            natives[sh.fn] = [this, cache, apiPublish, base, fn, sh](Args& a, int line) -> Value {
                 if (a.size() != sh.baseArgs + 1 || a.back().type == Value::Type::NIL) { if (a.size() == sh.baseArgs + 1) a.pop_back(); return base(a, line); }   // بلا خيارات = السلوك القديم
                 // آخر وسيط خريطة خيارات؟ للأفعال ذات الجسم (POST…) قد يكون الجسم نفسه خريطة، لكن عدد الوسائط يحسم: baseArgs+1
                 Value opts = a.back(); a.pop_back();
@@ -776,7 +892,7 @@ void Interpreter::registerNativesTimer() {
                 const std::string M = toUpperAscii(method);
                 if (cacheMs >= 0 && M != "GET") throw TO::badArg(line, fn + ": `cache` is for GET only (a " + M + " changes data)");
                 Value thenFn = vThen;
-                auto doCall = [this, cache, name, M, path, body, cacheMs, backoffMs, timeoutMs, retry, hasRetry, thenFn](int ln) -> Value {
+                auto doCall = [this, cache, apiPublish, name, M, path, body, cacheMs, backoffMs, timeoutMs, retry, hasRetry, thenFn](int ln) -> Value {
                     const std::string ck = "real|" + name + "|" + path;
                     Value res; bool hit = false;
                     if (cacheMs == 0) cache->erase(ck);
@@ -786,6 +902,7 @@ void Interpreter::registerNativesTimer() {
                     }
                     auto okOf = [](const Value& r) { bool ok = false; long st = 0; if (r.type == Value::Type::MAP) for (auto& kv : *r.map) { const std::string k = kv.first.toDisplayString(); if (k == "ok") ok = kv.second.isTruthy(); else if (k == "status" && kv.second.type == Value::Type::NUMBER) st = static_cast<long>(kv.second.number); } return ok && st < 500; };
                     if (!hit) {
+                        (*apiPublish)(name, Value::nil(), true);                 // loading = true
                         const int savedTimeout = defaultHttpTimeoutMs;
                         if (timeoutMs > 0) defaultHttpTimeoutMs = static_cast<int>(timeoutMs);
                         long attempts = 0;
@@ -796,13 +913,14 @@ void Interpreter::registerNativesTimer() {
                                 if (okOf(res) || attempts > retry) break;
                                 if (backoffMs > 0) timersSleep(backoffMs, ln);
                             }
-                        } catch (...) { defaultHttpTimeoutMs = savedTimeout; throw; }
+                        } catch (...) { defaultHttpTimeoutMs = savedTimeout; (*apiPublish)(name, Value::nil(), false); throw; }
                         defaultHttpTimeoutMs = savedTimeout;
                         if (hasRetry && res.type == Value::Type::MAP) { auto m = std::make_shared<MapData>(*res.map); m->push_back({Value::string("attempts"), Value::num(static_cast<double>(attempts))}); res = Value::makeMap(m); }
                         if (cacheMs > 0 && okOf(res)) (*cache)[ck] = {clk::monoMs() + cacheMs, res};
                     } else {
                         auto m = std::make_shared<MapData>(*res.map); m->push_back({Value::string("cached"), Value::boolean_(true)}); res = Value::makeMap(m);
                     }
+                    (*apiPublish)(name, res, false);
                     if (thenFn.type == Value::Type::FUNCTION) { std::vector<Value> ta{res}; callValue(thenFn, ta, ln); }
                     return res;
                 };
@@ -868,14 +986,40 @@ void Interpreter::registerNativesTimer() {
             return apiEndpoints.count(key) > 0;
         };
         auto enc = [](const std::string& sv) { static const char* hex = "0123456789ABCDEF"; std::string o; for (unsigned char c : sv) { if (std::isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') o += static_cast<char>(c); else { o += '%'; o += hex[c >> 4]; o += hex[c & 15]; } } return o; };
-        auto mkWrap = [this, stats, fieldOf, isReal, enc](const char* fnName, bool named) {
+        auto mkWrap = [this, stats, fieldOf, isReal, enc, apiPublish](const char* fnName, bool named) {
             auto prev = natives[fnName];                        // النسخة السابقة (محاكاة + خيارات المؤقّت): تُستعمل للحاويات الوهمية
             const std::string fn = fnName;
-            natives[fnName] = [this, stats, fieldOf, isReal, enc, prev, fn, named](Args& a, int line) -> Value {
+            natives[fnName] = [this, stats, fieldOf, isReal, enc, apiPublish, prev, fn, named](Args& a, int line) -> Value {
                 const size_t o = named ? 1 : 0;                  // callApi: (c, method, path…) · call: (method, path…)
                 if (a.size() < o + 2 || (named && a[0].type != Value::Type::STRING) || a[o].type != Value::Type::STRING || a[o + 1].type != Value::Type::STRING) return prev(a, line);
                 const std::string key = named ? a[0].str : (containerStack.empty() ? "" : containerStack.back());
-                if (!isReal(key)) return prev(a, line);
+                auto publishSync = [apiPublish, stats, &key](const Value& r) {   // الاستدعاء المتزامن ينشر حالته ويُحصى (المجدوَل ينشرها عند لحظته)
+                    bool sched = false; if (r.type == Value::Type::MAP && r.map) for (auto& kv : *r.map) if (kv.first.toDisplayString() == "scheduled") sched = true;
+                    if (sched) return;
+                    (*apiPublish)(key, r, false);
+                    auto& st = (*stats)[key]; st.calls += 1; st.last = r;
+                    bool ok = false; double code = 0; if (r.type == Value::Type::MAP) for (auto& kv : *r.map) { const std::string k = kv.first.toDisplayString(); if (k == "ok") ok = kv.second.isTruthy(); else if (k == "status" && kv.second.type == Value::Type::NUMBER) code = kv.second.number; }
+                    if (!ok || code >= 400) st.failed += 1;
+                };
+                if (!isReal(key)) {
+                    // محاكاة: params/query تعمل أيضاً (المسار يُوسَّع ويُطابَق route بلا الـ query) فيعمل نفس الكود في الحقيقي والمحاكاة
+                    if (a.size() == o + 3 && a.back().type == Value::Type::MAP && a.back().map) {
+                        Value params, query; auto rest = std::make_shared<MapData>();
+                        for (auto& kv : *a.back().map) { const std::string k = kv.first.toDisplayString(); if (k == "params") params = kv.second; else if (k == "query") query = kv.second; else rest->push_back(kv); }
+                        if (params.type != Value::Type::NIL || query.type != Value::Type::NIL) {
+                            std::string pth = a[o + 1].str;
+                            if (params.type == Value::Type::MAP && params.map) for (auto& kv : *params.map) {
+                                const std::string ph = ":" + kv.first.toDisplayString(); size_t at;
+                                while ((at = pth.find(ph)) != std::string::npos) pth.replace(at, ph.size(), enc(kv.second.toDisplayString()));
+                            }
+                            if (pth.find("/:") != std::string::npos) throw TO::badArg(line, fn + ": the path still has an unfilled parameter `" + pth.substr(pth.find("/:") + 1) + "` — pass `params: {name: value}`");
+                            std::vector<Value> na(a.begin(), a.begin() + static_cast<long>(o + 2)); na[o + 1] = Value::string(pth);
+                            if (!rest->empty()) na.push_back(Value::makeMap(rest));
+                            Value r = prev(na, line); publishSync(r); return r;
+                        }
+                    }
+                    Value r = prev(a, line); publishSync(r); return r;
+                }
                 const std::string M = toUpperAscii(a[o].str);
                 std::string path = a[o + 1].str;
                 const bool bodyM = (M == "POST" || M == "PUT" || M == "PATCH");
@@ -906,11 +1050,7 @@ void Interpreter::registerNativesTimer() {
                 std::vector<Value> ca{Value::string(key), Value::string(M), Value::string(path), body};
                 if (!nopts->empty()) ca.push_back(Value::makeMap(nopts));
                 Value r = natives["apiCall"](ca, line);
-                if (!timed) {    // إحصاءات الاستدعاءات المتزامنة فقط
-                    auto& st = (*stats)[key]; st.calls += 1;
-                    bool ok = false; if (r.type == Value::Type::MAP) for (auto& kv : *r.map) if (kv.first.toDisplayString() == "ok") ok = kv.second.isTruthy();
-                    if (!ok) st.failed += 1; st.last = r;
-                }
+                (void)timed; publishSync(r);          // النشر والإحصاء معاً في publishSync
                 return r;
             };
         };
@@ -952,6 +1092,72 @@ void Interpreter::registerNativesTimer() {
         return TO::instant(clk::epochMs());
     };
     natives["time.unfreeze"] = [argc](Args& a, int line) -> Value { argc("time.unfreeze", a, 0, 0, line); clk::unfreeze(); return Value::boolean_(true); };
+    // ---- icons: استيراد أيقونة (من ردّ api أو نصّ) إلى سجلّ indsin -------------------------------------
+    //  icons.import(name, src[, glyph]) → true/false · icons.has(name) · icons.path(name) · icons.svg(name[, size, color])
+    //  icons.fromApi(c, name[, glyph]) يستورد من c.data (آخر ردّ ناجح) · icons.names() أسماء الأيقونات المتجهية
+    natives["icons.importPack"] = [argc](Args& a, int line) -> Value {
+        argc("icons.importPack", a, 1, 2, line);
+        std::string prefix = a.size() > 1 && a[1].type == Value::Type::STRING ? a[1].str : "";
+        std::vector<Value> out; for (auto& n : iconPackImport(a[0], prefix)) out.push_back(Value::string(n));
+        return TimerOps::arr(std::move(out));
+    };
+    // icons.fromUrl(url[, name | prefix]) — يجلب رابطاً (https أو localhost): SVG واحد (يحتاج name) أو حزمة (JSON/sprite، والوسيط بادئة)
+    natives["icons.fromUrl"] = [this, argc](Args& a, int line) -> Value {
+        argc("icons.fromUrl", a, 1, 2, line);
+        if (a[0].type != Value::Type::STRING) throw TimerOps::badArg(line, "icons.fromUrl: the url must be a string");
+        const std::string& url = a[0].str;
+        const bool local = url.rfind("http://127.0.0.1", 0) == 0 || url.rfind("http://localhost", 0) == 0;
+        if (url.rfind("https://", 0) != 0 && !local) throw TimerOps::badArg(line, "icons.fromUrl: only https:// URLs are allowed (http:// only for localhost)");
+        auto r = http::performRequest("GET", url, {}, "", defaultHttpTimeoutMs);
+        if (!r.ok || r.status < 200 || r.status >= 300 || r.body.size() > 4u * 1024 * 1024) return TimerOps::arr({});
+        std::string arg = a.size() > 1 && a[1].type == Value::Type::STRING ? a[1].str : "";
+        std::vector<Value> out;
+        std::string d = indsin::IconRegistry::sourcePath(r.body);
+        if (!d.empty() && !arg.empty() && r.body.find("<symbol") == std::string::npos) { if (indsin::iconRegistry().importPath(arg, d)) out.push_back(Value::string(arg)); }
+        else for (auto& n : iconPackImport(Value::string(r.body), arg)) out.push_back(Value::string(n));
+        return TimerOps::arr(std::move(out));
+    };
+    natives["icons.import"] = [argc](Args& a, int line) -> Value {
+        argc("icons.import", a, 2, 3, line);
+        if (a[0].type != Value::Type::STRING || a[0].str.empty()) throw TimerOps::badArg(line, "icons.import: the icon name must be a non-empty string");
+        std::string src, nm, gl; if (a.size() > 2 && a[2].type == Value::Type::STRING) gl = a[2].str;
+        if (!iconSourceOf(a[1], src, nm, gl)) return Value::boolean_(false);
+        return Value::boolean_(indsin::iconRegistry().importSource(a[0].str, src, gl));
+    };
+    natives["icons.has"] = [argc](Args& a, int line) -> Value {
+        argc("icons.has", a, 1, 1, line);
+        return Value::boolean_(a[0].type == Value::Type::STRING && (indsin::iconRegistry().has(a[0].str) || indsin::iconRegistry().hasVector(a[0].str)));
+    };
+    natives["icons.path"] = [argc](Args& a, int line) -> Value {
+        argc("icons.path", a, 1, 1, line);
+        std::string d = a[0].type == Value::Type::STRING ? indsin::iconRegistry().vectorPath(a[0].str) : "";
+        return d.empty() ? Value::nil() : Value::string(d);
+    };
+    natives["icons.svg"] = [argc](Args& a, int line) -> Value {
+        argc("icons.svg", a, 1, 3, line);
+        if (a[0].type != Value::Type::STRING) return Value::nil();
+        int size = a.size() > 1 && a[1].type == Value::Type::NUMBER ? static_cast<int>(a[1].number) : 24;
+        std::string col = a.size() > 2 && a[2].type == Value::Type::STRING ? a[2].str : "currentColor";
+        std::string s = indsin::iconRegistry().svg(a[0].str, size, col);
+        return s.empty() ? Value::nil() : Value::string(s);
+    };
+    natives["icons.names"] = [this, argc](Args& a, int line) -> Value {
+        argc("icons.names", a, 0, 0, line);
+        auto& R = indsin::iconRegistry(); R.loadVectors();
+        std::vector<std::string> v; for (auto& kv : R.vectors) v.push_back(kv.first);
+        std::sort(v.begin(), v.end());
+        std::vector<Value> out; for (auto& n : v) out.push_back(Value::string(n));
+        return TimerOps::arr(std::move(out));
+    };
+    natives["icons.fromApi"] = [this, argc](Args& a, int line) -> Value {
+        argc("icons.fromApi", a, 2, 3, line);
+        std::string key; Environment* env = TimerOps::containerEnv(*this, a[0], "icons.fromApi", line, &key);
+        if (a[1].type != Value::Type::STRING || a[1].str.empty()) throw TimerOps::badArg(line, "icons.fromApi: the icon name must be a non-empty string");
+        auto it = env->values.find("data"); if (it == env->values.end()) return Value::boolean_(false);
+        std::string src, nm, gl; if (a.size() > 2 && a[2].type == Value::Type::STRING) gl = a[2].str;
+        if (!iconSourceOf(it->second, src, nm, gl)) return Value::boolean_(false);
+        return Value::boolean_(indsin::iconRegistry().importSource(a[1].str, src, gl));
+    };
     natives["time.frozen"] = [argc](Args& a, int line) -> Value { argc("time.frozen", a, 0, 0, line); return Value::boolean_(clk::isVirtual()); };
     natives["time.advance"] = [this, argc](Args& a, int line) -> Value {
         argc("time.advance", a, 1, 2, line);
