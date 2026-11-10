@@ -1,0 +1,35 @@
+// container.api ✕ icons: استيراد أيقونة من ردّ api (SVG · مسار · data URI) إلى سجلّ indsin
+@container.api=pack
+    let data = nil;
+    let status = 0;
+    let icon = nil;
+    let svg = nil;
+    let iconName = "logo";
+    route method="GET" path="/svg" status=200 body={"name": "bolt", "svg": "<svg viewBox='0 0 24 24'><path d='M13 2L3 14H12L11 22L21 10H12Z'/></svg>"};
+    route method="GET" path="/shapes" status=200 body="<svg><circle cx='12' cy='12' r='5'/><rect x='2' y='2' width='4' height='4'/><line x1='0' y1='0' x2='4' y2='4'/></svg>";
+    route method="GET" path="/d" status=200 body={"d": "M4 4H20V20H4Z"};
+    route method="GET" path="/b64" status=200 body="data:image/svg+xml;base64,PHN2Zz48cGF0aCBkPSdNMSAxTDUgNScvPjwvc3ZnPg==";
+    route method="GET" path="/bad" status=200 body={"svg": "<svg><script>alert(1)</script></svg>"};
+    route method="GET" path="/err" status=500 body={"message": "boom"};
+.end/container.api
+print icons.has("logo"), pack.icon;
+callApi("pack", "GET", "/svg");
+print pack.icon, icons.has("logo"), icons.path("logo");
+callApi("pack", "GET", "/shapes");
+print icons.path("logo");
+callApi("pack", "GET", "/d");
+print icons.path("logo"), pack.svg;
+callApi("pack", "GET", "/b64");
+print icons.path("logo");
+callApi("pack", "GET", "/bad");
+print icons.path("logo");                      // مصدر غير صالح ⇒ لا يُغيَّر
+callApi("pack", "GET", "/err");
+print pack.status, pack.icon;                  // الفشل لا يمسّ الأيقونة
+print icons.import("mine", "M1 1L2 2"), icons.has("mine"), icons.path("mine");
+print icons.import("zzz", "not a path"), icons.has("zzz");
+print icons.import("pic", "<svg><polygon points='0,0 4,0 4,4'/></svg>", "P"), icons.path("pic");
+print icons.fromApi("pack", "again"), icons.has("again");          // data الحالية (آخر ردّ ناجح) غير صالحة ⇒ false
+callApi("pack", "GET", "/d");
+print icons.fromApi("pack", "again"), icons.path("again");
+print icons.svg("mine", 16, "red");
+print icons.has("home"), len(icons.names()) > 100;
