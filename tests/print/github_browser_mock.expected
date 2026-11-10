@@ -1,0 +1,14 @@
+🌐 container.api = github
+🌐 route [GET /users/octo-dev/repos] -> 200
+🌐 route [GET /repos/octo-dev/rinlang/languages] -> 200
+🌐 route [GET /repos/octo-dev/rinlang/readme] -> 200
+🌐 route [GET /users/nobody/repos] -> 404
+✅ .end/container.api (github)
+rinlang *128 C++
+dotfiles *0 -
+200 https://avatars.example/octo.png 2
+C++ 80%
+Kotlin 20%
+# rinlang
+404 404 HTTP 404: Not Found 2
+mock 4 1 404
