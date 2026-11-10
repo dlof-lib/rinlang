@@ -560,6 +560,8 @@ struct TimerOps {
     }
 };
 
+#include "rin_fetch.cpp"   // عميل الروابط الحقيقي fetch()/url.* (docs/fetch.md) — يحتاج TimerOps
+
 // ------------------------------------------------------------------ واجهة Interpreter
 void Interpreter::timersPump(int line) { if (hub_ && !hub_->q.empty()) TimerOps::advanceTo(*this, clk::monoMs(), line); }
 void Interpreter::timersAdvanceTo(double untilMono, int line) { TimerOps::advanceTo(*this, untilMono, line); }
@@ -1158,6 +1160,112 @@ void Interpreter::registerNativesTimer() {
         if (!iconSourceOf(it->second, src, nm, gl)) return Value::boolean_(false);
         return Value::boolean_(indsin::iconRegistry().importSource(a[1].str, src, gl));
     };
+
+    // ---- fetch: عميل الروابط الحقيقي الكامل (docs/fetch.md) ----
+    //  fetch.request(url[, opts]) · fetch.get/delete/head(url[, opts]) · fetch.post/put/patch(url[, body[, opts]])
+    //  fetch.json(url[, opts]) → json الردّ (يرمي عند الفشل) · fetch.text(url[, opts]) → النص · fetch.download(url, path[, opts])
+    //  fetch.clearCookies([jar]) · url.parse/build/join/encode/decode/query/params/valid
+    {
+        auto mkCtx = [this]() { FetchCtx c; c.ip = this; c.defaultTimeoutMs = defaultHttpTimeoutMs;
+            c.resolvePath = [this](const std::string& p, int ln) { return resolvePath(p, ln); };
+            c.atArg = [this](const Value& v, int ln, const std::string& w) { return timerAtArg(v, ln, w); };
+            c.sleep = [this](double ms, int ln) { timersSleep(ms, ln); }; return c; };
+        auto doFetch = [this, apiPublish, mkCtx](const std::string& fn, const Value& urlV, const Value& optsIn, int line, const char* forceMethod, const Value* bodyArg) -> Value {
+            if (urlV.type != Value::Type::STRING) throw TO::badArg(line, fn + ": the url must be a string but got " + urlV.typeName());
+            Value opts = optsIn;
+            if (forceMethod || (bodyArg && bodyArg->type != Value::Type::NIL)) {
+                auto m = std::make_shared<MapData>(); if (opts.type == Value::Type::MAP && opts.map) *m = *opts.map;
+                if (forceMethod) { bool has = false; for (auto& e : *m) if (e.first.toDisplayString() == "method") has = true; if (!has) m->push_back({Value::string("method"), Value::string(forceMethod)}); }
+                if (bodyArg && bodyArg->type != Value::Type::NIL) m->push_back({Value::string(bodyArg->type == Value::Type::STRING ? "body" : "json"), *bodyArg});
+                opts = Value::makeMap(m);
+            }
+            FetchCtx ctx = mkCtx();
+            FetchOpts o = fetchParse(ctx, fn, urlV.str, opts, line);
+            auto run = [this, o, apiPublish, mkCtx](int ln) -> Value {
+                std::function<void(const Value&, bool)> pub;
+                if (!o.into.empty()) pub = [apiPublish, o](const Value& r, bool begin) { (*apiPublish)(o.into, r, begin); };
+                FetchCtx c2 = mkCtx(); Value res = fetchRun(c2, o, ln, pub);
+                if (o.then.type == Value::Type::FUNCTION) { std::vector<Value> ta{res}; callValue(o.then, ta, ln); }
+                return res;
+            };
+            if (o.hasSched) {
+                long id = schedAction(o.delay, o.interval, o.times, [run](int ln) { run(ln); }, "fetch " + o.method + " " + o.url, "");
+                return TO::mapOf({{"ok", Value::boolean_(true)}, {"scheduled", Value::boolean_(true)}, {"id", Value::num((double)id)}, {"kind", Value::string("fetch")}, {"target", Value::string(o.method + " " + o.url)}, {"in", Value::num(std::round(o.delay))}});
+            }
+            return run(line);
+        };
+        natives["fetch.request"] = [doFetch, argc](Args& a, int line) -> Value { argc("fetch.request", a, 1, 2, line); return doFetch("fetch.request", a[0], a.size() > 1 ? a[1] : Value::nil(), line, nullptr, nullptr); };
+        for (const char* mname : {"get", "delete", "head"}) {
+            const std::string fn = std::string("fetch.") + mname; const std::string M = toUpperAscii(mname);
+            natives[fn] = [doFetch, argc, fn, M](Args& a, int line) -> Value { argc(fn.c_str(), a, 1, 2, line); return doFetch(fn, a[0], a.size() > 1 ? a[1] : Value::nil(), line, M.c_str(), nullptr); };
+        }
+        for (const char* mname : {"post", "put", "patch"}) {
+            const std::string fn = std::string("fetch.") + mname; const std::string M = toUpperAscii(mname);
+            natives[fn] = [doFetch, argc, fn, M](Args& a, int line) -> Value { argc(fn.c_str(), a, 1, 3, line); Value body = a.size() > 1 ? a[1] : Value::nil(); return doFetch(fn, a[0], a.size() > 2 ? a[2] : Value::nil(), line, M.c_str(), &body); };
+        }
+        auto strictOpts = [](const Value& o) { auto m = std::make_shared<MapData>(); if (o.type == Value::Type::MAP && o.map) *m = *o.map; m->push_back({Value::string("strict"), Value::boolean_(true)}); return Value::makeMap(m); };
+        natives["fetch.json"] = [doFetch, argc, strictOpts](Args& a, int line) -> Value {
+            argc("fetch.json", a, 1, 2, line); Value r = doFetch("fetch.json", a[0], strictOpts(a.size() > 1 ? a[1] : Value::nil()), line, nullptr, nullptr);
+            if (r.type == Value::Type::MAP && r.map) for (auto& kv : *r.map) if (kv.first.toDisplayString() == "json") return kv.second; return Value::nil(); };
+        natives["fetch.text"] = [doFetch, argc, strictOpts](Args& a, int line) -> Value {
+            argc("fetch.text", a, 1, 2, line); Value r = doFetch("fetch.text", a[0], strictOpts(a.size() > 1 ? a[1] : Value::nil()), line, nullptr, nullptr);
+            if (r.type == Value::Type::MAP && r.map) for (auto& kv : *r.map) if (kv.first.toDisplayString() == "body") return kv.second; return Value::string(""); };
+        natives["fetch.clearCookies"] = [argc](Args& a, int line) -> Value {
+            argc("fetch.clearCookies", a, 0, 1, line); return Value::num((double)fetchClearJars(a.empty() || a[0].type != Value::Type::STRING ? "" : a[0].str)); };
+        // fetch.download(url, path[, opts]) — تنزيل متدفّق إلى ملف (لا يمرّ الجسم عبر الذاكرة)؛ يُكتب إلى path.part ثم يُعاد تسميته عند النجاح
+        natives["fetch.download"] = [this, argc, mkCtx](Args& a, int line) -> Value {
+            argc("fetch.download", a, 2, 3, line);
+            if (a[0].type != Value::Type::STRING || a[1].type != Value::Type::STRING || a[1].str.empty()) throw TO::badArg(line, "fetch.download: expected (url, path[, opts])");
+            FetchCtx ctx = mkCtx(); FetchOpts o = fetchParse(ctx, "fetch.download", a[0].str, a.size() > 2 ? a[2] : Value::nil(), line);
+            const std::string dest = resolvePath(a[1].str, line);
+            http::DownloadRequest dr; dr.url = o.url; dr.destPath = dest + ".part"; dr.headers = o.headers; dr.maxBytes = o.maxBytes;
+            if (o.timeoutMs > 0) dr.totalTimeoutMs = (int)o.timeoutMs;
+            http::DownloadResult r = http::performDownload(dr);
+            bool ok = r.ok; std::string err = r.error; long long bytes = r.bytes;
+            if (ok) { std::remove(dest.c_str()); if (std::rename(dr.destPath.c_str(), dest.c_str()) != 0) { ok = false; err = "could not move the finished download into place"; } }
+            else std::remove(dr.destPath.c_str());
+            return TO::mapOf({{"ok", Value::boolean_(ok)}, {"status", Value::num((double)r.status)}, {"path", Value::string(a[1].str)}, {"bytes", Value::num((double)bytes)},
+                              {"contentType", Value::string(r.contentType)}, {"url", Value::string(r.finalUrl.empty() ? o.url : r.finalUrl)}, {"error", Value::string(err)}});
+        };
+        // ---- url.* ----
+        natives["url.encode"] = [argc](Args& a, int line) -> Value { argc("url.encode", a, 1, 1, line); return Value::string(urlx::enc(a[0].toDisplayString())); };
+        natives["url.decode"] = [argc](Args& a, int line) -> Value { argc("url.decode", a, 1, 1, line); return Value::string(urlx::dec(a[0].toDisplayString(), true)); };
+        natives["url.valid"] = [argc](Args& a, int line) -> Value { argc("url.valid", a, 1, 1, line); if (a[0].type != Value::Type::STRING) return Value::boolean_(false); auto p = urlx::parse(a[0].str); return Value::boolean_(p.ok && (p.scheme == "http" || p.scheme == "https")); };
+        natives["url.join"] = [argc](Args& a, int line) -> Value { argc("url.join", a, 2, 2, line); return Value::string(urlx::join(a[0].toDisplayString(), a[1].toDisplayString())); };
+        auto paramsOf = [](const std::string& qs) {
+            auto m = std::make_shared<MapData>(); size_t i = 0;
+            while (i <= qs.size() && !qs.empty()) {
+                size_t j = qs.find('&', i); if (j == std::string::npos) j = qs.size(); std::string kv = qs.substr(i, j - i); i = j + 1;
+                if (kv.empty()) continue; size_t e = kv.find('='); std::string k = urlx::dec(kv.substr(0, e), true), v = e == std::string::npos ? "" : urlx::dec(kv.substr(e + 1), true);
+                bool done = false; for (auto& x : *m) if (x.first.str == k) { if (x.second.type == Value::Type::ARRAY) x.second.array->push_back(Value::string(v)); else x.second = TimerOps::arr({x.second, Value::string(v)}); done = true; break; }
+                if (!done) m->push_back({Value::string(k), Value::string(v)});
+            }
+            return Value::makeMap(m);
+        };
+        auto queryOf = [](const Value& v) { std::string qs; if (v.type != Value::Type::MAP || !v.map) return qs;
+            auto add = [&](const std::string& k, const Value& x) { if (x.type == Value::Type::NIL) return; if (!qs.empty()) qs += "&"; qs += urlx::enc(k) + "=" + urlx::enc(x.toDisplayString()); };
+            for (auto& kv : *v.map) { const std::string k = kv.first.toDisplayString(); if (kv.second.type == Value::Type::ARRAY && kv.second.array) for (auto& e : *kv.second.array) add(k, e); else add(k, kv.second); } return qs; };
+        natives["url.params"] = [argc, paramsOf](Args& a, int line) -> Value { argc("url.params", a, 1, 1, line); std::string q = a[0].toDisplayString(); if (!q.empty() && q[0] == '?') q.erase(0, 1); size_t h = q.find('#'); if (h != std::string::npos) q.erase(h); size_t qm = q.find('?'); if (qm != std::string::npos && q.find("://") != std::string::npos) q = q.substr(qm + 1); return paramsOf(q); };
+        natives["url.query"] = [argc, queryOf](Args& a, int line) -> Value { argc("url.query", a, 1, 1, line); return Value::string(queryOf(a[0])); };
+        natives["url.parse"] = [argc, paramsOf](Args& a, int line) -> Value {
+            argc("url.parse", a, 1, 1, line); auto p = urlx::parse(a[0].toDisplayString());
+            std::string dport = p.scheme == "https" ? "443" : (p.scheme == "http" ? "80" : "");
+            return TO::mapOf({{"valid", Value::boolean_(p.ok)}, {"scheme", Value::string(p.scheme)}, {"user", Value::string(p.user)}, {"host", Value::string(p.host)},
+                {"port", p.port.empty() ? (dport.empty() ? Value::nil() : Value::num(std::atof(dport.c_str()))) : Value::num(std::atof(p.port.c_str()))},
+                {"path", Value::string(p.path.empty() && p.ok ? "/" : p.path)}, {"query", Value::string(p.query)}, {"params", paramsOf(p.query)}, {"fragment", Value::string(p.fragment)},
+                {"origin", Value::string(p.ok ? p.scheme + "://" + p.host + (p.port.empty() ? "" : ":" + p.port) : "")}, {"href", Value::string(a[0].toDisplayString())}});
+        };
+        natives["url.build"] = [argc, queryOf](Args& a, int line) -> Value {
+            argc("url.build", a, 1, 1, line); if (a[0].type != Value::Type::MAP || !a[0].map) throw TO::badArg(line, "url.build: expected a map {scheme, host, port, path, query|params, fragment}");
+            urlx::Parts p; p.scheme = "https";
+            for (auto& kv : *a[0].map) { const std::string k = kv.first.toDisplayString(); const Value& v = kv.second;
+                if (k == "scheme") p.scheme = v.toDisplayString(); else if (k == "user") p.user = v.toDisplayString(); else if (k == "host") p.host = v.toDisplayString(); else if (k == "port") p.port = v.toDisplayString();
+                else if (k == "path") p.path = v.toDisplayString(); else if (k == "fragment") p.fragment = v.toDisplayString(); else if (k == "query" && v.type == Value::Type::STRING) p.query = v.str;
+                else if ((k == "params" || k == "query") && v.type == Value::Type::MAP) p.query = queryOf(v); }
+            if (p.host.empty()) throw TO::badArg(line, "url.build: `host` is required");
+            return Value::string(urlx::build(p));
+        };
+    }
     natives["time.frozen"] = [argc](Args& a, int line) -> Value { argc("time.frozen", a, 0, 0, line); return Value::boolean_(clk::isVirtual()); };
     natives["time.advance"] = [this, argc](Args& a, int line) -> Value {
         argc("time.advance", a, 1, 2, line);
