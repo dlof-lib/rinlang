@@ -55,7 +55,7 @@ inline bool isImpureCallee(const std::string& name) {
         // time.* (docs/TIME.md): الباقي نقي (قراءة/حساب)؛ هذه تنتظر أو تنفّذ دالة أو تغيّر إعداداً عاماً.
         "time.sleep", "time.measure", "time.config", "time.freeze", "time.unfreeze", "time.advance",
         // timer/timers (docs/TIMER.md): القراءات (timers.list/pending/next/ttl، timerInfo/timerList، containerTime) نقية؛ والباقي يغيّر الجدولة.
-        "icons.import", "icons.fromApi", "icons.importPack", "icons.fromUrl", "timers.after", "timers.every", "timers.at", "timers.cancel", "timers.clear", "timers.expire", "timers.persist", "timers.tick",
+        "fetch.request", "fetch.get", "fetch.post", "fetch.put", "fetch.patch", "fetch.delete", "fetch.head", "fetch.json", "fetch.text", "fetch.download", "fetch.clearCookies", "icons.import", "icons.fromApi", "icons.importPack", "icons.fromUrl", "timers.after", "timers.every", "timers.at", "timers.cancel", "timers.clear", "timers.expire", "timers.persist", "timers.tick",
         "timers.run", "timers.pauseAll", "timers.resumeAll", "timers.stopAll",
         "timerStart", "timerPause", "timerResume", "timerStop", "timerReset", "timerRestart", "timerLap", "timerExtend",
     };
