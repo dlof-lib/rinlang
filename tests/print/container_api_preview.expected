@@ -1,0 +1,12 @@
+🌐 container.api = cards
+🌐 route [GET /user] -> 200
+🌐 route [GET /pic] -> 200
+🌐 route [GET /plain] -> 200
+🌐 route [GET /thumb] -> 200
+✅ .end/container.api (cards)
+nil
+https://cdn.example.com/sara.png sara
+data:image/png;base64,iVBORw0KGgo= true
+nil
+https://cdn.example.com/t.jpg
+404 https://cdn.example.com/t.jpg
