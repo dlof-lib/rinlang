@@ -1404,6 +1404,7 @@ private:
     void registerNativesExtra7(); // rin_extra_natives7.cpp — مفهوم time (docs/TIME.md)
     void registerNativesExtra8(); // rin_extra_natives8.cpp — مفهوم token: tokenList/tokenStats/tokenAt/... (docs/TOKEN.md)
     void registerNativesExtra10(); // rin_extra_natives10.cpp — مفهوم linalg: mat*/vec* للجبر الخطي (docs/LINALG.md)
+    void registerNativesContainerZip(); // rin_container_zip.cpp — container.zip/unzip/pack/... و zip.* (docs/container_zip.md)
     void registerNativesExtra12(); // rin_extra_natives12.cpp — fileSync/fileLock/fileRename/fileSize/findByRange (docs/FILEDB.md)
     void registerNativesExtra11(); // rin_extra_natives11.cpp — مفهوم algo: algo* لتطوير الخوارزميات والحساب العددي (docs/ALGO.md)
     void registerNativesExtra9(); // rin_extra_natives9.cpp — مفهوم number: number/numberRound/numberFormat/... (docs/NUMBER.md)
