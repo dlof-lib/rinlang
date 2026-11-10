@@ -1,0 +1,15 @@
+🌐 container.api = lib
+🌐 route [GET /map] -> 200
+🌐 route [GET /arr] -> 200
+🌐 route [GET /sprite] -> 200
+🌐 route [GET /none] -> 200
+🌐 route [GET /err] -> 503
+✅ .end/container.api (lib)
+nil
+["fx:star", "fx:dot"] true M12 2L15 9L22 9Z false
+["fx:a1", "fx:a2"] M2 2L3 3
+["fx:sq", "fx:ln"] M4 4H20V20H4Z
+["fx:sq", "fx:ln"]
+503 ["fx:sq", "fx:ln"]
+["j1"] M1 1L9 9
+[] []
