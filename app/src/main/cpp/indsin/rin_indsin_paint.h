@@ -8,6 +8,7 @@
 #include "rin_indsin_layout.h" // splitCsv() -- reused here for DonutChart's data=/colors= parsing, same as Breadcrumb/Pagination already reuse it via rin_indsin_components_ext.h
 #include "rin_indsin_overlay.h" // OverlayLayer -- see paintWithOverlay() below
 #include "rin_indsin_icons.h"   // IconRegistry -- §18
+#include "rin_indsin_pathraster.h" // تسطيح مسارات SVG لـ DrawOp::STROKE_PATH
 #include "rin_indsin_validate.h"  // field type validation (email/number/tel/url)
 #include <cctype>
 #include "rin_indsin_video.h"
@@ -175,7 +176,9 @@ inline Color resolveBorderColor(const StrandPtr& s) {
 // rin_color.h), so this DrawCommand's own .color.a IS the scrim's actual translucency, not a
 // renderer-side convention keyed on the op the way it had to be before the Color Engine existed.
 // rasterizeToBuffer() below alpha-blends every DrawCommand the same way regardless of op.
-enum class DrawOp { FILL_RECT, STROKE_RECT, TEXT_RUN, SCRIM_RECT, STROKE_ARC };
+enum class DrawOp { FILL_RECT, STROKE_RECT, TEXT_RUN, SCRIM_RECT, STROKE_ARC, STROKE_PATH };
+// STROKE_PATH: مسار SVG في `text` على شبكة 24x24 تُمدَّد إلى مربّع `bounds` (متمركز)؛ strokeWidth بوحدات الشبكة (2 افتراضياً)،
+// أطراف ومفاصل دائرية، لون `color`. هو ما يرسم الأيقونات المتجهية (مدمجة بـ vector="true" أو مستوردة من api).
 // startAngleDeg/sweepAngleDeg only mean anything for STROKE_ARC (0deg = 3 o'clock, clockwise,
 // matching Android's Canvas.drawArc convention exactly so IndsinFabricView.kt can pass them
 // straight through -- see its drawArcCommand()/drawSpinner()/drawDonutChart()). Every other op
@@ -237,6 +240,12 @@ inline bool resolveShadow(const StrandPtr& s, ShadowSpec& out) {
     if (auto sh = s->attr("shadow")) {
         double n = sh->asNumber(0);
         if (n > 0) { sp.blur = n; sp.dy = n / 2.5; sp.spread = 0; sp.color = Color{0, 0, 0, 120}; any = true; }
+    }
+    if (!any && !s->attr("elevation") && !s->attr("shadow")) {   // افتراض الثيم الحديث: ظلّ ناعم للبطاقات والأزرار الممتلئة
+        const Theme& th = themeRegistry().active();
+        int lvl = s->kind == StrandKind::CARD ? th.cardElevation : (s->kind == StrandKind::BUTTON && resolveButtonTreatment(*s) == ButtonTreatment::FILL) ? th.buttonElevation : 0;
+        if (lvl > 5) lvl = 5;
+        if (lvl > 0) { sp.blur = table[lvl][0]; sp.dy = table[lvl][1]; sp.spread = table[lvl][2]; sp.color = Color{0, 0, 0, (unsigned char)std::lround(table[lvl][3] * 255 * 2.0)}; any = true; }
     }
     if (!any) return false;
     Color gc;
@@ -670,6 +679,8 @@ struct Dye {
             double borderWidth = s->attrNum("border", 0);
             if (borderWidth > 0)
                 list.push_back({DrawOp::STROKE_RECT, s->geometry, resolveBorderColor(s), "", s->id, r, borderWidth});
+            else if (themeRegistry().active().hairline && !s->attr("border"))   // ثيم حديث: حدّ شعري 1px بلون border
+                list.push_back({DrawOp::STROKE_RECT, s->geometry, themeRegistry().active().border, "", s->id, r, 1});
 
             const Theme& th = themeRegistry().active();
             double pad = 14;
@@ -1312,6 +1323,16 @@ struct Dye {
     // default-fallback branch below, so tone=/color= work on it exactly like every other kind.
     void paintIcon(const StrandPtr& s, DrawList& list) {
         std::string iconName = s->attrStr("icon", "");
+        // متجه: الأيقونات المستوردة (من api/نص) افتراضياً، أو أي أيقونة بـ vector="true"؛ vector="false" يفرض الرمز النصي.
+        const std::string vec = s->attrStr("vector", "");
+        const std::string path = iconRegistry().vectorPath(iconName);
+        if (!path.empty() && vec != "false" && (vec == "true" || iconRegistry().isImported(iconName) || iconRegistry().vectorDefault)) {
+            const Rect& g = s->geometry; double sz = std::min(g.w, g.h);
+            Rect box{g.x, g.y + (g.h - sz) / 2, sz, sz};   // محاذاة البداية كالرمز النصي
+            double sw = 2.0; try { sw = std::stod(s->attrStr("stroke", "2")); } catch (...) {}
+            list.push_back({DrawOp::STROKE_PATH, box, resolveColor(s), path, s->id, 0, sw});
+            return;
+        }
         std::string glyph = iconRegistry().resolve(iconName);
         list.push_back({DrawOp::TEXT_RUN, s->geometry, resolveColor(s), glyph, s->id, 0, 0});
     }
@@ -1414,6 +1435,33 @@ inline std::vector<unsigned char> rasterizeToBuffer(const DrawList& list, int W,
                 }
                 plot(x,y,cmd.color,cov);
             }
+    };
+    // مسار متجه: يُسطَّح ثم يُرسم كخط سميك بأطراف دائرية؛ التغطية = أقصى تغطية لكل بكسل (فلا تتراكم الشفافية عند التقاطع).
+    auto strokePath = [&](const DrawCommand& cmd) {
+        if (cmd.text.empty() || cmd.bounds.w <= 0 || cmd.bounds.h <= 0) return;
+        auto polys = flattenSvgPath(cmd.text);
+        const double sc = std::min(cmd.bounds.w, cmd.bounds.h) / 24.0, hw = std::max(0.5, cmd.strokeWidth * sc) / 2.0;
+        int x0 = (int)std::floor(cmd.bounds.x - hw - 1), y0 = (int)std::floor(cmd.bounds.y - hw - 1);
+        int x1 = (int)std::ceil(cmd.bounds.x + cmd.bounds.w + hw + 1), y1 = (int)std::ceil(cmd.bounds.y + cmd.bounds.h + hw + 1);
+        x0 = std::max(x0, 0); y0 = std::max(y0, 0); x1 = std::min(x1, W); y1 = std::min(y1, H);
+        if (x1 <= x0 || y1 <= y0) return;
+        const int BW = x1 - x0, BH = y1 - y0; std::vector<float> cov((size_t)BW * BH, 0.f);
+        auto P = [&](const PathPt& p) { return PathPt{cmd.bounds.x + p.x * sc, cmd.bounds.y + p.y * sc}; };
+        auto seg = [&](PathPt a, PathPt b) {
+            int ax0 = std::max(x0, (int)std::floor(std::min(a.x, b.x) - hw - 1)), ax1 = std::min(x1, (int)std::ceil(std::max(a.x, b.x) + hw + 1));
+            int ay0 = std::max(y0, (int)std::floor(std::min(a.y, b.y) - hw - 1)), ay1 = std::min(y1, (int)std::ceil(std::max(a.y, b.y) + hw + 1));
+            double vx = b.x - a.x, vy = b.y - a.y, L2 = vx*vx + vy*vy;
+            for (int y = ay0; y < ay1; y++) for (int x = ax0; x < ax1; x++) {
+                double px = x + 0.5, py = y + 0.5, t = L2 > 0 ? ((px - a.x)*vx + (py - a.y)*vy) / L2 : 0; t = t < 0 ? 0 : (t > 1 ? 1 : t);
+                double dx = px - (a.x + t*vx), dy = py - (a.y + t*vy), dist = std::sqrt(dx*dx + dy*dy);
+                float c = (float)clamp01(hw + 0.5 - dist); float& dst = cov[(size_t)(y - y0) * BW + (x - x0)]; if (c > dst) dst = c;
+            }
+        };
+        for (auto& poly : polys) {
+            if (poly.size() == 1) { seg(P(poly[0]), P(poly[0])); continue; }
+            for (size_t k = 0; k + 1 < poly.size(); ++k) seg(P(poly[k]), P(poly[k + 1]));
+        }
+        for (int y = y0; y < y1; y++) for (int x = x0; x < x1; x++) { float c = cov[(size_t)(y - y0) * BW + (x - x0)]; if (c > 0) plot(x, y, cmd.color, c); }
     };
     // ---- text ------------------------------------------------------------------------------------
     auto asciiFor = [](uint32_t cp) -> int {
@@ -1535,6 +1583,7 @@ inline std::vector<unsigned char> rasterizeToBuffer(const DrawList& list, int W,
                 fillRound(cmd.bounds, cmd.radius, cmd.color, &cmd); break;
             case DrawOp::STROKE_RECT: strokeRound(cmd.bounds, cmd.radius, cmd.strokeWidth, cmd.color); break;
             case DrawOp::STROKE_ARC: arc(cmd); break;
+            case DrawOp::STROKE_PATH: strokePath(cmd); break;
             case DrawOp::TEXT_RUN: drawText(cmd); break;
         }
     }
@@ -1746,6 +1795,7 @@ inline const char* drawOpName(DrawOp op) {
         case DrawOp::TEXT_RUN: return "text";
         case DrawOp::SCRIM_RECT: return "scrim";
         case DrawOp::STROKE_ARC: return "stroke_arc";
+        case DrawOp::STROKE_PATH: return "stroke_path";
         default: return "unknown";
     }
 }
