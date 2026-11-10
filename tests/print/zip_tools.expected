@@ -1,0 +1,17 @@
+true 3 1 true اختبار
+4 a.txt deflate true store
+["dir/b.json"] ["dir/", "dir/b.json"] true false
+{"k":[1,2]} 2
+3 1 4 اختبار
+جديد c 5
+["folder/", "folder/b.json", "n.bin", "a.txt", "z/c2.txt"] اختبار
+2 ["folder/", "folder/b.json", "a.txt"]
+1 S1
+{"k":[1,2]}
+exists
+true 3 0 ["folder/", "folder/b.json", "a.txt", "src1.txt"]
+hello
+true true
+true 300
+1 1 true false
+false
