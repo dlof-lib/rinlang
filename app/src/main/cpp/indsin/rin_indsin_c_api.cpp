@@ -208,6 +208,21 @@ bool fireGestureEffects(IndsinSession* sess, const char* attrKey, double x, doub
     }
     return any || indsin::effectLibrary().hasPending();
 }
+// container/api ✕ indsin (docs/api_container.md): التعبيرات التي تقرأ أسماء ليست خلايا warp (حاوية `shop.status`، متغيّر عام…) تُسجَّل
+// اشتراكاتها باسم الاسم الحر نفسه. حقول الحاويات تتغيّر خارج Warp (استدعاء api، مؤقّت، ttl)، فبعد كل لمسة/نبضة نعيد تقييم هذه الاشتراكات
+// فقط؛ ما تغيّرت قيمته يُسجَّل في names (اسم الحاوية) فيمرّ بمسار hashes -> relayout المعتاد.
+void refreshExternalReads(IndsinSession* sess, std::vector<std::string>& names) {
+    if (!sess || !sess->state.ok) return;
+    std::vector<std::string> ext;
+    for (auto& kv : sess->state.subs.byName) if (!sess->state.warp.has(kv.first)) ext.push_back(kv.first);
+    if (ext.empty()) return;
+    SessionRinHost rinHost(sess);
+    for (auto& n : ext) {
+        indsin::Shuttle sh;
+        sh.applyWarpChange(n, sess->state.warp, sess->state.subs, sess->index);
+        if (!sh.patches.empty() && std::find(names.begin(), names.end(), n) == names.end()) names.push_back(n);
+    }
+}
 // يطبّق تغييرات Warp (من نتيجة المضيف) كما يفعل tap: Shuttle -> hashes -> relayout.
 void applyWarpNames(IndsinSession* sess, const std::vector<std::string>& names) {
     if (!names.empty()) {
@@ -391,6 +406,7 @@ RIN_API char* rin_indsin_session_tap(void* sessionPtr, double x, double y) {
                                                         nullptr, nullptr,
                                                         sess->interp.get(), &sess->interpSeeded);
     const bool fxFired = fireGestureEffects(sess, "effect_tap", x, y);
+    refreshExternalReads(sess, tap.changedWarpNames);   // حقول الحاويات التي غيّرها المعالج (مثل callApi) تُحدِّث الواجهة
 
     if (!tap.changedWarpNames.empty()) {
         indsin::Shuttle shuttle;
@@ -453,6 +469,7 @@ RIN_API char* rin_indsin_session_set_input(void* sessionPtr, const char* name, c
 // handler was actually found but failed at runtime -- same convention as the tap endpoint.
 char* respondToGesture(IndsinSession* sess, const indsin::TapResult& g, const char* fxKey = nullptr, double fx = 0, double fy = 0) {
     fireGestureEffects(sess, fxKey, fx, fy);
+    { auto& gm = const_cast<indsin::TapResult&>(g); refreshExternalReads(sess, gm.changedWarpNames); }
     if (!g.changedWarpNames.empty()) {
         indsin::Shuttle shuttle;
         for (auto& name : g.changedWarpNames) {
@@ -523,23 +540,24 @@ RIN_API char* rin_indsin_session_tick(void* sessionPtr) {
     // تلقائياً كل خاصية تقرؤها (مثل text=time(clock, "HH:mm:ss")). المضيف يواصل النداء ما دام "ticking":true.
     std::vector<std::string> changed;
     bool ticking = false;
+    SessionRinHost tickHost(sess);   // كل إعادة تقييم لتعبيرات Rin أثناء النبضة (api/مؤقّتات/ساعة) تحتاج مضيف الجلسة
     // مؤقّتات Rin (docs/TIMER.md): أطلق ما استحقّ قبل إعادة التخطيط، فتُعاد كل خاصية تقرأ timer/val معه؛ ويبقى المضيف ينادي ما دام في المجدوِل ما ينتظر.
     if (sess->interp) { try { sess->interp->timersPump(); } catch (...) {} if (sess->interp->timersPending()) ticking = true; }
+    refreshExternalReads(sess, changed);   // استدعاءات api المجدولة/المؤقّتات غيّرت حقول حاويات؟ حدّث الواجهة (docs/api_container.md)
     if (sess->state.warp.has("clock")) {
         ticking = true;
-        SessionRinHost rinHost(sess);
         const double sec = std::floor(std::chrono::duration<double, std::milli>(
                                std::chrono::system_clock::now().time_since_epoch()).count() / 1000.0) * 1000.0;
         const indsin::Value cur = sess->state.warp.get("clock");
         if (cur.kind == indsin::Value::Kind::NUMBER && cur.number == sec) {
-            relayout(sess);
+            applyWarpNames(sess, changed);
         } else {
             sess->state.warp.set("clock", indsin::Value::num(sec));
             changed.push_back("clock");
             applyWarpNames(sess, changed); // Shuttle -> hashes -> relayout
         }
     } else {
-        relayout(sess); // re-applies the Effects Engine at "now"; sess->animating reflects this tick
+        applyWarpNames(sess, changed); // re-applies the Effects Engine at "now"; sess->animating reflects this tick (+ حقول الحاويات المتغيّرة)
     }
     std::string extra = ",\"handled\":false" + changedJson(changed);
     if (ticking) extra += ",\"ticking\":true";
