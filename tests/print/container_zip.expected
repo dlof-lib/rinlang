@@ -1,0 +1,32 @@
+📦 container = shop
+✅ .end/container (shop)
+🧾 container.doc = users
+🧾 document (إدراج) -> u1 = {"name": "سارة", "city": "الرياض"}
+🧾 document (إدراج) -> u2 = {"name": "عمر", "city": "جدة"}
+✅ .end/container.doc (users)
+📊 container.table = grid
+▦ row -> ["a", "b"]
+▦ row -> [1, 2]
+✅ .end/container.table (grid)
+true 2 shop 5
+true true
+true false 5
+42 true
+Set{"a", "b"} {"x": [1, 2, {"y": nil}], "ok": true}
+7 متجر
+2 2
+rin-container-zip 1 2 container.doc container.table
+container.doc 1 عمر
+2 true true 2
+42 متجر
+true true
+7
+["title", "count"]
+1 ملاحظة مرفقة
+حاوية غائبة
+ملف غائب
+ليس أرشيف حاويات
+اسم غير موجود في الأرشيف
+كلمة مرور مطلوبة
+كلمة مرور خاطئة
+true
