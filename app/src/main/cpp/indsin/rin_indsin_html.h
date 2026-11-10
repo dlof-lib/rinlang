@@ -102,6 +102,12 @@ inline std::string drawListToHtml(const DrawList& list, int W, int H, const std:
                        << " 1 " << cx + R*std::cos(a1) << " " << cy + R*std::sin(a1) << "\" fill=\"none\" stroke=\"" << cssRgba(d.color) << "\" stroke-width=\"" << sw << "\" stroke-linecap=\"round\"/>";
                 os << "</svg>\n"; break;
             }
+            case DrawOp::STROKE_PATH: {
+                double sz = std::min(b.w, b.h);
+                os << "<svg style=\"" << pos.str() << "\" viewBox=\"0 0 24 24\" preserveAspectRatio=\"xMidYMid meet\"><path d=\"" << d.text
+                   << "\" fill=\"none\" stroke=\"" << cssRgba(d.color) << "\" stroke-width=\"" << (d.strokeWidth > 0 ? d.strokeWidth : 2.0)
+                   << "\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg>\n"; (void)sz; break;
+            }
             case DrawOp::TEXT_RUN: {
                 double fs = d.fontSize > 0 ? d.fontSize : 14;
                 std::ostringstream extra;
