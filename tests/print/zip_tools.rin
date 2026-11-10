@@ -1,0 +1,51 @@
+// أدوات الأرشيف العامة zip.* — docs/container_zip.md
+fun rep(s, n) { let o = ""; for (let i = 0; i < n; i = i + 1) { o = o + s; } return o; }
+let P = "_czip_tmp/t.zip";
+let c = zip.create(P, {"a.txt": rep("مرحباً ", 50), "dir/": nil, "dir/b.json": {k: [1, 2]}, "n.bin": "xyz"}, {time: 1700000000, comment: "اختبار"});
+print c["ok"], c["files"], c["dirs"], c["bytes"] < c["originalBytes"], zip.comment(P);
+let ls = zip.list(P);
+print len(ls), ls[0]["name"], ls[0]["method"], ls[0]["size"] > ls[0]["packed"], ls[3]["method"];
+print zip.find(P, "*.json"), zip.find(P, "dir"), zip.exists(P, "a.txt"), zip.exists(P, "zzz");
+print zip.read(P, "dir/b.json"), zip.readJson(P, "dir/b.json")["k"][1];
+let i = zip.info(P);
+print i["files"], i["dirs"], i["entries"], i["comment"];
+
+// إضافة (تستبدل بالاسم) بلا إعادة ضغط الباقي
+zip.add(P, {"a.txt": "جديد", "c.txt": "c"});
+print zip.read(P, "a.txt"), zip.read(P, "c.txt"), zip.info(P)["entries"];
+// إعادة تسمية ملف ومجلد
+zip.rename(P, "c.txt", "z/c2.txt");
+zip.rename(P, "dir/", "folder");
+print zip.find(P, "*"), zip.comment(P);
+// حذف
+print zip.remove(P, ["z", "n.*"])["removed"], zip.find(P, "*");
+
+// استخراج مع strip وonly
+writeFile("_czip_tmp/src1.txt", "S1");
+zip.create("_czip_tmp/d.zip", ["_czip_tmp/src1.txt"], {time: 1700000000});
+let x = zip.extract("_czip_tmp/d.zip", "_czip_tmp/ex");
+print x["files"], readFile("_czip_tmp/ex/src1.txt");
+zip.extract("_czip_tmp/t.zip", "_czip_tmp/ex2", {only: ["folder/"], strip: 1});
+print readFile("_czip_tmp/ex2/b.json");
+print zip.extract("_czip_tmp/d.zip", "_czip_tmp/ex", {overwrite: false})["skipped"][0]["reason"];
+
+// دمج + اختبار سلامة
+zip.combine("_czip_tmp/m.zip", [P, "_czip_tmp/d.zip"]);
+let t = zip.test("_czip_tmp/m.zip");
+print t["ok"], t["checked"], len(t["errors"]), zip.find("_czip_tmp/m.zip", "*");
+
+// في الذاكرة + gzip
+let b = zip.bytes({"x.txt": "hello"});
+print zip.unbytes(b)["x.txt"];
+let g = zip.gzip(rep("سلام ", 100));
+print len(g) < 200, zip.gunzip(g) == rep("سلام ", 100);
+writeFile("_czip_tmp/g.txt", rep("abc", 100));
+print zip.gzipFile("_czip_tmp/g.txt")["ok"], zip.gunzipFile("_czip_tmp/g.txt.gz", "_czip_tmp/g2.txt")["bytes"];
+
+// تشفير + تالف
+zip.create("_czip_tmp/e.zip", {"s.txt": "سرّ"}, {password: "p"});
+print zip.info("_czip_tmp/e.zip")["encrypted"], zip.test("_czip_tmp/e.zip")["skipped"], zip.test("_czip_tmp/e.zip", {password: "p"})["ok"], zip.test("_czip_tmp/e.zip", {password: "q"})["ok"];
+writeFile("_czip_tmp/bad.zip", "not a zip at all......................");
+print zip.test("_czip_tmp/bad.zip")["ok"];
+
+for (let f in ["t.zip", "d.zip", "m.zip", "e.zip", "src1.txt", "g.txt", "g.txt.gz", "g2.txt", "bad.zip", "ex/src1.txt", "ex2/b.json"]) { deleteFile("_czip_tmp/" + f); }
