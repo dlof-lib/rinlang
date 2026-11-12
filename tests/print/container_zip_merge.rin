@@ -1,0 +1,51 @@
+// دمج الضغط مع ميزات موجودة أصلاً: installation/save format=zip + loadInstalled، exportToFile/importFromFile (.zip/.gz)،
+// Containers.Group وVolume مع container.zip — docs/container_zip.md
+@container=shop
+    let title = "متجر";
+    let count = 42;
+    save path="_czm/save.zip" format=zip;
+.end/container
+
+@Containers.Group=db
+    @container.doc=users
+        document id="u1" fields={ name: "سارة", city: "الرياض" };
+    .end/container.doc
+    @container=cfg
+        let mode = "dark";
+    .end/container
+.end/Containers.Group
+
+// 1) installation format=zip: الآن مضغوط فعلاً ويُحمَّل بـ loadInstalled (كان لا يُقرأ أبداً)
+installation shop format=zip;
+print zip.info("rin_installed/shop.zip")["deflate"] > 0, zip.exists("rin_installed/shop.zip", "shop.rin");
+container.set("shop", "count", 0);
+print loadInstalled("shop"), container.get("shop", "count");
+print loadInstalled("nope");
+
+// 2) أرشيف save format=zip يُستعاد بـ container.unzip أيضاً
+container.set("shop", "count", 1);
+let r = container.unzip("shop", "_czm/save.zip");
+print r["source"], r["loaded"], container.get("shop", "count");
+
+// 3) exportToFile / importFromFile باللاحقة
+container.exportToFile("shop", "_czm/shop.zip");
+container.exportToFile("shop", "_czm/shop.json.gz");
+print zip.exists("_czm/shop.zip", "rin-container.json"), len(zip.gunzip(readFile("_czm/shop.json.gz"))) > 10;
+container.set("shop", "count", 5);
+container.importFromFile("shop", "_czm/shop.zip");
+print container.get("shop", "count");
+container.set("shop", "count", 6);
+container.importFromFile("shop", "_czm/shop.json.gz");
+print container.get("shop", "count");
+container.importFromFile("fresh", "_czm/shop.zip");
+print container.exists("fresh"), container.get("fresh", "title");
+
+// 4) Containers.Group: اسم المجموعة = كل حاوياتها
+let g = container.zip("db", "_czm/db.zip", {time: 1700000000});
+print len(g["containers"]), g["containers"][0]["name"], g["containers"][1]["name"];
+let info = container.zipInfo("_czm/db.zip");
+print info["containers"][0]["documents"], info["containers"][1]["fields"];
+
+for (let f in ["save.zip", "shop.zip", "shop.json.gz", "db.zip"]) { deleteFile("_czm/" + f); }
+deleteFile("rin_installed/shop.zip");
+deleteFile("rin_installed/index.rininstall");
