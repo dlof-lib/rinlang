@@ -611,6 +611,8 @@ void Lexer::scanToken() {
             break;
         case '<':
             // `<=>` تبديل · `<==` مرادف حرفي لـ `=` (إسناد من اليمين إلى اليسار). كلاهما كان خطأ بناء (`<= =` / `<= >`) فلا تعارض.
+            // `<!=g=?>` = المقارنة الشاملة الثلاثية (-1/0/1): تسلسل حرفي من 7 محارف لم يكن صالحاً أصلاً (`<` ثم `!=` ثم معرّف `g`) فلا تعارض.
+            if (src.compare(start, 7, "<!=g=?>") == 0) { for (int k = 0; k < 6; ++k) advance(); addToken(TokenType::COMPARE3, "<!=g=?>"); break; }
             if (peek() == '=' && peekNext() == '>') { advance(); advance(); addToken(TokenType::SWAP); break; }
             if (peek() == '=' && peekNext() == '=') { advance(); advance(); addToken(TokenType::EQUAL, "<=="); break; }
             addToken(match('=') ? TokenType::LESS_EQUAL : TokenType::LESS);
