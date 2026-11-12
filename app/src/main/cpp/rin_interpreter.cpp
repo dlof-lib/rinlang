@@ -45,6 +45,7 @@
 #include <unistd.h>
 #define rin_isatty isatty
 #endif
+#include "rin_zip.h" // محرّك ZIP (Deflate حقيقي) — save/installation format=zip وcontainer.zip
 #include <zlib.h> // zlibDeflateRaw/zlibInflateRaw (ضغط DEFLATE حقيقي متوافق مع صيغة ZIP method=8)
 
 // ---- توافق ويندوز/POSIX لـ stat()/mkdir() ----------------------------------
@@ -612,6 +613,7 @@ static std::string tokenTypeName(TokenType t) {
         case TokenType::LESS_EQUAL: return "LESS_EQUAL";
         case TokenType::GREATER: return "GREATER";
         case TokenType::GREATER_EQUAL: return "GREATER_EQUAL";
+        case TokenType::COMPARE3: return "COMPARE3";
         case TokenType::LPAREN: return "LPAREN";
         case TokenType::RPAREN: return "RPAREN";
         case TokenType::LBRACE: return "LBRACE";
@@ -7850,7 +7852,31 @@ for(auto& kv:maskParents) if(maskResolve4(kv.second)==parent && !maskResolve4(kv
         std::string chosen;
         { std::ifstream t(fullVariant, std::ios::binary); if (t.good()) chosen = fullVariant; }
         if (chosen.empty()) { std::ifstream t(minVariant, std::ios::binary); if (t.good()) chosen = minVariant; }
-        if (chosen.empty()) return Value::boolean_(false);
+        if (chosen.empty()) {
+            // installation name format=zip كان يكتب rin_installed/<name>.zip لكن loadInstalled لا يقرؤه أبداً:
+            // الآن يفتح الأرشيف وينفّذ كل عنصر .rin فيه (الجداول المحفوظة .png صور فتُتجاوَز).
+            std::ifstream zt(resolvePath("rin_installed/" + name + ".zip"), std::ios::binary);
+            if (!zt.good()) return Value::boolean_(false);
+            std::ostringstream zb; zb << zt.rdbuf();
+            try {
+                rin::zipx::Reader zr(zb.str());
+                for (const auto& e : zr.entries()) {
+                    if (e.isDir() || e.name.size() < 5 || e.name.compare(e.name.size() - 4, 4, ".rin") != 0) continue;
+                    std::string zsrc = zr.read(e);
+                    Lexer zlex(zsrc);
+                    auto ztoks = zlex.scanTokens();
+                    Parser zp(ztoks);
+                    auto zstmts = zp.parse();
+                    executeBlock(zstmts, globals);
+                }
+            } catch (rin::zipx::ZipError& e) {
+                throw diagErr(diag::Code::E0028_ImportError, line, "loadInstalled('" + name + "'): أرشيف zip تالف: " + e.what());
+            } catch (RinError& e) {
+                throw diagErr(diag::Code::E0028_ImportError, line, "loadInstalled('" + name + "'): خطأ داخل الأرشيف المحمّل (سطر " + std::to_string(e.line) + "): " + e.message);
+            }
+            installedNames.insert(name);
+            return Value::boolean_(true);
+        }
         std::ifstream in(chosen, std::ios::binary);
         std::ostringstream buf;
         buf << in.rdbuf();
@@ -7954,7 +7980,8 @@ for(auto& kv:maskParents) if(maskResolve4(kv.second)==parent && !maskResolve4(kv
     registerNativesExtra7(); // مفهوم time: time() و time.* (rin_extra_natives7.cpp، docs/TIME.md)
     registerNativesExtra8(); // مفهوم token: tokenList/tokenStats/tokenAt/... (rin_extra_natives8.cpp، docs/TOKEN.md)
     registerNativesExtra10(); // مفهوم linalg: mat*/vec* (rin_extra_natives10.cpp، docs/LINALG.md)
-    registerNativesContainerZip(); // container.zip/unzip/pack + zip.* (rin_container_zip.cpp، docs/container_zip.md)
+    registerNativesContainerZip();
+    registerNativesContainerBlend(); // container.blend/recipe/cook (rin_container_blend.cpp، docs/container_blend.md) // container.zip/unzip/pack + zip.* (rin_container_zip.cpp، docs/container_zip.md)
     registerNativesExtra12(); // fileSync/fileLock/fileRename/fileSize/findByRange (rin_extra_natives12.cpp، docs/FILEDB.md)
     registerNativesExtra11(); // مفهوم algo: algo* (rin_extra_natives11.cpp، docs/ALGO.md)
     registerNativesRintwist(); // RINTWIST: rintwist.get/fmt/stack (rin_rintwist.cpp، docs/rintwist.md)
@@ -8472,63 +8499,18 @@ static std::vector<char32_t> visualOrder(const std::vector<char32_t>& cps, bool&
 
 } // namespace rinfont
 
-// ================= ZIP خفيف الوزن (تخزين stored بلا ضغط) — لأجل save/installation عند format=zip =================
-// يبني أرشيف .zip صالحاً قياسياً (يُفتح بأي أداة zip عادية)، كل عنصر بلا ضغط (STORED)، وهو كافٍ
-// تماماً هنا لأن المحتويات أصلاً نصوص/صور صغيرة، بلا حاجة لربط مكتبة ضغط خارجية (zlib) بالمشروع.
+// ================= ZIP حقيقي مضغوط (Deflate) — لأجل save/installation عند format=zip =================
+// كان هذا المُنشئ يكتب كل عنصر بلا ضغط (STORED) لأن zlib لم تكن مربوطة؛ هي مربوطة الآن (zlibDeflateRaw)،
+// فيعتمد محرّك rin_zip.h نفسه الذي تستعمله container.zip: Deflate لكل عنصر، ويُخزَّن بلا ضغط تلقائياً
+// فقط إن لم يصغّر الضغط العنصر (مثل PNG). الأرشيف ناتج قياسي يُفتح بأي أداة ZIP.
 static std::string buildZipArchive(const std::vector<std::pair<std::string, std::string>>& entries) {
-    auto putU16 = [](std::string& s, uint16_t v) { s += static_cast<char>(v & 0xFF); s += static_cast<char>((v >> 8) & 0xFF); };
-    auto putU32 = [](std::string& s, uint32_t v) {
-        s += static_cast<char>(v & 0xFF); s += static_cast<char>((v >> 8) & 0xFF);
-        s += static_cast<char>((v >> 16) & 0xFF); s += static_cast<char>((v >> 24) & 0xFF);
-    };
-
-    std::string out;
-    std::vector<std::string> centralDir;
-    for (auto& entry : entries) {
-        const std::string& name = entry.first;
-        const std::string& data = entry.second;
-        uint32_t crc = pngutil::crc32(reinterpret_cast<const unsigned char*>(data.data()), data.size());
-        uint32_t offset = static_cast<uint32_t>(out.size());
-
-        std::string local;
-        putU32(local, 0x04034b50);
-        putU16(local, 20); putU16(local, 0); putU16(local, 0); putU16(local, 0); putU16(local, 0);
-        putU32(local, crc);
-        putU32(local, static_cast<uint32_t>(data.size()));
-        putU32(local, static_cast<uint32_t>(data.size()));
-        putU16(local, static_cast<uint16_t>(name.size())); putU16(local, 0);
-        local += name; local += data;
-        out += local;
-
-        std::string central;
-        putU32(central, 0x02014b50);
-        putU16(central, 20); putU16(central, 20);
-        putU16(central, 0); putU16(central, 0); putU16(central, 0); putU16(central, 0);
-        putU32(central, crc);
-        putU32(central, static_cast<uint32_t>(data.size()));
-        putU32(central, static_cast<uint32_t>(data.size()));
-        putU16(central, static_cast<uint16_t>(name.size()));
-        putU16(central, 0); putU16(central, 0); putU16(central, 0); putU16(central, 0);
-        putU32(central, 0);
-        putU32(central, offset);
-        central += name;
-        centralDir.push_back(central);
+    try {
+        rin::zipx::Writer w;
+        for (const auto& entry : entries) w.addFile(entry.first, entry.second);
+        return w.finish();
+    } catch (const rin::zipx::ZipError& e) {
+        throw diagErr(diag::Code::E0035_RuntimeError, 0, std::string("zip: ") + e.what());
     }
-
-    auto centralStart = static_cast<uint32_t>(out.size());
-    uint32_t centralSize = 0;
-    for (auto& c : centralDir) { out += c; centralSize += static_cast<uint32_t>(c.size()); }
-
-    std::string end;
-    putU32(end, 0x06054b50);
-    putU16(end, 0); putU16(end, 0);
-    putU16(end, static_cast<uint16_t>(entries.size()));
-    putU16(end, static_cast<uint16_t>(entries.size()));
-    putU32(end, centralSize);
-    putU32(end, centralStart);
-    putU16(end, 0);
-    out += end;
-    return out;
 }
 
 // ================= جسر الجدول مع دوال الحاويات الموجودة أصلاً =================
@@ -12812,6 +12794,17 @@ Value Interpreter::evaluateTree(const ExprPtr& expr, const EnvPtr& env) {
                 }
                 requireNumbers(left, right, "<=", e->line);
                 return Value::boolean_(left.number <= right.number);
+            case TokenType::COMPARE3: { // a <!=g=?> b → -1 | 0 | 1 (الترتيب الشامل لأي نوعين؛ الكائنات عبر __cmp__/__lt__/__gt__ إن وُجدت)
+                int compareValues(const Value&, const Value&);
+                if (left.type == Value::Type::INSTANCE || right.type == Value::Type::INSTANCE) {
+                    if (auto lt = tryCompareOverload(TokenType::LESS, left, right, e->line)) {
+                        if (lt->isTruthy()) return Value::num(-1);
+                        auto gt = tryCompareOverload(TokenType::GREATER, left, right, e->line);
+                        return Value::num(gt && gt->isTruthy() ? 1 : 0);
+                    }
+                }
+                return Value::num(compareValues(left, right));
+            }
             case TokenType::EQUAL_EQUAL:
                 // Rin 1.0: __eq__ بين كائنين (مقارنة مع nil/أنواع أخرى لا تستدعي كود المستخدم أبداً).
                 if (left.type == Value::Type::INSTANCE && right.type == Value::Type::INSTANCE) {
@@ -15014,7 +15007,8 @@ void Interpreter::dialogAction(const std::shared_ptr<LiveActionStmt>& s, const E
 #include "rin_extra_natives10.cpp" // مفهوم linalg (docs/LINALG.md)
 #include "rin_extra_natives11.cpp" // مفهوم algo (docs/ALGO.md)
 #include "rin_extra_natives12.cpp" // ملفات وقواعد بيانات: fileSync/fileLock/fileRename/fileSize/findByRange (docs/FILEDB.md)
-#include "rin_container_zip.cpp" // ضغط/فكّ ضغط الحاويات + zip.* (docs/container_zip.md)
+#include "rin_container_zip.cpp"
+#include "rin_container_blend.cpp" // دمج الحاويات + الوصفات (docs/container_blend.md) // ضغط/فكّ ضغط الحاويات + zip.* (docs/container_zip.md)
 #include "rin_libdir.cpp" // مكتبات Rin المقسَّمة (docs/split-libraries.md)
 #include "rin_rintwist.cpp" // RINTWIST: سياق التنفيذ (docs/rintwist.md)
 #include "rin_table.cpp" // توسعة الجدول: دوال اللغة الموجودة تفهم الجدول (انظر رأس الملف)
