@@ -61,3 +61,15 @@ files/…                    ملفات مرفقة (include/dir)
 ## حدود
 ZIP64 (أرشيف/ملف > 4GB) غير مدعوم ويُرفض بوضوح · الأنواع غير القابلة للتمثيل (دوال، كائنات class) تُحفَظ كحقول map/`nil` · الأرشيف يُقرأ كاملاً في الذاكرة.
 الاختبارات: `tests/print/container_zip.rin` · `zip_tools.rin` · `zip_security.rin` · `tools/test_rin_zip.cpp`.
+
+## التكامل مع الميزات الموجودة
+
+لا مفاهيم جديدة هنا؛ الضغط وُصِّل بما كان موجوداً أصلاً:
+
+| الميزة الموجودة | ما تغيّر |
+|---|---|
+| `installation X format=zip` / `save path=… format=zip` | تُكتب الآن أرشيفات ZIP حقيقية مضغوطة (Deflate) بدل STORE بلا ضغط، وتُفتح بأي أداة ZIP. |
+| `loadInstalled("X")` | إن لم يوجد `X.rin` يقرأ `rin_installed/X.zip` وينفّذ عناصر `.rin` فيه. |
+| `container.exportToFile` / `importFromFile` | الامتداد `.zip` يستعمل `container.zip/unzip`، والامتداد `.gz` يضغط/يفكّ بـ gzip. |
+| `container.zip` | يقبل اسم `@Containers.Group` أو `@Containers.Volume` فيضمّ أعضاءه. |
+| `container.unzip` / `unzipAll` | تستعيد أيضاً أرشيفات `save`/`installation` (مستندات `.rin` بلا manifest) بتنفيذ عناصرها. |
