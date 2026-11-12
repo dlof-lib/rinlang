@@ -1,0 +1,16 @@
+📋 container.datalist = payroll
+✅ .end/container.datalist (payroll)
+📥 @import: تم استيراد "templates/business/business_types.rin" (من القرص)
+true true
+Worker omar true true 15
+Worker sara true true 25
+Student lina true true 17
+["Lina Saad", "Level 3", "active", "3000", "Fees", "1000", "Paid", "2000", "Due", "Guardian", "Saad", "+966500000001", "Marks", "math", "90", "sci", "80"]
+Invoice inv1 true true 16
+["Invoice A-1", "Nour Co - 2026-11-01", "issued", "Items", "Service", "2 x 10", "20", "Addon", "1 x 5.5", "5.5", "23.58", "Total", "0", "Paid", "23.58", "Balance"]
+true ["Payslip 2026-11", "sara", "Earnings and deductions", "Base", "5000", "Allowance", "500", "Deduction", "0", "5500", "Net"]
+true 4 payslips 19000
+true
+true 4 true
+حاوية غائبة
+تخطيط غائب
