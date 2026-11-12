@@ -50,7 +50,8 @@ inline bool isImpureCallee(const std::string& name) {
         "openChat", "sendMessage", "setChatTyping", "setField", "setPath", "setState", "sqlDelete", "sqlUpdate",
         "logClear", "logSave", "fetchIcon", "fetchImage", "clcContainerOpen", "httpSetTimeout",
         "captureOutput", "capture", // تنفيذ دالة بأثر جانبي كل مرة؛ داخل الخصائص استعمل indsin.run (مُخزَّنة)
-        "indsin.useTheme", "indsin.defineTheme", "indsin.registerTheme",
+        "indsin.useTheme", "indsin.defineTheme", "indsin.registerTheme", "indsin.blendTheme",
+        "blendInto", "blendIntoWith", "blendRecipe", "blendFn", // دمج في المكان/تسجيل وصفة: أثر جانبي (blend/blendWith/blendCook نقية)
         "indsin.defineEffect", "indsin.removeEffect", "indsin.playEffect", "indsin.stopEffect",
         // time.* (docs/TIME.md): الباقي نقي (قراءة/حساب)؛ هذه تنتظر أو تنفّذ دالة أو تغيّر إعداداً عاماً.
         "time.sleep", "time.measure", "time.config", "time.freeze", "time.unfreeze", "time.advance",
