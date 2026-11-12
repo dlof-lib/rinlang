@@ -1,0 +1,23 @@
+1 2 1 9 3
+[1, 2, 2, 3, 4]
+3 true
+abcd 6 5
+1 2
+x-y-z
+[1, 2, 3]
+تعارض مرفوض
+2
+[1] [1, 2]
+أنواع غير متوافقة
+3
+1 2 9
+2 2
+[1, 2, 3]
+1 7 5
+📦 container = ca
+✅ .end/container (ca)
+📦 container = cb
+✅ .end/container (cb)
+cc 3
+dark en 3
+دوران مكشوف
