@@ -57,6 +57,7 @@
 - [`events-effects.md`](./events-effects.md) — الأحداث والتأثيرات (محرك Indsin UI).
 - [`container_advanced.md`](./container_advanced.md) · [`container_pro.md`](./container_pro.md) · [`container_sql.md`](./container_sql.md) — دوال الحاويات المتقدمة وRCSQL.
 - [`container_zip.md`](./container_zip.md) — ضغط وفكّ ضغط الحاويات (`container.zip/unzip/pack`) وأدوات الأرشيف `zip.*` (ZIP/gzip حقيقي).
+- [`container_blend.md`](./container_blend.md) — دمج الحاويات وتكوين ميزة جديدة منها: `container.blend` (حقول + مستندات + صفوف + ستايل) والوصفات `container.recipe/cook`.
 - [`loops.md`](./loops.md) · [`key_terms_and_builtins.md`](./key_terms_and_builtins.md) · [`number_builtins.md`](./number_builtins.md) — الحلقات، الشروط المبنية، دوال الأرقام.
 - [`native-additions.md`](./native-additions.md) — الدوال الأصلية الجديدة (Rin 1.0).
 - [`packages-and-interop.md`](./packages-and-interop.md) — المكتبات والحزم وجسر C++ وJSON واختبارات rintest.
@@ -64,4 +65,5 @@
 - [`simple-style.md`](./simple-style.md) — Rin Simple Style.
 - [`TOOLCHAIN.md`](./TOOLCHAIN.md) · [`TOOLCHAIN_UPGRADE.md`](./TOOLCHAIN_UPGRADE.md) — سلسلة أدوات Rin.
 - [`VERSIONING.md`](./VERSIONING.md) — سياسة الإصدارات.
+- [`container_zip.md`](./container_zip.md) — ضغط وفكّ ضغط الحاويات (`container.zip/unzip/pack`) وأدوات الأرشيف `zip.*` (ZIP/gzip حقيقي) وتكامله مع save/installation/loadInstalled/exportToFile.
 - مكتبات Rin الرسمية: [`../lib/README.md`](../lib/README.md) (مُولَّد آلياً).
