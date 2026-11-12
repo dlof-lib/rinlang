@@ -1,0 +1,41 @@
+📦 container = auth
+✅ .end/container (auth)
+📦 container = billing
+✅ .end/container (billing)
+🧾 container.doc = notes
+🧾 document (إدراج) -> n1 = {"t": "a", "tags": ["x"]}
+🧾 document (إدراج) -> n2 = {"t": "b"}
+✅ .end/container.doc (notes)
+🧾 container.doc = notes2
+🧾 document (إدراج) -> n1 = {"t": "A", "tags": ["y"]}
+🧾 document (إدراج) -> n3 = {"t": "c"}
+✅ .end/container.doc (notes2)
+true account true container deep 2
+ali pro
+["read", "pay"]
+light ar 3 3 true
+opts billing merged
+roles billing merged
+["read"] dark
+dark light ["pay"]
+رُفض
+false
+ali pro nil
+ali pro
+true false false 4
+container.doc
+3 A ["x", "y"]
+["commerce", "identity"]
+ali pro
+free commerce
+لا وصفة
+دوران مكشوف
+true false
+🗂️ Containers.Group = suite
+📦 container = s1
+✅ .end/container (s1)
+📦 container = s2
+✅ .end/container (s2)
+✅ .end/Containers.Group (suite) [تحتوي: s1, s2]
+2 1 2
+3
