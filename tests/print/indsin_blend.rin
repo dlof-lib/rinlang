@@ -1,0 +1,35 @@
+// دمج indsin: indsin.blendTheme يكوّن ثيماً جديداً من ثيمات موجودة (ألوان + شكل)، وblend العام يعمل على قيم indsin
+let before = len(indsin.themes());
+// 1) ألوان Ocean + شكل Aurora
+let r = indsin.blendTheme("OceanSoft", ["Ocean"], {shape: "Aurora"});
+print r["name"], r["sources"], r["radius"], r["cardElevation"], r["buttonElevation"], r["hairline"];
+print r["colors"]["primary"] == indsin.themeColor("primary", "Ocean"), r["active"];
+print len(indsin.themes()) == before + 1;
+
+// 2) مصدران: ألوان الأحدث تفوز، الشكل غير الافتراضي الأحدث
+let r2 = indsin.blendTheme("Mixed", ["Aurora", "Sunset"]);
+print r2["colors"]["primary"] == indsin.themeColor("primary", "Sunset"), r2["radius"], r2["cardElevation"];
+
+// 3) keep: ألوان الأول تبقى
+let r3 = indsin.blendTheme("KeepFirst", ["Aurora", "Sunset"], {policy: "keep"});
+print r3["colors"]["primary"] == indsin.themeColor("primary", "Aurora");
+
+// 4) only / omit
+let r4 = indsin.blendTheme("OnlyPrimary", ["Dark", "Rose"], {only: ["primary"]});
+print r4["colors"]["primary"] == indsin.themeColor("primary", "Rose"), r4["colors"]["surface"] == indsin.themeColor("surface", "Dark");
+let r5 = indsin.blendTheme("NoShape", ["Aurora"], {omit: ["radius", "cardElevation", "buttonElevation", "hairline"]});
+print r5["radius"], r5["hairline"];
+
+// 5) overrides + activate
+let r6 = indsin.blendTheme("Brand", ["Aurora"], {overrides: {primary: "#FF6600", radius: 20, hairline: false}, activate: true});
+print r6["colors"]["primary"], r6["radius"], r6["hairline"], r6["active"], indsin.theme();
+indsin.useTheme("Dark");
+
+// 6) أخطاء واضحة
+try { indsin.blendTheme("X", ["Nope"]); } catch (e) { print "ثيم مجهول"; }
+try { indsin.blendTheme("X", ["Dark"], {overrides: {primary: "ليس لوناً"}}); } catch (e) { print "لون غير صالح"; }
+try { indsin.blendTheme("X", ["Dark"], {overrides: {foo: 1}}); } catch (e) { print "حقل مجهول"; }
+
+// 7) blend العام فوق خرائط indsin (ألوان ثيمين) — كل شيء يتركّب مع كل شيء
+let pal = blend(indsin.themeColors("Dark"), {primary: "#123456"});
+print pal["primary"], pal["surface"] == indsin.themeColor("surface", "Dark");
