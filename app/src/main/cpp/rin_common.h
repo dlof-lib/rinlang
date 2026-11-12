@@ -52,7 +52,8 @@ enum class TokenType {
     DOT,             // .  (تُستخدم في وسم الإغلاق .end/... وفي container.pipe)
     PIPE,            // |>   (مُشغّل الأنابيب: يمرر القيمة اليسرى كأول وسيط للنداء اليمين)
     QUESTION,        // ?  conditional expression
-    END_OF_FILE, ERROR
+    END_OF_FILE, ERROR,
+    COMPARE3         // <!=g=?>  مقارنة شاملة ثلاثية: a <!=g=?> b → -1 | 0 | 1 (docs/container_blend.md)
 };
 
 struct Token {
