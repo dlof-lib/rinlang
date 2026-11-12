@@ -1,0 +1,25 @@
+📦 container = shop
+🗜️ save (zip) -> _czm/save.zip (317 بايت، 1 عنصر)
+✅ .end/container (shop)
+🗂️ Containers.Group = db
+🧾 container.doc = users
+🧾 document (إدراج) -> u1 = {"name": "سارة", "city": "الرياض"}
+✅ .end/container.doc (users)
+📦 container = cfg
+✅ .end/container (cfg)
+✅ .end/Containers.Group (db) [تحتوي: users, cfg]
+🗜️ installation (zip): shop -> rin_installed/shop.zip (317 بايت، 1 عنصر)
+true true
+📦 container = shop
+✅ .end/container (shop)
+true 42
+false
+📦 container = shop
+✅ .end/container (shop)
+rin-documents 1 42
+true true
+42
+42
+true متجر
+2 users cfg
+1 1
