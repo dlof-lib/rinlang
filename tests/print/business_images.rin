@@ -1,0 +1,60 @@
+// حفظ الحاويات كصور: containerImage العامة + بطاقات indsin (تخطيط indsin ورسمه) + تضمين الصور في أرشيف الحاوية.
+// docs/container_business.md (قسم «الحفظ كصور»). يكتب تحت _biz_img_tmp/. النص اللاتيني فقط في PNG (العربية: indsin.html).
+@import "templates/business/business_types.rin";
+let dir = "_biz_img_tmp";
+let C = "templates/business/cards/";
+
+newContainer("Worker", "sara", {name: "Sara Ahmad", email: "sara@corp.com", phone: "+966501234567", position: "Engineer", department: "Dev",
+    hired: "2024-03-01", salary: 5000, allowance: 500,
+    cv: {summary: "Software engineer", skills: ["rin", "sql"], languages: ["ar", "en"], education: [{school: "KSU", degree: "BSc", year: 2017}],
+         experience: [{company: "Acme", years: 3}], certificates: []}});
+newContainer("Worker", "omar", {name: "Omar Khaled", position: "Accountant", salary: 4000});
+newContainer("Student", "lina", {name: "Lina Saad", level: "3", guardian: "Saad", guardianPhone: "+966500000001", fees: 3000, paid: 1000, marks: {math: 90, sci: 80}});
+newContainer("Invoice", "inv1", {number: "A-1", date: "2026-11-01", customer: "Nour Co", tax: 0.15, discount: 5,
+    items: [{desc: "Service", qty: 2, price: 10}, {desc: "Addon", qty: 1, price: 5.5}]});
+for (let m in ["2026-10", "2026-11"]) {
+    for (let w in containersOfType("Worker")) {
+        let base = getField(w, "salary"); let al = getField(w, "allowance");
+        insertDoc("payroll", m + "-" + w, {worker: w, month: m, base: base, allowance: al, deduction: 0, net: base + al});
+    }
+}
+
+// 1) الصورة العامة لأي حاوية (النظام الموجود): containerImage ترسم البطاقة وimgSave تحفظها
+for (let n in ["sara", "payroll"]) { let im = containerImage(n); imgSave(im, dir + "/" + n + "_card.png"); imgFree(im); }
+print fileExists(dir + "/sara_card.png"), fileExists(dir + "/payroll_card.png");
+
+// 2) بطاقات indsin: تخطيط من ملف indsin، والبيانات تُمرَّر كمتغيّر d، ثم الرسم بـ indsin.png
+for (let c in [["Worker", "worker"], ["Student", "student"], ["Invoice", "invoice"]]) {
+    for (let n in containersOfType(c[0])) {
+        let h = indsin.mount("<Rin>let d = " + json.stringify(container.fields(n)) + ";</Rin>\n" + readFile(C + c[1] + ".rin"), 390);
+        let p = dir + "/" + n + ".png";
+        print c[0], n, indsin.png(h, p), fileSize(p) > 1000, len(indsin.texts(h));
+        if (n == "inv1") { print indsin.texts(h); }
+        if (n == "lina") { print indsin.texts(h); }
+        indsin.free(h);
+    }
+}
+
+// 3) قسيمة راتب (مستند من payroll) + تقرير الرواتب كله
+let slip = findDoc("payroll", "2026-11-sara");
+let h1 = indsin.mount("<Rin>let d = " + json.stringify(slip) + ";</Rin>\n" + readFile(C + "payslip.rin"), 390);
+print indsin.png(h1, dir + "/slip.png"), indsin.texts(h1);
+indsin.free(h1);
+let rows = sql("payroll&order:asc(_id)");
+let h2 = indsin.mount("<Rin>let d = " + json.stringify({rows: rows, total: container.sum("payroll", "net")}) + ";</Rin>\n" + readFile(C + "payroll.rin"), 390);
+print indsin.png(h2, dir + "/payroll_report.png"), indsin.texts(h2)[1], indsin.texts(h2)[len(indsin.texts(h2)) - 2];
+indsin.free(h2);
+
+// 4) HTML من نفس التخطيط (للعربية الدقيقة) + صورة تُضمَّن في أرشيف الحاوية مع بياناتها
+let h3 = indsin.mount("<Rin>let d = " + json.stringify(container.fields("sara")) + ";</Rin>\n" + readFile(C + "worker.rin"), 390);
+print len(indsin.html(h3)) > 200;
+indsin.free(h3);
+let z = container.zip(["sara"], dir + "/sara_pack.zip", {time: 1700000000, include: [dir + "/sara.png", dir + "/slip.png"]});
+print z["ok"], z["files"], zip.exists(dir + "/sara_pack.zip", "files/sara.png");
+deleteFile(dir + "/sara_pack.zip");
+
+// 5) حاوية غير موجودة / ملف تخطيط غائب: أخطاء واضحة
+try { containerImage("nope"); } catch (e) { print "حاوية غائبة"; }
+try { readFile(C + "missing.rin"); } catch (e) { print "تخطيط غائب"; }
+
+for (let f in ["sara_card", "payroll_card", "omar", "sara", "lina", "inv1", "slip", "payroll_report"]) { deleteFile(dir + "/" + f + ".png"); }
