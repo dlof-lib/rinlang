@@ -1,0 +1,89 @@
+// دمج الحاويات: container.blend (حقول + مستندات + ستايل) + سياسات التعارض + الوصفات container.recipe/cook — docs/container_blend.md
+@container=auth
+    let user = "ali";
+    let roles = ["read"];
+    let opts = {theme: "dark", lang: "ar", flags: Set(1, 2)};
+.end/container
+
+@container=billing
+    let plan = "pro";
+    let roles = ["pay"];
+    let opts = {theme: "light", size: 3, flags: Set(2, 3)};
+.end/container
+
+@container.doc=notes
+    document id="n1" fields={ t: "a", tags: ["x"] };
+    document id="n2" fields={ t: "b" };
+.end/container.doc
+
+@container.doc=notes2
+    document id="n1" fields={ t: "A", tags: ["y"] };
+    document id="n3" fields={ t: "c" };
+.end/container.doc
+
+// 1) دمج عميق (الافتراضي): map بعمق، array لصق، Set اتحاد، المتعارض الأحدث يفوز
+let r = container.blend("account", ["auth", "billing"]);
+print r["ok"], r["target"], r["created"], r["kind"], r["policy"], len(r["from"]);
+print container.get("account", "user"), container.get("account", "plan");
+print container.get("account", "roles");
+let o = container.get("account", "opts");
+print o["theme"], o["lang"], o["size"], len(o["flags"]), o["flags"].has(3);
+for (let c in r["conflicts"]) { print c["key"], c["from"], c["action"]; }
+
+// 2) المصدر لم يتأثر (نسخ عميقة)
+print container.get("auth", "roles"), container.get("auth", "opts")["theme"];
+
+// 3) سياسات keep / override
+container.blend("k", ["auth", "billing"], {policy: "keep"});
+container.blend("o", ["auth", "billing"], {policy: "override"});
+print container.get("k", "opts")["theme"], container.get("o", "opts")["theme"], container.get("o", "roles");
+
+// 4) error: يرفض عند التعارض ولا يترك شيئاً نصف مكتوب
+try { container.blend("e", ["auth", "billing"], {policy: "error"}); } catch (err) { print "رُفض"; }
+print container.exists("e");
+
+// 5) only / omit / prefix / prefixes
+container.blend("p1", ["auth", "billing"], {only: ["user", "plan"], prefix: "x_"});
+print container.get("p1", "x_user"), container.get("p1", "x_plan"), container.get("p1", "x_roles");
+container.blend("p2", ["auth", "billing"], {omit: ["opts", "roles"], prefixes: {auth: "a_", billing: "b_"}});
+print container.get("p2", "a_user"), container.get("p2", "b_plan");
+
+// 4) dry: تقرير بلا كتابة
+let d = container.blend("ghost", ["auth", "billing"], {dry: true});
+print d["dry"], d["created"], container.exists("ghost"), d["fields"];
+
+// 6) المستندات: n1 يتعارض (deep)، n2 وn3 تُضاف
+container.blend("allnotes", ["notes", "notes2"]);
+print container.kind("allnotes");
+print countDocs("allnotes"), findDoc("allnotes", "n1")["t"], findDoc("allnotes", "n1")["tags"];
+
+// 7) الوصفات: تركيب ميزة من ميزات، وإعادة الطبخ بعد تغيّر المصدر
+container.recipe("identity", {from: ["auth"]});
+container.recipe("commerce", {from: ["billing"], include: ["identity"], policy: "override"});
+print container.recipes();
+container.cook("commerce", "shop");
+print container.get("shop", "user"), container.get("shop", "plan");
+container.set("billing", "plan", "free");
+let rc = container.cook("commerce", "shop");
+print container.get("shop", "plan"), rc["recipe"];
+try { container.cook("nope", "x"); } catch (err) { print "لا وصفة"; }
+container.recipe("loop1", {include: ["loop2"]});
+container.recipe("loop2", {include: ["loop1"]});
+try { container.cook("loop1", "z"); } catch (err) { print "دوران مكشوف"; }
+print container.dropRecipe("loop1"), container.dropRecipe("loop1");
+
+// 8) Containers.Group كمصدر (مفهوم موجود) + zip على النتيجة (دمج مع ميزة الضغط)
+@Containers.Group=suite
+    @container=s1
+        let a = 1;
+    .end/container
+    @container=s2
+        let b = 2;
+    .end/container
+.end/Containers.Group
+let g = container.blend("whole", "suite");
+print len(g["from"]), container.get("whole", "a"), container.get("whole", "b");
+container.zip("whole", "_cb.zip");
+container.unzip("whole2", "_cb.zip");
+print container.get("whole2", "a") + container.get("whole2", "b");
+deleteFile("_cb.zip");
