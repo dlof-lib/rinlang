@@ -1,0 +1,63 @@
+// دمج أقوى: سياسة بدالة، قواعد لكل مسار، دمج الدوال، blendDiff، blendIntoWith — docs/container_blend.md
+// 1) rules: استراتيجية لكل مسار (يقبل * و ?)
+let a = {name: "A", hits: 3, tags: ["x", "y"], limits: {max: 5, min: 1}, stats: {r: 10, w: 4}};
+let b = {name: "B", hits: 4, tags: ["y", "z"], limits: {max: 9, min: 0}, stats: {r: 5, w: 6}};
+let m = blendWith({rules: {"hits": "sum", "tags": "union", "limits.max": "max", "limits.min": "min", "stats.*": "sum", "name": "keep"}}, a, b);
+print m["name"], m["hits"], m["tags"], m["limits"]["max"], m["limits"]["min"], m["stats"]["r"], m["stats"]["w"];
+print a["hits"], a["tags"];
+
+// 2) policy كدالة fn(old, new, path)
+fun pick(old, nw, path) { if (path == "score") { return old > nw ? old : nw; } return nw; }
+let m2 = blendWith({policy: pick}, {score: 7, who: "a"}, {score: 3, who: "b", extra: 1});
+print m2["score"], m2["who"], m2["extra"];
+
+// 3) قاعدة بدالة لمسار واحد
+fun joinTxt(old, nw, path) { return old + "|" + nw; }
+print blendWith({rules: {"title": joinTxt}}, {title: "a", n: 1}, {title: "b", n: 2});
+
+// 4) concat للنصوص مع sep، وقاعدة غير صالحة
+print blendWith({rules: {"s": "concat"}, sep: "+"}, {s: "x"}, {s: "y"})["s"];
+try { blendWith({rules: {"k": "bogus"}}, {k: 1}, {k: 2}); } catch (e) { print "استراتيجية مجهولة"; }
+try { blendWith({rules: {"n": "sum"}}, {n: "a"}, {n: "b"}); } catch (e) { print "sum على نصوص"; }
+
+// 5) دمج الدوال: chain (الافتراضي) / all / first / each
+fun inc(x) { return x + 1; }
+fun dbl(x) { return x * 2; }
+fun nope(x) { return nil; }
+let both = blend(inc, dbl);
+print both(5);
+print blendWith({fn: "all"}, inc, dbl)(5);
+print blendFn("first", nope, dbl, inc)(5);
+print blendFn("chain", inc, dbl, inc)(1);
+print blendFn("each", inc, dbl)(4);
+fun add2(a, b) { return a + b; }
+fun neg(x) { return 0 - x; }
+print blendFn("chain", add2, neg)(3, 4);
+try { blendFn("bad", inc, dbl); } catch (e) { print "mode خاطئ"; }
+
+// 6) blendDiff
+let d = blendDiff({a: 1, n: {x: 1, y: 2}, gone: 0}, {a: 2, n: {x: 1, z: 3}, fresh: true});
+print d["equal"], d["same"], len(d["changed"]), d["changed"][0]["path"], len(d["added"]), len(d["removed"]);
+print blendDiff({a: 1}, {a: 1})["equal"];
+
+// 7) blendIntoWith + container.blend بقواعد
+let tgt = {c: 1, tags: ["a"]};
+blendIntoWith({rules: {"c": "sum", "tags": "union"}}, tgt, {c: 5, tags: ["a", "b"]});
+print tgt["c"], tgt["tags"];
+@container=p1
+    let visits = 3;
+    let langs = ["ar"];
+.end/container
+@container=p2
+    let visits = 4;
+    let langs = ["ar", "en"];
+.end/container
+let rep = container.blend("pm", ["p1", "p2"], {rules: {"visits": "sum", "langs": "union"}});
+print container.get("pm", "visits"), container.get("pm", "langs"), rep["conflicts"][0]["action"];
+let rep2 = container.blend("pm2", ["p1", "p2"], {policy: pick});
+print container.get("pm2", "visits");
+
+// 8) وصفة قيم فيها دوال وقواعد
+blendRecipe("calc", {parts: [inc, dbl], fn: "chain"});
+print blendCook("calc")(10);
+print container.recipes();
