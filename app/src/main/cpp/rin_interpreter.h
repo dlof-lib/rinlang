@@ -1181,6 +1181,7 @@ private:
     // فريد داخل نفس المجموعة (إدراج بنفس id موجود = تحديث/upsert). Containers.Group التي تضم عدّة
     // container.doc تصبح فعلياً "قاعدة بيانات" (database) كاملة من عدّة مجموعات مستندات مرتّبة.
     std::unordered_map<std::string, std::vector<std::pair<std::string, Value>>> docStore;
+    std::unordered_map<std::string, Value> blendRecipes; // container.recipe — وصفات دمج الحاويات (rin_container_blend.cpp)
 
     // ---- RIN CONTAINER SQL (RCSQL) — انظر rin_container_sql.h للصياغة الكاملة ----
     // اسم حاوية @sql/@container.sql (ContainerKind::SQL) -> نص استعلام RCSQL الخام المخزَّن في
@@ -1404,6 +1405,7 @@ private:
     void registerNativesExtra7(); // rin_extra_natives7.cpp — مفهوم time (docs/TIME.md)
     void registerNativesExtra8(); // rin_extra_natives8.cpp — مفهوم token: tokenList/tokenStats/tokenAt/... (docs/TOKEN.md)
     void registerNativesExtra10(); // rin_extra_natives10.cpp — مفهوم linalg: mat*/vec* للجبر الخطي (docs/LINALG.md)
+    void registerNativesContainerBlend(); // rin_container_blend.cpp — container.blend/recipe/cook (docs/container_blend.md)
     void registerNativesContainerZip(); // rin_container_zip.cpp — container.zip/unzip/pack/... و zip.* (docs/container_zip.md)
     void registerNativesExtra12(); // rin_extra_natives12.cpp — fileSync/fileLock/fileRename/fileSize/findByRange (docs/FILEDB.md)
     void registerNativesExtra11(); // rin_extra_natives11.cpp — مفهوم algo: algo* لتطوير الخوارزميات والحساب العددي (docs/ALGO.md)
