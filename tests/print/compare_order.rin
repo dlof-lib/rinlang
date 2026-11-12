@@ -1,0 +1,42 @@
+// الترتيب الشامل: compare (ثلاثي: -1/0/1) وorderBy لأي نوع — ويتكامل مع قواعد الدمج max/min — docs/container_blend.md
+// 1) compare على كل الأنواع
+print compare(1, 2), compare(2, 2), compare(3, 2);
+print compare("a", "b"), compare("b", "a"), compare("a", "a");
+print compare(nil, 0), compare(0, nil), compare(true, 1);          // nil < bool < number
+print compare([1, 2], [1, 3]), compare([1, 2], [1, 2, 0]), compare([2], [1, 9]);
+print compare({a: 1, b: 2}, {b: 2, a: 1}), compare({a: 1}, {a: 2});
+print compare(Set(1, 2), Set(2, 1)), compare(Set(1), Set(1, 2));
+
+// 2) خيارات النصوص: caseless / natural
+print compare("Apple", "apple"), compare("Apple", "apple", {caseless: true});
+print compare("a10", "a2"), compare("a10", "a2", {natural: true});
+print compare(nil, 5, {nilsFirst: false}), compare(1, 2, {desc: true});
+
+// 3) compare بمفتاح by (مسار أو دالة)
+print compare({n: {v: 3}}, {n: {v: 9}}, {by: "n.v"});
+fun lenOf(s) { return len(s); }
+print compare("ccc", "a", {by: lenOf});
+
+// 4) orderBy: مصفوفات بسيطة ومختلطة
+print orderBy([3, 1, 2]);
+print orderBy([3, 1, 2], nil, {desc: true});
+print orderBy(["b", "a", "C"], nil, {caseless: true});
+print orderBy(["a10", "a2", "a1"], nil, {natural: true});
+print orderBy([2, "x", nil, true, [1]]);
+
+// 5) orderBy بمسار / تنازلي / عدة مفاتيح (ثباتي)
+let people = [{n: "Sara", age: 30, c: {z: 2}}, {n: "Ali", age: 25, c: {z: 9}}, {n: "Omar", age: 30, c: {z: 1}}, {n: "Lina", age: 25, c: {z: 5}}];
+for (let p in orderBy(people, "n")) { print p["n"]; }
+print "--";
+for (let p in orderBy(people, ["-age", "n"])) { print p["n"], p["age"]; }
+print "--";
+for (let p in orderBy(people, "c.z")) { print p["n"]; }
+fun byLen(p) { return len(p["n"]); }
+print orderBy(people, [{by: byLen, desc: true}, "n"])[0]["n"];
+print orderBy(Set(3, 1, 2));
+print people[0]["n"];
+
+// 6) تكامل مع الدمج: max/min لأي نوع عبر compare
+print blendWith({rules: {"name": "max", "ver": "min"}}, {name: "alpha", ver: [1, 2]}, {name: "beta", ver: [1, 0, 9]});
+try { orderBy(5); } catch (e) { print "orderBy يحتاج مصفوفة"; }
+try { orderBy([1], 5); } catch (e) { print "مواصفة غير صالحة"; }
