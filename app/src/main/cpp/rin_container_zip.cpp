@@ -19,6 +19,8 @@
 // ============================================================================
 #include "rin_interpreter.h"
 #include "rin_json.h"
+#include "rin_lexer.h"
+#include "rin_parser.h"
 #include "rin_zip.h"
 #include <algorithm>
 #include <cmath>
@@ -890,10 +892,22 @@ void Interpreter::registerNativesContainerZip() {
     // الأسماء الفعلية للحاويات (تحويل easy_key/مسار إلى المفتاح الداخلي)
     auto namesArg = [this](const Value& v, const std::string& fn, int line) {
         std::vector<std::string> out;
+        auto add = [&](const std::string& c) { if (std::find(out.begin(), out.end(), c) == out.end()) out.push_back(c); };
         auto one = [&](const Value& x) {
             if (x.type != Value::Type::STRING) throw diagErr(diag::Code::E0004_InvalidType, line, "'" + fn + "' يتوقع اسم حاوية (نص) أو مصفوفة أسماء");
             std::string c = canonContainer(x.str);
-            if (std::find(out.begin(), out.end(), c) == out.end()) out.push_back(c);
+            // اسم Containers.Group أو Volume (مفاهيم موجودة) = كل حاوياته الفعلية، بنفس منطق groupContainers/volumeContainers
+            if (!containers.count(c)) {
+                const char* which = groupMembers.count(x.str) ? "groupContainers" : (volumeMembers.count(x.str) ? "volumeContainers" : nullptr);
+                if (which) {
+                    Args ga{Value::string(x.str)};
+                    Value members = natives[which](ga, line);
+                    if (members.type == Value::Type::ARRAY && members.array)
+                        for (const auto& m : *members.array) if (m.type == Value::Type::STRING && containers.count(m.str)) add(m.str);
+                    return;
+                }
+            }
+            add(c);
         };
         if (v.type == Value::Type::ARRAY && v.array) for (const auto& x : *v.array) one(x); else one(v);
         if (out.empty()) throw diagErr(diag::Code::E0007_InvalidArguments, line, "'" + fn + "': لا حاويات للضغط");
@@ -972,13 +986,41 @@ void Interpreter::registerNativesContainerZip() {
         return extractAll(r, dest, {}, "files/", optBool(opts, "overwrite", true), 0, optStr(opts, "password"), line, who);
     };
 
+    // ينفّذ مستندات .rin داخل أرشيف (نفس ما يفعله loadInstalled) — الاسم المحدّد فقط، أو كلها عند name فارغ
+    auto execRinDocs = [this, guard](const Reader& r, const std::string& name, const Value* opts, int line, const std::string& who) -> Value {
+        size_t n = 0;
+        ArrayData names;
+        for (const Entry& e : r.entries()) {
+            if (e.isDir() || e.name.size() < 5 || e.name.compare(e.name.size() - 4, 4, ".rin") != 0) continue;
+            if (!name.empty() && e.name != name + ".rin") continue;
+            std::string src = guard(line, who, [&] { return r.read(e, optStr(opts, "password")); });
+            try {
+                Lexer lex(src);
+                auto toks = lex.scanTokens();
+                Parser ps(toks);
+                auto stmts = ps.parse();
+                executeBlock(stmts, globals);
+            } catch (RinError& err) {
+                throw diagErr(diag::Code::E0028_ImportError, line, who + ": خطأ داخل '" + e.name + "' (سطر " + std::to_string(err.line) + "): " + err.message);
+            }
+            names.push_back(strV(e.name.substr(0, e.name.size() - 4)));
+            n++;
+        }
+        return mkMap({{"ok", boolV(n > 0)}, {"name", strV(name)}, {"source", strV("rin-documents")}, {"loaded", numV(double(n))}, {"names", newArray(std::move(names))}});
+    };
     // container.unzip(name, path, opts?) — يستعيد حاوية. opts: from:"اسم داخل الأرشيف" overwrite(true) password extract:"مجلد للملفات المرفقة"
-    natives["container.unzip"] = [this, openZip, readManifest, pickItem, restoreContainer, extractAttached](Args& a, int line) -> Value {
+    natives["container.unzip"] = [this, openZip, readManifest, pickItem, restoreContainer, extractAttached, execRinDocs](Args& a, int line) -> Value {
         need("container.unzip", a, 2, 3, line);
         std::string name = canonContainer(str(a[0], "container.unzip", line));
         std::string path = str(a[1], "container.unzip", line);
         const Value* opts = a.size() > 2 ? &a[2] : nullptr;
         auto r = openZip(path, opts, line, "container.unzip");
+        if (!r->find("rin-container.json") && r->find(name + ".rin")) {
+            // أرشيف كتبه `save format=zip` أو `installation format=zip`: عناصره مستندات .rin تُنفَّذ فتعيد بناء الحاوية
+            Value rep = execRinDocs(*r, name, opts, line, "container.unzip");
+            rep.map->put(strV("path"), strV(path));
+            return rep;
+        }
         std::vector<ManifestItem> items; Value whole;
         readManifest(*r, opts, line, "container.unzip", items, whole);
         const ManifestItem& mi = pickItem(items, name, optStr(opts, "from"), line, "container.unzip");
@@ -1004,11 +1046,15 @@ void Interpreter::registerNativesContainerZip() {
         return rep;
     };
     // container.unzipAll(path, opts?) — يستعيد كل الحاويات. opts: only:[أسماء] prefix:"p_" overwrite password extract
-    natives["container.unzipAll"] = [this, openZip, readManifest, restoreContainer, extractAttached](Args& a, int line) -> Value {
+    natives["container.unzipAll"] = [this, openZip, readManifest, restoreContainer, extractAttached, execRinDocs](Args& a, int line) -> Value {
         need("container.unzipAll", a, 1, 2, line);
         std::string path = str(a[0], "container.unzipAll", line);
         const Value* opts = a.size() > 1 ? &a[1] : nullptr;
         auto r = openZip(path, opts, line, "container.unzipAll");
+        if (!r->find("rin-container.json")) {
+            Value rep = execRinDocs(*r, "", opts, line, "container.unzipAll");
+            if (rep.map->findValue(strV("loaded"))->number > 0) { rep.map->put(strV("path"), strV(path)); return rep; }
+        }
         std::vector<ManifestItem> items; Value whole;
         readManifest(*r, opts, line, "container.unzipAll", items, whole);
         auto only = strList(optv(opts, "only"), "container.unzipAll", "only", line);
