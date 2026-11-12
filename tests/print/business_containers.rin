@@ -1,0 +1,65 @@
+// فواتير · طلاب · عمّال · رواتب · ملف شخصي + CV — docs/container_business.md
+// يكتب ملفات مؤقتة تحت _biz_tmp/.
+@import "templates/business/business_types.rin";
+
+// ── عمّال: ملف شخصي + سيرة ذاتية منظّمة + ملف CV مرفق ──
+writeFile("_biz_tmp/cv_sara.txt", "CV: Sara Ahmad");
+newContainer("Worker", "sara", {name: "سارة أحمد", email: "sara@corp.com", phone: "+966501234567", birth: "1995-04-12",
+    position: "مهندسة", department: "التطوير", hired: "2024-03-01", salary: 5000, allowance: 500, iban: "SA0380000000608010167519",
+    cv: {summary: "مهندسة برمجيات", skills: ["rin", "sql"], languages: ["ar", "en"],
+         education: [{school: "KSU", degree: "BSc", year: 2017}], experience: [{company: "A", years: 3}], certificates: []},
+    cvFile: "_biz_tmp/cv_sara.txt"});
+newContainer("Worker", "omar", {name: "عمر خالد", position: "محاسب", salary: 4000});
+print containerType("sara"), isContainerType("sara", "Profile"), containersOfType("Worker");
+print getField("sara", "name"), getField("sara", "cv")["skills"], getField("omar", "status"), getField("omar", "cv")["skills"];
+for (let a in [["w-راتب", "omar", "salary", -1], ["w-بريد", "omar", "email", "bad"], ["w-حالة", "omar", "status", "fired"], ["w-اسم", "omar", "name", "ع"]]) {
+    try { setField(a[1], a[2], a[3]); print "ok؟؟"; } catch (e) { print "رفض:", a[2]; }
+}
+
+// ── طلاب ──
+newContainer("Student", "lina", {name: "لينا سعد", level: "الثالث", guardian: "سعد", fees: 3000, marks: {math: 90, sci: 80}});
+newContainer("Student", "yazan", {name: "يزن علي", level: "الثاني", fees: 3000, paid: 3000, marks: {math: 70}});
+print containersOfType("Student"), containersOfType("Profile");
+try { newContainer("Student", "bad", {name: "طالب", level: "الأول", marks: {math: "x"}}); } catch (e) { print "رفض: marks"; }
+
+// ── فواتير: الإجمالي من البنود، والدفع ذرّي (يتراجع عند الزيادة) ──
+newContainer("Invoice", "inv1", {number: "A-1", date: "2026-11-01", customer: "شركة النور", tax: 0.15, discount: 5,
+    items: [{desc: "خدمة", qty: 2, price: 10}, {desc: "ملحق", qty: 1, price: 5.5}]});
+newContainer("Invoice", "fee1", {number: "F-1", date: "2026-11-02", kind: "tuition", customer: "lina", items: [{desc: "رسوم الفصل", qty: 1, price: 3000}]});
+print getField("inv1", "total"), getField("fee1", "total"), getField("inv1", "status");
+
+let r1 = container.attempt(["inv1"], fun() {
+    container.set("inv1", "paid", container.get("inv1", "paid") + 100);
+    if (container.get("inv1", "paid") > container.get("inv1", "total")) { throw "الدفع أكبر من قيمة الفاتورة"; }
+});
+print r1["ok"], r1["error"]["message"], getField("inv1", "paid");
+let r2 = container.attempt(["fee1", "lina"], fun() {
+    container.set("fee1", "paid", 3000); container.set("fee1", "status", "paid");
+    container.set("lina", "paid", container.get("lina", "paid") + 3000);
+});
+print r2["ok"], getField("fee1", "status"), getField("lina", "paid"), getField("lina", "fees") - getField("lina", "paid");
+let due = 0;
+for (let n in containersOfType("Invoice")) { due = due + getField(n, "total") - getField(n, "paid"); }
+print "المتبقّي على الفواتير:", due;
+
+// ── رواتب: قسيمة لكل عامل نشط في سجل payroll ثم تقارير RCSQL ──
+for (let m in ["2026-10", "2026-11"]) {
+    for (let w in containersOfType("Worker")) {
+        if (getField(w, "status") == "active") {
+            let ded = m == "2026-11" ? 200 : 0;
+            let base = getField(w, "salary"); let al = getField(w, "allowance");
+            insertDoc("payroll", m + "-" + w, {worker: w, month: m, base: base, allowance: al, deduction: ded, net: base + al - ded});
+        }
+    }
+}
+print sql("payroll&group:by(month)&agg:sum(net)&order:asc(month)");
+print sql("payroll&worker:eq(sara)&agg:sum(net)");
+print findDoc("payroll", "2026-11-sara"), container.sum("payroll", "net");
+try { insertDoc("payroll", "bad", {worker: "x", month: 5}); } catch (e) { print "رفض: schema"; }
+
+// ── أرشفة: ملف عامل مع CV المرفق + سجل الرواتب، ثم استعادة ──
+let z = container.zip(["sara", "payroll"], "_biz_tmp/hr.zip", {time: 1700000000, include: [getField("sara", "cvFile")]});
+print z["ok"], z["files"], z["containers"][0]["kind"], z["containers"][1]["documents"];
+destroyContainer("sara");
+let u = container.unzipAll("_biz_tmp/hr.zip", {extract: "_biz_tmp/out", only: ["sara"]});
+print u["ok"], containerType("sara"), getField("sara", "cv")["education"][0]["school"], readFile("_biz_tmp/out/cv_sara.txt");
