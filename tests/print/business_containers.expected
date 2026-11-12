@@ -1,0 +1,21 @@
+📋 container.datalist = payroll
+✅ .end/container.datalist (payroll)
+📥 @import: تم استيراد "templates/business/business_types.rin" (من القرص)
+Worker true ["omar", "sara"]
+سارة أحمد ["rin", "sql"] active []
+رفض: salary
+رفض: email
+رفض: status
+رفض: name
+["lina", "yazan"] ["lina", "omar", "sara", "yazan"]
+رفض: marks
+23.575 3000 issued
+false الدفع أكبر من قيمة الفاتورة 0
+true paid 3000 0
+المتبقّي على الفواتير: 23.575
+[{"_id": "2026-10", "month": "2026-10", "count": 2, "sum_net": 9500}, {"_id": "2026-11", "month": "2026-11", "count": 2, "sum_net": 9100}]
+[{"_id": "all", "count": 2, "sum_net": 10800}]
+{"worker": "sara", "month": "2026-11", "base": 5000, "allowance": 500, "deduction": 200, "net": 5300} 18600
+رفض: schema
+true 4 Worker 4
+true Worker KSU CV: Sara Ahmad
