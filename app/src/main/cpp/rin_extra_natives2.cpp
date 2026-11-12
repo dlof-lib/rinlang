@@ -34,6 +34,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -1320,6 +1321,21 @@ void Interpreter::registerNativesExtra2() {
     };
     // container.exportToFile(name, path) — يكتب حقول الحاوية كـ JSON فعلي على القرص (عبر container.toJson + writeFile المعزولة بـ resolvePath)
     natives["container.exportToFile"] = [this](Args& a, int line) -> Value {
+        // امتداد .zip → ضغط حقيقي بنفس container.zip (حقول + مستندات + صفوف)، و.gz → JSON مضغوط gzip
+        if (a.size() == 2 && a[0].type == Value::Type::STRING && a[1].type == Value::Type::STRING) {
+            const std::string& p_ = a[1].str;
+            auto ends_ = [&](const char* ext) { size_t n = std::strlen(ext); if (p_.size() <= n) return false; for (size_t i_ = 0; i_ < n; ++i_) if (std::tolower(static_cast<unsigned char>(p_[p_.size() - n + i_])) != ext[i_]) return false; return true; };
+            if (ends_(".zip")) { natives["container.zip"](a, line); return Value::boolean_(true); }
+            if (ends_(".gz")) {
+                Args jsonArgs_{a[0]};
+                Value json_ = natives["container.toJson"](jsonArgs_, line);
+                if (json_.type != Value::Type::STRING) return Value::boolean_(false);
+                Args ga_{json_};
+                Value gz_ = natives["zip.gzip"](ga_, line);
+                writeRealFile(p_, gz_.str, line, "container.exportToFile");
+                return Value::boolean_(true);
+            }
+        }
         { Value tv_; if (tableNative("container.exportToFile", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         need("container.exportToFile", a, 2, 2, line);
         std::string name = str(a[0], "container.exportToFile", line);
@@ -1332,6 +1348,28 @@ void Interpreter::registerNativesExtra2() {
     };
     // container.importFromFile(name, path, overwrite?) — يقرأ JSON من القرص ويدمجه في الحاوية (تُنشأ إن غابت عبر container.ensure أولاً من كود Rin)
     natives["container.importFromFile"] = [this](Args& a, int line) -> Value {
+        // .zip → استعادة بنفس container.unzip (overwrite من الوسيط الثالث)، و.gz → JSON مضغوط
+        if (a.size() >= 2 && a[0].type == Value::Type::STRING && a[1].type == Value::Type::STRING) {
+            const std::string& p_ = a[1].str;
+            auto ends_ = [&](const char* ext) { size_t n = std::strlen(ext); if (p_.size() <= n) return false; for (size_t i_ = 0; i_ < n; ++i_) if (std::tolower(static_cast<unsigned char>(p_[p_.size() - n + i_])) != ext[i_]) return false; return true; };
+            if (ends_(".zip")) {
+                Args ua_{a[0], a[1]};
+                if (a.size() > 2) ua_.push_back(newMap({{Value::string("overwrite"), a[2]}}));
+                if (!containers.count(a[0].str)) { Args ek_{Value::string("container"), a[0]}; natives["container.ensure"](ek_, line); }
+                natives["container.unzip"](ua_, line);
+                return Value::boolean_(true);
+            }
+            if (ends_(".gz")) {
+                std::ifstream gin_(resolvePath(p_, line), std::ios::binary);
+                if (!gin_) throw diagErr(diag::Code::E0036_IOFailure, line, "'container.importFromFile': تعذّر فتح الملف '" + p_ + "'");
+                std::ostringstream gb_; gb_ << gin_.rdbuf();
+                Args ga_{Value::string(gb_.str())};
+                Value txt_ = natives["zip.gunzip"](ga_, line);
+                Args jsonArgs_{a[0], txt_};
+                if (a.size() > 2) jsonArgs_.push_back(a[2]);
+                return natives["container.fromJson"](jsonArgs_, line);
+            }
+        }
         { Value tv_; if (tableNative("container.importFromFile", a, line, tv_)) return tv_; } // جدول (rin_table.cpp)
         need("container.importFromFile", a, 2, 3, line);
         std::string name = str(a[0], "container.importFromFile", line);
