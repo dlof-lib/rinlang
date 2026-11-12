@@ -22,6 +22,7 @@
 //   indsin.validate(rule, value[, min, max, pattern, message]) · indsin.suggest(value, "a,b,c", i)
 // التعديل (للبرنامج فقط؛ ممنوعة داخل الخصائص):
 //   indsin.useTheme(name) -> bool · indsin.defineTheme(name, seed[, dark]) -> score
+//   indsin.blendTheme(name, sources[, opts]) -> map   يدمج ثيمات موجودة (ألوان + شكل) في ثيم جديد (docs/container_blend.md)
 // التأثيرات (Effects Studio — rin_indsin_effects.h):
 //   indsin.defineEffect(name, frames[, options]) -> true     frames = "0%{opacity:0,y:20} 100%{opacity:1,y:0}"
 //        options: map — duration · delay · easing · iterations · direction · fill · base · x_fn/y_fn/scale_fn/opacity_fn/glow_fn
@@ -383,6 +384,91 @@ inline void registerIndsinRinLib(rin::Interpreter& interp) {
         Theme t = themeFromSeed(name, seed, dark);
         themeRegistry().registerTheme(t);
         return Value::num(validateTheme(t).score());
+    });
+
+    // indsin.blendTheme(name, sources, opts?) — تكوين ثيم جديد بدمج ثيمات موجودة (ألوان الأدوار + «شكل» الثيم).
+    //   sources: اسم ثيم أو مصفوفة أسماء (يُطبَّق بالترتيب؛ الألوان: الأحدث يفوز، والشكل: القيمة غير الافتراضية الأحدث تفوز)
+    //   opts: policy "override"(افتراضي)|"keep" · colors:"ثيم" (كل ألوان الأدوار منه) · shape:"ثيم" (الشكل منه)
+    //         only/omit: أسماء حقول (primary… radius cardElevation buttonElevation hairline) · overrides:{حقل: قيمة} (تُطبَّق آخراً)
+    //         activate: true لتفعيله فوراً
+    // الشكل الافتراضي 0/false = «غير مُعيَّن»، ولذلك لا يمحو ثيم بلا شكل شكلَ ثيم سبقه.
+    reg("blendTheme", [](Args& a, int line) {
+        needArgs("indsin.blendTheme", a, 2, 3, line);
+        std::string name = needStr("indsin.blendTheme", a, 0, line);
+        if (name.empty()) fail(line, "'indsin.blendTheme': اسم الثيم فارغ");
+        std::vector<std::string> srcNames;
+        if (a[1].type == Value::Type::STRING) srcNames.push_back(a[1].str);
+        else if (a[1].type == Value::Type::ARRAY && a[1].array) {
+            for (const auto& x : *a[1].array) {
+                if (x.type != Value::Type::STRING) fail(line, "'indsin.blendTheme': المصادر أسماء ثيمات (نصوص)");
+                srcNames.push_back(x.str);
+            }
+        } else fail(line, "'indsin.blendTheme': المصادر اسم ثيم أو مصفوفة أسماء");
+        if (srcNames.empty()) fail(line, "'indsin.blendTheme': لا مصادر");
+        const Value* opts = (a.size() == 3 && a[2].type == Value::Type::MAP && a[2].map) ? &a[2] : nullptr;
+        if (a.size() == 3 && a[2].type != Value::Type::MAP && a[2].type != Value::Type::NIL) fail(line, "'indsin.blendTheme': الخيارات map");
+        auto optS = [&](const char* k) -> std::string { if (!opts) return ""; const Value* v = opts->map->findValue(Value::string(k)); return (v && v->type == Value::Type::STRING) ? v->str : ""; };
+        auto optList = [&](const char* k) { std::vector<std::string> out; if (!opts) return out; const Value* v = opts->map->findValue(Value::string(k));
+            if (v && v->type == Value::Type::STRING) out.push_back(v->str);
+            else if (v && v->type == Value::Type::ARRAY && v->array) for (const auto& x : *v->array) if (x.type == Value::Type::STRING) out.push_back(x.str);
+            return out; };
+        std::string policy = optS("policy").empty() ? "override" : optS("policy");
+        if (policy != "override" && policy != "keep") fail(line, "'indsin.blendTheme': policy يجب أن تكون override أو keep");
+        std::vector<std::string> only = optList("only"), omit = optList("omit");
+        auto allowed = [&](const std::string& f) {
+            if (!only.empty() && std::find(only.begin(), only.end(), f) == only.end()) return false;
+            return std::find(omit.begin(), omit.end(), f) == omit.end();
+        };
+        static const char* kShape[] = {"radius", "cardElevation", "buttonElevation", "hairline"};
+        auto isShape = [&](const std::string& f) { for (const char* k : kShape) if (f == k) return true; return false; };
+
+        Theme t = themeOrFail("indsin.blendTheme", srcNames[0], line);
+        t.name = name;
+        Theme base = t; // ما لا يسمح به only/omit يبقى كما في أول مصدر
+        auto applyShape = [&](const Theme& s, bool fromExplicit) {
+            auto takeD = [&](const char* f, double& dst, double v) { if (allowed(f) && (fromExplicit || (policy == "override" ? v != 0 : dst == 0 && v != 0))) dst = v; };
+            takeD("radius", t.radius, s.radius);
+            if (allowed("cardElevation") && (fromExplicit || (policy == "override" ? s.cardElevation != 0 : t.cardElevation == 0 && s.cardElevation != 0))) t.cardElevation = s.cardElevation;
+            if (allowed("buttonElevation") && (fromExplicit || (policy == "override" ? s.buttonElevation != 0 : t.buttonElevation == 0 && s.buttonElevation != 0))) t.buttonElevation = s.buttonElevation;
+            if (allowed("hairline") && (fromExplicit || (policy == "override" ? s.hairline : (!t.hairline && s.hairline)))) t.hairline = s.hairline || (fromExplicit ? false : t.hairline);
+        };
+        // أول مصدر: الحقول غير المسموح بها تعود لقيمها الافتراضية (لا شيء مُدمَج بعد)
+        for (const char* r : roleNames()) if (!allowed(r)) { /* يبقى لون أول مصدر */ }
+        if (!allowed("radius")) t.radius = 0;
+        if (!allowed("cardElevation")) t.cardElevation = 0;
+        if (!allowed("buttonElevation")) t.buttonElevation = 0;
+        if (!allowed("hairline")) t.hairline = false;
+        for (size_t i = 1; i < srcNames.size(); ++i) {
+            const Theme& s = themeOrFail("indsin.blendTheme", srcNames[i], line);
+            if (policy == "override") for (const char* r : roleNames()) if (allowed(r)) t.setSlot(r, *s.slot(r));
+            applyShape(s, false);
+        }
+        if (!optS("colors").empty()) { const Theme& s = themeOrFail("indsin.blendTheme", optS("colors"), line); for (const char* r : roleNames()) if (allowed(r)) t.setSlot(r, *s.slot(r)); }
+        if (!optS("shape").empty()) { const Theme& s = themeOrFail("indsin.blendTheme", optS("shape"), line); applyShape(s, true); }
+        if (opts) if (const Value* ov = opts->map->findValue(Value::string("overrides")); ov && ov->type == Value::Type::MAP && ov->map) {
+            for (const auto& kv : *ov->map) {
+                std::string f = kv.first.toDisplayString();
+                if (t.slot(f)) {
+                    if (kv.second.type != Value::Type::STRING || !rincolor::looksLikeColorLiteral(kv.second.str)) fail(line, "'indsin.blendTheme': overrides." + f + " يجب أن يكون لوناً (#hex/rgb()/اسم)");
+                    t.setSlot(f, rincolor::parseColor(kv.second.str, {0, 0, 0, 255}));
+                } else if (f == "radius" && kv.second.type == Value::Type::NUMBER) t.radius = kv.second.number;
+                else if (f == "cardElevation" && kv.second.type == Value::Type::NUMBER) t.cardElevation = (int)kv.second.number;
+                else if (f == "buttonElevation" && kv.second.type == Value::Type::NUMBER) t.buttonElevation = (int)kv.second.number;
+                else if (f == "hairline") t.hairline = kv.second.isTruthy();
+                else fail(line, "'indsin.blendTheme': حقل overrides غير معروف `" + f + "`");
+            }
+        }
+        (void)base; (void)isShape;
+        themeRegistry().registerTheme(t);
+        bool activate = false;
+        if (opts) if (const Value* v = opts->map->findValue(Value::string("activate")); v && v->type != Value::Type::NIL) activate = v->isTruthy();
+        if (activate) themeRegistry().setActive(name);
+        std::vector<std::pair<std::string, Value>> cols;
+        for (const char* r : roleNames()) cols.push_back({r, hex(*t.slot(r))});
+        return mapOf({{"name", Value::string(name)}, {"sources", arrayOfStrings(srcNames)}, {"colors", mapOf(cols)},
+                      {"radius", Value::num(t.radius)}, {"cardElevation", Value::num(t.cardElevation)},
+                      {"buttonElevation", Value::num(t.buttonElevation)}, {"hairline", Value::boolean_(t.hairline)},
+                      {"score", Value::num(validateTheme(t).score())}, {"active", Value::boolean_(themeRegistry().activeName == name)}});
     });
 }
 
