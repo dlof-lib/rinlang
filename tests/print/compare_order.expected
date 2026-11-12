@@ -1,0 +1,36 @@
+-1 0 1
+-1 1 0
+-1 1 -1
+-1 -1 1
+0 -1
+0 -1
+-1 0
+-1 1
+1 1
+-1
+1
+[1, 2, 3]
+[3, 2, 1]
+["a", "b", "C"]
+["a1", "a2", "a10"]
+[nil, true, 2, "x", [1]]
+Ali
+Lina
+Omar
+Sara
+--
+Omar 30
+Sara 30
+Ali 25
+Lina 25
+--
+Omar
+Sara
+Lina
+Ali
+Lina
+[1, 2, 3]
+Sara
+{"name": "beta", "ver": [1, 0, 9]}
+orderBy يحتاج مصفوفة
+مواصفة غير صالحة
