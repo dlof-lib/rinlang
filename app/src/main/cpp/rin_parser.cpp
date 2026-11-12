@@ -4745,7 +4745,7 @@ ExprPtr Parser::equality() {
 ExprPtr Parser::comparison() {
     auto expr = term();
     for (;;) {
-        if (match({TokenType::LESS, TokenType::LESS_EQUAL, TokenType::GREATER, TokenType::GREATER_EQUAL})) {
+        if (match({TokenType::LESS, TokenType::LESS_EQUAL, TokenType::GREATER, TokenType::GREATER_EQUAL, TokenType::COMPARE3})) {
             auto op = previous().type;
             auto right = term();
             auto b = std::make_shared<BinaryExpr>();
