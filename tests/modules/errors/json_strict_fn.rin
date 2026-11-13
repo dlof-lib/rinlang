@@ -1,0 +1,2 @@
+fun f() { return 1; }
+json.stringifyStrict([f]);
