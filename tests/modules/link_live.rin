@@ -1,0 +1,27 @@
+// link: ربط حيّ بلا نسخ (على عكس merge/tying اللذين ينسخان القيم لحظة التنفيذ)
+@container=Config
+    let theme = "dark";
+    let size = 10;
+.end/container
+
+@container=Ui
+    link to=Config;
+    let size = 99;        // الاسم المحلي يحجب المرتبط
+    print theme;          // قراءة حيّة من Config
+    print size;           // 99 (محلي)
+    theme = "light";      // كتابة تمرّ إلى Config نفسها
+.end/container
+
+@container=Probe
+    link to=Config;
+    print theme;          // light: التعديل من Ui ظهر هنا بلا نسخ
+.end/container
+
+@container=Copy
+    merge with=Config;
+.end/container
+// merge نسخ لحظي: التعديل اللاحق على Config لا يظهر في Copy، بينما يظهر عبر link
+
+// وصول مؤهَّل عبر الحاوية المرتبطة + تأكيد أن النسخ لا يتبع التغيير
+Config.size = 500;
+print Ui.size, Probe.size, Copy.size;
