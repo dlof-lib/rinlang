@@ -1,0 +1,1 @@
+import { nokey } from "../json/config.json";
