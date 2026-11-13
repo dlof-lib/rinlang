@@ -1,0 +1,7 @@
+lib at load: false
+lib fn called from main: false
+main fn passed to lib: true
+lib nested fn: false
+lib method: false
+main itself: true false
+true
