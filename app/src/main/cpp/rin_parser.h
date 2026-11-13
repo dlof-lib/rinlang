@@ -257,6 +257,7 @@ private:
     StmtPtr translationsBlock();
     StmtPtr translationStatement();
     StmtPtr linkStatement();
+    StmtPtr unlinkStatement();   // unlink to=X;  (كلمة سياقية)
     StmtPtr tyingStatement();
     StmtPtr mergeStatement();
     StmtPtr installationStatement(bool simplifiedFlag);
