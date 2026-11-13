@@ -1,0 +1,4 @@
+export fun double(x) { return x * 2; }
+export fun triple(x) { return x * 3; }
+export let VERSION = "1.0";
+fun hidden() { return "private"; }
