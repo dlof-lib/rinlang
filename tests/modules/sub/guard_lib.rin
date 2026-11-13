@@ -1,0 +1,6 @@
+// دوال مكتبة تسأل «هل أنا في الرئيسي؟» -- الجواب بحسب الملف الذي كُتبت فيه لا بحسب من يستدعيها
+export fun amMain() { return slab.main(); }
+export fun callBack(f) { return f(); }          // تستدعي دالة من الرئيسي
+export fun nested() { fun inner() { return slab.main(); } return inner(); }
+export class Probe { fun ask() { return slab.main(); } }
+export let AT_LOAD = slab.main();
