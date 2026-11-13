@@ -1,0 +1,2 @@
+import { twice, VERSION, own } from "./sub/api.rin";
+print twice(5), VERSION, own();
