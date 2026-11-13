@@ -1,0 +1,8 @@
+import { double as dbl, VERSION as V, triple } from "./sub/util.rin";
+print dbl(4), triple(2), V;
+
+import * as util from "./sub/util.rin";
+print util.double(10);
+
+import { quad } from "./sub/deep.rin";
+print quad(3);
