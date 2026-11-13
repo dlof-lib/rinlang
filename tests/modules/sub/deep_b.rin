@@ -1,0 +1,4 @@
+export fun leaf() { return "leaf"; }
+export let B_DEPTH = slab.depth();
+export let B_NAME = slab.name();
+export let B_IMPORTED = slab.isImported();
