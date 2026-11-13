@@ -1,0 +1,7 @@
+@container=A
+    let x = 1;
+.end/container
+@container=B
+    link to=A readonly;
+.end/container
+B.x = 5;
