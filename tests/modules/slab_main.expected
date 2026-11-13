@@ -1,0 +1,5 @@
+tool.rin loaded: main= false  name= tool  depth= 1
+main: true slab_main 0
+10
+70
+["slab_main.rin"]
