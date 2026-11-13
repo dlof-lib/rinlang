@@ -1,0 +1,10 @@
+import { amMain, callBack, nested, Probe, AT_LOAD } from "./sub/guard_lib.rin";
+fun mineAsk() { return slab.main(); }
+print "lib at load:", AT_LOAD;                    // false
+print "lib fn called from main:", amMain();       // false (كان true قبل التطوير)
+print "main fn passed to lib:", callBack(mineAsk);// true  (الدالة كُتبت في الرئيسي)
+print "lib nested fn:", nested();                 // false
+let p = Probe();
+print "lib method:", p.ask();                     // false
+print "main itself:", slab.main(), slab.isImported();
+print slab.main(mineAsk);                         // true
