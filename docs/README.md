@@ -22,6 +22,9 @@
 - [`oop.md`](./oop.md) — OOP الموسَّع (Rin 1.0): `interface` · `trait` · `abstract/final/override` · `static` · `private/protected` · `get/set` · عوامل سحرية · دوال `oop.*`.
 - [`containers.md`](./containers.md) — `@container`، أقسام، ترجمات، مستندات NoSQL.
 - [`table.md`](./table.md) — الجدول `@table`: حقول `rows`/`columns`/`style` وأعمدته كحقول، ودوال المستندات والحاويات الموجودة، وعائلة `#`، والتصدير `csv/json/md/html/txt`.
+- [`json-interop.md`](./json-interop.md) — Rin↔JSON: استيراد ملفات JSON كوحدات، `json.into` (JSON→كائنات بفحص أنواع)، `stringifyStrict`، JSON Lines، أخطاء بموضع.
+- [`slab.md`](./slab.md) — `slab.main()` وهوية الوحدة: حارس «الملف الرئيسي» وتشغيل دالة عند الرئيسي فقط.
+- [`link-and-import.md`](./link-and-import.md) — `link` الحيّ (readonly/only/except/file) و`import` (as/`*`/إعادة التصدير) والمسارات النسبية.
 - [`cross-file-containers.md`](./cross-file-containers.md) — `use ... from` (English) — calling a container/UI element from another file.
 - [`boat.md`](./boat.md)
 
