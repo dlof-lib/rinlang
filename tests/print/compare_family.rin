@@ -1,0 +1,30 @@
+// عائلة الترتيب الموسّعة: relate / inRange / isSorted / sortedIndex / mergeSorted / rank / topN / uniqueBy
+let r = relate(3, 5);
+print r.order, r.relation, r.less, r.equal, r.identical;
+print relate("a", "A", {caseless: true}).equal, relate("a", "A").identical;
+print relate(1, "x").sameKind, relate(1, "x").order;
+
+print inRange(5, 1, 10), inRange(1, 1, 10), inRange(1, 1, 10, {exclusive: true}), inRange(5, 10, 1);
+print inRange("m", "a", "z");
+
+print isSorted([1, 2, 2, 3]), isSorted([1, 2, 2, 3], nil, {strict: true}), isSorted([3, 1]);
+print isSorted([{n: 1}, {n: 2}], "n"), isSorted([{n: 2}, {n: 1}], "n"), isSorted([]);
+
+let xs = [10, 20, 20, 30];
+print sortedIndex(xs, 20), sortedIndex(xs, 20, nil, {right: true}), sortedIndex(xs, 5), sortedIndex(xs, 99);
+
+print mergeSorted([[1, 4, 7], [2, 5], [3, 6, 9]]);
+print mergeSorted([[{n: 1, s: "a"}, {n: 2, s: "a"}], [{n: 1, s: "b"}]], "n");
+
+print rank([30, 10, 20, 10]);
+print rank([30, 10, 20, 10], nil, {desc: true});
+print rank([{p: 2}, {p: 1}], "p");
+
+print topN([5, 1, 9, 3, 7], 3);
+print topN([5, 1, 9, 3, 7], 2, nil, {desc: true});
+print topN([{n: "a", v: 2}, {n: "b", v: 9}, {n: "c", v: 5}], 2, "v");
+print topN([1, 2], 0), topN([1, 2], 10);
+
+print uniqueBy([{k: 1, v: "a"}, {k: 2, v: "b"}, {k: 1, v: "c"}], "k");
+print uniqueBy(["a", "A", "b", "B", "a"], nil, {caseless: true});
+print uniqueBy([3, 1, 3, 2, 1]);
