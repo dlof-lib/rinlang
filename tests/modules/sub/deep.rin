@@ -1,0 +1,3 @@
+// استيراد نسبي متداخل: يُحلّ ./util.rin نسبةً إلى هذا الملف لا إلى الملف الرئيسي
+import { double } from "./util.rin";
+export fun quad(x) { return double(double(x)); }
