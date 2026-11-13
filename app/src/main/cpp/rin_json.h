@@ -112,7 +112,10 @@ public:
             if (pos != len) throw std::runtime_error("محتوى زائد بعد نهاية JSON صالح");
             return true;
         } catch (std::exception& e) {
-            outErr = e.what();
+            // موضع الخلل (سطر/عمود، يبدآن من 1) لتسهيل إصلاح ملفات JSON الكبيرة
+            size_t at = pos < len ? pos : len, line = 1, col = 1;
+            for (size_t i = 0; i < at; ++i) { if (src[i] == '\n') { ++line; col = 1; } else ++col; }
+            outErr = std::string(e.what()) + " (line " + std::to_string(line) + ", column " + std::to_string(col) + ")";
             return false;
         }
     }
