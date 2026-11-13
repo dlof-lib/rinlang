@@ -320,6 +320,38 @@ void Interpreter::registerNativesOopLink() {
     defContainerBind("oop.bindContainerFrom", 1);
     defContainerBind("oop.bindContainerTwoWay", 2);
 
+    // links("Container") -> [{name, readonly}] : الحاويات المرتبطة حياً (link) بهذه الحاوية، بترتيب الربط
+    natives["links"] = [this](Args& a, int line) -> Value {
+        if (a.size() != 1 || a[0].type != Value::Type::STRING)
+            throw diagErr(diag::Code::E0007_InvalidArguments, line, "links(name) expects a container name (string)");
+        auto it = containers.find(a[0].str);
+        if (it == containers.end())
+            throw diagErr(diag::Code::E0014_InvalidContainer, line, "links: '" + a[0].str + "' is not a container");
+        auto out = std::make_shared<ArrayData>();
+        auto nameOf = [this](const EnvPtr& e) { for (auto& kv : containers) if (kv.second == e) return kv.first; return std::string("?"); };
+        auto add = [&](const std::vector<EnvPtr>& v, bool ro) {
+            for (auto& e : v) {
+                auto m = std::make_shared<MapData>();
+                m->push_back({Value::string("name"), Value::string(nameOf(e))});
+                m->push_back({Value::string("readonly"), Value::boolean_(ro)});
+                auto& lkdata = it->second->lkd();
+                auto fit = lkdata.filters.find(e.get());
+                if (fit != lkdata.filters.end()) {
+                    auto toArr = [](const std::unordered_set<std::string>& st) {
+                        std::vector<std::string> v(st.begin(), st.end()); std::sort(v.begin(), v.end());
+                        auto arr = std::make_shared<ArrayData>(); for (auto& x : v) arr->push_back(Value::string(x));
+                        return Value::makeArray(arr); };
+                    if (!fit->second.only.empty()) m->push_back({Value::string("only"), toArr(fit->second.only)});
+                    if (!fit->second.except.empty()) m->push_back({Value::string("except"), toArr(fit->second.except)});
+                }
+                out->push_back(Value::makeMap(m));
+            }
+        };
+        add(it->second->lkd().links, false);
+        add(it->second->lkd().roLinks, true);
+        return Value::makeArray(out);
+    };
+
     natives["oop.watchContainer"] = [this, needContainer, N](Args& a, int line) -> Value {
         need("oop.watchContainer", a, 3, 3, line);
         std::string cont = str(a[0], "oop.watchContainer", line), key = str(a[1], "oop.watchContainer", line);
