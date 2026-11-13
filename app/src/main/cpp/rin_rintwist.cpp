@@ -28,6 +28,7 @@
 #include <chrono>
 #include <ctime>
 #include <filesystem>
+#include <set>
 #if defined(_WIN32)
 #  include <process.h>
 #else
@@ -50,8 +51,13 @@ Interpreter::ExecFrameScope::ExecFrameScope(Interpreter& in, const std::string& 
         f.libName = libint::stripLibSuffix(libint::baseOf(path));
     }
     in.execFrames_.push_back(std::move(f));
+    prevOrigin_ = g_codeInMain;
+    g_codeInMain = false; // أثناء تحميل وحدة مستورَدة: الكود الجاري ليس الرئيسي
 }
-Interpreter::ExecFrameScope::~ExecFrameScope() { if (!in_.execFrames_.empty()) in_.execFrames_.pop_back(); }
+Interpreter::ExecFrameScope::~ExecFrameScope() {
+    if (!in_.execFrames_.empty()) in_.execFrames_.pop_back();
+    g_codeInMain = prevOrigin_;
+}
 
 namespace {
 const char* rtPlatform() {
@@ -272,6 +278,62 @@ void Interpreter::registerNativesRintwist() {
         const Value* v = rtResolve(snap, "stack");
         return v ? *v : Value::nil();
     };
+    // ======================= slab.* — هوية الوحدة (الملف) الجارية ونقطة الدخول =======================
+    // slab.main()            -> true إن كان الملف الجاري هو البرنامج الرئيسي (لا مستورَداً)؛ مكافئ حارس Python
+    //                           `if __name__ == "__main__"`: يحمي كود التشغيل/الاختبار داخل ملف مكتبة.
+    // slab.main(fn, args...) -> يستدعي fn(args...) فقط عند كونه الرئيسي ويُرجع نتيجتها؛ وإلا يُرجع null.
+    // slab.name() / path() / dir() -> اسم الملف بلا امتداد / مساره / مجلده (للملف الجاري)
+    // slab.entry()           -> مسار الملف الرئيسي (نقطة الدخول) أياً كان الملف الجاري
+    // slab.depth()           -> عمق الاستيراد (0 = الرئيسي)
+    // slab.stack()           -> مسارات سلسلة الاستيراد من الرئيسي إلى الجاري
+    // ملاحظة: الحكم بحسب مرحلة التنفيذ لحظة الاستدعاء؛ اكتب الحارس على مستوى الملف (وقت التحميل) ليعكس الملف المكتوب فيه.
+    natives["slab.main"] = [this](Args& a, int line) -> Value {
+        const bool isMain = g_codeInMain; // أصل الكود: الملف الذي كُتب فيه (لا مرحلة التنفيذ فقط)
+        if (a.empty()) return Value::boolean_(isMain);
+        if (!isMain) return Value::nil();
+        const Value fn = a[0];
+        if (fn.type != Value::Type::FUNCTION && !(fn.type == Value::Type::STRING && natives.count(fn.str)))
+            throw err(diag::Code::E0004_InvalidType, line, "'slab.main' expects a function as its first argument but got " + fn.typeName());
+        Args rest(a.begin() + 1, a.end());
+        return callValue(fn, rest, line);
+    };
+    auto slabField = [this](const char* name, const char* path) {
+        natives[name] = [this, name, path](Args& a, int line) -> Value {
+            expectArgsRange(name, a, 0, 0, line);
+            Value snap = rintwistValue();
+            const Value* v = rtResolve(snap, path);
+            return v ? *v : Value::nil();
+        };
+    };
+    slabField("slab.name", "file.stem");
+    slabField("slab.path", "file.path");
+    slabField("slab.dir", "file.dir");
+    slabField("slab.entry", "file.main");
+    slabField("slab.depth", "file.depth");
+    // slab.isImported() -> نفي slab.main() بصياغة أوضح لمن يفضّلها
+    natives["slab.isImported"] = [this](Args& a, int line) -> Value {
+        expectArgsRange("slab.isImported", a, 0, 0, line);
+        return Value::boolean_(!g_codeInMain);
+    };
+    // slab.args() -> وسائط البرنامج (كما في RINTWIST.run.args)
+    natives["slab.args"] = [this](Args& a, int line) -> Value {
+        expectArgsRange("slab.args", a, 0, 0, line);
+        return libint::strArr(programArgs_);
+    };
+    // slab.imports() -> مسارات الوحدات المستورَدة حتى الآن (مرتبة، بلا تكرار)
+    natives["slab.imports"] = [this](Args& a, int line) -> Value {
+        expectArgsRange("slab.imports", a, 0, 0, line);
+        std::set<std::string> uniq;
+        for (auto& k : importedPaths) { size_t h = k.find('#'); uniq.insert(h == std::string::npos ? k : k.substr(0, h)); }
+        return libint::strArr(std::vector<std::string>(uniq.begin(), uniq.end()));
+    };
+    natives["slab.stack"] = [this](Args& a, int line) -> Value {
+        expectArgsRange("slab.stack", a, 0, 0, line);
+        std::vector<std::string> paths{sourceFile};
+        for (auto& f : execFrames_) paths.push_back(f.path);
+        return libint::strArr(paths);
+    };
+
     // rintwist.rsf() — يحمّل المكتبة __rsf__ (Disconom) عند أول طلب ويُرجع واجهتها RSF؛
     // rintwist.rsf("dedupe", xs) — استدعاء مباشر لعضو من الواجهة: منع التكرار تلقائياً وكشف الدورات (docs/rsf.md).
     natives["rintwist.rsf"] = [this](Args& a, int line) -> Value {
