@@ -44,9 +44,15 @@ struct NsNode; // Namespace tree node (container / group / Volume) - defined rig
 struct Value; // fwd
 struct InstanceData; // fwd (see full definition after Value below — OOP: class/struct instances)
 
+// أصل الكود الجاري تنفيذه: true = كود الملف الرئيسي، false = كود وحدة مستورَدة. تدفعه ExecFrameScope (إلى false أثناء
+// تحميل وحدة) وتغيّره callFunction أثناء كل استدعاء إلى أصل الدالة المُستدعاة -- فيُجيب slab.main() بحسب
+// الملف الذي كُتب فيه الكود لا بحسب مرحلة التنفيذ (دالة مكتبة تُستدعى لاحقاً من الرئيسي تبقى «غير رئيسية»).
+inline thread_local bool g_codeInMain = true;
+
 struct Callable {
     std::shared_ptr<FunctionStmt> declaration;
     EnvPtr closure;
+    bool originMain = g_codeInMain; // أصل الدالة: يُلتقط لحظة إنشائها (تعريفها)
 };
 
 // مصفوفة (array): تُمرَّر بالمرجع (shared_ptr) حتى تعمل push/pop/الفهرسة بالتعديل المباشر.
@@ -198,6 +204,7 @@ struct ClassDef {
     std::vector<std::pair<std::string, ExprPtr>> fieldDefs; // (اسم الحقل، عبارة القيمة الافتراضية أو nullptr)
     std::unordered_map<std::string, std::shared_ptr<FunctionStmt>> methods; // تتضمن "init" إن عُرِّفت
     int line = 0;
+    bool originMain = true; // هل عُرِّف الصنف في الملف الرئيسي (لأجل slab.main() داخل methods)
 
     // ---- Rin 1.0: OOP الموسَّع ----
     ClassKind kind = ClassKind::Class;           // class/struct | interface | trait
@@ -374,10 +381,32 @@ struct StringHash {
 };
 using ValueMap = std::unordered_map<std::string, Value, StringHash, std::equal_to<>>;
 
+// فلتر ربط (link ... only= / except=): أي أسماء الهدف تُكشف عبر الربط.
+struct LinkFilter { std::unordered_set<std::string> only, except; };
+
 struct Environment : std::enable_shared_from_this<Environment> {
     ValueMap values;
     std::unordered_map<std::string, std::shared_ptr<LiveMeta>> live; // المتغيرات الحيّة فقط (غالباً فارغة)
     EnvPtr parent;
+    // link (ربط حيّ بلا نسخ): نطاقات حاويات أخرى تُقرأ/تُكتب أسماؤها كأنها جزء من هذا النطاق. تُستشار فقط
+    // عند غياب الاسم محلياً وقبل الانتقال للأب (المحلي ثم المرتبط بترتيب الربط ثم الأب). غالباً فارغة.
+    // بيانات الربط تُنشأ عند أول link فقط (lkd())؛ النطاقات العادية لا تدفع إلا مؤشراً فارغاً وعلماً.
+    struct LinkData {
+        std::vector<EnvPtr> links;
+        std::vector<EnvPtr> roLinks; // روابط قراءة فقط (link ... readonly): تُقرأ لكن لا تُكتب
+        std::unordered_map<const Environment*, LinkFilter> filters; // فلاتر اختيارية لكل هدف مرتبط
+    };
+    std::unique_ptr<LinkData> lk;
+    bool anyLinks = false; // مؤشر سريع: هل رُبط بهذا النطاق أي link (يُجنّب فحص القوائم في مسار القراءة الساخن)
+    LinkData& lkd() { if (!lk) { lk = std::make_unique<LinkData>(); } anyLinks = true; return *lk; }
+    bool linkAllows(const Environment* t, std::string_view name) const {
+        if (!lk || lk->filters.empty()) return true;
+        auto it = lk->filters.find(t);
+        if (it == lk->filters.end()) return true;
+        std::string n(name);
+        if (!it->second.only.empty()) return it->second.only.count(n) > 0;
+        return it->second.except.count(n) == 0;
+    }
     std::weak_ptr<NsNode> ns; // set only on the private env of a named container/group/Volume (namespace root scope)
     explicit Environment(EnvPtr parentEnv = nullptr) : parent(std::move(parentEnv)) {}
 
@@ -391,6 +420,10 @@ struct Environment : std::enable_shared_from_this<Environment> {
         for (Environment* e = this; e; e = e->parent.get()) {
             auto it = e->values.find(name);
             if (it != e->values.end()) return &it->second;
+            if (e->anyLinks) {
+                for (auto& l : e->lk->links) if (e->linkAllows(l.get(), name)) if (Value* p = l->lookup(name)) return p;
+                for (auto& l : e->lk->roLinks) if (e->linkAllows(l.get(), name)) if (Value* p = l->lookup(name)) return p;
+            }
         }
         return nullptr;
     }
@@ -398,6 +431,43 @@ struct Environment : std::enable_shared_from_this<Environment> {
         for (const Environment* e = this; e; e = e->parent.get()) {
             auto it = e->values.find(name);
             if (it != e->values.end()) return &it->second;
+            if (e->anyLinks) {
+                for (auto& l : e->lk->links) if (e->linkAllows(l.get(), name)) if (const Value* p = static_cast<const Environment&>(*l).lookup(name)) return p;
+                for (auto& l : e->lk->roLinks) if (e->linkAllows(l.get(), name)) if (const Value* p = static_cast<const Environment&>(*l).lookup(name)) return p;
+            }
+        }
+        return nullptr;
+    }
+    // هل يصل هذا النطاق إلى target عبر سلسلة links (لمنع دورات الربط A<->B قبل حدوثها)
+    bool linksReach(const Environment* target) const {
+        if (this == target) return true;
+        if (!lk) return false;
+        for (auto& l : lk->links) if (l->linksReach(target)) return true;
+        for (auto& l : lk->roLinks) if (l->linksReach(target)) return true;
+        return false;
+    }
+    // البيئة التي تملك الاسم فعلاً: هذا النطاق أو نطاقات links (بلا الصعود للأب)؛ nullptr إن لم يوجد.
+    Environment* findOwnerLinked(std::string_view name) noexcept {
+        if (values.find(name) != values.end()) return this;
+        if (!lk) return nullptr;
+        for (auto& l : lk->links) if (linkAllows(l.get(), name)) if (Environment* o = l->findOwnerLinked(name)) return o;
+        return nullptr;
+    }
+    // للقراءة: كسابقتها لكن تشمل الروابط القرائية (readonly) أيضاً.
+    Environment* findReadOwnerLinked(std::string_view name) noexcept {
+        if (values.find(name) != values.end()) return this;
+        if (!lk) return nullptr;
+        for (auto& l : lk->links) if (linkAllows(l.get(), name)) if (Environment* o = l->findReadOwnerLinked(name)) return o;
+        for (auto& l : lk->roLinks) if (linkAllows(l.get(), name)) if (Environment* o = l->findReadOwnerLinked(name)) return o;
+        return nullptr;
+    }
+    // كسابقتها لكن تصعد للآباء أيضاً (نفس ترتيب lookup: محلي ← مرتبط ← أب).
+    Environment* findOwner(std::string_view name) noexcept {
+        for (Environment* e = this; e; e = e->parent.get()) {
+            if (e->values.find(name) != e->values.end()) return e;
+            if (e->anyLinks) {
+                for (auto& l : e->lk->links) if (e->linkAllows(l.get(), name)) if (Environment* o = l->findOwnerLinked(name)) return o;
+            }
         }
         return nullptr;
     }
@@ -997,6 +1067,7 @@ private:
         ExecFrameScope(Interpreter& in, const std::string& path, const LibraryUnit* unit);
         ~ExecFrameScope();
         Interpreter& in_;
+        bool prevOrigin_ = true; // أصل الكود قبل الدخول (يُستعاد عند الخروج)
     };
     std::chrono::steady_clock::time_point startedAt_ = std::chrono::steady_clock::now();   // RINTWIST.run.uptimeMs
     long long startedUnixMs_ = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
@@ -1116,6 +1187,18 @@ private:
     // استيراد لم تكتمل بعد (A تستورد B وB لا تزال بمنتصف استيراد A نفسها) — importChain تحديداً
     // لهذه الحالة (انظر ImportChainGuard في execute(ImportStmt) في rin_interpreter.cpp).
     std::vector<std::string> importChain;
+    // مجلد كل ملف مستورَد جارٍ تنفيذه (الأحدث في النهاية): يُحلّ عليه الاستيراد النسبي الصريح (./ و ../)
+    // لملف مستورَد داخل ملف مستورَد، بدل أن يُحلّ دوماً على مجلد الملف الرئيسي.
+    std::vector<std::string> importDirs_;
+    // يفتح استيراداً نسبياً صريحاً (./x أو ../x) نسبةً لمجلد الملف المستورِد؛ يُرجع مجلد الملف المفتوح.
+    // مفتاح منع التكرار/كشف الدورات: للمسار النسبي الصريح (./ و ../) يُوحَّد نسبةً لمجلد المستورِد بحيث يُعدّ
+    // `./b.rin` من ملف مجاور و`./sub/b.rin` من الرئيسي ملفاً واحداً (فلا يُحمَّل مرتين). غير ذلك: libPath كما هو.
+    // ---- استيراد ملفات JSON كوحدات بيانات: @import "x.json" [as ns]; · import { a as b } from "x.json"; ----
+    // الجذر يجب أن يكون كائناً؛ كل مفتاح (اسم صالح) يصبح متغيراً. يُحلّ المسار كالوحدات (نسبةً للمستورِد ثم مجلد العمل).
+    static bool isJsonModulePath(const std::string& p);
+    Value loadJsonModule(const std::string& rawPath, int line);
+    std::string canonicalImportPath(const std::string& rawPath, const std::string& libPath) const;
+    bool openRelativeImport(const std::string& rawPath, std::ifstream& in, std::string& dirOut);
     std::unordered_map<std::string, std::string> linkIdToContainer; // معرّف الربط العام (container.link.id) -> اسم الحاوية المسجَّلة به
 
     // ---- .object("id") ... container.(); .end/object  (انظر ObjectLiteralStmt في rin_ast.h) ----
