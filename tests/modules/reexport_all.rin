@@ -1,0 +1,2 @@
+import { double, triple, VERSION, extra } from "./sub/all.rin";
+print double(4), triple(4), VERSION, extra();
