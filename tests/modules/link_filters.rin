@@ -1,0 +1,24 @@
+@container=Settings
+    let theme = "dark";
+    let size = 12;
+    let secret = "key";
+.end/container
+
+@container=Panel
+    link to=Settings only=theme,size;       // قائمة سماح
+    print theme, size;
+    try { print secret; } catch (e) { print "secret hidden"; }
+    print links("Panel");
+.end/container
+
+@container=Safe
+    link to=Settings except=secret readonly;   // قائمة منع + قراءة فقط
+    print theme, size;
+    try { print secret; } catch (e) { print "secret hidden"; }
+.end/container
+
+@container=Relink
+    link to=Settings only=theme;
+    link to=Settings;                           // إعادة الربط بلا فلتر ترفع الفلتر
+    print secret;
+.end/container
