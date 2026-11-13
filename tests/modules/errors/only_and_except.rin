@@ -1,0 +1,6 @@
+@container=A
+    let x = 1;
+.end/container
+@container=B
+    link to=A only=x except=x;
+.end/container
