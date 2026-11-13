@@ -1,0 +1,14 @@
+// JSON Lines
+let rows = json.lines("{\"a\":1}\n\n{\"a\":2}\r\n[3]\n");
+print len(rows), rows[1].a, rows[2];
+print json.toLines([{"x": 1}, [1, 2], "s"]);
+
+// stringifyStrict: يرفض ما لا يُمثَّل
+print json.stringifyStrict({"ok": [1, 2, {"k": "v"}]});
+fun f() { return 1; }
+try { json.stringifyStrict({"a": [1, f]}); } catch (e) { print "function rejected"; }
+print json.stringify({"a": f});                                // العادي: null صامتاً
+
+// أخطاء بموضع
+let r = json.tryParse("{\n  \"a\": 1,\n  \"b\": [1, 2\n}");
+print r.ok, r.error;
