@@ -1,0 +1,6 @@
+// link + import: الاستيراد باسم مستعار ثم ربطه حياً
+@import "./sub/util.rin" as u;
+@container=App
+    link to=u readonly;
+    print double(21), VERSION;
+.end/container
