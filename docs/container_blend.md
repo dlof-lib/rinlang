@@ -153,3 +153,26 @@ compare({n: {v: 3}}, {n: {v: 9}}, {by: "n.v"});       // -1
 blendWith({rules: {"ver": "min"}}, {ver: [1, 2]}, {ver: [1, 0, 9]});   // الأصغر بالترتيب الشامل
 ```
 الاختبار: `tests/print/compare_order.rin`. وله معامل في اللغة: `a <!=g=?> b` (انظر docs/shorthand.md).
+
+## العائلة الموسّعة
+
+كلها فوق المحرّك نفسه ونفس مواصفات `orderBy` (`spec`: مسار / دالة / مصفوفة / `{by,desc}` — و`opts`: `caseless` `natural` `nilsFirst` `desc`):
+
+| الدالة | الوظيفة |
+|---|---|
+| `relate(a, b, opts?)` | علاقة غنية: `{order, relation, less, equal, greater, identical, sameKind}` — `equal` ترتيبياً، و`identical` بتساوي القيم الحرفي |
+| `inRange(x, lo, hi, opts?)` | داخل المدى لأي نوع؛ مغلق افتراضياً، `{exclusive:true}` لاستبعاد الطرفين؛ يقلب `lo/hi` تلقائياً |
+| `isSorted(list, spec?, opts?)` | هل القائمة مرتّبة؟ `{strict:true}` يمنع التكرار |
+| `sortedIndex(list, v, spec?, opts?)` | موضع الإدراج بالبحث الثنائي؛ `{right:true}` بعد المتساويات |
+| `mergeSorted(lists, spec?, opts?)` | دمج ثباتي لقوائم مرتّبة (التعادل لصالح القائمة الأولى) |
+| `rank(list, spec?, opts?)` | الرتب بترتيب العناصر الأصلي، المتعادلون يتشاركون الرتبة (`1,2,2,4`) |
+| `topN(list, n, spec?, opts?)` | أكبر `n` عنصراً؛ `{desc:true}` تعكسها إلى أصغر `n` |
+| `uniqueBy(list, spec?, opts?)` | أول عنصر من كل مجموعة متعادلة مع حفظ ترتيب الظهور |
+
+```rin
+topN(players, 3, "score");                    // الأعلى نتيجة
+rank([30, 10, 20, 10]);                       // [4, 1, 3, 1]
+uniqueBy(["a", "A", "b"], nil, {caseless: true});   // ["a", "b"]
+sortedIndex([10, 20, 20, 30], 20);            // 1
+```
+الاختبار: `tests/print/compare_family.rin`.
