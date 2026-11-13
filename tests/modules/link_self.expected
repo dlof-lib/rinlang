@@ -1,0 +1,7 @@
+
+error[E0014]: link: لا يمكن ربط حاوية بنفسها ('S')
+  --> link_self.rin:2:1
+
+ 2 |     link to=S;
+   | ^
+
