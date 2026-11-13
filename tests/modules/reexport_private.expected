@@ -1,0 +1,10 @@
+
+error[E0028]: `double` is not defined in "./sub/api.rin"
+  --> reexport_private.rin:1:1
+
+ 1 | import { double } from "./sub/api.rin";   // double لم يُعد تصديره (اسمه المحلي twice)
+   | ^
+
+reason:
+  no top-level `let`/`fun`/`class`/`struct`/`enum` named `double` was found in this module
+
