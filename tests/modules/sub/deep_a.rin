@@ -1,0 +1,4 @@
+import { leaf } from "./deep_b.rin";
+export fun chain() { return leaf(); }
+export let A_STACK = slab.stack();
+export let A_DEPTH = slab.depth();
