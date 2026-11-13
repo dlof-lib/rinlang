@@ -1,0 +1,4 @@
+let theme = "dark";
+let size = 12;
+let secret = "key";
+fun greet() { return "hi " + theme; }
