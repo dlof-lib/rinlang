@@ -1,0 +1,1 @@
+import { double } from "./sub/api.rin";   // double لم يُعد تصديره (اسمه المحلي twice)
