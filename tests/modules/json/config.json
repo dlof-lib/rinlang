@@ -1,0 +1,7 @@
+{
+  "name": "demo",
+  "port": 8080,
+  "debug": true,
+  "server": {"host": "localhost", "tags": ["a", "b"]},
+  "not-an-identifier": 1
+}
