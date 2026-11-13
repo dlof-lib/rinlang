@@ -207,6 +207,29 @@ StmtPtr Parser::declaration() {
     // أسلوب class/struct/enum أدناه بالضبط)، مُميَّزة بالنظر خطوة إضافية للأمام: يجب أن يتبعها
     // مباشرة LET أو FUN أو IDENT("class"/"struct"/"enum") تحديداً، وإلا فهي مجرد اسم متغيّر/دالة
     // عادي اسمه "export" في أي سياق آخر (نداء `export(x)`، إسناد `export = 5;`، إلخ) فلا نتدخّل.
+    // إعادة التصدير: export { a, b as c } from "path";  -> يستورد الأسماء ويُصدّرها من هذه الوحدة (واجهة تجميعية)
+    // export * from "path";  -> يعيد تصدير كل أسماء تلك الوحدة المُصدَّرة
+    if (check(TokenType::IDENT) && peek().lexeme == "export" && checkNext(TokenType::STAR)) {
+        Token kw = advance(); advance(); // 'export' '*'
+        if (!(check(TokenType::IDENT) && peek().lexeme == "from"))
+            throw errRich(diag::Code::E0012_MissingToken, peek(), "expected 'from' after 'export *'",
+                          "`export * from \"path\";` re-exports everything another module exports",
+                          "add `from \"path\";`", "'from'");
+        advance(); // 'from'
+        Token pathTok = consumeStaticText("Expected a string path after 'from'");
+        consume(TokenType::SEMICOLON, "Expected ';' after export statement");
+        auto pathExpr = std::make_shared<LiteralExpr>();
+        pathExpr->kind = LiteralExpr::Kind::STRING; pathExpr->str = pathTok.lexeme; pathExpr->line = pathTok.line;
+        auto st = std::make_shared<ImportStmt>();
+        st->path = pathExpr; st->line = kw.line; st->reexportAll = true; st->exported = true;
+        return st;
+    }
+    if (check(TokenType::IDENT) && peek().lexeme == "export" && checkNext(TokenType::LBRACE)) {
+        advance(); // 'export'
+        StmtPtr re = importSelectedStatement();
+        re->exported = true;
+        return re;
+    }
     if (check(TokenType::IDENT) && peek().lexeme == "export" && current + 1 < tokens.size()) {
         const Token& after = tokens[current + 1];
         bool followedByDeclaration =
@@ -452,6 +475,31 @@ StmtPtr Parser::declaration() {
     // Modules: 'import { a, b, c } from "path";' -- بلا '@' إطلاقاً، صياغة مستقلة تماماً عن
     // '@import' أعلاه (لا تصادم: تلك تبدأ بـ '@'، هذه تبدأ بـ IDENT("import") مباشرة تتبعه '{').
     // 'import' هنا أيضاً كلمة سياقية غير محجوزة كسابقتها بالضبط.
+    // import * as ns from "path";  -> مكافئ لـ @import "path" as ns; (نطاق معزول باسم ns، يُصل إليه عبر ns.name)
+    if (check(TokenType::IDENT) && peek().lexeme == "import" && checkNext(TokenType::STAR)) {
+        Token kw = advance(); // 'import'
+        advance();            // '*'
+        if (!(check(TokenType::IDENT) && peek().lexeme == "as"))
+            throw errRich(diag::Code::E0012_MissingToken, peek(), "expected 'as' after 'import *'",
+                          "a namespace import needs a name: `import * as ns from \"path\";`",
+                          "write `import * as name from \"path\";`", "'as'");
+        advance(); // 'as'
+        Token nameTok = consume(TokenType::IDENT, "Expected a namespace name after 'as'");
+        if (!(check(TokenType::IDENT) && peek().lexeme == "from"))
+            throw errRich(diag::Code::E0012_MissingToken, peek(), "expected 'from' after namespace name",
+                          "`import * as ns` must be followed by `from \"path\";`",
+                          "add `from \"path\";`", "'from'");
+        advance(); // 'from'
+        Token pathTok = consumeStaticText("Expected a string path after 'from'");
+        consume(TokenType::SEMICOLON, "Expected ';' after import statement");
+        auto pathExpr = std::make_shared<LiteralExpr>();
+        pathExpr->kind = LiteralExpr::Kind::STRING;
+        pathExpr->str = pathTok.lexeme;
+        pathExpr->line = pathTok.line;
+        auto st = std::make_shared<ImportStmt>();
+        st->path = pathExpr; st->alias = nameTok.lexeme; st->line = kw.line;
+        return st;
+    }
     if (check(TokenType::IDENT) && peek().lexeme == "import" && checkNext(TokenType::LBRACE)) {
         advance(); // 'import'
         return importSelectedStatement();
@@ -586,6 +634,7 @@ StmtPtr Parser::declaration() {
     if (match({TokenType::TRANSLATIONS})) return translationsBlock();
     if (match({TokenType::TRANSLATION})) return translationStatement();
     if (match({TokenType::LINK})) return linkStatement();
+    if (check(TokenType::IDENT) && peek().lexeme == "unlink" && checkNext(TokenType::IDENT)) { advance(); return unlinkStatement(); }
     if (match({TokenType::TYING})) return tyingStatement();
     if (match({TokenType::MERGE})) return mergeStatement();
     if (match({TokenType::SIMPLIFIED})) return simplifiedStatement();
@@ -3998,10 +4047,18 @@ StmtPtr Parser::importStatement() {
 StmtPtr Parser::importSelectedStatement() {
     Token kw = previous(); // 'import' (للحصول على رقم السطر)
     consume(TokenType::LBRACE, "Expected '{' after 'import'");
-    std::vector<std::string> names;
+    std::vector<std::string> names, aliases;
     if (!check(TokenType::RBRACE)) {
         do {
+            if (check(TokenType::RBRACE)) break; // فاصلة أخيرة مسموحة: import { a, b, } from ...
             names.push_back(consume(TokenType::IDENT, "Expected a name to import").lexeme);
+            // 'as' كلمة سياقية: import { a as b } -> يُدرَج المُصدَّر a في النطاق الحالي باسم b
+            if (check(TokenType::IDENT) && peek().lexeme == "as") {
+                advance();
+                aliases.push_back(consume(TokenType::IDENT, "Expected a local name after 'as'").lexeme);
+            } else {
+                aliases.push_back("");
+            }
         } while (match({TokenType::COMMA}));
     }
     consume(TokenType::RBRACE, "Expected '}' after import list");
@@ -4023,6 +4080,7 @@ StmtPtr Parser::importSelectedStatement() {
 
     auto s = std::make_shared<ImportSelectedStmt>();
     s->names = std::move(names);
+    s->aliases = std::move(aliases);
     s->path = pathExpr;
     s->line = kw.line;
     return s;
@@ -4141,8 +4199,8 @@ StmtPtr Parser::linkStatement() {
         return s;
     }
 
-    Token key = consume(TokenType::IDENT, "Expected 'to' or 'id' after 'link'");
-    if (key.lexeme != "to" && key.lexeme != "id")
+    Token key = check(TokenType::FILE_KW) ? advance() : consume(TokenType::IDENT, "Expected 'to', 'id' or 'file' after 'link'"); // 'file' كلمة محجوزة
+    if (key.lexeme != "to" && key.lexeme != "id" && key.lexeme != "file")
         throw errRich(diag::Code::E0016_InvalidProperty, key,
                        "expected 'to' or 'id' attribute after 'link'",
                        "a `link` statement takes exactly one attribute: `to=name` (link by container "
@@ -4154,7 +4212,10 @@ StmtPtr Parser::linkStatement() {
 
     auto s = std::make_shared<LinkStmt>();
     s->line = tok.line;
-    if (key.lexeme == "id") {
+    if (key.lexeme == "file") {
+        // link file="./x.rin" [as=ns] [readonly] [only=..];  -> ربط ملف كامل
+        s->filePath = consumeStaticText("Expected a text path after 'file='").lexeme;
+    } else if (key.lexeme == "id") {
         // link id="X";  -> ربط بمعرّف عام بدل اسم الحاوية (يعمل عبر الملفات)
         Token val = consumeStaticText( "Expected a text value after 'id='");
         s->byId = val.lexeme;
@@ -4169,7 +4230,58 @@ StmtPtr Parser::linkStatement() {
                           "an identifier or string literal");
         s->target = advance().lexeme;
     }
+    // خيارات اختيارية بأي ترتيب (كلمات سياقية): readonly | only=a,b | except=a,b
+    while (check(TokenType::IDENT)) {
+        const std::string opt = peek().lexeme;
+        if (opt == "readonly") { advance(); s->readOnly = true; continue; }
+        if (opt == "as" && !s->filePath.empty()) {
+            advance();
+            consume(TokenType::EQUAL, "Expected '=' after 'as'");
+            s->alias = consume(TokenType::IDENT, "Expected a namespace name after 'as='").lexeme;
+            continue;
+        }
+        if (opt == "only" || opt == "except") {
+            advance();
+            consume(TokenType::EQUAL, "Expected '=' after '" + opt + "'");
+            auto& list = (opt == "only") ? s->only : s->except;
+            do {
+                if (!check(TokenType::IDENT) && !check(TokenType::STRING))
+                    throw errRich(diag::Code::E0012_MissingToken, peek(), "expected a name after '" + opt + "='",
+                                  "`" + opt + "=` takes a comma-separated list of names",
+                                  "e.g. `link to=Config " + opt + "=theme,size;`", "an identifier or string literal");
+                list.push_back(advance().lexeme);
+            } while (match({TokenType::COMMA}));
+            continue;
+        }
+        break;
+    }
+    if (!s->only.empty() && !s->except.empty())
+        throw errRich(diag::Code::E0016_InvalidProperty, previous(), "`only` and `except` cannot be combined",
+                      "use either an allow-list (`only=`) or a deny-list (`except=`) on one link",
+                      "remove one of them", "only or except");
     consume(TokenType::SEMICOLON, "Expected ';' after link statement");
+    return s;
+}
+
+// unlink to=X;  /  unlink id="X";   (كلمة سياقية، تُستدعى بعد استهلاك 'unlink')
+StmtPtr Parser::unlinkStatement() {
+    Token tok = previous();
+    Token key = consume(TokenType::IDENT, "Expected 'to' or 'id' after 'unlink'");
+    if (key.lexeme != "to" && key.lexeme != "id")
+        throw errRich(diag::Code::E0016_InvalidProperty, key, "expected 'to' or 'id' attribute after 'unlink'",
+                      "`unlink` takes `to=name` or `id=\"...\"`, like `link`",
+                      "write `unlink to=Other;`", "`to` or `id`");
+    consume(TokenType::EQUAL, "Expected '=' after '" + key.lexeme + "'");
+    auto s = std::make_shared<LinkStmt>();
+    s->line = tok.line; s->unlink = true;
+    if (key.lexeme == "id") s->byId = consumeStaticText("Expected a text value after 'id='").lexeme;
+    else {
+        if (!check(TokenType::IDENT) && !check(TokenType::STRING))
+            throw errRich(diag::Code::E0012_MissingToken, peek(), "expected a container name after 'to='",
+                          "`unlink to=` needs the container name", "e.g. `unlink to=Other;`", "an identifier or string literal");
+        s->target = advance().lexeme;
+    }
+    consume(TokenType::SEMICOLON, "Expected ';' after unlink statement");
     return s;
 }
 
