@@ -898,6 +898,198 @@ void Interpreter::registerNativesContainerBlend() {
         for (size_t i : idx) out.push_back(items[i]);
         return newArray(std::move(out));
     };
+
+    // ======================================================================== عائلة الترتيب الموسّعة
+    // كلها مبنية على نفس المحرّك (cmpV) ونفس مواصفات orderBy: مسار "a.b" | دالة | مصفوفة | {by,desc}؛ opts: caseless/natural/nilsFirst/desc
+    auto toItems = [](const Value& v, int line, const char* who) {
+        std::vector<Value> items;
+        if (v.type == Value::Type::ARRAY && v.array) items.assign(v.array->begin(), v.array->end());
+        else if (v.type == Value::Type::SET && v.set) items = v.set->items;
+        else throw diagErr(diag::Code::E0004_InvalidType, line, std::string(who) + " يتوقع مصفوفة أو Set");
+        return items;
+    };
+    // مفاتيح عنصر واحد وفق المواصفات
+    auto keysFor = [keyOf](const std::vector<OSpec>& specs, const Value& el, int line) {
+        std::vector<Value> k;
+        for (const auto& sp : specs) k.push_back(keyOf(sp, el, line));
+        return k;
+    };
+    auto cmpKeys = [](const std::vector<OSpec>& specs, const std::vector<Value>& x, const std::vector<Value>& y, const COpt& c, bool desc, int line) {
+        try {
+            for (size_t k = 0; k < specs.size(); ++k) {
+                int r = cmpV(x[k], y[k], c);
+                if (specs[k].desc) r = -r;
+                if (desc) r = -r;
+                if (r) return r;
+            }
+        } catch (const std::runtime_error& e) { throw diagErr(diag::Code::E0035_RuntimeError, line, e.what()); }
+        return 0;
+    };
+    auto specsOf = [readSpec](const Value* v, int line, const char* who) {
+        std::vector<OSpec> specs;
+        if (v && v->type != Value::Type::NIL) readSpec(*v, line, who, specs);
+        if (specs.empty()) specs.push_back(OSpec{});
+        return specs;
+    };
+
+    // relate(a, b, opts?) -> {order, relation, less, equal, greater, identical, sameKind}
+    //   equal = ترتيبياً (order==0)؛ identical = تساوي القيم الحرفي valuesEqual (1 و 1.0 متساويان، "a" و "A" لا — ما لم caseless)
+    natives["relate"] = [this, readCOpt](Args& a, int line) -> Value {
+        need("relate", a, 2, 3, line);
+        COpt c; bool desc = false;
+        readCOpt(a.size() > 2 ? &a[2] : nullptr, line, "relate", c, desc);
+        int r;
+        bool done = false; r = 0;
+        if (a[0].type == Value::Type::INSTANCE || a[1].type == Value::Type::INSTANCE) {
+            if (auto lt = tryCompareOverload(TokenType::LESS, a[0], a[1], line)) {
+                if (lt->isTruthy()) r = -1;
+                else { auto gt = tryCompareOverload(TokenType::GREATER, a[0], a[1], line); r = (gt && gt->isTruthy()) ? 1 : 0; }
+                done = true;
+            }
+        }
+        if (!done) { try { r = cmpV(a[0], a[1], c); } catch (const std::runtime_error& e) { throw diagErr(diag::Code::E0035_RuntimeError, line, e.what()); } }
+        if (desc) r = -r;
+        const char* rel = r < 0 ? "less" : (r > 0 ? "greater" : "equal");
+        return mkMap({{"order", numV(r)}, {"relation", strV(rel)}, {"less", boolV(r < 0)}, {"equal", boolV(r == 0)},
+                      {"greater", boolV(r > 0)}, {"identical", boolV(valuesEqual(a[0], a[1]))},
+                      {"sameKind", boolV(kindName(a[0]) == kindName(a[1]))}});
+    };
+
+    // inRange(x, lo, hi, opts?) -> bool  (مغلق على الطرفين؛ opts.exclusive لاستبعادهما؛ lo/hi يُعكسان تلقائياً إن كان lo>hi)
+    natives["inRange"] = [this, readCOpt](Args& a, int line) -> Value {
+        need("inRange", a, 3, 4, line);
+        COpt c; bool desc = false;
+        readCOpt(a.size() > 3 ? &a[3] : nullptr, line, "inRange", c, desc);
+        bool excl = a.size() > 3 && a[3].type == Value::Type::MAP ? czip::optBool(&a[3], "exclusive", false) : false;
+        try {
+            Value lo = a[1], hi = a[2];
+            if (cmpV(lo, hi, c) > 0) std::swap(lo, hi);
+            int l = cmpV(a[0], lo, c), h = cmpV(a[0], hi, c);
+            return Value::boolean_(excl ? (l > 0 && h < 0) : (l >= 0 && h <= 0));
+        } catch (const std::runtime_error& e) { throw diagErr(diag::Code::E0035_RuntimeError, line, e.what()); }
+    };
+
+    // isSorted(list, spec?, opts?) -> bool ؛ opts.strict: بلا تكرار
+    natives["isSorted"] = [readCOpt, toItems, keysFor, cmpKeys, specsOf](Args& a, int line) -> Value {
+        need("isSorted", a, 1, 3, line);
+        auto items = toItems(a[0], line, "isSorted");
+        auto specs = specsOf(a.size() > 1 ? &a[1] : nullptr, line, "isSorted");
+        COpt c; bool desc = false;
+        readCOpt(a.size() > 2 ? &a[2] : nullptr, line, "isSorted", c, desc);
+        bool strict = a.size() > 2 && a[2].type == Value::Type::MAP ? czip::optBool(&a[2], "strict", false) : false;
+        std::vector<Value> prev;
+        for (size_t i = 0; i < items.size(); ++i) {
+            auto k = keysFor(specs, items[i], line);
+            if (i) { int r = cmpKeys(specs, prev, k, c, desc, line); if (r > 0 || (strict && r == 0)) return Value::boolean_(false); }
+            prev = std::move(k);
+        }
+        return Value::boolean_(true);
+    };
+
+    // sortedIndex(list, value, spec?, opts?) -> موضع الإدراج (بحث ثنائي؛ القائمة يجب أن تكون مرتّبة). opts.right: بعد المتساويات
+    natives["sortedIndex"] = [readCOpt, toItems, keysFor, cmpKeys, specsOf](Args& a, int line) -> Value {
+        need("sortedIndex", a, 2, 4, line);
+        auto items = toItems(a[0], line, "sortedIndex");
+        auto specs = specsOf(a.size() > 2 ? &a[2] : nullptr, line, "sortedIndex");
+        COpt c; bool desc = false;
+        readCOpt(a.size() > 3 ? &a[3] : nullptr, line, "sortedIndex", c, desc);
+        bool right = a.size() > 3 && a[3].type == Value::Type::MAP ? czip::optBool(&a[3], "right", false) : false;
+        auto target = keysFor(specs, a[1], line);
+        size_t lo = 0, hi = items.size();
+        while (lo < hi) {
+            size_t mid = (lo + hi) / 2;
+            int r = cmpKeys(specs, keysFor(specs, items[mid], line), target, c, desc, line);
+            if (right ? (r <= 0) : (r < 0)) lo = mid + 1; else hi = mid;
+        }
+        return Value::num(double(lo));
+    };
+
+    // mergeSorted(lists, spec?, opts?) -> دمج ثباتي لقوائم مرتّبة (التعادل: القائمة الأولى أولاً) — دمج مفاهيم الترتيب مع blend
+    natives["mergeSorted"] = [readCOpt, toItems, keysFor, cmpKeys, specsOf](Args& a, int line) -> Value {
+        need("mergeSorted", a, 1, 3, line);
+        if (a[0].type != Value::Type::ARRAY || !a[0].array) throw diagErr(diag::Code::E0004_InvalidType, line, "mergeSorted يتوقع مصفوفة من القوائم");
+        std::vector<std::vector<Value>> lists;
+        for (const auto& l : *a[0].array) lists.push_back(toItems(l, line, "mergeSorted"));
+        auto specs = specsOf(a.size() > 1 ? &a[1] : nullptr, line, "mergeSorted");
+        COpt c; bool desc = false;
+        readCOpt(a.size() > 2 ? &a[2] : nullptr, line, "mergeSorted", c, desc);
+        std::vector<size_t> pos(lists.size(), 0);
+        std::vector<std::vector<Value>> head(lists.size());
+        auto load = [&](size_t i) { if (pos[i] < lists[i].size()) head[i] = keysFor(specs, lists[i][pos[i]], line); };
+        for (size_t i = 0; i < lists.size(); ++i) load(i);
+        ArrayData out;
+        for (;;) {
+            int best = -1;
+            for (size_t i = 0; i < lists.size(); ++i) {
+                if (pos[i] >= lists[i].size()) continue;
+                if (best < 0 || cmpKeys(specs, head[i], head[size_t(best)], c, desc, line) < 0) best = int(i);
+            }
+            if (best < 0) break;
+            out.push_back(lists[size_t(best)][pos[size_t(best)]]);
+            ++pos[size_t(best)]; load(size_t(best));
+        }
+        return newArray(std::move(out));
+    };
+
+    // rank(list, spec?, opts?) -> رتبة كل عنصر بترتيب القائمة الأصلي (1 = الأصغر؛ المتعادلون يتشاركون أدنى رتبة 1,2,2,4). opts.desc: 1 = الأكبر
+    natives["rank"] = [readCOpt, toItems, keysFor, cmpKeys, specsOf](Args& a, int line) -> Value {
+        need("rank", a, 1, 3, line);
+        auto items = toItems(a[0], line, "rank");
+        auto specs = specsOf(a.size() > 1 ? &a[1] : nullptr, line, "rank");
+        COpt c; bool desc = false;
+        readCOpt(a.size() > 2 ? &a[2] : nullptr, line, "rank", c, desc);
+        std::vector<std::vector<Value>> keys;
+        for (const auto& it : items) keys.push_back(keysFor(specs, it, line));
+        std::vector<size_t> idx(items.size());
+        for (size_t i = 0; i < idx.size(); ++i) idx[i] = i;
+        std::stable_sort(idx.begin(), idx.end(), [&](size_t p, size_t q) { return cmpKeys(specs, keys[p], keys[q], c, desc, line) < 0; });
+        std::vector<double> rk(items.size(), 0);
+        for (size_t i = 0; i < idx.size(); ++i)
+            rk[idx[i]] = (i > 0 && cmpKeys(specs, keys[idx[i - 1]], keys[idx[i]], c, desc, line) == 0) ? rk[idx[i - 1]] : double(i + 1);
+        ArrayData out;
+        for (double r : rk) out.push_back(Value::num(r));
+        return newArray(std::move(out));
+    };
+
+    // topN(list, n, spec?, opts?) -> أكبر n عنصراً (مرتّبة تنازلياً)؛ opts.desc=true يعكس الاتجاه فتصير "أصغر n". n<=0 → [] ؛ n>الطول → الكل
+    natives["topN"] = [readCOpt, toItems, keysFor, cmpKeys, specsOf](Args& a, int line) -> Value {
+        need("topN", a, 2, 4, line);
+        auto items = toItems(a[0], line, "topN");
+        if (a[1].type != Value::Type::NUMBER) throw diagErr(diag::Code::E0004_InvalidType, line, "topN: n رقم");
+        auto specs = specsOf(a.size() > 2 ? &a[2] : nullptr, line, "topN");
+        COpt c; bool flip = false;
+        readCOpt(a.size() > 3 ? &a[3] : nullptr, line, "topN", c, flip);
+        size_t n = a[1].number <= 0 ? 0 : size_t(a[1].number);
+        std::vector<std::vector<Value>> keys;
+        for (const auto& it : items) keys.push_back(keysFor(specs, it, line));
+        std::vector<size_t> idx(items.size());
+        for (size_t i = 0; i < idx.size(); ++i) idx[i] = i;
+        // الافتراضي: الأكبر أولاً ⇒ ترتيب تنازلي؛ flip يعكسه
+        std::stable_sort(idx.begin(), idx.end(), [&](size_t p, size_t q) { return cmpKeys(specs, keys[p], keys[q], c, !flip, line) < 0; });
+        ArrayData out;
+        for (size_t i = 0; i < idx.size() && i < n; ++i) out.push_back(items[idx[i]]);
+        return newArray(std::move(out));
+    };
+
+    // uniqueBy(list, spec?, opts?) -> أول عنصر من كل مجموعة متعادلة ترتيبياً، مع حفظ ترتيب الظهور الأصلي
+    natives["uniqueBy"] = [readCOpt, toItems, keysFor, cmpKeys, specsOf](Args& a, int line) -> Value {
+        need("uniqueBy", a, 1, 3, line);
+        auto items = toItems(a[0], line, "uniqueBy");
+        auto specs = specsOf(a.size() > 1 ? &a[1] : nullptr, line, "uniqueBy");
+        COpt c; bool desc = false;
+        readCOpt(a.size() > 2 ? &a[2] : nullptr, line, "uniqueBy", c, desc);
+        std::vector<std::vector<Value>> keys;
+        for (const auto& it : items) keys.push_back(keysFor(specs, it, line));
+        std::vector<size_t> idx(items.size());
+        for (size_t i = 0; i < idx.size(); ++i) idx[i] = i;
+        std::stable_sort(idx.begin(), idx.end(), [&](size_t p, size_t q) { return cmpKeys(specs, keys[p], keys[q], c, false, line) < 0; });
+        std::vector<char> keep(items.size(), 0);
+        for (size_t i = 0; i < idx.size(); ++i)
+            if (i == 0 || cmpKeys(specs, keys[idx[i - 1]], keys[idx[i]], c, false, line) != 0) keep[idx[i]] = 1;
+        ArrayData out;
+        for (size_t i = 0; i < items.size(); ++i) if (keep[i]) out.push_back(items[i]);
+        return newArray(std::move(out));
+    };
 }
 
 } // namespace rin
