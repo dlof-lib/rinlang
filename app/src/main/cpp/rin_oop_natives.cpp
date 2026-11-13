@@ -553,6 +553,54 @@ void Interpreter::registerNativesOop() {
         }
         return obj;
     };
+    // json.into(ClassName, data [, {strict: bool}]) — تحويل JSON (نص أو قاموس/مصفوفة) إلى كائنات صنف مع فحص الأنواع:
+    // نوع كل حقل يُستنتج من قيمته الافتراضية في الصنف (nil = أي نوع)، والحقول الكائنية المتداخلة تُبنى تكرارياً،
+    // والحقول الناقصة تحتفظ بقيمها الافتراضية، وstrict يرفض المفاتيح غير المعرَّفة. بلا استدعاء init (كـ oop.fromMap).
+    natives["json.into"] = [this](Args& a, int line) -> Value {
+        need("json.into", a, 2, 3, line);
+        const std::string cls0 = str(a[0], "json.into", line);
+        if (!classes.count(cls0)) throw unknownFunctionErr(cls0, line);
+        bool strict = false;
+        if (a.size() > 2 && a[2].type == Value::Type::MAP && a[2].map)
+            for (auto& kv : *a[2].map) if (kv.first.toDisplayString() == "strict") strict = kv.second.isTruthy();
+        Value data = a[1];
+        if (data.type == Value::Type::STRING) { std::vector<Value> pa{data}; data = natives["json.parse"](pa, line); }
+        std::function<Value(const std::string&, const Value&, const std::string&)> build =
+            [&](const std::string& cls, const Value& d, const std::string& path) -> Value {
+            if (d.type != Value::Type::MAP || !d.map)
+                throw errWithReason(diag::Code::E0004_InvalidType, line, "json.into: `" + path + "` expected an object for class `" + cls + "` but got " + d.typeName(),
+                                    "map JSON objects onto classes; arrays of objects are handled at the top level");
+            std::vector<Value> noArgs;
+            skipInit_ = true;
+            Value obj = instantiateClass(cls, noArgs, line);
+            InstanceData& inst = *obj.instance;
+            for (auto& kv : *d.map) {
+                const std::string n = kv.first.toDisplayString();
+                auto it = inst.fields.find(n);
+                if (it == inst.fields.end()) {
+                    if (strict) throw errWithReason(diag::Code::E0004_InvalidType, line, "json.into: unknown field `" + path + "." + n + "`",
+                                                    "class `" + cls + "` does not declare it (strict mode)");
+                    inst.fieldOrder.push_back(n);
+                    inst.fields[n] = copyForBinding(kv.second);
+                    continue;
+                }
+                const Value def = it->second; const Value& val = kv.second;
+                if (def.type == Value::Type::NIL || val.type == Value::Type::NIL) it->second = copyForBinding(val);
+                else if (def.type == Value::Type::INSTANCE && def.instance) it->second = build(def.instance->className, val, path + "." + n);
+                else if (def.type == val.type) it->second = copyForBinding(val);
+                else throw errWithReason(diag::Code::E0004_InvalidType, line,
+                                         "json.into: field `" + path + "." + n + "` expected " + def.typeName() + " but got " + val.typeName(),
+                                         "the type comes from the default value declared in class `" + cls + "`");
+            }
+            return obj;
+        };
+        if (data.type == Value::Type::ARRAY && data.array) {
+            ArrayData out;
+            for (size_t i = 0; i < data.array->size(); ++i) out.push_back(build(cls0, (*data.array)[i], "$[" + std::to_string(i) + "]"));
+            return newArray(std::move(out));
+        }
+        return build(cls0, data, "$");
+    };
     natives["oop.pick"] = [this, instOf, hasMember](Args& a, int line) -> Value {
         need("oop.pick", a, 2, 2, line);
         InstanceData& inst = instOf(a[0], "oop.pick", line);
