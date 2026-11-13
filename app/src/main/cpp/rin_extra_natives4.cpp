@@ -26,6 +26,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <fstream>
+#include <functional>
 #include <map>
 #include <regex>
 #include <set>
@@ -1437,6 +1438,59 @@ void Interpreter::registerNativesExtra4() {
         int indent = a.size() > 1 && a[1].type == Value::Type::NUMBER ? std::max(0, std::min(16, static_cast<int>(a[1].number))) : 0;
         bool sortKeys = a.size() > 2 && a[2].isTruthy();
         return S4(stringifyJson(a[0], indent, sortKeys));
+    };
+    // json.stringifyStrict(v [, indent]) — كـ stringify لكن يرفض (بدل التحويل الصامت إلى null) كل ما لا يُمثَّل في JSON:
+    // الدوال، NaN/Infinity، والبنى الدائرية/شديدة العمق؛ الخطأ يذكر المسار ($.a[1].b).
+    natives["json.stringifyStrict"] = [](Args& a, int line) -> Value {
+        need("json.stringifyStrict", a, 1, 2, line);
+        std::function<void(const Value&, const std::string&, int)> check = [&](const Value& v, const std::string& path, int depth) {
+            auto bad = [&](const std::string& why) {
+                throw diagErr(diag::Code::E0004_InvalidType, line, "json.stringifyStrict: value at `" + path + "` " + why);
+            };
+            if (depth > 200) bad("is nested too deeply (a cycle?)");
+            switch (v.type) {
+                case Value::Type::FUNCTION: bad("is a function, which JSON cannot represent"); break;
+                case Value::Type::NUMBER: if (!std::isfinite(v.number)) bad("is NaN or Infinity, which JSON cannot represent"); break;
+                case Value::Type::ARRAY: if (v.array) for (size_t i = 0; i < v.array->size(); ++i) check((*v.array)[i], path + "[" + std::to_string(i) + "]", depth + 1); break;
+                case Value::Type::SET: if (v.set) for (size_t i = 0; i < v.set->items.size(); ++i) check(v.set->items[i], path + "[" + std::to_string(i) + "]", depth + 1); break;
+                case Value::Type::MAP: if (v.map) for (auto& kv : *v.map) check(kv.second, path + "." + kv.first.toDisplayString(), depth + 1); break;
+                case Value::Type::INSTANCE: { MapData tmp = instanceAsMap(v); for (auto& kv : tmp) check(kv.second, path + "." + kv.first.toDisplayString(), depth + 1); break; }
+                default: break;
+            }
+        };
+        check(a[0], "$", 0);
+        int indent = a.size() > 1 && a[1].type == Value::Type::NUMBER ? std::max(0, std::min(16, static_cast<int>(a[1].number))) : 0;
+        return S4(stringifyJson(a[0], indent, false));
+    };
+    // json.lines(text) — JSON Lines/NDJSON: كل سطر غير فارغ قيمة JSON مستقلة -> مصفوفة؛ الخطأ يذكر رقم السطر.
+    natives["json.lines"] = [](Args& a, int line) -> Value {
+        need("json.lines", a, 1, 1, line);
+        const std::string text = str(a[0], "json.lines", line);
+        ArrayData items; size_t start = 0, lineNo = 0;
+        while (start <= text.size()) {
+            size_t nl = text.find('\n', start);
+            std::string ln = text.substr(start, nl == std::string::npos ? std::string::npos : nl - start);
+            ++lineNo;
+            if (!ln.empty() && ln.back() == '\r') ln.pop_back();
+            if (ln.find_first_not_of(" \t") != std::string::npos) {
+                Value v; std::string err;
+                if (!decodeStrict(ln, v, err))
+                    throw diagErr(diag::Code::E0035_RuntimeError, line, "json.lines: invalid JSON on line " + std::to_string(lineNo) + " — " + err);
+                items.push_back(std::move(v));
+            }
+            if (nl == std::string::npos) break;
+            start = nl + 1;
+        }
+        return A4(std::move(items));
+    };
+    // json.toLines(array) — عكس lines: عنصر لكل سطر، وسطر جديد أخير
+    natives["json.toLines"] = [](Args& a, int line) -> Value {
+        need("json.toLines", a, 1, 1, line);
+        if (a[0].type != Value::Type::ARRAY || !a[0].array)
+            throw diagErr(diag::Code::E0004_InvalidType, line, "json.toLines expects an array");
+        std::string o;
+        for (auto& v : *a[0].array) { o += stringifyJson(v, 0, false); o += '\n'; }
+        return S4(o);
     };
     natives["json.pretty"] = [](Args& a, int line) -> Value {
         need("json.pretty", a, 1, 2, line);
