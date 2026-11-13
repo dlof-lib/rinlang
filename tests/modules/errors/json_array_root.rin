@@ -1,0 +1,1 @@
+@import "../json/array_root.json" as x;
