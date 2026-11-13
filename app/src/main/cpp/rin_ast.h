@@ -1047,6 +1047,12 @@ struct TranslationStmt : Stmt { TranslationStmt() { stmtKind = StmtKind::Transla
 struct LinkStmt : Stmt { LinkStmt() { stmtKind = StmtKind::LinkStmt; }
     std::string target; // فارغ إن استُخدم byId
     std::string byId;   // فارغ إن استُخدم target (link to=)
+    bool readOnly = false; // link to=X readonly;  -> قراءة فقط: الكتابة عبر الربط تُرفض بخطأ واضح
+    std::string filePath; // link file="./x.rin" [as=ns];  -> يربط ملفاً كاملاً (يُحمَّل كنطاق معزول ثم يُربط حياً)
+    std::string alias;    // اسم نطاق الملف (افتراضياً اسم الملف بلا الامتداد)
+    std::vector<std::string> only;   // link to=X only=a,b;   -> يكشف هذه الأسماء فقط من X
+    std::vector<std::string> except; // link to=X except=a,b;  -> يكشف كل شيء عدا هذه الأسماء
+    bool unlink = false;   // unlink to=X;          -> يفكّ ربطاً سابقاً (الحاوية الحالية فقط)
 };
 
 // link.id="X";  (بداخل جسم حاوية) -> يسجّل "X" كـ"معرّف ربط" عام (container.link.id) لهذه الحاوية،
@@ -1127,6 +1133,8 @@ struct RouteStmt : Stmt { RouteStmt() { stmtKind = StmtKind::RouteStmt; }
 struct ImportStmt : Stmt { ImportStmt() { stmtKind = StmtKind::ImportStmt; }
     ExprPtr path;      // مسار/اسم المكتبة (نص)
     std::string alias; // فارغ = دمج مباشر في النطاق الحالي
+    bool reexportAll = false;                     // export * from "path";  (يُصدّر كل ما تُصدّره تلك الوحدة)
+    std::vector<std::string> reexportedNames;     // تُملأ وقت التنفيذ: الأسماء التي أضافها هذا الاستيراد
 };
 
 // import { a, b, c } from "path";  -> استيراد انتقائي صريح (بلا '@'، صياغة جديدة كلياً، لا تتقاطع
@@ -1134,8 +1142,10 @@ struct ImportStmt : Stmt { ImportStmt() { stmtKind = StmtKind::ImportStmt; }
 // المستورَد (بلا استثناء توافقية للخلف هنا؛ صياغة جديدة كلياً لا يعتمد عليها أي برنامج قديم) --
 // وإلا خطأ واضح فوراً (اسم غير مُصدَّر، أو غير موجود إطلاقاً). كل اسم يُدرَج مباشرة في النطاق
 // الحالي بنفس اسمه (لا alias فردي لكل عنصر -- أبسط ما يمكن، طبقة تسمية واحدة لا أكثر).
+// إعادة التسمية: import { a as b, c } from "path";  -> aliases[i] = الاسم المحلي لـ names[i] (فارغ = نفس الاسم).
 struct ImportSelectedStmt : Stmt { ImportSelectedStmt() { stmtKind = StmtKind::ImportSelectedStmt; }
     std::vector<std::string> names;
+    std::vector<std::string> aliases; // موازٍ لـ names
     ExprPtr path;
 };
 
