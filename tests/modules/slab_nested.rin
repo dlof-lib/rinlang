@@ -1,0 +1,7 @@
+// استيراد متداخل: main -> deep_a -> deep_b ؛ العمق والاسم عند التحميل
+import { chain, A_DEPTH, A_STACK } from "./sub/deep_a.rin";
+import { B_DEPTH, B_NAME, B_IMPORTED } from "./sub/deep_b.rin";
+print chain(), A_DEPTH, B_DEPTH, B_NAME, B_IMPORTED;
+print len(A_STACK);
+print slab.isImported(), slab.args();
+print slab.imports();
