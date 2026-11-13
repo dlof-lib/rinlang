@@ -1,0 +1,2 @@
+@import "./sub/all.rin";          // دمج مباشر: المُصدَّر فقط (وليس hidden الخاصة)
+print double(1), extra();
