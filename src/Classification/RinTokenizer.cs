@@ -64,6 +64,9 @@ namespace RinLang.VSSDK.Classification
                 // @import [as]
                 (new Regex(@"@import\b(\s+as\b)?", o), RinClassificationTypes.ImportKeyword),
 
+                // import { a as b } from "p"; / import * as ns from "p"; / export { a } from "p";
+                (new Regex(@"\b(import|export)(?=\s*[{*])|(?<=\})\s*\bfrom\b", o), RinClassificationTypes.ImportKeyword),
+
                 // @container / @container.pipe|data|api|import|table|doc|object|portal|block|everything|make, @Containers.Group, @Volume
                 (new Regex(@"@(container(\.(pipe|data|api|import|table|doc|object|portal|block|everything|make))?|Containers\.Group|Volume)\b", o), RinClassificationTypes.ContainerKeyword),
 
