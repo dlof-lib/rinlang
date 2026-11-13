@@ -1,0 +1,9 @@
+3 2 [3]
+{"x":1}
+[1,2]
+"s"
+
+{"ok":[1,2,{"k":"v"}]}
+function rejected
+{"a":null}
+false متوقَّع ']' (line 4, column 1)
