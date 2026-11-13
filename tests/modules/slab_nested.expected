@@ -1,0 +1,4 @@
+leaf 1 1 deep_b true
+2
+false []
+["sub/deep_a.rin", "sub/deep_b.rin"]
