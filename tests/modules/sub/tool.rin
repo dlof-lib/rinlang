@@ -1,0 +1,6 @@
+// وحدة تعمل كمكتبة وكبرنامج: الحارس يمنع تشغيل الكود التجريبي عند الاستيراد
+export fun area(w, h) { return w * h; }
+print "tool.rin loaded: main=", slab.main(), " name=", slab.name(), " depth=", slab.depth();
+if (slab.main()) {
+    print "self-test:", area(3, 4);
+}
