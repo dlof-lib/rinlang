@@ -1,0 +1,6 @@
+dark 12
+secret hidden
+[{"name": "Settings", "readonly": false, "only": ["size", "theme"]}]
+dark 12
+secret hidden
+key
