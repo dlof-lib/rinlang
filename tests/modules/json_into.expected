@@ -1,0 +1,7 @@
+Rana 31 false Beirut 1107 r
+2 B 2 0
+{"name":"Rana","age":31,"admin":false,"addr":{"city":"Beirut","zip":1107},"nick":"r"}
+{"name":"Rana","age":31,"admin":false,"addr":{"city":"Beirut","zip":1107},"nick":"r"}
+type mismatch caught
+strict caught
+1
