@@ -1,0 +1,3 @@
+// وحدة واجهة تجميعية: تعيد تصدير أسماء من util.rin (وبإعادة تسمية)
+export { double as twice, VERSION } from "./util.rin";
+export fun own() { return "api-own"; }
