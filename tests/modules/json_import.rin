@@ -1,0 +1,15 @@
+// استيراد JSON كوحدة بيانات: كل مفتاح متغيّر
+@import "./json/config.json" as cfg;
+print cfg.name, cfg.port, cfg.debug;
+print cfg.server.host, cfg.server.tags;
+
+import { port as p, name } from "./json/config.json";
+print p, name;
+
+@import "./json/config.json";            // دمج مباشر في النطاق الحالي
+print debug, server.host;
+
+@container=App
+    link file="./json/config.json" as=appcfg readonly;
+    print port;                           // 8080 (ربط حيّ بملف JSON)
+.end/container
