@@ -1,0 +1,7 @@
+import { area } from "./sub/tool.rin";    // مستورَد: لا يُشغَّل الاختبار الذاتي
+print "main:", slab.main(), slab.name(), slab.depth();
+print area(2, 5);
+
+fun times10(x) { return x * 10; }
+print slab.main(times10, 7);                   // رئيسي: يُنفَّذ ويُرجع 70
+print slab.stack();
