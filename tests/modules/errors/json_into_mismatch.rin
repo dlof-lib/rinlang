@@ -1,0 +1,2 @@
+class U { let age = 0; }
+json.into("U", "{\"age\":\"x\"}");
