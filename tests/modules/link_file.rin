@@ -1,0 +1,16 @@
+// ربط ملفات: link file="..." يحمّل الملف كنطاق معزول ويربطه حياً بالحاوية
+@container=Ui
+    link file="./sub/settings.rin" as=cfg only=theme,size,greet;
+    print theme, size, greet();
+    try { print secret; } catch (e) { print "secret hidden"; }
+    theme = "light";
+.end/container
+
+@container=Other
+    link file="./sub/settings.rin" as=cfg readonly;   // نفس الملف: حالة مشتركة
+    print theme, greet();
+.end/container
+
+print cfg.theme;                                       // النطاق متاح أيضاً بالوصول المؤهَّل
+link file="./sub/settings.rin" as=top;                 // على مستوى الملف = استيراد باسم مستعار
+print top.size;
