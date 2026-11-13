@@ -1,0 +1,27 @@
+@container=Base
+    let a = 1;
+    let b = 2;
+.end/container
+
+@container=Writer
+    link to=Base;
+    a = 10;               // كتابة مسموحة (rw)
+.end/container
+
+@container=Viewer
+    link to=Base readonly;
+    print a, b;           // 10 2  (قراءة حيّة)
+    print links("Viewer");
+    unlink to=Base;       // فكّ الربط
+    print links("Viewer");
+.end/container
+
+@container=Viewer2
+    link to=Base readonly;
+    try {
+        a = 99;           // مرفوض: الربط قرائي
+    } catch (e) {
+        print "blocked";
+    }
+.end/container
+print Base.a;             // 10
