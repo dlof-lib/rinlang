@@ -65,6 +65,15 @@
 #endif
 
 namespace rin {
+
+// يصلح اسماً لمتغير؟ (مفاتيح JSON المستوردة كوحدة بيانات)
+static bool jsonKeyIsIdentifier(const std::string& k) {
+    if (k.empty() || std::isdigit(static_cast<unsigned char>(k[0]))) return false;
+    for (unsigned char c : k) if (!(std::isalnum(c) || c == '_' || c >= 0x80)) return false;
+    return true;
+}
+
+
 namespace imgdraw { // rin_image_draw.cpp (يُضمَّن في نهاية هذا الملف)
 bool isImagePath(const std::string& path);
 std::string logAsImageBytes(const std::vector<LogEntry>& entries, const std::string& path);
@@ -10516,11 +10525,37 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
     }
 
     case StmtKind::ImportStmt: { auto s = std::static_pointer_cast<ImportStmt>(stmt);
+        // export * from "x": نسجّل الأسماء الجديدة التي يضيفها هذا الاستيراد لنطاقه (لإعادة تصديرها)
+        struct ReexportRecorder {
+            ImportStmt* st; Environment* e; std::unordered_set<std::string> before;
+            ReexportRecorder(ImportStmt* s_, Environment* e_) : st(s_), e(e_) {
+                if (st->reexportAll) for (auto& kv : e->values) before.insert(kv.first);
+            }
+            ~ReexportRecorder() {
+                if (!st->reexportAll) return;
+                for (auto& kv : e->values) if (!before.count(kv.first)) st->reexportedNames.push_back(kv.first);
+            }
+        } reexportRecorder(s.get(), env.get());
         Value pathVal = evaluate(s->path, env);
         if (pathVal.type != Value::Type::STRING) {
             throw diagErr(diag::Code::E0028_ImportError, s->line, "'@import' requires a string path/library name");
         }
         const std::string& rawPath = pathVal.str;
+
+        // ---- ملف JSON كوحدة بيانات: @import "cfg.json";  أو  @import "cfg.json" as cfg;  (cfg.key / cfg.a.b) ----
+        if (isJsonModulePath(rawPath)) {
+            Value root = loadJsonModule(rawPath, s->line);
+            if (s->alias.empty()) {
+                for (auto& kv : *root.map) { std::string k = kv.first.toDisplayString(); if (jsonKeyIsIdentifier(k)) env->define(k, copyForBinding(kv.second)); }
+            } else {
+                auto jenv = std::make_shared<Environment>(globals);
+                for (auto& kv : *root.map) { std::string k = kv.first.toDisplayString(); if (jsonKeyIsIdentifier(k)) jenv->define(k, copyForBinding(kv.second)); }
+                containers[s->alias] = jenv;
+                containerKinds[s->alias] = ContainerKind::IMPORT;
+                nsOpen(NsNode::Kind::Container, s->alias, s->alias, jenv);
+            }
+            return Flow::None;
+        }
 
         // ---- تقوية مفهوم lib/*.og.rin: اسم مكتبة "عارٍ" بلا مسار ولا امتداد (مثل @import "math";
         //      أو @import "myhelpers";) يُفهم تلقائياً على أنه lib/<name>.og.rin — سواء كانت مكتبة
@@ -10585,6 +10620,7 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
         bool fromEmbedded = !isSplitLib && (libIt != embedded.end());
 
         std::string source;
+        std::string currentImportDir; // مجلد الملف المستورَد (للاستيراد النسبي المتداخل)؛ فارغ = لا تغيير
         auto virtIt = virtualFiles_.find(libPath);
         if (virtIt == virtualFiles_.end()) virtIt = virtualFiles_.find(rawPath);
         if (isSplitLib) {
@@ -10599,7 +10635,8 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
             // 2) وإلا: مكتبة/ملف فعلي على القرص (نسبةً إلى basePath، أي مجلد المشروع الحالي)،
             //    بنفس أسلوب container.import. هذا هو نفس المسار الذي يكتب فيه قسم "المكتبات" في
             //    المحرر أي مكتبة ينشئها أو يرفعها المستخدم، فتُستورَد بنفس عبارة @import مباشرة.
-            std::ifstream in(resolvePath(libPath), std::ios::binary);
+            std::ifstream in;
+            if (!openRelativeImport(rawPath, in, currentImportDir)) in.open(resolvePath(libPath), std::ios::binary);
             // 2b) استيراد نسبي صريح (./ أو ../) لم يوجد نسبةً إلى CWD: جرّب نسبةً إلى مجلد الملف
             //     المُستورِد نفسه (عند غياب basePath المعزول فقط، فلا يُمسّ سلوك العزل على أندرويد).
             if (!in && basePath.empty() && (rawPath.rfind("./", 0) == 0 || rawPath.rfind("../", 0) == 0)) {
@@ -10628,8 +10665,11 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
                     auto d = diagErr(diag::Code::E0029_ModuleNotFound, s->line, "module not found: `" + rawPath + "`");
                     d.diagnostic->message = "module not found: `" + rawPath + "`";
                     d.diagnostic->withReason(
-                        "searched for `" + libPath + "` among embedded libraries, the project's lib/ folder, "
-                        "and RinPM packages installed via `rin pkg install`")
+                        ((rawPath.rfind("./", 0) == 0 || rawPath.rfind("../", 0) == 0)
+                            ? "`" + rawPath + "` is an explicit relative path: it was looked up in the importing file's folder, "
+                              "then in the working directory, and no such file exists"
+                            : "searched for `" + libPath + "` among embedded libraries, the project's lib/ folder, "
+                              "and RinPM packages installed via `rin pkg install`"))
                      .withHint("create/upload it from the \"Libraries\" section of the editor, "
                                "or run `rin pkg add " + rawPath + "` if it is meant to be a package");
                     throw d;
@@ -10639,7 +10679,7 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
 
         // منع إعادة استيراد نفس المكتبة بنفس أسلوب الاستيراد (مباشر أو باسم مستعار) أكثر من مرة
         // في نفس التشغيل، تماماً كأنظمة الوحدات (modules) المعتادة.
-        std::string importKey = libPath + (s->alias.empty() ? "" : ("#as:" + s->alias));
+        std::string importKey = canonicalImportPath(rawPath, libPath) + (s->alias.empty() ? "" : ("#as:" + s->alias));
 
         // Modules: اكتشاف دورة استيراد (A تستورد B وB لا تزال بمنتصف استيراد A نفسها) -- importedPaths
         // أعلاه وحدها لا تكفي هنا لأنها لا تُملأ إلا *بعد* اكتمال الاستيراد بنجاح، فدورة لم تكتمل بعد
@@ -10703,6 +10743,9 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
         try {
             ++importDepth_;
             ExecFrameScope frameScope_(*this, libPath, isSplitLib ? &libUnit : nullptr);
+            struct ImportDirGuard { std::vector<std::string>& v; bool pushed; ~ImportDirGuard() { if (pushed) v.pop_back(); } }
+                importDirGuard{importDirs_, !currentImportDir.empty()};
+            if (!currentImportDir.empty()) importDirs_.push_back(currentImportDir);
             if (s->alias.empty()) {
                 // دمج مباشر: كل fun/let/text أعلى مستوى في المكتبة تصبح متاحة في النطاق الحالي مباشرة،
                 // تماماً كـ #include. أي @container بداخل المكتبة يُسجَّل عالمياً كأي حاوية عادية.
@@ -10737,6 +10780,19 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
                             for (auto& n : names) { Value nv; if (libEnv->get(n, nv)) env->define(n, nv); }
                             continue;
                         }
+                        else if (auto ra = std::dynamic_pointer_cast<ImportStmt>(st)) {
+                            // export * from "x";  -> كل ما أضافه ذلك الاستيراد
+                            for (auto& ln : ra->reexportedNames) { Value nv; if (libEnv->get(ln, nv)) env->define(ln, nv); }
+                            continue;
+                        }
+                        else if (auto rs = std::dynamic_pointer_cast<ImportSelectedStmt>(st)) {
+                            // export { a as b } from "x";  -> أسماء مُعاد تصديرها (محلية = alias أو الاسم نفسه)
+                            for (size_t i = 0; i < rs->names.size(); ++i) {
+                                const std::string& ln = (i < rs->aliases.size() && !rs->aliases[i].empty()) ? rs->aliases[i] : rs->names[i];
+                                Value nv; if (libEnv->get(ln, nv)) env->define(ln, nv);
+                            }
+                            continue;
+                        }
                         else continue; // ClassStmt: مسجَّلة عالمياً فعلاً (انظر التعليق أعلاه)، لا شيء يُنسَخ
                         Value v;
                         if (libEnv->get(name, v)) env->define(name, v);
@@ -10750,6 +10806,8 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
                 execLibraryBody(importedStatements, isSplitLib ? &libUnit.segments : nullptr, libEnv);
                 containers[s->alias] = libEnv;
                 containerKinds[s->alias] = ContainerKind::IMPORT;
+                // نطاق مسمّى حقيقي: ns.name / ns.fn() / ns.x = v تعمل عبر شجرة النطاقات كأي حاوية.
+                nsOpen(NsNode::Kind::Container, s->alias, s->alias, libEnv);
                 importUI.stage(loaderui::LoadStage::Registering);
                 if (!groupStack.empty()) groupMembers[groupStack.back()].push_back(s->alias);
                 if (!volumeStack.empty() && (openCollectorKinds.empty() || openCollectorKinds.back() == 'V')) {
@@ -10793,6 +10851,26 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
         }
         const std::string& rawPath = pathVal.str;
 
+        // ---- import { a as b } from "cfg.json";  -> مفاتيح محدَّدة من كائن JSON الجذر ----
+        if (isJsonModulePath(rawPath)) {
+            Value root = loadJsonModule(rawPath, s->line);
+            for (size_t i = 0; i < s->names.size(); ++i) {
+                const std::string& want = s->names[i];
+                const std::string local = (i < s->aliases.size() && !s->aliases[i].empty()) ? s->aliases[i] : want;
+                const Value* found = nullptr;
+                for (auto& kv : *root.map) if (kv.first.toDisplayString() == want) { found = &kv.second; break; }
+                if (!found) {
+                    std::string keys;
+                    for (auto& kv : *root.map) { if (!keys.empty()) keys += ", "; keys += kv.first.toDisplayString(); }
+                    auto d = diagErr(diag::Code::E0028_ImportError, s->line, "import: JSON file `" + rawPath + "` has no key `" + want + "`");
+                    d.diagnostic->withReason("available keys: " + (keys.empty() ? std::string("(none)") : keys));
+                    throw d;
+                }
+                env->define(local, copyForBinding(*found));
+            }
+            return Flow::None;
+        }
+
         loaderui::LoadSession importUI(importUISink_, rawPath, importDepth_);
         importUI.stage(loaderui::LoadStage::Resolving);
 
@@ -10816,6 +10894,7 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
         bool fromEmbedded = !isSplitLib && (libIt != embedded.end());
 
         std::string source;
+        std::string currentImportDir;
         auto virtIt = virtualFiles_.find(libPath);
         if (virtIt == virtualFiles_.end()) virtIt = virtualFiles_.find(rawPath);
         if (isSplitLib) {
@@ -10825,7 +10904,8 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
         } else if (fromEmbedded) {
             source = libIt->second;
         } else {
-            std::ifstream in(resolvePath(libPath), std::ios::binary);
+            std::ifstream in;
+            if (!openRelativeImport(rawPath, in, currentImportDir)) in.open(resolvePath(libPath), std::ios::binary);
             if (in) {
                 std::ostringstream buf;
                 buf << in.rdbuf();
@@ -10843,8 +10923,11 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
                     auto d = diagErr(diag::Code::E0029_ModuleNotFound, s->line, "module not found: `" + rawPath + "`");
                     d.diagnostic->message = "module not found: `" + rawPath + "`";
                     d.diagnostic->withReason(
-                        "searched for `" + libPath + "` among embedded libraries, the project's lib/ folder, "
-                        "and RinPM packages installed via `rin pkg install`")
+                        ((rawPath.rfind("./", 0) == 0 || rawPath.rfind("../", 0) == 0)
+                            ? "`" + rawPath + "` is an explicit relative path: it was looked up in the importing file's folder, "
+                              "then in the working directory, and no such file exists"
+                            : "searched for `" + libPath + "` among embedded libraries, the project's lib/ folder, "
+                              "and RinPM packages installed via `rin pkg install`"))
                      .withHint("create/upload it from the \"Libraries\" section of the editor, "
                                "or run `rin pkg add " + rawPath + "` if it is meant to be a package");
                     throw d;
@@ -10854,7 +10937,7 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
 
         // مفتاح مستقل تماماً عن مفاتيح @import (بادئة "#sel:") -- استيراد نفس الملف مرة بـ @import
         // ومرة بـ import{...} في نفس التشغيل حالتان مختلفتان تماماً (النطاقات المستهدَفة مختلفة).
-        std::string importKey = libPath + "#sel";
+        std::string importKey = canonicalImportPath(rawPath, libPath) + "#sel";
         if (std::find(importChain.begin(), importChain.end(), importKey) != importChain.end()) {
             std::string chainDesc;
             for (auto& k : importChain) chainDesc += k + " -> ";
@@ -10907,6 +10990,9 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
         try {
             ++importDepth_;
             ExecFrameScope frameScope_(*this, libPath, isSplitLib ? &libUnit : nullptr);
+            struct ImportDirGuard { std::vector<std::string>& v; bool pushed; ~ImportDirGuard() { if (pushed) v.pop_back(); } }
+                importDirGuard{importDirs_, !currentImportDir.empty()};
+            if (!currentImportDir.empty()) importDirs_.push_back(currentImportDir);
             importUI.stage(loaderui::LoadStage::Initializing);
             execLibraryBody(importedStatements, isSplitLib ? &libUnit.segments : nullptr, libEnv);
             --importDepth_;
@@ -10924,7 +11010,9 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
 
         // كل اسم مطلوب يجب أن يقابل تصريحاً أعلى مستوى مُصدَّراً صراحة عبر 'export' -- خطأ واضح
         // فوراً لو غير مُصدَّر (privacy) أو غير موجود إطلاقاً (typo)، بدل الاستمرار بقيمة nil صامتة.
-        for (auto& requestedName : s->names) {
+        for (size_t reqIdx = 0; reqIdx < s->names.size(); ++reqIdx) {
+            const std::string& requestedName = s->names[reqIdx];
+            const std::string localName = (reqIdx < s->aliases.size() && !s->aliases[reqIdx].empty()) ? s->aliases[reqIdx] : requestedName;
             StmtPtr found = nullptr;
             for (auto& st : importedStatements) {
                 std::string name;
@@ -10935,6 +11023,17 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
                 else if (st->stmtKind == StmtKind::LetGroupStmt || st->stmtKind == StmtKind::LetPatternStmt) {
                     std::vector<std::string> names; letDeclaredNames(st, names); // let+
                     for (auto& n : names) if (n == requestedName) { name = n; break; }
+                }
+                else if (auto ra = std::dynamic_pointer_cast<ImportStmt>(st)) {
+                    if (ra->reexportAll && std::find(ra->reexportedNames.begin(), ra->reexportedNames.end(), requestedName) != ra->reexportedNames.end())
+                        name = requestedName;
+                }
+                else if (auto rs = std::dynamic_pointer_cast<ImportSelectedStmt>(st)) {
+                    // إعادة تصدير: export { a as b } from "x";
+                    for (size_t i = 0; i < rs->names.size(); ++i) {
+                        const std::string& ln = (i < rs->aliases.size() && !rs->aliases[i].empty()) ? rs->aliases[i] : rs->names[i];
+                        if (ln == requestedName) { name = ln; break; }
+                    }
                 }
                 if (name == requestedName) { found = st; break; }
             }
@@ -10952,7 +11051,7 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
             }
             if (std::dynamic_pointer_cast<ClassStmt>(found)) continue; // مسجَّلة عالمياً فعلاً، لا شيء يُنسَخ
             Value v;
-            if (libEnv->get(requestedName, v)) env->define(requestedName, v);
+            if (libEnv->get(requestedName, v)) env->define(localName, v);
         }
 
         importedPaths.insert(importKey);
@@ -11207,6 +11306,35 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
 
     case StmtKind::LinkStmt: { auto s = std::static_pointer_cast<LinkStmt>(stmt);
         std::string target = s->target;
+        if (!s->filePath.empty()) {
+            // link file="x.rin" [as=ns]: يُحمَّل الملف كنطاق معزول (كـ @import ... as) في أعلى النطاقات -- لا داخل
+            // الحاوية الحالية، كي لا تنشأ دورة أب<->ربط -- ثم يُربط حياً بالحاوية الحالية كأي link عادي.
+            std::string alias = s->alias;
+            if (alias.empty()) {
+                std::string base = s->filePath;
+                size_t sl = base.find_last_of('/'); if (sl != std::string::npos) base = base.substr(sl + 1);
+                for (const char* ext : {".og.rin", ".rin"}) {
+                    std::string e = ext;
+                    if (base.size() > e.size() && base.compare(base.size() - e.size(), e.size(), e) == 0) { base.resize(base.size() - e.size()); break; }
+                }
+                for (auto& c : base) if (!std::isalnum((unsigned char)c) && c != '_') c = '_';
+                if (base.empty() || std::isdigit((unsigned char)base[0])) base = "_" + base;
+                alias = base;
+            }
+            auto imp = std::make_shared<ImportStmt>();
+            auto lit = std::make_shared<LiteralExpr>();
+            lit->kind = LiteralExpr::Kind::STRING; lit->str = s->filePath; lit->line = s->line;
+            imp->path = lit; imp->alias = alias; imp->line = s->line;
+            EnvPtr rootEnv = env; while (rootEnv->parent) rootEnv = rootEnv->parent;
+            Value impRet;
+            // نطاق الملف يُسجَّل كجذر (لا كابن للحاوية الحالية) كي يصل إليه `alias.name` من أي مكان
+            std::vector<std::shared_ptr<NsNode>> savedNsStack;
+            savedNsStack.swap(nsStack);
+            struct NsRestore { std::vector<std::shared_ptr<NsNode>>& cur; std::vector<std::shared_ptr<NsNode>>& saved;
+                               ~NsRestore() { cur.swap(saved); } } nsRestore{nsStack, savedNsStack};
+            exec(imp, rootEnv, impRet);
+            target = alias;
+        }
         bool byId = !s->byId.empty();
         if (byId) {
             auto it = linkIdToContainer.find(s->byId);
@@ -11217,9 +11345,64 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
         bool isContainer = containers.count(target) > 0;
         bool isGroup = groupMembers.count(target) > 0;
         if (!isContainer && !isGroup) {
-            throw diagErr(diag::Code::E0014_InvalidContainer, s->line, "لا يمكن تنفيذ link: '" + target + "' غير معرَّف كحاوية أو كمجموعة (Containers.Group)");
+            throw diagErr(diag::Code::E0014_InvalidContainer, s->line, std::string("لا يمكن تنفيذ ") + (s->unlink ? "unlink" : "link") + ": '" + target + "' غير معرَّف كحاوية أو كمجموعة (Containers.Group)");
         }
-        output << "🔗 link -> " << target << (byId ? (" (id=\"" + s->byId + "\")") : "") << (isGroup ? " (Containers.Group)" : "") << "\n";
+        // ربط حيّ حقيقي بلا نسخ: داخل حاوية، تصبح أسماء الهدف مرئية (قراءةً وكتابةً) في الحاوية الحالية
+        // مباشرة من مصدرها -- أي تغيير في الهدف لاحقاً ينعكس فوراً، وأي اسم معرَّف محلياً يحجب المرتبط.
+        // (tying/merge بالمقابل ينسخان القيم لحظة التنفيذ فقط.)
+        if (s->unlink) {
+            size_t removed = 0;
+            if (!containerStack.empty() && containers.count(containerStack.back())) {
+                auto currentEnv = containers[containerStack.back()];
+                std::vector<EnvPtr> targets;
+                if (isContainer) targets.push_back(containers[target]);
+                else { std::vector<std::string> members; collectGroupContainerNames(groupMembers, target, members);
+                       for (auto& m : members) if (containers.count(m)) targets.push_back(containers[m]); }
+                for (auto& t : targets) {
+                    for (auto* vec : {&currentEnv->lkd().links, &currentEnv->lkd().roLinks}) {
+                        auto it = std::find(vec->begin(), vec->end(), t);
+                        if (it != vec->end()) { vec->erase(it); currentEnv->lkd().filters.erase(t.get()); ++removed; }
+                    }
+                }
+            }
+            output << "🔓 unlink -> " << target << (removed ? "" : " (no active link)") << "\n";
+            return Flow::None;
+        }
+        size_t linkedEnvs = 0;
+        if (!containerStack.empty() && containers.count(containerStack.back())) {
+            auto currentEnv = containers[containerStack.back()];
+            std::vector<EnvPtr> targets;
+            if (isContainer) targets.push_back(containers[target]);
+            else {
+                std::vector<std::string> members;
+                collectGroupContainerNames(groupMembers, target, members);
+                for (auto& m : members) if (containers.count(m)) targets.push_back(containers[m]);
+            }
+            for (auto& t : targets) {
+                if (t == currentEnv) {
+                    throw diagErr(diag::Code::E0014_InvalidContainer, s->line, "link: لا يمكن ربط حاوية بنفسها ('" + target + "')");
+                }
+                if (t->linksReach(currentEnv.get())) {
+                    throw diagErr(diag::Code::E0014_InvalidContainer, s->line,
+                        "link: ربط دائري — '" + target + "' مرتبطة أصلاً (مباشرة أو غير مباشرة) بالحاوية '" + containerStack.back() + "'");
+                }
+                // الربط يُعاد تعريفه بآخر نمط (rw/readonly) يُطلب: يُنقل بين القائمتين
+                auto& keep = s->readOnly ? currentEnv->lkd().roLinks : currentEnv->lkd().links;
+                auto& drop = s->readOnly ? currentEnv->lkd().links : currentEnv->lkd().roLinks;
+                drop.erase(std::remove(drop.begin(), drop.end(), t), drop.end());
+                currentEnv->anyLinks = true;
+                if (std::find(keep.begin(), keep.end(), t) == keep.end()) keep.push_back(t);
+                if (!s->only.empty() || !s->except.empty()) {
+                    LinkFilter lf;
+                    lf.only.insert(s->only.begin(), s->only.end());
+                    lf.except.insert(s->except.begin(), s->except.end());
+                    currentEnv->lkd().filters[t.get()] = std::move(lf);
+                } else currentEnv->lkd().filters.erase(t.get()); // إعادة ربط بلا فلتر ترفع الفلتر السابق
+                ++linkedEnvs;
+            }
+        }
+        output << "🔗 link -> " << target << (byId ? (" (id=\"" + s->byId + "\")") : "") << (isGroup ? " (Containers.Group)" : "")
+               << (linkedEnvs ? (std::string(s->readOnly ? " (live, read-only)" : " (live, no copy)") + (!s->only.empty() ? " (only)" : !s->except.empty() ? " (except)" : "")) : "") << "\n";
         return Flow::None;
     }
 
@@ -11480,6 +11663,67 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
     default: break;
     }
     return Flow::None;
+}
+
+bool Interpreter::isJsonModulePath(const std::string& p) {
+    if (p.size() < 6) return false;
+    std::string tail = p.substr(p.size() - 5);
+    for (auto& c : tail) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return tail == ".json" && p.rfind("http://", 0) != 0 && p.rfind("https://", 0) != 0;
+}
+
+Value Interpreter::loadJsonModule(const std::string& rawPath, int line) {
+    std::string text;
+    auto vit = virtualFiles_.find(rawPath);
+    if (vit != virtualFiles_.end()) text = vit->second;
+    else {
+        std::ifstream in; std::string dirOut;
+        if (!openRelativeImport(rawPath, in, dirOut)) in.open(resolvePath(rawPath), std::ios::binary);
+        if (!in) {
+            auto d = diagErr(diag::Code::E0029_ModuleNotFound, line, "@import: JSON file `" + rawPath + "` not found");
+            d.diagnostic->withReason("looked in the importing file's folder (for ./ and ../ paths) and in the working directory")
+                         .withHint("check the path and that the file exists");
+            throw d;
+        }
+        std::ostringstream buf; buf << in.rdbuf(); text = buf.str();
+    }
+    json::Decoder dec(text);
+    Value root; std::string err;
+    if (!dec.parse(root, err)) {
+        auto d = diagErr(diag::Code::E0028_ImportError, line, "@import: invalid JSON in `" + rawPath + "`");
+        d.diagnostic->withReason(err).withHint("fix the syntax error at the reported line/column");
+        throw d;
+    }
+    if (root.type != Value::Type::MAP || !root.map) {
+        auto d = diagErr(diag::Code::E0028_ImportError, line, "@import: the root of `" + rawPath + "` must be a JSON object");
+        d.diagnostic->withReason("each top-level key becomes a variable; an array or scalar root has no names to import")
+                     .withHint("wrap the data in an object, or read it with json.readFile(path)");
+        throw d;
+    }
+    return root;
+}
+
+std::string Interpreter::canonicalImportPath(const std::string& rawPath, const std::string& libPath) const {
+    if (!basePath.empty()) return libPath;
+    if (rawPath.rfind("./", 0) != 0 && rawPath.rfind("../", 0) != 0) return libPath;
+    std::string baseDir;
+    if (!importDirs_.empty()) baseDir = importDirs_.back();
+    else { size_t sl = sourceFile.find_last_of('/'); if (sl != std::string::npos) baseDir = sourceFile.substr(0, sl + 1); }
+    return (std::filesystem::path(baseDir + rawPath)).lexically_normal().generic_string();
+}
+
+bool Interpreter::openRelativeImport(const std::string& rawPath, std::ifstream& in, std::string& dirOut) {
+    if (!basePath.empty()) return false; // وضع معزول (أندرويد): يبقى السلوك كما هو
+    if (rawPath.rfind("./", 0) != 0 && rawPath.rfind("../", 0) != 0) return false;
+    std::string baseDir;
+    if (!importDirs_.empty()) baseDir = importDirs_.back();
+    else { size_t sl = sourceFile.find_last_of('/'); if (sl != std::string::npos) baseDir = sourceFile.substr(0, sl + 1); }
+    std::string full = baseDir + rawPath;
+    in.open(full, std::ios::binary);
+    if (!in) return false;
+    size_t sl = full.find_last_of('/');
+    dirOut = (sl == std::string::npos) ? std::string() : full.substr(0, sl + 1);
+    return true;
 }
 
 bool Interpreter::copyTargetIntoCurrentContainer(const std::string& target, int line) {
@@ -11793,14 +12037,14 @@ static RinError nsNoMemberErr(const std::shared_ptr<NsNode>& n, const std::strin
 
 Value Interpreter::nsGet(const std::shared_ptr<NsNode>& n, const std::string& member, int line) {
     if (auto c = n->child(member)) return nsSnapshot(c); // a bare namespace reads as a snapshot map of its fields
-    auto it = n->env->values.find(member);
-    if (it == n->env->values.end()) throw nsNoMemberErr(n, member, line, sourceFile, "member");
-    if (depTracker_) valTrack(n->env.get(), member);
-    if (liveActive_ && !n->env->live.empty()) {
-        auto lit = n->env->live.find(member);
-        if (lit != n->env->live.end()) return liveRead(n->env.get(), lit->second, member, line);
+    Environment* own = n->env->findReadOwnerLinked(member); // الاسم المحلي أو المرتبط عبر link
+    if (!own) throw nsNoMemberErr(n, member, line, sourceFile, "member");
+    if (depTracker_) valTrack(own, member);
+    if (liveActive_ && !own->live.empty()) {
+        auto lit = own->live.find(member);
+        if (lit != own->live.end()) return liveRead(own, lit->second, member, line);
     }
-    return it->second;
+    return own->values.find(member)->second;
 }
 
 Value Interpreter::nsSet(const std::shared_ptr<NsNode>& n, const std::string& member, const Value& v, int line) {
@@ -11813,10 +12057,16 @@ Value Interpreter::nsSet(const std::shared_ptr<NsNode>& n, const std::string& me
         throw diagErr(diag::Code::E0004_InvalidType, line,
                       "cannot assign to `" + n->path() + "." + member + "`: it is a nested namespace, not a variable");
     }
-    if (!n->env->values.count(member)) throw nsNoMemberErr(n, member, line, sourceFile, "variable");
+    Environment* own = n->env->findOwnerLinked(member);
+    if (!own && n->env->findReadOwnerLinked(member)) {
+        throw errWithReason(diag::Code::E0035_RuntimeError, line,
+                            "cannot write `" + n->path() + "." + member + "`: it comes from a read-only link",
+                            "link it without `readonly` to allow writes");
+    }
+    if (!own) throw nsNoMemberErr(n, member, line, sourceFile, "variable");
     Value stored = copyForBinding(v);
-    if (liveActive_) return liveAssign(n->env.get(), member, stored, line);
-    assignStateAware(n->env.get(), member, stored, line); // fires `on update(prev)` for `state` fields of containers
+    if (liveActive_) return liveAssign(own, member, stored, line);
+    assignStateAware(own, member, stored, line); // fires `on update(prev)` for `state` fields of containers
     return stored;
 }
 
@@ -11826,8 +12076,9 @@ Value Interpreter::nsCall(const std::shared_ptr<NsNode>& n, const std::string& m
                             std::string("cannot call `") + n->path() + "." + member + "()`: a " + n->kindName() + " does not expose functions",
                             "only a container can be called through its qualified name; put the function in a container");
     }
-    auto it = n->env->values.find(member);
-    if (it == n->env->values.end()) throw nsNoMemberErr(n, member, line, sourceFile, "function");
+    Environment* own = n->env->findReadOwnerLinked(member);
+    if (!own) throw nsNoMemberErr(n, member, line, sourceFile, "function");
+    auto it = own->values.find(member);
     if (it->second.type != Value::Type::FUNCTION) {
         throw diagErr(diag::Code::E0006_UnknownFunction, line, "`" + n->path() + "." + member + "` is not a function");
     }
@@ -11855,11 +12106,12 @@ bool Interpreter::nsTryCallDotted(const std::string& callee, std::vector<Value>&
     for (size_t i = 1; n && i + 1 < segs.size(); ++i) n = n->child(segs[i]);
     if (!n) return false;
     const std::string& member = segs.back();
-    auto it = n->env->values.find(member);
-    if (it == n->env->values.end()) {
+    Environment* ownEnv = n->env->findReadOwnerLinked(member);
+    if (!ownEnv) {
         if (natives.count(callee)) return false; // e.g. a namespace that happens to be named like a built-in family
         throw nsNoMemberErr(n, member, line, sourceFile, "function");
     }
+    auto it = ownEnv->values.find(member);
     if (it->second.type != Value::Type::FUNCTION) return false; // a map/array member: let the normal `.method()` path handle it
     out = nsCall(n, member, args, line);
     return true;
@@ -11924,6 +12176,7 @@ void Interpreter::registerClassStmt(const std::shared_ptr<ClassStmt>& s) {
         }
     }
     ClassDef def;
+    def.originMain = g_codeInMain;
     def.name = s->name;
     def.superclass = s->superclass;
     def.isStruct = s->isStruct;
@@ -12008,6 +12261,7 @@ std::shared_ptr<FunctionStmt> Interpreter::findMethod(const std::string& classNa
 Value Interpreter::bindMethod(const Value& receiver, const std::shared_ptr<FunctionStmt>& method, const std::string& ownerClass) {
     auto callable = std::make_shared<Callable>();
     callable->declaration = method;
+    if (!ownerClass.empty()) { auto cit = classes.find(ownerClass); if (cit != classes.end()) callable->originMain = cit->second.originMain; }
     auto closureEnv = std::make_shared<Environment>(globals);
     closureEnv->define("self", receiver);
     if (!ownerClass.empty()) closureEnv->define("__class__", Value::string(ownerClass));
@@ -12293,6 +12547,9 @@ Value Interpreter::callFunction(const std::shared_ptr<Callable>& fn, std::vector
         ~DepthGuard() { depth--; }
     } guard{callDepth};
     CurrentInterpGuard interpGuard(this); // Rin 1.0: لأجل __str__ داخل Value::toDisplayString
+    // أصل الكود أثناء هذا الاستدعاء = أصل الدالة (لأجل slab.main())
+    struct OriginGuard { bool prev; ~OriginGuard() { g_codeInMain = prev; } } originGuard{g_codeInMain};
+    g_codeInMain = fn->originMain;
 
     auto callEnv = std::make_shared<Environment>(fn->closure);
     callEnv->values.reserve(args.size() + 2); // يتفادى إعادة التجزئة (rehash) أثناء ربط المعاملات
@@ -12640,9 +12897,11 @@ Value Interpreter::evaluateTree(const ExprPtr& expr, const EnvPtr& env) {
         // on update(prevState) إن كان هذا الاسم أحد حقول `state` لحاوية معروفة. لا تغيير في
         // السلوك لأي متغيّر عادي (let/معاملات دالة/إلخ): يبقى الإسناد يعمل تماماً كما كان
         // (undefinedVariableErr عند الفشل).
-        Environment* owner = nullptr;
-        for (Environment* cur = env.get(); cur; cur = cur->parent.get()) {
-            if (cur->values.count(e->name)) { owner = cur; break; }
+        Environment* owner = env->findOwner(e->name); // محلي ← مرتبط (link) ← أب
+        if (!owner && env->lookup(e->name)) {
+            throw errWithReason(diag::Code::E0035_RuntimeError, e->line,
+                                "cannot assign `" + e->name + "`: it comes from a read-only link",
+                                "the container was linked with `readonly`; use `link to=...;` (without `readonly`) to allow writes");
         }
         if (!owner) {
             throw undefinedVariableErr(e->name, e->line, env);
@@ -13896,9 +14155,7 @@ std::string liveNum(double x) { return Value::num(x).toDisplayString(); }
 } // namespace
 
 Environment* Interpreter::findLiveOwner(const EnvPtr& env, const std::string& name) const {
-    for (Environment* cur = env.get(); cur; cur = cur->parent.get())
-        if (cur->values.count(name)) return cur;
-    return nullptr;
+    return env->findOwner(name);
 }
 
 Value Interpreter::liveApplyRange(const LiveMeta& m, const std::string& name, const Value& v, int line) const {
