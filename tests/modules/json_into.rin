@@ -1,0 +1,15 @@
+class Address { let city = ""; let zip = 0; }
+class User { let name = ""; let age = 0; let admin = false; let addr = Address(); let nick = nil; }
+
+let u = json.into("User", "{\"name\":\"Rana\",\"age\":31,\"addr\":{\"city\":\"Beirut\",\"zip\":1107},\"nick\":\"r\"}");
+print u.name, u.age, u.admin, u.addr.city, u.addr.zip, u.nick;
+
+let list = json.into("User", "[{\"name\":\"A\"},{\"name\":\"B\",\"age\":2}]");
+print len(list), list[1].name, list[1].age, list[0].age;      // الحقول الناقصة تحتفظ بالافتراضي
+
+print json.stringify(u);                                       // ذهاب وإياب
+print json.stringify(json.into("User", json.stringify(u)));
+
+try { json.into("User", "{\"age\":\"old\"}"); } catch (e) { print "type mismatch caught"; }
+try { json.into("User", "{\"zzz\":1}", {"strict": true}); } catch (e) { print "strict caught"; }
+print json.into("User", "{\"zzz\":1}").zzz;                    // غير صارم: يُقبل
