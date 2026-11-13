@@ -106,6 +106,15 @@
           }
         },
         {
+          "comment": "Module syntax: import { a as b } from \"p\"; import * as ns from \"p\"; export { a } from \"p\";",
+          "match": "\\b(import|export)(?=\\s*[{*])",
+          "name": "keyword.control.import.rin"
+        },
+        {
+          "match": "(?<=\\})\\s*\\b(from)\\b|(?<=\\*\\sas\\s[A-Za-z_][A-Za-z0-9_]*\\s)\\b(from)\\b",
+          "name": "keyword.control.import.rin"
+        },
+        {
           "match": "\\bas\\b",
           "name": "keyword.control.import.rin"
         }
@@ -319,7 +328,7 @@
     "container-statement-keywords": {
       "comment": "Statement-level keywords belonging to Rin's data/container language.",
       "name": "keyword.other.container.rin",
-      "match": "\\b(save|file|installation|simplified|link|tying|merge|pipe|container|Containers|Group|Volume|translation)\\b"
+      "match": "\\b(save|file|installation|simplified|link|unlink|readonly|tying|merge|pipe|container|Containers|Group|Volume|translation)\\b"
     },
 
     "relation-keywords": {
