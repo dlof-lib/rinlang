@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- لوحة شاشة Output: ترمنال داكن دائماً (لا نسخة فاتحة عمداً، كمنصّة تشغيل أي IDE)، لذا لا حاجة
+     لملف values-night مقابل. ألوان نوع السطر (خطأ/نجاح/تحذير...) تأتي من log_kind_* الموجودة أصلاً. -->
+<resources>
+    <color name="out_bg">#0B0F14</color>
+    <color name="out_surface">#121821</color>
+    <color name="out_surface_alt">#18212C</color>
+    <color name="out_border">#222C39</color>
+    <color name="out_gutter">#46556A</color>
+    <color name="out_text">#D6DCE5</color>
+    <color name="out_dim">#7C8899</color>
+    <color name="out_cursor">#57D6B8</color>
+    <color name="out_row_error_bg">#1A1114</color>
+    <color name="out_row_warn_bg">#1A1710</color>
+    <color name="out_chip_bg">#18212C</color>
+    <color name="out_chip_on_bg">#2A2350</color>
+</resources>
