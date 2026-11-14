@@ -285,6 +285,7 @@ class MainActivity : RinBaseActivity() {
         jobAdapter = RinJobAdapter(this)
         jobAdapter.onCancelRequested = { number -> RinJobScheduler.cancel(number) }
         jobAdapter.onPinToggleRequested = { number -> RinJobScheduler.togglePin(number) }
+        jobAdapter.onOpenOutputRequested = { number -> startActivity(OutputActivity.intent(this, number)) }
         rvJobs.layoutManager = LinearLayoutManager(this)
         rvJobs.adapter = jobAdapter
         // Wired through RinExecutionManager (Queue -> Structured Events -> Run Session) rather
@@ -303,6 +304,14 @@ class MainActivity : RinBaseActivity() {
         // نافذة إدخال المستخدم لدوال Rin (input/inputNumber/confirm/choose) — انظر RinInputBridge.
         setupTerminal()
         RinInputBridge.setPresenter(rinInputPresenter)
+
+        // شاشة Output المستقلة: زر الفتح + جسر «اذهب إلى سطر الخطأ» + تسليم/استرجاع أسئلة input().
+        findViewById<View>(R.id.btnOpenOutput).setOnClickListener {
+            startActivity(OutputActivity.intent(this))
+        }
+        RinOutputNav.goToLine = { line -> editorController.goToLine(line) }
+        RinOutputNav.releaseInput = { RinInputBridge.clearPresenter(rinInputPresenter) }
+        RinOutputNav.restoreInput = { RinInputBridge.setPresenter(rinInputPresenter) }
 
         RinLogoLoadingOverlay.setProgress(0.94f)
         window.decorView.post { RinLogoLoadingOverlay.finish() }
@@ -1063,6 +1072,7 @@ class MainActivity : RinBaseActivity() {
         }
         // تشغيل صريح من المستخدم: أظهِر الـ terminal ليرى المخرجات ويجيب عن input() فيه.
         showConsoleTab(terminal = true)
+        if (AppSettings.isAutoOpenOutput(this)) startActivity(OutputActivity.intent(this, job.number))
 
         // لا نشغّل الأنبوب فعلياً هنا (ذلك يحدث داخل شاشة RinFlow نفسها عبر PipelineTracer)؛
         // فقط نتحقّق بسرعة هل يحتوي الكود على كتلة @container.pipe لنعرض خيار الانتقال إليها.
@@ -1536,6 +1546,9 @@ class MainActivity : RinBaseActivity() {
         rinInputDialog?.dismiss()
         rinInputDialog = null
         RinInputBridge.clearPresenter(rinInputPresenter)
+        RinOutputNav.goToLine = null
+        RinOutputNav.releaseInput = null
+        RinOutputNav.restoreInput = null
         livePanel.release()
         uiHandler.removeCallbacksAndMessages(null)
         super.onDestroy()
