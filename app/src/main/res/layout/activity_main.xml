@@ -578,6 +578,17 @@
                 android:textColor="@color/rin_editor_hint" />
         </LinearLayout>
 
+        <!-- فتح شاشة Output المستقلة (كتابة حرفية حيّة لآخر تشغيل) -->
+        <ImageButton
+            android:id="@+id/btnOpenOutput"
+            android:layout_width="32dp"
+            android:layout_height="28dp"
+            android:padding="6dp"
+            android:src="@drawable/ic_out_expand"
+            app:tint="@color/rin_accent"
+            android:background="@drawable/bg_toolbar_btn_ghost"
+            android:contentDescription="@string/output_open_cta" />
+
         <Button
             android:id="@+id/btnCopyTerminal"
             android:layout_width="wrap_content"
