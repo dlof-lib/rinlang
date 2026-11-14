@@ -33,7 +33,7 @@
     <string name="live_pro_size_l">كبير</string>
     <string name="indsin_open_in_browser">فتح في المتصفح</string>
     <string name="indsin_browser_failed">تعذّر تشغيل خادم المعاينة المحلي</string>
-    <string name="indsin_browser_opening">جارٍ فتح المعاينة الحية في المتصفح (%s)…</string>
+    <string name="indsin_browser_opening">جارٍ فتح المعاينة الحية في المتصفح (%1$s)…</string>
     <string name="indsin_browser_no_app">لا يوجد تطبيق متصفح لفتح المعاينة</string>
     <string name="indsin_browser_nothing">لا شيء لمعاينته بعد</string>
 </resources>
