@@ -16,6 +16,12 @@
          عند أول محاولة تثبيت، كأي مصدر تثبيت غير معروف على أندرويد. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <!-- خدمة «فتح في المتصفح» (IndsinLiveService): تُبقي خادم المعاينة المحلي حياً أثناء استخدام المتصفح.
+         POST_NOTIFICATIONS اختياري: بدونه تعمل الخدمة لكن إشعارها (فتح/إيقاف) مخفي. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <application
         android:name=".RinApplication"
         android:allowBackup="true"
@@ -38,6 +44,15 @@
             <meta-data
                 android:name="autoStoreLocales"
                 android:value="true" />
+        </service>
+
+        <service
+            android:name=".IndsinLiveService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="local_loopback_preview_server" />
         </service>
 
         <!-- نشاط شفاف مهمته الوحيدة عرض حوار لوج الكراش/الخطأ (انظر CrashHandler وErrorReporter).
