@@ -36,4 +36,9 @@
     <string name="indsin_browser_opening">Opening live preview in your browser (%1$s)…</string>
     <string name="indsin_browser_no_app">No browser app found to open the preview</string>
     <string name="indsin_browser_nothing">Nothing to preview yet</string>
+    <string name="indsin_live_notif_channel">Indsin live preview server</string>
+    <string name="indsin_live_notif_title">Indsin Live preview</string>
+    <string name="indsin_live_notif_text">Local server: %1$s · tabs: %2$d</string>
+    <string name="indsin_live_notif_stop">Stop</string>
+    <string name="indsin_live_notif_open">Open</string>
 </resources>
