@@ -296,6 +296,8 @@ class IndsinFabricView @JvmOverloads constructor(
 
     private val navHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private var pendingAutoNavigate: Runnable? = null
+    /** «الهدف|المدة» للمؤقت المضبوط حالياً: يمنع إعادة ضبطه مع كل إطار (انظر setFabric). */
+    private var armedNavKey: String? = null
 
     /** True for `href`/`onTap="open:..."` values that name an external resource rather than an
      * in-app route — a URL scheme (`http:`, `https:`, `mailto:`, `tel:`) present. A bare filename
@@ -481,6 +483,10 @@ class IndsinFabricView @JvmOverloads constructor(
     /** Clears the Inspector highlight (call when the info panel is dismissed). */
     fun clearInspection() {
         inspectedNode = null
+        // تنقّل/إعادة تشغيل صفحة: اسمح لمؤقت الانتقال التلقائي بأن يُضبط من جديد حتى لو بقي الهدف نفسه.
+        pendingAutoNavigate?.let { navHandler.removeCallbacks(it) }
+        pendingAutoNavigate = null
+        armedNavKey = null
         invalidate()
     }
 
@@ -515,15 +521,21 @@ class IndsinFabricView @JvmOverloads constructor(
         // New: splash/loading pages — root attrs `duration="2000" navigate="mu.rin"` mean "auto
         // advance to mu.rin after 2000ms". Re-armed on every setFabric so switching pages cancels
         // whatever timer belonged to the previous page.
-        pendingAutoNavigate?.let { navHandler.removeCallbacks(it) }
-        pendingAutoNavigate = null
         val rootAttrs = node?.optJSONObject("attrs")
         val navigateTarget = rootAttrs?.optString("navigate")?.takeIf { it.isNotBlank() }
         val durationMs = rootAttrs?.optString("duration")?.toLongOrNull()
-        if (navigateTarget != null && durationMs != null && durationMs >= 0) {
-            val r = Runnable { onNavigate?.invoke(navigateTarget) }
-            pendingAutoNavigate = r
-            navHandler.postDelayed(r, durationMs)
+        val navKey = if (navigateTarget != null && durationMs != null && durationMs >= 0) "$navigateTarget|$durationMs" else null
+        // كل إطار (ضغطة مفتاح، لمسة، tick للتأثيرات كل ~16ms) يمرّ من هنا: إعادة ضبط المؤقت دائماً كانت تؤجّل
+        // الانتقال التلقائي إلى ما لا نهاية مع أي حركة أو تعديل. نُعيد الضبط فقط إن تغيّر الهدف/المدة أو انتهت الصفحة.
+        if (navKey != armedNavKey) {
+            pendingAutoNavigate?.let { navHandler.removeCallbacks(it) }
+            pendingAutoNavigate = null
+            armedNavKey = navKey
+            if (navKey != null && navigateTarget != null && durationMs != null) {
+                val r = Runnable { armedNavKey = null; pendingAutoNavigate = null; onNavigate?.invoke(navigateTarget) }
+                pendingAutoNavigate = r
+                navHandler.postDelayed(r, durationMs)
+            }
         }
 
         requestLayout()
@@ -547,6 +559,8 @@ class IndsinFabricView @JvmOverloads constructor(
 
     override fun onDetachedFromWindow() {
         pendingAutoNavigate?.let { navHandler.removeCallbacks(it) }
+        pendingAutoNavigate = null
+        armedNavKey = null // عند إعادة الإرفاق يُضبط المؤقت من جديد مع أول إطار
         mainHandler.removeCallbacks(spinnerTicker)
         remoteMediaViews.values.forEach { removeView(it); releaseMedia(it) }
         remoteMediaViews.clear()
