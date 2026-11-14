@@ -271,6 +271,13 @@ class MainActivity : RinBaseActivity() {
         // المعاينة الحية المدمجة: تبقى حيّة عبر تدوير الشاشة (الحالة في IndsinPreviewManager.panelVisible).
         livePanel = IndsinLivePanel(this, findViewById(R.id.livePreviewPanel))
         livePanel.onExpandRequested = { openLivePreviewFullscreen() }
+        livePanel.onGoToLine = { line -> editorController.goToLine(line) }
+        livePanel.onSizeChanged = { applyInterfaceSettings() }
+        livePanel.onResumeLive = {
+            // بعد التجميد: ادفع أحدث نص دفعة واحدة (الجلسة تُحدَّث بنفس مسار الكتابة الحية فتبقى حالة Warp).
+            val src = editCode.text.toString()
+            if (IndsinViewTracer.containsView(src)) IndsinPreviewManager.pushLiveEdit(src)
+        }
         livePanel.resume()
 
         // كل تعديل في المحرر يمرّ من هنا مرة واحدة: دفع للمعاينة الحية، ثم الحفظ التلقائي، ثم التشغيل التلقائي
@@ -571,14 +578,17 @@ class MainActivity : RinBaseActivity() {
      * أثناء التعديل — تبقى المعاينة على آخر إطار سليم بدل أن تتحوّل إلى خطأ فارغ.
      */
     private fun scheduleLivePreviewPush() {
-        if (!IndsinPreviewManager.isRunning) return
+        // livePanel يُنشأ في onCreate بعد أول setText؛ وفجوة «اللوحة ظاهرة تنتظر أول قياس» لا جلسة فيها بعد.
+        val panelWaiting = ::livePanel.isInitialized && livePanel.hasPendingStart
+        if (!IndsinPreviewManager.isRunning && !panelWaiting) return
         livePreviewTask?.let { uiHandler.removeCallbacks(it) }
         val task = Runnable {
             // يُقرأ النص لحظة التنفيذ لا لحظة الجدولة: أحدث ما كُتب دائماً.
             val source = editCode.text.toString()
             if (!IndsinViewTracer.containsView(source)) return@Runnable
-            if (livePanel.isShown) livePanel.onEditorEdit(currentProjectFile?.name)
-            IndsinPreviewManager.pushLiveEdit(source)
+            if (livePanel.isShown) livePanel.onEditorEdit(currentProjectFile?.name, source)
+            if (livePanel.isFrozen) return@Runnable // مجمَّد: يُدفَع النص كاملاً عند الاستئناف
+            if (IndsinPreviewManager.isRunning) IndsinPreviewManager.pushLiveEdit(source)
         }
         livePreviewTask = task
         uiHandler.postDelayed(task, LIVE_PREVIEW_DELAY_MS)
@@ -1143,7 +1153,11 @@ class MainActivity : RinBaseActivity() {
             Toast.makeText(this, getString(R.string.indsin_no_view_toast), Toast.LENGTH_SHORT).show()
             return
         }
+        // نفس عقد openLivePreviewFullscreen: إن كانت اللوحة ظاهرة تعود عند الرجوع (الجلسة نفسها حيّة)،
+        // وإلا تبقى جلسة بلا لوحة ولا مستمع تستقبل كل ضغطة مفتاح إلى الأبد.
+        val wasShown = livePanel.isShown
         livePanel.hide(stopSession = false)
+        IndsinPreviewManager.panelVisible = wasShown
         openLivePreview(source)
     }
 
@@ -1378,12 +1392,23 @@ class MainActivity : RinBaseActivity() {
         showConsoleTab(RinTerminal.terminalTabSelected)
         val compact = layout == AppSettings.LAYOUT_COMPACT
         setLayoutWeight(R.id.editorSurface, if (compact) 4f else 3f)
-        setLayoutWeight(R.id.livePreviewPanel, if (compact) 4f else 3f)
+        setLayoutWeight(R.id.livePreviewPanel, livePanelWeight(compact))
         setLayoutWeight(R.id.rvJobs, if (compact) 1f else 2f)
         setLayoutWeight(R.id.rinTerminal, if (compact) 1f else 2f)
 
         if (AppSettings.isKeepScreenOn(this)) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    }
+
+    /** وزن لوحة المعاينة: الأساس حسب نمط المحرر × حجم اللوحة الذي يختاره المستخدم (صغير 0.6 / متوسط 1 / كبير 1.8). */
+    private fun livePanelWeight(compact: Boolean): Float {
+        val base = if (compact) 4f else 3f
+        val factor = when (getSharedPreferences("indsin_prefs", MODE_PRIVATE).getInt("live_size", 1)) {
+            0 -> 0.6f
+            2 -> 1.8f
+            else -> 1f
+        }
+        return base * factor
     }
 
     private fun setLayoutWeight(viewId: Int, weight: Float) {
