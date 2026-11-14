@@ -167,16 +167,23 @@ object IndsinPreviewManager {
         pendingEdit.set(null) // a restart supersedes any older queued edit
         starting = true
         worker.execute {
-            session?.close()
-            val fresh = RinEngine.IndsinSession(source, rootWidth)
-            if (defaultBackground.isNotEmpty()) fresh.setDefaultBackground(defaultBackground)
-            fresh.setViewport(viewportHeight) // correct the native 844px default immediately -- see [viewportHeight]'s kdoc
-            session = fresh
-            appliedSource = source
-            starting = false
-            beginTrackedOperation()
-            val json = try { fresh.currentJson() } catch (t: Throwable) { errorJson(t) }
-            endTrackedOperation()
+            val json: String = try {
+                session?.close()
+                val fresh = RinEngine.IndsinSession(source, rootWidth)
+                if (defaultBackground.isNotEmpty()) fresh.setDefaultBackground(defaultBackground)
+                fresh.setViewport(viewportHeight) // correct the native 844px default immediately -- see [viewportHeight]'s kdoc
+                session = fresh
+                appliedSource = source
+                starting = false
+                beginTrackedOperation()
+                val j = try { fresh.currentJson() } catch (t: Throwable) { errorJson(t) }
+                endTrackedOperation()
+                j
+            } catch (t: Throwable) {
+                // فشل إنشاء الجلسة: بدون هذا يبقى starting=true للأبد (isRunning كاذب) ولا يصل أي إطار خطأ للواجهة.
+                starting = false
+                errorJson(t)
+            }
             deliver(json, 0)
         }
     }
@@ -190,6 +197,10 @@ object IndsinPreviewManager {
      * or no overlay is open. No-ops entirely if no session is running yet.
      */
     fun setViewport(height: Int) {
+        // نفس الارتفاع = لا شيء يتغيّر: بدونه كانت كل تمريرة تخطيط تعيد رسم الإطار في المحرك، والإطار الجديد
+        // يطلب تخطيطاً جديداً (setFabric → requestLayout) فتتكرّر الحلقة بلا توقف. الجلسات الجديدة تأخذ
+        // القيمة المخزَّنة في start()، فلا يضيع شيء.
+        if (height == viewportHeight) return
         viewportHeight = height
         val current = session ?: return
         worker.execute {
@@ -334,6 +345,9 @@ object IndsinPreviewManager {
             session?.close()
             session = null
             appliedSource = null
+            // عمليات سبقت stop() في الطابور قد تكون وضعت إطاراً قديماً في الذاكرة بعد أن مسحناها أعلاه؛
+            // مسحها هنا (بعد تنفيذها كلها) يمنع وميض إطار جلسة منتهية عند الفتح التالي للّوحة.
+            lastResultJson = null
         }
     }
 
