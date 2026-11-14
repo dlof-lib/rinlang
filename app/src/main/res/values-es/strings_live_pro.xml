@@ -36,4 +36,9 @@
     <string name="indsin_browser_opening">Abriendo la vista previa en vivo en el navegador (%1$s)…</string>
     <string name="indsin_browser_no_app">No hay ninguna app de navegador para abrir la vista previa</string>
     <string name="indsin_browser_nothing">Aún no hay nada que previsualizar</string>
+    <string name="indsin_live_notif_channel">Servidor de vista previa Indsin</string>
+    <string name="indsin_live_notif_title">Vista previa Indsin Live</string>
+    <string name="indsin_live_notif_text">Servidor local: %1$s · pestañas: %2$d</string>
+    <string name="indsin_live_notif_stop">Detener</string>
+    <string name="indsin_live_notif_open">Abrir</string>
 </resources>
