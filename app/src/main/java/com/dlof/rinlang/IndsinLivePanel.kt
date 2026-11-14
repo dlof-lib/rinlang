@@ -41,6 +41,9 @@ class IndsinLivePanel(
     /** المستخدم ضغط «ملء الشاشة»: المضيف يفتح [IndsinPreviewActivity] بالمصدر الحالي. */
     var onExpandRequested: (() -> Unit)? = null
 
+    /** «فتح في المتصفح»: على المضيف تشغيل [IndsinLiveServer] وفتح الصفحة الحالية في متصفح الجهاز. */
+    var onOpenInBrowser: (() -> Unit)? = null
+
     /** انتقل المحرر إلى هذا السطر (شريط الخطأ أو مفتّش العناصر). */
     var onGoToLine: ((Int) -> Unit)? = null
 
@@ -497,6 +500,7 @@ class IndsinLivePanel(
     private fun showMoreMenu(anchor: View) {
         val popup = PopupMenu(darkThemed(), anchor)
         val menu = popup.menu
+        menu.add(0, MORE_BROWSER, 0, activity.getString(R.string.indsin_open_in_browser))
         menu.add(0, MORE_RESTART, 0, activity.getString(R.string.indsin_restart_session))
         menu.add(0, MORE_COPY_JSON, 1, activity.getString(R.string.live_pro_copy_json))
         menu.add(0, MORE_SAFE, 2, activity.getString(R.string.live_pro_safe_area)).apply {
@@ -514,6 +518,7 @@ class IndsinLivePanel(
         menu.add(0, MORE_RESET, 5, activity.getString(R.string.live_pro_reset))
         popup.setOnMenuItemClickListener { item ->
             when {
+                item.itemId == MORE_BROWSER -> onOpenInBrowser?.invoke()
                 item.itemId == MORE_RESTART -> restart()
                 item.itemId == MORE_COPY_JSON -> {
                     if (lastFrameJson.isNotBlank()) {
@@ -689,6 +694,7 @@ class IndsinLivePanel(
         const val MORE_SAFE = 903
         const val MORE_STATS = 904
         const val MORE_RESET = 905
+        const val MORE_BROWSER = 906 // < BG_MENU_ID(1000): ما فوقها يُعامل كخيار خلفية
         const val LANDSCAPE_BASE = 2000
         val LANDSCAPE_WIDTHS = listOf(667, 844, 932)
     }
