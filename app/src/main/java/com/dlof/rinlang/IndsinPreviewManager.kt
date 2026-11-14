@@ -55,6 +55,16 @@ object IndsinPreviewManager {
     private val worker = Executors.newSingleThreadExecutor { r -> Thread(r, "indsin-preview-session") }
     private val mainHandler = Handler(Looper.getMainLooper())
 
+    /**
+     * خيط الجلسات الوحيد متاح لمضيفات أخرى (المعاينة في المتصفح — [IndsinLiveServer]): سجلات المحرّك الأصلي عامة على
+     * مستوى العملية، فكل نداء على أي جلسة يجب أن يُسلسَل هنا مع جلسة اللوحة المدمجة بدل التسابق من خيوط أخرى.
+     */
+    fun postToWorker(block: () -> Unit) { worker.execute { try { block() } catch (_: Throwable) {} } }
+
+    /** كـ [postToWorker] لكن ينتظر النتيجة (للخيوط الخلفية فقط — لا تستدعِه من خيط الواجهة). */
+    fun <T> runOnWorker(timeoutMs: Long = 30_000L, block: () -> T): T =
+        worker.submit(java.util.concurrent.Callable { block() }).get(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
+
     @Volatile private var session: RinEngine.IndsinSession? = null
     @Volatile private var listener: Listener? = null
     @Volatile private var lastResultJson: String? = null
@@ -125,6 +135,13 @@ object IndsinPreviewManager {
 
     /** File name shown in the panel header; restored together with [panelVisible]. */
     @Volatile var panelTitle: String = "main.rin"
+
+    /**
+     * مجلد المشروع والصفحة (نسبة له) اللذان تعرضهما المعاينة الآن — يضبطهما المحرر. يحتاجهما «فتح في المتصفح»
+     * ([IndsinLiveServer]) ليخدم وسائط المشروع وصفحاته الأخرى؛ null = ملف خارجي بلا مشروع (يُنسخ إلى مجلد مؤقت).
+     */
+    @Volatile var browserProjectDir: java.io.File? = null
+    @Volatile var browserPage: String? = null
 
     /** True once a session exists — the editor only bothers pushing live edits when this is true. */
     val isRunning: Boolean get() = session != null || starting
