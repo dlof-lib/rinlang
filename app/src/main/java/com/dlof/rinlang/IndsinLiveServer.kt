@@ -91,7 +91,29 @@ object IndsinLiveServer {
     private val cancelled = java.util.Collections.synchronizedSet(HashSet<String>())
     private val pool = Executors.newCachedThreadPool { r -> Thread(r, "indsin-live-server").apply { isDaemon = true } }
 
+    @Volatile private var lastUse = SystemClock.elapsedRealtime()
+    private const val ACTIVE_WINDOW_MS = 45_000L   // SSE ping كل 12 ث؛ تبويب صامت أطول من هذا يُعدّ مغلقاً
+    private const val MAX_CONNECTIONS = 64         // اتصالات HTTP متزامنة (تبويب واحد ≈ 1 SSE + نداءات قصيرة)
+    private val activeConns = java.util.concurrent.atomic.AtomicInteger()
+    private const val MAX_CLIENTS = 12             // سقف جلسات المحرّك المتزامنة (تبويبات/نوافذ)
+
+    /** تُستدعى بعد [stop] (تستعملها [IndsinLiveService] لإنهاء نفسها). */
+    @Volatile var onStopped: (() -> Unit)? = null
+
     val isRunning: Boolean get() = server?.isClosed == false
+
+    /** عدد التبويبات النشطة (آخر نشاط خلال [ACTIVE_WINDOW_MS]). */
+    fun activeClients(): Int { val now = SystemClock.elapsedRealtime(); return clients.values.count { now - it.seen < ACTIVE_WINDOW_MS } }
+
+    /** مدة الخمول: منذ آخر طلب أو نشاط تبويب (لإيقاف الخادم تلقائياً). */
+    fun idleMs(): Long {
+        val now = SystemClock.elapsedRealtime()
+        val lastSeen = clients.values.maxOfOrNull { it.seen } ?: 0L
+        return now - maxOf(lastUse, lastSeen)
+    }
+
+    /** رابط الصفحة الحالية مع المفتاح (للإشعار). */
+    fun currentUrl(): String = urlFor(entry)
     val port: Int get() = server?.localPort ?: DEFAULT_PORT
     private fun baseUrl() = "http://127.0.0.1:$port/"
 
@@ -120,6 +142,8 @@ object IndsinLiveServer {
         }
         configure(dir, rel, liveSource)
         val url = urlFor(rel)
+        IndsinLiveService.start(context) // تُبقي الخادم حياً والمتصفح في الواجهة؛ فشلها لا يمنع الفتح
+        requestNotificationPermissionOnce(context)
         Toast.makeText(context, context.getString(R.string.indsin_browser_opening, "127.0.0.1:$port"), Toast.LENGTH_SHORT).show()
         try {
             val i = Intent(Intent.ACTION_VIEW, Uri.parse(url))
@@ -128,6 +152,19 @@ object IndsinLiveServer {
         } catch (t: Throwable) {
             Toast.makeText(context, context.getString(R.string.indsin_browser_no_app), Toast.LENGTH_LONG).show()
         }
+    }
+
+    /** إذن الإشعارات (أندرويد 13+): بدونه تعمل الخدمة لكن الإشعار مخفي. نطلبه مرة واحدة فقط من نافذة نشطة. */
+    private fun requestNotificationPermissionOnce(context: Context) {
+        val act = context as? android.app.Activity ?: return
+        try {
+            val perm = "android.permission.POST_NOTIFICATIONS"
+            if (act.checkSelfPermission(perm) == android.content.pm.PackageManager.PERMISSION_GRANTED) return
+            val sp = act.getSharedPreferences("indsin_live", Context.MODE_PRIVATE)
+            if (sp.getBoolean("asked_notif", false)) return
+            sp.edit().putBoolean("asked_notif", true).apply()
+            act.requestPermissions(arrayOf(perm), 5757)
+        } catch (_: Throwable) {}
     }
 
     /** يربط الخادم بمشروع/صفحة (ويستبدل الجلسات القديمة إن تغيّر الجذر). يُنفَّذ على خيط المعاينة. */
@@ -186,7 +223,11 @@ object IndsinLiveServer {
             while (!bound.isClosed) {
                 try {
                     val s = bound.accept()
-                    pool.execute { handle(s) }
+                    if (activeConns.incrementAndGet() > MAX_CONNECTIONS) { // حماية الخيوط/الذاكرة من اتصالات معلّقة
+                        try { s.soTimeout = 1000; text(s.getOutputStream(), 503, "Busy — too many connections") } catch (_: Throwable) {}
+                        try { s.close() } catch (_: Exception) {}
+                        activeConns.decrementAndGet()
+                    } else pool.execute { try { handle(s) } finally { activeConns.decrementAndGet() } }
                 } catch (_: Exception) { if (bound.isClosed) break }
             }
         }
@@ -196,8 +237,10 @@ object IndsinLiveServer {
 
     @Synchronized
     fun stop() {
+        val wasRunning = server != null
         try { server?.close() } catch (_: Exception) {}
         server = null
+        if (wasRunning) try { onStopped?.invoke() } catch (_: Throwable) {}
         IndsinPreviewManager.postToWorker {
             clients.values.forEach { it.sess?.close(); it.sess = null }
             clients.clear(); docs.clear()
@@ -320,7 +363,14 @@ object IndsinLiveServer {
         if (cid.isEmpty() || cid.length > 64) return 400 to errJson("missing cid")
 
         if (cmd == "open") {
-            val c = findClient(cid) ?: Client(cid).also { clients[cid] = it }
+            val c = findClient(cid) ?: run {
+                if (clients.size >= MAX_CLIENTS) { // إخلاء الأقدم نشاطاً حمايةً للذاكرة (كل تبويب جلسة محرّك كاملة)
+                    clients.values.minByOrNull { it.seen }?.let { old ->
+                        clients.remove(old.cid); IndsinPreviewManager.postToWorker { old.sess?.close(); old.sess = null }
+                    }
+                }
+                Client(cid).also { clients[cid] = it }
+            }
             c.width = clampW(q.optDouble("width", Double.NaN), 390)
             c.vp = clampH(q.optDouble("vp", Double.NaN), 844)
             c.bg = q.optString("bg")
@@ -687,7 +737,7 @@ object IndsinLiveServer {
     private fun respond(out: OutputStream, status: Int, type: String, body: ByteArray, extra: String = "", headOnly: Boolean = false) {
         val reason = when (status) {
             200 -> "OK"; 206 -> "Partial Content"; 400 -> "Bad Request"; 401 -> "Unauthorized"; 403 -> "Forbidden"
-            404 -> "Not Found"; 405 -> "Method Not Allowed"; 409 -> "Conflict"; 410 -> "Gone"; 416 -> "Range Not Satisfiable"
+            404 -> "Not Found"; 405 -> "Method Not Allowed"; 409 -> "Conflict"; 410 -> "Gone"; 503 -> "Service Unavailable"; 416 -> "Range Not Satisfiable"
             else -> "Error"
         }
         val sb = StringBuilder()
@@ -702,14 +752,28 @@ object IndsinLiveServer {
     private fun text(out: OutputStream, status: Int, msg: String) = respond(out, status, "text/plain; charset=utf-8", msg.toByteArray(Charsets.UTF_8))
     private fun json(out: OutputStream, status: Int, body: String) = respond(out, status, "application/json; charset=utf-8", body.toByteArray(Charsets.UTF_8))
 
+    /** صفحة خطأ مقروءة عند فتح الرابط في المتصفح (التنقّل)؛ تبقى الرسالة النصية الأصلية داخلها لسهولة التشخيص. */
+    private fun errPage(out: OutputStream, status: Int, detail: String, hint: String) {
+        fun esc(x: String) = x.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        val html = "<!doctype html><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\">" +
+            "<title>Indsin Live</title><body style=\"font:16px system-ui;background:#121212;color:#eee;padding:24px;line-height:1.6\">" +
+            "<h2>Indsin Live — $status</h2><p>${esc(hint)}</p><pre style=\"color:#9aa;white-space:pre-wrap\">${esc(detail)}</pre></body>"
+        respond(out, status, "text/html; charset=utf-8", html.toByteArray(Charsets.UTF_8))
+    }
+
     private fun hostAllowed(host: String?): Boolean {
         val h = host?.lowercase() ?: return false
         val p = port
         return h == "127.0.0.1:$p" || h == "localhost:$p" || h == "[::1]:$p"
     }
 
+    private fun cookieName() = "indsin_k_$port" // الكوكيز لا تعزل المنافذ؛ اسم لكل منفذ يمنع التداخل مع خوادم محلية أخرى
+
+    private fun cookieKey(req: Request): String? =
+        req.headers["cookie"]?.split(';')?.map { it.trim() }?.firstOrNull { it.startsWith(cookieName() + "=") }?.substringAfter('=')
+
     private fun authorized(req: Request): Boolean {
-        val given = req.headers["x-indsin-key"] ?: req.qs["k"] ?: return false
+        val given = req.headers["x-indsin-key"] ?: req.qs["k"] ?: cookieKey(req) ?: return false
         return MessageDigest.isEqual(given.toByteArray(Charsets.UTF_8), key.toByteArray(Charsets.UTF_8))
     }
 
@@ -719,14 +783,28 @@ object IndsinLiveServer {
 
     /** يعيد true إن كان المقبس سيُغلقه المسار نفسه (لا يُستعمل حالياً: SSE يُغلق عند الانتهاء داخل serveEvents). */
     private fun route(req: Request, sock: Socket, out: OutputStream): Boolean {
-        if (!hostAllowed(req.headers["host"]) || req.headers["sec-fetch-site"] == "cross-site") { text(out, 403, "Forbidden"); return false }
+        lastUse = SystemClock.elapsedRealtime()
+        if (!hostAllowed(req.headers["host"])) {
+            Log.w(TAG, "403: Host غير مسموح: ${req.headers["host"]} (المنفذ ${port})")
+            errPage(out, 403, "Forbidden (host: ${req.headers["host"]}, expected port $port)", "Open the link from the app: it must use 127.0.0.1 or localhost with the exact port. / افتح الرابط من التطبيق نفسه."); return false
+        }
+        // فتح الرابط من التطبيق يجعل Chrome يرسل Sec-Fetch-Site: cross-site (المرجع android-app://) لطلب التنقّل الأول؛
+        // لذا يُرفض cross-site لطلبات fetch/XHR/الموارد فقط، أما التنقّل (navigate) فمحميّ بالمفتاح العشوائي وفحص Host.
+        if (req.headers["sec-fetch-site"] == "cross-site" && req.headers["sec-fetch-mode"].let { it != null && it != "navigate" }) {
+            Log.w(TAG, "403: طلب cross-site غير تنقّلي")
+            text(out, 403, "Forbidden (cross-site)"); return false
+        }
 
         if ((req.path == "/" || req.path == "/index.html") && (req.method == "GET" || req.method == "HEAD")) {
-            if (!authorized(req)) { text(out, 401, "Unauthorized — open the link from the app (it contains the key)."); return false }
+            if (!authorized(req)) { errPage(out, 401, "Unauthorized — open the link from the app (it contains the key).", "The link key is missing or stale (the app was restarted). Tap “Open in browser” in the app again. / المفتاح غير صالح، أعد الضغط على «فتح في المتصفح» من التطبيق."); return false }
             val html = clientHtml ?: try {
                 appContext!!.assets.open(CLIENT_ASSET).use { it.readBytes() }.also { clientHtml = it }
             } catch (t: Throwable) { text(out, 500, "client asset missing: ${t.message}"); return false }
-            respond(out, 200, "text/html; charset=utf-8", html, csp, headOnly = req.method == "HEAD")
+            // المفتاح يُحقن في الصفحة (meta) ويُثبَّت في كوكي HttpOnly/SameSite=Strict: تستطيع الواجهة إخفاء ?k= من شريط العنوان
+            // (فلا يبقى في السجل/اللقطات) ويعمل تحديث الصفحة بعدها. الصفحة لا تُخدَّم إلا لطلب مصرَّح به.
+            val page = String(html, Charsets.UTF_8).replaceFirst("<head>", "<head><meta name=\"indsin-key\" content=\"$key\">").toByteArray(Charsets.UTF_8)
+            val cookie = "Set-Cookie: ${cookieName()}=$key; Path=/; HttpOnly; SameSite=Strict\r\n"
+            respond(out, 200, "text/html; charset=utf-8", page, csp + cookie, headOnly = req.method == "HEAD")
             return false
         }
         if (!authorized(req)) { json(out, 401, errJson("unauthorized")); return false }
