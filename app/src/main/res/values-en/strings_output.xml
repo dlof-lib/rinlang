@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- شاشة Output المستقلة (OutputActivity): كتابة حرفية حيّة + فلاتر + بحث. -->
+<resources>
+    <string name="output_title">Output</string>
+    <string name="output_run_fmt">Run #%1$d</string>
+    <string name="output_empty">No runs yet. Press Run in the editor and the output will be typed out here.</string>
+    <string name="output_queued">Waiting in the queue…</string>
+    <string name="output_running">Running</string>
+    <string name="output_no_output">The program printed nothing.</string>
+    <string name="output_status_ok_fmt">✔ Finished successfully — %1$d ms</string>
+    <string name="output_status_error_fmt">✖ Run failed — %1$d ms</string>
+    <string name="output_status_timeout">⏱ Stopped: time limit exceeded</string>
+    <string name="output_status_cancelled">⏹ Run stopped</string>
+    <string name="output_summary_fmt">%1$d lines · %2$d errors · %3$d warnings</string>
+    <string name="output_search_hint">Search the output</string>
+    <string name="output_speed_fmt">Typing %1$s</string>
+    <string name="output_speed_slow">×0.5</string>
+    <string name="output_speed_normal">×1</string>
+    <string name="output_speed_fast">×3</string>
+    <string name="output_speed_instant">Instant</string>
+    <string name="output_skip">Skip typing</string>
+    <string name="output_follow">Jump to latest</string>
+    <string name="output_line_copied">Line copied</string>
+    <string name="output_stop">Stop run</string>
+    <string name="output_input_hint">Type your answer…</string>
+    <string name="output_send">Send</string>
+    <string name="output_cancel_input">Cancel input</string>
+    <string name="output_open_cta">Open the Output screen</string>
+    <string name="output_prev_run">Previous run</string>
+    <string name="output_next_run">Next run</string>
+    <string name="output_goto_line_hint">Tap an error line to jump to it in the editor</string>
+    <string name="output_copy_all">Copy all output</string>
+    <string name="output_search_toggle">Search</string>
+    <string name="settings_auto_open_output">Open Output screen on Run</string>
+    <string name="settings_auto_open_output_hint">Opens the dedicated Output screen (live typing) every time you press Run</string>
+</resources>
