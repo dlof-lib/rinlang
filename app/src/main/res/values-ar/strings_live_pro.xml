@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_pro_device_desc">عرض الجهاز والخلفية</string>
+    <string name="live_pro_zoom_out">تصغير</string>
+    <string name="live_pro_zoom_in">تكبير</string>
+    <string name="live_pro_zoom_reset">إعادة التكبير إلى 100%</string>
+    <string name="live_pro_grid">إظهار/إخفاء شبكة التخطيط</string>
+    <string name="live_pro_freeze">إيقاف التحديث الحي أو استئنافه</string>
+    <string name="live_pro_shot">حفظ ومشاركة لقطة شاشة</string>
+    <string name="live_pro_frozen_on">التحديث الحي متوقف. تعديلاتك محفوظة وتُطبَّق عند الاستئناف.</string>
+    <string name="live_pro_frozen_off">استُؤنف التحديث الحي</string>
+    <string name="live_pro_shot_failed">تعذّر التقاط المعاينة</string>
+    <string name="live_pro_shot_share">مشاركة اللقطة</string>
+    <string name="live_pro_goto_line">اذهب إلى السطر %1$d</string>
+    <string name="live_pro_copy">نسخ</string>
+    <string name="live_pro_copied">تم النسخ</string>
+    <string name="live_pro_close">إغلاق</string>
+    <string name="live_pro_inspector_title">%1$s · %2$s (سطر %3$d)</string>
+    <string name="live_pro_err_hint">اضغط: اذهب إلى السطر · ضغطة مطوّلة: نسخ</string>
+    <string name="live_pro_safe_area">حدود المنطقة الآمنة</string>
+    <string name="live_pro_zoom_fit">ملاءمة التكبير لعرض اللوحة</string>
+    <string name="live_pro_size">حجم اللوحة: صغير / متوسط / كبير</string>
+    <string name="live_pro_more">خيارات أكثر</string>
+    <string name="live_pro_copy_json">نسخ JSON للإطار</string>
+    <string name="live_pro_show_stats">إظهار شريط الإحصاءات</string>
+    <string name="live_pro_reset">إعادة ضبط إعدادات المعاينة</string>
+    <string name="live_pro_reset_done">أُعيد ضبط إعدادات المعاينة</string>
+    <string name="live_pro_landscape">أفقي</string>
+    <string name="live_pro_json_copied">نُسخ JSON الإطار</string>
+    <string name="live_pro_size_toast">حجم اللوحة: %1$s</string>
+    <string name="live_pro_size_s">صغير</string>
+    <string name="live_pro_size_m">متوسط</string>
+    <string name="live_pro_size_l">كبير</string>
+</resources>
