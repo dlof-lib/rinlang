@@ -76,4 +76,12 @@
         <item name="android:windowAnimationStyle">@null</item>
         <item name="android:backgroundDimEnabled">true</item>
     </style>
+
+    <!-- شاشة Output: خلفية وأشرطة نظام داكنة دائماً (RinSystemBars يقرأ هذه السمات ليرسم خلف الأشرطة). -->
+    <style name="Theme.RinLang.Output" parent="Theme.RinLang">
+        <item name="android:windowBackground">@color/out_bg</item>
+        <item name="android:statusBarColor">@color/out_bg</item>
+        <item name="android:navigationBarColor">@color/out_bg</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
 </resources>
