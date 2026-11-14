@@ -161,3 +161,12 @@ dependencies {
     // المصدر: JitPack (مُعرَّف في settings.gradle.kts) — غير متاحة على Maven Central.
     implementation 'cz.adaptech.tesseract4android:tesseract4android:4.9.0'
 }
+
+// «فتح في المتصفح» (IndsinLiveServer): واجهة المتصفح مصدرها الوحيد tools/indsin-live/client/index.html
+// (نفسها التي تُضمَّن في أداة سطح المكتب) — تُنسخ إلى assets وقت البناء فلا نسختان تتباعدان.
+tasks.register('copyIndsinLiveClient', Copy) {
+    from rootProject.file('tools/indsin-live/client/index.html')
+    into layout.buildDirectory.dir('generated/indsinLiveAssets/indsin_live')
+}
+android.sourceSets.main.assets.srcDir(layout.buildDirectory.dir('generated/indsinLiveAssets'))
+tasks.configureEach { if (it.name == 'preBuild') it.dependsOn('copyIndsinLiveClient') }
