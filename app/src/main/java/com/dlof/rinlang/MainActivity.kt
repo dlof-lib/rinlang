@@ -272,6 +272,7 @@ class MainActivity : RinBaseActivity() {
         livePanel = IndsinLivePanel(this, findViewById(R.id.livePreviewPanel))
         livePanel.onExpandRequested = { openLivePreviewFullscreen() }
         livePanel.onGoToLine = { line -> editorController.goToLine(line) }
+        livePanel.onOpenInBrowser = { openLiveInBrowser() }
         livePanel.onSizeChanged = { applyInterfaceSettings() }
         livePanel.onResumeLive = {
             // بعد التجميد: ادفع أحدث نص دفعة واحدة (الجلسة تُحدَّث بنفس مسار الكتابة الحية فتبقى حالة Warp).
@@ -580,12 +581,14 @@ class MainActivity : RinBaseActivity() {
     private fun scheduleLivePreviewPush() {
         // livePanel يُنشأ في onCreate بعد أول setText؛ وفجوة «اللوحة ظاهرة تنتظر أول قياس» لا جلسة فيها بعد.
         val panelWaiting = ::livePanel.isInitialized && livePanel.hasPendingStart
-        if (!IndsinPreviewManager.isRunning && !panelWaiting) return
+        if (!IndsinPreviewManager.isRunning && !panelWaiting && !IndsinLiveServer.isRunning) return
         livePreviewTask?.let { uiHandler.removeCallbacks(it) }
         val task = Runnable {
             // يُقرأ النص لحظة التنفيذ لا لحظة الجدولة: أحدث ما كُتب دائماً.
             val source = editCode.text.toString()
             if (!IndsinViewTracer.containsView(source)) return@Runnable
+            // تبويبات المتصفح (فتح في المتصفح) تتحدّث لحظياً مستقلةً عن تجميد اللوحة المدمجة.
+            if (IndsinLiveServer.isRunning) IndsinLiveServer.pushSource(currentProjectFile?.relPath ?: currentProjectFile?.name, source)
             if (livePanel.isShown) livePanel.onEditorEdit(currentProjectFile?.name, source)
             if (livePanel.isFrozen) return@Runnable // مجمَّد: يُدفَع النص كاملاً عند الاستئناف
             if (IndsinPreviewManager.isRunning) IndsinPreviewManager.pushLiveEdit(source)
@@ -1103,8 +1106,33 @@ class MainActivity : RinBaseActivity() {
         }
     }
 
+    /** يسجّل مشروع/ملف المحرر الحاليين كهدف «فتح في المتصفح» (تقرؤه [IndsinPreviewActivity] أيضاً). */
+    private fun rememberBrowserTarget() {
+        IndsinPreviewManager.browserProjectDir = currentProject?.dir
+        IndsinPreviewManager.browserPage = currentProjectFile?.relPath ?: currentProjectFile?.name
+    }
+
+    /**
+     * «فتح في المتصفح»: خادم محلي بنفس محرّك المعاينة الحية يخدم المشروع كاملاً، فيعمل اللمس والإدخال والتنقّل والوسائط فعلاً
+     * في متصفح الجهاز، وتظهر كتابتك فيه لحظياً قبل الحفظ.
+     */
+    private fun openLiveInBrowser() {
+        val source = editCode.text.toString()
+        if (!IndsinViewTracer.containsView(source)) {
+            Toast.makeText(this, getString(R.string.indsin_no_view_toast), Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (hasSaveTarget()) saveSilently()
+        rememberBrowserTarget()
+        IndsinLiveServer.openInBrowser(
+            this, currentProject?.dir,
+            currentProjectFile?.relPath ?: currentProjectFile?.name ?: "main.rin", source
+        )
+    }
+
     /** يُظهر المعاينة الحية بجانب المحرر ويبدأ جلسة جديدة بالكود الحالي (الكتابة بعدها تُحدّثها لحظياً). */
     private fun showLivePanel(source: String) {
+        rememberBrowserTarget()
         if (hasSaveTarget()) saveSilently()
         livePanel.show(source, currentProjectFile?.name ?: "main.rin")
         // أخفِ لوحة المفاتيح؟ لا — المطلوب أن يواصل المستخدم الكتابة ويرى الأثر فوراً.
@@ -1112,6 +1140,7 @@ class MainActivity : RinBaseActivity() {
 
     /** زر «ملء الشاشة» في اللوحة: ينقل الجلسة الحيّة نفسها إلى IndsinPreviewActivity دون فقدان حالة Warp. */
     private fun openLivePreviewFullscreen() {
+        rememberBrowserTarget()
         val source = editCode.text.toString()
         livePanel.hide(stopSession = false)
         val intent = android.content.Intent(this, IndsinPreviewActivity::class.java)
@@ -1125,6 +1154,7 @@ class MainActivity : RinBaseActivity() {
 
     /** يفتح المعاينة الحية ويبدأ/يعيد تشغيل جلستها بالكود الحالي للمحرر. */
     private fun openLivePreview(source: String) {
+        rememberBrowserTarget()
         // نترك IndsinPreviewActivity نفسها تستدعي IndsinPreviewManager.start() (في onCreate أو
         // onNewIntent حسب الحال) — فهي التي تعرف عرض الجهاز (rootWidth) الحالي المختار هناك؛
         // استدعاؤه هنا أيضاً كان سيعيد التشغيل مرتين بلا داعٍ.
@@ -1148,6 +1178,7 @@ class MainActivity : RinBaseActivity() {
 
     /** فتح يدوي للشاشة الكاملة المنفصلة (القديمة) من قائمة التشغيل. */
     private fun openLivePreviewFullscreenManually() {
+        rememberBrowserTarget()
         val source = editCode.text.toString()
         if (!IndsinViewTracer.containsView(source)) {
             Toast.makeText(this, getString(R.string.indsin_no_view_toast), Toast.LENGTH_SHORT).show()
