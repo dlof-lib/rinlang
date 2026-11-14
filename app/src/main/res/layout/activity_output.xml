@@ -1,0 +1,379 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- شاشة Output المستقلة: ترمنال داكن، كتابة حرفية حيّة، فلاتر مستوى، بحث، وسطر إدخال للبرنامج.
+     layoutDirection="ltr" على الجذر مقصود (التطبيق RTL عربياً لكن هذه الشاشة ترمنال: الأرقام
+     والأزرار بترتيب ثابت). -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:layoutDirection="ltr"
+    android:background="@color/out_bg">
+
+    <!-- ===== الرأس ===== -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="@color/out_surface">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="4dp"
+            android:paddingEnd="12dp"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp">
+
+            <ImageButton
+                android:id="@+id/btnOutBack"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:padding="12dp"
+                android:src="@drawable/ic_back"
+                android:background="@drawable/bg_icon_btn"
+                android:contentDescription="@string/action_back" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="4dp"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/txtOutTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/output_title"
+                    android:textColor="@color/out_text"
+                    android:textSize="17sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/txtOutRun"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="monospace"
+                    android:textColor="@color/out_dim"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/btnOutPrev"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:gravity="center"
+                android:text="‹"
+                android:textColor="@color/out_dim"
+                android:textSize="22sp"
+                android:background="@drawable/bg_icon_btn"
+                android:contentDescription="@string/output_prev_run" />
+
+            <TextView
+                android:id="@+id/btnOutNext"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:gravity="center"
+                android:text="›"
+                android:textColor="@color/out_dim"
+                android:textSize="22sp"
+                android:background="@drawable/bg_icon_btn"
+                android:contentDescription="@string/output_next_run" />
+
+            <TextView
+                android:id="@+id/txtOutStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:paddingTop="3dp"
+                android:paddingBottom="3dp"
+                android:textSize="10.5sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- ملخّص حي + مؤقّت -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="8dp">
+
+            <TextView
+                android:id="@+id/txtOutSummary"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textAlignment="viewStart"
+                android:textColor="@color/out_dim"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/txtOutTimer"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="monospace"
+                android:textColor="@color/out_cursor"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <ProgressBar
+            android:id="@+id/progressOut"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="2dp"
+            android:indeterminate="true"
+            android:indeterminateTint="@color/out_cursor"
+            android:visibility="invisible" />
+    </LinearLayout>
+
+    <!-- ===== فلاتر المستوى + السرعة + البحث ===== -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="10dp"
+        android:paddingEnd="6dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="6dp">
+
+        <HorizontalScrollView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:id="@+id/llOutChips"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal" />
+        </HorizontalScrollView>
+
+        <ImageButton
+            android:id="@+id/btnOutSearch"
+            android:layout_width="38dp"
+            android:layout_height="38dp"
+            android:padding="9dp"
+            android:src="@drawable/ic_out_search"
+            app:tint="@color/out_dim"
+            android:background="@drawable/bg_icon_btn"
+            android:contentDescription="@string/output_search_toggle" />
+
+        <TextView
+            android:id="@+id/btnOutSpeed"
+            android:layout_width="wrap_content"
+            android:layout_height="30dp"
+            android:layout_marginStart="2dp"
+            android:gravity="center"
+            android:drawableStart="@drawable/ic_out_bolt"
+            android:drawablePadding="4dp"
+            android:drawableTint="@color/out_cursor"
+            android:paddingStart="10dp"
+            android:paddingEnd="12dp"
+            android:textColor="@color/out_text"
+            android:textSize="11.5sp"
+            android:textStyle="bold"
+            android:background="@drawable/bg_out_chip" />
+    </LinearLayout>
+
+    <EditText
+        android:id="@+id/edtOutSearch"
+        android:layout_width="match_parent"
+        android:layout_height="40dp"
+        android:layout_marginStart="12dp"
+        android:layout_marginEnd="12dp"
+        android:layout_marginBottom="6dp"
+        android:visibility="gone"
+        android:hint="@string/output_search_hint"
+        android:textColorHint="@color/out_gutter"
+        android:textColor="@color/out_text"
+        android:textSize="13sp"
+        android:fontFamily="monospace"
+        android:singleLine="true"
+        android:imeOptions="actionSearch"
+        android:inputType="text"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:background="@drawable/bg_out_chip" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@color/out_border" />
+
+    <!-- ===== الجسم: قائمة الأسطر + حالة فارغة + زر «إلى آخر سطر» ===== -->
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvOutput"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:overScrollMode="ifContentScrolls"
+            android:paddingTop="8dp" />
+
+        <TextView
+            android:id="@+id/txtOutEmpty"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center"
+            android:padding="32dp"
+            android:text="@string/output_empty"
+            android:textColor="@color/out_dim"
+            android:textSize="14sp"
+            android:visibility="gone" />
+
+        <ImageButton
+            android:id="@+id/btnOutFollow"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:layout_gravity="bottom|end"
+            android:layout_margin="16dp"
+            android:padding="11dp"
+            android:src="@drawable/ic_out_down"
+            app:tint="@color/rin_accent"
+            android:background="@drawable/bg_out_fab"
+            android:elevation="4dp"
+            android:visibility="gone"
+            android:contentDescription="@string/output_follow" />
+    </FrameLayout>
+
+    <!-- ===== سطر إدخال البرنامج (input/confirm/choose) — يظهر عند الطلب فقط ===== -->
+    <LinearLayout
+        android:id="@+id/llOutInput"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="@color/out_surface"
+        android:paddingStart="12dp"
+        android:paddingEnd="8dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/txtOutInputPrompt"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="6dp"
+            android:textAlignment="viewStart"
+            android:textColor="@color/out_cursor"
+            android:textSize="12.5sp"
+            android:fontFamily="monospace" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <EditText
+                android:id="@+id/edtOutInput"
+                android:layout_width="0dp"
+                android:layout_height="42dp"
+                android:layout_weight="1"
+                android:hint="@string/output_input_hint"
+                android:textColorHint="@color/out_gutter"
+                android:textColor="@color/out_text"
+                android:textSize="14sp"
+                android:fontFamily="monospace"
+                android:singleLine="true"
+                android:imeOptions="actionSend"
+                android:inputType="text"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:background="@drawable/bg_out_input" />
+
+            <ImageButton
+                android:id="@+id/btnOutInputSend"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:padding="11dp"
+                android:src="@drawable/ic_out_send"
+                app:tint="@color/out_cursor"
+                android:background="@drawable/bg_icon_btn"
+                android:contentDescription="@string/output_send" />
+
+            <ImageButton
+                android:id="@+id/btnOutInputCancel"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:padding="12dp"
+                android:src="@drawable/ic_close"
+                app:tint="@color/out_dim"
+                android:background="@drawable/bg_icon_btn"
+                android:contentDescription="@string/output_cancel_input" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- ===== شريط الإجراءات السفلي ===== -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@color/out_border" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/out_surface"
+        android:orientation="horizontal"
+        android:paddingTop="4dp"
+        android:paddingBottom="4dp">
+
+        <ImageButton
+            android:id="@+id/btnOutCopy"
+            android:layout_width="0dp"
+            android:layout_height="46dp"
+            android:layout_weight="1"
+            android:padding="13dp"
+            android:src="@drawable/ic_out_copy"
+            app:tint="@color/out_text"
+            android:background="@drawable/bg_icon_btn"
+            android:contentDescription="@string/output_copy_all" />
+
+        <ImageButton
+            android:id="@+id/btnOutShare"
+            android:layout_width="0dp"
+            android:layout_height="46dp"
+            android:layout_weight="1"
+            android:padding="13dp"
+            android:src="@drawable/ic_out_share"
+            app:tint="@color/out_text"
+            android:background="@drawable/bg_icon_btn"
+            android:contentDescription="@string/job_share_cta" />
+
+        <ImageButton
+            android:id="@+id/btnOutSkip"
+            android:layout_width="0dp"
+            android:layout_height="46dp"
+            android:layout_weight="1"
+            android:padding="13dp"
+            android:src="@drawable/ic_out_skip"
+            app:tint="@color/out_text"
+            android:background="@drawable/bg_icon_btn"
+            android:contentDescription="@string/output_skip" />
+
+        <ImageButton
+            android:id="@+id/btnOutAction"
+            android:layout_width="0dp"
+            android:layout_height="46dp"
+            android:layout_weight="1"
+            android:padding="13dp"
+            android:src="@drawable/ic_out_rerun"
+            app:tint="@color/rin_accent"
+            android:background="@drawable/bg_icon_btn"
+            android:contentDescription="@string/job_rerun_cta" />
+    </LinearLayout>
+</LinearLayout>
