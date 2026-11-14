@@ -154,7 +154,7 @@ var I18N={
   errTitle:"خطأ في الملف — أُبقي آخر إطار سليم",errFatal:"تعذّر عرض الملف",line:"السطر",
   pickNode:"فعّل «فحص العناصر» ثم اضغط عنصراً في المعاينة.",runAudit:"تشغيل الفحص",noIssues:"لا ملاحظات — ممتاز.",
   kind:"النوع",name:"الاسم",box:"الأبعاد",attrs:"الخصائص",events:"الأحداث",unbound:"الحقل غير مرتبط بخلية warp (value={اسم}) فلن يُحدَّث.",
-  mediaFake:"تم اختيار الملفات (المسار فقط — لا رفع في المعاينة)",uploadNote:"طلب رفع: المعاينة لا ترسل شيئاً للشبكة.",
+  mediaFake:"تم اختيار الملفات (المسار فقط — لا رفع في المعاينة)",mediaReal:"تم نسخ الملفات إلى مشروعك",uploadNote:"طلب رفع: المعاينة لا ترسل شيئاً للشبكة.",
   opened:"فُتح الرابط في تبويب جديد",navMissing:"الصفحة غير موجودة: ",latency:"ms",
   dTitle:"الجهاز"},
  en:{back:"Back",rotate:"Rotate device",grid:"8px grid",inspect:"Inspect elements (I)",panel:"Side panel",reload:"Restart (reset state)",shot:"PNG screenshot",focus:"Focus mode",focusOff:"Show toolbar",theme:"Theme",bgReset:"Clear background colour",
@@ -163,7 +163,7 @@ var I18N={
   errTitle:"File error — last good frame kept",errFatal:"The file can't be rendered",line:"Line",
   pickNode:"Turn on Inspect, then click an element in the preview.",runAudit:"Run audit",noIssues:"No findings — nice.",
   kind:"Kind",name:"Name",box:"Box",attrs:"Attributes",events:"Events",unbound:"This field is not bound to a warp cell (value={name}); it won't update anything.",
-  mediaFake:"Files chosen (path only — nothing is uploaded in preview)",uploadNote:"Upload request: the preview sends nothing over the network.",
+  mediaFake:"Files chosen (path only — nothing is uploaded in preview)",mediaReal:"Files copied into your project",uploadNote:"Upload request: the preview sends nothing over the network.",
   opened:"Link opened in a new tab",navMissing:"Page not found: ",latency:"ms",
   dTitle:"Device"}
 };
@@ -464,13 +464,28 @@ function handleMedia(m){
     var inp=document.createElement("input"); inp.type="file"; inp.multiple=!!m.multiple;
     inp.accept=m.kind==="image"?"image/*":m.kind==="video"?"video/*":m.kind==="audio"?"audio/*":"";
     inp.onchange=function(){
-      var items=[].slice.call(inp.files||[]).map(function(f){return {path:f.name,name:f.name,mime:f.type||"application/octet-stream",size:f.size,kind:(f.type||"").split("/")[0]||"file"}});
-      if(!items.length)return;
-      api("media_picked",{cell:m.cell,items:items,kind:m.kind,multiple:!!m.multiple,maxMb:m.maxMb||0,append:!!m.append}).then(function(f){if(f){onFrame(f);toast(T("mediaFake"))}});
+      var files=[].slice.call(inp.files||[]); if(!files.length)return;
+      // A host that owns the project (the Android app) takes the bytes at POST /m and answers with a project-relative item;
+      // the desktop tool has no /m, so it falls back to "path only" (the file already lives on the same machine).
+      Promise.all(files.map(function(f){
+        var mime=f.type||"application/octet-stream";
+        var fake={item:{path:f.name,name:f.name,mime:mime,size:f.size,kind:mime.split("/")[0]||"file"},real:false};
+        return fetch("/m?name="+encodeURIComponent(f.name)+"&mime="+encodeURIComponent(mime),{method:"POST",headers:{"X-Indsin-Key":KEY,"Content-Type":"application/octet-stream"},body:f})
+          .then(function(r){return r.ok?r.json():null}).then(function(j){return j&&j.item?{item:j.item,real:true}:fake}).catch(function(){return fake});
+      })).then(function(rs){
+        var real=rs.every(function(r){return r.real});
+        api("media_picked",{cell:m.cell,items:rs.map(function(r){return r.item}),kind:m.kind,multiple:!!m.multiple,maxMb:m.maxMb||0,append:!!m.append}).then(function(f){if(f){onFrame(f);toast(T(real?"mediaReal":"mediaFake"))}});
+      });
     };
     inp.click();
   } else if(m.op==="upload"){
-    toast(T("uploadNote")); api("media_progress",{cell:m.cell,status:"done",progress:100,detail:"preview"}).then(function(f){if(f)onFrame(f)});
+    // Real upload when the host can do it (Android app: multipart POST with real progress frames over SSE); otherwise simulated.
+    api("media_upload",{media:m}).then(function(r){
+      if(r&&r.ok)return;
+      toast(T("uploadNote")); api("media_progress",{cell:m.cell,status:"done",progress:100,detail:"preview"}).then(function(f){if(f)onFrame(f)});
+    });
+  } else if(m.op==="cancel"){
+    api("media_cancel",{cell:m.cell});
   }
 }
 
