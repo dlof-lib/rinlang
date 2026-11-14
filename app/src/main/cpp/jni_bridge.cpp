@@ -760,6 +760,20 @@ Java_com_dlof_rinlang_RinEngine_indsinSessionSetViewportNative(JNIEnv* /* env */
     rin_indsin_session_set_viewport(reinterpret_cast<void*>(handle), (int)viewportHeight);
 }
 
+// indsinSessionResizeNative(handle, width, viewportHeight) -> إعادة تخطيط فورية بعرض/ارتفاع جديدين.
+// تحتاجه المعاينة في المتصفح (IndsinLiveServer): نافذة المتصفح تتغيّر دون إعادة تشغيل الجلسة (فتبقى حالة Warp).
+extern "C" JNIEXPORT void JNICALL
+Java_com_dlof_rinlang_RinEngine_indsinSessionResizeNative(JNIEnv* /* env */, jobject /* this */, jlong handle, jint width, jint viewportHeight) {
+    rin_indsin_session_resize(reinterpret_cast<void*>(handle), (int)width, (int)viewportHeight);
+}
+
+// indsinSessionExportPngNative(handle, path) -> يرسم الإطار الحالي بالرسّام الأصلي إلى ملف PNG (true عند النجاح).
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_dlof_rinlang_RinEngine_indsinSessionExportPngNative(JNIEnv* env, jobject /* this */, jlong handle, jstring pathJStr) {
+    std::string path = rin_jni::toStd(env, pathJStr);
+    return rin_indsin_session_export_png(reinterpret_cast<void*>(handle), path.c_str()) ? JNI_TRUE : JNI_FALSE;
+}
+
 // indsinSessionSetDefaultBackgroundNative(handle, color) -> default screen background ("" clears; JNI: 1 = accepted).
 // Precedence in the engine: root `<Screen bg>` > this host default > theme background (rin_indsin_c_api.h).
 extern "C" JNIEXPORT jboolean JNICALL
