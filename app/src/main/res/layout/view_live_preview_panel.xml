@@ -99,6 +99,220 @@
             android:contentDescription="@string/indsin_close" />
     </LinearLayout>
 
+    <!-- شريط أدوات المعاينة مرتَّب في مجموعات حسب تكرار الاستعمال (يسار ← يمين دائماً):
+         الجهاز | التكبير | الأدوات المساعدة | الإخراج والمزيد. الأقل استعمالاً (الخلفية، حدود المنطقة الآمنة،
+         نسخ JSON، إعادة الضبط…) داخل قائمة «المزيد». layoutDirection=ltr كي لا ينعكس الترتيب. -->
+    <HorizontalScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/rin_console_header"
+        android:scrollbars="none"
+        android:overScrollMode="never"
+        android:layoutDirection="ltr">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingStart="6dp"
+            android:paddingEnd="6dp"
+            android:paddingBottom="4dp">
+
+            <TextView
+                android:id="@+id/livePanelDevice"
+                android:layout_width="wrap_content"
+                android:layout_height="28dp"
+                android:minWidth="30dp"
+                android:layout_marginEnd="3dp"
+                android:gravity="center"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:background="@drawable/bg_toolbar_btn_ghost"
+                android:clickable="true"
+                android:focusable="false"
+                android:text="390"
+                android:textColor="@color/rin_on_toolbar"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:contentDescription="@string/live_pro_device_desc" />
+            <View
+                android:layout_width="1dp"
+                android:layout_height="16dp"
+                android:layout_marginStart="3dp"
+                android:layout_marginEnd="6dp"
+                android:background="@color/rin_editor_hint"
+                android:alpha="0.35" />
+            <TextView
+                android:id="@+id/livePanelZoomOut"
+                android:layout_width="wrap_content"
+                android:layout_height="28dp"
+                android:minWidth="30dp"
+                android:layout_marginEnd="3dp"
+                android:gravity="center"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:background="@drawable/bg_toolbar_btn_ghost"
+                android:clickable="true"
+                android:focusable="false"
+                android:text="−"
+                android:textColor="@color/rin_on_toolbar"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:contentDescription="@string/live_pro_zoom_out" />
+            <TextView
+                android:id="@+id/livePanelZoomLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="28dp"
+                android:minWidth="30dp"
+                android:layout_marginEnd="3dp"
+                android:gravity="center"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:background="@drawable/bg_toolbar_btn_ghost"
+                android:clickable="true"
+                android:focusable="false"
+                android:text="100%"
+                android:textColor="@color/rin_on_toolbar"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:contentDescription="@string/live_pro_zoom_reset" />
+            <TextView
+                android:id="@+id/livePanelZoomIn"
+                android:layout_width="wrap_content"
+                android:layout_height="28dp"
+                android:minWidth="30dp"
+                android:layout_marginEnd="3dp"
+                android:gravity="center"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:background="@drawable/bg_toolbar_btn_ghost"
+                android:clickable="true"
+                android:focusable="false"
+                android:text="+"
+                android:textColor="@color/rin_on_toolbar"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:contentDescription="@string/live_pro_zoom_in" />
+            <TextView
+                android:id="@+id/livePanelZoomFit"
+                android:layout_width="wrap_content"
+                android:layout_height="28dp"
+                android:minWidth="30dp"
+                android:layout_marginEnd="3dp"
+                android:gravity="center"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:background="@drawable/bg_toolbar_btn_ghost"
+                android:clickable="true"
+                android:focusable="false"
+                android:text="⤢"
+                android:textColor="@color/rin_on_toolbar"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:contentDescription="@string/live_pro_zoom_fit" />
+            <View
+                android:layout_width="1dp"
+                android:layout_height="16dp"
+                android:layout_marginStart="3dp"
+                android:layout_marginEnd="6dp"
+                android:background="@color/rin_editor_hint"
+                android:alpha="0.35" />
+            <TextView
+                android:id="@+id/livePanelGrid"
+                android:layout_width="wrap_content"
+                android:layout_height="28dp"
+                android:minWidth="30dp"
+                android:layout_marginEnd="3dp"
+                android:gravity="center"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:background="@drawable/bg_toolbar_btn_ghost"
+                android:clickable="true"
+                android:focusable="false"
+                android:text="▦"
+                android:textColor="@color/rin_on_toolbar"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:contentDescription="@string/live_pro_grid" />
+            <TextView
+                android:id="@+id/livePanelFreeze"
+                android:layout_width="wrap_content"
+                android:layout_height="28dp"
+                android:minWidth="30dp"
+                android:layout_marginEnd="3dp"
+                android:gravity="center"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:background="@drawable/bg_toolbar_btn_ghost"
+                android:clickable="true"
+                android:focusable="false"
+                android:text="❚❚"
+                android:textColor="@color/rin_on_toolbar"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:contentDescription="@string/live_pro_freeze" />
+            <View
+                android:layout_width="1dp"
+                android:layout_height="16dp"
+                android:layout_marginStart="3dp"
+                android:layout_marginEnd="6dp"
+                android:background="@color/rin_editor_hint"
+                android:alpha="0.35" />
+            <TextView
+                android:id="@+id/livePanelShot"
+                android:layout_width="wrap_content"
+                android:layout_height="28dp"
+                android:minWidth="30dp"
+                android:layout_marginEnd="3dp"
+                android:gravity="center"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:background="@drawable/bg_toolbar_btn_ghost"
+                android:clickable="true"
+                android:focusable="false"
+                android:text="⤓"
+                android:textColor="@color/rin_on_toolbar"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:contentDescription="@string/live_pro_shot" />
+            <TextView
+                android:id="@+id/livePanelSize"
+                android:layout_width="wrap_content"
+                android:layout_height="28dp"
+                android:minWidth="30dp"
+                android:layout_marginEnd="3dp"
+                android:gravity="center"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:background="@drawable/bg_toolbar_btn_ghost"
+                android:clickable="true"
+                android:focusable="false"
+                android:text="M"
+                android:textColor="@color/rin_on_toolbar"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:contentDescription="@string/live_pro_size" />
+            <TextView
+                android:id="@+id/livePanelMore"
+                android:layout_width="wrap_content"
+                android:layout_height="28dp"
+                android:minWidth="30dp"
+                android:layout_marginEnd="3dp"
+                android:gravity="center"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:background="@drawable/bg_toolbar_btn_ghost"
+                android:clickable="true"
+                android:focusable="false"
+                android:text="⋮"
+                android:textColor="@color/rin_on_toolbar"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:contentDescription="@string/live_pro_more" />
+        </LinearLayout>
+    </HorizontalScrollView>
+
     <LinearLayout
         android:id="@+id/livePanelErrorBanner"
         android:layout_width="match_parent"
@@ -110,6 +324,8 @@
         android:layout_marginEnd="6dp"
         android:layout_marginTop="4dp"
         android:padding="6dp"
+        android:clickable="true"
+        android:focusable="true"
         android:visibility="gone"
         tools:visibility="visible">
 
