@@ -69,6 +69,8 @@ main{flex:1;min-height:0;display:flex}
 #banner h4 span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #banner pre{margin:0;padding:8px 12px;border-top:1px solid var(--line);font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;direction:ltr;white-space:pre-wrap;word-break:break-word}
 #banner pre b{display:block;background:#ff5d6c26;color:var(--err);font-weight:600}
+#conn{position:absolute;inset-inline:12px;bottom:12px;z-index:6;background:var(--panel);border:1px solid var(--err);border-radius:10px;box-shadow:0 8px 30px #0006;display:none;gap:10px;align-items:center;padding:10px 12px;font-size:13px}
+#conn span{flex:1} #conn button{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:6px 12px;font:inherit;cursor:pointer}
 #banner.fatal{position:relative;inset:auto;margin:auto;max-width:640px;width:100%}
 
 aside{width:340px;flex:none;background:var(--panel);border-inline-start:1px solid var(--line);display:none;flex-direction:column;min-height:0}
@@ -126,6 +128,7 @@ body.focus #float{display:block}
 <main>
   <div id="viewport">
     <div id="banner"></div>
+    <div id="conn" role="alert"><span></span><button type="button"></button></div>
     <div id="holder"><div id="bezel"><div id="sizer">
       <div id="screen"></div>
     </div></div></div>
@@ -150,7 +153,7 @@ body.focus #float{display:block}
 var I18N={
  ar:{back:"رجوع",rotate:"تدوير الجهاز",grid:"شبكة 8px",inspect:"فحص العناصر (I)",panel:"اللوحة الجانبية",reload:"إعادة تشغيل (تصفير الحالة)",shot:"لقطة PNG",focus:"وضع التركيز",focusOff:"إظهار الشريط",theme:"السمة",bgReset:"إلغاء لون الخلفية",
   tabNode:"عنصر",tabAudit:"فحص",tabOutline:"هيكل",tabStats:"إحصاءات",
-  auto:"تلقائي (عرض النافذة)",fit:"ملاءمة",connected:"متصل",reconnecting:"إعادة اتصال…",offline:"انقطع الاتصال بالخادم",
+  auto:"تلقائي (عرض النافذة)",fit:"ملاءمة",connected:"متصل",connLost:"انقطع الاتصال بالخادم",connHint:"أُوقف الخادم أو أُعيد تشغيل التطبيق. أعد «فتح في المتصفح» من التطبيق إن لم يعد الاتصال.",retry:"إعادة المحاولة",reconnecting:"إعادة اتصال…",offline:"انقطع الاتصال بالخادم",
   errTitle:"خطأ في الملف — أُبقي آخر إطار سليم",errFatal:"تعذّر عرض الملف",line:"السطر",
   pickNode:"فعّل «فحص العناصر» ثم اضغط عنصراً في المعاينة.",runAudit:"تشغيل الفحص",noIssues:"لا ملاحظات — ممتاز.",
   kind:"النوع",name:"الاسم",box:"الأبعاد",attrs:"الخصائص",events:"الأحداث",unbound:"الحقل غير مرتبط بخلية warp (value={اسم}) فلن يُحدَّث.",
@@ -159,7 +162,7 @@ var I18N={
   dTitle:"الجهاز"},
  en:{back:"Back",rotate:"Rotate device",grid:"8px grid",inspect:"Inspect elements (I)",panel:"Side panel",reload:"Restart (reset state)",shot:"PNG screenshot",focus:"Focus mode",focusOff:"Show toolbar",theme:"Theme",bgReset:"Clear background colour",
   tabNode:"Node",tabAudit:"Audit",tabOutline:"Outline",tabStats:"Stats",
-  auto:"Auto (window width)",fit:"Fit",connected:"connected",reconnecting:"reconnecting…",offline:"server connection lost",
+  auto:"Auto (window width)",fit:"Fit",connected:"connected",connLost:"Connection to the server was lost",connHint:"The server was stopped or the app restarted. Tap “Open in browser” in the app again if it does not come back.",retry:"Retry",reconnecting:"reconnecting…",offline:"server connection lost",
   errTitle:"File error — last good frame kept",errFatal:"The file can't be rendered",line:"Line",
   pickNode:"Turn on Inspect, then click an element in the preview.",runAudit:"Run audit",noIssues:"No findings — nice.",
   kind:"Kind",name:"Name",box:"Box",attrs:"Attributes",events:"Events",unbound:"This field is not bound to a warp cell (value={name}); it won't update anything.",
@@ -172,6 +175,9 @@ var ZOOMS=["fit",0.5,0.75,1,1.25,1.5,2];
 
 // ------------------------------------------------------------------------------------ state
 var qs=new URLSearchParams(location.search), KEY=qs.get("k")||"";
+var _m=document.querySelector('meta[name="indsin-key"]');  /* يحقنه خادم التطبيق فقط (مع كوكي HttpOnly) */
+if(!KEY&&_m) KEY=_m.content||"";  /* بعد تحديث الصفحة بلا ?k= */
+if(_m&&qs.get("k")){try{qs.delete("k");var _r=qs.toString();history.replaceState(null,"",location.pathname+(_r?"?"+_r:""));}catch(e){}}  /* لا يبقى المفتاح في العنوان/السجل؛ أداة سطح المكتب لا تحقن meta فتبقى كما كانت */
 var CID=(crypto.randomUUID?crypto.randomUUID():String(Math.random()).slice(2)+Date.now()).replace(/[^a-z0-9]/gi,"").slice(0,32);
 var $=function(id){return document.getElementById(id)};
 var prefs={lang:(navigator.language||"en").slice(0,2)==="ar"?"ar":"en",device:(window.innerWidth<700?"0":"1"),rot:false,zoom:"fit",grid:false,panel:false,bg:"",theme:""};
@@ -189,21 +195,26 @@ function api(cmd,p,opts){
     var t0=performance.now(); S.busy++;
     return fetch("/api",{method:"POST",headers:{"X-Indsin-Key":KEY,"Content-Type":"application/json"},body:JSON.stringify(body)})
       .then(function(r){return r.json().then(function(j){return {status:r.status,j:j}})})
-      .then(function(o){S.busy--;
+      .then(function(o){S.busy--; connOk();
         if(o.status===410&&cmd!=="open"){return openSession().then(function(){return null});}
         if(o.status>=400){ if(cmd==="navigate"||cmd==="replace"){toast(T("navMissing")+(p&&p.target||""));} return null; }
         o.j._ms=performance.now()-t0; return o.j;})
-      .catch(function(){S.busy--;setStatus("bad");return null});
+      .catch(function(){S.busy--;setStatus("bad");connFail();return null});
   };
   var pr=chain.then(run,run); if(!(opts&&opts.parallel)) chain=pr.catch(function(){}); return pr;
 }
+var CF=0; /* إخفاقات اتصال متتالية: بعد 3 تظهر شريحة «انقطع الاتصال» مع زر إعادة المحاولة */
+function showConn(on){var c=$("conn"); if(!c)return; c.style.display=on?"flex":"none"; if(on){c.querySelector("span").textContent=T("connLost")+" — "+T("connHint"); c.querySelector("button").textContent=T("retry");}}
+function connFail(){ if(++CF>=3) showConn(true); }
+function connOk(){ CF=0; showConn(false); }
+document.addEventListener("DOMContentLoaded",function(){var b=document.querySelector("#conn button"); if(b) b.onclick=function(){CF=0; showConn(false); openSession();};});
 function setStatus(s){var d=$("dot");d.className=s==="ok"?"on":s==="bad"?"bad":"wait";d.title=s==="ok"?T("connected"):s==="bad"?T("offline"):T("reconnecting");}
 function connectSSE(){
   if(S.es){try{S.es.close()}catch(e){}}
   var es=new EventSource("/events?cid="+encodeURIComponent(CID)+"&k="+encodeURIComponent(KEY)); S.es=es;
-  es.onopen=function(){setStatus("ok")};
+  es.onopen=function(){setStatus("ok");connOk()};
   es.onmessage=function(m){try{onFrame(JSON.parse(m.data))}catch(e){console.error(e)}};
-  es.onerror=function(){setStatus("wait"); if(es.readyState===2){ setTimeout(function(){openSession()},1200);} };
+  es.onerror=function(){setStatus("wait");connFail(); if(es.readyState===2){ setTimeout(function(){openSession()},1200);} };
 }
 function openSession(){
   var d=deviceSize();
