@@ -382,6 +382,15 @@ object RinEngine {
         fun setDefaultBackground(color: String): Boolean =
             synchronized(lock) { if (closed) false else try { indsinSessionSetDefaultBackgroundNative(handle, color) } catch (_: Throwable) { false } }
 
+        /** تغيير عرض/ارتفاع الجلسة وإعادة التخطيط فوراً مع بقاء حالة Warp (ارتفاع 0 = إبقاء الحالي). */
+        fun resize(width: Int, viewportHeight: Int) {
+            synchronized(lock) { if (!closed) try { indsinSessionResizeNative(handle, width.coerceIn(1, 8192), viewportHeight.coerceIn(0, 20000)) } catch (_: Throwable) {} }
+        }
+
+        /** يصدّر الإطار الحالي كـ PNG إلى [path] بالرسّام الأصلي (ASCII فقط للنص). false عند الفشل أو بعد الإغلاق. */
+        fun exportPng(path: String): Boolean =
+            synchronized(lock) { if (closed) false else try { indsinSessionExportPngNative(handle, path) } catch (_: Throwable) { false } }
+
         // ---- Design System v2 / Audit / Introspection (docs/indsin_expansion.md §8) ----
         // الدوال الثلاث أدناه لا تلمس المؤشر الأصلي بعد [close] (تفادياً لـ use-after-free) بل تُعيد
         // JSON خطأ آمناً يفهمه المحلّل المطبَّع في IndsinDesignSystem.kt.
@@ -451,5 +460,7 @@ object RinEngine {
     private external fun indsinSessionUpdateSourceNative(handle: Long, newSource: String): String
     private external fun indsinSessionSetViewportNative(handle: Long, viewportHeight: Int)
     private external fun indsinSessionSetDefaultBackgroundNative(handle: Long, color: String): Boolean
+    private external fun indsinSessionResizeNative(handle: Long, width: Int, viewportHeight: Int)
+    private external fun indsinSessionExportPngNative(handle: Long, path: String): Boolean
     private external fun indsinSessionFreeNative(handle: Long)
 }
