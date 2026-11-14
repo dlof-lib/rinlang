@@ -69,6 +69,10 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
      *  it back into the editor and pressing Run, without touching the editor's current text. */
     var onRerunRequested: ((String) -> Unit)? = null
 
+    /** Invoked with a job's [RinJob.number] when the user taps the "open Output screen" button —
+     *  opens [OutputActivity] on that run (typewriter output, filters, search). */
+    var onOpenOutputRequested: ((Int) -> Unit)? = null
+
     /** Explicit user overrides of the expand/collapse state, keyed by [RinJob.number] rather
      *  than list position -- survives reordering, job completion (QUEUED -> RUNNING -> SUCCESS)
      *  and RecyclerView view-holder recycling. Absent from this map means "use the default"
@@ -83,6 +87,13 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
 
     /** Current search text per job number (section 12) -- applies to whichever tab is active. */
     private val searchQuery = HashMap<Int, String>()
+
+    /** عدد أسطر البث الحي التي كانت معروضة لكل تشغيل (للتفريق بين القديم والجديد عند الكتابة الحرفية). */
+    private val liveSeen = HashMap<Int, Int>()
+
+    /** وقت بدء كتابة كل سطر حي (مفتاحه رقم التشغيل×100000+الفهرس) كي لا تُعاد الحركة من الصفر عند إعادة بناء البطاقة. */
+    private val typeAnimStart = HashMap<Long, Long>()
+    private val typeHandler = Handler(Looper.getMainLooper())
 
     fun submit(newItems: List<RinJob>) {
         items = newItems
@@ -178,9 +189,25 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
             isFocusable = true
         }.also { (duration.parent as LinearLayout).addView(it) }
 
+        /** فتح شاشة Output المستقلة لهذا التشغيل. */
+        private val openOutputBtn: ImageView = ImageView(context).apply {
+            setImageResource(R.drawable.ic_out_expand)
+            imageTintList = android.content.res.ColorStateList.valueOf(ContextCompat.getColor(context, R.color.rin_accent))
+            layoutParams = LinearLayout.LayoutParams((18 * dp).toInt(), (18 * dp).toInt()).apply {
+                marginStart = (8 * dp).toInt()
+            }
+            contentDescription = context.getString(R.string.output_open_cta)
+            isClickable = true
+            isFocusable = true
+        }.also { (duration.parent as LinearLayout).addView(it) }
+
         private var boundJob: RinJob? = null
 
         init {
+            openOutputBtn.setOnClickListener {
+                boundJob?.let { onOpenOutputRequested?.invoke(it.number) }
+            }
+
             // Tapping the header toggles the collapsed/expanded detail body (output, artifacts,
             // stats) for this specific run -- keyed by job number in the adapter so it survives
             // recycling/rebinding instead of resetting on every scroll.
@@ -334,9 +361,16 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
                         } else {
                             fallbackOutput.visibility = View.GONE
                             fallbackOutput.text = ""
-                            for (line in job.liveLines) {
-                                outputLines.addView(buildLineRow(line))
+                            // كتابة حرفية للأسطر الواصلة حديثاً فقط (ما كان معروضاً قبل أول ربط يظهر كاملاً).
+                            val live = job.liveLines
+                            val seen = liveSeen.getOrPut(job.number) { live.size }
+                            live.forEachIndexed { i, line ->
+                                val key = job.number * 100_000L + i
+                                val animate = typeAnimStart.containsKey(key) || i >= seen
+                                outputLines.addView(buildLineRow(line, animKey = if (animate) key else null))
                             }
+                            liveSeen[job.number] = live.size
+                            if (typeAnimStart.size > 4000) typeAnimStart.clear()
                         }
                     }
                 }
@@ -711,7 +745,7 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
             setPadding(0, (4 * dp).toInt(), 0, (4 * dp).toInt())
         }
 
-        private fun buildLineRow(line: RinLogLine, highlightQuery: String = ""): View {
+        private fun buildLineRow(line: RinLogLine, highlightQuery: String = "", animKey: Long? = null): View {
             // `print.image(...)` renders as an actual inline thumbnail, not an icon+text row --
             // handled entirely separately since it has its own layout (header + image + caption).
             if (line.kind == LogKind.PRINT_IMAGE) return buildImageLineRow(line)
@@ -719,9 +753,16 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
             val row = LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = android.view.Gravity.TOP
-                setPadding(0, (2 * dp).toInt(), 0, (2 * dp).toInt())
+                setPadding((4 * dp).toInt(), (2 * dp).toInt(), (4 * dp).toInt(), (2 * dp).toInt())
             }
             val tint = ContextCompat.getColor(context, line.kind.colorRes)
+            // صف خطأ/تحذير بخلفية خفيفة وشريط جانبي بلون النوع (يعمل في الثيمين الفاتح والداكن).
+            if (line.kind == LogKind.ERROR || line.kind == LogKind.WARNING) {
+                row.background = GradientDrawable().apply {
+                    setColor(withAlpha(tint, 0x16))
+                    cornerRadius = 4 * dp
+                }
+            }
 
             if (line.kind.icon != null) {
                 val icon = ImageView(context).apply {
@@ -754,7 +795,25 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             }
             row.addView(text)
+            if (animKey != null && highlightQuery.isEmpty() && line.repeat <= 1) startTypeAnim(text, line.text, animKey)
             return row
+        }
+
+        /** كتابة حرفية لسطر حي: تتقدّم حسب الزمن المنقضي منذ أول ظهور للسطر، فتستمر بسلاسة حتى لو
+         *  أُعيد بناء البطاقة أثناءها. تتوقف تلقائياً عند فصل الـ TextView عن النافذة. */
+        private fun startTypeAnim(tv: TextView, full: String, key: Long) {
+            val start = typeAnimStart.getOrPut(key) { android.os.SystemClock.uptimeMillis() }
+            val duration = (full.length * 14L).coerceIn(120L, 700L)
+            lateinit var frame: Runnable
+            frame = Runnable {
+                val p = ((android.os.SystemClock.uptimeMillis() - start) / duration.toFloat()).coerceIn(0f, 1f)
+                var n = (full.length * p).toInt()
+                if (n in 1 until full.length && Character.isHighSurrogate(full[n - 1])) n--
+                tv.text = if (p >= 1f) full else full.substring(0, n) + "▌"
+                if (p < 1f && tv.isAttachedToWindow) typeHandler.postDelayed(frame, 30L)
+            }
+            tv.text = ""
+            tv.post(frame)
         }
 
         /** Renders one `print.image(...)` line: header (icon + file name) — actual decoded
