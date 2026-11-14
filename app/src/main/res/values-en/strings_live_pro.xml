@@ -32,8 +32,8 @@
     <string name="live_pro_size_m">medium</string>
     <string name="live_pro_size_l">large</string>
     <string name="indsin_open_in_browser">Open in browser</string>
-    <string name="indsin_browser_failed">Couldn't start the local preview server</string>
-    <string name="indsin_browser_opening">Opening live preview in your browser (%s)…</string>
+    <string name="indsin_browser_failed">Couldn\'t start the local preview server</string>
+    <string name="indsin_browser_opening">Opening live preview in your browser (%1$s)…</string>
     <string name="indsin_browser_no_app">No browser app found to open the preview</string>
     <string name="indsin_browser_nothing">Nothing to preview yet</string>
 </resources>
