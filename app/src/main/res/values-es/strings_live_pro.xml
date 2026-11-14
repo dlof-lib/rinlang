@@ -33,7 +33,7 @@
     <string name="live_pro_size_l">grande</string>
     <string name="indsin_open_in_browser">Abrir en el navegador</string>
     <string name="indsin_browser_failed">No se pudo iniciar el servidor local de vista previa</string>
-    <string name="indsin_browser_opening">Abriendo la vista previa en vivo en el navegador (%s)…</string>
+    <string name="indsin_browser_opening">Abriendo la vista previa en vivo en el navegador (%1$s)…</string>
     <string name="indsin_browser_no_app">No hay ninguna app de navegador para abrir la vista previa</string>
     <string name="indsin_browser_nothing">Aún no hay nada que previsualizar</string>
 </resources>
