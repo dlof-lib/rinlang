@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- شاشة Output المستقلة (OutputActivity): كتابة حرفية حيّة + فلاتر + بحث. -->
+<resources>
+    <string name="output_title">المخرجات</string>
+    <string name="output_run_fmt">تشغيل #%1$d</string>
+    <string name="output_empty">لا توجد عمليات تشغيل بعد. اضغط «تشغيل» في المحرر وستُكتب المخرجات هنا مباشرة.</string>
+    <string name="output_queued">في انتظار الدور…</string>
+    <string name="output_running">قيد التشغيل</string>
+    <string name="output_no_output">لم يطبع البرنامج شيئاً.</string>
+    <string name="output_status_ok_fmt">✔ اكتمل التشغيل بنجاح — %1$d ms</string>
+    <string name="output_status_error_fmt">✖ فشل التشغيل — %1$d ms</string>
+    <string name="output_status_timeout">⏱ توقّف التشغيل: تجاوز المهلة المسموحة</string>
+    <string name="output_status_cancelled">⏹ أُوقف التشغيل</string>
+    <string name="output_summary_fmt">%1$d سطر · %2$d أخطاء · %3$d تحذيرات</string>
+    <string name="output_search_hint">ابحث في المخرجات</string>
+    <string name="output_speed_fmt">الكتابة %1$s</string>
+    <string name="output_speed_slow">×0.5</string>
+    <string name="output_speed_normal">×1</string>
+    <string name="output_speed_fast">×3</string>
+    <string name="output_speed_instant">فورية</string>
+    <string name="output_skip">تخطّي الكتابة</string>
+    <string name="output_follow">إلى آخر سطر</string>
+    <string name="output_line_copied">نُسخ السطر</string>
+    <string name="output_stop">إيقاف التشغيل</string>
+    <string name="output_input_hint">اكتب إجابتك…</string>
+    <string name="output_send">إرسال</string>
+    <string name="output_cancel_input">إلغاء الإدخال</string>
+    <string name="output_open_cta">فتح شاشة المخرجات</string>
+    <string name="output_prev_run">التشغيل السابق</string>
+    <string name="output_next_run">التشغيل التالي</string>
+    <string name="output_goto_line_hint">اضغط على سطر الخطأ للانتقال إليه في المحرر</string>
+    <string name="output_copy_all">نسخ كل المخرجات</string>
+    <string name="output_search_toggle">بحث</string>
+    <string name="settings_auto_open_output">فتح شاشة المخرجات عند التشغيل</string>
+    <string name="settings_auto_open_output_hint">تُفتح شاشة المخرجات المستقلة (بالكتابة الحيّة) في كل مرة تضغط فيها تشغيل</string>
+</resources>
