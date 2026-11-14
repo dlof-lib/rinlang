@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- شاشة Output المستقلة (OutputActivity): كتابة حرفية حيّة + فلاتر + بحث. -->
+<resources>
+    <string name="output_title">Salida</string>
+    <string name="output_run_fmt">Ejecución #%1$d</string>
+    <string name="output_empty">Aún no hay ejecuciones. Pulsa Ejecutar en el editor y la salida se escribirá aquí.</string>
+    <string name="output_queued">Esperando en la cola…</string>
+    <string name="output_running">Ejecutando</string>
+    <string name="output_no_output">El programa no imprimió nada.</string>
+    <string name="output_status_ok_fmt">✔ Terminó correctamente — %1$d ms</string>
+    <string name="output_status_error_fmt">✖ La ejecución falló — %1$d ms</string>
+    <string name="output_status_timeout">⏱ Detenido: se superó el tiempo límite</string>
+    <string name="output_status_cancelled">⏹ Ejecución detenida</string>
+    <string name="output_summary_fmt">%1$d líneas · %2$d errores · %3$d avisos</string>
+    <string name="output_search_hint">Buscar en la salida</string>
+    <string name="output_speed_fmt">Escritura %1$s</string>
+    <string name="output_speed_slow">×0.5</string>
+    <string name="output_speed_normal">×1</string>
+    <string name="output_speed_fast">×3</string>
+    <string name="output_speed_instant">Instantánea</string>
+    <string name="output_skip">Omitir escritura</string>
+    <string name="output_follow">Ir a la última línea</string>
+    <string name="output_line_copied">Línea copiada</string>
+    <string name="output_stop">Detener ejecución</string>
+    <string name="output_input_hint">Escribe tu respuesta…</string>
+    <string name="output_send">Enviar</string>
+    <string name="output_cancel_input">Cancelar entrada</string>
+    <string name="output_open_cta">Abrir la pantalla de salida</string>
+    <string name="output_prev_run">Ejecución anterior</string>
+    <string name="output_next_run">Ejecución siguiente</string>
+    <string name="output_goto_line_hint">Toca una línea de error para ir a ella en el editor</string>
+    <string name="output_copy_all">Copiar toda la salida</string>
+    <string name="output_search_toggle">Buscar</string>
+    <string name="settings_auto_open_output">Abrir la pantalla de salida al ejecutar</string>
+    <string name="settings_auto_open_output_hint">Abre la pantalla de salida (escritura en vivo) cada vez que pulsas Ejecutar</string>
+</resources>
