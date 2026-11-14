@@ -242,6 +242,15 @@
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />
 
+        <!-- شاشة Output المستقلة: كتابة حرفية حيّة لمخرجات التشغيل (بث حي + فلاتر + بحث + إدخال).
+             singleTop كي لا تتكدّس نسخ منها عند فتحها من بطاقة تشغيل ثم من زر الكونسول. -->
+        <activity
+            android:name=".OutputActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.RinLang.Output"
+            android:windowSoftInputMode="adjustResize" />
+
         <!-- شاشة "CLC": تصدير/فحص/استيراد حاويات .rcl (Rin Compact Library Container) الخاصة بمشروع -->
         <activity
             android:name=".ClcActivity"
