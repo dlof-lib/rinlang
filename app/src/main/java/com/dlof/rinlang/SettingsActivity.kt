@@ -113,6 +113,7 @@ class SettingsActivity : RinBaseActivity() {
             Row.Section(R.string.settings_run_section_title),
             Row.Toggle(key.AUTO_RUN, R.string.settings_auto_run, R.string.settings_auto_run_hint),
             Row.Toggle(key.CLEAR_CONSOLE_ON_RUN, R.string.settings_clear_console_on_run, R.string.settings_clear_console_on_run_hint),
+            Row.Toggle(key.AUTO_OPEN_OUTPUT, R.string.settings_auto_open_output, R.string.settings_auto_open_output_hint),
 
             Row.Section(R.string.settings_interface_section_title),
             Row.Choice(
