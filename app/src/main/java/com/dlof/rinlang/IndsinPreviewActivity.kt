@@ -35,6 +35,7 @@ class IndsinPreviewActivity : RinBaseActivity(), IndsinPreviewManager.Listener {
         const val EXTRA_FILE_NAME = "indsin_preview_file_name"
         internal val DEVICE_WIDTHS = listOf(360, 390, 414, 428, 768)
         internal const val BG_MENU_ID = 1000
+        private const val BROWSER_MENU_ID = 900
         /** Default-background presets (label, color literal) offered in the device menu. */
         internal val BACKGROUND_PRESETS = listOf(
             R.string.indsin_background_black to "#000000",
@@ -577,9 +578,22 @@ class IndsinPreviewActivity : RinBaseActivity(), IndsinPreviewManager.Listener {
         }
     }
 
+    /**
+     * «فتح في المتصفح»: معاينة حقيقية في متصفح الجهاز فوق جلسة المحرّك الأصلية ([IndsinLiveServer]) — لمس وإدخال وتنقّل ووسائط
+     * فعلية. مشروع المحرر يُخدَم كاملاً؛ ملف خارجي (ACTION_VIEW) يُنسخ مع نصه الحالي إلى مجلد مؤقت.
+     */
+    private fun openInBrowser() {
+        val source = IndsinPreviewManager.lastSource
+        if (source.isBlank()) { Toast.makeText(this, R.string.indsin_browser_nothing, Toast.LENGTH_SHORT).show(); return }
+        val dir = IndsinPreviewManager.browserProjectDir
+        val page = IndsinPreviewManager.browserPage?.takeIf { dir != null && it.substringAfterLast('/') == currentPageName } ?: currentPageName
+        IndsinLiveServer.openInBrowser(this, dir, page, source)
+    }
+
     private fun showDeviceMenu(anchor: View) {
         val themedContext = ContextThemeWrapper(this, MaterialR.style.ThemeOverlay_MaterialComponents_Dark)
         val popup = PopupMenu(themedContext, anchor)
+        popup.menu.add(0, BROWSER_MENU_ID, 200, getString(R.string.indsin_open_in_browser))
         popup.menu.add(0, -1, 0, getString(R.string.indsin_device_fit_screen))
         DEVICE_WIDTHS.forEachIndexed { index, width ->
             popup.menu.add(0, index, index + 1, getString(R.string.indsin_device_width_format, width))
@@ -589,6 +603,7 @@ class IndsinPreviewActivity : RinBaseActivity(), IndsinPreviewManager.Listener {
         bgMenu.add(0, BG_MENU_ID + 1, 0, getString(R.string.indsin_background_theme))
         BACKGROUND_PRESETS.forEachIndexed { i, (nameRes, _) -> bgMenu.add(0, BG_MENU_ID + 2 + i, i + 1, getString(nameRes)) }
         popup.setOnMenuItemClickListener { item ->
+            if (item.itemId == BROWSER_MENU_ID) { openInBrowser(); return@setOnMenuItemClickListener true }
             if (item.itemId > BG_MENU_ID) {
                 val idx = item.itemId - BG_MENU_ID - 2
                 val color = BACKGROUND_PRESETS.getOrNull(idx)?.second ?: ""
