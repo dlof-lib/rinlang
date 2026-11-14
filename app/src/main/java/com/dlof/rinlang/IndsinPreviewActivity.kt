@@ -33,10 +33,10 @@ class IndsinPreviewActivity : RinBaseActivity(), IndsinPreviewManager.Listener {
         /** Optional: the project-relative file name [EXTRA_CODE] came from (defaults to
          * "main.rin"). Used as the starting point for real page navigation below. */
         const val EXTRA_FILE_NAME = "indsin_preview_file_name"
-        private val DEVICE_WIDTHS = listOf(360, 390, 414, 428, 768)
-        private const val BG_MENU_ID = 1000
+        internal val DEVICE_WIDTHS = listOf(360, 390, 414, 428, 768)
+        internal const val BG_MENU_ID = 1000
         /** Default-background presets (label, color literal) offered in the device menu. */
-        private val BACKGROUND_PRESETS = listOf(
+        internal val BACKGROUND_PRESETS = listOf(
             R.string.indsin_background_black to "#000000",
             R.string.indsin_background_midnight to "#0D0E18",
             R.string.indsin_background_slate to "#1E1E2E",
