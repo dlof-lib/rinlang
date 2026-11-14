@@ -23,3 +23,13 @@
 
 لم يُترجَم Kotlin/Android هنا؛ XML تحقّقتُ منه وKotlin راجعته يدوياً.
 MainActivity.kt مبني على نسخة rinlang-output-changed-files.
+
+## فتح في المتصفح (حقيقي)
+- `IndsinLiveServer.kt` (جديد): خادم loopback ببروتوكول `tools/indsin-live` فوق جلسات المحرّك الأصلي؛ تفاصيله في `docs/indsin_live_preview.md`.
+- زر «فتح في المتصفح»: ⋮ في اللوحة المدمجة، وقائمة الجهاز في `IndsinPreviewActivity`.
+- `RinEngine.IndsinSession`: `resize()` و`exportPng()` (+ دالتا JNI في `jni_bridge.cpp`).
+- `IndsinPreviewManager`: `postToWorker/runOnWorker` (تسلسل كل النداءات الأصلية) و`browserProjectDir/browserPage`.
+- `client/index.html`: رفع حقيقي لاختيار الوسائط (`POST /m`) و`uploadMedia` حقيقي (`media_upload/media_cancel`) مع رجوع للمحاكاة على أداة سطح المكتب؛ `live_client.h` أُعيد توليده.
+- `app/build.gradle(.kts)`: مهمة `copyIndsinLiveClient` تنسخ الواجهة إلى assets.
+- تحقّق: ترجمتُ `IndsinLiveServer.kt` بمترجم Kotlin 2.0.21 مقابل واجهات وهمية لأندرويد/المحرّك وشغّلتُه فعلياً باختبار HTTP (31 فحصاً: مفتاح، Host، جلسات، لمس، تحرير حيّ عبر SSE،
+  مراقب ملفات، تنقّل، مسارات هاربة، Range، رفع وسائط، رفع multipart حقيقي). لم يُبنَ APK كامل ولم يُترجَم C++ هنا.
