@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_pro_device_desc">Ancho del dispositivo y fondo</string>
+    <string name="live_pro_zoom_out">Reducir</string>
+    <string name="live_pro_zoom_in">Ampliar</string>
+    <string name="live_pro_zoom_reset">Restablecer zoom al 100%</string>
+    <string name="live_pro_grid">Mostrar u ocultar la cuadrícula</string>
+    <string name="live_pro_freeze">Pausar o reanudar la actualización en vivo</string>
+    <string name="live_pro_shot">Guardar y compartir una captura</string>
+    <string name="live_pro_frozen_on">Actualización en vivo en pausa. Tus cambios se aplican al reanudar.</string>
+    <string name="live_pro_frozen_off">Actualización en vivo reanudada</string>
+    <string name="live_pro_shot_failed">No se pudo capturar la vista previa</string>
+    <string name="live_pro_shot_share">Compartir captura</string>
+    <string name="live_pro_goto_line">Ir a la línea %1$d</string>
+    <string name="live_pro_copy">Copiar</string>
+    <string name="live_pro_copied">Copiado</string>
+    <string name="live_pro_close">Cerrar</string>
+    <string name="live_pro_inspector_title">%1$s · %2$s (línea %3$d)</string>
+    <string name="live_pro_err_hint">Toque: ir a la línea · Pulsación larga: copiar</string>
+    <string name="live_pro_safe_area">Guías de área segura</string>
+    <string name="live_pro_zoom_fit">Ajustar el zoom al ancho del panel</string>
+    <string name="live_pro_size">Tamaño del panel: pequeño / medio / grande</string>
+    <string name="live_pro_more">Más opciones</string>
+    <string name="live_pro_copy_json">Copiar JSON del fotograma</string>
+    <string name="live_pro_show_stats">Mostrar barra de estadísticas</string>
+    <string name="live_pro_reset">Restablecer ajustes de vista previa</string>
+    <string name="live_pro_reset_done">Ajustes de vista previa restablecidos</string>
+    <string name="live_pro_landscape">Horizontal</string>
+    <string name="live_pro_json_copied">JSON del fotograma copiado</string>
+    <string name="live_pro_size_toast">Tamaño del panel: %1$s</string>
+    <string name="live_pro_size_s">pequeño</string>
+    <string name="live_pro_size_m">medio</string>
+    <string name="live_pro_size_l">grande</string>
+</resources>
