@@ -17,4 +17,6 @@
     <files-path name="rin_apps" path="rin_apps/" />
     <!-- التقاط الكاميرا لـ indsin (pickMedia("camera")): IndsinMediaHost يكتب الملف المؤقت هنا ثم ينقله إلى media/. -->
     <cache-path name="indsin_capture" path="indsin_capture/" />
+    <!-- لقطات شاشة المعاينة الحية (IndsinLivePanel.captureAndShare). -->
+    <cache-path name="indsin_shots" path="indsin_shots/" />
 </paths>
