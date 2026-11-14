@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- سطر المؤشر الأخير: «❯ ▌» وامض عند الانتهاء، أو «● قيد التشغيل…» أثناء التنفيذ. -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/txtOutFooter"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layoutDirection="ltr"
+    android:fontFamily="monospace"
+    android:minHeight="28dp"
+    android:paddingStart="62dp"
+    android:paddingEnd="14dp"
+    android:paddingTop="4dp"
+    android:paddingBottom="28dp"
+    android:textAlignment="viewStart"
+    android:textColor="@color/out_dim"
+    android:textSize="13sp" />
