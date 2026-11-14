@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="live_pro_device_desc">Device width and background</string>
+    <string name="live_pro_zoom_out">Zoom out</string>
+    <string name="live_pro_zoom_in">Zoom in</string>
+    <string name="live_pro_zoom_reset">Reset zoom to 100%</string>
+    <string name="live_pro_grid">Toggle layout grid</string>
+    <string name="live_pro_freeze">Pause or resume live updates</string>
+    <string name="live_pro_shot">Save and share a screenshot</string>
+    <string name="live_pro_frozen_on">Live updates paused. Edits are kept and applied on resume.</string>
+    <string name="live_pro_frozen_off">Live updates resumed</string>
+    <string name="live_pro_shot_failed">Could not capture the preview</string>
+    <string name="live_pro_shot_share">Share screenshot</string>
+    <string name="live_pro_goto_line">Go to line %1$d</string>
+    <string name="live_pro_copy">Copy</string>
+    <string name="live_pro_copied">Copied</string>
+    <string name="live_pro_close">Close</string>
+    <string name="live_pro_inspector_title">%1$s · %2$s (line %3$d)</string>
+    <string name="live_pro_err_hint">Tap: go to line · Long-press: copy</string>
+    <string name="live_pro_safe_area">Safe area guides</string>
+    <string name="live_pro_zoom_fit">Fit zoom to panel width</string>
+    <string name="live_pro_size">Panel size: small / medium / large</string>
+    <string name="live_pro_more">More options</string>
+    <string name="live_pro_copy_json">Copy Fabric JSON</string>
+    <string name="live_pro_show_stats">Show stats bar</string>
+    <string name="live_pro_reset">Reset preview settings</string>
+    <string name="live_pro_reset_done">Preview settings reset</string>
+    <string name="live_pro_landscape">Landscape</string>
+    <string name="live_pro_json_copied">Frame JSON copied</string>
+    <string name="live_pro_size_toast">Panel size: %1$s</string>
+    <string name="live_pro_size_s">small</string>
+    <string name="live_pro_size_m">medium</string>
+    <string name="live_pro_size_l">large</string>
+</resources>
