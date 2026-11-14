@@ -63,6 +63,7 @@ object AppSettings {
 
         const val AUTO_RUN = "auto_run_on_type"
         const val CLEAR_CONSOLE_ON_RUN = "clear_console_on_run"
+        const val AUTO_OPEN_OUTPUT = "auto_open_output_screen"
 
         const val THEME_MODE = "theme_mode"
         const val EDITOR_LAYOUT = "editor_layout"
@@ -96,6 +97,7 @@ object AppSettings {
         // تشغيل تلقائي: معطّل افتراضيًا حتى لا يمتلئ طابور العمل بمحاولات تشغيل لم يطلبها المستخدم.
         Key.AUTO_RUN to false,
         Key.CLEAR_CONSOLE_ON_RUN to false,
+        Key.AUTO_OPEN_OUTPUT to false,
         Key.SHOW_TOOLBAR to true,
         Key.SHOW_CONSOLE to true,
         Key.KEEP_SCREEN_ON to false,
@@ -191,6 +193,8 @@ object AppSettings {
     /** تشغيل تلقائي (live output): يُعيد تنفيذ الكود في الطابور بعد توقّف قصير عن الكتابة. */
     fun isAutoRunEnabled(context: Context) = getBoolean(context, Key.AUTO_RUN)
     fun isClearConsoleOnRun(context: Context) = getBoolean(context, Key.CLEAR_CONSOLE_ON_RUN)
+    /** فتح شاشة Output المستقلة تلقائياً عند الضغط على Run (تشغيل صريح فقط، لا التشغيل التلقائي). */
+    fun isAutoOpenOutput(context: Context) = getBoolean(context, Key.AUTO_OPEN_OUTPUT)
 
     // ---- الواجهة --------------------------------------------------------------------------
 
