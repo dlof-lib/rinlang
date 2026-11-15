@@ -9,7 +9,7 @@
 <!--                                                                               -->
 <!-- هوية التصميم: حبر داكن · لون تمييز قابل للتبديل · عناوين مرقّمة · مزاج «طرفية».   -->
 <!-- الأقسام: hero · stats · why · platforms · tour · playground · indsin · pipeline · -->
-<!--          learn · ecosystem · fit · faq · cta · footer                          -->
+<!--          learn · ecosystem · fit · faq · cta · footer  (+ quickstart · examples)   -->
 <!-- ============================================================================= -->
 <Rin>
 // ---- حاويات NoSQL تصف هذه الصفحة نفسها (تُنفَّذ فعلاً قبل رسم أي عنصر) ----
@@ -27,6 +27,8 @@
   document id="s10" fields={ name: "fit",        kind: "section" };
   document id="s11" fields={ name: "faq",        kind: "section" };
   document id="s12" fields={ name: "cta",        kind: "section" };
+  document id="s13" fields={ name: "quickstart", kind: "section" };
+  document id="s14" fields={ name: "examples",   kind: "section" };
 .end/container.doc
 @container.doc=siteTargets
   document id="t0" fields={ name: "CLI",         kind: "platform" };
@@ -76,24 +78,52 @@ let tourCode = [
     "<warp count={0} />\n<Column#app gap=12 padding=20>\n  <Text#t size=22>Count: {count}</Text>\n  <Button#inc onTap={count = count + 1}>Add</Button>\n</Column>"
 ];
 
+// ---- معرض الأمثلة: كل مثال شُغِّل فعلاً بمحرّك Rin والمخرجات أدناه هي الناتج الحقيقي ----
+let exTitles = ["حلقات", "دوال", "حاويات", "قواميس"];
+let exNotes = [
+    "for … in للتكرار على العناصر، وfor الكلاسيكية للعدّ.",
+    "دالة تعاودية ومصفوفة تُملأ بحلقة — #add يضيف عنصراً للمصفوفة.",
+    "ثلاثة مستندات في حاوية، ثم استعلام بحقل واحد: queryDocs.",
+    "القاموس { مفتاح: قيمة } مع keys وlen للاستكشاف."
+];
+let exCode = [
+    "let names = [\"Rin\", \"Loom\", \"Container\"];\nfor (let name in names) {\n    print name;\n}\n\nlet total = 0;\nfor (let k = 1; k <= 5; k = k + 1) {\n    total = total + k;\n}\nprint \"المجموع = \" + total;",
+    "fun fib(n) {\n    if (n < 2) { return n; }\n    return fib(n - 1) + fib(n - 2);\n}\n\nlet seq = [];\nfor (let i = 0; i < 8; i = i + 1) {\n    #add(seq, fib(i));\n}\nprint seq;\nprint fib(10);",
+    "@container.doc=users\n  document id=\"u1\" fields={ name: \"سارة\", city: \"الرياض\" };\n  document id=\"u2\" fields={ name: \"خالد\", city: \"جدة\" };\n  document id=\"u3\" fields={ name: \"منى\", city: \"الرياض\" };\n.end/container.doc\n\nlet hits = queryDocs(\"users\", \"city\", \"الرياض\");\nprint len(hits);\nprint hits;",
+    "let m = { name: \"Rin\", age: 2 };\nprint m[\"name\"];\nprint keys(m);\n\nlet data = [10, 20, 30, 40, 50];\nprint len(data);"
+];
+let exOut = [
+    "Rin\nLoom\nContainer\nالمجموع = 15",
+    "[0, 1, 1, 2, 3, 5, 8, 13]\n55",
+    "2\n[{\"name\": \"سارة\", \"city\": \"الرياض\"}, {\"name\": \"منى\", \"city\": \"الرياض\"}]",
+    "Rin\n[\"name\", \"age\"]\n5"
+];
+
 // ---- ألوان التمييز المتاحة في «الملعب» ----
-let accents = ["#34d27b", "#6cb6ff", "#ffb84d", "#ff7eb6"];
-let accentNames = ["زمرّد", "سماء", "عنبر", "وردي"];
+let accents = ["#34d27b", "#6cb6ff", "#ffb84d", "#ff7eb6", "#b794ff", "#ff6b6b"];
+let accentNames = ["زمرّد", "سماء", "عنبر", "وردي", "بنفسجي", "مرجان"];
 
 // دالة تلوين: تعيد لون الخلفية حسب كون التبويب نشطاً
-fun tabBg(cur, idx) {
-    if (cur == idx) { return "#1b2530"; }
-    return "#10161d";
+// pick: يختار لون الوضع الداكن (d) أو الفاتح (w) بحسب خلية light
+fun pick(l, d, w) {
+    if (l) { return w; }
+    return d;
 }
-fun tabFg(cur, idx) {
-    if (cur == idx) { return "#ffffff"; }
-    return "#93a1ab";
+fun tabBg(cur, idx, l) {
+    if (cur == idx) { return pick(l, "#1b2530", "#c4d7ce"); }
+    return pick(l, "#10161d", "#e3eae7");
+}
+fun tabFg(cur, idx, l) {
+    if (cur == idx) { return pick(l, "#ffffff", "#10201a"); }
+    return pick(l, "#93a1ab", "#4b5a63");
 }
 </Rin>
 
 <warp navOpen={false} />
 <warp copyTick={false} />
+<warp light={false} />
 <warp tab={0} />
+<warp ex={0} />
 <warp openFaq={0} />
 <warp count={0} />
 <warp acc={"#34d27b"} />
@@ -108,75 +138,75 @@ fun tabFg(cur, idx) {
 <Define#Head num="٠١" tag="" title="" desc="">
   <Column#hd gap=10 align="stretch">
     <Text#hdEy text={num + " — " + tag} size=12 color={acc} weight="800" />
-    <Text#hdT text={title} size=26 size_lg=38 color="#eef3f1" weight="900" />
-    <Text#hdD text={desc} size=14 size_lg=16 color="#93a1ab" />
+    <Text#hdT text={title} size=26 size_lg=38 color={pick(light, "#eef3f1", "#10201a")} weight="900" />
+    <Text#hdD text={desc} size=14 size_lg=16 color={pick(light, "#93a1ab", "#4b5a63")} />
   </Column>
 </Define>
 
 <!-- بطاقة ميزة -->
 <Define#Feature icon="◇" title="" desc="">
-  <Card#fc padding=20 bg="#0e1218" radius=20 shadow="true">
+  <Card#fc padding=20 bg={pick(light, "#0e1218", "#ffffff")} radius=20 shadow="true">
     <Column#fcc gap=10 align="stretch">
       <Text#fci text={icon} size=26 color={acc} weight="900" />
-      <Text#fct text={title} size=16 color="#eef3f1" weight="800" />
-      <Text#fcd text={desc} size=13 color="#93a1ab" />
+      <Text#fct text={title} size=16 color={pick(light, "#eef3f1", "#10201a")} weight="800" />
+      <Text#fcd text={desc} size=13 color={pick(light, "#93a1ab", "#4b5a63")} />
     </Column>
   </Card>
 </Define>
 
 <!-- بطاقة رقم -->
 <Define#Stat value="" label="" tint="#34d27b">
-  <Card#sc padding=20 bg="#0e1218" radius=20 shadow="true">
+  <Card#sc padding=20 bg={pick(light, "#0e1218", "#ffffff")} radius=20 shadow="true">
     <Column#scc gap=6 align="stretch">
       <Text#scn text={value} size=32 color={tint} weight="900" mono="true" />
-      <Text#scl text={label} size=12.5 color="#93a1ab" />
+      <Text#scl text={label} size=12.5 color={pick(light, "#93a1ab", "#4b5a63")} />
     </Column>
   </Card>
 </Define>
 
 <!-- بطاقة رابط (مورد/وثيقة) -->
 <Define#Link title="" desc="" label="افتح" href="">
-  <Card#lc padding=18 bg="#0e1218" radius=18 shadow="true">
+  <Card#lc padding=18 bg={pick(light, "#0e1218", "#ffffff")} radius=18 shadow="true">
     <Column#lcc gap=8 align="stretch">
-      <Text#lct text={title} size=15 color="#eef3f1" weight="800" />
-      <Text#lcd text={desc} size=12.5 color="#93a1ab" />
-      <Button#lcb label={label} bg="#151c25" color={acc} weight="700" url={href} />
+      <Text#lct text={title} size=15 color={pick(light, "#eef3f1", "#10201a")} weight="800" />
+      <Text#lcd text={desc} size=12.5 color={pick(light, "#93a1ab", "#4b5a63")} />
+      <Button#lcb label={label} bg={pick(light, "#151c25", "#d9e2de")} color={acc} weight="700" url={href} />
     </Column>
   </Card>
 </Define>
 
 <!-- خطوة مرقّمة -->
 <Define#Step n="1" title="" desc="" href="">
-  <Card#stp padding=18 bg="#0e1218" radius=18 shadow="true">
+  <Card#stp padding=18 bg={pick(light, "#0e1218", "#ffffff")} radius=18 shadow="true">
     <Column#stpc gap=8 align="stretch">
       <Row#stph gap=12 valign="center">
         <Text#stpn text={n} size=22 color={acc} weight="900" mono="true" />
-        <Text#stpt text={title} size=15.5 color="#eef3f1" weight="800" />
+        <Text#stpt text={title} size=15.5 color={pick(light, "#eef3f1", "#10201a")} weight="800" />
       </Row>
-      <Text#stpd text={desc} size=13 color="#93a1ab" />
-      <Button#stpb label="افتح" bg="#151c25" color="#eef3f1" weight="700" url={href} />
+      <Text#stpd text={desc} size=13 color={pick(light, "#93a1ab", "#4b5a63")} />
+      <Button#stpb label="افتح" bg={pick(light, "#151c25", "#d9e2de")} color={pick(light, "#eef3f1", "#10201a")} weight="700" url={href} />
     </Column>
   </Card>
 </Define>
 
 <!-- مرحلة في مسار التنفيذ -->
 <Define#Stage n="01" title="" desc="">
-  <Card#sg padding=16 bg="#0e1218" radius=16 shadow="true">
+  <Card#sg padding=16 bg={pick(light, "#0e1218", "#ffffff")} radius=16 shadow="true">
     <Column#sgc gap=8 align="stretch">
       <Text#sgn text={n} size=20 color={acc} weight="900" mono="true" />
-      <Text#sgt text={title} size=15 color="#eef3f1" weight="800" mono="true" />
-      <Text#sgd text={desc} size=12.5 color="#93a1ab" />
+      <Text#sgt text={title} size=15 color={pick(light, "#eef3f1", "#10201a")} weight="800" mono="true" />
+      <Text#sgd text={desc} size=12.5 color={pick(light, "#93a1ab", "#4b5a63")} />
     </Column>
   </Card>
 </Define>
 
 <!-- سؤال شائع: الفهرس idx يقارَن بخلية openFaq (واحد مفتوح في كل مرة) -->
 <Define#Faq idx="1" q="" a="">
-  <Card#fq padding=12 bg="#0e1218" radius=16 shadow="true">
+  <Card#fq padding=12 bg={pick(light, "#0e1218", "#ffffff")} radius=16 shadow="true">
     <Column#fqc gap=8 align="stretch">
-      <Button#fqq label={q} bg="#151c25" color="#eef3f1" weight="700" onTap={openFaq = (openFaq == idx) ? 0 : idx} />
+      <Button#fqq label={q} bg={pick(light, "#151c25", "#d9e2de")} color={pick(light, "#eef3f1", "#10201a")} weight="700" onTap={openFaq = (openFaq == idx) ? 0 : idx} />
       <Column#fqa gap=6 visible={openFaq == idx} align="stretch">
-        <Text#fqat text={a} size=13.5 color="#93a1ab" />
+        <Text#fqat text={a} size=13.5 color={pick(light, "#93a1ab", "#4b5a63")} />
       </Column>
     </Column>
   </Card>
@@ -195,40 +225,62 @@ fun tabFg(cur, idx) {
 
 <!-- ============================== الصفحة ============================== -->
 <Scaffold#page>
-  <View.TopBar#nav role="topbar" padding=14 padding_lg=18 bg="#07090de6" shadow="true">
+  <View.TopBar#nav role="topbar" padding=14 padding_lg=18 bg={pick(light, "#07090de6", "#f4f7f5e6")} shadow="true">
     <Row#navRow gap=8 valign="center">
       <Text#brand text="rin" size=24 color={acc} weight="900" mono="true" />
-      <Button#navLibs label="المكتبات" bg="#10161d" color={acc} weight="700" url="?view=libraries" />
-      <Button#navDocs label="التوثيق" bg="#10161d" color="#eef3f1" weight="700" url="https://github.com/dlof-lib/rinlang/blob/main/docs/" />
-      <Button#navWhy label="لماذا Rin" bg="#10161d" color="#eef3f1" weight="700" url="#why" visible=false visible_lg=true />
-      <Button#navTour label="الجولة" bg="#10161d" color="#eef3f1" weight="700" url="#tour" visible=false visible_lg=true />
-      <Button#navLearn label="تعلّم" bg="#10161d" color="#eef3f1" weight="700" url="#learn" visible=false visible_lg=true />
-      <Button#navFaq label="الأسئلة" bg="#10161d" color="#eef3f1" weight="700" url="#faq" visible=false visible_lg=true />
+      <Button#themeBtn label={pick(light, "☀ فاتح", "☾ داكن")} bg={pick(light, "#10161d", "#e3eae7")} color={pick(light, "#eef3f1", "#10201a")} weight="700" onTap={toggle(light)} />
+      <Button#navLibs label="المكتبات" bg={pick(light, "#10161d", "#e3eae7")} color={acc} weight="700" url="?view=libraries" />
+      <Button#navDocs label="التوثيق" bg={pick(light, "#10161d", "#e3eae7")} color={pick(light, "#eef3f1", "#10201a")} weight="700" url="https://github.com/dlof-lib/rinlang/blob/main/docs/" />
+      <Button#navWhy label="لماذا Rin" bg={pick(light, "#10161d", "#e3eae7")} color={pick(light, "#eef3f1", "#10201a")} weight="700" url="#why" visible=false visible_lg=true />
+      <Button#navTour label="الجولة" bg={pick(light, "#10161d", "#e3eae7")} color={pick(light, "#eef3f1", "#10201a")} weight="700" url="#tour" visible=false visible_lg=true />
+      <Button#navLearn label="تعلّم" bg={pick(light, "#10161d", "#e3eae7")} color={pick(light, "#eef3f1", "#10201a")} weight="700" url="#learn" visible=false visible_lg=true />
+      <Button#navFaq label="الأسئلة" bg={pick(light, "#10161d", "#e3eae7")} color={pick(light, "#eef3f1", "#10201a")} weight="700" url="#faq" visible=false visible_lg=true />
       <Button#navGh label="GitHub" bg={acc} color="#04110b" weight="800" url="https://github.com/dlof-lib/rinlang" visible=false visible_md=true />
-      <Button#menuBtn label="☰" bg="#10161d" color="#eef3f1" weight="700" onTap={toggle(navOpen)} />
+      <Button#menuBtn label="☰" bg={pick(light, "#10161d", "#e3eae7")} color={pick(light, "#eef3f1", "#10201a")} weight="700" onTap={toggle(navOpen)} />
     </Row>
   </View.TopBar>
 
-  <Drawer#mobileMenu role="drawer" open={navOpen} width=280 bg="#0a0e13">
-    <Column#drawerCol gap=2 padding=20 align="stretch">
-      <Text#drawerLabel text="التنقّل" size=12 color="#5d6b75" weight="800" />
+  <Drawer#mobileMenu role="drawer" open={navOpen} width=300 bg={pick(light, "#0a0e13", "#f0f4f2")}>
+    <Column#drawerCol gap=4 padding=20 align="stretch">
+      <Row#drawerHead gap=10 valign="center">
+        <Text#drawerBrand text="rin" size=26 color={acc} weight="900" mono="true" />
+        <Button#drawerClose width=120 label="✕ إغلاق" bg={pick(light, "#10161d", "#e3eae7")} color={pick(light, "#eef3f1", "#10201a")} weight="700" onTap={toggle(navOpen)} />
+      </Row>
+      <Text#drawerSub margin_bottom=6 text="لغة برمجة صغيرة · محرّك واحد" size=12 color="#5d6b75" />
+      <Divider#dmDiv0 height=1 color={pick(light, "#1a232d", "#d5dedb")} />
+
+      <Text#dmG1 text="ابدأ" size=11.5 color="#5d6b75" weight="800" />
       <MenuItem#dm1 label="📚 مكتبات Rin" url="?view=libraries" onTap={toggle(navOpen)} color={acc} />
-      <MenuItem#dm2 label="لماذا Rin" url="#why" onTap={toggle(navOpen)} color="#eef3f1" />
-      <MenuItem#dm3 label="المنصّات" url="#platforms" onTap={toggle(navOpen)} color="#eef3f1" />
-      <MenuItem#dm4 label="جولة في اللغة" url="#tour" onTap={toggle(navOpen)} color="#eef3f1" />
-      <MenuItem#dm5 label="الملعب التفاعلي" url="#playground" onTap={toggle(navOpen)} color="#eef3f1" />
-      <MenuItem#dm6 label="Indsin للواجهات" url="#indsin" onTap={toggle(navOpen)} color="#eef3f1" />
-      <MenuItem#dm7 label="مسار التنفيذ" url="#pipeline" onTap={toggle(navOpen)} color="#eef3f1" />
-      <MenuItem#dm8 label="مسار التعلّم" url="#learn" onTap={toggle(navOpen)} color="#eef3f1" />
-      <MenuItem#dm9 label="المنظومة" url="#ecosystem" onTap={toggle(navOpen)} color="#eef3f1" />
-      <MenuItem#dm10 label="متى تناسبك؟" url="#fit" onTap={toggle(navOpen)} color="#eef3f1" />
-      <MenuItem#dm11 label="الأسئلة الشائعة" url="#faq" onTap={toggle(navOpen)} color="#eef3f1" />
-      <Divider#dmDiv height=1 color="#1a232d" />
-      <MenuItem#dm12 label="GitHub" url="https://github.com/dlof-lib/rinlang" onTap={toggle(navOpen)} color={acc} />
+      <MenuItem#dm2 label="لماذا Rin" url="#why" onTap={toggle(navOpen)} color={pick(light, "#eef3f1", "#10201a")} />
+      <MenuItem#dm3 label="المنصّات" url="#platforms" onTap={toggle(navOpen)} color={pick(light, "#eef3f1", "#10201a")} />
+      <MenuItem#dm13 label="ابدأ في ٣ خطوات" url="#quickstart" onTap={toggle(navOpen)} color={pick(light, "#eef3f1", "#10201a")} />
+
+      <Text#dmG2 margin_top=14 text="جرّب" size=11.5 color="#5d6b75" weight="800" />
+      <MenuItem#dm4 label="جولة في اللغة" url="#tour" onTap={toggle(navOpen)} color={pick(light, "#eef3f1", "#10201a")} />
+      <MenuItem#dm5 label="الملعب التفاعلي" url="#playground" onTap={toggle(navOpen)} color={pick(light, "#eef3f1", "#10201a")} />
+      <MenuItem#dm14 label="أمثلة جاهزة" url="#examples" onTap={toggle(navOpen)} color={pick(light, "#eef3f1", "#10201a")} />
+
+      <Text#dmG3 margin_top=14 text="تعمّق" size=11.5 color="#5d6b75" weight="800" />
+      <MenuItem#dm6 label="Indsin للواجهات" url="#indsin" onTap={toggle(navOpen)} color={pick(light, "#eef3f1", "#10201a")} />
+      <MenuItem#dm7 label="مسار التنفيذ" url="#pipeline" onTap={toggle(navOpen)} color={pick(light, "#eef3f1", "#10201a")} />
+      <MenuItem#dm8 label="مسار التعلّم" url="#learn" onTap={toggle(navOpen)} color={pick(light, "#eef3f1", "#10201a")} />
+      <MenuItem#dm9 label="المنظومة" url="#ecosystem" onTap={toggle(navOpen)} color={pick(light, "#eef3f1", "#10201a")} />
+      <MenuItem#dm10 label="متى تناسبك؟" url="#fit" onTap={toggle(navOpen)} color={pick(light, "#eef3f1", "#10201a")} />
+      <MenuItem#dm11 label="الأسئلة الشائعة" url="#faq" onTap={toggle(navOpen)} color={pick(light, "#eef3f1", "#10201a")} />
+
+      <Divider#dmDiv margin_top=8 height=1 color={pick(light, "#1a232d", "#d5dedb")} />
+      <Text#dmG4 margin_top=14 text="المظهر" size=11.5 color="#5d6b75" weight="800" />
+      <Button#dmTheme label={pick(light, "☀ التبديل إلى الوضع الفاتح", "☾ التبديل إلى الوضع الداكن")} bg={pick(light, "#10161d", "#e3eae7")} color={pick(light, "#eef3f1", "#10201a")} weight="700" onTap={toggle(light)} />
+      <Wrap#dmSw gap=8>
+        <<each accents as ac, ai>>
+          <Button#dsw label="●" bg={ac} color="#04110b" weight="900" onTap={acc = ac} />
+        <</each>>
+      </Wrap>
+      <Button#dmGh margin_top=10 label="GitHub ↗" bg={acc} color="#04110b" weight="800" url="https://github.com/dlof-lib/rinlang" onTap={toggle(navOpen)} />
     </Column>
   </Drawer>
 
-  <Column#content gap=56 gap_lg=88 padding=20 padding_md=32 padding_lg=48 bg="#07090d" align="stretch">
+  <Column#content gap=56 gap_lg=88 padding=20 padding_md=32 padding_lg=48 bg={pick(light, "#07090d", "#f4f7f5")} align="stretch">
 
     <!-- ============ 00 · البطل ============ -->
     <Grid#hero columns=1 columns_lg=2 gap=24 gap_lg=40 padding=26 padding_lg=48 gradient="#0d1a14,#080d11" radius=28 shadow="true">
@@ -292,59 +344,87 @@ fun tabFg(cur, idx) {
     <Column#platforms gap=22 align="stretch">
       <Head#h3 num="٠٣" tag="ثلاث منصّات" title="اختر مكانك، الكود لا يتغيّر" desc="Linux وmacOS وWindows وأندرويد والمتصفح — بنفس الملف .rin ونفس النتيجة." />
       <Grid#platGrid columns=1 columns_lg=3 gap=14 gap_lg=20>
-        <Card#pCli padding=20 bg="#0e1218" radius=22 shadow="true">
+        <Card#pCli padding=20 bg={pick(light, "#0e1218", "#ffffff")} radius=22 shadow="true">
           <Column#pClic gap=10 align="stretch">
             <Text#pCliI text="⌘" size=26 color={acc} weight="900" mono="true" />
-            <Text#pCliT text="سطر الأوامر" size=17 color="#eef3f1" weight="800" />
-            <Text#pCliD text="Linux وmacOS وWindows. يلزم cmake وg++ وzlib للبناء من المصدر." size=13 color="#93a1ab" />
+            <Text#pCliT text="سطر الأوامر" size=17 color={pick(light, "#eef3f1", "#10201a")} weight="800" />
+            <Text#pCliD text="Linux وmacOS وWindows. يلزم cmake وg++ وzlib للبناء من المصدر." size=13 color={pick(light, "#93a1ab", "#4b5a63")} />
             <Code#pCliCode src={"git clone https://github.com/dlof-lib/rinlang.git\ncd rinlang/cli/linux && ./build.sh"} />
             <Code#pCliCmd src={"rin -c 'print 1 + 1;'\nrin run hello.rin\nrin check hello.rin\nrin new myproj\nrin doctor"} />
           </Column>
         </Card>
-        <Card#pAnd padding=20 bg="#0e1218" radius=22 shadow="true">
+        <Card#pAnd padding=20 bg={pick(light, "#0e1218", "#ffffff")} radius=22 shadow="true">
           <Column#pAndc gap=10 align="stretch">
             <Text#pAndI text="▭" size=26 color={acc} weight="900" mono="true" />
-            <Text#pAndT text="RinStudio على أندرويد" size=17 color="#eef3f1" weight="800" />
-            <Text#pAndD text="بيئة تطوير كاملة على الهاتف: محرّر بإكمال ذكي، تشغيل، معاينة حيّة لـ Indsin، ونشر الحزم عبر RinPM." size=13 color="#93a1ab" />
-            <Button#pAndB label="دليل أندرويد" bg="#151c25" color="#eef3f1" weight="700" url="https://github.com/dlof-lib/rinlang/blob/main/docs/android.md" />
+            <Text#pAndT text="RinStudio على أندرويد" size=17 color={pick(light, "#eef3f1", "#10201a")} weight="800" />
+            <Text#pAndD text="بيئة تطوير كاملة على الهاتف: محرّر بإكمال ذكي، تشغيل، معاينة حيّة لـ Indsin، ونشر الحزم عبر RinPM." size=13 color={pick(light, "#93a1ab", "#4b5a63")} />
+            <Button#pAndB label="دليل أندرويد" bg={pick(light, "#151c25", "#d9e2de")} color={pick(light, "#eef3f1", "#10201a")} weight="700" url="https://github.com/dlof-lib/rinlang/blob/main/docs/android.md" />
           </Column>
         </Card>
-        <Card#pWeb padding=20 bg="#0e1218" radius=22 shadow="true">
+        <Card#pWeb padding=20 bg={pick(light, "#0e1218", "#ffffff")} radius=22 shadow="true">
           <Column#pWebc gap=10 align="stretch">
             <Text#pWebI text="◎" size=26 color={acc} weight="900" mono="true" />
-            <Text#pWebT text="المتصفح عبر WebAssembly" size=17 color="#eef3f1" weight="800" />
-            <Text#pWebD text="الموقع الذي تتصفّحه الآن يعمل بنفس المحرّك مُصرَّفاً إلى WASM. وبـ RinHTML تشغّل ملفات .rin داخل أي صفحة." size=13 color="#93a1ab" />
+            <Text#pWebT text="المتصفح عبر WebAssembly" size=17 color={pick(light, "#eef3f1", "#10201a")} weight="800" />
+            <Text#pWebD text="الموقع الذي تتصفّحه الآن يعمل بنفس المحرّك مُصرَّفاً إلى WASM. وبـ RinHTML تشغّل ملفات .rin داخل أي صفحة." size=13 color={pick(light, "#93a1ab", "#4b5a63")} />
             <Button#pWebB label="جرّب الـ Playground" bg={acc} color="#04110b" weight="800" url="https://dlof-lib.github.io/rinlang/" />
           </Column>
         </Card>
       </Grid>
     </Column>
 
-    <!-- ============ 04 · جولة في اللغة ============ -->
+    <!-- ============ 04 · ابدأ في ثلاث خطوات ============ -->
+    <Column#quickstart gap=22 align="stretch">
+      <Head#h4q num="٠٤" tag="ابدأ بسرعة" title="من الصفر إلى أول مخرجات في ثلاث خطوات" desc="الأوامر نفسها على Linux وmacOS؛ وعلى ويندوز استعمل ملف البناء الخاص بالمنصّة." />
+      <Grid#qsGrid columns=1 columns_lg=3 gap=14 gap_lg=20>
+        <Card#qs1 padding=20 bg={pick(light, "#0e1218", "#ffffff")} radius=22 shadow="true">
+          <Column#qs1c gap=10 align="stretch">
+            <Text#qs1n text="1" size=28 color={acc} weight="900" mono="true" />
+            <Text#qs1t text="ابنِ المحرّك" size=16 color={pick(light, "#eef3f1", "#10201a")} weight="800" />
+            <Code#qs1code src={"git clone https://github.com/dlof-lib/rinlang.git\ncd rinlang/cli/linux && ./build.sh"} />
+          </Column>
+        </Card>
+        <Card#qs2 padding=20 bg={pick(light, "#0e1218", "#ffffff")} radius=22 shadow="true">
+          <Column#qs2c gap=10 align="stretch">
+            <Text#qs2n text="2" size=28 color={acc} weight="900" mono="true" />
+            <Text#qs2t text="اكتب أول ملف" size=16 color={pick(light, "#eef3f1", "#10201a")} weight="800" />
+            <Code#qs2code src={"let name = \"Rin\";\nprint \"Hello, \" + name + \"!\";"} />
+          </Column>
+        </Card>
+        <Card#qs3 padding=20 bg={pick(light, "#0e1218", "#ffffff")} radius=22 shadow="true">
+          <Column#qs3c gap=10 align="stretch">
+            <Text#qs3n text="3" size=28 color={acc} weight="900" mono="true" />
+            <Text#qs3t text="شغّله وافحصه" size=16 color={pick(light, "#eef3f1", "#10201a")} weight="800" />
+            <Code#qs3code src={"rin run hello.rin\nrin check hello.rin\nrin doctor"} />
+          </Column>
+        </Card>
+      </Grid>
+    </Column>
+
+    <!-- ============ 05 · جولة في اللغة ============ -->
     <Column#tour gap=20 align="stretch">
-      <Head#h4 num="٠٤" tag="جولة في اللغة" title="خمس لقطات، كود حقيقي" desc="المقتطفات مأخوذة من التوثيق الرسمي. اضغط تبويباً لتبديل اللقطة — والتبديل نفسه مكتوب بخلية warp واحدة." />
+      <Head#h4 num="٠٥" tag="جولة في اللغة" title="خمس لقطات، كود حقيقي" desc="المقتطفات مأخوذة من التوثيق الرسمي. اضغط تبويباً لتبديل اللقطة — والتبديل نفسه مكتوب بخلية warp واحدة." />
       <Wrap#tourTabs gap=8>
         <<each tourTitles as tt, ti>>
-          <Button#tb label={tt} bg={tabBg(tab, ti)} color={tabFg(tab, ti)} weight="700" onTap={tab = ti} />
+          <Button#tb label={tt} bg={tabBg(tab, ti, light)} color={tabFg(tab, ti, light)} weight="700" onTap={tab = ti} />
         <</each>>
       </Wrap>
-      <Card#tourPane padding=20 bg="#0e1218" radius=22 shadow="true">
+      <Card#tourPane padding=20 bg={pick(light, "#0e1218", "#ffffff")} radius=22 shadow="true">
         <Column#tourPaneC gap=12 align="stretch">
-          <Text#tourHead text={tourHeads[tab]} size=18 color="#eef3f1" weight="800" />
-          <Text#tourNote text={tourNotes[tab]} size=13.5 color="#93a1ab" />
+          <Text#tourHead text={tourHeads[tab]} size=18 color={pick(light, "#eef3f1", "#10201a")} weight="800" />
+          <Text#tourNote text={tourNotes[tab]} size=13.5 color={pick(light, "#93a1ab", "#4b5a63")} />
           <Code#tourCode src={tourCode[tab]} />
         </Column>
       </Card>
     </Column>
 
-    <!-- ============ 05 · الملعب التفاعلي ============ -->
+    <!-- ============ 06 · الملعب التفاعلي ============ -->
     <Column#playground gap=22 align="stretch">
-      <Head#h5 num="٠٥" tag="الملعب التفاعلي" title="الصفحة نفسها برنامج حيّ" desc="غيّر لون التمييز أو اضغط العدّاد — كل ما ترتبط به الخلية يُعاد رسمه فوراً، بلا سطر JavaScript." />
+      <Head#h5 num="٠٦" tag="الملعب التفاعلي" title="الصفحة نفسها برنامج حيّ" desc="غيّر لون التمييز أو اضغط العدّاد — كل ما ترتبط به الخلية يُعاد رسمه فوراً، بلا سطر JavaScript." />
       <Grid#pgGrid columns=1 columns_lg=2 gap=14 gap_lg=20>
-        <Card#pgColor padding=20 bg="#0e1218" radius=22 shadow="true">
+        <Card#pgColor padding=20 bg={pick(light, "#0e1218", "#ffffff")} radius=22 shadow="true">
           <Column#pgColorC gap=12 align="stretch">
-            <Text#pgColorT text="لون التمييز" size=16 color="#eef3f1" weight="800" />
-            <Text#pgColorD text="يُخزَّن في خلية warp اسمها acc، وتقرؤه عشرات العناصر في الصفحة." size=13 color="#93a1ab" />
+            <Text#pgColorT text="لون التمييز" size=16 color={pick(light, "#eef3f1", "#10201a")} weight="800" />
+            <Text#pgColorD text="يُخزَّن في خلية warp اسمها acc، وتقرؤه عشرات العناصر في الصفحة." size=13 color={pick(light, "#93a1ab", "#4b5a63")} />
             <Wrap#pgSw gap=8>
               <<each accents as ac, ai>>
                 <Button#sw label={accentNames[ai]} bg={ac} color="#04110b" weight="800" onTap={acc = ac} />
@@ -352,28 +432,53 @@ fun tabFg(cur, idx) {
             </Wrap>
           </Column>
         </Card>
-        <Card#pgCount padding=20 bg="#0e1218" radius=22 shadow="true">
+        <Card#pgCount padding=20 bg={pick(light, "#0e1218", "#ffffff")} radius=22 shadow="true">
           <Column#pgCountC gap=12 align="stretch">
-            <Text#pgCountT text="عدّاد حيّ" size=16 color="#eef3f1" weight="800" />
+            <Text#pgCountT text="عدّاد حيّ" size=16 color={pick(light, "#eef3f1", "#10201a")} weight="800" />
             <Text#pgCountV text={"" + count} size=48 color={acc} weight="900" mono="true" />
             <Wrap#pgBtns gap=8>
               <Button#cInc label="+ زِد" bg={acc} color="#04110b" weight="800" onTap={count = count + 1} />
-              <Button#cDec label="− أنقص" bg="#151c25" color="#eef3f1" weight="700" onTap={count = count - 1} />
-              <Button#cRst label="صفر" bg="#151c25" color="#eef3f1" weight="700" onTap={count = 0} />
+              <Button#cDec label="− أنقص" bg={pick(light, "#151c25", "#d9e2de")} color={pick(light, "#eef3f1", "#10201a")} weight="700" onTap={count = count - 1} />
+              <Button#cRst label="صفر" bg={pick(light, "#151c25", "#d9e2de")} color={pick(light, "#eef3f1", "#10201a")} weight="700" onTap={count = 0} />
             </Wrap>
           </Column>
         </Card>
       </Grid>
     </Column>
 
-    <!-- ============ 06 · Indsin ============ -->
+    <!-- ============ 07 · معرض الأمثلة ============ -->
+    <Column#examples gap=20 align="stretch">
+      <Head#h7x num="٠٧" tag="أمثلة جاهزة" title="شغّلها بنفسك، وقارن المخرجات" desc="كل مثال هنا نُفِّذ فعلاً بمحرّك Rin، والمخرجات المعروضة هي الناتج الحقيقي — لا مُنمَّقة ولا مُختصرة." />
+      <Wrap#exTabs gap=8>
+        <<each exTitles as et, ei>>
+          <Button#eb label={et} bg={tabBg(ex, ei, light)} color={tabFg(ex, ei, light)} weight="700" onTap={ex = ei} />
+        <</each>>
+      </Wrap>
+      <Grid#exGrid columns=1 columns_lg=2 gap=14 gap_lg=20>
+        <Card#exPane padding=20 bg={pick(light, "#0e1218", "#ffffff")} radius=22 shadow="true">
+          <Column#exPaneC gap=12 align="stretch">
+            <Text#exNote text={exNotes[ex]} size=13.5 color={pick(light, "#93a1ab", "#4b5a63")} />
+            <Code#exCodeBox src={exCode[ex]} />
+          </Column>
+        </Card>
+        <Card#exOutCard padding=20 bg="#080b0f" radius=22 shadow="true">
+          <Column#exOutC gap=12 align="stretch">
+            <Text#exOutL text="← المخرجات الفعلية" size=12 color="#5d6b75" weight="800" />
+            <Text#exOutT text={exOut[ex]} size=13.5 color={pick(light, "#ffc857", "#8a5a00")} weight="700" mono="true" />
+            <Button#exMore label="مزيد من الأمثلة في المستودع" bg={pick(light, "#151c25", "#d9e2de")} color={acc} weight="700" url="https://github.com/dlof-lib/rinlang/tree/main/examples" />
+          </Column>
+        </Card>
+      </Grid>
+    </Column>
+
+    <!-- ============ 08 · Indsin ============ -->
     <Column#indsin gap=22 align="stretch">
-      <Head#h6 num="٠٦" tag="Indsin" title="لغة الواجهات: Interface Design" desc="Indsin هو محرّك عرض الواجهات في Rin. تكتب وسوماً بسيطة، فيقيسها المحرّك ويخطّطها ويرسمها — على أندرويد وسطح المكتب وCLI والمتصفح بالمسار نفسه." />
-      <Card#indsinProof padding=22 bg="#0a1620" radius=22 shadow="true">
+      <Head#h6 num="٠٨" tag="Indsin" title="لغة الواجهات: Interface Design" desc="Indsin هو محرّك عرض الواجهات في Rin. تكتب وسوماً بسيطة، فيقيسها المحرّك ويخطّطها ويرسمها — على أندرويد وسطح المكتب وCLI والمتصفح بالمسار نفسه." />
+      <Card#indsinProof padding=22 bg={pick(light, "#0a1620", "#e8f3fb")} radius=22 shadow="true">
         <Column#indsinProofc gap=10 align="stretch">
-          <Text#indsinProofT text="هذه الصفحة هي الدليل" size=17 color="#7cc4ff" weight="800" />
-          <Text#indsinProofD text="كل ما تراه هنا — الأزرار والتبويبات والدرج والأسئلة المنسدلة — شجرة Indsin مكتوبة في ملف واحد اسمه site.rin، بلا سطر HTML واحد." size=13.5 color="#93a1ab" />
-          <Button#indsinProofB label="اقرأ دليل Indsin" bg="#151c25" color="#eef3f1" weight="700" url="https://github.com/dlof-lib/rinlang/blob/main/indsin.md" />
+          <Text#indsinProofT text="هذه الصفحة هي الدليل" size=17 color={pick(light, "#7cc4ff", "#0b5c99")} weight="800" />
+          <Text#indsinProofD text="كل ما تراه هنا — الأزرار والتبويبات والدرج والأسئلة المنسدلة — شجرة Indsin مكتوبة في ملف واحد اسمه site.rin، بلا سطر HTML واحد." size=13.5 color={pick(light, "#93a1ab", "#4b5a63")} />
+          <Button#indsinProofB label="اقرأ دليل Indsin" bg={pick(light, "#151c25", "#d9e2de")} color={pick(light, "#eef3f1", "#10201a")} weight="700" url="https://github.com/dlof-lib/rinlang/blob/main/indsin.md" />
         </Column>
       </Card>
       <Grid#indsinGrid columns=1 columns_md=2 columns_lg=4 gap=14 gap_lg=20>
@@ -382,12 +487,12 @@ fun tabFg(cur, idx) {
         <Feature#g3 icon="⟣" title="تخطيط متجاوب" desc="Column وRow وGrid وWrap، ولاحقات _md و_lg لكل خاصية." />
         <Feature#g4 icon="⟤" title="معاينة حيّة" desc="تعديل الملف ينعكس فوراً على الهاتف أو المتصفح." />
       </Grid>
-      <Button#indsinElems label="كتالوج العناصر الكامل" bg="#151c25" color="#eef3f1" weight="700" url="https://github.com/dlof-lib/rinlang/blob/main/docs/RIN_ELEMENTS.md" />
+      <Button#indsinElems label="كتالوج العناصر الكامل" bg={pick(light, "#151c25", "#d9e2de")} color={pick(light, "#eef3f1", "#10201a")} weight="700" url="https://github.com/dlof-lib/rinlang/blob/main/docs/RIN_ELEMENTS.md" />
     </Column>
 
-    <!-- ============ 07 · مسار التنفيذ ============ -->
+    <!-- ============ 09 · مسار التنفيذ ============ -->
     <Column#pipeline gap=22 align="stretch">
-      <Head#h7 num="٠٧" tag="كيف تعمل" title="خمس مراحل، محرّك واحد" desc="من السطر الأول في ملفك إلى البكسل على الشاشة." />
+      <Head#h7 num="٠٩" tag="كيف تعمل" title="خمس مراحل، محرّك واحد" desc="من السطر الأول في ملفك إلى البكسل على الشاشة." />
       <Grid#pipeGrid columns=1 columns_md=2 columns_lg=5 gap=12 gap_lg=14>
         <Stage#sg1 n="01" title="Lexer" desc="يقطّع المصدر إلى رموز (tokens)." />
         <Stage#sg2 n="02" title="Parser" desc="يبني شجرة الصياغة AST." />
@@ -403,9 +508,9 @@ fun tabFg(cur, idx) {
       </Card>
     </Column>
 
-    <!-- ============ 08 · تعلّم ============ -->
+    <!-- ============ 10 · تعلّم ============ -->
     <Column#learn gap=22 align="stretch">
-      <Head#h8 num="٠٨" tag="تعلّم" title="من الصفر إلى أول تطبيق" desc="ستّ محطات مرتّبة. كل محطة وثيقة رسمية قصيرة." />
+      <Head#h8 num="١٠" tag="تعلّم" title="من الصفر إلى أول تطبيق" desc="ستّ محطات مرتّبة. كل محطة وثيقة رسمية قصيرة." />
       <Grid#learnGrid columns=1 columns_md=2 columns_lg=3 gap=14 gap_lg=20>
         <Step#ln1 n="1" title="التثبيت والأوامر" desc="ابنِ rin وجرّب rin doctor." href="https://github.com/dlof-lib/rinlang/blob/main/docs/getting-started.md" />
         <Step#ln2 n="2" title="الصياغة والمتغيّرات" desc="let وprint والتعابير والأنواع." href="https://github.com/dlof-lib/rinlang/blob/main/docs/syntax.md" />
@@ -417,9 +522,9 @@ fun tabFg(cur, idx) {
       <Button#learnRef label="المرجع الشامل للغة" bg={acc} color="#04110b" weight="800" url="https://github.com/dlof-lib/rinlang/blob/main/docs/language-reference.md" />
     </Column>
 
-    <!-- ============ 09 · المنظومة ============ -->
+    <!-- ============ 11 · المنظومة ============ -->
     <Column#ecosystem gap=22 align="stretch">
-      <Head#h9 num="٠٩" tag="المنظومة" title="كل ما حول اللغة" desc="أدوات ومكتبات وجسور تجعل Rin جاهزة للعمل اليومي." />
+      <Head#h9 num="١١" tag="المنظومة" title="كل ما حول اللغة" desc="أدوات ومكتبات وجسور تجعل Rin جاهزة للعمل اليومي." />
       <Grid#ecoGrid columns=1 columns_md=2 columns_lg=3 gap=14 gap_lg=20>
         <Link#e1 title="المكتبات" desc="أكثر من 80 مكتبة رسمية وحزم المجتمع في المتجر." label="فتح المتجر" href="?view=libraries" />
         <Link#e2 title="RinStudio" desc="IDE كامل على أندرويد." label="فتح" href="https://github.com/dlof-lib/rinlang/blob/main/docs/android.md" />
@@ -430,28 +535,28 @@ fun tabFg(cur, idx) {
       </Grid>
     </Column>
 
-    <!-- ============ 10 · الصراحة أولاً ============ -->
+    <!-- ============ 12 · الصراحة أولاً ============ -->
     <Column#fit gap=22 align="stretch">
-      <Head#h10 num="١٠" tag="الصراحة أولاً" title="متى تناسبك Rin؟" desc="" />
+      <Head#h10 num="١٢" tag="الصراحة أولاً" title="متى تناسبك Rin؟" desc="" />
       <Grid#fitGrid columns=1 columns_lg=2 gap=14 gap_lg=20>
-        <Card#fitYes padding=22 bg="#0a1f16" radius=22 shadow="true">
+        <Card#fitYes padding=22 bg={pick(light, "#0a1f16", "#e6f6ec")} radius=22 shadow="true">
           <Column#fitYesc gap=10 align="stretch">
             <Text#fitYesT text="✓ اختَرها إذا" size=16 color="#34d27b" weight="800" />
-            <Text#fitYesD text="أردت لغة صغيرة تتعلّمها في أيام · تبني أدوات وواجهات خفيفة · تبرمج من الهاتف · تحتاج النتيجة نفسها على CLI وأندرويد والويب." size=13.5 color="#a7b8ae" />
+            <Text#fitYesD text="أردت لغة صغيرة تتعلّمها في أيام · تبني أدوات وواجهات خفيفة · تبرمج من الهاتف · تحتاج النتيجة نفسها على CLI وأندرويد والويب." size=13.5 color={pick(light, "#a7b8ae", "#3c4f45")} />
           </Column>
         </Card>
-        <Card#fitNo padding=22 bg="#0e1218" radius=22 shadow="true">
+        <Card#fitNo padding=22 bg={pick(light, "#0e1218", "#ffffff")} radius=22 shadow="true">
           <Column#fitNoc gap=10 align="stretch">
-            <Text#fitNoT text="✕ ربما لا إذا" size=16 color="#ffc857" weight="800" />
-            <Text#fitNoD text="احتجت منظومة مكتبات ضخمة جاهزة لكل مجال · أو أداءً حرجاً لا يقبل مفسّراً · أو فريقاً كبيراً مرتبطاً بلغة أخرى أصلاً." size=13.5 color="#93a1ab" />
+            <Text#fitNoT text="✕ ربما لا إذا" size=16 color={pick(light, "#ffc857", "#8a5a00")} weight="800" />
+            <Text#fitNoD text="احتجت منظومة مكتبات ضخمة جاهزة لكل مجال · أو أداءً حرجاً لا يقبل مفسّراً · أو فريقاً كبيراً مرتبطاً بلغة أخرى أصلاً." size=13.5 color={pick(light, "#93a1ab", "#4b5a63")} />
           </Column>
         </Card>
       </Grid>
     </Column>
 
-    <!-- ============ 11 · الأسئلة الشائعة ============ -->
+    <!-- ============ 13 · الأسئلة الشائعة ============ -->
     <Column#faq gap=22 align="stretch">
-      <Head#h11 num="١١" tag="أسئلة شائعة" title="إجابات سريعة" desc="اضغط السؤال لفتح الجواب — يُغلق ما قبله تلقائياً." />
+      <Head#h11 num="١٣" tag="أسئلة شائعة" title="إجابات سريعة" desc="اضغط السؤال لفتح الجواب — يُغلق ما قبله تلقائياً." />
       <Column#faqList gap=10 align="stretch">
         <Faq#q1 idx=1 q="ما هي Rin؟" a="لغة برمجة صغيرة بمحرّك C++23 واحد يعمل من سطر الأوامر وفي IDE أندرويد وفي المتصفح عبر WebAssembly." />
         <Faq#q2 idx=2 q="هل أحتاج إلى تثبيت؟" a="لا للتجربة: افتح الـ Playground في المتصفح. للاستخدام اليومي ابنِ rin من المصدر أو ثبّت RinStudio على أندرويد." />
@@ -459,10 +564,13 @@ fun tabFg(cur, idx) {
         <Faq#q4 idx=4 q="ما هو Indsin؟" a="محرّك واجهات Rin (Interface Design): تكتب الوسوم فيقيسها ويرسمها بالمسار نفسه على كل المنصّات." />
         <Faq#q5 idx=5 q="ما الترخيص؟" a="رخصة MIT. الاسم والشعار غير مشمولين بالترخيص — راجع TRADEMARKS.md." />
         <Faq#q6 idx=6 q="كيف أساهم؟" a="اقرأ CONTRIBUTING.md وقواعد السلوك ثم افتح Issue أو Pull Request على GitHub." />
+        <Faq#q7 idx=7 q="هل يعمل الاتصال بالشبكة (HTTP) في المتصفح؟" a="نعم: في نسخة WebAssembly تُنفَّذ الطلبات عبر fetch() الحقيقية في المتصفح، فتخضع لسياسة CORS. على سطر الأوامر يُستخدم curl، لذا يلزم وجوده في PATH." />
+        <Faq#q8 idx=8 q="كيف أتحقق من سلامة بيئتي؟" a="شغّل rin doctor لفحص التثبيت، وrin check ملف.rin لفحص ملف دون تنفيذه." />
+        <Faq#q9 idx=9 q="هل يمكنني تنزيل ملفات كبيرة من برنامج Rin؟" a="على سطر الأوامر يُكتب التنزيل مباشرة إلى القرص مع استئناف وحدّ حجم اختياريين. في المتصفح يُجلب الملف كاملاً إلى ذاكرة الصفحة ثم يُكتب في نظام ملفات افتراضي، فلا استئناف هناك." />
       </Column>
     </Column>
 
-    <!-- ============ 12 · دعوة للعمل ============ -->
+    <!-- ============ 14 · دعوة للعمل ============ -->
     <Card#cta padding=28 padding_lg=48 gradient="#0d1a14,#08140f" radius=28 shadow="true">
       <Column#ctaCol gap=14 align="stretch">
         <Text#ctaTitle text="جاهز لأول برنامج Rin؟" size=26 size_lg=38 color="#eef3f1" weight="900" />
@@ -475,27 +583,28 @@ fun tabFg(cur, idx) {
     </Card>
 
     <!-- ============ التذييل ============ -->
-    <Divider#dFoot height=1 color="#1a232d" />
+    <Divider#dFoot height=1 color={pick(light, "#1a232d", "#d5dedb")} />
     <Grid#footer columns=1 columns_lg=3 gap=18 align="stretch">
       <Column#footBrand gap=8 align="stretch">
         <Text#footLogo text="rin" size=22 color={acc} weight="900" mono="true" />
         <Text#footCopy text="© 2026 Rin Project Contributors — MIT" size=12 color="#5d6b75" />
+        <Button#toTop label="↑ إلى الأعلى" bg={pick(light, "#10161d", "#e3eae7")} color={acc} weight="700" url="#hero" />
       </Column>
       <Column#footC1 gap=10 align="stretch">
-        <Text#footH1 text="المشروع" size=12 color="#93a1ab" weight="800" />
+        <Text#footH1 text="المشروع" size=12 color={pick(light, "#93a1ab", "#4b5a63")} weight="800" />
         <Row#footL1 gap=16>
-          <Text#fl1 text="GitHub" size=12.5 color="#cfd8d4" url="https://github.com/dlof-lib/rinlang" />
-          <Text#fl2 text="التوثيق" size=12.5 color="#cfd8d4" url="https://github.com/dlof-lib/rinlang/blob/main/docs/" />
-          <Text#fl3 text="الأمثلة" size=12.5 color="#cfd8d4" url="https://github.com/dlof-lib/rinlang/tree/main/examples" />
+          <Text#fl1 text="GitHub" size=12.5 color={pick(light, "#cfd8d4", "#2a3a33")} url="https://github.com/dlof-lib/rinlang" />
+          <Text#fl2 text="التوثيق" size=12.5 color={pick(light, "#cfd8d4", "#2a3a33")} url="https://github.com/dlof-lib/rinlang/blob/main/docs/" />
+          <Text#fl3 text="الأمثلة" size=12.5 color={pick(light, "#cfd8d4", "#2a3a33")} url="https://github.com/dlof-lib/rinlang/tree/main/examples" />
         </Row>
       </Column>
       <Column#footC2 gap=10 align="stretch">
-        <Text#footH2 text="المجتمع" size=12 color="#93a1ab" weight="800" />
+        <Text#footH2 text="المجتمع" size=12 color={pick(light, "#93a1ab", "#4b5a63")} weight="800" />
         <Row#footL2 gap=16>
-          <Text#fl4 text="المشاكل" size=12.5 color="#cfd8d4" url="https://github.com/dlof-lib/rinlang/issues" />
-          <Text#fl5 text="المساهمة" size=12.5 color="#cfd8d4" url="https://github.com/dlof-lib/rinlang/blob/main/CONTRIBUTING.md" />
-          <Text#fl6 text="الأمان" size=12.5 color="#cfd8d4" url="https://github.com/dlof-lib/rinlang/blob/main/SECURITY.md" />
-          <Text#fl7 text="العلامة" size=12.5 color="#cfd8d4" url="https://github.com/dlof-lib/rinlang/blob/main/TRADEMARKS.md" />
+          <Text#fl4 text="المشاكل" size=12.5 color={pick(light, "#cfd8d4", "#2a3a33")} url="https://github.com/dlof-lib/rinlang/issues" />
+          <Text#fl5 text="المساهمة" size=12.5 color={pick(light, "#cfd8d4", "#2a3a33")} url="https://github.com/dlof-lib/rinlang/blob/main/CONTRIBUTING.md" />
+          <Text#fl6 text="الأمان" size=12.5 color={pick(light, "#cfd8d4", "#2a3a33")} url="https://github.com/dlof-lib/rinlang/blob/main/SECURITY.md" />
+          <Text#fl7 text="العلامة" size=12.5 color={pick(light, "#cfd8d4", "#2a3a33")} url="https://github.com/dlof-lib/rinlang/blob/main/TRADEMARKS.md" />
         </Row>
       </Column>
     </Grid>
