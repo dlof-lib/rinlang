@@ -157,4 +157,23 @@ class RinOutputTypewriterTest {
         w.appendLines(listOf(plain("c")))
         assertEquals(1, w.rows[0].number)
     }
+
+    @Test fun openRowKnowsItsCloseIndexForFolding() {
+        val w = RinOutputTypewriter()
+        val open = RinContainerMark(ContainerRole.OPEN, "container.data", "a")
+        val close = RinContainerMark(ContainerRole.CLOSE, "container.data", "a")
+        w.appendLines(
+            listOf(
+                plain("before"),
+                RinLogLine(LogKind.STRUCTURE, "x", container = open),
+                plain("inside 1"),
+                plain("inside 2"),
+                RinLogLine(LogKind.SUCCESS, "x", container = close),
+                plain("after")
+            )
+        )
+        assertTrue(w.rows[1].isContainerOpen)
+        assertEquals(4, w.rows[1].closeIndex)
+        assertEquals(-1, w.rows[0].closeIndex)
+    }
 }
