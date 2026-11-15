@@ -861,14 +861,20 @@ struct Dye {
             center = oss.str();
         }
         if (!center.empty()) {
-            Rect hole{ s->geometry.x, s->geometry.y, s->geometry.w, s->geometry.h };
-            list.push_back({DrawOp::TEXT_RUN, hole, th.text, center, s->id, 0, 0});
+            double side = std::min(s->geometry.w, s->geometry.h), fs = std::max(10.0, side * 0.16);
+            Rect hole{ s->geometry.x, s->geometry.y + (s->geometry.h - fs) / 2.0, s->geometry.w, fs };
+            DrawCommand t{DrawOp::TEXT_RUN, hole, th.text, center, s->id, 0, 0};
+            t.fontSize = fs; t.align = 1; t.bold = true; t.singleLine = true; // explicit => the generic post-pass (left-aligned, 14px) skips it
+            list.push_back(t);
         }
     }
 
     // ---- Pro charts: data= إما أرقام "3,5,4" أو "تسمية:قيمة" (نفس اصطلاح DonutChart) ----
     static void parseSeries(const std::string& attr, std::vector<std::string>& labels, std::vector<double>& vals) {
-        for (auto& e : splitCsv(attr)) {
+        // يقبل أيضاً صيغة المصفوفة data={[3,5,4]} / ["a:1","b:2"]: تُجرَّد الأقواس والاقتباسات قبل التقسيم.
+        std::string clean; clean.reserve(attr.size());
+        for (char ch : attr) if (ch != '[' && ch != ']' && ch != '"' && ch != '\'') clean += ch;
+        for (auto& e : splitCsv(clean)) {
             size_t colon = e.find(':');
             if (colon == std::string::npos) { labels.push_back(""); vals.push_back(std::atof(e.c_str())); }
             else { labels.push_back(e.substr(0, colon)); vals.push_back(std::atof(e.c_str() + colon + 1)); }
@@ -903,6 +909,12 @@ struct Dye {
         static const Color kPalette[] = {{124, 92, 255}, {34, 200, 142}, {232, 178, 61}, {241, 76, 76}, {95, 211, 255}, {145, 152, 163}};
         std::vector<std::string> lb; std::vector<double> v; parseSeries(s->attrStr("data", ""), lb, v);
         const Rect& g = s->geometry; if (v.empty()) return;
+        { // labels="Mon,Tue,..." بالموضع لمن لم يكتب data="تسمية:قيمة" (اصطلاح View.BarChart في indsin_pro2_showcase)
+            std::string raw = s->attrStr("labels", ""), clean;
+            for (char ch : raw) if (ch != '[' && ch != ']' && ch != '"' && ch != '\'') clean += ch;
+            auto ll = splitCsv(clean);
+            for (size_t i = 0; i < lb.size() && i < ll.size(); ++i) if (lb[i].empty()) lb[i] = ll[i];
+        }
         bool anyLabel = false; for (auto& l : lb) if (!l.empty()) anyLabel = true;
         bool showVals = s->attrStr("values", "false") == "true";
         double labelH = anyLabel ? 16 : 0, topPad = showVals ? 16 : 0;
@@ -914,8 +926,8 @@ struct Dye {
             Color c = (i < colorList.size()) ? parseHexColor(colorList[i], kPalette[i % 6]) : kPalette[i % 6];
             Rect bar{g.x + i*cellW + (cellW - barW)/2.0, g.y + topPad + (plotH - h), barW, h};
             list.push_back({DrawOp::FILL_RECT, bar, c, "", s->id, std::min(4.0, barW/2.0), 0});
-            if (showVals) { std::ostringstream o; o << (long long)std::llround(v[i]); list.push_back({DrawOp::TEXT_RUN, {g.x + i*cellW, g.y + topPad + plotH - h - 16, cellW, 16}, th.text, o.str(), s->id, 0, 0}); }
-            if (anyLabel) list.push_back({DrawOp::TEXT_RUN, {g.x + i*cellW, g.y + g.h - labelH, cellW, labelH}, th.text_muted, lb[i], s->id, 0, 0});
+            if (showVals) { std::ostringstream o; o << (long long)std::llround(v[i]); DrawCommand t{DrawOp::TEXT_RUN, {g.x + i*cellW, g.y + topPad + plotH - h - 16, cellW, 16}, th.text, o.str(), s->id, 0, 0}; t.fontSize = 12; t.align = 1; t.singleLine = true; list.push_back(t); }
+            if (anyLabel) { DrawCommand t{DrawOp::TEXT_RUN, {g.x + i*cellW, g.y + g.h - labelH, cellW, labelH}, th.text_muted, lb[i], s->id, 0, 0}; t.fontSize = 12; t.align = 1; t.singleLine = true; list.push_back(t); }
         }
     }
     // ProgressRing: مسار كامل + قوس تقدّم يبدأ من 12 (value= 0..100) ونصّ في المركز (label= أو "N%").
@@ -931,7 +943,8 @@ struct Dye {
         std::string center = s->attrStr("label", "");
         if (center.empty()) { std::ostringstream o; o << (long long)std::llround(pct) << "%"; center = o.str(); }
         double fs = std::max(10.0, side * 0.2);   // حجم الخط يُشتقّ من ارتفاع المستطيل ⇒ مستطيل بحجم الخط وسط الحلقة
-        list.push_back({DrawOp::TEXT_RUN, {s->geometry.x, s->geometry.y + (side - fs)/2.0, side, fs}, th.text, center, s->id, 0, 0});
+        DrawCommand t{DrawOp::TEXT_RUN, {s->geometry.x, s->geometry.y + (side - fs)/2.0, side, fs}, th.text, center, s->id, 0, 0};
+        t.fontSize = fs; t.align = 1; t.bold = true; t.singleLine = true; list.push_back(t);
     }
 
     // StepItem: circular marker (state= "done"/"active"/"upcoming", index= 1-based -- both
@@ -1326,7 +1339,7 @@ struct Dye {
         // متجه: الأيقونات المستوردة (من api/نص) افتراضياً، أو أي أيقونة بـ vector="true"؛ vector="false" يفرض الرمز النصي.
         const std::string vec = s->attrStr("vector", "");
         const std::string path = iconRegistry().vectorPath(iconName);
-        if (!path.empty() && vec != "false" && (vec == "true" || iconRegistry().isImported(iconName) || iconRegistry().vectorDefault)) {
+        if (!path.empty() && vec != "false" && (vec == "true" || iconRegistry().isImported(iconName) || iconRegistry().vectorDefault || !iconRegistry().has(iconName)  /* له مسار ولا رمز نصي (bell…) ⇒ المتجه بدل "?" */)) {
             const Rect& g = s->geometry; double sz = std::min(g.w, g.h);
             Rect box{g.x, g.y + (g.h - sz) / 2, sz, sz};   // محاذاة البداية كالرمز النصي
             double sw = 2.0; try { sw = std::stod(s->attrStr("stroke", "2")); } catch (...) {}
