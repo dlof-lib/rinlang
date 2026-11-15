@@ -126,6 +126,7 @@ inline double measureTextWidth(const std::string& text, double fontSize) {
         if (cp >= 0x064B && cp <= 0x065F) em += 0.0;                                   // harakat
         else if ((cp >= 0x0600 && cp <= 0x06FF) || (cp >= 0x0750 && cp <= 0x077F) ||
                  (cp >= 0xFB50 && cp <= 0xFDFF) || (cp >= 0xFE70 && cp <= 0xFEFF)) em += 0.50;  // Arabic script
+        else if (cp == 0x20 || cp == 0xA0) em += 0.30;                                 // space: far narrower than a letter
         else em += 0.72;
         i += len;
     }
@@ -213,7 +214,13 @@ struct Indsin {
         if (sameConstraints && sameContent && s->geometry.w > 0) {
             stats.cacheHits++;
             double dx = originXIncoming - s->geometryOuter.x, dy = originYIncoming - s->geometryOuter.y;
-            if (dx != 0.0 || dy != 0.0) { translate(s, dx, dy); s->geometryOuter.x += dx; s->geometryOuter.y += dy; }
+            if (dx != 0.0 || dy != 0.0) {
+                translate(s, dx, dy); s->geometryOuter.x += dx; s->geometryOuter.y += dy;
+                // translate() moves only `geometry`; descendants' geometryOuter (the origin each was last
+                // offered) must follow in lock-step, or the next cache hit on a descendant (e.g. a Wrap's
+                // buttons after a tap re-layout) computes dx from a stale origin and shifts it away.
+                shiftOuterOfDescendants(s, dx, dy);
+            }
             if (s->screenRoot) webPostLayout(*this, s);
             return s->geometryOuter;
         }
@@ -724,6 +731,13 @@ struct Indsin {
         s->geometryOuter = outer;
         if (s->screenRoot) webPostLayout(*this, s);
         return outer;
+    }
+
+    void shiftOuterOfDescendants(StrandPtr s, double dx, double dy) {
+        for (auto& ch : s->children) {
+            ch->geometryOuter.x += dx; ch->geometryOuter.y += dy;
+            shiftOuterOfDescendants(ch, dx, dy);
+        }
     }
 
     void translate(StrandPtr s, double dx, double dy) {
