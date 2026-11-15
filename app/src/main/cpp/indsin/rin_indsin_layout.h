@@ -112,7 +112,24 @@ inline size_t utf8Length(const std::string& text) {
 // (bold labels, uppercase-heavy titles, digits); 0.72 plus a small fixed pad biases the box
 // slightly *wide* instead — a little extra breathing room beats a clipped "…".
 inline double measureTextWidth(const std::string& text, double fontSize) {
-    return utf8Length(text) * fontSize * 0.72 + 2.0;
+    // ASCII/other scripts keep the conservative 0.72em. Arabic-script letters are visibly narrower
+    // in real fonts (~0.5em), and combining marks (harakat) add no width: estimating them at 0.72
+    // made Arabic paragraphs measure ~35% too wide, i.e. too many wrapped lines and large gaps.
+    double em = 0;
+    for (size_t i = 0; i < text.size(); ) {
+        unsigned char c = static_cast<unsigned char>(text[i]);
+        size_t len = (c < 0x80) ? 1 : ((c >> 5) == 0x6) ? 2 : ((c >> 4) == 0xE) ? 3 : ((c >> 3) == 0x1E) ? 4 : 1;
+        unsigned cp = c;
+        if (len == 2 && i + 1 < text.size()) cp = ((c & 0x1Fu) << 6) | (static_cast<unsigned char>(text[i + 1]) & 0x3Fu);
+        else if (len == 3 && i + 2 < text.size())
+            cp = ((c & 0x0Fu) << 12) | ((static_cast<unsigned char>(text[i + 1]) & 0x3Fu) << 6) | (static_cast<unsigned char>(text[i + 2]) & 0x3Fu);
+        if (cp >= 0x064B && cp <= 0x065F) em += 0.0;                                   // harakat
+        else if ((cp >= 0x0600 && cp <= 0x06FF) || (cp >= 0x0750 && cp <= 0x077F) ||
+                 (cp >= 0xFB50 && cp <= 0xFDFF) || (cp >= 0xFE70 && cp <= 0xFEFF)) em += 0.50;  // Arabic script
+        else em += 0.72;
+        i += len;
+    }
+    return em * fontSize + 2.0;
 }
 
 // Word-wraps `text` into lines that each fit within `maxWidth` (estimated via measureTextWidth).
@@ -123,6 +140,20 @@ inline double measureTextWidth(const std::string& text, double fontSize) {
 inline std::vector<std::string> wrapText(const std::string& text, double fontSize, double maxWidth) {
     std::vector<std::string> lines;
     if (text.empty()) { lines.push_back(""); return lines; }
+    // Explicit line breaks: each paragraph is wrapped on its own (a blank line stays a blank line),
+    // matching how the host renders `\n` in Text — previously the layout ignored them.
+    if (text.find('\n') != std::string::npos) {
+        size_t start = 0;
+        while (true) {
+            size_t nl = text.find('\n', start);
+            std::string para = text.substr(start, nl == std::string::npos ? std::string::npos : nl - start);
+            if (para.empty()) lines.push_back("");
+            else for (auto& l : wrapText(para, fontSize, maxWidth)) lines.push_back(l);
+            if (nl == std::string::npos) break;
+            start = nl + 1;
+        }
+        return lines;
+    }
     if (maxWidth <= 0) { lines.push_back(text); return lines; }
 
     std::vector<std::string> words;
