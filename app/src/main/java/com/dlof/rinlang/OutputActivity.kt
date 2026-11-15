@@ -99,6 +99,7 @@ class OutputActivity : RinBaseActivity() {
     private var lastLive: RinLogLine? = null
     private var finalized = false
     private var recreated = false
+    private var foldedAll = false
 
     private var previousHook: ((List<RinJob>) -> Unit)? = null
     private val jobsHook: (List<RinJob>) -> Unit = { jobs ->
@@ -256,6 +257,13 @@ class OutputActivity : RinBaseActivity() {
         }
 
         findViewById<View>(R.id.btnOutSkip).setOnClickListener { skipTyping() }
+
+        // ضغط مطوّل على عنوان الشاشة: طيّ/فتح كل الحاويات دفعة واحدة.
+        findViewById<View>(R.id.txtOutTitle).setOnLongClickListener {
+            foldedAll = !foldedAll
+            adapter.setAllFolded(foldedAll)
+            true
+        }
 
         btnFollow.setOnClickListener {
             followTail = true
@@ -674,6 +682,8 @@ class OutputActivity : RinBaseActivity() {
 
     private fun onRowClicked(rowIndex: Int) {
         val row = writer.rows.getOrNull(rowIndex) ?: return
+        // سطر فتح حاوية: النقر يطوي/يفتح محتواها (الناتج مرتّب في كتل قابلة للطيّ).
+        if (row.isContainerOpen && row.isDone && adapter.toggleFold(rowIndex)) return
         val errLine = row.line.errorLine
         val go = RinOutputNav.goToLine
         if (errLine != null && go != null && row.isDone) {
