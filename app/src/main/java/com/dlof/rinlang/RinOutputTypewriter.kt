@@ -35,6 +35,12 @@ class OutRow(
     var typed: Int = 0
         internal set
 
+    /** لسطر فتح حاوية: فهرس سطر إغلاقها (-1 إن لم تُغلق بعد). يحدّد نطاق الطيّ. */
+    var closeIndex: Int = -1
+        internal set
+
+    val isContainerOpen: Boolean get() = line.container?.role == ContainerRole.OPEN
+
     val total: Int get() = stops.size
     val isDone: Boolean get() = typed >= stops.size
 
@@ -128,6 +134,8 @@ class RinOutputTypewriter {
     private var nextNumber = 1
 
     private val containerStack = ArrayList<Int>()
+    /** فهارس صفوف فتح الحاويات المفتوحة حالياً (توازي [containerStack]). */
+    private val openRowStack = ArrayList<Int>()
 
     /** يعيد كل شيء لحالة البداية (عند الانتقال إلى تشغيل آخر). */
     fun reset() {
@@ -138,6 +146,8 @@ class RinOutputTypewriter {
         pauseLeftMs = 0.0
         nextNumber = 1
         containerStack.clear()
+        openRowStack.clear()
+        lineCount = 0
     }
 
     val isTyping: Boolean get() = cursorRow < rows.size
@@ -171,6 +181,9 @@ class RinOutputTypewriter {
         // سطر إغلاق حاوية يُرسم بنفس عمق سطر فتحها: نُخرج من المكدس قبل حساب العمق.
         if (mark != null && mark.role == ContainerRole.CLOSE && containerStack.isNotEmpty()) {
             containerStack.removeAt(containerStack.size - 1)
+            if (openRowStack.isNotEmpty()) {
+                rows[openRowStack.removeAt(openRowStack.size - 1)].closeIndex = rows.size
+            }
         }
         val text = displayText(line)
         val isImage = line.kind == LogKind.PRINT_IMAGE
@@ -184,7 +197,10 @@ class RinOutputTypewriter {
             else containerStack.lastOrNull(),
             stops = OutRow.graphemeStops(text)
         )
-        if (mark != null && mark.role == ContainerRole.OPEN) containerStack.add(mark.family.accent)
+        if (mark != null && mark.role == ContainerRole.OPEN) {
+            containerStack.add(mark.family.accent)
+            openRowStack.add(rows.size) // الصف يُضاف في register أدناه بهذا الفهرس
+        }
         lineCount++
         register(row, instant)
     }
@@ -201,6 +217,7 @@ class RinOutputTypewriter {
                 mark.name?.let { append(" · ").append(it) }
                 if (mark.members.isNotEmpty()) append("  —  ").append(mark.members.joinToString("، "))
             }
+            line.kind == LogKind.PLAIN -> RinOutputPretty.json(line.text) ?: line.text
             else -> line.text
         }
         return if (line.repeat > 1) "$base  ×${line.repeat}" else base
