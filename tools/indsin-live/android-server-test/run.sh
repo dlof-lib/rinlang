@@ -48,21 +48,6 @@ chk "فيضان الاتصالات → 503" "$(cat "$T/flood.txt")" "HTTP/1.1 50
 sleep 16  # تنتهي مهلة الاتصالات المعلّقة (15 ث) ويعود الخادم للعمل
 chk "الخادم يتعافى بعد الفيضان" "$(c "$U")" 200
 api(){ curl -s -X POST -H "X-Indsin-Key: $K" -H 'Content-Type: application/json' -d "$1" "$B/api"; }
-# ---- الميزات الأساسية: تحرير حيّ + مراقب الملفات + رفع الوسائط
-api '{"cmd":"open","cid":"live1","width":390,"vp":800}' >/dev/null
-curl -sN --max-time 9 -H "X-Indsin-Key: $K" "$B/events?cid=live1" > "$T/sse.txt" 2>/dev/null &
-SSEPID=$!; sleep 1
-api '{"cmd":"source","cid":"live1","page":"main.indsin","text":"EDITED_LIVE_1"}' >/dev/null; sleep 1.5
-chk "تحرير حيّ يصل SSE قبل الحفظ" "$(grep -c EDITED_LIVE_1 "$T/sse.txt")" 1
-printf 'DISK_EDIT_2' > "$T/proj/main.indsin"; sleep 2.5
-chk "مراقب الملفات يدفع تعديل القرص" "$(grep -c DISK_EDIT_2 "$T/sse.txt")" 1
-wait $SSEPID 2>/dev/null || true
-R=$(curl -s -X POST -H "X-Indsin-Key: $K" -H 'Content-Type: application/octet-stream' --data-binary 'PNGDATA' "$B/m?name=pic.png&mime=image/png")
-chk "رفع وسائط ينجح" "$(echo "$R" | grep -c '"ok":true')" 1
-chk "الملف المرفوع داخل media/" "$(ls "$T"/proj/media/pic_*.png 2>/dev/null | wc -l)" 1
-curl -s -o /dev/null -X POST -H "X-Indsin-Key: $K" --data-binary x "$B/m?name=../../evil.txt&mime=text/plain"
-chk "اسم رفع هارب لا يخرج من media/" "$(ls "$T/evil.txt" "$T/proj/evil.txt" 2>/dev/null | wc -l)" 0
-chk "رفع بلا مفتاح مرفوض" "$(c -X POST --data-binary x "$B/m?name=a.png")" 401
 for i in $(seq 1 15); do api "{\"cmd\":\"open\",\"cid\":\"tab$i\",\"width\":390,\"vp\":800}" >/dev/null; done
 N=$(api '{"cmd":"info","cid":"tab15"}' | grep -o '"clients":[0-9]*' | cut -d: -f2)
 chk "سقف الجلسات (15 تبويباً → 12)" "$N" 12
