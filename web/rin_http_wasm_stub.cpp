@@ -29,6 +29,11 @@
 #include <cstdlib>
 #include <cstring>
 #include <cstdint>
+#include <cctype>
+#include <chrono>
+#include <fstream>
+#include <iterator>
+#include <string>
 
 namespace rin {
 namespace http {
@@ -204,6 +209,111 @@ HttpResult performRequest(const std::string& method,
 // النصي على أندرويد) — فيُعاد التوجيه مباشرة إلى performRequest العادي، كما يفعل CLI/سطح المكتب.
 HttpResult performBinaryGet(const std::string& url, int timeoutMs) {
     return performRequest("GET", url, {}, "", timeoutMs);
+}
+
+// ---------------------------------------------------------------------------------------------
+// performDownload — في المتصفح لا يوجد curl ولا تدفّق إلى القرص: يُجلب الجسم كاملاً عبر fetch()
+// ثم يُكتب إلى destPath داخل نظام ملفات Emscripten الافتراضي (MEMFS)، فيبقى عقد الدالة كما في
+// rin_http.h: ok فقط عند 2xx، وmaxBytes يُحترم، والخطأ فارغ عند حالة HTTP >= 400 (تُشرح من status).
+// الاستئناف (resume) غير مدعوم هنا فيُعاد التنزيل من الصفر دائماً.
+// ---------------------------------------------------------------------------------------------
+static std::string lowerAscii(std::string s) {
+    for (auto& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return s;
+}
+
+DownloadResult performDownload(const DownloadRequest& req) {
+    DownloadResult r;
+    HttpResult h = performRequest("GET", req.url, req.headers, "",
+                                  req.totalTimeoutMs > 0 ? req.totalTimeoutMs : 0);
+    r.status = h.status;
+    r.finalUrl = req.url;
+    for (auto& kv : h.headers) {
+        std::string k = lowerAscii(kv.first);
+        if (k == "content-type") {
+            std::string v = kv.second;
+            size_t sc = v.find(';');
+            if (sc != std::string::npos) v.erase(sc);
+            while (!v.empty() && (v.back() == ' ' || v.back() == '\t')) v.pop_back();
+            r.contentType = lowerAscii(v);
+        } else if (k == "content-disposition") {
+            r.contentDisposition = kv.second;
+        }
+    }
+    if (!h.ok) { r.error = h.error; return r; }
+    if (h.status < 200 || h.status >= 300) return r;   // خطأ HTTP: الشرح من status (كما في مسار curl --fail)
+    if (req.maxBytes > 0 && static_cast<long long>(h.body.size()) > req.maxBytes) {
+        r.error = "حجم الملف يتجاوز maxBytes";
+        return r;
+    }
+    std::ofstream f(req.destPath, std::ios::binary | std::ios::trunc);
+    if (!f) { r.error = "تعذّرت الكتابة على القرص (المساحة أو الصلاحيات)"; return r; }
+    f.write(h.body.data(), static_cast<std::streamsize>(h.body.size()));
+    f.close();
+    if (!f) { r.error = "تعذّرت الكتابة على القرص (المساحة أو الصلاحيات)"; return r; }
+    r.bytes = static_cast<long long>(h.body.size());
+    r.ok = true;
+    return r;
+}
+
+void setAndroidDownloadBridge(std::function<DownloadResult(const DownloadRequest&)> bridge) {
+    (void)bridge; // خاصة بأندرويد فقط
+}
+
+// ---------------------------------------------------------------------------------------------
+// performRequestEx — fetch() كاملة فوق performRequest: multipart يُبنى يدوياً (الملفات تُقرأ من
+// MEMFS)، وحدّ الحجم يُطبَّق على الرد، وإحصاءات (الزمن/الحجم/نوع المحتوى). المتصفح يتولى
+// التحويلات والكوكيز والضغط والوكيل بنفسه، فتُتجاهل follow/maxRedirects/cookieJar/proxy.
+// ---------------------------------------------------------------------------------------------
+ResultEx performRequestEx(const RequestEx& q) {
+    ResultEx r;
+    HeaderList headers = q.headers;
+    std::string body = q.body;
+
+    if (!q.parts.empty()) {
+        const std::string boundary = "----RinFormBoundary7MA4YWxkTrZu0gW";
+        body.clear();
+        for (auto& p : q.parts) {
+            body += "--" + boundary + "\r\n";
+            if (!p.file.empty()) {
+                std::ifstream in(p.file, std::ios::binary);
+                if (!in) { r.error = "تعذّر فتح الملف المرفوع: " + p.file; r.exitCode = 26; return r; }
+                std::string data((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+                std::string fname = p.filename.empty() ? p.file.substr(p.file.find_last_of('/') + 1) : p.filename;
+                body += "Content-Disposition: form-data; name=\"" + p.name + "\"; filename=\"" + fname + "\"\r\n";
+                body += "Content-Type: " + (p.type.empty() ? std::string("application/octet-stream") : p.type) + "\r\n\r\n";
+                body += data;
+            } else {
+                body += "Content-Disposition: form-data; name=\"" + p.name + "\"\r\n\r\n";
+                body += p.value;
+            }
+            body += "\r\n";
+        }
+        body += "--" + boundary + "--\r\n";
+        headers.push_back({"Content-Type", "multipart/form-data; boundary=" + boundary});
+    }
+
+    auto t0 = std::chrono::steady_clock::now();
+    HttpResult base = performRequest(q.method.empty() ? "GET" : q.method, q.url, headers, body, q.timeoutMs);
+    auto t1 = std::chrono::steady_clock::now();
+
+    static_cast<HttpResult&>(r) = base;
+    r.finalUrl = q.url;
+    r.redirects = 0;
+    r.sizeDownload = static_cast<long>(base.body.size());
+    r.timeMs = std::chrono::duration<double, std::milli>(t1 - t0).count();
+    for (auto& kv : base.headers) {
+        if (lowerAscii(kv.first) == "content-type") r.contentType = kv.second;
+    }
+    if (!base.ok) {
+        r.exitCode = (base.error.find("timeout") != std::string::npos) ? 28 : 7;
+    } else if (q.maxBytes > 0 && static_cast<long long>(base.body.size()) > q.maxBytes) {
+        r.ok = false;
+        r.exitCode = 63;
+        r.error = "response larger than the size limit";
+        r.body.clear();
+    }
+    return r;
 }
 
 } // namespace http
