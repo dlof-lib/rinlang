@@ -67,7 +67,35 @@ class OutputRowAdapter(
 
     // ------------------------------------------------------------------ بيانات/فلاتر
 
-    private fun matches(row: OutRow): Boolean {
+    /** صفوف فتح الحاويات المطويّة حالياً (فهارسها). */
+    private val folded = HashSet<Int>()
+
+    private fun isHiddenByFold(index: Int): Boolean {
+        for (o in folded) {
+            val close = writer.rows[o].closeIndex
+            if (index > o && (close < 0 || index <= close)) return true
+        }
+        return false
+    }
+
+    /** يطوي/يفتح الحاوية التي يبدأها الصف [openIndex]؛ يعيد true إن كان الصف حاوية فعلاً. */
+    fun toggleFold(openIndex: Int): Boolean {
+        val row = writer.rows.getOrNull(openIndex) ?: return false
+        if (!row.isContainerOpen) return false
+        if (!folded.remove(openIndex)) folded.add(openIndex)
+        rebuild()
+        return true
+    }
+
+    /** يطوي كل الحاويات (true) أو يفتحها كلها (false). */
+    fun setAllFolded(fold: Boolean) {
+        folded.clear()
+        if (fold) writer.rows.forEachIndexed { i, r -> if (r.isContainerOpen && r.closeIndex > i) folded.add(i) }
+        rebuild()
+    }
+
+    private fun matches(index: Int, row: OutRow): Boolean {
+        if (isHiddenByFold(index)) return false
         val f = levelFilter
         if (f != null) {
             // صفوف الحالة/السؤال/الجواب لا تُخفى بفلتر المستوى (تبقى سياقاً للقراءة).
@@ -88,7 +116,7 @@ class OutputRowAdapter(
     fun rebuild() {
         positions.clear()
         for (i in 0 until minOf(revealed, writer.rows.size)) {
-            if (matches(writer.rows[i])) positions.add(i)
+            if (matches(i, writer.rows[i])) positions.add(i)
         }
         notifyDataSetChanged()
     }
@@ -96,6 +124,7 @@ class OutputRowAdapter(
     fun reset() {
         revealed = 0
         positions.clear()
+        folded.clear()
         notifyDataSetChanged()
     }
 
@@ -105,7 +134,7 @@ class OutputRowAdapter(
         if (target <= revealed) return
         val startPos = positions.size
         for (i in revealed until target) {
-            if (matches(writer.rows[i])) positions.add(i)
+            if (matches(i, writer.rows[i])) positions.add(i)
         }
         revealed = target
         val added = positions.size - startPos
@@ -293,8 +322,20 @@ class OutputRowAdapter(
             val sb = SpannableStringBuilder()
             if (row.kind == OutRowKind.PROMPT) sb.append("❯ ")
             if (row.kind == OutRowKind.ANSWER) sb.append("↳ ")
+            if (row.isContainerOpen) sb.append(if (idx in folded) "▸ " else "▾ ")
             val base = sb.length
             sb.append(shown)
+            if (row.isContainerOpen && row.isDone && row.closeIndex > idx) {
+                val n = row.closeIndex - idx - 1
+                if (n > 0) sb.append("  ($n)")
+            }
+
+            // تلوين قيم JSON (مفاتيح/نصوص/أرقام/ثوابت) في الأسطر العادية.
+            if (row.kind == OutRowKind.LINE && row.line.kind == LogKind.PLAIN &&
+                row.line.container == null && RinOutputPretty.looksLikeJson(shown)
+            ) {
+                RinOutputPretty.colorize(sb, base, base + shown.length)
+            }
 
             // تظليل نتائج البحث داخل الجزء المكتوب فقط.
             if (query.isNotEmpty()) {
