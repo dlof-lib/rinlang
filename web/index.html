@@ -110,8 +110,21 @@
   .k-Divider{}
   .clickable{cursor:pointer}
   .clickable:hover{filter:brightness(1.12)}
-  .k-Drawer{transition:left .25s cubic-bezier(.2,.8,.2,1);z-index:50}
+  /* الدرج الجانبي: لوحة ثابتة على حافة العرض (يمين في RTL) بارتفاع النافذة وتمرير داخلي، فوق الخلفية المعتمة */
+  .k-Drawer{position:fixed!important;top:0!important;bottom:0!important;height:auto!important;
+    transition:transform .28s cubic-bezier(.2,.8,.2,1);z-index:50;overflow-y:auto;overscroll-behavior:contain;
+    box-shadow:-12px 0 40px -12px rgba(0,0,0,.6)}
+  .k-Drawer>.drawer-inner{position:relative}
+  html[dir=rtl] .k-Drawer{right:0!important;left:auto!important}
+  html[dir=rtl] .k-Drawer:not(.open){transform:translateX(105%)}
+  .k-Drawer.open{transform:none}
+  :root[data-light] .k-MenuItem:hover{background:#e3eae7}
   .k-TopBar{backdrop-filter:blur(10px);position:sticky;top:0;z-index:30}
+  /* إمكانية الوصول: حلقة تركيز واضحة للوحة المفاتيح، واحترام تفضيل تقليل الحركة */
+  .clickable:focus-visible{outline:2px solid #7cc4ff;outline-offset:2px}
+  @media (prefers-reduced-motion:reduce){
+    *{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+  }
 </style>
 </head>
 <body>
@@ -141,7 +154,7 @@
   </div>
 
   <div id="stage-outer">
-    <div id="stage">
+    <div id="stage" role="main">
       <div id="backdrop"></div>
     </div>
   </div>
@@ -192,6 +205,18 @@
       var el = buildElement(node);
       if (ox || oy) { el.style.left = (node.x - ox) + 'px'; el.style.top = (node.y - oy) + 'px'; }
       container.appendChild(el);
+      // الدرج الجانبي: أبناؤه داخل عنصره (ليتحرّكوا معه ويكونوا فوق خلفيته) بإحداثيات نسبية
+      if (node.kind === 'Drawer') {
+        var inner = document.createElement('div');
+        inner.className = 'drawer-inner';
+        var maxB = 0;
+        (function bottom(n) { (n.children || []).forEach(function (c) { maxB = Math.max(maxB, c.y + c.h); bottom(c); }); })(node);
+        inner.style.width = node.w + 'px';
+        inner.style.height = Math.max(0, maxB - node.y + 24) + 'px';
+        el.appendChild(inner);
+        for (var d = 0; d < node.children.length; d++) walk(node.children[d], inner, node.x, node.y);
+        return;
+      }
       // شريط علوي لاصق (sticky): أبناؤه يوضعون داخله بإحداثيات نسبية ليبقوا فوق خلفيته أثناء التمرير
       if (node.kind === 'TopBar') {
         for (var j = 0; j < node.children.length; j++) walk(node.children[j], el, node.x, node.y);
@@ -259,10 +284,23 @@
       var hasTap = !!a.onTap;
       if (hasUrl || hasTap) {
         el.classList.add('clickable');
+        if (node.kind !== 'Button') {
+          // div قابل للنقر: يصير قابلاً للوصول بلوحة المفاتيح (Tab + Enter/Space)
+          el.setAttribute('role', hasUrl ? 'link' : 'button');
+          el.setAttribute('tabindex', '0');
+          el.addEventListener('keydown', function (ev) {
+            if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); el.click(); }
+          });
+        }
         el.addEventListener('click', function (ev) {
           ev.stopPropagation();
           if (a.copyText && navigator.clipboard) {
-            navigator.clipboard.writeText(a.copyText).catch(function () {});
+            navigator.clipboard.writeText(a.copyText).then(function () {
+              // تأكيد بصري قصير؛ إعادة الرسم التالية تعيد النص الأصلي تلقائياً
+              var old = el.textContent;
+              el.textContent = 'تم النسخ ✓';
+              setTimeout(function () { if (el.isConnected && el.textContent === 'تم النسخ ✓') el.textContent = old; }, 1400);
+            }).catch(function () {});
           }
           if (hasTap) dispatchTapAt(node.x + node.w / 2, node.y + node.h / 2);
           if (hasUrl) {
@@ -272,7 +310,10 @@
               window.location.search = a.url;
             } else if (a.url.charAt(0) === '#') {
               var target = document.getElementById(a.url.slice(1));
-              if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              if (target) {
+                target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                try { history.replaceState(null, '', a.url); } catch (e) {}
+              }
             } else {
               window.open(a.url, '_blank', 'noopener');
             }
@@ -284,6 +325,13 @@
       if (node.kind === 'Drawer') {
         var isOpen = node.x >= 0;
         backdrop.classList.toggle('show', isOpen);
+        el.classList.toggle('open', isOpen);
+        el.style.left = ''; el.style.top = ''; el.style.height = '';
+        el.setAttribute('role', 'dialog');
+        el.setAttribute('aria-modal', 'true');
+        el.setAttribute('aria-label', 'القائمة الرئيسية');
+        if (isOpen) { el.removeAttribute('inert'); el.removeAttribute('aria-hidden'); }
+        else { el.setAttribute('inert', ''); el.setAttribute('aria-hidden', 'true'); }
       }
 
       return el;
@@ -297,6 +345,11 @@
         var r = menuBtn.getBoundingClientRect(), sr = stage.getBoundingClientRect();
         dispatchTapAt(r.left - sr.left + r.width / 2, r.top - sr.top + r.height / 2);
       }
+    });
+
+    // Esc يغلق الدرج الجانبي إن كان مفتوحاً (نفس مسار النقر على الخلفية)
+    document.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape' && backdrop.classList.contains('show')) backdrop.click();
     });
 
     // ------------------------------------------------------------------
@@ -314,6 +367,23 @@
       try { data = JSON.parse(jsonText); } catch (e) { fail('تعذّر قراءة ناتج المحرّك (JSON):', String(e)); return; }
       if (!data.ok) { fail('خطأ في site.rin:', (data.error || 'unknown') + (data.line ? ' (سطر ' + data.line + ')' : '')); return; }
       renderFabric(data.fabric);
+      // لون خلفية الصفحة يتبع خلفية جذر المحتوى (وضع فاتح/داكن) كي لا تظهر حواف بلون مختلف
+      var rootBg = (function find(n) {
+        if (n.name === 'content' && n.attrs && n.attrs.bg) return n.attrs.bg;
+        for (var i = 0; n.children && i < n.children.length; i++) { var r = find(n.children[i]); if (r) return r; }
+      })(data.fabric);
+      if (rootBg) {
+        document.body.style.background = rootBg;
+        document.getElementById('stage-outer').style.background = rootBg;
+        stage.style.background = rootBg;
+        var light = rootBg.charAt(1) > '7';
+        document.documentElement.style.colorScheme = light ? 'light' : 'dark';
+        if (light) document.documentElement.setAttribute('data-light', ''); else document.documentElement.removeAttribute('data-light');
+      }
+      if (backdrop.classList.contains('show')) {
+        var cb = document.getElementById('drawerClose');
+        if (cb && document.activeElement !== cb) cb.focus({ preventScroll: true });
+      }
       window.dispatchEvent(new CustomEvent('rin:rendered'));
     }
 
@@ -348,6 +418,11 @@
         applyFrame(json);
 
         bootEl.classList.add('hidden');
+        // رابط عميق مثل ‎/#faq‎: بعد أول رسم نمرّر إلى القسم المطلوب
+        if (location.hash.length > 1) {
+          var t = document.getElementById(decodeURIComponent(location.hash.slice(1)));
+          if (t) setTimeout(function () { t.scrollIntoView({ block: 'start' }); }, 50);
+        }
       } catch (e) {
         console.error(e);
         fail('تعذّر تشغيل site.rin في المتصفح:', String(e && e.message ? e.message : e));
