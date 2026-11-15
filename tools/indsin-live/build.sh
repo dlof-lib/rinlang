@@ -37,7 +37,10 @@ compile() { local src="$1" obj="$2"; "$CXX" $FLAGS -c "$src" -o "$obj" || return
 export -f compile 2>/dev/null || true
 for rel in "${ENGINE[@]}"; do
   src="$CORE/$rel"; obj="$OUT/obj/$(echo "$rel" | tr '/' '_').o"; objs+=("$obj")
-  if [ ! -f "$obj" ] || [ "$src" -nt "$obj" ]; then
+  # أي ترويسة (.h/.hpp) أحدث من الكائن تُعيد ترجمته: سابقاً كان تعديل rin_indsin_paint.h وحده لا يُعاد بناؤه فيعمل ملف قديم بصمت.
+  stale_hdr=""
+  if [ -f "$obj" ]; then stale_hdr=$(find "$CORE" \( -name '*.h' -o -name '*.hpp' \) -newer "$obj" 2>/dev/null | head -1 || true); fi
+  if [ ! -f "$obj" ] || [ "$src" -nt "$obj" ] || [ -n "$stale_hdr" ]; then
     echo "[live] CC $rel"
     compile "$src" "$obj" & pids+=($!)
     while [ "$(jobs -rp | wc -l)" -ge "$JOBS" ]; do sleep 0.2; done
