@@ -90,10 +90,10 @@
   #bootErr{white-space:pre-wrap;text-align:left;direction:ltr;font-family:monospace;
     font-size:13px;color:#ff8a8a;max-width:720px;margin:16px auto 0;display:none}
 
-  #stage-outer{min-height:100vh;display:flex;justify-content:center;background:#060807;
-    padding:24px 12px}
-  #stage{position:relative;width:100%;max-width:var(--rw,420px);background:#0a0c0a;
-    border-radius:20px;overflow:hidden;box-shadow:0 30px 80px -30px rgba(0,0,0,.6)}
+  #stage-outer{min-height:100vh;display:flex;justify-content:center;background:#07090d;
+    padding:0}
+  /* عرض المسرح = عرض التصميم الذي يخطّط عنده المحرّك (يُضبَط من JS على عرض النافذة الفعلي) */
+  #stage{position:relative;width:100%;max-width:1200px;background:#07090d;overflow:hidden}
   #backdrop{position:absolute;inset:0;background:rgba(0,0,0,.55);opacity:0;
     pointer-events:none;transition:opacity .2s ease;z-index:40}
   #backdrop.show{opacity:1;pointer-events:auto}
@@ -151,7 +151,13 @@
   <script src="rin-academy.js"></script>
   <script>
   (function () {
-    var DESIGN_WIDTH = 420; // rootWidth: عرض التصميم الذي يخطّط عنده محرّك Indsin نفسه
+    // rootWidth: عرض التصميم الذي يخطّط عنده محرّك Indsin — يتبع عرض النافذة (320..1200)
+    // فيعمل التصميم المتجاوب (لاحقات _md/_lg في site.rin) على الجوال والسطح المكتبي.
+    function pickWidth() {
+      var w = document.documentElement.clientWidth || window.innerWidth || 420;
+      return Math.max(320, Math.min(w, 1200));
+    }
+    var DESIGN_WIDTH = pickWidth();
 
     var bootEl = document.getElementById('boot');
     var bootMsg = document.getElementById('bootMsg');
@@ -173,14 +179,24 @@
     function renderFabric(root) {
       stage.querySelectorAll('.strand').forEach(function (n) { n.remove(); });
       stage.style.height = root.h + 'px';
+      stage.style.maxWidth = DESIGN_WIDTH + 'px';
       var frag = document.createDocumentFragment();
       walk(root, frag);
       stage.appendChild(frag);
     }
 
-    function walk(node, container) {
+    function walk(node, container, ox, oy) {
+      ox = ox || 0; oy = oy || 0;
+      // عنصر visible=false (يطويه المحرّك إلى حجم صفر) لا يُرسَم هو ولا أبناؤه
+      if (node.attrs && (node.attrs.visible === 'false' || node.attrs.visible === false)) return;
       var el = buildElement(node);
+      if (ox || oy) { el.style.left = (node.x - ox) + 'px'; el.style.top = (node.y - oy) + 'px'; }
       container.appendChild(el);
+      // شريط علوي لاصق (sticky): أبناؤه يوضعون داخله بإحداثيات نسبية ليبقوا فوق خلفيته أثناء التمرير
+      if (node.kind === 'TopBar') {
+        for (var j = 0; j < node.children.length; j++) walk(node.children[j], el, node.x, node.y);
+        return;
+      }
       // مهم: كل الأبناء يُلحَقون بنفس الحاوية المسطّحة (container)، لا بعنصر الأب
       // (el) — لأن كل .strand بترميز position:absolute، وx/y القادمتين من JSON
       // إحداثيات صفحة مطلقة (نفس نظام الإحداثيات الذي يحسبه محرّك Indsin نفسه،
@@ -190,7 +206,7 @@
       // تعشيش إضافي يراكم هذا الخطأ. ترتيب الإلحاق (الأب أولاً ثم أبناؤه بعمق قبل
       // الانتقال للشقيق التالي) يبقى كما هو ليحافظ على ترتيب الرسم الصحيح (الخلفية
       // قبل محتواها) دون الحاجة لأي تعشيش DOM فعلي.
-      for (var i = 0; i < node.children.length; i++) walk(node.children[i], container);
+      for (var i = 0; i < node.children.length; i++) walk(node.children[i], container, ox, oy);
     }
 
     function buildElement(node) {
@@ -213,7 +229,13 @@
       if (a.color) el.style.color = a.color;
       if (a.weight) el.style.fontWeight = a.weight;
       if (a.size) el.style.fontSize = a.size + 'px';
-      if (a.mono === 'true') el.style.fontFamily = "'JetBrains Mono', ui-monospace, Consolas, monospace";
+      if (a.mono === 'true') {
+        el.style.fontFamily = "'JetBrains Mono', ui-monospace, Consolas, monospace";
+        // الكود يُكتب من اليسار: كل سطر يأخذ اتجاهه من أول حرف قوي فيه (لاتيني → LTR، عربي → RTL)
+        el.style.unicodeBidi = 'plaintext';
+        el.style.textAlign = 'start';
+        el.style.lineHeight = '1.4';
+      }
       if (a.shadow) el.style.boxShadow = '0 10px 30px -12px rgba(0,0,0,.5)';
 
       // ---- Image: يقرأ src (رابط أو data: URI) ويرسمه كخلفية داخل مربع الـ
@@ -331,6 +353,28 @@
         fail('تعذّر تشغيل site.rin في المتصفح:', String(e && e.message ? e.message : e));
       }
     })();
+
+    // إعادة التخطيط عند تغيّر عرض النافذة: resize يحفظ حالة warp (لون التمييز/التبويب/…)
+    var resizeTimer = null;
+    window.addEventListener('resize', function () {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(function () {
+        var w = pickWidth();
+        if (!session || !Module || Math.abs(w - DESIGN_WIDTH) < 8) return;
+        DESIGN_WIDTH = w;
+        try {
+          Module.ccall('rin_indsin_session_resize', null, ['number', 'number', 'number'], [session, w, 0]);
+          applyFrame(Module.ccall('rin_indsin_session_render_json', 'string', ['number'], [session]));
+        } catch (e) {
+          // احتياط: إن لم تكن الدالة مُصدَّرة نعيد إنشاء الجلسة (تُفقَد الحالة التفاعلية فقط)
+          fetch('site.rin', { cache: 'no-store' }).then(function (r) { return r.text(); }).then(function (src) {
+            Module.ccall('rin_indsin_session_free', null, ['number'], [session]);
+            session = Module.ccall('rin_indsin_session_create', 'number', ['string', 'number'], [src, w]);
+            applyFrame(Module.ccall('rin_indsin_session_render_json', 'string', ['number'], [session]));
+          });
+        }
+      }, 150);
+    });
 
     window.addEventListener('beforeunload', function () {
       if (session && Module) Module.ccall('rin_indsin_session_free', null, ['number'], [session]);
