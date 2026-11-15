@@ -286,6 +286,35 @@ function hexRgba(h,a){ if(!h||h[0]!=="#")return h||"transparent"; var n=parseInt
 function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
 function r2(n){return Math.round(n*100)/100}
 
+// The native raster painter has no line primitive, so a Sparkline arrives as ~2 narrow fill_rects per pixel column (area + 2px cap).
+// Hundreds of DOM nodes and a stair-stepped edge: fold every such owner back into ONE svg (area polygon + round-joined polyline).
+// Strict shape test (>=20 pairs, all narrow, even/odd = area/line with a 2px cap) so ordinary fills are never touched.
+function coalesceSeries(P){
+  var by={}, i, o;
+  for(i=0;i<P.length;i++){ o=P[i]; if(o.op==="fill_rect"&&o.owner&&o.w<=8&&!o.stops&&!o.shadow)(by[o.owner]=by[o.owner]||[]).push(i); }
+  var fold={}, any=false;
+  for(var k in by){
+    var ix=by[k]; if(ix.length<40||ix.length%2)continue;
+    var ok=true, x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+    for(i=0;i<ix.length&&ok;i+=2){ var a=P[ix[i]], l=P[ix[i+1]];
+      if(Math.abs(l.h-2)>0.01||a.x!==l.x||a.color!==l.color||(i&&Math.abs(a.x-P[ix[i-2]].x)>8)||l.x<P[ix[Math.max(0,i-2)]].x)ok=false;
+      x0=Math.min(x0,a.x);x1=Math.max(x1,a.x+a.w);y0=Math.min(y0,l.y);y1=Math.max(y1,a.y+a.h); }
+    if(ok){ fold[k]={ix:ix,box:[x0,y0,x1,y1]}; any=true; }
+  }
+  if(!any)return P;
+  var out=[], done={};
+  for(i=0;i<P.length;i++){ o=P[i]; var f=fold[o.owner];
+    if(!(f&&o.op==="fill_rect"&&f.ix.indexOf(i)>=0)){ out.push(o); continue; }
+    if(done[o.owner])continue; done[o.owner]=1;
+    var b=f.box, pts=[], top=[], bot=b[3];
+    for(var j=0;j<f.ix.length;j+=2){ var ar=P[f.ix[j]], ln=P[f.ix[j+1]], cx=r2(ar.x+ar.w/2-b[0]);
+      top.push(cx+","+r2(ar.y-b[1])); pts.push(cx+","+r2(ln.y+1-b[1])); bot=Math.max(bot,ar.y+ar.h); }
+    var A=P[f.ix[0]], L=P[f.ix[1]], w=r2(b[2]-b[0]), h=r2(bot-b[1]);
+    out.push({op:"series",x:b[0],y:b[1],w:w,h:h,
+      poly:"0,"+h+" "+top.join(" ")+" "+w+","+h, line:pts.join(" "), aColor:A.color, aAlpha:A.alpha, lColor:L.color, lAlpha:L.alpha});
+  }
+  return out;
+}
 function paintHtml(p){
   var pos="left:"+r2(p.x)+"px;top:"+r2(p.y)+"px;width:"+r2(p.w)+"px;height:"+r2(p.h)+"px;";
   var rad=Math.min(p.radius||0,Math.min(p.w,p.h)/2);
@@ -303,6 +332,10 @@ function paintHtml(p){
       else{var a0=st*Math.PI/180,a1=(st+sweep)*Math.PI/180;
         inner='<path d="M'+(cx+R*Math.cos(a0))+" "+(cy+R*Math.sin(a0))+" A"+R+" "+R+" 0 "+(sweep>180?1:0)+" 1 "+(cx+R*Math.cos(a1))+" "+(cy+R*Math.sin(a1))+'" fill="none" stroke="'+col+'" stroke-width="'+sw+'" stroke-linecap="round"/>';}
       return '<svg class="px" style="'+pos+'" viewBox="0 0 '+p.w+" "+p.h+'">'+inner+"</svg>"; }
+    case "stroke_path": // vector icons: 24x24 SVG path in `text`, line width in `strokeWidth` (native paintIcon)
+      return '<svg class="px" style="'+pos+'" viewBox="0 0 24 24" preserveAspectRatio="xMinYMid meet" fill="none" stroke="'+hexRgba(p.color,p.alpha)+'" stroke-width="'+(p.strokeWidth||2)+'" stroke-linecap="round" stroke-linejoin="round"><path d="'+esc(p.text||"")+'"/></svg>';
+    case "series":
+      return '<svg class="px" style="'+pos+'" viewBox="0 0 '+p.w+" "+p.h+'" preserveAspectRatio="none"><polygon points="'+p.poly+'" fill="'+hexRgba(p.aColor,p.aAlpha)+'"/><polyline points="'+p.line+'" fill="none" stroke="'+hexRgba(p.lColor,p.lAlpha)+'" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/></svg>';
     case "text": {
       var cls="t "+(p.align===1?"c ":p.align===2?"e ":"")+(p.singleLine?"s":"w");
       return '<div class="'+cls+'" style="'+pos+"font-size:"+(p.fontSize>0?p.fontSize:14)+"px;color:"+hexRgba(p.color,p.alpha)+(p.bold?";font-weight:700":"")+'"><span dir="auto">'+esc(p.text||"")+"</span></div>"; }
@@ -345,7 +378,7 @@ function render(env){
   if(dev.auto)H=Math.max(cv.height||0,dev.h);
   S.W=W;S.H=H;
   var html="";
-  var P=env.paint; for(var i=0;i<P.length;i++)html+=paintHtml(P[i]);
+  var P=coalesceSeries(env.paint); for(var i=0;i<P.length;i++)html+=paintHtml(P[i]);
   var scr=$("screen"); var keep=[]; // keep focused field + hover/selection overlays alive
   var f=S.field&&S.field.el; if(f&&f.parentNode===scr)scr.removeChild(f);
   var hl=$("hl"),sel=$("sel"),grid=$("grid"); [hl,sel,grid].forEach(function(e){if(e&&e.parentNode===scr)scr.removeChild(e)});
