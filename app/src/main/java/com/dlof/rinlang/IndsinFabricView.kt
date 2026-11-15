@@ -113,6 +113,8 @@ class IndsinFabricView @JvmOverloads constructor(
         const val TIMELINE = "Timeline"; const val TIMELINEITEM = "TimelineItem"
         const val BREADCRUMB = "Breadcrumb"; const val PAGINATION = "Pagination"
         const val DONUT_CHART = "DonutChart"
+        // Pro charts (rin_indsin_paint.h paintSparkline/paintBarChart/paintProgressRing): attribute-driven leaves.
+        const val SPARKLINE = "Sparkline"; const val BAR_CHART = "BarChart"; const val PROGRESS_RING = "ProgressRing"
         // Collapsible lists (rin_indsin_collapsible.h): structural containers whose Row/Column/Text
         // children are synthesized natively, so they draw like plain Columns (transparent, border only
         // when the source asked for one) and their children draw themselves.
@@ -1111,6 +1113,9 @@ class IndsinFabricView @JvmOverloads constructor(
             }
             Kind.SPINNER -> drawSpinner(canvas, rect, attrs, resolved)
             Kind.DONUT_CHART -> drawDonutChart(canvas, rect, attrs)
+            Kind.SPARKLINE -> drawSparkline(canvas, rect, attrs, resolved)
+            Kind.BAR_CHART -> drawBarChart(canvas, rect, attrs)
+            Kind.PROGRESS_RING -> drawProgressRing(canvas, rect, attrs, resolved)
             Kind.STEPS -> { /* connector line drawn per-StepItem below; children draw themselves */ }
             Kind.STEPITEM -> drawStepItem(canvas, rect, attrs)
             Kind.TIMELINE -> { /* connector implied by consecutive dots; children draw themselves */ }
@@ -1175,7 +1180,7 @@ class IndsinFabricView @JvmOverloads constructor(
      */
     private fun drawTable(canvas: Canvas, rect: RectF, node: JSONObject, attrs: JSONObject) {
         if (rect.width() <= 0f || rect.height() <= 0f) return
-        val fontSize = attrs.optString("size").toFloatOrNull() ?: 14f
+        val fontSize = resolveFontSize(attrs, 14f)
         val rowH = fontSize * 1.4f + 12f
         val columns = attrs.optString("columns").split(',').map { it.trim() }.filter { it.isNotEmpty() }
 
@@ -1450,6 +1455,36 @@ class IndsinFabricView @JvmOverloads constructor(
         canvas: Canvas, rect: RectF, attrs: JSONObject,
         singleLine: Boolean, monospace: Boolean, emptyPlaceholder: String = "", kindType: String = ""
     ) {
+        drawFieldBody(canvas, rect, attrs, singleLine, monospace, emptyPlaceholder, kindType)
+        drawFieldCounter(canvas, rect, attrs, singleLine, monospace)
+    }
+
+    /** `maxlength=` + `counter=true` (default ON for TextArea, i.e. a multi-line non-code field; `counter=false` turns it off) -> "n/max"
+     * right-aligned at the bottom edge, danger-red once n > max. Same rule as indsin::paintField() in rin_indsin_paint.h. */
+    private fun drawFieldCounter(canvas: Canvas, rect: RectF, attrs: JSONObject, singleLine: Boolean, monospace: Boolean) {
+        val maxLen = attrs.optString("maxlength").ifBlank { attrs.optString("maxLength") }.toDoubleOrNull() ?: return
+        if (maxLen <= 0.0 || rect.width() <= 24f || rect.height() <= 24f) return
+        val counter = attrs.optString("counter").lowercase()
+        val show = if (!singleLine && !monospace) counter != "false" else (counter == "true" || counter == "1" || counter == "yes")
+        if (!show) return
+        val value = if (isEditingNode(rect)) editBuf.toString() else attrs.optString("value")
+        val n = value.codePointCount(0, value.length)
+        val savedTypeface = textPaint.typeface
+        textPaint.typeface = android.graphics.Typeface.DEFAULT
+        textPaint.isFakeBoldText = false
+        textPaint.textSize = 11f
+        textPaint.textAlign = Paint.Align.RIGHT
+        textPaint.color = if (n > maxLen) 0xFFD14545.toInt() else defaultPlaceholder
+        val cy = rect.bottom - 12f - (textPaint.ascent() + textPaint.descent()) / 2f
+        canvas.drawText("$n/${maxLen.toLong()}", rect.right - 8f, cy, textPaint)
+        textPaint.textAlign = Paint.Align.LEFT
+        textPaint.typeface = savedTypeface
+    }
+
+    private fun drawFieldBody(
+        canvas: Canvas, rect: RectF, attrs: JSONObject,
+        singleLine: Boolean, monospace: Boolean, emptyPlaceholder: String = "", kindType: String = ""
+    ) {
         if (rect.width() <= 0f || rect.height() <= 0f) return
         drawBox(canvas, rect, attrs, defaultFieldBg, defaultRadius = 8f)
         val err = attrs.optString("error")
@@ -1672,6 +1707,151 @@ class IndsinFabricView @JvmOverloads constructor(
         }
     }
 
+    /** `data="3,5,4"` or `data="label:value,..."` (same convention as DonutChart) -> labels + values; a non-numeric value counts as 0. */
+    private fun parseChartSeries(raw: String): Pair<List<String>, List<Double>> {
+        val labels = ArrayList<String>()
+        val vals = ArrayList<Double>()
+        // data={[3,5,4]} / ["a:1","b:2"] (array syntax) -> strip brackets and quotes first, like indsin::parseSeries().
+        for (entry in raw.filterNot { it == '[' || it == ']' || it == '"' || it == '\'' }.split(',')) {
+            val t = entry.trim()
+            if (t.isEmpty()) continue
+            val colon = t.indexOf(':')
+            if (colon < 0) {
+                labels.add("")
+                vals.add(t.toDoubleOrNull() ?: 0.0)
+            } else {
+                labels.add(t.substring(0, colon).trim())
+                vals.add(t.substring(colon + 1).trim().toDoubleOrNull() ?: 0.0)
+            }
+        }
+        return labels to vals
+    }
+
+    /** Sparkline: a real anti-aliased polyline over a faint area (the native raster painter has no line primitive and fakes it with
+     * 1px columns -- same data/range/padding maths as indsin::paintSparkline(), smoother on a Canvas). Fewer than two points = a flat 2px line. */
+    private fun drawSparkline(canvas: Canvas, rect: RectF, attrs: JSONObject, resolved: Int?) {
+        val vals = parseChartSeries(attrs.optString("data")).second
+        if (vals.isEmpty()) return
+        val color = resolved ?: defaultButton
+        fillPaint.shader = null; fillPaint.clearShadowLayer()
+        if (vals.size < 2 || rect.width() < 2f || rect.height() < 2f) {
+            fillPaint.color = color
+            canvas.drawRect(rect.left, rect.centerY() - 1f, rect.right, rect.centerY() + 1f, fillPaint)
+            return
+        }
+        val mn = vals.minOrNull() ?: 0.0
+        val mx = vals.maxOrNull() ?: 0.0
+        val range = if (mx - mn > 0.0) mx - mn else 1.0
+        val pad = 2f
+        val n = vals.size
+        val xs = FloatArray(n) { i -> rect.left + rect.width() * i / (n - 1) }
+        val ys = FloatArray(n) { i -> rect.top + pad + (rect.height() - 2f * pad) * (1.0 - (vals[i] - mn) / range).toFloat() }
+        val line = android.graphics.Path()
+        val area = android.graphics.Path()
+        area.moveTo(xs[0], rect.bottom)
+        for (i in 0 until n) {
+            if (i == 0) line.moveTo(xs[i], ys[i]) else line.lineTo(xs[i], ys[i])
+            area.lineTo(xs[i], ys[i])
+        }
+        area.lineTo(xs[n - 1], rect.bottom)
+        area.close()
+        fillPaint.color = (color and 0x00FFFFFF) or (45 shl 24)
+        canvas.drawPath(area, fillPaint)
+        val savedCap = strokePaint.strokeCap
+        val savedJoin = strokePaint.strokeJoin
+        strokePaint.strokeCap = Paint.Cap.ROUND
+        strokePaint.strokeJoin = Paint.Join.ROUND
+        strokePaint.strokeWidth = 2f
+        strokePaint.color = color
+        canvas.drawPath(line, strokePaint)
+        strokePaint.strokeCap = savedCap
+        strokePaint.strokeJoin = savedJoin
+        strokePaint.strokeWidth = 1.2f
+    }
+
+    /** BarChart: equal-width rounded bars scaled to the largest value, labels under the bars, `values="true"` prints each value above its
+     * bar, `colors="#..,#.."` by position else the shared palette (mirrors indsin::paintBarChart()). */
+    private fun drawBarChart(canvas: Canvas, rect: RectF, attrs: JSONObject) {
+        if (rect.width() <= 0f || rect.height() <= 0f) return
+        val (parsedLabels, vals) = parseChartSeries(attrs.optString("data"))
+        if (vals.isEmpty()) return
+        // labels="Mon,Tue,.." by position when data carries no "label:value" pairs (View.BarChart convention).
+        val positional = attrs.optString("labels").filterNot { it == '[' || it == ']' || it == '"' || it == '\'' }.split(',').map { it.trim() }
+        val labels = parsedLabels.mapIndexed { i, l -> if (l.isEmpty()) positional.getOrNull(i).orEmpty() else l }
+        val palette = intArrayOf(
+            Color.rgb(124, 92, 255), Color.rgb(34, 200, 142), Color.rgb(232, 178, 61),
+            Color.rgb(241, 76, 76), Color.rgb(95, 211, 255), Color.rgb(145, 152, 163)
+        )
+        val anyLabel = labels.any { it.isNotEmpty() }
+        val showValues = attrs.optString("values") == "true"
+        val labelH = if (anyLabel) 16f else 0f
+        val topPad = if (showValues) 16f else 0f
+        val plotH = max(2f, rect.height() - labelH - topPad)
+        var maxV = vals.maxOrNull() ?: 1.0
+        if (maxV <= 0.0) maxV = 1.0
+        val cellW = rect.width() / vals.size
+        val barW = cellW * 0.7f
+        val colors = attrs.optString("colors").split(',').map { it.trim() }.filter { it.isNotEmpty() }
+        fillPaint.shader = null; fillPaint.clearShadowLayer()
+        textPaint.textAlign = Paint.Align.CENTER
+        textPaint.typeface = android.graphics.Typeface.DEFAULT
+        textPaint.isFakeBoldText = false
+        textPaint.textSize = 11f
+        val fm = (textPaint.ascent() + textPaint.descent()) / 2f
+        for (i in vals.indices) {
+            val h = max(0f, (vals[i] / maxV * plotH).toFloat())
+            val left = rect.left + i * cellW + (cellW - barW) / 2f
+            val top = rect.top + topPad + (plotH - h)
+            if (h > 0f) {
+                fillPaint.color = colors.getOrNull(i)?.let { parseHexColor(it, palette[i % 6]) } ?: palette[i % 6]
+                val r = min(4f, barW / 2f)
+                canvas.drawRoundRect(RectF(left, top, left + barW, top + h), r, r, fillPaint)
+            }
+            val cx = rect.left + i * cellW + cellW / 2f
+            if (showValues) {
+                textPaint.color = defaultText
+                canvas.drawText(Math.round(vals[i]).toString(), cx, (top - 8f) - fm, textPaint)
+            }
+            if (anyLabel && labels[i].isNotEmpty()) {
+                textPaint.color = defaultPlaceholder
+                canvas.drawText(labels[i], cx, (rect.bottom - labelH / 2f) - fm, textPaint)
+            }
+        }
+        textPaint.textAlign = Paint.Align.LEFT
+    }
+
+    /** ProgressRing: full track + a progress arc from 12 o'clock (`value=` 0..100), centered `label=` or "N%"; always a circle even when the
+     * parent stretches the box (mirrors indsin::paintProgressRing()). */
+    private fun drawProgressRing(canvas: Canvas, rect: RectF, attrs: JSONObject, resolved: Int?) {
+        if (rect.width() <= 0f || rect.height() <= 0f) return
+        val raw = attrs.optDouble("value", 0.0)
+        val pct = (if (raw.isNaN()) 0.0 else raw).coerceIn(0.0, 100.0)
+        val side = min(rect.width(), rect.height())
+        val thickness = max(4f, side * 0.11f)
+        val ring = RectF(rect.left + thickness / 2f, rect.top + thickness / 2f, rect.left + side - thickness / 2f, rect.top + side - thickness / 2f)
+        val savedCap = strokePaint.strokeCap
+        strokePaint.strokeCap = Paint.Cap.BUTT
+        strokePaint.strokeWidth = thickness
+        strokePaint.color = defaultTrack
+        canvas.drawArc(ring, 0f, 360f, false, strokePaint)
+        if (pct > 0.0) {
+            strokePaint.color = resolved ?: defaultButton
+            canvas.drawArc(ring, -90f, (pct * 3.6).toFloat(), false, strokePaint)
+        }
+        strokePaint.strokeCap = savedCap
+        strokePaint.strokeWidth = 1.2f
+        val center = attrs.optString("label").ifBlank { "${Math.round(pct)}%" }
+        textPaint.textAlign = Paint.Align.CENTER
+        textPaint.color = defaultText
+        textPaint.textSize = max(10f, side * 0.2f)
+        textPaint.isFakeBoldText = true
+        textPaint.typeface = android.graphics.Typeface.DEFAULT
+        val cy = rect.top + side / 2f - (textPaint.ascent() + textPaint.descent()) / 2f
+        canvas.drawText(center, rect.left + side / 2f, cy, textPaint)
+        textPaint.isFakeBoldText = false
+        textPaint.textAlign = Paint.Align.LEFT
+    }
+
     /** StepItem: circular marker (state=/index= injected natively by applyStepsConveniences() in
      * rin_indsin_components_ext.h) above its label= -- "done" fills solid with a checkmark,
      * "active" is a thicker outlined ring with its step number, "upcoming" a muted thin ring. */
@@ -1728,7 +1908,7 @@ class IndsinFabricView @JvmOverloads constructor(
         canvas.drawOval(RectF(rect.left, rect.top + 2f, rect.left + dot, rect.top + 2f + dot), fillPaint)
 
         val textX = rect.left + dot + 12f
-        val fontSize = attrs.optString("size").toFloatOrNull() ?: 14f
+        val fontSize = resolveFontSize(attrs, 14f)
         val lineH = fontSize * 1.35f
         var y = rect.top
         val date = attrs.optString("date")
@@ -1826,7 +2006,10 @@ class IndsinFabricView @JvmOverloads constructor(
         fillPaint.shader = null; fillPaint.clearShadowLayer()
         fillPaint.color = resolved ?: defaultButton
         canvas.drawCircle(rect.centerX(), rect.centerY(), radius, fillPaint)
-        val initial = (attrs.optString("label").ifBlank { attrs.optString("name") }).trim().firstOrNull()?.uppercaseChar()?.toString() ?: ""
+        // initials="AB" (what the native painter draws) wins; otherwise the first letter of label=/name=.
+        val initial = attrs.optString("initials").trim().ifEmpty {
+            (attrs.optString("label").ifBlank { attrs.optString("name") }).trim().firstOrNull()?.uppercaseChar()?.toString() ?: ""
+        }
         if (initial.isNotEmpty()) drawText(canvas, rect, attrs, initial, Color.WHITE, centered = true, boldHint = true, singleLine = true)
     }
 
@@ -1859,7 +2042,7 @@ class IndsinFabricView @JvmOverloads constructor(
         drawText(canvas, rect, attrs, text, color)
         val underline = attrs.optString("underline").ifBlank { "true" } == "true"
         if (underline && text.isNotEmpty()) {
-            val sizeSp = attrs.optString("size").toFloatOrNull() ?: 14f
+            val sizeSp = resolveFontSize(attrs, 14f)
             textPaint.textSize = sizeSp
             val hPad = 4f
             val textWidth = min(rect.width() - hPad * 2f, textPaint.measureText(text))
@@ -1877,9 +2060,52 @@ class IndsinFabricView @JvmOverloads constructor(
      * host-app/runtime concern, same relationship Image's real bitmap decode has to a raw
      * placeholder) — draws the first letter of name= as a plain-text stand-in so an icon still
      * reads as "something is here" rather than an empty box. */
+    private val iconPathCache = HashMap<String, android.graphics.Path?>()
+
+    /** The vector (24x24, stroke 2) path for an icon name: direct hit in IndsinIconData.paths, else through its alias. Cached; null = none. */
+    private fun iconVectorPath(name: String): android.graphics.Path? {
+        val key = if (IndsinIconData.paths.containsKey(name)) name else IndsinIconData.aliases[name] ?: return null
+        if (iconPathCache.containsKey(key)) return iconPathCache[key]
+        val parsed = try {
+            IndsinIconData.paths[key]?.let { androidx.core.graphics.PathParser.createPathFromPathData(it) }
+        } catch (_: Throwable) { null }
+        iconPathCache[key] = parsed
+        return parsed
+    }
+
+    /** Icon/IconButton: `icon=` (what the native engine uses; the older `name=` still works) -> a real stroked vector path from the
+     * engine's own 187-icon table (`vector=false` forces the typographic glyph, `stroke=` sets the line width in 24-grid units),
+     * else the engine's glyph, else "?" for an unknown `icon=` exactly like indsin::IconRegistry::resolve(). */
     private fun drawIcon(canvas: Canvas, rect: RectF, attrs: JSONObject, fallbackColor: Int) {
         if (rect.width() <= 0f || rect.height() <= 0f) return
-        val glyph = attrs.optString("name").trim().firstOrNull()?.uppercaseChar()?.toString() ?: "•"
+        val viaIcon = attrs.optString("icon").trim()
+        val name = viaIcon.ifEmpty { attrs.optString("name").trim() }
+        val path = if (name.isNotEmpty() && !attrs.optString("vector").equals("false", ignoreCase = true)) iconVectorPath(name) else null
+        if (path != null) {
+            val size = min(rect.width(), rect.height())
+            val scale = size / 24f
+            val strokeUnits = (attrs.optString("stroke").toFloatOrNull() ?: 2f).coerceIn(0.25f, 6f)
+            val savedCap = strokePaint.strokeCap
+            val savedJoin = strokePaint.strokeJoin
+            strokePaint.strokeCap = Paint.Cap.ROUND
+            strokePaint.strokeJoin = Paint.Join.ROUND
+            strokePaint.strokeWidth = strokeUnits
+            strokePaint.color = parseHexColor(attrs.optString("color").ifBlank { null }, fallbackColor)
+            canvas.save()
+            canvas.translate(rect.left + (rect.width() - size) / 2f, rect.top + (rect.height() - size) / 2f)
+            canvas.scale(scale, scale)
+            canvas.drawPath(path, strokePaint)
+            canvas.restore()
+            strokePaint.strokeCap = savedCap
+            strokePaint.strokeJoin = savedJoin
+            strokePaint.strokeWidth = 1.2f
+            return
+        }
+        val glyph = when {
+            name.isEmpty() -> "\u2022"
+            else -> IndsinIconData.glyphs[name] ?: IndsinIconData.aliases[name]?.let { IndsinIconData.glyphs[it] }
+                ?: if (viaIcon.isNotEmpty()) "?" else name.first().uppercaseChar().toString()
+        }
         drawText(canvas, rect, attrs, glyph, fallbackColor, centered = true, boldHint = true, singleLine = true)
     }
 
@@ -1964,15 +2190,45 @@ class IndsinFabricView @JvmOverloads constructor(
         }.start()
     }
 
+    /** `size=` as a number ("14", "14px", "14sp") or a typography token -- same table as indsin::resolveTypographyToken() (rin_indsin_tokens.h). */
+    private fun resolveFontSize(attrs: JSONObject, def: Float): Float {
+        val raw = attrs.optString("size").trim().lowercase()
+        if (raw.isEmpty()) return def
+        raw.removeSuffix("px").removeSuffix("sp").trim().toFloatOrNull()?.let { return it }
+        return when (raw) {
+            "caption" -> 12f; "body" -> 14f; "label" -> 13f; "subtitle" -> 16f; "title" -> 20f; "heading" -> 28f; "code" -> 13f
+            else -> def
+        }
+    }
+
+    /** Bold when `bold=true`, a numeric `weight=`/`fontWeight=` >= 600, a bold-ish weight name, or a token whose preset is semibold/bold
+     * (title, heading) -- the engine's own rule (`if (t.weight >= 600) d.bold = true`). */
+    private fun resolveBold(attrs: JSONObject): Boolean {
+        if (attrs.optString("bold").equals("true", ignoreCase = true)) return true
+        val w = attrs.optString("weight").ifBlank { attrs.optString("fontWeight") }.trim().lowercase()
+        if (w.isNotEmpty()) {
+            w.toIntOrNull()?.let { return it >= 600 }
+            return w == "bold" || w == "semibold" || w == "extrabold" || w == "black" || w == "heavy"
+        }
+        return when (attrs.optString("size").trim().lowercase()) { "title", "heading" -> true; else -> false }
+    }
+
     private fun drawText(
         canvas: Canvas, rect: RectF, attrs: JSONObject, text: String,
         fallbackColor: Int, centered: Boolean = false, boldHint: Boolean = false, singleLine: Boolean = false
     ) {
         if (text.isEmpty() || rect.width() <= 0f || rect.height() <= 0f) return
-        val sizeSp = attrs.optString("size").toFloatOrNull() ?: 14f
+        val sizeSp = resolveFontSize(attrs, 14f)
         textPaint.color = parseHexColor(attrs.optString("color").ifBlank { null }, fallbackColor)
         textPaint.textSize = sizeSp
-        textPaint.isFakeBoldText = boldHint
+        textPaint.isFakeBoldText = boldHint || resolveBold(attrs)
+        // textAlign= / text_align= (left|start|center|right|end) wins over the caller's `centered` hint, like indsin::paintInto().
+        val alignMode = when (attrs.optString("textAlign").ifBlank { attrs.optString("text_align") }.trim().lowercase()) {
+            "center" -> 1
+            "right", "end" -> 2
+            "left", "start" -> 0
+            else -> if (centered) 1 else 0
+        }
         textPaint.isAntiAlias = true
         val savedTypeface = textPaint.typeface
         textPaint.typeface = resolveTypeface(attrs)
@@ -1983,7 +2239,7 @@ class IndsinFabricView @JvmOverloads constructor(
         if (singleLine) {
             val truncated = TextUtils.ellipsize(text, textPaint, available, TextUtils.TruncateAt.END)
             val textWidth = textPaint.measureText(truncated, 0, truncated.length)
-            val startX = if (centered) rect.left + (rect.width() - textWidth) / 2f else rect.left + hPad
+            val startX = when (alignMode) { 1 -> rect.left + (rect.width() - textWidth) / 2f; 2 -> rect.right - hPad - textWidth; else -> rect.left + hPad }
             val baseline = rect.top + rect.height() / 2f - (textPaint.descent() + textPaint.ascent()) / 2f
             canvas.drawText(truncated, 0, truncated.length, startX, baseline, textPaint)
             textPaint.typeface = savedTypeface
@@ -2008,7 +2264,7 @@ class IndsinFabricView @JvmOverloads constructor(
                 TextUtils.ellipsize(rawLine, textPaint, available, TextUtils.TruncateAt.END).toString()
             else rawLine
             val lineWidth = textPaint.measureText(line)
-            val startX = if (centered) rect.left + (rect.width() - lineWidth) / 2f else rect.left + hPad
+            val startX = when (alignMode) { 1 -> rect.left + (rect.width() - lineWidth) / 2f; 2 -> rect.right - hPad - lineWidth; else -> rect.left + hPad }
             canvas.drawText(line, startX, baseline, textPaint)
             baseline += lineHeight
         }
@@ -2081,7 +2337,7 @@ class IndsinFabricView @JvmOverloads constructor(
      * this renderer. */
     private fun drawMarkdownText(canvas: Canvas, rect: RectF, attrs: JSONObject, text: String, fallbackColor: Int) {
         if (text.isEmpty() || rect.width() <= 0f || rect.height() <= 0f) return
-        val sizeSp = attrs.optString("size").toFloatOrNull() ?: 14f
+        val sizeSp = resolveFontSize(attrs, 14f)
         textPaint.color = parseHexColor(attrs.optString("color").ifBlank { null }, fallbackColor)
         textPaint.textSize = sizeSp
         textPaint.isAntiAlias = true
