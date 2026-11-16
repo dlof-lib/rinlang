@@ -1,0 +1,2 @@
+fun f(a, b) { let c = a + b; { let c = 100; a = a + c; } return a + c; }
+print f(1, 2);
