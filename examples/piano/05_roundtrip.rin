@@ -1,0 +1,13 @@
+// piano — حفظ مشهد .puo ثم تحميله وإكمال الرسم عليه
+@import "piano";
+
+let c = pn_canvas(300, 160);
+pn_theme(c, "piano");
+pn_rrect(c, 20, 20, 260, 120, [30, 8, 30, 8], {"fill": "#1db143"});
+pn_text(c, 150, 90, "PIANO.PUO", {"size": 28, "weight": 800, "anchor": "middle", "fill": "#ffffff"});
+pn_save(c, "examples/piano/out/05_a.puo");
+
+let d = pn_load("examples/piano/out/05_a.puo");
+pn_circle(d, 150, 140, 6, {"fill": "#0a0a0a"});
+pn_save(d, "examples/piano/out/05_b.svg");
+print "ok", len(d["nodes"]);
