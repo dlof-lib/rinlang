@@ -29,11 +29,11 @@
 #include <sstream>
 #include <sys/stat.h>
 #ifdef _WIN32
-#  define RIN_STAT _stat
-#  define RIN_STAT_T struct _stat
+#  define RIN_CZIP_STAT _stat
+#  define RIN_CZIP_STAT_T struct _stat
 #else
-#  define RIN_STAT stat
-#  define RIN_STAT_T struct stat
+#  define RIN_CZIP_STAT stat
+#  define RIN_CZIP_STAT_T struct stat
 #endif
 
 namespace rin {
@@ -281,8 +281,8 @@ void Interpreter::registerNativesContainerZip() {
         std::error_code ec;
         if (!fs::exists(full, ec)) throw diagErr(diag::Code::E0036_IOFailure, line, who + ": المسار غير موجود '" + rawPath + "'");
         auto statOf = [&](const std::string& p, time_t& mt, uint32_t& mode) {
-            RIN_STAT_T st{};
-            if (RIN_STAT(p.c_str(), &st) == 0) { if (useDiskTime) mt = static_cast<time_t>(st.st_mtime); mode = static_cast<uint32_t>(st.st_mode & 0777); }
+            RIN_CZIP_STAT_T st{};
+            if (RIN_CZIP_STAT(p.c_str(), &st) == 0) { if (useDiskTime) mt = static_cast<time_t>(st.st_mtime); mode = static_cast<uint32_t>(st.st_mode & 0777); }
         };
         auto addOne = [&](const std::string& diskFull, const std::string& entryName, const std::string& displayPath) {
             std::error_code e2;
