@@ -1,0 +1,4 @@
+// Host bridge contract. Native actions are performed by the host adapter only.
+export fun ts_camera_request(options) { return ts_native_request("camera", "capture", options); }
+export fun ts_share_request(payload) { return ts_native_request("share", "open", payload); }
+export fun ts_storage_request(action, payload) { return ts_native_request("storage", action, payload); }
