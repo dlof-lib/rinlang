@@ -1,0 +1,15 @@
+// piano — أول رسم: بطاقة بتدرّج وظل ونص عربي
+@import "piano";
+
+let c = pn_canvas(480, 270);
+pn_theme(c, "dark");
+pn_title(c, "مرحباً piano");
+
+pn_rect(c, 0, 0, 480, 270, {"grad": ["#0b1020", "#1e1b4b"], "angle": 60});
+pn_circle(c, 380, 60, 90, {"grad": ["#818cf8", "#22d3ee"], "op": 0.35, "blur": 12});
+pn_rrect(c, 40, 60, 400, 150, 20, {"fill": "#ffffff14", "stroke": "#ffffff33", "sw": 1.5, "shadow": true});
+pn_text(c, 240, 130, "piano", {"size": 54, "weight": 800, "anchor": "middle", "grad": ["#fff", "#c7d2fe"]});
+pn_text(c, 240, 170, "مكتبة رسم احترافية بلغة Rin", {"size": 18, "anchor": "middle", "fill": "#a5b4fc", "dir": "rtl"});
+pn_label(c, 240, 232, "SVG · JSON · C++ · JS", {"size": 13, "bg": "#1db143"});
+pn_save(c, "examples/piano/out/01_hello.svg");
+pn_save(c, "examples/piano/out/01_hello.puo");
