@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import com.dlof.rinlang.Project
 import com.dlof.rinlang.RinAppRecord
 import com.dlof.rinlang.RinAppsRegistry
+import com.dlof.rinlang.apk.dex.RinDexCompiler
 import org.json.JSONObject
 import java.io.File
 import java.security.MessageDigest
@@ -58,6 +59,9 @@ object RinApkExporter {
         val durationMs: Long = 1300L
     )
 
+    /** وضع تحويل Rin → DEX: AUTO يتراجع للمفسِّر إن لم يُدعم المصدر، REQUIRED يفشل، OFF يعطّله. */
+    enum class DexMode { AUTO, REQUIRED, OFF }
+
     fun export(
         context: Context,
         project: Project,
@@ -67,6 +71,7 @@ object RinApkExporter {
         targetSdkVersion: Int = 36,
         customIcon: Bitmap? = null,
         splash: SplashConfig = SplashConfig(),
+        dexMode: DexMode = DexMode.AUTO,
         onProgress: (Progress) -> Unit
     ) {
         thread(name = "rin-apk-export") {
@@ -127,14 +132,48 @@ object RinApkExporter {
                 // 3) تجهيز أصول المشروع للحقن
                 log("… تجهيز ملفات المشروع للحقن كأصول (assets/rin_export_project)")
                 val extraEntries = ArrayList<ApkRepackager.ExtraEntry>()
+                val projectFiles = collectProjectFiles(project.dir, project.dir)
+                if (projectFiles.isEmpty()) throw IllegalStateException("مجلد المشروع فارغ — لا يوجد ما يُصدَّر")
+
+                // 3.أ) تحويل Rin → DEX حقيقي (classesN.dex) عند الإمكان
+                var dexBytes: ByteArray? = null
+                if (dexMode != DexMode.OFF) {
+                    log("… تحويل مصدر Rin إلى DEX (Dalvik bytecode) — $entryFile")
+                    val entryF = File(project.dir, entryFile)
+                    val src = if (entryF.isFile) entryF.readText(Charsets.UTF_8) else null
+                    val res = if (src == null) null else RinDexCompiler.compile(src, entryFile)
+                    when (res) {
+                        is RinDexCompiler.Result.Ok -> {
+                            dexBytes = res.dex
+                            log("✓ تم توليد DEX: ${res.dex.size / 1024} كِلوبايت، ${res.functions} دالة")
+                        }
+                        is RinDexCompiler.Result.Unsupported -> {
+                            val why = res.reason + (if (res.line > 0) " (سطر ${res.line})" else "")
+                            if (dexMode == DexMode.REQUIRED) throw IllegalStateException("تعذّر التحويل إلى DEX: $why")
+                            onProgress(Progress.Log("⚠ المصدر خارج مجموعة DEX المدعومة: $why — تراجع لوضع المفسِّر", ok = true))
+                        }
+                        null -> {
+                            if (dexMode == DexMode.REQUIRED) throw IllegalStateException("ملف الدخول غير موجود: $entryFile")
+                            onProgress(Progress.Log("⚠ ملف الدخول غير موجود كملف مستقل — وضع المفسِّر", ok = true))
+                        }
+                    }
+                }
+                if (dexBytes != null) {
+                    val n = nextDexIndex(hostApk)
+                    val name = if (n <= 1) "classes.dex" else "classes$n.dex"
+                    extraEntries.add(ApkRepackager.ExtraEntry(name, dexBytes))
+                    log("✓ أُضيف $name إلى الحزمة")
+                }
+
                 var fileCount = 0
                 var totalBytes = 0L
-                collectProjectFiles(project.dir, project.dir).forEach { (relPath, file) ->
+                projectFiles.forEach { (relPath, file) ->
+                    // في وضع DEX لا حاجة لمصدر .rin داخل الحزمة (الكود صار bytecode)
+                    if (dexBytes != null && relPath.endsWith(".rin")) return@forEach
                     extraEntries.add(ApkRepackager.ExtraEntry("assets/rin_export_project/$relPath", file.readBytes()))
                     fileCount++
                     totalBytes += file.length()
                 }
-                if (fileCount == 0) throw IllegalStateException("مجلد المشروع فارغ — لا يوجد ما يُصدَّر")
 
                 val manifestJson = JSONObject().apply {
                     put("display_name", appDisplayName)
@@ -144,6 +183,11 @@ object RinApkExporter {
                     put("exported_at", System.currentTimeMillis())
                     put("min_sdk", minSdkVersion)
                     put("target_sdk", targetSdkVersion)
+                    if (dexBytes != null) {
+                        put("mode", "dex")
+                        put("dex_class", RinDexCompiler.PROGRAM_CLASS)
+                        put("dex_method", RinDexCompiler.ENTRY_METHOD)
+                    } else put("mode", "interpreter")
                     splash.tagline?.let { put("splash_tagline", it) }
                     put("splash_duration_ms", splash.durationMs)
                 }.toString(2)
@@ -210,6 +254,20 @@ object RinApkExporter {
                 work.deleteRecursively()
             }
         }
+    }
+
+    /** رقم classesN.dex التالي الشاغر في الحزمة المضيفة (classes.dex = 1). */
+    private fun nextDexIndex(zipFile: File): Int {
+        var max = 0
+        val re = Regex("classes(\\d*)\\.dex")
+        java.util.zip.ZipFile(zipFile).use { zf ->
+            val e = zf.entries()
+            while (e.hasMoreElements()) {
+                val m = re.matchEntire(e.nextElement().name) ?: continue
+                max = maxOf(max, m.groupValues[1].ifEmpty { "1" }.toInt())
+            }
+        }
+        return max + 1
     }
 
     /** يقرأ مُدخلاً واحداً فقط من ملف zip. */
