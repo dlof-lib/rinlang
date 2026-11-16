@@ -1,0 +1,4 @@
+let s = 0; let i = 0;
+while (i < 10) { i = i + 1; if (i % 2 == 0) { continue; } if (i > 7) { break; } s = s + i; }
+print s, i;
+for (let k = 0; k < 3; k = k + 1) { for (let m = 0; m < 3; m = m + 1) { if (m == 1) { continue; } if (k == 2) { break; } print k, m; } }
