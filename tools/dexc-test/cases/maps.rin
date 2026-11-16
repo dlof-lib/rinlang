@@ -1,0 +1,2 @@
+let m = {a:1, "b":2}; m["c"] = 3; m["a"] = 10; print m, m["b"], m["zz"], len(m), keys(m), values(m), has(m,"a"), has(m,"q");
+print remove(m,"a"), remove(m,"a"), m;
