@@ -1,0 +1,3 @@
+print f(3);
+fun f(x) { return x * g(x); }
+fun g(y) { return y + 1; }
