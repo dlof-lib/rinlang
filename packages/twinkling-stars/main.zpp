@@ -1,0 +1,4 @@
+// Twinkling Stars package entry. The flat .og.rin is the engine's portable entry point.
+@import "lib/twinkling-stars.og.rin";
+export let TWINKLING_STARS = ts_info();
+export let TS = { info: ts_info, theme: ts_theme, app: ts_app, screen: ts_screen, component: ts_component, button: ts_button, card: ts_card, input: ts_input, form: ts_form, validate: ts_validate_fields, navigate: ts_navigate, native: ts_native_request, manifest: ts_export_manifest };
