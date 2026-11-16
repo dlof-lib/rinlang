@@ -66,6 +66,21 @@ class ExportedRunActivity : RinBaseActivity() {
 
                 mainHandler.post { title = displayName }
 
+                if (manifest.optString("mode") == "dex") {
+                    val output = runDex(
+                        manifest.optString("dex_class", "rin.export.Program"),
+                        manifest.optString("dex_method", "run"),
+                        entry
+                    )
+                    mainHandler.post {
+                        progress.visibility = View.GONE
+                        btnRestart.visibility = View.VISIBLE
+                        RinConsoleFormatter.formatLines(output).forEach { appendLine(it.text, isError = it.kind == LogKind.ERROR) }
+                        if (output.isBlank()) appendLine("(no output)", isError = false)
+                    }
+                    return@execute
+                }
+
                 val projectDir = File(filesDir, "exported_project")
                 extractAssetDir(PROJECT_ASSET_PREFIX, projectDir)
 
@@ -89,6 +104,47 @@ class ExportedRunActivity : RinBaseActivity() {
                     appendLine("${getString(R.string.exported_run_error_prefix)} ${t.message}", isError = true)
                 }
             }
+        }
+    }
+
+    /**
+     * وضع DEX: البرنامج مُصرَّف مسبقاً إلى Dalvik bytecode داخل classesN.dex للحزمة نفسها،
+     * فنستدعي `run()` بالانعكاس على خيط بمكدّس كبير (التكرار العميق) ونجمع المخرجات.
+     */
+    private fun runDex(className: String, methodName: String, entry: String): String {
+        val sb = StringBuilder()
+        val outLock = Any()
+        com.dlof.rinlang.dexrt.out = { chunk -> synchronized(outLock) { sb.append(chunk) } }
+        com.dlof.rinlang.dexrt.line = 0
+        var failure: Throwable? = null
+        val t = Thread(null, {
+            try {
+                Class.forName(className).getMethod(methodName).invoke(null)
+            } catch (e: Throwable) {
+                failure = if (e is java.lang.reflect.InvocationTargetException) (e.targetException ?: e) else e
+            }
+        }, "rin-dex-run", 64L * 1024 * 1024)
+        t.start()
+        t.join()
+        com.dlof.rinlang.dexrt.out = null
+        val f = failure
+        synchronized(outLock) {
+            when (f) {
+                null -> {}
+                is com.dlof.rinlang.dexrt.RinRuntimeError -> {
+                    if (sb.isNotEmpty() && !sb.endsWith("\n")) sb.append('\n')
+                    sb.append("error[${f.code}]: ${f.message}\n  --> $entry:${f.line}\n")
+                }
+                is StackOverflowError -> {
+                    if (sb.isNotEmpty() && !sb.endsWith("\n")) sb.append('\n')
+                    sb.append("error[E_STACK]: stack overflow (recursion too deep)\n  --> $entry:${com.dlof.rinlang.dexrt.line}\n")
+                }
+                else -> {
+                    if (sb.isNotEmpty() && !sb.endsWith("\n")) sb.append('\n')
+                    sb.append("error: ${f.javaClass.simpleName}: ${f.message}\n")
+                }
+            }
+            return sb.toString()
         }
     }
 
