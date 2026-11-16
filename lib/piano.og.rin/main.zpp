@@ -1,0 +1,154 @@
+// ============================================================================
+//  piano — مكتبة رسم متجهي احترافي لـ Rin                      (الجزء الأساسي)
+//
+//  الفكرة: «مشهد» (scene) = قاموس JSON بسيط يحوي أشكالاً مرتّبة في شجرة.
+//  كل دالة pn_* تضيف عقدة إلى المشهد، ثم يُخرَج المشهد إلى:
+//      SVG   ←  pn_svg(c)  ·  pn_save(c, "a.svg")
+//      JSON  ←  pn_json(c) ·  pn_save(c, "a.puo")      (صيغة .puo = مشهد piano)
+//      HTML  ←  pn_html(c) ·  pn_save(c, "a.html")
+//      Data-URI ← pn_data_uri(c)   لاستعماله في <Image src=...> داخل indsin
+//
+//  نفس المشهد (.puo) يقرؤه: محرّك Rin هذا، ومُصيِّر C++ (native/piano_cli.cpp)،
+//  وصفحة المعاينة الحيّة (web/piano/index.html) — والنتيجة SVG واحدة حرفياً.
+//
+//  الاستعمال المختصر:
+//      @import "piano";
+//      let c = pn_canvas(480, 270);
+//      pn_theme(c, "dark");
+//      pn_circle(c, 240, 135, 80, {"grad": ["#818cf8", "#22d3ee"], "shadow": true});
+//      pn_text(c, 240, 142, "piano", {"size": 34, "anchor": "middle", "weight": 700});
+//      pn_save(c, "hello.svg");
+//
+//  كل دالة رسم: pn_<شكل>(الأب, هندسة..., خيارات) — الأب = canvas أو group،
+//  والخيارات قاموس (يمكن {}) .   لا قيم افتراضية للمعاملات في Rin، لذا الخيارات إلزامية.
+// ============================================================================
+
+let PN_VERSION = "1.0.0";
+let PN_SCHEMA = 1;
+let PN_HEXD = "0123456789abcdef";
+let PN_FONT = "Inter, 'Segoe UI', Tahoma, 'Noto Sans Arabic', Arial, sans-serif";
+
+// ---------------------------------------------------------------------------
+//  1) أدوات صغيرة
+// ---------------------------------------------------------------------------
+fun pn_o(o) {
+    if (o == nil) { return {}; }
+    return o;
+}
+// هل الحقل k موجود وغير nil في القاموس o؟
+fun pn_has(o, k) {
+    if (o == nil) { return false; }
+    if (!has(o, k)) { return false; }
+    return o[k] != nil;
+}
+fun pn_opt(o, k, d) {
+    if (pn_has(o, k)) { return o[k]; }
+    return d;
+}
+fun pn_isnum(v) { return type(v) == "number"; }
+fun pn_rad(deg) { return deg * PI / 180; }
+fun pn_clamp(v, lo, hi) {
+    if (v < lo) { return lo; }
+    if (v > hi) { return hi; }
+    return v;
+}
+fun pn_lerp(a, b, t) { return a + (b - a) * t; }
+
+// تنسيق رقم بعدد خانات عشرية ثابت، بدون أُسّ وبحذف الأصفار الزائدة.
+// القاعدة (floor(|v|·10^d + 0.5)) متطابقة حرفياً في Rin وC++ وJS كي تتطابق المخرجات.
+fun pn_nf(v, d) {
+    if (v != v) { return "0"; }
+    if (v > 1000000000) { v = 1000000000; }
+    if (v < -1000000000) { v = -1000000000; }
+    let neg = v < 0;
+    let n = floor(abs(v) * pow(10, d) + 0.5);
+    if (n == 0) { return "0"; }
+    let s = str(n);
+    if (d > 0) {
+        while (len(s) <= d) { s = "0" + s; }
+        let ip = substr(s, 0, len(s) - d);
+        let fp = substr(s, len(s) - d, d);
+        while (len(fp) > 0 and substr(fp, len(fp) - 1, 1) == "0") { fp = substr(fp, 0, len(fp) - 1); }
+        if (len(fp) > 0) { s = ip + "." + fp; } else { s = ip; }
+    }
+    if (neg) { s = "-" + s; }
+    return s;
+}
+fun pn_n(v) { return pn_nf(v, 2); }
+
+// هروب XML للنصوص والسمات
+fun pn_esc(s) {
+    if (type(s) != "string") { s = str(s); }
+    s = replace(s, "&", "&amp;");
+    s = replace(s, "<", "&lt;");
+    s = replace(s, ">", "&gt;");
+    s = replace(s, "\"", "&quot;");
+    return s;
+}
+
+// نسخ قائمة (مستوى واحد) كي لا تُشارَك المراجع بين العقد
+fun pn_copy_list(a) {
+    let out = [];
+    for (let v in a) { push(out, v); }
+    return out;
+}
+// نسخ عميق لعقدة (تُبقي _ctx كمرجع مشترك)
+fun pn_clone(v) {
+    let t = type(v);
+    if (t == "array") {
+        let out = [];
+        for (let x in v) { push(out, pn_clone(x)); }
+        return out;
+    }
+    if (t == "map") {
+        let out = {};
+        for (let k in keys(v)) {
+            if (substr(k, 0, 1) == "_") { out[k] = v[k]; }
+            else { out[k] = pn_clone(v[k]); }
+        }
+        return out;
+    }
+    return v;
+}
+
+// ---------------------------------------------------------------------------
+//  2) الألوان
+//  الصيغ: "#rgb" "#rrggbb" "#rrggbbaa" "none" "@id" (مرجع تدرّج/نمط)
+// ---------------------------------------------------------------------------
+fun pn_hex1(ch) { return indexOf(PN_HEXD, lower(ch)); }
+fun pn_hex2(s, i) { return pn_hex1(substr(s, i, 1)) * 16 + pn_hex1(substr(s, i + 1, 1)); }
+
+// "#rgb" → "#rrggbb"
+fun pn_norm_color(col) {
+    if (type(col) != "string") { return "#000000"; }
+    if (len(col) == 4 and substr(col, 0, 1) == "#") {
+        let r = substr(col, 1, 1); let g = substr(col, 2, 1); let b = substr(col, 3, 1);
+        return "#" + r + r + g + g + b + b;
+    }
+    return col;
+}
+// "#rrggbb" + شفافية 0..1  →  "#rrggbbaa"
+fun pn_alpha(col, a) {
+    col = pn_norm_color(col);
+    let base = substr(col, 0, 7);
+    let v = floor(pn_clamp(a, 0, 1) * 255 + 0.5);
+    return base + substr(PN_HEXD, floor(v / 16), 1) + substr(PN_HEXD, v - floor(v / 16) * 16, 1);
+}
+fun pn_mix(a, b, t) { return lower(colorMix(pn_norm_color(a), pn_norm_color(b), t)); }
+fun pn_lighten(c, t) { return lower(colorLighten(pn_norm_color(c), t)); }
+fun pn_darken(c, t) { return lower(colorDarken(pn_norm_color(c), t)); }
+// خريطة لونية: محطات + t∈[0,1]
+fun pn_ramp(stops, t) {
+    t = pn_clamp(t, 0, 1);
+    let n = len(stops) - 1;
+    if (n < 1) { return stops[0]; }
+    let p = t * n;
+    let i = floor(p);
+    if (i >= n) { return stops[n]; }
+    return pn_mix(stops[i], stops[i + 1], p - i);
+}
+// لون الورقة التالية من لوحة الثيم (يلتفّ)
+fun pn_color(parent, i) {
+    let pal = parent["_ctx"]["theme"]["palette"];
+    return pal[i - floor(i / len(pal)) * len(pal)];
+}
