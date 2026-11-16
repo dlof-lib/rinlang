@@ -1,0 +1,135 @@
+{
+  "piano": 1,
+  "w": 480,
+  "h": 270,
+  "title": "مرحباً piano",
+  "bg": "#0b1020",
+  "font": "Inter, 'Segoe UI', Tahoma, 'Noto Sans Arabic', Arial, sans-serif",
+  "defs": [
+    {
+      "t": "linear",
+      "id": "pn1",
+      "x1": 0.25,
+      "y1": 0.066987,
+      "x2": 0.75,
+      "y2": 0.933013,
+      "stops": [
+        [0, "#0b1020"],
+        [1, "#1e1b4b"]
+      ]
+    },
+    {
+      "t": "linear",
+      "id": "pn2",
+      "x1": 0.5,
+      "y1": 0,
+      "x2": 0.5,
+      "y2": 1,
+      "stops": [
+        [0, "#818cf8"],
+        [1, "#22d3ee"]
+      ]
+    },
+    {
+      "t": "blur",
+      "id": "pn3",
+      "r": 12
+    },
+    {
+      "t": "shadow",
+      "id": "pn4",
+      "dx": 0,
+      "dy": 6,
+      "blur": 10,
+      "c": "#000000",
+      "op": 0.3
+    },
+    {
+      "t": "linear",
+      "id": "pn5",
+      "x1": 0.5,
+      "y1": 0,
+      "x2": 0.5,
+      "y2": 1,
+      "stops": [
+        [0, "#fff"],
+        [1, "#c7d2fe"]
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "t": "rect",
+      "x": 0,
+      "y": 0,
+      "w": 480,
+      "h": 270,
+      "fill": "@pn1"
+    },
+    {
+      "t": "circle",
+      "cx": 380,
+      "cy": 60,
+      "r": 90,
+      "op": 0.35,
+      "fill": "@pn2",
+      "filter": "@pn3"
+    },
+    {
+      "t": "rect",
+      "x": 40,
+      "y": 60,
+      "w": 400,
+      "h": 150,
+      "rx": 20,
+      "fill": "#ffffff14",
+      "stroke": "#ffffff33",
+      "sw": 1.5,
+      "filter": "@pn4"
+    },
+    {
+      "t": "text",
+      "x": 240,
+      "y": 130,
+      "text": "piano",
+      "size": 54,
+      "anchor": "middle",
+      "weight": 800,
+      "fill": "@pn5"
+    },
+    {
+      "t": "text",
+      "x": 240,
+      "y": 170,
+      "text": "مكتبة رسم احترافية بلغة Rin",
+      "size": 18,
+      "anchor": "middle",
+      "dir": "rtl",
+      "fill": "#a5b4fc"
+    },
+    {
+      "t": "g",
+      "nodes": [
+        {
+          "t": "rect",
+          "x": 142.64,
+          "y": 219.5,
+          "w": 194.72,
+          "h": 25,
+          "rx": 12.5,
+          "fill": "#1db143"
+        },
+        {
+          "t": "text",
+          "x": 240,
+          "y": 236.55,
+          "text": "SVG · JSON · C++ · JS",
+          "size": 13,
+          "anchor": "middle",
+          "weight": 600,
+          "fill": "#000000"
+        }
+      ]
+    }
+  ]
+}
