@@ -1,0 +1,93 @@
+// @version: 1.0.0
+// Twinkling Stars — App Creation Studio for Rin / Indsin
+// مكتبة متكاملة لبناء تطبيقات احترافية: Design tokens, screen models, navigation,
+// forms, cards, lists, app metadata, JSON helpers, HTML snippets and native bridge contracts.
+// Pure Rin helpers run on CLI, Android and WASM. Native device features require a host adapter.
+// Import: @import "lib/twinkling-stars.og.rin";
+
+let TS_VERSION = "1.0.0";
+let TS_NAME = "Twinkling Stars";
+let TS_COLORS = { background: "#080D1D", surface: "#111A30", surfaceAlt: "#18243D", primary: "#7C5CFF", secondary: "#27D7FF", accent: "#F18BFF", "text": "#F5F7FF", muted: "#9AA8C7", success: "#39D98A", warning: "#FFCA68", danger: "#FF647C", border: "#293653" };
+let TS_SPACING = { xs: 4, sm: 8, md: 16, lg: 24, xl: 32, xxl: 48 };
+let TS_RADIUS = { sm: 8, md: 14, lg: 20, xl: 28, pill: 999 };
+let TS_TYPOGRAPHY = { caption: 12, body: 14, subtitle: 16, title: 22, headline: 30, display: 40 };
+
+fun ts_info() { return { name: TS_NAME, version: TS_VERSION, engine: "Rin + Indsin", platforms: ["Android", "WebAssembly", "Linux", "macOS", "Windows"], modules: ["design", "screens", "navigation", "forms", "data", "html", "native"], license: "MIT" }; }
+fun ts_theme() { return { colors: TS_COLORS, spacing: TS_SPACING, radius: TS_RADIUS, typography: TS_TYPOGRAPHY }; }
+fun ts_color(name) { if (has(TS_COLORS, name)) { return TS_COLORS[name]; } return TS_COLORS.primary; }
+fun ts_space(name) { if (has(TS_SPACING, name)) { return TS_SPACING[name]; } return TS_SPACING.md; }
+fun ts_radius(name) { if (has(TS_RADIUS, name)) { return TS_RADIUS[name]; } return TS_RADIUS.md; }
+fun ts_text_size(name) { if (has(TS_TYPOGRAPHY, name)) { return TS_TYPOGRAPHY[name]; } return TS_TYPOGRAPHY.body; }
+fun ts_merge(base, extra) { let out = {}; for (let k in keys(base)) { out[k] = base[k]; } for (let k in keys(extra)) { out[k] = extra[k]; } return out; }
+fun ts_clamp(value, low, high) { if (value < low) { return low; } if (value > high) { return high; } return value; }
+fun ts_percent(value, total) { if (total <= 0) { return 0; } return ts_clamp((value / total) * 100, 0, 100); }
+
+// Application descriptor: stable metadata consumed by RinStudio project tooling.
+fun ts_app(name, version, packageId, orientation) { return { name: name, version: version, packageId: packageId, orientation: orientation, minSdk: 24, theme: ts_theme(), screens: [], assets: [], permissions: [], routes: [] }; }
+fun ts_screen(name, title, kind) { return { name: name, title: title, kind: kind, layout: "column", safeArea: true, scroll: false, background: TS_COLORS.background, children: [] }; }
+fun ts_add_child(screen, child) { let out = ts_merge(screen, {}); let children = screen.children; push(children, child); out.children = children; return out; }
+fun ts_component(kind, id, props) { return { component: kind, id: id, props: props, children: [] }; }
+fun ts_text(id, value, style) { return ts_component("Text", id, { "text": value, style: style }); }
+fun ts_button(id, label, action, style) { return ts_component("Button", id, { label: label, action: action, style: style }); }
+fun ts_image(id, source, fit) { return ts_component("Image", id, { source: source, fit: fit }); }
+fun ts_input(id, label, value, inputType, required) { return ts_component("Input", id, { label: label, value: value, type: inputType, required: required }); }
+fun ts_card(id, title, subtitle, style) { return ts_component("Card", id, { title: title, subtitle: subtitle, style: style }); }
+fun ts_row(id, gap) { return ts_component("Row", id, { gap: gap }); }
+fun ts_column(id, gap) { return ts_component("Column", id, { gap: gap }); }
+fun ts_spacer(id, size) { return ts_component("Spacer", id, { size: size }); }
+fun ts_divider(id) { return ts_component("Divider", id, { color: TS_COLORS.border }); }
+fun ts_badge(id, badgeText, tone) { return ts_component("Badge", id, { "text": badgeText, tone: tone }); }
+fun ts_progress(id, value, max) { return ts_component("Progress", id, { value: value, max: max, percent: ts_percent(value, max) }); }
+fun ts_avatar(id, source, label) { return ts_component("Avatar", id, { source: source, label: label }); }
+fun ts_list(id, items) { return ts_component("List", id, { items: items }); }
+fun ts_grid(id, columns, gap) { return ts_component("Grid", id, { columns: ts_clamp(columns, 1, 6), gap: gap }); }
+fun ts_modal(id, title, body) { return ts_component("Modal", id, { title: title, body: body, dismissible: true }); }
+fun ts_toast(message, tone) { return { effect: "toast", message: message, tone: tone }; }
+
+// Screen flow. Routes are data; a host router performs the actual navigation.
+fun ts_route(name, screen, params) { return { name: name, screen: screen, params: params }; }
+fun ts_navigate(routeName, params) { return { effect: "navigate", route: routeName, params: params }; }
+fun ts_back() { return { effect: "back" }; }
+fun ts_tabbar(items, selected) { return ts_component("TabBar", "main-tabs", { items: items, selected: selected }); }
+fun ts_topbar(title, subtitle, back) { return ts_component("TopBar", "topbar", { title: title, subtitle: subtitle, back: back }); }
+fun ts_drawer(items, selected) { return ts_component("Drawer", "app-drawer", { items: items, selected: selected }); }
+
+// Form model and validation. Validators return {ok, errors, values}; no native UI assumptions.
+fun ts_field(name, label, value, kind, required) { return { name: name, label: label, value: value, kind: kind, required: required }; }
+fun ts_form(fields, submitAction) { return { component: "Form", fields: fields, submitAction: submitAction }; }
+fun ts_validate_required(value, label) { if (type(value) == "nil" or value == "") { return { ok: false, error: label + " is required" }; } return { ok: true, error: "" }; }
+fun ts_validate_email(value) { let at = indexOf(value, "@"); let dot = indexOf(value, "."); return at > 0 and dot > at + 1 and dot < len(value) - 1; }
+fun ts_validate_min(value, minLength) { return len(value) >= minLength; }
+fun ts_validate_range(value, minValue, maxValue) { return value >= minValue and value <= maxValue; }
+fun ts_validate_fields(values, rules) { let errors = []; for (let name in keys(rules)) { let rule = rules[name]; let value = values[name]; if (rule.required and (type(value) == "nil" or value == "")) { push(errors, { field: name, message: name + " is required" }); } else if (rule.kind == "email" and ts_validate_email(value) == false) { push(errors, { field: name, message: name + " is not a valid email" }); } else if (rule.min > 0 and (len(value) < rule.min)) { push(errors, { field: name, message: name + " is too short" }); } } return { ok: len(errors) == 0, errors: errors, values: values }; }
+
+// Data helpers: predictable JSON-compatible maps/arrays.
+fun ts_ok(data) { return { ok: true, data: data, error: nil }; }
+fun ts_fail(code, message) { return { ok: false, data: nil, error: { code: code, message: message } }; }
+fun ts_get(map, key, fallback) { if (has(map, key)) { return map[key]; } return fallback; }
+fun ts_pick(map, names) { let out = {}; for (let name in names) { if (has(map, name)) { out[name] = map[name]; } } return out; }
+fun ts_without(map, names) { let out = {}; for (let key in keys(map)) { if (contains(names, key) == false) { out[key] = map[key]; } } return out; }
+fun ts_map(items, fn) { let out = []; for (let item in items) { push(out, fn(item)); } return out; }
+fun ts_filter(items, fn) { let out = []; for (let item in items) { if (fn(item)) { push(out, item); } } return out; }
+fun ts_find(items, fn) { for (let item in items) { if (fn(item)) { return item; } } return nil; }
+fun ts_unique(items) { let out = []; for (let item in items) { if (contains(out, item) == false) { push(out, item); } } return out; }
+fun ts_sorted(items) { return sort(items); }
+fun ts_json_shape() { return { app: "object", screens: "array", routes: "array", theme: "object", assets: "array", permissions: "array" }; }
+
+// HTML helpers. Escape text before embedding; these return strings, not executable scripts.
+fun ts_html_escape(value) { let s = str(value); s = replace(s, "&", "&amp;"); s = replace(s, "<", "&lt;"); s = replace(s, ">", "&gt;"); s = replace(s, "\"", "&quot;"); s = replace(s, "'", "&#39;"); return s; }
+fun ts_html_text(value) { return "<span>" + ts_html_escape(value) + "</span>"; }
+fun ts_html_button(label, id) { return "<button type=\"button\" id=\"" + ts_html_escape(id) + "\">" + ts_html_escape(label) + "</button>"; }
+fun ts_html_card(title, body) { return "<article class=\"ts-card\"><h2>" + ts_html_escape(title) + "</h2><p>" + ts_html_escape(body) + "</p></article>"; }
+fun ts_html_document(title, body, accent) { return "<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>" + ts_html_escape(title) + "</title><style>:root{color-scheme:dark;--accent:" + ts_html_escape(accent) + ";font-family:system-ui}body{margin:0;padding:24px;background:#080d1d;color:#f5f7ff} .ts-card{padding:20px;border:1px solid #293653;border-radius:20px;background:#111a30}button{background:var(--accent);color:white;border:0;border-radius:12px;padding:12px 18px}</style><main>" + body + "</main></html>"; }
+
+// Native capability declarations. These are contracts for Android/C++ host adapters,
+// not fake implementations of camera, filesystem, notifications or network access.
+fun ts_native_capabilities() { return ["storage", "camera", "media", "notifications", "share", "biometric", "http", "sqlite", "haptics", "deep-links", "apk-export"]; }
+fun ts_native_request(capability, action, payload) { return { bridge: "twinkling-stars/1", capability: capability, action: action, payload: payload }; }
+fun ts_native_supported(host, capability) { if (type(host) != "map") { return false; } if (has(host, "capabilities") == false) { return false; } return contains(host.capabilities, capability); }
+fun ts_native_guard(host, capability, action, payload) { if (ts_native_supported(host, capability)) { return ts_ok(ts_native_request(capability, action, payload)); } return ts_fail("TS_NATIVE_UNAVAILABLE", "Host capability is unavailable: " + capability); }
+fun ts_permission(name, reason, optional) { return { name: name, reason: reason, optional: optional }; }
+fun ts_asset(path, kind) { return { path: path, kind: kind }; }
+fun ts_dependency(name, version) { return { name: name, version: version }; }
+fun ts_export_manifest(app) { return { format: "twinkling-stars-app", formatVersion: 1, generator: "RinStudio", libraryVersion: TS_VERSION, app: app }; }
