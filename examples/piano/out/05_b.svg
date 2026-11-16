@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="160" viewBox="0 0 300 160" font-family="Inter, 'Segoe UI', Tahoma, 'Noto Sans Arabic', Arial, sans-serif">
+  <rect width="100%" height="100%" fill="#ffffff"/>
+  <path d="M 50 20 L 272 20 A 8 8 0 0 1 280 28 L 280 110 A 30 30 0 0 1 250 140 L 28 140 A 8 8 0 0 1 20 132 L 20 50 A 30 30 0 0 1 50 20 Z" fill="#1db143"/>
+  <text x="150" y="90" font-size="28" font-weight="800" text-anchor="middle" fill="#ffffff">PIANO.PUO</text>
+  <circle cx="150" cy="140" r="6" fill="#0a0a0a"/>
+</svg>
