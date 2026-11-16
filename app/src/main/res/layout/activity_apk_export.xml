@@ -312,6 +312,24 @@
                 </LinearLayout>
             </LinearLayout>
 
+            <!-- تحويل Rin → DEX -->
+            <CheckBox
+                android:id="@+id/checkApkExportDex"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:checked="true"
+                android:text="@string/apk_export_dex_option"
+                android:textColor="@color/pipeline_text_muted"
+                android:textSize="13sp" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/apk_export_dex_hint"
+                android:textColor="@color/pipeline_text_muted"
+                android:textSize="11sp"
+                android:lineSpacingExtra="2dp" />
+
             <!-- ملاحظة الحدود المعروفة -->
             <TextView
                 android:layout_width="match_parent"
