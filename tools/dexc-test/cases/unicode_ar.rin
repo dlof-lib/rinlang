@@ -1,0 +1,1 @@
+let s = "مرحبا"; print s, len(s), s + "!", upper(s);
