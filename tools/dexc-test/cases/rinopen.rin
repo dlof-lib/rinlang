@@ -1,0 +1,1 @@
+let n = 3; rinopen (n > 0) { print n; n = n - 1; }
