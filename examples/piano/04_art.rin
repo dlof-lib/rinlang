@@ -1,0 +1,32 @@
+// piano — فن توليدي: دوائر متراكبة، أنماط، قصّ وحركة
+@import "piano";
+
+let c = pn_canvas(480, 480);
+pn_theme(c, "neon");
+let sky = pn_radial(c, ["#312e81", "#09090b"], 0.5, 0.45, 0.75);
+pn_rect(c, 0, 0, 480, 480, {"fill": sky});
+
+let dots = pn_pattern(c, 16, 16);
+pn_circle(dots, 8, 8, 1.4, {"fill": "#ffffff22"});
+pn_rect(c, 0, 0, 480, 480, {"fill": pn_ref(dots)});
+
+let orbit = pn_group(c, {});
+let i = 0;
+while (i < 12) {
+    let a = pn_rad(i * 30);
+    pn_circle(orbit, 240 + 130 * cos(a), 240 + 130 * sin(a), 14 + (i % 4) * 4,
+              {"fill": pn_color(c, i), "op": 0.85, "glow": true});
+    i = i + 1;
+}
+pn_spin(orbit, 240, 240, 24);
+
+let clip = pn_clip_circle(c, 240, 240, 70);
+let core = pn_group(c, {"clip": clip});
+pn_rect(core, 170, 170, 140, 140, {"grad": ["#22d3ee", "#f472b6"], "angle": 45});
+pn_wave(core, 170, 240, 140, 22, 2, {"stroke": "#ffffff", "sw": 4});
+pn_circle(c, 240, 240, 70, {"fill": "none", "stroke": "#ffffff", "sw": 2, "op": 0.6});
+let ring = pn_circle(c, 240, 240, 95, {"fill": "none", "stroke": "#22d3ee", "sw": 1.5, "dash": [4, 6]});
+pn_pulse(ring, "opacity", 0.2, 1, 3);
+pn_text(c, 240, 440, "PIANO", {"size": 28, "weight": 800, "anchor": "middle", "ls": 8, "fill": "#ffffff"});
+pn_save(c, "examples/piano/out/04_art.svg");
+pn_save(c, "examples/piano/out/04_art.puo");
