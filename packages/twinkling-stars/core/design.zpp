@@ -1,0 +1,4 @@
+// Design-system facade.
+export fun ts_design() { return ts_theme(); }
+export fun ts_design_color(name) { return ts_color(name); }
+export fun ts_design_space(name) { return ts_space(name); }
