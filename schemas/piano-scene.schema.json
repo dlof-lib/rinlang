@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dlof-lib.github.io/rinlang/schemas/piano-scene.schema.json",
+  "title": "piano scene (.puo)",
+  "description": "مشهد piano: شجرة أشكال متجهية تُصيَّر إلى SVG بمُصيِّرات Rin وC++ وJS المتطابقة.",
+  "type": "object",
+  "required": ["piano", "w", "h", "nodes"],
+  "properties": {
+    "piano": {"const": 1},
+    "w": {"type": "number", "exclusiveMinimum": 0},
+    "h": {"type": "number", "exclusiveMinimum": 0},
+    "title": {"type": "string"},
+    "bg": {"$ref": "#/$defs/paint"},
+    "font": {"type": "string"},
+    "defs": {"type": "array", "items": {"$ref": "#/$defs/def"}},
+    "nodes": {"type": "array", "items": {"$ref": "#/$defs/node"}}
+  },
+  "$defs": {
+    "paint": {"type": "string", "description": "#rgb | #rrggbb | #rrggbbaa | none | @id (مرجع تدرّج/نمط)"},
+    "numlist": {"type": "array", "items": {"type": "number"}},
+    "stops": {"type": "array", "items": {"type": "array", "prefixItems": [{"type": "number"}, {"type": "string"}], "minItems": 2, "maxItems": 2}},
+    "tf": {"type": "array", "items": {"type": "array", "prefixItems": [{"enum": ["translate", "rotate", "scale", "skewX", "skewY", "matrix"]}], "items": {"type": "number"}}},
+    "anim": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["dur"],
+        "properties": {
+          "k": {"enum": ["attr", "rotate"]}, "name": {"type": "string"},
+          "from": {}, "to": {}, "values": {"type": "array"},
+          "cx": {"type": "number"}, "cy": {"type": "number"},
+          "dur": {"type": "number"}, "rep": {"type": ["string", "number"]}
+        }
+      }
+    },
+    "def": {
+      "type": "object",
+      "required": ["t", "id"],
+      "properties": {
+        "t": {"enum": ["linear", "radial", "shadow", "glow", "blur", "pattern", "clip"]},
+        "id": {"type": "string"},
+        "stops": {"$ref": "#/$defs/stops"},
+        "nodes": {"type": "array", "items": {"$ref": "#/$defs/node"}}
+      }
+    },
+    "node": {
+      "type": "object",
+      "required": ["t"],
+      "properties": {
+        "t": {"enum": ["g", "rect", "circle", "ellipse", "line", "polyline", "polygon", "path", "text", "image"]},
+        "id": {"type": "string"}, "cls": {"type": "string"}, "title": {"type": "string"},
+        "x": {"type": "number"}, "y": {"type": "number"}, "w": {"type": "number"}, "h": {"type": "number"},
+        "rx": {"type": "number"}, "ry": {"type": "number"},
+        "cx": {"type": "number"}, "cy": {"type": "number"}, "r": {"type": "number"},
+        "x1": {"type": "number"}, "y1": {"type": "number"}, "x2": {"type": "number"}, "y2": {"type": "number"},
+        "pts": {"$ref": "#/$defs/numlist"},
+        "d": {"type": "string"},
+        "text": {"type": "string"}, "size": {"type": "number"}, "anchor": {"enum": ["start", "middle", "end"]},
+        "weight": {"type": ["number", "string"]}, "family": {"type": "string"}, "italic": {"type": "boolean"},
+        "ls": {"type": "number"}, "lh": {"type": "number"}, "base": {"type": "string"}, "dir": {"enum": ["rtl", "ltr"]},
+        "href": {"type": "string"}, "par": {"type": "string"},
+        "fill": {"$ref": "#/$defs/paint"}, "stroke": {"$ref": "#/$defs/paint"},
+        "fo": {"type": "number"}, "so": {"type": "number"}, "sw": {"type": "number"}, "op": {"type": "number"},
+        "dash": {"$ref": "#/$defs/numlist"}, "cap": {"enum": ["butt", "round", "square"]}, "join": {"enum": ["miter", "round", "bevel"]},
+        "tf": {"$ref": "#/$defs/tf"}, "filter": {"type": "string"}, "clip": {"type": "string"},
+        "anim": {"$ref": "#/$defs/anim"},
+        "nodes": {"type": "array", "items": {"$ref": "#/$defs/node"}}
+      }
+    }
+  }
+}
