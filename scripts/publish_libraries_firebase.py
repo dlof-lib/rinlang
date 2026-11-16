@@ -56,7 +56,10 @@ def extract_description(text: str, stem: str) -> str:
 
 
 def build_record(path: Path, now_ms: int) -> tuple:
-    raw = path.read_bytes()
+    source = path / "main.zpp" if path.is_dir() else path
+    if not source.is_file():
+        raise FileNotFoundError(f"library directory has no main.zpp: {path}")
+    raw = source.read_bytes()
     text = raw.decode("utf-8")
     file_name = path.name
     stem = file_name[: -len(SUFFIX)]
