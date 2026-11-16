@@ -1,0 +1,24 @@
+// piano — اختبار النواة: تنسيق الأرقام، الألوان، الأشكال، JSON ذهاباً وإياباً
+@import "piano";
+
+print pn_nf(3.14159, 2), pn_nf(-0.001, 2), pn_nf(2.5, 0), pn_nf(1234.5678, 3), pn_n(0.1 + 0.2), pn_nf(100, 2);
+print pn_alpha("#f00", 0.5), pn_norm_color("#abc"), pn_esc("a<b & \"c\"");
+print pn_nice(0, 27, 5)["max"], pn_nice(3, 97, 5)["step"];
+
+let c = pn_canvas(100, 60);
+pn_title(c, "t&t");
+pn_bg(c, "#102030");
+pn_rect(c, 1, 2, 30, 20, {"fill": "#ff000080", "rx": 4, "dash": [2, 3], "rot": 10});
+pn_text(c, 5, 50, "a\nb", {"size": 10});
+let p = pn_pen(); pn_move(p, 0, 0); pn_lineto(p, 10, 0); pn_arcto(p, 5, 5, 0, 0, 1, 10, 10); pn_close(p);
+pn_path(c, p, {});
+print pn_svg(c);
+
+let back = pn_from_json(pn_json(c));
+print pn_svg(back) == pn_svg(c);
+pn_circle(back, 50, 30, 5, {});
+print len(back["nodes"]);
+
+try { pn_theme(c, "nope"); } catch (e) { print "err:", e["message"]; }
+try { pn_from_json("{\"a\":1}"); } catch (e) { print "err:", e["message"]; }
+try { pn_save(c, "x.png"); } catch (e) { print "err:", e["message"]; }
