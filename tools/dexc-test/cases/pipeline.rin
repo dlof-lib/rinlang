@@ -1,0 +1,3 @@
+fun dbl(x) { return x * 2; }
+fun add(a, b) { return a + b; }
+print 5 |> dbl |> dbl, 1 |> add(2);
