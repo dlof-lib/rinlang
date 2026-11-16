@@ -194,9 +194,6 @@ jobs:
           cp web/index.html dist/index.html
           # متجر المكتبات (طبقة Firebase/ويب) — نفس التطبيق بلا صفحات HTML لكل مكتبة.
           cp web/libraries.js web/libraries.css web/rin-academy.js dist/
-          mkdir -p dist/lib
-          cp lib/twinkling-stars.og.rin dist/lib/twinkling-stars.og.rin
-          cp web/twinkling-stars-icon-192.png dist/twinkling-stars-icon-192.png
           # 404.html = محوّل SPA لروابط /@user/library.og.rin (GitHub Pages بلا rewrite)
           cp web/404.html dist/404.html
           # الأيقونات وبيان التطبيق (PWA) وملف llms.txt
@@ -239,6 +236,14 @@ jobs:
       # ----------------------------------------------------------------------
       # 7) التحقق من اكتمال الحزمة وتطابق site.rin المنشور مع المصدر
       # ----------------------------------------------------------------------
+      - name: Build piano live preview
+        run: |
+          # صفحة معاينة piano: تُبنى من المصدر وتُنشر في /piano/ (تستعمل rin.js/rin.wasm من الجذر عند توفرهما)
+          python3 tools/piano_build.py
+          mkdir -p dist/piano
+          cp web/piano/index.html web/piano/piano.bundle.rin dist/piano/
+          cp assets/branding/piano/piano_icon_192.png assets/branding/piano/piano_icon_512.png dist/piano/
+
       - name: Verify bundle
         run: |
           for f in index.html site.rin rin.wasm rin.js libraries.js libraries.css rin-academy.js \
@@ -246,6 +251,7 @@ jobs:
                    manifest.webmanifest og-store.png sitemap.xml robots.txt packs/catalog.json; do
             test -s "dist/$f" || { echo "::error::missing dist/$f"; exit 1; }
           done
+          test -s dist/piano/index.html || { echo "::error::missing dist/piano/index.html"; exit 1; }
           cmp "$SITE_SRC" dist/site.rin
           echo "Bundle contents:"
           ls -la dist
