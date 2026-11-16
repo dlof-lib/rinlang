@@ -1,0 +1,26 @@
+{
+  "piano": 1,
+  "w": 300,
+  "h": 160,
+  "title": "",
+  "bg": "#ffffff",
+  "font": "Inter, 'Segoe UI', Tahoma, 'Noto Sans Arabic', Arial, sans-serif",
+  "defs": [],
+  "nodes": [
+    {
+      "t": "path",
+      "d": "M 50 20 L 272 20 A 8 8 0 0 1 280 28 L 280 110 A 30 30 0 0 1 250 140 L 28 140 A 8 8 0 0 1 20 132 L 20 50 A 30 30 0 0 1 50 20 Z",
+      "fill": "#1db143"
+    },
+    {
+      "t": "text",
+      "x": 150,
+      "y": 90,
+      "text": "PIANO.PUO",
+      "size": 28,
+      "anchor": "middle",
+      "weight": 800,
+      "fill": "#ffffff"
+    }
+  ]
+}
