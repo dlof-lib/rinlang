@@ -1,0 +1,60 @@
+// piano — الجزء 5: المجموعات (group) والتحويلات والحركة
+
+// مجموعة: كل ما يُرسم داخلها يتحرّك ويُظلَّل ويُقصّ معاً
+fun pn_group(parent, o) {
+    return pn_mk(parent, {"t": "g", "nodes": [], "_ctx": parent["_ctx"]}, o, nil, nil);
+}
+// مجموعة بنظام إحداثيات محلي مُزاح إلى (x, y)
+fun pn_at(parent, x, y, o) {
+    o = pn_o(o);
+    let o2 = pn_clone(o);
+    let tf = [["translate", x, y]];
+    if (pn_has(o, "tf")) { for (let t in o["tf"]) { push(tf, t); } }
+    o2["tf"] = tf;
+    return pn_group(parent, o2);
+}
+
+fun pn_tf_push(n, op) {
+    if (!pn_has(n, "tf")) { n["tf"] = []; }
+    push(n["tf"], op);
+    return n;
+}
+fun pn_translate(n, x, y) { return pn_tf_push(n, ["translate", x, y]); }
+fun pn_rotate(n, deg, cx, cy) { return pn_tf_push(n, ["rotate", deg, cx, cy]); }
+fun pn_scale(n, sx, sy) { return pn_tf_push(n, ["scale", sx, sy]); }
+fun pn_skewx(n, deg) { return pn_tf_push(n, ["skewX", deg]); }
+fun pn_skewy(n, deg) { return pn_tf_push(n, ["skewY", deg]); }
+
+// نُسخ متكرّرة: يرسم fn(g, i) لكل i في مجموعة جديدة
+fun pn_repeat(parent, count, o, fn) {
+    let g = pn_group(parent, o);
+    let i = 0;
+    while (i < count) { fn(g, i); i = i + 1; }
+    return g;
+}
+
+// ---------------------------------------------------------------------------
+//  الحركة (SMIL) — تعمل في المتصفحات داخل SVG مباشرة
+//  rep: "indefinite" أو عدد مرّات
+// ---------------------------------------------------------------------------
+fun pn_animate(n, attr, from, to, dur, rep) {
+    if (!pn_has(n, "anim")) { n["anim"] = []; }
+    push(n["anim"], {"k": "attr", "name": attr, "from": from, "to": to, "dur": dur, "rep": rep});
+    return n;
+}
+// قيم متعددة: values = [a, b, a, …]
+fun pn_animate_values(n, attr, values, dur, rep) {
+    if (!pn_has(n, "anim")) { n["anim"] = []; }
+    push(n["anim"], {"k": "attr", "name": attr, "values": values, "dur": dur, "rep": rep});
+    return n;
+}
+// دوران مستمر حول (cx, cy)
+fun pn_spin(n, cx, cy, dur) {
+    if (!pn_has(n, "anim")) { n["anim"] = []; }
+    push(n["anim"], {"k": "rotate", "from": 0, "to": 360, "cx": cx, "cy": cy, "dur": dur, "rep": "indefinite"});
+    return n;
+}
+// نبض: attr يتأرجح بين a وb
+fun pn_pulse(n, attr, a, b, dur) {
+    return pn_animate_values(n, attr, [a, b, a], dur, "indefinite");
+}
