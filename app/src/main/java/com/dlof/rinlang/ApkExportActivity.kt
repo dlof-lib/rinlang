@@ -14,6 +14,7 @@ import android.text.style.StyleSpan
 import android.graphics.Typeface
 import android.view.View
 import android.widget.ArrayAdapter
+import android.widget.CheckBox
 import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageButton
@@ -50,6 +51,7 @@ class ApkExportActivity : RinBaseActivity() {
     private lateinit var edtSplashTagline: EditText
     private lateinit var spinnerMinSdk: Spinner
     private lateinit var spinnerTargetSdk: Spinner
+    private lateinit var checkDex: CheckBox
     private lateinit var btnBuild: Button
     private lateinit var progress: ProgressBar
     private lateinit var txtStatus: TextView
@@ -99,6 +101,7 @@ class ApkExportActivity : RinBaseActivity() {
         edtSplashTagline = findViewById(R.id.edtApkExportSplashTagline)
         spinnerMinSdk = findViewById(R.id.spinnerApkExportMinSdk)
         spinnerTargetSdk = findViewById(R.id.spinnerApkExportTargetSdk)
+        checkDex = findViewById(R.id.checkApkExportDex)
         btnBuild = findViewById(R.id.btnApkExportBuild)
         progress = findViewById(R.id.progressApkExport)
         txtStatus = findViewById(R.id.txtApkExportStatus)
@@ -214,6 +217,7 @@ class ApkExportActivity : RinBaseActivity() {
         val entry = spinnerEntry.selectedItem as? String ?: "main.rin"
         val tagline = edtSplashTagline.text.toString().trim().ifBlank { null }
         val icon = selectedIcon
+        val dexMode = if (checkDex.isChecked) RinApkExporter.DexMode.AUTO else RinApkExporter.DexMode.OFF
 
         buildExecutor.execute {
             RinApkExporter.export(
@@ -224,7 +228,8 @@ class ApkExportActivity : RinBaseActivity() {
                 minSdkVersion = minSdk,
                 targetSdkVersion = targetSdk,
                 customIcon = icon,
-                splash = RinApkExporter.SplashConfig(tagline = tagline)
+                splash = RinApkExporter.SplashConfig(tagline = tagline),
+                dexMode = dexMode
             ) { p ->
                 mainHandler.post { handleProgress(p) }
             }
