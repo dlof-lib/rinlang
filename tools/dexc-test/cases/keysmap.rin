@@ -1,0 +1,1 @@
+let m = {}; for (let i = 0; i < 5; i = i + 1) { m[toString(i)] = i * i; } print m, len(keys(m));
