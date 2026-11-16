@@ -1,0 +1,142 @@
+// piano — الجزء 2: المشهد (canvas) والثيمات والتعريفات (تدرّجات، ظلال، أنماط، قصّ)
+
+// ---------------------------------------------------------------------------
+//  الثيمات — مطابقة لـ data/themes.json (يفحصها tools/piano_check.py)
+// ---------------------------------------------------------------------------
+fun pn_themes() {
+    return {
+        "light":  {"bg": "#ffffff", "ink": "#111827", "muted": "#6b7280", "grid": "#e5e7eb", "accent": "#4f46e5",
+                   "palette": ["#4f46e5", "#06b6d4", "#f59e0b", "#ef4444", "#10b981", "#8b5cf6", "#ec4899", "#64748b"]},
+        "dark":   {"bg": "#0b1020", "ink": "#e5e7eb", "muted": "#94a3b8", "grid": "#1e293b", "accent": "#818cf8",
+                   "palette": ["#818cf8", "#22d3ee", "#fbbf24", "#f87171", "#34d399", "#a78bfa", "#f472b6", "#94a3b8"]},
+        "ocean":  {"bg": "#f0f9ff", "ink": "#0c4a6e", "muted": "#0369a1", "grid": "#bae6fd", "accent": "#0284c7",
+                   "palette": ["#0284c7", "#0d9488", "#6366f1", "#f59e0b", "#0ea5e9", "#14b8a6", "#8b5cf6", "#64748b"]},
+        "sunset": {"bg": "#fff7ed", "ink": "#431407", "muted": "#9a3412", "grid": "#fed7aa", "accent": "#ea580c",
+                   "palette": ["#ea580c", "#db2777", "#7c3aed", "#ca8a04", "#dc2626", "#9333ea", "#f97316", "#78716c"]},
+        "neon":   {"bg": "#09090b", "ink": "#fafafa", "muted": "#a1a1aa", "grid": "#27272a", "accent": "#22d3ee",
+                   "palette": ["#22d3ee", "#a3e635", "#f472b6", "#facc15", "#c084fc", "#fb923c", "#4ade80", "#38bdf8"]},
+        "mono":   {"bg": "#fafafa", "ink": "#18181b", "muted": "#71717a", "grid": "#e4e4e7", "accent": "#18181b",
+                   "palette": ["#18181b", "#3f3f46", "#71717a", "#a1a1aa", "#d4d4d8", "#52525b", "#27272a", "#a1a1aa"]},
+        "piano":  {"bg": "#ffffff", "ink": "#0a0a0a", "muted": "#525252", "grid": "#e5e5e5", "accent": "#1db143",
+                   "palette": ["#1db143", "#0a0a0a", "#16a34a", "#737373", "#4ade80", "#262626", "#15803d", "#a3a3a3"]}
+    };
+}
+fun pn_theme_names() { return keys(pn_themes()); }
+fun pn_theme_def(name) {
+    let all = pn_themes();
+    if (!has(all, name)) { throw "piano: ثيم غير معروف «" + name + "» — المتاح: " + join(keys(all), ", "); }
+    return all[name];
+}
+
+// ---------------------------------------------------------------------------
+//  اللوحة (canvas)
+// ---------------------------------------------------------------------------
+fun pn_canvas(w, h) {
+    let th = pn_theme_def("light");
+    let ctx = {"seq": 0, "defs": [], "theme": th};
+    return {"piano": PN_SCHEMA, "w": w, "h": h, "title": "", "bg": th["bg"], "font": PN_FONT,
+            "defs": ctx["defs"], "nodes": [], "_ctx": ctx};
+}
+// تغيير الثيم: يضبط الخلفية وألوان الأشكال التي تُرسَم بعده
+fun pn_theme(c, name) {
+    let th = pn_theme_def(name);
+    c["_ctx"]["theme"] = th;
+    c["bg"] = th["bg"];
+    return c;
+}
+fun pn_bg(c, color) { c["bg"] = color; return c; }
+fun pn_title(c, s) { c["title"] = s; return c; }
+fun pn_font(c, family) { c["font"] = family; return c; }
+fun pn_size(c, w, h) { c["w"] = w; c["h"] = h; return c; }
+fun pn_ink(parent) { return parent["_ctx"]["theme"]["ink"]; }
+fun pn_accent(parent) { return parent["_ctx"]["theme"]["accent"]; }
+fun pn_muted(parent) { return parent["_ctx"]["theme"]["muted"]; }
+fun pn_gridc(parent) { return parent["_ctx"]["theme"]["grid"]; }
+
+fun pn_id(parent) {
+    let ctx = parent["_ctx"];
+    ctx["seq"] = ctx["seq"] + 1;
+    return "pn" + str(ctx["seq"]);
+}
+fun pn_ref(x) {
+    if (type(x) == "string") { return "@" + x; }
+    return "@" + x["id"];
+}
+
+// ---------------------------------------------------------------------------
+//  التدرّجات — stops: ["#a", "#b"] (موزّعة بالتساوي) أو [[0,"#a"],[0.4,"#b"],[1,"#c"]]
+// ---------------------------------------------------------------------------
+fun pn_stops(stops) {
+    let out = [];
+    let n = len(stops);
+    let i = 0;
+    for (let s in stops) {
+        if (type(s) == "array") { push(out, [s[0], s[1]]); }
+        else {
+            let o = 0;
+            if (n > 1) { o = i / (n - 1); }
+            push(out, [o, s]);
+        }
+        i = i + 1;
+    }
+    return out;
+}
+// زاوية بالدرجات: 0 = يسار←يمين، 90 = أعلى←أسفل، 45 = قطري
+fun pn_linear(parent, stops, angle) {
+    let a = pn_rad(angle);
+    let id = pn_id(parent);
+    push(parent["_ctx"]["defs"], {"t": "linear", "id": id,
+        "x1": 0.5 - 0.5 * cos(a), "y1": 0.5 - 0.5 * sin(a),
+        "x2": 0.5 + 0.5 * cos(a), "y2": 0.5 + 0.5 * sin(a), "stops": pn_stops(stops)});
+    return "@" + id;
+}
+// cx,cy,r ككسور من صندوق الشكل (0.5,0.5,0.5 = تدرّج مركزي كامل)
+fun pn_radial(parent, stops, cx, cy, r) {
+    let id = pn_id(parent);
+    push(parent["_ctx"]["defs"], {"t": "radial", "id": id, "cx": cx, "cy": cy, "r": r, "stops": pn_stops(stops)});
+    return "@" + id;
+}
+
+// ---------------------------------------------------------------------------
+//  الفلاتر — تُعيد "@id" لتوضع في خيار filter
+// ---------------------------------------------------------------------------
+fun pn_shadow(parent, dx, dy, blur, color, op) {
+    let id = pn_id(parent);
+    push(parent["_ctx"]["defs"], {"t": "shadow", "id": id, "dx": dx, "dy": dy, "blur": blur, "c": color, "op": op});
+    return "@" + id;
+}
+fun pn_glow(parent, radius, color) {
+    let id = pn_id(parent);
+    push(parent["_ctx"]["defs"], {"t": "glow", "id": id, "r": radius, "c": color});
+    return "@" + id;
+}
+fun pn_blur(parent, radius) {
+    let id = pn_id(parent);
+    push(parent["_ctx"]["defs"], {"t": "blur", "id": id, "r": radius});
+    return "@" + id;
+}
+
+// ---------------------------------------------------------------------------
+//  حاويات التعريف: نمط (pattern) وقصّ (clip) — تُرسَم داخلها كأنها group
+// ---------------------------------------------------------------------------
+fun pn_pattern(parent, w, h) {
+    let p = {"t": "pattern", "id": pn_id(parent), "w": w, "h": h, "nodes": [], "_ctx": parent["_ctx"]};
+    push(parent["_ctx"]["defs"], p);
+    return p;
+}
+fun pn_clip(parent) {
+    let p = {"t": "clip", "id": pn_id(parent), "nodes": [], "_ctx": parent["_ctx"]};
+    push(parent["_ctx"]["defs"], p);
+    return p;
+}
+// قصّ مستطيل سريع → "@id"
+fun pn_clip_rect(parent, x, y, w, h, r) {
+    let cp = pn_clip(parent);
+    pn_rect(cp, x, y, w, h, {"rx": r});
+    return "@" + cp["id"];
+}
+fun pn_clip_circle(parent, cx, cy, r) {
+    let cp = pn_clip(parent);
+    pn_circle(cp, cx, cy, r, {});
+    return "@" + cp["id"];
+}
