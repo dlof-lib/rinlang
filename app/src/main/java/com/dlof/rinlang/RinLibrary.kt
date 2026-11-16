@@ -55,7 +55,7 @@ object BuiltinLibraries {
     const val FEATURED = "indsinicons"
 
     fun categoryOf(displayName: String): LibCategory = when (displayName) {
-        "indsinicons", "inputkit", "rinxg", "previewkit" -> LibCategory.UI
+        "indsinicons", "inputkit", "rinxg", "previewkit", "twinkling-stars" -> LibCategory.UI
         "oglang", "ringo", "langkit", "astwalk", "envkit", "lexkit", "parsekit", "runkit", "bob" -> LibCategory.LANGUAGE
         "movingmask", "physics" -> LibCategory.GAMES
         "syskit", "ghpublish", "passkit", "passkitlang", "passkitcrypt", "passkitdb" -> LibCategory.SYSTEM
@@ -63,6 +63,12 @@ object BuiltinLibraries {
     }
 
     val all: List<BuiltinLibraryInfo> = listOf(
+        BuiltinLibraryInfo(
+            "lib/twinkling-stars.og.rin", "twinkling-stars",
+            "استوديو بناء التطبيقات: نظام تصميم، شاشات ومكوّنات، تنقّل، نماذج وتحقّق، أدوات JSON وHTML، وعقود ربط Android/C++",
+            "ts_app • ts_screen • ts_button • ts_card • ts_form • ts_validate_fields • ts_navigate • ts_html_document • ts_native_request",
+            iconRes = R.drawable.ic_lib_twinkling_stars
+        ),
         BuiltinLibraryInfo(
             "lib/compose.og.rin", "compose",
             "مكتبة أساسية — تركيب ودمج وتفاعل كل مفاهيم Rin (دوال، map، array، Set، كائنات، حاويات) بجسر واحد",
