@@ -231,10 +231,25 @@
   }
   function dbRef(p) { return S.fb.database().ref(p); }
 
+  function loadLocalTwinkling() {
+    return root.fetch(S.base + 'lib/twinkling-stars.og.rin').then(function (res) {
+      if (!res.ok) throw new Error('local library');
+      return res.text();
+    }).then(function (content) {
+      return { kind: 'official', id: 'twinkling-stars_og_rin', name: 'twinkling-stars', fileName: 'twinkling-stars.og.rin', version: '1.0.0',
+        description: 'Professional app-building toolkit for Rin + Indsin: design system, screens, navigation, forms, JSON, HTML and native bridge contracts.',
+        category: 'UI / App Development', publisher: 'Rin', size: new TextEncoder().encode(content).length, downloads: 0, likes: 0, ts: 0, content: content,
+        ref: 'libraries/twinkling-stars_og_rin', share: '?library=twinkling-stars', deps: {}, license: 'MIT', rating: 0, ratingCount: 0, icon: S.base + 'twinkling-stars-icon-192.png' };
+    });
+  }
   function loadOfficial() {
     if (S.officialList) return Promise.resolve(S.officialList);
     return fbReady().then(function () { return dbRef('libraries').once('value'); }).then(function (snap) {
-      var v = snap.val() || {}; S.officialList = Object.keys(v).map(function (k) { return normOfficial(k, v[k]); }); return S.officialList;
+      var v = snap.val() || {}; S.officialList = Object.keys(v).map(function (k) { return normOfficial(k, v[k]); });
+      return loadLocalTwinkling().then(function (local) {
+        if (!S.officialList.some(function (it) { return it.name.toLowerCase() === 'twinkling-stars'; })) S.officialList.push(local);
+        return S.officialList;
+      }).catch(function () { return S.officialList; });
     });
   }
   function loadCommunity() {
@@ -265,8 +280,19 @@
     return fbReady().then(function () { return dbRef('packages/' + id).once('value'); }).then(function (s) { return s.exists() ? normPackage(id, s.val()) : null; });
   }
   function loadLibraryByName(name) {
+    var n = name.toLowerCase().replace(/\.og\.rin$/, '').replace(/_og_rin$/, '');
+    if (n === 'twinkling-stars') {
+      return root.fetch(S.base + 'lib/twinkling-stars.og.rin').then(function (res) {
+        if (!res.ok) throw new Error('local library');
+        return res.text();
+      }).then(function (content) {
+        return { kind: 'official', id: 'twinkling-stars_og_rin', name: 'twinkling-stars', fileName: 'twinkling-stars.og.rin', version: '1.0.0',
+          description: 'Professional app-building toolkit for Rin + Indsin: design system, screens, navigation, forms, JSON, HTML and native bridge contracts.',
+          category: 'UI / App Development', publisher: 'Rin', size: new TextEncoder().encode(content).length, downloads: 0, likes: 0, ts: 0, content: content,
+          ref: 'libraries/twinkling-stars_og_rin', share: '?library=twinkling-stars', deps: {}, license: 'MIT', rating: 0, ratingCount: 0, icon: S.base + 'twinkling-stars-icon-192.png' };
+      }).catch(function () { return loadOfficial().then(function (list) { return list.filter(function (l) { return l.name.toLowerCase() === n; })[0] || null; }); });
+    }
     return loadOfficial().then(function (list) {
-      var n = name.toLowerCase().replace(/\.og\.rin$/, '').replace(/_og_rin$/, '');
       return list.filter(function (l) { return l.name.toLowerCase() === n; })[0] || null;
     });
   }
