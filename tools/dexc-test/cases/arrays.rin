@@ -1,0 +1,4 @@
+let a = [1,2,3]; a[1] = 20; print a, a[2], len(a);
+let b = a; push(b, 4); print a;
+print pop(a), a;
+let n = [[1,2],[3,4]]; n[1][0] = 9; print n, n[1][0];
