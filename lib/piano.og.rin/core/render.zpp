@@ -1,0 +1,389 @@
+// piano — الجزء 6: الإخراج (SVG · JSON/.puo · HTML · data-URI)
+//
+// قاعدة الذهب: هذا الملف هو «المواصفة المرجعية» للتصيير. مُصيِّرا C++ وJS ينسخانه حرفياً
+// (ترتيب السمات، تنسيق الأرقام، المسافات)، وتختبرهما tools/piano_check.py بمقارنة المخرجات.
+
+// ---------------------------------------------------------------------------
+//  سمات
+// ---------------------------------------------------------------------------
+fun pn_attr(name, v) { return " " + name + "=\"" + pn_esc(v) + "\""; }
+fun pn_attrn(name, v) { return " " + name + "=\"" + pn_n(v) + "\""; }
+fun pn_anum(n, key, name) {
+    if (pn_has(n, key)) { return pn_attrn(name, n[key]); }
+    return "";
+}
+fun pn_astr(n, key, name) {
+    if (pn_has(n, key)) { return pn_attr(name, n[key]); }
+    return "";
+}
+fun pn_url(v) {
+    if (substr(v, 0, 1) == "@") { return "url(#" + substr(v, 1, len(v) - 1) + ")"; }
+    return v;
+}
+// طلاء: لون | none | @id ، مع شفافية من #rrggbbaa أو من الحقل الصريح (opkey)
+fun pn_paint(n, key, attr, opkey, opattr) {
+    let s = "";
+    let op = nil;
+    if (pn_has(n, key)) {
+        let v = n[key];
+        if (type(v) == "string") {
+            if (substr(v, 0, 1) == "@") { s = pn_attr(attr, pn_url(v)); }
+            else {
+                v = pn_norm_color(v);
+                if (len(v) == 9 and substr(v, 0, 1) == "#") {
+                    s = pn_attr(attr, substr(v, 0, 7));
+                    op = pn_hex2(v, 7) / 255;
+                } else { s = pn_attr(attr, v); }
+            }
+        } else { s = pn_attr(attr, v); }
+    }
+    if (pn_has(n, opkey)) { op = n[opkey]; }
+    if (op != nil) { s = s + pn_attr(opattr, pn_nf(op, 3)); }
+    return s;
+}
+fun pn_tfstr(tf) {
+    let parts = [];
+    for (let op in tf) {
+        let s = op[0] + "(";
+        let args = [];
+        let i = 1;
+        while (i < len(op)) { push(args, pn_n(op[i])); i = i + 1; }
+        push(parts, s + join(args, " ") + ")");
+    }
+    return join(parts, " ");
+}
+fun pn_nums(a) {
+    let out = [];
+    for (let v in a) { push(out, pn_n(v)); }
+    return out;
+}
+// سمات الطلاء والتحويل المشتركة (تأتي بعد الهندسة دائماً)
+fun pn_tail(n) {
+    let s = pn_paint(n, "fill", "fill", "fo", "fill-opacity");
+    s = s + pn_paint(n, "stroke", "stroke", "so", "stroke-opacity");
+    s = s + pn_anum(n, "sw", "stroke-width");
+    if (pn_has(n, "dash")) { s = s + pn_attr("stroke-dasharray", join(pn_nums(n["dash"]), " ")); }
+    s = s + pn_astr(n, "cap", "stroke-linecap");
+    s = s + pn_astr(n, "join", "stroke-linejoin");
+    s = s + pn_anum(n, "op", "opacity");
+    if (pn_has(n, "tf")) { s = s + pn_attr("transform", pn_tfstr(n["tf"])); }
+    if (pn_has(n, "filter")) { s = s + pn_attr("filter", pn_url(n["filter"])); }
+    if (pn_has(n, "clip")) { s = s + pn_attr("clip-path", pn_url(n["clip"])); }
+    return s;
+}
+fun pn_head(n) {
+    return pn_astr(n, "id", "id") + pn_astr(n, "cls", "class");
+}
+
+// ---------------------------------------------------------------------------
+//  الحركة
+// ---------------------------------------------------------------------------
+fun pn_av(v) {
+    if (type(v) == "number") { return pn_n(v); }
+    return pn_esc(v);
+}
+fun pn_repv(v) {
+    if (v == nil) { return "indefinite"; }
+    if (type(v) == "number") { return pn_n(v); }
+    return v;
+}
+fun pn_anim_str(a) {
+    if (pn_opt(a, "k", "attr") == "rotate") {
+        let cx = pn_n(pn_opt(a, "cx", 0));
+        let cy = pn_n(pn_opt(a, "cy", 0));
+        return "<animateTransform attributeName=\"transform\" type=\"rotate\" from=\"" + pn_n(a["from"]) + " " + cx + " " + cy
+             + "\" to=\"" + pn_n(a["to"]) + " " + cx + " " + cy + "\" dur=\"" + pn_n(a["dur"]) + "s\" repeatCount=\"" + pn_repv(pn_opt(a, "rep", nil)) + "\"/>";
+    }
+    let s = "<animate attributeName=\"" + pn_esc(a["name"]) + "\"";
+    if (pn_has(a, "values")) {
+        let vs = [];
+        for (let v in a["values"]) { push(vs, pn_av(v)); }
+        s = s + " values=\"" + join(vs, ";") + "\"";
+    } else {
+        s = s + " from=\"" + pn_av(a["from"]) + "\" to=\"" + pn_av(a["to"]) + "\"";
+    }
+    return s + " dur=\"" + pn_n(a["dur"]) + "s\" repeatCount=\"" + pn_repv(pn_opt(a, "rep", nil)) + "\"/>";
+}
+
+// ---------------------------------------------------------------------------
+//  العقد
+// ---------------------------------------------------------------------------
+fun pn_points(f) {
+    let parts = [];
+    let i = 0;
+    while (i + 1 < len(f)) { push(parts, pn_n(f[i]) + "," + pn_n(f[i + 1])); i = i + 2; }
+    return join(parts, " ");
+}
+fun pn_text_attrs(n) {
+    let s = pn_attrn("x", n["x"]) + pn_attrn("y", n["y"]);
+    s = s + pn_anum(n, "size", "font-size");
+    s = s + pn_astr(n, "family", "font-family");
+    if (pn_has(n, "weight")) { s = s + pn_attr("font-weight", pn_av(n["weight"])); }
+    if (pn_has(n, "italic") and n["italic"] == true) { s = s + pn_attr("font-style", "italic"); }
+    s = s + pn_astr(n, "anchor", "text-anchor");
+    s = s + pn_astr(n, "base", "dominant-baseline");
+    s = s + pn_anum(n, "ls", "letter-spacing");
+    s = s + pn_astr(n, "dir", "direction");
+    return s;
+}
+fun pn_text_body(n) {
+    let txt = n["text"];
+    if (type(txt) != "string") { txt = str(txt); }
+    let ls = split(txt, "\n");
+    if (len(ls) < 2) { return pn_esc(txt); }
+    let size = pn_opt(n, "size", 16);
+    let lh = pn_opt(n, "lh", 1.2);
+    let out = "";
+    let i = 0;
+    while (i < len(ls)) {
+        let dy = 0;
+        if (i > 0) { dy = size * lh; }
+        out = out + "<tspan" + pn_attrn("x", n["x"]) + pn_attrn("dy", dy) + ">" + pn_esc(ls[i]) + "</tspan>";
+        i = i + 1;
+    }
+    return out;
+}
+
+// يُلحق أسطر العقدة (بمسافة بادئة ind) إلى out
+fun pn_emit(out, n, ind) {
+    let pad = repeat(" ", ind);
+    let t = n["t"];
+    let a = pn_head(n);
+    if (t == "rect") {
+        a = a + pn_anum(n, "x", "x") + pn_anum(n, "y", "y") + pn_anum(n, "w", "width") + pn_anum(n, "h", "height")
+              + pn_anum(n, "rx", "rx") + pn_anum(n, "ry", "ry");
+    } else if (t == "circle") {
+        a = a + pn_anum(n, "cx", "cx") + pn_anum(n, "cy", "cy") + pn_anum(n, "r", "r");
+    } else if (t == "ellipse") {
+        a = a + pn_anum(n, "cx", "cx") + pn_anum(n, "cy", "cy") + pn_anum(n, "rx", "rx") + pn_anum(n, "ry", "ry");
+    } else if (t == "line") {
+        a = a + pn_anum(n, "x1", "x1") + pn_anum(n, "y1", "y1") + pn_anum(n, "x2", "x2") + pn_anum(n, "y2", "y2");
+    } else if (t == "polyline" or t == "polygon") {
+        a = a + pn_attr("points", pn_points(n["pts"]));
+    } else if (t == "path") {
+        a = a + pn_attr("d", n["d"]);
+    } else if (t == "text") {
+        a = a + pn_text_attrs(n);
+    } else if (t == "image") {
+        a = a + pn_anum(n, "x", "x") + pn_anum(n, "y", "y") + pn_anum(n, "w", "width") + pn_anum(n, "h", "height")
+              + pn_attr("href", n["href"]) + pn_astr(n, "par", "preserveAspectRatio");
+    }
+    a = a + pn_tail(n);
+
+    let kids = [];
+    if (pn_has(n, "title")) { push(kids, "<title>" + pn_esc(n["title"]) + "</title>"); }
+    if (pn_has(n, "anim")) { for (let an in n["anim"]) { push(kids, pn_anim_str(an)); } }
+
+    if (t == "text") {
+        push(out, pad + "<text" + a + ">" + pn_text_body(n) + join(kids, "") + "</text>");
+        return out;
+    }
+    let sub = [];
+    if (t == "g") {
+        for (let ch in n["nodes"]) { pn_emit(sub, ch, ind + 2); }
+    }
+    if (len(kids) == 0 and len(sub) == 0) {
+        push(out, pad + "<" + pn_tag(t) + a + "/>");
+        return out;
+    }
+    push(out, pad + "<" + pn_tag(t) + a + ">");
+    for (let k in kids) { push(out, pad + "  " + k); }
+    for (let s in sub) { push(out, s); }
+    push(out, pad + "</" + pn_tag(t) + ">");
+    return out;
+}
+fun pn_tag(t) { return t; }
+
+// ---------------------------------------------------------------------------
+//  التعريفات (defs)
+// ---------------------------------------------------------------------------
+fun pn_stop_lines(out, stops, pad) {
+    for (let s in stops) {
+        let col = pn_norm_color(s[1]);
+        let a = pn_attrn("offset", s[0]);
+        if (len(col) == 9 and substr(col, 0, 1) == "#") {
+            a = a + pn_attr("stop-color", substr(col, 0, 7)) + pn_attr("stop-opacity", pn_nf(pn_hex2(col, 7) / 255, 3));
+        } else { a = a + pn_attr("stop-color", col); }
+        push(out, pad + "<stop" + a + "/>");
+    }
+    return out;
+}
+fun pn_flood(c, op) {
+    let col = pn_norm_color(c);
+    if (len(col) == 9 and substr(col, 0, 1) == "#") { col = substr(col, 0, 7); }
+    return "<feFlood" + pn_attr("flood-color", col) + pn_attr("flood-opacity", pn_nf(op, 3)) + "/>";
+}
+fun pn_emit_def(out, d, ind) {
+    let pad = repeat(" ", ind);
+    let t = d["t"];
+    let id = pn_attr("id", d["id"]);
+    let region = " x=\"-50%\" y=\"-50%\" width=\"200%\" height=\"200%\"";
+    if (t == "linear") {
+        push(out, pad + "<linearGradient" + id + pn_attrn("x1", d["x1"]) + pn_attrn("y1", d["y1"]) + pn_attrn("x2", d["x2"]) + pn_attrn("y2", d["y2"]) + ">");
+        pn_stop_lines(out, d["stops"], pad + "  ");
+        push(out, pad + "</linearGradient>");
+    } else if (t == "radial") {
+        push(out, pad + "<radialGradient" + id + pn_attrn("cx", d["cx"]) + pn_attrn("cy", d["cy"]) + pn_attrn("r", d["r"]) + ">");
+        pn_stop_lines(out, d["stops"], pad + "  ");
+        push(out, pad + "</radialGradient>");
+    } else if (t == "shadow") {
+        push(out, pad + "<filter" + id + region + ">");
+        push(out, pad + "  <feGaussianBlur in=\"SourceAlpha\"" + pn_attrn("stdDeviation", d["blur"] / 2) + "/>");
+        push(out, pad + "  <feOffset" + pn_attrn("dx", d["dx"]) + pn_attrn("dy", d["dy"]) + " result=\"o\"/>");
+        push(out, pad + "  " + pn_flood(d["c"], pn_opt(d, "op", 0.3)));
+        push(out, pad + "  <feComposite in2=\"o\" operator=\"in\"/>");
+        push(out, pad + "  <feMerge><feMergeNode/><feMergeNode in=\"SourceGraphic\"/></feMerge>");
+        push(out, pad + "</filter>");
+    } else if (t == "glow") {
+        push(out, pad + "<filter" + id + region + ">");
+        push(out, pad + "  <feGaussianBlur in=\"SourceAlpha\"" + pn_attrn("stdDeviation", d["r"]) + " result=\"b\"/>");
+        push(out, pad + "  " + pn_flood(d["c"], 1));
+        push(out, pad + "  <feComposite in2=\"b\" operator=\"in\" result=\"g\"/>");
+        push(out, pad + "  <feMerge><feMergeNode in=\"g\"/><feMergeNode in=\"g\"/><feMergeNode in=\"SourceGraphic\"/></feMerge>");
+        push(out, pad + "</filter>");
+    } else if (t == "blur") {
+        push(out, pad + "<filter" + id + region + ">");
+        push(out, pad + "  <feGaussianBlur" + pn_attrn("stdDeviation", d["r"]) + "/>");
+        push(out, pad + "</filter>");
+    } else if (t == "pattern") {
+        push(out, pad + "<pattern" + id + pn_attrn("width", d["w"]) + pn_attrn("height", d["h"]) + " patternUnits=\"userSpaceOnUse\">");
+        for (let ch in d["nodes"]) { pn_emit(out, ch, ind + 2); }
+        push(out, pad + "</pattern>");
+    } else if (t == "clip") {
+        push(out, pad + "<clipPath" + id + ">");
+        for (let ch in d["nodes"]) { pn_emit(out, ch, ind + 2); }
+        push(out, pad + "</clipPath>");
+    }
+    return out;
+}
+
+// ---------------------------------------------------------------------------
+//  SVG
+// ---------------------------------------------------------------------------
+fun pn_svg(c) {
+    let w = pn_n(c["w"]);
+    let h = pn_n(c["h"]);
+    let out = [];
+    let root = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"" + w + "\" height=\"" + h + "\" viewBox=\"0 0 " + w + " " + h + "\"";
+    if (pn_has(c, "font")) { root = root + pn_attr("font-family", c["font"]); }
+    push(out, root + ">");
+    if (pn_has(c, "title") and c["title"] != "") { push(out, "  <title>" + pn_esc(c["title"]) + "</title>"); }
+    if (pn_has(c, "defs") and len(c["defs"]) > 0) {
+        push(out, "  <defs>");
+        for (let d in c["defs"]) { pn_emit_def(out, d, 4); }
+        push(out, "  </defs>");
+    }
+    if (pn_has(c, "bg") and c["bg"] != "none") {
+        push(out, "  <rect width=\"100%\" height=\"100%\"" + pn_paint({"fill": c["bg"]}, "fill", "fill", "_", "_") + "/>");
+    }
+    for (let n in c["nodes"]) { pn_emit(out, n, 2); }
+    push(out, "</svg>");
+    return join(out, "\n");
+}
+fun pn_print(c) { print pn_svg(c); return c; }
+
+// ---------------------------------------------------------------------------
+//  JSON (.puo) — كاتب خاص: ترتيب ثابت، أرقام حتى 6 خانات، تجاهل مفاتيح _
+// ---------------------------------------------------------------------------
+fun pn_jstr(s) {
+    s = replace(s, "\\", "\\\\");
+    s = replace(s, "\"", "\\\"");
+    s = replace(s, "\n", "\\n");
+    s = replace(s, "\r", "\\r");
+    s = replace(s, "\t", "\\t");
+    return "\"" + s + "\"";
+}
+fun pn_jflat(a) {
+    for (let v in a) {
+        let t = type(v);
+        if (t == "array" or t == "map") { return false; }
+    }
+    return true;
+}
+fun pn_jv(v, ind) {
+    let t = type(v);
+    if (v == nil) { return "null"; }
+    if (t == "bool") { if (v) { return "true"; } return "false"; }
+    if (t == "number") { return pn_nf(v, 6); }
+    if (t == "string") { return pn_jstr(v); }
+    let pad = repeat(" ", ind + 2);
+    let epad = repeat(" ", ind);
+    if (t == "array") {
+        if (len(v) == 0) { return "[]"; }
+        let items = [];
+        if (pn_jflat(v)) {
+            for (let x in v) { push(items, pn_jv(x, 0)); }
+            return "[" + join(items, ", ") + "]";
+        }
+        for (let x in v) { push(items, pad + pn_jv(x, ind + 2)); }
+        return "[\n" + join(items, ",\n") + "\n" + epad + "]";
+    }
+    if (t == "map") {
+        let items = [];
+        for (let k in keys(v)) {
+            if (substr(k, 0, 1) != "_" and v[k] != nil) { push(items, pad + pn_jstr(k) + ": " + pn_jv(v[k], ind + 2)); }
+        }
+        if (len(items) == 0) { return "{}"; }
+        return "{\n" + join(items, ",\n") + "\n" + epad + "}";
+    }
+    return "null";
+}
+fun pn_json(c) { return pn_jv(c, 0); }
+
+fun pn_restore(nodes, ctx) {
+    for (let n in nodes) {
+        if (n["t"] == "g" or n["t"] == "pattern" or n["t"] == "clip") {
+            n["_ctx"] = ctx;
+            if (!has(n, "nodes") or n["nodes"] == nil) { n["nodes"] = []; }
+            pn_restore(n["nodes"], ctx);
+        }
+    }
+    return nodes;
+}
+// قراءة مشهد .puo / JSON إلى لوحة قابلة للإكمال بالرسم
+fun pn_from_json(s) {
+    let c = jsonDecode(s);
+    if (type(c) != "map" or !has(c, "piano")) { throw "piano: هذا ليس مشهد piano (حقل piano مفقود)"; }
+    if (c["piano"] != PN_SCHEMA) { throw "piano: إصدار المخطط غير مدعوم: " + str(c["piano"]); }
+    if (!pn_has(c, "defs")) { c["defs"] = []; }
+    if (!pn_has(c, "nodes")) { c["nodes"] = []; }
+    let ctx = {"seq": 1000, "defs": c["defs"], "theme": pn_theme_def("light")};
+    c["_ctx"] = ctx;
+    pn_restore(c["defs"], ctx);
+    pn_restore(c["nodes"], ctx);
+    return c;
+}
+
+// ---------------------------------------------------------------------------
+//  HTML · data-URI · حفظ
+// ---------------------------------------------------------------------------
+fun pn_html(c) {
+    let bg = pn_opt(c, "bg", "#ffffff");
+    if (substr(bg, 0, 1) != "#") { bg = "#ffffff"; }
+    let ttl = pn_opt(c, "title", "");
+    if (ttl == "") { ttl = "piano"; }
+    return "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n"
+         + "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
+         + "<title>" + pn_esc(ttl) + "</title>\n"
+         + "<style>html,body{margin:0;min-height:100%;background:" + bg + "}body{display:grid;place-items:center;min-height:100vh}svg{max-width:100%;height:auto}</style>\n"
+         + "</head>\n<body>\n" + pn_svg(c) + "\n</body>\n</html>\n";
+}
+// للاستعمال في indsin:  <Image src={pn_data_uri(c)} width=320 />
+fun pn_data_uri(c) { return "data:image/svg+xml;base64," + sec.base64Encode(pn_svg(c)); }
+
+fun pn_ext(path) {
+    let p = lower(path);
+    let i = len(p) - 1;
+    while (i >= 0 and substr(p, i, 1) != ".") { i = i - 1; }
+    if (i < 0) { return ""; }
+    return substr(p, i, len(p) - i);
+}
+// يحفظ بحسب الامتداد: .svg · .html · .json · .puo
+fun pn_save(c, path) {
+    let e = pn_ext(path);
+    if (e == ".svg") { return writeFile(path, pn_svg(c) + "\n"); }
+    if (e == ".html" or e == ".htm") { return writeFile(path, pn_html(c)); }
+    if (e == ".json" or e == ".puo") { return writeFile(path, pn_json(c) + "\n"); }
+    throw "piano: امتداد غير مدعوم «" + e + "» — استعمل .svg أو .html أو .puo أو .json";
+}
+fun pn_load(path) { return pn_from_json(readFile(path)); }
