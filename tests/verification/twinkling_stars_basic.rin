@@ -1,0 +1,15 @@
+@import "lib/twinkling-stars.og.rin";
+let info = ts_info();
+assert(info.name == "Twinkling Stars");
+assert(info.version == "1.0.0");
+let app = ts_app("Demo", "1.0.0", "com.example.demo", "portrait");
+assert(app.packageId == "com.example.demo");
+let screen = ts_screen("home", "Home", "dashboard");
+screen = ts_add_child(screen, ts_text("title", "Hello", "headline"));
+assert(len(screen.children) == 1);
+assert(ts_validate_email("dev@example.com"));
+assert(ts_validate_email("invalid") == false);
+assert(ts_validate_range(5, 1, 10));
+assert(ts_html_escape("<hello>") == "&lt;hello&gt;");
+assert(ts_native_request("camera", "capture", {})["bridge"] == "twinkling-stars/1");
+print "Twinkling Stars: OK";
