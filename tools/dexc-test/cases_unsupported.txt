@@ -1,0 +1,9 @@
+class A {}
+print "a", "b", sep="-";
+let f = fun(x) { return x; };
+each x in [1,2] { print x; }
+print 1e3;
+import "x.rin";
+fun a() { fun b() {} }
+return 1;
+`tpl`
