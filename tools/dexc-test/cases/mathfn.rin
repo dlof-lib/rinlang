@@ -1,0 +1,1 @@
+print abs(-3.5), sqrt(16), pow(2,10), floor(2.7), ceil(2.1), round(2.5), round(-2.5), round(2.4), sum([1,2,3]), mean([1,2,3,4]), maxOf([1,9,3]), minOf([4,2,8]);
