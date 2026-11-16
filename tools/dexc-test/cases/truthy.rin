@@ -1,0 +1,1 @@
+if ("") { print "s"; } if (0) { print "z"; } else { print "zf"; } if ([]) { print "arr"; } if (nil) { print "n"; } else { print "nf"; } if ({}) { print "m"; }
