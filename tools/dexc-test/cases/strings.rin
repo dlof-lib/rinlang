@@ -1,0 +1,3 @@
+let s = "héllo wörld";
+print len(s), upper(s), lower("ABC"), trim("  x  "), substr(s,1,4), substr("abc",5), substr("abc",-2,2);
+print split("a,b,,c", ","), join(["a",1,nil],"-"), indexOf("hello","l"), replace("aXbXc","X","--"), contains("abc","bc"), charAt("xyz",1);
