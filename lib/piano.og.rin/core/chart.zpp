@@ -1,0 +1,376 @@
+// piano — الجزء 7: المخططات الجاهزة (مبنيّة بالكامل فوق الأشكال الأولية، فتخرج كأي مشهد piano)
+//
+//   pn_bar_chart(c, 40, 40, 400, 240, ["أ","ب","ج"], [[3,5,2],[4,1,6]], {"title": "مبيعات", "names": ["2025","2026"]});
+//   pn_line_chart(…, {"smooth": true, "area": true})   pn_pie_chart(c, cx, cy, r, labels, values, {"inner": 0.6})
+//   pn_radar_chart · pn_sparkline · pn_gauge · pn_legend
+//
+// الخيارات المشتركة: colors:[…] (افتراضياً لوحة الثيم) · title · names (أسماء السلاسل للوسيلة) · grid:true
+
+fun pn_log10(v) { return log(v) / log(10); }
+fun pn_nice_step(range, n) {
+    let raw = range / n;
+    let mag = pow(10, floor(pn_log10(raw)));
+    let nm = raw / mag;
+    let s = 10;
+    if (nm <= 1) { s = 1; } else if (nm <= 2) { s = 2; } else if (nm <= 5) { s = 5; }
+    return s * mag;
+}
+// محور «لطيف»: يُعيد {min, max, step} بقيم مستديرة تحيط بالمدى [lo, hi]
+fun pn_nice(lo, hi, n) {
+    if (hi <= lo) { hi = lo + 1; }
+    let step = pn_nice_step(hi - lo, n);
+    return {"min": floor(lo / step + 0.000001) * step, "max": ceil(hi / step - 0.000001) * step, "step": step};
+}
+fun pn_series_list(series) {
+    if (len(series) > 0 and type(series[0]) == "number") { return [series]; }
+    return series;
+}
+fun pn_series_color(parent, o, i) {
+    if (pn_has(o, "colors")) {
+        let cs = o["colors"];
+        return cs[pn_mod(i, len(cs))];
+    }
+    return pn_color(parent, i);
+}
+fun pn_range_of(sr, stacked, n) {
+    let lo = 0; let hi = 0;
+    let i = 0;
+    while (i < n) {
+        let acc = 0;
+        for (let s in sr) {
+            let v = s[i];
+            if (stacked) { acc = acc + v; if (acc > hi) { hi = acc; } }
+            else { if (v > hi) { hi = v; } if (v < lo) { lo = v; } }
+        }
+        i = i + 1;
+    }
+    return [lo, hi];
+}
+
+// وسيلة إيضاح أفقية: أسماء + ألوان
+fun pn_legend(parent, x, y, names, colors, o) {
+    o = pn_o(o);
+    let size = pn_opt(o, "size", 12);
+    let g = pn_group(parent, pn_pick(o, ["id", "op", "tf", "title"]));
+    let cx = x;
+    let i = 0;
+    while (i < len(names)) {
+        pn_rect(g, cx, y - size + 2, size, size, {"fill": colors[pn_mod(i, len(colors))], "rx": 3});
+        pn_text(g, cx + size + 6, y + 1, names[i], {"size": size, "fill": pn_muted(parent)});
+        cx = cx + size + 6 + len(names[i]) * size * 0.58 + 16;
+        i = i + 1;
+    }
+    return g;
+}
+fun pn_legend_width(names) {
+    let w = 0;
+    for (let nm in names) { w = w + 12 + 6 + len(nm) * 12 * 0.58 + 16; }
+    return w - 16;
+}
+
+// منطقة الرسم الداخلية بعد حجز الهوامش والعنوان
+fun pn_plot_area(x, y, w, h, o) {
+    let top = 10;
+    if (pn_has(o, "title")) { top = top + 24; }
+    let left = pn_opt(o, "padl", 44);
+    return {"x": x + left, "y": y + top, "w": w - left - 12, "h": h - top - 30};
+}
+fun pn_chart_head(g, parent, x, y, w, o, colors, count) {
+    if (pn_has(o, "title")) {
+        pn_text(g, x + 4, y + 18, o["title"], {"size": 15, "weight": 700});
+    }
+    if (pn_has(o, "names") and count > 1) {
+        pn_legend(g, x + w - 8 - pn_legend_width(o["names"]), y + 16, o["names"], colors, {"size": 12});
+    }
+    return g;
+}
+// شبكة المحور الرأسي مع القيم
+fun pn_y_axis(g, parent, pa, nice, o) {
+    let steps = floor((nice["max"] - nice["min"]) / nice["step"] + 0.5);
+    let i = 0;
+    while (i <= steps) {
+        let v = nice["min"] + i * nice["step"];
+        let yy = pa["y"] + pa["h"] - (v - nice["min"]) / (nice["max"] - nice["min"]) * pa["h"];
+        if (pn_opt(o, "grid", true)) {
+            pn_line(g, pa["x"], yy, pa["x"] + pa["w"], yy, {"stroke": pn_gridc(parent), "sw": 1});
+        }
+        pn_text(g, pa["x"] - 8, yy + 4, pn_nf(v, 2), {"size": 11, "anchor": "end", "fill": pn_muted(parent)});
+        i = i + 1;
+    }
+    return g;
+}
+fun pn_x_labels(g, parent, pa, labels) {
+    let n = len(labels);
+    let i = 0;
+    while (i < n) {
+        let px = pa["x"] + pa["w"] * (i + 0.5) / n;
+        pn_text(g, px, pa["y"] + pa["h"] + 18, labels[i], {"size": 11, "anchor": "middle", "fill": pn_muted(parent)});
+        i = i + 1;
+    }
+    return g;
+}
+
+// ---------------------------------------------------------------------------
+//  أعمدة (متجاورة أو متراكمة) — o: stacked gap(0.3) rx(3) values(عرض القيم) min max
+// ---------------------------------------------------------------------------
+fun pn_bar_chart(parent, x, y, w, h, labels, series, o) {
+    o = pn_o(o);
+    let sr = pn_series_list(series);
+    let ns = len(sr);
+    let n = len(labels);
+    let stacked = pn_opt(o, "stacked", false);
+    let colors = [];
+    let k = 0;
+    while (k < ns) { push(colors, pn_series_color(parent, o, k)); k = k + 1; }
+
+    let g = pn_group(parent, pn_pick(o, ["id", "op", "tf", "shadow", "clip", "anim"]));
+    let pa = pn_plot_area(x, y, w, h, o);
+    let rg = pn_range_of(sr, stacked, n);
+    let nice = pn_nice(pn_opt(o, "min", rg[0]), pn_opt(o, "max", rg[1]), 5);
+    pn_chart_head(g, parent, x, y, w, o, colors, ns);
+    pn_y_axis(g, parent, pa, nice, o);
+    pn_x_labels(g, parent, pa, labels);
+
+    let span = nice["max"] - nice["min"];
+    let yb = pa["y"] + pa["h"] - (0 - nice["min"]) / span * pa["h"];
+    let gw = pa["w"] / n;
+    let gap = pn_opt(o, "gap", 0.3);
+    let bw = gw * (1 - gap);
+    if (!stacked) { bw = bw / ns; }
+    let rx = pn_opt(o, "rx", 3);
+    let i = 0;
+    while (i < n) {
+        let bx = pa["x"] + gw * i + gw * gap / 2;
+        let acc = 0;
+        let s = 0;
+        while (s < ns) {
+            let v = sr[s][i];
+            let y0 = 0; let y1 = 0; let xx = bx;
+            if (stacked) {
+                y0 = pa["y"] + pa["h"] - (acc + v - nice["min"]) / span * pa["h"];
+                y1 = pa["y"] + pa["h"] - (acc - nice["min"]) / span * pa["h"];
+                acc = acc + v;
+            } else {
+                xx = bx + bw * s;
+                let yv = pa["y"] + pa["h"] - (v - nice["min"]) / span * pa["h"];
+                y0 = yv; y1 = yb;
+                if (yv > yb) { y0 = yb; y1 = yv; }
+            }
+            pn_rect(g, xx, y0, bw, y1 - y0, {"fill": colors[s], "rx": rx, "title": labels[i] + ": " + pn_nf(v, 2)});
+            if (pn_opt(o, "values", false) and !stacked) {
+                pn_text(g, xx + bw / 2, y0 - 5, pn_nf(v, 2), {"size": 11, "anchor": "middle", "fill": pn_muted(parent)});
+            }
+            s = s + 1;
+        }
+        i = i + 1;
+    }
+    return g;
+}
+
+// ---------------------------------------------------------------------------
+//  خطوط — o: smooth area dots(true) width(2.5)
+// ---------------------------------------------------------------------------
+fun pn_line_pen(f, smooth) {
+    let p = pn_pen();
+    pn_move(p, f[0], f[1]);
+    if (smooth) { pn_spline_to(p, f, 1, false); }
+    else {
+        let j = 2;
+        while (j < len(f)) { pn_lineto(p, f[j], f[j + 1]); j = j + 2; }
+    }
+    return p;
+}
+fun pn_area_pen(f, smooth, base) {
+    let p = pn_line_pen(f, smooth);
+    pn_lineto(p, f[len(f) - 2], base);
+    pn_lineto(p, f[0], base);
+    pn_close(p);
+    return p;
+}
+fun pn_line_chart(parent, x, y, w, h, labels, series, o) {
+    o = pn_o(o);
+    let sr = pn_series_list(series);
+    let ns = len(sr);
+    let n = len(labels);
+    let colors = [];
+    let k = 0;
+    while (k < ns) { push(colors, pn_series_color(parent, o, k)); k = k + 1; }
+
+    let g = pn_group(parent, pn_pick(o, ["id", "op", "tf", "shadow", "clip", "anim"]));
+    let pa = pn_plot_area(x, y, w, h, o);
+    let lo = sr[0][0]; let hi = sr[0][0];
+    for (let s in sr) { for (let v in s) { if (v < lo) { lo = v; } if (v > hi) { hi = v; } } }
+    if (lo > 0) { lo = 0; }
+    let nice = pn_nice(pn_opt(o, "min", lo), pn_opt(o, "max", hi), 5);
+    pn_chart_head(g, parent, x, y, w, o, colors, ns);
+    pn_y_axis(g, parent, pa, nice, o);
+    pn_x_labels(g, parent, pa, labels);
+
+    let span = nice["max"] - nice["min"];
+    let base = pa["y"] + pa["h"] - (0 - nice["min"]) / span * pa["h"];
+    let smooth = pn_opt(o, "smooth", false);
+    let s = 0;
+    while (s < ns) {
+        let f = [];
+        let i = 0;
+        while (i < n) {
+            push(f, pa["x"] + pa["w"] * (i + 0.5) / n);
+            push(f, pa["y"] + pa["h"] - (sr[s][i] - nice["min"]) / span * pa["h"]);
+            i = i + 1;
+        }
+        let col = colors[s];
+        if (pn_opt(o, "area", false)) {
+            pn_path(g, pn_area_pen(f, smooth, base), {"fill": pn_alpha(col, 0.18)});
+        }
+        pn_path(g, pn_line_pen(f, smooth), {"stroke": col, "sw": pn_opt(o, "width", 2.5), "cap": "round", "join": "round"});
+        if (pn_opt(o, "dots", true)) {
+            let m = 0;
+            while (m < n) {
+                pn_circle(g, f[2 * m], f[2 * m + 1], 3.5, {"fill": col, "stroke": parent["_ctx"]["theme"]["bg"], "sw": 1.5,
+                                                          "title": labels[m] + ": " + pn_nf(sr[s][m], 2)});
+                m = m + 1;
+            }
+        }
+        s = s + 1;
+    }
+    return g;
+}
+
+// ---------------------------------------------------------------------------
+//  فطيرة/دونات — o: inner(0..0.9) start(-90) gap(سماكة فاصل) labels(true) center(نص)
+// ---------------------------------------------------------------------------
+fun pn_pie_chart(parent, cx, cy, r, labels, values, o) {
+    o = pn_o(o);
+    let total = 0;
+    for (let v in values) { total = total + v; }
+    let inner = pn_opt(o, "inner", 0);
+    let a0 = pn_opt(o, "start", -90);
+    let gap = pn_opt(o, "gap", 0);
+    let g = pn_group(parent, pn_pick(o, ["id", "op", "tf", "shadow", "clip", "anim"]));
+    let i = 0;
+    while (i < len(values)) {
+        let sweep = 360 * values[i] / total;
+        let a1 = a0 + sweep;
+        let col = pn_series_color(parent, o, i);
+        let pct = pn_nf(values[i] / total * 100, 1) + "%";
+        let so = {"fill": col, "title": labels[i] + ": " + pn_nf(values[i], 2) + " (" + pct + ")"};
+        if (gap > 0) { so["stroke"] = parent["_ctx"]["theme"]["bg"]; so["sw"] = gap; so["join"] = "round"; }
+        if (inner > 0) { pn_ring(g, cx, cy, r * inner, r, a0, a1, so); }
+        else { pn_slice(g, cx, cy, r, a0, a1, so); }
+        if (pn_opt(o, "labels", true) and sweep >= 18) {
+            let mid = pn_rad((a0 + a1) / 2);
+            let rr = r * 0.66;
+            if (inner > 0) { rr = r * (1 + inner) / 2; }
+            pn_text(g, cx + rr * cos(mid), cy + rr * sin(mid) + 4, pct,
+                    {"size": 12, "weight": 700, "anchor": "middle", "fill": colorTextOn(pn_norm_color(col))});
+        }
+        a0 = a1;
+        i = i + 1;
+    }
+    if (pn_has(o, "center") and inner > 0) {
+        pn_text(g, cx, cy + 6, o["center"], {"size": r * inner * 0.42, "weight": 700, "anchor": "middle"});
+    }
+    return g;
+}
+
+// ---------------------------------------------------------------------------
+//  رادار — axes: أسماء المحاور، series: مصفوفة أرقام أو مصفوفة سلاسل. o: max rings(4)
+// ---------------------------------------------------------------------------
+fun pn_radar_chart(parent, cx, cy, r, axes, series, o) {
+    o = pn_o(o);
+    let sr = pn_series_list(series);
+    let n = len(axes);
+    let mx = 0;
+    for (let s in sr) { for (let v in s) { if (v > mx) { mx = v; } } }
+    mx = pn_opt(o, "max", mx);
+    let rings = pn_opt(o, "rings", 4);
+    let g = pn_group(parent, pn_pick(o, ["id", "op", "tf", "shadow", "clip", "anim"]));
+    let ri = 1;
+    while (ri <= rings) {
+        let pts = [];
+        let a = 0;
+        while (a < n) {
+            let ang = pn_rad(-90 + 360 * a / n);
+            push(pts, cx + r * ri / rings * cos(ang));
+            push(pts, cy + r * ri / rings * sin(ang));
+            a = a + 1;
+        }
+        pn_polygon(g, pts, {"fill": "none", "stroke": pn_gridc(parent), "sw": 1});
+        ri = ri + 1;
+    }
+    let a2 = 0;
+    while (a2 < n) {
+        let ang = pn_rad(-90 + 360 * a2 / n);
+        pn_line(g, cx, cy, cx + r * cos(ang), cy + r * sin(ang), {"stroke": pn_gridc(parent), "sw": 1});
+        let lx = cx + (r + 16) * cos(ang);
+        let ly = cy + (r + 16) * sin(ang) + 4;
+        let anc = "middle";
+        if (cos(ang) > 0.3) { anc = "start"; }
+        if (cos(ang) < -0.3) { anc = "end"; }
+        pn_text(g, lx, ly, axes[a2], {"size": 12, "anchor": anc, "fill": pn_muted(parent)});
+        a2 = a2 + 1;
+    }
+    let si = 0;
+    while (si < len(sr)) {
+        let col = pn_series_color(parent, o, si);
+        let pts = [];
+        let m = 0;
+        while (m < n) {
+            let ang = pn_rad(-90 + 360 * m / n);
+            let rr = r * sr[si][m] / mx;
+            push(pts, cx + rr * cos(ang));
+            push(pts, cy + rr * sin(ang));
+            m = m + 1;
+        }
+        pn_polygon(g, pts, {"fill": pn_alpha(col, 0.22), "stroke": col, "sw": 2, "join": "round"});
+        let m2 = 0;
+        while (m2 < n) { pn_circle(g, pts[2 * m2], pts[2 * m2 + 1], 3, {"fill": col}); m2 = m2 + 1; }
+        si = si + 1;
+    }
+    return g;
+}
+
+// ---------------------------------------------------------------------------
+//  خط مصغّر (sparkline) — o: smooth(true) area(true) dot(true) color width
+// ---------------------------------------------------------------------------
+fun pn_sparkline(parent, x, y, w, h, values, o) {
+    o = pn_o(o);
+    let lo = values[0]; let hi = values[0];
+    for (let v in values) { if (v < lo) { lo = v; } if (v > hi) { hi = v; } }
+    if (hi == lo) { hi = lo + 1; }
+    let col = pn_opt(o, "color", pn_accent(parent));
+    let n = len(values);
+    let f = [];
+    let i = 0;
+    while (i < n) {
+        push(f, x + w * i / (n - 1));
+        push(f, y + h - (values[i] - lo) / (hi - lo) * h);
+        i = i + 1;
+    }
+    let g = pn_group(parent, pn_pick(o, ["id", "op", "tf", "shadow", "clip", "anim"]));
+    let smooth = pn_opt(o, "smooth", true);
+    if (pn_opt(o, "area", true)) {
+        pn_path(g, pn_area_pen(f, smooth, y + h), {"fill": pn_alpha(col, 0.15)});
+    }
+    pn_path(g, pn_line_pen(f, smooth), {"stroke": col, "sw": pn_opt(o, "width", 2), "cap": "round", "join": "round"});
+    if (pn_opt(o, "dot", true)) { pn_circle(g, f[len(f) - 2], f[len(f) - 1], 3.5, {"fill": col}); }
+    return g;
+}
+
+// ---------------------------------------------------------------------------
+//  مقياس نصف دائري — o: thickness(14) color label(نص تحت القيمة)
+// ---------------------------------------------------------------------------
+fun pn_gauge(parent, cx, cy, r, value, mx, o) {
+    o = pn_o(o);
+    let th = pn_opt(o, "thickness", 14);
+    let col = pn_opt(o, "color", pn_accent(parent));
+    let g = pn_group(parent, pn_pick(o, ["id", "op", "tf", "shadow", "clip", "anim"]));
+    let t = pn_clamp(value / mx, 0, 1);
+    pn_arc(g, cx, cy, r, 180, 360, {"stroke": pn_gridc(parent), "sw": th, "cap": "round"});
+    if (t > 0) { pn_arc(g, cx, cy, r, 180, 180 + 180 * t, {"stroke": col, "sw": th, "cap": "round"}); }
+    pn_text(g, cx, cy - r * 0.12, pn_nf(value, 2), {"size": r * 0.5, "weight": 700, "anchor": "middle"});
+    if (pn_has(o, "label")) {
+        pn_text(g, cx, cy + r * 0.16, o["label"], {"size": r * 0.18, "anchor": "middle", "fill": pn_muted(parent)});
+    }
+    return g;
+}
