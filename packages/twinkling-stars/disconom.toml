@@ -1,0 +1,15 @@
+# Twinkling Stars — modular source package for RinPM / Disconom
+disconom = 2
+name = "twinkling-stars"
+version = "1.0.0"
+description = "Professional app-building toolkit for Rin and Indsin: design system, screens, navigation, forms, JSON, HTML and native host contracts"
+authors = ["Rin Project"]
+license = "MIT"
+keywords = ["app-development", "indsin", "ui", "design-system", "json", "html", "native-bridge"]
+categories = ["ui", "app-development", "utilities"]
+rin = ">=1.0.0"
+main = "main.zpp"
+parts = ["main.zpp", "core/design.zpp", "core/components.zpp", "core/forms.zpp", "core/native.zpp"]
+
+[scripts]
+check = "rin lib check ."
