@@ -1,0 +1,344 @@
+// piano — الجزء 3: الأشكال الأساسية
+//
+// خيارات مشتركة لكل الأشكال (o):
+//   fill stroke sw op fo so dash cap join   — الطلاء. الألوان: "#rgb" "#rrggbb" "#rrggbbaa" "none" "@id"
+//   grad:[ألوان] angle:90                   — تدرّج خطي سريع كتعبئة
+//   shadow:true|"#لون"|{dx,dy,blur,c,op}   — ظل  ·  glow:true|"#لون"|نصف_قطر  ·  blur:نصف_قطر
+//   rot:درجات (حول مركز الشكل) · tf:[[…]] · clip:"@id" · filter:"@id" · id · cls · title(تلميح) · anim
+
+// ---------------------------------------------------------------------------
+//  باني العقدة المشترك
+// ---------------------------------------------------------------------------
+fun pn_pick(o, ks) {
+    let out = {};
+    for (let k in ks) { if (pn_has(o, k)) { out[k] = o[k]; } }
+    return out;
+}
+
+fun pn_mk(parent, node, o, cx, cy) {
+    o = pn_o(o);
+    let t = node["t"];
+    let ks = ["id", "cls", "fill", "stroke", "sw", "op", "fo", "so", "dash", "cap", "join", "title", "clip"];
+    for (let k in ks) { if (pn_has(o, k)) { node[k] = o[k]; } }
+    if (pn_has(o, "grad")) { node["fill"] = pn_linear(parent, o["grad"], pn_opt(o, "angle", 90)); }
+
+    // قيم افتراضية بحسب نوع العقدة
+    if (t == "rect" or t == "circle" or t == "ellipse" or t == "polygon") {
+        if (!pn_has(node, "fill")) { node["fill"] = pn_accent(parent); }
+    }
+    if (t == "line" or t == "polyline") {
+        if (t == "polyline" and !pn_has(node, "fill")) { node["fill"] = "none"; }
+        if (!pn_has(node, "stroke")) { node["stroke"] = pn_ink(parent); }
+        if (!pn_has(node, "sw")) { node["sw"] = 2; }
+    }
+    if (t == "path") {
+        let d = node["d"];
+        let last = substr(d, len(d) - 1, 1);
+        if (last == "Z" or last == "z") {
+            if (!pn_has(node, "fill")) { node["fill"] = pn_accent(parent); }
+        } else {
+            if (!pn_has(node, "fill")) { node["fill"] = "none"; }
+            if (!pn_has(node, "stroke")) { node["stroke"] = pn_ink(parent); }
+            if (!pn_has(node, "sw")) { node["sw"] = 2; }
+        }
+    }
+    if (t == "text") {
+        if (!pn_has(node, "fill")) { node["fill"] = pn_ink(parent); }
+    }
+
+    // تحويلات
+    if (pn_has(o, "tf")) { node["tf"] = pn_copy_list(o["tf"]); }
+    if (pn_has(o, "rot") and cx != nil) {
+        if (!pn_has(node, "tf")) { node["tf"] = []; }
+        push(node["tf"], ["rotate", o["rot"], cx, cy]);
+    }
+
+    // فلاتر مختصرة
+    if (pn_has(o, "filter")) { node["filter"] = o["filter"]; }
+    else if (pn_has(o, "shadow")) {
+        let s = o["shadow"];
+        let ty = type(s);
+        if (ty == "map") {
+            node["filter"] = pn_shadow(parent, pn_opt(s, "dx", 0), pn_opt(s, "dy", 6), pn_opt(s, "blur", 10),
+                                       pn_opt(s, "c", "#000000"), pn_opt(s, "op", 0.3));
+        } else if (ty == "string") {
+            node["filter"] = pn_shadow(parent, 0, 6, 10, s, 0.35);
+        } else {
+            node["filter"] = pn_shadow(parent, 0, 6, 10, "#000000", 0.3);
+        }
+    } else if (pn_has(o, "glow")) {
+        let g = o["glow"];
+        let col = pn_accent(parent);
+        let rad = 6;
+        if (type(g) == "string") { col = g; }
+        else if (type(g) == "number") { rad = g; }
+        else if (type(node["fill"]) == "string" and substr(node["fill"], 0, 1) == "#") { col = node["fill"]; }
+        node["filter"] = pn_glow(parent, rad, col);
+    } else if (pn_has(o, "blur")) {
+        node["filter"] = pn_blur(parent, o["blur"]);
+    }
+
+    if (pn_has(o, "anim")) { node["anim"] = pn_copy_list(o["anim"]); }
+    push(parent["nodes"], node);
+    return node;
+}
+
+// ---------------------------------------------------------------------------
+//  الأشكال الأولية
+// ---------------------------------------------------------------------------
+// مستطيل — خيارات إضافية: rx ry (أو r لكليهما)
+fun pn_rect(parent, x, y, w, h, o) {
+    o = pn_o(o);
+    let n = {"t": "rect", "x": x, "y": y, "w": w, "h": h};
+    if (pn_has(o, "r")) { n["rx"] = o["r"]; }
+    if (pn_has(o, "rx")) { n["rx"] = o["rx"]; }
+    if (pn_has(o, "ry")) { n["ry"] = o["ry"]; }
+    return pn_mk(parent, n, o, x + w / 2, y + h / 2);
+}
+// مستطيل بزوايا مستديرة: r رقم، أو [أعلى-يسار، أعلى-يمين، أسفل-يمين، أسفل-يسار]
+fun pn_rrect(parent, x, y, w, h, r, o) {
+    o = pn_o(o);
+    if (type(r) == "number") {
+        let o2 = pn_clone(o);
+        o2["rx"] = r;
+        return pn_rect(parent, x, y, w, h, o2);
+    }
+    let p = pn_pen();
+    pn_move(p, x + r[0], y);
+    pn_lineto(p, x + w - r[1], y);
+    pn_arcto(p, r[1], r[1], 0, 0, 1, x + w, y + r[1]);
+    pn_lineto(p, x + w, y + h - r[2]);
+    pn_arcto(p, r[2], r[2], 0, 0, 1, x + w - r[2], y + h);
+    pn_lineto(p, x + r[3], y + h);
+    pn_arcto(p, r[3], r[3], 0, 0, 1, x, y + h - r[3]);
+    pn_lineto(p, x, y + r[0]);
+    pn_arcto(p, r[0], r[0], 0, 0, 1, x + r[0], y);
+    pn_close(p);
+    let n = {"t": "path", "d": pn_d(p)};
+    return pn_mk(parent, n, o, x + w / 2, y + h / 2);
+}
+fun pn_circle(parent, cx, cy, r, o) {
+    return pn_mk(parent, {"t": "circle", "cx": cx, "cy": cy, "r": r}, o, cx, cy);
+}
+fun pn_ellipse(parent, cx, cy, rx, ry, o) {
+    return pn_mk(parent, {"t": "ellipse", "cx": cx, "cy": cy, "rx": rx, "ry": ry}, o, cx, cy);
+}
+fun pn_line(parent, x1, y1, x2, y2, o) {
+    return pn_mk(parent, {"t": "line", "x1": x1, "y1": y1, "x2": x2, "y2": y2}, o, (x1 + x2) / 2, (y1 + y2) / 2);
+}
+
+// نقاط: [x,y,x,y,…] أو [[x,y],[x,y],…]  →  مصفوفة مسطّحة
+fun pn_flat(pts) {
+    if (len(pts) == 0) { return []; }
+    if (type(pts[0]) != "array") { return pn_copy_list(pts); }
+    let out = [];
+    for (let p in pts) { push(out, p[0]); push(out, p[1]); }
+    return out;
+}
+fun pn_center_of(flat) {
+    let n = len(flat) / 2;
+    if (n < 1) { return [0, 0]; }
+    let sx = 0; let sy = 0;
+    let i = 0;
+    while (i < len(flat)) { sx = sx + flat[i]; sy = sy + flat[i + 1]; i = i + 2; }
+    return [sx / n, sy / n];
+}
+fun pn_polyline(parent, pts, o) {
+    let f = pn_flat(pts);
+    let c = pn_center_of(f);
+    return pn_mk(parent, {"t": "polyline", "pts": f}, o, c[0], c[1]);
+}
+fun pn_polygon(parent, pts, o) {
+    let f = pn_flat(pts);
+    let c = pn_center_of(f);
+    return pn_mk(parent, {"t": "polygon", "pts": f}, o, c[0], c[1]);
+}
+// مسار: p إمّا pen (pn_pen) أو نص d جاهز
+fun pn_path(parent, p, o) {
+    let d = p;
+    if (type(p) == "map") { d = pn_d(p); }
+    return pn_mk(parent, {"t": "path", "d": d}, o, nil, nil);
+}
+
+// نص — خيارات: size(16) anchor(start|middle|end) weight family italic ls(تباعد) lh(1.2 للأسطر) base(dominant-baseline) dir(rtl|ltr)
+// الأسطر المتعددة بـ \n
+fun pn_text(parent, x, y, s, o) {
+    o = pn_o(o);
+    let n = {"t": "text", "x": x, "y": y, "text": s, "size": pn_opt(o, "size", 16)};
+    if (pn_has(o, "anchor")) { n["anchor"] = o["anchor"]; }
+    if (pn_has(o, "weight")) { n["weight"] = o["weight"]; }
+    if (pn_has(o, "family")) { n["family"] = o["family"]; }
+    if (pn_has(o, "italic")) { n["italic"] = o["italic"]; }
+    if (pn_has(o, "ls")) { n["ls"] = o["ls"]; }
+    if (pn_has(o, "lh")) { n["lh"] = o["lh"]; }
+    if (pn_has(o, "base")) { n["base"] = o["base"]; }
+    if (pn_has(o, "dir")) { n["dir"] = o["dir"]; }
+    return pn_mk(parent, n, o, x, y);
+}
+fun pn_image(parent, x, y, w, h, href, o) {
+    let n = {"t": "image", "x": x, "y": y, "w": w, "h": h, "href": href};
+    return pn_mk(parent, n, o, x + w / 2, y + h / 2);
+}
+
+// ---------------------------------------------------------------------------
+//  أشكال مركّبة
+// ---------------------------------------------------------------------------
+// مضلّع منتظم: n ضلعاً، نصف القطر r، زاوية البداية o.start (افتراضي -90 = رأس للأعلى)
+fun pn_ngon(parent, cx, cy, n, r, o) {
+    o = pn_o(o);
+    let a0 = pn_opt(o, "start", -90);
+    let pts = [];
+    let i = 0;
+    while (i < n) {
+        let a = pn_rad(a0 + 360 * i / n);
+        push(pts, cx + r * cos(a));
+        push(pts, cy + r * sin(a));
+        i = i + 1;
+    }
+    return pn_mk(parent, {"t": "polygon", "pts": pts}, o, cx, cy);
+}
+// نجمة: n رأساً، نصف قطر خارجي r1 وداخلي r2
+fun pn_star(parent, cx, cy, n, r1, r2, o) {
+    o = pn_o(o);
+    let a0 = pn_opt(o, "start", -90);
+    let pts = [];
+    let i = 0;
+    while (i < n * 2) {
+        let r = r1;
+        if (i - floor(i / 2) * 2 == 1) { r = r2; }
+        let a = pn_rad(a0 + 180 * i / n);
+        push(pts, cx + r * cos(a));
+        push(pts, cy + r * sin(a));
+        i = i + 1;
+    }
+    return pn_mk(parent, {"t": "polygon", "pts": pts}, o, cx, cy);
+}
+// قطاع دائري (فطيرة): الزوايا بالدرجات، 0 = اليمين، تزداد مع عقارب الساعة
+fun pn_slice(parent, cx, cy, r, a0, a1, o) {
+    if (abs(a1 - a0) >= 359.99) { return pn_circle(parent, cx, cy, r, o); }
+    let p = pn_pen();
+    pn_move(p, cx, cy);
+    pn_lineto(p, cx + r * cos(pn_rad(a0)), cy + r * sin(pn_rad(a0)));
+    pn_arc_cmds(p, cx, cy, r, a0, a1);
+    pn_close(p);
+    return pn_mk(parent, {"t": "path", "d": pn_d(p)}, o, cx, cy);
+}
+// حلقة/قطاع حلقي (دونات)
+fun pn_ring(parent, cx, cy, r0, r1, a0, a1, o) {
+    let p = pn_pen();
+    if (abs(a1 - a0) >= 359.99) { a1 = a0 + 359.99; }
+    pn_move(p, cx + r1 * cos(pn_rad(a0)), cy + r1 * sin(pn_rad(a0)));
+    pn_arc_cmds(p, cx, cy, r1, a0, a1);
+    pn_lineto(p, cx + r0 * cos(pn_rad(a1)), cy + r0 * sin(pn_rad(a1)));
+    pn_arc_cmds(p, cx, cy, r0, a1, a0);
+    pn_close(p);
+    return pn_mk(parent, {"t": "path", "d": pn_d(p)}, o, cx, cy);
+}
+// قوس مفتوح (خط فقط)
+fun pn_arc(parent, cx, cy, r, a0, a1, o) {
+    let p = pn_pen();
+    pn_move(p, cx + r * cos(pn_rad(a0)), cy + r * sin(pn_rad(a0)));
+    pn_arc_cmds(p, cx, cy, r, a0, a1);
+    return pn_mk(parent, {"t": "path", "d": pn_d(p)}, o, cx, cy);
+}
+// سهم: خط + رأس مثلث. خيارات: head(10) وبقية خيارات الخط (stroke, sw, …)
+fun pn_arrow(parent, x1, y1, x2, y2, o) {
+    o = pn_o(o);
+    let g = pn_group(parent, pn_pick(o, ["id", "op", "tf", "shadow", "glow", "filter", "title", "clip", "anim"]));
+    let col = pn_opt(o, "stroke", pn_ink(parent));
+    let sw = pn_opt(o, "sw", 2);
+    let head = pn_opt(o, "head", 10);
+    let a = atan2(y2 - y1, x2 - x1);
+    let bx = x2 - head * cos(a);
+    let by = y2 - head * sin(a);
+    let nx = -sin(a) * head * 0.5;
+    let ny = cos(a) * head * 0.5;
+    pn_line(g, x1, y1, bx, by, {"stroke": col, "sw": sw, "cap": "round", "dash": pn_opt(o, "dash", nil)});
+    pn_polygon(g, [x2, y2, bx + nx, by + ny, bx - nx, by - ny], {"fill": col});
+    return g;
+}
+// شبكة خطوط: خطوط كل step بكسل داخل المستطيل
+fun pn_grid(parent, x, y, w, h, step, o) {
+    o = pn_o(o);
+    let p = pn_pen();
+    let gx = 0;
+    while (gx <= w + 0.001) {
+        pn_move(p, x + gx, y); pn_lineto(p, x + gx, y + h);
+        gx = gx + step;
+    }
+    let gy = 0;
+    while (gy <= h + 0.001) {
+        pn_move(p, x, y + gy); pn_lineto(p, x + w, y + gy);
+        gy = gy + step;
+    }
+    let o2 = pn_clone(o);
+    if (!pn_has(o2, "stroke")) { o2["stroke"] = pn_gridc(parent); }
+    if (!pn_has(o2, "sw")) { o2["sw"] = 1; }
+    return pn_path(parent, p, o2);
+}
+// موجة جيبية: تبدأ عند (x,y) بعرض w وسعة amp وعدد موجات waves
+fun pn_wave(parent, x, y, w, amp, waves, o) {
+    let n = floor(waves * 24);
+    if (n < 8) { n = 8; }
+    let pts = [];
+    let i = 0;
+    while (i <= n) {
+        push(pts, x + w * i / n);
+        push(pts, y - amp * sin(2 * PI * waves * i / n));
+        i = i + 1;
+    }
+    let o2 = pn_clone(pn_o(o));
+    if (!pn_has(o2, "stroke")) { o2["stroke"] = pn_accent(parent); }
+    if (!pn_has(o2, "sw")) { o2["sw"] = 3; }
+    if (!pn_has(o2, "cap")) { o2["cap"] = "round"; }
+    return pn_polyline(parent, pts, o2);
+}
+// حلزون أرخميدس
+fun pn_spiral(parent, cx, cy, r, turns, o) {
+    let n = floor(turns * 48);
+    if (n < 12) { n = 12; }
+    let pts = [];
+    let i = 0;
+    while (i <= n) {
+        let t = i / n;
+        let a = 2 * PI * turns * t;
+        push(pts, cx + r * t * cos(a));
+        push(pts, cy + r * t * sin(a));
+        i = i + 1;
+    }
+    let o2 = pn_clone(pn_o(o));
+    if (!pn_has(o2, "stroke")) { o2["stroke"] = pn_accent(parent); }
+    if (!pn_has(o2, "sw")) { o2["sw"] = 2; }
+    if (!pn_has(o2, "cap")) { o2["cap"] = "round"; }
+    return pn_polyline(parent, pts, o2);
+}
+// منحنى ناعم يمرّ بالنقاط (Catmull-Rom → Bézier). o.tension (1 افتراضي)، o.closed
+fun pn_smooth(parent, pts, o) {
+    o = pn_o(o);
+    let f = pn_flat(pts);
+    let closed = pn_opt(o, "closed", false);
+    let p = pn_pen();
+    pn_move(p, f[0], f[1]);
+    pn_spline_to(p, f, pn_opt(o, "tension", 1), closed);
+    let o2 = pn_clone(o);
+    if (!closed and !pn_has(o2, "fill")) { o2["fill"] = "none"; }
+    if (!closed and !pn_has(o2, "stroke")) { o2["stroke"] = pn_accent(parent); }
+    if (!closed and !pn_has(o2, "sw")) { o2["sw"] = 3; }
+    if (!closed and !pn_has(o2, "cap")) { o2["cap"] = "round"; }
+    return pn_path(parent, p, o2);
+}
+// تسمية: نص داخل كبسولة. خيارات: size(14) padx(10) pady(6) bg fg
+fun pn_label(parent, x, y, s, o) {
+    o = pn_o(o);
+    let size = pn_opt(o, "size", 14);
+    let padx = pn_opt(o, "padx", 10);
+    let pady = pn_opt(o, "pady", 6);
+    let w = len(s) * size * 0.56 + padx * 2;
+    let h = size + pady * 2;
+    let bg = pn_opt(o, "bg", pn_accent(parent));
+    let fg = pn_opt(o, "fg", colorTextOn(pn_norm_color(bg)));
+    let g = pn_group(parent, pn_pick(o, ["id", "op", "tf", "shadow", "glow", "filter", "title", "clip", "anim"]));
+    pn_rect(g, x - w / 2, y - h / 2, w, h, {"fill": bg, "rx": h / 2});
+    pn_text(g, x, y + size * 0.35, s, {"size": size, "anchor": "middle", "weight": pn_opt(o, "weight", 600), "fill": fg});
+    return g;
+}
