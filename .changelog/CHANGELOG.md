@@ -1,5 +1,10 @@
 # سجل التغييرات — Rin
 
+## piano 1.0.0 — مكتبة الرسم المتجهي
+- جديد: `lib/piano.og.rin` (7 أجزاء zpp) + مُصيِّر C++ وJS + مخطط `.puo` + صفحة معاينة حيّة `web/piano/` + أيقونة `assets/branding/piano/`.
+- `tools/piano_check.py`: تطابق Rin/C++/JS بايتاً ببايت.
+- `.github/workflows/pages.yml`: نشر المعاينة في `/piano/`.
+
 > مجمَّع آلياً من ملفات `CHANGES_*.md` المتفرّقة (انظر `cleanup-project.yml`). أضف الجديد هنا مباشرةً.
 
 
