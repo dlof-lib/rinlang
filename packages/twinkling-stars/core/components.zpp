@@ -1,0 +1,3 @@
+// Component factories.
+export fun ts_primary_button(id, label, action) { return ts_button(id, label, action, { background: ts_color("primary"), radius: ts_radius("md"), size: "large" }); }
+export fun ts_surface_card(id, title, subtitle) { return ts_card(id, title, subtitle, { background: ts_color("surface"), radius: ts_radius("lg"), padding: ts_space("lg") }); }
