@@ -1,0 +1,117 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="480" viewBox="0 0 480 480" font-family="Inter, 'Segoe UI', Tahoma, 'Noto Sans Arabic', Arial, sans-serif">
+  <defs>
+    <radialGradient id="pn1" cx="0.5" cy="0.45" r="0.75">
+      <stop offset="0" stop-color="#312e81"/>
+      <stop offset="1" stop-color="#09090b"/>
+    </radialGradient>
+    <pattern id="pn2" width="16" height="16" patternUnits="userSpaceOnUse">
+      <circle cx="8" cy="8" r="1.4" fill="#ffffff" fill-opacity="0.133"/>
+    </pattern>
+    <filter id="pn3" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="6" result="b"/>
+      <feFlood flood-color="#22d3ee" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn4" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="6" result="b"/>
+      <feFlood flood-color="#a3e635" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn5" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="6" result="b"/>
+      <feFlood flood-color="#f472b6" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn6" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="6" result="b"/>
+      <feFlood flood-color="#facc15" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn7" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="6" result="b"/>
+      <feFlood flood-color="#c084fc" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn8" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="6" result="b"/>
+      <feFlood flood-color="#fb923c" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn9" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="6" result="b"/>
+      <feFlood flood-color="#4ade80" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn10" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="6" result="b"/>
+      <feFlood flood-color="#38bdf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn11" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="6" result="b"/>
+      <feFlood flood-color="#22d3ee" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn12" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="6" result="b"/>
+      <feFlood flood-color="#a3e635" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn13" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="6" result="b"/>
+      <feFlood flood-color="#f472b6" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn14" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="6" result="b"/>
+      <feFlood flood-color="#facc15" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <clipPath id="pn15">
+      <circle cx="240" cy="240" r="70" fill="#22d3ee"/>
+    </clipPath>
+    <linearGradient id="pn16" x1="0.15" y1="0.15" x2="0.85" y2="0.85">
+      <stop offset="0" stop-color="#22d3ee"/>
+      <stop offset="1" stop-color="#f472b6"/>
+    </linearGradient>
+  </defs>
+  <rect width="100%" height="100%" fill="#09090b"/>
+  <rect x="0" y="0" width="480" height="480" fill="url(#pn1)"/>
+  <rect x="0" y="0" width="480" height="480" fill="url(#pn2)"/>
+  <g>
+    <animateTransform attributeName="transform" type="rotate" from="0 240 240" to="360 240 240" dur="24s" repeatCount="indefinite"/>
+    <circle cx="370" cy="240" r="14" fill="#22d3ee" opacity="0.85" filter="url(#pn3)"/>
+    <circle cx="352.58" cy="305" r="18" fill="#a3e635" opacity="0.85" filter="url(#pn4)"/>
+    <circle cx="305" cy="352.58" r="22" fill="#f472b6" opacity="0.85" filter="url(#pn5)"/>
+    <circle cx="240" cy="370" r="26" fill="#facc15" opacity="0.85" filter="url(#pn6)"/>
+    <circle cx="175" cy="352.58" r="14" fill="#c084fc" opacity="0.85" filter="url(#pn7)"/>
+    <circle cx="127.42" cy="305" r="18" fill="#fb923c" opacity="0.85" filter="url(#pn8)"/>
+    <circle cx="110" cy="240" r="22" fill="#4ade80" opacity="0.85" filter="url(#pn9)"/>
+    <circle cx="127.42" cy="175" r="26" fill="#38bdf8" opacity="0.85" filter="url(#pn10)"/>
+    <circle cx="175" cy="127.42" r="14" fill="#22d3ee" opacity="0.85" filter="url(#pn11)"/>
+    <circle cx="240" cy="110" r="18" fill="#a3e635" opacity="0.85" filter="url(#pn12)"/>
+    <circle cx="305" cy="127.42" r="22" fill="#f472b6" opacity="0.85" filter="url(#pn13)"/>
+    <circle cx="352.58" cy="175" r="26" fill="#facc15" opacity="0.85" filter="url(#pn14)"/>
+  </g>
+  <g clip-path="url(#pn15)">
+    <rect x="170" y="170" width="140" height="140" fill="url(#pn16)"/>
+    <polyline points="170,240 172.92,234.31 175.83,229 178.75,224.44 181.67,220.95 184.58,218.75 187.5,218 190.42,218.75 193.33,220.95 196.25,224.44 199.17,229 202.08,234.31 205,240 207.92,245.69 210.83,251 213.75,255.56 216.67,259.05 219.58,261.25 222.5,262 225.42,261.25 228.33,259.05 231.25,255.56 234.17,251 237.08,245.69 240,240 242.92,234.31 245.83,229 248.75,224.44 251.67,220.95 254.58,218.75 257.5,218 260.42,218.75 263.33,220.95 266.25,224.44 269.17,229 272.08,234.31 275,240 277.92,245.69 280.83,251 283.75,255.56 286.67,259.05 289.58,261.25 292.5,262 295.42,261.25 298.33,259.05 301.25,255.56 304.17,251 307.08,245.69 310,240" fill="none" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
+  </g>
+  <circle cx="240" cy="240" r="70" fill="none" stroke="#ffffff" stroke-width="2" opacity="0.6"/>
+  <circle cx="240" cy="240" r="95" fill="none" stroke="#22d3ee" stroke-width="1.5" stroke-dasharray="4 6">
+    <animate attributeName="opacity" values="0.2;1;0.2" dur="3s" repeatCount="indefinite"/>
+  </circle>
+  <text x="240" y="440" font-size="28" font-weight="800" text-anchor="middle" letter-spacing="8" fill="#ffffff">PIANO</text>
+</svg>
