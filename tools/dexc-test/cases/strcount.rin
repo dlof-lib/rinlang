@@ -1,0 +1,1 @@
+let t = ""; for (let i = 0; i < 5; i = i + 1) { t = t + i; } print t, len(t);
