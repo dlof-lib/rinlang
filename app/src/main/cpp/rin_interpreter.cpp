@@ -638,6 +638,8 @@ static std::string tokenTypeName(TokenType t) {
         case TokenType::QUESTION: return "QUESTION";
         case TokenType::END_OF_FILE: return "EOF";
         case TokenType::ERROR: return "ERROR";
+        case TokenType::ARROW_R: return "ARROW_R";
+        case TokenType::SWAP: return "SWAP";
     }
     return "UNKNOWN";
 }
