@@ -1,0 +1,2 @@
+when (1 == 1) print "w"; otherwise print "o";
+when (1 == 2) print "w"; otherwise print "o";
