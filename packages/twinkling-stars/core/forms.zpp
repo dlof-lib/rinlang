@@ -1,0 +1,3 @@
+// Form helpers.
+export fun ts_email_field(name, label, required) { return ts_field(name, label, "", "email", required); }
+export fun ts_password_field(name, label, required) { return ts_field(name, label, "", "password", required); }
