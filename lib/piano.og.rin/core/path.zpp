@@ -1,0 +1,73 @@
+// piano — الجزء 4: مُنشئ المسارات (pen) والمنحنيات
+//
+//   let p = pn_pen();
+//   pn_move(p, 10, 10); pn_lineto(p, 90, 10); pn_quadto(p, 100, 50, 90, 90); pn_close(p);
+//   pn_path(c, p, {"fill": "#1db143"});
+
+fun pn_mod(a, b) { return a - floor(a / b) * b; }
+
+fun pn_pen() { return {"cmds": []}; }
+fun pn_move(p, x, y) { push(p["cmds"], ["M", x, y]); return p; }
+fun pn_lineto(p, x, y) { push(p["cmds"], ["L", x, y]); return p; }
+fun pn_quadto(p, cx, cy, x, y) { push(p["cmds"], ["Q", cx, cy, x, y]); return p; }
+fun pn_cubicto(p, c1x, c1y, c2x, c2y, x, y) { push(p["cmds"], ["C", c1x, c1y, c2x, c2y, x, y]); return p; }
+// قوس إهليلجي SVG: large وsweep = 0 أو 1
+fun pn_arcto(p, rx, ry, rot, large, sweep, x, y) { push(p["cmds"], ["A", rx, ry, rot, large, sweep, x, y]); return p; }
+fun pn_close(p) { push(p["cmds"], ["Z"]); return p; }
+
+// نص السمة d
+fun pn_d(p) {
+    let parts = [];
+    for (let c in p["cmds"]) {
+        let s = c[0];
+        let i = 1;
+        while (i < len(c)) { s = s + " " + pn_n(c[i]); i = i + 1; }
+        push(parts, s);
+    }
+    return join(parts, " ");
+}
+
+// يُلحق قوساً دائرياً من الزاوية a0 إلى a1 (درجات) — القلم عند زاوية a0 مسبقاً.
+// يُقسَّم إلى أجزاء ≤ 120° فلا التباس في large-arc.
+fun pn_arc_cmds(p, cx, cy, r, a0, a1) {
+    let total = a1 - a0;
+    let sweep = 1;
+    if (total < 0) { sweep = 0; }
+    let nseg = ceil(abs(total) / 120);
+    if (nseg < 1) { nseg = 1; }
+    let step = total / nseg;
+    let i = 1;
+    while (i <= nseg) {
+        let a = pn_rad(a0 + step * i);
+        pn_arcto(p, r, r, 0, 0, sweep, cx + r * cos(a), cy + r * sin(a));
+        i = i + 1;
+    }
+    return p;
+}
+
+// منحنى Catmull-Rom عبر النقاط المسطّحة f — القلم عند f[0],f[1] مسبقاً.
+// k = التوتر (1 طبيعي، 0 = خطوط مستقيمة)
+fun pn_spline_to(p, f, k, closed) {
+    let n = floor(len(f) / 2);
+    if (n < 2) { return p; }
+    let segs = n - 1;
+    if (closed) { segs = n; }
+    let i = 0;
+    while (i < segs) {
+        let i0 = i - 1; let i2 = i + 1; let i3 = i + 2;
+        if (closed) { i0 = pn_mod(i - 1, n); i2 = pn_mod(i + 1, n); i3 = pn_mod(i + 2, n); }
+        else {
+            if (i0 < 0) { i0 = 0; }
+            if (i3 > n - 1) { i3 = n - 1; }
+        }
+        let x0 = f[2 * i0]; let y0 = f[2 * i0 + 1];
+        let x1 = f[2 * i];  let y1 = f[2 * i + 1];
+        let x2 = f[2 * i2]; let y2 = f[2 * i2 + 1];
+        let x3 = f[2 * i3]; let y3 = f[2 * i3 + 1];
+        pn_cubicto(p, x1 + (x2 - x0) / 6 * k, y1 + (y2 - y0) / 6 * k,
+                      x2 - (x3 - x1) / 6 * k, y2 - (y3 - y1) / 6 * k, x2, y2);
+        i = i + 1;
+    }
+    if (closed) { pn_close(p); }
+    return p;
+}
