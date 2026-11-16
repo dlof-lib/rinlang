@@ -70,6 +70,10 @@ rin doctor                   # فحص البيئة
 - **82 مكتبة رسمية** ومدير حزم (RinPM) ومتجر على الويب.
 - **ربط** مع Python وNode.js وC: [`bindings/`](./bindings/README.md).
 
+## مكتبة Twinkling Stars
+
+مكتبة لبناء التطبيقات الاحترافية فوق Rin وIndsin: [الدليل](./docs/twinkling-stars.md) · [صفحة المكتبة](https://dlof-lib.github.io/rinlang/?library=twinkling-stars).
+
 ## الوثائق
 
 | | |
