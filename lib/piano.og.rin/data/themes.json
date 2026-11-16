@@ -1,0 +1,121 @@
+{
+  "light": {
+    "bg": "#ffffff",
+    "ink": "#111827",
+    "muted": "#6b7280",
+    "grid": "#e5e7eb",
+    "accent": "#4f46e5",
+    "palette": [
+      "#4f46e5",
+      "#06b6d4",
+      "#f59e0b",
+      "#ef4444",
+      "#10b981",
+      "#8b5cf6",
+      "#ec4899",
+      "#64748b"
+    ]
+  },
+  "dark": {
+    "bg": "#0b1020",
+    "ink": "#e5e7eb",
+    "muted": "#94a3b8",
+    "grid": "#1e293b",
+    "accent": "#818cf8",
+    "palette": [
+      "#818cf8",
+      "#22d3ee",
+      "#fbbf24",
+      "#f87171",
+      "#34d399",
+      "#a78bfa",
+      "#f472b6",
+      "#94a3b8"
+    ]
+  },
+  "ocean": {
+    "bg": "#f0f9ff",
+    "ink": "#0c4a6e",
+    "muted": "#0369a1",
+    "grid": "#bae6fd",
+    "accent": "#0284c7",
+    "palette": [
+      "#0284c7",
+      "#0d9488",
+      "#6366f1",
+      "#f59e0b",
+      "#0ea5e9",
+      "#14b8a6",
+      "#8b5cf6",
+      "#64748b"
+    ]
+  },
+  "sunset": {
+    "bg": "#fff7ed",
+    "ink": "#431407",
+    "muted": "#9a3412",
+    "grid": "#fed7aa",
+    "accent": "#ea580c",
+    "palette": [
+      "#ea580c",
+      "#db2777",
+      "#7c3aed",
+      "#ca8a04",
+      "#dc2626",
+      "#9333ea",
+      "#f97316",
+      "#78716c"
+    ]
+  },
+  "neon": {
+    "bg": "#09090b",
+    "ink": "#fafafa",
+    "muted": "#a1a1aa",
+    "grid": "#27272a",
+    "accent": "#22d3ee",
+    "palette": [
+      "#22d3ee",
+      "#a3e635",
+      "#f472b6",
+      "#facc15",
+      "#c084fc",
+      "#fb923c",
+      "#4ade80",
+      "#38bdf8"
+    ]
+  },
+  "mono": {
+    "bg": "#fafafa",
+    "ink": "#18181b",
+    "muted": "#71717a",
+    "grid": "#e4e4e7",
+    "accent": "#18181b",
+    "palette": [
+      "#18181b",
+      "#3f3f46",
+      "#71717a",
+      "#a1a1aa",
+      "#d4d4d8",
+      "#52525b",
+      "#27272a",
+      "#a1a1aa"
+    ]
+  },
+  "piano": {
+    "bg": "#ffffff",
+    "ink": "#0a0a0a",
+    "muted": "#525252",
+    "grid": "#e5e5e5",
+    "accent": "#1db143",
+    "palette": [
+      "#1db143",
+      "#0a0a0a",
+      "#16a34a",
+      "#737373",
+      "#4ade80",
+      "#262626",
+      "#15803d",
+      "#a3a3a3"
+    ]
+  }
+}
