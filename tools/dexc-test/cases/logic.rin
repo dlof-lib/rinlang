@@ -1,0 +1,1 @@
+print true and false, true or false, nil or "d", 0 and 5, "" and 7, !nil, !0, !"x", false or nil;
