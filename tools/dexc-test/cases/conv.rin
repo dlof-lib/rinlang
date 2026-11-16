@@ -1,0 +1,1 @@
+print toNumber("12.5"), toNumber("  7abc"), toNumber(5), toString(3.0), str(true), toBool("TRUE"), toBool(0), isBool(true), isBool(1), chr(65), ord("A");
