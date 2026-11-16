@@ -1,0 +1,1 @@
+let a = ["b","a","c"]; sort(a); print a; let n=[3,1,2]; print sort(n);
