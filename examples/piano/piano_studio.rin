@@ -1,0 +1,31 @@
+<!-- piano + indsin: واجهة تعرض رسم piano وتبدّل الثيم حيّاً (rin indsin examples/piano/piano_studio.rin) -->
+<warp theme={"dark"} />
+<warp art={""} />
+<Rin>
+@import "piano";
+
+fun drawArt(name) {
+    let c = pn_canvas(320, 200);
+    pn_theme(c, name);
+    pn_rrect(c, 16, 16, 288, 168, 18, {"grad": [pn_accent(c), pn_color(c, 1)], "angle": 35, "shadow": true});
+    pn_pie_chart(c, 90, 100, 52, ["أ", "ب", "ج"], [5, 3, 2], {"inner": 0.55, "gap": 2, "labels": false});
+    pn_sparkline(c, 160, 70, 120, 60, [3, 6, 4, 9, 7, 12], {"color": "#ffffff"});
+    pn_text(c, 220, 160, "piano · " + name, {"size": 14, "weight": 700, "anchor": "middle", "fill": "#ffffff"});
+    return pn_data_uri(c);
+}
+fun setTheme(name) { theme = name; art = drawArt(name); }
+art = drawArt("dark");
+</Rin>
+<Column#root padding=16 gap=12>
+  <Text#heading text="piano + indsin" size="title" />
+  <Card#preview padding=8>
+    <Image#art src={art} width=320 height=200 />
+  </Card>
+  <Wrap#themes gap=8>
+    <Button#b1 onTap={setTheme("dark")}>dark</Button>
+    <Button#b2 onTap={setTheme("ocean")}>ocean</Button>
+    <Button#b3 onTap={setTheme("sunset")}>sunset</Button>
+    <Button#b4 onTap={setTheme("neon")}>neon</Button>
+  </Wrap>
+  <Text#cur text={"الثيم الحالي: " + theme} />
+</Column>
