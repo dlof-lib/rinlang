@@ -269,6 +269,8 @@ print \"Hello, \" + name + \"!\";
     <string name="apk_export_no_entry_error">لا يوجد ملف .rin واحد على الأقل في هذا المشروع</string>
     <string name="apk_export_icon_load_error">تعذّر تحميل الأيقونة المحدَّدة</string>
     <string name="apk_export_sdk_range_error">الحد الأدنى لإصدار SDK يجب ألا يتجاوز الإصدار المستهدف</string>
+    <string name="apk_export_dex_option">تحويل الكود إلى DEX (حقيقي)</string>
+    <string name="apk_export_dex_hint">يُصرَّف مصدر Rin إلى Dalvik bytecode (classesN.dex) داخل الحزمة ويعمل مباشرة على ART بلا مفسِّر. إن استخدم المشروع ميزة غير مدعومة (كلاسات، import، lambdas…) يتراجع التصدير تلقائياً لوضع المفسِّر.</string>
     <string name="apk_export_note_limitation">ملاحظة: اسم التطبيق المعروض أعلاه يُكتب فعلياً داخل بيان الحزمة الناتجة. الأيقونة فقط تبقى كما في RinStudio (resources.arsc لا يُعدَّل حالياً). التوقيع حقيقي بمخطّطي v1 (JAR) وv2 معاً (تُضاف كتلة v2 وتُتحقَّق ذاتياً تلقائياً، وتتراجع v1 وحدها إن تعذّر ذلك) بمفتاح RSA-2048 خاص بجهازك — لأقصى ثقة تثبيت على أندرويد الحديث.</string>
 
     <string name="more_row_rin_apps_subtitle">تصفّح كل تطبيقاتك المُصدَّرة سابقاً، ثبّتها أو شاركها أو أعد تصديرها</string>
