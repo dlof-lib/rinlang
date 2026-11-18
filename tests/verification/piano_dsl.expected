@@ -1,0 +1,14 @@
+📥 @import: تم استيراد "lib/piano.og.rin" (مكتبة: piano 1.0.0 — 11 أجزاء)
+5 100 60 10 30 hi
+60 70 0.5 g
+1 7 @pn1 b
+err: piano.dsl سطر 28: متغير غير معرّف $nope
+err: piano.dsl سطر 33: نوع غير معروف «Wobble»
+err: piano.dsl سطر 38: Rect يحتاج «w»
+err: piano.dsl سطر 44: $f تتوقع 2 معاملات وجاءها 1
+err: piano.dsl سطر 1: كل جملة تبدأ بـ $اسم — وجدتُ «r»
+done
+100 30 60 a, b
+↺ @import: "lib/piano.og.rin" مستورَدة مسبقاً بالفعل (تم تجاهل التكرار)
+📥 @import: تم استيراد "./tests/verification/pia_scene.pia" (من القرص)
+pia ok 50 4
