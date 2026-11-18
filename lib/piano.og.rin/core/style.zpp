@@ -129,6 +129,22 @@ fun pn_clip(parent) {
     push(parent["_ctx"]["defs"], p);
     return p;
 }
+// قناع (mask): ارسم داخله بالأبيض (ظاهر) والأسود (مخفي) وتدرّجات الرمادي (شفافية) ثم استعمله بخيار mask:"@id"
+fun pn_mask(parent) {
+    let p = {"t": "mask", "id": pn_id(parent), "nodes": [], "_ctx": parent["_ctx"]};
+    push(parent["_ctx"]["defs"], p);
+    return p;
+}
+// قناع تلاشٍ جاهز: dir = "right" | "left" | "down" | "up" → "@id"
+fun pn_fade_mask(parent, x, y, w, h, dir) {
+    let m = pn_mask(parent);
+    let a = 0;
+    if (dir == "left") { a = 180; }
+    if (dir == "down") { a = 90; }
+    if (dir == "up") { a = 270; }
+    pn_rect(m, x, y, w, h, {"fill": pn_linear(parent, ["#ffffff", "#000000"], a)});
+    return "@" + m["id"];
+}
 // قصّ مستطيل سريع → "@id"
 fun pn_clip_rect(parent, x, y, w, h, r) {
     let cp = pn_clip(parent);
