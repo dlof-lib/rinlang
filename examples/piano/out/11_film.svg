@@ -1,0 +1,2213 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="270" viewBox="0 0 480 270" font-family="Inter, 'Segoe UI', Tahoma, 'Noto Sans Arabic', Arial, sans-serif">
+  <defs>
+    <linearGradient id="pn1" x1="0.33" y1="0.03" x2="0.67" y2="0.97">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <filter id="pn2" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn3" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn4" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn5" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn6" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="pn1001" x1="0.33" y1="0.03" x2="0.67" y2="0.97">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <filter id="pn1002" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn1003" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn1004" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn1005" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn1006" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="pn2001" x1="0.33" y1="0.03" x2="0.67" y2="0.97">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <filter id="pn2002" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn2003" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn2004" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn2005" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn2006" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="pn3001" x1="0.33" y1="0.03" x2="0.67" y2="0.97">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <filter id="pn3002" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn3003" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn3004" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn3005" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn3006" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="pn4001" x1="0.33" y1="0.03" x2="0.67" y2="0.97">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <filter id="pn4002" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn4003" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn4004" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn4005" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn4006" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="pn5001" x1="0.33" y1="0.03" x2="0.67" y2="0.97">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <filter id="pn5002" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn5003" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn5004" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn5005" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn5006" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="pn6001" x1="0.33" y1="0.03" x2="0.67" y2="0.97">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <filter id="pn6002" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn6003" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn6004" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn6005" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn6006" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="pn7001" x1="0.33" y1="0.03" x2="0.67" y2="0.97">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <filter id="pn7002" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn7003" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn7004" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn7005" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn7006" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="pn8001" x1="0.33" y1="0.03" x2="0.67" y2="0.97">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <filter id="pn8002" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn8003" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn8004" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn8005" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn8006" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="pn9001" x1="0.33" y1="0.03" x2="0.67" y2="0.97">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <filter id="pn9002" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn9003" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn9004" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn9005" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn9006" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="pn10001" x1="0.33" y1="0.03" x2="0.67" y2="0.97">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <filter id="pn10002" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn10003" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn10004" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn10005" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn10006" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="pn11001" x1="0.33" y1="0.03" x2="0.67" y2="0.97">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <filter id="pn11002" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn11003" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn11004" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn11005" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn11006" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="pn12001" x1="0.33" y1="0.03" x2="0.67" y2="0.97">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <filter id="pn12002" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn12003" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn12004" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn12005" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn12006" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="pn13001" x1="0.33" y1="0.03" x2="0.67" y2="0.97">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <filter id="pn13002" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn13003" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn13004" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn13005" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn13006" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="pn14001" x1="0.33" y1="0.03" x2="0.67" y2="0.97">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <filter id="pn14002" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn14003" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn14004" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn14005" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn14006" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="pn15001" x1="0.33" y1="0.03" x2="0.67" y2="0.97">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <filter id="pn15002" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn15003" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn15004" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn15005" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn15006" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="pn16001" x1="0.33" y1="0.03" x2="0.67" y2="0.97">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <filter id="pn16002" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn16003" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn16004" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn16005" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn16006" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="pn17001" x1="0.33" y1="0.03" x2="0.67" y2="0.97">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <filter id="pn17002" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn17003" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn17004" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn17005" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn17006" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="pn18001" x1="0.33" y1="0.03" x2="0.67" y2="0.97">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <filter id="pn18002" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn18003" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn18004" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn18005" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn18006" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="pn19001" x1="0.33" y1="0.03" x2="0.67" y2="0.97">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <filter id="pn19002" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn19003" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn19004" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn19005" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn19006" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="pn20001" x1="0.33" y1="0.03" x2="0.67" y2="0.97">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <filter id="pn20002" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn20003" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn20004" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn20005" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn20006" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="pn21001" x1="0.33" y1="0.03" x2="0.67" y2="0.97">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <filter id="pn21002" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn21003" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn21004" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn21005" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn21006" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="pn22001" x1="0.33" y1="0.03" x2="0.67" y2="0.97">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <filter id="pn22002" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn22003" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn22004" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn22005" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn22006" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="pn23001" x1="0.33" y1="0.03" x2="0.67" y2="0.97">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <filter id="pn23002" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn23003" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn23004" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn23005" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn23006" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="pn24001" x1="0.33" y1="0.03" x2="0.67" y2="0.97">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <filter id="pn24002" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn24003" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn24004" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn24005" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn24006" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="pn25001" x1="0.33" y1="0.03" x2="0.67" y2="0.97">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <filter id="pn25002" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn25003" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn25004" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn25005" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn25006" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="pn26001" x1="0.33" y1="0.03" x2="0.67" y2="0.97">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <filter id="pn26002" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn26003" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn26004" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn26005" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn26006" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="pn27001" x1="0.33" y1="0.03" x2="0.67" y2="0.97">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <filter id="pn27002" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn27003" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn27004" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn27005" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn27006" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="pn28001" x1="0.33" y1="0.03" x2="0.67" y2="0.97">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <filter id="pn28002" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn28003" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn28004" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn28005" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn28006" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="pn29001" x1="0.33" y1="0.03" x2="0.67" y2="0.97">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <filter id="pn29002" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn29003" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn29004" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn29005" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn29006" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="pn30001" x1="0.33" y1="0.03" x2="0.67" y2="0.97">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <filter id="pn30002" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn30003" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn30004" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn30005" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn30006" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="pn31001" x1="0.33" y1="0.03" x2="0.67" y2="0.97">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <filter id="pn31002" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn31003" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn31004" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn31005" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn31006" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="pn32001" x1="0.33" y1="0.03" x2="0.67" y2="0.97">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <filter id="pn32002" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn32003" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn32004" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn32005" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn32006" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="pn33001" x1="0.33" y1="0.03" x2="0.67" y2="0.97">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <filter id="pn33002" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn33003" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn33004" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn33005" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn33006" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="pn34001" x1="0.33" y1="0.03" x2="0.67" y2="0.97">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <filter id="pn34002" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn34003" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn34004" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn34005" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn34006" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="pn35001" x1="0.33" y1="0.03" x2="0.67" y2="0.97">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <filter id="pn35002" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn35003" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn35004" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn35005" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn35006" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="pn36001" x1="0.33" y1="0.03" x2="0.67" y2="0.97">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <filter id="pn36002" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn36003" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn36004" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn36005" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn36006" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="pn37001" x1="0.33" y1="0.03" x2="0.67" y2="0.97">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <filter id="pn37002" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn37003" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn37004" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn37005" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn37006" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="pn38001" x1="0.33" y1="0.03" x2="0.67" y2="0.97">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <filter id="pn38002" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn38003" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn38004" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn38005" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn38006" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="pn39001" x1="0.33" y1="0.03" x2="0.67" y2="0.97">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <filter id="pn39002" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn39003" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn39004" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn39005" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn39006" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="pn40001" x1="0.33" y1="0.03" x2="0.67" y2="0.97">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <filter id="pn40002" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn40003" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn40004" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn40005" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn40006" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="pn41001" x1="0.33" y1="0.03" x2="0.67" y2="0.97">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <filter id="pn41002" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn41003" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn41004" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn41005" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn41006" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="pn42001" x1="0.33" y1="0.03" x2="0.67" y2="0.97">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <filter id="pn42002" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn42003" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn42004" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn42005" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn42006" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="pn43001" x1="0.33" y1="0.03" x2="0.67" y2="0.97">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <filter id="pn43002" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn43003" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn43004" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn43005" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn43006" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="pn44001" x1="0.33" y1="0.03" x2="0.67" y2="0.97">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <filter id="pn44002" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn44003" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn44004" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn44005" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn44006" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="pn45001" x1="0.33" y1="0.03" x2="0.67" y2="0.97">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <filter id="pn45002" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn45003" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn45004" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn45005" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn45006" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="pn46001" x1="0.33" y1="0.03" x2="0.67" y2="0.97">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <filter id="pn46002" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn46003" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn46004" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn46005" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn46006" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="pn47001" x1="0.33" y1="0.03" x2="0.67" y2="0.97">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <filter id="pn47002" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn47003" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn47004" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn47005" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn47006" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/>
+      <feFlood flood-color="#818cf8" flood-opacity="1"/>
+      <feComposite in2="b" operator="in" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="100%" height="100%" fill="#0b1020"/>
+  <g>
+    <animate attributeName="visibility" calcMode="discrete" values="visible;hidden;hidden" keyTimes="0;0.0208;1" dur="2s" repeatCount="indefinite"/>
+    <rect x="0" y="0" width="480" height="270" fill="url(#pn1)"/>
+    <line x1="40" y1="200" x2="440" y2="200" stroke="#334155" stroke-width="2"/>
+    <ellipse cx="80" cy="186" rx="17.5" ry="11.2" fill="#818cf8" filter="url(#pn2)"/>
+    <ellipse cx="160" cy="70.8" rx="14.16" ry="13.84" fill="#22d3ee" filter="url(#pn3)"/>
+    <ellipse cx="240" cy="109.2" rx="14" ry="14" fill="#fbbf24" filter="url(#pn4)"/>
+    <ellipse cx="320" cy="109.2" rx="14" ry="14" fill="#f87171" filter="url(#pn5)"/>
+    <ellipse cx="400" cy="70.8" rx="14.16" ry="13.84" fill="#34d399" filter="url(#pn6)"/>
+    <text x="240" y="80" font-size="34" font-weight="800" text-anchor="middle" fill="#ffffff" opacity="0">piano.film</text>
+    <text x="240" y="250" font-size="11" text-anchor="middle" fill="#94a3b8">الإطار 1 / 48</text>
+  </g>
+  <g visibility="hidden">
+    <animate attributeName="visibility" calcMode="discrete" values="hidden;visible;hidden;hidden" keyTimes="0;0.0208;0.0417;1" dur="2s" repeatCount="indefinite"/>
+    <rect x="0" y="0" width="480" height="270" fill="url(#pn1001)"/>
+    <line x1="40" y1="200" x2="440" y2="200" stroke="#334155" stroke-width="2"/>
+    <ellipse cx="80" cy="166.83" rx="16.71" ry="11.73" fill="#818cf8" filter="url(#pn1002)"/>
+    <ellipse cx="160" cy="67.63" rx="14.11" ry="13.89" fill="#22d3ee" filter="url(#pn1003)"/>
+    <ellipse cx="240" cy="122.03" rx="14" ry="14" fill="#fbbf24" filter="url(#pn1004)"/>
+    <ellipse cx="320" cy="98.03" rx="14" ry="14" fill="#f87171" filter="url(#pn1005)"/>
+    <ellipse cx="400" cy="75.63" rx="14.24" ry="13.76" fill="#34d399" filter="url(#pn1006)"/>
+    <text x="240" y="79.82" font-size="34" font-weight="800" text-anchor="middle" fill="#ffffff" opacity="0.01">piano.film</text>
+    <text x="240" y="250" font-size="11" text-anchor="middle" fill="#94a3b8">الإطار 2 / 48</text>
+  </g>
+  <g visibility="hidden">
+    <animate attributeName="visibility" calcMode="discrete" values="hidden;visible;hidden;hidden" keyTimes="0;0.0417;0.0625;1" dur="2s" repeatCount="indefinite"/>
+    <rect x="0" y="0" width="480" height="270" fill="url(#pn2001)"/>
+    <line x1="40" y1="200" x2="440" y2="200" stroke="#334155" stroke-width="2"/>
+    <ellipse cx="80" cy="149.33" rx="16.08" ry="12.19" fill="#818cf8" filter="url(#pn2002)"/>
+    <ellipse cx="160" cy="66.13" rx="14.07" ry="13.93" fill="#22d3ee" filter="url(#pn2003)"/>
+    <ellipse cx="240" cy="136.53" rx="14" ry="14" fill="#fbbf24" filter="url(#pn2004)"/>
+    <ellipse cx="320" cy="88.53" rx="14" ry="14" fill="#f87171" filter="url(#pn2005)"/>
+    <ellipse cx="400" cy="82.13" rx="14.36" ry="13.65" fill="#34d399" filter="url(#pn2006)"/>
+    <text x="240" y="79.27" font-size="34" font-weight="800" text-anchor="middle" fill="#ffffff" opacity="0.04">piano.film</text>
+    <text x="240" y="250" font-size="11" text-anchor="middle" fill="#94a3b8">الإطار 3 / 48</text>
+  </g>
+  <g visibility="hidden">
+    <animate attributeName="visibility" calcMode="discrete" values="hidden;visible;hidden;hidden" keyTimes="0;0.0625;0.0833;1" dur="2s" repeatCount="indefinite"/>
+    <rect x="0" y="0" width="480" height="270" fill="url(#pn3001)"/>
+    <line x1="40" y1="200" x2="440" y2="200" stroke="#334155" stroke-width="2"/>
+    <ellipse cx="80" cy="133.5" rx="15.57" ry="12.59" fill="#818cf8" filter="url(#pn3002)"/>
+    <ellipse cx="160" cy="66.3" rx="14.04" ry="13.96" fill="#22d3ee" filter="url(#pn3003)"/>
+    <ellipse cx="240" cy="152.7" rx="14" ry="14" fill="#fbbf24" filter="url(#pn3004)"/>
+    <ellipse cx="320" cy="80.7" rx="14" ry="14" fill="#f87171" filter="url(#pn3005)"/>
+    <ellipse cx="400" cy="90.3" rx="14.51" ry="13.51" fill="#34d399" filter="url(#pn3006)"/>
+    <text x="240" y="78.36" font-size="34" font-weight="800" text-anchor="middle" fill="#ffffff" opacity="0.08">piano.film</text>
+    <text x="240" y="250" font-size="11" text-anchor="middle" fill="#94a3b8">الإطار 4 / 48</text>
+  </g>
+  <g visibility="hidden">
+    <animate attributeName="visibility" calcMode="discrete" values="hidden;visible;hidden;hidden" keyTimes="0;0.0833;0.1042;1" dur="2s" repeatCount="indefinite"/>
+    <rect x="0" y="0" width="480" height="270" fill="url(#pn4001)"/>
+    <line x1="40" y1="200" x2="440" y2="200" stroke="#334155" stroke-width="2"/>
+    <ellipse cx="80" cy="119.33" rx="15.17" ry="12.92" fill="#818cf8" filter="url(#pn4002)"/>
+    <ellipse cx="160" cy="68.13" rx="14.02" ry="13.98" fill="#22d3ee" filter="url(#pn4003)"/>
+    <ellipse cx="240" cy="170.53" rx="14" ry="14" fill="#fbbf24" filter="url(#pn4004)"/>
+    <ellipse cx="320" cy="74.53" rx="14.01" ry="13.99" fill="#f87171" filter="url(#pn4005)"/>
+    <ellipse cx="400" cy="100.13" rx="14.71" ry="13.32" fill="#34d399" filter="url(#pn4006)"/>
+    <text x="240" y="77.08" font-size="34" font-weight="800" text-anchor="middle" fill="#ffffff" opacity="0.15">piano.film</text>
+    <text x="240" y="250" font-size="11" text-anchor="middle" fill="#94a3b8">الإطار 5 / 48</text>
+  </g>
+  <g visibility="hidden">
+    <animate attributeName="visibility" calcMode="discrete" values="hidden;visible;hidden;hidden" keyTimes="0;0.1042;0.125;1" dur="2s" repeatCount="indefinite"/>
+    <rect x="0" y="0" width="480" height="270" fill="url(#pn5001)"/>
+    <line x1="40" y1="200" x2="440" y2="200" stroke="#334155" stroke-width="2"/>
+    <ellipse cx="80" cy="106.83" rx="14.86" ry="13.19" fill="#818cf8" filter="url(#pn5002)"/>
+    <ellipse cx="160" cy="71.63" rx="14.01" ry="13.99" fill="#22d3ee" filter="url(#pn5003)"/>
+    <ellipse cx="240" cy="182.03" rx="14" ry="14" fill="#fbbf24" filter="url(#pn5004)"/>
+    <ellipse cx="320" cy="70.03" rx="14.02" ry="13.98" fill="#f87171" filter="url(#pn5005)"/>
+    <ellipse cx="400" cy="111.63" rx="14.98" ry="13.09" fill="#34d399" filter="url(#pn5006)"/>
+    <text x="240" y="75.44" font-size="34" font-weight="800" text-anchor="middle" fill="#ffffff" opacity="0.23">piano.film</text>
+    <text x="240" y="250" font-size="11" text-anchor="middle" fill="#94a3b8">الإطار 6 / 48</text>
+  </g>
+  <g visibility="hidden">
+    <animate attributeName="visibility" calcMode="discrete" values="hidden;visible;hidden;hidden" keyTimes="0;0.125;0.1458;1" dur="2s" repeatCount="indefinite"/>
+    <rect x="0" y="0" width="480" height="270" fill="url(#pn6001)"/>
+    <line x1="40" y1="200" x2="440" y2="200" stroke="#334155" stroke-width="2"/>
+    <ellipse cx="80" cy="96" rx="14.62" ry="13.4" fill="#818cf8" filter="url(#pn6002)"/>
+    <ellipse cx="160" cy="76.8" rx="14.01" ry="13.99" fill="#22d3ee" filter="url(#pn6003)"/>
+    <ellipse cx="240" cy="163.2" rx="14" ry="14" fill="#fbbf24" filter="url(#pn6004)"/>
+    <ellipse cx="320" cy="67.2" rx="14.03" ry="13.97" fill="#f87171" filter="url(#pn6005)"/>
+    <ellipse cx="400" cy="124.8" rx="15.32" ry="12.79" fill="#34d399" filter="url(#pn6006)"/>
+    <text x="240" y="73.44" font-size="34" font-weight="800" text-anchor="middle" fill="#ffffff" opacity="0.33">piano.film</text>
+    <text x="240" y="250" font-size="11" text-anchor="middle" fill="#94a3b8">الإطار 7 / 48</text>
+  </g>
+  <g visibility="hidden">
+    <animate attributeName="visibility" calcMode="discrete" values="hidden;visible;hidden;hidden" keyTimes="0;0.1458;0.1667;1" dur="2s" repeatCount="indefinite"/>
+    <rect x="0" y="0" width="480" height="270" fill="url(#pn7001)"/>
+    <line x1="40" y1="200" x2="440" y2="200" stroke="#334155" stroke-width="2"/>
+    <ellipse cx="80" cy="86.83" rx="14.44" ry="13.57" fill="#818cf8" filter="url(#pn7002)"/>
+    <ellipse cx="160" cy="83.63" rx="14" ry="14" fill="#22d3ee" filter="url(#pn7003)"/>
+    <ellipse cx="240" cy="146.03" rx="14" ry="14" fill="#fbbf24" filter="url(#pn7004)"/>
+    <ellipse cx="320" cy="66.03" rx="14.05" ry="13.95" fill="#f87171" filter="url(#pn7005)"/>
+    <ellipse cx="400" cy="139.63" rx="15.76" ry="12.44" fill="#34d399" filter="url(#pn7006)"/>
+    <text x="240" y="71.06" font-size="34" font-weight="800" text-anchor="middle" fill="#ffffff" opacity="0.45">piano.film</text>
+    <text x="240" y="250" font-size="11" text-anchor="middle" fill="#94a3b8">الإطار 8 / 48</text>
+  </g>
+  <g visibility="hidden">
+    <animate attributeName="visibility" calcMode="discrete" values="hidden;visible;hidden;hidden" keyTimes="0;0.1667;0.1875;1" dur="2s" repeatCount="indefinite"/>
+    <rect x="0" y="0" width="480" height="270" fill="url(#pn8001)"/>
+    <line x1="40" y1="200" x2="440" y2="200" stroke="#334155" stroke-width="2"/>
+    <ellipse cx="80" cy="79.33" rx="14.31" ry="13.7" fill="#818cf8" filter="url(#pn8002)"/>
+    <ellipse cx="160" cy="92.13" rx="14" ry="14" fill="#22d3ee" filter="url(#pn8003)"/>
+    <ellipse cx="240" cy="130.53" rx="14" ry="14" fill="#fbbf24" filter="url(#pn8004)"/>
+    <ellipse cx="320" cy="66.53" rx="14.08" ry="13.92" fill="#f87171" filter="url(#pn8005)"/>
+    <ellipse cx="400" cy="156.13" rx="16.31" ry="12.01" fill="#34d399" filter="url(#pn8006)"/>
+    <text x="240" y="68.33" font-size="34" font-weight="800" text-anchor="middle" fill="#ffffff" opacity="0.58">piano.film</text>
+    <text x="240" y="250" font-size="11" text-anchor="middle" fill="#94a3b8">الإطار 9 / 48</text>
+  </g>
+  <g visibility="hidden">
+    <animate attributeName="visibility" calcMode="discrete" values="hidden;visible;hidden;hidden" keyTimes="0;0.1875;0.2083;1" dur="2s" repeatCount="indefinite"/>
+    <rect x="0" y="0" width="480" height="270" fill="url(#pn9001)"/>
+    <line x1="40" y1="200" x2="440" y2="200" stroke="#334155" stroke-width="2"/>
+    <ellipse cx="80" cy="73.5" rx="14.21" ry="13.79" fill="#818cf8" filter="url(#pn9002)"/>
+    <ellipse cx="160" cy="102.3" rx="14" ry="14" fill="#22d3ee" filter="url(#pn9003)"/>
+    <ellipse cx="240" cy="116.7" rx="14" ry="14" fill="#fbbf24" filter="url(#pn9004)"/>
+    <ellipse cx="320" cy="68.7" rx="14.13" ry="13.87" fill="#f87171" filter="url(#pn9005)"/>
+    <ellipse cx="400" cy="174.3" rx="17.01" ry="11.52" fill="#34d399" filter="url(#pn9006)"/>
+    <text x="240" y="65.23" font-size="34" font-weight="800" text-anchor="middle" fill="#ffffff" opacity="0.74">piano.film</text>
+    <text x="240" y="250" font-size="11" text-anchor="middle" fill="#94a3b8">الإطار 10 / 48</text>
+  </g>
+  <g visibility="hidden">
+    <animate attributeName="visibility" calcMode="discrete" values="hidden;visible;hidden;hidden" keyTimes="0;0.2083;0.2292;1" dur="2s" repeatCount="indefinite"/>
+    <rect x="0" y="0" width="480" height="270" fill="url(#pn10001)"/>
+    <line x1="40" y1="200" x2="440" y2="200" stroke="#334155" stroke-width="2"/>
+    <ellipse cx="80" cy="69.33" rx="14.14" ry="13.86" fill="#818cf8" filter="url(#pn10002)"/>
+    <ellipse cx="160" cy="114.13" rx="14" ry="14" fill="#22d3ee" filter="url(#pn10003)"/>
+    <ellipse cx="240" cy="104.53" rx="14" ry="14" fill="#fbbf24" filter="url(#pn10004)"/>
+    <ellipse cx="320" cy="72.53" rx="14.19" ry="13.81" fill="#f87171" filter="url(#pn10005)"/>
+    <ellipse cx="400" cy="178.13" rx="17.16" ry="11.42" fill="#34d399" filter="url(#pn10006)"/>
+    <text x="240" y="61.76" font-size="34" font-weight="800" text-anchor="middle" fill="#ffffff" opacity="0.91">piano.film</text>
+    <text x="240" y="250" font-size="11" text-anchor="middle" fill="#94a3b8">الإطار 11 / 48</text>
+  </g>
+  <g visibility="hidden">
+    <animate attributeName="visibility" calcMode="discrete" values="hidden;visible;hidden;hidden" keyTimes="0;0.2292;0.25;1" dur="2s" repeatCount="indefinite"/>
+    <rect x="0" y="0" width="480" height="270" fill="url(#pn11001)"/>
+    <line x1="40" y1="200" x2="440" y2="200" stroke="#334155" stroke-width="2"/>
+    <ellipse cx="80" cy="66.83" rx="14.09" ry="13.91" fill="#818cf8" filter="url(#pn11002)"/>
+    <ellipse cx="160" cy="127.63" rx="14" ry="14" fill="#22d3ee" filter="url(#pn11003)"/>
+    <ellipse cx="240" cy="94.03" rx="14" ry="14" fill="#fbbf24" filter="url(#pn11004)"/>
+    <ellipse cx="320" cy="78.03" rx="14.28" ry="13.72" fill="#f87171" filter="url(#pn11005)"/>
+    <ellipse cx="400" cy="159.63" rx="16.44" ry="11.92" fill="#34d399" filter="url(#pn11006)"/>
+    <text x="240" y="60.96" font-size="34" font-weight="800" text-anchor="middle" fill="#ffffff" opacity="0.95">piano.film</text>
+    <text x="240" y="250" font-size="11" text-anchor="middle" fill="#94a3b8">الإطار 12 / 48</text>
+  </g>
+  <g visibility="hidden">
+    <animate attributeName="visibility" calcMode="discrete" values="hidden;visible;hidden;hidden" keyTimes="0;0.25;0.2708;1" dur="2s" repeatCount="indefinite"/>
+    <rect x="0" y="0" width="480" height="270" fill="url(#pn12001)"/>
+    <line x1="40" y1="200" x2="440" y2="200" stroke="#334155" stroke-width="2"/>
+    <ellipse cx="80" cy="66" rx="14.05" ry="13.95" fill="#818cf8" filter="url(#pn12002)"/>
+    <ellipse cx="160" cy="142.8" rx="14" ry="14" fill="#22d3ee" filter="url(#pn12003)"/>
+    <ellipse cx="240" cy="85.2" rx="14" ry="14" fill="#fbbf24" filter="url(#pn12004)"/>
+    <ellipse cx="320" cy="85.2" rx="14.41" ry="13.6" fill="#f87171" filter="url(#pn12005)"/>
+    <ellipse cx="400" cy="142.8" rx="15.86" ry="12.36" fill="#34d399" filter="url(#pn12006)"/>
+    <text x="240" y="62.49" font-size="34" font-weight="800" text-anchor="middle" fill="#ffffff" opacity="0.88">piano.film</text>
+    <text x="240" y="250" font-size="11" text-anchor="middle" fill="#94a3b8">الإطار 13 / 48</text>
+  </g>
+  <g visibility="hidden">
+    <animate attributeName="visibility" calcMode="discrete" values="hidden;visible;hidden;hidden" keyTimes="0;0.2708;0.2917;1" dur="2s" repeatCount="indefinite"/>
+    <rect x="0" y="0" width="480" height="270" fill="url(#pn13001)"/>
+    <line x1="40" y1="200" x2="440" y2="200" stroke="#334155" stroke-width="2"/>
+    <ellipse cx="80" cy="66.83" rx="14.03" ry="13.97" fill="#818cf8" filter="url(#pn13002)"/>
+    <ellipse cx="160" cy="159.63" rx="14" ry="14" fill="#22d3ee" filter="url(#pn13003)"/>
+    <ellipse cx="240" cy="78.03" rx="14.01" ry="13.99" fill="#fbbf24" filter="url(#pn13004)"/>
+    <ellipse cx="320" cy="94.03" rx="14.58" ry="13.44" fill="#f87171" filter="url(#pn13005)"/>
+    <ellipse cx="400" cy="127.63" rx="15.4" ry="12.73" fill="#34d399" filter="url(#pn13006)"/>
+    <text x="240" y="63.66" font-size="34" font-weight="800" text-anchor="middle" fill="#ffffff" opacity="0.82">piano.film</text>
+    <text x="240" y="250" font-size="11" text-anchor="middle" fill="#94a3b8">الإطار 14 / 48</text>
+  </g>
+  <g visibility="hidden">
+    <animate attributeName="visibility" calcMode="discrete" values="hidden;visible;hidden;hidden" keyTimes="0;0.2917;0.3125;1" dur="2s" repeatCount="indefinite"/>
+    <rect x="0" y="0" width="480" height="270" fill="url(#pn14001)"/>
+    <line x1="40" y1="200" x2="440" y2="200" stroke="#334155" stroke-width="2"/>
+    <ellipse cx="80" cy="69.33" rx="14.02" ry="13.98" fill="#818cf8" filter="url(#pn14002)"/>
+    <ellipse cx="160" cy="178.13" rx="14" ry="14" fill="#22d3ee" filter="url(#pn14003)"/>
+    <ellipse cx="240" cy="72.53" rx="14.01" ry="13.99" fill="#fbbf24" filter="url(#pn14004)"/>
+    <ellipse cx="320" cy="104.53" rx="14.81" ry="13.24" fill="#f87171" filter="url(#pn14005)"/>
+    <ellipse cx="400" cy="114.13" rx="15.04" ry="13.03" fill="#34d399" filter="url(#pn14006)"/>
+    <text x="240" y="64.47" font-size="34" font-weight="800" text-anchor="middle" fill="#ffffff" opacity="0.78">piano.film</text>
+    <text x="240" y="250" font-size="11" text-anchor="middle" fill="#94a3b8">الإطار 15 / 48</text>
+  </g>
+  <g visibility="hidden">
+    <animate attributeName="visibility" calcMode="discrete" values="hidden;visible;hidden;hidden" keyTimes="0;0.3125;0.3333;1" dur="2s" repeatCount="indefinite"/>
+    <rect x="0" y="0" width="480" height="270" fill="url(#pn15001)"/>
+    <line x1="40" y1="200" x2="440" y2="200" stroke="#334155" stroke-width="2"/>
+    <ellipse cx="80" cy="73.5" rx="14.01" ry="13.99" fill="#818cf8" filter="url(#pn15002)"/>
+    <ellipse cx="160" cy="174.3" rx="14" ry="14" fill="#22d3ee" filter="url(#pn15003)"/>
+    <ellipse cx="240" cy="68.7" rx="14.02" ry="13.98" fill="#fbbf24" filter="url(#pn15004)"/>
+    <ellipse cx="320" cy="116.7" rx="15.1" ry="12.98" fill="#f87171" filter="url(#pn15005)"/>
+    <ellipse cx="400" cy="102.3" rx="14.76" ry="13.28" fill="#34d399" filter="url(#pn15006)"/>
+    <text x="240" y="64.91" font-size="34" font-weight="800" text-anchor="middle" fill="#ffffff" opacity="0.75">piano.film</text>
+    <text x="240" y="250" font-size="11" text-anchor="middle" fill="#94a3b8">الإطار 16 / 48</text>
+  </g>
+  <g visibility="hidden">
+    <animate attributeName="visibility" calcMode="discrete" values="hidden;visible;hidden;hidden" keyTimes="0;0.3333;0.3542;1" dur="2s" repeatCount="indefinite"/>
+    <rect x="0" y="0" width="480" height="270" fill="url(#pn16001)"/>
+    <line x1="40" y1="200" x2="440" y2="200" stroke="#334155" stroke-width="2"/>
+    <ellipse cx="80" cy="79.33" rx="14" ry="14" fill="#818cf8" filter="url(#pn16002)"/>
+    <ellipse cx="160" cy="156.13" rx="14" ry="14" fill="#22d3ee" filter="url(#pn16003)"/>
+    <ellipse cx="240" cy="66.53" rx="14.04" ry="13.96" fill="#fbbf24" filter="url(#pn16004)"/>
+    <ellipse cx="320" cy="130.53" rx="15.48" ry="12.66" fill="#f87171" filter="url(#pn16005)"/>
+    <ellipse cx="400" cy="92.13" rx="14.54" ry="13.48" fill="#34d399" filter="url(#pn16006)"/>
+    <text x="240" y="64.98" font-size="34" font-weight="800" text-anchor="middle" fill="#ffffff" opacity="0.75">piano.film</text>
+    <text x="240" y="250" font-size="11" text-anchor="middle" fill="#94a3b8">الإطار 17 / 48</text>
+  </g>
+  <g visibility="hidden">
+    <animate attributeName="visibility" calcMode="discrete" values="hidden;visible;hidden;hidden" keyTimes="0;0.3542;0.375;1" dur="2s" repeatCount="indefinite"/>
+    <rect x="0" y="0" width="480" height="270" fill="url(#pn17001)"/>
+    <line x1="40" y1="200" x2="440" y2="200" stroke="#334155" stroke-width="2"/>
+    <ellipse cx="80" cy="86.83" rx="14" ry="14" fill="#818cf8" filter="url(#pn17002)"/>
+    <ellipse cx="160" cy="139.63" rx="14" ry="14" fill="#22d3ee" filter="url(#pn17003)"/>
+    <ellipse cx="240" cy="66.03" rx="14.06" ry="13.94" fill="#fbbf24" filter="url(#pn17004)"/>
+    <ellipse cx="320" cy="146.03" rx="15.97" ry="12.28" fill="#f87171" filter="url(#pn17005)"/>
+    <ellipse cx="400" cy="83.63" rx="14.38" ry="13.63" fill="#34d399" filter="url(#pn17006)"/>
+    <text x="240" y="64.7" font-size="34" font-weight="800" text-anchor="middle" fill="#ffffff" opacity="0.77">piano.film</text>
+    <text x="240" y="250" font-size="11" text-anchor="middle" fill="#94a3b8">الإطار 18 / 48</text>
+  </g>
+  <g visibility="hidden">
+    <animate attributeName="visibility" calcMode="discrete" values="hidden;visible;hidden;hidden" keyTimes="0;0.375;0.3958;1" dur="2s" repeatCount="indefinite"/>
+    <rect x="0" y="0" width="480" height="270" fill="url(#pn18001)"/>
+    <line x1="40" y1="200" x2="440" y2="200" stroke="#334155" stroke-width="2"/>
+    <ellipse cx="80" cy="96" rx="14" ry="14" fill="#818cf8" filter="url(#pn18002)"/>
+    <ellipse cx="160" cy="124.8" rx="14" ry="14" fill="#22d3ee" filter="url(#pn18003)"/>
+    <ellipse cx="240" cy="67.2" rx="14.1" ry="13.9" fill="#fbbf24" filter="url(#pn18004)"/>
+    <ellipse cx="320" cy="163.2" rx="16.57" ry="11.83" fill="#f87171" filter="url(#pn18005)"/>
+    <ellipse cx="400" cy="76.8" rx="14.26" ry="13.74" fill="#34d399" filter="url(#pn18006)"/>
+    <text x="240" y="64.04" font-size="34" font-weight="800" text-anchor="middle" fill="#ffffff" opacity="0.8">piano.film</text>
+    <text x="240" y="250" font-size="11" text-anchor="middle" fill="#94a3b8">الإطار 19 / 48</text>
+  </g>
+  <g visibility="hidden">
+    <animate attributeName="visibility" calcMode="discrete" values="hidden;visible;hidden;hidden" keyTimes="0;0.3958;0.4167;1" dur="2s" repeatCount="indefinite"/>
+    <rect x="0" y="0" width="480" height="270" fill="url(#pn19001)"/>
+    <line x1="40" y1="200" x2="440" y2="200" stroke="#334155" stroke-width="2"/>
+    <ellipse cx="80" cy="106.83" rx="14" ry="14" fill="#818cf8" filter="url(#pn19002)"/>
+    <ellipse cx="160" cy="111.63" rx="14" ry="14" fill="#22d3ee" filter="url(#pn19003)"/>
+    <ellipse cx="240" cy="70.03" rx="14.15" ry="13.85" fill="#fbbf24" filter="url(#pn19004)"/>
+    <ellipse cx="320" cy="182.03" rx="17.33" ry="11.31" fill="#f87171" filter="url(#pn19005)"/>
+    <ellipse cx="400" cy="71.63" rx="14.18" ry="13.82" fill="#34d399" filter="url(#pn19006)"/>
+    <text x="240" y="63.03" font-size="34" font-weight="800" text-anchor="middle" fill="#ffffff" opacity="0.85">piano.film</text>
+    <text x="240" y="250" font-size="11" text-anchor="middle" fill="#94a3b8">الإطار 20 / 48</text>
+  </g>
+  <g visibility="hidden">
+    <animate attributeName="visibility" calcMode="discrete" values="hidden;visible;hidden;hidden" keyTimes="0;0.4167;0.4375;1" dur="2s" repeatCount="indefinite"/>
+    <rect x="0" y="0" width="480" height="270" fill="url(#pn20001)"/>
+    <line x1="40" y1="200" x2="440" y2="200" stroke="#334155" stroke-width="2"/>
+    <ellipse cx="80" cy="119.33" rx="14" ry="14" fill="#818cf8" filter="url(#pn20002)"/>
+    <ellipse cx="160" cy="100.13" rx="14" ry="14" fill="#22d3ee" filter="url(#pn20003)"/>
+    <ellipse cx="240" cy="74.53" rx="14.23" ry="13.78" fill="#fbbf24" filter="url(#pn20004)"/>
+    <ellipse cx="320" cy="170.53" rx="16.86" ry="11.63" fill="#f87171" filter="url(#pn20005)"/>
+    <ellipse cx="400" cy="68.13" rx="14.12" ry="13.89" fill="#34d399" filter="url(#pn20006)"/>
+    <text x="240" y="61.64" font-size="34" font-weight="800" text-anchor="middle" fill="#ffffff" opacity="0.92">piano.film</text>
+    <text x="240" y="250" font-size="11" text-anchor="middle" fill="#94a3b8">الإطار 21 / 48</text>
+  </g>
+  <g visibility="hidden">
+    <animate attributeName="visibility" calcMode="discrete" values="hidden;visible;hidden;hidden" keyTimes="0;0.4375;0.4583;1" dur="2s" repeatCount="indefinite"/>
+    <rect x="0" y="0" width="480" height="270" fill="url(#pn21001)"/>
+    <line x1="40" y1="200" x2="440" y2="200" stroke="#334155" stroke-width="2"/>
+    <ellipse cx="80" cy="133.5" rx="14" ry="14" fill="#818cf8" filter="url(#pn21002)"/>
+    <ellipse cx="160" cy="90.3" rx="14" ry="14" fill="#22d3ee" filter="url(#pn21003)"/>
+    <ellipse cx="240" cy="80.7" rx="14.33" ry="13.68" fill="#fbbf24" filter="url(#pn21004)"/>
+    <ellipse cx="320" cy="152.7" rx="16.19" ry="12.1" fill="#f87171" filter="url(#pn21005)"/>
+    <ellipse cx="400" cy="66.3" rx="14.07" ry="13.93" fill="#34d399" filter="url(#pn21006)"/>
+    <text x="240" y="60.05" font-size="34" font-weight="800" text-anchor="middle" fill="#ffffff" opacity="1">piano.film</text>
+    <text x="240" y="250" font-size="11" text-anchor="middle" fill="#94a3b8">الإطار 22 / 48</text>
+  </g>
+  <g visibility="hidden">
+    <animate attributeName="visibility" calcMode="discrete" values="hidden;visible;hidden;hidden" keyTimes="0;0.4583;0.4792;1" dur="2s" repeatCount="indefinite"/>
+    <rect x="0" y="0" width="480" height="270" fill="url(#pn22001)"/>
+    <line x1="40" y1="200" x2="440" y2="200" stroke="#334155" stroke-width="2"/>
+    <ellipse cx="80" cy="149.33" rx="14" ry="14" fill="#818cf8" filter="url(#pn22002)"/>
+    <ellipse cx="160" cy="82.13" rx="14" ry="14" fill="#22d3ee" filter="url(#pn22003)"/>
+    <ellipse cx="240" cy="88.53" rx="14.47" ry="13.54" fill="#fbbf24" filter="url(#pn22004)"/>
+    <ellipse cx="320" cy="136.53" rx="15.66" ry="12.51" fill="#f87171" filter="url(#pn22005)"/>
+    <ellipse cx="400" cy="66.13" rx="14.04" ry="13.96" fill="#34d399" filter="url(#pn22006)"/>
+    <text x="240" y="60.8" font-size="34" font-weight="800" text-anchor="middle" fill="#ffffff" opacity="0.96">piano.film</text>
+    <text x="240" y="250" font-size="11" text-anchor="middle" fill="#94a3b8">الإطار 23 / 48</text>
+  </g>
+  <g visibility="hidden">
+    <animate attributeName="visibility" calcMode="discrete" values="hidden;visible;hidden;hidden" keyTimes="0;0.4792;0.5;1" dur="2s" repeatCount="indefinite"/>
+    <rect x="0" y="0" width="480" height="270" fill="url(#pn23001)"/>
+    <line x1="40" y1="200" x2="440" y2="200" stroke="#334155" stroke-width="2"/>
+    <ellipse cx="80" cy="166.83" rx="14" ry="14" fill="#818cf8" filter="url(#pn23002)"/>
+    <ellipse cx="160" cy="75.63" rx="14.01" ry="13.99" fill="#22d3ee" filter="url(#pn23003)"/>
+    <ellipse cx="240" cy="98.03" rx="14.67" ry="13.36" fill="#fbbf24" filter="url(#pn23004)"/>
+    <ellipse cx="320" cy="122.03" rx="15.24" ry="12.86" fill="#f87171" filter="url(#pn23005)"/>
+    <ellipse cx="400" cy="67.63" rx="14.03" ry="13.97" fill="#34d399" filter="url(#pn23006)"/>
+    <text x="240" y="61.19" font-size="34" font-weight="800" text-anchor="middle" fill="#ffffff" opacity="0.94">piano.film</text>
+    <text x="240" y="250" font-size="11" text-anchor="middle" fill="#94a3b8">الإطار 24 / 48</text>
+  </g>
+  <g visibility="hidden">
+    <animate attributeName="visibility" calcMode="discrete" values="hidden;visible;hidden;hidden" keyTimes="0;0.5;0.5208;1" dur="2s" repeatCount="indefinite"/>
+    <rect x="0" y="0" width="480" height="270" fill="url(#pn24001)"/>
+    <line x1="40" y1="200" x2="440" y2="200" stroke="#334155" stroke-width="2"/>
+    <ellipse cx="80" cy="186" rx="14" ry="14" fill="#818cf8" filter="url(#pn24002)"/>
+    <ellipse cx="160" cy="70.8" rx="14.01" ry="13.99" fill="#22d3ee" filter="url(#pn24003)"/>
+    <ellipse cx="240" cy="109.2" rx="14.92" ry="13.14" fill="#fbbf24" filter="url(#pn24004)"/>
+    <ellipse cx="320" cy="109.2" rx="14.92" ry="13.14" fill="#f87171" filter="url(#pn24005)"/>
+    <ellipse cx="400" cy="70.8" rx="14.01" ry="13.99" fill="#34d399" filter="url(#pn24006)"/>
+    <text x="240" y="61.22" font-size="34" font-weight="800" text-anchor="middle" fill="#ffffff" opacity="0.94">piano.film</text>
+    <text x="240" y="250" font-size="11" text-anchor="middle" fill="#94a3b8">الإطار 25 / 48</text>
+  </g>
+  <g visibility="hidden">
+    <animate attributeName="visibility" calcMode="discrete" values="hidden;visible;hidden;hidden" keyTimes="0;0.5208;0.5417;1" dur="2s" repeatCount="indefinite"/>
+    <rect x="0" y="0" width="480" height="270" fill="url(#pn25001)"/>
+    <line x1="40" y1="200" x2="440" y2="200" stroke="#334155" stroke-width="2"/>
+    <ellipse cx="80" cy="166.83" rx="14" ry="14" fill="#818cf8" filter="url(#pn25002)"/>
+    <ellipse cx="160" cy="67.63" rx="14.03" ry="13.97" fill="#22d3ee" filter="url(#pn25003)"/>
+    <ellipse cx="240" cy="122.03" rx="15.24" ry="12.86" fill="#fbbf24" filter="url(#pn25004)"/>
+    <ellipse cx="320" cy="98.03" rx="14.67" ry="13.36" fill="#f87171" filter="url(#pn25005)"/>
+    <ellipse cx="400" cy="75.63" rx="14.01" ry="13.99" fill="#34d399" filter="url(#pn25006)"/>
+    <text x="240" y="60.87" font-size="34" font-weight="800" text-anchor="middle" fill="#ffffff" opacity="0.96">piano.film</text>
+    <text x="240" y="250" font-size="11" text-anchor="middle" fill="#94a3b8">الإطار 26 / 48</text>
+  </g>
+  <g visibility="hidden">
+    <animate attributeName="visibility" calcMode="discrete" values="hidden;visible;hidden;hidden" keyTimes="0;0.5417;0.5625;1" dur="2s" repeatCount="indefinite"/>
+    <rect x="0" y="0" width="480" height="270" fill="url(#pn26001)"/>
+    <line x1="40" y1="200" x2="440" y2="200" stroke="#334155" stroke-width="2"/>
+    <ellipse cx="80" cy="149.33" rx="14" ry="14" fill="#818cf8" filter="url(#pn26002)"/>
+    <ellipse cx="160" cy="66.13" rx="14.04" ry="13.96" fill="#22d3ee" filter="url(#pn26003)"/>
+    <ellipse cx="240" cy="136.53" rx="15.66" ry="12.51" fill="#fbbf24" filter="url(#pn26004)"/>
+    <ellipse cx="320" cy="88.53" rx="14.47" ry="13.54" fill="#f87171" filter="url(#pn26005)"/>
+    <ellipse cx="400" cy="82.13" rx="14" ry="14" fill="#34d399" filter="url(#pn26006)"/>
+    <text x="240" y="60.17" font-size="34" font-weight="800" text-anchor="middle" fill="#ffffff" opacity="0.99">piano.film</text>
+    <text x="240" y="250" font-size="11" text-anchor="middle" fill="#94a3b8">الإطار 27 / 48</text>
+  </g>
+  <g visibility="hidden">
+    <animate attributeName="visibility" calcMode="discrete" values="hidden;visible;hidden;hidden" keyTimes="0;0.5625;0.5833;1" dur="2s" repeatCount="indefinite"/>
+    <rect x="0" y="0" width="480" height="270" fill="url(#pn27001)"/>
+    <line x1="40" y1="200" x2="440" y2="200" stroke="#334155" stroke-width="2"/>
+    <ellipse cx="80" cy="133.5" rx="14" ry="14" fill="#818cf8" filter="url(#pn27002)"/>
+    <ellipse cx="160" cy="66.3" rx="14.07" ry="13.93" fill="#22d3ee" filter="url(#pn27003)"/>
+    <ellipse cx="240" cy="152.7" rx="16.19" ry="12.1" fill="#fbbf24" filter="url(#pn27004)"/>
+    <ellipse cx="320" cy="80.7" rx="14.33" ry="13.68" fill="#f87171" filter="url(#pn27005)"/>
+    <ellipse cx="400" cy="90.3" rx="14" ry="14" fill="#34d399" filter="url(#pn27006)"/>
+    <text x="240" y="60.27" font-size="34" font-weight="800" text-anchor="middle" fill="#ffffff" opacity="0.99">piano.film</text>
+    <text x="240" y="250" font-size="11" text-anchor="middle" fill="#94a3b8">الإطار 28 / 48</text>
+  </g>
+  <g visibility="hidden">
+    <animate attributeName="visibility" calcMode="discrete" values="hidden;visible;hidden;hidden" keyTimes="0;0.5833;0.6042;1" dur="2s" repeatCount="indefinite"/>
+    <rect x="0" y="0" width="480" height="270" fill="url(#pn28001)"/>
+    <line x1="40" y1="200" x2="440" y2="200" stroke="#334155" stroke-width="2"/>
+    <ellipse cx="80" cy="119.33" rx="14" ry="14" fill="#818cf8" filter="url(#pn28002)"/>
+    <ellipse cx="160" cy="68.13" rx="14.12" ry="13.89" fill="#22d3ee" filter="url(#pn28003)"/>
+    <ellipse cx="240" cy="170.53" rx="16.86" ry="11.63" fill="#fbbf24" filter="url(#pn28004)"/>
+    <ellipse cx="320" cy="74.53" rx="14.23" ry="13.78" fill="#f87171" filter="url(#pn28005)"/>
+    <ellipse cx="400" cy="100.13" rx="14" ry="14" fill="#34d399" filter="url(#pn28006)"/>
+    <text x="240" y="60.27" font-size="34" font-weight="800" text-anchor="middle" fill="#ffffff" opacity="0.99">piano.film</text>
+    <text x="240" y="250" font-size="11" text-anchor="middle" fill="#94a3b8">الإطار 29 / 48</text>
+  </g>
+  <g visibility="hidden">
+    <animate attributeName="visibility" calcMode="discrete" values="hidden;visible;hidden;hidden" keyTimes="0;0.6042;0.625;1" dur="2s" repeatCount="indefinite"/>
+    <rect x="0" y="0" width="480" height="270" fill="url(#pn29001)"/>
+    <line x1="40" y1="200" x2="440" y2="200" stroke="#334155" stroke-width="2"/>
+    <ellipse cx="80" cy="106.83" rx="14" ry="14" fill="#818cf8" filter="url(#pn29002)"/>
+    <ellipse cx="160" cy="71.63" rx="14.18" ry="13.82" fill="#22d3ee" filter="url(#pn29003)"/>
+    <ellipse cx="240" cy="182.03" rx="17.33" ry="11.31" fill="#fbbf24" filter="url(#pn29004)"/>
+    <ellipse cx="320" cy="70.03" rx="14.15" ry="13.85" fill="#f87171" filter="url(#pn29005)"/>
+    <ellipse cx="400" cy="111.63" rx="14" ry="14" fill="#34d399" filter="url(#pn29006)"/>
+    <text x="240" y="60" font-size="34" font-weight="800" text-anchor="middle" fill="#ffffff" opacity="1">piano.film</text>
+    <text x="240" y="250" font-size="11" text-anchor="middle" fill="#94a3b8">الإطار 30 / 48</text>
+  </g>
+  <g visibility="hidden">
+    <animate attributeName="visibility" calcMode="discrete" values="hidden;visible;hidden;hidden" keyTimes="0;0.625;0.6458;1" dur="2s" repeatCount="indefinite"/>
+    <rect x="0" y="0" width="480" height="270" fill="url(#pn30001)"/>
+    <line x1="40" y1="200" x2="440" y2="200" stroke="#334155" stroke-width="2"/>
+    <ellipse cx="80" cy="96" rx="14" ry="14" fill="#818cf8" filter="url(#pn30002)"/>
+    <ellipse cx="160" cy="76.8" rx="14.26" ry="13.74" fill="#22d3ee" filter="url(#pn30003)"/>
+    <ellipse cx="240" cy="163.2" rx="16.57" ry="11.83" fill="#fbbf24" filter="url(#pn30004)"/>
+    <ellipse cx="320" cy="67.2" rx="14.1" ry="13.9" fill="#f87171" filter="url(#pn30005)"/>
+    <ellipse cx="400" cy="124.8" rx="14" ry="14" fill="#34d399" filter="url(#pn30006)"/>
+    <text x="240" y="60" font-size="34" font-weight="800" text-anchor="middle" fill="#ffffff" opacity="1">piano.film</text>
+    <text x="240" y="250" font-size="11" text-anchor="middle" fill="#94a3b8">الإطار 31 / 48</text>
+  </g>
+  <g visibility="hidden">
+    <animate attributeName="visibility" calcMode="discrete" values="hidden;visible;hidden;hidden" keyTimes="0;0.6458;0.6667;1" dur="2s" repeatCount="indefinite"/>
+    <rect x="0" y="0" width="480" height="270" fill="url(#pn31001)"/>
+    <line x1="40" y1="200" x2="440" y2="200" stroke="#334155" stroke-width="2"/>
+    <ellipse cx="80" cy="86.83" rx="14" ry="14" fill="#818cf8" filter="url(#pn31002)"/>
+    <ellipse cx="160" cy="83.63" rx="14.38" ry="13.63" fill="#22d3ee" filter="url(#pn31003)"/>
+    <ellipse cx="240" cy="146.03" rx="15.97" ry="12.28" fill="#fbbf24" filter="url(#pn31004)"/>
+    <ellipse cx="320" cy="66.03" rx="14.06" ry="13.94" fill="#f87171" filter="url(#pn31005)"/>
+    <ellipse cx="400" cy="139.63" rx="14" ry="14" fill="#34d399" filter="url(#pn31006)"/>
+    <text x="240" y="60" font-size="34" font-weight="800" text-anchor="middle" fill="#ffffff" opacity="1">piano.film</text>
+    <text x="240" y="250" font-size="11" text-anchor="middle" fill="#94a3b8">الإطار 32 / 48</text>
+  </g>
+  <g visibility="hidden">
+    <animate attributeName="visibility" calcMode="discrete" values="hidden;visible;hidden;hidden" keyTimes="0;0.6667;0.6875;1" dur="2s" repeatCount="indefinite"/>
+    <rect x="0" y="0" width="480" height="270" fill="url(#pn32001)"/>
+    <line x1="40" y1="200" x2="440" y2="200" stroke="#334155" stroke-width="2"/>
+    <ellipse cx="80" cy="79.33" rx="14" ry="14" fill="#818cf8" filter="url(#pn32002)"/>
+    <ellipse cx="160" cy="92.13" rx="14.54" ry="13.48" fill="#22d3ee" filter="url(#pn32003)"/>
+    <ellipse cx="240" cy="130.53" rx="15.48" ry="12.66" fill="#fbbf24" filter="url(#pn32004)"/>
+    <ellipse cx="320" cy="66.53" rx="14.04" ry="13.96" fill="#f87171" filter="url(#pn32005)"/>
+    <ellipse cx="400" cy="156.13" rx="14" ry="14" fill="#34d399" filter="url(#pn32006)"/>
+    <text x="240" y="60" font-size="34" font-weight="800" text-anchor="middle" fill="#ffffff" opacity="1">piano.film</text>
+    <text x="240" y="250" font-size="11" text-anchor="middle" fill="#94a3b8">الإطار 33 / 48</text>
+  </g>
+  <g visibility="hidden">
+    <animate attributeName="visibility" calcMode="discrete" values="hidden;visible;hidden;hidden" keyTimes="0;0.6875;0.7083;1" dur="2s" repeatCount="indefinite"/>
+    <rect x="0" y="0" width="480" height="270" fill="url(#pn33001)"/>
+    <line x1="40" y1="200" x2="440" y2="200" stroke="#334155" stroke-width="2"/>
+    <ellipse cx="80" cy="73.5" rx="14.01" ry="13.99" fill="#818cf8" filter="url(#pn33002)"/>
+    <ellipse cx="160" cy="102.3" rx="14.76" ry="13.28" fill="#22d3ee" filter="url(#pn33003)"/>
+    <ellipse cx="240" cy="116.7" rx="15.1" ry="12.98" fill="#fbbf24" filter="url(#pn33004)"/>
+    <ellipse cx="320" cy="68.7" rx="14.02" ry="13.98" fill="#f87171" filter="url(#pn33005)"/>
+    <ellipse cx="400" cy="174.3" rx="14" ry="14" fill="#34d399" filter="url(#pn33006)"/>
+    <text x="240" y="60" font-size="34" font-weight="800" text-anchor="middle" fill="#ffffff" opacity="1">piano.film</text>
+    <text x="240" y="250" font-size="11" text-anchor="middle" fill="#94a3b8">الإطار 34 / 48</text>
+  </g>
+  <g visibility="hidden">
+    <animate attributeName="visibility" calcMode="discrete" values="hidden;visible;hidden;hidden" keyTimes="0;0.7083;0.7292;1" dur="2s" repeatCount="indefinite"/>
+    <rect x="0" y="0" width="480" height="270" fill="url(#pn34001)"/>
+    <line x1="40" y1="200" x2="440" y2="200" stroke="#334155" stroke-width="2"/>
+    <ellipse cx="80" cy="69.33" rx="14.02" ry="13.98" fill="#818cf8" filter="url(#pn34002)"/>
+    <ellipse cx="160" cy="114.13" rx="15.04" ry="13.03" fill="#22d3ee" filter="url(#pn34003)"/>
+    <ellipse cx="240" cy="104.53" rx="14.81" ry="13.24" fill="#fbbf24" filter="url(#pn34004)"/>
+    <ellipse cx="320" cy="72.53" rx="14.01" ry="13.99" fill="#f87171" filter="url(#pn34005)"/>
+    <ellipse cx="400" cy="178.13" rx="14" ry="14" fill="#34d399" filter="url(#pn34006)"/>
+    <text x="240" y="60" font-size="34" font-weight="800" text-anchor="middle" fill="#ffffff" opacity="1">piano.film</text>
+    <text x="240" y="250" font-size="11" text-anchor="middle" fill="#94a3b8">الإطار 35 / 48</text>
+  </g>
+  <g visibility="hidden">
+    <animate attributeName="visibility" calcMode="discrete" values="hidden;visible;hidden;hidden" keyTimes="0;0.7292;0.75;1" dur="2s" repeatCount="indefinite"/>
+    <rect x="0" y="0" width="480" height="270" fill="url(#pn35001)"/>
+    <line x1="40" y1="200" x2="440" y2="200" stroke="#334155" stroke-width="2"/>
+    <ellipse cx="80" cy="66.83" rx="14.03" ry="13.97" fill="#818cf8" filter="url(#pn35002)"/>
+    <ellipse cx="160" cy="127.63" rx="15.4" ry="12.73" fill="#22d3ee" filter="url(#pn35003)"/>
+    <ellipse cx="240" cy="94.03" rx="14.58" ry="13.44" fill="#fbbf24" filter="url(#pn35004)"/>
+    <ellipse cx="320" cy="78.03" rx="14.01" ry="13.99" fill="#f87171" filter="url(#pn35005)"/>
+    <ellipse cx="400" cy="159.63" rx="14" ry="14" fill="#34d399" filter="url(#pn35006)"/>
+    <text x="240" y="60" font-size="34" font-weight="800" text-anchor="middle" fill="#ffffff" opacity="1">piano.film</text>
+    <text x="240" y="250" font-size="11" text-anchor="middle" fill="#94a3b8">الإطار 36 / 48</text>
+  </g>
+  <g visibility="hidden">
+    <animate attributeName="visibility" calcMode="discrete" values="hidden;visible;hidden;hidden" keyTimes="0;0.75;0.7708;1" dur="2s" repeatCount="indefinite"/>
+    <rect x="0" y="0" width="480" height="270" fill="url(#pn36001)"/>
+    <line x1="40" y1="200" x2="440" y2="200" stroke="#334155" stroke-width="2"/>
+    <ellipse cx="80" cy="66" rx="14.05" ry="13.95" fill="#818cf8" filter="url(#pn36002)"/>
+    <ellipse cx="160" cy="142.8" rx="15.86" ry="12.36" fill="#22d3ee" filter="url(#pn36003)"/>
+    <ellipse cx="240" cy="85.2" rx="14.41" ry="13.6" fill="#fbbf24" filter="url(#pn36004)"/>
+    <ellipse cx="320" cy="85.2" rx="14" ry="14" fill="#f87171" filter="url(#pn36005)"/>
+    <ellipse cx="400" cy="142.8" rx="14" ry="14" fill="#34d399" filter="url(#pn36006)"/>
+    <text x="240" y="60" font-size="34" font-weight="800" text-anchor="middle" fill="#ffffff" opacity="1">piano.film</text>
+    <text x="240" y="250" font-size="11" text-anchor="middle" fill="#94a3b8">الإطار 37 / 48</text>
+  </g>
+  <g visibility="hidden">
+    <animate attributeName="visibility" calcMode="discrete" values="hidden;visible;hidden;hidden" keyTimes="0;0.7708;0.7917;1" dur="2s" repeatCount="indefinite"/>
+    <rect x="0" y="0" width="480" height="270" fill="url(#pn37001)"/>
+    <line x1="40" y1="200" x2="440" y2="200" stroke="#334155" stroke-width="2"/>
+    <ellipse cx="80" cy="66.83" rx="14.09" ry="13.91" fill="#818cf8" filter="url(#pn37002)"/>
+    <ellipse cx="160" cy="159.63" rx="16.44" ry="11.92" fill="#22d3ee" filter="url(#pn37003)"/>
+    <ellipse cx="240" cy="78.03" rx="14.28" ry="13.72" fill="#fbbf24" filter="url(#pn37004)"/>
+    <ellipse cx="320" cy="94.03" rx="14" ry="14" fill="#f87171" filter="url(#pn37005)"/>
+    <ellipse cx="400" cy="127.63" rx="14" ry="14" fill="#34d399" filter="url(#pn37006)"/>
+    <text x="240" y="60" font-size="34" font-weight="800" text-anchor="middle" fill="#ffffff" opacity="1">piano.film</text>
+    <text x="240" y="250" font-size="11" text-anchor="middle" fill="#94a3b8">الإطار 38 / 48</text>
+  </g>
+  <g visibility="hidden">
+    <animate attributeName="visibility" calcMode="discrete" values="hidden;visible;hidden;hidden" keyTimes="0;0.7917;0.8125;1" dur="2s" repeatCount="indefinite"/>
+    <rect x="0" y="0" width="480" height="270" fill="url(#pn38001)"/>
+    <line x1="40" y1="200" x2="440" y2="200" stroke="#334155" stroke-width="2"/>
+    <ellipse cx="80" cy="69.33" rx="14.14" ry="13.86" fill="#818cf8" filter="url(#pn38002)"/>
+    <ellipse cx="160" cy="178.13" rx="17.16" ry="11.42" fill="#22d3ee" filter="url(#pn38003)"/>
+    <ellipse cx="240" cy="72.53" rx="14.19" ry="13.81" fill="#fbbf24" filter="url(#pn38004)"/>
+    <ellipse cx="320" cy="104.53" rx="14" ry="14" fill="#f87171" filter="url(#pn38005)"/>
+    <ellipse cx="400" cy="114.13" rx="14" ry="14" fill="#34d399" filter="url(#pn38006)"/>
+    <text x="240" y="60" font-size="34" font-weight="800" text-anchor="middle" fill="#ffffff" opacity="1">piano.film</text>
+    <text x="240" y="250" font-size="11" text-anchor="middle" fill="#94a3b8">الإطار 39 / 48</text>
+  </g>
+  <g visibility="hidden">
+    <animate attributeName="visibility" calcMode="discrete" values="hidden;visible;hidden;hidden" keyTimes="0;0.8125;0.8333;1" dur="2s" repeatCount="indefinite"/>
+    <rect x="0" y="0" width="480" height="270" fill="url(#pn39001)"/>
+    <line x1="40" y1="200" x2="440" y2="200" stroke="#334155" stroke-width="2"/>
+    <ellipse cx="80" cy="73.5" rx="14.21" ry="13.79" fill="#818cf8" filter="url(#pn39002)"/>
+    <ellipse cx="160" cy="174.3" rx="17.01" ry="11.52" fill="#22d3ee" filter="url(#pn39003)"/>
+    <ellipse cx="240" cy="68.7" rx="14.13" ry="13.87" fill="#fbbf24" filter="url(#pn39004)"/>
+    <ellipse cx="320" cy="116.7" rx="14" ry="14" fill="#f87171" filter="url(#pn39005)"/>
+    <ellipse cx="400" cy="102.3" rx="14" ry="14" fill="#34d399" filter="url(#pn39006)"/>
+    <text x="240" y="60" font-size="34" font-weight="800" text-anchor="middle" fill="#ffffff" opacity="1">piano.film</text>
+    <text x="240" y="250" font-size="11" text-anchor="middle" fill="#94a3b8">الإطار 40 / 48</text>
+  </g>
+  <g visibility="hidden">
+    <animate attributeName="visibility" calcMode="discrete" values="hidden;visible;hidden;hidden" keyTimes="0;0.8333;0.8542;1" dur="2s" repeatCount="indefinite"/>
+    <rect x="0" y="0" width="480" height="270" fill="url(#pn40001)"/>
+    <line x1="40" y1="200" x2="440" y2="200" stroke="#334155" stroke-width="2"/>
+    <ellipse cx="80" cy="79.33" rx="14.31" ry="13.7" fill="#818cf8" filter="url(#pn40002)"/>
+    <ellipse cx="160" cy="156.13" rx="16.31" ry="12.01" fill="#22d3ee" filter="url(#pn40003)"/>
+    <ellipse cx="240" cy="66.53" rx="14.08" ry="13.92" fill="#fbbf24" filter="url(#pn40004)"/>
+    <ellipse cx="320" cy="130.53" rx="14" ry="14" fill="#f87171" filter="url(#pn40005)"/>
+    <ellipse cx="400" cy="92.13" rx="14" ry="14" fill="#34d399" filter="url(#pn40006)"/>
+    <text x="240" y="60" font-size="34" font-weight="800" text-anchor="middle" fill="#ffffff" opacity="1">piano.film</text>
+    <text x="240" y="250" font-size="11" text-anchor="middle" fill="#94a3b8">الإطار 41 / 48</text>
+  </g>
+  <g visibility="hidden">
+    <animate attributeName="visibility" calcMode="discrete" values="hidden;visible;hidden;hidden" keyTimes="0;0.8542;0.875;1" dur="2s" repeatCount="indefinite"/>
+    <rect x="0" y="0" width="480" height="270" fill="url(#pn41001)"/>
+    <line x1="40" y1="200" x2="440" y2="200" stroke="#334155" stroke-width="2"/>
+    <ellipse cx="80" cy="86.83" rx="14.44" ry="13.57" fill="#818cf8" filter="url(#pn41002)"/>
+    <ellipse cx="160" cy="139.63" rx="15.76" ry="12.44" fill="#22d3ee" filter="url(#pn41003)"/>
+    <ellipse cx="240" cy="66.03" rx="14.05" ry="13.95" fill="#fbbf24" filter="url(#pn41004)"/>
+    <ellipse cx="320" cy="146.03" rx="14" ry="14" fill="#f87171" filter="url(#pn41005)"/>
+    <ellipse cx="400" cy="83.63" rx="14" ry="14" fill="#34d399" filter="url(#pn41006)"/>
+    <text x="240" y="60" font-size="34" font-weight="800" text-anchor="middle" fill="#ffffff" opacity="1">piano.film</text>
+    <text x="240" y="250" font-size="11" text-anchor="middle" fill="#94a3b8">الإطار 42 / 48</text>
+  </g>
+  <g visibility="hidden">
+    <animate attributeName="visibility" calcMode="discrete" values="hidden;visible;hidden;hidden" keyTimes="0;0.875;0.8958;1" dur="2s" repeatCount="indefinite"/>
+    <rect x="0" y="0" width="480" height="270" fill="url(#pn42001)"/>
+    <line x1="40" y1="200" x2="440" y2="200" stroke="#334155" stroke-width="2"/>
+    <ellipse cx="80" cy="96" rx="14.62" ry="13.4" fill="#818cf8" filter="url(#pn42002)"/>
+    <ellipse cx="160" cy="124.8" rx="15.32" ry="12.79" fill="#22d3ee" filter="url(#pn42003)"/>
+    <ellipse cx="240" cy="67.2" rx="14.03" ry="13.97" fill="#fbbf24" filter="url(#pn42004)"/>
+    <ellipse cx="320" cy="163.2" rx="14" ry="14" fill="#f87171" filter="url(#pn42005)"/>
+    <ellipse cx="400" cy="76.8" rx="14.01" ry="13.99" fill="#34d399" filter="url(#pn42006)"/>
+    <text x="240" y="60" font-size="34" font-weight="800" text-anchor="middle" fill="#ffffff" opacity="1">piano.film</text>
+    <text x="240" y="250" font-size="11" text-anchor="middle" fill="#94a3b8">الإطار 43 / 48</text>
+  </g>
+  <g visibility="hidden">
+    <animate attributeName="visibility" calcMode="discrete" values="hidden;visible;hidden;hidden" keyTimes="0;0.8958;0.9167;1" dur="2s" repeatCount="indefinite"/>
+    <rect x="0" y="0" width="480" height="270" fill="url(#pn43001)"/>
+    <line x1="40" y1="200" x2="440" y2="200" stroke="#334155" stroke-width="2"/>
+    <ellipse cx="80" cy="106.83" rx="14.86" ry="13.19" fill="#818cf8" filter="url(#pn43002)"/>
+    <ellipse cx="160" cy="111.63" rx="14.98" ry="13.09" fill="#22d3ee" filter="url(#pn43003)"/>
+    <ellipse cx="240" cy="70.03" rx="14.02" ry="13.98" fill="#fbbf24" filter="url(#pn43004)"/>
+    <ellipse cx="320" cy="182.03" rx="14" ry="14" fill="#f87171" filter="url(#pn43005)"/>
+    <ellipse cx="400" cy="71.63" rx="14.01" ry="13.99" fill="#34d399" filter="url(#pn43006)"/>
+    <text x="240" y="60" font-size="34" font-weight="800" text-anchor="middle" fill="#ffffff" opacity="1">piano.film</text>
+    <text x="240" y="250" font-size="11" text-anchor="middle" fill="#94a3b8">الإطار 44 / 48</text>
+  </g>
+  <g visibility="hidden">
+    <animate attributeName="visibility" calcMode="discrete" values="hidden;visible;hidden;hidden" keyTimes="0;0.9167;0.9375;1" dur="2s" repeatCount="indefinite"/>
+    <rect x="0" y="0" width="480" height="270" fill="url(#pn44001)"/>
+    <line x1="40" y1="200" x2="440" y2="200" stroke="#334155" stroke-width="2"/>
+    <ellipse cx="80" cy="119.33" rx="15.17" ry="12.92" fill="#818cf8" filter="url(#pn44002)"/>
+    <ellipse cx="160" cy="100.13" rx="14.71" ry="13.32" fill="#22d3ee" filter="url(#pn44003)"/>
+    <ellipse cx="240" cy="74.53" rx="14.01" ry="13.99" fill="#fbbf24" filter="url(#pn44004)"/>
+    <ellipse cx="320" cy="170.53" rx="14" ry="14" fill="#f87171" filter="url(#pn44005)"/>
+    <ellipse cx="400" cy="68.13" rx="14.02" ry="13.98" fill="#34d399" filter="url(#pn44006)"/>
+    <text x="240" y="60" font-size="34" font-weight="800" text-anchor="middle" fill="#ffffff" opacity="1">piano.film</text>
+    <text x="240" y="250" font-size="11" text-anchor="middle" fill="#94a3b8">الإطار 45 / 48</text>
+  </g>
+  <g visibility="hidden">
+    <animate attributeName="visibility" calcMode="discrete" values="hidden;visible;hidden;hidden" keyTimes="0;0.9375;0.9583;1" dur="2s" repeatCount="indefinite"/>
+    <rect x="0" y="0" width="480" height="270" fill="url(#pn45001)"/>
+    <line x1="40" y1="200" x2="440" y2="200" stroke="#334155" stroke-width="2"/>
+    <ellipse cx="80" cy="133.5" rx="15.57" ry="12.59" fill="#818cf8" filter="url(#pn45002)"/>
+    <ellipse cx="160" cy="90.3" rx="14.51" ry="13.51" fill="#22d3ee" filter="url(#pn45003)"/>
+    <ellipse cx="240" cy="80.7" rx="14" ry="14" fill="#fbbf24" filter="url(#pn45004)"/>
+    <ellipse cx="320" cy="152.7" rx="14" ry="14" fill="#f87171" filter="url(#pn45005)"/>
+    <ellipse cx="400" cy="66.3" rx="14.04" ry="13.96" fill="#34d399" filter="url(#pn45006)"/>
+    <text x="240" y="60" font-size="34" font-weight="800" text-anchor="middle" fill="#ffffff" opacity="1">piano.film</text>
+    <text x="240" y="250" font-size="11" text-anchor="middle" fill="#94a3b8">الإطار 46 / 48</text>
+  </g>
+  <g visibility="hidden">
+    <animate attributeName="visibility" calcMode="discrete" values="hidden;visible;hidden;hidden" keyTimes="0;0.9583;0.9792;1" dur="2s" repeatCount="indefinite"/>
+    <rect x="0" y="0" width="480" height="270" fill="url(#pn46001)"/>
+    <line x1="40" y1="200" x2="440" y2="200" stroke="#334155" stroke-width="2"/>
+    <ellipse cx="80" cy="149.33" rx="16.08" ry="12.19" fill="#818cf8" filter="url(#pn46002)"/>
+    <ellipse cx="160" cy="82.13" rx="14.36" ry="13.65" fill="#22d3ee" filter="url(#pn46003)"/>
+    <ellipse cx="240" cy="88.53" rx="14" ry="14" fill="#fbbf24" filter="url(#pn46004)"/>
+    <ellipse cx="320" cy="136.53" rx="14" ry="14" fill="#f87171" filter="url(#pn46005)"/>
+    <ellipse cx="400" cy="66.13" rx="14.07" ry="13.93" fill="#34d399" filter="url(#pn46006)"/>
+    <text x="240" y="60" font-size="34" font-weight="800" text-anchor="middle" fill="#ffffff" opacity="1">piano.film</text>
+    <text x="240" y="250" font-size="11" text-anchor="middle" fill="#94a3b8">الإطار 47 / 48</text>
+  </g>
+  <g visibility="hidden">
+    <animate attributeName="visibility" calcMode="discrete" values="hidden;visible;visible" keyTimes="0;0.9792;1" dur="2s" repeatCount="indefinite"/>
+    <rect x="0" y="0" width="480" height="270" fill="url(#pn47001)"/>
+    <line x1="40" y1="200" x2="440" y2="200" stroke="#334155" stroke-width="2"/>
+    <ellipse cx="80" cy="166.83" rx="16.71" ry="11.73" fill="#818cf8" filter="url(#pn47002)"/>
+    <ellipse cx="160" cy="75.63" rx="14.24" ry="13.76" fill="#22d3ee" filter="url(#pn47003)"/>
+    <ellipse cx="240" cy="98.03" rx="14" ry="14" fill="#fbbf24" filter="url(#pn47004)"/>
+    <ellipse cx="320" cy="122.03" rx="14" ry="14" fill="#f87171" filter="url(#pn47005)"/>
+    <ellipse cx="400" cy="67.63" rx="14.11" ry="13.89" fill="#34d399" filter="url(#pn47006)"/>
+    <text x="240" y="60" font-size="34" font-weight="800" text-anchor="middle" fill="#ffffff" opacity="1">piano.film</text>
+    <text x="240" y="250" font-size="11" text-anchor="middle" fill="#94a3b8">الإطار 48 / 48</text>
+  </g>
+</svg>
