@@ -1,0 +1,154 @@
+{
+  "piano": 1,
+  "w": 480,
+  "h": 270,
+  "title": "Poster",
+  "bg": "#0b1020",
+  "font": "Inter, 'Segoe UI', Tahoma, 'Noto Sans Arabic', Arial, sans-serif",
+  "defs": [
+    {
+      "t": "linear",
+      "id": "pn1",
+      "x1": 0.25,
+      "y1": 0.07,
+      "x2": 0.75,
+      "y2": 0.93,
+      "stops": [
+        [0, "#0b1020"],
+        [1, "#1e1b4b"]
+      ]
+    },
+    {
+      "t": "linear",
+      "id": "pn2",
+      "x1": 0.15,
+      "y1": 0.15,
+      "x2": 0.85,
+      "y2": 0.85,
+      "stops": [
+        [0, "#818cf8"],
+        [1, "#22d3ee"]
+      ]
+    },
+    {
+      "t": "shadow",
+      "id": "pn3",
+      "dx": 0,
+      "dy": 6,
+      "blur": 10,
+      "c": "#000000",
+      "op": 0.3
+    }
+  ],
+  "nodes": [
+    {
+      "t": "rect",
+      "x": 0,
+      "y": 0,
+      "w": 480,
+      "h": 270,
+      "fill": "@pn1",
+      "cls": "Bg"
+    },
+    {
+      "t": "g",
+      "nodes": [
+        {
+          "t": "circle",
+          "cx": 240,
+          "cy": 128,
+          "r": 74,
+          "fill": "@pn2",
+          "cls": "Disc"
+        },
+        {
+          "t": "text",
+          "x": 240,
+          "y": 138,
+          "text": "piano",
+          "size": 34,
+          "anchor": "middle",
+          "weight": 800,
+          "fill": "#ffffff",
+          "cls": "Name"
+        }
+      ],
+      "filter": "@pn3",
+      "cls": "Hero"
+    },
+    {
+      "t": "circle",
+      "cx": 40,
+      "cy": 232,
+      "r": 4,
+      "fill": "#818cf8"
+    },
+    {
+      "t": "circle",
+      "cx": 106,
+      "cy": 232,
+      "r": 5,
+      "fill": "#22d3ee"
+    },
+    {
+      "t": "circle",
+      "cx": 172,
+      "cy": 232,
+      "r": 6,
+      "fill": "#fbbf24"
+    },
+    {
+      "t": "circle",
+      "cx": 238,
+      "cy": 232,
+      "r": 7,
+      "fill": "#f87171"
+    },
+    {
+      "t": "circle",
+      "cx": 304,
+      "cy": 232,
+      "r": 4,
+      "fill": "#818cf8"
+    },
+    {
+      "t": "circle",
+      "cx": 370,
+      "cy": 232,
+      "r": 5,
+      "fill": "#22d3ee"
+    },
+    {
+      "t": "circle",
+      "cx": 436,
+      "cy": 232,
+      "r": 6,
+      "fill": "#fbbf24"
+    },
+    {
+      "t": "g",
+      "nodes": [
+        {
+          "t": "rect",
+          "x": 168.12,
+          "y": 23.5,
+          "w": 143.76,
+          "h": 25,
+          "rx": 12.5,
+          "fill": "#1db143"
+        },
+        {
+          "t": "text",
+          "x": 240,
+          "y": 40.55,
+          "text": "لغة الكتل",
+          "size": 13,
+          "anchor": "middle",
+          "weight": 600,
+          "fill": "#000000"
+        }
+      ],
+      "cls": "Tag"
+    }
+  ]
+}
