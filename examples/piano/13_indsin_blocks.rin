@@ -1,0 +1,38 @@
+<!-- piano داخل indsin: كتل piano.Name(بيانات) { … } تُستدعى مباشرة داخل <Rin> وتتحدّث مع warp
+     rin indsin examples/piano/13_indsin_blocks.rin     أو للويب:  indsin2web examples/piano/13_indsin_blocks.rin -o page.html -->
+<warp theme={"dark"} />
+<warp score={72} />
+<warp art={""} />
+<Rin>
+@import "piano";
+
+// بيانات الواجهة (score, theme) تصير $score و$theme داخل الكتلة
+fun gaugeScene(score, theme) {
+    piano.Gauge(score, theme) {
+        $size  => "240, 150";
+        $theme => $theme;
+        $Bg.RRect  => "6, 6, 228, 138, 16" { fill: alpha(ink(), 0.06); stroke: alpha(ink(), 0.15); sw: 1; };
+        $Dial.Gauge => "120, 112, 72, $score, 100" { thickness: 14; color: pal(0); label: "الأداء"; };
+        $Tag.Badge => "120, 26, 'مباشر'" { color: pal(4); };
+    };
+    return Gauge;
+}
+fun refresh() { art = pn_uri(gaugeScene(score, theme)); }
+fun bump() { score = score + 9; if (score > 100) { score = 7; } refresh(); }
+fun setTheme(t) { theme = t; refresh(); }
+refresh();
+</Rin>
+<Column#root padding=16 gap=12>
+  <Row#top gap=8>
+    <Image#ic src={pn_icon_uri("settings", 24, "#1db143")} width=24 height=24 />
+    <Text#heading text="piano داخل indsin" size="title" />
+  </Row>
+  <Card#card padding=8><Image#art src={art} width=240 height=150 /></Card>
+  <Text#val text={"الأداء: " + str(score) + "%  ·  الثيم: " + theme} />
+  <Wrap#actions gap=8>
+    <Button#b0 onTap={bump()}>تحديث +9</Button>
+    <Button#b1 onTap={setTheme("dark")}>dark</Button>
+    <Button#b2 onTap={setTheme("ocean")}>ocean</Button>
+    <Button#b3 onTap={setTheme("sunset")}>sunset</Button>
+  </Wrap>
+</Column>
