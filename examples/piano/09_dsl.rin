@@ -1,0 +1,31 @@
+// piano — لغة الكتل: piano.<الاسم> { … }; داخل أي كود Rin
+@import "piano";
+
+let accent = "#1db143";
+print "قبل الكتلة";
+
+piano.Poster {
+    $size  => "480 270";
+    $theme => "dark";
+    $gap   => 14;
+
+    $Bg.Rect => "0 0 480 270" { grad: ["#0b1020", "#1e1b4b"]; angle: 60; };
+    $sky.Linear => "45 '#818cf8' '#22d3ee'";
+
+    // مجموعة بخيارات في أولها
+    $Hero.Group {
+        shadow: true;
+        $Disc.Circle => "240 128 (60 + $gap)" { fill: $sky; };
+        $Name.Text => "240 138 'piano'" { size: 34; weight: 800; anchor: "middle"; fill: "#ffffff"; };
+    };
+
+    // حلقة + دالة
+    $dot.Fn(x, y, k) { $.Circle => "$x $y (4 + $k)" { fill: pal($k); }; };
+    $Row.Repeat => 7 { $dot((40 + $i * 66), 232, ($i % 4)); };
+
+    $Tag.Label => "240 36 'لغة الكتل'" { bg: "#1db143"; size: 13; };
+    $save => "examples/piano/out/09_dsl.puo";
+};
+
+print "بعد الكتلة:", len(Poster["nodes"]), "عقدة";
+pn_save(Poster, "examples/piano/out/09_dsl.svg");
