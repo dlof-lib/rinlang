@@ -69,6 +69,7 @@ fun pn_tail(n) {
     if (pn_has(n, "tf")) { s = s + pn_attr("transform", pn_tfstr(n["tf"])); }
     if (pn_has(n, "filter")) { s = s + pn_attr("filter", pn_url(n["filter"])); }
     if (pn_has(n, "clip")) { s = s + pn_attr("clip-path", pn_url(n["clip"])); }
+    if (pn_has(n, "mask")) { s = s + pn_attr("mask", pn_url(n["mask"])); }
     return s;
 }
 fun pn_head(n) {
@@ -253,6 +254,10 @@ fun pn_emit_def(out, d, ind) {
         push(out, pad + "<clipPath" + id + ">");
         for (let ch in d["nodes"]) { pn_emit(out, ch, ind + 2); }
         push(out, pad + "</clipPath>");
+    } else if (t == "mask") {
+        push(out, pad + "<mask" + id + ">");
+        for (let ch in d["nodes"]) { pn_emit(out, ch, ind + 2); }
+        push(out, pad + "</mask>");
     }
     return out;
 }
@@ -260,22 +265,32 @@ fun pn_emit_def(out, d, ind) {
 // ---------------------------------------------------------------------------
 //  SVG
 // ---------------------------------------------------------------------------
-fun pn_svg(c) {
+// رأس SVG: وسم الجذر + العنوان (يتشاركه الرسم الثابت والمتحرك)
+fun pn_svg_head(c) {
     let w = pn_n(c["w"]);
     let h = pn_n(c["h"]);
     let out = [];
-    let root = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"" + w + "\" height=\"" + h + "\" viewBox=\"0 0 " + w + " " + h + "\"";
+    // dw/dh: حجم العرض (width/height) المستقل عن نظام الإحداثيات — للتحجيم المتجاوب
+    let root = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"" + pn_n(pn_opt(c, "dw", c["w"])) + "\" height=\"" + pn_n(pn_opt(c, "dh", c["h"])) + "\" viewBox=\"0 0 " + w + " " + h + "\"";
     if (pn_has(c, "font")) { root = root + pn_attr("font-family", c["font"]); }
     push(out, root + ">");
     if (pn_has(c, "title") and c["title"] != "") { push(out, "  <title>" + pn_esc(c["title"]) + "</title>"); }
+    return out;
+}
+fun pn_svg_bg(out, c) {
+    if (pn_has(c, "bg") and c["bg"] != "none") {
+        push(out, "  <rect width=\"100%\" height=\"100%\"" + pn_paint({"fill": c["bg"]}, "fill", "fill", "_", "_") + "/>");
+    }
+    return out;
+}
+fun pn_svg(c) {
+    let out = pn_svg_head(c);
     if (pn_has(c, "defs") and len(c["defs"]) > 0) {
         push(out, "  <defs>");
         for (let d in c["defs"]) { pn_emit_def(out, d, 4); }
         push(out, "  </defs>");
     }
-    if (pn_has(c, "bg") and c["bg"] != "none") {
-        push(out, "  <rect width=\"100%\" height=\"100%\"" + pn_paint({"fill": c["bg"]}, "fill", "fill", "_", "_") + "/>");
-    }
+    pn_svg_bg(out, c);
     for (let n in c["nodes"]) { pn_emit(out, n, 2); }
     push(out, "</svg>");
     return join(out, "\n");
@@ -283,7 +298,7 @@ fun pn_svg(c) {
 fun pn_print(c) { print pn_svg(c); return c; }
 
 // ---------------------------------------------------------------------------
-//  JSON (.puo) — كاتب خاص: ترتيب ثابت، أرقام حتى 6 خانات، تجاهل مفاتيح _
+//  JSON (.puo) — كاتب خاص: ترتيب ثابت، أرقام بخانتين (3 لـ fo/so) كما في SVG، تجاهل مفاتيح _
 // ---------------------------------------------------------------------------
 fun pn_jstr(s) {
     s = replace(s, "\\", "\\\\");
@@ -300,11 +315,11 @@ fun pn_jflat(a) {
     }
     return true;
 }
-fun pn_jv(v, ind) {
+fun pn_jv(v, ind, dec) {
     let t = type(v);
     if (v == nil) { return "null"; }
     if (t == "bool") { if (v) { return "true"; } return "false"; }
-    if (t == "number") { return pn_nf(v, 6); }
+    if (t == "number") { return pn_nf(v, dec); }
     if (t == "string") { return pn_jstr(v); }
     let pad = repeat(" ", ind + 2);
     let epad = repeat(" ", ind);
@@ -312,27 +327,32 @@ fun pn_jv(v, ind) {
         if (len(v) == 0) { return "[]"; }
         let items = [];
         if (pn_jflat(v)) {
-            for (let x in v) { push(items, pn_jv(x, 0)); }
+            for (let x in v) { push(items, pn_jv(x, 0, dec)); }
             return "[" + join(items, ", ") + "]";
         }
-        for (let x in v) { push(items, pad + pn_jv(x, ind + 2)); }
+        for (let x in v) { push(items, pad + pn_jv(x, ind + 2, dec)); }
         return "[\n" + join(items, ",\n") + "\n" + epad + "]";
     }
     if (t == "map") {
         let items = [];
         for (let k in keys(v)) {
-            if (substr(k, 0, 1) != "_" and v[k] != nil) { push(items, pad + pn_jstr(k) + ": " + pn_jv(v[k], ind + 2)); }
+            if (substr(k, 0, 1) != "_" and v[k] != nil) {
+                // نفس قاعدة التقريب في SVG: خانتان، وثلاث لشفافيات fo/so — فيتطابق المسار المباشر مع المسار عبر .puo
+                let dd = 2;
+                if (k == "fo" or k == "so") { dd = 3; }
+                push(items, pad + pn_jstr(k) + ": " + pn_jv(v[k], ind + 2, dd));
+            }
         }
         if (len(items) == 0) { return "{}"; }
         return "{\n" + join(items, ",\n") + "\n" + epad + "}";
     }
     return "null";
 }
-fun pn_json(c) { return pn_jv(c, 0); }
+fun pn_json(c) { return pn_jv(c, 0, 2); }
 
 fun pn_restore(nodes, ctx) {
     for (let n in nodes) {
-        if (n["t"] == "g" or n["t"] == "pattern" or n["t"] == "clip") {
+        if (n["t"] == "g" or n["t"] == "pattern" or n["t"] == "clip" or n["t"] == "mask") {
             n["_ctx"] = ctx;
             if (!has(n, "nodes") or n["nodes"] == nil) { n["nodes"] = []; }
             pn_restore(n["nodes"], ctx);
@@ -358,6 +378,11 @@ fun pn_from_json(s) {
 //  HTML · data-URI · حفظ
 // ---------------------------------------------------------------------------
 fun pn_html(c) {
+    let doc = pn_svg(c);
+    if (pn_has(c, "anim")) { doc = pn_anim_svg(c); }
+    return pn_html_page(c, doc);
+}
+fun pn_html_page(c, doc) {
     let bg = pn_opt(c, "bg", "#ffffff");
     if (substr(bg, 0, 1) != "#") { bg = "#ffffff"; }
     let ttl = pn_opt(c, "title", "");
@@ -366,7 +391,7 @@ fun pn_html(c) {
          + "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
          + "<title>" + pn_esc(ttl) + "</title>\n"
          + "<style>html,body{margin:0;min-height:100%;background:" + bg + "}body{display:grid;place-items:center;min-height:100vh}svg{max-width:100%;height:auto}</style>\n"
-         + "</head>\n<body>\n" + pn_svg(c) + "\n</body>\n</html>\n";
+         + "</head>\n<body>\n" + doc + "\n</body>\n</html>\n";
 }
 // للاستعمال في indsin:  <Image src={pn_data_uri(c)} width=320 />
 fun pn_data_uri(c) { return "data:image/svg+xml;base64," + sec.base64Encode(pn_svg(c)); }
@@ -381,9 +406,18 @@ fun pn_ext(path) {
 // يحفظ بحسب الامتداد: .svg · .html · .json · .puo
 fun pn_save(c, path) {
     let e = pn_ext(path);
-    if (e == ".svg") { return writeFile(path, pn_svg(c) + "\n"); }
+    // لوحة فيها anim (من pn_film أو $x.Frame) تُحفظ .svg/.html متحركةً؛ ولقطتها الأولى الثابتة عبر pn_svg(c)
+    if (e == ".svg") {
+        if (pn_has(c, "anim")) { return writeFile(path, pn_anim_svg(c) + "\n"); }
+        return writeFile(path, pn_svg(c) + "\n");
+    }
     if (e == ".html" or e == ".htm") { return writeFile(path, pn_html(c)); }
     if (e == ".json" or e == ".puo") { return writeFile(path, pn_json(c) + "\n"); }
     throw "piano: امتداد غير مدعوم «" + e + "» — استعمل .svg أو .html أو .puo أو .json";
 }
-fun pn_load(path) { return pn_from_json(readFile(path)); }
+// يحمّل مشهداً: .puo/.json ← JSON، وأي امتداد آخر (.pia .rin …) ← لغة الكتل
+fun pn_load(path) {
+    let e = pn_ext(path);
+    if (e == ".puo" or e == ".json") { return pn_from_json(readFile(path)); }
+    return pn_dsl_load(path);
+}
