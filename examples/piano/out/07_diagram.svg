@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="340" viewBox="0 0 720 340" font-family="Inter, 'Segoe UI', Tahoma, 'Noto Sans Arabic', Arial, sans-serif">
+  <rect width="100%" height="100%" fill="#ffffff"/>
+  <path d="M 0 0 L 0 340 M 24 0 L 24 340 M 48 0 L 48 340 M 72 0 L 72 340 M 96 0 L 96 340 M 120 0 L 120 340 M 144 0 L 144 340 M 168 0 L 168 340 M 192 0 L 192 340 M 216 0 L 216 340 M 240 0 L 240 340 M 264 0 L 264 340 M 288 0 L 288 340 M 312 0 L 312 340 M 336 0 L 336 340 M 360 0 L 360 340 M 384 0 L 384 340 M 408 0 L 408 340 M 432 0 L 432 340 M 456 0 L 456 340 M 480 0 L 480 340 M 504 0 L 504 340 M 528 0 L 528 340 M 552 0 L 552 340 M 576 0 L 576 340 M 600 0 L 600 340 M 624 0 L 624 340 M 648 0 L 648 340 M 672 0 L 672 340 M 696 0 L 696 340 M 720 0 L 720 340 M 0 0 L 720 0 M 0 24 L 720 24 M 0 48 L 720 48 M 0 72 L 720 72 M 0 96 L 720 96 M 0 120 L 720 120 M 0 144 L 720 144 M 0 168 L 720 168 M 0 192 L 720 192 M 0 216 L 720 216 M 0 240 L 720 240 M 0 264 L 720 264 M 0 288 L 720 288 M 0 312 L 720 312 M 0 336 L 720 336" fill="none" stroke="#e5e7eb" stroke-width="1" opacity="0.5"/>
+  <text x="24" y="36" font-size="20" font-weight="800" fill="#111827">مسار بناء المكتبة</text>
+  <g>
+    <rect x="30" y="120" width="130" height="54" rx="10" fill="#4f46e5" fill-opacity="0.141" stroke="#4f46e5" stroke-width="1.5"/>
+    <text x="95" y="152" font-size="14" font-weight="600" text-anchor="middle" fill="#111827">main.zpp</text>
+  </g>
+  <g>
+    <rect x="230" y="60" width="130" height="54" rx="10" fill="#06b6d4" fill-opacity="0.141" stroke="#06b6d4" stroke-width="1.5"/>
+    <text x="295" y="92" font-size="14" font-weight="600" text-anchor="middle" fill="#111827">core/shapes</text>
+  </g>
+  <g>
+    <rect x="230" y="180" width="130" height="54" rx="10" fill="#ec4899" fill-opacity="0.141" stroke="#ec4899" stroke-width="1.5"/>
+    <text x="295" y="212" font-size="14" font-weight="600" text-anchor="middle" fill="#111827">core/design</text>
+  </g>
+  <g>
+    <rect x="430" y="120" width="130" height="54" rx="10" fill="#f59e0b" fill-opacity="0.141" stroke="#f59e0b" stroke-width="1.5"/>
+    <text x="495" y="152" font-size="14" font-weight="600" text-anchor="middle" fill="#111827">render.zpp</text>
+  </g>
+  <g>
+    <rect x="580" y="250" width="120" height="54" rx="10" fill="#10b981" fill-opacity="0.141" stroke="#10b981" stroke-width="1.5"/>
+    <text x="640" y="282" font-size="14" font-weight="600" text-anchor="middle" fill="#111827">SVG</text>
+  </g>
+  <g>
+    <rect x="580" y="40" width="120" height="54" rx="10" fill="#8b5cf6" fill-opacity="0.141" stroke="#8b5cf6" stroke-width="1.5"/>
+    <text x="640" y="72" font-size="14" font-weight="600" text-anchor="middle" fill="#111827">.puo</text>
+  </g>
+  <g>
+    <path d="M 160 147 C 195 147 186 87 221 87" fill="none" stroke="#6b7280" stroke-width="2" stroke-linecap="round"/>
+    <polygon points="230,87 220,92 220,82" fill="#6b7280"/>
+  </g>
+  <g>
+    <path d="M 160 147 C 195 147 186 207 221 207" fill="none" stroke="#6b7280" stroke-width="2" stroke-linecap="round"/>
+    <polygon points="230,207 220,212 220,202" fill="#6b7280"/>
+  </g>
+  <g>
+    <path d="M 360 87 C 395 87 386 147 421 147" fill="none" stroke="#6b7280" stroke-width="2" stroke-linecap="round"/>
+    <polygon points="430,147 420,152 420,142" fill="#6b7280"/>
+  </g>
+  <g>
+    <path d="M 360 207 C 395 207 386 147 421 147" fill="none" stroke="#6b7280" stroke-width="2" stroke-dasharray="6 5" stroke-linecap="round"/>
+    <polygon points="430,147 420,152 420,142" fill="#6b7280"/>
+  </g>
+  <g>
+    <path d="M 560 147 L 570 147 L 570 277 L 571 277" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <polygon points="580,277 570,282 570,272" fill="#10b981"/>
+  </g>
+  <g>
+    <path d="M 560 147 L 570 147 L 570 67 L 571 67" fill="none" stroke="#8b5cf6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <polygon points="580,67 570,72 570,62" fill="#8b5cf6"/>
+  </g>
+  <g>
+    <rect x="151.4" y="288" width="87.2" height="24" rx="12" fill="#06b6d4"/>
+    <text x="195" y="304.2" font-size="12" font-weight="600" text-anchor="middle" fill="#000000">pn_connect</text>
+  </g>
+  <g>
+    <rect x="303.12" y="288" width="73.76" height="24" rx="12" fill="#10b981"/>
+    <text x="340" y="304.2" font-size="12" font-weight="600" text-anchor="middle" fill="#000000">pn_elbow</text>
+  </g>
+</svg>
