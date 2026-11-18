@@ -31061,6 +31061,3034 @@ fun ts_export_manifest(app) { return { format: "twinkling-stars-app", formatVers
 
 )TWINKLINGSTARS";
 
+static const char* kLib_piano_og_rin = R"PIANOOGRIN(
+// piano 1.0.0 — مكتبة مقسَّمة (lib/piano.og.rin/) مدمجة كملف واحد. لا تعدّل هنا: عدّل الأجزاء ثم شغّل tools/embed_piano.py
+// ============================================================================
+//  piano — مكتبة رسم متجهي احترافي لـ Rin                      (الجزء الأساسي)
+//
+//  الفكرة: «مشهد» (scene) = قاموس JSON بسيط يحوي أشكالاً مرتّبة في شجرة.
+//  كل دالة pn_* تضيف عقدة إلى المشهد، ثم يُخرَج المشهد إلى:
+//      SVG   ←  pn_svg(c)  ·  pn_save(c, "a.svg")
+//      JSON  ←  pn_json(c) ·  pn_save(c, "a.puo")      (صيغة .puo = مشهد piano)
+//      HTML  ←  pn_html(c) ·  pn_save(c, "a.html")
+//      Data-URI ← pn_data_uri(c)   لاستعماله في <Image src=...> داخل indsin
+//
+//  نفس المشهد (.puo) يقرؤه: محرّك Rin هذا، ومُصيِّر C++ (native/piano_cli.cpp)،
+//  وصفحة المعاينة الحيّة (web/piano/index.html) — والنتيجة SVG واحدة حرفياً.
+//
+//  الاستعمال المختصر:
+//      @import "piano";
+//      let c = pn_canvas(480, 270);
+//      pn_theme(c, "dark");
+//      pn_circle(c, 240, 135, 80, {"grad": ["#818cf8", "#22d3ee"], "shadow": true});
+//      pn_text(c, 240, 142, "piano", {"size": 34, "anchor": "middle", "weight": 700});
+//      pn_save(c, "hello.svg");
+//
+//  كل دالة رسم: pn_<شكل>(الأب, هندسة..., خيارات) — الأب = canvas أو group،
+//  والخيارات قاموس (يمكن {}) .   لا قيم افتراضية للمعاملات في Rin، لذا الخيارات إلزامية.
+// ============================================================================
+
+let PN_VERSION = "1.0.0";
+let PN_SCHEMA = 1;
+let PN_HEXD = "0123456789abcdef";
+let PN_FONT = "Inter, 'Segoe UI', Tahoma, 'Noto Sans Arabic', Arial, sans-serif";
+
+// ---------------------------------------------------------------------------
+//  1) أدوات صغيرة
+// ---------------------------------------------------------------------------
+fun pn_o(o) {
+    if (o == nil) { return {}; }
+    return o;
+}
+// هل الحقل k موجود وغير nil في القاموس o؟
+fun pn_has(o, k) {
+    if (o == nil) { return false; }
+    if (!has(o, k)) { return false; }
+    return o[k] != nil;
+}
+fun pn_opt(o, k, d) {
+    if (pn_has(o, k)) { return o[k]; }
+    return d;
+}
+fun pn_isnum(v) { return type(v) == "number"; }
+fun pn_rad(deg) { return deg * PI / 180; }
+fun pn_clamp(v, lo, hi) {
+    if (v < lo) { return lo; }
+    if (v > hi) { return hi; }
+    return v;
+}
+fun pn_lerp(a, b, t) { return a + (b - a) * t; }
+
+// تنسيق رقم بعدد خانات عشرية ثابت، بدون أُسّ وبحذف الأصفار الزائدة.
+// القاعدة (floor(|v|·10^d + 0.5)) متطابقة حرفياً في Rin وC++ وJS كي تتطابق المخرجات.
+fun pn_nf(v, d) {
+    if (v != v) { return "0"; }
+    if (v > 1000000000) { v = 1000000000; }
+    if (v < -1000000000) { v = -1000000000; }
+    let neg = v < 0;
+    let n = floor(abs(v) * pow(10, d) + 0.5);
+    if (n == 0) { return "0"; }
+    let s = str(n);
+    if (d > 0) {
+        while (len(s) <= d) { s = "0" + s; }
+        let ip = substr(s, 0, len(s) - d);
+        let fp = substr(s, len(s) - d, d);
+        while (len(fp) > 0 and substr(fp, len(fp) - 1, 1) == "0") { fp = substr(fp, 0, len(fp) - 1); }
+        if (len(fp) > 0) { s = ip + "." + fp; } else { s = ip; }
+    }
+    if (neg) { s = "-" + s; }
+    return s;
+}
+fun pn_n(v) { return pn_nf(v, 2); }
+
+// هروب XML للنصوص والسمات
+fun pn_esc(s) {
+    if (type(s) != "string") { s = str(s); }
+    s = replace(s, "&", "&amp;");
+    s = replace(s, "<", "&lt;");
+    s = replace(s, ">", "&gt;");
+    s = replace(s, "\"", "&quot;");
+    return s;
+}
+
+// نسخ قائمة (مستوى واحد) كي لا تُشارَك المراجع بين العقد
+fun pn_copy_list(a) {
+    let out = [];
+    for (let v in a) { push(out, v); }
+    return out;
+}
+// نسخ عميق لعقدة (تُبقي _ctx كمرجع مشترك)
+fun pn_clone(v) {
+    let t = type(v);
+    if (t == "array") {
+        let out = [];
+        for (let x in v) { push(out, pn_clone(x)); }
+        return out;
+    }
+    if (t == "map") {
+        let out = {};
+        for (let k in keys(v)) {
+            if (substr(k, 0, 1) == "_") { out[k] = v[k]; }
+            else { out[k] = pn_clone(v[k]); }
+        }
+        return out;
+    }
+    return v;
+}
+
+// ---------------------------------------------------------------------------
+//  2) الألوان
+//  الصيغ: "#rgb" "#rrggbb" "#rrggbbaa" "none" "@id" (مرجع تدرّج/نمط)
+// ---------------------------------------------------------------------------
+fun pn_hex1(ch) { return indexOf(PN_HEXD, lower(ch)); }
+fun pn_hex2(s, i) { return pn_hex1(substr(s, i, 1)) * 16 + pn_hex1(substr(s, i + 1, 1)); }
+
+// "#rgb" → "#rrggbb"
+fun pn_norm_color(col) {
+    if (type(col) != "string") { return "#000000"; }
+    if (len(col) == 4 and substr(col, 0, 1) == "#") {
+        let r = substr(col, 1, 1); let g = substr(col, 2, 1); let b = substr(col, 3, 1);
+        return "#" + r + r + g + g + b + b;
+    }
+    return col;
+}
+// "#rrggbb" + شفافية 0..1  →  "#rrggbbaa"
+fun pn_alpha(col, a) {
+    col = pn_norm_color(col);
+    let base = substr(col, 0, 7);
+    let v = floor(pn_clamp(a, 0, 1) * 255 + 0.5);
+    return base + substr(PN_HEXD, floor(v / 16), 1) + substr(PN_HEXD, v - floor(v / 16) * 16, 1);
+}
+fun pn_mix(a, b, t) { return lower(colorMix(pn_norm_color(a), pn_norm_color(b), t)); }
+fun pn_lighten(c, t) { return lower(colorLighten(pn_norm_color(c), t)); }
+fun pn_darken(c, t) { return lower(colorDarken(pn_norm_color(c), t)); }
+// خريطة لونية: محطات + t∈[0,1]
+fun pn_ramp(stops, t) {
+    t = pn_clamp(t, 0, 1);
+    let n = len(stops) - 1;
+    if (n < 1) { return stops[0]; }
+    let p = t * n;
+    let i = floor(p);
+    if (i >= n) { return stops[n]; }
+    return pn_mix(stops[i], stops[i + 1], p - i);
+}
+// لون الورقة التالية من لوحة الثيم (يلتفّ)
+fun pn_color(parent, i) {
+    let pal = parent["_ctx"]["theme"]["palette"];
+    return pal[i - floor(i / len(pal)) * len(pal)];
+}
+
+// piano — الجزء 2: المشهد (canvas) والثيمات والتعريفات (تدرّجات، ظلال، أنماط، قصّ)
+
+// ---------------------------------------------------------------------------
+//  الثيمات — مطابقة لـ data/themes.json (يفحصها tools/piano_check.py)
+// ---------------------------------------------------------------------------
+fun pn_themes() {
+    return {
+        "light":  {"bg": "#ffffff", "ink": "#111827", "muted": "#6b7280", "grid": "#e5e7eb", "accent": "#4f46e5",
+                   "palette": ["#4f46e5", "#06b6d4", "#f59e0b", "#ef4444", "#10b981", "#8b5cf6", "#ec4899", "#64748b"]},
+        "dark":   {"bg": "#0b1020", "ink": "#e5e7eb", "muted": "#94a3b8", "grid": "#1e293b", "accent": "#818cf8",
+                   "palette": ["#818cf8", "#22d3ee", "#fbbf24", "#f87171", "#34d399", "#a78bfa", "#f472b6", "#94a3b8"]},
+        "ocean":  {"bg": "#f0f9ff", "ink": "#0c4a6e", "muted": "#0369a1", "grid": "#bae6fd", "accent": "#0284c7",
+                   "palette": ["#0284c7", "#0d9488", "#6366f1", "#f59e0b", "#0ea5e9", "#14b8a6", "#8b5cf6", "#64748b"]},
+        "sunset": {"bg": "#fff7ed", "ink": "#431407", "muted": "#9a3412", "grid": "#fed7aa", "accent": "#ea580c",
+                   "palette": ["#ea580c", "#db2777", "#7c3aed", "#ca8a04", "#dc2626", "#9333ea", "#f97316", "#78716c"]},
+        "neon":   {"bg": "#09090b", "ink": "#fafafa", "muted": "#a1a1aa", "grid": "#27272a", "accent": "#22d3ee",
+                   "palette": ["#22d3ee", "#a3e635", "#f472b6", "#facc15", "#c084fc", "#fb923c", "#4ade80", "#38bdf8"]},
+        "mono":   {"bg": "#fafafa", "ink": "#18181b", "muted": "#71717a", "grid": "#e4e4e7", "accent": "#18181b",
+                   "palette": ["#18181b", "#3f3f46", "#71717a", "#a1a1aa", "#d4d4d8", "#52525b", "#27272a", "#a1a1aa"]},
+        "piano":  {"bg": "#ffffff", "ink": "#0a0a0a", "muted": "#525252", "grid": "#e5e5e5", "accent": "#1db143",
+                   "palette": ["#1db143", "#0a0a0a", "#16a34a", "#737373", "#4ade80", "#262626", "#15803d", "#a3a3a3"]}
+    };
+}
+fun pn_theme_names() { return keys(pn_themes()); }
+fun pn_theme_def(name) {
+    let all = pn_themes();
+    if (!has(all, name)) { throw "piano: ثيم غير معروف «" + name + "» — المتاح: " + join(keys(all), ", "); }
+    return all[name];
+}
+
+// ---------------------------------------------------------------------------
+//  اللوحة (canvas)
+// ---------------------------------------------------------------------------
+fun pn_canvas(w, h) {
+    let th = pn_theme_def("light");
+    let ctx = {"seq": 0, "defs": [], "theme": th};
+    return {"piano": PN_SCHEMA, "w": w, "h": h, "title": "", "bg": th["bg"], "font": PN_FONT,
+            "defs": ctx["defs"], "nodes": [], "_ctx": ctx};
+}
+// تغيير الثيم: يضبط الخلفية وألوان الأشكال التي تُرسَم بعده
+fun pn_theme(c, name) {
+    let th = pn_theme_def(name);
+    c["_ctx"]["theme"] = th;
+    c["bg"] = th["bg"];
+    return c;
+}
+fun pn_bg(c, color) { c["bg"] = color; return c; }
+fun pn_title(c, s) { c["title"] = s; return c; }
+fun pn_font(c, family) { c["font"] = family; return c; }
+fun pn_size(c, w, h) { c["w"] = w; c["h"] = h; return c; }
+fun pn_ink(parent) { return parent["_ctx"]["theme"]["ink"]; }
+fun pn_accent(parent) { return parent["_ctx"]["theme"]["accent"]; }
+fun pn_muted(parent) { return parent["_ctx"]["theme"]["muted"]; }
+fun pn_gridc(parent) { return parent["_ctx"]["theme"]["grid"]; }
+
+fun pn_id(parent) {
+    let ctx = parent["_ctx"];
+    ctx["seq"] = ctx["seq"] + 1;
+    return "pn" + str(ctx["seq"]);
+}
+fun pn_ref(x) {
+    if (type(x) == "string") { return "@" + x; }
+    return "@" + x["id"];
+}
+
+// ---------------------------------------------------------------------------
+//  التدرّجات — stops: ["#a", "#b"] (موزّعة بالتساوي) أو [[0,"#a"],[0.4,"#b"],[1,"#c"]]
+// ---------------------------------------------------------------------------
+fun pn_stops(stops) {
+    let out = [];
+    let n = len(stops);
+    let i = 0;
+    for (let s in stops) {
+        if (type(s) == "array") { push(out, [s[0], s[1]]); }
+        else {
+            let o = 0;
+            if (n > 1) { o = i / (n - 1); }
+            push(out, [o, s]);
+        }
+        i = i + 1;
+    }
+    return out;
+}
+// زاوية بالدرجات: 0 = يسار←يمين، 90 = أعلى←أسفل، 45 = قطري
+fun pn_linear(parent, stops, angle) {
+    let a = pn_rad(angle);
+    let id = pn_id(parent);
+    push(parent["_ctx"]["defs"], {"t": "linear", "id": id,
+        "x1": 0.5 - 0.5 * cos(a), "y1": 0.5 - 0.5 * sin(a),
+        "x2": 0.5 + 0.5 * cos(a), "y2": 0.5 + 0.5 * sin(a), "stops": pn_stops(stops)});
+    return "@" + id;
+}
+// cx,cy,r ككسور من صندوق الشكل (0.5,0.5,0.5 = تدرّج مركزي كامل)
+fun pn_radial(parent, stops, cx, cy, r) {
+    let id = pn_id(parent);
+    push(parent["_ctx"]["defs"], {"t": "radial", "id": id, "cx": cx, "cy": cy, "r": r, "stops": pn_stops(stops)});
+    return "@" + id;
+}
+
+// ---------------------------------------------------------------------------
+//  الفلاتر — تُعيد "@id" لتوضع في خيار filter
+// ---------------------------------------------------------------------------
+fun pn_shadow(parent, dx, dy, blur, color, op) {
+    let id = pn_id(parent);
+    push(parent["_ctx"]["defs"], {"t": "shadow", "id": id, "dx": dx, "dy": dy, "blur": blur, "c": color, "op": op});
+    return "@" + id;
+}
+fun pn_glow(parent, radius, color) {
+    let id = pn_id(parent);
+    push(parent["_ctx"]["defs"], {"t": "glow", "id": id, "r": radius, "c": color});
+    return "@" + id;
+}
+fun pn_blur(parent, radius) {
+    let id = pn_id(parent);
+    push(parent["_ctx"]["defs"], {"t": "blur", "id": id, "r": radius});
+    return "@" + id;
+}
+
+// ---------------------------------------------------------------------------
+//  حاويات التعريف: نمط (pattern) وقصّ (clip) — تُرسَم داخلها كأنها group
+// ---------------------------------------------------------------------------
+fun pn_pattern(parent, w, h) {
+    let p = {"t": "pattern", "id": pn_id(parent), "w": w, "h": h, "nodes": [], "_ctx": parent["_ctx"]};
+    push(parent["_ctx"]["defs"], p);
+    return p;
+}
+fun pn_clip(parent) {
+    let p = {"t": "clip", "id": pn_id(parent), "nodes": [], "_ctx": parent["_ctx"]};
+    push(parent["_ctx"]["defs"], p);
+    return p;
+}
+// قناع (mask): ارسم داخله بالأبيض (ظاهر) والأسود (مخفي) وتدرّجات الرمادي (شفافية) ثم استعمله بخيار mask:"@id"
+fun pn_mask(parent) {
+    let p = {"t": "mask", "id": pn_id(parent), "nodes": [], "_ctx": parent["_ctx"]};
+    push(parent["_ctx"]["defs"], p);
+    return p;
+}
+// قناع تلاشٍ جاهز: dir = "right" | "left" | "down" | "up" → "@id"
+fun pn_fade_mask(parent, x, y, w, h, dir) {
+    let m = pn_mask(parent);
+    let a = 0;
+    if (dir == "left") { a = 180; }
+    if (dir == "down") { a = 90; }
+    if (dir == "up") { a = 270; }
+    pn_rect(m, x, y, w, h, {"fill": pn_linear(parent, ["#ffffff", "#000000"], a)});
+    return "@" + m["id"];
+}
+// قصّ مستطيل سريع → "@id"
+fun pn_clip_rect(parent, x, y, w, h, r) {
+    let cp = pn_clip(parent);
+    pn_rect(cp, x, y, w, h, {"rx": r});
+    return "@" + cp["id"];
+}
+fun pn_clip_circle(parent, cx, cy, r) {
+    let cp = pn_clip(parent);
+    pn_circle(cp, cx, cy, r, {});
+    return "@" + cp["id"];
+}
+
+// piano — الجزء 3: الأشكال الأساسية
+//
+// خيارات مشتركة لكل الأشكال (o):
+//   fill stroke sw op fo so dash cap join   — الطلاء. الألوان: "#rgb" "#rrggbb" "#rrggbbaa" "none" "@id"
+//   grad:[ألوان] angle:90                   — تدرّج خطي سريع كتعبئة
+//   shadow:true|"#لون"|{dx,dy,blur,c,op}   — ظل  ·  glow:true|"#لون"|نصف_قطر  ·  blur:نصف_قطر
+//   rot:درجات (حول مركز الشكل) · tf:[[…]] · clip:"@id" · filter:"@id" · id · cls · title(تلميح) · anim
+
+// ---------------------------------------------------------------------------
+//  باني العقدة المشترك
+// ---------------------------------------------------------------------------
+fun pn_pick(o, ks) {
+    let out = {};
+    for (let k in ks) { if (pn_has(o, k)) { out[k] = o[k]; } }
+    return out;
+}
+
+fun pn_mk(parent, node, o, cx, cy) {
+    o = pn_o(o);
+    let t = node["t"];
+    let ks = ["id", "cls", "fill", "stroke", "sw", "op", "fo", "so", "dash", "cap", "join", "title", "clip", "mask"];
+    for (let k in ks) { if (pn_has(o, k)) { node[k] = o[k]; } }
+    if (pn_has(o, "grad")) { node["fill"] = pn_linear(parent, o["grad"], pn_opt(o, "angle", 90)); }
+
+    // قيم افتراضية بحسب نوع العقدة
+    if (t == "rect" or t == "circle" or t == "ellipse" or t == "polygon") {
+        if (!pn_has(node, "fill")) { node["fill"] = pn_accent(parent); }
+    }
+    if (t == "line" or t == "polyline") {
+        if (t == "polyline" and !pn_has(node, "fill")) { node["fill"] = "none"; }
+        if (!pn_has(node, "stroke")) { node["stroke"] = pn_ink(parent); }
+        if (!pn_has(node, "sw")) { node["sw"] = 2; }
+    }
+    if (t == "path") {
+        let d = node["d"];
+        let last = substr(d, len(d) - 1, 1);
+        if (last == "Z" or last == "z") {
+            if (!pn_has(node, "fill")) { node["fill"] = pn_accent(parent); }
+        } else {
+            if (!pn_has(node, "fill")) { node["fill"] = "none"; }
+            if (!pn_has(node, "stroke")) { node["stroke"] = pn_ink(parent); }
+            if (!pn_has(node, "sw")) { node["sw"] = 2; }
+        }
+    }
+    if (t == "text") {
+        if (!pn_has(node, "fill")) { node["fill"] = pn_ink(parent); }
+    }
+
+    // تحويلات
+    if (pn_has(o, "tf")) { node["tf"] = pn_copy_list(o["tf"]); }
+    if (pn_has(o, "rot") and cx != nil) {
+        if (!pn_has(node, "tf")) { node["tf"] = []; }
+        push(node["tf"], ["rotate", o["rot"], cx, cy]);
+    }
+
+    // فلاتر مختصرة
+    if (pn_has(o, "filter")) { node["filter"] = o["filter"]; }
+    else if (pn_has(o, "shadow")) {
+        let s = o["shadow"];
+        let ty = type(s);
+        if (ty == "map") {
+            node["filter"] = pn_shadow(parent, pn_opt(s, "dx", 0), pn_opt(s, "dy", 6), pn_opt(s, "blur", 10),
+                                       pn_opt(s, "c", "#000000"), pn_opt(s, "op", 0.3));
+        } else if (ty == "string") {
+            node["filter"] = pn_shadow(parent, 0, 6, 10, s, 0.35);
+        } else {
+            node["filter"] = pn_shadow(parent, 0, 6, 10, "#000000", 0.3);
+        }
+    } else if (pn_has(o, "glow")) {
+        let g = o["glow"];
+        let col = pn_accent(parent);
+        let rad = 6;
+        if (type(g) == "string") { col = g; }
+        else if (type(g) == "number") { rad = g; }
+        else if (type(node["fill"]) == "string" and substr(node["fill"], 0, 1) == "#") { col = node["fill"]; }
+        node["filter"] = pn_glow(parent, rad, col);
+    } else if (pn_has(o, "blur")) {
+        node["filter"] = pn_blur(parent, o["blur"]);
+    }
+
+    if (pn_has(o, "anim")) { node["anim"] = pn_copy_list(o["anim"]); }
+    push(parent["nodes"], node);
+    return node;
+}
+
+// ---------------------------------------------------------------------------
+//  الأشكال الأولية
+// ---------------------------------------------------------------------------
+// مستطيل — خيارات إضافية: rx ry (أو r لكليهما)
+fun pn_rect(parent, x, y, w, h, o) {
+    o = pn_o(o);
+    let n = {"t": "rect", "x": x, "y": y, "w": w, "h": h};
+    if (pn_has(o, "r")) { n["rx"] = o["r"]; }
+    if (pn_has(o, "rx")) { n["rx"] = o["rx"]; }
+    if (pn_has(o, "ry")) { n["ry"] = o["ry"]; }
+    return pn_mk(parent, n, o, x + w / 2, y + h / 2);
+}
+// مستطيل بزوايا مستديرة: r رقم، أو [أعلى-يسار، أعلى-يمين، أسفل-يمين، أسفل-يسار]
+fun pn_rrect(parent, x, y, w, h, r, o) {
+    o = pn_o(o);
+    if (type(r) == "number") {
+        let o2 = pn_clone(o);
+        o2["rx"] = r;
+        return pn_rect(parent, x, y, w, h, o2);
+    }
+    let p = pn_pen();
+    pn_move(p, x + r[0], y);
+    pn_lineto(p, x + w - r[1], y);
+    pn_arcto(p, r[1], r[1], 0, 0, 1, x + w, y + r[1]);
+    pn_lineto(p, x + w, y + h - r[2]);
+    pn_arcto(p, r[2], r[2], 0, 0, 1, x + w - r[2], y + h);
+    pn_lineto(p, x + r[3], y + h);
+    pn_arcto(p, r[3], r[3], 0, 0, 1, x, y + h - r[3]);
+    pn_lineto(p, x, y + r[0]);
+    pn_arcto(p, r[0], r[0], 0, 0, 1, x + r[0], y);
+    pn_close(p);
+    let n = {"t": "path", "d": pn_d(p)};
+    return pn_mk(parent, n, o, x + w / 2, y + h / 2);
+}
+fun pn_circle(parent, cx, cy, r, o) {
+    return pn_mk(parent, {"t": "circle", "cx": cx, "cy": cy, "r": r}, o, cx, cy);
+}
+fun pn_ellipse(parent, cx, cy, rx, ry, o) {
+    return pn_mk(parent, {"t": "ellipse", "cx": cx, "cy": cy, "rx": rx, "ry": ry}, o, cx, cy);
+}
+fun pn_line(parent, x1, y1, x2, y2, o) {
+    return pn_mk(parent, {"t": "line", "x1": x1, "y1": y1, "x2": x2, "y2": y2}, o, (x1 + x2) / 2, (y1 + y2) / 2);
+}
+
+// نقاط: [x,y,x,y,…] أو [[x,y],[x,y],…]  →  مصفوفة مسطّحة
+fun pn_flat(pts) {
+    if (len(pts) == 0) { return []; }
+    if (type(pts[0]) != "array") { return pn_copy_list(pts); }
+    let out = [];
+    for (let p in pts) { push(out, p[0]); push(out, p[1]); }
+    return out;
+}
+fun pn_center_of(flat) {
+    let n = len(flat) / 2;
+    if (n < 1) { return [0, 0]; }
+    let sx = 0; let sy = 0;
+    let i = 0;
+    while (i < len(flat)) { sx = sx + flat[i]; sy = sy + flat[i + 1]; i = i + 2; }
+    return [sx / n, sy / n];
+}
+fun pn_polyline(parent, pts, o) {
+    let f = pn_flat(pts);
+    let c = pn_center_of(f);
+    return pn_mk(parent, {"t": "polyline", "pts": f}, o, c[0], c[1]);
+}
+fun pn_polygon(parent, pts, o) {
+    let f = pn_flat(pts);
+    let c = pn_center_of(f);
+    return pn_mk(parent, {"t": "polygon", "pts": f}, o, c[0], c[1]);
+}
+// مسار: p إمّا pen (pn_pen) أو نص d جاهز
+fun pn_path(parent, p, o) {
+    let d = p;
+    if (type(p) == "map") { d = pn_d(p); }
+    return pn_mk(parent, {"t": "path", "d": d}, o, nil, nil);
+}
+
+// نص — خيارات: size(16) anchor(start|middle|end) weight family italic ls(تباعد) lh(1.2 للأسطر) base(dominant-baseline) dir(rtl|ltr)
+// الأسطر المتعددة بـ \n
+fun pn_text(parent, x, y, s, o) {
+    o = pn_o(o);
+    let n = {"t": "text", "x": x, "y": y, "text": s, "size": pn_opt(o, "size", 16)};
+    if (pn_has(o, "anchor")) { n["anchor"] = o["anchor"]; }
+    if (pn_has(o, "weight")) { n["weight"] = o["weight"]; }
+    if (pn_has(o, "family")) { n["family"] = o["family"]; }
+    if (pn_has(o, "italic")) { n["italic"] = o["italic"]; }
+    if (pn_has(o, "ls")) { n["ls"] = o["ls"]; }
+    if (pn_has(o, "lh")) { n["lh"] = o["lh"]; }
+    if (pn_has(o, "base")) { n["base"] = o["base"]; }
+    if (pn_has(o, "dir")) { n["dir"] = o["dir"]; }
+    return pn_mk(parent, n, o, x, y);
+}
+fun pn_image(parent, x, y, w, h, href, o) {
+    let n = {"t": "image", "x": x, "y": y, "w": w, "h": h, "href": href};
+    return pn_mk(parent, n, o, x + w / 2, y + h / 2);
+}
+
+// ---------------------------------------------------------------------------
+//  أشكال مركّبة
+// ---------------------------------------------------------------------------
+// مضلّع منتظم: n ضلعاً، نصف القطر r، زاوية البداية o.start (افتراضي -90 = رأس للأعلى)
+fun pn_ngon(parent, cx, cy, n, r, o) {
+    o = pn_o(o);
+    let a0 = pn_opt(o, "start", -90);
+    let pts = [];
+    let i = 0;
+    while (i < n) {
+        let a = pn_rad(a0 + 360 * i / n);
+        push(pts, cx + r * cos(a));
+        push(pts, cy + r * sin(a));
+        i = i + 1;
+    }
+    return pn_mk(parent, {"t": "polygon", "pts": pts}, o, cx, cy);
+}
+// نجمة: n رأساً، نصف قطر خارجي r1 وداخلي r2
+fun pn_star(parent, cx, cy, n, r1, r2, o) {
+    o = pn_o(o);
+    let a0 = pn_opt(o, "start", -90);
+    let pts = [];
+    let i = 0;
+    while (i < n * 2) {
+        let r = r1;
+        if (i - floor(i / 2) * 2 == 1) { r = r2; }
+        let a = pn_rad(a0 + 180 * i / n);
+        push(pts, cx + r * cos(a));
+        push(pts, cy + r * sin(a));
+        i = i + 1;
+    }
+    return pn_mk(parent, {"t": "polygon", "pts": pts}, o, cx, cy);
+}
+// قطاع دائري (فطيرة): الزوايا بالدرجات، 0 = اليمين، تزداد مع عقارب الساعة
+fun pn_slice(parent, cx, cy, r, a0, a1, o) {
+    if (abs(a1 - a0) >= 359.99) { return pn_circle(parent, cx, cy, r, o); }
+    let p = pn_pen();
+    pn_move(p, cx, cy);
+    pn_lineto(p, cx + r * cos(pn_rad(a0)), cy + r * sin(pn_rad(a0)));
+    pn_arc_cmds(p, cx, cy, r, a0, a1);
+    pn_close(p);
+    return pn_mk(parent, {"t": "path", "d": pn_d(p)}, o, cx, cy);
+}
+// حلقة/قطاع حلقي (دونات)
+fun pn_ring(parent, cx, cy, r0, r1, a0, a1, o) {
+    let p = pn_pen();
+    if (abs(a1 - a0) >= 359.99) { a1 = a0 + 359.99; }
+    pn_move(p, cx + r1 * cos(pn_rad(a0)), cy + r1 * sin(pn_rad(a0)));
+    pn_arc_cmds(p, cx, cy, r1, a0, a1);
+    pn_lineto(p, cx + r0 * cos(pn_rad(a1)), cy + r0 * sin(pn_rad(a1)));
+    pn_arc_cmds(p, cx, cy, r0, a1, a0);
+    pn_close(p);
+    return pn_mk(parent, {"t": "path", "d": pn_d(p)}, o, cx, cy);
+}
+// قوس مفتوح (خط فقط)
+fun pn_arc(parent, cx, cy, r, a0, a1, o) {
+    let p = pn_pen();
+    pn_move(p, cx + r * cos(pn_rad(a0)), cy + r * sin(pn_rad(a0)));
+    pn_arc_cmds(p, cx, cy, r, a0, a1);
+    return pn_mk(parent, {"t": "path", "d": pn_d(p)}, o, cx, cy);
+}
+// سهم: خط + رأس مثلث. خيارات: head(10) وبقية خيارات الخط (stroke, sw, …)
+fun pn_arrow(parent, x1, y1, x2, y2, o) {
+    o = pn_o(o);
+    let g = pn_group(parent, pn_pick(o, ["id", "op", "tf", "shadow", "glow", "filter", "title", "clip", "anim"]));
+    let col = pn_opt(o, "stroke", pn_ink(parent));
+    let sw = pn_opt(o, "sw", 2);
+    let head = pn_opt(o, "head", 10);
+    let a = atan2(y2 - y1, x2 - x1);
+    let bx = x2 - head * cos(a);
+    let by = y2 - head * sin(a);
+    let nx = -sin(a) * head * 0.5;
+    let ny = cos(a) * head * 0.5;
+    pn_line(g, x1, y1, bx, by, {"stroke": col, "sw": sw, "cap": "round", "dash": pn_opt(o, "dash", nil)});
+    pn_polygon(g, [x2, y2, bx + nx, by + ny, bx - nx, by - ny], {"fill": col});
+    return g;
+}
+// شبكة خطوط: خطوط كل step بكسل داخل المستطيل
+fun pn_grid(parent, x, y, w, h, step, o) {
+    o = pn_o(o);
+    let p = pn_pen();
+    let gx = 0;
+    while (gx <= w + 0.001) {
+        pn_move(p, x + gx, y); pn_lineto(p, x + gx, y + h);
+        gx = gx + step;
+    }
+    let gy = 0;
+    while (gy <= h + 0.001) {
+        pn_move(p, x, y + gy); pn_lineto(p, x + w, y + gy);
+        gy = gy + step;
+    }
+    let o2 = pn_clone(o);
+    if (!pn_has(o2, "stroke")) { o2["stroke"] = pn_gridc(parent); }
+    if (!pn_has(o2, "sw")) { o2["sw"] = 1; }
+    return pn_path(parent, p, o2);
+}
+// موجة جيبية: تبدأ عند (x,y) بعرض w وسعة amp وعدد موجات waves
+fun pn_wave(parent, x, y, w, amp, waves, o) {
+    let n = floor(waves * 24);
+    if (n < 8) { n = 8; }
+    let pts = [];
+    let i = 0;
+    while (i <= n) {
+        push(pts, x + w * i / n);
+        push(pts, y - amp * sin(2 * PI * waves * i / n));
+        i = i + 1;
+    }
+    let o2 = pn_clone(pn_o(o));
+    if (!pn_has(o2, "stroke")) { o2["stroke"] = pn_accent(parent); }
+    if (!pn_has(o2, "sw")) { o2["sw"] = 3; }
+    if (!pn_has(o2, "cap")) { o2["cap"] = "round"; }
+    return pn_polyline(parent, pts, o2);
+}
+// حلزون أرخميدس
+fun pn_spiral(parent, cx, cy, r, turns, o) {
+    let n = floor(turns * 48);
+    if (n < 12) { n = 12; }
+    let pts = [];
+    let i = 0;
+    while (i <= n) {
+        let t = i / n;
+        let a = 2 * PI * turns * t;
+        push(pts, cx + r * t * cos(a));
+        push(pts, cy + r * t * sin(a));
+        i = i + 1;
+    }
+    let o2 = pn_clone(pn_o(o));
+    if (!pn_has(o2, "stroke")) { o2["stroke"] = pn_accent(parent); }
+    if (!pn_has(o2, "sw")) { o2["sw"] = 2; }
+    if (!pn_has(o2, "cap")) { o2["cap"] = "round"; }
+    return pn_polyline(parent, pts, o2);
+}
+// منحنى ناعم يمرّ بالنقاط (Catmull-Rom → Bézier). o.tension (1 افتراضي)، o.closed
+fun pn_smooth(parent, pts, o) {
+    o = pn_o(o);
+    let f = pn_flat(pts);
+    let closed = pn_opt(o, "closed", false);
+    let p = pn_pen();
+    pn_move(p, f[0], f[1]);
+    pn_spline_to(p, f, pn_opt(o, "tension", 1), closed);
+    let o2 = pn_clone(o);
+    if (!closed and !pn_has(o2, "fill")) { o2["fill"] = "none"; }
+    if (!closed and !pn_has(o2, "stroke")) { o2["stroke"] = pn_accent(parent); }
+    if (!closed and !pn_has(o2, "sw")) { o2["sw"] = 3; }
+    if (!closed and !pn_has(o2, "cap")) { o2["cap"] = "round"; }
+    return pn_path(parent, p, o2);
+}
+// تسمية: نص داخل كبسولة. خيارات: size(14) padx(10) pady(6) bg fg
+fun pn_label(parent, x, y, s, o) {
+    o = pn_o(o);
+    let size = pn_opt(o, "size", 14);
+    let padx = pn_opt(o, "padx", 10);
+    let pady = pn_opt(o, "pady", 6);
+    let w = len(s) * size * 0.56 + padx * 2;
+    let h = size + pady * 2;
+    let bg = pn_opt(o, "bg", pn_accent(parent));
+    let fg = pn_opt(o, "fg", colorTextOn(pn_norm_color(bg)));
+    let g = pn_group(parent, pn_pick(o, ["id", "op", "tf", "shadow", "glow", "filter", "title", "clip", "anim"]));
+    pn_rect(g, x - w / 2, y - h / 2, w, h, {"fill": bg, "rx": h / 2});
+    pn_text(g, x, y + size * 0.35, s, {"size": size, "anchor": "middle", "weight": pn_opt(o, "weight", 600), "fill": fg});
+    return g;
+}
+
+// piano — الجزء 4: مُنشئ المسارات (pen) والمنحنيات
+//
+//   let p = pn_pen();
+//   pn_move(p, 10, 10); pn_lineto(p, 90, 10); pn_quadto(p, 100, 50, 90, 90); pn_close(p);
+//   pn_path(c, p, {"fill": "#1db143"});
+
+fun pn_mod(a, b) { return a - floor(a / b) * b; }
+
+fun pn_pen() { return {"cmds": []}; }
+fun pn_move(p, x, y) { push(p["cmds"], ["M", x, y]); return p; }
+fun pn_lineto(p, x, y) { push(p["cmds"], ["L", x, y]); return p; }
+fun pn_quadto(p, cx, cy, x, y) { push(p["cmds"], ["Q", cx, cy, x, y]); return p; }
+fun pn_cubicto(p, c1x, c1y, c2x, c2y, x, y) { push(p["cmds"], ["C", c1x, c1y, c2x, c2y, x, y]); return p; }
+// قوس إهليلجي SVG: large وsweep = 0 أو 1
+fun pn_arcto(p, rx, ry, rot, large, sweep, x, y) { push(p["cmds"], ["A", rx, ry, rot, large, sweep, x, y]); return p; }
+fun pn_close(p) { push(p["cmds"], ["Z"]); return p; }
+
+// نص السمة d
+fun pn_d(p) {
+    let parts = [];
+    for (let c in p["cmds"]) {
+        let s = c[0];
+        let i = 1;
+        while (i < len(c)) { s = s + " " + pn_n(c[i]); i = i + 1; }
+        push(parts, s);
+    }
+    return join(parts, " ");
+}
+
+// يُلحق قوساً دائرياً من الزاوية a0 إلى a1 (درجات) — القلم عند زاوية a0 مسبقاً.
+// يُقسَّم إلى أجزاء ≤ 120° فلا التباس في large-arc.
+fun pn_arc_cmds(p, cx, cy, r, a0, a1) {
+    let total = a1 - a0;
+    let sweep = 1;
+    if (total < 0) { sweep = 0; }
+    let nseg = ceil(abs(total) / 120);
+    if (nseg < 1) { nseg = 1; }
+    let step = total / nseg;
+    let i = 1;
+    while (i <= nseg) {
+        let a = pn_rad(a0 + step * i);
+        pn_arcto(p, r, r, 0, 0, sweep, cx + r * cos(a), cy + r * sin(a));
+        i = i + 1;
+    }
+    return p;
+}
+
+// منحنى Catmull-Rom عبر النقاط المسطّحة f — القلم عند f[0],f[1] مسبقاً.
+// k = التوتر (1 طبيعي، 0 = خطوط مستقيمة)
+fun pn_spline_to(p, f, k, closed) {
+    let n = floor(len(f) / 2);
+    if (n < 2) { return p; }
+    let segs = n - 1;
+    if (closed) { segs = n; }
+    let i = 0;
+    while (i < segs) {
+        let i0 = i - 1; let i2 = i + 1; let i3 = i + 2;
+        if (closed) { i0 = pn_mod(i - 1, n); i2 = pn_mod(i + 1, n); i3 = pn_mod(i + 2, n); }
+        else {
+            if (i0 < 0) { i0 = 0; }
+            if (i3 > n - 1) { i3 = n - 1; }
+        }
+        let x0 = f[2 * i0]; let y0 = f[2 * i0 + 1];
+        let x1 = f[2 * i];  let y1 = f[2 * i + 1];
+        let x2 = f[2 * i2]; let y2 = f[2 * i2 + 1];
+        let x3 = f[2 * i3]; let y3 = f[2 * i3 + 1];
+        pn_cubicto(p, x1 + (x2 - x0) / 6 * k, y1 + (y2 - y0) / 6 * k,
+                      x2 - (x3 - x1) / 6 * k, y2 - (y3 - y1) / 6 * k, x2, y2);
+        i = i + 1;
+    }
+    if (closed) { pn_close(p); }
+    return p;
+}
+
+// piano — الجزء 5: المجموعات (group) والتحويلات والحركة
+
+// مجموعة: كل ما يُرسم داخلها يتحرّك ويُظلَّل ويُقصّ معاً
+fun pn_group(parent, o) {
+    return pn_mk(parent, {"t": "g", "nodes": [], "_ctx": parent["_ctx"]}, o, nil, nil);
+}
+// مجموعة بنظام إحداثيات محلي مُزاح إلى (x, y)
+fun pn_at(parent, x, y, o) {
+    o = pn_o(o);
+    let o2 = pn_clone(o);
+    let tf = [["translate", x, y]];
+    if (pn_has(o, "tf")) { for (let t in o["tf"]) { push(tf, t); } }
+    o2["tf"] = tf;
+    return pn_group(parent, o2);
+}
+
+fun pn_tf_push(n, op) {
+    if (!pn_has(n, "tf")) { n["tf"] = []; }
+    push(n["tf"], op);
+    return n;
+}
+fun pn_translate(n, x, y) { return pn_tf_push(n, ["translate", x, y]); }
+fun pn_rotate(n, deg, cx, cy) { return pn_tf_push(n, ["rotate", deg, cx, cy]); }
+fun pn_scale(n, sx, sy) { return pn_tf_push(n, ["scale", sx, sy]); }
+fun pn_skewx(n, deg) { return pn_tf_push(n, ["skewX", deg]); }
+fun pn_skewy(n, deg) { return pn_tf_push(n, ["skewY", deg]); }
+
+// نُسخ متكرّرة: يرسم fn(g, i) لكل i في مجموعة جديدة
+fun pn_repeat(parent, count, o, fn) {
+    let g = pn_group(parent, o);
+    let i = 0;
+    while (i < count) { fn(g, i); i = i + 1; }
+    return g;
+}
+
+// ---------------------------------------------------------------------------
+//  الحركة (SMIL) — تعمل في المتصفحات داخل SVG مباشرة
+//  rep: "indefinite" أو عدد مرّات
+// ---------------------------------------------------------------------------
+fun pn_animate(n, attr, from, to, dur, rep) {
+    if (!pn_has(n, "anim")) { n["anim"] = []; }
+    push(n["anim"], {"k": "attr", "name": attr, "from": from, "to": to, "dur": dur, "rep": rep});
+    return n;
+}
+// قيم متعددة: values = [a, b, a, …]
+fun pn_animate_values(n, attr, values, dur, rep) {
+    if (!pn_has(n, "anim")) { n["anim"] = []; }
+    push(n["anim"], {"k": "attr", "name": attr, "values": values, "dur": dur, "rep": rep});
+    return n;
+}
+// دوران مستمر حول (cx, cy)
+fun pn_spin(n, cx, cy, dur) {
+    if (!pn_has(n, "anim")) { n["anim"] = []; }
+    push(n["anim"], {"k": "rotate", "from": 0, "to": 360, "cx": cx, "cy": cy, "dur": dur, "rep": "indefinite"});
+    return n;
+}
+// نبض: attr يتأرجح بين a وb
+fun pn_pulse(n, attr, a, b, dur) {
+    return pn_animate_values(n, attr, [a, b, a], dur, "indefinite");
+}
+
+// piano — الجزء 6: الإخراج (SVG · JSON/.puo · HTML · data-URI)
+//
+// قاعدة الذهب: هذا الملف هو «المواصفة المرجعية» للتصيير. مُصيِّرا C++ وJS ينسخانه حرفياً
+// (ترتيب السمات، تنسيق الأرقام، المسافات)، وتختبرهما tools/piano_check.py بمقارنة المخرجات.
+
+// ---------------------------------------------------------------------------
+//  سمات
+// ---------------------------------------------------------------------------
+fun pn_attr(name, v) { return " " + name + "=\"" + pn_esc(v) + "\""; }
+fun pn_attrn(name, v) { return " " + name + "=\"" + pn_n(v) + "\""; }
+fun pn_anum(n, key, name) {
+    if (pn_has(n, key)) { return pn_attrn(name, n[key]); }
+    return "";
+}
+fun pn_astr(n, key, name) {
+    if (pn_has(n, key)) { return pn_attr(name, n[key]); }
+    return "";
+}
+fun pn_url(v) {
+    if (substr(v, 0, 1) == "@") { return "url(#" + substr(v, 1, len(v) - 1) + ")"; }
+    return v;
+}
+// طلاء: لون | none | @id ، مع شفافية من #rrggbbaa أو من الحقل الصريح (opkey)
+fun pn_paint(n, key, attr, opkey, opattr) {
+    let s = "";
+    let op = nil;
+    if (pn_has(n, key)) {
+        let v = n[key];
+        if (type(v) == "string") {
+            if (substr(v, 0, 1) == "@") { s = pn_attr(attr, pn_url(v)); }
+            else {
+                v = pn_norm_color(v);
+                if (len(v) == 9 and substr(v, 0, 1) == "#") {
+                    s = pn_attr(attr, substr(v, 0, 7));
+                    op = pn_hex2(v, 7) / 255;
+                } else { s = pn_attr(attr, v); }
+            }
+        } else { s = pn_attr(attr, v); }
+    }
+    if (pn_has(n, opkey)) { op = n[opkey]; }
+    if (op != nil) { s = s + pn_attr(opattr, pn_nf(op, 3)); }
+    return s;
+}
+fun pn_tfstr(tf) {
+    let parts = [];
+    for (let op in tf) {
+        let s = op[0] + "(";
+        let args = [];
+        let i = 1;
+        while (i < len(op)) { push(args, pn_n(op[i])); i = i + 1; }
+        push(parts, s + join(args, " ") + ")");
+    }
+    return join(parts, " ");
+}
+fun pn_nums(a) {
+    let out = [];
+    for (let v in a) { push(out, pn_n(v)); }
+    return out;
+}
+// سمات الطلاء والتحويل المشتركة (تأتي بعد الهندسة دائماً)
+fun pn_tail(n) {
+    let s = pn_paint(n, "fill", "fill", "fo", "fill-opacity");
+    s = s + pn_paint(n, "stroke", "stroke", "so", "stroke-opacity");
+    s = s + pn_anum(n, "sw", "stroke-width");
+    if (pn_has(n, "dash")) { s = s + pn_attr("stroke-dasharray", join(pn_nums(n["dash"]), " ")); }
+    s = s + pn_astr(n, "cap", "stroke-linecap");
+    s = s + pn_astr(n, "join", "stroke-linejoin");
+    s = s + pn_anum(n, "op", "opacity");
+    if (pn_has(n, "tf")) { s = s + pn_attr("transform", pn_tfstr(n["tf"])); }
+    if (pn_has(n, "filter")) { s = s + pn_attr("filter", pn_url(n["filter"])); }
+    if (pn_has(n, "clip")) { s = s + pn_attr("clip-path", pn_url(n["clip"])); }
+    if (pn_has(n, "mask")) { s = s + pn_attr("mask", pn_url(n["mask"])); }
+    return s;
+}
+fun pn_head(n) {
+    return pn_astr(n, "id", "id") + pn_astr(n, "cls", "class");
+}
+
+// ---------------------------------------------------------------------------
+//  الحركة
+// ---------------------------------------------------------------------------
+fun pn_av(v) {
+    if (type(v) == "number") { return pn_n(v); }
+    return pn_esc(v);
+}
+fun pn_repv(v) {
+    if (v == nil) { return "indefinite"; }
+    if (type(v) == "number") { return pn_n(v); }
+    return v;
+}
+fun pn_anim_str(a) {
+    if (pn_opt(a, "k", "attr") == "rotate") {
+        let cx = pn_n(pn_opt(a, "cx", 0));
+        let cy = pn_n(pn_opt(a, "cy", 0));
+        return "<animateTransform attributeName=\"transform\" type=\"rotate\" from=\"" + pn_n(a["from"]) + " " + cx + " " + cy
+             + "\" to=\"" + pn_n(a["to"]) + " " + cx + " " + cy + "\" dur=\"" + pn_n(a["dur"]) + "s\" repeatCount=\"" + pn_repv(pn_opt(a, "rep", nil)) + "\"/>";
+    }
+    let s = "<animate attributeName=\"" + pn_esc(a["name"]) + "\"";
+    if (pn_has(a, "values")) {
+        let vs = [];
+        for (let v in a["values"]) { push(vs, pn_av(v)); }
+        s = s + " values=\"" + join(vs, ";") + "\"";
+    } else {
+        s = s + " from=\"" + pn_av(a["from"]) + "\" to=\"" + pn_av(a["to"]) + "\"";
+    }
+    return s + " dur=\"" + pn_n(a["dur"]) + "s\" repeatCount=\"" + pn_repv(pn_opt(a, "rep", nil)) + "\"/>";
+}
+
+// ---------------------------------------------------------------------------
+//  العقد
+// ---------------------------------------------------------------------------
+fun pn_points(f) {
+    let parts = [];
+    let i = 0;
+    while (i + 1 < len(f)) { push(parts, pn_n(f[i]) + "," + pn_n(f[i + 1])); i = i + 2; }
+    return join(parts, " ");
+}
+fun pn_text_attrs(n) {
+    let s = pn_attrn("x", n["x"]) + pn_attrn("y", n["y"]);
+    s = s + pn_anum(n, "size", "font-size");
+    s = s + pn_astr(n, "family", "font-family");
+    if (pn_has(n, "weight")) { s = s + pn_attr("font-weight", pn_av(n["weight"])); }
+    if (pn_has(n, "italic") and n["italic"] == true) { s = s + pn_attr("font-style", "italic"); }
+    s = s + pn_astr(n, "anchor", "text-anchor");
+    s = s + pn_astr(n, "base", "dominant-baseline");
+    s = s + pn_anum(n, "ls", "letter-spacing");
+    s = s + pn_astr(n, "dir", "direction");
+    return s;
+}
+fun pn_text_body(n) {
+    let txt = n["text"];
+    if (type(txt) != "string") { txt = str(txt); }
+    let ls = split(txt, "\n");
+    if (len(ls) < 2) { return pn_esc(txt); }
+    let size = pn_opt(n, "size", 16);
+    let lh = pn_opt(n, "lh", 1.2);
+    let out = "";
+    let i = 0;
+    while (i < len(ls)) {
+        let dy = 0;
+        if (i > 0) { dy = size * lh; }
+        out = out + "<tspan" + pn_attrn("x", n["x"]) + pn_attrn("dy", dy) + ">" + pn_esc(ls[i]) + "</tspan>";
+        i = i + 1;
+    }
+    return out;
+}
+
+// يُلحق أسطر العقدة (بمسافة بادئة ind) إلى out
+fun pn_emit(out, n, ind) {
+    let pad = repeat(" ", ind);
+    let t = n["t"];
+    let a = pn_head(n);
+    if (t == "rect") {
+        a = a + pn_anum(n, "x", "x") + pn_anum(n, "y", "y") + pn_anum(n, "w", "width") + pn_anum(n, "h", "height")
+              + pn_anum(n, "rx", "rx") + pn_anum(n, "ry", "ry");
+    } else if (t == "circle") {
+        a = a + pn_anum(n, "cx", "cx") + pn_anum(n, "cy", "cy") + pn_anum(n, "r", "r");
+    } else if (t == "ellipse") {
+        a = a + pn_anum(n, "cx", "cx") + pn_anum(n, "cy", "cy") + pn_anum(n, "rx", "rx") + pn_anum(n, "ry", "ry");
+    } else if (t == "line") {
+        a = a + pn_anum(n, "x1", "x1") + pn_anum(n, "y1", "y1") + pn_anum(n, "x2", "x2") + pn_anum(n, "y2", "y2");
+    } else if (t == "polyline" or t == "polygon") {
+        a = a + pn_attr("points", pn_points(n["pts"]));
+    } else if (t == "path") {
+        a = a + pn_attr("d", n["d"]);
+    } else if (t == "text") {
+        a = a + pn_text_attrs(n);
+    } else if (t == "image") {
+        a = a + pn_anum(n, "x", "x") + pn_anum(n, "y", "y") + pn_anum(n, "w", "width") + pn_anum(n, "h", "height")
+              + pn_attr("href", n["href"]) + pn_astr(n, "par", "preserveAspectRatio");
+    }
+    a = a + pn_tail(n);
+
+    let kids = [];
+    if (pn_has(n, "title")) { push(kids, "<title>" + pn_esc(n["title"]) + "</title>"); }
+    if (pn_has(n, "anim")) { for (let an in n["anim"]) { push(kids, pn_anim_str(an)); } }
+
+    if (t == "text") {
+        push(out, pad + "<text" + a + ">" + pn_text_body(n) + join(kids, "") + "</text>");
+        return out;
+    }
+    let sub = [];
+    if (t == "g") {
+        for (let ch in n["nodes"]) { pn_emit(sub, ch, ind + 2); }
+    }
+    if (len(kids) == 0 and len(sub) == 0) {
+        push(out, pad + "<" + pn_tag(t) + a + "/>");
+        return out;
+    }
+    push(out, pad + "<" + pn_tag(t) + a + ">");
+    for (let k in kids) { push(out, pad + "  " + k); }
+    for (let s in sub) { push(out, s); }
+    push(out, pad + "</" + pn_tag(t) + ">");
+    return out;
+}
+fun pn_tag(t) { return t; }
+
+// ---------------------------------------------------------------------------
+//  التعريفات (defs)
+// ---------------------------------------------------------------------------
+fun pn_stop_lines(out, stops, pad) {
+    for (let s in stops) {
+        let col = pn_norm_color(s[1]);
+        let a = pn_attrn("offset", s[0]);
+        if (len(col) == 9 and substr(col, 0, 1) == "#") {
+            a = a + pn_attr("stop-color", substr(col, 0, 7)) + pn_attr("stop-opacity", pn_nf(pn_hex2(col, 7) / 255, 3));
+        } else { a = a + pn_attr("stop-color", col); }
+        push(out, pad + "<stop" + a + "/>");
+    }
+    return out;
+}
+fun pn_flood(c, op) {
+    let col = pn_norm_color(c);
+    if (len(col) == 9 and substr(col, 0, 1) == "#") { col = substr(col, 0, 7); }
+    return "<feFlood" + pn_attr("flood-color", col) + pn_attr("flood-opacity", pn_nf(op, 3)) + "/>";
+}
+fun pn_emit_def(out, d, ind) {
+    let pad = repeat(" ", ind);
+    let t = d["t"];
+    let id = pn_attr("id", d["id"]);
+    let region = " x=\"-50%\" y=\"-50%\" width=\"200%\" height=\"200%\"";
+    if (t == "linear") {
+        push(out, pad + "<linearGradient" + id + pn_attrn("x1", d["x1"]) + pn_attrn("y1", d["y1"]) + pn_attrn("x2", d["x2"]) + pn_attrn("y2", d["y2"]) + ">");
+        pn_stop_lines(out, d["stops"], pad + "  ");
+        push(out, pad + "</linearGradient>");
+    } else if (t == "radial") {
+        push(out, pad + "<radialGradient" + id + pn_attrn("cx", d["cx"]) + pn_attrn("cy", d["cy"]) + pn_attrn("r", d["r"]) + ">");
+        pn_stop_lines(out, d["stops"], pad + "  ");
+        push(out, pad + "</radialGradient>");
+    } else if (t == "shadow") {
+        push(out, pad + "<filter" + id + region + ">");
+        push(out, pad + "  <feGaussianBlur in=\"SourceAlpha\"" + pn_attrn("stdDeviation", d["blur"] / 2) + "/>");
+        push(out, pad + "  <feOffset" + pn_attrn("dx", d["dx"]) + pn_attrn("dy", d["dy"]) + " result=\"o\"/>");
+        push(out, pad + "  " + pn_flood(d["c"], pn_opt(d, "op", 0.3)));
+        push(out, pad + "  <feComposite in2=\"o\" operator=\"in\"/>");
+        push(out, pad + "  <feMerge><feMergeNode/><feMergeNode in=\"SourceGraphic\"/></feMerge>");
+        push(out, pad + "</filter>");
+    } else if (t == "glow") {
+        push(out, pad + "<filter" + id + region + ">");
+        push(out, pad + "  <feGaussianBlur in=\"SourceAlpha\"" + pn_attrn("stdDeviation", d["r"]) + " result=\"b\"/>");
+        push(out, pad + "  " + pn_flood(d["c"], 1));
+        push(out, pad + "  <feComposite in2=\"b\" operator=\"in\" result=\"g\"/>");
+        push(out, pad + "  <feMerge><feMergeNode in=\"g\"/><feMergeNode in=\"g\"/><feMergeNode in=\"SourceGraphic\"/></feMerge>");
+        push(out, pad + "</filter>");
+    } else if (t == "blur") {
+        push(out, pad + "<filter" + id + region + ">");
+        push(out, pad + "  <feGaussianBlur" + pn_attrn("stdDeviation", d["r"]) + "/>");
+        push(out, pad + "</filter>");
+    } else if (t == "pattern") {
+        push(out, pad + "<pattern" + id + pn_attrn("width", d["w"]) + pn_attrn("height", d["h"]) + " patternUnits=\"userSpaceOnUse\">");
+        for (let ch in d["nodes"]) { pn_emit(out, ch, ind + 2); }
+        push(out, pad + "</pattern>");
+    } else if (t == "clip") {
+        push(out, pad + "<clipPath" + id + ">");
+        for (let ch in d["nodes"]) { pn_emit(out, ch, ind + 2); }
+        push(out, pad + "</clipPath>");
+    } else if (t == "mask") {
+        push(out, pad + "<mask" + id + ">");
+        for (let ch in d["nodes"]) { pn_emit(out, ch, ind + 2); }
+        push(out, pad + "</mask>");
+    }
+    return out;
+}
+
+// ---------------------------------------------------------------------------
+//  SVG
+// ---------------------------------------------------------------------------
+// رأس SVG: وسم الجذر + العنوان (يتشاركه الرسم الثابت والمتحرك)
+fun pn_svg_head(c) {
+    let w = pn_n(c["w"]);
+    let h = pn_n(c["h"]);
+    let out = [];
+    // dw/dh: حجم العرض (width/height) المستقل عن نظام الإحداثيات — للتحجيم المتجاوب
+    let root = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"" + pn_n(pn_opt(c, "dw", c["w"])) + "\" height=\"" + pn_n(pn_opt(c, "dh", c["h"])) + "\" viewBox=\"0 0 " + w + " " + h + "\"";
+    if (pn_has(c, "font")) { root = root + pn_attr("font-family", c["font"]); }
+    push(out, root + ">");
+    if (pn_has(c, "title") and c["title"] != "") { push(out, "  <title>" + pn_esc(c["title"]) + "</title>"); }
+    return out;
+}
+fun pn_svg_bg(out, c) {
+    if (pn_has(c, "bg") and c["bg"] != "none") {
+        push(out, "  <rect width=\"100%\" height=\"100%\"" + pn_paint({"fill": c["bg"]}, "fill", "fill", "_", "_") + "/>");
+    }
+    return out;
+}
+fun pn_svg(c) {
+    let out = pn_svg_head(c);
+    if (pn_has(c, "defs") and len(c["defs"]) > 0) {
+        push(out, "  <defs>");
+        for (let d in c["defs"]) { pn_emit_def(out, d, 4); }
+        push(out, "  </defs>");
+    }
+    pn_svg_bg(out, c);
+    for (let n in c["nodes"]) { pn_emit(out, n, 2); }
+    push(out, "</svg>");
+    return join(out, "\n");
+}
+fun pn_print(c) { print pn_svg(c); return c; }
+
+// ---------------------------------------------------------------------------
+//  JSON (.puo) — كاتب خاص: ترتيب ثابت، أرقام بخانتين (3 لـ fo/so) كما في SVG، تجاهل مفاتيح _
+// ---------------------------------------------------------------------------
+fun pn_jstr(s) {
+    s = replace(s, "\\", "\\\\");
+    s = replace(s, "\"", "\\\"");
+    s = replace(s, "\n", "\\n");
+    s = replace(s, "\r", "\\r");
+    s = replace(s, "\t", "\\t");
+    return "\"" + s + "\"";
+}
+fun pn_jflat(a) {
+    for (let v in a) {
+        let t = type(v);
+        if (t == "array" or t == "map") { return false; }
+    }
+    return true;
+}
+fun pn_jv(v, ind, dec) {
+    let t = type(v);
+    if (v == nil) { return "null"; }
+    if (t == "bool") { if (v) { return "true"; } return "false"; }
+    if (t == "number") { return pn_nf(v, dec); }
+    if (t == "string") { return pn_jstr(v); }
+    let pad = repeat(" ", ind + 2);
+    let epad = repeat(" ", ind);
+    if (t == "array") {
+        if (len(v) == 0) { return "[]"; }
+        let items = [];
+        if (pn_jflat(v)) {
+            for (let x in v) { push(items, pn_jv(x, 0, dec)); }
+            return "[" + join(items, ", ") + "]";
+        }
+        for (let x in v) { push(items, pad + pn_jv(x, ind + 2, dec)); }
+        return "[\n" + join(items, ",\n") + "\n" + epad + "]";
+    }
+    if (t == "map") {
+        let items = [];
+        for (let k in keys(v)) {
+            if (substr(k, 0, 1) != "_" and v[k] != nil) {
+                // نفس قاعدة التقريب في SVG: خانتان، وثلاث لشفافيات fo/so — فيتطابق المسار المباشر مع المسار عبر .puo
+                let dd = 2;
+                if (k == "fo" or k == "so") { dd = 3; }
+                push(items, pad + pn_jstr(k) + ": " + pn_jv(v[k], ind + 2, dd));
+            }
+        }
+        if (len(items) == 0) { return "{}"; }
+        return "{\n" + join(items, ",\n") + "\n" + epad + "}";
+    }
+    return "null";
+}
+fun pn_json(c) { return pn_jv(c, 0, 2); }
+
+fun pn_restore(nodes, ctx) {
+    for (let n in nodes) {
+        if (n["t"] == "g" or n["t"] == "pattern" or n["t"] == "clip" or n["t"] == "mask") {
+            n["_ctx"] = ctx;
+            if (!has(n, "nodes") or n["nodes"] == nil) { n["nodes"] = []; }
+            pn_restore(n["nodes"], ctx);
+        }
+    }
+    return nodes;
+}
+// قراءة مشهد .puo / JSON إلى لوحة قابلة للإكمال بالرسم
+fun pn_from_json(s) {
+    let c = jsonDecode(s);
+    if (type(c) != "map" or !has(c, "piano")) { throw "piano: هذا ليس مشهد piano (حقل piano مفقود)"; }
+    if (c["piano"] != PN_SCHEMA) { throw "piano: إصدار المخطط غير مدعوم: " + str(c["piano"]); }
+    if (!pn_has(c, "defs")) { c["defs"] = []; }
+    if (!pn_has(c, "nodes")) { c["nodes"] = []; }
+    let ctx = {"seq": 1000, "defs": c["defs"], "theme": pn_theme_def("light")};
+    c["_ctx"] = ctx;
+    pn_restore(c["defs"], ctx);
+    pn_restore(c["nodes"], ctx);
+    return c;
+}
+
+// ---------------------------------------------------------------------------
+//  HTML · data-URI · حفظ
+// ---------------------------------------------------------------------------
+fun pn_html(c) {
+    let doc = pn_svg(c);
+    if (pn_has(c, "anim")) { doc = pn_anim_svg(c); }
+    return pn_html_page(c, doc);
+}
+fun pn_html_page(c, doc) {
+    let bg = pn_opt(c, "bg", "#ffffff");
+    if (substr(bg, 0, 1) != "#") { bg = "#ffffff"; }
+    let ttl = pn_opt(c, "title", "");
+    if (ttl == "") { ttl = "piano"; }
+    return "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n"
+         + "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
+         + "<title>" + pn_esc(ttl) + "</title>\n"
+         + "<style>html,body{margin:0;min-height:100%;background:" + bg + "}body{display:grid;place-items:center;min-height:100vh}svg{max-width:100%;height:auto}</style>\n"
+         + "</head>\n<body>\n" + doc + "\n</body>\n</html>\n";
+}
+// للاستعمال في indsin:  <Image src={pn_data_uri(c)} width=320 />
+fun pn_data_uri(c) { return "data:image/svg+xml;base64," + sec.base64Encode(pn_svg(c)); }
+
+fun pn_ext(path) {
+    let p = lower(path);
+    let i = len(p) - 1;
+    while (i >= 0 and substr(p, i, 1) != ".") { i = i - 1; }
+    if (i < 0) { return ""; }
+    return substr(p, i, len(p) - i);
+}
+// يحفظ بحسب الامتداد: .svg · .html · .json · .puo
+fun pn_save(c, path) {
+    let e = pn_ext(path);
+    // لوحة فيها anim (من pn_film أو $x.Frame) تُحفظ .svg/.html متحركةً؛ ولقطتها الأولى الثابتة عبر pn_svg(c)
+    if (e == ".svg") {
+        if (pn_has(c, "anim")) { return writeFile(path, pn_anim_svg(c) + "\n"); }
+        return writeFile(path, pn_svg(c) + "\n");
+    }
+    if (e == ".html" or e == ".htm") { return writeFile(path, pn_html(c)); }
+    if (e == ".json" or e == ".puo") { return writeFile(path, pn_json(c) + "\n"); }
+    throw "piano: امتداد غير مدعوم «" + e + "» — استعمل .svg أو .html أو .puo أو .json";
+}
+// يحمّل مشهداً: .puo/.json ← JSON، وأي امتداد آخر (.pia .rin …) ← لغة الكتل
+fun pn_load(path) {
+    let e = pn_ext(path);
+    if (e == ".puo" or e == ".json") { return pn_from_json(readFile(path)); }
+    return pn_dsl_load(path);
+}
+
+// piano — الجزء 7: المخططات الجاهزة (مبنيّة بالكامل فوق الأشكال الأولية، فتخرج كأي مشهد piano)
+//
+//   pn_bar_chart(c, 40, 40, 400, 240, ["أ","ب","ج"], [[3,5,2],[4,1,6]], {"title": "مبيعات", "names": ["2025","2026"]});
+//   pn_line_chart(…, {"smooth": true, "area": true})   pn_pie_chart(c, cx, cy, r, labels, values, {"inner": 0.6})
+//   pn_radar_chart · pn_sparkline · pn_gauge · pn_legend
+//
+// الخيارات المشتركة: colors:[…] (افتراضياً لوحة الثيم) · title · names (أسماء السلاسل للوسيلة) · grid:true
+
+fun pn_log10(v) { return log(v) / log(10); }
+fun pn_nice_step(range, n) {
+    let raw = range / n;
+    let mag = pow(10, floor(pn_log10(raw)));
+    let nm = raw / mag;
+    let s = 10;
+    if (nm <= 1) { s = 1; } else if (nm <= 2) { s = 2; } else if (nm <= 5) { s = 5; }
+    return s * mag;
+}
+// محور «لطيف»: يُعيد {min, max, step} بقيم مستديرة تحيط بالمدى [lo, hi]
+fun pn_nice(lo, hi, n) {
+    if (hi <= lo) { hi = lo + 1; }
+    let step = pn_nice_step(hi - lo, n);
+    return {"min": floor(lo / step + 0.000001) * step, "max": ceil(hi / step - 0.000001) * step, "step": step};
+}
+fun pn_series_list(series) {
+    if (len(series) > 0 and type(series[0]) == "number") { return [series]; }
+    return series;
+}
+fun pn_series_color(parent, o, i) {
+    if (pn_has(o, "colors")) {
+        let cs = o["colors"];
+        return cs[pn_mod(i, len(cs))];
+    }
+    return pn_color(parent, i);
+}
+fun pn_range_of(sr, stacked, n) {
+    let lo = 0; let hi = 0;
+    let i = 0;
+    while (i < n) {
+        let acc = 0;
+        for (let s in sr) {
+            let v = s[i];
+            if (stacked) { acc = acc + v; if (acc > hi) { hi = acc; } }
+            else { if (v > hi) { hi = v; } if (v < lo) { lo = v; } }
+        }
+        i = i + 1;
+    }
+    return [lo, hi];
+}
+
+// وسيلة إيضاح أفقية: أسماء + ألوان
+fun pn_legend(parent, x, y, names, colors, o) {
+    o = pn_o(o);
+    let size = pn_opt(o, "size", 12);
+    let g = pn_group(parent, pn_pick(o, ["id", "op", "tf", "title"]));
+    let cx = x;
+    let i = 0;
+    while (i < len(names)) {
+        pn_rect(g, cx, y - size + 2, size, size, {"fill": colors[pn_mod(i, len(colors))], "rx": 3});
+        pn_text(g, cx + size + 6, y + 1, names[i], {"size": size, "fill": pn_muted(parent)});
+        cx = cx + size + 6 + len(names[i]) * size * 0.58 + 16;
+        i = i + 1;
+    }
+    return g;
+}
+fun pn_legend_width(names) {
+    let w = 0;
+    for (let nm in names) { w = w + 12 + 6 + len(nm) * 12 * 0.58 + 16; }
+    return w - 16;
+}
+
+// منطقة الرسم الداخلية بعد حجز الهوامش والعنوان
+fun pn_plot_area(x, y, w, h, o) {
+    let top = 10;
+    if (pn_has(o, "title")) { top = top + 24; }
+    let left = pn_opt(o, "padl", 44);
+    return {"x": x + left, "y": y + top, "w": w - left - 12, "h": h - top - 30};
+}
+fun pn_chart_head(g, parent, x, y, w, o, colors, count) {
+    if (pn_has(o, "title")) {
+        pn_text(g, x + 4, y + 18, o["title"], {"size": 15, "weight": 700});
+    }
+    if (pn_has(o, "names") and count > 1) {
+        pn_legend(g, x + w - 8 - pn_legend_width(o["names"]), y + 16, o["names"], colors, {"size": 12});
+    }
+    return g;
+}
+// شبكة المحور الرأسي مع القيم
+fun pn_y_axis(g, parent, pa, nice, o) {
+    let steps = floor((nice["max"] - nice["min"]) / nice["step"] + 0.5);
+    let i = 0;
+    while (i <= steps) {
+        let v = nice["min"] + i * nice["step"];
+        let yy = pa["y"] + pa["h"] - (v - nice["min"]) / (nice["max"] - nice["min"]) * pa["h"];
+        if (pn_opt(o, "grid", true)) {
+            pn_line(g, pa["x"], yy, pa["x"] + pa["w"], yy, {"stroke": pn_gridc(parent), "sw": 1});
+        }
+        pn_text(g, pa["x"] - 8, yy + 4, pn_nf(v, 2), {"size": 11, "anchor": "end", "fill": pn_muted(parent)});
+        i = i + 1;
+    }
+    return g;
+}
+fun pn_x_labels(g, parent, pa, labels) {
+    let n = len(labels);
+    let i = 0;
+    while (i < n) {
+        let px = pa["x"] + pa["w"] * (i + 0.5) / n;
+        pn_text(g, px, pa["y"] + pa["h"] + 18, labels[i], {"size": 11, "anchor": "middle", "fill": pn_muted(parent)});
+        i = i + 1;
+    }
+    return g;
+}
+
+// ---------------------------------------------------------------------------
+//  أعمدة (متجاورة أو متراكمة) — o: stacked gap(0.3) rx(3) values(عرض القيم) min max
+// ---------------------------------------------------------------------------
+fun pn_bar_chart(parent, x, y, w, h, labels, series, o) {
+    o = pn_o(o);
+    let sr = pn_series_list(series);
+    let ns = len(sr);
+    let n = len(labels);
+    let stacked = pn_opt(o, "stacked", false);
+    let colors = [];
+    let k = 0;
+    while (k < ns) { push(colors, pn_series_color(parent, o, k)); k = k + 1; }
+
+    let g = pn_group(parent, pn_pick(o, ["id", "op", "tf", "shadow", "clip", "anim"]));
+    let pa = pn_plot_area(x, y, w, h, o);
+    let rg = pn_range_of(sr, stacked, n);
+    let nice = pn_nice(pn_opt(o, "min", rg[0]), pn_opt(o, "max", rg[1]), 5);
+    pn_chart_head(g, parent, x, y, w, o, colors, ns);
+    pn_y_axis(g, parent, pa, nice, o);
+    pn_x_labels(g, parent, pa, labels);
+
+    let span = nice["max"] - nice["min"];
+    let yb = pa["y"] + pa["h"] - (0 - nice["min"]) / span * pa["h"];
+    let gw = pa["w"] / n;
+    let gap = pn_opt(o, "gap", 0.3);
+    let bw = gw * (1 - gap);
+    if (!stacked) { bw = bw / ns; }
+    let rx = pn_opt(o, "rx", 3);
+    let i = 0;
+    while (i < n) {
+        let bx = pa["x"] + gw * i + gw * gap / 2;
+        let acc = 0;
+        let s = 0;
+        while (s < ns) {
+            let v = sr[s][i];
+            let y0 = 0; let y1 = 0; let xx = bx;
+            if (stacked) {
+                y0 = pa["y"] + pa["h"] - (acc + v - nice["min"]) / span * pa["h"];
+                y1 = pa["y"] + pa["h"] - (acc - nice["min"]) / span * pa["h"];
+                acc = acc + v;
+            } else {
+                xx = bx + bw * s;
+                let yv = pa["y"] + pa["h"] - (v - nice["min"]) / span * pa["h"];
+                y0 = yv; y1 = yb;
+                if (yv > yb) { y0 = yb; y1 = yv; }
+            }
+            pn_rect(g, xx, y0, bw, y1 - y0, {"fill": colors[s], "rx": rx, "title": labels[i] + ": " + pn_nf(v, 2)});
+            if (pn_opt(o, "values", false) and !stacked) {
+                pn_text(g, xx + bw / 2, y0 - 5, pn_nf(v, 2), {"size": 11, "anchor": "middle", "fill": pn_muted(parent)});
+            }
+            s = s + 1;
+        }
+        i = i + 1;
+    }
+    return g;
+}
+
+// ---------------------------------------------------------------------------
+//  خطوط — o: smooth area dots(true) width(2.5)
+// ---------------------------------------------------------------------------
+fun pn_line_pen(f, smooth) {
+    let p = pn_pen();
+    pn_move(p, f[0], f[1]);
+    if (smooth) { pn_spline_to(p, f, 1, false); }
+    else {
+        let j = 2;
+        while (j < len(f)) { pn_lineto(p, f[j], f[j + 1]); j = j + 2; }
+    }
+    return p;
+}
+fun pn_area_pen(f, smooth, base) {
+    let p = pn_line_pen(f, smooth);
+    pn_lineto(p, f[len(f) - 2], base);
+    pn_lineto(p, f[0], base);
+    pn_close(p);
+    return p;
+}
+fun pn_line_chart(parent, x, y, w, h, labels, series, o) {
+    o = pn_o(o);
+    let sr = pn_series_list(series);
+    let ns = len(sr);
+    let n = len(labels);
+    let colors = [];
+    let k = 0;
+    while (k < ns) { push(colors, pn_series_color(parent, o, k)); k = k + 1; }
+
+    let g = pn_group(parent, pn_pick(o, ["id", "op", "tf", "shadow", "clip", "anim"]));
+    let pa = pn_plot_area(x, y, w, h, o);
+    let lo = sr[0][0]; let hi = sr[0][0];
+    for (let s in sr) { for (let v in s) { if (v < lo) { lo = v; } if (v > hi) { hi = v; } } }
+    if (lo > 0) { lo = 0; }
+    let nice = pn_nice(pn_opt(o, "min", lo), pn_opt(o, "max", hi), 5);
+    pn_chart_head(g, parent, x, y, w, o, colors, ns);
+    pn_y_axis(g, parent, pa, nice, o);
+    pn_x_labels(g, parent, pa, labels);
+
+    let span = nice["max"] - nice["min"];
+    let base = pa["y"] + pa["h"] - (0 - nice["min"]) / span * pa["h"];
+    let smooth = pn_opt(o, "smooth", false);
+    let s = 0;
+    while (s < ns) {
+        let f = [];
+        let i = 0;
+        while (i < n) {
+            push(f, pa["x"] + pa["w"] * (i + 0.5) / n);
+            push(f, pa["y"] + pa["h"] - (sr[s][i] - nice["min"]) / span * pa["h"]);
+            i = i + 1;
+        }
+        let col = colors[s];
+        if (pn_opt(o, "area", false)) {
+            pn_path(g, pn_area_pen(f, smooth, base), {"fill": pn_alpha(col, 0.18)});
+        }
+        pn_path(g, pn_line_pen(f, smooth), {"stroke": col, "sw": pn_opt(o, "width", 2.5), "cap": "round", "join": "round"});
+        if (pn_opt(o, "dots", true)) {
+            let m = 0;
+            while (m < n) {
+                pn_circle(g, f[2 * m], f[2 * m + 1], 3.5, {"fill": col, "stroke": parent["_ctx"]["theme"]["bg"], "sw": 1.5,
+                                                          "title": labels[m] + ": " + pn_nf(sr[s][m], 2)});
+                m = m + 1;
+            }
+        }
+        s = s + 1;
+    }
+    return g;
+}
+
+// ---------------------------------------------------------------------------
+//  فطيرة/دونات — o: inner(0..0.9) start(-90) gap(سماكة فاصل) labels(true) center(نص)
+// ---------------------------------------------------------------------------
+fun pn_pie_chart(parent, cx, cy, r, labels, values, o) {
+    o = pn_o(o);
+    let total = 0;
+    for (let v in values) { total = total + v; }
+    let inner = pn_opt(o, "inner", 0);
+    let a0 = pn_opt(o, "start", -90);
+    let gap = pn_opt(o, "gap", 0);
+    let g = pn_group(parent, pn_pick(o, ["id", "op", "tf", "shadow", "clip", "anim"]));
+    let i = 0;
+    while (i < len(values)) {
+        let sweep = 360 * values[i] / total;
+        let a1 = a0 + sweep;
+        let col = pn_series_color(parent, o, i);
+        let pct = pn_nf(values[i] / total * 100, 1) + "%";
+        let so = {"fill": col, "title": labels[i] + ": " + pn_nf(values[i], 2) + " (" + pct + ")"};
+        if (gap > 0) { so["stroke"] = parent["_ctx"]["theme"]["bg"]; so["sw"] = gap; so["join"] = "round"; }
+        if (inner > 0) { pn_ring(g, cx, cy, r * inner, r, a0, a1, so); }
+        else { pn_slice(g, cx, cy, r, a0, a1, so); }
+        if (pn_opt(o, "labels", true) and sweep >= 18) {
+            let mid = pn_rad((a0 + a1) / 2);
+            let rr = r * 0.66;
+            if (inner > 0) { rr = r * (1 + inner) / 2; }
+            pn_text(g, cx + rr * cos(mid), cy + rr * sin(mid) + 4, pct,
+                    {"size": 12, "weight": 700, "anchor": "middle", "fill": colorTextOn(pn_norm_color(col))});
+        }
+        a0 = a1;
+        i = i + 1;
+    }
+    if (pn_has(o, "center") and inner > 0) {
+        pn_text(g, cx, cy + 6, o["center"], {"size": r * inner * 0.42, "weight": 700, "anchor": "middle"});
+    }
+    return g;
+}
+
+// ---------------------------------------------------------------------------
+//  رادار — axes: أسماء المحاور، series: مصفوفة أرقام أو مصفوفة سلاسل. o: max rings(4)
+// ---------------------------------------------------------------------------
+fun pn_radar_chart(parent, cx, cy, r, axes, series, o) {
+    o = pn_o(o);
+    let sr = pn_series_list(series);
+    let n = len(axes);
+    let mx = 0;
+    for (let s in sr) { for (let v in s) { if (v > mx) { mx = v; } } }
+    mx = pn_opt(o, "max", mx);
+    let rings = pn_opt(o, "rings", 4);
+    let g = pn_group(parent, pn_pick(o, ["id", "op", "tf", "shadow", "clip", "anim"]));
+    let ri = 1;
+    while (ri <= rings) {
+        let pts = [];
+        let a = 0;
+        while (a < n) {
+            let ang = pn_rad(-90 + 360 * a / n);
+            push(pts, cx + r * ri / rings * cos(ang));
+            push(pts, cy + r * ri / rings * sin(ang));
+            a = a + 1;
+        }
+        pn_polygon(g, pts, {"fill": "none", "stroke": pn_gridc(parent), "sw": 1});
+        ri = ri + 1;
+    }
+    let a2 = 0;
+    while (a2 < n) {
+        let ang = pn_rad(-90 + 360 * a2 / n);
+        pn_line(g, cx, cy, cx + r * cos(ang), cy + r * sin(ang), {"stroke": pn_gridc(parent), "sw": 1});
+        let lx = cx + (r + 16) * cos(ang);
+        let ly = cy + (r + 16) * sin(ang) + 4;
+        let anc = "middle";
+        if (cos(ang) > 0.3) { anc = "start"; }
+        if (cos(ang) < -0.3) { anc = "end"; }
+        pn_text(g, lx, ly, axes[a2], {"size": 12, "anchor": anc, "fill": pn_muted(parent)});
+        a2 = a2 + 1;
+    }
+    let si = 0;
+    while (si < len(sr)) {
+        let col = pn_series_color(parent, o, si);
+        let pts = [];
+        let m = 0;
+        while (m < n) {
+            let ang = pn_rad(-90 + 360 * m / n);
+            let rr = r * sr[si][m] / mx;
+            push(pts, cx + rr * cos(ang));
+            push(pts, cy + rr * sin(ang));
+            m = m + 1;
+        }
+        pn_polygon(g, pts, {"fill": pn_alpha(col, 0.22), "stroke": col, "sw": 2, "join": "round"});
+        let m2 = 0;
+        while (m2 < n) { pn_circle(g, pts[2 * m2], pts[2 * m2 + 1], 3, {"fill": col}); m2 = m2 + 1; }
+        si = si + 1;
+    }
+    return g;
+}
+
+// ---------------------------------------------------------------------------
+//  خط مصغّر (sparkline) — o: smooth(true) area(true) dot(true) color width
+// ---------------------------------------------------------------------------
+fun pn_sparkline(parent, x, y, w, h, values, o) {
+    o = pn_o(o);
+    let lo = values[0]; let hi = values[0];
+    for (let v in values) { if (v < lo) { lo = v; } if (v > hi) { hi = v; } }
+    if (hi == lo) { hi = lo + 1; }
+    let col = pn_opt(o, "color", pn_accent(parent));
+    let n = len(values);
+    let f = [];
+    let i = 0;
+    while (i < n) {
+        push(f, x + w * i / (n - 1));
+        push(f, y + h - (values[i] - lo) / (hi - lo) * h);
+        i = i + 1;
+    }
+    let g = pn_group(parent, pn_pick(o, ["id", "op", "tf", "shadow", "clip", "anim"]));
+    let smooth = pn_opt(o, "smooth", true);
+    if (pn_opt(o, "area", true)) {
+        pn_path(g, pn_area_pen(f, smooth, y + h), {"fill": pn_alpha(col, 0.15)});
+    }
+    pn_path(g, pn_line_pen(f, smooth), {"stroke": col, "sw": pn_opt(o, "width", 2), "cap": "round", "join": "round"});
+    if (pn_opt(o, "dot", true)) { pn_circle(g, f[len(f) - 2], f[len(f) - 1], 3.5, {"fill": col}); }
+    return g;
+}
+
+// ---------------------------------------------------------------------------
+//  مقياس نصف دائري — o: thickness(14) color label(نص تحت القيمة)
+// ---------------------------------------------------------------------------
+fun pn_gauge(parent, cx, cy, r, value, mx, o) {
+    o = pn_o(o);
+    let th = pn_opt(o, "thickness", 14);
+    let col = pn_opt(o, "color", pn_accent(parent));
+    let g = pn_group(parent, pn_pick(o, ["id", "op", "tf", "shadow", "clip", "anim"]));
+    let t = pn_clamp(value / mx, 0, 1);
+    pn_arc(g, cx, cy, r, 180, 360, {"stroke": pn_gridc(parent), "sw": th, "cap": "round"});
+    if (t > 0) { pn_arc(g, cx, cy, r, 180, 180 + 180 * t, {"stroke": col, "sw": th, "cap": "round"}); }
+    pn_text(g, cx, cy - r * 0.12, pn_nf(value, 2), {"size": r * 0.5, "weight": 700, "anchor": "middle"});
+    if (pn_has(o, "label")) {
+        pn_text(g, cx, cy + r * 0.16, o["label"], {"size": r * 0.18, "anchor": "middle", "fill": pn_muted(parent)});
+    }
+    return g;
+}
+
+// piano — الجزء 8: التصميم (تخطيط · مكوّنات واجهة · إطارات أجهزة · مخططات انسيابية · أيقونات · خلفيات)
+//
+//   let phone = pn_phone(c, 40, 30, 220, 440, {});          // ارسم داخل phone كأنه لوحة
+//   pn_card(phone, 16, 60, 188, 90, {"title": "الرصيد"});
+//   pn_button(phone, 16, 400, 188, 40, "تأكيد", {});
+//   pn_icon(phone, "bell", 176, 24, 22, {});
+//
+// كل المكوّنات تُلوَّن من ثيم اللوحة (pn_theme) وتُرجع group يقبل خيارات tf/shadow/clip/anim.
+
+// ---------------------------------------------------------------------------
+//  1) التخطيط — دوال حسابية بحتة تُرجع مستطيلات {x,y,w,h}
+// ---------------------------------------------------------------------------
+fun pn_rect_of(x, y, w, h) { return {"x": x, "y": y, "w": w, "h": h}; }
+// تقليص المستطيل بهامش p من كل جهة
+fun pn_pad(r, p) { return {"x": r["x"] + p, "y": r["y"] + p, "w": r["w"] - 2 * p, "h": r["h"] - 2 * p}; }
+// شبكة خلايا (صفوف × أعمدة) بترتيب الصفوف أولاً
+fun pn_grid_cells(x, y, w, h, cols, rows, gap) {
+    let cw = (w - gap * (cols - 1)) / cols;
+    let ch = (h - gap * (rows - 1)) / rows;
+    let out = [];
+    let r = 0;
+    while (r < rows) {
+        let c = 0;
+        while (c < cols) {
+            push(out, {"x": x + c * (cw + gap), "y": y + r * (ch + gap), "w": cw, "h": ch});
+            c = c + 1;
+        }
+        r = r + 1;
+    }
+    return out;
+}
+// تقسيم بأوزان: dir = "row" (جنباً إلى جنب) أو "col" (فوق بعض)
+fun pn_split(x, y, w, h, weights, gap, dir) {
+    let total = 0;
+    for (let k in weights) { total = total + k; }
+    let n = len(weights);
+    let avail = h - gap * (n - 1);
+    if (dir == "row") { avail = w - gap * (n - 1); }
+    let out = [];
+    let pos = 0;
+    for (let k in weights) {
+        let sz = avail * k / total;
+        if (dir == "row") { push(out, {"x": x + pos, "y": y, "w": sz, "h": h}); }
+        else { push(out, {"x": x, "y": y + pos, "w": w, "h": sz}); }
+        pos = pos + sz + gap;
+    }
+    return out;
+}
+
+// ---------------------------------------------------------------------------
+//  2) ألوان السطح
+// ---------------------------------------------------------------------------
+fun pn_surface(parent) {
+    let th = parent["_ctx"]["theme"];
+    return pn_mix(th["bg"], th["ink"], 0.06);
+}
+fun pn_gcommon(o) { return pn_pick(o, ["id", "op", "tf", "shadow", "glow", "filter", "title", "clip", "mask", "anim"]); }
+
+// ---------------------------------------------------------------------------
+//  3) مكوّنات الواجهة
+// ---------------------------------------------------------------------------
+// بطاقة. خيارات: r(14) fill heading subtitle elevate(ظل)
+fun pn_card(parent, x, y, w, h, o) {
+    o = pn_o(o);
+    let g = pn_group(parent, pn_gcommon(o));
+    let rr = pn_rrect(g, x, y, w, h, pn_opt(o, "r", 14),
+                      {"fill": pn_opt(o, "fill", pn_surface(parent)), "stroke": pn_gridc(parent), "sw": 1,
+                       "shadow": pn_opt(o, "elevate", false)});
+    if (pn_has(o, "heading")) { pn_text(g, x + 16, y + 26, o["heading"], {"size": 15, "weight": 700}); }
+    if (pn_has(o, "subtitle")) { pn_text(g, x + 16, y + 46, o["subtitle"], {"size": 12, "fill": pn_muted(parent)}); }
+    return g;
+}
+// زر. variant: solid | soft | outline | ghost · color · r(10) · size(14)
+fun pn_button(parent, x, y, w, h, label, o) {
+    o = pn_o(o);
+    let v = pn_opt(o, "variant", "solid");
+    let col = pn_opt(o, "color", pn_accent(parent));
+    let r = pn_opt(o, "r", 10);
+    let size = pn_opt(o, "size", 14);
+    let g = pn_group(parent, pn_gcommon(o));
+    let fg = col;
+    if (v == "solid") {
+        pn_rect(g, x, y, w, h, {"fill": col, "rx": r});
+        fg = colorTextOn(pn_norm_color(col));
+    } else if (v == "soft") {
+        pn_rect(g, x, y, w, h, {"fill": pn_alpha(col, 0.16), "rx": r});
+    } else if (v == "outline") {
+        pn_rect(g, x + 0.75, y + 0.75, w - 1.5, h - 1.5, {"fill": "none", "stroke": col, "sw": 1.5, "rx": r});
+    }
+    pn_text(g, x + w / 2, y + h / 2 + size * 0.35, label, {"size": size, "weight": 600, "anchor": "middle", "fill": fg});
+    return g;
+}
+// شارة صغيرة مركزها (x, y). color
+fun pn_badge(parent, x, y, label, o) {
+    o = pn_o(o);
+    let col = pn_opt(o, "color", pn_accent(parent));
+    return pn_label(parent, x, y, label, {"size": pn_opt(o, "size", 12), "bg": pn_alpha(col, 0.16), "fg": col});
+}
+// صورة رمزية بالأحرف الأولى
+fun pn_avatar(parent, cx, cy, r, initials, o) {
+    o = pn_o(o);
+    let col = pn_opt(o, "color", pn_accent(parent));
+    let g = pn_group(parent, pn_gcommon(o));
+    pn_circle(g, cx, cy, r, {"grad": [col, pn_darken(col, 0.25)], "angle": 45});
+    pn_text(g, cx, cy + r * 0.3, initials, {"size": r * 0.85, "weight": 700, "anchor": "middle", "fill": colorTextOn(pn_norm_color(col))});
+    return g;
+}
+// شريط تقدّم: value ∈ [0,1]
+fun pn_progress(parent, x, y, w, h, value, o) {
+    o = pn_o(o);
+    let g = pn_group(parent, pn_gcommon(o));
+    pn_rect(g, x, y, w, h, {"fill": pn_gridc(parent), "rx": h / 2});
+    let v = pn_clamp(value, 0, 1);
+    if (v > 0) {
+        let fw = w * v;
+        if (fw < h) { fw = h; }
+        let fo = {"rx": h / 2};
+        if (pn_has(o, "grad")) { fo["grad"] = o["grad"]; fo["angle"] = 0; }
+        else { fo["fill"] = pn_opt(o, "color", pn_accent(parent)); }
+        pn_rect(g, x, y, fw, h, fo);
+    }
+    return g;
+}
+// مفتاح تبديل 44×24
+fun pn_toggle(parent, x, y, state, o) {
+    o = pn_o(o);
+    let g = pn_group(parent, pn_gcommon(o));
+    let col = pn_gridc(parent);
+    if (state) { col = pn_opt(o, "color", pn_accent(parent)); }
+    pn_rect(g, x, y, 44, 24, {"fill": col, "rx": 12});
+    let kx = x + 12;
+    if (state) { kx = x + 32; }
+    pn_circle(g, kx, y + 12, 9, {"fill": "#ffffff", "shadow": {"dy": 1, "blur": 3, "op": 0.3}});
+    return g;
+}
+// حقل إدخال: text = القيمة، وإن أردت نصاً إرشادياً فاستعمل o.hint
+fun pn_input(parent, x, y, w, h, value, o) {
+    o = pn_o(o);
+    let g = pn_group(parent, pn_gcommon(o));
+    pn_rect(g, x + 0.75, y + 0.75, w - 1.5, h - 1.5, {"fill": parent["_ctx"]["theme"]["bg"], "stroke": pn_opt(o, "stroke", pn_gridc(parent)), "sw": 1.5, "rx": pn_opt(o, "r", 10)});
+    let col = pn_ink(parent);
+    if (pn_opt(o, "hint", false)) { col = pn_muted(parent); }
+    pn_text(g, x + 14, y + h / 2 + 5, value, {"size": 14, "fill": col});
+    return g;
+}
+fun pn_divider(parent, x1, y, x2, o) {
+    return pn_line(parent, x1, y, x2, y, {"stroke": pn_gridc(parent), "sw": 1});
+}
+
+// ---------------------------------------------------------------------------
+//  4) إطارات الأجهزة — تُرجع group محتوى مقصوصاً على الشاشة، وفيه _screen = {x,y,w,h}
+// ---------------------------------------------------------------------------
+fun pn_phone(parent, x, y, w, h, o) {
+    o = pn_o(o);
+    let bez = pn_opt(o, "bezel", 9);
+    let r = w * 0.14;
+    let outer = pn_group(parent, pn_gcommon(o));
+    pn_rrect(outer, x, y, w, h, r, {"fill": pn_opt(o, "color", "#0a0a0a"), "stroke": "#3f3f46", "sw": 1.5});
+    let sx = x + bez; let sy = y + bez; let sw = w - 2 * bez; let sh = h - 2 * bez;
+    let g = pn_group(outer, {"clip": pn_clip_rect(parent, sx, sy, sw, sh, r - bez)});
+    pn_rect(g, sx, sy, sw, sh, {"fill": parent["_ctx"]["theme"]["bg"]});
+    pn_rect(g, x + w / 2 - w * 0.17, sy + 8, w * 0.34, 14, {"fill": "#0a0a0a", "rx": 7});
+    g["_screen"] = {"x": sx, "y": sy, "w": sw, "h": sh};
+    return g;
+}
+// نافذة متصفح. url = العنوان المعروض
+fun pn_browser(parent, x, y, w, h, url, o) {
+    o = pn_o(o);
+    let outer = pn_group(parent, pn_gcommon(o));
+    pn_rrect(outer, x, y, w, h, 12, {"fill": pn_surface(parent), "stroke": pn_gridc(parent), "sw": 1, "shadow": pn_opt(o, "elevate", false)});
+    pn_circle(outer, x + 20, y + 19, 5.5, {"fill": "#ef4444"});
+    pn_circle(outer, x + 40, y + 19, 5.5, {"fill": "#f59e0b"});
+    pn_circle(outer, x + 60, y + 19, 5.5, {"fill": "#22c55e"});
+    pn_rect(outer, x + 84, y + 8, w - 84 - 16, 22, {"fill": parent["_ctx"]["theme"]["bg"], "rx": 11});
+    pn_text(outer, x + 98, y + 23, url, {"size": 11, "fill": pn_muted(parent)});
+    let g = pn_group(outer, {"clip": pn_clip_rect(parent, x, y + 38, w, h - 38, 0)});
+    pn_rect(g, x, y + 38, w, h - 38, {"fill": parent["_ctx"]["theme"]["bg"]});
+    g["_screen"] = {"x": x, "y": y + 38, "w": w, "h": h - 38};
+    return g;
+}
+
+// ---------------------------------------------------------------------------
+//  5) خلفية شبكية ضبابية (mesh) — colors: 2..5 ألوان
+// ---------------------------------------------------------------------------
+fun pn_mesh(parent, w, h, colors, o) {
+    o = pn_o(o);
+    let g = pn_group(parent, {"clip": pn_clip_rect(parent, 0, 0, w, h, 0)});
+    pn_rect(g, 0, 0, w, h, {"fill": parent["_ctx"]["theme"]["bg"]});
+    let big = w;
+    if (h > w) { big = h; }
+    let i = 0;
+    while (i < len(colors)) {
+        let fx = pn_mod(0.2 + i * 0.618, 1);
+        let fy = pn_mod(0.3 + i * 0.382, 1);
+        pn_circle(g, w * fx, h * fy, big * 0.42, {"fill": colors[i], "op": pn_opt(o, "strength", 0.55), "blur": big * pn_opt(o, "soft", 0.12)});
+        i = i + 1;
+    }
+    return g;
+}
+
+// ---------------------------------------------------------------------------
+//  6) مخططات انسيابية
+// ---------------------------------------------------------------------------
+// صندوق عقدة: نص في وسط مستطيل. color
+fun pn_box(parent, x, y, w, h, label, o) {
+    o = pn_o(o);
+    let col = pn_opt(o, "color", pn_accent(parent));
+    let g = pn_group(parent, pn_gcommon(o));
+    pn_rect(g, x, y, w, h, {"fill": pn_opt(o, "fill", pn_alpha(col, 0.14)), "stroke": col, "sw": 1.5, "rx": pn_opt(o, "r", 10)});
+    pn_text(g, x + w / 2, y + h / 2 + 5, label, {"size": pn_opt(o, "size", 14), "weight": 600, "anchor": "middle"});
+    return g;
+}
+fun pn_arrow_head(g, tx, ty, angle, size, col) {
+    let bx = tx - size * cos(angle);
+    let by = ty - size * sin(angle);
+    let nx = -sin(angle) * size * 0.5;
+    let ny = cos(angle) * size * 0.5;
+    return pn_polygon(g, [tx, ty, bx + nx, by + ny, bx - nx, by - ny], {"fill": col});
+}
+// موصل منحنٍ بين نقطتين (يخرج أفقياً ويدخل أفقياً). خيارات: stroke sw dash head(10|false)
+fun pn_connect(parent, x1, y1, x2, y2, o) {
+    o = pn_o(o);
+    let g = pn_group(parent, pn_gcommon(o));
+    let col = pn_opt(o, "stroke", pn_muted(parent));
+    let dir = 1;
+    if (x2 < x1) { dir = -1; }
+    let dx = abs(x2 - x1) * 0.5;
+    if (dx < 24) { dx = 24; }
+    let head = pn_opt(o, "head", 10);
+    let ex = x2;
+    if (head != false) { ex = x2 - dir * head * 0.9; }
+    let p = pn_pen();
+    pn_move(p, x1, y1);
+    pn_cubicto(p, x1 + dir * dx, y1, ex - dir * dx, y2, ex, y2);
+    pn_path(g, p, {"stroke": col, "sw": pn_opt(o, "sw", 2), "cap": "round", "dash": pn_opt(o, "dash", nil)});
+    if (head != false) {
+        let a = 0;
+        if (dir < 0) { a = PI; }
+        pn_arrow_head(g, x2, y2, a, head, col);
+    }
+    return g;
+}
+// موصل متعامد (كوع) بخط عمودي في المنتصف
+fun pn_elbow(parent, x1, y1, x2, y2, o) {
+    o = pn_o(o);
+    let g = pn_group(parent, pn_gcommon(o));
+    let col = pn_opt(o, "stroke", pn_muted(parent));
+    let mx = (x1 + x2) / 2;
+    let dir = 1;
+    if (x2 < mx) { dir = -1; }
+    let head = pn_opt(o, "head", 10);
+    let ex = x2;
+    if (head != false) { ex = x2 - dir * head * 0.9; }
+    let p = pn_pen();
+    pn_move(p, x1, y1);
+    pn_lineto(p, mx, y1);
+    pn_lineto(p, mx, y2);
+    pn_lineto(p, ex, y2);
+    pn_path(g, p, {"stroke": col, "sw": pn_opt(o, "sw", 2), "join": "round", "cap": "round", "dash": pn_opt(o, "dash", nil)});
+    if (head != false) {
+        let a = 0;
+        if (dir < 0) { a = PI; }
+        pn_arrow_head(g, x2, y2, a, head, col);
+    }
+    return g;
+}
+
+// ---------------------------------------------------------------------------
+//  7) الأيقونات — شبكة 24×24 بخط (stroke). pn_icon_names() لقائمتها
+// ---------------------------------------------------------------------------
+fun pn_icons() {
+    return {
+        "check": "M5 12.5 L10 17.5 L19 7",
+        "close": "M6 6 L18 18 M18 6 L6 18",
+        "plus": "M12 5 V19 M5 12 H19",
+        "minus": "M5 12 H19",
+        "arrow-right": "M5 12 H19 M13 6 L19 12 L13 18",
+        "arrow-left": "M19 12 H5 M11 6 L5 12 L11 18",
+        "menu": "M4 6 H20 M4 12 H20 M4 18 H20",
+        "search": "M18 11 A7 7 0 1 1 4 11 A7 7 0 1 1 18 11 M16.5 16.5 L21 21",
+        "home": "M3 11 L12 3 L21 11 M5 10 V20 H10 V14 H14 V20 H19 V10",
+        "user": "M16 8 A4 4 0 1 1 8 8 A4 4 0 1 1 16 8 M4 21 C4 16 8 14 12 14 C16 14 20 16 20 21",
+        "bell": "M6 16 V11 A6 6 0 0 1 18 11 V16 L20 18 H4 Z M10 21 H14",
+        "heart": "M12 20 C4 14 3 9 6 6.5 C8.5 4.5 11 5.5 12 8 C13 5.5 15.5 4.5 18 6.5 C21 9 20 14 12 20 Z",
+        "star": "M12 3 L14.8 9 L21 9.8 L16.4 14.2 L17.6 20.5 L12 17.4 L6.4 20.5 L7.6 14.2 L3 9.8 L9.2 9 Z",
+        "download": "M12 4 V15 M7 11 L12 16 L17 11 M5 20 H19",
+        "play": "M8 5 L19 12 L8 19 Z",
+        "settings": "M4 7 H20 M4 12 H20 M4 17 H20 M9 5 V9 M15 10 V14 M8 15 V19"
+    };
+}
+fun pn_icon_names() { return keys(pn_icons()); }
+// أيقونة بمقاس size عند (x,y) (الزاوية العليا اليسرى). خيارات: stroke sw(2) fill cap join
+fun pn_icon(parent, name, x, y, size, o) {
+    o = pn_o(o);
+    let all = pn_icons();
+    if (!has(all, name)) { throw "piano: أيقونة غير معروفة «" + name + "» — المتاح: " + join(keys(all), ", "); }
+    let s = size / 24;
+    let go = pn_gcommon(o);
+    go["tf"] = [["translate", x, y], ["scale", s, s]];
+    let g = pn_group(parent, go);
+    pn_path(g, all[name], {"fill": pn_opt(o, "fill", "none"), "stroke": pn_opt(o, "stroke", pn_ink(parent)), "sw": pn_opt(o, "sw", 2),
+                           "cap": pn_opt(o, "cap", "round"), "join": pn_opt(o, "join", "round")});
+    return g;
+}
+
+// piano — الجزء 9: التكامل مع indsin (واجهات Rin)
+//
+// indsin يعرض الصور عبر <Image src=...>، وهذا الجزء يحوّل رسوم piano إلى data-URI جاهز لها:
+//
+//   @import "piano";
+//   <Image#art src={pn_chart_uri("bar", ["أ","ب","ج"], [3,5,2], 320, 180, "dark", {})} width=320 height=180 />
+//   <Image#ic  src={pn_icon_uri("bell", 24, "#1db143")} width=24 height=24 />
+//   <Image#hero src={pn_uri(Poster)} width=320 height=200 />          // Poster من كتلة piano.Poster { … } أو pn_film
+//
+// كتل piano داخل <Rin> تقبل بيانات الواجهة كمتغيّرات:   piano.Gauge(score, theme) { … $score … };
+//
+// وعند تغيّر warp يُعاد حساب المصدر تلقائياً، فتتحرك المخططات مع البيانات.
+
+// أيقونة مفردة بلون محدّد (خلفية شفافة)
+fun pn_icon_uri(name, size, color) {
+    let c = pn_canvas(size, size);
+    pn_bg(c, "none");
+    pn_icon(c, name, 0, 0, size, {"stroke": color, "sw": 2});
+    return pn_data_uri(c);
+}
+
+// مخطط سريع كـ data-URI.
+//   kind: "bar" | "line" | "pie" | "donut" | "radar" | "spark" | "gauge"
+//   labels: أسماء (أو محاور الرادار) · data: أرقام أو سلاسل (للمقياس: رقم واحد)
+//   o: خيارات المخطط نفسها + transparent:true لخلفية شفافة + bg:"#لون"
+fun pn_chart_uri(kind, labels, data, w, h, theme, o) {
+    o = pn_o(o);
+    let c = pn_canvas(w, h);
+    pn_theme(c, theme);
+    if (pn_opt(o, "transparent", false)) { pn_bg(c, "none"); }
+    if (pn_has(o, "bg")) { pn_bg(c, o["bg"]); }
+    let m = w;
+    if (h < m) { m = h; }
+    if (kind == "bar") { pn_bar_chart(c, 0, 0, w, h, labels, data, o); }
+    else if (kind == "line") { pn_line_chart(c, 0, 0, w, h, labels, data, o); }
+    else if (kind == "pie") { pn_pie_chart(c, w / 2, h / 2, m * 0.42, labels, data, o); }
+    else if (kind == "donut") {
+        let o2 = pn_clone(o);
+        if (!pn_has(o2, "inner")) { o2["inner"] = 0.6; }
+        pn_pie_chart(c, w / 2, h / 2, m * 0.42, labels, data, o2);
+    }
+    else if (kind == "radar") { pn_radar_chart(c, w / 2, h / 2, m * 0.34, labels, data, o); }
+    else if (kind == "spark") { pn_sparkline(c, 4, 4, w - 8, h - 8, data, o); }
+    else if (kind == "gauge") {
+        let r = m * 0.42;
+        if (w / 2 < r) { r = w / 2 - 10; }
+        pn_gauge(c, w / 2, h * 0.72, r, data, pn_opt(o, "max", 100), o);
+    }
+    else { throw "piano: نوع مخطط غير معروف «" + kind + "» — bar line pie donut radar spark gauge"; }
+    return pn_data_uri(c);
+}
+
+// حجم العرض (width/height) المستقل عن نظام الإحداثيات: يُصغَّر/يُكبَّر الرسم كله بلا فقد
+fun pn_display(c, w, h) { c["dw"] = w; c["dh"] = h; return c; }
+// تحجيم متجاوب: عرض w مع حفظ النسبة
+fun pn_display_w(c, w) { c["dw"] = w; c["dh"] = c["h"] * w / c["w"]; return c; }
+
+// data-URI تلقائي: متحرك (SMIL) إن كانت اللوحة فيها anim، وإلا ثابت.
+// في الويب (rin indsin2web) يتحوّل <Image> إلى <img> فتتحرك الصورة وحدها؛ وفي الطرفية/أندرويد تظهر اللقطة الأولى —
+// وللتحريك هناك اعرض pn_frame_uri(film, i) وحرّك i بمتغيّر warp.
+fun pn_anim_uri(c) { return "data:image/svg+xml;base64," + sec.base64Encode(pn_anim_svg(c)); }
+fun pn_uri(c) {
+    if (pn_has(c, "anim")) { return pn_anim_uri(c); }
+    return pn_data_uri(c);
+}
+// الإطار التالي/السابق (يلتفّ) — لأزرار ▶ ◀ في واجهة indsin
+fun pn_next(c, i) { return pn_mod(i + 1, pn_frame_count(c)); }
+fun pn_prev(c, i) { return pn_mod(i - 1, pn_frame_count(c)); }
+
+// وسم <Image> جاهز لنصّ indsin (لتوليد ملفات .rin/.indsin آلياً)
+fun pn_indsin_image(id, uri, w, h) {
+    return "<Image#" + id + " src=\"" + uri + "\" width=" + pn_n(w) + " height=" + pn_n(h) + " />";
+}
+fun pn_indsin_snippet(c, id) {
+    return pn_indsin_image(id, pn_uri(c), pn_opt(c, "dw", c["w"]), pn_opt(c, "dh", c["h"]));
+}
+// ألوان الثيم كقاموس للاستعمال في سمات indsin (bg/color…)
+fun pn_tokens(name) {
+    let t = pn_clone(pn_theme_def(name));
+    t["radius"] = 12;
+    t["gap"] = 12;
+    t["pad"] = 16;
+    return t;
+}
+
+// piano — الجزء 10: لغة الكتل (DSL)  piano.<الاسم> { … }
+//
+//   @import "piano";
+//
+//   piano.Poster {
+//       $size  => "480 270";                       // متغير/إعداد  ($size $theme $bg $title $font $display $save)
+//       $theme => "dark";
+//       $gap   => 12;                              // متغير مستخدم، يُقرأ لاحقاً كـ $gap
+//
+//       $Bg.Rect    => "0 0 480 270" { grad: ["#0b1020", "#1e1b4b"]; angle: 60; };
+//       $Hero.Circle => "240 135 (60 + $gap)" { fill: "#1db143"; shadow: true; };
+//       $Title.Text => "240 150 'مرحباً'" { size: 34; anchor: "middle"; weight: 800; };
+//
+//       $Dots.Repeat => 6 {                        // حلقة: $i و$n
+//           $d.Circle => "(40 + $i * 30) 40 6" { fill: pal($i); };
+//       };
+//       $dot.Fn(x, y) { $.Circle => "$x $y 4"; };  // دالة
+//       $dot(100, 100);                            // استدعاء
+//       $save => "poster.svg";                     // حفظ عند الانتهاء
+//   };
+//
+// المحرّك يحوّل الكتلة تلقائياً إلى:  let Poster = pn_dsl_at("Poster", "<النص>", <سطر البداية>);
+// ويمكن استعمال الدالة مباشرة:  let c = pn_dsl("x", مصدر);  أو  pn_dsl_load("a.piano").
+//
+// الأنواع: Rect RRect Circle Ellipse Line Polyline Polygon Path Text Image Ngon Star Slice Ring Arc Arrow Grid Wave Spiral Smooth Label
+//          Card Button Badge Avatar Progress Toggle Input Divider Icon Box Connect Elbow Mesh Bar LineChart Pie Radar Spark Gauge
+//          Linear Radial Shadow Glow Blur   |  حاويات: Group At Repeat Each If Frame Phone Browser Pattern Clip Mask Fn
+// حركة: $fps => 30; $duration => 3; $loop => true;  ثم  $حركة.Frame { … }  (فيها $t $p $i $n وdوال ease tween fract pingpong lerp clamp)
+// قيم الهندسة: كلمات مفصولة بمسافات أو بفاصلة (, أو ،) — "10 20 30" = "10, 20, 30": رقم | $متغير | (تعبير) | 'نص' | كلمة. ما نقص يؤخذ من الكتلة بالاسم (x: 10;).
+
+// ---------------------------------------------------------------------------
+//  1) المحلّل المفرداتي
+// ---------------------------------------------------------------------------
+fun pn_d_err(line, msg) { throw "piano.dsl سطر " + str(line) + ": " + msg; }
+fun pn_d_isdig(ch) { return ch != "" and indexOf("0123456789", ch) >= 0; }
+fun pn_d_isid(ch) {
+    if (ch == "") { return false; }
+    if (indexOf("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_", ch) >= 0) { return true; }
+    return ord(ch) > 127;
+}
+
+// نهاية تعليق يبدأ عند i بطول فتح openlen ويُغلق بـ closer (multi = يمتد عبر الأسطر). غير المغلق ينتهي بنهاية السطر.
+fun pn_d_cend(src, i, openlen, closer, multi) {
+    let n = len(src);
+    let cl = len(closer);
+    let k = i + openlen;
+    while (k < n) {
+        if (substr(src, k, 1) == "\n" and !multi) { return k; }
+        if (substr(src, k, cl) == closer) { return k + cl; }
+        k = k + 1;
+    }
+    k = i + openlen;
+    while (k < n and substr(src, k, 1) != "\n") { k = k + 1; }
+    return k;
+}
+// يُرجع قائمة رموز: {"k": var|id|num|str|p, "v": القيمة, "l": السطر}
+fun pn_d_lex(src, line0) {
+    let out = [];
+    let i = 0;
+    let n = len(src);
+    let ln = line0;
+    while (i < n) {
+        let ch = substr(src, i, 1);
+        let two = substr(src, i, 2);
+        if (ch == "\n") { ln = ln + 1; i = i + 1; }
+        else if (ch == " " or ch == "\t" or ch == "\r") { i = i + 1; }
+        else if (substr(src, i, 3) == "*//" or two == "//" or two == "++" or two == "/*") {
+            // تعليقات:  *// … //*   //…//   ++ … ++   /* … */   (وأي «//» بلا إغلاق تنتهي بنهاية السطر)
+            let j = i;
+            if (substr(src, i, 3) == "*//") { j = pn_d_cend(src, i, 3, "//*", true); }
+            else if (two == "//") { j = pn_d_cend(src, i, 2, "//", false); }
+            else if (two == "++") { j = pn_d_cend(src, i, 2, "++", true); }
+            else { j = pn_d_cend(src, i, 2, "*/", true); }
+            let q = i;
+            while (q < j) { if (substr(src, q, 1) == "\n") { ln = ln + 1; } q = q + 1; }
+            i = j;
+        }
+        else if (ch == "\"" or ch == "'") {
+            let q = ch;
+            let s = "";
+            i = i + 1;
+            while (i < n and substr(src, i, 1) != q) {
+                let c2 = substr(src, i, 1);
+                if (c2 == "\\" and i + 1 < n) {
+                    let nx = substr(src, i + 1, 1);
+                    if (nx == "n") { s = s + "\n"; } else if (nx == "t") { s = s + "\t"; } else { s = s + nx; }
+                    i = i + 2;
+                } else {
+                    if (c2 == "\n") { ln = ln + 1; }
+                    s = s + c2;
+                    i = i + 1;
+                }
+            }
+            if (i >= n) { pn_d_err(ln, "نص غير منتهٍ"); }
+            i = i + 1;
+            push(out, {"k": "str", "v": s, "l": ln, "q": q});
+        }
+        else if (ch == "$") {
+            let j = i + 1;
+            while (j < n and pn_d_isid(substr(src, j, 1))) { j = j + 1; }
+            push(out, {"k": "var", "v": substr(src, i + 1, j - i - 1), "l": ln});
+            i = j;
+        }
+        else if (pn_d_isdig(ch) or (ch == "." and pn_d_isdig(substr(src, i + 1, 1)))) {
+            let j = i;
+            while (j < n and (pn_d_isdig(substr(src, j, 1)) or substr(src, j, 1) == ".")) { j = j + 1; }
+            push(out, {"k": "num", "v": toNumber(substr(src, i, j - i)), "l": ln});
+            i = j;
+        }
+        else if (pn_d_isid(ch)) {
+            let j = i;
+            while (j < n and pn_d_isid(substr(src, j, 1))) { j = j + 1; }
+            push(out, {"k": "id", "v": substr(src, i, j - i), "l": ln});
+            i = j;
+        }
+        else if (two == "=>" or two == "==" or two == "!=" or two == "<=" or two == ">=" or two == "&&" or two == "||") {
+            push(out, {"k": "p", "v": two, "l": ln});
+            i = i + 2;
+        }
+        else {
+            push(out, {"k": "p", "v": ch, "l": ln});
+            i = i + 1;
+        }
+    }
+    return out;
+}
+
+// ---------------------------------------------------------------------------
+//  2) حالة التنفيذ ونطاقات المتغيرات
+// ---------------------------------------------------------------------------
+fun pn_d_scope(parent) { return {"vars": {}, "up": parent}; }
+fun pn_d_find(sc, nm) {
+    let s = sc;
+    while (s != nil) {
+        if (has(s["vars"], nm)) { return s; }
+        s = s["up"];
+    }
+    return nil;
+}
+fun pn_d_get(st, sc, nm, line) {
+    let s = pn_d_find(sc, nm);
+    if (s == nil) { pn_d_err(line, "متغير غير معرّف $" + nm); }
+    return s["vars"][nm];
+}
+fun pn_d_cur(st) { return st["t"][st["p"]]; }
+fun pn_d_isp(st, v) {
+    if (st["p"] >= len(st["t"])) { return false; }
+    let t = st["t"][st["p"]];
+    return t["k"] == "p" and t["v"] == v;
+}
+fun pn_d_line(st) {
+    if (st["p"] < len(st["t"])) { return st["t"][st["p"]]["l"]; }
+    if (len(st["t"]) > 0) { return st["t"][len(st["t"]) - 1]["l"]; }
+    return 0;
+}
+fun pn_d_expect(st, v) {
+    if (!pn_d_isp(st, v)) { pn_d_err(pn_d_line(st), "متوقَّع «" + v + "»"); }
+    st["p"] = st["p"] + 1;
+}
+
+// ---------------------------------------------------------------------------
+//  3) المعبّرات (expressions): + - * / % ، مقارنات، && ||، قوائم [..]، قواميس {..}، دوال
+// ---------------------------------------------------------------------------
+fun pn_d_prec(op) {
+    if (op == "||") { return 1; }
+    if (op == "&&") { return 2; }
+    if (op == "==" or op == "!=") { return 3; }
+    if (op == "<" or op == ">" or op == "<=" or op == ">=") { return 4; }
+    if (op == "+" or op == "-") { return 5; }
+    if (op == "*" or op == "/" or op == "%") { return 6; }
+    return 0;
+}
+fun pn_d_bin(op, a, b, line) {
+    if (op == "+") { return a + b; }
+    if (op == "-") { return a - b; }
+    if (op == "*") { return a * b; }
+    if (op == "/") { if (b == 0) { pn_d_err(line, "قسمة على صفر"); } return a / b; }
+    if (op == "%") { return pn_mod(a, b); }
+    if (op == "==") { return a == b; }
+    if (op == "!=") { return a != b; }
+    if (op == "<") { return a < b; }
+    if (op == ">") { return a > b; }
+    if (op == "<=") { return a <= b; }
+    if (op == ">=") { return a >= b; }
+    if (op == "&&") { return a and b; }
+    return a or b;
+}
+fun pn_d_expr(st, sc, minp) {
+    let lhs = pn_d_unary(st, sc);
+    while (st["p"] < len(st["t"])) {
+        let t = st["t"][st["p"]];
+        if (t["k"] != "p") { break; }
+        let pr = pn_d_prec(t["v"]);
+        if (pr == 0 or pr < minp) { break; }
+        st["p"] = st["p"] + 1;
+        let rhs = pn_d_expr(st, sc, pr + 1);
+        lhs = pn_d_bin(t["v"], lhs, rhs, t["l"]);
+    }
+    return lhs;
+}
+fun pn_d_unary(st, sc) {
+    if (pn_d_isp(st, "-")) { st["p"] = st["p"] + 1; return 0 - pn_d_unary(st, sc); }
+    if (pn_d_isp(st, "!")) { st["p"] = st["p"] + 1; return !pn_d_unary(st, sc); }
+    return pn_d_postfix(st, sc);
+}
+fun pn_d_postfix(st, sc) {
+    let v = pn_d_primary(st, sc);
+    while (pn_d_isp(st, "[")) {
+        let ln = pn_d_line(st);
+        st["p"] = st["p"] + 1;
+        let ix = pn_d_expr(st, sc, 1);
+        pn_d_expect(st, "]");
+        if (type(v) != "array" or ix < 0 or ix >= len(v)) { pn_d_err(ln, "فهرس خارج الحدود"); }
+        v = v[ix];
+    }
+    return v;
+}
+fun pn_d_args(st, sc) {
+    let a = [];
+    pn_d_expect(st, "(");
+    while (!pn_d_isp(st, ")")) {
+        push(a, pn_d_expr(st, sc, 1));
+        if (pn_d_isp(st, ",")) { st["p"] = st["p"] + 1; }
+        else if (!pn_d_isp(st, ")")) { pn_d_err(pn_d_line(st), "متوقَّع «,» أو «)»"); }
+    }
+    st["p"] = st["p"] + 1;
+    return a;
+}
+fun pn_d_call(st, fnm, a, line) {
+    let c = st["c"];
+    if (fnm == "sin") { return sin(pn_rad(a[0])); }
+    if (fnm == "cos") { return cos(pn_rad(a[0])); }
+    if (fnm == "abs") { return abs(a[0]); }
+    if (fnm == "floor") { return floor(a[0]); }
+    if (fnm == "ceil") { return ceil(a[0]); }
+    if (fnm == "round") { return floor(a[0] + 0.5); }
+    if (fnm == "sqrt") { return sqrt(a[0]); }
+    if (fnm == "pow") { return pow(a[0], a[1]); }
+    if (fnm == "min") { return min(a[0], a[1]); }
+    if (fnm == "max") { return max(a[0], a[1]); }
+    if (fnm == "len") { return len(a[0]); }
+    if (fnm == "mix") { return pn_mix(a[0], a[1], a[2]); }
+    if (fnm == "alpha") { return pn_alpha(a[0], a[1]); }
+    if (fnm == "lighten") { return pn_lighten(a[0], a[1]); }
+    if (fnm == "darken") { return pn_darken(a[0], a[1]); }
+    if (fnm == "pal") { return pn_color(c, a[0]); }
+    if (fnm == "ink") { return pn_ink(c); }
+    if (fnm == "accent") { return pn_accent(c); }
+    if (fnm == "muted") { return pn_muted(c); }
+    if (fnm == "str") { return str(a[0]); }
+    if (fnm == "ease") { return pn_ease(a[0], a[1]); }
+    if (fnm == "tween") { return pn_tween(a[0], a[1], a[2], a[3]); }
+    if (fnm == "fract") { return pn_fract(a[0]); }
+    if (fnm == "pingpong") { return pn_pingpong(a[0]); }
+    if (fnm == "clamp") { return pn_clamp(a[0], a[1], a[2]); }
+    if (fnm == "lerp") { return pn_lerp(a[0], a[1], a[2]); }
+    pn_d_err(line, "دالة غير معروفة " + fnm + "()");
+}
+fun pn_d_primary(st, sc) {
+    if (st["p"] >= len(st["t"])) { pn_d_err(pn_d_line(st), "تعبير ناقص"); }
+    let t = st["t"][st["p"]];
+    let k = t["k"];
+    st["p"] = st["p"] + 1;
+    if (k == "num") { return t["v"]; }
+    if (k == "str") { return t["v"]; }
+    if (k == "var") { return pn_d_get(st, sc, t["v"], t["l"]); }
+    if (k == "id") {
+        if (t["v"] == "true") { return true; }
+        if (t["v"] == "false") { return false; }
+        if (t["v"] == "nil") { return nil; }
+        if (pn_d_isp(st, "(")) { return pn_d_call(st, t["v"], pn_d_args(st, sc), t["l"]); }
+        return t["v"];
+    }
+    if (k == "p" and t["v"] == "(") {
+        let v = pn_d_expr(st, sc, 1);
+        pn_d_expect(st, ")");
+        return v;
+    }
+    if (k == "p" and t["v"] == "[") {
+        let a = [];
+        while (!pn_d_isp(st, "]")) {
+            push(a, pn_d_expr(st, sc, 1));
+            if (pn_d_isp(st, ",")) { st["p"] = st["p"] + 1; }
+            else if (!pn_d_isp(st, "]")) { pn_d_err(pn_d_line(st), "متوقَّع «,» أو «]»"); }
+        }
+        st["p"] = st["p"] + 1;
+        return a;
+    }
+    if (k == "p" and t["v"] == "{") {
+        let m = {};
+        while (!pn_d_isp(st, "}")) {
+            let kt = st["t"][st["p"]];
+            if (kt["k"] != "id" and kt["k"] != "str") { pn_d_err(kt["l"], "مفتاح متوقَّع"); }
+            st["p"] = st["p"] + 1;
+            pn_d_expect(st, ":");
+            m[kt["v"]] = pn_d_expr(st, sc, 1);
+            if (pn_d_isp(st, ";") or pn_d_isp(st, ",")) { st["p"] = st["p"] + 1; }
+        }
+        st["p"] = st["p"] + 1;
+        return m;
+    }
+    pn_d_err(t["l"], "رمز غير متوقَّع «" + str(t["v"]) + "»");
+}
+
+// ---------------------------------------------------------------------------
+//  4) قيمة الهندسة "x y (expr) 'نص'"  →  مصفوفة قيم
+// ---------------------------------------------------------------------------
+fun pn_d_isnumstr(s) {
+    if (s == "" or s == "-" or s == ".") { return false; }
+    let i = 0;
+    let dots = 0;
+    while (i < len(s)) {
+        let ch = substr(s, i, 1);
+        if (ch == ".") { dots = dots + 1; }
+        else if (!pn_d_isdig(ch) and !(i == 0 and ch == "-")) { return false; }
+        i = i + 1;
+    }
+    return dots < 2;
+}
+// نص مقتبس في الهندسة: $اسم يُستبدل بقيمة المتغيّر إن وُجد (افصل بمسافة قبل حرف عربي لاصق)
+fun pn_d_interp(sc, s) {
+    if (indexOf(s, "$") < 0) { return s; }
+    let out = "";
+    let i = 0;
+    let n = len(s);
+    while (i < n) {
+        let ch = substr(s, i, 1);
+        if (ch == "$" and i + 1 < n and pn_d_isid(substr(s, i + 1, 1))) {
+            let j = i + 1;
+            while (j < n and pn_d_isid(substr(s, j, 1))) { j = j + 1; }
+            let nm = substr(s, i + 1, j - i - 1);
+            let f = pn_d_find(sc, nm);
+            if (f != nil) {
+                let v = f["vars"][nm];
+                if (type(v) == "number") { out = out + pn_n(v); } else { out = out + str(v); }
+                i = j;
+                continue;
+            }
+        }
+        out = out + ch;
+        i = i + 1;
+    }
+    return out;
+}
+fun pn_d_geom(st, sc, s, line) {
+    let out = [];
+    let i = 0;
+    let n = len(s);
+    while (i < n) {
+        let ch = substr(s, i, 1);
+        if (ch == " " or ch == "\t" or ch == "\n" or ch == "\r" or ch == ",") { i = i + 1; }
+        else if (substr(s, i, 2) == "،") { i = i + 2; }
+        else if (ch == "'" or ch == "\"") {
+            let j = i + 1;
+            while (j < n and substr(s, j, 1) != ch) { j = j + 1; }
+            push(out, pn_d_interp(sc, substr(s, i + 1, j - i - 1)));
+            i = j + 1;
+        }
+        else {
+            // كلمة: حتى مسافة خارج الأقواس
+            let j = i;
+            let depth = 0;
+            while (j < n) {
+                let c2 = substr(s, j, 1);
+                if (c2 == "(" or c2 == "[") { depth = depth + 1; }
+                if (c2 == ")" or c2 == "]") { depth = depth - 1; }
+                if (depth <= 0 and (c2 == " " or c2 == "\t" or c2 == "\n" or c2 == "," or substr(s, j, 2) == "،")) { break; }
+                j = j + 1;
+            }
+            let w = substr(s, i, j - i);
+            let f = substr(w, 0, 1);
+            if (f == "$" or f == "(" or f == "[") {
+                let st2 = {"t": pn_d_lex(w, line), "p": 0, "c": st["c"]};
+                push(out, pn_d_expr(st2, sc, 1));
+            }
+            else if (pn_d_isnumstr(w)) { push(out, toNumber(w)); }
+            else if (w == "true") { push(out, true); }
+            else if (w == "false") { push(out, false); }
+            else { push(out, w); }
+            i = j;
+        }
+    }
+    return out;
+}
+
+// ---------------------------------------------------------------------------
+//  5) الكتل والجُمَل
+// ---------------------------------------------------------------------------
+// فهرس الرمز الذي يغلق القوس المفتوح عند p (p يشير إلى القوس الفاتح)
+fun pn_d_match(st, p) {
+    let depth = 0;
+    let i = p;
+    while (i < len(st["t"])) {
+        let t = st["t"][i];
+        if (t["k"] == "p") {
+            if (t["v"] == "{" or t["v"] == "(" or t["v"] == "[") { depth = depth + 1; }
+            if (t["v"] == "}" or t["v"] == ")" or t["v"] == "]") {
+                depth = depth - 1;
+                if (depth == 0) { return i; }
+            }
+        }
+        i = i + 1;
+    }
+    pn_d_err(st["t"][p]["l"], "قوس غير مغلق");
+}
+// نهاية الجملة التي تبدأ عند p: بعد «;» على العمق 0، أو بعد قوس «}» يغلق كتلة على العمق 0
+fun pn_d_stmt_end(st, p, b) {
+    let depth = 0;
+    let i = p;
+    while (i < b) {
+        let t = st["t"][i];
+        if (t["k"] == "p") {
+            let v = t["v"];
+            if (v == "{" or v == "(" or v == "[") { depth = depth + 1; }
+            else if (v == "}" or v == ")" or v == "]") {
+                depth = depth - 1;
+                if (depth == 0 and v == "}") {
+                    if (i + 1 < b and st["t"][i + 1]["k"] == "p" and st["t"][i + 1]["v"] == ";") { return i + 2; }
+                    return i + 1;
+                }
+            }
+            else if (v == ";" and depth == 0) { return i + 1; }
+        }
+        i = i + 1;
+    }
+    return b;
+}
+// أزواج «مفتاح: قيمة;» → قاموس خيارات (النطاق [a,b) رموزه كلها أزواج)
+fun pn_d_pairs(st, sc, a, b) {
+    let o = {};
+    let sv = st["p"];
+    st["p"] = a;
+    while (st["p"] < b) {
+        let kt = st["t"][st["p"]];
+        if (kt["k"] == ";") { st["p"] = st["p"] + 1; continue; }
+        if (kt["k"] == "p" and kt["v"] == ";") { st["p"] = st["p"] + 1; continue; }
+        if (kt["k"] != "id" and kt["k"] != "str") { pn_d_err(kt["l"], "متوقَّع «مفتاح: قيمة;» داخل الكتلة"); }
+        st["p"] = st["p"] + 1;
+        pn_d_expect(st, ":");
+        o[kt["v"]] = pn_d_expr(st, sc, 1);
+        if (st["p"] < b and pn_d_isp(st, ";")) { st["p"] = st["p"] + 1; }
+    }
+    st["p"] = sv;
+    return o;
+}
+// كتلة حاوية: تفصل أزواج «key: v;» في أولها (خيارات الحاوية) عن بقية الجُمَل
+fun pn_d_split(st, sc, a, b) {
+    let o = {};
+    let rest = [];
+    let p = a;
+    while (p < b) {
+        let t = st["t"][p];
+        let nx = pn_d_stmt_end(st, p, b);
+        let isp = t["k"] == "id" and p + 1 < b and st["t"][p + 1]["k"] == "p" and st["t"][p + 1]["v"] == ":";
+        if (isp) {
+            let sub = pn_d_pairs(st, sc, p, nx);
+            for (let k in keys(sub)) { o[k] = sub[k]; }
+        } else if (t["k"] == "p" and t["v"] == ";") {
+        } else { push(rest, [p, nx]); }
+        p = nx;
+    }
+    return {"opts": o, "rest": rest};
+}
+
+fun pn_d_is_container(ty) {
+    return ty == "Group" or ty == "At" or ty == "Repeat" or ty == "Each" or ty == "If" or ty == "Phone" or ty == "Browser"
+        or ty == "Pattern" or ty == "Clip" or ty == "Mask" or ty == "Fn" or ty == "Frame";
+}
+
+// ينفّذ الجُمَل في [a,b) داخل النطاق sc ومع الأب parent
+fun pn_d_run(st, sc, a, b, parent) {
+    let p = a;
+    while (p < b) {
+        let t = st["t"][p];
+        if (t["k"] == "p" and t["v"] == ";") { p = p + 1; continue; }
+        if (t["k"] != "var") { pn_d_err(t["l"], "كل جملة تبدأ بـ $اسم — وجدتُ «" + str(t["v"]) + "»"); }
+        let nx = pn_d_stmt_end(st, p, b);
+        pn_d_stmt(st, sc, p, nx, parent);
+        p = nx;
+    }
+}
+
+fun pn_d_stmt(st, sc, a, b, parent) {
+    let t = st["t"][a];
+    let nm = t["v"];
+    let line = t["l"];
+    let p = a + 1;
+    let ty = nil;
+    if (p < b and st["t"][p]["k"] == "p" and st["t"][p]["v"] == "." and p + 1 < b and st["t"][p + 1]["k"] == "id") {
+        ty = st["t"][p + 1]["v"];
+        p = p + 2;
+    }
+    let params = nil;
+    let isdef = false;
+    if (p < b and st["t"][p]["k"] == "p" and st["t"][p]["v"] == "(") {
+        // تعريف دالة  $f.Fn(x, y) { }  أو استدعاء  $f(1, 2);
+        if (ty == "Fn") {
+            let e = pn_d_match(st, p);
+            params = [];
+            let q = p + 1;
+            while (q < e) {
+                if (st["t"][q]["k"] == "var" or st["t"][q]["k"] == "id") { push(params, st["t"][q]["v"]); }
+                q = q + 1;
+            }
+            p = e + 1;
+            isdef = true;
+        } else if (ty == nil) {
+            st["p"] = p;
+            let args = pn_d_args(st, sc);
+            pn_d_callfn(st, sc, nm, args, parent, line);
+            return nil;
+        }
+    }
+    // «=> تعبير»
+    let ex = nil;
+    let hasex = false;
+    if (p < b and st["t"][p]["k"] == "p" and st["t"][p]["v"] == "=>") {
+        st["p"] = p + 1;
+        ex = pn_d_expr(st, sc, 1);
+        hasex = true;
+        p = st["p"];
+    }
+    // كتلة
+    let ba = -1; let bb = -1;
+    if (p < b and st["t"][p]["k"] == "p" and st["t"][p]["v"] == "{") {
+        bb = pn_d_match(st, p);
+        ba = p + 1;
+        p = bb + 1;
+    }
+    if (isdef) {
+        sc["vars"][nm] = {"__fn": true, "params": params, "a": ba, "b": bb, "sc": sc};
+        return nil;
+    }
+    if (ty == nil) {
+        if (!hasex) { pn_d_err(line, "المتغير $" + nm + " يحتاج «=> قيمة»"); }
+        pn_d_assign(st, sc, nm, ex, parent, line);
+        return nil;
+    }
+    pn_d_elem(st, sc, nm, ty, ex, hasex, ba, bb, parent, line);
+    return nil;
+}
+
+fun pn_d_assign(st, sc, nm, v, parent, line) {
+    let c = st["c"];
+    if (sc["up"] == nil) {
+        if (nm == "size") {
+            let a = v;
+            if (type(v) == "string") { a = pn_d_geom(st, sc, v, line); }
+            pn_size(c, a[0], a[1]);
+            return nil;
+        }
+        if (nm == "display") {
+            let a = v;
+            if (type(v) == "string") { a = pn_d_geom(st, sc, v, line); }
+            pn_display(c, a[0], a[1]);
+            return nil;
+        }
+        if (nm == "theme") { pn_theme(c, v); return nil; }
+        if (nm == "bg") { pn_bg(c, v); return nil; }
+        if (nm == "title") { pn_title(c, v); return nil; }
+        if (nm == "font") { pn_font(c, v); return nil; }
+        if (nm == "save") { push(st["save"], v); return nil; }
+        if (nm == "fps" or nm == "duration" or nm == "loop") {
+            if (nm == "fps") { st["fps"] = v; }
+            else if (nm == "duration") { st["dur"] = v; }
+            else { st["loop"] = v; }
+            let nn = floor(st["fps"] * st["dur"] + 0.5);
+            if (nn < 1) { nn = 1; }
+            sc["vars"]["fps"] = st["fps"]; sc["vars"]["duration"] = st["dur"]; sc["vars"]["n"] = nn;
+            sc["vars"]["t"] = st["k"] / st["fps"]; sc["vars"]["p"] = st["k"] / nn;
+            return nil;
+        }
+    }
+    let s = pn_d_find(sc, nm);
+    if (s == nil) { s = sc; }
+    s["vars"][nm] = v;
+    return nil;
+}
+
+fun pn_d_callfn(st, sc, nm, args, parent, line) {
+    let f = pn_d_get(st, sc, nm, line);
+    if (type(f) != "map" or !has(f, "__fn")) { pn_d_err(line, "$" + nm + " ليس دالة"); }
+    if (len(args) != len(f["params"])) { pn_d_err(line, "$" + nm + " تتوقع " + str(len(f["params"])) + " معاملات وجاءها " + str(len(args))); }
+    st["depth"] = st["depth"] + 1;
+    if (st["depth"] > 40) { pn_d_err(line, "تداخل استدعاءات أعمق من 40 (تكرار لا نهائي؟)"); }
+    let fs = pn_d_scope(f["sc"]);
+    let i = 0;
+    while (i < len(args)) { fs["vars"][f["params"][i]] = args[i]; i = i + 1; }
+    pn_d_run(st, fs, f["a"], f["b"], parent);
+    st["depth"] = st["depth"] - 1;
+}
+
+// ---------------------------------------------------------------------------
+//  6) العناصر
+// ---------------------------------------------------------------------------
+fun pn_d_sig(ty) {
+    let sg = {
+        "Rect": ["x", "y", "w", "h"], "RRect": ["x", "y", "w", "h", "r"], "Circle": ["cx", "cy", "r"],
+        "Ellipse": ["cx", "cy", "rx", "ry"], "Line": ["x1", "y1", "x2", "y2"], "Text": ["x", "y", "text"],
+        "Image": ["x", "y", "w", "h", "href"], "Ngon": ["cx", "cy", "n", "r"], "Star": ["cx", "cy", "n", "r1", "r2"],
+        "Slice": ["cx", "cy", "r", "a0", "a1"], "Ring": ["cx", "cy", "r0", "r1", "a0", "a1"], "Arc": ["cx", "cy", "r", "a0", "a1"],
+        "Arrow": ["x1", "y1", "x2", "y2"], "Grid": ["x", "y", "w", "h", "step"], "Wave": ["x", "y", "w", "amp", "waves"],
+        "Spiral": ["cx", "cy", "r", "turns"], "Label": ["x", "y", "text"], "Card": ["x", "y", "w", "h"],
+        "Button": ["x", "y", "w", "h", "label"], "Badge": ["x", "y", "label"], "Avatar": ["cx", "cy", "r", "initials"],
+        "Progress": ["x", "y", "w", "h", "value"], "Toggle": ["x", "y", "state"], "Input": ["x", "y", "w", "h", "value"],
+        "Divider": ["x1", "y", "x2"], "Icon": ["name", "x", "y", "size"], "Box": ["x", "y", "w", "h", "label"],
+        "Connect": ["x1", "y1", "x2", "y2"], "Elbow": ["x1", "y1", "x2", "y2"], "Mesh": ["w", "h"],
+        "Bar": ["x", "y", "w", "h"], "LineChart": ["x", "y", "w", "h"], "Pie": ["cx", "cy", "r"], "Radar": ["cx", "cy", "r"],
+        "Spark": ["x", "y", "w", "h"], "Gauge": ["cx", "cy", "r", "value", "max"],
+        "At": ["x", "y"], "Phone": ["x", "y", "w", "h"], "Browser": ["x", "y", "w", "h", "url"], "Pattern": ["w", "h"],
+        "Repeat": ["n"], "Each": ["items"], "If": ["cond"], "Clip": ["x", "y", "w", "h", "r"],
+        "Linear": ["angle"], "Radial": ["cx", "cy", "r"], "Shadow": ["dx", "dy", "blur", "c", "op"], "Glow": ["r", "c"], "Blur": ["r"],
+        "Fade": ["x", "y", "w", "h", "dir"]
+    };
+    if (!has(sg, ty)) { return nil; }
+    return sg[ty];
+}
+// وسائط مسمّاة: القيم الموضعية أولاً ثم الباقي من الخيارات
+fun pn_d_named(ty, geom, o, line) {
+    let sg = pn_d_sig(ty);
+    let a = {};
+    if (sg == nil) { return a; }
+    let i = 0;
+    if (ty == "Text" or ty == "Label") {
+        if (len(geom) == 1 and type(geom[0]) == "string") { a["text"] = geom[0]; i = 99; }
+    }
+    if (i == 0) {
+        while (i < len(geom) and i < len(sg)) { a[sg[i]] = geom[i]; i = i + 1; }
+    }
+    for (let k in sg) {
+        if (!has(a, k) and pn_has(o, k)) { a[k] = o[k]; }
+    }
+    return a;
+}
+fun pn_d_arg(a, k, d) {
+    if (has(a, k) and a[k] != nil) { return a[k]; }
+    return d;
+}
+fun pn_d_need(a, ks, ty, line) {
+    for (let k in ks) { if (!has(a, k) or a[k] == nil) { pn_d_err(line, ty + " يحتاج «" + k + "»"); } }
+}
+
+fun pn_d_elem(st, sc, nm, ty, ex, hasex, ba, bb, parent, line) {
+    let c = st["c"];
+    let geom = [];
+    if (hasex) {
+        if (type(ex) == "string") { geom = pn_d_geom(st, sc, ex, line); }
+        else if (type(ex) == "array" and ty != "Each") { geom = ex; }
+        else { geom = [ex]; }
+    }
+    // خيارات: كتلة أزواج لغير الحاويات
+    let o = {};
+    let rest = [];
+    if (pn_d_is_container(ty)) {
+        if (bb >= 0) {
+            let sp = pn_d_split(st, sc, ba, bb);
+            o = sp["opts"];
+            rest = sp["rest"];
+        }
+    } else if (bb >= 0) {
+        o = pn_d_pairs(st, sc, ba, bb);
+    }
+    let a = pn_d_named(ty, geom, o, line);
+    let res = nil;
+
+    // ---- تعريفات تُرجع مرجعاً
+    if (ty == "Linear") {
+        let stops = [];
+        let i = 1;
+        while (i < len(geom)) { push(stops, geom[i]); i = i + 1; }
+        if (pn_has(o, "stops")) { stops = o["stops"]; }
+        sc["vars"][nm] = pn_linear(parent, stops, pn_d_arg(a, "angle", 90));
+        return nil;
+    }
+    if (ty == "Radial") {
+        let stops = [];
+        let i = 3;
+        while (i < len(geom)) { push(stops, geom[i]); i = i + 1; }
+        if (pn_has(o, "stops")) { stops = o["stops"]; }
+        sc["vars"][nm] = pn_radial(parent, stops, pn_d_arg(a, "cx", 0.5), pn_d_arg(a, "cy", 0.5), pn_d_arg(a, "r", 0.5));
+        return nil;
+    }
+    if (ty == "Shadow") { sc["vars"][nm] = pn_shadow(parent, pn_d_arg(a, "dx", 0), pn_d_arg(a, "dy", 6), pn_d_arg(a, "blur", 10), pn_d_arg(a, "c", "#000000"), pn_d_arg(a, "op", 0.3)); return nil; }
+    if (ty == "Glow") { sc["vars"][nm] = pn_glow(parent, pn_d_arg(a, "r", 6), pn_d_arg(a, "c", pn_accent(c))); return nil; }
+    if (ty == "Blur") { sc["vars"][nm] = pn_blur(parent, pn_d_arg(a, "r", 6)); return nil; }
+    if (ty == "Fade") { sc["vars"][nm] = pn_fade_mask(parent, pn_d_arg(a, "x", 0), pn_d_arg(a, "y", 0), a["w"], a["h"], pn_d_arg(a, "dir", "right")); return nil; }
+
+    // ---- حاويات
+    if (ty == "Frame") {
+        // كتلة إطار: تُنفَّذ في كل إطار من الحركة ($t ثوانٍ، $p تقدّم 0..1، $i رقم الإطار، $n عدد الإطارات)
+        st["hasframe"] = true;
+        let fs = pn_d_scope(sc);
+        for (let r in rest) { pn_d_run(st, fs, r[0], r[1], parent); }
+        return nil;
+    }
+    if (ty == "Repeat" or ty == "Each" or ty == "If") {
+        if (ty == "Repeat") {
+            let n = pn_d_arg(a, "n", 0);
+            let i = 0;
+            while (i < n) {
+                let rs = pn_d_scope(sc);
+                rs["vars"]["i"] = i; rs["vars"]["n"] = n;
+                for (let r in rest) { pn_d_run(st, rs, r[0], r[1], parent); }
+                i = i + 1;
+            }
+        } else if (ty == "Each") {
+            let items = pn_d_arg(a, "items", []);
+            let i = 0;
+            while (i < len(items)) {
+                let rs = pn_d_scope(sc);
+                rs["vars"]["i"] = i; rs["vars"]["it"] = items[i];
+                for (let r in rest) { pn_d_run(st, rs, r[0], r[1], parent); }
+                i = i + 1;
+            }
+        } else {
+            if (pn_d_arg(a, "cond", false)) {
+                let rs = pn_d_scope(sc);
+                for (let r in rest) { pn_d_run(st, rs, r[0], r[1], parent); }
+            }
+        }
+        return nil;
+    }
+    if (ty == "Pattern" or ty == "Clip" or ty == "Mask") {
+        let cont = nil;
+        if (ty == "Pattern") { cont = pn_pattern(parent, pn_d_arg(a, "w", 16), pn_d_arg(a, "h", 16)); }
+        else if (ty == "Clip") {
+            if (pn_has(a, "w")) { sc["vars"][nm] = pn_clip_rect(parent, pn_d_arg(a, "x", 0), pn_d_arg(a, "y", 0), a["w"], pn_d_arg(a, "h", a["w"]), pn_d_arg(a, "r", 0)); return nil; }
+            cont = pn_clip(parent);
+        }
+        else { cont = pn_mask(parent); }
+        sc["vars"][nm] = "@" + cont["id"];
+        let rs = pn_d_scope(sc);
+        for (let r in rest) { pn_d_run(st, rs, r[0], r[1], cont); }
+        return nil;
+    }
+    if (ty == "Group" or ty == "At" or ty == "Phone" or ty == "Browser") {
+        let g = nil;
+        let rs = pn_d_scope(sc);
+        if (ty == "Group") { g = pn_group(parent, o); }
+        else if (ty == "At") { g = pn_at(parent, pn_d_arg(a, "x", 0), pn_d_arg(a, "y", 0), o); }
+        else if (ty == "Phone") {
+            pn_d_need(a, ["x", "y", "w", "h"], ty, line);
+            g = pn_phone(parent, a["x"], a["y"], a["w"], a["h"], o);
+        } else {
+            pn_d_need(a, ["x", "y", "w", "h"], ty, line);
+            g = pn_browser(parent, a["x"], a["y"], a["w"], a["h"], pn_d_arg(a, "url", ""), o);
+        }
+        if (has(g, "_screen")) {
+            rs["vars"]["sx"] = g["_screen"]["x"]; rs["vars"]["sy"] = g["_screen"]["y"];
+            rs["vars"]["sw"] = g["_screen"]["w"]; rs["vars"]["sh"] = g["_screen"]["h"];
+        }
+        if (!pn_has(g, "cls") and nm != "") { g["cls"] = nm; }
+        for (let r in rest) { pn_d_run(st, rs, r[0], r[1], g); }
+        pn_d_post(g, o);
+        return nil;
+    }
+
+    // ---- أشكال ومكوّنات
+    res = pn_d_make(st, ty, a, geom, o, parent, line);
+    if (type(res) == "map") {
+        if (!pn_has(res, "cls") and nm != "") { res["cls"] = nm; }
+        pn_d_post(res, o);
+    }
+}
+
+// حركات مختصرة: spin: [cx, cy, dur] · pulse: [attr, a, b, dur]
+fun pn_d_post(node, o) {
+    if (pn_has(o, "spin")) { pn_spin(node, o["spin"][0], o["spin"][1], o["spin"][2]); }
+    if (pn_has(o, "pulse")) { pn_pulse(node, o["pulse"][0], o["pulse"][1], o["pulse"][2], o["pulse"][3]); }
+    return node;
+}
+
+fun pn_d_nums(geom) {
+    let out = [];
+    for (let g in geom) { if (type(g) == "number") { push(out, g); } }
+    return out;
+}
+fun pn_d_make(st, ty, a, geom, o, p, line) {
+    let c = st["c"];
+    if (ty == "Rect") { pn_d_need(a, ["x", "y", "w", "h"], ty, line); return pn_rect(p, a["x"], a["y"], a["w"], a["h"], o); }
+    if (ty == "RRect") { pn_d_need(a, ["x", "y", "w", "h", "r"], ty, line); return pn_rrect(p, a["x"], a["y"], a["w"], a["h"], a["r"], o); }
+    if (ty == "Circle") { pn_d_need(a, ["cx", "cy", "r"], ty, line); return pn_circle(p, a["cx"], a["cy"], a["r"], o); }
+    if (ty == "Ellipse") { pn_d_need(a, ["cx", "cy", "rx", "ry"], ty, line); return pn_ellipse(p, a["cx"], a["cy"], a["rx"], a["ry"], o); }
+    if (ty == "Line") { pn_d_need(a, ["x1", "y1", "x2", "y2"], ty, line); return pn_line(p, a["x1"], a["y1"], a["x2"], a["y2"], o); }
+    if (ty == "Polyline") { return pn_polyline(p, pn_d_arg(o, "pts", pn_d_nums(geom)), o); }
+    if (ty == "Polygon") { return pn_polygon(p, pn_d_arg(o, "pts", pn_d_nums(geom)), o); }
+    if (ty == "Smooth") { return pn_smooth(p, pn_d_arg(o, "pts", pn_d_nums(geom)), o); }
+    if (ty == "Path") {
+        if (len(geom) < 1 and !pn_has(o, "d")) { pn_d_err(line, "Path يحتاج نص المسار 'M …'"); }
+        return pn_path(p, pn_d_arg(o, "d", geom[0]), o);
+    }
+    if (ty == "Text") { pn_d_need(a, ["text"], ty, line); return pn_text(p, pn_d_arg(a, "x", 0), pn_d_arg(a, "y", 0), a["text"], o); }
+    if (ty == "Image") { pn_d_need(a, ["x", "y", "w", "h", "href"], ty, line); return pn_image(p, a["x"], a["y"], a["w"], a["h"], a["href"], o); }
+    if (ty == "Ngon") { pn_d_need(a, ["cx", "cy", "n", "r"], ty, line); return pn_ngon(p, a["cx"], a["cy"], a["n"], a["r"], o); }
+    if (ty == "Star") { pn_d_need(a, ["cx", "cy", "n", "r1", "r2"], ty, line); return pn_star(p, a["cx"], a["cy"], a["n"], a["r1"], a["r2"], o); }
+    if (ty == "Slice") { pn_d_need(a, ["cx", "cy", "r", "a0", "a1"], ty, line); return pn_slice(p, a["cx"], a["cy"], a["r"], a["a0"], a["a1"], o); }
+    if (ty == "Ring") { pn_d_need(a, ["cx", "cy", "r0", "r1", "a0", "a1"], ty, line); return pn_ring(p, a["cx"], a["cy"], a["r0"], a["r1"], a["a0"], a["a1"], o); }
+    if (ty == "Arc") { pn_d_need(a, ["cx", "cy", "r", "a0", "a1"], ty, line); return pn_arc(p, a["cx"], a["cy"], a["r"], a["a0"], a["a1"], o); }
+    if (ty == "Arrow") { pn_d_need(a, ["x1", "y1", "x2", "y2"], ty, line); return pn_arrow(p, a["x1"], a["y1"], a["x2"], a["y2"], o); }
+    if (ty == "Grid") { pn_d_need(a, ["x", "y", "w", "h", "step"], ty, line); return pn_grid(p, a["x"], a["y"], a["w"], a["h"], a["step"], o); }
+    if (ty == "Wave") { pn_d_need(a, ["x", "y", "w", "amp", "waves"], ty, line); return pn_wave(p, a["x"], a["y"], a["w"], a["amp"], a["waves"], o); }
+    if (ty == "Spiral") { pn_d_need(a, ["cx", "cy", "r", "turns"], ty, line); return pn_spiral(p, a["cx"], a["cy"], a["r"], a["turns"], o); }
+    if (ty == "Label") { pn_d_need(a, ["text"], ty, line); return pn_label(p, pn_d_arg(a, "x", 0), pn_d_arg(a, "y", 0), a["text"], o); }
+    if (ty == "Card") { pn_d_need(a, ["x", "y", "w", "h"], ty, line); return pn_card(p, a["x"], a["y"], a["w"], a["h"], o); }
+    if (ty == "Button") { pn_d_need(a, ["x", "y", "w", "h", "label"], ty, line); return pn_button(p, a["x"], a["y"], a["w"], a["h"], a["label"], o); }
+    if (ty == "Badge") { pn_d_need(a, ["x", "y", "label"], ty, line); return pn_badge(p, a["x"], a["y"], a["label"], o); }
+    if (ty == "Avatar") { pn_d_need(a, ["cx", "cy", "r", "initials"], ty, line); return pn_avatar(p, a["cx"], a["cy"], a["r"], a["initials"], o); }
+    if (ty == "Progress") { pn_d_need(a, ["x", "y", "w", "h", "value"], ty, line); return pn_progress(p, a["x"], a["y"], a["w"], a["h"], a["value"], o); }
+    if (ty == "Toggle") { pn_d_need(a, ["x", "y"], ty, line); return pn_toggle(p, a["x"], a["y"], pn_d_arg(a, "state", false), o); }
+    if (ty == "Input") { pn_d_need(a, ["x", "y", "w", "h", "value"], ty, line); return pn_input(p, a["x"], a["y"], a["w"], a["h"], a["value"], o); }
+    if (ty == "Divider") { pn_d_need(a, ["x1", "y", "x2"], ty, line); return pn_divider(p, a["x1"], a["y"], a["x2"], o); }
+    if (ty == "Icon") { pn_d_need(a, ["name", "x", "y", "size"], ty, line); return pn_icon(p, a["name"], a["x"], a["y"], a["size"], o); }
+    if (ty == "Box") { pn_d_need(a, ["x", "y", "w", "h", "label"], ty, line); return pn_box(p, a["x"], a["y"], a["w"], a["h"], a["label"], o); }
+    if (ty == "Connect") { pn_d_need(a, ["x1", "y1", "x2", "y2"], ty, line); return pn_connect(p, a["x1"], a["y1"], a["x2"], a["y2"], o); }
+    if (ty == "Elbow") { pn_d_need(a, ["x1", "y1", "x2", "y2"], ty, line); return pn_elbow(p, a["x1"], a["y1"], a["x2"], a["y2"], o); }
+    if (ty == "Mesh") {
+        pn_d_need(a, ["w", "h"], ty, line);
+        let cols = pn_d_arg(o, "colors", []);
+        let i = 2;
+        while (i < len(geom)) { push(cols, geom[i]); i = i + 1; }
+        return pn_mesh(p, a["w"], a["h"], cols, o);
+    }
+    if (ty == "Bar") { pn_d_need(a, ["x", "y", "w", "h"], ty, line); return pn_bar_chart(p, a["x"], a["y"], a["w"], a["h"], pn_d_arg(o, "labels", []), pn_d_arg(o, "data", []), o); }
+    if (ty == "LineChart") { pn_d_need(a, ["x", "y", "w", "h"], ty, line); return pn_line_chart(p, a["x"], a["y"], a["w"], a["h"], pn_d_arg(o, "labels", []), pn_d_arg(o, "data", []), o); }
+    if (ty == "Pie") { pn_d_need(a, ["cx", "cy", "r"], ty, line); return pn_pie_chart(p, a["cx"], a["cy"], a["r"], pn_d_arg(o, "labels", []), pn_d_arg(o, "data", []), o); }
+    if (ty == "Radar") { pn_d_need(a, ["cx", "cy", "r"], ty, line); return pn_radar_chart(p, a["cx"], a["cy"], a["r"], pn_d_arg(o, "labels", []), pn_d_arg(o, "data", []), o); }
+    if (ty == "Spark") { pn_d_need(a, ["x", "y", "w", "h"], ty, line); return pn_sparkline(p, a["x"], a["y"], a["w"], a["h"], pn_d_arg(o, "data", []), o); }
+    if (ty == "Gauge") { pn_d_need(a, ["cx", "cy", "r", "value"], ty, line); return pn_gauge(p, a["cx"], a["cy"], a["r"], a["value"], pn_d_arg(a, "max", 100), o); }
+    pn_d_err(line, "نوع غير معروف «" + ty + "»");
+}
+
+// ---------------------------------------------------------------------------
+//  7) الواجهة العامة
+// ---------------------------------------------------------------------------
+// ينفّذ نص كتلة (ما بين الأقواس) ويُرجع لوحة. nm يُستعمل عنواناً افتراضياً.
+fun pn_dsl(nm, src) { return pn_dsl_at(nm, src, 1); }
+fun pn_dsl_at(nm, src, line0) { return pn_dsl_with(nm, src, line0, {}); }
+// مثل pn_dsl لكن أرقام الأسطر في الأخطاء تبدأ من line0 (يستعملها المحرّك لمطابقة ملف المصدر)
+// مع متغيّرات خارجية: vars = {"score": 72} تصير $score داخل الكتلة (تستعملها piano.Name(score) { … })
+fun pn_dsl_with(nm, src, line0, vars) {
+    let toks = pn_d_lex(src, line0);
+    let st0 = pn_d_pass(nm, toks, 0, 30, 2, true, vars);
+    let c = st0["c"];
+    // $x.Frame { … } موجودة ⇒ حركة: نعيد تشغيل الكتلة كاملة لكل إطار بقيم $t $p $i $n الخاصة به
+    if (st0["hasframe"]) {
+        let fps = st0["fps"];
+        let n = floor(fps * st0["dur"] + 0.5);
+        if (n > 1) {
+            let frames = [{"defs": c["defs"], "nodes": c["nodes"]}];
+            let k = 1;
+            while (k < n) {
+                let sk = pn_d_pass(nm, toks, k, fps, st0["dur"], st0["loop"], vars);
+                push(frames, {"defs": sk["c"]["defs"], "nodes": sk["c"]["nodes"]});
+                k = k + 1;
+            }
+            c["anim"] = {"fps": fps, "loop": st0["loop"], "frames": frames};
+        }
+    }
+    for (let path in st0["save"]) { pn_save(c, path); }
+    return c;
+}
+// تمريرة واحدة: لوحة جديدة + نطاق جذر فيه $t $p $i $n $fps $duration $pi
+fun pn_d_pass(nm, toks, k, fps, dur, looping, vars) {
+    let c = pn_canvas(480, 270);
+    pn_title(c, nm);
+    c["_ctx"]["seq"] = k * 1000;
+    let st = {"t": toks, "p": 0, "c": c, "save": [], "depth": 0, "fps": fps, "dur": dur, "loop": looping, "hasframe": false, "k": k};
+    let n = floor(fps * dur + 0.5);
+    if (n < 1) { n = 1; }
+    let root = pn_d_scope(nil);
+    root["vars"]["t"] = k / fps; root["vars"]["p"] = k / n; root["vars"]["i"] = k; root["vars"]["n"] = n;
+    root["vars"]["fps"] = fps; root["vars"]["duration"] = dur; root["vars"]["pi"] = PI;
+    for (let vk in keys(vars)) { root["vars"][vk] = vars[vk]; }
+    pn_d_run(st, root, 0, len(toks), c);
+    return st;
+}
+// يقرأ ملف كتل (.pia أو .rin أو أي امتداد): إمّا جسم الكتلة مباشرة أو  piano.Name { … };  كاملة
+fun pn_dsl_load(path) {
+    let s = readFile(path);
+    let t = trim(s);
+    let nm = "piano";
+    if (substr(t, 0, 6) == "piano.") {
+        let b = indexOf(t, "{");
+        if (b < 0) { throw "piano.dsl: كتلة بلا «{» في " + path; }
+        nm = trim(substr(t, 6, b - 6));
+        let e = len(t) - 1;
+        while (e > b and substr(t, e, 1) != "}") { e = e - 1; }
+        s = substr(t, b + 1, e - b - 1);
+    }
+    return pn_dsl(nm, s);
+}
+
+// piano — الجزء 11: الرسم أثناء التشغيل مع أنيميشن — الإطارات تُبرمَج بكود المستخدم
+//
+//   @import "piano";
+//   let state = {"x": 0};                                  // حالتك أنت: تبقى بين الإطارات
+//   let film = pn_film(480, 270, 30, 3, "dark", fun(c, t, p, i, n) { … });   // أو دالة مسمّاة
+//   fun draw(c, t, p, i, n) {                              // t ثوانٍ · p ∈[0,1) تقدّم · i رقم الإطار · n عدد الإطارات
+//       pn_circle(c, 240 + 100 * cos(t * 2 * PI), 135, 20, {"fill": pn_accent(c)});
+//   }
+//   let film = pn_film(480, 270, 30, 3, "dark", draw);
+//   pn_save(film, "loop.svg");      // SVG متحرك (SMIL) — .html أيضاً، و.puo يحفظ كل الإطارات
+//
+// pn_film يستدعي draw مرة لكل إطار على لوحة جديدة (بثيمها وحجمها)، ويُرجع اللوحة الأولى وفيها
+// الحقل anim = {fps, loop, frames:[{defs, nodes}, …]}؛ فتظل لوحة عادية صالحة لكل المُصيِّرات (تعرض الإطار الأول).
+
+// ---------------------------------------------------------------------------
+//  1) الفيلم
+// ---------------------------------------------------------------------------
+fun pn_film(w, h, fps, secs, theme, draw) {
+    let n = floor(fps * secs + 0.5);
+    if (n < 1) { n = 1; }
+    let first = nil;
+    let frames = [];
+    let i = 0;
+    while (i < n) {
+        let c = pn_canvas(w, h);
+        pn_theme(c, theme);
+        c["_ctx"]["seq"] = i * 1000;      // معرّفات فريدة لكل إطار كي تتجاور التعريفات في SVG واحد
+        draw(c, i / fps, i / n, i, n);
+        push(frames, {"defs": c["defs"], "nodes": c["nodes"]});
+        if (i == 0) { first = c; }
+        i = i + 1;
+    }
+    first["anim"] = {"fps": fps, "loop": true, "frames": frames};
+    return first;
+}
+fun pn_film_loop(c, looping) { c["anim"]["loop"] = looping; return c; }
+fun pn_frame_count(c) {
+    if (!pn_has(c, "anim")) { return 1; }
+    return len(c["anim"]["frames"]);
+}
+// لوحة ثابتة للإطار رقم i (يلتفّ) — لتصديره أو عرضه
+fun pn_frame(c, i) {
+    if (!pn_has(c, "anim")) { return c; }
+    let fr = c["anim"]["frames"];
+    let k = pn_mod(i, len(fr));
+    let out = {"piano": PN_SCHEMA, "w": c["w"], "h": c["h"], "bg": pn_opt(c, "bg", "none"), "font": pn_opt(c, "font", PN_FONT),
+               "defs": fr[k]["defs"], "nodes": fr[k]["nodes"]};
+    if (pn_has(c, "title")) { out["title"] = c["title"]; }
+    if (pn_has(c, "dw")) { out["dw"] = c["dw"]; out["dh"] = c["dh"]; }
+    return out;
+}
+// data-URI للإطار i — لعرض الحركة داخل <Image src=…> في indsin (حرّك i بمتغيّر warp)
+fun pn_frame_uri(c, i) { return pn_data_uri(pn_frame(c, i)); }
+
+// ---------------------------------------------------------------------------
+//  2) SVG متحرك: كل إطار <g> يظهر في فترته فقط (SMIL، calcMode=discrete)
+// ---------------------------------------------------------------------------
+fun pn_anim_svg(c) {
+    if (!pn_has(c, "anim")) { return pn_svg(c); }
+    let a = c["anim"];
+    let fr = a["frames"];
+    let n = len(fr);
+    let dur = n / a["fps"];
+    let out = pn_svg_head(c);
+    let any = false;
+    for (let f in fr) { if (len(f["defs"]) > 0) { any = true; } }
+    if (any) {
+        push(out, "  <defs>");
+        for (let f in fr) { for (let d in f["defs"]) { pn_emit_def(out, d, 4); } }
+        push(out, "  </defs>");
+    }
+    pn_svg_bg(out, c);
+    let rep = " repeatCount=\"indefinite\"";
+    if (!pn_opt(a, "loop", true)) { rep = " repeatCount=\"1\" fill=\"freeze\""; }
+    let i = 0;
+    while (i < n) {
+        let vis = "";
+        if (i > 0) { vis = " visibility=\"hidden\""; }
+        let vals = ""; let kts = "";
+        if (n == 1) { vals = "visible;visible"; kts = "0;1"; }
+        else if (i == 0) { vals = "visible;hidden;hidden"; kts = "0;" + pn_nf((i + 1) / n, 4) + ";1"; }
+        else if (i == n - 1) { vals = "hidden;visible;visible"; kts = "0;" + pn_nf(i / n, 4) + ";1"; }
+        else { vals = "hidden;visible;hidden;hidden"; kts = "0;" + pn_nf(i / n, 4) + ";" + pn_nf((i + 1) / n, 4) + ";1"; }
+        push(out, "  <g" + vis + ">");
+        push(out, "    <animate attributeName=\"visibility\" calcMode=\"discrete\" values=\"" + vals + "\" keyTimes=\"" + kts + "\" dur=\"" + pn_nf(dur, 3) + "s\"" + rep + "/>");
+        for (let nd in fr[i]["nodes"]) { pn_emit(out, nd, 4); }
+        push(out, "  </g>");
+        i = i + 1;
+    }
+    push(out, "</svg>");
+    return join(out, "\n");
+}
+
+// ---------------------------------------------------------------------------
+//  3) دوال الزمن والتخفيف — لبرمجة الحركة
+// ---------------------------------------------------------------------------
+fun pn_fract(x) { return x - floor(x); }
+// ذهاب وإياب: 0→1→0 كل دورة (t بالدورات)
+fun pn_pingpong(t) {
+    let f = pn_fract(t / 2) * 2;
+    if (f > 1) { return 2 - f; }
+    return f;
+}
+// تخفيف: name ∈ linear in out inout in3 out3 inout3 sine bounce elastic back step · t ∈ [0,1]
+fun pn_ease(name, t) {
+    t = pn_clamp(t, 0, 1);
+    if (name == "linear") { return t; }
+    if (name == "in") { return t * t; }
+    if (name == "out") { return 1 - (1 - t) * (1 - t); }
+    if (name == "inout") {
+        if (t < 0.5) { return 2 * t * t; }
+        return 1 - (-2 * t + 2) * (-2 * t + 2) / 2;
+    }
+    if (name == "in3") { return t * t * t; }
+    if (name == "out3") { return 1 - pow(1 - t, 3); }
+    if (name == "inout3") {
+        if (t < 0.5) { return 4 * t * t * t; }
+        return 1 - pow(-2 * t + 2, 3) / 2;
+    }
+    if (name == "sine") { return 0 - (cos(PI * t) - 1) / 2; }
+    if (name == "step") {
+        if (t < 1) { return 0; }
+        return 1;
+    }
+    if (name == "back") {
+        let c1 = 1.70158;
+        let c3 = c1 + 1;
+        return 1 + c3 * pow(t - 1, 3) + c1 * pow(t - 1, 2);
+    }
+    if (name == "elastic") {
+        if (t == 0) { return 0; }
+        if (t == 1) { return 1; }
+        return pow(2, -10 * t) * sin((t * 10 - 0.75) * (2 * PI / 3)) + 1;
+    }
+    if (name == "bounce") {
+        let n1 = 7.5625;
+        let d1 = 2.75;
+        if (t < 1 / d1) { return n1 * t * t; }
+        if (t < 2 / d1) { let u = t - 1.5 / d1; return n1 * u * u + 0.75; }
+        if (t < 2.5 / d1) { let u2 = t - 2.25 / d1; return n1 * u2 * u2 + 0.9375; }
+        let u3 = t - 2.625 / d1;
+        return n1 * u3 * u3 + 0.984375;
+    }
+    throw "piano: تخفيف غير معروف «" + name + "» — linear in out inout in3 out3 inout3 sine bounce elastic back step";
+}
+// استيفاء من a إلى b عند التقدّم p بتخفيف مسمّى
+fun pn_tween(a, b, p, name) { return a + (b - a) * pn_ease(name, p); }
+)PIANOOGRIN";
+
 inline const std::unordered_map<std::string, std::string>& embeddedRinLibraries() {
     static const std::unordered_map<std::string, std::string> libs = {
         {"lib/twinkling-stars.og.rin", kLib_twinkling_stars_og_rin},
@@ -31100,6 +34128,7 @@ inline const std::unordered_map<std::string, std::string>& embeddedRinLibraries(
         {"lib/syskit.og.rin", kLib_syskit_og_rin},
         {"lib/requirekit.og.rin", kLib_requirekit_og_rin},
         {"lib/physics.og.rin", kLib_physics_og_rin},
+        {"lib/piano.og.rin", kLib_piano_og_rin},
         {"lib/extdb.og.rin", kLib_extdb_og_rin},
         {"lib/indsinicons.og.rin", kLib_indsinicons_og_rin},
         {"lib/passkitlang.og.rin", kLib_passkitlang_og_rin},
