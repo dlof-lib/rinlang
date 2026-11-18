@@ -1,0 +1,25 @@
+// piano — مخطط انسيابي: صناديق وموصلات ومحاور
+@import "piano";
+
+let c = pn_canvas(720, 340);
+pn_theme(c, "light");
+pn_grid(c, 0, 0, 720, 340, 24, {"op": 0.5});
+pn_text(c, 24, 36, "مسار بناء المكتبة", {"size": 20, "weight": 800});
+
+pn_box(c, 30, 120, 130, 54, "main.zpp", {"color": "#4f46e5"});
+pn_box(c, 230, 60, 130, 54, "core/shapes", {"color": "#06b6d4"});
+pn_box(c, 230, 180, 130, 54, "core/design", {"color": "#ec4899"});
+pn_box(c, 430, 120, 130, 54, "render.zpp", {"color": "#f59e0b"});
+pn_box(c, 580, 250, 120, 54, "SVG", {"color": "#10b981"});
+pn_box(c, 580, 40, 120, 54, ".puo", {"color": "#8b5cf6"});
+
+pn_connect(c, 160, 147, 230, 87, {});
+pn_connect(c, 160, 147, 230, 207, {});
+pn_connect(c, 360, 87, 430, 147, {});
+pn_connect(c, 360, 207, 430, 147, {"dash": [6, 5]});
+pn_elbow(c, 560, 147, 580, 277, {"stroke": "#10b981"});
+pn_elbow(c, 560, 147, 580, 67, {"stroke": "#8b5cf6"});
+pn_label(c, 195, 300, "pn_connect", {"size": 12, "bg": "#06b6d4"});
+pn_label(c, 340, 300, "pn_elbow", {"size": 12, "bg": "#10b981"});
+pn_save(c, "examples/piano/out/07_diagram.svg");
+pn_save(c, "examples/piano/out/07_diagram.puo");
