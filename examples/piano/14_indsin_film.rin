@@ -1,0 +1,46 @@
+<!-- حركة piano داخل indsin: في الويب <Image> يتحوّل إلى <img> فيتحرك SVG وحده،
+     وفي الطرفية/أندرويد تُعرض الإطارات بالتنقّل (◀ ▶) عبر pn_frame_uri
+     rin indsin examples/piano/14_indsin_film.rin   ·   indsin2web examples/piano/14_indsin_film.rin -o film.html -->
+<warp frame={0} />
+<warp still={""} />
+<warp total={1} />
+<Rin>
+@import "piano";
+
+piano.Orbit {
+    $size => "240, 160";
+    $theme => "dark";
+    $fps => 20;
+    $duration => 2;
+    $Bg.Rect => "0, 0, 240, 160" { grad: ["#0b1020", "#1e1b4b"]; angle: 60; };
+    $Sun.Circle => "120, 80, 14" { fill: "#fbbf24"; glow: 8; };
+    $go.Frame {
+        $Planets.Repeat => 3 {
+            $a => ($p * 360 * (1 + $i * 0.5) + $i * 120);
+            $Orb.Circle => "(120 + cos($a) * (34 + $i * 18)), (80 + sin($a) * (34 + $i * 18)), (4 + $i)" { fill: pal($i); };
+        };
+        $Lbl.Text => "120, 150, 'إطار $i من $n'" { size: 10; anchor: "middle"; fill: "#94a3b8"; };
+    };
+};
+total = pn_frame_count(Orbit);
+let live = pn_uri(Orbit);                    // SVG متحرك (للويب)
+fun showFrame() { still = pn_frame_uri(Orbit, frame); }
+fun nextF() { frame = pn_next(Orbit, frame); showFrame(); }
+fun prevF() { frame = pn_prev(Orbit, frame); showFrame(); }
+showFrame();
+</Rin>
+<Column#root padding=16 gap=12>
+  <Text#heading text="حركة piano داخل indsin" size="title" />
+  <Row#r gap=12>
+    <Card#c1 padding=8>
+      <Column#a1 gap=4><Text#t1 text="متحرك (ويب)" /><Image#anim src={live} width=240 height=160 /></Column>
+    </Card>
+    <Card#c2 padding=8>
+      <Column#a2 gap=4><Text#t2 text={"الإطار " + str(frame + 1) + " / " + str(total)} /><Image#still src={still} width=240 height=160 /></Column>
+    </Card>
+  </Row>
+  <Wrap#ctl gap=8>
+    <Button#bp onTap={prevF()}>◀</Button>
+    <Button#bn onTap={nextF()}>▶</Button>
+  </Wrap>
+</Column>
