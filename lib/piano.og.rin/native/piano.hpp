@@ -300,6 +300,7 @@ inline std::string tail(const J& n) {
     if (n.has("tf")) s += attr("transform", tfstr(n.at("tf")));
     if (n.has("filter")) s += attr("filter", url(n.at("filter").s));
     if (n.has("clip")) s += attr("clip-path", url(n.at("clip").s));
+    if (n.has("mask")) s += attr("mask", url(n.at("mask").s));
     return s;
 }
 inline std::string head(const J& n) { return astr(n, "id", "id") + astr(n, "cls", "class"); }
@@ -470,6 +471,10 @@ inline void emit_def(std::vector<std::string>& out, const J& d, int ind) {
         out.push_back(pad + "<clipPath" + id + ">");
         if (d.has("nodes")) for (auto& ch : d.at("nodes").a) emit(out, ch, ind + 2);
         out.push_back(pad + "</clipPath>");
+    } else if (t == "mask") {
+        out.push_back(pad + "<mask" + id + ">");
+        if (d.has("nodes")) for (auto& ch : d.at("nodes").a) emit(out, ch, ind + 2);
+        out.push_back(pad + "</mask>");
     }
 }
 
@@ -479,8 +484,9 @@ inline void emit_def(std::vector<std::string>& out, const J& d, int ind) {
 inline std::string render_svg(const J& c) {
     if (!c.isObj() || !c.has("piano")) throw std::runtime_error("piano: هذا ليس مشهد piano (حقل piano مفقود)");
     std::string w = n2(c.at("w").n), h = n2(c.at("h").n);
+    std::string dw = n2(c.has("dw") ? c.at("dw").n : c.at("w").n), dh = n2(c.has("dh") ? c.at("dh").n : c.at("h").n);
     std::vector<std::string> out;
-    std::string root = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"" + w + "\" height=\"" + h + "\" viewBox=\"0 0 " + w + " " + h + "\"";
+    std::string root = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"" + dw + "\" height=\"" + dh + "\" viewBox=\"0 0 " + w + " " + h + "\"";
     if (c.has("font")) root += attr("font-family", c.at("font").s);
     out.push_back(root + ">");
     if (c.has("title") && tostr(c.at("title")) != "") out.push_back("  <title>" + esc(tostr(c.at("title"))) + "</title>");
