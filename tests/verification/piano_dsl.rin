@@ -1,0 +1,61 @@
+// piano: لغة الكتل piano.<الاسم> { … }; — متغيرات، دوال، حلقات، مجموعات، أخطاء بأسطر صحيحة
+@import "piano";
+
+piano.A {
+    $size => "100 60";
+    $theme => "dark";
+    $k => 10;
+    $r.Rect => "($k) 5 30 (20 + $k)" { fill: "#ff0000"; rx: 4; };   // تعليق
+    $t.Text => "50 40 'hi'" { size: 12; anchor: "middle"; };
+    $d.Fn(x) { $.Circle => "$x 50 3" { fill: pal(1); }; };
+    $rep.Repeat => 2 { $d(60 + $i * 10); };
+    $g.Group { op: 0.5; $l.Line => "0 0 100 60" { stroke: "#fff"; }; };
+};
+print len(A["nodes"]), A["w"], A["h"], A["nodes"][0]["x"], A["nodes"][0]["h"], A["nodes"][1]["text"];
+print A["nodes"][2]["cx"], A["nodes"][3]["cx"], A["nodes"][4]["op"], A["nodes"][4]["t"];
+
+piano.Grad {
+    $sky.Linear => "0 '#000' '#fff'";
+    $r.Rect => "0 0 10 10" { fill: $sky; };
+    $m.Repeat => 3 { $x.Rect => "0 0 1 1"; };
+    $c.If => (1 == 1) { $y.Circle => "1 1 1"; };
+    $e.Each => ["a", "b"] { $z.Text => "0 0 $it"; };
+};
+print len(Grad["defs"]), len(Grad["nodes"]), Grad["nodes"][0]["fill"], Grad["nodes"][6]["text"];
+
+try {
+    piano.E1 {
+        $r.Rect => "0 0 $nope 5";
+    };
+} catch (e) { print "err:", e["message"]; }
+try {
+    piano.E2 {
+        $r.Wobble => "1 2";
+    };
+} catch (e) { print "err:", e["message"]; }
+try {
+    piano.E3 {
+        $r.Rect => "1 2";
+    };
+} catch (e) { print "err:", e["message"]; }
+try {
+    piano.E4 {
+        $f.Fn(a, b) { $.Circle => "$a $b 1"; };
+        $f(1);
+    };
+} catch (e) { print "err:", e["message"]; }
+try { pn_dsl("E5", "r.Rect => 1;"); } catch (e) { print "err:", e["message"]; }
+print "done";
+
+// فاصلة بدل المسافة (, أو ،) — وتحفظ الفواصل داخل النصوص المقتبسة
+piano.Commas {
+    $size => "100, 60";
+    $a.Rect => "10, 5, 30, 20";
+    $b.Circle => "60،30،8";
+    $t.Text => "50, 50, 'a, b'";
+};
+print Commas["w"], Commas["nodes"][0]["w"], Commas["nodes"][1]["cx"], Commas["nodes"][2]["text"];
+
+// استيراد ملف .pia
+@import "./tests/verification/pia_scene.pia";
+print piaHello(), FromPia["w"], FromPia["nodes"][0]["h"];
