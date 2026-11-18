@@ -9,6 +9,8 @@
     "piano": {"const": 1},
     "w": {"type": "number", "exclusiveMinimum": 0},
     "h": {"type": "number", "exclusiveMinimum": 0},
+    "dw": {"type": "number", "exclusiveMinimum": 0, "description": "عرض العرض الفعلي (اختياري)"},
+    "dh": {"type": "number", "exclusiveMinimum": 0},
     "title": {"type": "string"},
     "bg": {"$ref": "#/$defs/paint"},
     "font": {"type": "string"},
@@ -37,7 +39,7 @@
       "type": "object",
       "required": ["t", "id"],
       "properties": {
-        "t": {"enum": ["linear", "radial", "shadow", "glow", "blur", "pattern", "clip"]},
+        "t": {"enum": ["linear", "radial", "shadow", "glow", "blur", "pattern", "clip", "mask"]},
         "id": {"type": "string"},
         "stops": {"$ref": "#/$defs/stops"},
         "nodes": {"type": "array", "items": {"$ref": "#/$defs/node"}}
@@ -62,7 +64,7 @@
         "fill": {"$ref": "#/$defs/paint"}, "stroke": {"$ref": "#/$defs/paint"},
         "fo": {"type": "number"}, "so": {"type": "number"}, "sw": {"type": "number"}, "op": {"type": "number"},
         "dash": {"$ref": "#/$defs/numlist"}, "cap": {"enum": ["butt", "round", "square"]}, "join": {"enum": ["miter", "round", "bevel"]},
-        "tf": {"$ref": "#/$defs/tf"}, "filter": {"type": "string"}, "clip": {"type": "string"},
+        "tf": {"$ref": "#/$defs/tf"}, "filter": {"type": "string"}, "clip": {"type": "string"}, "mask": {"type": "string"},
         "anim": {"$ref": "#/$defs/anim"},
         "nodes": {"type": "array", "items": {"$ref": "#/$defs/node"}}
       }
