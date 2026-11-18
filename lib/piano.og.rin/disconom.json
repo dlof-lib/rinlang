@@ -2,11 +2,33 @@
   "disconom": 1,
   "name": "piano",
   "version": "1.0.0",
-  "description": "piano — مكتبة رسم متجهي احترافي: مشهد JSON (.puo) → SVG/HTML، أشكال ومسارات وتدرّجات وظلال وحركة ومخططات، بمُصيِّرات Rin وC++ وJS متطابقة",
+  "description": "piano — مكتبة رسم وتصميم متجهي: مشهد JSON (.puo) → SVG/HTML؛ أشكال وأقنعة وحركة ومخططات ومكوّنات واجهة وأيقونات، دمج indsin، ولغة كتل declarative: piano.Name { $Shape.Rect => \"…\" { … }; } · رسم متحرك أثناء التشغيل: pn_film وإطارات يبرمجها المستخدم",
   "rin": ">=1.0.0",
-  "authors": ["Rin"],
+  "authors": [
+    "Rin"
+  ],
   "license": "MIT",
-  "keywords": ["drawing", "vector", "svg", "charts", "canvas", "رسم", "مخططات"],
+  "keywords": [
+    "drawing",
+    "vector",
+    "svg",
+    "charts",
+    "canvas",
+    "رسم",
+    "مخططات"
+  ],
   "main": "main.zpp",
-  "parts": ["main.zpp", "core/style.zpp", "core/shapes.zpp", "core/path.zpp", "core/transform.zpp", "core/render.zpp", "core/chart.zpp"]
+  "parts": [
+    "main.zpp",
+    "core/style.zpp",
+    "core/shapes.zpp",
+    "core/path.zpp",
+    "core/transform.zpp",
+    "core/render.zpp",
+    "core/chart.zpp",
+    "core/design.zpp",
+    "core/indsin.zpp",
+    "core/dsl.zpp",
+    "core/film.zpp"
+  ]
 }
