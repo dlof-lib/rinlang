@@ -1,0 +1,304 @@
+// piano — الجزء 8: التصميم (تخطيط · مكوّنات واجهة · إطارات أجهزة · مخططات انسيابية · أيقونات · خلفيات)
+//
+//   let phone = pn_phone(c, 40, 30, 220, 440, {});          // ارسم داخل phone كأنه لوحة
+//   pn_card(phone, 16, 60, 188, 90, {"title": "الرصيد"});
+//   pn_button(phone, 16, 400, 188, 40, "تأكيد", {});
+//   pn_icon(phone, "bell", 176, 24, 22, {});
+//
+// كل المكوّنات تُلوَّن من ثيم اللوحة (pn_theme) وتُرجع group يقبل خيارات tf/shadow/clip/anim.
+
+// ---------------------------------------------------------------------------
+//  1) التخطيط — دوال حسابية بحتة تُرجع مستطيلات {x,y,w,h}
+// ---------------------------------------------------------------------------
+fun pn_rect_of(x, y, w, h) { return {"x": x, "y": y, "w": w, "h": h}; }
+// تقليص المستطيل بهامش p من كل جهة
+fun pn_pad(r, p) { return {"x": r["x"] + p, "y": r["y"] + p, "w": r["w"] - 2 * p, "h": r["h"] - 2 * p}; }
+// شبكة خلايا (صفوف × أعمدة) بترتيب الصفوف أولاً
+fun pn_grid_cells(x, y, w, h, cols, rows, gap) {
+    let cw = (w - gap * (cols - 1)) / cols;
+    let ch = (h - gap * (rows - 1)) / rows;
+    let out = [];
+    let r = 0;
+    while (r < rows) {
+        let c = 0;
+        while (c < cols) {
+            push(out, {"x": x + c * (cw + gap), "y": y + r * (ch + gap), "w": cw, "h": ch});
+            c = c + 1;
+        }
+        r = r + 1;
+    }
+    return out;
+}
+// تقسيم بأوزان: dir = "row" (جنباً إلى جنب) أو "col" (فوق بعض)
+fun pn_split(x, y, w, h, weights, gap, dir) {
+    let total = 0;
+    for (let k in weights) { total = total + k; }
+    let n = len(weights);
+    let avail = h - gap * (n - 1);
+    if (dir == "row") { avail = w - gap * (n - 1); }
+    let out = [];
+    let pos = 0;
+    for (let k in weights) {
+        let sz = avail * k / total;
+        if (dir == "row") { push(out, {"x": x + pos, "y": y, "w": sz, "h": h}); }
+        else { push(out, {"x": x, "y": y + pos, "w": w, "h": sz}); }
+        pos = pos + sz + gap;
+    }
+    return out;
+}
+
+// ---------------------------------------------------------------------------
+//  2) ألوان السطح
+// ---------------------------------------------------------------------------
+fun pn_surface(parent) {
+    let th = parent["_ctx"]["theme"];
+    return pn_mix(th["bg"], th["ink"], 0.06);
+}
+fun pn_gcommon(o) { return pn_pick(o, ["id", "op", "tf", "shadow", "glow", "filter", "title", "clip", "mask", "anim"]); }
+
+// ---------------------------------------------------------------------------
+//  3) مكوّنات الواجهة
+// ---------------------------------------------------------------------------
+// بطاقة. خيارات: r(14) fill heading subtitle elevate(ظل)
+fun pn_card(parent, x, y, w, h, o) {
+    o = pn_o(o);
+    let g = pn_group(parent, pn_gcommon(o));
+    let rr = pn_rrect(g, x, y, w, h, pn_opt(o, "r", 14),
+                      {"fill": pn_opt(o, "fill", pn_surface(parent)), "stroke": pn_gridc(parent), "sw": 1,
+                       "shadow": pn_opt(o, "elevate", false)});
+    if (pn_has(o, "heading")) { pn_text(g, x + 16, y + 26, o["heading"], {"size": 15, "weight": 700}); }
+    if (pn_has(o, "subtitle")) { pn_text(g, x + 16, y + 46, o["subtitle"], {"size": 12, "fill": pn_muted(parent)}); }
+    return g;
+}
+// زر. variant: solid | soft | outline | ghost · color · r(10) · size(14)
+fun pn_button(parent, x, y, w, h, label, o) {
+    o = pn_o(o);
+    let v = pn_opt(o, "variant", "solid");
+    let col = pn_opt(o, "color", pn_accent(parent));
+    let r = pn_opt(o, "r", 10);
+    let size = pn_opt(o, "size", 14);
+    let g = pn_group(parent, pn_gcommon(o));
+    let fg = col;
+    if (v == "solid") {
+        pn_rect(g, x, y, w, h, {"fill": col, "rx": r});
+        fg = colorTextOn(pn_norm_color(col));
+    } else if (v == "soft") {
+        pn_rect(g, x, y, w, h, {"fill": pn_alpha(col, 0.16), "rx": r});
+    } else if (v == "outline") {
+        pn_rect(g, x + 0.75, y + 0.75, w - 1.5, h - 1.5, {"fill": "none", "stroke": col, "sw": 1.5, "rx": r});
+    }
+    pn_text(g, x + w / 2, y + h / 2 + size * 0.35, label, {"size": size, "weight": 600, "anchor": "middle", "fill": fg});
+    return g;
+}
+// شارة صغيرة مركزها (x, y). color
+fun pn_badge(parent, x, y, label, o) {
+    o = pn_o(o);
+    let col = pn_opt(o, "color", pn_accent(parent));
+    return pn_label(parent, x, y, label, {"size": pn_opt(o, "size", 12), "bg": pn_alpha(col, 0.16), "fg": col});
+}
+// صورة رمزية بالأحرف الأولى
+fun pn_avatar(parent, cx, cy, r, initials, o) {
+    o = pn_o(o);
+    let col = pn_opt(o, "color", pn_accent(parent));
+    let g = pn_group(parent, pn_gcommon(o));
+    pn_circle(g, cx, cy, r, {"grad": [col, pn_darken(col, 0.25)], "angle": 45});
+    pn_text(g, cx, cy + r * 0.3, initials, {"size": r * 0.85, "weight": 700, "anchor": "middle", "fill": colorTextOn(pn_norm_color(col))});
+    return g;
+}
+// شريط تقدّم: value ∈ [0,1]
+fun pn_progress(parent, x, y, w, h, value, o) {
+    o = pn_o(o);
+    let g = pn_group(parent, pn_gcommon(o));
+    pn_rect(g, x, y, w, h, {"fill": pn_gridc(parent), "rx": h / 2});
+    let v = pn_clamp(value, 0, 1);
+    if (v > 0) {
+        let fw = w * v;
+        if (fw < h) { fw = h; }
+        let fo = {"rx": h / 2};
+        if (pn_has(o, "grad")) { fo["grad"] = o["grad"]; fo["angle"] = 0; }
+        else { fo["fill"] = pn_opt(o, "color", pn_accent(parent)); }
+        pn_rect(g, x, y, fw, h, fo);
+    }
+    return g;
+}
+// مفتاح تبديل 44×24
+fun pn_toggle(parent, x, y, state, o) {
+    o = pn_o(o);
+    let g = pn_group(parent, pn_gcommon(o));
+    let col = pn_gridc(parent);
+    if (state) { col = pn_opt(o, "color", pn_accent(parent)); }
+    pn_rect(g, x, y, 44, 24, {"fill": col, "rx": 12});
+    let kx = x + 12;
+    if (state) { kx = x + 32; }
+    pn_circle(g, kx, y + 12, 9, {"fill": "#ffffff", "shadow": {"dy": 1, "blur": 3, "op": 0.3}});
+    return g;
+}
+// حقل إدخال: text = القيمة، وإن أردت نصاً إرشادياً فاستعمل o.hint
+fun pn_input(parent, x, y, w, h, value, o) {
+    o = pn_o(o);
+    let g = pn_group(parent, pn_gcommon(o));
+    pn_rect(g, x + 0.75, y + 0.75, w - 1.5, h - 1.5, {"fill": parent["_ctx"]["theme"]["bg"], "stroke": pn_opt(o, "stroke", pn_gridc(parent)), "sw": 1.5, "rx": pn_opt(o, "r", 10)});
+    let col = pn_ink(parent);
+    if (pn_opt(o, "hint", false)) { col = pn_muted(parent); }
+    pn_text(g, x + 14, y + h / 2 + 5, value, {"size": 14, "fill": col});
+    return g;
+}
+fun pn_divider(parent, x1, y, x2, o) {
+    return pn_line(parent, x1, y, x2, y, {"stroke": pn_gridc(parent), "sw": 1});
+}
+
+// ---------------------------------------------------------------------------
+//  4) إطارات الأجهزة — تُرجع group محتوى مقصوصاً على الشاشة، وفيه _screen = {x,y,w,h}
+// ---------------------------------------------------------------------------
+fun pn_phone(parent, x, y, w, h, o) {
+    o = pn_o(o);
+    let bez = pn_opt(o, "bezel", 9);
+    let r = w * 0.14;
+    let outer = pn_group(parent, pn_gcommon(o));
+    pn_rrect(outer, x, y, w, h, r, {"fill": pn_opt(o, "color", "#0a0a0a"), "stroke": "#3f3f46", "sw": 1.5});
+    let sx = x + bez; let sy = y + bez; let sw = w - 2 * bez; let sh = h - 2 * bez;
+    let g = pn_group(outer, {"clip": pn_clip_rect(parent, sx, sy, sw, sh, r - bez)});
+    pn_rect(g, sx, sy, sw, sh, {"fill": parent["_ctx"]["theme"]["bg"]});
+    pn_rect(g, x + w / 2 - w * 0.17, sy + 8, w * 0.34, 14, {"fill": "#0a0a0a", "rx": 7});
+    g["_screen"] = {"x": sx, "y": sy, "w": sw, "h": sh};
+    return g;
+}
+// نافذة متصفح. url = العنوان المعروض
+fun pn_browser(parent, x, y, w, h, url, o) {
+    o = pn_o(o);
+    let outer = pn_group(parent, pn_gcommon(o));
+    pn_rrect(outer, x, y, w, h, 12, {"fill": pn_surface(parent), "stroke": pn_gridc(parent), "sw": 1, "shadow": pn_opt(o, "elevate", false)});
+    pn_circle(outer, x + 20, y + 19, 5.5, {"fill": "#ef4444"});
+    pn_circle(outer, x + 40, y + 19, 5.5, {"fill": "#f59e0b"});
+    pn_circle(outer, x + 60, y + 19, 5.5, {"fill": "#22c55e"});
+    pn_rect(outer, x + 84, y + 8, w - 84 - 16, 22, {"fill": parent["_ctx"]["theme"]["bg"], "rx": 11});
+    pn_text(outer, x + 98, y + 23, url, {"size": 11, "fill": pn_muted(parent)});
+    let g = pn_group(outer, {"clip": pn_clip_rect(parent, x, y + 38, w, h - 38, 0)});
+    pn_rect(g, x, y + 38, w, h - 38, {"fill": parent["_ctx"]["theme"]["bg"]});
+    g["_screen"] = {"x": x, "y": y + 38, "w": w, "h": h - 38};
+    return g;
+}
+
+// ---------------------------------------------------------------------------
+//  5) خلفية شبكية ضبابية (mesh) — colors: 2..5 ألوان
+// ---------------------------------------------------------------------------
+fun pn_mesh(parent, w, h, colors, o) {
+    o = pn_o(o);
+    let g = pn_group(parent, {"clip": pn_clip_rect(parent, 0, 0, w, h, 0)});
+    pn_rect(g, 0, 0, w, h, {"fill": parent["_ctx"]["theme"]["bg"]});
+    let big = w;
+    if (h > w) { big = h; }
+    let i = 0;
+    while (i < len(colors)) {
+        let fx = pn_mod(0.2 + i * 0.618, 1);
+        let fy = pn_mod(0.3 + i * 0.382, 1);
+        pn_circle(g, w * fx, h * fy, big * 0.42, {"fill": colors[i], "op": pn_opt(o, "strength", 0.55), "blur": big * pn_opt(o, "soft", 0.12)});
+        i = i + 1;
+    }
+    return g;
+}
+
+// ---------------------------------------------------------------------------
+//  6) مخططات انسيابية
+// ---------------------------------------------------------------------------
+// صندوق عقدة: نص في وسط مستطيل. color
+fun pn_box(parent, x, y, w, h, label, o) {
+    o = pn_o(o);
+    let col = pn_opt(o, "color", pn_accent(parent));
+    let g = pn_group(parent, pn_gcommon(o));
+    pn_rect(g, x, y, w, h, {"fill": pn_opt(o, "fill", pn_alpha(col, 0.14)), "stroke": col, "sw": 1.5, "rx": pn_opt(o, "r", 10)});
+    pn_text(g, x + w / 2, y + h / 2 + 5, label, {"size": pn_opt(o, "size", 14), "weight": 600, "anchor": "middle"});
+    return g;
+}
+fun pn_arrow_head(g, tx, ty, angle, size, col) {
+    let bx = tx - size * cos(angle);
+    let by = ty - size * sin(angle);
+    let nx = -sin(angle) * size * 0.5;
+    let ny = cos(angle) * size * 0.5;
+    return pn_polygon(g, [tx, ty, bx + nx, by + ny, bx - nx, by - ny], {"fill": col});
+}
+// موصل منحنٍ بين نقطتين (يخرج أفقياً ويدخل أفقياً). خيارات: stroke sw dash head(10|false)
+fun pn_connect(parent, x1, y1, x2, y2, o) {
+    o = pn_o(o);
+    let g = pn_group(parent, pn_gcommon(o));
+    let col = pn_opt(o, "stroke", pn_muted(parent));
+    let dir = 1;
+    if (x2 < x1) { dir = -1; }
+    let dx = abs(x2 - x1) * 0.5;
+    if (dx < 24) { dx = 24; }
+    let head = pn_opt(o, "head", 10);
+    let ex = x2;
+    if (head != false) { ex = x2 - dir * head * 0.9; }
+    let p = pn_pen();
+    pn_move(p, x1, y1);
+    pn_cubicto(p, x1 + dir * dx, y1, ex - dir * dx, y2, ex, y2);
+    pn_path(g, p, {"stroke": col, "sw": pn_opt(o, "sw", 2), "cap": "round", "dash": pn_opt(o, "dash", nil)});
+    if (head != false) {
+        let a = 0;
+        if (dir < 0) { a = PI; }
+        pn_arrow_head(g, x2, y2, a, head, col);
+    }
+    return g;
+}
+// موصل متعامد (كوع) بخط عمودي في المنتصف
+fun pn_elbow(parent, x1, y1, x2, y2, o) {
+    o = pn_o(o);
+    let g = pn_group(parent, pn_gcommon(o));
+    let col = pn_opt(o, "stroke", pn_muted(parent));
+    let mx = (x1 + x2) / 2;
+    let dir = 1;
+    if (x2 < mx) { dir = -1; }
+    let head = pn_opt(o, "head", 10);
+    let ex = x2;
+    if (head != false) { ex = x2 - dir * head * 0.9; }
+    let p = pn_pen();
+    pn_move(p, x1, y1);
+    pn_lineto(p, mx, y1);
+    pn_lineto(p, mx, y2);
+    pn_lineto(p, ex, y2);
+    pn_path(g, p, {"stroke": col, "sw": pn_opt(o, "sw", 2), "join": "round", "cap": "round", "dash": pn_opt(o, "dash", nil)});
+    if (head != false) {
+        let a = 0;
+        if (dir < 0) { a = PI; }
+        pn_arrow_head(g, x2, y2, a, head, col);
+    }
+    return g;
+}
+
+// ---------------------------------------------------------------------------
+//  7) الأيقونات — شبكة 24×24 بخط (stroke). pn_icon_names() لقائمتها
+// ---------------------------------------------------------------------------
+fun pn_icons() {
+    return {
+        "check": "M5 12.5 L10 17.5 L19 7",
+        "close": "M6 6 L18 18 M18 6 L6 18",
+        "plus": "M12 5 V19 M5 12 H19",
+        "minus": "M5 12 H19",
+        "arrow-right": "M5 12 H19 M13 6 L19 12 L13 18",
+        "arrow-left": "M19 12 H5 M11 6 L5 12 L11 18",
+        "menu": "M4 6 H20 M4 12 H20 M4 18 H20",
+        "search": "M18 11 A7 7 0 1 1 4 11 A7 7 0 1 1 18 11 M16.5 16.5 L21 21",
+        "home": "M3 11 L12 3 L21 11 M5 10 V20 H10 V14 H14 V20 H19 V10",
+        "user": "M16 8 A4 4 0 1 1 8 8 A4 4 0 1 1 16 8 M4 21 C4 16 8 14 12 14 C16 14 20 16 20 21",
+        "bell": "M6 16 V11 A6 6 0 0 1 18 11 V16 L20 18 H4 Z M10 21 H14",
+        "heart": "M12 20 C4 14 3 9 6 6.5 C8.5 4.5 11 5.5 12 8 C13 5.5 15.5 4.5 18 6.5 C21 9 20 14 12 20 Z",
+        "star": "M12 3 L14.8 9 L21 9.8 L16.4 14.2 L17.6 20.5 L12 17.4 L6.4 20.5 L7.6 14.2 L3 9.8 L9.2 9 Z",
+        "download": "M12 4 V15 M7 11 L12 16 L17 11 M5 20 H19",
+        "play": "M8 5 L19 12 L8 19 Z",
+        "settings": "M4 7 H20 M4 12 H20 M4 17 H20 M9 5 V9 M15 10 V14 M8 15 V19"
+    };
+}
+fun pn_icon_names() { return keys(pn_icons()); }
+// أيقونة بمقاس size عند (x,y) (الزاوية العليا اليسرى). خيارات: stroke sw(2) fill cap join
+fun pn_icon(parent, name, x, y, size, o) {
+    o = pn_o(o);
+    let all = pn_icons();
+    if (!has(all, name)) { throw "piano: أيقونة غير معروفة «" + name + "» — المتاح: " + join(keys(all), ", "); }
+    let s = size / 24;
+    let go = pn_gcommon(o);
+    go["tf"] = [["translate", x, y], ["scale", s, s]];
+    let g = pn_group(parent, go);
+    pn_path(g, all[name], {"fill": pn_opt(o, "fill", "none"), "stroke": pn_opt(o, "stroke", pn_ink(parent)), "sw": pn_opt(o, "sw", 2),
+                           "cap": pn_opt(o, "cap", "round"), "join": pn_opt(o, "join", "round")});
+    return g;
+}
