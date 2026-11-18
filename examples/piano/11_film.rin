@@ -1,0 +1,27 @@
+// piano — رسم متحرك أثناء التشغيل: كود المستخدم يرسم كل إطار (pn_film)
+@import "piano";
+
+let balls = 5;
+
+// t ثوانٍ · p ∈ [0,1) · i رقم الإطار · n عدد الإطارات — تُستدعى مرة لكل إطار
+fun draw(c, t, p, i, n) {
+    pn_rect(c, 0, 0, 480, 270, {"grad": ["#0b1020", "#1e1b4b"], "angle": 70});
+    pn_line(c, 40, 200, 440, 200, {"stroke": "#334155", "sw": 2});
+    let k = 0;
+    while (k < balls) {
+        let ph = pn_fract(p + k / balls);                       // طور كل كرة
+        let y = 200 - 120 * (1 - pow(2 * pn_pingpong(ph * 2) - 1, 2));
+        let sq = 1 + 0.25 * pow(1 - pn_pingpong(ph * 2), 6);      // تسطّح عند الارتطام
+        pn_ellipse(c, 80 + k * 80, y - 14, 14 * sq, 14 / sq, {"fill": pn_color(c, k), "glow": 5});
+        k = k + 1;
+    }
+    // نص يظهر بتخفيف bounce ثم يثبت
+    let a = pn_ease("bounce", pn_clamp(t / 1.2, 0, 1));
+    pn_text(c, 240, 60 + 20 * (1 - a), "piano.film", {"size": 34, "weight": 800, "anchor": "middle", "fill": "#ffffff", "op": a});
+    pn_text(c, 240, 250, "الإطار " + str(i + 1) + " / " + str(n), {"size": 11, "anchor": "middle", "fill": "#94a3b8"});
+}
+
+let film = pn_film(480, 270, 24, 2, "dark", draw);
+print "frames:", pn_frame_count(film);
+pn_save(film, "examples/piano/out/11_film.svg");
+pn_save(film, "examples/piano/out/11_film.puo");
