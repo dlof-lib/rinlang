@@ -1,0 +1,84 @@
+// piano — الجزء 9: التكامل مع indsin (واجهات Rin)
+//
+// indsin يعرض الصور عبر <Image src=...>، وهذا الجزء يحوّل رسوم piano إلى data-URI جاهز لها:
+//
+//   @import "piano";
+//   <Image#art src={pn_chart_uri("bar", ["أ","ب","ج"], [3,5,2], 320, 180, "dark", {})} width=320 height=180 />
+//   <Image#ic  src={pn_icon_uri("bell", 24, "#1db143")} width=24 height=24 />
+//   <Image#hero src={pn_uri(Poster)} width=320 height=200 />          // Poster من كتلة piano.Poster { … } أو pn_film
+//
+// كتل piano داخل <Rin> تقبل بيانات الواجهة كمتغيّرات:   piano.Gauge(score, theme) { … $score … };
+//
+// وعند تغيّر warp يُعاد حساب المصدر تلقائياً، فتتحرك المخططات مع البيانات.
+
+// أيقونة مفردة بلون محدّد (خلفية شفافة)
+fun pn_icon_uri(name, size, color) {
+    let c = pn_canvas(size, size);
+    pn_bg(c, "none");
+    pn_icon(c, name, 0, 0, size, {"stroke": color, "sw": 2});
+    return pn_data_uri(c);
+}
+
+// مخطط سريع كـ data-URI.
+//   kind: "bar" | "line" | "pie" | "donut" | "radar" | "spark" | "gauge"
+//   labels: أسماء (أو محاور الرادار) · data: أرقام أو سلاسل (للمقياس: رقم واحد)
+//   o: خيارات المخطط نفسها + transparent:true لخلفية شفافة + bg:"#لون"
+fun pn_chart_uri(kind, labels, data, w, h, theme, o) {
+    o = pn_o(o);
+    let c = pn_canvas(w, h);
+    pn_theme(c, theme);
+    if (pn_opt(o, "transparent", false)) { pn_bg(c, "none"); }
+    if (pn_has(o, "bg")) { pn_bg(c, o["bg"]); }
+    let m = w;
+    if (h < m) { m = h; }
+    if (kind == "bar") { pn_bar_chart(c, 0, 0, w, h, labels, data, o); }
+    else if (kind == "line") { pn_line_chart(c, 0, 0, w, h, labels, data, o); }
+    else if (kind == "pie") { pn_pie_chart(c, w / 2, h / 2, m * 0.42, labels, data, o); }
+    else if (kind == "donut") {
+        let o2 = pn_clone(o);
+        if (!pn_has(o2, "inner")) { o2["inner"] = 0.6; }
+        pn_pie_chart(c, w / 2, h / 2, m * 0.42, labels, data, o2);
+    }
+    else if (kind == "radar") { pn_radar_chart(c, w / 2, h / 2, m * 0.34, labels, data, o); }
+    else if (kind == "spark") { pn_sparkline(c, 4, 4, w - 8, h - 8, data, o); }
+    else if (kind == "gauge") {
+        let r = m * 0.42;
+        if (w / 2 < r) { r = w / 2 - 10; }
+        pn_gauge(c, w / 2, h * 0.72, r, data, pn_opt(o, "max", 100), o);
+    }
+    else { throw "piano: نوع مخطط غير معروف «" + kind + "» — bar line pie donut radar spark gauge"; }
+    return pn_data_uri(c);
+}
+
+// حجم العرض (width/height) المستقل عن نظام الإحداثيات: يُصغَّر/يُكبَّر الرسم كله بلا فقد
+fun pn_display(c, w, h) { c["dw"] = w; c["dh"] = h; return c; }
+// تحجيم متجاوب: عرض w مع حفظ النسبة
+fun pn_display_w(c, w) { c["dw"] = w; c["dh"] = c["h"] * w / c["w"]; return c; }
+
+// data-URI تلقائي: متحرك (SMIL) إن كانت اللوحة فيها anim، وإلا ثابت.
+// في الويب (rin indsin2web) يتحوّل <Image> إلى <img> فتتحرك الصورة وحدها؛ وفي الطرفية/أندرويد تظهر اللقطة الأولى —
+// وللتحريك هناك اعرض pn_frame_uri(film, i) وحرّك i بمتغيّر warp.
+fun pn_anim_uri(c) { return "data:image/svg+xml;base64," + sec.base64Encode(pn_anim_svg(c)); }
+fun pn_uri(c) {
+    if (pn_has(c, "anim")) { return pn_anim_uri(c); }
+    return pn_data_uri(c);
+}
+// الإطار التالي/السابق (يلتفّ) — لأزرار ▶ ◀ في واجهة indsin
+fun pn_next(c, i) { return pn_mod(i + 1, pn_frame_count(c)); }
+fun pn_prev(c, i) { return pn_mod(i - 1, pn_frame_count(c)); }
+
+// وسم <Image> جاهز لنصّ indsin (لتوليد ملفات .rin/.indsin آلياً)
+fun pn_indsin_image(id, uri, w, h) {
+    return "<Image#" + id + " src=\"" + uri + "\" width=" + pn_n(w) + " height=" + pn_n(h) + " />";
+}
+fun pn_indsin_snippet(c, id) {
+    return pn_indsin_image(id, pn_uri(c), pn_opt(c, "dw", c["w"]), pn_opt(c, "dh", c["h"]));
+}
+// ألوان الثيم كقاموس للاستعمال في سمات indsin (bg/color…)
+fun pn_tokens(name) {
+    let t = pn_clone(pn_theme_def(name));
+    t["radius"] = 12;
+    t["gap"] = 12;
+    t["pad"] = 16;
+    return t;
+}
