@@ -1,0 +1,66 @@
+// piano: الرسم المتحرك أثناء التشغيل — pn_film، التخفيف، SVG متحرك، $x.Frame، أنماط التعليقات
+@import "piano";
+
+// 1) pn_film: كود المستخدم يرسم كل إطار، وحالته تبقى بين الإطارات
+let calls = 0;
+fun draw(c, t, p, i, n) {
+    calls = calls + 1;
+    pn_circle(c, 10 + 80 * p, 30, 5, {"fill": pn_linear(c, ["#f00", "#00f"], 0)});
+}
+let f = pn_film(100, 60, 4, 2, "dark", draw);
+print calls, pn_frame_count(f), f["anim"]["fps"], f["anim"]["loop"], len(f["nodes"]);
+print f["anim"]["frames"][1]["defs"][0]["id"], f["anim"]["frames"][7]["defs"][0]["id"];
+print pn_frame(f, 9)["nodes"][0]["cx"], pn_frame(f, 1)["nodes"][0]["cx"];
+
+// 2) SVG متحرك: كل إطار <g> بمفاتيح زمن منفصلة
+let a = pn_anim_svg(f);
+let k = 0;
+for (let ln in split(a, "\n")) { if (indexOf(ln, "<animate attributeName=\"visibility\"") >= 0) { k = k + 1; } }
+print k, indexOf(a, "dur=\"2s\"") > 0, indexOf(a, "repeatCount=\"indefinite\"") > 0;
+print split(a, "\n")[len(split(a, "\n")) - 1];
+pn_film_loop(f, false);
+print indexOf(pn_anim_svg(f), "fill=\"freeze\"") > 0;
+print pn_anim_svg(pn_canvas(10, 10)) == pn_svg(pn_canvas(10, 10));
+
+// 3) تخفيف
+print pn_ease("linear", 0.25), pn_ease("in", 0.5), pn_ease("out", 0.5), pn_ease("inout", 0.25), pn_ease("step", 0.9), pn_ease("bounce", 1), pn_ease("back", 1);
+print pn_nf(pn_ease("elastic", 0.5), 4), pn_nf(pn_tween(10, 20, 0.5, "in"), 2), pn_fract(2.75), pn_pingpong(1.5), pn_pingpong(0.25);
+try { pn_ease("nope", 0.5); } catch (e) { print "err:", e["message"]; }
+
+// 4) لغة الكتل: $x.Frame مع $t $p $i $n
+piano.Anim {
+    $size => "100, 60";
+    $fps => 5;
+    $duration => 1;
+    $Bg.Rect => "0, 0, 100, 60";
+    $go.Frame {
+        $Dot.Circle => "(10 + $p * 80), 30, (2 + $i)";
+        $Msg.Text => "5, 55, '$i/$n'" { size: 8; };
+    };
+};
+print pn_frame_count(Anim), Anim["anim"]["fps"], Anim["anim"]["frames"][3]["nodes"][1]["r"], Anim["anim"]["frames"][4]["nodes"][1]["cx"];
+
+// 5) بلا Frame لا حركة، وبدون anim يبقى الرسم ثابتاً
+piano.Still { $Dot.Circle => "5, 5, 2"; };
+print pn_frame_count(Still), has(Still, "anim");
+
+// 6) أنماط التعليقات داخل الكتلة (وفي ملف .pia خارجها)
+piano.Cmt {
+    *// تعليق { متعدد
+       الأسطر //*
+    $size => "100, 60";   //حجم//
+    ++ تعليق ++
+    $r.Rect => "1,2,3,4";  // قديم
+    $q.Rect => "5,6,7,8";  ++ آخر ++
+};
+print len(Cmt["nodes"]), Cmt["w"], Cmt["nodes"][1]["x"];
+@import "./tests/verification/pia_comments.pia";
+print ci, cj, len(Cm["nodes"]), Cm["nodes"][1]["x"];
+
+// 7) $اسم داخل النص المقتبس يُستبدل بقيمة المتغيّر (والمجهول يبقى كما هو)
+piano.Interp {
+    $who => "سارة";
+    $k => 3.5;
+    $a.Text => "0, 0, 'مرحباً $who: $k/10 $nope'";
+};
+print Interp["nodes"][0]["text"];
