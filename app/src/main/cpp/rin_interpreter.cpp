@@ -10568,7 +10568,9 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
         importUI.stage(loaderui::LoadStage::Resolving);
 
         std::string libPath = rawPath;
-        if (libPath.find('/') == std::string::npos) {
+        // ملفات .pia (مشاهد/أكواد piano): اسم عارٍ ينتهي بـ .pia يُحمَّل كملف نسبي كما هو، لا من lib/
+        const bool isPiaFile = libPath.size() > 4 && libPath.compare(libPath.size() - 4, 4, ".pia") == 0;
+        if (!isPiaFile && libPath.find('/') == std::string::npos) {
             static const std::string kLibExt = ".og.rin";
             bool hasExt = libPath.size() >= kLibExt.size() &&
                           libPath.compare(libPath.size() - kLibExt.size(), kLibExt.size(), kLibExt) == 0;
@@ -10877,7 +10879,9 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
         importUI.stage(loaderui::LoadStage::Resolving);
 
         std::string libPath = rawPath;
-        if (libPath.find('/') == std::string::npos) {
+        // ملفات .pia (مشاهد/أكواد piano): اسم عارٍ ينتهي بـ .pia يُحمَّل كملف نسبي كما هو، لا من lib/
+        const bool isPiaFile = libPath.size() > 4 && libPath.compare(libPath.size() - 4, 4, ".pia") == 0;
+        if (!isPiaFile && libPath.find('/') == std::string::npos) {
             static const std::string kLibExt = ".og.rin";
             bool hasExt = libPath.size() >= kLibExt.size() &&
                           libPath.compare(libPath.size() - kLibExt.size(), kLibExt.size(), kLibExt) == 0;
@@ -11315,7 +11319,7 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
             if (alias.empty()) {
                 std::string base = s->filePath;
                 size_t sl = base.find_last_of('/'); if (sl != std::string::npos) base = base.substr(sl + 1);
-                for (const char* ext : {".og.rin", ".rin"}) {
+                for (const char* ext : {".og.rin", ".rin", ".pia"}) {
                     std::string e = ext;
                     if (base.size() > e.size() && base.compare(base.size() - e.size(), e.size(), e) == 0) { base.resize(base.size() - e.size()); break; }
                 }
