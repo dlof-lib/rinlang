@@ -1,0 +1,19 @@
+// ملف .pia — يعمل كبرنامج Rin:  rin examples/piano/10_card.pia   (الامتداد .rin أو .pia كلاهما مقبول)
+// وللاستيراد من كود آخر:  @import "./examples/piano/10_card.pia";   أو  pn_load("examples/piano/10_card.pia")
+@import "piano";
+
+piano.Card {
+    $size  => "320, 180";             // الفاصلة تفصل الأرقام بدل المسافة (والمسافة تعمل أيضاً)
+    $theme => "light";
+
+    $Bg.RRect     => "10, 10, 300, 160, 18" { fill: "#ffffff"; stroke: "#e5e7eb"; sw: 1.5; shadow: true; };
+    $Av.Avatar    => "56, 62, 26, 'سر'";
+    $Name.Text    => "96, 58, 'سارة المنصور'" { size: 17; weight: 800; };
+    $Role.Text    => "96, 78, 'مصمّمة واجهات'" { size: 12; fill: muted(); };
+    $Tag.Badge    => "262, 36, 'نشطة'" { color: "#10b981"; };
+    $Bar.Progress => "28, 112, 264, 8, 0.72" { grad: ["#4f46e5", "#06b6d4"]; };
+    $Cap.Text     => "28, 140, 'اكتمال الملف: ٧٢٪'" { size: 12; fill: muted(); };
+    $Btn.Button   => "216, 138, 84, 24, 'متابعة'" { size: 12; r: 8; };
+    $save => "examples/piano/out/10_card.svg";
+};
+print "OK", len(Card["nodes"]);
