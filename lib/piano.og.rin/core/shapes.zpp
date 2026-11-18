@@ -18,7 +18,7 @@ fun pn_pick(o, ks) {
 fun pn_mk(parent, node, o, cx, cy) {
     o = pn_o(o);
     let t = node["t"];
-    let ks = ["id", "cls", "fill", "stroke", "sw", "op", "fo", "so", "dash", "cap", "join", "title", "clip"];
+    let ks = ["id", "cls", "fill", "stroke", "sw", "op", "fo", "so", "dash", "cap", "join", "title", "clip", "mask"];
     for (let k in ks) { if (pn_has(o, k)) { node[k] = o[k]; } }
     if (pn_has(o, "grad")) { node["fill"] = pn_linear(parent, o["grad"], pn_opt(o, "angle", 90)); }
 
