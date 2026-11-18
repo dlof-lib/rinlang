@@ -1,0 +1,30 @@
+*// ملف .pia — حركة بلغة الكتل: كل ما داخل $x.Frame يُنفَّذ في كل إطار ($t ثوانٍ · $p تقدّم · $i · $n)
+   للتشغيل:  rin examples/piano/12_film.pia   (تعليق متعدد الأسطر) //*
+@import "piano";
+
+piano.Loader {
+    $size     => "360, 220";
+    $theme    => "dark";
+    ++ عدد الإطارات في الثانية ++
+    $fps      => 24;
+    $duration => 2;                                // 48 إطاراً
+
+    $Bg.Rect => "0, 0, 360, 220" { grad: ["#0b1020", "#1e1b4b"]; angle: 60; };
+    $Ring.Arc => "180, 100, 54, 0, 359" { stroke: "#1e293b"; sw: 10; };
+
+    $spin.Frame {
+        //قوس يدور بتخفيف، وقطرات تدور حوله//
+        $a0 => (ease("inout", fract($p)) * 360);
+        $Run.Arc => "180, 100, 54, ($a0 - 90), ($a0 + 100 - 90)" { stroke: "#1db143"; sw: 10; cap: "round"; };
+        $Dots.Repeat => 8 {
+            $ang => ($p * 360 + $i * 45);
+            $Dot.Circle => "(180 + cos($ang) * 76), (100 + sin($ang) * 76), (2 + 3 * pingpong($p * 2 + $i / 8))" { fill: pal($i); };
+        };
+        $pct => floor(ease("inout", $p) * 100);
+        $Txt.Text => "180, 108, '$pct%'" { size: 22; weight: 800; anchor: "middle"; fill: "#ffffff"; };
+    };
+    $Cap.Text => "180, 200, 'يعمل أثناء التشغيل'" { size: 12; anchor: "middle"; fill: "#94a3b8"; };
+    $save => "examples/piano/out/12_film.svg";
+    $save => "examples/piano/out/12_film.puo";
+};
+print "OK", pn_frame_count(Loader);
