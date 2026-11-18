@@ -1,0 +1,43 @@
+<!-- piano + indsin: لوحة مؤشرات حيّة — مخططات وأيقونات من piano داخل واجهة (rin indsin examples/piano/piano_dashboard.rin) -->
+<warp theme={"dark"} />
+<warp sales={[12, 19, 14, 22, 27]} />
+<warp goal={72} />
+<warp bars={""} />
+<warp gauge={""} />
+<warp pie={""} />
+<Rin>
+@import "piano";
+
+let LABELS = ["ي", "ف", "م", "أ", "ي"];
+
+fun refresh() {
+    bars = pn_chart_uri("bar", LABELS, sales, 320, 190, theme, {"title": "المبيعات", "transparent": true});
+    gauge = pn_chart_uri("gauge", [], goal, 180, 120, theme, {"label": "الهدف", "max": 100, "transparent": true});
+    pie = pn_chart_uri("donut", ["أ", "ب", "ج"], [sales[0], sales[1], sales[2]], 140, 140, theme, {"labels": false, "transparent": true});
+}
+fun setTheme(name) { theme = name; refresh(); }
+fun bump() {
+    goal = goal + 7;
+    if (goal > 100) { goal = 5; }
+    sales = [sales[1], sales[2], sales[3], sales[4], 10 + goal / 4];
+    refresh();
+}
+refresh();
+</Rin>
+<Column#root padding=16 gap=12>
+  <Row#top gap=8>
+    <Image#ic1 src={pn_icon_uri("home", 24, "#1db143")} width=24 height=24 />
+    <Text#heading text="لوحة piano" size="title" />
+  </Row>
+  <Card#c1 padding=8><Image#bars src={bars} width=320 height=190 /></Card>
+  <Row#r2 gap=12>
+    <Card#c2 padding=8><Image#g src={gauge} width=180 height=120 /></Card>
+    <Card#c3 padding=8><Image#p src={pie} width=140 height=140 /></Card>
+  </Row>
+  <Wrap#actions gap=8>
+    <Button#b0 onTap={bump()}>تحديث البيانات</Button>
+    <Button#b1 onTap={setTheme("dark")}>dark</Button>
+    <Button#b2 onTap={setTheme("ocean")}>ocean</Button>
+    <Button#b3 onTap={setTheme("neon")}>neon</Button>
+  </Wrap>
+</Column>
