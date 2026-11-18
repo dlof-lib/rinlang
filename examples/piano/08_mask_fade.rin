@@ -1,0 +1,16 @@
+// piano — الأقنعة: تلاشي تدرّجي لصورة/أشكال + عرض متجاوب
+@import "piano";
+
+let c = pn_canvas(480, 220);
+pn_theme(c, "ocean");
+let fade = pn_fade_mask(c, 20, 20, 440, 180, "right");
+let g = pn_group(c, {"mask": fade});
+let i = 0;
+while (i < 22) {
+    pn_rect(g, 20 + i * 20, 200 - (20 + (i * 37) % 120), 14, 20 + (i * 37) % 120, {"fill": pn_color(c, i), "rx": 4});
+    i = i + 1;
+}
+pn_text(c, 240, 34, "mask → تلاشي نحو اليمين", {"size": 14, "anchor": "middle", "fill": pn_muted(c)});
+pn_display_w(c, 320);
+pn_save(c, "examples/piano/out/08_mask_fade.svg");
+pn_save(c, "examples/piano/out/08_mask_fade.puo");
