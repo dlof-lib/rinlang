@@ -1,3 +1,4 @@
+#include <vector>
 #include "rin_lexer.h"
 #include "diagnostics/source_manager.h"
 #include <cctype>
@@ -48,7 +49,198 @@ std::vector<std::string> keywordList() {
     return out;
 }
 
-Lexer::Lexer(std::string source, std::string filename) : src(std::move(source)), file(std::move(filename)) {
+
+// ---------------------------------------------------------------------------
+//  piano: كتل لغة الرسم  piano.<الاسم> { … };
+//  تُحوَّل قبل التحليل المفرداتي إلى:  let <الاسم> = pn_dsl_at("<الاسم>", "<نص الكتلة>", <سطر البداية>);
+//  (يتطلب @import "piano"). عدد الأسطر محفوظ فلا تتغير أرقام الأخطاء.
+// ---------------------------------------------------------------------------
+namespace {
+bool pianoIdCh(unsigned char c) { return std::isalnum(c) || c == '_' || c >= 0x80; }
+
+// أنماط تعليقات piano/pia (تُغلق من الطرفين):  *// تعليق //*  ·  //تعليق//  ·  ++ تعليق ++
+// mode: 1 = مستوى ملف .pia/.piano الخارجي · 2 = داخل كتلة piano.X { … }
+// غير المغلق ينتهي بنهاية السطر. يُرجع نهاية التعليق أو i إن لم يبدأ تعليق عند i.
+size_t pianoNewComment(const std::string& s, size_t i, int mode) {
+    size_t n = s.size();
+    auto close = [&](size_t from, const char* cl, size_t cll, bool multi) -> size_t {
+        for (size_t k = from; k < n; ++k) {
+            if (s[k] == '\n') { if (!multi) return k; continue; }
+            if (s.compare(k, cll, cl) == 0) return k + cll;
+        }
+        size_t k = from;
+        while (k < n && s[k] != '\n') ++k;
+        return k;
+    };
+    if (s.compare(i, 3, "*//") == 0) return close(i + 3, "//*", 3, true);
+    if (s.compare(i, 2, "//") == 0) return close(i + 2, "//", 2, false);
+    if (s[i] == '+' && i + 1 < n && s[i + 1] == '+') {
+        if (mode == 1) {  // في الكود الخارجي «++» عامل زيادة: لا يُعدّ تعليقاً إلا بعد فراغ وقبل فراغ
+            bool prevOk = i == 0 || std::isspace((unsigned char)s[i - 1]) || s[i - 1] == ';' || s[i - 1] == '{' || s[i - 1] == '}';
+            bool nextOk = i + 2 >= n || std::isspace((unsigned char)s[i + 2]);
+            if (!prevOk || !nextOk) return i;
+        }
+        return close(i + 2, "++", 2, true);
+    }
+    return i;
+}
+
+// يتجاوز نصاً/تعليقاً يبدأ عند i إن وُجد، ويُرجع الفهرس التالي؛ وإلا i نفسه
+size_t pianoSkipLiteral(const std::string& s, size_t i) {
+    size_t n = s.size();
+    char c = s[i];
+    if (c == '/' && i + 1 < n && s[i + 1] == '/') { while (i < n && s[i] != '\n') ++i; return i; }
+    if (c == '/' && i + 1 < n && s[i + 1] == '*') {
+        i += 2;
+        while (i + 1 < n && !(s[i] == '*' && s[i + 1] == '/')) ++i;
+        return i + 2 < n ? i + 2 : n;
+    }
+    if (c == '"' || c == '\'' || c == '`') {
+        char q = c; ++i;
+        while (i < n && s[i] != q) { if (s[i] == '\\' && i + 1 < n) ++i; ++i; }
+        return i < n ? i + 1 : n;
+    }
+    return i;
+}
+
+bool pianoExtIs(const std::string& f, const char* ext) {
+    size_t l = std::char_traits<char>::length(ext);
+    return f.size() >= l && f.compare(f.size() - l, l, ext) == 0;
+}
+
+std::string expandPianoBlocks(const std::string& s, const std::string& filename) {
+    const bool piaFile = pianoExtIs(filename, ".pia") || pianoExtIs(filename, ".piano");
+    if (!piaFile && s.find("piano.") == std::string::npos) return s;
+    std::string out;
+    out.reserve(s.size() + 64);
+    size_t i = 0, n = s.size();
+    char lastSig = 0;  // آخر محرف مؤثّر (خارج الفراغات والتعليقات)
+    while (i < n) {
+        if (piaFile) {
+            size_t c = pianoNewComment(s, i, 1);
+            if (c != i) {  // نُمحي التعليق بفراغات (مع حفظ الأسطر) فيمرّ الباقي على مُحلّل Rin كما هو
+                for (size_t x = i; x < c; ++x) out += (s[x] == '\n') ? '\n' : ' ';
+                i = c; continue;
+            }
+        }
+        size_t j = pianoSkipLiteral(s, i);
+        if (j != i) {
+            bool isComment = s[i] == '/';
+            out.append(s, i, j - i);
+            if (!isComment) lastSig = '"';
+            i = j; continue;
+        }
+        if (s[i] == 'p' && s.compare(i, 6, "piano.") == 0 && (i == 0 || (!pianoIdCh((unsigned char)s[i - 1]) && s[i - 1] != '.'))) {
+            // بداية جملة؟ آخر محرف مؤثّر سابق ;  {  }  أو لا شيء
+            bool stmtStart = lastSig == 0 || lastSig == ';' || lastSig == '{' || lastSig == '}';
+            size_t k = i + 6, ns = k;
+            while (k < n && pianoIdCh((unsigned char)s[k])) ++k;
+            std::string name = s.substr(ns, k - ns);
+            size_t m = k;
+            while (m < n && std::isspace((unsigned char)s[m])) ++m;
+            // معاملات اختيارية: piano.Name(a, b = expr) { … } تُمرَّر كمتغيّرات $a و$b داخل الكتلة
+            std::string varsMap;
+            if (stmtStart && !name.empty() && m < n && s[m] == '(') {
+                size_t depthP = 0, pe = m;
+                for (; pe < n; ++pe) {
+                    size_t sk = pianoSkipLiteral(s, pe);
+                    if (sk != pe) { pe = sk - 1; continue; }
+                    if (s[pe] == '(' || s[pe] == '[' || s[pe] == '{') ++depthP;
+                    else if (s[pe] == ')' || s[pe] == ']' || s[pe] == '}') { if (--depthP == 0) break; }
+                }
+                size_t after = pe + 1;
+                while (after < n && std::isspace((unsigned char)s[after])) ++after;
+                if (pe < n && after < n && s[after] == '{') {
+                    std::string inner = s.substr(m + 1, pe - m - 1);
+                    for (char& ch : inner) if (ch == '\n' || ch == '\r') ch = ' ';
+                    std::vector<std::string> items;
+                    std::string cur;
+                    int d = 0;
+                    for (size_t x = 0; x < inner.size(); ++x) {
+                        size_t sk = pianoSkipLiteral(inner, x);
+                        if (sk != x) { cur.append(inner, x, sk - x); x = sk - 1; continue; }
+                        char ch = inner[x];
+                        if (ch == '(' || ch == '[' || ch == '{') ++d;
+                        else if (ch == ')' || ch == ']' || ch == '}') --d;
+                        if (ch == ',' && d == 0) { items.push_back(cur); cur.clear(); } else cur += ch;
+                    }
+                    if (!cur.empty()) items.push_back(cur);
+                    auto trim = [](std::string t) {
+                        size_t a = 0, b = t.size();
+                        while (a < b && std::isspace((unsigned char)t[a])) ++a;
+                        while (b > a && std::isspace((unsigned char)t[b - 1])) --b;
+                        return t.substr(a, b - a);
+                    };
+                    varsMap = "{";
+                    bool okVars = true, first = true;
+                    for (auto& it : items) {
+                        std::string key, expr = trim(it);
+                        size_t eq = std::string::npos;
+                        int d2 = 0;
+                        for (size_t x = 0; x < expr.size(); ++x) {
+                            size_t sk = pianoSkipLiteral(expr, x);
+                            if (sk != x) { x = sk - 1; continue; }
+                            char ch = expr[x];
+                            if (ch == '(' || ch == '[' || ch == '{') ++d2;
+                            else if (ch == ')' || ch == ']' || ch == '}') --d2;
+                            else if (ch == '=' && d2 == 0 && (x + 1 >= expr.size() || expr[x + 1] != '=') && (x == 0 || (expr[x - 1] != '=' && expr[x - 1] != '!' && expr[x - 1] != '<' && expr[x - 1] != '>'))) { eq = x; break; }
+                        }
+                        if (eq != std::string::npos) { key = trim(expr.substr(0, eq)); expr = trim(expr.substr(eq + 1)); }
+                        else key = expr;
+                        if (key.empty() || expr.empty() || std::isdigit((unsigned char)key[0])) { okVars = false; break; }
+                        for (char ch : key) if (!pianoIdCh((unsigned char)ch)) okVars = false;
+                        if (!okVars) break;
+                        if (!first) varsMap += ", ";
+                        first = false;
+                        varsMap += "\"" + key + "\": " + expr;
+                    }
+                    varsMap += "}";
+                    if (!okVars) varsMap.clear();
+                    else { m = after; }
+                }
+            }
+            if (stmtStart && !name.empty() && !std::isdigit((unsigned char)name[0]) && m < n && s[m] == '{') {
+                size_t depth = 0, e = m;
+                for (; e < n; ++e) {
+                    size_t sk = pianoNewComment(s, e, 2);
+                    if (sk == e) sk = pianoSkipLiteral(s, e);
+                    if (sk != e) { e = sk - 1; continue; }
+                    if (s[e] == '{') ++depth;
+                    else if (s[e] == '}') { if (--depth == 0) break; }
+                }
+                if (e < n) {
+                    std::string body = s.substr(m + 1, e - m - 1), esc;
+                    for (char ch : body) {
+                        if (ch == '\\') esc += "\\\\";
+                        else if (ch == '"') esc += "\\\"";
+                        else if (ch == '\n') esc += "\\n";
+                        else if (ch == '\t') esc += "\\t";
+                        else if (ch != '\r') esc += ch;
+                    }
+                    size_t after = e + 1, q = after;
+                    while (q < n && (s[q] == ' ' || s[q] == '\t')) ++q;
+                    if (q < n && s[q] == ';') after = q + 1;
+                    size_t nl = 0;
+                    for (size_t x = i; x < after; ++x) if (s[x] == '\n') ++nl;
+                    size_t line0 = 1;
+                    for (size_t x = 0; x < m; ++x) if (s[x] == '\n') ++line0;
+                    if (varsMap.empty()) out += "let " + name + " = pn_dsl_at(\"" + name + "\", \"" + esc + "\", " + std::to_string(line0) + ");";
+                    else out += "let " + name + " = pn_dsl_with(\"" + name + "\", \"" + esc + "\", " + std::to_string(line0) + ", " + varsMap + ");";
+                    out.append(nl, '\n');
+                    lastSig = ';';
+                    i = after;
+                    continue;
+                }
+            }
+        }
+        if (!std::isspace((unsigned char)s[i])) lastSig = s[i];
+        out += s[i++];
+    }
+    return out;
+}
+}  // namespace
+
+Lexer::Lexer(std::string source, std::string filename) : src(expandPianoBlocks(source, filename)), file(std::move(filename)) {
     diag::globalSourceManager().addFile(file, src);
 }
 
