@@ -1161,6 +1161,7 @@ inline const char* const kLibModules[] = {
   "envkit.og.rin",
   "events.og.rin",
   "extdb.og.rin",
+  "piano.og.rin",
   "format.og.rin",
   "functional.og.rin",
   "geometry.og.rin",
