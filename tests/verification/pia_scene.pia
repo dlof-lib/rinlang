@@ -1,0 +1,7 @@
+// ملف .pia للاختبار: كتلة + دالة عادية
+@import "piano";
+piano.FromPia {
+    $size => "50, 30";
+    $r.Rect => "1, 2, 3, 4" { fill: "#0f0"; };
+};
+fun piaHello() { return "pia ok"; }
