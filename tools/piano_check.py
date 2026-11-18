@@ -19,12 +19,25 @@ def check(ok, msg):
         fail += 1
 
 # 1) اختبار النواة
-r = run([RIN, "tests/piano/core.rin"])
-out = "\n".join(l for l in r.stdout.splitlines() if not l.startswith("📥")) + "\n"
-check(out == open(os.path.join(ROOT, "tests/piano/core.expected"), encoding="utf-8").read(), "tests/piano/core.rin == core.expected")
+r = run([RIN, "tests/verification/piano_basic.rin"])
+want = open(os.path.join(ROOT, "tests/verification/piano_basic.expected"), encoding="utf-8").read()
+check(r.stdout.strip() == want.strip(), "tests/verification/piano_basic.rin == .expected")
+r = run([RIN, "tests/verification/piano_dsl.rin"])
+want = open(os.path.join(ROOT, "tests/verification/piano_dsl.expected"), encoding="utf-8").read()
+check(r.stdout.strip() == want.strip(), "tests/verification/piano_dsl.rin == .expected (كتل piano.X { })")
+
+r = run([RIN, "tests/verification/piano_film.rin"])
+want = open(os.path.join(ROOT, "tests/verification/piano_film.expected"), encoding="utf-8").read()
+check(r.stdout.strip() == want.strip(), "tests/verification/piano_film.rin == .expected (حركة + تعليقات)")
+
+# تضمين المفسّر مطابق للأجزاء الحالية (شغّل tools/embed_piano.py إن فشل)
+meta = json.load(open(os.path.join(LIB, "disconom.json"), encoding="utf-8"))
+body = "\n".join(open(os.path.join(LIB, p), encoding="utf-8").read().rstrip("\n") + "\n" for p in meta["parts"]).rstrip("\n")
+hdr = open(os.path.join(ROOT, "app/src/main/cpp/rin_stdlib_libs.h"), encoding="utf-8").read()
+check(body in hdr, "rin_stdlib_libs.h يحوي أجزاء piano الحالية")
 
 # 2) تشغيل الأمثلة
-for f in sorted(glob.glob(os.path.join(ROOT, "examples/piano/0*.rin"))):
+for f in sorted(glob.glob(os.path.join(ROOT, "examples/piano/[01][0-9]_*.rin")) + glob.glob(os.path.join(ROOT, "examples/piano/[01][0-9]_*.pia"))):
     r = run([RIN, os.path.relpath(f, ROOT)])
     check(r.returncode == 0 and "error" not in r.stdout.lower(), "example " + os.path.basename(f))
 
@@ -36,14 +49,18 @@ check(r.returncode == 0 and r.stderr == "", "g++ piano_cli (بلا تحذيرا�
 
 # 4) تطابق الثلاثة
 js = os.path.join(LIB, "native/piano.js")
-for puo in sorted(glob.glob(os.path.join(ROOT, "examples/piano/out/0[1-4]*.puo"))):
+for puo in sorted(glob.glob(os.path.join(ROOT, "examples/piano/out/[01][0-9]_*.puo"))):
     base = puo[:-4]
+    if not os.path.exists(base + ".svg"):
+        continue
     want = open(base + ".svg", encoding="utf-8").read()
-    cpp = run([cli, puo]).stdout
-    node = run(["node", "-e", "const P=require(process.argv[1]);const fs=require('fs');process.stdout.write(P.render(JSON.parse(fs.readFileSync(process.argv[2],'utf8')))+'\\n')", js, puo]).stdout
     n = os.path.basename(base)
-    check(cpp == want, f"{n}: C++ == Rin")
-    check(node == want, f"{n}: JS  == Rin")
+    animated = isinstance(json.load(open(puo, encoding="utf-8")).get("anim"), dict)
+    fn = "renderAnim" if animated else "render"
+    node = run(["node", os.path.join(ROOT, "tools/piano_render.js"), js, puo, fn]).stdout
+    check(node == want, f"{n}: JS  == Rin" + (" (متحرك)" if animated else ""))
+    if not animated:  # مُصيِّر C++ للمشاهد الثابتة فقط (يتجاهل anim)
+        check(run([cli, puo]).stdout == want, f"{n}: C++ == Rin")
 
 # 5) الثيمات
 r = run([RIN, "-c", '@import "piano"; print jsonEncode(pn_themes());'])
@@ -54,6 +71,17 @@ check(a == b, "data/themes.json == pn_themes()")
 # 6) .puo مخالف: C++ يرفض
 bad = os.path.join(tmp, "bad.puo"); open(bad, "w").write('{"a":1}')
 check(run([cli, bad]).returncode == 1, "C++ يرفض مشهداً غير صالح")
+
+# 7) خبز صفحات indsin (يتطلب build/indsin2web؛ يُتخطّى إن لم يوجد)
+i2w = os.path.join(ROOT, "build/indsin2web")
+if os.path.exists(i2w):
+    for pg in ("13_indsin_blocks", "14_indsin_film"):
+        out_html = os.path.join(tmp, pg + ".html")
+        r = run(["python3", "tools/piano_indsin_bake.py", f"examples/piano/{pg}.rin", "-o", os.path.join(tmp, pg + ".rin"), "--rin", RIN, "--html", out_html, "--indsin2web", i2w])
+        html = open(out_html, encoding="utf-8").read() if os.path.exists(out_html) else ""
+        check("data:image/svg+xml;base64," in html and "<img" in html, f"bake {pg}: الصور مخبوزة داخل صفحة الويب")
+else:
+    print("· تخطّي فحص الخبز: build/indsin2web غير مبني (bash scripts/build_indsin2web.sh)")
 
 print("\nالنتيجة:", "نجح كل شيء" if not fail else f"{fail} إخفاق")
 sys.exit(1 if fail else 0)
