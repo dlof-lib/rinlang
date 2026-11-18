@@ -29,10 +29,16 @@ except (OSError, ValueError):
 
 # الأمثلة: نزيل @import وأسطر pn_save ونضيف عنواناً
 ex = []
-titles = {"01_hello": "مرحباً — بطاقة وتدرّج", "02_shapes": "معرض الأشكال", "03_dashboard": "لوحة مؤشرات", "04_art": "فن توليدي متحرّك"}
+titles = {"01_hello": "مرحباً — بطاقة وتدرّج", "02_shapes": "معرض الأشكال", "03_dashboard": "لوحة مؤشرات", "04_art": "فن توليدي متحرّك", "06_ui_kit": "تصميم واجهة: هاتف + مكوّنات", "07_diagram": "مخطط انسيابي", "08_mask_fade": "قناع تلاشٍ", "09_dsl": "لغة الكتل piano.Poster { … }", "11_film": "حركة بكود المستخدم (pn_film)", "12_film": "حركة بلغة الكتل ($x.Frame)"}
 for k, title in titles.items():
-    src = rd(os.path.join(ROOT, f"examples/piano/{k}.rin"))
-    src = "\n".join(l for l in src.splitlines() if not l.startswith("@import") and "pn_save(" not in l).strip() + "\n"
+    pth = os.path.join(ROOT, f"examples/piano/{k}.rin")
+    if not os.path.exists(pth):
+        pth = os.path.join(ROOT, f"examples/piano/{k}.pia")
+    src = rd(pth)
+    if pth.endswith(".pia"):  # نحذف رأس التعليق الخارجي بنمط *// … //* (ليس صالحاً في تبويب Rin)
+        i = src.find("@import")
+        src = src[i:] if i >= 0 else src
+    src = "\n".join(l for l in src.splitlines() if not l.startswith("@import") and "pn_save(" not in l and "$save" not in l and not l.startswith("print ")).strip() + "\n"
     puo = rd(os.path.join(ROOT, f"examples/piano/out/{k}.puo")).strip()
     ex.append({"title": title, "rin": src, "puo": puo})
 
