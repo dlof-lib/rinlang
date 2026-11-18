@@ -1,0 +1,50 @@
+// piano — تصميم واجهة: مكوّنات + هاتف + أيقونات + خلفية ضبابية
+@import "piano";
+
+let c = pn_canvas(760, 520);
+pn_theme(c, "dark");
+pn_mesh(c, 760, 520, ["#4f46e5", "#06b6d4", "#ec4899"], {"strength": 0.5});
+
+// ---- هاتف
+let ph = pn_phone(c, 60, 30, 250, 460, {"elevate": true, "shadow": {"dy": 14, "blur": 30, "op": 0.5}});
+let s = ph["_screen"];
+pn_text(ph, s["x"] + 18, s["y"] + 62, "مرحباً، سارة", {"size": 20, "weight": 800});
+pn_text(ph, s["x"] + 18, s["y"] + 84, "رصيدك هذا الشهر", {"size": 12, "fill": pn_muted(c)});
+pn_card(ph, s["x"] + 14, s["y"] + 100, s["w"] - 28, 96, {"heading": "٤٬٢٥٠ ر.س", "subtitle": "+12% عن الشهر الماضي"});
+pn_sparkline(ph, s["x"] + 118, s["y"] + 150, 84, 32, [3, 5, 4, 8, 7, 12], {"color": "#34d399"});
+pn_progress(ph, s["x"] + 18, s["y"] + 220, s["w"] - 36, 8, 0.72, {"grad": ["#818cf8", "#22d3ee"]});
+pn_text(ph, s["x"] + 18, s["y"] + 246, "الهدف: ٧٢٪", {"size": 12, "fill": pn_muted(c)});
+pn_button(ph, s["x"] + 14, s["y"] + s["h"] - 130, s["w"] - 28, 42, "تحويل", {});
+pn_button(ph, s["x"] + 14, s["y"] + s["h"] - 80, s["w"] - 28, 38, "كشف الحساب", {"variant": "outline"});
+let i = 0;
+let names = ["home", "search", "bell", "user"];
+while (i < 4) {
+    pn_icon(ph, names[i], s["x"] + 28 + i * 48, s["y"] + s["h"] - 34, 22, {"stroke": pn_muted(c)});
+    i = i + 1;
+}
+
+// ---- لوحة مكوّنات
+let b = pn_browser(c, 350, 40, 360, 440, "piano.puo/components", {"elevate": true});
+let r = b["_screen"];
+pn_text(b, r["x"] + 20, r["y"] + 36, "المكوّنات", {"size": 18, "weight": 800});
+pn_button(b, r["x"] + 20, r["y"] + 56, 96, 34, "solid", {});
+pn_button(b, r["x"] + 124, r["y"] + 56, 96, 34, "soft", {"variant": "soft"});
+pn_button(b, r["x"] + 228, r["y"] + 56, 96, 34, "ghost", {"variant": "ghost"});
+pn_badge(b, r["x"] + 50, r["y"] + 120, "جديد", {});
+pn_badge(b, r["x"] + 134, r["y"] + 120, "نشط", {"color": "#34d399"});
+pn_badge(b, r["x"] + 222, r["y"] + 120, "تحذير", {"color": "#fbbf24"});
+pn_avatar(b, r["x"] + 36, r["y"] + 176, 20, "سر", {});
+pn_avatar(b, r["x"] + 80, r["y"] + 176, 20, "عل", {"color": "#ec4899"});
+pn_avatar(b, r["x"] + 124, r["y"] + 176, 20, "مح", {"color": "#f59e0b"});
+pn_toggle(b, r["x"] + 190, r["y"] + 164, true, {});
+pn_toggle(b, r["x"] + 246, r["y"] + 164, false, {});
+pn_input(b, r["x"] + 20, r["y"] + 220, r["w"] - 40, 40, "البحث عن مستخدم…", {"hint": true});
+pn_divider(b, r["x"] + 20, r["y"] + 284, r["x"] + r["w"] - 20, {});
+let k = 0;
+let ic = pn_icon_names();
+while (k < 8) {
+    pn_icon(b, ic[k], r["x"] + 24 + (k % 4) * 80, r["y"] + 304 + floor(k / 4) * 50, 28, {"stroke": pn_color(c, k)});
+    k = k + 1;
+}
+pn_save(c, "examples/piano/out/06_ui_kit.svg");
+pn_save(c, "examples/piano/out/06_ui_kit.puo");
