@@ -259,6 +259,20 @@ class UrinTests(unittest.TestCase):
         for k in ("type", "id", "name", "description", "tags", "permissions", "dependencies", "version"): self.assertEqual(back[k], m[k], k)
         self.assertEqual(back["extra"], {"future": "v"}); self.assertEqual(back["schema"], R.URIN_SCHEMA)
 
+    def test_identity_fields_roundtrip_and_limits(self):
+        m = {"type": "html", "name": "بيانو", "shortName": "بيانو", "versionCode": "1000000", "channel": "beta", "lang": "ar",
+             "homepage": "https://x.example/", "icons": ["a/192.png", "a/512.png"], "seoTitle": "عنوان", "seoDescription": "وصف",
+             "seoKeywords": ["بيانو", "piano"], "canonical": "https://x.example/", "robots": "index, follow", "ogImage": "a/512.png", "extra": {}}
+        back = R.urin_parse(R.urin_render(m))
+        for k in m:
+            if k != "extra": self.assertEqual(back[k], m[k], k)
+        self.assertEqual(back["extra"], {})
+        long = R.urin_parse('type="free";\nseoTitle="' + "t" * 500 + '";\nseoKeywords="' + ",".join(f"k{i}" for i in range(40)) + '";')
+        self.assertEqual(len(long["seoTitle"]), 120); self.assertEqual(len(long["seoKeywords"]), 16)
+        import re  # التوافق: لا اسم حقل جديد ينتهي بـ type، فيبقى أول type= هو النوع
+        txt = R.urin_render({"type": "ui", "seoTitle": "type=evil", "ogImage": "type=x"})
+        self.assertEqual(re.search(r'type\s*=\s*"?([A-Za-z0-9_]+)"?', txt).group(1), "ui")
+
     def test_old_regex_still_finds_type_first(self):
         # الصيغة القديمة في التطبيق: Regex(type\s*=\s*"?([A-Za-z0-9_]+)"?) أول تطابق في الملف.
         import re
