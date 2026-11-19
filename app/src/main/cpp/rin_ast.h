@@ -747,7 +747,10 @@ struct TextStmt : Stmt { TextStmt() { stmtKind = StmtKind::TextStmt; }
 
 enum class ObjectStyleFieldKind { Text, Image, File, Fonts, Background, Css3 };
 
-enum class ContainerKind { PLAIN, PIPE, DATA, API, IMPORT, TABLE, DOC, OBJECT, PORTAL, BLOCK, STICKER, AUKT, CHATBOT, EVERYTHING, SQL, DATALIST };
+enum class ContainerKind { PLAIN, PIPE, DATA, API, IMPORT, TABLE, DOC, OBJECT, PORTAL, BLOCK, STICKER, AUKT, CHATBOT, EVERYTHING, SQL, DATALIST, APP };
+// APP: @container.app / @container.site (والاختصار @name.app / @name.site) — «هوية» تطبيق أو موقع: الاسم، الإصدار،
+// الأيقونات، الوصف، ونصوص محركات البحث (SEO). حاوية بيانات نقية (let فقط، بلا دوال) تُقرأ بدوال app.* (info/validate/
+// head/manifest/robots/sitemap/bump/pack/open) وتُحفَظ داخل ملف .rcl في Metadata. انظر docs/container_app.md.
 // DATALIST: @container.datalist / @datalist — قائمة بيانات مرتّبة من السجلات (مستندات بمعرّفات تلقائية)،
 // مخزَّنة في docStore فتعمل معها كل دوال المستندات وRCSQL بلا أي دالة جديدة.
 
