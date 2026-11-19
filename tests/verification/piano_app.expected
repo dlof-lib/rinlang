@@ -1,0 +1,11 @@
+📥 @import: تم استيراد "lib/piano.og.rin" (مكتبة: piano 1.0.0 — 12 أجزاء)
+🪪 container.app = demo
+✅ .end/container.app (demo)
+عنوان اللوحة
+true true true true true
+false
+true
+["_papp_tmp/site/head.html", "_papp_tmp/site/manifest.webmanifest", "_papp_tmp/site/app.json", "_papp_tmp/site/robots.txt", "_papp_tmp/site/sitemap.xml", "_papp_tmp/site/index.html", "_papp_tmp/site/scene.svg"]
+true
+indsin2web pages/home.rin -o _papp_tmp/site2/index.html --app-dir _papp_tmp/site2
+true true
