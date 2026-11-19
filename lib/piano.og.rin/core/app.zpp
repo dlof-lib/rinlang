@@ -1,0 +1,78 @@
+// ============================================================================
+//  piano — الجزء 12: هوية التطبيق/الموقع (container.app) لصفحات piano
+//  app = اسم حاوية @container.app (أو قاموس هوية من container.appInfo/appOpen)
+//  التوثيق: docs/container_app.md · docs/PIANO.md
+//      pn_app_apply(c, app)            ← عنوان SEO يصير <title> داخل SVG (وصول/قارئ الشاشة)
+//      pn_app_html(c, app, o)          ← صفحة HTML كاملة: <head> بالهوية (SEO/OG/أيقونات/manifest/JSON-LD) + المشهد
+//      pn_app_indsin(c, app, o)        ← صفحة indsin (.rin) بالهوية + المشهد
+//      pn_app_save(c, dir, app, o)     ← يكتب dir/index.rin (o.format: indsin|html|both) + scene.svg + manifest.webmanifest + robots.txt + head.html + app.json
+//  الخيارات o: manifest (مسار أو false) · favicon_scene (true ⇒ المشهد نفسه أيقونة تبويب SVG) · paths (مسارات sitemap)
+// ============================================================================
+fun pn_app_apply(c, app) {
+    let info = container.appInfo(app);
+    let t = info["seo"]["title"];
+    if (t == nil or t == "") { t = info["name"]; }
+    c["title"] = t;
+    return c;
+}
+fun pn_app_doc(c) {
+    if (pn_has(c, "anim")) { return pn_anim_svg(c); }
+    return pn_svg(c);
+}
+fun pn_app_html(c, app, o) {
+    o = pn_o(o);
+    let info = container.appInfo(app);
+    let bg = pn_opt(c, "bg", "#ffffff");
+    if (substr(bg, 0, 1) != "#") { bg = "#ffffff"; }
+    let head = container.appHead(app, {"manifest": pn_opt(o, "manifest", "manifest.webmanifest"), "indent": ""});
+    if (pn_opt(o, "favicon_scene", false) == true) {
+        head = head + "<link rel=\"icon\" type=\"image/svg+xml\" href=\"" + pn_data_uri(c) + "\">\n";
+    }
+    let lang = info["lang"];
+    if (lang == "") { lang = "en"; }
+    let dir = info["dir"];
+    if (dir == "") { dir = "ltr"; }
+    return "<!doctype html>\n<html lang=\"" + pn_esc(lang) + "\" dir=\"" + pn_esc(dir) + "\">\n<head>\n" + head
+         + "<style>html,body{margin:0;min-height:100%;background:" + bg + "}body{display:grid;place-items:center;min-height:100vh}svg{max-width:100%;height:auto}</style>\n"
+         + "</head>\n<body>\n" + pn_app_doc(c) + "\n</body>\n</html>\n";
+}
+fun pn_app_ind_esc(t) {
+    t = replace(t, "&", "&amp;");
+    t = replace(t, "<", "&lt;");
+    t = replace(t, "{", "&#123;");
+    return t;
+}
+// صفحة indsin (.rin) بدل HTML: الهوية + المشهد (scene.svg) — تُحوَّل لاحقاً بـ indsin2web --app-dir
+fun pn_app_indsin(c, app, o) {
+    o = pn_o(o);
+    let info = container.appInfo(app);
+    let bg = pn_opt(c, "bg", "#0B1020");
+    if (substr(bg, 0, 1) != "#") { bg = "#0B1020"; }
+    let src = "<!-- " + pn_app_ind_esc(info["name"]) + " — صفحة indsin مولّدة من container.app (لا تعدّلها يدوياً؛ أعد التوليد) -->\n";
+    src = src + "<Palette seed=" + bg + " dark />\n";
+    src = src + "<Screen#app bg=" + bg + " padding=24 gap=16>\n";
+    src = src + "  <Image#scene src=\"scene.svg\" width=100% alt=\"" + pn_esc(info["name"]) + "\" />\n";
+    src = src + "  <Text#title size=heading>" + pn_app_ind_esc(info["name"]) + "</Text>\n";
+    src = src + "  <Text#ver size=small color=#9aa4bf>v" + pn_app_ind_esc(info["version"]) + "</Text>\n";
+    if (info["description"] != "") {
+        src = src + "  <Text#desc>" + pn_app_ind_esc(info["description"]) + "</Text>\n";
+    }
+    return src + "</Screen>\n";
+}
+// o.format: "indsin" (الافتراضي → index.rin) · "html" (→ index.html) · "both"
+fun pn_app_save(c, dir, app, o) {
+    o = pn_o(o);
+    let fmt = pn_opt(o, "format", "indsin");
+    let files = container.appExport(app, dir, {"paths": pn_opt(o, "paths", [])})["files"];
+    if (fmt == "indsin" or fmt == "both") {
+        writeFile(dir + "/index.rin", pn_app_indsin(c, app, o));
+        push(files, dir + "/index.rin");
+    }
+    if (fmt == "html" or fmt == "both") {
+        writeFile(dir + "/index.html", pn_app_html(c, app, o));
+        push(files, dir + "/index.html");
+    }
+    writeFile(dir + "/scene.svg", pn_app_doc(c) + "\n");
+    push(files, dir + "/scene.svg");
+    return files;
+}
