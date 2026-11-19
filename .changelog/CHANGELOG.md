@@ -2,6 +2,13 @@
 
 > مجمَّع آلياً من ملفات `CHANGES_*.md` المتفرّقة (انظر `cleanup-project.yml`). أضف الجديد هنا مباشرةً.
 
+## container.app / container.site — هوية التطبيقات والمواقع
+
+- نوع حاوية جديد `@container.app` / `@container.site` (اختصار `@name.app`): اسم، اسم مختصر، معرّف، إصدار (semver + `version_code` + قناة)، أيقونات (أحجام/أنواع/غرض)، وصف، ونصوص SEO (عنوان، وصف، كلمات مفتاحية، canonical، robots، Open Graph، Twitter، hreflang، JSON-LD).
+- دوال `container.appInfo/Validate/Head/Manifest/Robots/Sitemap/Bump/Export/Pack/Open` (ومرادفات `app.*`) — `rin_container_app.cpp`.
+- الهوية تُحفَظ داخل ملف `.rcl` بلا أي تغيير على تخطيط CLC (مفاتيح `app.*`/`seo.*`/`icon.N.*` في Metadata) — `clc/clc_identity.h`؛ و`clcContainerIdentity(handle)`.
+- شاشة فحص CLC في التطبيق تعرض المعرّف والقناة والوصف وعدد الأيقونات وعنوان SEO. التوثيق: `docs/container_app.md`.
+
 ## مكتبة piano 1.0.0 — رسم وتصميم متجهي وحركة ودمج مع indsin
 
 - مكتبة `lib/piano.og.rin` (11 جزء zpp) مضمَّنة في المفسّر (`tools/embed_piano.py`): `@import "piano";` تعمل بلا مجلد lib.
