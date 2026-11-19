@@ -829,6 +829,7 @@ struct ContainerStmt : Stmt { ContainerStmt() { stmtKind = StmtKind::ContainerSt
     std::string mask; // قناع: هوية منطقية مستقرة للحاوية، مستقلة عن الاسم
     std::vector<StmtPtr> body;
     ContainerKind kind = ContainerKind::PLAIN;
+    bool isSite = false; // APP: كُتبت كـ @container.site / @name.site ⇒ kind="site" افتراضياً في الهوية (docs/container_app.md)
 
     // ---- Policy block (RCS-1.0 §3.13 Security) ----
     // مُعمَّمة من @make.(name) (انظر MakeStmt أدناه) إلى أي @container: نفس الكلمات الأربع
