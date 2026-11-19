@@ -113,6 +113,7 @@ static void collect(const StmtPtr& stmt, std::set<std::string>& out) {
             case ContainerKind::DOC: out.insert("doc"); break;
             case ContainerKind::DATALIST: out.insert("datalist"); break;
             case ContainerKind::CHATBOT: out.insert("chatbot"); break;
+            case ContainerKind::APP: out.insert("app"); break;
             case ContainerKind::EVERYTHING: out.insert("make"); break;
             default: break;
         }
