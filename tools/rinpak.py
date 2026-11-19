@@ -136,10 +136,17 @@ def analyze(m, app_version=None):
 URIN = "project.og.urin"
 URIN_SCHEMA = 2
 URIN_FIELDS = ("type", "id", "name", "version", "description", "author", "license", "tags", "created",
-               "modified", "minRinVersion", "permissions", "dependencies", "icon")
-URIN_LISTS = {"tags": (16, 32), "permissions": (64, 64), "dependencies": (64, 128)}
+               "modified", "minRinVersion", "permissions", "dependencies", "icon",
+               # هوية التطبيق/الموقع (container.app — docs/container_app.md): تسمية، إصدار، أيقونات، وصف، SEO
+               "shortName", "versionCode", "channel", "lang", "homepage", "category", "shortDescription",
+               "themeColor", "backgroundColor", "icons", "seoTitle", "seoDescription", "seoKeywords",
+               "canonical", "robots", "ogImage")
+URIN_LISTS = {"tags": (16, 32), "permissions": (64, 64), "dependencies": (64, 128),
+              "icons": (16, 256), "seoKeywords": (16, 64)}
 URIN_LIMITS = {"name": 64, "id": 64, "version": 32, "description": 1000, "author": 128, "license": 64,
-               "icon": 256, "minRinVersion": 32}
+               "icon": 256, "minRinVersion": 32, "shortName": 32, "versionCode": 12, "channel": 16, "lang": 16,
+               "homepage": 256, "category": 32, "shortDescription": 160, "themeColor": 9, "backgroundColor": 9,
+               "seoTitle": 120, "seoDescription": 320, "canonical": 256, "robots": 64, "ogImage": 256}
 _URIN_LINE = re.compile(r'^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:"((?:[^"\\]|\\.)*)"|([^;\s"]+))\s*;?\s*$')
 _ESC = {"n": "\n", "r": "\r", "t": "\t", '"': '"', "\\": "\\"}
 
