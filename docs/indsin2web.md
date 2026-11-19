@@ -18,6 +18,7 @@ bash scripts/build_indsin2web.sh          # أو: make indsin2web   (g++ بدع�
 build/indsin2web app.rin -o app.html
 build/indsin2web app.rin --check          # تحقق وتحذيرات بلا كتابة ملف
 build/indsin2web app.rin --strict         # أي تحذير = رمز خروج 2 (للـ CI)
+build/indsin2web app.rin -o out/index.html --app-dir out  # هوية container.app: head كامل + lang/dir + manifest (docs/container_app.md)
 build/indsin2web app.rin --fragment       # <style>+<div>+<script> للتضمين في صفحة أخرى
 build/indsin2web app.rin --report r.json  # تقرير JSON: العناصر/الروابط/التحذيرات
 build/indsin2web app.rin --lang ar --dir rtl --title "تطبيقي"
@@ -65,3 +66,7 @@ Chromium (إن توفّر node+playwright) ليتأكد أن النقر يغيّ
 * `tools/indsin2web.cpp` — المترجم (AST → HTML/JS)
 * `tools/indsin2web_runtime.inc` — CSS الأساسي + runtime الصفحة (جدول الخصائص `P`، الحالة، الإجراءات، دوال `indsin.*`)
 * `scripts/build_indsin2web.sh` · `tests/indsin2web/`
+
+
+## الهوية مصدر للمتصفح
+إذا وُجد `app.json` و`head.html` بجوار ملف `.rin` يُفعَّل `--app-dir` تلقائياً (`--no-app` للتعطيل). تُضمَّن الهوية في الصفحة كـ `<script type="application/json" id="app-identity">` ويصير `window.APP` (مجمَّد) متاحاً لسكربتات الصفحة: `APP.name` · `APP.version` · `APP.seo` · `APP.icons`.
