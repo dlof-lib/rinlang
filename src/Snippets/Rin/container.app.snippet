@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<CodeSnippets xmlns="http://schemas.microsoft.com/VisualStudio/2005/CodeSnippet">
+  <CodeSnippet Format="1.0.0">
+    <Header>
+      <Title>container.app</Title>
+      <Shortcut>container.app</Shortcut>
+      <Description>هوية تطبيق/موقع: اسم وإصدار وأيقونات ووصف وSEO</Description>
+      <SnippetTypes>
+        <SnippetType>Expansion</SnippetType>
+      </SnippetTypes>
+    </Header>
+    <Snippet>
+      <Declarations>
+        <Literal><ID>p1</ID><ToolTip>p1</ToolTip><Default>app</Default></Literal>
+        <Literal><ID>p2</ID><ToolTip>p2</ToolTip><Default>اسم التطبيق</Default></Literal>
+      </Declarations>
+      <Code Language="Rin"><![CDATA[@container.app=$p1$
+	let name = "$p2$";
+	let version = "1.0.0";
+	let lang = "ar";
+	let description = "$end$";
+	let icons = {"192": "icons/192.png", "512": "icons/512.png"};
+	let seo = {title: "$p2$", keywords: []};
+.end/container.app]]></Code>
+    </Snippet>
+  </CodeSnippet>
+</CodeSnippets>
