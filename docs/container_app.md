@@ -9,7 +9,7 @@
     let version = "1.0.0";
     let channel = "stable";
     let lang = "ar";
-    let homepage = "https://rinlang.dev/piano/";
+    let homepage = "https://piano.example.com/";
     let description = "مكتبة لرسم المشاهد بلغة Rin.";
     let icons = {"192": "icons/192.png", "512": "icons/512.png"};
     let seo = {title: "piano — رسم بلغة Rin", keywords: ["Rin", "SVG"], og_image: "icons/512.png"};
@@ -63,3 +63,35 @@
 
 ## أمثلة واختبارات
 `examples/app_identity_demo.rin` · `tests/print/container_app.rin`.
+
+## v2 — لغات، حقن، إصدارات، `rin app`
+
+### لغات (`locales`)
+```rin
+let locales = {
+    en: {name: "Al-Nour Shop", description: "Online store.", url: "https://shop.example.com/en/", seo: {title: "Al-Nour Shop", keywords: ["office"]}},
+    fr: {name: "Boutique Al-Nour", url: "https://shop.example.com/fr/"}
+};
+```
+`container.appHead("shop", {lang: "en"})` يطبّق نصوص اللغة فوق الأساس ويشتق الباقي (og:locale، الاتجاه، canonical). لغة غير معرّفة ⇒ خطأ. أي `locale` له `url` يُضاف تلقائياً إلى `hreflang` مع اللغة الأساسية و`x-default`. الحقول الفارغة تعود لنص اللغة الأساسية.
+
+### `icons_dir` وخيارات التوليد
+`let icons_dir = "icons";` يمسح المجلد (PNG/SVG/ICO/WebP، غير تكراري) ويضيف ما لم يُذكر صراحةً؛ يتطلب `dir` (جذر الملفات). خيارات `appHead/appInject`: `embed: N` (يضمّن أيقونات ≤ N بايت كـ data:)، `assets_url` (بادئة للمسارات النسبية، مفيدة لـ og:image المطلق).
+
+### الحقن في صفحة
+```rin
+container.appInject("piano", "index.html", {dir: "assets", embed: 4096});            // يكتب
+container.appInject("piano", "index.html", {dir: "assets", embed: 4096, check: true}); // فحص انجراف
+```
+الصفحة تحتفظ بـ `charset/viewport/style` الخاصة بها؛ الكتلة بين `<!-- rin:app-head -->` و`<!-- /rin:app-head -->` ملك الحاوية ولا تُعدَّل يدوياً.
+
+### الإصدارات
+`let releases = [{version: "1.0.0", date: "2026-01-01", notes: ["..."]}];` — `appBump(name, "minor", {notes: "..."})` يضيف سجلاً، `appChangelog` يولّد markdown. قواعد جديدة: `locale.*`، `release.*`، `icons_dir.*`.
+
+### سطر الأوامر
+```
+rin app new demo --site          rin app check --strict
+rin app inject --into index.html [--check]   rin app bump minor --notes "..."
+rin app export --out dist/meta --paths /,/docs   rin app urin
+```
+الملف: `*.app.rin` في المجلد الحالي (أو مرّره صراحةً). `bump` يعدّل الملف نفسه. مثال حي: `web/piano/piano.app.rin`.
