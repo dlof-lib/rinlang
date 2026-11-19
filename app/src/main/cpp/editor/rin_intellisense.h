@@ -804,7 +804,7 @@ inline const std::vector<std::string>& atTags() {
     static const std::vector<std::string> v = {
         "container", "container.pipe", "container.data", "container.api", "container.import", "container.table",
         "container.doc", "container.object", "container.portal", "container.block", "container.sticker",
-        "container.aukt", "container.chatbot", "container.make", "container.everything", "make", "Rin.make", "Object",
+        "container.app", "container.site", "container.aukt", "container.chatbot", "container.make", "container.everything", "make", "Rin.make", "Object",
         "Containers.Group", "Volume", "view", "theme", "effect", "loop", "import", "tmpl", "body",
         "element.button", "element.input", "element.search", "element.image", "element.video", "element.audio",
         "element.progress", "element.checkbox", "element.radio", "element.switch", "element.slider",
