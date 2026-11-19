@@ -217,6 +217,7 @@ void printUsage() {
         "  rin vm <file> [--disasm] [--stats]      run on RinVM (real bytecode VM)\n"
         "  rin --vm <file>                         run any program on RinVM\n"
         "  rin toolchain-new <name>                generate a complete toolchain project skeleton\n"
+        "  rin app <new|info|check|head|export|inject|bump|changelog|urin|list>  هوية التطبيق/الموقع: اسم وإصدار وأيقونات ووصف وSEO في حاوية واحدة — rin app --help\n"
         "  rin lib <new|check|info|list|run>      مكتبات Rin المقسَّمة (.og.rin: Disconom + .zpp + .rinz) — rin lib --help\n"
         "  rin test [dir]                         تشغيل اختبارات .rin\n"
         "  rin fmt <file> [--write]               إعادة محاذاة المسافات البادئة\n"
@@ -584,6 +585,285 @@ static int cmdDisconomScripts(const std::vector<std::string>& args, bool run) {
     std::cerr << "> " << plan.manifest.name << " " << name << ": " << *cmd << extra << "\n";
     int rc = std::system(full.c_str());
     return WIFEXITED(rc) ? WEXITSTATUS(rc) : 1;
+}
+
+// ---------------------------------------------------------------------------
+// rin app <new|info|check|head|export|inject|bump|changelog|urin|list> [file.rin] [خيارات]
+// واجهة سطر أوامر لهوية التطبيق/الموقع (container.app/site — docs/container_app.md). الملف يحمل الحاوية؛ الأمر يشغّله
+// ثم يستدعي دوال container.app* عليه، فلا منطق مكرَّر: كل ما تفعله الدوال من سكربت Rin تفعله من الطرفية.
+// ---------------------------------------------------------------------------
+std::string appQuote(const std::string& s) { // نص Rin حرفي
+    std::string o = "\"";
+    for (char c : s) {
+        if (c == '"') o += "\\\""; else if (c == '\\') o += "\\\\"; else if (c == '\n') o += "\\n"; else if (c == '\r') o += "\\r"; else if (c == '\t') o += "\\t"; else o += c;
+    }
+    return o + "\"";
+}
+std::string appDirName(const std::string& path) {
+    size_t p = path.find_last_of('/');
+    return p == std::string::npos ? std::string(".") : (p == 0 ? std::string("/") : path.substr(0, p));
+}
+// يشغّل المصدر ويلتقط الناتج (بدل طباعته) كي نقرأ منه أسطراً مخصّصة؛ يعيد true عند النجاح.
+bool appRunCaptured(const std::string& source, const std::string& name, std::string& out) {
+    try {
+        rin::Interpreter interp;
+        rin::Lexer lexer(source, name);
+        auto tokens = lexer.scanTokens();
+        rin::Parser parser(tokens, name);
+        auto statements = parser.parse();
+        interp.setSourceFile(name);
+        out = interp.run(statements);
+        return !interp.hadError();
+    } catch (rin::RinError& e) {
+        if (e.diagnostic) std::cerr << "\n" << rin::diag::renderPlain(*e.diagnostic, rin::diag::globalSourceManager());
+        else std::cerr << "\n[rin] خطأ في " << name << " عند السطر " << e.line << ": " << e.message << "\n";
+        return false;
+    } catch (std::exception& e) { std::cerr << "\n[rin] خطأ داخلي: " << e.what() << "\n"; return false; }
+}
+// نطاق حاوية الهوية في نص الملف: [begin,end) من سطر الترويسة حتى سطر .end/container.(app|site) ضمناً.
+bool appRegion(const std::string& text, const std::string& name, size_t& b, size_t& e) {
+    size_t pos = 0;
+    while (pos < text.size()) {
+        size_t nl = text.find('\n', pos); if (nl == std::string::npos) nl = text.size();
+        std::string line = text.substr(pos, nl - pos);
+        size_t f = line.find_first_not_of(" \t");
+        if (f != std::string::npos && line[f] == '@') {
+            std::string t = line.substr(f + 1);
+            while (!t.empty() && (t.back() == ' ' || t.back() == '\r' || t.back() == '\t')) t.pop_back();
+            bool hit = false;
+            for (const char* pre : {"container.app", "container.site"}) {
+                std::string P = pre;
+                if (t.compare(0, P.size(), P) == 0) { std::string r = t.substr(P.size()); size_t q = r.find_first_not_of(" \t"); if (q != std::string::npos && r[q] == '=') { std::string n = r.substr(q + 1); n.erase(0, n.find_first_not_of(" \t")); if (name.empty() || n == name) hit = true; } }
+            }
+            for (const char* suf : {".app", ".site"}) {
+                std::string S = suf;
+                if (t.size() > S.size() && t.compare(t.size() - S.size(), S.size(), S) == 0 && (name.empty() || t.substr(0, t.size() - S.size()) == name) && t.compare(0, 10, "container.") != 0) hit = true;
+            }
+            if (hit) {
+                b = pos; size_t p2 = nl + 1;
+                while (p2 < text.size()) {
+                    size_t n2 = text.find('\n', p2); if (n2 == std::string::npos) n2 = text.size();
+                    std::string l2 = text.substr(p2, n2 - p2); size_t f2 = l2.find_first_not_of(" \t");
+                    if (f2 != std::string::npos && l2.compare(f2, 14, ".end/container") == 0) { e = std::min(text.size(), n2 + 1); return true; }
+                    p2 = n2 + 1;
+                }
+                return false;
+            }
+        }
+        pos = nl + 1;
+    }
+    return false;
+}
+
+int cmdApp(const std::vector<std::string>& args) {
+    auto usage = []() {
+        std::cout <<
+            "rin app — هوية التطبيق/الموقع (container.app / container.site) — docs/container_app.md\n\n"
+            "  rin app new <name> [--site] [--lang ar] [--dir D]    ينشئ <name>.app.rin بهوية جاهزة للتعبئة\n"
+            "  rin app info [file] [--lang L] [--json]              الهوية المكتملة (القيم المشتقة مشمولة)\n"
+            "  rin app check [file] [--strict]                      فحص الهوية؛ يخرج 1 عند أخطاء (و--strict عند تحذيرات أيضاً)\n"
+            "  rin app head [file] [--lang L] [--embed N] [--assets-url U]   وسوم <head> (title/SEO/أيقونات/OG/JSON-LD)\n"
+            "  rin app export [file] --out DIR [--paths /,/docs]    head.html + manifest + robots.txt (+ sitemap + CHANGELOG + لكل لغة)\n"
+            "  rin app inject [file] --into page.html [--check]     يحدّث <!-- rin:app-head --> في الصفحة؛ --check يفحص الانجراف فقط (CI)\n"
+            "  rin app bump [file] major|minor|patch [--notes T]    يرفع الإصدار في الملف نفسه (+ version_code وسجل releases)\n"
+            "  rin app changelog [file]                             سجل الإصدارات markdown\n"
+            "  rin app urin [file] [--type ui|html|free]            نص project.og.urin مُولَّداً من الهوية\n"
+            "  rin app list [file]                                  حاويات الهوية في الملف\n\n"
+            "[file] اختياري: وإلا يُبحث في المجلد الحالي عن *.app.rin ثم app.rin. --name N لاختيار حاوية عند تعدّدها.\n"
+            "مجلد الملفات (الأيقونات/icons_dir) = مجلد الملف، أو --dir D.\n";
+    };
+    if (args.empty() || args[0] == "--help" || args[0] == "-h" || args[0] == "help") { usage(); return args.empty() ? 2 : 0; }
+    const std::string sub = args[0];
+    static const char* subs[] = {"new", "info", "check", "head", "export", "inject", "bump", "changelog", "urin", "list"};
+    bool known = false; for (auto s : subs) if (sub == s) known = true;
+    if (!known) { std::cerr << "rin app: أمر غير معروف '" << sub << "' (rin app --help)\n"; return 2; }
+
+    std::string file, name, dirOpt, lang, out, into, paths, notes, assetsUrl, embed, type, part, manifest;
+    bool asJson = false, strict = false, checkOnly = false, site = false;
+    for (size_t i = 1; i < args.size(); ++i) {
+        const std::string& a = args[i];
+        auto val = [&](std::string& dst) { if (i + 1 < args.size()) dst = args[++i]; else { std::cerr << "rin app: " << a << " يحتاج قيمة\n"; std::exit(2); } };
+        if (a == "--name") val(name); else if (a == "--dir") val(dirOpt); else if (a == "--lang") val(lang); else if (a == "--out") val(out);
+        else if (a == "--into") val(into); else if (a == "--paths") val(paths); else if (a == "--notes") val(notes);
+        else if (a == "--assets-url") val(assetsUrl); else if (a == "--embed") val(embed); else if (a == "--type") val(type);
+        else if (a == "--manifest") val(manifest);
+        else if (a == "--json") asJson = true; else if (a == "--strict") strict = true; else if (a == "--check") checkOnly = true; else if (a == "--site") site = true;
+        else if (!a.empty() && a[0] == '-') { std::cerr << "rin app: خيار غير معروف '" << a << "'\n"; return 2; }
+        else if (sub == "bump" && part.empty() && (a == "major" || a == "minor" || a == "patch")) part = a;
+        else if (sub == "new" && name.empty()) name = a;
+        else if (file.empty()) file = a;
+        else { std::cerr << "rin app: وسيط زائد '" << a << "'\n"; return 2; }
+    }
+
+    // ---- new
+    if (sub == "new") {
+        if (name.empty()) { std::cerr << "rin app new: يلزم اسم. مثال: rin app new piano\n"; return 2; }
+        for (char c : name) if (!(std::isalnum(static_cast<unsigned char>(c)) || c == '_' || c == '-' || (static_cast<unsigned char>(c) >= 0x80))) { std::cerr << "rin app new: الاسم يحوي محارف غير صالحة لاسم حاوية\n"; return 2; }
+        std::string dir = dirOpt.empty() ? "." : dirOpt;
+        if (!isDir(dir) && !makeDir(dir)) { std::cerr << "rin app new: تعذّر إنشاء المجلد '" << dir << "'\n"; return 1; }
+        std::string path = (dir == "." ? "" : dir + "/") + name + ".app.rin";
+        if (fileExists(path)) { std::cerr << "rin app new: '" << path << "' موجود — لن يُستبدل\n"; return 1; }
+        std::string kind = site ? "site" : "app", L = lang.empty() ? "ar" : lang;
+        std::string body =
+            "// هوية " + std::string(site ? "الموقع" : "التطبيق") + " " + name + " — مصدر الحقيقة الوحيد للاسم والإصدار والأيقونات والوصف وSEO.\n"
+            "// rin app check " + name + ".app.rin   ·   rin app head   ·   rin app inject --into index.html   (docs/container_app.md)\n"
+            "@container." + kind + "=" + name + "\n"
+            "    let name = " + appQuote(name) + ";\n"
+            "    let id = \"com.example." + name + "\";\n"
+            "    let version = \"0.1.0\";\n"
+            "    let channel = \"dev\";\n"
+            "    let lang = " + appQuote(L) + ";\n"
+            "    let homepage = \"https://example.com/\";\n"
+            "    let description = \"وصف قصير يشرح ما يفعله " + std::string(site ? "الموقع" : "التطبيق") + ".\";\n"
+            "    let icons_dir = \"icons\";          // يُمسَح تلقائياً: icon_192.png / icon_512.png ... (الأحجام من ترويسة PNG)\n"
+            "    let seo = {keywords: []};\n"
+            "    // let locales = {en: {name: \"...\", description: \"...\", url: \"https://example.com/en/\"}};\n"
+            "    // let releases = [{version: \"0.1.0\", date: \"" + std::string("2026-01-01") + "\", notes: [\"الإصدار الأول\"]}];\n"
+            ".end/container." + kind + "\n";
+        if (!writeFile(path, body)) { std::cerr << "rin app new: تعذّرت الكتابة إلى '" << path << "'\n"; return 1; }
+        std::cout << "تم إنشاء " << path << "\n";
+        return 0;
+    }
+
+    // ---- حلّ الملف
+    if (file.empty()) {
+        std::vector<std::string> cands;
+        if (DIR* d = opendir(".")) {
+            while (dirent* e = readdir(d)) { std::string n = e->d_name; if (n.size() > 8 && n.compare(n.size() - 8, 8, ".app.rin") == 0) cands.push_back(n); }
+            closedir(d);
+        }
+        std::sort(cands.begin(), cands.end());
+        if (cands.size() == 1) file = cands[0];
+        else if (cands.size() > 1) { std::cerr << "rin app " << sub << ": عدة ملفات *.app.rin — حدّد واحداً:"; for (auto& c : cands) std::cerr << " " << c; std::cerr << "\n"; return 2; }
+        else if (fileExists("app.rin")) file = "app.rin";
+        else { std::cerr << "rin app " << sub << ": لا يوجد ملف هوية (*.app.rin أو app.rin). أنشئ واحداً: rin app new <name>\n"; return 2; }
+    }
+    std::string source;
+    if (!readFile(file, source)) { std::cerr << "rin app " << sub << ": تعذّر فتح '" << file << "'\n"; return 2; }
+    std::string dir = dirOpt.empty() ? appDirName(file) : dirOpt;
+
+    // خيارات مشتركة كقاموس Rin
+    auto opts = [&](bool withLang) {
+        std::string o = "{dir: " + appQuote(dir);
+        if (withLang && !lang.empty()) o += ", lang: " + appQuote(lang);
+        if (!assetsUrl.empty()) o += ", assets_url: " + appQuote(assetsUrl);
+        if (!embed.empty()) o += ", embed: " + embed;
+        if (!manifest.empty()) o += ", manifest: " + appQuote(manifest);
+        return o;
+    };
+    std::string tail = "\nlet __app = container.appPick(" + appQuote(name) + ");\n";
+    std::string o = opts(true);
+    if (sub == "list") {
+        tail = "\nfor (let a in container.appList()) { print a[\"name\"] + \"  [\" + a[\"kind\"] + \"]  \" + a[\"version\"] + \"  \" + a[\"title\"] + \"  \" + a[\"id\"]; }\n";
+    } else if (sub == "info") {
+        if (asJson) tail += "print jsonEncode(container.appInfo(__app, " + o + "}));\n";
+        else tail +=
+            "let __i = container.appInfo(__app, " + o + "});\n"
+            "print \"الاسم:      \" + __i[\"name\"] + \"  (\" + __i[\"short_name\"] + \")\";\n"
+            "print \"النوع:      \" + __i[\"kind\"] + \"   المعرّف: \" + __i[\"id\"];\n"
+            "print \"الإصدار:    \" + __i[\"version\"] + \"  (build \" + str(__i[\"version_code\"]) + \")  قناة: \" + __i[\"channel\"];\n"
+            "print \"اللغة:      \" + __i[\"lang\"] + \"  اتجاه: \" + __i[\"dir\"];\n"
+            "print \"الوصف:      \" + __i[\"short_description\"];\n"
+            "print \"الأيقونات:  \" + str(len(__i[\"icons\"])) + \"   اللغات: \" + str(len(keys(__i[\"locales\"]))) + \"   الإصدارات المسجّلة: \" + str(len(__i[\"releases\"]));\n"
+            "print \"عنوان SEO:  \" + __i[\"seo\"][\"title\"];\n"
+            "print \"canonical:  \" + __i[\"seo\"][\"canonical\"];\n";
+    } else if (sub == "check") {
+        tail +=
+            "let __iss = container.appValidate(__app, {dir: " + appQuote(dir) + "});\n"
+            "let __e = 0; let __w = 0; let __n = 0;\n"
+            "for (let x in __iss) {\n"
+            "    print x[\"level\"] + \"  \" + x[\"code\"] + \"  [\" + x[\"field\"] + \"]  \" + x[\"message\"];\n"
+            "    if (x[\"level\"] == \"error\") { __e = __e + 1; } else if (x[\"level\"] == \"warn\") { __w = __w + 1; } else { __n = __n + 1; }\n"
+            "}\n"
+            "print str(__e) + \" خطأ · \" + str(__w) + \" تحذير · \" + str(__n) + \" ملاحظة\";\n"
+            "if (__e > 0) { exit(1); }\n" +
+            std::string(strict ? "if (__w > 0) { exit(1); }\n" : "");
+    } else if (sub == "head") {
+        tail += "print container.appHead(__app, " + o + "});\n";
+    } else if (sub == "export") {
+        if (out.empty()) { std::cerr << "rin app export: يلزم --out DIR\n"; return 2; }
+        std::string ex = o;
+        if (!paths.empty()) { ex += ", paths: ["; std::stringstream ps(paths); std::string t; bool first = true; while (std::getline(ps, t, ',')) { if (t.empty()) continue; ex += (first ? "" : ", ") + appQuote(t); first = false; } ex += "]"; }
+        tail += "let __r = container.appExport(__app, " + appQuote(out) + ", " + ex + "});\nfor (let f in __r[\"files\"]) { print \"كُتب \" + f; }\n";
+    } else if (sub == "inject") {
+        if (into.empty()) { std::cerr << "rin app inject: يلزم --into page.html\n"; return 2; }
+        std::string io = o; if (checkOnly) io += ", check: true";
+        tail += "let __r = container.appInject(__app, " + appQuote(into) + ", " + io + "});\n";
+        if (checkOnly) tail += "if (__r[\"in_sync\"]) { print \"متزامنة: \" + __r[\"path\"]; } else { print \"انجراف: \" + __r[\"path\"] + \" لا يطابق الهوية — نفّذ rin app inject\"; exit(1); }\n";
+        else tail += "if (__r[\"changed\"]) { print \"حُدّثت (\" + __r[\"mode\"] + \"): \" + __r[\"path\"]; } else { print \"بلا تغيير: \" + __r[\"path\"]; }\n";
+    } else if (sub == "changelog") {
+        tail += "print container.appChangelog(__app);\n";
+    } else if (sub == "urin") {
+        tail += "print container.appUrin(__app, {dir: " + appQuote(dir) + (type.empty() ? "" : ", type: " + appQuote(type)) + "});\n";
+    } else if (sub == "bump") {
+        if (part.empty()) { std::cerr << "rin app bump: حدّد major أو minor أو patch\n"; return 2; }
+        std::string bo = notes.empty() ? std::string() : ", {notes: " + appQuote(notes) + "}";
+        tail = "\nlet __app = container.appPick(" + appQuote(name) + ");\n"
+               "let __old = container.appInfo(__app);\n"
+               "let __new = container.appBump(__app, " + appQuote(part) + bo + ");\n"
+               "print \"RIN_APP_NAME:\" + __app;\nprint \"RIN_APP_OLD:\" + __old[\"version\"];\nprint \"RIN_APP_NEW:\" + __new;\n"
+               "let __after = container.appInfo(__app);\nprint \"RIN_APP_CODE:\" + str(__after[\"version_code\"]);\n"
+               "let __rel = __after[\"releases\"];\nif (len(__rel) > 0) { let __last = __rel[len(__rel) - 1]; print \"RIN_APP_DATE:\" + __last[\"date\"]; print \"RIN_APP_CHANNEL:\" + __last[\"channel\"]; }\n";
+    }
+
+    std::string result;
+    bool ok = appRunCaptured(source + tail, file, result);
+    // أول أسطر الناتج هي بنية الحاويات (🪪 container.app = …) — لا تُطبع في الأوامر المقروءة
+    std::vector<std::string> lines; { std::stringstream ss(result); std::string l; while (std::getline(ss, l)) lines.push_back(l); }
+    auto isNoise = [](const std::string& l) { return l.compare(0, 4, "\xF0\x9F\xAA\xAA") == 0 || l.compare(0, 3, "\xE2\x9C\x85") == 0; }; // 🪪 / ✅
+    if (sub != "bump") {
+        // محتوى head قد يبدأ بمسافات؛ نحذف فقط ضجيج إنشاء الحاويات من بداية الناتج
+        size_t k = 0; while (k < lines.size() && isNoise(lines[k])) ++k;
+        for (size_t i = k; i < lines.size(); ++i) std::cout << lines[i] << "\n";
+        return ok ? 0 : 1;
+    }
+    if (!ok) { for (auto& l : lines) if (!isNoise(l)) std::cerr << l << "\n"; return 1; }
+    std::string cname, oldV, newV, code, date, channel;
+    for (auto& l : lines) {
+        auto take = [&](const char* k, std::string& dst) { std::string K = k; if (l.compare(0, K.size(), K) == 0) dst = l.substr(K.size()); };
+        take("RIN_APP_NAME:", cname); take("RIN_APP_OLD:", oldV); take("RIN_APP_NEW:", newV); take("RIN_APP_CODE:", code); take("RIN_APP_DATE:", date); take("RIN_APP_CHANNEL:", channel);
+    }
+    if (newV.empty()) { std::cerr << "rin app bump: تعذّر حساب الإصدار الجديد\n"; return 1; }
+    size_t rb = 0, re = 0;
+    if (!appRegion(source, cname, rb, re)) { std::cerr << "rin app bump: تعذّر تحديد حاوية '" << cname << "' في '" << file << "' لتحديثها\n"; return 1; }
+    std::string region = source.substr(rb, re - rb);
+    auto setLet = [&](const std::string& key, const std::string& valueLiteral) -> bool { // يستبدل `let key = …;` داخل النطاق
+        size_t p = 0;
+        while ((p = region.find("let " + key, p)) != std::string::npos) {
+            size_t after = p + 4 + key.size();
+            size_t q = region.find_first_not_of(" \t", after);
+            bool boundary = after < region.size() && (region[after] == ' ' || region[after] == '\t' || region[after] == '=');
+            if (boundary && q != std::string::npos && region[q] == '=' && (p == 0 || region[p - 1] == ' ' || region[p - 1] == '\t' || region[p - 1] == '\n')) {
+                size_t semi = region.find(';', q); if (semi == std::string::npos) return false;
+                region.replace(q + 1, semi - q - 1, " " + valueLiteral);
+                return true;
+            }
+            p = after;
+        }
+        return false;
+    };
+    if (!setLet("version", appQuote(newV))) { std::cerr << "rin app bump: لا يوجد `let version = \"…\";` في الحاوية — أضفه ثم أعد المحاولة\n"; return 1; }
+    if (region.find("let version_code") != std::string::npos) setLet("version_code", code);
+    if (!notes.empty()) {
+        std::string chan = channel.empty() ? "" : ", channel: " + appQuote(channel);
+        std::string entry = "{version: " + appQuote(newV) + ", date: " + appQuote(date) + chan + ", notes: [" + appQuote(notes) + "]}";
+        size_t lp = std::string::npos;
+        for (size_t q = 0; (q = region.find("let releases", q)) != std::string::npos; q += 12) { // تجاهل السطور المعلَّقة
+            size_t ls0 = region.rfind('\n', q); ls0 = ls0 == std::string::npos ? 0 : ls0 + 1;
+            if (region.substr(ls0, q - ls0).find("//") == std::string::npos) { lp = q; break; }
+        }
+        size_t br = lp == std::string::npos ? std::string::npos : region.find('[', lp);
+        if (br != std::string::npos) region.insert(br + 1, "\n        " + entry + ",");
+        else {
+            size_t endLine = region.rfind(".end/container");
+            size_t ls = region.rfind('\n', endLine == std::string::npos ? region.size() : endLine);
+            region.insert(ls == std::string::npos ? 0 : ls + 1, "    let releases = [\n        " + entry + "\n    ];\n");
+        }
+    }
+    std::string updated = source.substr(0, rb) + region + source.substr(re);
+    if (!writeFile(file, updated)) { std::cerr << "rin app bump: تعذّرت الكتابة إلى '" << file << "'\n"; return 1; }
+    std::cout << oldV << " → " << newV << "  (" << file << ")\n";
+    return 0;
 }
 
 int cmdLib(const std::vector<std::string>& args) {
@@ -1367,6 +1647,7 @@ static int realMain(int argc, char** argv) {
         if (cmd == "clean") return cmdClean();
         if (cmd == "doctor") return cmdDoctor();
         if (cmd == "lib") return cmdLib(rest);
+        if (cmd == "app") return cmdApp(rest);   // هوية التطبيق/الموقع: container.app/site (docs/container_app.md)
         if (cmd == "analyze") return cmdAnalyze(rest);
         if (cmd == "bytecode") return cmdBytecode(rest, false);
         if (cmd == "vm") return cmdRealVM(rest);
