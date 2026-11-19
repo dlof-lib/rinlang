@@ -1,0 +1,49 @@
+// container.app / container.site — هوية التطبيق/الموقع: اسم، إصدار، أيقونات، وصف، SEO (docs/container_app.md)
+// يكتب ملفات مؤقتة تحت _capp_tmp/ ويتركها للمشغّل (تُنظَّف قبل كل تشغيل).
+writeFile("_capp_tmp/src/main.rin", "print 1");
+writeFile("_capp_tmp/src/icons/piano_192.png", "x");
+writeFile("_capp_tmp/src/icons/piano_512.png", "x");
+@container.app=piano
+    let name = "بيانو";
+    let id = "com.droy.piano";
+    let version = "1.0.0";
+    let channel = "stable";
+    let author = "Droy";
+    let lang = "ar";
+    let homepage = "https://piano.example.com/";
+    let description = "تطبيق بيانو تفاعلي لتعلّم العزف مباشرة من المتصفح أو الهاتف.";
+    let theme_color = "#1a1a2e";
+    let icons = {"192": "icons/piano_192.png", "512": "icons/piano_512.png"};
+    let seo = {title: "بيانو — تعلّم العزف مجاناً", keywords: ["بيانو", "piano"], alternates: {"en": "https://piano.example.com/en/"}};
+.end/container.app
+@blog.site
+    let name = "مدونتي";
+    let homepage = "https://blog.example.com";
+    let icons = ["missing.png"];
+    let seo = {robots: "index, bogus", canonical: "blog.example.com"};
+.end/container.site
+
+let info = container.appInfo("piano");
+print info["name"], info["version"], info["version_code"], info["dir"], info["short_name"], info["kind"];
+print info["icons"][0]["sizes"], info["icons"][1]["type"], info["seo"]["robots"], info["seo"]["locale"], info["version_parts"]["minor"];
+print kindOf("piano"), kindOf("blog");
+print len(container.appValidate("piano", {dir: "_capp_tmp/src", info: false}));
+for (let i in container.appValidate("blog", {dir: "_capp_tmp/src", info: false})) { print i["level"], i["code"]; }
+print container.appHead("piano");
+print container.appManifest("piano");
+print container.appRobots("piano");
+print container.appSitemap("piano", ["/", "learn"], {lastmod: "2026-11-19"});
+print container.appBump("piano", "minor"), piano.version, container.appBump("piano", "patch"), container.appBump("piano", "major");
+try { container.appBump("piano", "huge"); } catch (e) { print "جزء غير صالح"; }
+let ex = container.appExport("piano", "_capp_tmp/site", {paths: ["/"]});
+print ex["files"];
+let r = container.appPack("piano", "_capp_tmp/src", "_capp_tmp/piano.rcl", {level: 3});
+print r["name"], r["version"], r["files"], len(r["issues"]);
+let o = container.appOpen("_capp_tmp/piano.rcl");
+print o["has_identity"], o["name"], o["version"], o["id"], o["version_code"], o["lang"], o["seo"]["keywords"], o["seo"]["alternates"]["en"];
+print container.appHead(o) == container.appHead("piano");
+try { container.appPack("blog", "_capp_tmp/src", "_capp_tmp/blog.rcl"); } catch (e) { print "رُفض بسبب أخطاء الهوية"; }
+try { container.appPack("piano", "_capp_tmp/src", "_capp_tmp/src/in.rcl"); } catch (e) { print "ناتج داخل المصدر مرفوض"; }
+let h = clcContainerOpen("_capp_tmp/piano.rcl");
+print clcContainerMetaName(h), clcContainerIdentity(h)["channel"];
+clcContainerClose(h);
