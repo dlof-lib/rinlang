@@ -250,6 +250,15 @@ class ClcActivity : RinBaseActivity() {
             append("let h = clcContainerOpen(\"").append(escapeRinString(entry.relPath)).append("\");\n")
             append("print \"CLC_NAME:\" + clcContainerMetaName(h);\n")
             append("print \"CLC_VERSION:\" + clcContainerMetaVersion(h);\n")
+            // هوية التطبيق/الموقع (container.app): تُطبَع فقط إن كانت الحاوية تحملها (docs/container_app.md)
+            append("let idn = clcContainerIdentity(h);\n")
+            append("if (idn[\"has_identity\"]) {\n")
+            append("    print \"CLC_APPID:\" + idn[\"id\"];\n")
+            append("    print \"CLC_CHANNEL:\" + idn[\"channel\"];\n")
+            append("    print \"CLC_DESC:\" + idn[\"short_description\"];\n")
+            append("    print \"CLC_ICONS:\" + len(idn[\"icons\"]);\n")
+            append("    print \"CLC_SEO:\" + idn[\"seo\"][\"title\"];\n")
+            append("}\n")
             append("let n = clcContainerFileCount(h);\n")
             append("print \"CLC_COUNT:\" + n;\n")
             append("let i = 0;\n")
@@ -272,12 +281,22 @@ class ClcActivity : RinBaseActivity() {
         var name = ""
         var version = ""
         var count = 0
+        var appId = ""
+        var channel = ""
+        var desc = ""
+        var seoTitle = ""
+        var iconCount = -1 // -1 = الحاوية بلا هوية تطبيق
         val files = mutableListOf<String>()
         for (line in result.output.lineSequence()) {
             when {
                 line.startsWith("CLC_NAME:") -> name = line.removePrefix("CLC_NAME:")
                 line.startsWith("CLC_VERSION:") -> version = line.removePrefix("CLC_VERSION:")
                 line.startsWith("CLC_COUNT:") -> count = line.removePrefix("CLC_COUNT:").trim().toDoubleOrNull()?.toInt() ?: 0
+                line.startsWith("CLC_APPID:") -> { appId = line.removePrefix("CLC_APPID:"); if (iconCount < 0) iconCount = 0 }
+                line.startsWith("CLC_CHANNEL:") -> channel = line.removePrefix("CLC_CHANNEL:")
+                line.startsWith("CLC_DESC:") -> desc = line.removePrefix("CLC_DESC:")
+                line.startsWith("CLC_ICONS:") -> iconCount = line.removePrefix("CLC_ICONS:").trim().toDoubleOrNull()?.toInt() ?: 0
+                line.startsWith("CLC_SEO:") -> seoTitle = line.removePrefix("CLC_SEO:")
                 line.startsWith("CLC_FILE:") -> files.add(line.removePrefix("CLC_FILE:"))
             }
         }
@@ -287,6 +306,13 @@ class ClcActivity : RinBaseActivity() {
             append(name.ifBlank { "—" }).append('\n')
             append(getString(R.string.clc_inspect_version)).append(' ')
             append(version.ifBlank { "—" }).append('\n')
+            if (iconCount >= 0) { // هوية تطبيق/موقع: المعرّف · القناة · الوصف · الأيقونات · عنوان SEO
+                append(getString(R.string.clc_inspect_app_id)).append(' ').append(appId.ifBlank { "—" }).append('\n')
+                append(getString(R.string.clc_inspect_channel)).append(' ').append(channel.ifBlank { "—" }).append('\n')
+                append(getString(R.string.clc_inspect_description)).append(' ').append(desc.ifBlank { "—" }).append('\n')
+                append(getString(R.string.clc_inspect_icons)).append(' ').append(iconCount).append('\n')
+                append(getString(R.string.clc_inspect_seo_title)).append(' ').append(seoTitle.ifBlank { "—" }).append('\n')
+            }
             append(getString(R.string.clc_inspect_count)).append(' ').append(count).append('\n')
             if (files.isNotEmpty()) {
                 append('\n').append(getString(R.string.clc_inspect_files_header)).append('\n')
