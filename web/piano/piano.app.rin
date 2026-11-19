@@ -1,0 +1,37 @@
+// هوية piano — مصدر الحقيقة الوحيد لاسم الصفحة المنشورة (/piano/) وإصدارها وأيقوناتها ووصفها ونصوص محركات البحث.
+// كانت هذه القيم مبعثرة: <title> و<meta description> و<link rel=icon> داخل index.template.html + نسخة من الإصدار والوصف في
+// lib/piano.og.rin/disconom.json. الآن: عدّل هنا فقط ثم  python3 tools/piano_build.py  (يحقن <head> ويتحقّق من تطابق disconom).
+// أوامر مفيدة (من جذر المشروع):
+//   rin app check web/piano/piano.app.rin --dir assets/branding/piano
+//   rin app inject web/piano/piano.app.rin --into web/piano/index.template.html --dir assets/branding/piano --embed 4096 --assets-url https://dlof-lib.github.io/rinlang/piano/
+// مسارات الأيقونات = كما تُنشر بجوار index.html في dist/piano/ (pages.yml ينسخ 192 و512) وتُقرأ فعلياً من assets/branding/piano.
+@container.app=piano
+    let name = "piano";
+    let short_name = "piano";
+    let id = "org.rinlang.piano";
+    let version = "1.0.0";
+    let channel = "stable";
+    let author = "Rin";
+    let license = "MIT";
+    let lang = "ar";
+    let category = "graphics";
+    let homepage = "https://dlof-lib.github.io/rinlang/piano/";
+    let description = "piano: مكتبة رسم متجهي احترافي لـ Rin — معاينة حيّة للمشاهد (.puo) والشيفرة.";
+    let theme_color = "#0a0a0a";
+    let background_color = "#0a0a0a";
+    let icons = {
+        "32": "piano_icon_32.png",
+        "192": "piano_icon_192.png",
+        "512": "piano_icon_512.png"
+    };
+    let seo = {
+        title: "PIANO.PUO — معاينة حيّة",
+        description: "piano: مكتبة رسم متجهي احترافي لـ Rin — معاينة حيّة للمشاهد (.puo) والشيفرة.",
+        keywords: ["Rin", "piano", "SVG", "رسم متجهي", "مخططات", "charts"],
+        og_image: "piano_icon_512.png",
+        twitter_card: "summary"
+    };
+    let releases = [
+        {version: "1.0.0", notes: ["الإصدار الأول من piano: رسم متجهي، حركة، مخططات، دمج indsin، ولغة الكتل"]}
+    ];
+.end/container.app
