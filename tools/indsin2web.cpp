@@ -644,21 +644,24 @@ std::string readAll(const std::string& p, bool& ok) {
 } // namespace
 
 int main(int argc, char** argv) {
-    std::string in, outPath, title, lang = "en", dir = "", report, desc, themeColor, iconPath, ogImage, embedNative;
+    std::string in, outPath, title, lang = "en", dir = "", report, desc, themeColor, iconPath, ogImage, embedNative, appDir; bool noApp = false;
+    bool langExplicit = false;
     bool pwa = false;
     bool check = false, strict = false, fragment = false, desugarOnly = false;
     for (int i = 1; i < argc; i++) {
         std::string a = argv[i];
         auto need = [&](const char* n) -> std::string { if (i + 1 >= argc) { fprintf(stderr, "الخيار %s يحتاج قيمة\n", n); exit(64); } return argv[++i]; };
         if (a == "-o") outPath = need("-o"); else if (a == "--check") check = true; else if (a == "--strict") strict = true;
-        else if (a == "--title") title = need("--title"); else if (a == "--lang") lang = need("--lang"); else if (a == "--dir") dir = need("--dir");
+        else if (a == "--title") title = need("--title"); else if (a == "--lang") { lang = need("--lang"); langExplicit = true; } else if (a == "--dir") dir = need("--dir");
         else if (a == "--description") desc = need("--description"); else if (a == "--theme-color") themeColor = need("--theme-color");
         else if (a == "--pwa") pwa = true; else if (a == "--icon") iconPath = need("--icon"); else if (a == "--og-image") ogImage = need("--og-image");
         else if (a == "--embed-native") embedNative = need("--embed-native");
+        else if (a == "--app-dir") appDir = need("--app-dir");
+        else if (a == "--no-app") noApp = true;
         else if (a == "--fragment") fragment = true; else if (a == "--desugar") desugarOnly = true; else if (a == "--report") report = need("--report");
         else if (a == "-h" || a == "--help") {
             puts("  [--embed-native draw.json]  يضمّن DrawList المحرّك الأصلي مع راسم canvas وزرّ تبديل (web/native/split)\n");
-            puts("indsin2web — مترجم Indsin إلى HTML/CSS/JS\n  indsin2web input.rin [-o out.html] [--check] [--strict] [--title T] [--lang ar] [--dir rtl|ltr] [--fragment] [--report r.json]\n    [--description T] [--theme-color #RRGGBB] [--og-image URL]   وسوم SEO/OpenGraph\n    [--pwa [--icon icon.png]]   يكتب manifest.webmanifest + sw.js بجوار الناتج ويسجّل العامل (يعمل بلا اتصال)");
+            puts("indsin2web — مترجم Indsin إلى HTML/CSS/JS\n  indsin2web input.rin [-o out.html] [--check] [--strict] [--title T] [--lang ar] [--dir rtl|ltr] [--fragment] [--report r.json]\n    [--description T] [--theme-color #RRGGBB] [--og-image URL]   وسوم SEO/OpenGraph\n    [--no-app]   تعطيل الاكتشاف التلقائي\n    [--app-dir D]   هوية التطبيق من container.app (container.appExport): head.html + app.json + manifest\n    [--pwa [--icon icon.png]]   يكتب manifest.webmanifest + sw.js بجوار الناتج ويسجّل العامل (يعمل بلا اتصال)");
             return 0;
         } else if (!a.empty() && a[0] == '-') { fprintf(stderr, "خيار غير معروف: %s\n", a.c_str()); return 64; }
         else in = a;
@@ -666,6 +669,7 @@ int main(int argc, char** argv) {
     if (in.empty()) { fprintf(stderr, "usage: indsin2web input.rin [-o out.html]\n"); return 64; }
     bool ok; std::string src = readAll(in, ok);
     if (!ok) { fprintf(stderr, "%s: تعذّرت القراءة\n", in.c_str()); return 1; }
+    const bool dirExplicit = !dir.empty();   // --dir صريح يتقدّم على هوية --app-dir
     if (dir.empty()) dir = (lang == "ar" || lang == "he" || lang == "fa" || lang == "ur") ? "rtl" : "ltr";
 
     std::vector<StmtPtr> program;
@@ -741,6 +745,30 @@ int main(int argc, char** argv) {
     std::string page;
     if (title.empty()) { title = in; auto p = title.find_last_of("/\\"); if (p != std::string::npos) title = title.substr(p + 1); auto d = title.rfind('.'); if (d != std::string::npos) title = title.substr(0, d); }
     std::string headExtra;
+    std::string appJson;        // app.json الخام ⇒ يُضمَّن في الصفحة كمصدر للمتصفح (window.APP)
+    if (appDir.empty() && !noApp) {   // اكتشاف تلقائي: app.json + head.html بجوار الملف المصدر ⇒ هوية التطبيق بلا --app-dir
+        std::string idir = in.find_last_of("/\\") == std::string::npos ? "." : in.substr(0, in.find_last_of("/\\"));
+        bool a1 = false, a2 = false; readAll(idir + "/app.json", a1); readAll(idir + "/head.html", a2);
+        if (a1 && a2) appDir = idir;
+    }
+    std::string appSfx;         // لاحقة لغة head/manifest عند اختيار نسخة لغة
+    std::string appHead;        // --app-dir: <head> كامل من container.appExport (title/SEO/OG/أيقونات/manifest/JSON-LD)
+    if (!appDir.empty()) {
+        bool hok = false, jok = false;
+        // --lang صريح + وجود head.<lang>.html (container.appExport مع locales) ⇒ نستعمل نسخة تلك اللغة
+        std::string sfx;
+        if (langExplicit) { bool lok = false; readAll(appDir + "/head." + lang + ".html", lok); if (lok) sfx = "." + lang; }
+        appSfx = sfx;
+        std::string hh = readAll(appDir + "/head" + sfx + ".html", hok), js_ = readAll(appDir + "/app.json", jok);
+        if (!hok) { fprintf(stderr, "--app-dir: لا يوجد %s/head.html (شغّل container.appExport أولاً)\n", appDir.c_str()); return 64; }
+        // نحذف charset/viewport (نكتبهما بأنفسنا) ونُبقي الباقي كما هو
+        std::istringstream hs(hh); std::string ln;
+        while (std::getline(hs, ln)) { if (ln.find("<meta charset") != std::string::npos || ln.find("name=\"viewport\"") != std::string::npos) continue; appHead += ln + "\n"; }
+        auto field = [&](const char* k) { std::string key = std::string("\"") + k + "\":\""; size_t p = js_.find(key); if (p == std::string::npos) return std::string(); p += key.size(); size_t e = js_.find('"', p); return e == std::string::npos ? std::string() : js_.substr(p, e - p); };
+        if (jok) appJson = js_;
+        if (jok) { std::string l = field("lang"), d = field("dir"); if (!l.empty() && sfx.empty()) lang = l; if (!d.empty() && !dirExplicit && sfx.empty()) dir = d; }
+        if (title.empty()) { size_t a1 = appHead.find("<title>"), a2 = appHead.find("</title>"); if (a1 != std::string::npos && a2 != std::string::npos && a2 > a1) title = appHead.substr(a1 + 7, a2 - a1 - 7); }
+    }
     if (themeColor.empty()) { auto it = out.theme.find("primary"); themeColor = it != out.theme.end() ? it->second : "#6C5CE7"; }
     headExtra += "<meta name=\"theme-color\" content=\"" + htmlEsc(themeColor) + "\">\n";
     if (!desc.empty()) headExtra += "<meta name=\"description\" content=\"" + htmlEsc(desc) + "\">\n<meta property=\"og:description\" content=\"" + htmlEsc(desc) + "\">\n";
@@ -767,6 +795,19 @@ int main(int argc, char** argv) {
         if (!icon.empty()) headExtra += "<link rel=\"apple-touch-icon\" href=\"" + htmlEsc(icon) + "\">\n";
         pwaJs = "if (\"serviceWorker\" in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register(\"sw.js\").catch(() => {});\n";
     }
+    if (!appDir.empty()) {   // هوية container.app تحلّ محلّ وسوم title/theme/description/og/manifest المولَّدة أعلاه
+        headExtra = appHead;
+        if (!appJson.empty()) {   // الهوية مصدر للمتصفح أيضاً: <script type=application/json id=app-identity> + window.APP
+            std::string j; for (size_t k = 0; k < appJson.size(); k++) { if (appJson[k] == '<') j += "\\u003c"; else j += appJson[k]; }
+            while (!j.empty() && (j.back() == '\n' || j.back() == ' ')) j.pop_back();
+            headExtra += "<script type=\"application/json\" id=\"app-identity\">" + j + "</script>\n<script>try{window.APP=JSON.parse(document.getElementById(\"app-identity\").textContent);Object.freeze(window.APP)}catch(e){}</script>\n";
+        }
+        if (!fragment && !outPath.empty() && outPath != "-") {   // manifest التطبيق يُنسخ بجوار الناتج (بدل manifest --pwa المبسّط)
+            std::string dirp = outPath.find_last_of("/\\") == std::string::npos ? "." : outPath.substr(0, outPath.find_last_of("/\\"));
+            bool mok = false; std::string mf = readAll(appDir + "/manifest" + appSfx + ".webmanifest", mok);
+            if (mok) { std::ofstream mo(dirp + "/manifest.webmanifest", std::ios::binary); mo << mf; }
+        }
+    }
     std::string nativeBlock;
     if (!embedNative.empty() && !fragment) {   // جسر المحرّك الأصلي: JSON الـ DrawList + راسم canvas + زرّ تبديل العرض
         bool nok; std::string nj = readAll(embedNative, nok);
@@ -778,7 +819,7 @@ int main(int argc, char** argv) {
         page = "<style>" + std::string(kBaseCss) + themeCss + screenCss + "</style>\n<div class=\"in-screen\" id=\"indsin-root\">\n" + out.html + "</div>\n<script>\n" + js + "</script>\n";
     } else {
         page = "<!doctype html>\n<html lang=\"" + htmlEsc(lang) + "\" dir=\"" + htmlEsc(dir) + "\">\n<head>\n<meta charset=\"utf-8\">\n"
-               "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<meta name=\"generator\" content=\"indsin2web\">\n<title>" + htmlEsc(title) + "</title>\n" + headExtra + "<style>\n" +
+               "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<meta name=\"generator\" content=\"indsin2web\">\n" + (appDir.empty() ? "<title>" + htmlEsc(title) + "</title>\n" : std::string()) + headExtra + "<style>\n" +
                kBaseCss + themeCss + screenCss + "\n</style>\n</head>\n<body>\n<div class=\"in-screen\" id=\"indsin-root\">\n" + out.html +
                "</div>\n<noscript>هذه الصفحة تحتاج JavaScript لتطبيق الأنماط والتفاعل.</noscript>\n<script>\n" + js + pwaJs + "</script>\n" + nativeBlock + "</body>\n</html>\n";
     }
