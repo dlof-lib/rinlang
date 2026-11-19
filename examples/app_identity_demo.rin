@@ -1,0 +1,39 @@
+// هوية تطبيق/موقع بـ container.app: اسم · إصدار · أيقونات · وصف · SEO — ثم توليد head/manifest/robots وحزمة .rcl
+// الأيقونات نسبية لمجلد assets (نفس مجلد الحزمة). التشغيل من جذر المشروع:  rin examples/app_identity_demo.rin   (التوثيق: docs/container_app.md)
+@container.app=piano
+    let name = "بيانو";
+    let short_name = "بيانو";
+    let id = "org.rinlang.piano";
+    let version = "1.0.0";
+    let channel = "stable";
+    let author = "Droy";
+    let license = "MIT";
+    let lang = "ar";
+    let category = "music";
+    let homepage = "https://rinlang.dev/piano/";
+    let description = "مكتبة piano لرسم المشاهد والأفلام القصيرة بلغة Rin وتصديرها SVG.";
+    let theme_color = "#12121c";
+    let background_color = "#12121c";
+    let icons = [
+        {src: "branding/piano/favicon.ico"},
+        {src: "branding/piano/piano_icon_192.png"},
+        {src: "branding/piano/piano_icon_512.png"}
+    ];
+    let seo = {
+        title: "piano — رسم ومشاهد بلغة Rin",
+        keywords: ["Rin", "piano", "SVG", "رسم", "أفلام قصيرة"],
+        og_image: "branding/piano/piano_icon_512.png",
+        alternates: {"en": "https://rinlang.dev/en/piano/"}
+    };
+.end/container.app
+
+let issues = container.appValidate("piano", {dir: "assets"});
+print "مشاكل الهوية:", len(issues);
+for (let i in issues) { print " ", i["level"], i["field"], i["message"]; }
+
+print container.appHead("piano");
+container.appExport("piano", "_app_out", {paths: ["/", "/docs"]});   // head.html + manifest.webmanifest + robots.txt + sitemap.xml
+print container.appBump("piano", "patch");                           // 1.0.1 (يُحدَّث الحقل version في الحاوية)
+let r = container.appPack("piano", "assets", "_app_out/piano.rcl");
+print "حاوية CLC:", r["name"], r["version"], r["files"], "ملفات";
+print container.appOpen("_app_out/piano.rcl")["seo"]["title"];
