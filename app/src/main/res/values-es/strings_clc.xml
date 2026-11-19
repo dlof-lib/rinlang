@@ -34,6 +34,11 @@
     <string name="clc_inspect_title_format">Detalles: %1$s</string>
     <string name="clc_inspect_name">Nombre:</string>
     <string name="clc_inspect_version">Versión:</string>
+    <string name="clc_inspect_app_id">ID de la app:</string>
+    <string name="clc_inspect_channel">Canal:</string>
+    <string name="clc_inspect_description">Descripción:</string>
+    <string name="clc_inspect_icons">Cantidad de iconos:</string>
+    <string name="clc_inspect_seo_title">Título SEO:</string>
     <string name="clc_inspect_count">Cantidad de archivos:</string>
     <string name="clc_inspect_files_header">Archivos:</string>
 
