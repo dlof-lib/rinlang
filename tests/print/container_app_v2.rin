@@ -1,0 +1,58 @@
+// container.app v2: لغات متعددة، icons_dir، سجل إصدارات، حقن head في HTML، project.og.urin، appList/appPick
+// يكتب ملفات مؤقتة تحت _capp2_tmp/ و_capp2_src/ (يُنظَّفان قبل كل تشغيل).
+writeFile("_capp2_tmp/icons/a_192.png", "x");
+writeFile("_capp2_tmp/icons/a_512.png", "x");
+writeFile("_capp2_src/main.rin", "print 1");
+writeFile("_capp2_src/icons/a_192.png", "x");
+writeFile("_capp2_src/icons/a_512.png", "x");
+writeFile("_capp2_tmp/page.html", "<!doctype html>\n<html><head>\n<meta charset=\"utf-8\">\n<title>old</title>\n<meta name=\"description\" content=\"old\">\n<style>a<b{}</style>\n</head><body>x</body></html>\n");
+@container.site=shop
+    let name = "متجر النور";
+    let version = "2.0.0";
+    let version_code = 20;
+    let lang = "ar";
+    let homepage = "https://shop.example.com/";
+    let description = "متجر إلكتروني للأدوات المكتبية والقرطاسية بأسعار مناسبة وشحن سريع.";
+    let icons_dir = "icons";
+    let locales = {
+        en: {name: "Al-Nour Shop", description: "Online store for office supplies.", url: "https://shop.example.com/en/", seo: {title: "Al-Nour Shop", keywords: ["office"]}},
+        fr: {name: "Boutique Al-Nour", url: "https://shop.example.com/fr/"}
+    };
+    let releases = [{version: "2.0.0", date: "2026-10-01", notes: ["واجهة جديدة", "- دفع أسرع"]}];
+.end/container.site
+@tool.app
+    let name = "tool";
+.end/container.app
+
+print container.appList();
+print container.appPick("shop"), "|", len(container.appList());
+let i = container.appInfo("shop", {dir: "_capp2_tmp"});
+print i["kind"], len(i["icons"]), i["icons"][0]["src"], i["icons"][1]["sizes"];
+let en = container.appInfo("shop", {lang: "en", dir: "_capp2_tmp"});
+print en["name"], en["lang"], en["dir"], en["seo"]["title"], en["seo"]["locale"], en["seo"]["canonical"];
+let fr = container.appInfo("shop", {lang: "fr"});
+print fr["name"], "/", fr["description"];
+let h = container.appHead("shop", {lang: "en"});
+print contains(h, "hreflang=\"fr\""), contains(h, "hreflang=\"x-default\" href=\"https://shop.example.com/\"");
+print container.appValidate("shop", {dir: "_capp2_tmp", info: false});
+let bad = {name: "x", homepage: "https://x.example.com/", locales: {zz: {name: "Z", url: "nope"}, "ar": {name: "ar"}}, releases: [{version: "oops"}]};
+for (let v in container.appValidate(bad, {info: false})) { print v["level"], v["code"]; }
+print container.appBump("shop", "minor", {notes: ["ميزة", "إصلاح"], date: "2026-11-19"});
+print container.appChangelog("shop");
+let r1 = container.appInject("shop", "_capp2_tmp/page.html", {dir: "_capp2_tmp"});
+print r1["mode"], r1["changed"], r1["written"];
+let r2 = container.appInject("shop", "_capp2_tmp/page.html", {dir: "_capp2_tmp", check: true});
+print r2["in_sync"], r2["mode"];
+let pg = readFile("_capp2_tmp/page.html");
+print contains(pg, "<title>متجر النور</title>"), contains(pg, "<title>old</title>"), contains(pg, "a<b{}"), len(split(pg, "<!-- rin:app-head -->")) - 1;
+let r3 = container.appInject("shop", "_capp2_tmp/page.html", {dir: "_capp2_tmp", lang: "en", check: true});
+print r3["in_sync"];
+let u = container.appUrin("shop", {dir: "_capp2_tmp"});
+print contains(u, "type=\"html\";"), contains(u, "versionCode=\"21\";"), contains(u, "icon=\"icons/a_512.png\";");
+let back = container.appFromUrin(u);
+print back["name"], back["kind"], back["version"], back["version_code"], len(back["icons"]);
+let ex = container.appExport("shop", "_capp2_tmp/out", {dir: "_capp2_tmp", paths: ["/"]});
+print len(ex["files"]), ex["files"][2];
+container.appPack("shop", "_capp2_src", "_capp2_tmp/shop.rcl");
+let re = container.appOpen("_capp2_tmp/shop.rcl");
+print len(keys(re["locales"])), re["locales"]["en"]["name"], len(re["releases"]), re["icons_dir"];
