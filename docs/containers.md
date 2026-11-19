@@ -134,6 +134,7 @@
 | `sticker` | بطاقة هوية بصرية جاهزة. |
 | `aukt` | جداول معرفة آلية (Automated Knowledge Tables). |
 | `chatbot` | حاوية روبوت محادثة. |
+| `app` / `site` | هوية تطبيق أو موقع (اسم/إصدار/أيقونات/وصف/SEO) — انظر [`container_app.md`](./container_app.md). |
 | `sql` | استعلام RCSQL مُسمّى — يُستدعى لاحقًا بقناع الحاوية عبر `sql(mask)`/`sqlOne(mask)`/`sqlCount(mask)` بدل تكرار نص الاستعلام. |
 | `make` | بنفس أسلوب `container.xxx` الأخرى، لكن بمعنى Make Unit. |
 | `everything` | حاوية تجميعية شاملة. |
