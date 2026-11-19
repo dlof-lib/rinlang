@@ -2073,6 +2073,175 @@
       ],
       "ret": "map",
       "doc": "قيم ومتجهات ذاتية لمصفوفة حقيقية عامة: {values:[{re,im}], vectors:[متجه|nil]} (nil للقيم المركّبة)."
+    },
+    "container.appInfo": {
+      "params": [
+        "src"
+      ],
+      "ret": "map",
+      "doc": "هوية مكتملة لحاوية container.app/site (أو قاموس): الاسم/الإصدار/الأيقونات/الوصف/SEO مع القيم المشتقة."
+    },
+    "app.info": {
+      "params": [
+        "src"
+      ],
+      "ret": "map",
+      "doc": "هوية مكتملة لحاوية container.app/site (أو قاموس): الاسم/الإصدار/الأيقونات/الوصف/SEO مع القيم المشتقة. (اسم بديل؛ استعمل container.appInfo إن وُجدت حاوية اسمها app)."
+    },
+    "container.appValidate": {
+      "params": [
+        "src",
+        "[opts]"
+      ],
+      "ret": "array",
+      "doc": "فحص الهوية: مصفوفة {level,code,field,message}؛ فارغة = سليمة. opts: dir (للتحقق من ملفات الأيقونات), info."
+    },
+    "app.validate": {
+      "params": [
+        "src",
+        "[opts]"
+      ],
+      "ret": "array",
+      "doc": "فحص الهوية: مصفوفة {level,code,field,message}؛ فارغة = سليمة. opts: dir (للتحقق من ملفات الأيقونات), info. (اسم بديل؛ استعمل container.appValidate إن وُجدت حاوية اسمها app)."
+    },
+    "container.appHead": {
+      "params": [
+        "src",
+        "[opts]"
+      ],
+      "ret": "string",
+      "doc": "وسوم <head> جاهزة: title/description/keywords/robots/canonical/أيقونات/manifest/Open Graph/Twitter/hreflang/JSON-LD."
+    },
+    "app.head": {
+      "params": [
+        "src",
+        "[opts]"
+      ],
+      "ret": "string",
+      "doc": "وسوم <head> جاهزة: title/description/keywords/robots/canonical/أيقونات/manifest/Open Graph/Twitter/hreflang/JSON-LD. (اسم بديل؛ استعمل container.appHead إن وُجدت حاوية اسمها app)."
+    },
+    "container.appManifest": {
+      "params": [
+        "src"
+      ],
+      "ret": "string",
+      "doc": "web app manifest (JSON) من الهوية."
+    },
+    "app.manifest": {
+      "params": [
+        "src"
+      ],
+      "ret": "string",
+      "doc": "web app manifest (JSON) من الهوية. (اسم بديل؛ استعمل container.appManifest إن وُجدت حاوية اسمها app)."
+    },
+    "container.appRobots": {
+      "params": [
+        "src",
+        "[opts]"
+      ],
+      "ret": "string",
+      "doc": "robots.txt؛ opts: sitemap, disallow."
+    },
+    "app.robots": {
+      "params": [
+        "src",
+        "[opts]"
+      ],
+      "ret": "string",
+      "doc": "robots.txt؛ opts: sitemap, disallow. (اسم بديل؛ استعمل container.appRobots إن وُجدت حاوية اسمها app)."
+    },
+    "container.appSitemap": {
+      "params": [
+        "src",
+        "paths",
+        "[opts]"
+      ],
+      "ret": "string",
+      "doc": "sitemap.xml من مسارات؛ opts: base, lastmod, today."
+    },
+    "app.sitemap": {
+      "params": [
+        "src",
+        "paths",
+        "[opts]"
+      ],
+      "ret": "string",
+      "doc": "sitemap.xml من مسارات؛ opts: base, lastmod, today. (اسم بديل؛ استعمل container.appSitemap إن وُجدت حاوية اسمها app)."
+    },
+    "container.appBump": {
+      "params": [
+        "name",
+        "part"
+      ],
+      "ret": "string",
+      "doc": "يرفع الإصدار (major|minor|patch) ويحدّث الحقل version في الحاوية ويعيده."
+    },
+    "app.bump": {
+      "params": [
+        "name",
+        "part"
+      ],
+      "ret": "string",
+      "doc": "يرفع الإصدار (major|minor|patch) ويحدّث الحقل version في الحاوية ويعيده. (اسم بديل؛ استعمل container.appBump إن وُجدت حاوية اسمها app)."
+    },
+    "container.appExport": {
+      "params": [
+        "src",
+        "dir",
+        "[opts]"
+      ],
+      "ret": "map",
+      "doc": "يكتب head.html + manifest.webmanifest + robots.txt (+ sitemap.xml) إلى مجلد."
+    },
+    "app.export": {
+      "params": [
+        "src",
+        "dir",
+        "[opts]"
+      ],
+      "ret": "map",
+      "doc": "يكتب head.html + manifest.webmanifest + robots.txt (+ sitemap.xml) إلى مجلد. (اسم بديل؛ استعمل container.appExport إن وُجدت حاوية اسمها app)."
+    },
+    "container.appPack": {
+      "params": [
+        "src",
+        "dir",
+        "out",
+        "[opts]"
+      ],
+      "ret": "map",
+      "doc": "يبني ملف .rcl من مجلد ويحفظ الهوية في Metadata؛ يرفض الأخطاء إلا مع force."
+    },
+    "app.pack": {
+      "params": [
+        "src",
+        "dir",
+        "out",
+        "[opts]"
+      ],
+      "ret": "map",
+      "doc": "يبني ملف .rcl من مجلد ويحفظ الهوية في Metadata؛ يرفض الأخطاء إلا مع force. (اسم بديل؛ استعمل container.appPack إن وُجدت حاوية اسمها app)."
+    },
+    "container.appOpen": {
+      "params": [
+        "path"
+      ],
+      "ret": "map",
+      "doc": "يقرأ هوية التطبيق/الموقع من ملف .rcl."
+    },
+    "app.open": {
+      "params": [
+        "path"
+      ],
+      "ret": "map",
+      "doc": "يقرأ هوية التطبيق/الموقع من ملف .rcl. (اسم بديل؛ استعمل container.appOpen إن وُجدت حاوية اسمها app)."
+    },
+    "clcContainerIdentity": {
+      "params": [
+        "handle"
+      ],
+      "ret": "map",
+      "doc": "هوية التطبيق/الموقع لحاوية .rcl مفتوحة بـ clcContainerOpen (has_identity=false إن لم تحملها)."
     }
   },
   "namespaces": {
