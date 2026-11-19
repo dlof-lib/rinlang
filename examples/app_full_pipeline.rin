@@ -1,0 +1,80 @@
+// ============================================================================
+//  خط إنتاج كامل: هوية التطبيق (container.app) ← تحقق ← إصدار ← صفحة piano ← تصدير indsin ← حزمة .rcl
+//  التشغيل من جذر المشروع:   rin examples/app_full_pipeline.rin
+//  الناتج في _app_site/ :  index.html · scene.svg · head*.html · manifest*.webmanifest · app.json ·
+//                          robots.txt · sitemap.xml · CHANGELOG.md · piano.rcl
+// ============================================================================
+@import "piano";
+
+// ---- 1) الهوية: مصدر الحقيقة الوحيد (الاسم، الإصدار، الأيقونات، الوصف، SEO، اللغات، سجل الإصدارات) ----
+@container.app=studio
+    let name = "استوديو بيانو";
+    let short_name = "بيانو";
+    let id = "org.rinlang.studio";
+    let version = "1.0.0";
+    let channel = "stable";
+    let author = "Droy";
+    let license = "MIT";
+    let lang = "ar";
+    let category = "graphics";
+    let homepage = "https://rinlang.dev/studio/";
+    let description = "استوديو لرسم المشاهد المتجهية بلغة Rin وتصديرها SVG وصفحات ويب جاهزة لمحركات البحث.";
+    let theme_color = "#12121c";
+    let background_color = "#12121c";
+    let icons_dir = "branding/piano";                     // يمسح مجلد الأيقونات تلقائياً (الأحجام من ترويسة PNG)
+    let seo = {
+        title: "استوديو بيانو — رسم متجهي بلغة Rin",
+        keywords: ["Rin", "piano", "SVG", "رسم متجهي"],
+        og_image: "branding/piano/piano_icon_512.png"
+    };
+    let locales = {
+        en: {
+            name: "Piano Studio",
+            description: "Vector scene studio for Rin: draw, animate and export SVG and SEO-ready web pages.",
+            seo: {title: "Piano Studio — vector drawing in Rin"},
+            url: "https://rinlang.dev/en/studio/"
+        }
+    };
+    let releases = [
+        {version: "1.0.0", date: "2026-11-19", notes: ["الإصدار الأول"]}
+    ];
+.end/container.app
+
+let FILES = "assets";            // جذر ملفات الأيقونات والحزمة
+let OUT = "_app_site";
+
+// ---- 2) التحقق: أخطاء الهوية توقف الإنتاج ----
+let issues = container.appValidate("studio", {dir: FILES, info: false});
+let errors = 0;
+for (let i in issues) {
+    print i["level"], i["code"], "—", i["message"];
+    if (i["level"] == "error") { errors = errors + 1; }
+}
+if (errors > 0) { throw "الهوية بها " + errors + " أخطاء — أصلحها أولاً"; }
+
+// ---- 3) الإصدار: رفع patch وتسجيله في سجل الإصدارات ----
+let next = container.appBump("studio", "patch", {notes: "تحسينات في الرسم والتصدير"});
+print "الإصدار الجديد:", next;
+
+// ---- 4) مشهد piano ----
+let c = pn_canvas(640, 360);
+pn_theme(c, "dark");
+pn_circle(c, 320, 180, 110, {"grad": ["#818cf8", "#22d3ee"], "shadow": true});
+pn_text(c, 320, 190, "piano", {"size": 48, "anchor": "middle", "weight": 700});
+pn_app_apply(c, "studio");                                   // عنوان SEO يصير <title> داخل SVG
+
+// ---- 5) صفحة piano كاملة + ملفات الهوية (head/manifest/robots/sitemap/app.json/CHANGELOG لكل لغة) ----
+let files = pn_app_save(c, OUT, "studio", {"paths": ["/", "/docs"], "favicon_scene": true, "dir": FILES});  // يكتب index.rin (indsin) بدل HTML؛ {"format":"html"|"both"} للـ HTML
+for (let f in files) { print "كُتب:", f; }
+
+// ---- 6) indsin: أمر بناء صفحة indsin بنفس الهوية (يُنفَّذ من الطرفية) ----
+let ex = container.appExport("studio", OUT, {page: "_app_site/index.rin", dir: FILES});
+print "للويب بـ indsin:", ex["indsin2web"];
+
+// ---- 7) حزمة CLC: الهوية تُحفَظ داخل ملف .rcl ----
+let pk = container.appPack("studio", FILES, OUT + "/studio.rcl", {level: 3});
+print "حزمة:", pk["name"], pk["version"], pk["files"], "ملفات،", pk["size"], "بايت";
+
+let back = container.appOpen(OUT + "/studio.rcl");
+print "من الحزمة:", back["name"], back["version"], back["seo"]["title"];
+print "السجل:", container.appChangelog("studio");
