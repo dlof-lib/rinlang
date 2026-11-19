@@ -2,6 +2,18 @@
 
 > مجمَّع آلياً من ملفات `CHANGES_*.md` المتفرّقة (انظر `cleanup-project.yml`). أضف الجديد هنا مباشرةً.
 
+## container.app v2 — مصدر حقيقة واحد للهوية (لغات، حقن HTML، سجل إصدارات، `rin app`)
+
+- **لغات متعددة**: حقل `locales` (اسم/وصف/SEO/رابط لكل لغة) ← `lang` في `appInfo/Head/Manifest`؛ `hreflang` و`x-default` تُولَّدان تلقائياً من روابط اللغات؛ `appExport` يكتب `head.<lang>.html` و`manifest.<lang>.webmanifest`.
+- **حقن في الصفحات**: `container.appInject(src, file)` يحدّث كتلة `<!-- rin:app-head -->` (أول مرة يحذف `title/description/icons/OG/canonical/JSON-LD` المكرَّرة)؛ `check:true` يكشف الانجراف. خيارا `embed` (تضمين أيقونات صغيرة data:) و`assets_url` (روابط مطلقة للأيقونات وog:image).
+- **`icons_dir`**: مسح مجلد أيقونات تلقائياً (الأحجام من ترويسة PNG) بدل سردها يدوياً.
+- **سجل الإصدارات** `releases` داخل الحاوية: `appBump(name, part, {notes})` يسجّل الإصدار، و`appChangelog` يولّد CHANGELOG.md (ويُصدَّر مع `appExport`).
+- **ربط `project.og.urin`**: `appUrin` يولّده من الحاوية و`appFromUrin` يعكسه — لا نسختان يدويتان.
+- `appList` / `appPick`؛ و`@container.site` صار يضبط `kind="site"` فعلاً (كان يُسجَّل app).
+- **أمر `rin app`**: `new/info/check/head/export/inject/bump/changelog/urin/list` (`--strict`, `--check` للـ CI).
+- **piano**: `web/piano/piano.app.rin` مصدر هوية الصفحة؛ `tools/piano_build.py` يتحقق من تطابقها مع `disconom.json` ويحقن `<head>`.
+- اختبارات: `tests/print/container_app_v2.rin`، `tests/rin_app_cli_test.sh`.
+
 ## container.app / container.site — هوية التطبيقات والمواقع
 
 - نوع حاوية جديد `@container.app` / `@container.site` (اختصار `@name.app`): اسم، اسم مختصر، معرّف، إصدار (semver + `version_code` + قناة)، أيقونات (أحجام/أنواع/غرض)، وصف، ونصوص SEO (عنوان، وصف، كلمات مفتاحية، canonical، robots، Open Graph، Twitter، hreflang، JSON-LD).
