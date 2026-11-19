@@ -30,6 +30,11 @@
     permissions="network";
     dependencies="math,@rin/strings";
     icon="assets/icon.png";
+    shortName="المتجر";
+    channel="stable";
+    lang="ar";
+    seoTitle="متجري — تسوّق بسهولة";
+    seoKeywords="متجر,تسوق";
 .end/container
 ```
 
@@ -46,6 +51,9 @@
 | `tags`، `permissions`، `dependencies` | قوائم مفصولة بفواصل | 16×32 / 64×64 / 64×128 |
 | `created`، `modified` | ISO-8601 (`modified` يتحدّث مع كل تعديل من التطبيق) | — |
 | `icon` | مسار نسبي لصورة **PNG ≤ 512KB** داخل المشروع تصبح أيقونة الحزمة المصدَّرة | 256 |
+| `shortName` `versionCode` `channel` `lang` `homepage` `category` `shortDescription` `themeColor` `backgroundColor` | هوية التطبيق/الموقع: اسم مختصر، رقم بناء (أرقام)، قناة (stable/beta/…)، لغة، رابط، تصنيف، وصف سطر واحد، لونان `#RRGGBB` | 32 / 12 / 16 / 16 / 256 / 32 / 160 / 9 / 9 |
+| `icons` | أيقونات إضافية (192/512/maskable…) مسارات نسبية مفصولة بفواصل | 16×256 |
+| `seoTitle` `seoDescription` `seoKeywords` `canonical` `robots` `ogImage` | نصوص محركات البحث (الكلمات مفصولة بفواصل) | 120 / 320 / 16×64 / 256 / 64 / 256 |
 | أي مفتاح آخر | يُحفظ في `extra` ويُعاد كما هو (≤32 مفتاحاً، القيمة ≤512) — لا تضيع حقول إصدارات أحدث | — |
 
 القيم النصية تُهرَّب: `\\` `\"` `\n` `\r` `\t`. القوائم تُقصّ وتُنظَّف (فراغات/عناصر فارغة).
@@ -66,3 +74,6 @@
 
 - الملف **بيانات فقط**: لا يُنفَّذ ولا يمنح أي صلاحية. `permissions` وصف يُعرض في المعاينة ويُحلَّل (`SENSITIVE_PERMISSIONS`).
 - مسار `icon` يمرّ بنفس فحص المسارات الآمنة (بلا `..` ولا مقاطع مخفية) ويُرفض إن كان خارج المشروع أو ليس PNG أو أكبر من 512KB.
+
+## هوية التطبيق/الموقع (container.app)
+حقول الهوية أعلاه تقابل حقول `@container.app` (انظر [`container_app.md`](./container_app.md)) بصيغة camelCase بدل snake_case (`shortName` ↔ `short_name`، `seoTitle` ↔ `seo.title`...). الملفات القديمة تبقى صالحة، والتطبيقات الأقدم تحفظ الحقول الجديدة في `extra` كما هي. تعديل سريع: `python3 tools/rinpak.py meta <dir> --set seoTitle="..." --set channel=beta`.
