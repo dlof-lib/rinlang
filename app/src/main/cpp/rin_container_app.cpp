@@ -21,6 +21,12 @@
 //    container.appExport(src, dir, opts?) يكتب manifest.webmanifest + robots.txt + head.html (+ sitemap.xml)
 //    container.appPack(src, dir, out, opts?)  يبني ملف .rcl من مجلد ويحفظ الهوية داخل Metadata
 //    container.appOpen(path)              يقرأ الهوية من ملف .rcl
+//    container.appList()                  كل حاويات الهوية المعرَّفة {name, kind, id, version, lang}
+//    container.appPick(name?)             اسم حاوية الهوية (الوحيدة إن لم يُعطَ اسم؛ خطأ واضح عند الغياب/الالتباس)
+//    container.appInject(src, file, opts?) يحقن <head> المُولَّد في صفحة HTML بين علامات rin:app-head (check ⇒ فحص انجراف فقط)
+//    container.appChangelog(src)          سجل الإصدارات (releases) كـ markdown
+//    container.appUrin(src, opts?)        نص project.og.urin مُولَّداً من الهوية؛ appFromUrin(textOrPath) عكسه
+//  opts مشتركة: dir (جذر الملفات للأيقونات/icons_dir) · lang (لغة من locales) · assets_url · embed (حد بايتات لتضمين الأيقونات).
 //  src = اسم حاوية | قاموس هوية (مثل ناتج appInfo/appOpen).
 //  إضافةً: clcContainerIdentity(handle) لخدمة واجهة ClcActivity (فحص الحاويات).
 // ============================================================================
@@ -140,6 +146,58 @@ static clc::AppIdentity identityFromMap(const MapData& m) {
             }
         } else addIcon(a.icons, *is);
     }
+    a.iconsDir = textOf(m, {"icons_dir", "iconsDir", "icons_from"});
+    // اللغات: قاموس {ar: {...}} أو مصفوفة [{lang, ...}]
+    auto addLocale = [&](const std::string& lang, const MapData& lm) {
+        clc::LocaleInfo l; l.lang = lang;
+        l.name = textOf(lm, {"name", "title"});
+        l.shortName = textOf(lm, {"short_name", "shortName", "short"});
+        l.description = textOf(lm, {"description", "desc"});
+        l.shortDescription = textOf(lm, {"short_description", "shortDescription", "tagline"});
+        l.url = textOf(lm, {"url", "homepage", "canonical"});
+        l.ogImage = textOf(lm, {"og_image", "ogImage", "image"});
+        const MapData* ls = nullptr;
+        if (const Value* sv = pick(lm, {"seo"}); sv && sv->type == Value::Type::MAP && sv->map) ls = sv->map.get();
+        l.seoTitle = ls ? textOf(*ls, {"title"}) : textOf(lm, {"seo_title", "seoTitle"});
+        l.seoDescription = ls ? textOf(*ls, {"description", "desc"}) : textOf(lm, {"seo_description", "seoDescription"});
+        const Value* kw = ls ? pick(*ls, {"keywords"}) : nullptr;
+        if (!kw) kw = pick(lm, {"keywords", "seo_keywords", "seoKeywords"});
+        l.keywords = listOf(kw);
+        a.locales.push_back(l);
+    };
+    if (const Value* lv = pick(m, {"locales", "translations", "i18n"})) {
+        if (lv->type == Value::Type::MAP && lv->map) {
+            for (const auto& kv : *lv->map)
+                if (kv.second.type == Value::Type::MAP && kv.second.map)
+                    addLocale(kv.first.type == Value::Type::STRING ? kv.first.str : kv.first.toDisplayString(), *kv.second.map);
+        } else if (lv->type == Value::Type::ARRAY && lv->array) {
+            for (const auto& x : *lv->array)
+                if (x.type == Value::Type::MAP && x.map) addLocale(textOf(*x.map, {"lang", "language", "code"}), *x.map);
+        }
+    }
+    // سجل الإصدارات: مصفوفة [{version, date, channel, notes}] أو قاموس {"1.0.0": "ملاحظات"}؛ notes نص أو مصفوفة أسطر
+    auto notesOf = [&](const Value* v) {
+        if (!v) return std::string();
+        if (v->type == Value::Type::ARRAY) return clc::idn::join(listOf(v), "\n");
+        return asText(v);
+    };
+    if (const Value* rv = pick(m, {"releases", "history", "changelog"})) {
+        if (rv->type == Value::Type::ARRAY && rv->array) {
+            for (const auto& x : *rv->array) {
+                if (x.type != Value::Type::MAP || !x.map) continue;
+                clc::ReleaseInfo r; r.version = textOf(*x.map, {"version"}); r.date = textOf(*x.map, {"date"});
+                r.channel = textOf(*x.map, {"channel"}); r.notes = notesOf(pick(*x.map, {"notes", "changes", "note"}));
+                a.releases.push_back(r);
+            }
+        } else if (rv->type == Value::Type::MAP && rv->map) {
+            for (const auto& kv : *rv->map) {
+                clc::ReleaseInfo r; r.version = kv.first.type == Value::Type::STRING ? kv.first.str : kv.first.toDisplayString();
+                if (kv.second.type == Value::Type::MAP && kv.second.map) { r.date = textOf(*kv.second.map, {"date"}); r.channel = textOf(*kv.second.map, {"channel"}); r.notes = notesOf(pick(*kv.second.map, {"notes", "changes"})); }
+                else r.notes = notesOf(&kv.second);
+                a.releases.push_back(r);
+            }
+        }
+    }
     // SEO: قاموس seo + اختصارات مسطّحة
     clc::SeoInfo& s = a.seo;
     const MapData* sm = nullptr;
@@ -181,6 +239,25 @@ static Value iconsToValue(const std::vector<clc::IconEntry>& icons) {
         arr.push_back(mkMap({{"src", strV(ic.src)}, {"sizes", strV(ic.sizes)}, {"type", strV(ic.type)}, {"purpose", strV(ic.purpose)}}));
     return newArray(std::move(arr));
 }
+static Value localesToValue(const clc::AppIdentity& a) {
+    MapData out;
+    for (const auto& l : a.locales) {
+        ArrayData kws; for (auto& k : l.keywords) kws.push_back(strV(k));
+        out.push_back({strV(l.lang), mkMap({{"name", strV(l.name)}, {"short_name", strV(l.shortName)}, {"description", strV(l.description)},
+                                            {"short_description", strV(l.shortDescription)}, {"seo_title", strV(l.seoTitle)},
+                                            {"seo_description", strV(l.seoDescription)}, {"keywords", newArray(std::move(kws))},
+                                            {"url", strV(l.url)}, {"og_image", strV(l.ogImage)}})});
+    }
+    return newMap(std::move(out));
+}
+static Value releasesToValue(const clc::AppIdentity& a) {
+    ArrayData arr;
+    for (const auto& r : a.releases) {
+        ArrayData notes; for (auto& n : clc::idn::split(r.notes, '\n')) if (!clc::idn::trim(n).empty()) notes.push_back(strV(n));
+        arr.push_back(mkMap({{"version", strV(r.version)}, {"date", strV(r.date)}, {"channel", strV(r.channel)}, {"notes", newArray(std::move(notes))}}));
+    }
+    return newArray(std::move(arr));
+}
 static Value identityToValue(const clc::AppIdentity& a) {
     ArrayData kws; for (auto& k : a.seo.keywords) kws.push_back(strV(k));
     MapData alts; for (auto& al : a.seo.alternates) alts.push_back({strV(al.first), strV(al.second)});
@@ -200,7 +277,8 @@ static Value identityToValue(const clc::AppIdentity& a) {
                   {"category", strV(a.category)}, {"description", strV(a.description)}, {"short_description", strV(a.shortDescription)},
                   {"theme_color", strV(a.themeColor)}, {"background_color", strV(a.backgroundColor)}, {"display", strV(a.display)},
                   {"orientation", strV(a.orientation)}, {"start_url", strV(a.startUrl)}, {"scope", strV(a.scope)},
-                  {"favicon", strV(a.favicon)}, {"icons", iconsToValue(a.icons)}, {"seo", seo}});
+                  {"favicon", strV(a.favicon)}, {"icons", iconsToValue(a.icons)}, {"icons_dir", strV(a.iconsDir)}, {"seo", seo},
+                  {"locales", localesToValue(a)}, {"releases", releasesToValue(a)}});
 }
 static Value issuesToValue(const std::vector<clc::IdentityIssue>& v) {
     ArrayData arr;
@@ -227,6 +305,30 @@ static std::string originOf(const std::string& url) {
 static std::string siteOrigin(const clc::AppIdentity& id) {
     std::string o = originOf(id.seo.canonical);
     return o.empty() ? originOf(id.homepage) : o;
+}
+static std::string b64(const std::string& in) {
+    static const char* T = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string o; o.reserve((in.size() + 2) / 3 * 4);
+    size_t i = 0;
+    for (; i + 2 < in.size(); i += 3) {
+        unsigned v = (unsigned char)in[i] << 16 | (unsigned char)in[i + 1] << 8 | (unsigned char)in[i + 2];
+        o += T[v >> 18]; o += T[(v >> 12) & 63]; o += T[(v >> 6) & 63]; o += T[v & 63];
+    }
+    if (i + 1 == in.size()) { unsigned v = (unsigned char)in[i] << 16; o += T[v >> 18]; o += T[(v >> 12) & 63]; o += "=="; }
+    else if (i + 2 == in.size()) { unsigned v = (unsigned char)in[i] << 16 | (unsigned char)in[i + 1] << 8; o += T[v >> 18]; o += T[(v >> 12) & 63]; o += T[(v >> 6) & 63]; o += '='; }
+    return o;
+}
+// data: URI لأيقونة صغيرة (≤ maxBytes) من base/rel؛ "" إن كبرت أو غابت أو ليست صورة.
+static std::string embedIcon(const std::string& base, const std::string& rel, size_t maxBytes) {
+    if (base.empty() || maxBytes == 0 || rel.empty() || clc::idn::isAbsUrl(rel) || rel.find("..") != std::string::npos || rel[0] == '/') return "";
+    std::string mime = clc::idn::mimeOfPath(rel);
+    if (mime.empty()) return "";
+    std::error_code ec; fs::path p = fs::path(base) / rel;
+    if (!fs::is_regular_file(p, ec) || fs::is_symlink(p, ec)) return "";
+    auto sz = fs::file_size(p, ec);
+    if (ec || sz > maxBytes) return "";
+    std::ifstream in(p, std::ios::binary); std::string data((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    return "data:" + mime + ";base64," + b64(data);
 }
 static std::string todayIso() {
     std::time_t t = std::time(nullptr); std::tm tm{};
@@ -276,7 +378,11 @@ void Interpreter::registerNativesContainerApp() {
     };
     auto existsIn = [](const std::string& base) -> std::function<bool(const std::string&)> {
         if (base.empty()) return nullptr;
-        return [base](const std::string& rel) { std::error_code ec; return fs::is_regular_file(fs::path(base) / rel, ec); };
+        return [base](const std::string& rel) {
+            std::error_code ec;
+            if (!rel.empty() && rel.back() == '/') return fs::is_directory(fs::path(base) / rel, ec); // «مجلد/» = فحص مجلد
+            return fs::is_regular_file(fs::path(base) / rel, ec);
+        };
     };
     auto writeText = [this](const std::string& rawPath, const std::string& text, int line, const std::string& who) {
         std::string full = resolvePath(rawPath, line);
@@ -297,14 +403,23 @@ void Interpreter::registerNativesContainerApp() {
         natives["app." + lowered] = fn;                                 // app.info
     };
 
-    reg("Info", [this, sourceIdentity](Args& a, int line) -> Value {
-        need("container.appInfo", a, 1, 1, line);
-        std::string c;
-        clc::AppIdentity id = sourceIdentity(a[0], "container.appInfo", line, &c);
-        clc::completeIdentity(id);
-        Value v = identityToValue(id);
-        if (!c.empty()) v.map->put(strV("container"), strV(c));
-        return v;
+    // هوية جاهزة للتوليد: لغة (opts.lang) ثم الإكمال بجذر الملفات (opts.dir) — الأخطاء تُترجَم لخطأ معاملات واضح.
+    auto resolve = [baseDirOf](clc::AppIdentity id, const Value* opts, int line) -> clc::AppIdentity {
+        id = clc::localizeIdentity(id, optStr(opts, "lang"));
+        clc::completeIdentity(id, baseDirOf(opts, line));
+        return id;
+    };
+
+    reg("Info", [this, sourceIdentity, resolve, guard](Args& a, int line) -> Value {
+        need("container.appInfo", a, 1, 2, line);
+        const Value* opts = a.size() > 1 ? &a[1] : nullptr;
+        return guard(line, "container.appInfo", [&] {
+            std::string c;
+            clc::AppIdentity id = resolve(sourceIdentity(a[0], "container.appInfo", line, &c), opts, line);
+            Value v = identityToValue(id);
+            if (!c.empty()) v.map->put(strV("container"), strV(c));
+            return v;
+        });
     });
 
     reg("Validate", [this, sourceIdentity, baseDirOf, existsIn, guard](Args& a, int line) -> Value {
@@ -321,10 +436,8 @@ void Interpreter::registerNativesContainerApp() {
         });
     });
 
-    reg("Head", [this, sourceIdentity](Args& a, int line) -> Value {
-        need("container.appHead", a, 1, 2, line);
-        const Value* opts = a.size() > 1 ? &a[1] : nullptr;
-        clc::AppIdentity id = sourceIdentity(a[0], "container.appHead", line, nullptr);
+    // خيارات توليد head المشتركة بين Head وExport وInject.
+    auto headOptions = [baseDirOf](const Value* opts, int line) -> clc::HeadOptions {
         clc::HeadOptions ho;
         if (const Value* m = optv(opts, "manifest")) {
             if (m->type == Value::Type::STRING) ho.manifestHref = m->str;
@@ -332,12 +445,31 @@ void Interpreter::registerNativesContainerApp() {
         }
         if (const Value* ind = optv(opts, "indent"); ind && ind->type == Value::Type::STRING) ho.indent = ind->str;
         ho.charsetViewport = optBool(opts, "charset", true);
-        return strV(clc::buildHead(id, ho));
-    });
+        ho.assetsUrl = optStr(opts, "assets_url");
+        if (const Value* e = optv(opts, "embed"); e && e->type == Value::Type::NUMBER && e->number > 0) {
+            std::string base = baseDirOf(opts, line); size_t lim = size_t(e->number);
+            if (!base.empty()) ho.embed = [base, lim](const std::string& src) { return embedIcon(base, src, lim); };
+        } else if (e && e->type == Value::Type::BOOL && e->boolean) {
+            std::string base = baseDirOf(opts, line);
+            if (!base.empty()) ho.embed = [base](const std::string& src) { return embedIcon(base, src, 8192); };
+        }
+        return ho;
+    };
 
-    reg("Manifest", [this, sourceIdentity](Args& a, int line) -> Value {
-        need("container.appManifest", a, 1, 1, line);
-        return strV(clc::buildManifest(sourceIdentity(a[0], "container.appManifest", line, nullptr)));
+    reg("Head", [this, sourceIdentity, resolve, headOptions, guard](Args& a, int line) -> Value {
+        need("container.appHead", a, 1, 2, line);
+        const Value* opts = a.size() > 1 ? &a[1] : nullptr;
+        return guard(line, "container.appHead", [&] {
+        clc::AppIdentity id = resolve(sourceIdentity(a[0], "container.appHead", line, nullptr), opts, line);
+        return strV(clc::buildHead(id, headOptions(opts, line)));
+        });
+    });
+    reg("Manifest", [this, sourceIdentity, resolve, guard](Args& a, int line) -> Value {
+        need("container.appManifest", a, 1, 2, line);
+        const Value* opts = a.size() > 1 ? &a[1] : nullptr;
+        return guard(line, "container.appManifest", [&] {
+            return strV(clc::buildManifest(resolve(sourceIdentity(a[0], "container.appManifest", line, nullptr), opts, line)));
+        });
     });
 
     reg("Robots", [this, sourceIdentity](Args& a, int line) -> Value {
@@ -367,8 +499,9 @@ void Interpreter::registerNativesContainerApp() {
     });
 
     reg("Bump", [this, guard](Args& a, int line) -> Value {
-        need("container.appBump", a, 2, 2, line);
+        need("container.appBump", a, 2, 3, line);
         std::string who = "container.appBump";
+        const Value* bopts = a.size() > 2 ? &a[2] : nullptr; // {notes, date, channel}: يُسجَّل الإصدار الجديد في releases
         std::string name = str(a[0], who, line), part = str(a[1], who, line);
         std::string c = canonContainer(name);
         auto it = containers.find(c);
@@ -381,31 +514,54 @@ void Interpreter::registerNativesContainerApp() {
             vals["version"] = strV(next);
             auto cit = vals.find("version_code"); // يُزاد 1 فقط إن عُرِّف صراحةً (وإلا يُشتق من الإصدار)
             if (cit != vals.end() && cit->second.type == Value::Type::NUMBER) cit->second = numV(cit->second.number + 1);
+            const Value* nv = optv(bopts, "notes");
+            if (nv && nv->type != Value::Type::NIL) { // سجل إصدار جديد في الحاوية نفسها
+                std::string notes = nv->type == Value::Type::ARRAY ? clc::idn::join(listOf(nv), "\n") : asText(nv);
+                std::string ch = optStr(bopts, "channel");
+                if (ch.empty()) { auto chit = vals.find("channel"); if (chit != vals.end() && chit->second.type == Value::Type::STRING) ch = chit->second.str; }
+                ArrayData arr;
+                auto rit = vals.find("releases");
+                if (rit != vals.end() && rit->second.type == Value::Type::ARRAY && rit->second.array) arr = *rit->second.array;
+                ArrayData lines; for (auto& l : clc::idn::split(notes, '\n')) if (!clc::idn::trim(l).empty()) lines.push_back(strV(l));
+                arr.push_back(mkMap({{"version", strV(next)}, {"date", strV(optStr(bopts, "date", todayIso()))}, {"channel", strV(ch)}, {"notes", newArray(std::move(lines))}}));
+                vals["releases"] = newArray(std::move(arr));
+            }
             return strV(next);
         });
     });
 
-    reg("Export", [this, sourceIdentity, baseDirOf, guard, writeText](Args& a, int line) -> Value {
+    reg("Export", [this, sourceIdentity, baseDirOf, headOptions, guard, writeText](Args& a, int line) -> Value {
         need("container.appExport", a, 2, 3, line);
         std::string who = "container.appExport";
         std::string dir = str(a[1], who, line);
         const Value* opts = a.size() > 2 ? &a[2] : nullptr;
         return guard(line, who, [&] {
-            clc::AppIdentity id = sourceIdentity(a[0], who, line, nullptr);
+            clc::AppIdentity raw = sourceIdentity(a[0], who, line, nullptr);
+            std::string files = baseDirOf(opts, line);
             while (!dir.empty() && dir.back() == '/') dir.pop_back();
             std::string pre = dir.empty() ? "" : dir + "/";
             ArrayData written;
             auto put = [&](const std::string& rel, const std::string& text) { writeText(pre + rel, text, line, who); written.push_back(strV(pre + rel)); };
-            clc::HeadOptions ho; ho.manifestHref = "manifest.webmanifest";
-            put("head.html", clc::buildHead(id, ho));
-            put("manifest.webmanifest", clc::buildManifest(id));
-            clc::completeIdentity(id);
+            auto finish = [&](const std::string& lang) { clc::AppIdentity id = clc::localizeIdentity(raw, lang); clc::completeIdentity(id, files); return id; };
+            // اللغة الأساسية: head.html/manifest.webmanifest؛ وكل لغة في locales: head.<lang>.html/manifest.<lang>.webmanifest
+            std::vector<std::string> langs{""};
+            if (optBool(opts, "all_langs", true)) for (auto& l : raw.locales) langs.push_back(l.lang);
+            for (auto& lg : langs) {
+                clc::AppIdentity id = finish(lg);
+                std::string sfx = lg.empty() ? "" : "." + lg;
+                clc::HeadOptions ho = headOptions(opts, line);
+                if (ho.manifestHref == "manifest.webmanifest") ho.manifestHref = "manifest" + sfx + ".webmanifest";
+                put("head" + sfx + ".html", clc::buildHead(id, ho));
+                put("manifest" + sfx + ".webmanifest", clc::buildManifest(id));
+            }
+            clc::AppIdentity id = finish("");
             std::string base = optStr(opts, "base");
             if (base.empty()) base = siteOrigin(id);
             std::vector<std::string> paths = listOf(optv(opts, "paths"));
             std::string smUrl = clc::idn::isAbsUrl(base) && !paths.empty() ? base + "/sitemap.xml" : "";
             put("robots.txt", clc::buildRobots(id, smUrl, listOf(optv(opts, "disallow"))));
             if (!smUrl.empty()) put("sitemap.xml", clc::buildSitemap(base, paths, optStr(opts, "lastmod")));
+            if (!id.releases.empty()) put("CHANGELOG.md", clc::buildChangelog(id));
             return mkMap({{"dir", strV(dir)}, {"files", newArray(std::move(written))}});
         });
     });
@@ -463,6 +619,150 @@ void Interpreter::registerNativesContainerApp() {
             v.map->put(strV("created"), strV(info.metadata.created));
             v.map->put(strV("modified"), strV(info.metadata.modified));
             return v;
+        });
+    });
+
+    // ------------------------------------------------------------------ قائمة الحاويات
+    auto appContainers = [this]() {
+        std::vector<std::string> names;
+        for (const auto& kv : containerKinds) if (kv.second == ContainerKind::APP && containers.count(kv.first)) names.push_back(kv.first);
+        std::sort(names.begin(), names.end());
+        return names;
+    };
+    reg("List", [this, appContainers](Args& a, int line) -> Value {
+        need("container.appList", a, 0, 0, line);
+        ArrayData out;
+        for (auto& n : appContainers()) {
+            MapData m; for (const auto& kv : containers.at(n)->values) m.push_back({Value::string(kv.first), kv.second});
+            clc::AppIdentity id = identityFromMap(m);
+            if (id.name.empty()) id.name = n;
+            if (id.version.empty()) id.version = "0.1.0";
+            out.push_back(mkMap({{"name", strV(n)}, {"kind", strV(id.kind)}, {"id", strV(id.id)}, {"title", strV(id.name)},
+                                 {"version", strV(id.version)}, {"lang", strV(id.lang)}}));
+        }
+        return newArray(std::move(out));
+    });
+    reg("Pick", [this, appContainers](Args& a, int line) -> Value {
+        need("container.appPick", a, 0, 1, line);
+        auto names = appContainers();
+        if (!a.empty() && a[0].type == Value::Type::STRING && !a[0].str.empty()) {
+            std::string c = canonContainer(a[0].str);
+            if (std::find(names.begin(), names.end(), c) == names.end()) {
+                std::string have; for (auto& n : names) have += (have.empty() ? "" : "، ") + n;
+                throw diagErr(diag::Code::E0014_InvalidContainer, line, "container.appPick: لا توجد حاوية هوية باسم '" + a[0].str + "'" + (have.empty() ? " (لا توجد حاويات container.app/site)" : " — المتاح: " + have));
+            }
+            return strV(c);
+        }
+        if (names.empty()) throw diagErr(diag::Code::E0014_InvalidContainer, line, "container.appPick: لا توجد أي حاوية container.app/container.site معرَّفة");
+        if (names.size() > 1) {
+            std::string have; for (auto& n : names) have += (have.empty() ? "" : "، ") + n;
+            throw diagErr(diag::Code::E0014_InvalidContainer, line, "container.appPick: عدة حاويات هوية (" + have + ") — حدّد الاسم");
+        }
+        return strV(names[0]);
+    });
+
+    // ------------------------------------------------------------------ سجل الإصدارات
+    reg("Changelog", [this, sourceIdentity, guard](Args& a, int line) -> Value {
+        need("container.appChangelog", a, 1, 1, line);
+        return guard(line, "container.appChangelog", [&] { return strV(clc::buildChangelog(sourceIdentity(a[0], "container.appChangelog", line, nullptr))); });
+    });
+
+    // ------------------------------------------------------------------ حقن الهوية في صفحة HTML
+    reg("Inject", [this, sourceIdentity, resolve, headOptions, guard, writeText](Args& a, int line) -> Value {
+        need("container.appInject", a, 2, 3, line);
+        std::string who = "container.appInject";
+        std::string fileRaw = str(a[1], who, line);
+        const Value* opts = a.size() > 2 ? &a[2] : nullptr;
+        return guard(line, who, [&] {
+            std::string full = resolvePath(fileRaw, line);
+            std::ifstream in(full, std::ios::binary);
+            if (!in) throw diagErr(diag::Code::E0036_IOFailure, line, who + ": تعذّر فتح '" + fileRaw + "'");
+            std::string page((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+            in.close();
+            clc::AppIdentity id = resolve(sourceIdentity(a[0], who, line, nullptr), opts, line);
+            clc::HeadOptions ho = headOptions(opts, line);
+            if (!optv(opts, "charset")) ho.charsetViewport = false; // الصفحة تملك charset/viewport عادةً
+            if (!optv(opts, "manifest")) ho.manifestHref.clear();   // لا رابط manifest ما لم يُطلب صراحةً
+            std::string mode;
+            std::string res = clc::injectHeadIntoHtml(page, clc::buildHead(id, ho), optBool(opts, "strip", true), optStr(opts, "indent", ""), mode);
+            bool changed = res != page, check = optBool(opts, "check", false);
+            if (changed && !check) writeText(fileRaw, res, line, who);
+            return mkMap({{"path", strV(fileRaw)}, {"mode", strV(mode)}, {"changed", boolV(changed)}, {"written", boolV(changed && !check)},
+                          {"in_sync", boolV(!changed)}});
+        });
+    });
+
+    // ------------------------------------------------------------------ project.og.urin
+    reg("Urin", [this, sourceIdentity, resolve, guard](Args& a, int line) -> Value {
+        need("container.appUrin", a, 1, 2, line);
+        const Value* opts = a.size() > 1 ? &a[1] : nullptr;
+        return guard(line, "container.appUrin", [&] {
+            clc::AppIdentity id = resolve(sourceIdentity(a[0], "container.appUrin", line, nullptr), opts, line);
+            clc::UrinOptions u;
+            u.type = optStr(opts, "type");
+            u.tags = listOf(optv(opts, "tags")); u.permissions = listOf(optv(opts, "permissions")); u.dependencies = listOf(optv(opts, "dependencies"));
+            u.minRinVersion = optStr(opts, "min_rin_version"); u.created = optStr(opts, "created"); u.modified = optStr(opts, "modified");
+            u.icon = optStr(opts, "icon");
+            if (u.icon.empty()) { // أيقونة الحزمة: أكبر PNG ≤ 512KB (يُفحص الحجم إن عُرف dir) وإلا أول PNG
+                std::string base = optStr(opts, "dir"); base = base.empty() ? "" : resolvePath(base, line);
+                std::vector<const clc::IconEntry*> pngs;
+                for (auto& ic : id.icons) if (ic.type == "image/png" && !clc::idn::isAbsUrl(ic.src)) pngs.push_back(&ic);
+                std::stable_sort(pngs.begin(), pngs.end(), [](auto* x, auto* y) { return clc::idn::maxSize(x->sizes) > clc::idn::maxSize(y->sizes); });
+                for (auto* ic : pngs) {
+                    if (base.empty()) { u.icon = ic->src; break; }
+                    std::error_code ec; auto sz = fs::file_size(fs::path(base) / ic->src, ec);
+                    if (!ec && sz <= 512 * 1024) { u.icon = ic->src; break; }
+                }
+            }
+            return strV(clc::buildUrin(id, u));
+        });
+    });
+    reg("FromUrin", [this, guard](Args& a, int line) -> Value {
+        need("container.appFromUrin", a, 1, 1, line);
+        std::string raw = str(a[0], "container.appFromUrin", line), text = raw;
+        if (raw.find('\n') == std::string::npos && raw.find('=') == std::string::npos) { // مسار ملف
+            std::ifstream in(resolvePath(raw, line), std::ios::binary);
+            if (!in) throw diagErr(diag::Code::E0036_IOFailure, line, "container.appFromUrin: تعذّر فتح '" + raw + "'");
+            text.assign((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+            if (text.size() > 64 * 1024) throw diagErr(diag::Code::E0007_InvalidArguments, line, "container.appFromUrin: الملف أكبر من 64KB");
+        }
+        return guard(line, "container.appFromUrin", [&] {
+            std::map<std::string, std::string> kv;
+            for (auto& line_ : clc::idn::split(text, '\n')) {
+                std::string t = clc::idn::trim(line_);
+                if (t.empty() || t[0] == '#' || clc::idn::startsWith(t, "//") || clc::idn::startsWith(t, "@container") || clc::idn::startsWith(t, ".end")) continue;
+                size_t eq = t.find('='); if (eq == std::string::npos) continue;
+                std::string k = clc::idn::trim(t.substr(0, eq)), v = clc::idn::trim(t.substr(eq + 1));
+                if (!v.empty() && v.back() == ';') v.pop_back();
+                v = clc::idn::trim(v);
+                if (v.size() >= 2 && v.front() == '"' && v.back() == '"') {
+                    std::string o; v = v.substr(1, v.size() - 2);
+                    for (size_t i = 0; i < v.size(); ++i) {
+                        if (v[i] == '\\' && i + 1 < v.size()) { char n = v[++i]; o += n == 'n' ? '\n' : n == 'r' ? '\r' : n == 't' ? '\t' : n; }
+                        else o += v[i];
+                    }
+                    v = o;
+                }
+                kv[k] = v;
+            }
+            auto g = [&](const char* k) { auto it = kv.find(k); return it == kv.end() ? std::string() : it->second; };
+            auto csv = [&](const char* k) { ArrayData arr; for (auto& x : splitList(g(k))) arr.push_back(strV(x)); return newArray(std::move(arr)); };
+            std::string type = g("type");
+            ArrayData icons; if (!g("icon").empty()) icons.push_back(strV(g("icon")));
+            for (auto& x : splitList(g("icons"))) if (x != g("icon")) icons.push_back(strV(x));
+            Value seo = mkMap({{"title", strV(g("seoTitle"))}, {"description", strV(g("seoDescription"))}, {"keywords", csv("seoKeywords")},
+                               {"canonical", strV(g("canonical"))}, {"robots", strV(g("robots"))}, {"og_image", strV(g("ogImage"))}});
+            double vc = 0; try { if (!g("versionCode").empty()) vc = std::stod(g("versionCode")); } catch (...) {}
+            Value out = mkMap({{"kind", strV(clc::idn::startsWith(type, "html") ? "site" : "app")}, {"type", strV(type)}, {"id", strV(g("id"))},
+                               {"name", strV(g("name"))}, {"short_name", strV(g("shortName"))}, {"version", strV(g("version"))},
+                               {"version_code", numV(vc)}, {"channel", strV(g("channel"))}, {"author", strV(g("author"))},
+                               {"license", strV(g("license"))}, {"homepage", strV(g("homepage"))}, {"lang", strV(g("lang"))},
+                               {"category", strV(g("category"))}, {"description", strV(g("description"))},
+                               {"short_description", strV(g("shortDescription"))}, {"theme_color", strV(g("themeColor"))},
+                               {"background_color", strV(g("backgroundColor"))}, {"icons", newArray(std::move(icons))}, {"seo", seo},
+                               {"tags", csv("tags")}, {"permissions", csv("permissions")}, {"dependencies", csv("dependencies")},
+                               {"min_rin_version", strV(g("minRinVersion"))}, {"created", strV(g("created"))}, {"modified", strV(g("modified"))}});
+            return out;
         });
     });
 
