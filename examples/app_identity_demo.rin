@@ -10,7 +10,7 @@
     let license = "MIT";
     let lang = "ar";
     let category = "music";
-    let homepage = "https://rinlang.dev/piano/";
+    let homepage = "https://piano.example.com/";
     let description = "مكتبة piano لرسم المشاهد والأفلام القصيرة بلغة Rin وتصديرها SVG.";
     let theme_color = "#12121c";
     let background_color = "#12121c";
@@ -23,7 +23,7 @@
         title: "piano — رسم ومشاهد بلغة Rin",
         keywords: ["Rin", "piano", "SVG", "رسم", "أفلام قصيرة"],
         og_image: "branding/piano/piano_icon_512.png",
-        alternates: {"en": "https://rinlang.dev/en/piano/"}
+        alternates: {"en": "https://piano.example.com/en/"}
     };
 .end/container.app
 
