@@ -2076,17 +2076,19 @@
     },
     "container.appInfo": {
       "params": [
-        "src"
+        "src",
+        "[opts]"
       ],
       "ret": "map",
-      "doc": "هوية مكتملة لحاوية container.app/site (أو قاموس): الاسم/الإصدار/الأيقونات/الوصف/SEO مع القيم المشتقة."
+      "doc": "هوية مكتملة لحاوية container.app/site (أو قاموس): الاسم/الإصدار/الأيقونات/الوصف/SEO مع القيم المشتقة. opts: lang (من locales)، dir."
     },
     "app.info": {
       "params": [
-        "src"
+        "src",
+        "[opts]"
       ],
       "ret": "map",
-      "doc": "هوية مكتملة لحاوية container.app/site (أو قاموس): الاسم/الإصدار/الأيقونات/الوصف/SEO مع القيم المشتقة. (اسم بديل؛ استعمل container.appInfo إن وُجدت حاوية اسمها app)."
+      "doc": "هوية مكتملة لحاوية container.app/site (أو قاموس): الاسم/الإصدار/الأيقونات/الوصف/SEO مع القيم المشتقة. (اسم بديل؛ استعمل container.appInfo إن وُجدت حاوية اسمها app). opts: lang (من locales)، dir."
     },
     "container.appValidate": {
       "params": [
@@ -2122,14 +2124,16 @@
     },
     "container.appManifest": {
       "params": [
-        "src"
+        "src",
+        "[opts]"
       ],
       "ret": "string",
       "doc": "web app manifest (JSON) من الهوية."
     },
     "app.manifest": {
       "params": [
-        "src"
+        "src",
+        "[opts]"
       ],
       "ret": "string",
       "doc": "web app manifest (JSON) من الهوية. (اسم بديل؛ استعمل container.appManifest إن وُجدت حاوية اسمها app)."
@@ -2171,18 +2175,20 @@
     "container.appBump": {
       "params": [
         "name",
-        "part"
+        "part",
+        "[opts]"
       ],
       "ret": "string",
-      "doc": "يرفع الإصدار (major|minor|patch) ويحدّث الحقل version في الحاوية ويعيده."
+      "doc": "يرفع الإصدار (major|minor|patch) ويحدّث الحقل version في الحاوية ويعيده. opts {notes,date,channel}: يسجّل الإصدار في releases."
     },
     "app.bump": {
       "params": [
         "name",
-        "part"
+        "part",
+        "[opts]"
       ],
       "ret": "string",
-      "doc": "يرفع الإصدار (major|minor|patch) ويحدّث الحقل version في الحاوية ويعيده. (اسم بديل؛ استعمل container.appBump إن وُجدت حاوية اسمها app)."
+      "doc": "يرفع الإصدار (major|minor|patch) ويحدّث الحقل version في الحاوية ويعيده. (اسم بديل؛ استعمل container.appBump إن وُجدت حاوية اسمها app). opts {notes,date,channel}: يسجّل الإصدار في releases."
     },
     "container.appExport": {
       "params": [
@@ -2242,6 +2248,92 @@
       ],
       "ret": "map",
       "doc": "هوية التطبيق/الموقع لحاوية .rcl مفتوحة بـ clcContainerOpen (has_identity=false إن لم تحملها)."
+    },
+    "container.appList": {
+      "params": [],
+      "ret": "array",
+      "doc": "قائمة حاويات الهوية المعرَّفة: {name, kind, id, title, version, lang}."
+    },
+    "app.list": {
+      "params": [],
+      "ret": "array",
+      "doc": "قائمة حاويات الهوية المعرَّفة: {name, kind, id, title, version, lang}. (اسم بديل)."
+    },
+    "container.appPick": {
+      "params": [
+        "[name]"
+      ],
+      "ret": "string",
+      "doc": "اسم حاوية الهوية (الوحيدة إن لم يُعطَ اسم)؛ خطأ واضح عند الغياب أو الالتباس."
+    },
+    "app.pick": {
+      "params": [
+        "[name]"
+      ],
+      "ret": "string",
+      "doc": "اسم حاوية الهوية (الوحيدة إن لم يُعطَ اسم)؛ خطأ واضح عند الغياب أو الالتباس. (اسم بديل)."
+    },
+    "container.appInject": {
+      "params": [
+        "src",
+        "file",
+        "[opts]"
+      ],
+      "ret": "map",
+      "doc": "يحقن <head> المُولَّد في صفحة HTML بين <!-- rin:app-head --> و<!-- /rin:app-head --> (أول مرة يحذف الوسوم المكرَّرة). opts: lang, dir, embed, assets_url, check. يعيد {mode, changed, written, in_sync}."
+    },
+    "app.inject": {
+      "params": [
+        "src",
+        "file",
+        "[opts]"
+      ],
+      "ret": "map",
+      "doc": "يحقن <head> المُولَّد في صفحة HTML بين <!-- rin:app-head --> و<!-- /rin:app-head --> (أول مرة يحذف الوسوم المكرَّرة). opts: lang, dir, embed, assets_url, check. يعيد {mode, changed, written, in_sync}. (اسم بديل)."
+    },
+    "container.appChangelog": {
+      "params": [
+        "src"
+      ],
+      "ret": "string",
+      "doc": "سجل الإصدارات (releases) كنص markdown من الأحدث للأقدم."
+    },
+    "app.changelog": {
+      "params": [
+        "src"
+      ],
+      "ret": "string",
+      "doc": "سجل الإصدارات (releases) كنص markdown من الأحدث للأقدم. (اسم بديل)."
+    },
+    "container.appUrin": {
+      "params": [
+        "src",
+        "[opts]"
+      ],
+      "ret": "string",
+      "doc": "يولّد نص project.og.urin من الهوية (opts: type, tags, permissions, dependencies, dir, lang)."
+    },
+    "app.urin": {
+      "params": [
+        "src",
+        "[opts]"
+      ],
+      "ret": "string",
+      "doc": "يولّد نص project.og.urin من الهوية (opts: type, tags, permissions, dependencies, dir, lang). (اسم بديل)."
+    },
+    "container.appFromUrin": {
+      "params": [
+        "textOrPath"
+      ],
+      "ret": "map",
+      "doc": "يقرأ project.og.urin (نصاً أو مساراً) ويعيد قاموس هوية صالحاً كمصدر لدوال container.app*."
+    },
+    "app.fromUrin": {
+      "params": [
+        "textOrPath"
+      ],
+      "ret": "map",
+      "doc": "يقرأ project.og.urin (نصاً أو مساراً) ويعيد قاموس هوية صالحاً كمصدر لدوال container.app*. (اسم بديل)."
     }
   },
   "namespaces": {
