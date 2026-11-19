@@ -29,6 +29,7 @@
     "core/design.zpp",
     "core/indsin.zpp",
     "core/dsl.zpp",
-    "core/film.zpp"
+    "core/film.zpp",
+    "core/app.zpp"
   ]
 }
