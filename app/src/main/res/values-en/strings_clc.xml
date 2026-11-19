@@ -34,6 +34,11 @@
     <string name="clc_inspect_title_format">Details: %1$s</string>
     <string name="clc_inspect_name">Name:</string>
     <string name="clc_inspect_version">Version:</string>
+    <string name="clc_inspect_app_id">App ID:</string>
+    <string name="clc_inspect_channel">Channel:</string>
+    <string name="clc_inspect_description">Description:</string>
+    <string name="clc_inspect_icons">Icon count:</string>
+    <string name="clc_inspect_seo_title">SEO title:</string>
     <string name="clc_inspect_count">File count:</string>
     <string name="clc_inspect_files_header">Files:</string>
 
