@@ -4002,7 +4002,7 @@ StmtPtr Parser::atBlock() {
         else if (tag == "container.aukt" || tag == "AUKT") s->kind = ContainerKind::AUKT;
         else if (tag == "container.chatbot" || tag == "chatbot") s->kind = ContainerKind::CHATBOT;
         else if (tag == "container.sql" || tag == "sql") s->kind = ContainerKind::SQL;
-        else if (tag == "container.app" || tag == "container.site") s->kind = ContainerKind::APP;
+        else if (tag == "container.app" || tag == "container.site") { s->kind = ContainerKind::APP; s->isSite = (tag == "container.site"); }
         else if (tag == "container.everything" || tag == "Everything" ||
                  tag == "container.make" || tag == "make" || tag == "Rin.make") s->kind = ContainerKind::EVERYTHING;
         else s->kind = ContainerKind::PLAIN;
