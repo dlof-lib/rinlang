@@ -1,0 +1,82 @@
+🪪 container.app = piano
+✅ .end/container.app (piano)
+🪪 container.app = blog
+✅ .end/container.app (blog)
+بيانو 1.0.0 1000000 rtl بيانو app
+192x192 image/png index, follow ar_AR 0
+container.app container.app
+0
+warn description.missing
+warn icon.sizes.unknown
+error icon.file.missing
+warn seo.description.missing
+error seo.canonical.not_absolute
+error seo.robots.invalid
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>بيانو — تعلّم العزف مجاناً</title>
+    <meta name="description" content="تطبيق بيانو تفاعلي لتعلّم العزف مباشرة من المتصفح أو الهاتف.">
+    <meta name="keywords" content="بيانو, piano">
+    <meta name="robots" content="index, follow">
+    <meta name="author" content="Droy">
+    <meta name="application-name" content="بيانو">
+    <meta name="apple-mobile-web-app-title" content="بيانو">
+    <meta name="theme-color" content="#1a1a2e">
+    <meta name="generator" content="com.droy.piano@1.0.0">
+    <link rel="canonical" href="https://piano.example.com/">
+    <link rel="alternate" hreflang="en" href="https://piano.example.com/en/">
+    <link rel="icon" href="icons/piano_192.png" type="image/png" sizes="192x192">
+    <link rel="icon" href="icons/piano_512.png" type="image/png" sizes="512x512">
+    <link rel="apple-touch-icon" href="icons/piano_192.png">
+    <link rel="manifest" href="manifest.webmanifest">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="بيانو — تعلّم العزف مجاناً">
+    <meta property="og:description" content="تطبيق بيانو تفاعلي لتعلّم العزف مباشرة من المتصفح أو الهاتف.">
+    <meta property="og:site_name" content="بيانو">
+    <meta property="og:url" content="https://piano.example.com/">
+    <meta property="og:image" content="icons/piano_512.png">
+    <meta property="og:locale" content="ar_AR">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="بيانو — تعلّم العزف مجاناً">
+    <meta name="twitter:description" content="تطبيق بيانو تفاعلي لتعلّم العزف مباشرة من المتصفح أو الهاتف.">
+    <meta name="twitter:image" content="icons/piano_512.png">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"بيانو","description":"تطبيق بيانو تفاعلي لتعلّم العزف مباشرة من المتصفح أو الهاتف.","url":"https://piano.example.com/","inLanguage":"ar","image":"icons/piano_512.png","softwareVersion":"1.0.0","author":{"@type":"Person","name":"Droy"}}</script>
+
+{
+  "id": "com.droy.piano",
+  "name": "بيانو",
+  "short_name": "بيانو",
+  "description": "تطبيق بيانو تفاعلي لتعلّم العزف مباشرة من المتصفح أو الهاتف.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "lang": "ar",
+  "dir": "rtl",
+  "theme_color": "#1a1a2e",
+  "version": "1.0.0",
+  "icons": [
+    {"src": "icons/piano_192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "icons/piano_512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"}
+  ]
+}
+
+User-agent: *
+Allow: /
+
+Sitemap: https://piano.example.com/sitemap.xml
+
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://piano.example.com/</loc><lastmod>2026-11-19</lastmod></url>
+  <url><loc>https://piano.example.com/learn</loc><lastmod>2026-11-19</lastmod></url>
+</urlset>
+
+1.1.0 1.1.0 1.1.1 2.0.0
+جزء غير صالح
+["_capp_tmp/site/head.html", "_capp_tmp/site/manifest.webmanifest", "_capp_tmp/site/robots.txt", "_capp_tmp/site/sitemap.xml"]
+بيانو 2.0.0 3 1
+true بيانو 2.0.0 com.droy.piano 2000000 ar ["بيانو", "piano"] https://piano.example.com/en/
+true
+رُفض بسبب أخطاء الهوية
+ناتج داخل المصدر مرفوض
+بيانو stable
