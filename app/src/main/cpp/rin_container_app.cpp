@@ -18,7 +18,7 @@
 //    container.appRobots(src, opts?)      robots.txt
 //    container.appSitemap(src, paths, opts?) sitemap.xml
 //    container.appBump(name, part)        يرفع الإصدار (major/minor/patch) ويحدّث الحقل في الحاوية
-//    container.appExport(src, dir, opts?) يكتب manifest.webmanifest + robots.txt + head.html (+ sitemap.xml)
+//    container.appExport(src, dir, opts?) يكتب head.html + manifest.webmanifest + robots.txt + app.json (+ sitemap.xml، CHANGELOG.md)؛ opts.page ⇒ يعيد أمر indsin2web الجاهز
 //    container.appPack(src, dir, out, opts?)  يبني ملف .rcl من مجلد ويحفظ الهوية داخل Metadata
 //    container.appOpen(path)              يقرأ الهوية من ملف .rcl
 //    container.appList()                  كل حاويات الهوية المعرَّفة {name, kind, id, version, lang}
@@ -257,6 +257,24 @@ static Value releasesToValue(const clc::AppIdentity& a) {
         arr.push_back(mkMap({{"version", strV(r.version)}, {"date", strV(r.date)}, {"channel", strV(r.channel)}, {"notes", newArray(std::move(notes))}}));
     }
     return newArray(std::move(arr));
+}
+// ترميز JSON مضغوط لقيمة Rin (قاموس/مصفوفة/نص/رقم/منطقي/nil) — لملف app.json الذي يقرؤه indsin2web --app-dir.
+static void valueJson(const Value& v, std::string& out, int depth = 0) {
+    if (depth > 16) { out += "null"; return; }
+    switch (v.type) {
+        case Value::Type::STRING: out += clc::idn::jstr(v.str); break;
+        case Value::Type::NUMBER: out += v.toDisplayString(); break;
+        case Value::Type::BOOL: out += v.boolean ? "true" : "false"; break;
+        case Value::Type::ARRAY:
+            out += '[';
+            if (v.array) for (size_t i = 0; i < v.array->size(); ++i) { if (i) out += ','; valueJson((*v.array)[i], out, depth + 1); }
+            out += ']'; break;
+        case Value::Type::MAP:
+            out += '{';
+            if (v.map) { bool first = true; for (const auto& kv : *v.map) { if (!first) out += ','; first = false; out += clc::idn::jstr(kv.first.toDisplayString()); out += ':'; valueJson(kv.second, out, depth + 1); } }
+            out += '}'; break;
+        default: out += "null";
+    }
 }
 static Value identityToValue(const clc::AppIdentity& a) {
     ArrayData kws; for (auto& k : a.seo.keywords) kws.push_back(strV(k));
@@ -555,6 +573,7 @@ void Interpreter::registerNativesContainerApp() {
                 put("manifest" + sfx + ".webmanifest", clc::buildManifest(id));
             }
             clc::AppIdentity id = finish("");
+            { std::string js; valueJson(identityToValue(id), js); put("app.json", js + "\n"); } // lang/dir وغيرها لـ indsin2web --app-dir
             std::string base = optStr(opts, "base");
             if (base.empty()) base = siteOrigin(id);
             std::vector<std::string> paths = listOf(optv(opts, "paths"));
@@ -562,7 +581,10 @@ void Interpreter::registerNativesContainerApp() {
             put("robots.txt", clc::buildRobots(id, smUrl, listOf(optv(opts, "disallow"))));
             if (!smUrl.empty()) put("sitemap.xml", clc::buildSitemap(base, paths, optStr(opts, "lastmod")));
             if (!id.releases.empty()) put("CHANGELOG.md", clc::buildChangelog(id));
-            return mkMap({{"dir", strV(dir)}, {"files", newArray(std::move(written))}});
+            // opts.page = ملف indsin (.rin): نعيد سطر الأمر الجاهز لبناء صفحة الويب بهذه الهوية
+            std::string page = optStr(opts, "page");
+            std::string cmd = page.empty() ? "" : "indsin2web " + page + " -o " + pre + "index.html --app-dir " + (dir.empty() ? "." : dir);
+            return mkMap({{"dir", strV(dir)}, {"files", newArray(std::move(written))}, {"indsin2web", strV(cmd)}});
         });
     });
 
