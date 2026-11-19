@@ -217,5 +217,8 @@ g++ -std=c++17 -O2 lib/piano.og.rin/native/piano_cli.cpp -o piano_cli
 ```
 انظر `examples/piano/piano_studio.rin`.
 
+## هوية التطبيق/الموقع (SEO · أيقونات · إصدار)
+مع `@container.app` ([`container_app.md`](./container_app.md)): `pn_app_apply(c, app)` · `pn_app_html(c, app, {})` · `pn_app_save(c, dir, app, {})` تولّد صفحة ويب بـ `<head>` كامل (title/description/keywords/canonical/Open Graph/Twitter/أيقونات/manifest/JSON-LD) و`lang`/`dir` من الهوية. مثال: `examples/piano/app_page.rin`.
+
 ## حدود الإصدار 1.0
 لا تصدير PNG أصلياً من Rin (استعمل SVG أو زر PNG في المعاينة)، ولا نصوص على مسار. أسماء معاملات مثل `on` و`text` محجوزة في Rin فلا تُستعمل في شيفرتك كمعاملات.
