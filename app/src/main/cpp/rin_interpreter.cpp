@@ -10464,6 +10464,7 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
         // (body + lifecycle hooks + container.import), nested under whichever group/volume/container is open.
         NsScope nsGuard(this, s->name.empty() ? nullptr : nsOpen(NsNode::Kind::Container, s->name, containerKey, containerEnv));
         containerStack.push_back(containerKey);
+        if (s->kind == ContainerKind::APP && s->isSite) containerEnv->values["kind"] = Value::string("site"); // @container.site ⇒ kind="site" (let kind في الجسم يتقدّم)
         executeBlock(s->body, containerEnv);
         containerStack.pop_back();
 
