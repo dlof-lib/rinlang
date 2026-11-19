@@ -1,0 +1,24 @@
+// piano + container.app: pn_app_apply / pn_app_html / pn_app_save، و container.appExport {page} لـ indsin2web
+@import "piano";
+@container.app=demo
+    let name = "لوحة";
+    let version = "1.2.3";
+    let lang = "ar";
+    let homepage = "https://x.example/";
+    let description = "وصف اللوحة";
+    let icons = {"192": "i/192.png"};
+    let seo = {title: "عنوان اللوحة", keywords: ["a", "b"]};
+.end/container.app
+let c = pn_canvas(100, 50);
+pn_rect(c, 10, 10, 30, 20, {"fill": "#ff0000"});
+pn_app_apply(c, "demo");
+print c["title"];
+let h = pn_app_html(c, "demo", {});
+print contains(h, "<html lang=\"ar\" dir=\"rtl\">"), contains(h, "<title>عنوان اللوحة</title>"), contains(h, "<meta name=\"keywords\" content=\"a, b\">"), contains(h, "rel=\"manifest\""), contains(h, "<svg");
+print contains(pn_app_html(c, "demo", {"manifest": false}), "rel=\"manifest\"");
+print contains(pn_app_html(c, "demo", {"favicon_scene": true}), "data:image/svg+xml;base64,");
+print pn_app_save(c, "_papp_tmp/site", "demo", {"paths": ["/"]});
+print readFile("_papp_tmp/site/scene.svg") == pn_svg(c) + "\n";
+let e = container.appExport("demo", "_papp_tmp/site2", {page: "pages/home.rin"});
+print e["indsin2web"];
+print contains(readFile("_papp_tmp/site2/app.json"), "\"lang\":\"ar\""), contains(readFile("_papp_tmp/site2/app.json"), "\"dir\":\"rtl\"");
