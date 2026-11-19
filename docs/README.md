@@ -21,6 +21,7 @@
 - [`indsin_expansion.md`](./indsin_expansion.md) — Indsin Design System v2: توكنز، ثيمات، تجاوب، حركات، actions، مدقّق.
 - [`oop.md`](./oop.md) — OOP الموسَّع (Rin 1.0): `interface` · `trait` · `abstract/final/override` · `static` · `private/protected` · `get/set` · عوامل سحرية · دوال `oop.*`.
 - [`containers.md`](./containers.md) — `@container`، أقسام، ترجمات، مستندات NoSQL.
+- [`container_app.md`](./container_app.md) — `@container.app` / `@container.site`: اسم وإصدار وأيقونات ووصف وSEO لتطبيق أو موقع، مع `appHead/appManifest/appRobots/appSitemap/appPack` وحفظ الهوية داخل `.rcl`.
 - [`table.md`](./table.md) — الجدول `@table`: حقول `rows`/`columns`/`style` وأعمدته كحقول، ودوال المستندات والحاويات الموجودة، وعائلة `#`، والتصدير `csv/json/md/html/txt`.
 - [`json-interop.md`](./json-interop.md) — Rin↔JSON: استيراد ملفات JSON كوحدات، `json.into` (JSON→كائنات بفحص أنواع)، `stringifyStrict`، JSON Lines، أخطاء بموضع.
 - [`slab.md`](./slab.md) — `slab.main()` وهوية الوحدة: حارس «الملف الرئيسي» وتشغيل دالة عند الرئيسي فقط.
