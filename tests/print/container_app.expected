@@ -73,7 +73,7 @@ Sitemap: https://piano.example.com/sitemap.xml
 
 1.1.0 1.1.0 1.1.1 2.0.0
 جزء غير صالح
-["_capp_tmp/site/head.html", "_capp_tmp/site/manifest.webmanifest", "_capp_tmp/site/robots.txt", "_capp_tmp/site/sitemap.xml"]
+["_capp_tmp/site/head.html", "_capp_tmp/site/manifest.webmanifest", "_capp_tmp/site/app.json", "_capp_tmp/site/robots.txt", "_capp_tmp/site/sitemap.xml"]
 بيانو 2.0.0 3 1
 true بيانو 2.0.0 com.droy.piano 2000000 ar ["بيانو", "piano"] https://piano.example.com/en/
 true
