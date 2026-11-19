@@ -1246,6 +1246,8 @@ static std::string containerTagName(ContainerKind k) {
         case ContainerKind::EVERYTHING: return "container.make";
         // "@sql="/"@container.sql=" توحَّد دائماً إلى "container.sql" عند الحفظ وإعادة القراءة.
         case ContainerKind::SQL: return "container.sql";
+        // "@app="/"@site="/"@container.app="/"@container.site=" توحَّد إلى "container.app" (هوية تطبيق/موقع).
+        case ContainerKind::APP: return "container.app";
         default: return "container";
     }
 }
@@ -1266,6 +1268,7 @@ static std::string containerIcon(ContainerKind k) {
         case ContainerKind::CHATBOT: return "💬";
         case ContainerKind::EVERYTHING: return "🛠️";
         case ContainerKind::SQL: return "🔎";
+        case ContainerKind::APP: return "🪪";
         default: return "📦";
     }
 }
@@ -1293,6 +1296,7 @@ static ContainerKind resolveContainerKindName(const std::string& raw) {
     if (s == "aukt") return ContainerKind::AUKT;
     if (s == "chatbot") return ContainerKind::CHATBOT;
     if (s == "sql") return ContainerKind::SQL;
+    if (s == "app" || s == "site") return ContainerKind::APP;
     if (s == "everything" || s == "make") return ContainerKind::EVERYTHING;
     if (s == "container" || s == "plain") return ContainerKind::PLAIN;
     return ContainerKind::PLAIN;
@@ -7992,6 +7996,7 @@ for(auto& kv:maskParents) if(maskResolve4(kv.second)==parent && !maskResolve4(kv
     registerNativesExtra8(); // مفهوم token: tokenList/tokenStats/tokenAt/... (rin_extra_natives8.cpp، docs/TOKEN.md)
     registerNativesExtra10(); // مفهوم linalg: mat*/vec* (rin_extra_natives10.cpp، docs/LINALG.md)
     registerNativesContainerZip();
+    registerNativesContainerApp(); // container.appInfo/Validate/Head/Manifest/Robots/Sitemap/Bump/Export/Pack/Open (rin_container_app.cpp)
     registerNativesContainerBlend(); // container.blend/recipe/cook (rin_container_blend.cpp، docs/container_blend.md) // container.zip/unzip/pack + zip.* (rin_container_zip.cpp، docs/container_zip.md)
     registerNativesExtra12(); // fileSync/fileLock/fileRename/fileSize/findByRange (rin_extra_natives12.cpp، docs/FILEDB.md)
     registerNativesExtra11(); // مفهوم algo: algo* (rin_extra_natives11.cpp، docs/ALGO.md)
@@ -15271,6 +15276,7 @@ void Interpreter::dialogAction(const std::shared_ptr<LiveActionStmt>& s, const E
 #include "rin_extra_natives11.cpp" // مفهوم algo (docs/ALGO.md)
 #include "rin_extra_natives12.cpp" // ملفات وقواعد بيانات: fileSync/fileLock/fileRename/fileSize/findByRange (docs/FILEDB.md)
 #include "rin_container_zip.cpp"
+#include "rin_container_app.cpp" // هوية التطبيق/الموقع: اسم/إصدار/أيقونات/وصف/SEO (docs/container_app.md)
 #include "rin_container_blend.cpp" // دمج الحاويات + الوصفات (docs/container_blend.md) // ضغط/فكّ ضغط الحاويات + zip.* (docs/container_zip.md)
 #include "rin_libdir.cpp" // مكتبات Rin المقسَّمة (docs/split-libraries.md)
 #include "rin_rintwist.cpp" // RINTWIST: سياق التنفيذ (docs/rintwist.md)
