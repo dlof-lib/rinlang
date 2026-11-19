@@ -34,6 +34,30 @@ data class RinProjectMeta(
     val dependencies: List<String> = emptyList(),
     /** مسار نسبي لصورة PNG داخل المشروع تُستعمل أيقونةً للحزمة المصدَّرة (اختياري). */
     val icon: String = "",
+    // ---- هوية التطبيق/الموقع (تقابل container.app — docs/container_app.md): تسمية، إصدار، أيقونات، وصف، SEO ----
+    /** اسم مختصر يظهر تحت الأيقونة (≤32). */
+    val shortName: String = "",
+    /** رقم بناء تصاعدي (أرقام فقط)؛ فارغ = يُشتق من version. */
+    val versionCode: String = "",
+    /** قناة الإصدار: stable | beta | alpha | dev | nightly | rc. */
+    val channel: String = "",
+    /** رمز لغة الواجهة (ar، ar-SA، en...). */
+    val lang: String = "",
+    val homepage: String = "",
+    val category: String = "",
+    /** وصف من سطر واحد (≤160). */
+    val shortDescription: String = "",
+    val themeColor: String = "",
+    val backgroundColor: String = "",
+    /** مسارات أيقونات إضافية نسبية داخل المشروع (192/512/maskable...). */
+    val icons: List<String> = emptyList(),
+    /** نصوص محركات البحث: عنوان الصفحة، الوصف، الكلمات المفتاحية، canonical، robots، صورة المشاركة. */
+    val seoTitle: String = "",
+    val seoDescription: String = "",
+    val seoKeywords: List<String> = emptyList(),
+    val canonical: String = "",
+    val robots: String = "",
+    val ogImage: String = "",
     val extra: Map<String, String> = emptyMap(),
     /** إصدار صيغة الملف الذي قُرئ منه (1 = قديم). الكتابة دائماً بـ [SCHEMA]. */
     val schema: Int = 1
@@ -45,7 +69,13 @@ data class RinProjectMeta(
         description = description.take(MAX_DESCRIPTION), author = author.take(MAX_AUTHOR),
         license = license.take(MAX_LICENSE), icon = icon.take(MAX_ICON_PATH), minRinVersion = minRinVersion.take(MAX_VERSION),
         tags = clean(tags, MAX_TAGS, MAX_TAG_LEN), permissions = clean(permissions, MAX_PERMS, MAX_PERM_LEN),
-        dependencies = clean(dependencies, MAX_DEPS, MAX_DEP_LEN)
+        dependencies = clean(dependencies, MAX_DEPS, MAX_DEP_LEN),
+        shortName = shortName.take(32), versionCode = versionCode.filter { it.isDigit() }.take(12), channel = channel.take(16),
+        lang = lang.take(16), homepage = homepage.take(256), category = category.take(32),
+        shortDescription = shortDescription.take(160), themeColor = themeColor.take(9), backgroundColor = backgroundColor.take(9),
+        icons = clean(icons, MAX_ICONS, MAX_ICON_PATH), seoTitle = seoTitle.take(120), seoDescription = seoDescription.take(320),
+        seoKeywords = clean(seoKeywords, MAX_KEYWORDS, MAX_KEYWORD_LEN), canonical = canonical.take(256),
+        robots = robots.take(64), ogImage = ogImage.take(256)
     )
 
     /**
@@ -80,6 +110,9 @@ data class RinProjectMeta(
         const val MAX_PERM_LEN = 64
         const val MAX_DEPS = 64
         const val MAX_DEP_LEN = 128
+        const val MAX_ICONS = 16
+        const val MAX_KEYWORDS = 16
+        const val MAX_KEYWORD_LEN = 64
         const val MAX_EXTRA = 32
         const val MAX_EXTRA_VALUE = 512
 
@@ -156,6 +189,22 @@ data class RinProjectMeta(
                     "tags" -> m = m.copy(tags = splitList(value, MAX_TAGS, MAX_TAG_LEN))
                     "permissions" -> m = m.copy(permissions = splitList(value, MAX_PERMS, MAX_PERM_LEN))
                     "dependencies" -> m = m.copy(dependencies = splitList(value, MAX_DEPS, MAX_DEP_LEN))
+                    "shortName" -> m = m.copy(shortName = value)
+                    "versionCode" -> m = m.copy(versionCode = value)
+                    "channel" -> m = m.copy(channel = value)
+                    "lang" -> m = m.copy(lang = value)
+                    "homepage" -> m = m.copy(homepage = value)
+                    "category" -> m = m.copy(category = value)
+                    "shortDescription" -> m = m.copy(shortDescription = value)
+                    "themeColor" -> m = m.copy(themeColor = value)
+                    "backgroundColor" -> m = m.copy(backgroundColor = value)
+                    "icons" -> m = m.copy(icons = splitList(value, MAX_ICONS, MAX_ICON_PATH))
+                    "seoTitle" -> m = m.copy(seoTitle = value)
+                    "seoDescription" -> m = m.copy(seoDescription = value)
+                    "seoKeywords" -> m = m.copy(seoKeywords = splitList(value, MAX_KEYWORDS, MAX_KEYWORD_LEN))
+                    "canonical" -> m = m.copy(canonical = value)
+                    "robots" -> m = m.copy(robots = value)
+                    "ogImage" -> m = m.copy(ogImage = value)
                     else -> if (extra.size < MAX_EXTRA) extra[key] = value.take(MAX_EXTRA_VALUE)
                 }
             }
@@ -186,6 +235,22 @@ data class RinProjectMeta(
             put("permissions", m.permissions.joinToString(","))
             put("dependencies", m.dependencies.joinToString(","))
             put("icon", m.icon)
+            put("shortName", m.shortName)
+            put("versionCode", m.versionCode)
+            put("channel", m.channel)
+            put("lang", m.lang)
+            put("homepage", m.homepage)
+            put("category", m.category)
+            put("shortDescription", m.shortDescription)
+            put("themeColor", m.themeColor)
+            put("backgroundColor", m.backgroundColor)
+            put("icons", m.icons.joinToString(","))
+            put("seoTitle", m.seoTitle)
+            put("seoDescription", m.seoDescription)
+            put("seoKeywords", m.seoKeywords.joinToString(","))
+            put("canonical", m.canonical)
+            put("robots", m.robots)
+            put("ogImage", m.ogImage)
             for ((k, v) in m.extra.toSortedMap()) put(k, v)
             append(".end/container\n")
         }
