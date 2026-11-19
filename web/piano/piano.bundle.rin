@@ -3022,3 +3022,50 @@ fun pn_ease(name, t) {
 }
 // استيفاء من a إلى b عند التقدّم p بتخفيف مسمّى
 fun pn_tween(a, b, p, name) { return a + (b - a) * pn_ease(name, p); }
+
+// ============================================================================
+//  piano — الجزء 12: هوية التطبيق/الموقع (container.app) لصفحات piano
+//  app = اسم حاوية @container.app (أو قاموس هوية من container.appInfo/appOpen)
+//  التوثيق: docs/container_app.md · docs/PIANO.md
+//      pn_app_apply(c, app)            ← عنوان SEO يصير <title> داخل SVG (وصول/قارئ الشاشة)
+//      pn_app_html(c, app, o)          ← صفحة HTML كاملة: <head> بالهوية (SEO/OG/أيقونات/manifest/JSON-LD) + المشهد
+//      pn_app_save(c, dir, app, o)     ← يكتب dir/index.html + scene.svg + manifest.webmanifest + robots.txt + head.html + app.json
+//  الخيارات o: manifest (مسار أو false) · favicon_scene (true ⇒ المشهد نفسه أيقونة تبويب SVG) · paths (مسارات sitemap)
+// ============================================================================
+fun pn_app_apply(c, app) {
+    let info = container.appInfo(app);
+    let t = info["seo"]["title"];
+    if (t == nil or t == "") { t = info["name"]; }
+    c["title"] = t;
+    return c;
+}
+fun pn_app_doc(c) {
+    if (pn_has(c, "anim")) { return pn_anim_svg(c); }
+    return pn_svg(c);
+}
+fun pn_app_html(c, app, o) {
+    o = pn_o(o);
+    let info = container.appInfo(app);
+    let bg = pn_opt(c, "bg", "#ffffff");
+    if (substr(bg, 0, 1) != "#") { bg = "#ffffff"; }
+    let head = container.appHead(app, {"manifest": pn_opt(o, "manifest", "manifest.webmanifest"), "indent": ""});
+    if (pn_opt(o, "favicon_scene", false) == true) {
+        head = head + "<link rel=\"icon\" type=\"image/svg+xml\" href=\"" + pn_data_uri(c) + "\">\n";
+    }
+    let lang = info["lang"];
+    if (lang == "") { lang = "en"; }
+    let dir = info["dir"];
+    if (dir == "") { dir = "ltr"; }
+    return "<!doctype html>\n<html lang=\"" + pn_esc(lang) + "\" dir=\"" + pn_esc(dir) + "\">\n<head>\n" + head
+         + "<style>html,body{margin:0;min-height:100%;background:" + bg + "}body{display:grid;place-items:center;min-height:100vh}svg{max-width:100%;height:auto}</style>\n"
+         + "</head>\n<body>\n" + pn_app_doc(c) + "\n</body>\n</html>\n";
+}
+fun pn_app_save(c, dir, app, o) {
+    o = pn_o(o);
+    let files = container.appExport(app, dir, {"paths": pn_opt(o, "paths", [])})["files"];
+    writeFile(dir + "/index.html", pn_app_html(c, app, o));
+    writeFile(dir + "/scene.svg", pn_app_doc(c) + "\n");
+    push(files, dir + "/index.html");
+    push(files, dir + "/scene.svg");
+    return files;
+}
