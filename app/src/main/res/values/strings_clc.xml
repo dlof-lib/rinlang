@@ -39,6 +39,11 @@
     <string name="clc_inspect_title_format">تفاصيل: %1$s</string>
     <string name="clc_inspect_name">الاسم:</string>
     <string name="clc_inspect_version">الإصدار:</string>
+    <string name="clc_inspect_app_id">المعرّف:</string>
+    <string name="clc_inspect_channel">القناة:</string>
+    <string name="clc_inspect_description">الوصف:</string>
+    <string name="clc_inspect_icons">عدد الأيقونات:</string>
+    <string name="clc_inspect_seo_title">عنوان SEO:</string>
     <string name="clc_inspect_count">عدد الملفات:</string>
     <string name="clc_inspect_files_header">الملفات:</string>
 
