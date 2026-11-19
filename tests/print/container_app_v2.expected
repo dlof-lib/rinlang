@@ -1,0 +1,38 @@
+🪪 container.app = shop
+✅ .end/container.app (shop)
+🪪 container.app = tool
+✅ .end/container.app (tool)
+[{"name": "shop", "kind": "site", "id": "", "title": "متجر النور", "version": "2.0.0", "lang": "ar"}, {"name": "tool", "kind": "app", "id": "", "title": "tool", "version": "0.1.0", "lang": ""}]
+shop | 2
+site 2 icons/a_192.png 512x512
+Al-Nour Shop en ltr Al-Nour Shop en_US https://shop.example.com/en/
+Boutique Al-Nour / متجر إلكتروني للأدوات المكتبية والقرطاسية بأسعار مناسبة وشحن سريع.
+true true
+[]
+error version.missing
+warn description.missing
+warn icons.missing
+warn seo.description.missing
+error locale.url.not_absolute
+error release.version.invalid
+2.1.0
+# سجل التغييرات — متجر النور
+
+## 2.1.0 — 2026-11-19
+
+- ميزة
+- إصلاح
+
+## 2.0.0 — 2026-10-01
+
+- واجهة جديدة
+- دفع أسرع
+
+inserted true true
+true unchanged
+true false true 1
+false
+true true true
+متجر النور site 2.1.0 21 2
+9 _capp2_tmp/out/head.en.html
+2 Al-Nour Shop 2 icons
