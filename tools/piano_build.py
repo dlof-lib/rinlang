@@ -16,6 +16,38 @@ def rd(p, enc="utf-8"):
         return f.read()
 
 dis = json.loads(rd(os.path.join(LIB, "disconom.json")))
+
+# هوية الصفحة: web/piano/piano.app.rin (container.app) هي مصدر الحقيقة للاسم/الإصدار/الأيقونات/الوصف/SEO.
+#  (1) نتحقق أن disconom.json يطابقها (الاسم والإصدار والرخصة) — لا نسختان مختلفتان لنفس المعلومة.
+#  (2) نحقن <head> المُولَّد في index.template.html بين <!-- rin:app-head --> و<!-- /rin:app-head -->.
+# بلا rin (أو rin قديم بلا `rin app`) تبقى الكتلة المحقونة سابقاً في القالب كما هي (CI لا يبني rin) مع تنبيه.
+APP = os.path.join(ROOT, "web/piano/piano.app.rin")
+APP_DIR = "assets/branding/piano"
+APP_URL = "https://dlof-lib.github.io/rinlang/piano/"   # يطابق homepage في piano.app.rin (مسار النشر على Pages)
+TEMPLATE = os.path.join(ROOT, "web/piano/index.template.html")
+
+def rin_app(*args):
+    try:
+        return subprocess.run([RIN, "app", *args], cwd=ROOT, capture_output=True, text=True)
+    except OSError:
+        return None
+
+_info = rin_app("info", APP, "--json", "--dir", APP_DIR)
+if _info is not None and _info.returncode == 0 and "{" in _info.stdout:
+    ident = json.loads(_info.stdout[_info.stdout.index("{"):])
+    bad = [f"{k}: app.rin={ident.get(k)!r} ≠ disconom={dis.get(k)!r}" for k in ("name", "version", "license") if ident.get(k) != dis.get(k)]
+    if bad:
+        sys.exit("تعارض بين web/piano/piano.app.rin و lib/piano.og.rin/disconom.json:\n  " + "\n  ".join(bad))
+    chk = rin_app("check", APP, "--dir", APP_DIR)
+    if chk.returncode != 0:
+        sys.exit("هوية piano بها أخطاء:\n" + chk.stdout + chk.stderr)
+    inj = rin_app("inject", APP, "--into", TEMPLATE, "--dir", APP_DIR, "--embed", "4096", "--assets-url", APP_URL)
+    if inj.returncode != 0:
+        sys.exit("تعذّر حقن الهوية في القالب:\n" + inj.stdout + inj.stderr)
+    print("identity:", inj.stdout.strip())
+else:
+    print("تنبيه: `rin app` غير متاح — بقيت كتلة <head> المحقونة سابقاً في القالب دون تحديث ولم تُفحص الهوية")
+
 bundle = "\n".join(rd(os.path.join(LIB, p)) for p in dis["parts"])
 open(os.path.join(ROOT, "web/piano/piano.bundle.rin"), "w", encoding="utf-8").write(bundle)
 
