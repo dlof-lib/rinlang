@@ -26,6 +26,7 @@ object RinContainerTags {
         "container.table", "container.doc", "container.object", "Object", "container.open/object",
         "container.portal", "portal", "container.block", "block", "container.sticker", "sticker",
         "container.aukt", "AUKT", "container.chatbot", "chatbot",
+        "container.app", "container.site", // هوية تطبيق/موقع (docs/container_app.md)
         // make (سابقاً "Everything"؛ الاسمان القديمان "Everything"/"container.everything" ما زالا
         // مقبولين كاسم بديل للتوافق العكسي): ثلاث صيغ متكافئة تماماً "make"/"Rin.make"/"container.make".
         "container.everything", "Everything", "container.make", "make", "Rin.make",
