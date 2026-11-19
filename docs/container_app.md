@@ -95,3 +95,7 @@ rin app inject --into index.html [--check]   rin app bump minor --notes "..."
 rin app export --out dist/meta --paths /,/docs   rin app urin
 ```
 الملف: `*.app.rin` في المجلد الحالي (أو مرّره صراحةً). `bump` يعدّل الملف نفسه. مثال حي: `web/piano/piano.app.rin`.
+
+
+## صفحة indsin بدل HTML
+`pn_app_save(c, dir, app, o)` يكتب الآن `index.rin` (صفحة indsin بالهوية + `scene.svg`) افتراضياً. الخيار `format`: `"indsin"` (افتراضي) · `"html"` · `"both"`. حوّلها للويب: `indsin2web dir/index.rin -o dir/index.html --app-dir dir`. `pn_app_indsin(c, app, o)` يعيد نص الصفحة.
