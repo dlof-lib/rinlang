@@ -1255,7 +1255,9 @@ inline const char* builtinPrelude() {
         "<Define#NumberField label=\"\" value=\"\" placeholder=\"0\" helper=\"\" error=\"\" min=-999999999 max=999999999 prefix=\"\" suffix=\"\"><Field#nf label={label} value={value} placeholder={placeholder} helper={helper} type=number min={min} max={max} prefix={prefix} suffix={suffix} error={error != \"\" ? error : indsin.fieldError(\"number\", value, min, max)} /></Define>"
         "<Define#PhoneField label=\"Phone\" value=\"\" placeholder=\"+961 3 123 456\" helper=\"\" error=\"\"><Field#phf label={label} value={value} placeholder={placeholder} helper={helper} type=tel error={error != \"\" ? error : indsin.fieldError(\"tel\", value)} /></Define>"
         "<Define#SearchField value=\"\" placeholder=\"Search\"><Row#sfr width=full gap=8><Input#sfi width=75% type=search value={value} placeholder={placeholder} /><Button#sfc variant=outline visible={value != \"\"} onTap={value = \"\"}>Clear</Button></Row></Define>"
-        "<Define#TextAreaField label=\"\" value=\"\" placeholder=\"\" helper=\"\" error=\"\" height=120 maxlength=0><Column#taf width=full gap=4><Text#tal size=small color=text_muted visible={label != \"\"}>{label}</Text><TextArea#tai width=full height={height} value={value} placeholder={placeholder} maxlength={maxlength} error={error} /><Text#tae size=small color=danger visible={error != \"\"}>{error}</Text><Text#tah size=small color=text_muted visible={helper != \"\" and error == \"\"}>{helper}</Text></Column></Define>";
+        "<Define#TextAreaField label=\"\" value=\"\" placeholder=\"\" helper=\"\" error=\"\" height=120 maxlength=0><Column#taf width=full gap=4><Text#tal size=small color=text_muted visible={label != \"\"}>{label}</Text><TextArea#tai width=full height={height} value={value} placeholder={placeholder} maxlength={maxlength} error={error} /><Text#tae size=small color=danger visible={error != \"\"}>{error}</Text><Text#tah size=small color=text_muted visible={helper != \"\" and error == \"\"}>{helper}</Text></Column></Define>"
+        // ContainerView: بطاقة تعرض بيانات container حيّة (حقول/جدول/مستندات) — name=اسم الحاوية، tick=خلية تُغيَّر لإعادة الرسم
+        "<Define#ContainerView name=\"\" tick=0 tint=primary><Card#cv width=full padding=12 radius=14 gap=6 elevation=sm><Row#cvh gap=8><Text#cvt size=title>{name}</Text><Spacer /><Text#cvk size=small color={tint}>{indsin.run(\"containerKind\", name, tick)}</Text></Row><Divider /><Text#cvb>{indsin.run(\"containerBody\", name, tick)}</Text></Card></Define>";
 }
 // مكتبة الحفظ بحاويات Rin (@container.doc) مع ملف JSON اختياري: storeOpen/Save/Get/Has/Delete/All/Count/Find/Flush/Hash.
 inline const char* storeLibPrelude() {
@@ -1266,8 +1268,22 @@ inline bool usesStoreApi(const std::string& src) {
     for (const char* n : names) if (src.find(n) != std::string::npos) return true;
     return false;
 }
+// عرض بيانات container في indsin: دوال Rin تُحقَن فقط إن استُعمل <ContainerView> أو containerBody/containerKind (سطر واحد: الأسطر محفوظة).
+// containerKind(name) -> "data" | "table" | ... · containerBody(name, tick) يطبع الحقول (أبجدياً) ثم صفوف الجدول/المستندات؛ tick لإعادة الحساب فقط.
+inline const char* containerLibPrelude() {
+    return "<Rin>fun containerKind(name, tick) { if (!hasContainer(name)) { return \"?\"; } let k = container.info(name)[\"kind\"]; if (k == \"container\") { return \"plain\"; } return replace(k, \"container.\", \"\"); } "
+           "fun containerBody(name, tick) { if (!hasContainer(name)) { print \"no container: \" + name; return 0; } let info = container.info(name); let isTable = info[\"kind\"] == \"container.table\"; let f = container.fields(name); let ks = sort(keys(f)); let n = 0; "
+           "for (let k in ks) { if (isTable and (k == \"rows\" or k == \"header\" or k == \"body\" or k == \"records\" or k == \"columns\" or k == \"style\")) { continue; } let v = f[k]; if (type(v) == \"function\") { continue; } n = n + 1; if (type(v) == \"string\") { print k + \" : \" + v; } else { print k + \" : \" + jsonEncode(v); } } "
+           "if (isTable) { let rows = container.get(name, \"rows\"); if (rows != nil) { for (let r in rows) { let cells = []; for (let c in r) { push(cells, str(c)); } print join(cells, \" | \"); n = n + 1; } } } "
+           "if (info[\"kind\"] == \"container.doc\" or info[\"kind\"] == \"container.datalist\") { for (let id in docIds(name)) { print \"#\" + id + \"  \" + jsonEncode(findDoc(name, id)); n = n + 1; } } "
+           "if (n == 0) { print \"(no data)\"; } return n; }</Rin>";
+}
+inline bool usesContainerView(const std::string& src) {
+    return src.find("<ContainerView") != std::string::npos || src.find("containerBody(") != std::string::npos ||
+           src.find("containerKind(") != std::string::npos;
+}
 inline bool usesBuiltinComponent(const std::string& src) {
-    static const char* names[] = {"Chip", "Stat", "Alert", "Section", "ListTile", "Hero", "EmptyState", "Toggle", "Field", "PasswordField", "OrDivider", "SocialButton", "OtpBoxes", "LoginForm", "Tabs", "Stepper", "Badge", "ProfileCard", "ConfirmCard", "TopBar", "Header", "NavBar", "Breadcrumb", "SearchBar", "Pagination", "Footer", "Fab", "TextField", "EmailField", "NumberField", "PhoneField", "SearchField", "TextAreaField"};
+    static const char* names[] = {"ContainerView", "Chip", "Stat", "Alert", "Section", "ListTile", "Hero", "EmptyState", "Toggle", "Field", "PasswordField", "OrDivider", "SocialButton", "OtpBoxes", "LoginForm", "Tabs", "Stepper", "Badge", "ProfileCard", "ConfirmCard", "TopBar", "Header", "NavBar", "Breadcrumb", "SearchBar", "Pagination", "Footer", "Fab", "TextField", "EmailField", "NumberField", "PhoneField", "SearchField", "TextAreaField"};
     for (const char* n : names) {
         std::string needle = std::string("<") + n;
         for (size_t p = src.find(needle); p != std::string::npos; p = src.find(needle, p + 1)) {
@@ -1283,6 +1299,7 @@ inline std::string desugarWith(const std::string& source, Ctx& ctx) {
     std::string pre;
     if (usesBuiltinComponent(source)) pre += builtinPrelude();
     if (usesStoreApi(source)) pre += storeLibPrelude();
+    if (usesContainerView(source)) pre += containerLibPrelude();
     std::string r;
     if (!pre.empty()) {
         std::string withPrelude = pre + source; // بلا '\n' في المقدمة: الأسطر محفوظة
