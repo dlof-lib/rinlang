@@ -1,0 +1,29 @@
+// تكامل التوكنات مع message و throw
+
+// 1) require فاشل → message خطأ
+try {
+    let t = token("u:1", ["read"]);
+    token_require(t, "write");
+} catch (e) {
+    print is_message(e);
+    print message_code(e);          // E_TOKEN_SCOPE أو مشابه
+    print message_level(e);
+}
+
+// 2) رسالة مع توكن
+let session = token("user:9", ["profile"], {ttl: 60});
+let m = msg+ "مرحباً" with session;
+print is_message(m);
+print is_token(message_token(m));
+print token_subject(message_token(m));
+
+// 3) revoke
+token_revoke(session);
+print token_ok(session);
+print token_revoked(session);
+
+// 4) refresh
+let t2 = token("u:2", ["read"], {ttl: 10});
+let t3 = token_refresh(t2, 100);
+print token_ok(t3);
+print token_subject(t3) == "u:2";
