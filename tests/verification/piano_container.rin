@@ -1,0 +1,65 @@
+// piano: رسم وطباعة بيانات الـ container — pn_container_model/text/print/scene/uri + النوع Container في لغة الكتل
+@import "piano";
+@container.data=inv
+    let apples = 5;
+    let name = "المتجر";
+    let tags = ["a", "b"];
+.end/container.data
+@container=app
+    state counter = 3;
+    let title = "Rin";
+    fun inc() { counter = counter + 1; }
+    @container=inner
+        let z = {"q": nil, "w": true};
+    .end/container
+.end/container
+@container.table=scores
+    row cells=["name", "score"];
+    row cells=["sara", 95];
+    row cells=["yusuf", 88];
+    row cells=["lina", 71];
+.end/container.table
+@container.doc=docs
+.end/container.doc
+insertDoc("docs", "1", {"name": "ali", "age": 3});
+
+// 1) النموذج
+let m = pn_container_model("inv", {});
+print m["kind"], len(m["fields"]), m["fields"][0]["k"], m["fields"][0]["t"];
+let ma = pn_container_model("app", {});
+print ma["funcs"], ma["children"], len(ma["fields"]);
+let mt = pn_container_model("scores", {});
+print mt["table"]["header"], len(mt["table"]["rows"]), mt["total"];
+print len(pn_container_model("docs", {})["docs"]);
+print len(pn_container_model("inv", {"fields": ["apples"]})["fields"]), len(pn_container_model("inv", {"hide": ["tags"]})["fields"]);
+
+// 2) الطباعة النصّية
+print pn_container_text("inv", {});
+print pn_container_text("scores", {"maxRows": 2});
+print pn_container_text("docs", {});
+let out = pn_container_print(["app"], {});
+print len(out) > 0;
+
+// 3) الرسم
+let c = pn_container_scene(["inv", "app", "scores", "docs"], 420, {"theme": "dark"});
+print c["w"], c["h"] > 300;
+let svg = pn_svg(c);
+print contains(svg, "<svg"), contains(svg, "apples"), contains(svg, "sara"), contains(svg, "yusuf");
+print pn_svg(pn_container_scene(["inv"], 420, {"theme": "dark"})) == pn_svg(pn_container_scene("inv", 420, {"theme": "dark"}));
+print len(pn_container_scene(nil, 300, {})["nodes"]) == 5;
+print substr(pn_container_uri("inv", 360, "light", {}), 0, 26);
+
+// 4) لغة الكتل
+piano.Panel {
+    $size  => "480 300";
+    $theme => "ocean";
+    $Inv.Container   => "10 10 220 'inv'";
+    $Score.Container => "250 10 220 'scores'" { maxRows: 2; };
+};
+let ps = pn_svg(Panel);
+print contains(ps, "apples"), contains(ps, "scores"), contains(ps, "sara");
+
+// 5) أخطاء
+let r = "";
+try { pn_container_model("nope", {}); } catch (e) { r = "err"; }
+print r;
