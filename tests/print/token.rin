@@ -1,0 +1,27 @@
+// نظام التوكنات — أساسيات (docs/token-system.md)
+
+// 1) إنشاء
+let t = token("user:1", ["read", "write"], {ttl: 3600, meta: {role: "user"}});
+print is_token(t);
+print token_subject(t);
+print token_has(t, "read");
+print token_has(t, "admin");
+print token_ok(t);
+
+// 2) rank / remaining
+print token_remaining(t) > 0;
+print token_age(t) >= 0;
+
+// 3) narrow + has
+let ro = token_narrow(t, ["read"]);
+print token_has(ro, "read");
+print token_has(ro, "write");
+
+// 4) require (نجاح)
+token_require(t, "write");
+print "require-ok";
+
+// 5) as_message
+let m = as_message(t, "info", "جلسة نشطة");
+print is_message(m);
+print message_body(m);
