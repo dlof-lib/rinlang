@@ -1,0 +1,26 @@
+<!-- piano داخل indsin: بطاقة حيّة ببيانات container تتحدّث عند التعديل
+     rin indsin examples/piano/16_indsin_container.rin -->
+<warp theme={"dark"} />
+<warp art={""} />
+<Rin>
+@import "piano";
+
+@container=counter
+    let value = 0;
+    let label = "العدّاد";
+.end/container
+
+fun refresh() { art = pn_container_uri("counter", 320, theme, {}); }
+fun bump() { container.set("counter", "value", container.get("counter", "value") + 1); refresh(); }
+fun setTheme(t) { theme = t; refresh(); }
+refresh();
+</Rin>
+<Column#root padding=16 gap=12>
+  <Text#heading text="بيانات الـ container" size="title" />
+  <Card#card padding=8><Image#art src={art} width=320 /></Card>
+  <Wrap#actions gap=8>
+    <Button#b0 onTap={bump()}>value +1</Button>
+    <Button#b1 onTap={setTheme("dark")}>dark</Button>
+    <Button#b2 onTap={setTheme("ocean")}>ocean</Button>
+  </Wrap>
+</Column>
