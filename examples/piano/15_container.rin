@@ -1,0 +1,40 @@
+// piano — رسم وطباعة بيانات الـ container
+//   rin examples/piano/15_container.rin        ← يطبع جداول نصّية ويحفظ out/15_container.svg و.puo
+@import "piano";
+
+@container.data=inventory
+    let apples = 42;
+    let owner = "متجر النور";
+    let tags = ["fresh", "local"];
+.end/container.data
+
+@container=app
+    state counter = 3;
+    let title = "Rin";
+    fun inc() { counter = counter + 1; }
+    @container=settings
+        let theme = "dark";
+        let beta = true;
+    .end/container
+.end/container
+
+@container.table=scores
+    row cells=["name", "score"];
+    row cells=["sara", 95];
+    row cells=["يوسف", 88];
+    row cells=["lina", 71];
+.end/container.table
+
+// 1) طباعة نصّية لكل الحاويات (أو قائمة محدّدة)، و{"svg": true} تطبع الـ SVG أيضاً
+pn_container_print(nil, {});
+
+// 2) رسم: لوحة جاهزة بطاقة لكل حاوية
+let c = pn_container_scene(["inventory", "app", "scores"], 440, {"theme": "dark", "title": "بيانات الحاويات"});
+pn_save(c, "examples/piano/out/15_container.svg");
+pn_save(c, "examples/piano/out/15_container.puo");
+
+// 3) رسم بطاقة واحدة داخل تصميمك الخاص
+let d = pn_canvas(520, 260);
+pn_theme(d, "ocean");
+pn_container(d, 20, 20, 480, "inventory", {"color": "#0284c7", "showTypes": false});
+pn_save(d, "examples/piano/out/15_container_card.svg");
