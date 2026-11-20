@@ -1,0 +1,14 @@
+let double as dbl, VERSION as V, triple from "./sub/util.rin";
+print dbl(4), triple(2), V;
+
+let { double } from "./sub/util.rin";
+print double(21);
+
+let * as util from "./sub/util.rin";
+print util.double(10);
+
+let quad from "./sub/deep.rin";
+print quad(3);
+
+let from = 7;
+print from;
