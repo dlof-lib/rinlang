@@ -1,0 +1,30 @@
+// تكامل التدقيق مع token_require و message
+
+audit_on();
+audit_clear();
+audit_emit_denies(false);
+
+let t = token("user:3", ["read"], {ttl: 60});
+
+// require ناجح
+audit_require(t, "read");
+print audit_last().result;
+
+// require فاشل → يرمي + يسجّل
+try {
+    audit_require(t, "write");
+} catch (e) {
+    print is_message(e);
+    print message_level(e);
+    print audit_last().result;
+    print audit_last().scope;
+}
+
+// تحويل سجل إلى رسالة
+let entry = audit_last();
+let m = as_message(entry);
+print is_message(m);
+print message_body(m) != "";
+
+// ملخص نهائي
+print audit_summary().deny >= 1;
