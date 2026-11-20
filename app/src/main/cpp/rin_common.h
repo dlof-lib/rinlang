@@ -53,7 +53,8 @@ enum class TokenType {
     PIPE,            // |>   (مُشغّل الأنابيب: يمرر القيمة اليسرى كأول وسيط للنداء اليمين)
     QUESTION,        // ?  conditional expression
     END_OF_FILE, ERROR,
-    COMPARE3         // <!=g=?>  مقارنة شاملة ثلاثية: a <!=g=?> b → -1 | 0 | 1 (docs/container_blend.md)
+    COMPARE3,        // <!=g=?>  مقارنة شاملة ثلاثية: a <!=g=?> b → -1 | 0 | 1 (docs/container_blend.md)
+    POSITIVE         // =[×]= (و =[x]= =[X]= =[*]=)  مفهوم positive: اختبار/مقارنة/إسناد ضربي مشروط (docs/positive.md)
 };
 
 struct Token {
