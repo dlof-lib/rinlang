@@ -15,7 +15,7 @@
     <string name="pipeline_status_error">RinFlow: Failed</string>
     <string name="pipeline_status_idle">RinFlow: Not run yet</string>
     <string name="pipeline_status_stopped">RinFlow: Stopped</string>
-    <string name="pipeline_no_block_found">No @container.pipe block was found in this code. Add one, then press Run again.</string>
+    <string name="pipeline_no_block_found">No pipe was found in this code. RinFlow understands @container.pipe blocks, `a |> f() |> g();` chains and `reckon`. Add one, then press Run again.</string>
     <string name="pipeline_action_run">Run</string>
     <string name="pipeline_action_stop">Stop</string>
     <string name="pipeline_action_configure">Configure</string>
@@ -34,6 +34,25 @@
     <!-- يظهر بعد الضغط على Run عندما يحتوي الكود الحالي على كتلة @container.pipe حقيقية -->
     <string name="rinflow_detected_snackbar">RinFlow pipeline detected in this run</string>
     <string name="rinflow_open_action">Open RinFlow</string>
+
+    <!-- RinFlow: دعم كل مفاهيم الأنابيب (container.pipe / |> / reckon) + محرر المصدر -->
+    <string name="pipeline_source_hint">"\@container.pipe=name\n  let r = data |> step() |> step();\n.end/container.pipe"</string>
+    <string name="pipeline_action_replay">Replay</string>
+    <string name="pipeline_status_running_node">RinFlow: Running… node %1$d</string>
+    <string name="pipeline_status_timeout">RinFlow: Timed out</string>
+    <string name="pipeline_empty_hint">Write or paste Rin code that uses pipes — @container.pipe, a |> chain, or reckon — then press Run.</string>
+    <string name="pipeline_detected_fmt">%1$d container.pipe · %2$d chain · %3$d reckon · %4$d stages</string>
+    <string name="pipeline_metrics_fmt">nodes %1$d · passed %2$d · failed %3$d · skipped %4$d · %5$d ms · records %6$d → %7$d</string>
+    <string name="pipeline_timeout_title">RinFlow — time limit</string>
+    <string name="pipeline_timeout_none">No limit</string>
+    <string name="pipeline_timeout_seconds">%1$d s</string>
+    <string name="pipeline_chain_header">pipe @ line %1$d</string>
+    <string name="pipeline_stdout_label">stdout</string>
+    <string name="pipeline_replay_failed">Replay unavailable: %1$s</string>
+    <string name="pipeline_nodes_hidden">… %1$d more nodes</string>
+    <string name="pipeline_not_executed">Pipes were found in your code, but none of them ran. Make sure the code that contains them is actually executed (for example, call the function that holds the pipe).</string>
+    <string name="pipeline_records_fmt">%1$d records</string>
+    <string name="pipeline_replace_confirm">Replace the current code with an example?</string>
     <string name="action_clear">Clear</string>
     <string name="action_open">Open</string>
 
