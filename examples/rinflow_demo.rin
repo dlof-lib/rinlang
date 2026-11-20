@@ -1,0 +1,45 @@
+// RinFlow demo — كل مفاهيم الأنابيب في Rin في ملف واحد: انظر docs/rinflow.md
+// افتحه في شاشة RinFlow (المزيد ← منفّذ الأنابيب، أو زر Open RinFlow بعد Run) لترى
+// الرسم البياني الحقيقي: عقدة لكل مرحلة بزمنها وقيمها.
+
+// 1) سلسلة |> مجرَّدة (بلا حاوية)
+fun isAdult(x) { return x > 18; }
+fun myDouble(x) { return x * 2; }
+fun filter(arr, pred) { let out = []; let i = 0; while (i < len(arr)) { if (pred(arr[i])) { push(out, arr[i]); } i = i + 1; } return out; }
+fun map(arr, fn) { let out = []; let i = 0; while (i < len(arr)) { push(out, fn(arr[i])); i = i + 1; } return out; }
+let ages = [10, 20, 30, 5, 40];
+let doubledAdults = ages |> filter(isAdult) |> map(myDouble) |> sum;
+print doubledAdults;
+
+// 2) حاوية أنابيب: سلسلة |> + reckon داخل @container.pipe
+@container.pipe=sales_pipeline
+    let raw = [10, 20, 30, 40, 50];
+
+    fun transform(data) { return normalize(data); }
+    fun aggregate(data) { return mean(data); }
+
+    let final_output = raw |> transform() |> aggregate();
+    print final_output;
+
+    reckon bigSales(raw)
+        where item >= 30 |> sum();
+    print bigSales;
+.end/container.pipe
+
+// 3) reckon مستقل مع where ومراحل متعددة
+let scores = [-5, 42, 88, 0, 73, 91, -12, 60];
+reckon average(scores)
+    where item > 0 |> mean();
+print average;
+
+reckon smoothed(scores)
+    |> movingAverage(3) |> clamp(0, 100);
+print smoothed;
+
+// 4) positive: المعامل =[x]= (≡ =[×]=) شرطاً في where، والدالة positive مرحلة في السلسلة
+let mixed = [3, -1, 4, 0, 7];
+reckon positives(mixed)
+    where item =[x]= |> sum();
+print positives;
+let allPositive = mixed |> positive;
+print allPositive;
