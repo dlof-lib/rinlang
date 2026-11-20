@@ -9,6 +9,8 @@
 #include "rin_interpreter.h"
 #include <iostream>
 #include <cassert>
+#include <cstdio>
+#include <fstream>
 
 using namespace rin;
 
@@ -158,6 +160,93 @@ int main() {
                 // and still retrievable after replay.
             }
         }
+    }
+
+    // ---- Test 7: reckon goes through the Flow engine (INPUT + FILTER for `where` + one node per stage) ----
+    {
+        std::cout << "== Test 7: reckon as flow nodes ==\n";
+        const std::string src =
+            "let scores = [-5, 42, 88, 0, 73, 91, -12, 60];\n"
+            "reckon average(scores)\n"
+            "    where item > 0 |> mean();\n"
+            "print average;\n"
+            "reckon smoothed(scores)\n"
+            "    |> movingAverage(3) |> clamp(0, 100);\n"
+            "print smoothed;\n";
+        // مرجع: التشغيل العادي (بلا Flow) -- يجب أن يطابق مخرجات Flow حرفياً (RinFlow لا يغيّر النتيجة).
+        Interpreter plain;
+        std::string plainOut = plain.run(parseOrDie(src));
+        Interpreter interp;
+        auto res = interp.runProgramAsFlow(parseOrDie(src), flow::FlowRunOptions{});
+        std::cout << "status=" << flow::sessionStatusName(res.status) << "\noutput: " << res.output;
+        printGraph(res.graph);
+        // reckon #1: INPUT + FILTER(where) + REDUCE(mean) = 3 ؛ reckon #2: INPUT + 2 stages = 3 ؛ المجموع 6.
+        if (res.status != flow::SessionStatus::SUCCESS) { std::cout << "FAIL: status\n"; failures++; }
+        if (res.graph.nodes.size() != 6) { std::cout << "FAIL: expected 6 nodes, got " << res.graph.nodes.size() << "\n"; failures++; }
+        else {
+            if (res.graph.nodes[0].name != "reckon average" || res.graph.nodes[0].type != flow::NodeType::INPUT) { std::cout << "FAIL: node0\n"; failures++; }
+            if (res.graph.nodes[1].type != flow::NodeType::FILTER || res.graph.nodes[1].name != "where") { std::cout << "FAIL: where node\n"; failures++; }
+            if (res.graph.nodes[2].type != flow::NodeType::REDUCE) { std::cout << "FAIL: mean should be REDUCE\n"; failures++; }
+            if (res.graph.nodes[3].name != "reckon smoothed") { std::cout << "FAIL: node3\n"; failures++; }
+        }
+        if (res.output != plainOut) { std::cout << "FAIL: flow output differs from plain run:\n" << plainOut << "\n"; failures++; }
+    }
+
+    // ---- Test 8: error inside a reckon stage -> failing node carries the real error, rest SKIPPED ----
+    {
+        std::cout << "== Test 8: reckon stage error ==\n";
+        auto program = parseOrDie(
+            "let xs = [1, 2, 3];\n"
+            "reckon r(xs)\n"
+            "    |> normalize() |> noSuchStage() |> mean();\n"
+        );
+        Interpreter interp;
+        auto res = interp.runProgramAsFlow(program, flow::FlowRunOptions{});
+        std::cout << "status=" << flow::sessionStatusName(res.status) << "\n";
+        printGraph(res.graph);
+        if (res.status != flow::SessionStatus::ERROR) { std::cout << "FAIL: expected ERROR\n"; failures++; }
+        bool sawError = false, sawSkipped = false;
+        for (auto& n : res.graph.nodes) {
+            if (n.status == flow::NodeStatus::ERROR && n.error) sawError = true;
+            if (n.status == flow::NodeStatus::SKIPPED) sawSkipped = true;
+        }
+        if (!sawError || !sawSkipped) { std::cout << "FAIL: expected an ERROR node and a SKIPPED node\n"; failures++; }
+    }
+
+    // ---- Test 9: صيغ المترجم الأحدث (positive / =[×]= / let..from) تعمل تحت RinFlow وتطابق التشغيل العادي ----
+    {
+        std::cout << "== Test 9: positive + =[x]= + let-from inside flow ==\n";
+        {   // وحدة مُصدَّرة يستوردها البرنامج بصيغة `let ... from` (مسار نسبي لمجلد العمل الحالي)
+            std::ofstream mod("flow_selftest_mod.rin");
+            mod << "export fun double(x) { return x * 2; }\n";
+        }
+        const std::string src =
+            "let double from \"./flow_selftest_mod.rin\";\n"
+            "let xs = [3, -1, 4, 0, 7];\n"
+            "let allPos = xs |> positive;\n"
+            "print allPos;\n"
+            "reckon pos(xs)\n"
+            "    where item =[x]= |> sum();\n"
+            "print pos;\n"
+            "let y = 4;\n"
+            "y =[×]= 3;\n"
+            "y =[×]= -1;\n"
+            "print y;\n"
+            "let doubled = 21 |> double;\n"
+            "print doubled;\n";
+        Interpreter plain;
+        std::string plainOut = plain.run(parseOrDie(src));
+        Interpreter interp;
+        auto res = interp.runProgramAsFlow(parseOrDie(src), flow::FlowRunOptions{});
+        std::cout << "status=" << flow::sessionStatusName(res.status) << "\noutput: " << res.output;
+        printGraph(res.graph);
+        std::remove("flow_selftest_mod.rin");
+        if (res.status != flow::SessionStatus::SUCCESS) { std::cout << "FAIL: status\n"; failures++; }
+        if (res.output != plainOut) { std::cout << "FAIL: flow output differs from plain run:\n" << plainOut << "\n"; failures++; }
+        // positive([3,-1,4,0,7]) = false ؛ where item =[x]= -> [3,4,7] ؛ sum = 14 ؛ y: 12 ثم تبقى 12 ؛ double(21) = 42
+        // (سطر "📥 import" الإعلامي يسبقها في المخرجات، لذا نبحث عن التسلسل لا عن تطابق كامل).
+        const std::string expected = "false\n14\n12\n42\n";
+        if (res.output.find(expected) == std::string::npos) { std::cout << "FAIL: unexpected output, wanted:\n" << expected << "\n"; failures++; }
     }
 
   } catch (RinError& e) {
