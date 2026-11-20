@@ -245,63 +245,6 @@ StmtPtr Parser::declaration() {
             return inner;
         }
     }
-    // مفهوم `from` مع `let`: تعريف أسماء محلية مصدرها ملف آخر، بلا كلمة import:
-    //   let a, b as c from "p";      -> import { a, b as c } from "p";
-    //   let { a, b as c } from "p";  -> (الأقواس اختيارية)
-    //   let * from "p";              -> @import "p";          (دمج كل المُصدَّر في النطاق الحالي)
-    //   let * as ns from "p";        -> import * as ns from "p";
-    // تُميَّز بالنظر للأمام: let ثم قائمة أسماء/`*`/`{}` ثم IDENT("from") ثم نص، قبل أي '=' أو ';'. وإلا فهي `let` عادية
-    // (فـ `let from = 5;` و`let x = 1;` لا يتأثران). تتحوّل لنفس عقد الاستيراد الموجودة فلا يتغيّر المُفسِّر/VM/rinc.
-    if (check(TokenType::LET)) {
-        size_t k = current + 1;
-        int depth = 0;
-        bool isFrom = false;
-        for (; k + 1 < tokens.size(); ++k) {
-            const Token& t = tokens[k];
-            if (t.type == TokenType::LBRACE) depth++;
-            else if (t.type == TokenType::RBRACE) depth--;
-            else if (t.type == TokenType::EQUAL || t.type == TokenType::SEMICOLON || t.type == TokenType::END_OF_FILE) break;
-            else if (depth == 0 && t.type == TokenType::IDENT && t.lexeme == "from" && k > current + 1 &&
-                     tokens[k + 1].type == TokenType::STRING) { isFrom = true; break; }
-            else if (!(t.type == TokenType::IDENT || t.type == TokenType::COMMA || t.type == TokenType::STAR) && depth == 0) break;
-        }
-        if (isFrom) {
-            Token kw = advance(); // 'let'
-            std::vector<std::string> names, aliases;
-            std::string nsAlias; bool star = false;
-            if (match({TokenType::STAR})) {
-                star = true;
-                if (check(TokenType::IDENT) && peek().lexeme == "as") {
-                    advance();
-                    nsAlias = consume(TokenType::IDENT, "Expected a namespace name after 'as'").lexeme;
-                }
-            } else {
-                const bool braced = match({TokenType::LBRACE});
-                do {
-                    if (braced && check(TokenType::RBRACE)) break; // فاصلة أخيرة مسموحة داخل الأقواس
-                    names.push_back(consume(TokenType::IDENT, "Expected a name to import").lexeme);
-                    if (check(TokenType::IDENT) && peek().lexeme == "as") {
-                        advance();
-                        aliases.push_back(consume(TokenType::IDENT, "Expected a local name after 'as'").lexeme);
-                    } else aliases.push_back("");
-                } while (match({TokenType::COMMA}));
-                if (braced) consume(TokenType::RBRACE, "Expected '}' after import list");
-            }
-            advance(); // 'from'
-            Token pathTok = consumeStaticText("Expected a string path after 'from'");
-            consume(TokenType::SEMICOLON, "Expected ';' after let ... from statement");
-            auto pathExpr = std::make_shared<LiteralExpr>();
-            pathExpr->kind = LiteralExpr::Kind::STRING; pathExpr->str = pathTok.lexeme; pathExpr->line = pathTok.line;
-            if (star) {
-                auto st = std::make_shared<ImportStmt>();
-                st->path = pathExpr; st->alias = nsAlias; st->line = kw.line;
-                return st;
-            }
-            auto st = std::make_shared<ImportSelectedStmt>();
-            st->names = std::move(names); st->aliases = std::move(aliases); st->path = pathExpr; st->line = kw.line;
-            return st;
-        }
-    }
     if (match({TokenType::LET})) return letDeclaration();
     if (match({TokenType::FUN})) return functionDeclaration();
     // OOP: 'class'/'struct'/'enum' كلمات سياقية غير محجوزة (بنفس أسلوب route/row/document/warp/
@@ -3252,7 +3195,9 @@ std::shared_ptr<BlockStmt> Parser::block() {
 }
 
 StmtPtr Parser::expressionStatement() {
+    exprStmtStart = true;
     auto expr = expression();
+    exprStmtStart = false;
     consume(TokenType::SEMICOLON, "Expected ';' after expression");
     auto stmt = std::make_shared<ExpressionStmt>();
     stmt->expr = expr;
@@ -4698,7 +4643,26 @@ ExprPtr Parser::ifExpression(const Token& kw) {
 }
 
 ExprPtr Parser::assignment() {
+    const bool atStmtStart = exprStmtStart; exprStmtStart = false;
     auto expr = pipeline();
+    // `x =[×]= e;` على مستوى العبارة: إسناد ضربي مشروط  x = positiveKeep(x * e, x)  (docs/positive.md)
+    if (atStmtStart) {
+        auto pc = std::dynamic_pointer_cast<CallExpr>(expr);
+        if (pc && pc->callee == "__positive_cmp" && pc->args.size() == 2 && check(TokenType::SEMICOLON)) {
+            ExprPtr tgt = pc->args[0];
+            if (std::dynamic_pointer_cast<VariableExpr>(tgt) || std::dynamic_pointer_cast<IndexExpr>(tgt) || std::dynamic_pointer_cast<GetExpr>(tgt)) {
+                if (!isSimpleTarget(tgt))
+                    throw errRich(diag::Code::E0003_InvalidAssignment, peek(), "`=[×]=` assignment needs a simple target",
+                                  "the target is read and written, so it must have no side effects (it is evaluated twice)",
+                                  "use a variable, `arr[i]` or `obj.field` with plain names/numbers", "a variable, index or property");
+                int ln = pc->line;
+                auto prod = std::make_shared<BinaryExpr>(); prod->left = tgt; prod->op = TokenType::STAR; prod->right = pc->args[1]; prod->line = ln;
+                auto keep = std::make_shared<CallExpr>(); keep->callee = "__positive_keep"; keep->args = {prod, tgt}; keep->line = ln;
+                auto st = rinMakeStore(tgt, keep, ln);
+                if (st) return st;
+            }
+        }
+    }
     while (noElseExpr == 0 && check(TokenType::ELSE)) {      // a else b else c  (من اليسار: أول قيمة غير nil)
         Token e = advance();
         auto rhs = pipeline();
@@ -4908,8 +4872,9 @@ ExprPtr Parser::logicAnd() {
 
 ExprPtr Parser::equality() {
     auto expr = comparison();
-    while (match({TokenType::EQUAL_EQUAL, TokenType::BANG_EQUAL, TokenType::NOT_SAME, TokenType::COPY_OF, TokenType::SAME_SHAPE})) {
+    while (match({TokenType::EQUAL_EQUAL, TokenType::BANG_EQUAL, TokenType::NOT_SAME, TokenType::COPY_OF, TokenType::SAME_SHAPE, TokenType::POSITIVE})) {
         auto op = previous().type;
+        if (op == TokenType::POSITIVE) { expr = positiveOperand(expr, previous()); continue; }   // =[×]= (docs/positive.md)
         auto right = comparison();
         auto b = std::make_shared<BinaryExpr>();
         b->left = expr; b->op = op; b->right = right;
@@ -6398,6 +6363,21 @@ bool Parser::tokensMayCapture(size_t from, size_t to) const {
         }
     }
     return false;
+}
+
+// =[×]= داخل مستوى equality. بلا معامل أيمن → اختبار positive(x) ؛ ومعه → مقارنة __positive_cmp(a, b)
+// (تتحوّل إلى إسناد ضربي مشروط فقط إن جاءت وحدها كعبارة — انظر assignment()).
+ExprPtr Parser::positiveOperand(ExprPtr left, const Token& op) {
+    switch (peek().type) {
+        case TokenType::SEMICOLON: case TokenType::RPAREN: case TokenType::RBRACE: case TokenType::RBRACKET:
+        case TokenType::COMMA: case TokenType::COLON: case TokenType::QUESTION: case TokenType::AND: case TokenType::OR:
+        case TokenType::ELSE: case TokenType::END_OF_FILE: {
+            auto c = std::make_shared<CallExpr>(); c->callee = "positive"; c->args = {left}; c->line = op.line; return c;
+        }
+        default: break;
+    }
+    auto right = comparison();
+    auto c = std::make_shared<CallExpr>(); c->callee = "__positive_cmp"; c->args = {left, right}; c->line = op.line; return c;
 }
 
 bool Parser::isSimpleTarget(const ExprPtr& e) const {
