@@ -144,6 +144,17 @@ int main(int argc, char** argv) {
         try { if (indsin::tags::desugar(src) != src) { ++fails; std::cerr << "FAIL corpus (changed legacy file): " << argv[k] << "\n"; } }
         catch (indsin::tags::TagError& e) { ++fails; std::cerr << "FAIL corpus " << argv[k] << ":" << e.line << " " << e.message << "\n"; }
     }
+    { // ContainerView: مكوّن جاهز + مكتبة Rin تُحقَن فقط عند الاستعمال، والأسطر محفوظة
+        ++runs;
+        std::string src = "<Column#r>\n<ContainerView name=\"inv\" tick={n} />\n</Column>\n";
+        std::string got = indsin::tags::desugar(src);
+        bool ok = got.find("fun containerBody(") != std::string::npos && got.find("indsin.run(\"containerBody\", \"inv\", n)") != std::string::npos &&
+                  got.find("indsin.run(\"containerKind\"") != std::string::npos && lines(got) == lines(src);
+        if (!ok) { ++fails; std::cerr << "FAIL ContainerView expansion\n" << got << "\n"; }
+        ++runs;
+        std::string plain = indsin::tags::desugar("<Column#r>\n</Column>\n");
+        if (plain.find("containerBody") != std::string::npos) { ++fails; std::cerr << "FAIL ContainerView prelude leaked into unrelated source\n"; }
+    }
     std::cout << (runs - fails) << "/" << runs << " passed\n";
     return fails ? 1 : 0;
 }
