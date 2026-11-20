@@ -44,7 +44,7 @@
 - [`MAKE_MEDIA.md`](./MAKE_MEDIA.md) — `make.video` `make.audio` `make.api` `make.image.removeBg` `make.ocr`: فيديو وصوت وAPI وإزالة الخلفية وقراءة النص.
 - [`TIME.md`](./TIME.md) — `time()` و`time.*`: لحظات وتنسيق ونصوص طبيعية وحساب وفروق ومناطق وتقويم هجري ومدد.
 - [`previewkit.md`](./previewkit.md) — مكتبة `previewkit`: معاينة حيّة لملفات PDF وMarkdown وTypeScript/JavaScript/JSON (تلوين، هيكل، فحص، استخراج نص PDF عربي/RTL).
-- [`rinflow.md`](./rinflow.md) — طبقة تنفيذ التدفّق المهيكل.
+- [`rinflow.md`](./rinflow.md) — طبقة تنفيذ التدفّق المهيكل: `|>` و`@container.pipe` و`reckon` + شاشة RinFlow على أندرويد.
 
 ### الواجهة
 - [`banner.md`](./banner.md)
