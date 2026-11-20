@@ -136,6 +136,9 @@ private:
     StmtPtr hashIgnoranceStatement();        // #ignorance { ... } | #ignorance stmt
     StmtPtr hashSwapStatement();             // #swap a, b;  |  #swap(a, b);   (nullptr إن كانت الصيغة الدالّية ذات 3 وسائط)
     bool exprStmtStart = false; // يضبطها expressionStatement ليعرف assignment() أنه رأس عبارة (=[×]= إسناد مشروط)
+    // main.lock (docs/main-lock.md): `<<main.lock["NAME"]>>` / `<<main.lock[]>>` — يُفكَّك إلى نداءات main.lock.*
+    bool atLockRef() const;
+    ExprPtr lockRefName(bool& hasName, bool& eqConsumed, int& line); // يستهلك المرجع كاملاً؛ يعيد تعبير الاسم أو null
     ExprPtr positiveOperand(ExprPtr left, const Token& op); // =[×]= داخل equality: اختبار (postfix) أو مقارنة
     int noElseExpr = 0;       // >0: `a else b` معطّل (else تخصّ بنية أخرى: let/accept/if-expression)
     bool bareIfThen = false;  // الفرع الأول لـ if بلا أقواس: else التالية له لا لحلقة بداخله
