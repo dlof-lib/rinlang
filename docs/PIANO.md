@@ -115,7 +115,7 @@ pn_save(Poster, "poster.puo");          // Poster صار متغيراً (لوح�
 - **الهندسة** كلمات مفصولة بمسافات **أو بفاصلة** (`"10, 20, 30"` أو `"10،20،30"` أو `"10 20 30"`): رقم · `$متغير` · `(تعبير)` · `'نص'` · كلمة. ما نقص منها يُؤخذ من الكتلة بالاسم (`x: 10;`).
 - **الكتلة** `{ … }` للعناصر العادية = خيارات (`fill`, `stroke`, `rx`, `shadow`, `grad`, `labels`, `data`, `spin`, `pulse`…) بقيم: أرقام، نصوص، `true/false`، قوائم `[..]`، قواميس `{..}`، تعبيرات `+ - * / %`، مقارنات، ودوال `sin cos abs floor ceil round sqrt pow min max len mix alpha lighten darken pal ink accent muted`.
 - **حاويات** تحوي جُمَلاً: `Group` · `At => "x y"` · `Repeat => n` · `Each => [قائمة]` (`$it` `$i`) · `If => (شرط)` · `Phone` · `Browser` (داخلهما `$sx $sy $sw $sh` = الشاشة) · `Pattern` · `Clip` · `Mask`. أزواج `مفتاح: قيمة;` في أول الحاوية تصير خيارات لها.
-- **الأنواع:** Rect RRect Circle Ellipse Line Polyline Polygon Path Text Image Ngon Star Slice Ring Arc Arrow Grid Wave Spiral Smooth Label · Card Button Badge Avatar Progress Toggle Input Divider Icon Box Connect Elbow Mesh · Bar LineChart Pie Radar Spark Gauge · تعريفات: Linear Radial Shadow Glow Blur Fade.
+- **الأنواع:** Rect RRect Circle Ellipse Line Polyline Polygon Path Text Image Ngon Star Slice Ring Arc Arrow Grid Wave Spiral Smooth Label · Card Button Badge Avatar Progress Toggle Input Divider Icon Box Connect Elbow Mesh · Bar LineChart Pie Radar Spark Gauge · **Container** · تعريفات: Linear Radial Shadow Glow Blur Fade.
 - التعليقات: انظر القسم أدناه. أخطاء الكتلة تحمل **رقم السطر الحقيقي** في ملفك.
 - **امتداد الملفات:** `.rin` أو `.pia` (أو أي امتداد). `rin card.pia` يشغّله كبرنامج، و`@import "./card.pia";` أو `@import "card.pia";` (بجانب الملف الحالي) يستورده، و`pn_load("card.pia")` يعيد اللوحة. أما `.puo` فمشهد JSON جاهز (`pn_load("a.puo")`).
 - يمكن أيضاً: `let c = pn_dsl("اسم", مصدر);` أو `pn_dsl_load("a.pia")`.
@@ -216,6 +216,39 @@ g++ -std=c++17 -O2 lib/piano.og.rin/native/piano_cli.cpp -o piano_cli
 <Image#art src={pn_data_uri(c)} width=320 height=200 />
 ```
 انظر `examples/piano/piano_studio.rin`.
+
+## رسم وطباعة بيانات الـ container
+تقرأ piano بيانات أي حاوية **حيّة** (`@container` · `.data` · `.object` · `.table` · `.doc` · `.datalist`) وترسمها بطاقة SVG أو تطبعها جدولاً نصّياً. الناتج مشهد piano عادي، فيعمل مع `pn_save` (`.svg .puo .html`) وindsin والويب ومُصيِّرَي C++/JS بلا أي تغيير فيهما.
+
+```kotlin
+@import "piano";
+@container.table=scores
+    row cells=["name", "score"];
+    row cells=["sara", 95];
+.end/container.table
+
+pn_container_print(nil, {});                                   // جداول نصّية لكل الحاويات (nil أو [] = الكل)
+let c = pn_container_scene(["scores", "app"], 440, {"theme": "dark"});   // بطاقة لكل حاوية
+pn_save(c, "containers.svg");
+```
+
+| الدالة | الناتج |
+|---|---|
+| `pn_container_model(name, o)` | نموذج `{name, kind, size, fields:[{k,v,t}], funcs, children, table:{header,rows}, docs:[{id,v}], total}` |
+| `pn_container(parent, x, y, w, name, o)` | يرسم بطاقة في لوحتك؛ يُرجع group فيه `_h` = الارتفاع الفعلي |
+| `pn_container_scene(names, w, o)` | لوحة جديدة بطاقة لكل اسم (نص أو قائمة؛ `nil`/`[]` = كل الحاويات) |
+| `pn_container_uri(names, w, theme, o)` | data-URI لـ `<Image src=…>` في indsin |
+| `pn_container_save(names, path, o)` | يحفظ بالامتداد (`o.width` افتراضي 440) |
+| `pn_container_text(name, o)` · `pn_container_print(names, o)` | جدول نصّي · طباعته (`o.svg=true` تطبع الـ SVG أيضاً) |
+
+**الخيارات (كلها اختيارية):** `theme` · `title` · `fields:[..]` (أسماء تُعرَض فقط) · `hide:[..]` · `maxRows`(10) · `maxCols`(8) · `maxDocs`(6) · `showTypes`(true) · `showFuncs`(true) · `showChildren`(true) · `color` · `size`(13) · `gap` · `pad` · `margin`.
+
+- الحقول **مرتّبة أبجدياً** (ترتيب التصريح غير محفوظ في الحاوية). الدوال تظهر في سطر `ƒ`، والحاويات المتداخلة في سطر `⊂`.
+- الجدول: الصف الأول رأس إن كانت كل خلاياه نصوصاً؛ ما زاد على `maxRows` يُختصر بسطر `… +N`. القص يحترم UTF-8 فلا تنكسر العربية.
+- **لغة الكتل:** `$Inv.Container => "x y w 'اسم'" { maxRows: 5; };`
+- **داخل indsin:** `<Image src={pn_container_uri("counter", 320, theme, {})} width=320 />` — أعد الاستدعاء بعد تعديل الحاوية لتتحدّث البطاقة.
+- أمثلة: `examples/piano/15_container.rin` · `16_indsin_container.rin` · الاختبار: `tests/verification/piano_container.rin`.
+- ملاحظة: القراءة من الحاوية تعمل في مفسّر Rin فقط؛ ملف `.puo` الناتج لقطة ثابتة من البيانات لحظة الرسم.
 
 ## هوية التطبيق/الموقع (SEO · أيقونات · إصدار)
 مع `@container.app` ([`container_app.md`](./container_app.md)): `pn_app_apply(c, app)` · `pn_app_html(c, app, {})` · `pn_app_save(c, dir, app, {})` تولّد صفحة ويب بـ `<head>` كامل (title/description/keywords/canonical/Open Graph/Twitter/أيقونات/manifest/JSON-LD) و`lang`/`dir` من الهوية. مثال: `examples/piano/app_page.rin`.
