@@ -1,0 +1,444 @@
+// piano — الجزء 13: رسم وطباعة بيانات الـ container
+//
+// يقرأ بيانات أي حاوية حيّة (`@container` · `.data` · `.object` · `.table` · `.doc` ...) عبر `container.fields/info`
+// ويرسمها بطاقة piano (SVG) أو يطبعها كجدول نصّي في الطرفية — بلا أي تغيير في المفسّر ولا في مُصيِّرات C++/JS
+// (الناتج مشهد piano عادي، فيعمل في indsin والويب والحفظ .svg/.puo/.html كغيره).
+//
+//   @import "piano";
+//   let c = pn_container_scene(["inv", "scores"], 420, {"theme": "dark"});   // لوحة جاهزة بطاقة لكل حاوية
+//   pn_save(c, "containers.svg");
+//   pn_container_print("inv", {});                                          // جدول نصّي في الطرفية
+//   <Image src={pn_container_uri("inv", 360, "dark", {})} width=360 />       // داخل indsin
+//
+// الدوال:
+//   pn_container_model(name, o)            ← نموذج بيانات {name, kind, fields, funcs, children, table, docs, ...}
+//   pn_container(parent, x, y, w, name, o) ← يرسم بطاقة؛ يُرجع group فيه _h = الارتفاع المستعمل
+//   pn_container_scene(names, w, o)        ← لوحة جديدة بطاقة لكل اسم (نص أو قائمة؛ nil/[] = كل الحاويات)
+//   pn_container_uri / pn_container_save   ← data-URI لـ <Image> · حفظ بالامتداد (.svg .puo .html)
+//   pn_container_text / pn_container_print ← جدول نصّي · طباعته (o.svg=true يطبع الـ SVG أيضاً)
+// خيارات (كلها اختيارية): theme · title · fields[] (أسماء تُعرَض فقط) · hide[] (أسماء تُخفى) · maxRows(10) · maxCols(8)
+//   · maxDocs(6) · showTypes(true) · showFuncs(true) · showChildren(true) · color · size(13) · gap(14) · pad(16)
+
+// ---------------------------------------------------------------------------
+//  1) أدوات
+// ---------------------------------------------------------------------------
+// قصّ نص إلى n محرفاً (UTF-8 صحيح، فلا تنكسر العربية) مع «…»
+fun pn_ct_clip(s, n) {
+    if (n < 2) { n = 2; }
+    if (utf8Len(s) <= n) { return s; }
+    return utf8Substr(s, 0, n - 1) + "…";
+}
+// تمثيل قيمة كنص قصير (على سطر واحد)
+fun pn_ct_fmt(v, n) {
+    let t = type(v);
+    let s = "";
+    if (t == "string") { s = v; }
+    else if (t == "nil") { s = "nil"; }
+    else if (t == "array" or t == "map") { s = jsonEncode(v); }
+    else if (t == "function") { s = "ƒ()"; }
+    else { s = str(v); }
+    s = replace(s, "\n", " ");
+    return pn_ct_clip(s, n);
+}
+fun pn_ct_rep(ch, n) {
+    let s = "";
+    let i = 0;
+    while (i < n) { s = s + ch; i = i + 1; }
+    return s;
+}
+fun pn_ct_pad(s, n) {
+    let k = utf8Len(s);
+    if (k >= n) { return s; }
+    return s + pn_ct_rep(" ", n - k);
+}
+fun pn_ct_in(list, k) {
+    if (list == nil) { return false; }
+    let i = 0;
+    while (i < len(list)) {
+        if (list[i] == k) { return true; }
+        i = i + 1;
+    }
+    return false;
+}
+// لون حسب النوع (للشارات): نص · رقم · منطقي · مصفوفة · قاموس · nil
+fun pn_ct_tcolor(parent, t) {
+    if (t == "number") { return pn_color(parent, 1); }
+    if (t == "string") { return pn_color(parent, 4); }
+    if (t == "bool") { return pn_color(parent, 2); }
+    if (t == "array") { return pn_color(parent, 5); }
+    if (t == "map") { return pn_color(parent, 6); }
+    return pn_muted(parent);
+}
+
+// ---------------------------------------------------------------------------
+//  2) النموذج — قراءة بيانات الحاوية الحيّة
+// ---------------------------------------------------------------------------
+// {name, kind, size, fields:[{k,v,t}], funcs:[أسماء], children:[أسماء],
+//  table:{header:[..], rows:[[..]]} أو nil, docs:[{id, v}] أو nil, total}
+fun pn_container_model(name, o) {
+    o = pn_o(o);
+    if (!hasContainer(name)) { throw "piano: لا توجد حاوية باسم «" + name + "»"; }
+    let info = container.info(name);
+    let kind = info["kind"];
+    let m = {"name": name, "kind": kind, "size": info["size"], "fields": [], "funcs": [],
+             "children": [], "table": nil, "docs": nil, "total": 0};
+    let only = pn_opt(o, "fields", nil);
+    let hide = pn_opt(o, "hide", nil);
+    if (kind == "container.table") {
+        let rows = container.get(name, "rows");
+        if (rows == nil) { rows = []; }
+        let header = container.get(name, "header");
+        if (header == nil) { header = []; }
+        let body = rows;
+        if (len(header) > 0 and len(rows) > 0) {
+            body = [];
+            let r = 1;
+            while (r < len(rows)) { push(body, rows[r]); r = r + 1; }
+        }
+        m["table"] = {"header": header, "rows": body};
+        m["total"] = len(body);
+        // متغيّرات حقيقية داخل الجدول (إن وُجدت) تُعرض كحقول عادية — الحقول الافتراضية (rows/header/...) لا تتكرّر
+        // لذا نكتفي هنا بما يعيده fields دون الأسماء المحجوزة
+    }
+    let all = container.fields(name);
+    let ks = sort(keys(all));        // ترتيب أبجدي ثابت (ترتيب التصريح غير محفوظ في الحاوية)
+    let i = 0;
+    while (i < len(ks)) {
+        let k = ks[i];
+        i = i + 1;
+        if (m["table"] != nil and pn_ct_in(["rows", "header", "body", "records", "columns", "style"], k)) { continue; }
+        if (only != nil and !pn_ct_in(only, k)) { continue; }
+        if (pn_ct_in(hide, k)) { continue; }
+        let v = all[k];
+        if (type(v) == "function") { push(m["funcs"], k); }
+        else { push(m["fields"], {"k": k, "v": v, "t": type(v)}); }
+    }
+    let ch = container.descendants(name);
+    if (ch != nil) { m["children"] = ch; }
+    if (kind == "container.doc" or kind == "container.datalist") {
+        let ids = docIds(name);
+        let docs = [];
+        let j = 0;
+        while (j < len(ids)) {
+            push(docs, {"id": ids[j], "v": findDoc(name, ids[j])});
+            j = j + 1;
+        }
+        m["docs"] = docs;
+        m["total"] = len(ids);
+    }
+    return m;
+}
+// كل أسماء الحاويات (مرتّبة) — أو القائمة المعطاة
+fun pn_ct_names(names) {
+    if (names == nil) { let a = container.names(); return sort(a); }
+    if (type(names) == "string") { return [names]; }
+    if (len(names) == 0) { let a = container.names(); return sort(a); }
+    return names;
+}
+
+// ---------------------------------------------------------------------------
+//  3) الرسم
+// ---------------------------------------------------------------------------
+// بطاقة حاوية واحدة في (x, y) بعرض w. يُرجع group وفيه _h (الارتفاع الفعلي).
+fun pn_container(parent, x, y, w, name, o) {
+    o = pn_o(o);
+    let m = pn_container_model(name, o);
+    let fs = pn_opt(o, "size", 13);
+    let pad = pn_opt(o, "pad", 16);
+    let rowh = fs * 2;
+    let cw = fs * 0.58;                         // عرض المحرف التقريبي
+    let accent = pn_opt(o, "color", pn_accent(parent));
+    let showT = pn_opt(o, "showTypes", true);
+    let g = pn_group(parent, pn_gcommon(o));
+    // ارتفاع المحتوى أولاً (لرسم الخلفية قبل المحتوى)
+    let h = 52;
+    let nf = len(m["fields"]);
+    if (nf > 0) { h = h + nf * rowh + 6; }
+    let tb = m["table"];
+    let maxRows = pn_opt(o, "maxRows", 10);
+    let maxCols = pn_opt(o, "maxCols", 8);
+    let shownRows = 0;
+    let ncols = 0;
+    if (tb != nil) {
+        shownRows = len(tb["rows"]);
+        if (shownRows > maxRows) { shownRows = maxRows; }
+        let r = 0;
+        while (r < len(tb["rows"])) {
+            if (len(tb["rows"][r]) > ncols) { ncols = len(tb["rows"][r]); }
+            r = r + 1;
+        }
+        if (len(tb["header"]) > ncols) { ncols = len(tb["header"]); }
+        if (ncols > maxCols) { ncols = maxCols; }
+        if (ncols < 1) { ncols = 1; }
+        let lines = shownRows;
+        if (len(tb["header"]) > 0) { lines = lines + 1; }
+        if (len(tb["rows"]) > shownRows) { lines = lines + 1; }
+        if (len(tb["rows"]) == 0) { lines = 1; }
+        h = h + lines * rowh + 8;
+    }
+    let maxDocs = pn_opt(o, "maxDocs", 6);
+    let shownDocs = 0;
+    if (m["docs"] != nil) {
+        shownDocs = len(m["docs"]);
+        if (shownDocs > maxDocs) { shownDocs = maxDocs; }
+        let lines = shownDocs;
+        if (len(m["docs"]) > shownDocs) { lines = lines + 1; }
+        if (len(m["docs"]) == 0) { lines = 1; }
+        h = h + lines * rowh + 8;
+    }
+    let showF = pn_opt(o, "showFuncs", true) and len(m["funcs"]) > 0;
+    let showC = pn_opt(o, "showChildren", true) and len(m["children"]) > 0;
+    if (showF) { h = h + rowh; }
+    if (showC) { h = h + rowh; }
+    if (nf == 0 and tb == nil and m["docs"] == nil and !showF and !showC) { h = h + rowh; }
+    h = h + 10;
+
+    pn_rrect(g, x, y, w, h, 14, {"fill": pn_surface(parent), "stroke": pn_gridc(parent), "sw": 1, "shadow": pn_opt(o, "elevate", false)});
+    pn_rect(g, x, y + 14, 4, 24, {"fill": accent, "rx": 2});
+    // رأس: الاسم + شارة النوع + العدّاد
+    pn_text(g, x + pad, y + 31, pn_opt(o, "title", name), {"size": fs + 3, "weight": 700});
+    let kl = replace(m["kind"], "container.", "");
+    if (kl == "container") { kl = "plain"; }
+    pn_badge(g, x + w - pad - (utf8Len(kl) * fs * 0.56 + 20) / 2, y + 27, kl, {"color": accent, "size": fs - 2});
+    let cy = y + 52;
+    pn_divider(g, x + pad, cy - 6, x + w - pad, {});
+    // الحقول: مفتاح | قيمة | نوع
+    let kw = w * 0.34;
+    let i = 0;
+    while (i < nf) {
+        let f = m["fields"][i];
+        let by = cy + i * rowh + rowh * 0.68;
+        pn_text(g, x + pad, by, pn_ct_clip(f["k"], floor((kw - 8) / cw)), {"size": fs, "fill": pn_muted(parent), "weight": 600});
+        let vmax = floor((w - pad * 2 - kw - 8) / cw);
+        if (showT) { vmax = floor((w - pad * 2 - kw - 8 - 56) / cw); }
+        pn_text(g, x + pad + kw, by, pn_ct_fmt(f["v"], vmax), {"size": fs, "family": "ui-monospace, Menlo, Consolas, monospace"});
+        if (showT) {
+            pn_text(g, x + w - pad, by, f["t"], {"size": fs - 3, "anchor": "end", "fill": pn_ct_tcolor(parent, f["t"])});
+        }
+        i = i + 1;
+    }
+    if (nf > 0) { cy = cy + nf * rowh + 6; }
+    // جدول
+    if (tb != nil) {
+        let colw = (w - pad * 2) / ncols;
+        let cmax = floor((colw - 10) / cw);
+        let line = 0;
+        if (len(tb["header"]) > 0) {
+            pn_rect(g, x + pad - 6, cy + line * rowh + 3, w - pad * 2 + 12, rowh - 2, {"fill": pn_alpha(accent, 0.14), "rx": 6});
+            let c2 = 0;
+            while (c2 < ncols and c2 < len(tb["header"])) {
+                pn_text(g, x + pad + c2 * colw, cy + line * rowh + rowh * 0.68, pn_ct_fmt(tb["header"][c2], cmax), {"size": fs, "weight": 700});
+                c2 = c2 + 1;
+            }
+            line = line + 1;
+        }
+        let r2 = 0;
+        while (r2 < shownRows) {
+            if (r2 % 2 == 1) { pn_rect(g, x + pad - 6, cy + line * rowh + 3, w - pad * 2 + 12, rowh - 2, {"fill": pn_alpha(pn_ink(parent), 0.05), "rx": 6}); }
+            let row = tb["rows"][r2];
+            let c3 = 0;
+            while (c3 < ncols and c3 < len(row)) {
+                pn_text(g, x + pad + c3 * colw, cy + line * rowh + rowh * 0.68, pn_ct_fmt(row[c3], cmax), {"size": fs});
+                c3 = c3 + 1;
+            }
+            line = line + 1;
+            r2 = r2 + 1;
+        }
+        if (len(tb["rows"]) == 0) {
+            pn_text(g, x + pad, cy + rowh * 0.68, "(جدول فارغ)", {"size": fs, "fill": pn_muted(parent), "italic": true});
+            line = 1;
+        }
+        if (len(tb["rows"]) > shownRows) {
+            pn_text(g, x + pad, cy + line * rowh + rowh * 0.68, "… +" + str(len(tb["rows"]) - shownRows) + " صفوف", {"size": fs - 1, "fill": pn_muted(parent)});
+            line = line + 1;
+        }
+        cy = cy + line * rowh + 8;
+    }
+    // مستندات (doc/datalist)
+    if (m["docs"] != nil) {
+        let line = 0;
+        let d = 0;
+        while (d < shownDocs) {
+            let dd = m["docs"][d];
+            let by = cy + line * rowh + rowh * 0.68;
+            pn_text(g, x + pad, by, "#" + pn_ct_clip(str(dd["id"]), 8), {"size": fs, "weight": 700, "fill": accent});
+            pn_text(g, x + pad + fs * 5, by, pn_ct_fmt(dd["v"], floor((w - pad * 2 - fs * 5) / cw)), {"size": fs, "family": "ui-monospace, Menlo, Consolas, monospace"});
+            line = line + 1;
+            d = d + 1;
+        }
+        if (len(m["docs"]) == 0) {
+            pn_text(g, x + pad, cy + rowh * 0.68, "(لا مستندات)", {"size": fs, "fill": pn_muted(parent), "italic": true});
+            line = 1;
+        }
+        if (len(m["docs"]) > shownDocs) {
+            pn_text(g, x + pad, cy + line * rowh + rowh * 0.68, "… +" + str(len(m["docs"]) - shownDocs) + " مستندات", {"size": fs - 1, "fill": pn_muted(parent)});
+            line = line + 1;
+        }
+        cy = cy + line * rowh + 8;
+    }
+    // دوال وحاويات فرعية (سطر مختصر لكل منهما)
+    if (showF) {
+        pn_text(g, x + pad, cy + rowh * 0.68, "ƒ  " + pn_ct_clip(join(m["funcs"], "()  ") + "()", floor((w - pad * 2 - 20) / cw)), {"size": fs - 1, "fill": pn_color(parent, 0)});
+        cy = cy + rowh;
+    }
+    if (showC) {
+        pn_text(g, x + pad, cy + rowh * 0.68, "⊂  " + pn_ct_clip(join(m["children"], "  ·  "), floor((w - pad * 2 - 20) / cw)), {"size": fs - 1, "fill": pn_muted(parent)});
+        cy = cy + rowh;
+    }
+    if (nf == 0 and tb == nil and m["docs"] == nil and !showF and !showC) {
+        pn_text(g, x + pad, cy + rowh * 0.68, "(لا بيانات)", {"size": fs, "fill": pn_muted(parent), "italic": true});
+    }
+    g["_h"] = h;
+    return g;
+}
+
+// لوحة جديدة: بطاقة لكل حاوية بعرض w، مرتّبة عمودياً. o.theme · o.gap(14) · o.pad(16) · o.title
+fun pn_container_scene(names, w, o) {
+    o = pn_o(o);
+    let list = pn_ct_names(names);
+    let gap = pn_opt(o, "gap", 14);
+    let margin = pn_opt(o, "margin", 12);
+    let c = pn_canvas(w + margin * 2, 10);
+    pn_theme(c, pn_opt(o, "theme", "dark"));
+    pn_title(c, pn_opt(o, "title", "container"));
+    let oc = pn_clone(o);
+    oc["title"] = nil;                          // title للوحة كلها، وعنوان كل بطاقة = اسم حاويتها
+    let y = margin;
+    let i = 0;
+    while (i < len(list)) {
+        let g = pn_container(c, margin, y, w, list[i], oc);
+        y = y + g["_h"] + gap;
+        i = i + 1;
+    }
+    if (len(list) == 0) {
+        pn_text(c, margin + 8, margin + 24, "(لا حاويات)", {"size": 14, "fill": pn_muted(c)});
+        y = margin + 40 + gap;
+    }
+    pn_size(c, w + margin * 2, y - gap + margin);
+    return c;
+}
+fun pn_container_uri(names, w, theme, o) {
+    let o2 = pn_clone(pn_o(o));
+    o2["theme"] = theme;
+    return pn_data_uri(pn_container_scene(names, w, o2));
+}
+fun pn_container_save(names, path, o) {
+    let w = pn_opt(pn_o(o), "width", 440);
+    return pn_save(pn_container_scene(names, w, o), path);
+}
+
+// ---------------------------------------------------------------------------
+//  4) الطباعة النصّية (للطرفية)
+// ---------------------------------------------------------------------------
+// جدول نصّي لحاوية واحدة (سلسلة بأسطر \n) — يحترم نفس خيارات النموذج (fields/hide/maxRows/maxDocs)
+fun pn_container_text(name, o) {
+    o = pn_o(o);
+    let m = pn_container_model(name, o);
+    let kl = replace(m["kind"], "container.", "");
+    if (kl == "container") { kl = "plain"; }
+    let SEP = "\u0001";                          // علامة سطر فاصل
+    let body = [];
+    push(body, name + "  [" + kl + "]");
+    push(body, SEP);
+    let kw = 4;
+    let vw = 5;
+    let i = 0;
+    while (i < len(m["fields"])) {
+        if (utf8Len(m["fields"][i]["k"]) > kw) { kw = utf8Len(m["fields"][i]["k"]); }
+        let l = utf8Len(pn_ct_fmt(m["fields"][i]["v"], 48));
+        if (l > vw) { vw = l; }
+        i = i + 1;
+    }
+    i = 0;
+    while (i < len(m["fields"])) {
+        let f = m["fields"][i];
+        push(body, pn_ct_pad(f["k"], kw) + " : " + pn_ct_pad(pn_ct_fmt(f["v"], 48), vw) + "  " + f["t"]);
+        i = i + 1;
+    }
+    let tb = m["table"];
+    if (tb != nil) {
+        let maxRows = pn_opt(o, "maxRows", 10);
+        let rows = [];
+        if (len(tb["header"]) > 0) { push(rows, tb["header"]); }
+        let r = 0;
+        while (r < len(tb["rows"]) and r < maxRows) { push(rows, tb["rows"][r]); r = r + 1; }
+        let nc = 0;
+        r = 0;
+        while (r < len(rows)) { if (len(rows[r]) > nc) { nc = len(rows[r]); } r = r + 1; }
+        let ws = [];
+        let c = 0;
+        while (c < nc) {
+            let mw = 1;
+            r = 0;
+            while (r < len(rows)) {
+                if (c < len(rows[r])) {
+                    let l = utf8Len(pn_ct_fmt(rows[r][c], 20));
+                    if (l > mw) { mw = l; }
+                }
+                r = r + 1;
+            }
+            push(ws, mw);
+            c = c + 1;
+        }
+        r = 0;
+        while (r < len(rows)) {
+            let cells = [];
+            c = 0;
+            while (c < nc) {
+                let cell = "";
+                if (c < len(rows[r])) { cell = pn_ct_fmt(rows[r][c], 20); }
+                push(cells, pn_ct_pad(cell, ws[c]));
+                c = c + 1;
+            }
+            push(body, join(cells, " | "));
+            if (r == 0 and len(tb["header"]) > 0) { push(body, SEP); }
+            r = r + 1;
+        }
+        if (len(tb["rows"]) > maxRows) { push(body, "… +" + str(len(tb["rows"]) - maxRows) + " rows"); }
+        if (len(tb["rows"]) == 0) { push(body, "(empty table)"); }
+    }
+    if (m["docs"] != nil) {
+        let maxDocs = pn_opt(o, "maxDocs", 6);
+        let d = 0;
+        while (d < len(m["docs"]) and d < maxDocs) {
+            push(body, "#" + str(m["docs"][d]["id"]) + "  " + pn_ct_fmt(m["docs"][d]["v"], 60));
+            d = d + 1;
+        }
+        if (len(m["docs"]) > maxDocs) { push(body, "… +" + str(len(m["docs"]) - maxDocs) + " docs"); }
+        if (len(m["docs"]) == 0) { push(body, "(no docs)"); }
+    }
+    if (len(m["funcs"]) > 0) { push(body, "fn: " + join(m["funcs"], "(), ") + "()"); }
+    if (len(m["children"]) > 0) { push(body, "⊂ " + join(m["children"], ", ")); }
+    if (len(body) == 2) { push(body, "(no data)"); }
+    let width = 0;
+    i = 0;
+    while (i < len(body)) {
+        if (body[i] != SEP and utf8Len(body[i]) > width) { width = utf8Len(body[i]); }
+        i = i + 1;
+    }
+    let bar = "+" + pn_ct_rep("-", width + 2) + "+";
+    let lines = [bar];
+    i = 0;
+    while (i < len(body)) {
+        if (body[i] == SEP) { push(lines, bar); }
+        else { push(lines, "| " + pn_ct_pad(body[i], width) + " |"); }
+        i = i + 1;
+    }
+    push(lines, bar);
+    return join(lines, "\n");
+}
+// يطبع جدولاً نصّياً لكل حاوية في names (nil أو [] = كلها). o.svg=true يطبع أيضاً مشهد SVG (pn_print). يُرجع النص المطبوع.
+fun pn_container_print(names, o) {
+    o = pn_o(o);
+    let list = pn_ct_names(names);
+    let parts = [];
+    let i = 0;
+    while (i < len(list)) {
+        push(parts, pn_container_text(list[i], o));
+        i = i + 1;
+    }
+    let out = join(parts, "\n");
+    print out;
+    if (pn_opt(o, "svg", false)) { pn_print(pn_container_scene(list, pn_opt(o, "width", 440), o)); }
+    return out;
+}
