@@ -186,6 +186,27 @@ void Interpreter::registerNativesConditions() {
         if (lo > hi) std::swap(lo, hi);
         return Value::boolean_(x < lo || x > hi);
     };
+    // ---- positive (=[×]=) — docs/positive.md ----
+    // positive(x, ...): true إذا كانت كل القيم أعداداً > 0 (والمصفوفات: كل عناصرها موجبة، والفارغة false).
+    {
+        struct PosHelper { static bool is(const Value& v) {
+            if (v.type == Value::Type::NUMBER) return v.number > 0.0;
+            if (v.type == Value::Type::ARRAY && v.array) { if (v.array->empty()) return false; for (auto& e : *v.array) if (!is(e)) return false; return true; }
+            return false;
+        } };
+        auto positiveAll = [](Args& a, int line) -> Value {
+            if (a.empty()) throw diagErr(diag::Code::E0004_InvalidType, line, "'positive' expects at least 1 argument");
+            for (auto& v : a) if (!PosHelper::is(v)) return Value::boolean_(false);
+            return Value::boolean_(true);
+        };
+        natives["positive"] = positiveAll;
+        natives["__positive_cmp"] = positiveAll;   // a =[×]= b  (الاثنان موجبان)
+        // __positive_keep(candidate, current): candidate إن كان عدداً موجباً وإلا current — أساس  x =[×]= e;
+        natives["__positive_keep"] = [](Args& a, int line) -> Value {
+            if (a.size() != 2) throw diagErr(diag::Code::E0004_InvalidType, line, "internal: __positive_keep expects 2 arguments");
+            return (a[0].type == Value::Type::NUMBER && a[0].number > 0.0) ? a[0] : a[1];
+        };
+    }
     natives["isInt"] = [](Args& a, int line) -> Value {
         expectArgs("isInt", a, 1, line);
         return Value::boolean_(a[0].type == Value::Type::NUMBER && isIntegral(a[0].number));
