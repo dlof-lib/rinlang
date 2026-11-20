@@ -1,0 +1,29 @@
+// message.layer مربوط بـ @container.api (وضع mock بلا شبكة)
+
+@container.api=svc
+    let mock = true;
+    route method="GET"  path="/items" status=200 body={"n": 3};
+    route method="POST" path="/items" status=201 body={"id": 9};
+    route method="GET"  path="/missing" status=404 body="no";
+.end/container.api
+
+message.layer("svc", {audit: true});
+
+// 1) get → message success
+let m = message.from_callapi(callApi("svc", "GET", "/items"), {api: "svc", method: "GET", path: "/items"});
+print is_message(m);
+print message_level(m);
+print message_meta(m).status;
+
+// 2) 404 → warning
+let m2 = message.from_callapi(callApi("svc", "GET", "/missing"), {api: "svc", method: "GET", path: "/missing"});
+print message_level(m2);
+print message_code(m2);
+
+// 3) layer_info
+let info = message.layer_info("svc");
+print info.name == "svc" || info["name"] == "svc";
+
+// 4) unwrap
+let u = message.unwrap(m);
+print u.status == 200 || u["status"] == 200;
