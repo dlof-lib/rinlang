@@ -86,3 +86,15 @@ print smoothedScores; // [41.6667, 43.3333, 53.6667, ...]
 - [`pipelines.md`](./pipelines.md) — عامل `|>` الذي يُبنى `reckon` فوقه.
 - [`MAKE_UNIT.md`](./MAKE_UNIT.md) — `@make.(name)` وسياسة القدرات.
 - [`variables.md`](./variables.md) — المصفوفات التي يعمل عليها `reckon`.
+
+## `reckon` في RinFlow
+عند التشغيل عبر RinFlow (انظر [`rinflow.md`](./rinflow.md)) يظهر كل `reckon` في الـ Flow Graph:
+`INPUT 'reckon <name>'`، ثم `FILTER 'where'` إن وُجد `where`، ثم عقدة لكل مرحلة `|>` — بقيم وأزمنة
+حقيقية، ومخرجات `print` مطابقة حرفيًا للتشغيل العادي.
+
+## `where` مع `=[×]=`
+اختبار الإيجابية ([`positive.md`](./positive.md)) يصلح شرطًا لـ `where` مباشرة، وينتهي عند `|>`:
+```kotlin
+reckon positives(values)
+    where item =[x]= |> sum();   // يحتفظ بالعناصر الموجبة فقط ثم يجمعها
+```
