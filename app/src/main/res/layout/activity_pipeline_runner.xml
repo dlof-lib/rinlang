@@ -89,17 +89,40 @@
                 android:textStyle="bold"
                 android:layout_marginBottom="6dp" />
 
-            <TextView
-                android:id="@+id/txtPipelineCode"
+            <!-- المصدر الآن قابل للتحرير: عدّل الكود ثم اضغط Run. التلوين يُطبَّق أثناء الكتابة. -->
+            <EditText
+                android:id="@+id/edtPipelineCode"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:minLines="5"
+                android:maxLines="18"
+                android:gravity="top|start"
                 android:fontFamily="monospace"
                 android:textSize="12sp"
                 android:padding="12dp"
                 android:background="@drawable/bg_pipeline_code_card"
                 android:elevation="1dp"
                 android:textColor="@color/pipeline_text_primary"
+                android:textColorHint="@color/pipeline_text_muted"
+                android:hint="@string/pipeline_source_hint"
+                android:inputType="textMultiLine|textNoSuggestions"
+                android:importantForAutofill="no"
+                android:scrollbars="vertical"
+                android:textDirection="ltr"
+                android:layoutDirection="ltr"
                 tools:text="@container.pipe=sales_pipeline" />
+
+            <!-- ما اكتشفه الماسح الساكن من مفاهيم الأنابيب في الكود (container.pipe / |> / reckon) -->
+            <TextView
+                android:id="@+id/txtPipelineDetected"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:fontFamily="monospace"
+                android:textSize="11sp"
+                android:textColor="@color/pipeline_text_muted"
+                android:visibility="gone"
+                tools:text="1 container.pipe · 1 chain · 1 reckon · 4 stages" />
 
             <!-- Flow terminal: نافذة طرفية داكنة (أسلوب جديد بالكامل) تعرض كل خطوة من
                  @container.pipe كسطر أمر/مخرجات ملوّن أحادي المسافة، بدل بطاقات CI/CD الأفقية
@@ -214,6 +237,17 @@
             </LinearLayout>
 
             <TextView
+                android:id="@+id/txtPipelineMetrics"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:textSize="12sp"
+                android:fontFamily="monospace"
+                android:textColor="@color/pipeline_text_primary"
+                android:visibility="gone"
+                tools:text="nodes 4 · passed 4 · failed 0" />
+
+            <TextView
                 android:id="@+id/txtPipelineDetails"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -223,7 +257,9 @@
                 android:textColor="@color/pipeline_text_muted"
                 android:visibility="gone" />
 
-            <!-- Controls -->
+            <!-- Controls. app:backgroundTint="@null": تحت ثيم Material يتحوّل Button إلى MaterialButton
+                 ويُلوَّن بـ colorPrimary (الأخضر) متجاهلاً android:background، فكانت أزرار Configure/Example
+                 خضراء بنصٍّ غير مقروء. إلغاء التلوين يُظهر خلفيات الـ drawable المقصودة. -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -239,7 +275,8 @@
                     android:text="@string/pipeline_action_run"
                     android:textAllCaps="false"
                     android:textColor="@android:color/white"
-                    android:background="@drawable/bg_pipeline_btn_primary" />
+                    android:background="@drawable/bg_pipeline_btn_primary"
+                    app:backgroundTint="@null" />
 
                 <Button
                     android:id="@+id/btnPipelineStop"
@@ -251,7 +288,39 @@
                     android:textAllCaps="false"
                     android:textColor="@color/pipeline_btn_outline_text"
                     android:background="@drawable/bg_pipeline_btn_outline"
+                    app:backgroundTint="@null"
                     android:enabled="false" />
+
+                <Button
+                    android:id="@+id/btnPipelineReplay"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/pipeline_action_replay"
+                    android:textAllCaps="false"
+                    android:textColor="@color/pipeline_btn_outline_text"
+                    android:background="@drawable/bg_pipeline_btn_outline"
+                    app:backgroundTint="@null"
+                    android:enabled="false" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginTop="8dp">
+
+                <Button
+                    android:id="@+id/btnPipelineLoadSample"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="8dp"
+                    android:text="@string/pipeline_action_load_sample"
+                    android:textAllCaps="false"
+                    android:textColor="@color/pipeline_green"
+                    android:background="@drawable/bg_pipeline_btn_outline"
+                    app:backgroundTint="@null" />
 
                 <Button
                     android:id="@+id/btnPipelineConfigure"
@@ -261,21 +330,9 @@
                     android:text="@string/pipeline_action_configure"
                     android:textAllCaps="false"
                     android:textColor="@color/pipeline_btn_outline_text"
-                    android:background="@drawable/bg_pipeline_btn_outline" />
+                    android:background="@drawable/bg_pipeline_btn_outline"
+                    app:backgroundTint="@null" />
             </LinearLayout>
-
-            <!-- يظهر فقط عندما لا يتم التعرّف على أي @container.pipe حقيقي في كود المستخدم؛
-                 لا يُستبدل كود المستخدم تلقائياً أبداً — هذا الزر هو الطريقة الوحيدة لتحميل المثال. -->
-            <Button
-                android:id="@+id/btnPipelineLoadSample"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="@string/pipeline_action_load_sample"
-                android:textAllCaps="false"
-                android:textColor="@color/pipeline_green"
-                android:background="@drawable/bg_pipeline_btn_outline"
-                android:visibility="gone" />
 
         </LinearLayout>
     </ScrollView>
