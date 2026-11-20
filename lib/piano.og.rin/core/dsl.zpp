@@ -23,7 +23,7 @@
 // ويمكن استعمال الدالة مباشرة:  let c = pn_dsl("x", مصدر);  أو  pn_dsl_load("a.piano").
 //
 // الأنواع: Rect RRect Circle Ellipse Line Polyline Polygon Path Text Image Ngon Star Slice Ring Arc Arrow Grid Wave Spiral Smooth Label
-//          Card Button Badge Avatar Progress Toggle Input Divider Icon Box Connect Elbow Mesh Bar LineChart Pie Radar Spark Gauge
+//          Card Button Badge Avatar Progress Toggle Input Divider Icon Box Connect Elbow Mesh Bar LineChart Pie Radar Spark Gauge Container
 //          Linear Radial Shadow Glow Blur   |  حاويات: Group At Repeat Each If Frame Phone Browser Pattern Clip Mask Fn
 // حركة: $fps => 30; $duration => 3; $loop => true;  ثم  $حركة.Frame { … }  (فيها $t $p $i $n وdوال ease tween fract pingpong lerp clamp)
 // قيم الهندسة: كلمات مفصولة بمسافات أو بفاصلة (, أو ،) — "10 20 30" = "10, 20, 30": رقم | $متغير | (تعبير) | 'نص' | كلمة. ما نقص يؤخذ من الكتلة بالاسم (x: 10;).
@@ -606,7 +606,7 @@ fun pn_d_sig(ty) {
         "Divider": ["x1", "y", "x2"], "Icon": ["name", "x", "y", "size"], "Box": ["x", "y", "w", "h", "label"],
         "Connect": ["x1", "y1", "x2", "y2"], "Elbow": ["x1", "y1", "x2", "y2"], "Mesh": ["w", "h"],
         "Bar": ["x", "y", "w", "h"], "LineChart": ["x", "y", "w", "h"], "Pie": ["cx", "cy", "r"], "Radar": ["cx", "cy", "r"],
-        "Spark": ["x", "y", "w", "h"], "Gauge": ["cx", "cy", "r", "value", "max"],
+        "Spark": ["x", "y", "w", "h"], "Gauge": ["cx", "cy", "r", "value", "max"], "Container": ["x", "y", "w", "name"],
         "At": ["x", "y"], "Phone": ["x", "y", "w", "h"], "Browser": ["x", "y", "w", "h", "url"], "Pattern": ["w", "h"],
         "Repeat": ["n"], "Each": ["items"], "If": ["cond"], "Clip": ["x", "y", "w", "h", "r"],
         "Linear": ["angle"], "Radial": ["cx", "cy", "r"], "Shadow": ["dx", "dy", "blur", "c", "op"], "Glow": ["r", "c"], "Blur": ["r"],
@@ -826,6 +826,7 @@ fun pn_d_make(st, ty, a, geom, o, p, line) {
     if (ty == "Radar") { pn_d_need(a, ["cx", "cy", "r"], ty, line); return pn_radar_chart(p, a["cx"], a["cy"], a["r"], pn_d_arg(o, "labels", []), pn_d_arg(o, "data", []), o); }
     if (ty == "Spark") { pn_d_need(a, ["x", "y", "w", "h"], ty, line); return pn_sparkline(p, a["x"], a["y"], a["w"], a["h"], pn_d_arg(o, "data", []), o); }
     if (ty == "Gauge") { pn_d_need(a, ["cx", "cy", "r", "value"], ty, line); return pn_gauge(p, a["cx"], a["cy"], a["r"], a["value"], pn_d_arg(a, "max", 100), o); }
+    if (ty == "Container") { pn_d_need(a, ["x", "y", "w", "name"], ty, line); return pn_container(p, a["x"], a["y"], a["w"], a["name"], o); }
     pn_d_err(line, "نوع غير معروف «" + ty + "»");
 }
 
