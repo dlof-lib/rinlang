@@ -24,6 +24,7 @@ private:
     char advance();
     char peek() const;
     char peekNext() const;
+    size_t positiveKeyLen() const;   // طول `[×]=` (أو `[x]=` `[X]=` `[*]=`) عند current، وإلا 0
     bool match(char expected);
     void addToken(TokenType type);
     void addToken(TokenType type, const std::string& lexeme);
