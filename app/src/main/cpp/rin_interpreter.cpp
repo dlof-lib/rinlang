@@ -618,6 +618,7 @@ static std::string tokenTypeName(TokenType t) {
         case TokenType::NOT_SAME: return "NOT_SAME";
         case TokenType::COPY_OF: return "COPY_OF";
         case TokenType::SAME_SHAPE: return "SAME_SHAPE";
+        case TokenType::POSITIVE: return "POSITIVE";
         case TokenType::LESS: return "LESS";
         case TokenType::LESS_EQUAL: return "LESS_EQUAL";
         case TokenType::GREATER: return "GREATER";
