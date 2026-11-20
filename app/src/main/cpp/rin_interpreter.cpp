@@ -66,6 +66,9 @@
 
 namespace rin {
 
+// main.lock (rin_lock.cpp): يخفي أي سرّ فُتح/خُتم من نص الطباعة (لا أثر إن لم تُفعَّل الخزنة)
+std::string lockRedact(const std::string& text);
+
 // يصلح اسماً لمتغير؟ (مفاتيح JSON المستوردة كوحدة بيانات)
 static bool jsonKeyIsIdentifier(const std::string& k) {
     if (k.empty() || std::isdigit(static_cast<unsigned char>(k[0]))) return false;
@@ -8001,6 +8004,7 @@ for(auto& kv:maskParents) if(maskResolve4(kv.second)==parent && !maskResolve4(kv
     registerNativesContainerBlend(); // container.blend/recipe/cook (rin_container_blend.cpp، docs/container_blend.md) // container.zip/unzip/pack + zip.* (rin_container_zip.cpp، docs/container_zip.md)
     registerNativesExtra12(); // fileSync/fileLock/fileRename/fileSize/findByRange (rin_extra_natives12.cpp، docs/FILEDB.md)
     registerNativesExtra11(); // مفهوم algo: algo* (rin_extra_natives11.cpp، docs/ALGO.md)
+    registerNativesLock(); // main.lock: خزنة الأسرار المشفّرة (rin_lock.cpp، docs/main-lock.md)
     registerNativesRintwist(); // RINTWIST: rintwist.get/fmt/stack (rin_rintwist.cpp، docs/rintwist.md)
     registerNativesLibDir(); // مكتبات Rin المقسَّمة: rinlib.* (rin_libdir.cpp، docs/split-libraries.md)
     registerNativesCapture(); // captureOutput/capture/indsin.run — التقاط ناتج الطباعة لجسر <<...>> (rin_expr_host.cpp، docs/indsin_bridge.md)
@@ -9718,7 +9722,7 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
             if (fv.type == Value::Type::STRING && !fv.str.empty()) content = "\x1b[" + fv.str + "m" + content + "\x1b[0m";
         }
         for (long long i = 0; i < times; i++) {
-            output << prefix << content << end;
+            output << prefix << lockRedact(content) << end;
         }
         return Flow::None;
     }
@@ -15367,6 +15371,7 @@ void Interpreter::dialogAction(const std::shared_ptr<LiveActionStmt>& s, const E
 #include "rin_container_app.cpp" // هوية التطبيق/الموقع: اسم/إصدار/أيقونات/وصف/SEO (docs/container_app.md)
 #include "rin_container_blend.cpp" // دمج الحاويات + الوصفات (docs/container_blend.md) // ضغط/فكّ ضغط الحاويات + zip.* (docs/container_zip.md)
 #include "rin_libdir.cpp" // مكتبات Rin المقسَّمة (docs/split-libraries.md)
+#include "rin_lock.cpp" // main.lock: خزنة الأسرار المشفّرة (docs/main-lock.md)
 #include "rin_rintwist.cpp" // RINTWIST: سياق التنفيذ (docs/rintwist.md)
 #include "rin_table.cpp" // توسعة الجدول: دوال اللغة الموجودة تفهم الجدول (انظر رأس الملف)
 #include "rin_conditions.cpp" // متغيّرات الشروط الموسّعة (docs/key_terms_and_builtins.md)
