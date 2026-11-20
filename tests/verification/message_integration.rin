@@ -1,0 +1,34 @@
+// message — تكامل مع throw / banner / emit (docs/message.md)
+
+// 1) throw message → catch كرسالة
+try {
+    throw msg! "فشل" code "E100" {step: 3};
+} catch (e) {
+    print is_message(e);
+    print message_code(e);
+    print message_body(e);
+    print message_meta(e).step;
+}
+
+// 2) as_error + throw
+let m = msg? "تحذير مهم" code "W5";
+try {
+    throw as_error(m);
+} catch (e) {
+    print message_level(e);
+    print message_code(e);
+}
+
+// 3) emit + messages (سجل)
+clear_messages();
+emit msg+ "بدأ";
+emit msg! "خطأ" code "E1";
+emit msg? "تحذير";
+let errs = messages(level: "error");
+print len(errs);
+print message_code(errs[0]);
+
+// 4) banner يقبل message (لا يرمي)
+banner(msg+ "تم");
+banner(msg! "فشل" code "E2");
+print "banner-ok";
