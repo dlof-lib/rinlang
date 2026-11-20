@@ -135,6 +135,8 @@ private:
     StmtPtr hashBanStatement();              // #ban x[, y]; | #ban x = expr;
     StmtPtr hashIgnoranceStatement();        // #ignorance { ... } | #ignorance stmt
     StmtPtr hashSwapStatement();             // #swap a, b;  |  #swap(a, b);   (nullptr إن كانت الصيغة الدالّية ذات 3 وسائط)
+    bool exprStmtStart = false; // يضبطها expressionStatement ليعرف assignment() أنه رأس عبارة (=[×]= إسناد مشروط)
+    ExprPtr positiveOperand(ExprPtr left, const Token& op); // =[×]= داخل equality: اختبار (postfix) أو مقارنة
     int noElseExpr = 0;       // >0: `a else b` معطّل (else تخصّ بنية أخرى: let/accept/if-expression)
     bool bareIfThen = false;  // الفرع الأول لـ if بلا أقواس: else التالية له لا لحلقة بداخله
     int tryElseSeq = 0;
