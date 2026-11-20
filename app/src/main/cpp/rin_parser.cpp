@@ -245,6 +245,63 @@ StmtPtr Parser::declaration() {
             return inner;
         }
     }
+    // مفهوم `from` مع `let`: تعريف أسماء محلية مصدرها ملف آخر، بلا كلمة import:
+    //   let a, b as c from "p";      -> import { a, b as c } from "p";
+    //   let { a, b as c } from "p";  -> (الأقواس اختيارية)
+    //   let * from "p";              -> @import "p";          (دمج كل المُصدَّر في النطاق الحالي)
+    //   let * as ns from "p";        -> import * as ns from "p";
+    // تُميَّز بالنظر للأمام: let ثم قائمة أسماء/`*`/`{}` ثم IDENT("from") ثم نص، قبل أي '=' أو ';'. وإلا فهي `let` عادية
+    // (فـ `let from = 5;` و`let x = 1;` لا يتأثران). تتحوّل لنفس عقد الاستيراد الموجودة فلا يتغيّر المُفسِّر/VM/rinc.
+    if (check(TokenType::LET)) {
+        size_t k = current + 1;
+        int depth = 0;
+        bool isFrom = false;
+        for (; k + 1 < tokens.size(); ++k) {
+            const Token& t = tokens[k];
+            if (t.type == TokenType::LBRACE) depth++;
+            else if (t.type == TokenType::RBRACE) depth--;
+            else if (t.type == TokenType::EQUAL || t.type == TokenType::SEMICOLON || t.type == TokenType::END_OF_FILE) break;
+            else if (depth == 0 && t.type == TokenType::IDENT && t.lexeme == "from" && k > current + 1 &&
+                     tokens[k + 1].type == TokenType::STRING) { isFrom = true; break; }
+            else if (!(t.type == TokenType::IDENT || t.type == TokenType::COMMA || t.type == TokenType::STAR) && depth == 0) break;
+        }
+        if (isFrom) {
+            Token kw = advance(); // 'let'
+            std::vector<std::string> names, aliases;
+            std::string nsAlias; bool star = false;
+            if (match({TokenType::STAR})) {
+                star = true;
+                if (check(TokenType::IDENT) && peek().lexeme == "as") {
+                    advance();
+                    nsAlias = consume(TokenType::IDENT, "Expected a namespace name after 'as'").lexeme;
+                }
+            } else {
+                const bool braced = match({TokenType::LBRACE});
+                do {
+                    if (braced && check(TokenType::RBRACE)) break; // فاصلة أخيرة مسموحة داخل الأقواس
+                    names.push_back(consume(TokenType::IDENT, "Expected a name to import").lexeme);
+                    if (check(TokenType::IDENT) && peek().lexeme == "as") {
+                        advance();
+                        aliases.push_back(consume(TokenType::IDENT, "Expected a local name after 'as'").lexeme);
+                    } else aliases.push_back("");
+                } while (match({TokenType::COMMA}));
+                if (braced) consume(TokenType::RBRACE, "Expected '}' after import list");
+            }
+            advance(); // 'from'
+            Token pathTok = consumeStaticText("Expected a string path after 'from'");
+            consume(TokenType::SEMICOLON, "Expected ';' after let ... from statement");
+            auto pathExpr = std::make_shared<LiteralExpr>();
+            pathExpr->kind = LiteralExpr::Kind::STRING; pathExpr->str = pathTok.lexeme; pathExpr->line = pathTok.line;
+            if (star) {
+                auto st = std::make_shared<ImportStmt>();
+                st->path = pathExpr; st->alias = nsAlias; st->line = kw.line;
+                return st;
+            }
+            auto st = std::make_shared<ImportSelectedStmt>();
+            st->names = std::move(names); st->aliases = std::move(aliases); st->path = pathExpr; st->line = kw.line;
+            return st;
+        }
+    }
     if (match({TokenType::LET})) return letDeclaration();
     if (match({TokenType::FUN})) return functionDeclaration();
     // OOP: 'class'/'struct'/'enum' كلمات سياقية غير محجوزة (بنفس أسلوب route/row/document/warp/
@@ -6371,7 +6428,8 @@ ExprPtr Parser::positiveOperand(ExprPtr left, const Token& op) {
     switch (peek().type) {
         case TokenType::SEMICOLON: case TokenType::RPAREN: case TokenType::RBRACE: case TokenType::RBRACKET:
         case TokenType::COMMA: case TokenType::COLON: case TokenType::QUESTION: case TokenType::AND: case TokenType::OR:
-        case TokenType::ELSE: case TokenType::END_OF_FILE: {
+        case TokenType::ELSE: case TokenType::END_OF_FILE:
+        case TokenType::PIPE: {   // `|>` : `reckon r(xs) where item =[x]= |> sum();` (RinFlow/reckon)
             auto c = std::make_shared<CallExpr>(); c->callee = "positive"; c->args = {left}; c->line = op.line; return c;
         }
         default: break;
