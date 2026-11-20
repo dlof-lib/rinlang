@@ -2,6 +2,11 @@
 
 > مجمَّع آلياً من ملفات `CHANGES_*.md` المتفرّقة (انظر `cleanup-project.yml`). أضف الجديد هنا مباشرةً.
 
+## positive — المعامل `=[×]=` (اختبار · مقارنة · إسناد ضربي مشروط)
+
+- `x =[×]=` اختبار موجب · `a =[×]= b` كلاهما موجب · `x =[×]= e;` يضرب فقط إن بقيت النتيجة موجبة. مفاتيح سهلة: `=[x]=` `=[X]=` `=[*]=`، ودالة `positive(...)`.
+- تفكيك في المحلل (بلا تعديل في المفسّر/RinVM): `rin_lexer` (توكن `POSITIVE`) · `rin_parser` (equality + assignment) · `rin_conditions.cpp` (`positive`). التوثيق: `docs/positive.md`، الاختبار: `tests/print/positive.rin`.
+
 ## container.app v2 — مصدر حقيقة واحد للهوية (لغات، حقن HTML، سجل إصدارات، `rin app`)
 
 - **لغات متعددة**: حقل `locales` (اسم/وصف/SEO/رابط لكل لغة) ← `lang` في `appInfo/Head/Manifest`؛ `hreflang` و`x-default` تُولَّدان تلقائياً من روابط اللغات؛ `appExport` يكتب `head.<lang>.html` و`manifest.<lang>.webmanifest`.
@@ -2376,8 +2381,3 @@ Official AGP compatibility: AGP 8.13 requires Gradle 8.13 and JDK 17.
 - مكوّنات جاهزة: TextField, TextAreaField, PasswordField, NumberField, EmailField, SearchField, PhoneField.
 - `rin_indsin_validate.h`، تنقية `set_input` حسب النوع/maxlength، تحقق تلقائي، `indsin.isNumber/fieldError`.
 - أندرويد: IndsinFabricView.drawField (كلمة المرور/prefix/suffix/التحقق) وحوار الإدخال حسب النوع.
-
-## `from` — تعريف أسماء من ملف بـ `let`
-- مفهوم جديد `let a, b as c from "path";` و`let { a, b } from "path";` و`let * from "path";` و`let * as ns from "path";`. يتحوّل في المحلِّل (`rin_parser.cpp`) إلى `ImportSelectedStmt`/`ImportStmt` الموجودتين، فلا تغيير في المُفسِّر أو VM أو rinc.
-- `let` العادية لا تتأثر (`let from = 5;` و`let x = 1;` و`let [a, b] = ...`): لا تُفسَّر كمفهوم إلا بوجود `from` ثم نص قبل أي `=`.
-- التوثيق: `docs/from.md`، الاختبار: `tests/modules/from_concept.rin` + `.expected`.
