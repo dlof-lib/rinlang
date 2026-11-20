@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="464" height="544" viewBox="0 0 464 544" font-family="Inter, 'Segoe UI', Tahoma, 'Noto Sans Arabic', Arial, sans-serif">
+  <title>بيانات الحاويات</title>
+  <defs>
+    <filter id="pn1" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5"/>
+      <feOffset dx="0" dy="6" result="o"/>
+      <feFlood flood-color="#000000" flood-opacity="0.3"/>
+      <feComposite in2="o" operator="in"/>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn2" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5"/>
+      <feOffset dx="0" dy="6" result="o"/>
+      <feFlood flood-color="#000000" flood-opacity="0.3"/>
+      <feComposite in2="o" operator="in"/>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pn3" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="5"/>
+      <feOffset dx="0" dy="6" result="o"/>
+      <feFlood flood-color="#000000" flood-opacity="0.3"/>
+      <feComposite in2="o" operator="in"/>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="100%" height="100%" fill="#0b1020"/>
+  <g>
+    <rect x="12" y="12" width="440" height="146" rx="14" fill="#181d2c" stroke="#1e293b" stroke-width="1" filter="url(#pn1)"/>
+    <rect x="12" y="26" width="4" height="24" rx="2" fill="#818cf8"/>
+    <text x="28" y="43" font-size="16" font-weight="700" fill="#e5e7eb">inventory</text>
+    <g>
+      <rect x="389.12" y="27.5" width="44.64" height="23" rx="11.5" fill="#818cf8" fill-opacity="0.161"/>
+      <text x="411.44" y="42.85" font-size="11" font-weight="600" text-anchor="middle" fill="#818cf8">data</text>
+    </g>
+    <line x1="28" y1="58" x2="436" y2="58" stroke="#1e293b" stroke-width="1"/>
+    <text x="28" y="81.68" font-size="13" font-weight="600" fill="#94a3b8">apples</text>
+    <text x="177.6" y="81.68" font-size="13" font-family="ui-monospace, Menlo, Consolas, monospace" fill="#e5e7eb">42</text>
+    <text x="436" y="81.68" font-size="10" text-anchor="end" fill="#22d3ee">number</text>
+    <text x="28" y="107.68" font-size="13" font-weight="600" fill="#94a3b8">owner</text>
+    <text x="177.6" y="107.68" font-size="13" font-family="ui-monospace, Menlo, Consolas, monospace" fill="#e5e7eb">متجر النور</text>
+    <text x="436" y="107.68" font-size="10" text-anchor="end" fill="#34d399">string</text>
+    <text x="28" y="133.68" font-size="13" font-weight="600" fill="#94a3b8">tags</text>
+    <text x="177.6" y="133.68" font-size="13" font-family="ui-monospace, Menlo, Consolas, monospace" fill="#e5e7eb">[&quot;fresh&quot;,&quot;local&quot;]</text>
+    <text x="436" y="133.68" font-size="10" text-anchor="end" fill="#a78bfa">array</text>
+  </g>
+  <g>
+    <rect x="12" y="172" width="440" height="172" rx="14" fill="#181d2c" stroke="#1e293b" stroke-width="1" filter="url(#pn2)"/>
+    <rect x="12" y="186" width="4" height="24" rx="2" fill="#818cf8"/>
+    <text x="28" y="203" font-size="16" font-weight="700" fill="#e5e7eb">app</text>
+    <g>
+      <rect x="382.4" y="187.5" width="50.8" height="23" rx="11.5" fill="#818cf8" fill-opacity="0.161"/>
+      <text x="407.8" y="202.85" font-size="11" font-weight="600" text-anchor="middle" fill="#818cf8">plain</text>
+    </g>
+    <line x1="28" y1="218" x2="436" y2="218" stroke="#1e293b" stroke-width="1"/>
+    <text x="28" y="241.68" font-size="13" font-weight="600" fill="#94a3b8">counter</text>
+    <text x="177.6" y="241.68" font-size="13" font-family="ui-monospace, Menlo, Consolas, monospace" fill="#e5e7eb">3</text>
+    <text x="436" y="241.68" font-size="10" text-anchor="end" fill="#22d3ee">number</text>
+    <text x="28" y="267.68" font-size="13" font-weight="600" fill="#94a3b8">title</text>
+    <text x="177.6" y="267.68" font-size="13" font-family="ui-monospace, Menlo, Consolas, monospace" fill="#e5e7eb">Rin</text>
+    <text x="436" y="267.68" font-size="10" text-anchor="end" fill="#34d399">string</text>
+    <text x="28" y="299.68" font-size="12" fill="#818cf8">ƒ  inc()</text>
+    <text x="28" y="325.68" font-size="12" fill="#94a3b8">⊂  settings</text>
+  </g>
+  <g>
+    <rect x="12" y="358" width="440" height="174" rx="14" fill="#181d2c" stroke="#1e293b" stroke-width="1" filter="url(#pn3)"/>
+    <rect x="12" y="372" width="4" height="24" rx="2" fill="#818cf8"/>
+    <text x="28" y="389" font-size="16" font-weight="700" fill="#e5e7eb">scores</text>
+    <g>
+      <rect x="382.4" y="373.5" width="50.8" height="23" rx="11.5" fill="#818cf8" fill-opacity="0.161"/>
+      <text x="407.8" y="388.85" font-size="11" font-weight="600" text-anchor="middle" fill="#818cf8">table</text>
+    </g>
+    <line x1="28" y1="404" x2="436" y2="404" stroke="#1e293b" stroke-width="1"/>
+    <rect x="22" y="413" width="420" height="24" rx="6" fill="#818cf8" fill-opacity="0.141"/>
+    <text x="28" y="427.68" font-size="13" font-weight="700" fill="#e5e7eb">name</text>
+    <text x="232" y="427.68" font-size="13" font-weight="700" fill="#e5e7eb">score</text>
+    <text x="28" y="453.68" font-size="13" fill="#e5e7eb">sara</text>
+    <text x="232" y="453.68" font-size="13" fill="#e5e7eb">95</text>
+    <rect x="22" y="465" width="420" height="24" rx="6" fill="#e5e7eb" fill-opacity="0.051"/>
+    <text x="28" y="479.68" font-size="13" fill="#e5e7eb">يوسف</text>
+    <text x="232" y="479.68" font-size="13" fill="#e5e7eb">88</text>
+    <text x="28" y="505.68" font-size="13" fill="#e5e7eb">lina</text>
+    <text x="232" y="505.68" font-size="13" fill="#e5e7eb">71</text>
+  </g>
+</svg>
