@@ -1,0 +1,57 @@
+📥 @import: تم استيراد "lib/piano.og.rin" (مكتبة: piano 1.0.0 — 13 أجزاء)
+🗂️ container.data = inv
+✅ .end/container.data (inv)
+📦 container = app
+📦 container = inner
+✅ .end/container (inner)
+✅ .end/container (app)
+📊 container.table = scores
+▦ row -> ["name", "score"]
+▦ row -> ["sara", 95]
+▦ row -> ["yusuf", 88]
+▦ row -> ["lina", 71]
+✅ .end/container.table (scores)
+🧾 container.doc = docs
+✅ .end/container.doc (docs)
+container.data 3 apples number
+["inc"] ["inner"] 2
+["name", "score"] 3 3
+1
+1 2
++----------------------------+
+| inv  [data]                |
++----------------------------+
+| apples : 5          number |
+| name   : المتجر     string |
+| tags   : ["a","b"]  array  |
++----------------------------+
++-----------------+
+| scores  [table] |
++-----------------+
+| name  | score   |
++-----------------+
+| sara  | 95      |
+| yusuf | 88      |
+| … +1 rows       |
++-----------------+
++----------------------------+
+| docs  [doc]                |
++----------------------------+
+| #1  {"name":"ali","age":3} |
++----------------------------+
++-------------------------+
+| app  [plain]            |
++-------------------------+
+| counter : 3      number |
+| title   : Rin    string |
+| fn: inc()               |
+| ⊂ inner                 |
++-------------------------+
+true
+444 true
+true true true true
+true
+true
+data:image/svg+xml;base64,
+true true true
+err
