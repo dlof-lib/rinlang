@@ -48,7 +48,7 @@
 | `<Theme#Brand primary=#… active />` | `@theme=Brand …; .end/theme` |
 | `<Tokens brand=#6C5CE7 />` | `let brand = "#6C5CE7";` — ثوابت تصميم |
 | `<Style#card radius=16 />` + `class="card"` | أنماط مسمّاة قابلة للوراثة (`extends=`) |
-| `<Hero>` `<Stat>` `<Chip>` `<Alert>` `<Section>` `<ListTile>` `<Toggle>` `<EmptyState>` | مكوّنات جاهزة تتوسّع وقت الترجمة (انظر [indsin_design_freedom.md](indsin_design_freedom.md) §8) |
+| `<ContainerView>` — بيانات container حيّة (انظر §ContainerView أسفل) · `<Hero>` `<Stat>` `<Chip>` `<Alert>` `<Section>` `<ListTile>` `<Toggle>` `<EmptyState>` | مكوّنات جاهزة تتوسّع وقت الترجمة (انظر [indsin_design_freedom.md](indsin_design_freedom.md) §8) |
 | `<!-- تعليق -->` | `// تعليق` |
 
 ## قيم السمات
@@ -141,3 +141,20 @@ g++ -std=c++17 -I app/src/main/cpp tests/indsin_tags/tags_test.cpp -o /tmp/tags_
 
 التحويل: `python3 tools/view2tags.py file.rin -o file.rin` · للتحقق من تطابق الرسم مع الأصل: `INDSIN_DUMP=<أداة dump> python3 tools/view2tags.py --verify file.rin`.
 حاويات البيانات (`@container.api/.doc/…`) وصيغة الأقواس `{ … };` تبقى كوداً خاماً/ترفض بأمان بدل تحويل خاطئ.
+
+## ContainerView — عرض بيانات الـ container
+```rin
+<warp n={0} />
+<Rin>
+@container.data=inv  let apples = 5;  .end/container.data
+fun bump() { container.set("inv", "apples", container.get("inv", "apples") + 1); n = n + 1; }
+</Rin>
+<ContainerView name="inv" tick={n} />
+<Button onTap={bump()}>+1</Button>
+```
+بطاقة (Card) فيها اسم الحاوية ونوعها وبياناتها: الحقول مرتّبة أبجدياً (الدوال مخفية)، وللجدول صفوفه، ولـ `container.doc/datalist` مستنداته (`#id {json}`).
+* `name` اسم الحاوية · `tint` لون النوع (افتراضي `primary`) · `tick` خلية تُعاد قراءة البيانات عند تغيّرها (النتيجة مخزَّنة بمفتاح الوسائط كأي `indsin.run`، فغيّر `tick` بعد كل تعديل).
+* يتوسّع وقت الترجمة إلى `Card/Row/Text` + دالتين `containerKind`/`containerBody` تُحقَنان فقط عند الاستعمال (الأسطر محفوظة)، فيعمل في كل المضيفين.
+* للرسم المتجهي الأغنى (SVG) استعمل piano: `pn_container_uri(...)` — انظر [PIANO.md](PIANO.md). المثال: `examples/indsin_container_view.rin`، والاختبار: `tests/indsin_tags/tags_test.cpp`.
+* **الويب:** `indsin2web` لا يشغّل Rin ولا يقرأ الحاويات، فـ`<ContainerView>` يعمل في المحرّك الأصلي (أندرويد/سطح المكتب/CLI/المعاينة الحيّة) فقط. لصفحة ويب استعمل صورة piano: `<Image src={pn_container_uri("inv", 320, "dark", {})} />` ثم اخبز الصفحة بـ`tools/piano_indsin_bake.py` (جُرّب على `examples/piano/16_indsin_container.rin`).
+
