@@ -30,6 +30,7 @@
     "core/indsin.zpp",
     "core/dsl.zpp",
     "core/film.zpp",
-    "core/app.zpp"
+    "core/app.zpp",
+    "core/container.zpp"
   ]
 }
