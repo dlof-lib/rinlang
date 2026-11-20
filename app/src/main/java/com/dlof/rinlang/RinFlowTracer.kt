@@ -130,7 +130,8 @@ object RinFlowTracer {
      * concept (table, data, api, group, volume, section, translations) RinFlow can also trace.
      */
     fun looksTraceable(source: String): Boolean =
-        PipelineTracer.containsPipeline(source) || containerOpenRegex.containsMatchIn(source)
+        PipelineTracer.containsPipeline(source) || RinPipeScanner.hasPipes(source) ||
+            containerOpenRegex.containsMatchIn(source)
 
     // ---- real RinFlow engine path (section 15): bare `data |> step() |> step();`, with or
     // without an enclosing @container, executed once through the real native Flow Graph engine
