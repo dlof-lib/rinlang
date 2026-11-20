@@ -1,0 +1,17 @@
+// main.lock — خزنة الأسرار المشفّرة (docs/main-lock.md)
+main.lock(1, "test-passphrase");
+let <<main.lock["API_KEY"]>> = "sk-live-ABC123456";
+let < < main.lock [ "DB_PASS" ] > > = "hunter2-hunter2";
+let key = <<main.lock["API_KEY"]>>;
+print len(key);
+print "leak:", key;
+print main.lock.mask("Bearer " + key);
+print <<main.lock[]>>;
+print main.lock.has("API_KEY"), main.lock.has("NOPE");
+print main.lock.get("NOPE", "fallback");
+let tok = main.lock.seal("refresh-token-xyz");
+print main.lock.open(tok);
+print main.lock.remove("DB_PASS");
+print main.lock.names();
+main.lock.reset();
+print main.lock.status().armed;
