@@ -159,3 +159,8 @@ rin_indsin_preview file.rin --width 390 --png out.png --html out.html --tap 60,1
 | `indsin test` | اختبارات المترجم | `tests/indsin2web/` |
 
 الاسم الوحيد للمحرّك والماركة هو **Indsin**؛ لم يبقَ "Loom" إلا في جدول إعادة التسمية أعلاه وسكربت تنظيف CI (`delete_loom.sh`).
+
+---
+## عرض بيانات الـ container (جديد)
+`<ContainerView name="inv" tick={n} />` يرسم بطاقة حيّة ببيانات أي container (حقول/جدول/مستندات)، وpiano يرسمها SVG ويطبعها نصّاً
+(`pn_container_scene` / `pn_container_print`). راجع [docs/indsin_tags.md](docs/indsin_tags.md) (§ContainerView) و[docs/PIANO.md](docs/PIANO.md) والمثال `examples/indsin_container_view.rin`.
