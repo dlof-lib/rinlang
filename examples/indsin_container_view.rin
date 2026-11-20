@@ -1,0 +1,19 @@
+<!-- ContainerView: بطاقة تعرض بيانات container حيّة داخل indsin. tick={n} خلية تُغيَّر بعد أي تعديل ليُعاد الرسم.
+     rin indsin examples/indsin_container_view.rin -->
+<warp n={0} />
+<Rin>
+@container.data=inv
+    let apples = 5;
+    let name = "المتجر";
+.end/container.data
+@container.table=scores
+    row cells=["name", "score"];
+    row cells=["sara", 95];
+.end/container.table
+fun bump() { container.set("inv", "apples", container.get("inv", "apples") + 1); n = n + 1; }
+</Rin>
+<Column#root padding=16 gap=12>
+  <ContainerView name="inv" tick={n} />
+  <ContainerView name="scores" tick={n} />
+  <Button#b onTap={bump()}>+1</Button>
+</Column>
