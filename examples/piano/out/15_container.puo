@@ -1,0 +1,478 @@
+{
+  "piano": 1,
+  "w": 464,
+  "h": 544,
+  "title": "بيانات الحاويات",
+  "bg": "#0b1020",
+  "font": "Inter, 'Segoe UI', Tahoma, 'Noto Sans Arabic', Arial, sans-serif",
+  "defs": [
+    {
+      "t": "shadow",
+      "id": "pn1",
+      "dx": 0,
+      "dy": 6,
+      "blur": 10,
+      "c": "#000000",
+      "op": 0.3
+    },
+    {
+      "t": "shadow",
+      "id": "pn2",
+      "dx": 0,
+      "dy": 6,
+      "blur": 10,
+      "c": "#000000",
+      "op": 0.3
+    },
+    {
+      "t": "shadow",
+      "id": "pn3",
+      "dx": 0,
+      "dy": 6,
+      "blur": 10,
+      "c": "#000000",
+      "op": 0.3
+    }
+  ],
+  "nodes": [
+    {
+      "t": "g",
+      "nodes": [
+        {
+          "t": "rect",
+          "x": 12,
+          "y": 12,
+          "w": 440,
+          "h": 146,
+          "rx": 14,
+          "fill": "#181d2c",
+          "stroke": "#1e293b",
+          "sw": 1,
+          "filter": "@pn1"
+        },
+        {
+          "t": "rect",
+          "x": 12,
+          "y": 26,
+          "w": 4,
+          "h": 24,
+          "rx": 2,
+          "fill": "#818cf8"
+        },
+        {
+          "t": "text",
+          "x": 28,
+          "y": 43,
+          "text": "inventory",
+          "size": 16,
+          "weight": 700,
+          "fill": "#e5e7eb"
+        },
+        {
+          "t": "g",
+          "nodes": [
+            {
+              "t": "rect",
+              "x": 389.12,
+              "y": 27.5,
+              "w": 44.64,
+              "h": 23,
+              "rx": 11.5,
+              "fill": "#818cf829"
+            },
+            {
+              "t": "text",
+              "x": 411.44,
+              "y": 42.85,
+              "text": "data",
+              "size": 11,
+              "anchor": "middle",
+              "weight": 600,
+              "fill": "#818cf8"
+            }
+          ]
+        },
+        {
+          "t": "line",
+          "x1": 28,
+          "y1": 58,
+          "x2": 436,
+          "y2": 58,
+          "stroke": "#1e293b",
+          "sw": 1
+        },
+        {
+          "t": "text",
+          "x": 28,
+          "y": 81.68,
+          "text": "apples",
+          "size": 13,
+          "weight": 600,
+          "fill": "#94a3b8"
+        },
+        {
+          "t": "text",
+          "x": 177.6,
+          "y": 81.68,
+          "text": "42",
+          "size": 13,
+          "family": "ui-monospace, Menlo, Consolas, monospace",
+          "fill": "#e5e7eb"
+        },
+        {
+          "t": "text",
+          "x": 436,
+          "y": 81.68,
+          "text": "number",
+          "size": 10,
+          "anchor": "end",
+          "fill": "#22d3ee"
+        },
+        {
+          "t": "text",
+          "x": 28,
+          "y": 107.68,
+          "text": "owner",
+          "size": 13,
+          "weight": 600,
+          "fill": "#94a3b8"
+        },
+        {
+          "t": "text",
+          "x": 177.6,
+          "y": 107.68,
+          "text": "متجر النور",
+          "size": 13,
+          "family": "ui-monospace, Menlo, Consolas, monospace",
+          "fill": "#e5e7eb"
+        },
+        {
+          "t": "text",
+          "x": 436,
+          "y": 107.68,
+          "text": "string",
+          "size": 10,
+          "anchor": "end",
+          "fill": "#34d399"
+        },
+        {
+          "t": "text",
+          "x": 28,
+          "y": 133.68,
+          "text": "tags",
+          "size": 13,
+          "weight": 600,
+          "fill": "#94a3b8"
+        },
+        {
+          "t": "text",
+          "x": 177.6,
+          "y": 133.68,
+          "text": "[\"fresh\",\"local\"]",
+          "size": 13,
+          "family": "ui-monospace, Menlo, Consolas, monospace",
+          "fill": "#e5e7eb"
+        },
+        {
+          "t": "text",
+          "x": 436,
+          "y": 133.68,
+          "text": "array",
+          "size": 10,
+          "anchor": "end",
+          "fill": "#a78bfa"
+        }
+      ]
+    },
+    {
+      "t": "g",
+      "nodes": [
+        {
+          "t": "rect",
+          "x": 12,
+          "y": 172,
+          "w": 440,
+          "h": 172,
+          "rx": 14,
+          "fill": "#181d2c",
+          "stroke": "#1e293b",
+          "sw": 1,
+          "filter": "@pn2"
+        },
+        {
+          "t": "rect",
+          "x": 12,
+          "y": 186,
+          "w": 4,
+          "h": 24,
+          "rx": 2,
+          "fill": "#818cf8"
+        },
+        {
+          "t": "text",
+          "x": 28,
+          "y": 203,
+          "text": "app",
+          "size": 16,
+          "weight": 700,
+          "fill": "#e5e7eb"
+        },
+        {
+          "t": "g",
+          "nodes": [
+            {
+              "t": "rect",
+              "x": 382.4,
+              "y": 187.5,
+              "w": 50.8,
+              "h": 23,
+              "rx": 11.5,
+              "fill": "#818cf829"
+            },
+            {
+              "t": "text",
+              "x": 407.8,
+              "y": 202.85,
+              "text": "plain",
+              "size": 11,
+              "anchor": "middle",
+              "weight": 600,
+              "fill": "#818cf8"
+            }
+          ]
+        },
+        {
+          "t": "line",
+          "x1": 28,
+          "y1": 218,
+          "x2": 436,
+          "y2": 218,
+          "stroke": "#1e293b",
+          "sw": 1
+        },
+        {
+          "t": "text",
+          "x": 28,
+          "y": 241.68,
+          "text": "counter",
+          "size": 13,
+          "weight": 600,
+          "fill": "#94a3b8"
+        },
+        {
+          "t": "text",
+          "x": 177.6,
+          "y": 241.68,
+          "text": "3",
+          "size": 13,
+          "family": "ui-monospace, Menlo, Consolas, monospace",
+          "fill": "#e5e7eb"
+        },
+        {
+          "t": "text",
+          "x": 436,
+          "y": 241.68,
+          "text": "number",
+          "size": 10,
+          "anchor": "end",
+          "fill": "#22d3ee"
+        },
+        {
+          "t": "text",
+          "x": 28,
+          "y": 267.68,
+          "text": "title",
+          "size": 13,
+          "weight": 600,
+          "fill": "#94a3b8"
+        },
+        {
+          "t": "text",
+          "x": 177.6,
+          "y": 267.68,
+          "text": "Rin",
+          "size": 13,
+          "family": "ui-monospace, Menlo, Consolas, monospace",
+          "fill": "#e5e7eb"
+        },
+        {
+          "t": "text",
+          "x": 436,
+          "y": 267.68,
+          "text": "string",
+          "size": 10,
+          "anchor": "end",
+          "fill": "#34d399"
+        },
+        {
+          "t": "text",
+          "x": 28,
+          "y": 299.68,
+          "text": "ƒ  inc()",
+          "size": 12,
+          "fill": "#818cf8"
+        },
+        {
+          "t": "text",
+          "x": 28,
+          "y": 325.68,
+          "text": "⊂  settings",
+          "size": 12,
+          "fill": "#94a3b8"
+        }
+      ]
+    },
+    {
+      "t": "g",
+      "nodes": [
+        {
+          "t": "rect",
+          "x": 12,
+          "y": 358,
+          "w": 440,
+          "h": 174,
+          "rx": 14,
+          "fill": "#181d2c",
+          "stroke": "#1e293b",
+          "sw": 1,
+          "filter": "@pn3"
+        },
+        {
+          "t": "rect",
+          "x": 12,
+          "y": 372,
+          "w": 4,
+          "h": 24,
+          "rx": 2,
+          "fill": "#818cf8"
+        },
+        {
+          "t": "text",
+          "x": 28,
+          "y": 389,
+          "text": "scores",
+          "size": 16,
+          "weight": 700,
+          "fill": "#e5e7eb"
+        },
+        {
+          "t": "g",
+          "nodes": [
+            {
+              "t": "rect",
+              "x": 382.4,
+              "y": 373.5,
+              "w": 50.8,
+              "h": 23,
+              "rx": 11.5,
+              "fill": "#818cf829"
+            },
+            {
+              "t": "text",
+              "x": 407.8,
+              "y": 388.85,
+              "text": "table",
+              "size": 11,
+              "anchor": "middle",
+              "weight": 600,
+              "fill": "#818cf8"
+            }
+          ]
+        },
+        {
+          "t": "line",
+          "x1": 28,
+          "y1": 404,
+          "x2": 436,
+          "y2": 404,
+          "stroke": "#1e293b",
+          "sw": 1
+        },
+        {
+          "t": "rect",
+          "x": 22,
+          "y": 413,
+          "w": 420,
+          "h": 24,
+          "rx": 6,
+          "fill": "#818cf824"
+        },
+        {
+          "t": "text",
+          "x": 28,
+          "y": 427.68,
+          "text": "name",
+          "size": 13,
+          "weight": 700,
+          "fill": "#e5e7eb"
+        },
+        {
+          "t": "text",
+          "x": 232,
+          "y": 427.68,
+          "text": "score",
+          "size": 13,
+          "weight": 700,
+          "fill": "#e5e7eb"
+        },
+        {
+          "t": "text",
+          "x": 28,
+          "y": 453.68,
+          "text": "sara",
+          "size": 13,
+          "fill": "#e5e7eb"
+        },
+        {
+          "t": "text",
+          "x": 232,
+          "y": 453.68,
+          "text": "95",
+          "size": 13,
+          "fill": "#e5e7eb"
+        },
+        {
+          "t": "rect",
+          "x": 22,
+          "y": 465,
+          "w": 420,
+          "h": 24,
+          "rx": 6,
+          "fill": "#e5e7eb0d"
+        },
+        {
+          "t": "text",
+          "x": 28,
+          "y": 479.68,
+          "text": "يوسف",
+          "size": 13,
+          "fill": "#e5e7eb"
+        },
+        {
+          "t": "text",
+          "x": 232,
+          "y": 479.68,
+          "text": "88",
+          "size": 13,
+          "fill": "#e5e7eb"
+        },
+        {
+          "t": "text",
+          "x": 28,
+          "y": 505.68,
+          "text": "lina",
+          "size": 13,
+          "fill": "#e5e7eb"
+        },
+        {
+          "t": "text",
+          "x": 232,
+          "y": 505.68,
+          "text": "71",
+          "size": 13,
+          "fill": "#e5e7eb"
+        }
+      ]
+    }
+  ]
+}
