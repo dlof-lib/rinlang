@@ -1,0 +1,28 @@
+// تدقيق الصلاحيات — أساسيات (docs/permission-audit.md)
+
+audit_on();
+audit_level("detailed");
+audit_clear();
+
+let t = token("user:7", ["read", "write"], {ttl: 3600});
+
+// 1) فحص ناجح
+print audit_check(t, "read");
+print audit_last().result;
+
+// 2) فحص فاشل (بدون رمي)
+print audit_check(t, "admin");
+print audit_last().result;
+print audit_last().scope;
+
+// 3) عدّ
+print audit_count();
+print audit_count({result: "deny"});
+
+// 4) ملخص
+let s = audit_summary();
+print s.total >= 2;
+print s.deny >= 1;
+
+// 5) is_audit
+print is_audit(audit_last());
