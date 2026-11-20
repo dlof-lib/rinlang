@@ -568,7 +568,7 @@
         },
         {
           "name": "keyword.operator.comparison.rin",
-          "match": "(<!=g=\\?>|=::=|=/=|=/(?![/*])|/=|==|!=|<=|>=|<|>)"
+          "match": "(<!=g=\\?>|=\\[[×xX*]\\]=|=::=|=/=|=/(?![/*])|/=|==|!=|<=|>=|<|>)"
         },
         {
           "name": "keyword.operator.assignment.rin",
