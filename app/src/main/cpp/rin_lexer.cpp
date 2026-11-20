@@ -250,6 +250,16 @@ char Lexer::advance() { return src[current++]; }
 
 char Lexer::peek() const { return isAtEnd() ? '\0' : src[current]; }
 
+size_t Lexer::positiveKeyLen() const {
+    // current يشير إلى '[' بعد '='. المفتاح الأساسي × (UTF-8: C3 97)، والمفاتيح السهلة x X *.
+    static const char* keys[] = {"[\xC3\x97]=", "[x]=", "[X]=", "[*]="};
+    for (const char* k : keys) {
+        size_t n = std::char_traits<char>::length(k);
+        if (current + n <= src.size() && src.compare(current, n, k) == 0) return n;
+    }
+    return 0;
+}
+
 char Lexer::peekNext() const {
     return (current + 1 >= src.size()) ? '\0' : src[current + 1];
 }
@@ -782,6 +792,9 @@ void Lexer::scanToken() {
             if (match('=')) {
                 if (peek() == '>') { advance(); addToken(TokenType::ARROW_R); break; } // `==>`  (كانت `== >` خطأ بناء)
                 addToken(TokenType::EQUAL_EQUAL);
+            } else if (peek() == '[' && positiveKeyLen() > 0) {
+                for (size_t k = positiveKeyLen(); k > 0; --k) advance();
+                addToken(TokenType::POSITIVE);   // =[×]=  (مفتاح سهل: =[x]= =[X]= =[*]=)
             } else if (peek() == ':' && peekNext() == ':' && (current + 2 < src.size() && src[current + 2] == '=')) {
                 advance(); advance(); advance();
                 addToken(TokenType::SAME_SHAPE); // =::=  (نفس الشكل)
