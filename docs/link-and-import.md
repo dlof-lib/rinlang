@@ -93,6 +93,7 @@ print Probe.size;        // 500 — الوصول المؤهَّل يرى الأ�
 | `import { a, b } from "path";` | انتقائي — يشترط `export` على كل اسم |
 | `import { a as x, b } from "path";` | **جديد:** إعادة تسمية محلية لتفادي التعارض |
 | `import * as ns from "path";` | **جديد:** مكافئ `@import "path" as ns;` بصياغة وحدات |
+| `let a, b as c from "path";` | **جديد:** مفهوم `from` مع `let` (انظر `docs/from.md`) |
 
 ```kotlin
 // util.rin
