@@ -9947,6 +9947,92 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
             throw diagErr(diag::Code::E0004_InvalidType, s->line,
                 "`reckon " + s->name + "` expects an array/collection, but got a " + collVal.typeName());
         }
+        // RinFlow: مع جلسة Flow نشطة فعلاً يُنفَّذ reckon عبر نفس محرّك الـ Flow Graph الذي تمرّ به سلاسل `|>`
+        // العادية (INPUT ثم FILTER لِـ `where` ثم عقدة لكل مرحلة)، فيظهر في RinFlow بقيمه وأزمنته الحقيقية.
+        // بلا جلسة نشطة (run() العادي) هذا الفرع لا يُؤخَذ أبداً والسلوك أدناه كما كان بالضبط.
+        if (activeFlowSession_) {
+            auto& session = *activeFlowSession_;
+            auto tracer = session.tracer;
+            const auto& opts = activeFlowOptions_;
+            if (session.isCancelled() || session.isTimedOut()) {
+                env->define(s->name, Value::nil());
+                return Flow::None;
+            }
+            auto nodeErr = [&](RinError& e) {
+                flow::NodeError nerr;
+                nerr.line = e.line;
+                nerr.message = e.message;
+                nerr.code = e.diagnostic ? ("RIN-F-" + diag::codeString(e.diagnostic->code)) : "RIN-F2000";
+                return nerr;
+            };
+            auto skipRest = [&](size_t from) {
+                for (size_t j = from; j < s->stages.size(); ++j) {
+                    int skipId = tracer->queueNode(inferFlowNodeType(s->stages[j]->callee), s->stages[j]->callee, s->stages[j]->line);
+                    tracer->skipNode(skipId);
+                }
+            };
+
+            // INPUT: اسمه "reckon <name>" كي تعرض الواجهة أي reckon هو بالضبط (حقيقي من المحرّك، لا تخمين).
+            int inputId = tracer->queueNode(flow::NodeType::INPUT, "reckon " + s->name, s->line);
+            tracer->startNode(inputId);
+            tracer->recordOutput(inputId, collVal, opts.maxPreviewChars, opts.maxRecordsPreview);
+            tracer->finishNode(inputId);
+
+            Value current = collVal;
+            if (s->whereCond) {
+                int whereId = tracer->queueNode(flow::NodeType::FILTER, "where", s->whereCond->line ? s->whereCond->line : s->line);
+                tracer->startNode(whereId);
+                tracer->recordInput(whereId, collVal, opts.maxPreviewChars, opts.maxRecordsPreview);
+                try {
+                    auto filtered = std::make_shared<ArrayData>();
+                    auto itemEnv = std::make_shared<Environment>(env);
+                    for (auto& elem : *collVal.array) {
+                        itemEnv->define("item", elem);
+                        Value cond = evaluate(s->whereCond, itemEnv);
+                        if (cond.isTruthy()) filtered->push_back(elem);
+                    }
+                    current = Value::makeArray(filtered);
+                } catch (RinError& e) {
+                    tracer->failNode(whereId, nodeErr(e));
+                    skipRest(0);
+                    throw;
+                }
+                tracer->recordOutput(whereId, current, opts.maxPreviewChars, opts.maxRecordsPreview);
+                tracer->finishNode(whereId);
+            }
+
+            for (size_t i = 0; i < s->stages.size(); ++i) {
+                auto& stage = s->stages[i];
+                flow::NodeType type = inferFlowNodeType(stage->callee);
+                if (i + 1 == s->stages.size() && type == flow::NodeType::CUSTOM) type = flow::NodeType::OUTPUT;
+                if (session.isCancelled() || session.isTimedOut()) {
+                    int nid = tracer->queueNode(type, stage->callee, stage->line);
+                    if (session.isCancelled()) tracer->cancelNode(nid); else tracer->timeoutNode(nid);
+                    skipRest(i + 1);
+                    env->define(s->name, Value::nil());
+                    return Flow::None;
+                }
+                int nodeId = tracer->queueNode(type, stage->callee, stage->line);
+                tracer->startNode(nodeId);
+                tracer->recordInput(nodeId, current, opts.maxPreviewChars, opts.maxRecordsPreview);
+                std::vector<Value> args;
+                args.reserve(stage->args.size() + 1);
+                args.push_back(current);
+                try {
+                    for (auto& a : stage->args) args.push_back(evaluate(a, env));
+                    current = invokeCallee(stage->callee, args, stage->line, env);
+                } catch (RinError& e) {
+                    tracer->failNode(nodeId, nodeErr(e));
+                    skipRest(i + 1);
+                    throw;
+                }
+                tracer->recordOutput(nodeId, current, opts.maxPreviewChars, opts.maxRecordsPreview);
+                tracer->finishNode(nodeId);
+            }
+            env->define(s->name, current);
+            return Flow::None;
+        }
+
         Value current;
         if (s->whereCond) {
             auto filtered = std::make_shared<ArrayData>();
