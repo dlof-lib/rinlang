@@ -1,0 +1,44 @@
+// message — النظام الموحّد (docs/message.md)
+
+// ── 1. البناء الأساسي ──────────────────────────────
+let m1 = message("hello");
+print is_message(m1);
+print message_level(m1);
+print message_body(m1);
+print message_code(m1) == nil;
+
+// ── 2. مستوى + meta + code ─────────────────────────
+let m2 = message("error", "fail", {code: 7}, "E7");
+print message_level(m2);
+print message_body(m2);
+print message_meta(m2).code;
+print message_code(m2);
+
+// ── 3. الاختصارات السياقية ─────────────────────────
+print message_level(msg "info text");
+print message_level(msg! "err");
+print message_level(msg? "warn");
+print message_level(msg+ "ok");
+print message_level(msg# "dbg");
+
+// ── 4. اختصار + meta + code ────────────────────────
+let m3 = msg! "boom" {x: 1} code "E99";
+print message_level(m3);
+print message_meta(m3).x;
+print message_code(m3);
+
+// ── 5. قالب بسيط ───────────────────────────────────
+let m4 = message("مرحباً {name} رصيدك {n}", {name: "رين", n: 10});
+print message_body(m4);
+
+// ── 6. التحويل من/إلى خطأ ──────────────────────────
+print is_message(as_message("نص عادي"));
+print message_body(as_message("نص عادي"));
+
+// ── 7. rank ────────────────────────────────────────
+print message_rank(msg# "d") < message_rank(msg! "e");
+
+// ── 8. is_message على قيم عادية ─────────────────────
+print is_message(42);
+print is_message("no");
+print is_message({kind: "message", level: "info", body: "yes"});
