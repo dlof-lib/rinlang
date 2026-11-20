@@ -40,6 +40,34 @@ metrics: total=4 ok=4 failed=0
 نفسها (مطابقة بأسماء معروفة مثل `filter`/`map`/`sum`/`mean`) لأغراض العرض فقط —
 لا يغيّر التنفيذ الفعلي بأي شكل؛ دالة باسم غير معروف تُصنَّف `CUSTOM`.
 
+## مفاهيم الأنابيب التي يغطيها RinFlow
+كل ما يلي يمرّ عبر نفس الـ Flow Graph (عقدة `INPUT` ثم عقدة لكل مرحلة)، بلا تعديل أي كود `.rin`:
+
+| المفهوم | كيف يظهر في الرسم البياني |
+|---|---|
+| `a \|> f() \|> g();` (مجرَّدة أو داخل `@container.pipe`) | `INPUT 'input'` ثم عقدة لكل مرحلة (نوعها من اسم الدالة). |
+| `@container.pipe=name … .end/container.pipe` | نفس السلاسل التي بداخلها؛ الحاوية نفسها لا تُنشئ عقدة. |
+| `reckon name(coll) [where cond] \|> f();` | `INPUT 'reckon <name>'`، ثم `FILTER 'where'` إن وُجد `where`، ثم عقدة لكل مرحلة. |
+
+مثال `reckon` (مُتحقَّق منه فعليًا في `flow_selftest.cpp`، الاختبار 7):
+```
+[0] INPUT  'reckon average' out=[-5, 42, 88, 0, 73, 91, -12, 60]
+[1] FILTER 'where'          in=[-5, 42, 88, 0, 73, 91, -12, 60] out=[42, 88, 73, 91, 60]
+[2] REDUCE 'mean'           in=[42, 88, 73, 91, 60] out=70.8
+```
+مخرجات `print` تطابق التشغيل العادي حرفيًا. خطأ داخل مرحلة `reckon` يُسجَّل على عقدتها
+(`ERROR` + كود وسطر) وتصير المراحل التالية `SKIPPED`، كما في `|>` تمامًا.
+ملاحظة: `replayFlow` يعيد تنفيذ آخر سلسلة `|>` عادية فقط (لا `reckon`).
+
+## شاشة RinFlow في تطبيق أندرويد
+`PipelineRunnerActivity` (من «المزيد ← منفّذ الأنابيب»، أو من إشعار «Open RinFlow» بعد Run):
+- **المصدر قابل للتحرير** داخل الشاشة، بتلوين أثناء الكتابة؛ لا يُستبدل كودك إلا بزر «مثال» وبتأكيد.
+- **ملخص ساكن** قبل التشغيل (`RinPipeScanner`): عدد كتل `container.pipe` وسلاسل `|>` و`reckon` والمراحل.
+- **تشغيل واحد حقيقي** عبر `RinEngine.runSourceAsFlow`: لكل عقدة النوع، الزمن، السطر، معاينة المدخل `←`
+  والمخرج `⇒` مع عدد السجلات، والخطأ الحقيقي (`RIN-F-…` + سطر:عمود)؛ ثم قسم `stdout` ومقاييس الجلسة.
+- **إيقاف** (إلغاء تعاوني حقيقي عبر `cancelFlow`)، **إعادة** (`replayFlow`)، و**المهلة** (5/15/30/60 ث أو بلا حدّ، تُحفظ).
+- احتياطي: كتلة `@container.pipe` لم تُنتج عقدًا (مثلاً خطأ قبل أول `|>`) تُشخَّص عبر `PipelineTracer` القديم.
+
 ## الأخطاء
 خطأ حقيقي (`RinError`) في أي مرحلة يُسجَّل على عقدتها كـ`NodeError` (كود مثل
 `RIN-F-E0021`، مبني من كود اللغة `E0021` الحقيقي) بدل إيقاف الجلسة بلا تفصيل:
@@ -75,8 +103,25 @@ status=CANCELLED
 | `SessionStatus` | `RUNNING`, `SUCCESS`, `ERROR`, `CANCELLED`, `TIMEOUT` |
 | `EventType` | `FLOW_STARTED`, `NODE_QUEUED`, `NODE_STARTED`, `NODE_OUTPUT`, `NODE_FINISHED`, `NODE_ERROR`, `FLOW_FINISHED`, `FLOW_CANCELLED`, `FLOW_TIMEOUT` |
 
+## التوافق مع المترجم الكامل (positive · from · message · token · audit)
+RinFlow مبنيّ فوق نسخة المحرّك الأحدث التي تضم: `positive` و`=[×]=` ([`positive.md`](./positive.md))،
+و`let … from "p"` ([`from.md`](./from.md))، ونظام `message`/`token`/`audit` وطبقة `message.layer`. لا شيء
+منها يغيّر الـ Flow Graph أو نتائج الحساب؛ كلها تُفكَّك في المحلّل إلى نداءات عادية فتعمل تحت RinFlow كما هي:
+
+| الصيغة | أثرها في RinFlow |
+|---|---|
+| `xs \|> positive;` | مرحلة عادية (`OUTPUT 'positive'` إن كانت الأخيرة). |
+| `reckon r(xs) where item =[x]= \|> sum();` | `FILTER 'where'` يحتفظ بالعناصر الموجبة فقط (المعامل ينتهي عند `\|>`). |
+| `x =[×]= e;` | عبارة عادية خارج الأنابيب؛ لا عقدة لها. |
+| `let f from "./m.rin";` ثم `v \|> f;` | الاستيراد يتم قبل السلسلة؛ `f` مرحلة عادية تظهر باسمها. |
+| `message`/`token`/`audit` | نداءات عادية؛ استُعملت كمرحلة تظهر `CUSTOM` ما لم تُسجَّل بـ `registerFlowNodeType`. |
+
+اختبار هذا التوافق: Test 9 في `flow_selftest.cpp` (مخرجات Flow مطابقة حرفيًا للتشغيل العادي). ولتلوين
+المحرّر في شاشة RinFlow صارت `from`/`import`/`export`/`as` كلمات مفتاحية، و`=[×]=` (و`=[x]=` `=[X]=` `=[*]=`) و`positive`
+تُلوَّن كعوامل.
+
 ## انظر أيضًا
 - [`pipelines.md`](./pipelines.md) — عامل `|>` الذي يبني RinFlow رسمه البياني فوقه.
-- [`RECKON.md`](./RECKON.md) — `reckon` يُنتج نفس نوع العقد (`REDUCE` لدوال مثل `mean`) عند تشغيله عبر Flow.
+- [`RECKON.md`](./RECKON.md) — `reckon` يُنتج `INPUT` و`FILTER` (لِـ `where`) وعقد المراحل (`REDUCE` لدوال مثل `mean`) عند تشغيله عبر Flow.
 - `app/src/main/cpp/rin_interpreter.h` (`namespace flow`) — التعريفات الكاملة للأنواع/الهياكل.
 - `app/src/main/cpp/flow_selftest.cpp` — سادة اختبار قائمة بذاتها لتجربة كل هذا فعليًا.
