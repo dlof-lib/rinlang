@@ -1087,9 +1087,10 @@ class MainActivity : RinBaseActivity() {
         showConsoleTab(terminal = true)
         if (AppSettings.isAutoOpenOutput(this)) startActivity(OutputActivity.intent(this, job.number))
 
-        // لا نشغّل الأنبوب فعلياً هنا (ذلك يحدث داخل شاشة RinFlow نفسها عبر PipelineTracer)؛
-        // فقط نتحقّق بسرعة هل يحتوي الكود على كتلة @container.pipe لنعرض خيار الانتقال إليها.
-        if (PipelineTracer.containsPipeline(source)) {
+        // لا نشغّل الأنبوب فعلياً هنا (ذلك يحدث داخل شاشة RinFlow نفسها عبر محرّك Flow الأصلي)؛
+        // فقط نتحقّق بسرعة (مسح ساكن) هل يحتوي الكود على أي مفهوم أنابيب — كتلة @container.pipe أو
+        // سلسلة `|>` أو reckon — لنعرض خيار الانتقال إليها.
+        if (RinPipeScanner.hasPipes(source)) {
             com.google.android.material.snackbar.Snackbar
                 .make(rvJobs, getString(R.string.rinflow_detected_snackbar), com.google.android.material.snackbar.Snackbar.LENGTH_LONG)
                 .setAction(getString(R.string.rinflow_open_action)) { openPipeline() }
