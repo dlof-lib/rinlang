@@ -1,0 +1,8 @@
+allow
+true
+error
+deny
+write
+true
+true
+true
