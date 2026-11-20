@@ -916,6 +916,25 @@ StmtPtr Parser::letDeclaration() {
 }
 
 StmtPtr Parser::letDeclarator() {
+    if (atLockRef()) {   // let <<main.lock["NAME"]>> = value;   |   let <<main.lock[]>>;  (تقرير)
+        bool hasName = false, eq = false; int ln = 0;
+        ExprPtr nm = lockRefName(hasName, eq, ln);
+        auto es = std::make_shared<ExpressionStmt>(); es->line = ln;
+        auto c = std::make_shared<CallExpr>(); c->line = ln;
+        if (!hasName) {
+            if (eq || check(TokenType::EQUAL)) throw errRich(diag::Code::E0013_InvalidExpression, peek(), "`<<main.lock[]>>` has no name to seal into",
+                                                             "put the secret name inside the brackets", "write `let <<main.lock[\"API_KEY\"]>> = \"…\";`", "a secret name");
+            c->callee = "main.lock.report";
+        } else {
+            if (!eq) consume(TokenType::EQUAL, "Expected '=' after `<<main.lock[\"NAME\"]>>` (to read a secret write `let v = <<main.lock[\"NAME\"]>>;`)");
+            ++noElseExpr;
+            ExprPtr val = expression();
+            --noElseExpr;
+            c->callee = "main.lock.set"; c->args = {nm, val};
+        }
+        es->expr = c;
+        return es;
+    }
     if (check(TokenType::LBRACKET) || check(TokenType::LBRACE)) {
         Token startTok = peek();
         auto st = std::make_shared<LetPatternStmt>();
@@ -5121,6 +5140,15 @@ ExprPtr Parser::call() {
 static bool startsLiteralItem(TokenType t); // تعريفها أدناه (فاصلة اختيارية في القوائم)
 
 ExprPtr Parser::primary() {
+    if (atLockRef()) {   // `<<main.lock["NAME"]>>` = فتح السرّ ؛ `<<main.lock[]>>` = أسماء الأسرار
+        bool hasName = false, eq = false; int ln = 0;
+        ExprPtr nm = lockRefName(hasName, eq, ln);
+        if (eq) throw errRich(diag::Code::E0013_InvalidExpression, previous(), "`<<main.lock[...]>>=` is a seal, not a value",
+                              "sealing is a statement: `let <<main.lock[\"NAME\"]>> = value;`", "to read a secret write `let v = <<main.lock[\"NAME\"]>>;`", "an expression");
+        auto c = std::make_shared<CallExpr>(); c->line = ln;
+        if (hasName) { c->callee = "main.lock.get"; c->args = {nm}; } else { c->callee = "main.lock.names"; }
+        return c;
+    }
     if (check(TokenType::IF) && checkNext(TokenType::LPAREN)) { Token kw = advance(); return ifExpression(kw); }
     if (check(TokenType::ELSE))
         throw errRich(diag::Code::E0013_InvalidExpression, peek(), "`else` has nothing to attach to",
@@ -6424,6 +6452,30 @@ bool Parser::tokensMayCapture(size_t from, size_t to) const {
 
 // =[×]= داخل مستوى equality. بلا معامل أيمن → اختبار positive(x) ؛ ومعه → مقارنة __positive_cmp(a, b)
 // (تتحوّل إلى إسناد ضربي مشروط فقط إن جاءت وحدها كعبارة — انظر assignment()).
+// ---- main.lock: المرجع `<<main.lock[expr?]>>` (يُقبل `< <` و`> >` بمسافات) ----
+bool Parser::atLockRef() const {
+    if (current + 5 >= tokens.size()) return false;
+    return tokens[current].type == TokenType::LESS && tokens[current + 1].type == TokenType::LESS &&
+           tokens[current + 2].type == TokenType::IDENT && tokens[current + 2].lexeme == "main" &&
+           tokens[current + 3].type == TokenType::DOT &&
+           tokens[current + 4].type == TokenType::IDENT && tokens[current + 4].lexeme == "lock" &&
+           tokens[current + 5].type == TokenType::LBRACKET;
+}
+
+ExprPtr Parser::lockRefName(bool& hasName, bool& eqConsumed, int& line) {
+    line = peek().line;
+    advance(); advance(); advance(); advance(); advance(); advance();   // < < main . lock [
+    ExprPtr name;
+    hasName = !check(TokenType::RBRACKET);
+    if (hasName) name = expression();
+    consume(TokenType::RBRACKET, "Expected ']' to close `<<main.lock[...]>>`");
+    consume(TokenType::GREATER, "Expected '>>' to close `<<main.lock[...]>>` (write `> >` or `>>`)");
+    eqConsumed = false;
+    if (check(TokenType::GREATER_EQUAL)) { advance(); eqConsumed = true; }   // `>>=` بلا مسافة: الثانية `>` والـ `=` معاً
+    else consume(TokenType::GREATER, "Expected '>>' to close `<<main.lock[...]>>` (write `> >` or `>>`)");
+    return name;
+}
+
 ExprPtr Parser::positiveOperand(ExprPtr left, const Token& op) {
     switch (peek().type) {
         case TokenType::SEMICOLON: case TokenType::RPAREN: case TokenType::RBRACE: case TokenType::RBRACKET:
