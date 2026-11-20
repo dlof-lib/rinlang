@@ -15,7 +15,7 @@
     <string name="pipeline_status_error">RinFlow: Falló</string>
     <string name="pipeline_status_idle">RinFlow: Aún no se ha ejecutado</string>
     <string name="pipeline_status_stopped">RinFlow: Detenido</string>
-    <string name="pipeline_no_block_found">No se encontró ningún bloque @container.pipe en este código. Agrega uno y vuelve a presionar Ejecutar.</string>
+    <string name="pipeline_no_block_found">No se encontró ningún pipe en este código. RinFlow entiende bloques @container.pipe, cadenas `a |> f() |> g();` y `reckon`. Añade uno y pulsa Run de nuevo.</string>
     <string name="pipeline_action_run">Ejecutar</string>
     <string name="pipeline_action_stop">Detener</string>
     <string name="pipeline_action_configure">Configurar</string>
@@ -34,6 +34,25 @@
     <!-- Aparece tras presionar Ejecutar cuando el código actual contiene un bloque @container.pipe real -->
     <string name="rinflow_detected_snackbar">Se detectó una canalización RinFlow en esta ejecución</string>
     <string name="rinflow_open_action">Abrir RinFlow</string>
+
+    <!-- RinFlow: دعم كل مفاهيم الأنابيب (container.pipe / |> / reckon) + محرر المصدر -->
+    <string name="pipeline_source_hint">"\@container.pipe=name\n  let r = data |> step() |> step();\n.end/container.pipe"</string>
+    <string name="pipeline_action_replay">Repetir</string>
+    <string name="pipeline_status_running_node">RinFlow: Ejecutando… nodo %1$d</string>
+    <string name="pipeline_status_timeout">RinFlow: Tiempo agotado</string>
+    <string name="pipeline_empty_hint">Escribe o pega código Rin con pipes — @container.pipe, una cadena |> o reckon — y pulsa Run.</string>
+    <string name="pipeline_detected_fmt">%1$d container.pipe · %2$d cadena · %3$d reckon · %4$d etapas</string>
+    <string name="pipeline_metrics_fmt">nodos %1$d · correctos %2$d · fallidos %3$d · omitidos %4$d · %5$d ms · registros %6$d → %7$d</string>
+    <string name="pipeline_timeout_title">RinFlow — límite de tiempo</string>
+    <string name="pipeline_timeout_none">Sin límite</string>
+    <string name="pipeline_timeout_seconds">%1$d s</string>
+    <string name="pipeline_chain_header">pipe @ línea %1$d</string>
+    <string name="pipeline_stdout_label">stdout</string>
+    <string name="pipeline_replay_failed">Repetición no disponible: %1$s</string>
+    <string name="pipeline_nodes_hidden">… %1$d nodos más</string>
+    <string name="pipeline_not_executed">Se encontraron pipes en tu código, pero ninguno se ejecutó. Asegúrate de que el código que los contiene se ejecute (por ejemplo, llama a la función que contiene el pipe).</string>
+    <string name="pipeline_records_fmt">%1$d registros</string>
+    <string name="pipeline_replace_confirm">¿Reemplazar el código actual por un ejemplo?</string>
     <string name="action_clear">Borrar</string>
     <string name="action_open">Abrir</string>
 
