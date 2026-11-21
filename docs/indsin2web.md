@@ -46,12 +46,22 @@ build/indsin2web app.rin --lang ar --dir rtl --title "تطبيقي"
 Checkbox/Switch/Radio/Slider/Select/Divider/Progress/Link/Video/Audio/WebView/Dialog/Badge/Tag/Avatar/List/Banner/Tabs…
 مكوّن غير معروف يصبح `<div data-indsin-kind="…">` مع تحذير، ولا يتوقف الترجمة.
 
+## حاويات الويب: تخزين محلي وجلب في الخلفية
+| في Indsin | في الناتج |
+|---|---|
+| `@container.storage=prefs … .end/container.storage` | `const prefs = IN.storage(...)`: كائن تفاعلي عميق تُحفَظ حقوله في `localStorage` وتُستعاد عند فتح الصفحة — [`container_storage.md`](container_storage.md) |
+| `@container.api=feed` مع `let baseUrl` | `const feed = IN.api(...)`: `fetch` في الخلفية (دوري/عند الطلب، `debounce`، إلغاء الأقدم، إعادة محاولة، كاش) تملأ `data/status/error/updated/loading` — [`container_fetch.md`](container_fetch.md) |
+| `value={prefs.name}` / `checked={prefs.dark}` | ربط ثنائي الاتجاه بحقل حاوية |
+| `feed.get(...)` · `prefs.reset("cart")` · `callApi("feed", "GET", "/x")` · `container.get/set` | نداءات مباشرة على كائن الحاوية |
+
+مثال: `examples/samples/indsin_storage_fetch.rin`. دالة جديدة مضمَّنة: `removeAt(list, i)`.
+
 ## الصدق في التغطية (تحذيرات لا إخفاء)
 
 المترجم **لا يتظاهر** بأنه ينقل ما لا ينقله. كل ما يلي يُنتج تحذيراً على stderr (ويُخزَّن كـ `data-*` أو يُهمَل):
 * خاصية غير موجودة في جدول الويب · مكوّن غير معروف · استدعاء دالة ليست معرَّفة في الملف ولا مضمَّنة (مثل `time.*`, `xdb_*`)
 * `@import` لمكتبات Rin (لا تُضمَّن) · عبارات Rin غير المدعومة داخل الدوال (try/catch، الفئات، …)
-* `<<each list as it>>` على قائمة غير حرفية: يحتاج مفسّر Rin لمعرفة الحجم (استعمل مسار المعاينة، أو قائمة حرفية)
+* `<<each list as it, i>>` على قائمة غير حرفية (مثل `inbox.data` من `container.api`): تُترجَم إلى قالب يكرّره الـ runtime لكل عنصر وتُطابَق العناصر بالموضع: يُعاد بناء العنصر الذي تغيّر محتواه وحده، ويُضاف الجديد ويُحذف الزائد، وغير المتغيّر يبقى بعقدته (تركيز الإدخال سليم). الربط ثنائي الاتجاه لحقل warp أو حاوية (`value={prefs.q}`) يعمل داخل الجسم (القيمة مشتركة بين العناصر)، أما ربط خاصية العنصر نفسه (`n["x"]`) فغير ممكن. قيود: لا تداخل بين `<<each>>`، وأقصى 2000 عنصر. المثال: `examples/samples/indsin_live_list.rin`
 * `<Palette seed=…>` تقريب مبسّط للوحة tonal الكاملة في المحرّك (لا فحص WCAG كامل)
 * ملفات الوسائط (`src="poster.png"`) تبقى مساراً نسبياً كما كُتبت
 
