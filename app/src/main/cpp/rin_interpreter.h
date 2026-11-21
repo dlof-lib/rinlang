@@ -382,7 +382,13 @@ struct StringHash {
 using ValueMap = std::unordered_map<std::string, Value, StringHash, std::equal_to<>>;
 
 // فلتر ربط (link ... only= / except=): أي أسماء الهدف تُكشف عبر الربط.
-struct LinkFilter { std::unordered_set<std::string> only, except; };
+struct LinkFilter {
+    std::unordered_set<std::string> only, except;
+    // إعادة التسمية (link a as x from X / only=a as x): الاسم المحلي x يُقرأ/يُكتب على اسم الهدف a. only/except هنا بأسماء
+    // *محلية*. prefix (link ... prefix=cfg_): كل اسم للهدف يظهر محلياً بالبادئة، و only/except حينها بأسماء الهدف.
+    std::unordered_map<std::string, std::string> rename; // محلي -> اسم الهدف
+    std::string prefix;
+};
 
 struct Environment : std::enable_shared_from_this<Environment> {
     ValueMap values;
@@ -400,12 +406,26 @@ struct Environment : std::enable_shared_from_this<Environment> {
     bool anyLinks = false; // مؤشر سريع: هل رُبط بهذا النطاق أي link (يُجنّب فحص القوائم في مسار القراءة الساخن)
     LinkData& lkd() { if (!lk) { lk = std::make_unique<LinkData>(); } anyLinks = true; return *lk; }
     bool linkAllows(const Environment* t, std::string_view name) const {
+        std::string rb; return linkMap(t, name, rb);
+    }
+    // يحوّل اسماً محلياً إلى اسم الهدف عبر فلتر الربط (only/except/rename/prefix). false = الاسم غير مكشوف.
+    // remote فارغ بعد النجاح يعني "الاسم نفسه" (المسار الشائع بلا فلتر لا يُنشئ أي نص).
+    bool linkMap(const Environment* t, std::string_view name, std::string& remote) const {
+        remote.clear();
         if (!lk || lk->filters.empty()) return true;
         auto it = lk->filters.find(t);
         if (it == lk->filters.end()) return true;
+        const LinkFilter& f = it->second;
         std::string n(name);
-        if (!it->second.only.empty()) return it->second.only.count(n) > 0;
-        return it->second.except.count(n) == 0;
+        if (!f.prefix.empty()) {
+            if (n.size() <= f.prefix.size() || n.compare(0, f.prefix.size(), f.prefix) != 0) return false;
+            n.erase(0, f.prefix.size());
+            remote = n;
+        }
+        if (!f.only.empty()) { if (f.only.count(n) == 0) return false; }
+        else if (f.except.count(n) != 0) return false;
+        if (f.prefix.empty() && !f.rename.empty()) { auto r = f.rename.find(n); if (r != f.rename.end()) remote = r->second; }
+        return true;
     }
     std::weak_ptr<NsNode> ns; // set only on the private env of a named container/group/Volume (namespace root scope)
     explicit Environment(EnvPtr parentEnv = nullptr) : parent(std::move(parentEnv)) {}
@@ -421,8 +441,9 @@ struct Environment : std::enable_shared_from_this<Environment> {
             auto it = e->values.find(name);
             if (it != e->values.end()) return &it->second;
             if (e->anyLinks) {
-                for (auto& l : e->lk->links) if (e->linkAllows(l.get(), name)) if (Value* p = l->lookup(name)) return p;
-                for (auto& l : e->lk->roLinks) if (e->linkAllows(l.get(), name)) if (Value* p = l->lookup(name)) return p;
+                std::string rb;
+                for (auto& l : e->lk->links) if (e->linkMap(l.get(), name, rb)) if (Value* p = l->lookup(rb.empty() ? name : std::string_view(rb))) return p;
+                for (auto& l : e->lk->roLinks) if (e->linkMap(l.get(), name, rb)) if (Value* p = l->lookup(rb.empty() ? name : std::string_view(rb))) return p;
             }
         }
         return nullptr;
@@ -432,8 +453,9 @@ struct Environment : std::enable_shared_from_this<Environment> {
             auto it = e->values.find(name);
             if (it != e->values.end()) return &it->second;
             if (e->anyLinks) {
-                for (auto& l : e->lk->links) if (e->linkAllows(l.get(), name)) if (const Value* p = static_cast<const Environment&>(*l).lookup(name)) return p;
-                for (auto& l : e->lk->roLinks) if (e->linkAllows(l.get(), name)) if (const Value* p = static_cast<const Environment&>(*l).lookup(name)) return p;
+                std::string rb;
+                for (auto& l : e->lk->links) if (e->linkMap(l.get(), name, rb)) if (const Value* p = static_cast<const Environment&>(*l).lookup(rb.empty() ? name : std::string_view(rb))) return p;
+                for (auto& l : e->lk->roLinks) if (e->linkMap(l.get(), name, rb)) if (const Value* p = static_cast<const Environment&>(*l).lookup(rb.empty() ? name : std::string_view(rb))) return p;
             }
         }
         return nullptr;
@@ -447,26 +469,30 @@ struct Environment : std::enable_shared_from_this<Environment> {
         return false;
     }
     // البيئة التي تملك الاسم فعلاً: هذا النطاق أو نطاقات links (بلا الصعود للأب)؛ nullptr إن لم يوجد.
-    Environment* findOwnerLinked(std::string_view name) noexcept {
-        if (values.find(name) != values.end()) return this;
+    // outName (اختياري): اسم المتغيّر عند المالك -- يختلف عن name إن مرّ الربط بإعادة تسمية/بادئة.
+    Environment* findOwnerLinked(std::string_view name, std::string* outName = nullptr) noexcept {
+        if (values.find(name) != values.end()) { if (outName) outName->assign(name); return this; }
         if (!lk) return nullptr;
-        for (auto& l : lk->links) if (linkAllows(l.get(), name)) if (Environment* o = l->findOwnerLinked(name)) return o;
+        std::string rb;
+        for (auto& l : lk->links) if (linkMap(l.get(), name, rb)) if (Environment* o = l->findOwnerLinked(rb.empty() ? name : std::string_view(rb), outName)) return o;
         return nullptr;
     }
     // للقراءة: كسابقتها لكن تشمل الروابط القرائية (readonly) أيضاً.
-    Environment* findReadOwnerLinked(std::string_view name) noexcept {
-        if (values.find(name) != values.end()) return this;
+    Environment* findReadOwnerLinked(std::string_view name, std::string* outName = nullptr) noexcept {
+        if (values.find(name) != values.end()) { if (outName) outName->assign(name); return this; }
         if (!lk) return nullptr;
-        for (auto& l : lk->links) if (linkAllows(l.get(), name)) if (Environment* o = l->findReadOwnerLinked(name)) return o;
-        for (auto& l : lk->roLinks) if (linkAllows(l.get(), name)) if (Environment* o = l->findReadOwnerLinked(name)) return o;
+        std::string rb;
+        for (auto& l : lk->links) if (linkMap(l.get(), name, rb)) if (Environment* o = l->findReadOwnerLinked(rb.empty() ? name : std::string_view(rb), outName)) return o;
+        for (auto& l : lk->roLinks) if (linkMap(l.get(), name, rb)) if (Environment* o = l->findReadOwnerLinked(rb.empty() ? name : std::string_view(rb), outName)) return o;
         return nullptr;
     }
     // كسابقتها لكن تصعد للآباء أيضاً (نفس ترتيب lookup: محلي ← مرتبط ← أب).
-    Environment* findOwner(std::string_view name) noexcept {
+    Environment* findOwner(std::string_view name, std::string* outName = nullptr) noexcept {
         for (Environment* e = this; e; e = e->parent.get()) {
-            if (e->values.find(name) != e->values.end()) return e;
+            if (e->values.find(name) != e->values.end()) { if (outName) outName->assign(name); return e; }
             if (e->anyLinks) {
-                for (auto& l : e->lk->links) if (e->linkAllows(l.get(), name)) if (Environment* o = l->findOwnerLinked(name)) return o;
+                std::string rb;
+                for (auto& l : e->lk->links) if (e->linkMap(l.get(), name, rb)) if (Environment* o = l->findOwnerLinked(rb.empty() ? name : std::string_view(rb), outName)) return o;
             }
         }
         return nullptr;
