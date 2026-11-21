@@ -48,3 +48,6 @@
 - **اختبار بلا شبكة**: `tests/print/github_browser_mock.rin` (نفس الحاوية بـ `mock = true` ومسارات `route`) — `params`/`query` تعمل في الحقيقي والمحاكاة (في المحاكاة يُطابَق المسار بلا الـ query).
 - **قاعدة indsin**: خصائص الواجهة تتبع المتغيّرات المذكورة في تعبيرها، فمرّر الحالة وسائط: `text={repoLine(k, repos)}` لا `repoLine(k)`.
 - **أخطاء HTTP**: `ok` = تمّ الاتصال؛ حقول الحاوية تعتبر النجاح 2xx فقط: عند 404 يُملأ `error = "HTTP 404: Not Found"` ويبقى `data` آخر نتيجة ناجحة. `apiInfo().failed` يعدّ الاتصال الفاشل وأي status ≥ 400. ويعمل `preview` أيضاً مع مصفوفة أو `owner.avatar_url`.
+
+## في المتصفح (indsin2web)
+نفس الحاوية (بـ `baseUrl`) تعمل في الصفحات المولَّدة عبر `fetch` حقيقي مع تحديث دوري وبحث فوري وتخزين آخر نتيجة — انظر [`container_fetch.md`](./container_fetch.md).
