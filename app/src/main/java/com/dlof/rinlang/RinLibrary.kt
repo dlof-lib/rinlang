@@ -55,7 +55,7 @@ object BuiltinLibraries {
     const val FEATURED = "indsinicons"
 
     fun categoryOf(displayName: String): LibCategory = when (displayName) {
-        "indsinicons", "inputkit", "rinxg", "previewkit", "twinkling-stars" -> LibCategory.UI
+        "indsinicons", "indsinlive", "inputkit", "rinxg", "previewkit", "twinkling-stars" -> LibCategory.UI
         "oglang", "ringo", "langkit", "astwalk", "envkit", "lexkit", "parsekit", "runkit", "bob" -> LibCategory.LANGUAGE
         "movingmask", "physics" -> LibCategory.GAMES
         "syskit", "ghpublish", "passkit", "passkitlang", "passkitcrypt", "passkitdb" -> LibCategory.SYSTEM
@@ -109,6 +109,11 @@ object BuiltinLibraries {
             "مكتبة أيقونات متجهية (SVG) لواجهات indsin: 187 أيقونة مرسومة على شبكة 24×24 مع بحث وأسماء بديلة وتوليد SVG جاهز",
             "ic_svg • ic_search • ic_has • ic_snippet • ic_html • ic_dataUri • ic_sprite • ic_register • ic_audit",
             iconRes = R.drawable.ic_lib_indsinicons
+        ),
+        BuiltinLibraryInfo(
+            "lib/indsinlive.og.rin", "indsinlive",
+            "Rin يُحرّك واجهات indsin ويستجيب للمستخدم: أحداث، نماذج بتحقق ودورة إرسال، محتوى يتحدّث بلا إعادة تحميل (فرق add/remove/move/update)، وحركة تكتب في خلايا warp",
+            "ilApp • ilOn • ilEmit • ilForm • ilFormSubmit • ilRegion • ilUpdate • ilLoad • ilOptimistic • ilAnim • ilPreset • ilTick"
         ),
         BuiltinLibraryInfo(
             "lib/math.og.rin", "math",
