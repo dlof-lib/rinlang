@@ -1,0 +1,4 @@
+// واجهة تجميعية بصيغة from: إعادة تصدير بدل export { } from / export * from
+export let double as twice, VERSION from "./util.rin";
+export let * from "./deep.rin";
+export fun own() { return "own"; }
