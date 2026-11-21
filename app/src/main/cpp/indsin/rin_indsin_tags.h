@@ -275,6 +275,7 @@ struct Ctx { // حالة مشتركة بين التشغيل الرئيسي وت�
     int depth = 0;
     // ── جسر << >> ──
     std::string tail;                         // عبارات Rin مرفوعة (<<let>> داخل عنصر) تُلحَق بآخر الناتج
+    bool webEach = false;                     // مترجم الويب: <<each>> غير الحرفية تصير @view.Each=… list=…; item="p"; index="i"; تُكرَّر في المتصفح وقت التشغيل
     bool probe = false;                       // تمريرة قياس: <<each>> غير الحرفية تُسجَّل ولا تُوسَّع
     std::vector<std::string> eachExprs;       // تعابير القوائم المسجَّلة في تمريرة القياس (بترتيب أول ظهور)
     std::map<std::string, EachSize> eachCounts; // تعبير القائمة → حجمها ونوعها (من التشغيل التجريبي)
@@ -864,6 +865,13 @@ private:
             }
         }
         if (!literal && !le.empty() && le.find_first_not_of("0123456789") == std::string::npos && le.size() < 6) { numeric = true; count = std::stoi(le); }
+        if (!literal && !numeric && ctx.webEach) {   // indsin2web: لا حاجة لمعرفة الحجم الآن — الجسم قالب يُكرَّر بحسب البيانات الحية
+            std::string inner = expandBody(body, vars, idSuffix + "_w", "each", startLine, activeCond());
+            put("@view.Each=each" + idSuffix + "_" + std::to_string(++ctx.autoId) + " list=" + le + "; item=\"" + itName + "\";" +
+                (idxName.empty() ? std::string() : " index=\"" + idxName + "\";") + " " + inner + " .end/view");
+            emitNewlines(line - startLine);
+            return;
+        }
         if (!literal && !numeric) {
             if (ctx.probe) {
                 bool seen = false;
@@ -1880,6 +1888,9 @@ private:
 // بلا مكوّنات مطابقاً حرفياً). تعريف المستخدم لنفس الاسم (<Define#Chip …>) يحلّ محلّها.
 inline const char* builtinPrelude() {
     return
+        // PrintLayout: رسم نتيجة سمات print (box/table/tree/bars/article...) بخط ثابت العرض داخل indsin.
+        //   <PrintLayout src={"a\nb"} opts={{box: "round", mark: "bullet"}} />  — يستعمل layoutText/layoutRows (docs/print-layout.md)
+        "<Define#PrintLayout src=\"\" opts=\"\" lang=\"plain\"><CodeEditor#plc width=full readonly=true language={lang} height={layoutRows(src, opts) * 18 + 14} value={layoutText(src, opts)} /></Define>"
         // Chip: حبّة صغيرة ملوّنة (داخل Row كي تلتفّ حول محتواها ولا تتمدّد)
         "<Define#Chip label=\"Chip\" tint=primary><Row#cw><Card#chip padding=8 radius=14 bg={tint}><Text#t size=small color=#ffffff>{label}</Text></Card></Row></Define>"
         // Stat: بطاقة رقم + عنوان (w=30% داخل Row)
@@ -1972,7 +1983,7 @@ inline bool usesContainerView(const std::string& src) {
            src.find("containerKind(") != std::string::npos;
 }
 inline bool usesBuiltinComponent(const std::string& src) {
-    static const char* names[] = {"ContainerView", "Chip", "Stat", "Alert", "Section", "ListTile", "Hero", "EmptyState", "Toggle", "Field", "PasswordField", "OrDivider", "SocialButton", "OtpBoxes", "LoginForm", "Tabs", "Stepper", "Badge", "ProfileCard", "ConfirmCard", "TopBar", "Header", "NavBar", "Breadcrumb", "SearchBar", "Pagination", "Footer", "Fab", "TextField", "EmailField", "NumberField", "PhoneField", "SearchField", "TextAreaField"};
+    static const char* names[] = {"ContainerView", "PrintLayout", "Chip", "Stat", "Alert", "Section", "ListTile", "Hero", "EmptyState", "Toggle", "Field", "PasswordField", "OrDivider", "SocialButton", "OtpBoxes", "LoginForm", "Tabs", "Stepper", "Badge", "ProfileCard", "ConfirmCard", "TopBar", "Header", "NavBar", "Breadcrumb", "SearchBar", "Pagination", "Footer", "Fab", "TextField", "EmailField", "NumberField", "PhoneField", "SearchField", "TextAreaField"};
     for (const char* n : names) {
         std::string needle = std::string("<") + n;
         for (size_t p = src.find(needle); p != std::string::npos; p = src.find(needle, p + 1)) {
@@ -2007,6 +2018,13 @@ inline std::string desugarWith(const std::string& source, Ctx& ctx) {
 
 inline std::string desugar(const std::string& source) {
     detail::Ctx ctx;
+    return detail::desugarWith(source, ctx);
+}
+
+// نسخة الويب: <<each>> على قائمة غير حرفية ⇒ @view.Each (قالب يكرّره runtime الصفحة عند تغيّر البيانات)
+inline std::string desugarWeb(const std::string& source) {
+    detail::Ctx ctx;
+    ctx.webEach = true;
     return detail::desugarWith(source, ctx);
 }
 
