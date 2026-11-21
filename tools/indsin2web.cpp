@@ -68,6 +68,7 @@ bool isIdent(const std::string& s) {
 struct Ctx {
     std::set<std::string> warps;                 // أسماء warp (تُقرأ كـ S.name)
     std::set<std::string> globals;               // let/fun على مستوى الملف
+    std::set<std::string> containers;            // حاويات يملكها الـ runtime (container.storage / container.api الحقيقية): تُقرأ كـ name.field
     std::vector<std::set<std::string>> locals;   // نطاقات محلية (معاملات/let داخل الدوال)
     std::map<std::string, ExprPtr> warpInit;
     bool isLocal(const std::string& n) const { for (auto& s : locals) if (s.count(n)) return true; return false; }
@@ -84,7 +85,7 @@ const std::set<std::string> kValueActions = {"toast","copyText","openUrl","scrol
 const std::set<std::string> kNatives = {
     "len","str","num","upper","lower","round","floor","ceil","abs","min","max","sqrt","pow","sin","cos","tan",
     "random","trim","contains","join","split","keys","values","range","push","now","time","int","sum","reverse","print",
-    "startsWith","endsWith","replace","isNil","typeof","clamp","substr","indexOf","repeat","capitalize"};
+    "startsWith","endsWith","replace","isNil","typeof","clamp","substr","indexOf","repeat","capitalize","removeAt"};
 // دوال indsin.* النقية التي ينقلها الـ runtime إلى JS (نماذج/ألوان)
 const std::set<std::string> kIndsinFns = {"isEmail","isPhone","isUrl","isNumber","passwordScore","passwordLabel","passwordTone",
     "maskEmail","initials","slug","fieldError","themeColor","onColor","isLight"};
@@ -120,6 +121,17 @@ std::string args(const std::vector<ExprPtr>& a) {
 std::string callExpr(const std::string& callee, const std::vector<ExprPtr>& a, int line) {
     if (callee == "json.parse") return "JSON.parse(" + args(a) + ")";
     if (callee == "json.stringify") return "JSON.stringify(" + args(a) + ")";
+    // حاويات الويب (storage/api): callApi(c, method, path, [body], [opts]) و container.get/set(name, field[, value])
+    if (!g.isLocal(callee) && !g.globals.count(callee) && callee == "callApi") return "IN.callApi(" + args(a) + ")";
+    {   // استدعاء دالة حاوية: suggest.get(...) · prefs.reset("cart") · rates.refresh()
+        size_t dot = callee.find('.');
+        if (dot != std::string::npos && dot > 0 && !g.isLocal(callee.substr(0, dot)) && g.containers.count(callee.substr(0, dot))) {
+            std::string m = callee.substr(dot + 1);
+            return callee.substr(0, dot) + (isIdent(m) ? "." + m : "[" + jsStr(m) + "]") + "(" + args(a) + ")";
+        }
+    }
+    if (callee == "container.get") return "IN.cget(" + args(a) + ")";
+    if (callee == "container.set") return "IN.cset(" + args(a) + ")";
     if (!g.isLocal(callee) && !g.globals.count(callee) && kActions.count(callee)) {
         // إجراءات المحرّك: الوسيط الأول اسم خلية warp (لا قيمتها)
         std::string o = "A." + callee + "(";
@@ -466,7 +478,37 @@ std::string handlerCode(const ExprPtr& e) {
     return expr(e);
 }
 
+void emitView(const std::shared_ptr<ViewStmt>& v, int depth, bool isRoot);
+// <Each list={xs} item="p" index="i"> … </Each> (ناتج <<each xs as p, i>> على بيانات حيّة): الجسم يُترجَم مرة واحدة كقالب (HTML + ربط + معالجات
+// كدوال في (p, i)) ويكرّره runtime الصفحة لكل عنصر عندما تتغيّر القائمة؛ بقية الصفحة لا تُلمَس.
+void emitEach(const std::shared_ptr<ViewStmt>& v, int depth) {
+    std::string listCode = "[]", item = "it", idx = "i";
+    for (auto& a : v->attrs) {
+        if (a.key == "list") listCode = expr(a.value);
+        else if (a.key == "item") literalString(a.value, item);
+        else if (a.key == "index") literalString(a.value, idx);
+    }
+    std::string id = uniqueId(v->name), pad((size_t)depth * 2, ' ');
+    out.html += pad + "<div id=\"" + id + "\" class=\"in-each\" style=\"display:contents\"></div>\n";
+    std::string saveHtml = std::move(out.html);
+    auto saveB = std::move(out.bindings); auto saveH = std::move(out.handlers);
+    out.html.clear(); out.bindings.clear(); out.handlers.clear();
+    g.locals.emplace_back(); g.locals.back().insert(item); g.locals.back().insert(idx);
+    for (auto& c : v->children) emitView(c, 0, false);
+    g.locals.pop_back();
+    std::string tpl = std::move(out.html), bs, hs;
+    for (auto& b : out.bindings) bs += (bs.empty() ? "" : ",") + std::string("[") + jsStr(b.id) + "," + jsStr(b.key) + "," + b.value + "]";
+    for (auto& h : out.handlers) {
+        if (h.event == "__bind__" || h.event == "__bindc__") hs += (hs.empty() ? "" : ",") + std::string("[") + jsStr(h.id) + "," + jsStr(h.event) + "," + h.code + "]";
+        else hs += (hs.empty() ? "" : ",") + std::string("[") + jsStr(h.id) + "," + jsStr(h.event) + ",(ev)=>{ " + h.code + "; }]";
+    }
+    out.html = std::move(saveHtml); out.bindings = std::move(saveB); out.handlers = std::move(saveH);
+    std::string params = "(" + item + "," + idx + ")=>";
+    out.bindings.push_back({id, "__each__", "[()=>(" + listCode + "), " + jsStr(tpl) + ", " + params + "[" + bs + "], " + params + "[" + hs + "]]", false});
+}
+
 void emitView(const std::shared_ptr<ViewStmt>& v, int depth, bool isRoot) {
+    if (v->kindTag == "Each") { emitEach(v, depth); return; }
     std::string tagName = v->kindTag.empty() ? (v->role == UiRole::LOOP ? "loop" : "box") : v->kindTag;
     if (v->role == UiRole::LOOP) tagName = "loop";
     KindInfo ki = kindInfo(tagName);
@@ -565,6 +607,15 @@ void emitView(const std::shared_ptr<ViewStmt>& v, int depth, bool isRoot) {
             if (g.warps.count(n) && !g.isLocal(n))
                 out.handlers.push_back({id, "__bind__", jsStr(n) + "," + jsStr(k)});
         }
+        // ربط ثنائي الاتجاه لحقل حاوية: value={prefs.name} / checked={prefs.dark}  (container.storage / container.api)
+        if (field && (k == "value" || k == "checked") && a.value && a.value->exprKind == ExprKind::Get) {
+            auto* ge = static_cast<GetExpr*>(a.value.get());
+            if (ge->object && ge->object->exprKind == ExprKind::Variable) {
+                const std::string& cn = static_cast<VariableExpr*>(ge->object.get())->name;
+                if (g.containers.count(cn) && !g.isLocal(cn))
+                    out.handlers.push_back({id, "__bindc__", jsStr(cn) + "," + jsStr(ge->name) + "," + jsStr(k)});
+            }
+        }
     }
     for (auto& b : v->attrs) (void)b;
     if (!staticText.empty() && (tc == "text" || tc == "label")) out.html += htmlEsc(staticText);
@@ -577,9 +628,46 @@ void emitView(const std::shared_ptr<ViewStmt>& v, int depth, bool isRoot) {
 // يجمع عناصر المستوى الأعلى (داخل الحاويات أيضاً): warp/let/fun/theme/view
 std::vector<std::shared_ptr<ViewStmt>> g_roots;
 std::string g_userJs;
+std::string g_containerJs;   // تعريفات حاويات الويب (تُكتب قبل كود المستخدم كي لا يصطدم أي استدعاء مبكر بـ TDZ)
+
+// ── حاويات الويب: container.storage (تخزين محلي دائم) و container.api (جلب في الخلفية) ──
+// حقول الإعداد المحجوزة (لا تصير حقولاً تفاعلية بل تُمرَّر للـ runtime كإعداد).
+const std::set<std::string> kStorageCfg = {"store", "storeKey", "version", "ttl", "sync"};
+const std::set<std::string> kApiCfg = {"baseUrl", "path", "method", "headers", "token", "timeout", "retry", "backoff", "cache", "every",
+                                       "autoload", "debounce", "persist", "pauseHidden", "query", "pick", "body", "credentials", "mock"};
+bool bodyHasLet(const std::vector<StmtPtr>& body, const char* name) {
+    for (auto& st : body) if (st && st->stmtKind == StmtKind::LetStmt && static_cast<LetStmt*>(st.get())->name == name) return true;
+    return false;
+}
+// storage دائماً حقيقية. api حقيقية فقط عند وجود baseUrl (كما في المفسّر الأصلي)؛ بدونها تبقى محاكاة route كما كانت.
+bool isWebContainer(ContainerStmt* c) {
+    if (c->name.empty() || !isIdent(c->name)) return false;
+    if (c->kind == ContainerKind::STORAGE) return true;
+    return c->kind == ContainerKind::API && bodyHasLet(c->body, "baseUrl");
+}
+void emitWebContainer(ContainerStmt* c) {
+    const bool isStorage = c->kind == ContainerKind::STORAGE;
+    const auto& cfgNames = isStorage ? kStorageCfg : kApiCfg;
+    std::string fields, cfg;
+    for (auto& st : c->body) {
+        if (!st) continue;
+        if (st->stmtKind == StmtKind::LetStmt) {
+            auto* l = static_cast<LetStmt*>(st.get());
+            std::string init = l->initializer ? expr(l->initializer) : "null";
+            (cfgNames.count(l->name) ? cfg : fields) += jsStr(l->name) + ": " + init + ", ";
+        } else if (st->stmtKind == StmtKind::RouteStmt) {
+            warn("`route` (محاكاة) داخل `" + c->name + "` لا تُنفَّذ في الويب: الطلبات تذهب إلى baseUrl الحقيقي", st->line);
+        } else if (st->stmtKind == StmtKind::MaskStmt) {
+        } else {
+            warn(std::string("عبارة غير مدعومة داخل ") + (isStorage ? "container.storage" : "container.api") + " `" + c->name + "` (المسموح: let فقط)", st->line);
+        }
+    }
+    g_containerJs += "const " + c->name + " = IN." + (isStorage ? "storage" : "api") + "(" + jsStr(c->name) + ", {" + fields + "}, {" + cfg + "});\n";
+}
 std::vector<std::string> g_warpInitJs;
 
 void collectDecls(const std::vector<StmtPtr>& body);
+bool isWebContainer(ContainerStmt* c);
 void handleStmt(const StmtPtr& s) {
     switch (s->stmtKind) {
         case StmtKind::WarpStmt: {
@@ -589,7 +677,12 @@ void handleStmt(const StmtPtr& s) {
         }
         case StmtKind::LetStmt: g.globals.insert(static_cast<LetStmt*>(s.get())->name); break;
         case StmtKind::FunctionStmt: g.globals.insert(static_cast<FunctionStmt*>(s.get())->name); break;
-        case StmtKind::ContainerStmt: collectDecls(static_cast<ContainerStmt*>(s.get())->body); break;
+        case StmtKind::ContainerStmt: {
+            auto* c = static_cast<ContainerStmt*>(s.get());
+            if (isWebContainer(c)) { g.containers.insert(c->name); g.globals.insert(c->name); }
+            else collectDecls(c->body);
+            break;
+        }
         default: break;
     }
 }
@@ -599,7 +692,11 @@ void translateTop(const std::vector<StmtPtr>& body) {
     for (auto& s : body) {
         switch (s->stmtKind) {
             case StmtKind::ViewStmt: g_roots.push_back(std::static_pointer_cast<ViewStmt>(s)); break;
-            case StmtKind::ContainerStmt: translateTop(static_cast<ContainerStmt*>(s.get())->body); break;
+            case StmtKind::ContainerStmt: {
+                auto* c = static_cast<ContainerStmt*>(s.get());
+                if (isWebContainer(c)) emitWebContainer(c); else translateTop(c->body);
+                break;
+            }
             case StmtKind::WarpStmt: {
                 auto* w = static_cast<WarpStmt*>(s.get());
                 g_warpInitJs.push_back(jsStr(w->name) + ": " + expr(w->initializer));
@@ -674,7 +771,7 @@ int main(int argc, char** argv) {
 
     std::vector<StmtPtr> program;
     try {
-        std::string desugared = indsin::tags::desugar(src);
+        std::string desugared = indsin::tags::desugarWeb(src);
         if (desugarOnly) { std::cout << desugared; return 0; }
         Lexer lexer(desugared, in);
         Parser parser(lexer.scanTokens(), in);
@@ -727,7 +824,7 @@ int main(int argc, char** argv) {
     std::string js = "\"use strict\";\n" + std::string(kRuntimeJs) + "\n";
     js += "const S = IN.state({" ;
     for (size_t i = 0; i < g_warpInitJs.size(); i++) js += (i ? ", " : "") + g_warpInitJs[i];
-    js += "});\nconst A = IN.actions(S), R = IN.natives, indsin = IN.indsin;\n" + g_userJs;
+    js += "});\nconst A = IN.actions(S), R = IN.natives, indsin = IN.indsin;\n" + g_containerJs + g_userJs;
     js += "IN.boot(S, [\n";
     for (size_t i = 0; i < out.bindings.size(); i++) {
         auto& b = out.bindings[i];
@@ -736,7 +833,7 @@ int main(int argc, char** argv) {
     js += "], [\n";
     for (size_t i = 0; i < out.handlers.size(); i++) {
         auto& h = out.handlers[i];
-        if (h.event == "__bind__") js += "  [" + jsStr(h.id) + ", \"__bind__\", " + h.code + "]";
+        if (h.event == "__bind__" || h.event == "__bindc__") js += "  [" + jsStr(h.id) + ", " + jsStr(h.event) + ", " + h.code + "]";
         else js += "  [" + jsStr(h.id) + ", " + jsStr(h.event) + ", (ev)=>{ " + h.code + "; }]";
         js += i + 1 < out.handlers.size() ? ",\n" : "\n";
     }
