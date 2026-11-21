@@ -1057,6 +1057,8 @@ struct LinkStmt : Stmt { LinkStmt() { stmtKind = StmtKind::LinkStmt; }
     std::vector<std::string> only;   // link to=X only=a,b;   -> يكشف هذه الأسماء فقط من X
     std::vector<std::string> except; // link to=X except=a,b;  -> يكشف كل شيء عدا هذه الأسماء
     bool unlink = false;   // unlink to=X;          -> يفكّ ربطاً سابقاً (الحاوية الحالية فقط)
+    std::vector<std::pair<std::string, std::string>> rename; // (محلي, اسم الهدف): link a as x from X;  /  only=a as x
+    std::string prefix;    // link to=X prefix=cfg_;  -> أسماء الهدف تظهر محلياً بهذه البادئة
 };
 
 // link.id="X";  (بداخل جسم حاوية) -> يسجّل "X" كـ"معرّف ربط" عام (container.link.id) لهذه الحاوية،
@@ -1151,6 +1153,7 @@ struct ImportSelectedStmt : Stmt { ImportSelectedStmt() { stmtKind = StmtKind::I
     std::vector<std::string> names;
     std::vector<std::string> aliases; // موازٍ لـ names
     ExprPtr path;
+    ExprPtr fallback; // nullable: `let a, b from "p" else {"a": 1, "b": 2};` -- قيم بديلة (قاموس) إن لم تُوجد الوحدة (E0029)
 };
 
 // ---- Indsintime rendering engine: view strands + reactive state (Warp) ----
