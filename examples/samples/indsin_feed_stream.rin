@@ -1,0 +1,33 @@
+<!-- خلاصة منشورات حيّة: بث (SSE) + تحميل تدريجي — indsin2web
+       • stream: منشور جديد من الخادم يظهر في أعلى القائمة فور وصوله (بلا استطلاع)، بلا تكرار (dedupe)
+       • loadMore(): يجلب الصفحة التالية ويُلحقها بنهاية القائمة (append)
+       • persist: آخر قائمة تظهر فوراً عند فتح الصفحة، وpg.page يبقى محفوظاً
+     build/indsin2web examples/samples/indsin_feed_stream.rin -o feed.html   (الخادم يحتاج CORS) -->
+<Rin>
+@container.api=feed
+    let baseUrl = "https://api.example.com";
+    let path = "/posts";              // الصفحة الأولى تُجلب تلقائياً
+    let stream = "/posts/stream";     // كل رسالة SSE تحمل منشوراً أو مصفوفة منشورات
+    let streamMode = "prepend";       // الجديد في الأعلى
+    let dedupe = "id";                // لا يتكرر منشور له نفس id
+    let maxItems = 200;               // سقف الذاكرة
+    let persist = true;
+    let data = [];
+.end/container.api
+
+@container.storage=pg
+    let page = 1;
+.end/container.storage
+
+fun loadMore() { pg.page = pg.page + 1; feed.more("/posts", {"query": {"page": pg.page}}); }
+</Rin>
+<Column#Root padding=16 gap=8>
+  <Text#Head size="title" text={"المنشورات (" + len(feed.data) + ")"} />
+  <Text#Conn size="caption" text={feed.error == nil ? "● متصل" : "○ " + feed.error} />
+  <<each feed.data as p, i>>
+    <Card#Post padding=10>
+      <Text#Title text={p["title"]} />
+    </Card>
+  <</each>>
+  <Button#More onTap={loadMore()}>تحميل المزيد</Button>
+</Column>
