@@ -2421,12 +2421,14 @@ StmtPtr Parser::printStatement() {
         "indent", "gap", "pad", "before", "after", "visible", "squeeze", "trim", "fmt", "case", "wrap", "cut",
         "mark", "hl", "hlwrap", "box", "title", "cols", "colgap", "page", "place",
         "leader", "justify", "inalign", "rule", "numbers", "beside", "table", "shadow", "cutat",
-        "tabs", "dedent", "maxlines", "ends", "ruler", "hlcase", "focus", "tree", "bars", "diff"
+        "tabs", "dedent", "maxlines", "ends", "ruler", "hlcase", "focus", "tree", "bars", "diff",
+        "article", "toc", "stats", "notes", "byline", "parindent", "excerpt", "newspaper", "quote", "heading"
     };
-    static const char* layoutNames[40] = {"indent", "gap", "pad", "before", "after", "visible", "squeeze", "trim",
+    static const char* layoutNames[50] = {"indent", "gap", "pad", "before", "after", "visible", "squeeze", "trim",
         "fmt", "case", "wrap", "cut", "mark", "hl", "hlwrap", "box", "title", "cols", "colgap", "page", "place",
         "leader", "justify", "inalign", "rule", "numbers", "beside", "table", "shadow", "cutat",
-        "tabs", "dedent", "maxlines", "ends", "ruler", "hlcase", "focus", "tree", "bars", "diff"};
+        "tabs", "dedent", "maxlines", "ends", "ruler", "hlcase", "focus", "tree", "bars", "diff",
+        "article", "toc", "stats", "notes", "byline", "parindent", "excerpt", "newspaper", "quote", "heading"};
     std::unordered_map<std::string, ExprPtr> layoutArgs;
     // لهجة الاستدعاء (docs/print_dialects.md):  print(a, b, sep="-");  — بجانب اللهجة الكلاسيكية  print a, b sep="-";
     // نجرّب الاستدعاء أولاً: '(' [قيم وسمات key=value بفواصل] ')' ثم ';' أو سمة كلاسيكية. إن لم يتطابق الشكل
@@ -2511,7 +2513,7 @@ StmtPtr Parser::printStatement() {
         else if (attr == "lower") stmt->lower = value;
         else if (attr == "width") stmt->width = value;
         else if (attr == "align") stmt->align = value;
-        else { bool lay = false; for (int li = 0; li < 40; li++) if (attr == layoutNames[li]) { layoutArgs[attr] = value; lay = true; }
+        else { bool lay = false; for (int li = 0; li < 50; li++) if (attr == layoutNames[li]) { layoutArgs[attr] = value; lay = true; }
                if (!lay) for (int fi = 0; fi < 9; fi++) if (attr == fxNames[fi]) { fxArgs[fi] = value; anyFx = true; } }
     }
     if (anyFx) {   // تنسيق الخط: يُجمَّع في استدعاء واحد لـ __fxcode (يُطبَّق بعد upper/width/align، فلا يُفسد الحشو)
@@ -2539,7 +2541,7 @@ StmtPtr Parser::printStatement() {
             else if (attr == "lower") stmt->lower = value;
             else if (attr == "width") stmt->width = value;
             else if (attr == "align") stmt->align = value;
-            else { bool lay = false; for (int li = 0; li < 40; li++) if (attr == layoutNames[li]) { layoutArgs[attr] = value; lay = true; }
+            else { bool lay = false; for (int li = 0; li < 50; li++) if (attr == layoutNames[li]) { layoutArgs[attr] = value; lay = true; }
                if (!lay) for (int fi = 0; fi < 9; fi++) if (attr == fxNames[fi]) { fxArgs[fi] = value; anyFx = true; } }
         }
         if (anyFx) {
@@ -2558,7 +2560,7 @@ StmtPtr Parser::printStatement() {
         auto nilLit = [&]() { auto nl = std::make_shared<LiteralExpr>(); nl->kind = LiteralExpr::Kind::NIL; nl->line = tok.line; return nl; };
         call->args.push_back(stmt->sep ? stmt->sep : nilLit());
         call->args.push_back(stmt->pretty ? stmt->pretty : nilLit());
-        for (int li = 0; li < 40; li++) { auto it = layoutArgs.find(layoutNames[li]); call->args.push_back(it != layoutArgs.end() ? it->second : nilLit()); }
+        for (int li = 0; li < 50; li++) { auto it = layoutArgs.find(layoutNames[li]); call->args.push_back(it != layoutArgs.end() ? it->second : nilLit()); }
         for (auto& e : stmt->exprs) call->args.push_back(e);
         stmt->exprs.clear(); stmt->exprs.push_back(call);
         stmt->sep = nullptr; stmt->pretty = nullptr;
@@ -3463,7 +3465,7 @@ std::string Parser::readTagKeyword() {
             nextIsContextualWord = (w == "data" || w == "api" || w == "import" || w == "table" || w == "doc" ||
                                      w == "object" || w == "portal" || w == "block" || w == "aukt" || w == "open" ||
                                      w == "chatbot" || w == "everything" || w == "make" || w == "sql" || w == "datalist" || w == "list" ||
-                                     w == "app" || w == "site");
+                                     w == "app" || w == "site" || w == "storage");
         }
         // لا نستهلك '.' إلا إذا كانت متبوعة مباشرة بإحدى هذه الكلمات، وإلا فقد تكون في الحقيقة
         // بداية وسم إغلاق آخر مجاور مثل '.end/container' تلاه '.end/Containers.Group'
@@ -3977,6 +3979,7 @@ static bool isContainerFamilyTag(const std::string& tag) {
         // RIN CONTAINER SQL (RCSQL): استعلام مُسمّى/قابل لإعادة الاستخدام عبر مسك — انظر
         // rin_container_sql.h وContainerKind::SQL أعلى ContainerStmt في rin_ast.h.
         "container.sql", "sql",
+        "container.storage", "storage",
         "container.app", "container.site",
         "container.everything", "Everything", "container.make", "make", "Rin.make"
     };
@@ -4074,10 +4077,10 @@ StmtPtr Parser::atBlock() {
         tokens[current + 1].type == TokenType::DOT) {
         static const std::unordered_set<std::string> shortTypes = {
             "doc", "table", "data", "api", "sql", "list", "datalist", "object", "portal", "block",
-            "sticker", "aukt", "chatbot", "make", "app", "site"};
+            "sticker", "aukt", "chatbot", "make", "app", "site", "storage"};
         static const std::unordered_set<std::string> reservedNames = {
             "Rin", "import", "view", "doc", "table", "data", "api", "sql", "list", "datalist", "object", "portal",
-            "block", "sticker", "aukt", "chatbot", "make", "Object", "AUKT", "Everything", "Volume", "element"};
+            "block", "sticker", "aukt", "chatbot", "make", "Object", "AUKT", "Everything", "Volume", "element", "storage"};
         const Token& a = tokens[current];
         const Token& dot = tokens[current + 1];
         const Token& b = tokens[current + 2];
@@ -4099,10 +4102,10 @@ StmtPtr Parser::atBlock() {
         tokens[current + 1].type == TokenType::DOT && tokens[current + 2].type == TokenType::IDENT) {
         static const std::unordered_set<std::string> builtinTypes = {
             "doc", "table", "data", "api", "sql", "list", "datalist", "object", "portal", "block", "sticker", "aukt",
-            "chatbot", "make", "pipe", "import", "open", "everything", "container", "Group", "make", "app", "site"};
+            "chatbot", "make", "pipe", "import", "open", "everything", "container", "Group", "make", "app", "site", "storage"};
         static const std::unordered_set<std::string> builtinNames = {
             "Rin", "import", "view", "doc", "table", "data", "api", "sql", "list", "datalist", "object", "portal",
-            "block", "sticker", "aukt", "chatbot", "make", "Object", "AUKT", "Everything", "Volume", "element",
+            "block", "sticker", "aukt", "chatbot", "make", "Object", "AUKT", "Everything", "Volume", "element", "storage",
             "start", "end", "ok", "fail", "tx", "container", "Containers"};
         const Token& a = tokens[current];
         const Token& dot = tokens[current + 1];
@@ -4131,6 +4134,8 @@ StmtPtr Parser::atBlock() {
         "container.sticker", "sticker", "container.aukt", "AUKT", "container.chatbot", "chatbot",
         // RIN CONTAINER SQL: انظر ContainerKind::SQL في rin_ast.h ورين rin_container_sql.h للصياغة.
         "container.sql", "sql",
+        // تخزين محلي للمتصفح: انظر ContainerKind::STORAGE في rin_ast.h وdocs/container_storage.md
+        "container.storage", "storage",
         // هوية تطبيق/موقع: انظر ContainerKind::APP في rin_ast.h
         "container.app", "container.site",
         // make (اسمها الرسمي الحالي؛ سابقاً "Everything"): المفهوم الجامع — بلا أي قيود على الجسم
@@ -4204,6 +4209,7 @@ StmtPtr Parser::atBlock() {
         tag == "container.aukt" || tag == "AUKT" ||
         tag == "container.chatbot" || tag == "chatbot" ||
         tag == "container.sql" || tag == "sql" ||
+        tag == "container.storage" || tag == "storage" ||
         tag == "container.app" || tag == "container.site" ||
         tag == "container.everything" || tag == "Everything" ||
         tag == "container.make" || tag == "make" || tag == "Rin.make") {
@@ -4220,6 +4226,7 @@ StmtPtr Parser::atBlock() {
             tag == "container.block" || tag == "block" ||
             tag == "container.sticker" || tag == "sticker" ||
             tag == "container.app" || tag == "container.site" ||
+            tag == "container.storage" || tag == "storage" ||
             tag == "container.sql" || tag == "sql")) validateDataContainerBody(body);
         auto s = std::make_shared<ContainerStmt>();
         s->name = name; s->mask = mask; s->easyKey = easyKey; s->body = body; s->line = atTok.line;
@@ -4243,6 +4250,7 @@ StmtPtr Parser::atBlock() {
         else if (tag == "container.aukt" || tag == "AUKT") s->kind = ContainerKind::AUKT;
         else if (tag == "container.chatbot" || tag == "chatbot") s->kind = ContainerKind::CHATBOT;
         else if (tag == "container.sql" || tag == "sql") s->kind = ContainerKind::SQL;
+        else if (tag == "container.storage" || tag == "storage") s->kind = ContainerKind::STORAGE;
         else if (tag == "container.app" || tag == "container.site") { s->kind = ContainerKind::APP; s->isSite = (tag == "container.site"); }
         else if (tag == "container.everything" || tag == "Everything" ||
                  tag == "container.make" || tag == "make" || tag == "Rin.make") s->kind = ContainerKind::EVERYTHING;
