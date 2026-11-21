@@ -1,0 +1,89 @@
+// مسافات · تنسيق · تعليم · تخطيط للطباعة (docs/print-layout.md)
+
+// ---- 1) المسافات ----
+print "indented" indent=4;
+print "a", "b", "c" gap=3;
+print "padded" pad=2 box="ascii";
+print "x" before=1 after=1;
+print "a  b   c" visible=true;
+print "  a    b   c  " trim=true squeeze=true visible=true;
+
+// ---- 2) التنسيق ----
+print 1234567.891 fmt=",.2";
+print 0.256 fmt=".1%";
+print 7 fmt="05";
+print 255 fmt="x";
+print 1500, 2000000 fmt="k";
+print 42 fmt="+";
+print fmtNumber(1234.5, "money");
+print "hello big world" case="title";
+print "helloBigWorld" case="snake";
+print "hello big world" case="camel";
+print "the quick brown fox jumps over the lazy dog" wrap=16;
+print "truncate this long sentence" cut=12;
+
+// ---- 3) التعليم ----
+print "one\ntwo\nthree" mark="bullet";
+print "one\ntwo\nthree" mark="num";
+print "alpha\nbeta" mark="check";
+print "todo\ndone" mark="[ ]";
+print "find the needle in the haystack" hl="needle";
+print "a-b-a" hl=["a", "b"] hlwrap="[]";
+print "long item that wraps around nicely" mark="num" wrap=14;
+
+// ---- 4) التخطيط ----
+print "Rin" box=true;
+print "Hello\nWorld" box="double" title="Greeting";
+print "round" box="round" pad=2;
+print [1, 22, 333, 4, 5, 6, 7] cols=3;
+print ["a", "bb", "ccc", "d"] cols=2 colgap=4;
+print "center" page=20 place="center";
+print "right" page=20 place="right";
+print "sub" indent="> " box="ascii";
+print "ok", 1 box=true if=true;
+print "never" box=true if=false;
+
+// ---- 5) دالة layoutText ----
+let t = layoutText("hi\nthere", {box: "ascii", mark: "dash"});
+print t;
+print showSpaces("a b\tc");
+
+// ---- 6) الاستدعاء بأقواس + دمج مع السمات القديمة ----
+print("x", "y", gap=2, box="ascii");
+print "mixed" box="ascii" upper=true;
+print "نص عربي" box="single";
+print "سطر\nثاني" mark="bullet" indent=2;
+
+// ---- 7) ميزات إضافية ----
+// جدول من مصفوفة قواميس ومن مصفوفة صفوف
+print [{name: "Ali", qty: 3, price: 4.5}, {name: "Sara", qty: 12, price: 10}] table=true;
+print [["item", "n"], ["tea", 2], ["coffee", 10]] table="round";
+// نقاط قيادة (قائمة طعام)
+print "Coffee", 3.5, "Cake", 12 leader="." page=24 fmt=".2";
+// ضبط داخلي + محاذاة الكتلة
+print "short\nmuch longer line" inalign="center" box=true;
+print "short\nmuch longer line" inalign="right" box="ascii";
+// ترقيم الأسطر + خط فاصل + ظل
+print "alpha\nbeta\ngamma" numbers=true;
+print "alpha\nbeta" numbers=10 rule="=";
+print "shadow" box="ascii" shadow=true;
+// كتل جنباً إلى جنب
+print "A\nB\nC", "1\n2" beside=true colgap=4;
+// ضبط النص (justify) ومواضع الاقتطاع
+print "the quick brown fox jumps over the lazy dog again" wrap=20 justify=true;
+print "/very/long/path/to/file.txt" cut=16 cutat="start";
+print "/very/long/path/to/file.txt" cut=16 cutat="middle";
+
+// ---- 8) المزيد: شجرة · أعمدة بيانية · فرق · أدوات مسافات ----
+print {name: "app", deps: {a: 1, b: [2, 3]}, ok: true} tree=true;
+print {x: {y: 1}, z: 2} tree="ascii";
+print {Mon: 4, Tue: 9, Wed: 6} bars=10;
+print [3, 8, 5] bars=8 fmt=".1";
+print "a\nb\nc", "a\nB\nc\nd" diff=true;
+print "\tone\n\t\ttwo" tabs=4 visible=true;
+print "    x\n      y\n    z" dedent=true visible=true;
+print "1\n2\n3\n4\n5" maxlines=3;
+print "ab\ncd" ends=true;
+print "hello world" ruler=true;
+print "Error one\nok\nerror two" focus="rror";
+print "Find ERROR and error" hl="error" hlcase=false;
