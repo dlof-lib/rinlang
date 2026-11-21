@@ -40,9 +40,29 @@
 | `pick` | مسار منقّط داخل الردّ (`"data.items"`) |
 | `persist` | `true` ⇒ تُحفَظ آخر `data` و`updated` في `localStorage` (`rin:api:<الاسم>`) وتُعرَض قبل وصول الردّ |
 | `pauseHidden` | `false` ⇒ يستمر الدوري والتبويب مخفي |
+| `append` · `dedupe` · `maxItems` | دمج النتائج بدل الاستبدال (`true`/`"prepend"`)، منع التكرار بحقل، وسقف للطول |
+| `stream` · `streamMode` | بث SSE (انظر «تحميل تدريجي وبث حيّ») |
 | `credentials` | `"same-origin"` (الافتراضي) · `"include"` |
 
 كل المدد أرقام بالميلي ثانية في Rin (`30s` ⇒ 30000) وتُقبل أيضاً نصاً `"1h30m"`.
+
+## تحميل تدريجي وبث حيّ
+```kotlin
+@container.api=feed
+    let baseUrl = "https://api.example.com";
+    let path = "/posts";           // الصفحة الأولى
+    let stream = "/posts/stream";  // بث Server-Sent Events: رسالة ⇒ تحديث data فوراً بلا استطلاع
+    let streamMode = "prepend";    // replace (الافتراضي) | append | prepend
+    let dedupe = "id";             // لا يتكرر عنصر له نفس قيمة الحقل
+    let maxItems = 200;            // سقف الطول بعد الدمج
+    let data = [];
+.end/container.api
+fun loadMore() { feed.more("/posts", {"query": {"page": 2}}); }   // يُلحَق بـ data بدل أن يستبدلها
+```
+- `feed.more(path, opts)` = `get` مع `append: true`؛ ويمكن تفعيل الإلحاق لكل الطلبات بـ `let append = true;` (أو `"prepend"`). الطلبات الإضافية لا تلغي بعضها.
+- الدمج للمصفوفات فقط (قيمة مفردة تُلفّ في مصفوفة). `maxItems` في `append` يُبقي **الأحدث** (آخر N)، وفي `prepend` يُبقي **الأول** N.
+- `stream` مسار (أو رابط) يُفتح بـ `EventSource` تلقائياً (`autoload = false` يعطّله و`feed.listen()` يشغّله)، ويُغلَق بـ `feed.stop()`. الاتصال يُعاد تلقائياً؛ الانقطاع يظهر في `error` (`"stream disconnected"`) ويُمحى عند أول رسالة. `pick` يُطبَّق على كل رسالة.
+- الخادم يرسل `data: {...}` (JSON) ويحتاج CORS. مثال كامل: `examples/samples/indsin_feed_stream.rin`.
 
 ## الاستدعاء
 ```kotlin
@@ -52,7 +72,7 @@ fun legacy()   { callApi("shop", "GET", "/items", {"params": {"id": 7}}); }   //
 ```
 `opts` لكل طلب: `params` (يستبدل `:id` في المسار؛ مسار فيه معامل غير مملوء يُرفض) · `query` · `headers` · `token` · `retry` · `backoff` · `timeout` ·
 `cache` · `debounce` · `pick` · `latest` · `then` (دالة تُستدعى بـ `{ok, status, error, json, body, cached}`).
-`rates.refresh()` يعيد آخر طلب · `rates.abort()` · `rates.start()` / `rates.stop()` للدوري · `rates.info()` ⇒ `{calls, failed, cached, aborted, polling…}`.
+`feed.more(...)` · `feed.listen()` · `rates.refresh()` يعيد آخر طلب · `rates.abort()` · `rates.start()` / `rates.stop()` للدوري · `rates.info()` ⇒ `{calls, failed, cached, aborted, polling…}`.
 
 **الأحدث يربح**: طلب GET جديد يلغي السابق (`AbortController`)، وأي ردّ قديم يصل متأخراً يُتجاهَل — فلا يُكتب نتيجة بحث قديمة فوق أحدث.
 طلبات الكتابة (POST/PUT/PATCH/DELETE) لا تُلغى تلقائياً. ربط حقل إدخال: `onInput={find(ev.target.value)}`.
