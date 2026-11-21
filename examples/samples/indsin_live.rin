@@ -1,0 +1,128 @@
+<!-- Indsin Live: Rin يُحرّك الواجهة ويستجيب للمستخدم (docs/indsin_live.md)
+     • نموذج تسجيل: تحقق عند الكتابة، رسالة خطأ لكل حقل، حماية من النقر المزدوج، أخطاء الخادم تُربط بالحقول
+     • محتوى يتحدّث بلا إعادة تحميل: قائمة «المنضمّون» تتغيّر بعمليات add/remove/move/update فقط
+     • حركة: الشاشة تظهر تدريجياً، زر الحفظ يومض بالأحمر عند الخطأ، وعدّاد المنضمّين يصعد
+     التشغيل: rin_indsin_preview indsin_live.rin --png out.png --tap 60,300
+     كل شيء هنا بلا مؤقّتات نظام: المضيف يستدعي tick فيُطلق ilStart إطارات الحركة. -->
+<Palette seed=#6C5CE7 dark />
+
+<warp email={""} />
+<warp password={""} />
+<warp emailErr={""} />
+<warp passErr={""} />
+<warp banner={""} />
+<warp busy={false} />
+<warp screenOpacity={0} />
+<warp saveBg={"#6C5CE7"} />
+<warp joined={0} />
+<warp row0={""} />
+<warp row1={""} />
+<warp row2={""} />
+<warp row3={""} />
+
+<Rin>
+@import "lib/indsinlive.og.rin";
+
+let app = ilApp("signup-demo");
+
+// ---- ١) النموذج: القواعد في مكان واحد، والواجهة تقرأ لقطة الحالة فقط
+ilForm(app, "signup", {
+    "email": {"required": true, "kind": "email"},
+    "password": {"required": true, "minLen": 8}
+}, {"lang": "en", "validateOn": "change", "resetOnSuccess": true});
+
+ilFormBind(app, "signup", fun(s) {
+    emailErr = s["errors"]["email"] == nil ? "" : s["errors"]["email"];
+    passErr = s["errors"]["password"] == nil ? "" : s["errors"]["password"];
+    busy = s["state"] == "submitting";
+    return nil;
+});
+
+// ---- ٢) المحتوى الحيّ: منطقة مفتاحها id، تُعرض في 4 خانات ثابتة
+ilRegion(app, "joined", [], {"key": "id"});
+ilRegionBind(app, "joined", fun(items, patches) {
+    row0 = len(items) > 0 ? items[0]["email"] : "";
+    row1 = len(items) > 1 ? items[1]["email"] : "";
+    row2 = len(items) > 2 ? items[2]["email"] : "";
+    row3 = len(items) > 3 ? items[3]["email"] : "";
+    return nil;
+});
+ilBind(app, "banner", fun(v) { banner = v; });
+
+// ---- ٣) الحركة: كل خاصية متحرّكة تُربط بخلية warp
+ilBindProp(app, "screen", "opacity", fun(v) { screenOpacity = v; });
+ilBindProp(app, "save", "bg", fun(v) { saveBg = v; });
+ilBindProp(app, "joined", "value", fun(v) { joined = v; });
+
+// ---- ٤) الاستجابة للمستخدم: الأحداث ← منطق
+let nextId = 1;
+fun fakeServer(v) {
+    if (v["email"] == "taken@example.com") {
+        return {"ok": false, "errors": {"email": "already registered"}, "error": "Could not create the account"};
+    }
+    return {"id": nextId};
+}
+
+ilOn(app, "click:save", fun(ev) {
+    ilFieldSet(app, "signup", "email", email);          // مزامنة آخر قيمة من خلايا warp
+    ilFieldSet(app, "signup", "password", password);
+    let r = ilFormSubmit(app, "signup", fun(v) { return fakeServer(v); });
+    return r["state"];
+});
+
+ilOn(app, "submit:signup", fun(ev) {
+    let who = ev["payload"]["values"]["email"];
+    ilAdd(app, "joined", {"id": nextId, "email": who}, 0);        // أحدث منضمّ في الأعلى
+    nextId = nextId + 1;
+    if (len(ilRegionItems(app, "joined")) > 4) {                  // نحتفظ بأحدث 4 فقط
+        ilRemove(app, "joined", ilRegionItems(app, "joined")[4]["id"]);
+    }
+    ilSet(app, "banner", "Welcome, " + who);
+    ilCountUp(app, "joined", joined, len(ilRegionItems(app, "joined")), 400, nil);
+    return nil;
+});
+
+ilOn(app, "invalid:signup", fun(ev) {
+    ilSet(app, "banner", "Please fix the highlighted fields");
+    ilAnim(app, "save", "bg", "#E74C3C", "#6C5CE7", 600, {"ease": "cubicOut"});
+    return nil;
+});
+ilOn(app, "failed:signup", fun(ev) {
+    ilSet(app, "banner", ev["payload"]["error"]);
+    ilAnim(app, "save", "bg", "#E74C3C", "#6C5CE7", 600, {"ease": "cubicOut"});
+    return nil;
+});
+
+fun onEmail() { ilFieldSet(app, "signup", "email", email); }
+fun onPassword() { ilFieldSet(app, "signup", "password", password); }
+fun onSave() { ilClick(app, "save", nil); }
+fun onClear() { ilFormReset(app, "signup"); email = ""; password = ""; ilSet(app, "banner", ""); }
+
+// ظهور تدريجي عند الفتح، ثم تشغيل المحرّك (يُستدعى tick من المضيف)
+ilPreset(app, "screen", "fadeIn", {"dur": 500});
+ilStart(app, 16);
+</Rin>
+
+<Screen#app size=phone bg=#0B1020>
+  <Column#root gap=12 padding=spacious opacity={screenOpacity}>
+    <Text#h size=heading color=#ffffff>Create account</Text>
+
+    <Input#em placeholder="you@example.com" value={email} error={emailErr} onChange={onEmail()} />
+    <Input#pw type=password placeholder="Password (8+ characters)" value={password} error={passErr} onChange={onPassword()} />
+
+    <Row#actions gap=8>
+      <Button#save bg={saveBg} disabled={busy} onTap={onSave()}>Sign up</Button>
+      <Button#clear onTap={onClear()}>Clear</Button>
+    </Row>
+
+    <Text#msg color=#A29BFE visible={banner != ""}><<banner>></Text>
+
+    <Card#list padding=12 gap=6>
+      <Text#cnt size=heading color=#ffffff>Joined: <<joined>></Text>
+      <Text#r0 visible={row0 != ""}><<row0>></Text>
+      <Text#r1 visible={row1 != ""}><<row1>></Text>
+      <Text#r2 visible={row2 != ""}><<row2>></Text>
+      <Text#r3 visible={row3 != ""}><<row3>></Text>
+    </Card>
+  </Column>
+</Screen>
