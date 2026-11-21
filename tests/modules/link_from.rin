@@ -1,0 +1,42 @@
+@container=Config
+    let theme = "dark";
+    let size = 10;
+    let secret = "s";
+    fun greet() { return "hi " + theme; }
+.end/container
+
+@container=Ui
+    link theme as appTheme, size, greet as hello from Config;
+    print appTheme, size, hello();
+    appTheme = "light";
+.end/container
+print Config.theme;
+print Ui.appTheme, Ui.size;
+Ui.size = 20;
+print Config.size;
+print Ui.hello();
+
+@container=Pfx
+    link * from Config prefix=cfg_;
+    print cfg_theme, cfg_size;
+.end/container
+print Pfx.cfg_secret;
+
+@container=Old
+    link to=Config only=theme as t,size;
+    print t, size;
+.end/container
+
+@container=Ro
+    link theme as t from Config readonly;
+    print t;
+.end/container
+print links("Ui");
+print links("Pfx");
+
+@container=F
+    link theme as skin, greet from "./sub/settings.rin" as=cfg;
+    print skin, greet();
+    skin = "blue";
+.end/container
+print cfg.theme;
