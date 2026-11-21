@@ -23,6 +23,9 @@
 //   TYPO-002  warning  خاصية طباعية غير صالحة (font_feature/font_variation/font_variant/text_shadow/…)
 //   TXTFX-001 warning  مسبق/تأثير حركة نص غير معروف
 //   LAYOUT-001 warning عنصر يتجاوز عرض الشاشة أفقياً (عدا الطبقات المنبثقة)
+//   VALUE-001 warning  لون مكتوب كحرفية (#... أو rgb()/hsl()) لكنه غير صالح — مثل #12345 أو rgb(1,2)
+//   VALUE-002 warning  قيمة زمن غير صالحة أو سالبة في سمة توقيت (*_duration / *_delay / *_interval ...)
+//   VALUE-003 warning  سمة توقيت تقرأ «ميلي ثانية» رقماً صرفاً (type_duration ...) لكن كُتبت بوحدة (2s) فتُتجاهل
 //
 // الدرجة (score): 100 - 10*errors - 3*warnings (حدّها الأدنى 0).
 #pragma once
@@ -32,6 +35,7 @@
 #include "rin_indsin_a11y.h"
 #include "rin_indsin_typography.h"
 #include "rin_indsin_textfx.h"
+#include "rin_indsin_value.h"
 #include <set>
 #include <sstream>
 #include <string>
@@ -112,6 +116,55 @@ inline void add(AuditReport& r, const StrandPtr& root, const Strand& s, const ch
     i.code = code; i.severity = sev; i.strandId = s.id; i.kind = strandKindName(s.kind); i.name = s.name;
     i.path = pathString(root, &s); i.message = std::move(msg); i.hint = std::move(hint); i.line = s.sourceLine;
     r.issues.push_back(std::move(i));
+}
+
+// VALUE-00x: فحص قيم الخصائص المُنمَّطة (يستعمل indsin::vx). حرفيات اللون فقط تُفحص (#... / func(...))؛
+// أسماء الثيم والألوان الدلالية (text_muted, primary...) تُترك لمحلّل الألوان الفعلي فلا إنذارات كاذبة.
+inline bool keyEndsWith(const std::string& k, const char* suf) {
+    size_t n = std::char_traits<char>::length(suf);
+    return k.size() >= n && k.compare(k.size() - n, n, suf) == 0;
+}
+inline bool isColorKey(const std::string& k) {
+    static const char* keys[] = {"color", "bg", "background", "border_color", "tint", "fill", "stroke", "accent",
+                                 "caret_color", "text_color", "icon_color", "divider_color", "outline_color"};
+    for (auto* c : keys) if (k == c) return true;
+    return false;
+}
+inline bool isTimingKey(const std::string& k) {
+    return k == "duration" || k == "delay" || k == "type_hold" || k == "type_cursor_blink" ||
+           keyEndsWith(k, "_duration") || keyEndsWith(k, "_delay") || keyEndsWith(k, "_interval");
+}
+// تقرأها textfx بـ numAttr (ميلي ثانية رقماً صرفاً): كتابة 2s تُتجاهل بصمت وتعود الافتراضية.
+inline bool isPlainMsKey(const std::string& k) {
+    return k == "type_duration" || k == "type_delay" || k == "type_hold" || k == "type_erase_duration" || k == "type_cursor_blink";
+}
+inline void checkTypedValues(AuditReport& r, const StrandPtr& root, const Strand& s) {
+    for (auto& a : s.attrs) {
+        const std::string& k = a.key; const Value& v = a.value;
+        if (isColorKey(k) && v.isString()) {
+            std::string t = typo::trim(v.str);
+            // تدرّجات (bg="#a,#b,135" · linear-gradient(...)) وروابط تُعالَج في مكان آخر: لا تُفحَص كلون مفرد.
+            bool composite = t.find("gradient") != std::string::npos || t.find("url(") != std::string::npos ||
+                             vx::splitList(t).size() > 1;
+            if (!composite && !t.empty() && (t[0] == '#' || t.find('(') != std::string::npos)) {
+                auto c = vx::parseColor(t);
+                if (!c.ok) add(r, root, s, "VALUE-001", "warning", k + "=\"" + t + "\": " + c.error,
+                               "use #rgb, #rrggbb, rgb(r,g,b), hsl(h,s%,l%) or a theme color name");
+            }
+        }
+        if (isTimingKey(k) && !v.isEmpty()) {
+            if (isPlainMsKey(k) && v.isString() && v.asMeasure().ok && !v.asMeasure().unit.empty()) {
+                add(r, root, s, "VALUE-003", "warning", k + "=\"" + v.str + "\": this attribute reads plain milliseconds, the unit is ignored",
+                    "write " + k + "=" + Value::formatNumber(vx::toDurationMs(v).valueOr(0)) + " (milliseconds)");
+                continue;
+            }
+            double tokenMs = 0; // fast / normal / slow (rin_indsin_tokens.h) صالحة دائماً
+            if (v.isString() && resolveDurationToken(typo::trim(v.str), tokenMs)) continue;
+            auto d = vx::toDurationMs(v);
+            if (!d.ok) add(r, root, s, "VALUE-002", "warning", k + ": " + d.error, "use milliseconds (300) or a unit: 300ms, 1.5s");
+            else if (d.value < 0 && keyEndsWith(k, "_duration")) add(r, root, s, "VALUE-002", "warning", k + " is negative", "durations must be >= 0");
+        }
+    }
 }
 
 } // namespace audit_detail
@@ -226,6 +279,8 @@ inline AuditReport auditFabric(const StrandPtr& root, const AuditOptions& opt = 
         if (const Value* av = s.attr("text_animation"))
             for (auto& w : typo::words(av->asString()))
                 if (!textfx::findPreset(w)) add(r, root, s, "TXTFX-001", "warning", "unknown text_animation preset '" + w + "'", "see docs/indsin_typography_motion_a11y.md for the list");
+        // VALUE-001/002/003: قيم مُنمَّطة (لون/زمن)
+        checkTypedValues(r, root, s);
         // STRUCT-001: أسماء الإخوة
         if (!s.children.empty()) {
             std::set<std::string> seen;
