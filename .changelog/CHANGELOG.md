@@ -2381,3 +2381,8 @@ Official AGP compatibility: AGP 8.13 requires Gradle 8.13 and JDK 17.
 - مكوّنات جاهزة: TextField, TextAreaField, PasswordField, NumberField, EmailField, SearchField, PhoneField.
 - `rin_indsin_validate.h`، تنقية `set_input` حسب النوع/maxlength، تحقق تلقائي، `indsin.isNumber/fieldError`.
 - أندرويد: IndsinFabricView.drawField (كلمة المرور/prefix/suffix/التحقق) وحوار الإدخال حسب النوع.
+
+## `from` — تعريف أسماء من ملف بـ `let`
+- مفهوم جديد `let a, b as c from "path";` و`let { a, b } from "path";` و`let * from "path";` و`let * as ns from "path";`. يتحوّل في المحلِّل (`rin_parser.cpp`) إلى `ImportSelectedStmt`/`ImportStmt` الموجودتين، فلا تغيير في المُفسِّر أو VM أو rinc.
+- `let` العادية لا تتأثر (`let from = 5;` و`let x = 1;` و`let [a, b] = ...`): لا تُفسَّر كمفهوم إلا بوجود `from` ثم نص قبل أي `=`.
+- التوثيق: `docs/from.md`، الاختبار: `tests/modules/from_concept.rin` + `.expected`.
