@@ -46,6 +46,7 @@
 //   (متغيّر Rin يُكتب دائماً بين أقواس معقوصة: visible={flag})
 #pragma once
 
+#include <algorithm>
 #include <cctype>
 #include <map>
 #include <string>
@@ -97,12 +98,175 @@ struct Frame {
     std::string chain;   // ما يجب نفيه في <Else> التالي (If: الشرط؛ Else-if: تراكمي)
     std::string cond;    // شرط <If>/<Else> (تعبير Rin) — يُحقَن كـ visible= في العناصر الأبناء
     bool br = false;     // فُتح بصيغة <<if>> (يُغلَق بـ <</if>> ويقبل <<else>>)
+    std::string cname;   // اسم الحاوية إن كان الإطار <Container#X> (لـ <field[]> بلا اسم)
 };
 
 struct Macro {
     std::vector<std::pair<std::string, std::string>> props; // الخصائص وقيمها الافتراضية (نص Rin)
     std::string body;                                       // مصدر الجسم الخام (بصيغة الوسوم)
 };
+
+// ── مسح ساكن للحاويات (field ==> body · head.X · rin--g): أسماء الحاويات وحقولها (let/state/const) بلا تشغيل ──
+struct FieldInfo {
+    std::string name, kind, raw; // kind: string|number|bool|list|map|nil|expr
+};
+struct ContainerInfo {
+    std::string name, kind;      // kind: plain|app|site|data|… أو "tag" لوسم <Container#X> بلا نوع
+    bool tagForm = false;
+    size_t begin = 0, end = 0;   // مواضع في المصدر الممسوح (لمعرفة الحاوية المحيطة بوسم)
+    std::vector<FieldInfo> fields;
+    const FieldInfo* find(const std::string& nm) const {
+        for (auto& f : fields) if (f.name == nm) return &f;
+        return nullptr;
+    }
+};
+
+// معرِّفات تقبل العربية (بايتات UTF-8 ≥ 0x80) كما تقبلها أسماء الحقول والحاويات.
+inline bool isWordByte(char c) { return std::isalnum((unsigned char)c) || c == '_' || (unsigned char)c >= 0x80; }
+
+inline std::string inferKind(const std::string& raw) {
+    size_t a = 0, b = raw.size();
+    while (a < b && std::isspace((unsigned char)raw[a])) ++a;
+    while (b > a && (std::isspace((unsigned char)raw[b - 1]) || raw[b - 1] == ';')) --b;
+    if (a >= b) return "expr";
+    const std::string t = raw.substr(a, b - a);
+    char c = t[0];
+    if (c == '"' || c == '\'') return "string";
+    if (c == '[') return "list";
+    if (c == '{') return "map";
+    if (t == "true" || t == "false") return "bool";
+    if (t == "nil" || t == "null") return "nil";
+    size_t k = 0;
+    if (t[k] == '-' || t[k] == '+') ++k;
+    size_t digits = 0;
+    while (k < t.size() && (std::isdigit((unsigned char)t[k]) || t[k] == '.' || t[k] == '_')) { if (std::isdigit((unsigned char)t[k])) ++digits; ++k; }
+    if (digits > 0 && k == t.size()) return "number";
+    return "expr";
+}
+
+inline std::vector<ContainerInfo> scanContainers(const std::string& s) {
+    std::vector<ContainerInfo> res;
+    struct Open { size_t idx; int depth; bool tagForm; };
+    std::vector<Open> open;
+    const size_t n = s.size();
+    auto word = [&](size_t& p) { size_t b = p; while (p < n && isWordByte(s[p])) ++p; return s.substr(b, p - b); };
+    auto skipSp = [&](size_t& p) { while (p < n && (s[p] == ' ' || s[p] == '\t')) ++p; };
+    auto skipWsAll = [&](size_t& p) { while (p < n && std::isspace((unsigned char)s[p])) ++p; };
+    auto push = [&](const std::string& nm, const std::string& kind, bool tagForm, size_t at) {
+        ContainerInfo ci; ci.name = nm; ci.kind = kind; ci.tagForm = tagForm; ci.begin = at; ci.end = n;
+        res.push_back(std::move(ci));
+        open.push_back({res.size() - 1, 0, tagForm});
+    };
+    auto popKind = [&](bool tagForm, size_t at) {
+        for (size_t q = open.size(); q-- > 0;) if (open[q].tagForm == tagForm) { res[open[q].idx].end = at; open.erase(open.begin() + (long)q); return; }
+    };
+    // يقرأ "name = value" عند p (بعد let/state/const) ويضيف الحقل إلى الحاوية المفتوحة.
+    auto tryField = [&](size_t p, bool bridge) {
+        skipWsAll(p);
+        std::string nm = word(p);
+        if (nm.empty() || std::isdigit((unsigned char)nm[0])) return;
+        skipSp(p);
+        if (p >= n || s[p] != '=' || (p + 1 < n && s[p + 1] == '=')) return;
+        ++p;
+        std::string raw; int d = 0;
+        while (p < n && raw.size() < 300) {
+            char ch = s[p];
+            if (ch == '"' || ch == '\'') {
+                char q = ch; raw += ch; ++p;
+                while (p < n && s[p] != q && s[p] != '\n') { if (s[p] == '\\' && p + 1 < n) raw += s[p++]; raw += s[p++]; }
+                if (p < n && s[p] == q) raw += s[p++];
+                continue;
+            }
+            if (ch == '(' || ch == '[' || ch == '{') ++d;
+            else if (ch == ')' || ch == ']' || ch == '}') { if (d > 0) --d; }
+            else if (d == 0 && (ch == ';' || ch == '\n')) break;
+            else if (d == 0 && bridge && ch == '>' && p + 1 < n && s[p + 1] == '>') break;
+            else if (d == 0 && ch == '<' && p + 1 < n && s[p + 1] == '/') break;
+            raw += ch; ++p;
+        }
+        ContainerInfo& ci = res[open.back().idx];
+        if (!ci.find(nm)) ci.fields.push_back({nm, inferKind(raw), raw});
+    };
+    size_t k = 0;
+    while (k < n) {
+        char c = s[k];
+        if (c == '/' && k + 1 < n && s[k + 1] == '/') { while (k < n && s[k] != '\n') ++k; continue; }
+        if (c == '/' && k + 1 < n && s[k + 1] == '*') { size_t e = s.find("*/", k + 2); k = e == std::string::npos ? n : e + 2; continue; }
+        if (c == '<' && s.compare(k, 4, "<!--") == 0) { size_t e = s.find("-->", k + 4); k = e == std::string::npos ? n : e + 3; continue; }
+        if (c == '"') { ++k; while (k < n && s[k] != '"') { if (s[k] == '\\') ++k; ++k; } ++k; continue; }
+        if (c == '\'') { // سلسلة فقط إن أُغلقت في السطر نفسه (الفاصلة العليا في نص عادي لا تكسر المسح)
+            size_t e = k + 1;
+            while (e < n && s[e] != '\'' && s[e] != '\n') { if (s[e] == '\\') ++e; ++e; }
+            if (e < n && s[e] == '\'') k = e + 1; else ++k;
+            continue;
+        }
+        if (c == '{') { if (!open.empty()) ++open.back().depth; ++k; continue; }
+        if (c == '}') { if (!open.empty() && open.back().depth > 0) --open.back().depth; ++k; continue; }
+        if (c == '@') {
+            size_t p = k + 1;
+            std::string w = word(p);
+            if (w == "container") {
+                std::string kind = "plain";
+                if (p < n && s[p] == '.') { ++p; kind = word(p); }
+                skipSp(p);
+                if (p < n && s[p] == '=') {
+                    ++p; skipSp(p);
+                    std::string nm;
+                    if (p < n && (s[p] == '"' || s[p] == '\'')) { char q = s[p++]; size_t b = p; while (p < n && s[p] != q) ++p; nm = s.substr(b, p - b); if (p < n) ++p; }
+                    else nm = word(p);
+                    if (!nm.empty()) push(nm, kind, false, k);
+                }
+                k = p; continue;
+            }
+            if (!w.empty() && p < n && s[p] == '.') { // اختصار @piano.app / @blog.site
+                size_t q = p + 1;
+                std::string sub = word(q);
+                if (sub == "app" || sub == "site") { push(w, sub, false, k); k = q; continue; }
+            }
+            ++k; continue;
+        }
+        if (c == '.' && s.compare(k, 14, ".end/container") == 0) { popKind(false, k); k += 14; continue; }
+        if (c == '<') {
+            if (k + 10 < n && lower(s.substr(k + 1, 9)) == "container" &&
+                (s[k + 10] == '#' || s[k + 10] == '.' || s[k + 10] == '>' || s[k + 10] == '/' || std::isspace((unsigned char)s[k + 10]))) {
+                size_t p = k + 10;
+                std::string kind = "tag";
+                if (p < n && s[p] == '.') { ++p; kind = word(p); }
+                std::string nm;
+                if (p < n && s[p] == '#') { ++p; nm = word(p); }
+                size_t e = p; int bd = 0; char q = 0;
+                while (e < n) {
+                    char ch = s[e];
+                    if (q) { if (ch == '\\') ++e; else if (ch == q) q = 0; }
+                    else if (ch == '"' || ch == '\'') q = ch;
+                    else if (ch == '{') ++bd;
+                    else if (ch == '}') --bd;
+                    else if (ch == '>' && bd <= 0) break;
+                    ++e;
+                }
+                bool selfc = e > 0 && e < n && s[e - 1] == '/';
+                if (!nm.empty()) { push(nm, kind, true, k); if (selfc) { res[open.back().idx].end = e; open.pop_back(); } }
+                k = e < n ? e + 1 : n; continue;
+            }
+            if (k + 11 <= n && s[k + 1] == '/' && lower(s.substr(k + 2, 9)) == "container") { popKind(true, k); k += 11; continue; }
+            ++k; continue;
+        }
+        if (isWordByte(c) && (k == 0 || !isWordByte(s[k - 1]))) {
+            size_t p = k;
+            std::string w = word(p);
+            if ((w == "let" || w == "state" || w == "const") && !open.empty() && open.back().depth == 0) {
+                size_t b = k; bool ok = false;
+                while (b > 0 && (s[b - 1] == ' ' || s[b - 1] == '\t')) --b;
+                if (b == 0 || s[b - 1] == '\n') ok = true;
+                else { char pc = s[b - 1]; ok = pc == ';' || pc == '}' || pc == '>' || pc == '{'; }
+                if (ok) tryField(p, false);
+            }
+            k = p > k ? p : k + 1; continue;
+        }
+        ++k;
+    }
+    return res;
+}
 
 struct Ctx { // حالة مشتركة بين التشغيل الرئيسي وتشغيلات التوسعة (Define/Repeat)
     std::map<std::string, Macro> macros;
@@ -114,6 +278,13 @@ struct Ctx { // حالة مشتركة بين التشغيل الرئيسي وت�
     bool probe = false;                       // تمريرة قياس: <<each>> غير الحرفية تُسجَّل ولا تُوسَّع
     std::vector<std::string> eachExprs;       // تعابير القوائم المسجَّلة في تمريرة القياس (بترتيب أول ظهور)
     std::map<std::string, EachSize> eachCounts; // تعبير القائمة → حجمها ونوعها (من التشغيل التجريبي)
+    // ── field ==> body · head.X · rin--g ──
+    std::vector<ContainerInfo> reg;           // مسح ساكن للحاويات وحقولها (يُملأ فقط إن استُعمل أحد الوسوم الثلاثة)
+    std::string curContainer;                 // الحاوية التي يقع فيها الوسم الحالي (@container=X … .end/container)
+    std::string headApp;                      // اسم @container.app المربوط بـ <head.X> (يفعّل head.* في التعابير)
+    std::map<std::string, int> fieldUse;      // عدد استعمالات <field.X> (لأسماء عناصر فريدة)
+    int ringUse = 0;
+    bool fieldGetDeclared = false;
 };
 
 class Desugarer {
@@ -398,7 +569,12 @@ private:
         for (char c : v) if (!(isIdChar(c) || c == '.' || c == '-' || c == '%')) { ok = false; break; }
         return ok;
     }
-    std::string applyVars(const std::string& e) const {
+    std::string applyVars(const std::string& e0) const {
+        std::string e = vars.empty() ? e0 : substituteVars(e0);
+        if (!ctx.headApp.empty() && e.find("head") != std::string::npos) e = headRewrite(e); // head.name → container.appInfo("APP")["name"]
+        return e;
+    }
+    std::string substituteVars(const std::string& e) const {
         if (vars.empty()) return e;
         std::string r;
         size_t k = 0;
@@ -792,7 +968,509 @@ private:
         emitNewlines(consumed);
     }
 
+    // ═════════════ field ==> body · head.X · rin--g==> ═════════════
+    // ثلاثة وسوم تُترجَم وقت الترجمة إلى وسوم/عناصر موجودة (لا مفاسّر جديدة): انظر docs/field-head-ring.md
+    struct RItem {
+        std::string it, value, shown, key, kind, label; // كلها نصوص Rin جاهزة (مقتبسة عند الحاجة)
+        bool isField = false;
+    };
+
+    static std::string quoteRin(const std::string& v) {
+        std::string q = "\"";
+        for (char c : v) { if (c == '"' || c == '\\') q += '\\'; q += c; }
+        return q + "\"";
+    }
+    static std::string unquoteRin(const std::string& v) {
+        if (v.size() >= 2 && (v.front() == '"' || v.front() == '\'') && v.back() == v.front()) return v.substr(1, v.size() - 2);
+        return v;
+    }
+    // short_name / shortName → "Short name"
+    static std::string humanize(const std::string& k) {
+        std::string r;
+        for (size_t p = 0; p < k.size(); ++p) {
+            char c = k[p];
+            if (c == '_' || c == '-') { if (!r.empty() && r.back() != ' ') r += ' '; continue; }
+            if (p > 0 && std::isupper((unsigned char)c) && std::islower((unsigned char)k[p - 1])) { r += ' '; r += (char)std::tolower((unsigned char)c); continue; }
+            r += c;
+        }
+        if (!r.empty()) r[0] = (char)std::toupper((unsigned char)r[0]);
+        return r;
+    }
+
+    const ContainerInfo* findContainer(const std::string& name) const {
+        for (auto& c : ctx.reg) if (c.name == name) return &c;
+        return nullptr;
+    }
+    static std::string containerAtOffset(const std::vector<ContainerInfo>& reg, size_t off) {
+        const ContainerInfo* best = nullptr;
+        for (auto& c : reg) if (off >= c.begin && off < c.end && (!best || c.begin >= best->begin)) best = &c;
+        return best ? best->name : "";
+    }
+    // الحاوية المحيطة بالموضع الحالي: وسم <Container#X> مفتوح، وإلا حاوية @container=X التي يقع الوسم داخلها.
+    std::string enclosingContainer() const {
+        for (size_t k = stack.size(); k-- > 0;) if (!stack[k].cname.empty()) return stack[k].cname;
+        return ctx.curContainer;
+    }
+
+    // [ … ] متوازنة عند الموضع الحالي (على '[')؛ يعيد المحتوى مشذَّباً.
+    std::string readBracket() {
+        const int startLine = line;
+        ++i;
+        int depth = 1;
+        std::string body;
+        while (i < n) {
+            char c = s[i];
+            if (c == '"' || c == '\'') {
+                char q = c; body += s[i++];
+                while (i < n && s[i] != q) {
+                    if (s[i] == '\\' && i + 1 < n) body += s[i++];
+                    if (s[i] == '\n') ++line;
+                    body += s[i++];
+                }
+                if (i < n) body += s[i++];
+                continue;
+            }
+            if (c == '[') ++depth;
+            if (c == ']' && --depth == 0) { ++i; return trimWs(body); }
+            if (c == '\n') ++line;
+            body += c; ++i;
+        }
+        fail("unterminated '[' (missing ']')", startLine);
+    }
+
+    // سمات وسم مخصّص حتى '>' أو '/>'؛ يقبل ';' قبلهما (<field.x[];>) ويسجّله في semi.
+    void readCustomAttrs(const std::string& tagName, int startLine, std::vector<Attr>& attrs, bool& selfClose, bool& semi) {
+        for (;;) {
+            skipWs();
+            if (i >= n) fail("unterminated tag <" + tagName + ">", startLine);
+            if (s[i] == ';') { semi = true; ++i; continue; }
+            if (s[i] == '>') { ++i; return; }
+            if (s[i] == '/' && i + 1 < n && s[i + 1] == '>') { i += 2; selfClose = true; return; }
+            if (!isIdStart(s[i])) fail(std::string("unexpected '") + s[i] + "' in tag <" + tagName + ">");
+            size_t kb = i;
+            while (i < n && (isIdChar(s[i]) || (s[i] == '-' && i + 1 < n && isIdChar(s[i + 1])))) ++i;
+            Attr a; a.key = s.substr(kb, i - kb);
+            for (auto& ch : a.key) if (ch == '-') ch = '_';
+            size_t save = i; int saveLine = line;
+            skipWs();
+            if (i < n && s[i] == '=' && !(i + 1 < n && s[i + 1] == '>')) { ++i; skipWs(); a.value = readValue(); }
+            else { i = save; line = saveLine; a.value = "true"; }
+            attrs.push_back(std::move(a));
+        }
+    }
+    static std::string attrOf(const std::vector<Attr>& attrs, const char* key) {
+        for (auto& a : attrs) if (a.key == key) return a.value;
+        return "";
+    }
+    static std::vector<std::string> csvOf(const std::string& v) {
+        std::vector<std::string> r;
+        std::string x = unquoteRin(v), cur;
+        for (char c : x) { if (c == ',' || std::isspace((unsigned char)c)) { if (!cur.empty()) r.push_back(cur); cur.clear(); } else cur += c; }
+        if (!cur.empty()) r.push_back(cur);
+        return r;
+    }
+
+    // حقول حاوية → عناصر (key/value/shown/kind/label). sel = محتوى [ ] ('' = الكل؛ a,b = مختارة؛ !a = استثناء).
+    std::vector<RItem> fieldItems(const std::string& cn, const std::string& sel, const std::string& tick,
+                                  const std::vector<std::string>& kinds, int ln) {
+        const ContainerInfo* ci = findContainer(cn);
+        std::vector<std::string> pos, neg;
+        for (auto& part : splitTop(sel)) {
+            std::string t = trimWs(part);
+            if (t.empty()) continue;
+            if (t[0] == '!') neg.push_back(unquoteRin(trimWs(t.substr(1))));
+            else pos.push_back(unquoteRin(t));
+        }
+        auto names = [&]() { std::string r; if (ci) for (auto& f : ci->fields) r += (r.empty() ? "" : ", ") + f.name; return r.empty() ? std::string("none") : r; };
+        std::vector<FieldInfo> chosen;
+        if (pos.empty()) {
+            if (!ci) fail("no container named '" + cn + "' in this file — declare it (@container=" + cn + " / <Container#" + cn + ">) or list the fields: <field." + cn + "[a, b]>", ln);
+            chosen = ci->fields;
+        } else {
+            for (auto& nm : pos) {
+                const FieldInfo* f = ci ? ci->find(nm) : nullptr;
+                if (ci && !f) fail("container '" + cn + "' has no field '" + nm + "' (fields: " + names() + ")", ln);
+                chosen.push_back(f ? *f : FieldInfo{nm, "expr", ""});
+            }
+        }
+        for (auto& nm : neg) {
+            if (ci && !ci->find(nm)) fail("container '" + cn + "' has no field '" + nm + "' to exclude (fields: " + names() + ")", ln);
+            for (size_t k = 0; k < chosen.size(); ++k) if (chosen[k].name == nm) { chosen.erase(chosen.begin() + (long)k); break; }
+        }
+        if (!kinds.empty()) {
+            std::vector<FieldInfo> keep;
+            for (auto& f : chosen) {
+                bool ok = f.kind == "expr";
+                for (auto& k : kinds) if (k == f.kind) ok = true;
+                if (ok) keep.push_back(f);
+            }
+            chosen = keep;
+        }
+        if (chosen.empty()) fail("<field." + cn + "[…]> matched no fields" + (ci ? " (container fields: " + names() + ")" : ""), ln);
+        if (!tick.empty() && !ctx.fieldGetDeclared) {
+            ctx.fieldGetDeclared = true;
+            ctx.tail += "fun fieldGet(name, key, tick) { return container.get(name, key); } ";
+        }
+        std::vector<RItem> r;
+        for (auto& f : chosen) {
+            RItem it;
+            it.isField = true;
+            it.key = quoteRin(f.name);
+            it.value = tick.empty() ? "container.get(" + quoteRin(cn) + ", " + quoteRin(f.name) + ")"
+                                    : "fieldGet(" + quoteRin(cn) + ", " + quoteRin(f.name) + ", " + tick + ")";
+            it.shown = (f.kind == "list" || f.kind == "map") ? "jsonEncode(" + it.value + ")" : it.value;
+            it.kind = quoteRin(f.kind);
+            it.label = quoteRin(humanize(f.name));
+            it.it = it.value;
+            r.push_back(std::move(it));
+        }
+        return r;
+    }
+
+    // حجم قائمة Rin (حرفية/رقم/قياس تجريبي) لمصدر {expr}. يعيد false في تمريرة القياس (سُجِّل التعبير فقط).
+    bool listInfo(const std::string& le, int ln, int& count, bool& numeric, bool& literal, std::vector<std::string>& elems) {
+        count = -1; numeric = false; literal = false; elems.clear();
+        if (le.size() >= 2 && le.front() == '[' && le.back() == ']') {
+            int d = 0; bool single = true;
+            for (size_t k = 0; k < le.size(); ++k) {
+                char c = le[k];
+                if (c == '"' || c == '\'') { char q = c; ++k; while (k < le.size() && le[k] != q) { if (le[k] == '\\') ++k; ++k; } continue; }
+                if (c == '[' || c == '(' || c == '{') ++d;
+                else if (c == ']' || c == ')' || c == '}') { --d; if (d == 0 && k + 1 < le.size()) { single = false; break; } }
+            }
+            if (single) {
+                literal = true;
+                std::string inner = trimWs(le.substr(1, le.size() - 2));
+                if (!inner.empty()) for (auto& e : splitTop(inner)) { std::string t = trimWs(e); if (!t.empty()) elems.push_back(t); }
+                count = (int)elems.size();
+                return true;
+            }
+        }
+        if (!le.empty() && le.find_first_not_of("0123456789") == std::string::npos && le.size() < 6) { numeric = true; count = std::stoi(le); return true; }
+        if (ctx.probe) {
+            bool seen = false;
+            for (auto& e : ctx.eachExprs) if (e == le) seen = true;
+            if (!seen) ctx.eachExprs.push_back(le);
+            return false;
+        }
+        auto f = ctx.eachCounts.find(le);
+        if (f == ctx.eachCounts.end())
+            fail("<rin--g==>{" + le + "} needs the Rin runtime to know the list size (use it through the indsin pipeline/preview, "
+                 "or give a literal list like [\"a\", \"b\"] or a number)", ln);
+        count = f->second.count; numeric = f->second.numeric;
+        return true;
+    }
+
+    // {{x}} → {x} (خارج علامات الاقتباس فقط): قالب rin--g بصيغة mustache.
+    std::string normalizeMustache(const std::string& t) const {
+        std::string r;
+        size_t k = 0;
+        while (k < t.size()) {
+            char c = t[k];
+            if (c == '"' || c == '\'') {
+                char q = c; r += c; ++k;
+                while (k < t.size() && t[k] != q) { if (t[k] == '\\' && k + 1 < t.size()) r += t[k++]; r += t[k++]; }
+                if (k < t.size()) r += t[k++];
+                continue;
+            }
+            if (c == '{' && k + 1 < t.size() && t[k + 1] == '{') {
+                size_t b = k + 2; int d = 0; size_t e = b;
+                while (e < t.size()) {
+                    if (t[e] == '{') ++d;
+                    else if (t[e] == '}') { if (d == 0 && e + 1 < t.size() && t[e + 1] == '}') break; if (d > 0) --d; }
+                    ++e;
+                }
+                if (e >= t.size()) { r += c; ++k; continue; }
+                r += "{" + t.substr(b, e - b) + "}";
+                k = e + 2;
+                continue;
+            }
+            r += c; ++k;
+        }
+        return r;
+    }
+
+    // يطبّق قالب الجسم على كل عنصر ويضيف النتيجة إلى المخرجات (الأسطر المستهلكة تُحفَظ).
+    void renderItems(const std::vector<RItem>& items, const std::string& body, const std::string& kName, const std::string& vName,
+                     bool ringVars, const std::string& what, const std::string& idTag, int startLine) {
+        static const char* kFieldRow = "<Row#fld gap=8 padding=4><Text#fk size=small color=text_muted>{label}</Text><Spacer /><Text#fv>{shown}</Text></Row>";
+        static const char* kPlainText = "<Text#itm>{shown}</Text>";
+        std::string text;
+        for (size_t k = 0; k < items.size(); ++k) {
+            const RItem& it = items[k];
+            auto v = vars;
+            v[kName] = it.key; v[vName] = it.value;
+            v["shown"] = it.shown; v["kind"] = it.kind; v["label"] = it.label; v["index"] = std::to_string(k);
+            if (ringVars) { v["it"] = it.it; v["i"] = std::to_string(k); }
+            std::string tag;
+            if (it.isField) { tag = unquoteRin(it.key); for (auto& ch : tag) if (!isIdChar(ch)) ch = '_'; }
+            else tag = std::to_string(k);
+            const std::string& tpl = !body.empty() ? body : std::string(it.isField ? kFieldRow : kPlainText);
+            text += expandBody(tpl, v, idSuffix + "_" + idTag + "_" + tag, what, startLine, activeCond()) + " ";
+        }
+        put(text);
+        emitNewlines(line - startLine);
+    }
+
+    // ── <field.NAME[sel];> / <field[]> … </field> ─────────────────────────────────────────────
+    //   حقول الحاوية NAME (أو المحيطة إن حُذف الاسم) تتدفّق إلى جسم: قالب افتراضي (سطر: اسم + قيمة) أو جسم مخصّص.
+    void handleField() {
+        const int startLine = line;
+        i += 6; // "<field"
+        std::string cname;
+        if (i < n && s[i] == '.') {
+            ++i; size_t b = i;
+            while (i < n && isWordByte(s[i])) ++i;
+            cname = s.substr(b, i - b);
+            if (cname.empty()) fail("expected a container name after '<field.'", startLine);
+        }
+        std::string sel;
+        if (i < n && s[i] == '[') sel = readBracket();
+        std::vector<Attr> attrs; bool selfClose = false, semi = false;
+        readCustomAttrs("field", startLine, attrs, selfClose, semi);
+        for (auto& a : attrs) if (a.key != "tick" && a.key != "as" && a.key != "type" && a.key != "kind")
+            fail("<field> has no attribute '" + a.key + "' (known: tick, as, type)", startLine);
+        std::string cn = cname.empty() ? enclosingContainer() : cname;
+        if (cn.empty()) fail("<field[]> has no container: write <field.NAME[]> or put it inside <Container#NAME> / @container=NAME", startLine);
+        std::string kName = "key", vName = "value";
+        std::vector<std::string> as = csvOf(attrOf(attrs, "as"));
+        if (as.size() > 2) fail("<field as=\"k, v\"> takes at most two names", startLine);
+        if (as.size() >= 1) kName = as[0];
+        if (as.size() == 2) vName = as[1];
+        std::vector<std::string> kinds = csvOf(!attrOf(attrs, "type").empty() ? attrOf(attrs, "type") : attrOf(attrs, "kind"));
+        std::vector<RItem> items = fieldItems(cn, sel, attrOf(attrs, "tick"), kinds, startLine);
+        std::string body;
+        if (!selfClose && !semi) body = trimWs(captureBody("field", false, startLine));
+        int use = ++ctx.fieldUse[cn];
+        renderItems(items, body, kName, vName, false, "field", cn + (use > 1 ? "_" + std::to_string(use) : ""), startLine);
+    }
+
+    // ── <rin--g==>SRC & SRC & {{قالب}};> ─────────────────────────────────────────────────────
+    //   SRC: [] سياق (حقول الحاوية المحيطة) · [a, "b", 3] قائمة حرفية · NAME[sel] حقول حاوية · {expr} قائمة/رقم من Rin
+    //   & يضمّ المصادر بالترتيب، و{{ … }} (الأخير) قالب الجسم؛ فارغ = القالب الافتراضي.
+    void handleRing() {
+        const int startLine = line;
+        i += 7; // "<rin--g"
+        skipWs();
+        if (s.compare(i, 3, "==>") != 0) fail("rin--g needs '==>' after its name: <rin--g==>[] & {{ … }};>", startLine);
+        i += 3;
+        std::vector<RItem> items;
+        std::string tpl; bool haveTpl = false, probeSkip = false;
+        for (;;) {
+            skipWs();
+            if (i >= n) fail("unterminated tag <rin--g>", startLine);
+            if (haveTpl) fail("<rin--g>: the {{ template }} must be the last item (after '&')", startLine);
+            if (s[i] == '{' && i + 1 < n && s[i + 1] == '{') {
+                i += 2; int d = 0; std::string raw; bool closed = false;
+                while (i < n) {
+                    char c = s[i];
+                    if (c == '"' || c == '\'') {
+                        char q = c; raw += s[i++];
+                        while (i < n && s[i] != q) { if (s[i] == '\\' && i + 1 < n) raw += s[i++]; if (s[i] == '\n') ++line; raw += s[i++]; }
+                        if (i < n) raw += s[i++];
+                        continue;
+                    }
+                    if (c == '{') ++d;
+                    else if (c == '}') { if (d == 0 && i + 1 < n && s[i + 1] == '}') { i += 2; closed = true; break; } if (d > 0) --d; }
+                    if (c == '\n') ++line;
+                    raw += c; ++i;
+                }
+                if (!closed) fail("unterminated '{{' template (missing '}}')", startLine);
+                tpl = trimWs(normalizeMustache(raw)); haveTpl = true;
+            } else if (s[i] == '{' || std::isdigit((unsigned char)s[i])) { // {expr} أو رقم N: قائمة/عدد من Rin
+                std::string e;
+                if (s[i] == '{') e = readBraced();
+                else { size_t b = i; while (i < n && std::isdigit((unsigned char)s[i])) ++i; e = s.substr(b, i - b); }
+                if (e.empty()) fail("empty {} source in <rin--g>", startLine);
+                int count; bool numeric, literal; std::vector<std::string> elems;
+                if (!listInfo(e, startLine, count, numeric, literal, elems)) probeSkip = true;
+                else {
+                    if (count < 0) count = 0;
+                    if (count > 2000) fail("<rin--g> list is too long (" + std::to_string(count) + " > 2000)", startLine);
+                    for (int k = 0; k < count; ++k) {
+                        RItem it;
+                        it.it = literal ? "(" + elems[k] + ")" : numeric ? std::to_string(k) : "(" + e + ")[" + std::to_string(k) + "]";
+                        it.value = it.shown = it.it;
+                        it.key = quoteRin(std::to_string(k));
+                        it.kind = quoteRin(literal ? inferKind(elems[k]) : numeric ? "number" : "expr");
+                        it.label = literal ? quoteRin(humanize(unquoteRin(elems[k]))) : quoteRin("#" + std::to_string(k));
+                        items.push_back(std::move(it));
+                    }
+                }
+            } else if (s[i] == '[') { // [] سياق · [a, b, …] قائمة حرفية
+                std::string inner = readBracket();
+                if (inner.empty()) {
+                    std::string cn = enclosingContainer();
+                    if (cn.empty()) fail("<rin--g==>[]> has no list: put it inside <Container#NAME>, or write [a, b, c], NAME[] or {expr}", startLine);
+                    for (auto& it : fieldItems(cn, "", "", {}, startLine)) items.push_back(std::move(it));
+                } else {
+                    for (auto& e : splitTop(inner)) {
+                        std::string t = applyVars(trim(e));
+                        if (t.empty()) continue;
+                        RItem it;
+                        it.it = it.value = it.shown = t;
+                        it.key = quoteRin(std::to_string(items.size()));
+                        it.kind = quoteRin(inferKind(t));
+                        it.label = quoteRin(humanize(unquoteRin(t)));
+                        items.push_back(std::move(it));
+                    }
+                }
+            } else if (isWordByte(s[i])) { // NAME[sel] — حقول حاوية
+                size_t b = i;
+                while (i < n && isWordByte(s[i])) ++i;
+                std::string cn = s.substr(b, i - b), sel;
+                if (i < n && s[i] == '[') sel = readBracket();
+                for (auto& it : fieldItems(cn, sel, "", {}, startLine)) items.push_back(std::move(it));
+            } else fail(std::string("unexpected '") + s[i] + "' in <rin--g==>: expected [..] · NAME[..] · {expr} · {{template}}", startLine);
+            skipWs();
+            if (i < n && s[i] == '&') { ++i; continue; }
+            break;
+        }
+        skipWs();
+        if (i < n && s[i] == ';') { ++i; skipWs(); }
+        if (i < n && s[i] == '>') ++i;
+        else if (i + 1 < n && s[i] == '/' && s[i + 1] == '>') i += 2;
+        else fail("<rin--g==> must end with '>' (e.g. …};>)", startLine);
+        if (probeSkip) { emitNewlines(line - startLine); return; }
+        if (items.empty()) fail("<rin--g==> has no items (empty list)", startLine);
+        int use = ++ctx.ringUse;
+        renderItems(items, tpl, "key", "value", true, "rin--g", "g" + std::to_string(use), startLine);
+    }
+
+    // ── <head.NAME …> : ربط هوية @container.app=NAME بعناصر التصميم ─────────────────────────
+    static size_t editDistance(const std::string& a, const std::string& b) {
+        std::vector<size_t> prev(b.size() + 1), cur(b.size() + 1);
+        for (size_t j = 0; j <= b.size(); ++j) prev[j] = j;
+        for (size_t x = 1; x <= a.size(); ++x) {
+            cur[0] = x;
+            for (size_t j = 1; j <= b.size(); ++j)
+                cur[j] = std::min({prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[x - 1] == b[j - 1] ? 0 : 1)});
+            prev.swap(cur);
+        }
+        return prev[b.size()];
+    }
+    static const std::vector<std::string>& headFields() {
+        static const std::vector<std::string> f = {"kind", "id", "name", "short_name", "shortName", "category", "version", "version_code", "versionCode",
+            "channel", "author", "publisher", "license", "homepage", "lang", "dir", "description", "short_description", "shortDescription",
+            "theme_color", "themeColor", "background_color", "backgroundColor", "display", "orientation", "start_url", "startUrl", "scope",
+            "icon", "icons", "favicon", "seo", "locales", "releases", "version_parts", "container", "keywords", "canonical", "robots",
+            "seo_title", "seo_description", "og_image"};
+        return f;
+    }
+    // head.a.b → container.appInfo("APP")["a"]["b"] (خارج السلاسل). حقل غير معروف خطأ مع اقتراح.
+    std::string headRewrite(const std::string& e) const {
+        std::string r;
+        size_t k = 0;
+        const std::string base = "container.appInfo(" + quoteRin(ctx.headApp) + ")";
+        while (k < e.size()) {
+            char c = e[k];
+            if (c == '"' || c == '\'') {
+                size_t b = k++;
+                while (k < e.size() && e[k] != c) { if (e[k] == '\\' && k + 1 < e.size()) ++k; ++k; }
+                if (k < e.size()) ++k;
+                r += e.substr(b, k - b);
+            } else if (isIdStart(c)) {
+                size_t b = k;
+                while (k < e.size() && isIdChar(e[k])) ++k;
+                std::string w = e.substr(b, k - b);
+                bool member = b > 0 && e[b - 1] == '.';
+                if (w != "head" || member) { r += w; continue; }
+                std::vector<std::string> path;
+                size_t q = k;
+                while (q < e.size() && e[q] == '.') {
+                    size_t p = q + 1, pb = p;
+                    while (p < e.size() && isIdChar(e[p])) ++p;
+                    if (p == pb) break;
+                    path.push_back(e.substr(pb, p - pb));
+                    q = p;
+                }
+                if (path.empty()) { r += base; continue; }
+                bool known = false;
+                for (auto& f : headFields()) if (f == path[0]) known = true;
+                if (!known) {
+                    std::string best; size_t bd = 3;
+                    for (auto& f : headFields()) { size_t d = editDistance(path[0], f); if (d < bd) { bd = d; best = f; } }
+                    fail("unknown head field 'head." + path[0] + "'" + (best.empty() ? "" : " — did you mean 'head." + best + "'?") +
+                         " (fields of @container.app=" + ctx.headApp + ": name, version, description, icon, theme_color, lang, dir, seo.title …)");
+                }
+                std::string x = base;
+                for (auto& p : path) x += "[" + quoteRin(p) + "]";
+                r += x;
+                k = q;
+            } else { r += c; ++k; }
+        }
+        return r;
+    }
+
+    void handleHead() {
+        const int startLine = line;
+        i += 5; // "<head"
+        if (!(i < n && s[i] == '.')) fail("<head> needs the app container: <head.name_app>", startLine);
+        ++i;
+        size_t b = i;
+        while (i < n && isWordByte(s[i])) ++i;
+        const std::string app = s.substr(b, i - b);
+        if (app.empty()) fail("expected a container name after '<head.'", startLine);
+        std::string id = "head_" + app;
+        if (i < n && s[i] == '#') { ++i; size_t ib = i; while (i < n && isIdChar(s[i])) ++i; id = s.substr(ib, i - ib); if (id.empty()) fail("expected a name after '#'", startLine); }
+        std::vector<Attr> attrs; bool selfClose = false, semi = false;
+        readCustomAttrs("head." + app, startLine, attrs, selfClose, semi);
+        const bool block = !selfClose && !semi;
+        const bool show = !attrOf(attrs, "show").empty();
+        const bool dark = !attrOf(attrs, "dark").empty(), light = !attrOf(attrs, "light").empty();
+        const bool extern_ = !attrOf(attrs, "extern").empty();
+        std::vector<std::string> apply = csvOf(attrOf(attrs, "apply"));
+        std::vector<Attr> passthru;
+        for (auto& a : attrs) if (a.key != "show" && a.key != "dark" && a.key != "light" && a.key != "extern" && a.key != "apply") passthru.push_back(a);
+        if (!passthru.empty() && !show && !block)
+            fail("<head." + app + "> has no element to apply '" + passthru[0].key + "' to — add `show` or give it a body (<head." + app + "> … </head>)", startLine);
+
+        const ContainerInfo* ci = findContainer(app);
+        if (!ci && !extern_) fail("no @container.app=" + app + " in this file for <head." + app + "> (add `extern` if it is declared in an imported file)", startLine);
+        if (ci && !ci->tagForm && ci->kind != "app" && ci->kind != "site")
+            fail("<head." + app + "> needs an app/site container, but '" + app + "' is container." + ci->kind + " (use @container.app=" + app + ")", startLine);
+        ctx.headApp = app;
+
+        std::string text;
+        for (auto& a : apply) {
+            if (a == "theme") {
+                const FieldInfo* f = ci ? ci->find("theme_color") : nullptr;
+                std::string hex = f ? unquoteRin(trimWs(f->raw)) : "";
+                if (!f || f->kind != "string" || hex.size() < 4 || hex[0] != '#')
+                    fail("<head." + app + " apply=theme> needs a literal theme_color=\"#RRGGBB\" inside @container.app=" + app, startLine);
+                text += expandBody("<Palette#" + id + "_theme seed=" + hex + (dark ? " dark" : "") + (light ? " light" : "") + " />", {}, idSuffix, "head", startLine, activeCond()) + " ";
+            } else if (a == "tokens") {
+                static const char* fs[] = {"version", "description", "theme_color", "background_color", "lang", "dir", "icon"};
+                // name وshort_name مشتقّان دائماً؛ الباقي فقط إن عُرِّف في الحاوية (لا مفاتيح ناقصة وقت التشغيل)
+                std::vector<std::string> have = {"name", "short_name"};
+                for (const char* f : fs) if (!ci || ci->find(f)) have.push_back(f);
+                for (auto& f : have) ctx.tail += "let head_" + f + " = container.appInfo(" + quoteRin(app) + ")[\"" + f + "\"]; ";
+            } else fail("<head." + app + " apply=\"" + a + "\"> is unknown (use theme, tokens)", startLine);
+        }
+        auto attrText = [&]() { std::string t; for (auto& a : passthru) t += " " + a.key + "=" + a.value; return t; };
+        if (show) {
+            if (block) fail("<head." + app + "> has both `show` and a body — pick one", startLine);
+            std::string t = "<Row#" + id + attrText() + (attrOf(passthru, "gap").empty() ? " gap=12" : "") + (attrOf(passthru, "padding").empty() ? " padding=12" : "") + ">";
+            if (ci && ci->find("icon")) t += "<Image#" + id + "_icon src={head.icon} width=40 height=40 />";
+            t += "<Column#" + id + "_txt gap=2><Text#" + id + "_name size=title>{head.name}</Text>";
+            if (ci && ci->find("version")) t += "<Text#" + id + "_ver size=small color=text_muted>v{head.version}</Text>";
+            t += "</Column></Row>";
+            text += expandBody(t, {}, idSuffix, "head", startLine, activeCond()) + " ";
+        }
+        if (!text.empty()) put(text);
+        if (block) { // <head.X> … </head>: الأبناء داخل صف ترويسة (Row افتراضياً أو as=Column)
+            std::string kind = attrOf(passthru, "as"); kind = kind.empty() ? "Row" : unquoteRin(kind);
+            std::string st = "@view." + kind + "=" + nameToken(id + idSuffix);
+            for (auto& a : passthru) if (a.key != "as") st += " " + a.key + "=" + a.value + ";";
+            put(st);
+            Frame fr{"head." + app, ".end/view", startLine, "", ""};
+            stack.push_back(fr);
+        }
+        emitNewlines(line - startLine);
+    }
+
     void handleTag() {
+        if (!flat && !ctx.reg.empty()) ctx.curContainer = containerAtOffset(ctx.reg, i);
         if (i + 1 < n && s[i] == '<' && s[i + 1] == '<') { handleBridge(); return; } // << … >>
         const int startLine = line;
         const size_t startPos = i;
@@ -827,7 +1505,8 @@ private:
             if (stack.empty()) fail("unexpected closing tag </" + nm + ">", startLine);
             Frame f = stack.back();
             if (f.br) fail("<<" + lower(f.tagName) + ">> opened at line " + std::to_string(f.line) + " is not closed: it needs <</if>> before </" + nm + ">", f.line);
-            if (!nm.empty() && lower(nm) != lower(f.tagName))
+            const bool headClose = lower(nm) == "head" && lower(f.tagName).compare(0, 5, "head.") == 0; // </head> يغلق <head.X>
+            if (!nm.empty() && lower(nm) != lower(f.tagName) && !headClose)
                 fail("closing tag </" + nm + "> does not match <" + f.tagName + "> opened at line " + std::to_string(f.line), startLine);
             if (nm.empty() && !f.tagName.empty())
                 fail("'</>' closes a fragment, but <" + f.tagName + "> is open (line " + std::to_string(f.line) + ")", startLine);
@@ -837,6 +1516,13 @@ private:
             return;
         }
 
+        // field ==> body · head.X · rin--g==>  (حروف صغيرة فقط؛ <Field> الجاهز و<Head…> لا يتأثران)
+        {
+            auto delim = [&](size_t p) { return p >= n || s[p] == '.' || s[p] == '[' || s[p] == '>' || s[p] == '/' || s[p] == ';' || std::isspace((unsigned char)s[p]); };
+            if (s.compare(i, 6, "<field") == 0 && delim(i + 6) && !ctx.macros.count("field")) { handleField(); return; }
+            if (s.compare(i, 5, "<head") == 0 && delim(i + 5) && !ctx.macros.count("head")) { handleHead(); return; }
+            if (s.compare(i, 7, "<rin--g") == 0 && (delim(i + 7) || s[i + 7] == '=') && !ctx.macros.count("rin--g")) { handleRing(); return; }
+        }
         // افتتاح
         ++i; // <
         size_t b = i;
@@ -1044,6 +1730,7 @@ private:
             }
         }
 
+        const std::string rawId = id;
         if (!id.empty()) id += idSuffix; // عناصر القوالب/التكرار: أسماء فريدة لكل نسخة
         // تصنيف الوسم
         std::string head = tagName, sub;
@@ -1175,7 +1862,9 @@ private:
             if (!isStatement) out += " " + closer;
         } else {
             put(stmt);
-            stack.push_back({tagName, closer, startLine, "", ""});
+            Frame fr{tagName, closer, startLine, "", ""};
+            if (hl == "container") fr.cname = rawId;
+            stack.push_back(fr);
         }
         emitNewlines(consumed);
         (void)startPos;
@@ -1294,6 +1983,11 @@ inline bool usesBuiltinComponent(const std::string& src) {
     return false;
 }
 
+// هل في المصدر <field …> أو <head.X> أو <rin--g==> ؟ (فحص سريع؛ يفعّل مسح الحاويات)
+inline bool usesFieldHeadRing(const std::string& src) {
+    return src.find("<field") != std::string::npos || src.find("<head") != std::string::npos || src.find("<rin--g") != std::string::npos;
+}
+
 namespace detail {
 inline std::string desugarWith(const std::string& source, Ctx& ctx) {
     std::string pre;
@@ -1301,14 +1995,11 @@ inline std::string desugarWith(const std::string& source, Ctx& ctx) {
     if (usesStoreApi(source)) pre += storeLibPrelude();
     if (usesContainerView(source)) pre += containerLibPrelude();
     std::string r;
-    if (!pre.empty()) {
-        std::string withPrelude = pre + source; // بلا '\n' في المقدمة: الأسطر محفوظة
-        Desugarer d(withPrelude, ctx);
-        r = d.run();
-    } else {
-        Desugarer d(source, ctx);
-        r = d.run();
-    }
+    std::string withPrelude = pre.empty() ? std::string() : pre + source; // بلا '\n' في المقدمة: الأسطر محفوظة
+    const std::string& text = pre.empty() ? source : withPrelude;
+    if (usesFieldHeadRing(source)) ctx.reg = scanContainers(text); // مسح ساكن للحاويات: فقط إن استُعمل field/head/rin--g
+    Desugarer d(text, ctx);
+    r = d.run();
     if (!ctx.tail.empty()) r += "\n" + ctx.tail; // عبارات <<let>> المرفوعة (بعد كل الأسطر الأصلية، فأرقام الأخطاء سليمة)
     return r;
 }
