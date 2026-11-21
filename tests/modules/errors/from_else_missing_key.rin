@@ -1,0 +1,1 @@
+let q from "./nope.rin" else {"other": 1};
