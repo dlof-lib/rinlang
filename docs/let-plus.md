@@ -13,6 +13,7 @@
 | حارس `else` | `let v = find(k) else { return; };` |
 | تفكيك في `for` | `for (let [k, v] in pairs) { ... }` |
 | تبديل/إسناد تفكيكي | `[a, b] = [b, a];` |
+| `from` | `let name, age = 0, ...rest from user else { return; };` — انظر `docs/from.md` |
 
 ## 1) تفكيك المصفوفة
 ```kotlin
