@@ -1037,6 +1037,7 @@ private:
     void loadLibraryUnit(const std::string& root, int line, LibraryUnit& unit);
     void execLibraryBody(const std::vector<StmtPtr>& stmts, const std::vector<std::pair<size_t, std::string>>* segs, const EnvPtr& env);
     void registerNativesLibDir();   // rin_libdir.cpp — rinlib.*
+    void registerNativesPrintLayout(); // rin_print_layout.cpp — سمات print: مسافات/تنسيق/تعليم/تخطيط + layoutText/fmtNumber/showSpaces (docs/print-layout.md)
     void registerNativesLock();     // rin_lock.cpp — main.lock: خزنة الأسرار المشفّرة
     void registerNativesRintwist(); // rin_rintwist.cpp — rintwist.get / fmt / stack
     void registerNativesCapture();  // rin_expr_host.cpp — captureOutput/capture/indsin.run: استدعاء دالة والتقاط ما تطبعه (جسر <<...>>)
