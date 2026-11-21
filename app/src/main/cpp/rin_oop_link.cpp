@@ -343,6 +343,14 @@ void Interpreter::registerNativesOopLink() {
                         return Value::makeArray(arr); };
                     if (!fit->second.only.empty()) m->push_back({Value::string("only"), toArr(fit->second.only)});
                     if (!fit->second.except.empty()) m->push_back({Value::string("except"), toArr(fit->second.except)});
+                    if (!fit->second.prefix.empty()) m->push_back({Value::string("prefix"), Value::string(fit->second.prefix)});
+                    if (!fit->second.rename.empty()) {
+                        auto rm = std::make_shared<MapData>();
+                        std::vector<std::pair<std::string, std::string>> rv(fit->second.rename.begin(), fit->second.rename.end());
+                        std::sort(rv.begin(), rv.end());
+                        for (auto& kv : rv) rm->push_back({Value::string(kv.first), Value::string(kv.second)}); // محلي -> اسم الهدف
+                        m->push_back({Value::string("rename"), Value::makeMap(rm)});
+                    }
                 }
                 out->push_back(Value::makeMap(m));
             }
@@ -351,6 +359,144 @@ void Interpreter::registerNativesOopLink() {
         add(it->second->lkd().roLinks, true);
         return Value::makeArray(out);
     };
+
+    // ======================= links.* — دوال الربط (تكافئ link/unlink لكن برمجياً بأسماء حاويات صريحة) =======================
+    // links.add(from, target [, opts])  opts: {readonly, only:[..], except:[..], rename:{محلي: اسم_الهدف}, prefix}
+    //                                   rename بلا only = اسم بديل (الأصلي يبقى مرئياً)؛ مع only = إعادة تسمية خالصة
+    // links.remove(from, target) -> عدد الروابط المفكوكة      links.clear(from) -> عدد الروابط المفكوكة كلها
+    // links.has(from, target) -> bool                         links.count(from) -> عدد الروابط
+    // links.by(target) -> [حاويات مرتبطة بـ target] (عكسي)    links.names(from) -> [الأسماء المرئية فيها بما فيها المرتبطة]
+    // links.ids() -> {id: حاوية}                              links.target(id) -> اسم الحاوية أو nil
+    {
+        auto envName = [this](const EnvPtr& e) { for (auto& kv : containers) if (kv.second == e) return kv.first; return std::string("?"); };
+        auto strList = [](const Value& v, const std::string& fn, const char* what, int line) {
+            std::vector<std::string> out;
+            if (v.type != Value::Type::ARRAY || !v.array)
+                throw diagErr(diag::Code::E0004_InvalidType, line, "'" + fn + "': `" + what + "` must be an array of names but got " + v.typeName());
+            for (auto& x : *v.array) out.push_back(x.toDisplayString());
+            return out;
+        };
+        auto strArg = [](const Args& a, size_t i, const std::string& fn, int line) -> std::string {
+            if (a.size() <= i || a[i].type != Value::Type::STRING)
+                throw diagErr(diag::Code::E0007_InvalidArguments, line, "'" + fn + "' expects a container name (string) as argument " + std::to_string(i + 1));
+            return a[i].str;
+        };
+
+        natives["links.add"] = [this, needContainer, strList, strArg](Args& a, int line) -> Value {
+            if (a.size() < 2 || a.size() > 3)
+                throw diagErr(diag::Code::E0007_InvalidArguments, line, "links.add(from, target [, opts]) expects 2 or 3 arguments");
+            EnvPtr cur = needContainer(strArg(a, 0, "links.add", line), "links.add", line);
+            EnvPtr t = needContainer(strArg(a, 1, "links.add", line), "links.add", line);
+            LinkFilter lf; bool ro = false;
+            if (a.size() == 3 && a[2].type != Value::Type::NIL) {
+                if (a[2].type != Value::Type::MAP || !a[2].map)
+                    throw diagErr(diag::Code::E0004_InvalidType, line, "links.add: opts must be a map like {readonly: true, only: [\"a\"]}");
+                for (auto& kv : *a[2].map) {
+                    const std::string k = kv.first.toDisplayString();
+                    if (k == "readonly") ro = kv.second.isTruthy();
+                    else if (k == "only") { auto v = strList(kv.second, "links.add", "only", line); lf.only.insert(v.begin(), v.end()); }
+                    else if (k == "except") { auto v = strList(kv.second, "links.add", "except", line); lf.except.insert(v.begin(), v.end()); }
+                    else if (k == "prefix") lf.prefix = kv.second.toDisplayString();
+                    else if (k == "rename") {
+                        if (kv.second.type != Value::Type::MAP || !kv.second.map)
+                            throw diagErr(diag::Code::E0004_InvalidType, line, "links.add: `rename` must be a map {local: targetName}");
+                        for (auto& r : *kv.second.map) lf.rename[r.first.toDisplayString()] = r.second.toDisplayString();
+                    } else
+                        throw errWithReason(diag::Code::E0016_InvalidProperty, line, "links.add: unknown option `" + k + "`",
+                                            "valid options: readonly, only, except, rename, prefix");
+                }
+            }
+            if (!lf.only.empty() && !lf.except.empty())
+                throw diagErr(diag::Code::E0016_InvalidProperty, line, "links.add: `only` and `except` cannot be combined");
+            if (!lf.prefix.empty() && !lf.rename.empty())
+                throw diagErr(diag::Code::E0016_InvalidProperty, line, "links.add: `prefix` cannot be combined with `rename`");
+            if (t == cur) throw diagErr(diag::Code::E0014_InvalidContainer, line, "links.add: a container cannot be linked to itself ('" + a[0].str + "')");
+            if (t->linksReach(cur.get()))
+                throw diagErr(diag::Code::E0014_InvalidContainer, line, "links.add: circular link — '" + a[1].str + "' is already linked (directly or not) to '" + a[0].str + "'");
+            auto& keep = ro ? cur->lkd().roLinks : cur->lkd().links;
+            auto& drop = ro ? cur->lkd().links : cur->lkd().roLinks;
+            drop.erase(std::remove(drop.begin(), drop.end(), t), drop.end());
+            cur->anyLinks = true;
+            if (std::find(keep.begin(), keep.end(), t) == keep.end()) keep.push_back(t);
+            if (!lf.only.empty() || !lf.except.empty() || !lf.prefix.empty() || !lf.rename.empty()) cur->lkd().filters[t.get()] = std::move(lf);
+            else cur->lkd().filters.erase(t.get());
+            return Value::boolean_(true);
+        };
+        natives["links.remove"] = [this, needContainer, strArg](Args& a, int line) -> Value {
+            EnvPtr cur = needContainer(strArg(a, 0, "links.remove", line), "links.remove", line);
+            EnvPtr t = needContainer(strArg(a, 1, "links.remove", line), "links.remove", line);
+            double removed = 0;
+            if (cur->lk) for (auto* vec : {&cur->lk->links, &cur->lk->roLinks}) {
+                auto it = std::find(vec->begin(), vec->end(), t);
+                if (it != vec->end()) { vec->erase(it); cur->lk->filters.erase(t.get()); ++removed; }
+            }
+            return Value::num(removed);
+        };
+        natives["links.clear"] = [this, needContainer, strArg](Args& a, int line) -> Value {
+            EnvPtr cur = needContainer(strArg(a, 0, "links.clear", line), "links.clear", line);
+            double n = 0;
+            if (cur->lk) { n = (double)(cur->lk->links.size() + cur->lk->roLinks.size()); cur->lk->links.clear(); cur->lk->roLinks.clear(); cur->lk->filters.clear(); }
+            return Value::num(n);
+        };
+        natives["links.has"] = [this, needContainer, strArg](Args& a, int line) -> Value {
+            EnvPtr cur = needContainer(strArg(a, 0, "links.has", line), "links.has", line);
+            EnvPtr t = needContainer(strArg(a, 1, "links.has", line), "links.has", line);
+            if (!cur->lk) return Value::boolean_(false);
+            for (auto* vec : {&cur->lk->links, &cur->lk->roLinks})
+                if (std::find(vec->begin(), vec->end(), t) != vec->end()) return Value::boolean_(true);
+            return Value::boolean_(false);
+        };
+        natives["links.count"] = [this, needContainer, strArg](Args& a, int line) -> Value {
+            EnvPtr cur = needContainer(strArg(a, 0, "links.count", line), "links.count", line);
+            return Value::num(cur->lk ? (double)(cur->lk->links.size() + cur->lk->roLinks.size()) : 0.0);
+        };
+        natives["links.by"] = [this, needContainer, strArg](Args& a, int line) -> Value {
+            EnvPtr t = needContainer(strArg(a, 0, "links.by", line), "links.by", line);
+            std::set<std::string> by;
+            for (auto& kv : containers) {
+                if (!kv.second || !kv.second->lk) continue;
+                for (auto* vec : {&kv.second->lk->links, &kv.second->lk->roLinks})
+                    if (std::find(vec->begin(), vec->end(), t) != vec->end()) by.insert(kv.first);
+            }
+            return libint::strArr(std::vector<std::string>(by.begin(), by.end()));
+        };
+        natives["links.names"] = [this, needContainer, strArg](Args& a, int line) -> Value {
+            EnvPtr cur = needContainer(strArg(a, 0, "links.names", line), "links.names", line);
+            std::function<void(const Environment*, std::set<std::string>&, int)> collect =
+                [&](const Environment* e, std::set<std::string>& out, int depth) {
+                    for (auto& kv : e->values) out.insert(kv.first);
+                    if (!e->lk || depth > 32) return;
+                    for (auto* vec : {&e->lk->links, &e->lk->roLinks}) for (auto& l : *vec) {
+                        std::set<std::string> inner; collect(l.get(), inner, depth + 1);
+                        auto fit = e->lk->filters.find(l.get());
+                        for (auto& n : inner) {
+                            if (fit == e->lk->filters.end()) { out.insert(n); continue; }
+                            const LinkFilter& f = fit->second;
+                            std::vector<std::string> cands{n};
+                            if (!f.prefix.empty()) cands.push_back(f.prefix + n);
+                            for (auto& r : f.rename) if (r.second == n) cands.push_back(r.first);
+                            for (auto& c : cands) {
+                                std::string rb;
+                                if (e->linkMap(l.get(), c, rb) && (rb.empty() ? c : rb) == n) out.insert(c);
+                            }
+                        }
+                    }
+                };
+            std::set<std::string> all; collect(cur.get(), all, 0);
+            return libint::strArr(std::vector<std::string>(all.begin(), all.end()));
+        };
+        natives["links.ids"] = [this](Args& a, int line) -> Value {
+            if (!a.empty()) throw diagErr(diag::Code::E0007_InvalidArguments, line, "links.ids() takes no arguments");
+            std::map<std::string, std::string> sorted(linkIdToContainer.begin(), linkIdToContainer.end());
+            auto m = std::make_shared<MapData>();
+            for (auto& kv : sorted) m->push_back({Value::string(kv.first), Value::string(kv.second)});
+            return Value::makeMap(m);
+        };
+        natives["links.target"] = [this, strArg](Args& a, int line) -> Value {
+            auto it = linkIdToContainer.find(strArg(a, 0, "links.target", line));
+            return it == linkIdToContainer.end() ? Value::nil() : Value::string(it->second);
+        };
+    }
 
     natives["oop.watchContainer"] = [this, needContainer, N](Args& a, int line) -> Value {
         need("oop.watchContainer", a, 3, 3, line);
