@@ -1,0 +1,6 @@
+@container=C
+    let a = 1;
+.end/container
+@container=D
+    link a as x, a from C prefix=p_;
+.end/container
