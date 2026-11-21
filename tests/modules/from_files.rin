@@ -1,0 +1,19 @@
+// تواصل الملفات بـ from: إعادة تصدير، مسار ديناميكي، استيراد اختياري، JSON
+let twice, VERSION, quad, own from "./sub/from_api.rin";
+print twice(5), VERSION, quad(3), own();
+
+let dir = "./sub";
+let double as dbl from file(dir + "/util.rin");
+print dbl(21);
+
+let * as util from file(dir + "/" + "util.rin");
+print util.triple(2);
+
+let host, port from "./sub/from_cfg.json";
+print host, port;
+
+let a, b as c from "./nope.rin" else {"a": 1, "b": 2};
+print a, c;
+
+let host as h2, port as p2 from "./nope.json" else {"host": "localhost", "port": 8080};
+print h2, p2;
