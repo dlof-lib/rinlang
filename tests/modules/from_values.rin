@@ -1,0 +1,41 @@
+// from_values.rin — `let ... from <قيمة>` (docs/from.md): تفكيك قاموس/كائن/مصفوفة بأسلوب from
+let user = {"name": "Sara", "age": 30, "city": "Riyadh", "role": "admin"};
+
+let name, age from user;
+print name, age;
+
+let city as town, missing = "n/a" from user;
+print town, missing;
+
+let name as nm, ...others from user;
+print nm, len(others);
+
+let "role" as r from user;
+print r;
+
+let { name as who, age = 0 } from user;
+print who, age;
+
+let profile = {"profile": {"lang": "ar", "tz": "UTC+3"}};
+let profile: {lang, tz = "x", theme = "dark"} from profile;
+print lang, tz, theme;
+
+let [a, b = 5, ...rest] from [1, nil, 3, 4];
+print a, b, len(rest);
+
+fun describe(m) {
+    let id, tag = "-" from m else { return "bad shape"; };
+    return id + tag;
+}
+print describe({"id": "7"}), describe(nil);
+
+let color = nil;
+let c from {"c": "red"} else "blue";
+print c;
+
+class Pt { let x = 3; let y = 4; }
+let x, y from Pt();
+print x, y;
+
+let from = 9;
+print from;
