@@ -1,0 +1,317 @@
+// indsin_live.rin — اختبار lib/indsinlive.og.rin (أحداث · محتوى حيّ · نماذج · حركة) — docs/indsin_live.md
+// الزمن يدوي (ilSetTime/ilTick) فالمخرجات حتمية.
+@import "lib/indsinlive.og.rin";
+
+fun check(label, cond) {
+    if (cond) { print "ok   " + label; } else { print "FAIL " + label; }
+}
+
+let app = ilApp("demo");
+ilSetTime(app, 0);
+
+print "== 1) الأحداث";
+let log = [];
+let hid = ilOn(app, "click:save", fun(ev) { push(log, "save:" + ev["target"]); return 1; });
+ilOn(app, "click:*", fun(ev) { push(log, "any:" + ev["target"]); return 2; });
+ilOn(app, "*:save", fun(ev) { push(log, "type:" + ev["type"]); return 3; });
+let r = ilClick(app, "save", {"n": 1});
+check("3 معالجات تطابق click:save", r["handled"] == 3);
+check("ترتيب التسجيل محفوظ", join(log, ",") == "save:save,any:save,type:click");
+log = [];
+ilClick(app, "cancel", nil);
+check("click:* فقط لـ cancel", join(log, ",") == "any:cancel");
+check("ilOff يحذف", ilOff(app, hid) == true and ilOff(app, hid) == false);
+let once = [];
+ilOnce(app, "ready", fun(ev) { push(once, "r"); return nil; });
+ilEmit(app, "ready", nil);
+ilEmit(app, "ready", nil);
+check("ilOnce مرة واحدة", len(once) == 1);
+ilOn(app, "boom", fun(ev) { throw "bad handler"; });
+let br = ilEmit(app, "boom", nil);
+check("خطأ المعالج يُلتقط ولا يوقف", br["handled"] == 0 and len(br["errors"]) == 1 and len(ilErrors(app)) == 1);
+ilClearErrors(app);
+ilUse(app, fun(ev) { return ev["name"] != "click:blocked"; });
+ilOn(app, "click:blocked", fun(ev) { return 1; });
+let gr = ilClick(app, "blocked", nil);
+check("الحارس يلغي الحدث", gr["cancelled"] == true and gr["handled"] == 0);
+ilThrottle(app, "click:buy", 500);
+let buys = [];
+ilOn(app, "click:buy", fun(ev) { push(buys, 1); return nil; });
+ilSetTime(app, 1000); ilClick(app, "buy", nil);
+ilSetTime(app, 1200); ilClick(app, "buy", nil);
+ilSetTime(app, 1600); ilClick(app, "buy", nil);
+check("throttle 500ms: نقرتان من ثلاث", len(buys) == 2);
+let q = [];
+ilDebounce(app, "input:search", 300, fun(ev) { push(q, ev["payload"]); return nil; });
+ilSetTime(app, 2000); ilInput(app, "search", "a");
+ilSetTime(app, 2100); ilInput(app, "search", "ab");
+ilTick(app, 2300);
+check("debounce لم يُطلق بعد", len(q) == 0);
+ilTick(app, 2400);
+check("debounce أُطلق بآخر قيمة", len(q) == 1 and q[0] == "ab");
+let deep = 0;
+ilOn(app, "loop:a", fun(ev) { ilEmit(app, "loop:a", nil); return nil; });
+let lr = ilEmit(app, "loop:a", nil);
+check("حدّ العمق يمنع الدوران اللانهائي", len(ilErrors(app)) > 0);
+ilClearErrors(app);
+
+print "== 2) خانات حيّة";
+let title = "";
+let bindCalls = 0;
+ilBind(app, "title", fun(v) { title = v; bindCalls = bindCalls + 1; });
+check("ilSet يغيّر ويبلّغ", ilSet(app, "title", "Hello") == true and title == "Hello");
+check("نفس القيمة لا تُبلّغ", ilSet(app, "title", "Hello") == false and bindCalls == 1);
+ilSet(app, "count", 1);
+ilUpdateSlot(app, "count", fun(c) { return c + 4; });
+check("ilUpdateSlot", ilGet(app, "count", 0) == 5);
+let late = "";
+ilBind(app, "title", fun(v) { late = v; });
+check("ilBind يستدعي فوراً بالقيمة الحالية", late == "Hello");
+
+print "== 3) فرق القوائم";
+let old = [{"id": 1, "name": "A"}, {"id": 2, "name": "B"}, {"id": 3, "name": "C"}, {"id": 4, "name": "D"}];
+let nw = [{"id": 4, "name": "D"}, {"id": 2, "name": "B2"}, {"id": 5, "name": "E"}, {"id": 1, "name": "A"}];
+let ps = ilDiff(old, nw, "id");
+let ops = [];
+for (let p in ps) { push(ops, p["op"] + (p["key"] == nil ? "" : "#" + str(p["key"]))); }
+print join(ops, " ");
+check("ilApply(diff) = الجديد", ilApply(old, ps) == nw);
+check("بلا تغيير ⇒ لا عمليات", len(ilDiff(old, old, "id")) == 0);
+print ilDiff([1, 2, 3], [1, 9, 3, 4], nil);
+check("بلا مفتاح: ilApply", ilApply([1, 2, 3], ilDiff([1, 2, 3], [1, 9, 3, 4], nil)) == [1, 9, 3, 4]);
+check("بلا مفتاح: حذف الذيل", ilApply([1, 2, 3, 4], ilDiff([1, 2, 3, 4], [1], nil)) == [1]);
+let seed = 7;
+let allOk = true;
+let round_i = 0;
+while (round_i < 60) {
+    let a = [];
+    let b = [];
+    let pool = [1, 2, 3, 4, 5, 6, 7, 8];
+    let k = 0;
+    while (k < len(pool)) {
+        seed = (seed * 1103 + 12345) % 65536;
+        if (seed % 3 != 0) { push(a, {"id": pool[k], "v": seed % 4}); }
+        seed = (seed * 1103 + 12345) % 65536;
+        if (seed % 3 != 0) { push(b, {"id": pool[k], "v": seed % 4}); }
+        k = k + 1;
+    }
+    let bs = [];
+    let m = len(b) - 1;
+    while (m >= 0) { push(bs, b[m]); m = m - 1; }
+    seed = (seed * 1103 + 12345) % 65536;
+    let target = seed % 2 == 0 ? b : bs;
+    if (ilApply(a, ilDiff(a, target, "id")) != target) { allOk = false; }
+    round_i = round_i + 1;
+}
+check("60 حالة عشوائية: ilApply(ilDiff(a,b)) == b", allOk);
+let dupFail = false;
+try { ilDiff([], [{"id": 1}, {"id": 1}], "id"); } catch (e) { dupFail = true; }
+check("مفتاح مكرّر يُرفض", dupFail);
+
+print "== 4) مناطق المحتوى";
+ilRegion(app, "todos", [{"id": 1, "t": "milk", "done": false}], {"key": "id"});
+let seen = [];
+ilOn(app, "patch:todos", fun(ev) { push(seen, len(ev["payload"]["patches"])); return nil; });
+let mirror = [];
+ilRegionBind(app, "todos", fun(items, patches) { mirror = items; return nil; });
+ilAdd(app, "todos", {"id": 2, "t": "eggs", "done": false}, nil);
+ilPatchItem(app, "todos", 1, {"done": true});
+check("ilAdd + ilPatchItem", len(ilRegionItems(app, "todos")) == 2 and ilFind(app, "todos", 1)["done"] == true);
+check("حدث patch لكل تغيير", len(seen) == 2 and seen[0] == 1 and seen[1] == 1);
+check("ilRegionBind يرى القائمة", len(mirror) == 2);
+check("نفس البيانات ⇒ لا patch", len(ilUpdate(app, "todos", ilRegionItems(app, "todos"))) == 0 and len(seen) == 2);
+ilRemove(app, "todos", 1);
+check("ilRemove", len(ilRegionItems(app, "todos")) == 1 and ilRegionVersion(app, "todos") == 3);
+let pj = ilPatchesJson([{"op": "remove", "index": 0}]);
+print pj;
+
+print "== 5) تحميل وتحديث متفائل";
+ilRegion(app, "users", [], {"key": "id"});
+print ilRegionState(app, "users");
+let calls = {"n": 0};
+let loadFn = fun() { calls["n"] = calls["n"] + 1; return [{"id": 1, "name": "Ali"}, {"id": 2, "name": "Sara"}]; };
+let lr1 = ilLoad(app, "users", loadFn);
+check("ilLoad ok", lr1["ok"] == true and ilRegionState(app, "users") == "ready" and len(ilRegionItems(app, "users")) == 2);
+let lr2 = ilRefresh(app, "users");
+check("ilRefresh بلا تغيير ⇒ بلا patches", len(lr2["patches"]) == 0 and calls["n"] == 2);
+let failLoad = ilLoad(app, "users", fun() { throw "network down"; });
+check("فشل التحميل ⇒ حالة error", failLoad["ok"] == false and ilRegionState(app, "users") == "error");
+check("الإخفاق يُبقي العناصر القديمة", len(ilRegionItems(app, "users")) == 2);
+ilLoad(app, "users", loadFn);
+let rolled = [];
+ilOn(app, "rollback:users", fun(ev) { push(rolled, ev["payload"]["error"]); return nil; });
+let o1 = ilOptimistic(app, "users", fun(items) { push(items, {"id": 3, "name": "Omar"}); return items; }, fun() { return {"ok": false, "error": "409"}; });
+check("optimistic فشل ⇒ تراجع", o1["rolledBack"] == true and len(ilRegionItems(app, "users")) == 2 and rolled[0] == "409");
+let o2 = ilOptimistic(app, "users", fun(items) { push(items, {"id": 3, "name": "Omar"}); return items; }, fun() { return {"ok": true}; });
+check("optimistic نجاح ⇒ يبقى", o2["ok"] == true and len(ilRegionItems(app, "users")) == 3);
+ilRegion(app, "feed", [], {"key": "id"});
+let polls = {"n": 0};
+ilLoad(app, "feed", fun() { polls["n"] = polls["n"] + 1; return [{"id": polls["n"]}]; });
+ilSetTime(app, 10000);
+ilPoll(app, "feed", 1000);
+ilTick(app, 10500);
+ilTick(app, 11000);
+ilTick(app, 11500);
+ilTick(app, 12000);
+check("ilPoll كل ثانية", polls["n"] == 3);
+check("ilPollStop", ilPollStop(app, "feed") == true and ilPollStop(app, "feed") == false);
+
+print "== 6) النماذج";
+let schema = {
+    "email": {"required": true, "kind": "email"},
+    "password": {"required": true, "minLen": 8},
+    "confirm": {"required": true, "equals": "password"},
+    "age": {"kind": "integer", "min": 18, "max": 99}
+};
+ilForm(app, "signup", schema, {"lang": "en"});
+check("حالة أولية idle", ilFormState(app, "signup") == "idle");
+check("لا خطأ قبل اللمس", ilFieldSet(app, "signup", "email", "bad") == "");
+check("blur يُظهر الخطأ", ilFieldBlur(app, "signup", "email") == "Enter a valid email address");
+check("بعد الخطأ يُعاد الفحص عند الكتابة", ilFieldSet(app, "signup", "email", "ali@example.com") == "");
+let snaps = [];
+ilFormBind(app, "signup", fun(s) { push(snaps, s["state"]); return nil; });
+let sub = {"n": 0};
+let inv = ilFormSubmit(app, "signup", fun(v) { sub["n"] = sub["n"] + 1; return nil; });
+check("إرسال ناقص ⇒ invalid", inv["state"] == "invalid" and sub["n"] == 0);
+check("أول خطأ بترتيب المخطط", ilFormFirstError(app, "signup")["field"] == "password");
+ilFieldSet(app, "signup", "password", "secret123");
+ilFieldSet(app, "signup", "confirm", "secret124");
+check("equals", ilFormError(app, "signup", "confirm") == "Values do not match");
+ilFieldSet(app, "signup", "confirm", "secret123");
+ilFieldSet(app, "signup", "age", "17");
+check("min", ilFormError(app, "signup", "age") == "Must be at least 18");
+ilFieldSet(app, "signup", "age", "abc");
+check("integer", ilFormError(app, "signup", "age") == "Enter a whole number");
+ilFieldSet(app, "signup", "age", "30");
+let serverFail = ilFormSubmit(app, "signup", fun(v) { return {"ok": false, "errors": {"email": "already registered"}, "error": "rejected"}; });
+check("أخطاء الخادم تُربط بالحقول", serverFail["state"] == "failed" and ilFormError(app, "signup", "email") == "already registered");
+ilFieldSet(app, "signup", "email", "new@example.com");
+let okSub = ilFormSubmit(app, "signup", fun(v) { sub["n"] = sub["n"] + 1; return {"id": 7, "email": v["email"]}; });
+check("إرسال ناجح", okSub["ok"] == true and okSub["state"] == "success" and okSub["result"]["email"] == "new@example.com");
+let events = [];
+ilOn(app, "submit:signup", fun(ev) { push(events, ev["payload"]["values"]["email"]); return nil; });
+let pend = ilFormSubmit(app, "signup", fun(v) { return {"pending": true}; });
+check("pending يبقى submitting", pend["pending"] == true and ilFormState(app, "signup") == "submitting");
+let dbl = ilFormSubmit(app, "signup", fun(v) { sub["n"] = 99; return nil; });
+check("منع الإرسال المزدوج", dbl["blocked"] == true and sub["n"] == 1);
+let fin = ilFormResolve(app, "signup", {"ok": true});
+check("ilFormResolve", fin["ok"] == true and events[0] == "new@example.com");
+let thrown = ilFormSubmit(app, "signup", fun(v) { throw "timeout"; });
+check("استثناء المعالج ⇒ failed", thrown["state"] == "failed" and thrown["error"] == "timeout");
+check("ilFormBind يتلقّى الحالات", len(snaps) > 5 and snaps[len(snaps) - 1] == "failed");
+let snap = ilFormSnapshot(app, "signup");
+check("snapshot", snap["valid"] == true and snap["dirty"] == true and snap["submits"] == 2);
+ilFormReset(app, "signup");
+check("ilFormReset", ilFormState(app, "signup") == "idle" and ilFormValues(app, "signup")["email"] == "");
+ilForm(app, "ar", {"name": {"required": true, "label": "الاسم"}, "phone": {"kind": "phone"}}, {"lang": "ar", "validateOn": "change"});
+check("رسالة عربية", ilFieldSet(app, "ar", "name", "  ") == "هذا الحقل مطلوب");
+check("هاتف صحيح/خاطئ", ilFieldSet(app, "ar", "phone", "+966 50 123 4567") == "" and ilFieldSet(app, "ar", "phone", "12") == "أدخل رقم هاتف صحيحاً");
+ilForm(app, "custom", {"code": {"required": true, "check": fun(v, all) { return startsWithAb(v) ? "" : "must start with ab"; }, "message": nil}}, nil);
+fun startsWithAb(s) { return substr(s, 0, 2) == "ab"; }
+ilFieldSet(app, "custom", "code", "xy");
+check("check مخصّص", ilFormValidate(app, "custom")["errors"]["code"] == "must start with ab");
+ilForm(app, "msg", {"x": {"required": true, "message": "املأ x"}}, nil);
+check("message مخصّصة", ilFormValidate(app, "msg")["errors"]["x"] == "املأ x");
+ilForm(app, "reset", {"x": {"required": true}}, {"resetOnSuccess": true});
+ilFieldSet(app, "reset", "x", "v");
+ilFormSubmit(app, "reset", fun(v) { return nil; });
+check("resetOnSuccess", ilFormValues(app, "reset")["x"] == "");
+
+print "== 7) الحركة";
+check("ilEase حدود", ilEase("linear", 0) == 0 and ilEase("elastic", 1) == 1 and ilEase("bounce", 0.5) > 0.2);
+let opac = [];
+ilBindProp(app, "card", "opacity", fun(v) { push(opac, v); return nil; });
+ilSetTime(app, 0);
+ilAnim(app, "card", "opacity", 0, 1, 100, {"ease": "linear"});
+check("القيمة الابتدائية تُكتب فوراً", opac[0] == 0);
+ilTick(app, 25);
+ilTick(app, 50);
+ilTick(app, 100);
+check("خطي: 0 → .25 → .5 → 1", opac[1] == 0.25 and opac[2] == 0.5 and opac[3] == 1);
+check("انتهت الحركة", ilAnimating(app, "card") == false and ilValue(app, "card", "opacity") == 1);
+let col = [];
+ilBindProp(app, "bar", "color", fun(v) { push(col, v); return nil; });
+ilSetTime(app, 0);
+ilAnim(app, "bar", "color", "#000000", "#ff8040", 100, {"ease": "linear"});
+ilTick(app, 50);
+ilTick(app, 100);
+check("مزج الألوان", col[1] == "#804020" and col[2] == "#ff8040");
+let sc = [];
+ilBindProp(app, "pill", "scale", fun(v) { push(sc, v); return nil; });
+ilSetTime(app, 0);
+ilAnim(app, "pill", "scale", 1, 2, 100, {"ease": "linear", "loop": 2, "yoyo": true});
+ilTick(app, 50);
+ilTick(app, 100);
+ilTick(app, 150);
+ilTick(app, 200);
+print sc;
+let done = [];
+ilSetTime(app, 0);
+ilBindProp(app, "n", "value", fun(v) { push(done, v); return nil; });
+ilCountUp(app, "n", 0, 100, 100, {"ease": "linear"});
+ilOn(app, "anim:n.value", fun(ev) { push(done, "done"); return nil; });
+ilTick(app, 33);
+ilTick(app, 100);
+print done;
+let seqv = [];
+ilBindProp(app, "box", "x", fun(v) { push(seqv, v); return nil; });
+ilSetTime(app, 0);
+ilSequence(app, [
+    {"target": "box", "prop": "x", "from": 0, "to": 10, "dur": 100, "ease": "linear"},
+    {"target": "box", "prop": "x", "from": 10, "to": 0, "dur": 100, "ease": "linear"}
+]);
+ilTick(app, 50);
+ilTick(app, 150);
+ilTick(app, 200);
+print seqv;
+check("sequence: الخطوة المتأخرة لا تقفز", seqv[1] == 5 and seqv[len(seqv) - 1] == 0);
+let st = [];
+ilSetTime(app, 0);
+ilBindProp(app, "c1", "opacity", fun(v) { push(st, "c1=" + str(v)); return nil; });
+ilBindProp(app, "c2", "opacity", fun(v) { push(st, "c2=" + str(v)); return nil; });
+ilStagger(app, ["c1", "c2"], "opacity", 0, 1, 100, 50, {"ease": "linear"});
+ilTick(app, 50);
+ilTick(app, 100);
+print join(st, " ");
+let stopId = ilAnim(app, "card", "opacity", 0, 1, 1000, nil);
+check("ilAnimStop", ilAnimStop(app, stopId) == true and ilAnimating(app, "card") == false);
+check("وصف المسبقات", len(ilPresets()) == 12);
+let badPreset = false;
+try { ilPreset(app, "card", "nope", nil); } catch (e) { badPreset = true; }
+check("مسبق مجهول يُرفض", badPreset);
+let badEase = false;
+try { ilAnim(app, "card", "opacity", 0, 1, 10, {"ease": "nope"}); } catch (e) { badEase = true; }
+check("easing مجهول يُرفض", badEase);
+
+let app2 = ilApp("clock-switch");
+let cv = [];
+ilBindProp(app2, "x", "v", fun(v) { push(cv, v); return nil; });
+ilAnim(app2, "x", "v", 0, 10, 100, {"ease": "linear"});
+ilTick(app2, 5000);
+ilTick(app2, 5050);
+ilTick(app2, 5100);
+check("التحويل لساعة المضيف يُعيد ضبط البدء", cv[len(cv) - 3] == 0 and cv[len(cv) - 2] == 5 and cv[len(cv) - 1] == 10);
+
+print "== 8) أحداث ← حركة ← نموذج";
+let shx = [];
+ilBindProp(app, "loginCard", "x", fun(v) { push(shx, v); return nil; });
+ilForm(app, "login", {"user": {"required": true}}, nil);
+ilAnimateOn(app, "invalid:login", "loginCard", "shake");
+ilSetTime(app, 0);
+ilFormSubmit(app, "login", fun(v) { return nil; });
+check("النموذج غير الصالح يشغّل shake", ilAnimating(app, "loginCard") == true);
+ilTick(app, 150);
+ilTick(app, 400);
+check("shake ينتهي عند 0", ilValue(app, "loginCard", "x") == 0 and ilAnimating(app, "loginCard") == false);
+ilAnimateOn(app, "click:*", nil, "pulse");
+let noBind = ilClick(app, "ghost", nil);
+check("بلا خصائص مربوطة ⇒ none مسجَّلة", noBind["results"][len(noBind["results"]) - 1] == "none" and app["effectLog"][0]["target"] == "ghost");
+check("ilDefineHostEffects بلا مضيف = 0", ilDefineHostEffects(app) == 0);
+let startId = ilStart(app, 16);
+check("ilStart: -1 بلا مجدول أو معرّف مؤقّت", startId == -1 or startId >= 0);
+ilStop(app);
+
+print "== 9) إحصاءات";
+let s = ilStats(app);
+check("ilStats", s["forms"] == 6 and s["regions"] == 3 and s["handlers"] > 5);
+check("ilLog", len(ilLog(app, 3)) == 3);
