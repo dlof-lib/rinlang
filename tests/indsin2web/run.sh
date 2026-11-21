@@ -73,6 +73,7 @@ if command -v node >/dev/null && node -e "require('playwright')" 2>/dev/null; th
   node "$ROOT/tests/indsin2web/browser_pro2.js" "$OUT/pro2.html" && ok "browser: pro2 features" || bad "browser pro2 test"
   node "$ROOT/tests/indsin2web/browser_storage_fetch.js" "$BIN" "$ROOT/examples/samples/indsin_storage_fetch.rin" >"$OUT/sf.log" 2>&1 && ok "browser: container.storage + container.api" || { cat "$OUT/sf.log"; bad "browser storage/fetch test"; }
   node "$ROOT/tests/indsin2web/browser_each.js" "$BIN" "$ROOT/examples/samples/indsin_live_list.rin" >"$OUT/each.log" 2>&1 && ok "browser: <<each>> on live data" || { cat "$OUT/each.log"; bad "browser each test"; }
+  node "$ROOT/tests/indsin2web/browser_stream.js" "$BIN" "$ROOT/examples/samples/indsin_feed_stream.rin" >"$OUT/stream.log" 2>&1 && ok "browser: SSE stream + load more" || { cat "$OUT/stream.log"; bad "browser stream test"; }
   node "$ROOT/tests/rinhtml/browser_storage_fetch.js" >"$OUT/rh.log" 2>&1 && ok "browser: rinhtml persist + rin-fetch" || { cat "$OUT/rh.log"; bad "rinhtml storage/fetch test"; }
 else echo "skip browser test (node/playwright غير متوفر)"; fi
 echo; [ $fail -eq 0 ] && echo "ALL PASSED" || { echo "SOME FAILED"; exit 1; }
