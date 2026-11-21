@@ -54,6 +54,15 @@ mkdir -p "$OUT/pwa"; "$BIN" "$ROOT/examples/samples/indsin_pro_web.rin" -o "$OUT
   && grep -q 'theme-color" content="#112233"' "$OUT/pwa/app.html" && node -e "JSON.parse(require('fs').readFileSync('$OUT/pwa/manifest.webmanifest','utf8'))" 2>/dev/null && ok "--pwa files + meta" || bad "--pwa"
 "$BIN" "$ROOT/examples/samples/indsin_pro_web.rin" --pwa 2>/dev/null; [ $? -eq 64 ] && ok "--pwa without -o → 64" || bad "--pwa needs -o"
 
+# 5e) container.storage/container.api: تُترجَم إلى IN.storage/IN.api، وحقول الإعداد لا تصير حقولاً، و`--strict` نظيف
+"$BIN" "$ROOT/examples/samples/indsin_storage_fetch.rin" -o "$OUT/sf.html" --strict 2>"$OUT/sf.err"; rc=$?
+[ $rc -eq 0 ] && grep -q 'const prefs = IN.storage("prefs"' "$OUT/sf.html" && grep -q 'const rates = IN.api("rates"' "$OUT/sf.html" \
+  && grep -q '"every": 30000' "$OUT/sf.html" && ! grep -q 'var baseUrl' "$OUT/sf.html" && ok "container.storage/api translate" || bad "container.storage/api translate (rc=$rc: $(head -1 "$OUT/sf.err"))"
+printf '@container.storage=s\n  let a = 1;\n  fun f() { return 1; }\n.end/container.storage\n<Column#r><Text#t text={s.a} /></Column>\n' > "$OUT/sbad.rin"
+"$BIN" "$OUT/sbad.rin" -o "$OUT/sbad.html" 2>"$OUT/sbad.log"; [ $? -eq 1 ] && ok "container.storage rejects fun (pure data)" || bad "container.storage must be pure data"
+printf '@container.api=m\n  let data = nil;\n  route method="GET" path="/n" status=200 body={"n": 3};\n.end/container.api\n<Column#r><Text#t text={m.data} /></Column>\n' > "$OUT/mock.rin"
+"$BIN" "$OUT/mock.rin" -o "$OUT/mock.html" 2>/dev/null && ! grep -q 'IN.api("m"' "$OUT/mock.html" && ok "container.api without baseUrl stays mock (unchanged)" || bad "mock api behaviour changed"
+
 # 6) اختبار متصفح (اختياري: يحتاج node + playwright)
 if command -v node >/dev/null && node -e "require('playwright')" 2>/dev/null; then
   "$BIN" "$ROOT/examples/samples/indsin_tags_demo.rin" -o "$OUT/demo.html" 2>/dev/null
@@ -62,5 +71,8 @@ if command -v node >/dev/null && node -e "require('playwright')" 2>/dev/null; th
   node "$ROOT/tests/indsin2web/browser_pro.js" "$OUT/pro.html" && ok "browser: pro features" || bad "browser pro test"
   "$BIN" "$ROOT/examples/samples/indsin_pro2_showcase.rin" -o "$OUT/pro2.html" 2>/dev/null
   node "$ROOT/tests/indsin2web/browser_pro2.js" "$OUT/pro2.html" && ok "browser: pro2 features" || bad "browser pro2 test"
+  node "$ROOT/tests/indsin2web/browser_storage_fetch.js" "$BIN" "$ROOT/examples/samples/indsin_storage_fetch.rin" >"$OUT/sf.log" 2>&1 && ok "browser: container.storage + container.api" || { cat "$OUT/sf.log"; bad "browser storage/fetch test"; }
+  node "$ROOT/tests/indsin2web/browser_each.js" "$BIN" "$ROOT/examples/samples/indsin_live_list.rin" >"$OUT/each.log" 2>&1 && ok "browser: <<each>> on live data" || { cat "$OUT/each.log"; bad "browser each test"; }
+  node "$ROOT/tests/rinhtml/browser_storage_fetch.js" >"$OUT/rh.log" 2>&1 && ok "browser: rinhtml persist + rin-fetch" || { cat "$OUT/rh.log"; bad "rinhtml storage/fetch test"; }
 else echo "skip browser test (node/playwright غير متوفر)"; fi
 echo; [ $fail -eq 0 ] && echo "ALL PASSED" || { echo "SOME FAILED"; exit 1; }
