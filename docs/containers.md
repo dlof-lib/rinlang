@@ -195,3 +195,7 @@ fun saveForm() {
   شجرة مقاسة ثم بكسلات فعلية، وقسم "دمج @element بـ indsin" لتفاصيل جذر الشاشة.
 - `app/src/main/cpp/rin_ast.h` — البنية الكاملة (`ContainerStmt`, `ViewStmt`,
   `LifecycleHookStmt`, `StateDeclStmt`) بتعليقات مصدرية مفصَّلة لكل حقل.
+
+## حاويات المتصفح: `storage` و`api` الحقيقية
+`@container.storage` (تخزين محلي يبقى بعد إغلاق الصفحة) و`@container.api` مع `baseUrl` (جلب في الخلفية وتحديث جزئي) تُترجَمان في
+[`indsin2web`](./indsin2web.md) إلى كائنات تفاعلية: [`container_storage.md`](./container_storage.md) · [`container_fetch.md`](./container_fetch.md).
