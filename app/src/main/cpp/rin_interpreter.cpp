@@ -10947,6 +10947,34 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
     // وفقط لو كانت مُصدَّرة فعلاً عبر 'export' في الملف المستورَد -- بلا أي استثناء توافقية للخلف هنا
     // (صياغة جديدة كلياً، لا يعتمد عليها أي ملف .rin موجود مسبقاً بعكس @import بلا 'export').
     case StmtKind::ImportSelectedStmt: { auto s = std::static_pointer_cast<ImportSelectedStmt>(stmt);
+        // `let a, b from "p" else {"a": 1, "b": 2};` (docs/from.md): استيراد اختياري. نُنفّذ الاستيراد العادي بنسخة بلا
+        // fallback؛ إن لم توجد الوحدة (E0029 فقط -- أي خطأ آخر كخطأ داخل الوحدة أو اسم غير مُصدَّر يبقى كما هو) تُؤخذ
+        // الأسماء من القاموس البديل بنفس مفاتيحها. المفتاح المفقود في البديل خطأ واضح بدل nil صامتة.
+        if (s->fallback) {
+            auto plain = std::make_shared<ImportSelectedStmt>(*s);
+            plain->fallback = nullptr;
+            try {
+                return exec(plain, env, ret);
+            } catch (RinError& e) {
+                if (!(e.diagnostic && e.diagnostic->code == diag::Code::E0029_ModuleNotFound)) throw;
+                Value fb = evaluate(s->fallback, env);
+                if (fb.type != Value::Type::MAP || !fb.map)
+                    throw diagErr(diag::Code::E0028_ImportError, s->line, "the `else` fallback of `let ... from` must be a map (e.g. {\"a\": 1})");
+                for (size_t i = 0; i < s->names.size(); ++i) {
+                    const std::string& want = s->names[i];
+                    const std::string local = (i < s->aliases.size() && !s->aliases[i].empty()) ? s->aliases[i] : want;
+                    const Value* found = nullptr;
+                    for (auto& kv : *fb.map) if (kv.first.toDisplayString() == want) { found = &kv.second; break; }
+                    if (!found) {
+                        auto d = diagErr(diag::Code::E0028_ImportError, s->line, "the module was not found and the `else` fallback has no key `" + want + "`");
+                        d.diagnostic->withReason(e.message);
+                        throw d;
+                    }
+                    env->define(local, copyForBinding(*found));
+                }
+                return Flow::None;
+            }
+        }
         Value pathVal = evaluate(s->path, env);
         if (pathVal.type != Value::Type::STRING) {
             throw diagErr(diag::Code::E0028_ImportError, s->line, "'import { ... } from' requires a string path/library name");
@@ -11496,17 +11524,19 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
                 drop.erase(std::remove(drop.begin(), drop.end(), t), drop.end());
                 currentEnv->anyLinks = true;
                 if (std::find(keep.begin(), keep.end(), t) == keep.end()) keep.push_back(t);
-                if (!s->only.empty() || !s->except.empty()) {
+                if (!s->only.empty() || !s->except.empty() || !s->prefix.empty() || !s->rename.empty()) {
                     LinkFilter lf;
                     lf.only.insert(s->only.begin(), s->only.end());
                     lf.except.insert(s->except.begin(), s->except.end());
+                    for (auto& rn : s->rename) lf.rename[rn.first] = rn.second;
+                    lf.prefix = s->prefix;
                     currentEnv->lkd().filters[t.get()] = std::move(lf);
                 } else currentEnv->lkd().filters.erase(t.get()); // إعادة ربط بلا فلتر ترفع الفلتر السابق
                 ++linkedEnvs;
             }
         }
         output << "🔗 link -> " << target << (byId ? (" (id=\"" + s->byId + "\")") : "") << (isGroup ? " (Containers.Group)" : "")
-               << (linkedEnvs ? (std::string(s->readOnly ? " (live, read-only)" : " (live, no copy)") + (!s->only.empty() ? " (only)" : !s->except.empty() ? " (except)" : "")) : "") << "\n";
+               << (linkedEnvs ? (std::string(s->readOnly ? " (live, read-only)" : " (live, no copy)") + (!s->rename.empty() ? " (renamed)" : !s->prefix.empty() ? " (prefix)" : !s->only.empty() ? " (only)" : !s->except.empty() ? " (except)" : "")) : "") << "\n";
         return Flow::None;
     }
 
@@ -12141,14 +12171,15 @@ static RinError nsNoMemberErr(const std::shared_ptr<NsNode>& n, const std::strin
 
 Value Interpreter::nsGet(const std::shared_ptr<NsNode>& n, const std::string& member, int line) {
     if (auto c = n->child(member)) return nsSnapshot(c); // a bare namespace reads as a snapshot map of its fields
-    Environment* own = n->env->findReadOwnerLinked(member); // الاسم المحلي أو المرتبط عبر link
+    std::string rn;
+    Environment* own = n->env->findReadOwnerLinked(member, &rn); // الاسم المحلي أو المرتبط عبر link (rn = اسمه عند المالك)
     if (!own) throw nsNoMemberErr(n, member, line, sourceFile, "member");
-    if (depTracker_) valTrack(own, member);
+    if (depTracker_) valTrack(own, rn);
     if (liveActive_ && !own->live.empty()) {
-        auto lit = own->live.find(member);
-        if (lit != own->live.end()) return liveRead(own, lit->second, member, line);
+        auto lit = own->live.find(rn);
+        if (lit != own->live.end()) return liveRead(own, lit->second, rn, line);
     }
-    return own->values.find(member)->second;
+    return own->values.find(rn)->second;
 }
 
 Value Interpreter::nsSet(const std::shared_ptr<NsNode>& n, const std::string& member, const Value& v, int line) {
@@ -12161,7 +12192,8 @@ Value Interpreter::nsSet(const std::shared_ptr<NsNode>& n, const std::string& me
         throw diagErr(diag::Code::E0004_InvalidType, line,
                       "cannot assign to `" + n->path() + "." + member + "`: it is a nested namespace, not a variable");
     }
-    Environment* own = n->env->findOwnerLinked(member);
+    std::string rn;
+    Environment* own = n->env->findOwnerLinked(member, &rn);
     if (!own && n->env->findReadOwnerLinked(member)) {
         throw errWithReason(diag::Code::E0035_RuntimeError, line,
                             "cannot write `" + n->path() + "." + member + "`: it comes from a read-only link",
@@ -12169,8 +12201,8 @@ Value Interpreter::nsSet(const std::shared_ptr<NsNode>& n, const std::string& me
     }
     if (!own) throw nsNoMemberErr(n, member, line, sourceFile, "variable");
     Value stored = copyForBinding(v);
-    if (liveActive_) return liveAssign(own, member, stored, line);
-    assignStateAware(own, member, stored, line); // fires `on update(prev)` for `state` fields of containers
+    if (liveActive_) return liveAssign(own, rn, stored, line);
+    assignStateAware(own, rn, stored, line); // fires `on update(prev)` for `state` fields of containers
     return stored;
 }
 
@@ -12180,9 +12212,10 @@ Value Interpreter::nsCall(const std::shared_ptr<NsNode>& n, const std::string& m
                             std::string("cannot call `") + n->path() + "." + member + "()`: a " + n->kindName() + " does not expose functions",
                             "only a container can be called through its qualified name; put the function in a container");
     }
-    Environment* own = n->env->findReadOwnerLinked(member);
+    std::string rn;
+    Environment* own = n->env->findReadOwnerLinked(member, &rn);
     if (!own) throw nsNoMemberErr(n, member, line, sourceFile, "function");
-    auto it = own->values.find(member);
+    auto it = own->values.find(rn);
     if (it->second.type != Value::Type::FUNCTION) {
         throw diagErr(diag::Code::E0006_UnknownFunction, line, "`" + n->path() + "." + member + "` is not a function");
     }
@@ -12210,12 +12243,13 @@ bool Interpreter::nsTryCallDotted(const std::string& callee, std::vector<Value>&
     for (size_t i = 1; n && i + 1 < segs.size(); ++i) n = n->child(segs[i]);
     if (!n) return false;
     const std::string& member = segs.back();
-    Environment* ownEnv = n->env->findReadOwnerLinked(member);
+    std::string rn;
+    Environment* ownEnv = n->env->findReadOwnerLinked(member, &rn);
     if (!ownEnv) {
         if (natives.count(callee)) return false; // e.g. a namespace that happens to be named like a built-in family
         throw nsNoMemberErr(n, member, line, sourceFile, "function");
     }
-    auto it = ownEnv->values.find(member);
+    auto it = ownEnv->values.find(rn);
     if (it->second.type != Value::Type::FUNCTION) return false; // a map/array member: let the normal `.method()` path handle it
     out = nsCall(n, member, args, line);
     return true;
@@ -13001,7 +13035,8 @@ Value Interpreter::evaluateTree(const ExprPtr& expr, const EnvPtr& env) {
         // on update(prevState) إن كان هذا الاسم أحد حقول `state` لحاوية معروفة. لا تغيير في
         // السلوك لأي متغيّر عادي (let/معاملات دالة/إلخ): يبقى الإسناد يعمل تماماً كما كان
         // (undefinedVariableErr عند الفشل).
-        Environment* owner = env->findOwner(e->name); // محلي ← مرتبط (link) ← أب
+        std::string ownName;
+        Environment* owner = env->findOwner(e->name, &ownName); // محلي ← مرتبط (link) ← أب؛ ownName = اسمه عند المالك (يختلف مع rename/prefix)
         if (!owner && env->lookup(e->name)) {
             throw errWithReason(diag::Code::E0035_RuntimeError, e->line,
                                 "cannot assign `" + e->name + "`: it comes from a read-only link",
@@ -13011,8 +13046,8 @@ Value Interpreter::evaluateTree(const ExprPtr& expr, const EnvPtr& env) {
             throw undefinedVariableErr(e->name, e->line, env);
         }
         Value stored = copyForBinding(v);
-        if (liveActive_) return liveAssign(owner, e->name, stored, e->line); // stone/gauge/tape/lens/fuse/bell + trial
-        assignStateAware(owner, e->name, stored, e->line);
+        if (liveActive_) return liveAssign(owner, ownName, stored, e->line); // stone/gauge/tape/lens/fuse/bell + trial
+        assignStateAware(owner, ownName, stored, e->line);
         return stored;
     }
     case ExprKind::PatternAssign: return letPatternAssign(std::static_pointer_cast<PatternAssignExpr>(expr), env);
