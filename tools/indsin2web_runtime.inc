@@ -224,7 +224,7 @@ const IN = (() => {
   const ovf = n => (el, v) => setS(el, n, v === "scroll" ? "auto" : v);
   // ---- نظام الثيم (تبديل فوري + حفظ) ----
   const theme = { set(m) { const r = document.documentElement; if (m === "dark" || m === "light") r.setAttribute("data-theme", m); else r.removeAttribute("data-theme");
-      try { if (m === "dark" || m === "light") localStorage.setItem("in-theme", m); else localStorage.removeItem("in-theme"); } catch (e) {} lastV = []; run(); },
+      try { if (m === "dark" || m === "light") localStorage.setItem("in-theme", m); else localStorage.removeItem("in-theme"); } catch (e) {} epoch++; run(); },
     isDark() { const a = document.documentElement.getAttribute("data-theme"); return a === "dark" || (a !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches); },
     toggle() { theme.set(theme.isDark() ? "light" : "dark"); } };
   const BP = {sm: 360, md: 600, lg: 840, xl: 1200}, SFX = /^(.+)_(sm|md|lg|xl|dark|print)$/, RANK = {sm: 1, md: 2, lg: 3, xl: 4, dark: 5, print: 6};
@@ -484,6 +484,7 @@ const IN = (() => {
       get: (t, k) => t[k],
       set: (t, k, v) => { if (!Object.is(t[k], v)) { t[k] = v; if (!queued) { queued = true; queueMicrotask(flush); } } return true; }
     });
+    kick = () => { if (!queued) { queued = true; queueMicrotask(flush); } };
     state.proxy = px_; state.raw = raw; return px_;
   }
   function actions(S) {
@@ -526,6 +527,7 @@ const IN = (() => {
     substr: (s, st, n) => { const a = Array.from(String(s)); return (n === undefined ? a.slice(st) : a.slice(st, st + n)).join(""); },
     indexOf: (s, x) => String(s).indexOf(x), repeat: (s, n) => String(s).repeat(Math.max(0, n)),
     capitalize: s => { s = String(s); return s.charAt(0).toUpperCase() + s.slice(1); },
+    removeAt: (a, i) => { if (Array.isArray(a) && i >= 0 && i < a.length) a.splice(i, 1); return a; },
     iter: v => typeof v === "number" ? Array.from({length: v}, (_, i) => i) : typeof v === "string" ? Array.from(v) : Array.isArray(v) ? v : Object.keys(v || {}),
     copyOf: (a, b) => a !== b && JSON.stringify(a) === JSON.stringify(b),
     method: (o, m, ...a) => { if (o == null) throw new TypeError("nil." + m + "()"); const f = o[m]; if (typeof f === "function") return f.apply(o, a);
@@ -561,44 +563,277 @@ const IN = (() => {
     themeColor: r => "var(--in-" + r + ")", onColor: c => lum(hexRgb(c)) > .179 ? "#000000" : "#ffffff", isLight: c => lum(hexRgb(c)) > .179
   };
 
-  let B = [], lastV = [];
-  function run() {
-    for (let i = 0; i < B.length; i++) {
-      const b = B[i]; let v, key = b[1];
+
+  // ======================================================================================================
+  // حاويات الويب: container.storage (تخزين محلي دائم) و container.api (جلب في الخلفية + تحديث جزئي)
+  //   • كل حاوية كائن تفاعلي عميق (Proxy): أي كتابة على حقل — حتى push داخل مصفوفة — تجدول إعادة تقييم الخصائص،
+  //     و run() يكتب في الـ DOM فقط الخصائص التي تغيّرت قيمتها فعلاً ⇒ يتحدّث الجزء المرتبط بالحقل وحده.
+  //   • كل ما يلمس المتصفح (localStorage/fetch) محاط بـ try/catch: وضع التصفح الخاص أو امتلاء الحصّة لا يكسران الصفحة.
+  // ======================================================================================================
+  let kick = () => {};
+  const CT = {};   // سجل الحاويات: الاسم → الكائن التفاعلي (container.get/set وربط الحقول يستعملانه)
+  const hasOwn = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+  const clone = v => v === undefined ? undefined : JSON.parse(JSON.stringify(v));
+  const DUR = {ms: 1, s: 1000, m: 60000, h: 3600000, d: 86400000, w: 604800000};
+  // المدد في Rin أرقام بالميلي ثانية (30s ⇒ 30000)؛ ونقبل نصاً مثل "1h30m" أيضاً
+  const dur = v => { if (v == null || v === false) return 0; if (typeof v === "number") return v > 0 ? v : 0;
+    let t = 0, ok = false; String(v).replace(/(\d+(?:\.\d+)?)(ms|s|m|h|d|w)/g, (_, n, u) => { t += Number(n) * DUR[u]; ok = true; return ""; }); return ok ? t : (Number(v) > 0 ? Number(v) : 0); };
+  const sameType = (d, v) => d === null || d === undefined || v === null || (Array.isArray(d) === Array.isArray(v) && typeof d === typeof v);
+  const webStore = area => { try { const s = window[area], k = "__in_probe__"; s.setItem(k, "1"); s.removeItem(k); return s; } catch (e) { return null; } };
+
+  // يبني كائناً تفاعلياً فوق raw: القراءة تعيد أبناء مُغلَّفين، والكتابة تستدعي onChange. الحقول غير المعرَّفة مرفوضة بتحذير.
+  function makeContainer(name, raw, methods, onChange) {
+    const cache = new WeakMap(), raws = new WeakMap();
+    const unwrap = v => (v !== null && typeof v === "object" && raws.get(v)) || v;
+    const wrap = v => { if (v === null || typeof v !== "object") return v; if (cache.has(v)) return cache.get(v);
+      const p = new Proxy(v, deep); cache.set(v, p); raws.set(p, v); return p; };
+    const deep = {
+      get: (t, k, r) => { const v = Reflect.get(t, k, r); return typeof k === "symbol" || typeof v === "function" ? v : wrap(v); },
+      set: (t, k, v) => { const u = unwrap(v); if (!Object.is(t[k], u)) { t[k] = u; onChange(); } return true; },
+      deleteProperty: (t, k) => { if (k in t) { delete t[k]; onChange(); } return true; }
+    };
+    const top = new Proxy(raw, {
+      get: (t, k) => hasOwn(t, k) ? wrap(t[k]) : (typeof k === "string" && hasOwn(methods, k) ? methods[k] : undefined),
+      set: (t, k, v) => { if (!hasOwn(t, k)) { console.warn("[indsin] " + name + "." + String(k) + " غير معرَّف: أضف let " + String(k) + " داخل الحاوية"); return true; }
+        const u = unwrap(v); if (!Object.is(t[k], u)) { t[k] = u; onChange(); } return true; },
+      has: (t, k) => hasOwn(t, k) || hasOwn(methods, k),
+      ownKeys: t => Reflect.ownKeys(t),
+      getOwnPropertyDescriptor: (t, k) => Object.getOwnPropertyDescriptor(t, k)
+    });
+    CT[name] = top; return top;
+  }
+
+  // ---------------------------------------------------------------- container.storage
+  //   store: "local" (الافتراضي، يبقى بعد إغلاق المتصفح) | "session" (حتى إغلاق التبويب) | "memory"
+  //   storeKey: مفتاح التخزين (الافتراضي اسم الحاوية) · version: تغييره يُسقط البيانات القديمة (هجرة) · ttl: عمرها بالميلي ثانية
+  //   sync: مزامنة التبويبات (حدث storage) — الافتراضي true
+  function storage(name, fields, cfg) {
+    cfg = cfg || {};
+    const area = cfg.store === "session" ? "sessionStorage" : cfg.store === "memory" ? null : "localStorage";
+    const st = area ? webStore(area) : null;
+    const key = "rin:" + (cfg.storeKey || name), ver = cfg.version != null ? cfg.version : 1, ttl = dur(cfg.ttl);
+    const defaults = clone(fields), raw = clone(fields);
+    const info = {key, area: st ? area : "memory", restored: false, expired: false, error: area && !st ? "storage unavailable" : null, savedAt: 0};
+    const read = () => { if (!st) return null; try { const s = st.getItem(key); return s ? JSON.parse(s) : null; } catch (e) { info.error = String(e); return null; } };
+    const apply = rec => {
+      if (!rec || typeof rec !== "object" || rec.v !== ver || !rec.d || typeof rec.d !== "object") return false;
+      if (ttl && Date.now() - (rec.t || 0) > ttl) { info.expired = true; return false; }
+      for (const k of Object.keys(defaults)) if (hasOwn(rec.d, k) && sameType(defaults[k], rec.d[k])) raw[k] = rec.d[k];
+      info.savedAt = rec.t || 0; return true;
+    };
+    const save = () => { if (!st) return; try { const t = Date.now(); st.setItem(key, JSON.stringify({v: ver, t, d: raw})); info.savedAt = t; info.error = null; }
+      catch (e) { info.error = String((e && e.name) || e); console.warn("[indsin] تعذّر حفظ " + name + ":", e); } };
+    const rec0 = read();
+    if (rec0) { info.restored = apply(rec0); if (!info.restored && st) { try { st.removeItem(key); } catch (e) {} } }   // إصدار/صلاحية قديمة ⇒ تُحذف
+    let q = false;
+    const changed = () => { kick(); if (!q) { q = true; queueMicrotask(() => { q = false; save(); }); } };   // كتابات متتالية ⇒ حفظ واحد
+    const methods = {
+      reset: k => { if (k === undefined) { for (const f of Object.keys(defaults)) raw[f] = clone(defaults[f]); } else if (hasOwn(defaults, k)) raw[k] = clone(defaults[k]); changed(); },
+      clear: () => { for (const f of Object.keys(defaults)) raw[f] = clone(defaults[f]); if (st) { try { st.removeItem(key); } catch (e) {} } info.restored = false; kick(); },
+      save, has: k => hasOwn(raw, k), info: () => clone(info), keys: () => Object.keys(raw)
+    };
+    const obj = makeContainer(name, raw, methods, changed);
+    if (st && area === "localStorage" && cfg.sync !== false) window.addEventListener("storage", e => {
+      if (e.storageArea !== st || (e.key !== key && e.key !== null)) return;
+      let rec = null; try { rec = e.newValue ? JSON.parse(e.newValue) : null; } catch (x) {}
+      if (!(rec && apply(rec))) for (const f of Object.keys(defaults)) raw[f] = clone(defaults[f]);   // التبويب الآخر مسح البيانات ⇒ نعود للافتراضي
+      kick();
+    });
+    return obj;
+  }
+
+  // ---------------------------------------------------------------- container.api
+  //   الحقول التفاعلية: data · status · error · updated · loading (+ أي let إضافي)
+  //   الإعداد: baseUrl · path (يُجلب تلقائياً) · method · headers · token · query · timeout · retry · backoff · cache · every (دوري)
+  //            debounce · autoload · persist (آخر data تبقى في localStorage فتظهر فوراً قبل وصول الجديد) · pauseHidden · pick ("a.b") · body
+  //   الدوال: get/post/put/patch/delete(path, …, opts) · request · refresh · abort · start · stop · reset · info
+  function api(name, fields, cfg) {
+    cfg = Object.assign({}, cfg);
+    const raw = Object.assign({data: null, status: 0, error: null, updated: 0, loading: false}, clone(fields));
+    const defaults = clone(raw), pkey = "rin:api:" + name, st = cfg.persist ? webStore("localStorage") : null;
+    if (st) { try { const r = JSON.parse(st.getItem(pkey) || "null"); if (r && typeof r === "object" && hasOwn(r, "data")) { raw.data = r.data; raw.updated = r.updated || 0; } } catch (e) {} }
+    const memo = new Map(), stats = {calls: 0, failed: 0, cached: 0, aborted: 0};
+    let getCtl = null, seq = 0, lastReq = null, debT = 0, debRes = null, pollT = 0, polling = false, lastRun = 0;
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const pickPath = (j, p) => { if (!p) return j; for (const k of String(p).split(".")) { if (j == null) return undefined; j = j[k]; } return j; };
+
+    function buildUrl(path, o) {
+      let p = String(path == null ? (cfg.path == null ? "" : cfg.path) : path);
+      const params = o.params || {};
+      p = p.replace(/:([A-Za-z_]\w*)/g, (m, k) => { if (!hasOwn(params, k)) throw new Error("المعامل :" + k + " غير مملوء في params"); return encodeURIComponent(params[k]); });
+      const base = cfg.baseUrl == null ? "" : String(cfg.baseUrl).replace(/\/+$/, "");
+      const full = /^https?:\/\//i.test(p) ? p : (base ? base + "/" + p.replace(/^\/+/, "") : p);
+      const u = new URL(full, location.href);
+      if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error("يُسمح بروابط http/https فقط");
+      const q = Object.assign({}, cfg.query, o.query);
+      for (const k of Object.keys(q)) { const v = q[k]; if (v == null) continue; if (Array.isArray(v)) v.forEach(x => u.searchParams.append(k, String(x))); else u.searchParams.set(k, String(v)); }
+      return u.href;
+    }
+
+    async function run(method, path, body, o) {
+      o = o || {}; method = String(method || "GET").toUpperCase();
+      const latest = o.latest !== undefined ? !!o.latest : method === "GET", mySeq = latest ? ++seq : seq;
+      const cb = typeof o.then === "function" ? o.then : (typeof cfg.then === "function" ? cfg.then : null);
+      stats.calls++; lastRun = Date.now();
+      let u; try { u = buildUrl(path, o); } catch (e) { return finish(null, String(e.message || e), null, null, 0); }
+      const ttlC = method === "GET" ? dur(o.cache != null ? o.cache : cfg.cache) : 0, hit = ttlC ? memo.get(u) : null;
+      if (hit && Date.now() - hit.t < ttlC) { stats.cached++; return finish(hit.r, null, hit.json, hit.text, hit.r.status, true); }
+      if (latest && getCtl) getCtl.abort();
+      raw.loading = true; kick();
+      const headers = Object.assign({Accept: "application/json"}, cfg.headers, o.headers);
+      const tok = o.token != null ? o.token : cfg.token;
+      if (tok && !Object.keys(headers).some(h => h.toLowerCase() === "authorization")) headers.Authorization = "Bearer " + tok;
+      let payload; const b = body !== undefined ? body : (method === "GET" || method === "DELETE" ? undefined : cfg.body);
+      if (b !== undefined && b !== null) {
+        if (typeof b === "string" || (typeof FormData !== "undefined" && b instanceof FormData)) payload = b;
+        else { payload = JSON.stringify(b); if (!Object.keys(headers).some(h => h.toLowerCase() === "content-type")) headers["Content-Type"] = "application/json"; }
+      }
+      const tries = 1 + Math.max(0, Math.trunc(Number(o.retry != null ? o.retry : cfg.retry) || 0)), back = dur(o.backoff != null ? o.backoff : cfg.backoff) || 500;
+      const tmo = dur(o.timeout != null ? o.timeout : cfg.timeout) || 15000;
+      let res = null, text = "", err = null;
+      for (let attempt = 1; ; attempt++) {
+        const c = new AbortController(); let timedOut = false; if (latest) getCtl = c;
+        const tm = setTimeout(() => { timedOut = true; c.abort(); }, tmo);
+        res = null; err = null;
+        try { res = await fetch(u, {method, headers, body: payload, signal: c.signal, credentials: cfg.credentials || "same-origin"}); text = await res.text(); }
+        catch (e) { err = timedOut ? "timeout" : String((e && e.message) || e); if (!timedOut && (c.signal.aborted || (latest && mySeq !== seq))) { stats.aborted++; return {ok: false, aborted: true}; } }
+        clearTimeout(tm);
+        if (latest && mySeq !== seq) { stats.aborted++; return {ok: false, aborted: true}; }   // وصل ردّ قديم بعد طلب أحدث: يُتجاهل
+        const retryable = err || (res && (res.status >= 500 || res.status === 429 || res.status === 408));
+        if (retryable && attempt < tries) { await sleep(back * Math.pow(2, attempt - 1)); if (latest && mySeq !== seq) { stats.aborted++; return {ok: false, aborted: true}; } continue; }
+        break;
+      }
+      let json = null;
+      if (res && text) { const ct = res.headers.get("content-type") || ""; if (/json/i.test(ct) || /^\s*[\[{]/.test(text)) { try { json = JSON.parse(text); } catch (e) {} } }
+      const r = res ? {ok: res.ok, status: res.status, statusText: res.statusText} : null;
+      if (ttlC && r && r.ok) memo.set(u, {t: Date.now(), r, json, text});
+      return finish(r, err, json, text, res ? res.status : 0, false);
+
+      function finish(r, e, j, t, status, cached) {
+        const ok = !!(r && r.ok) && !e;
+        raw.loading = false; raw.status = status;
+        if (ok) {
+          const d = o.pick !== undefined || cfg.pick ? pickPath(j, o.pick !== undefined ? o.pick : cfg.pick) : j;
+          raw.data = d !== undefined && d !== null ? d : (j !== null ? j : (t === "" ? null : t)); raw.error = null; raw.updated = Date.now();
+          if (st) { try { st.setItem(pkey, JSON.stringify({data: raw.data, updated: raw.updated})); } catch (x) {} }
+        } else { stats.failed++; raw.error = e || ("HTTP " + status + (r && r.statusText ? ": " + r.statusText : "")); }   // آخر data ناجحة تبقى ظاهرة
+        kick();
+        const out = {ok, status, error: ok ? null : raw.error, json: j, body: t, cached: !!cached};
+        if (cb) { try { cb(out); } catch (x) { console.error("[indsin] then:", x); } }
+        return out;
+      }
+    }
+
+    function call(method, path, body, o) {
+      o = o || {}; lastReq = [method, path, body, o];
+      const d = dur(o.debounce != null ? o.debounce : cfg.debounce);
+      if (!d) return run(method, path, body, o);
+      clearTimeout(debT); if (debRes) debRes({ok: false, aborted: true});
+      return new Promise(res => { debRes = res; debT = setTimeout(() => { debRes = null; run(method, path, body, o).then(res); }, d); });
+    }
+    const refresh = () => lastReq ? run(lastReq[0], lastReq[1], lastReq[2], lastReq[3]) : run(cfg.method || "GET", cfg.path, undefined, {});
+
+    function schedule() { clearTimeout(pollT); const ev = dur(cfg.every); if (polling && ev) pollT = setTimeout(tick, ev); }
+    async function tick() {
+      if (!polling) return;
+      if ((document.hidden && cfg.pauseHidden !== false) || navigator.onLine === false) { schedule(); return; }   // التبويب مخفي/بلا اتصال: لا طلبات
+      try { await refresh(); } catch (e) { console.error("[indsin] " + name + ":", e); }
+      schedule();
+    }
+    const start = () => { if (polling || !dur(cfg.every)) return; polling = true; schedule(); };
+    const stop = () => { polling = false; clearTimeout(pollT); };
+    document.addEventListener("visibilitychange", () => { const ev = dur(cfg.every); if (polling && ev && !document.hidden && Date.now() - lastRun >= ev) { clearTimeout(pollT); tick(); } });
+    window.addEventListener("online", () => { if (polling) { clearTimeout(pollT); tick(); } });
+
+    const methods = {
+      get: (p, o) => call("GET", p, undefined, o), delete: (p, o) => call("DELETE", p, undefined, o),
+      post: (p, b, o) => call("POST", p, b, o), put: (p, b, o) => call("PUT", p, b, o), patch: (p, b, o) => call("PATCH", p, b, o),
+      request: (m, p, b, o) => call(m, p, b, o), refresh,
+      abort: () => { if (getCtl) getCtl.abort(); clearTimeout(debT); },
+      start, stop, reset: () => { for (const f of Object.keys(defaults)) raw[f] = clone(defaults[f]); kick(); },
+      info: () => Object.assign({name, baseUrl: cfg.baseUrl, polling, every: dur(cfg.every), lastStatus: raw.status}, stats)
+    };
+    const obj = makeContainer(name, raw, methods, kick);
+    if (cfg.autoload !== false && (cfg.path != null || dur(cfg.every))) setTimeout(() => { refresh(); start(); }, 0);
+    else if (dur(cfg.every) && cfg.autoload === false) start();
+    return obj;
+  }
+  // callApi(c, method, path, [body], [opts]) — نفس توقيع المفسّر الأصلي: GET/DELETE الرابع opts، وPOST/PUT/PATCH الرابع body والخامس opts
+  const callApi = (c, method, path, a, b) => { if (typeof c === "string") c = CT[c]; if (!c) throw new Error("callApi: حاوية غير معرَّفة"); const m = String(method).toUpperCase(), w = m === "POST" || m === "PUT" || m === "PATCH"; return c.request(m, path, w ? a : undefined, w ? b : a); };
+  const cget = (n, f) => { const c = CT[n]; return c ? c[f] : undefined; };
+  const cset = (n, f, v) => { const c = CT[n]; if (c) c[f] = v; return v; };
+
+  let B = [], epoch = 0;   // epoch++ ⇒ يُعاد تطبيق كل الخصائص (تغيّر الثيم/الحجم)؛ آخر قيمة مطبَّقة تُحفَظ على الربط نفسه
+  const sortB = list => list.map((b, i) => [b, i]).sort((x, y) => { const rk = k => { const m = SFX.exec(k[0][1]); return m && !(k[0][1] in P) ? RANK[m[2]] : 0; }; return rk(x) - rk(y) || x[1] - y[1]; }).map(x => x[0]);
+  function runList(L) {
+    for (let i = 0; i < L.length; i++) {
+      const b = L[i]; let v, key = b[1];
+      if (key === "__each__") { runEach(b); continue; }
       if (!(key in P)) { const m = SFX.exec(key); if (m && m[1] in P) { if (!sfxMatch(m[2])) continue; key = m[1]; } }
       try { v = typeof b[2] === "function" ? b[2]() : b[2]; } catch (e) { console.error("[indsin] " + b[0] + "." + b[1] + ":", e); continue; }
       const sv = typeof v === "object" ? JSON.stringify(v) : v;
-      if (i in lastV && lastV[i] === sv) continue;
-      lastV[i] = sv;
+      if (b._e === epoch && b._v === sv) continue;
+      b._e = epoch; b._v = sv;
       const el = $(b[0]); if (!el) continue;
       if (/^(bg|background)(_|$)/.test(b[1])) el.dataset.hasBg = "1";
       (P[key] || ((e, v2) => FALLBACK(e, key, v2)))(el, v);
     }
   }
+  const run = () => runList(B);
+  // <<each xs as p, i>> على بيانات حيّة: b[2] = [قائمة(), قالبHTML, (p,i)=>ربط[], (p,i)=>معالجات[]]. تُعاد بناء العناصر فقط عندما يتغيّر محتوى القائمة؛
+  // وإلا يُعاد تقييم ربط كل عنصر وحده (فيُكتب في الـ DOM ما تغيّر فقط). ids القالب تُلحَق بـ ~k ليبقى كل عنصر فريداً.
+  let SS = null;   // حالة الصفحة (warp) لمعالجات الربط داخل <<each>>
+  // ربط ثنائي الاتجاه: __bind__ (warp: name,key) و__bindc__ (حقل حاوية: container,field,key)
+  function attachBind(el, h) {
+    if (h[1] === "__bind__") {
+      const S = SS, name = h[2], key = h[3];
+      if (el.classList.contains("in-rating") || el.classList.contains("in-pagination")) { el.addEventListener("in-change", e => { S[name] = e.detail; }); return; }
+      if (key === "checked") el.addEventListener("change", () => { S[name] = el.checked; });
+      else el.addEventListener("input", () => { const cur = S[name]; S[name] = (typeof cur === "number" || el.type === "range" || el.type === "number") && el.value !== "" ? Number(el.value) : el.value; });
+      return;
+    }
+    const o = CT[h[2]], f = h[3]; if (!o) return;
+    if (h[4] === "checked") el.addEventListener("change", () => { o[f] = el.checked; });
+    else el.addEventListener("input", () => { const cur = o[f]; o[f] = (typeof cur === "number" || el.type === "range" || el.type === "number") && el.value !== "" ? Number(el.value) : el.value; });
+  }
+  function runEach(b) {
+    const d = b[2], el = $(b[0]); if (!el) return;
+    let L; try { L = d[0](); } catch (e) { console.error("[indsin] each " + b[0] + ":", e); return; }
+    const arr = (Array.isArray(L) ? L : typeof L === "number" ? Array.from({length: Math.max(0, Math.min(L | 0, 2000))}, (_, k) => k) : (L && typeof L === "object" ? Object.values(L) : [])).slice(0, 2000);
+    const items = b._items || (b._items = []);
+    // مطابقة بالموضع: عنصر لم يتغيّر محتواه يبقى بعقدته وربطه (تركيز الإدخال والتمرير يسلَمان)؛ المتغيّر وحده يُعاد بناؤه، والزائد يُحذف، والجديد يُضاف
+    arr.forEach((it, k) => {
+      const sig = JSON.stringify(it === undefined ? null : it);
+      if (items[k] && items[k].sig === sig) return;
+      const w = document.createElement("div"); w.style.display = "contents";
+      w.innerHTML = d[1].replace(/ id="([^"]*)"/g, (m, id) => ' id="' + id + "~" + k + '"');
+      const kids = d[2](it, k).map(x => [x[0] + "~" + k, x[1], x[2]]);
+      d[3](it, k).forEach(h => { const e2 = w.querySelector("[id=\"" + h[0] + "~" + k + "\"]"); if (e2 && (h[1] === "__bind__" || h[1] === "__bindc__")) attachBind(e2, [h[0], h[1], h[2], h[3], h[4]]); else if (e2) e2.addEventListener(h[1], ev => { if (h[1] === "submit") ev.preventDefault(); try { h[2](ev); } catch (x) { console.error("[indsin] handler:", x); } }); });
+      if (items[k]) el.replaceChild(w, items[k].el); else el.appendChild(w);
+      items[k] = {sig, el: w, kids: sortB(kids)};
+    });
+    while (items.length > arr.length) el.removeChild(items.pop().el);
+    runList(items.reduce((acc, x) => acc.concat(x.kids), []));
+  }
   function boot(S, bindings, handlers) {
-    B = bindings.map((b, i) => [b, i]).sort((x, y) => { const rk = k => { const m = SFX.exec(k[0][1]); return m && !(k[0][1] in P) ? RANK[m[2]] : 0; }; return rk(x) - rk(y) || x[1] - y[1]; }).map(x => x[0]);
+    SS = S;
+    B = sortB(bindings);;
     try { const t = localStorage.getItem("in-theme"); if (t === "dark" || t === "light") document.documentElement.setAttribute("data-theme", t); } catch (e) {}
     document.querySelectorAll(".in-marquee").forEach(initMarquee);
     document.querySelectorAll("details.in-dropdown").forEach(initDropdown);
-    let rq = 0; const redo = () => { if (rq) return; rq = requestAnimationFrame(() => { rq = 0; lastV = []; run(); }); };
+    let rq = 0; const redo = () => { if (rq) return; rq = requestAnimationFrame(() => { rq = 0; epoch++; run(); }); };
     window.addEventListener("resize", redo); try { window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", redo); } catch (e) {}
     // الخلفية أولاً كي يعرف color الزر أنه نص لا تعبئة
     B.forEach(b => { if (/^(bg|background)(_|$)/.test(b[1])) { const e = $(b[0]); if (e) e.dataset.hasBg = "1"; } });
     handlers.forEach(h => {
       const el = $(h[0]); if (!el) return;
-      if (h[1] === "__bind__") {
-        const name = h[2], key = h[3];
-        if (el.classList.contains("in-rating") || el.classList.contains("in-pagination")) { el.addEventListener("in-change", e => { S[name] = e.detail; }); return; }
-        if (key === "checked") el.addEventListener("change", () => { S[name] = el.checked; });
-        else el.addEventListener("input", () => { const cur = S[name]; S[name] = (typeof cur === "number" || el.type === "range" || el.type === "number") && el.value !== "" ? Number(el.value) : el.value; });
-        return;
-      }
+      if (h[1] === "__bind__" || h[1] === "__bindc__") { attachBind(el, h); return; }
       if (h[1] === "in-visible") observe(el); else if (h[1] === "in-swipel" || h[1] === "in-swiper") watchSwipe(el);
       el.addEventListener(h[1], ev => { if (h[1] === "submit") ev.preventDefault(); try { h[2](ev); } catch (e) { console.error("[indsin] handler:", e); } });
     });
     run();
   }
-  return {state, actions, natives, boot, P, indsin, theme};
+  return {state, actions, natives, boot, P, indsin, theme, storage, api, callApi, cget, cset, containers: CT};
 })();
 )JS";
 
