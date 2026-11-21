@@ -39,6 +39,7 @@
 | `gridkit` | حلقات متداخلة على شبكات ثنائية الأبعاد (2D grids / matrices) | 4.5 KB |
 | `httpkit` | Rin HTTPKit Pro — URL/request normalization around native HTTP functions. | 0.6 KB |
 | `indsinicons` | IndsinIcons: مكتبة أيقونات متجهية (SVG) لمحرّك indsin | 34.2 KB |
+| `indsinlive` | Indsin Live: أحداث ونماذج ومحتوى حيّ (فرق add/remove/move/update) وحركة — Rin يُحرّك واجهات indsin ويستجيب للمستخدم | 47.7 KB |
 | `indsinweb` | IndsinWeb: مكتبة WebView والروابط لمحرّك indsin | 71.6 KB |
 | `inputkit` | أصناف (OOP) جاهزة للتحقق من إدخال المستخدم | 3.8 KB |
 | `iterkit` | مكرِّرات (iterators) بنمط hasNext/next فوق المصفوفات | 4.4 KB |
