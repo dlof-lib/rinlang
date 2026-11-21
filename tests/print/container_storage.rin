@@ -1,0 +1,15 @@
+// container.storage في المفسّر الأصلي = حاوية بيانات عادية (في الذاكرة)؛ الحفظ الدائم يخص مترجم الويب indsin2web
+@container.storage=prefs
+    let dark = true;
+    let visits = 3;
+    let cart = ["a", "b"];
+.end/container.storage
+@storage=short
+    let n = 1;
+.end/storage
+print container.get("prefs", "dark");
+print container.get("prefs", "visits");
+container.set("prefs", "visits", container.get("prefs", "visits") + 1);
+print container.get("prefs", "visits");
+print container.get("short", "n");
+print kindOf("prefs");
