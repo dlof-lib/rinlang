@@ -1,0 +1,7 @@
+@container=C
+    let theme = "d";
+.end/container
+@container=D
+    link theme as t from C readonly;
+    t = "x";
+.end/container
