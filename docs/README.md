@@ -26,6 +26,7 @@
 - [`json-interop.md`](./json-interop.md) — Rin↔JSON: استيراد ملفات JSON كوحدات، `json.into` (JSON→كائنات بفحص أنواع)، `stringifyStrict`، JSON Lines، أخطاء بموضع.
 - [`slab.md`](./slab.md) — `slab.main()` وهوية الوحدة: حارس «الملف الرئيسي» وتشغيل دالة عند الرئيسي فقط.
 - [`link-and-import.md`](./link-and-import.md) — `link` الحيّ (readonly/only/except/file) و`import` (as/`*`/إعادة التصدير) والمسارات النسبية.
+- [`field-head-ring.md`](./field-head-ring.md) — `<field…>` (حقول الحاوية ← جسم) و`<head.X>` (هوية التطبيق ↔ التصميم) و`<rin--g==>` (قائمة ← قالب) في صيغة الوسوم.
 - [`cross-file-containers.md`](./cross-file-containers.md) — `use ... from` (English) — calling a container/UI element from another file.
 - [`boat.md`](./boat.md)
 
