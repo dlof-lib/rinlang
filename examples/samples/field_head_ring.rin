@@ -1,0 +1,51 @@
+<!-- field ==> body · head.X · rin--g==>  — ثلاثة مفاهيم وسوم جديدة (docs/field-head-ring.md)
+     rin indsin examples/samples/field_head_ring.rin -->
+<warp n={0} />
+<Rin>
+@container.app=shop
+    let name = "متجر النور";
+    let short_name = "النور";
+    let version = "1.2.0";
+    let icon = "icons/192.png";
+    let theme_color = "#6C5CE7";
+    let description = "متجر قرطاسية.";
+.end/container.app
+
+@container.data=inv
+    let apples = 5;
+    let owner = "متجر النور";
+    let tags = ["fresh", "local"];
+.end/container.data
+
+fun bump() { container.set("inv", "apples", container.get("inv", "apples") + 1); n = n + 1; }
+</Rin>
+
+<!-- head: يربط هوية التطبيق بالتصميم -->
+<head.shop apply=theme dark />
+<head.shop#bar show />
+
+<Column#root padding=16 gap=12>
+  <Text#title size=heading>{head.name}</Text>
+  <Text#ver size=small color=text_muted>الإصدار <<head.version>></Text>
+
+  <!-- field ==> body: حقول inv تتدفّق إلى قالب افتراضي (اسم + قيمة حيّة) -->
+  <Card#all padding=12 gap=4>
+    <field.inv[];>
+  </Card>
+
+  <!-- جسم مخصّص + tick لإعادة القراءة بعد التعديل -->
+  <field.inv[apples, owner] tick={n}>
+    <Row#line gap=8>
+      <Text#k size=small color=text_muted>{label}</Text>
+      <Text#v>{value}</Text>
+    </Row>
+  </field>
+
+  <!-- rin--g: قائمة ← قالب -->
+  <Row#chips gap=6>
+    <rin--g==>["fresh", "local", "bio"] & {{ <Chip label={{it}} /> }};>
+  </Row>
+  <rin--g==>3 & {{ <Text#n size=small>سطر {{i + 1}}</Text> }};>
+
+  <Button#b onTap={bump()}>+1 تفاح</Button>
+</Column>
