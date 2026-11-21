@@ -50,6 +50,9 @@
 | `<Style#card radius=16 />` + `class="card"` | أنماط مسمّاة قابلة للوراثة (`extends=`) |
 | `<ContainerView>` — بيانات container حيّة (انظر §ContainerView أسفل) · `<Hero>` `<Stat>` `<Chip>` `<Alert>` `<Section>` `<ListTile>` `<Toggle>` `<EmptyState>` | مكوّنات جاهزة تتوسّع وقت الترجمة (انظر [indsin_design_freedom.md](indsin_design_freedom.md) §8) |
 | `<!-- تعليق -->` | `// تعليق` |
+| `<field.nm[];>` · `<field[]>…</field>` | حقول حاوية ← قالب/جسم — [field-head-ring.md](field-head-ring.md) |
+| `<head.name_app />` · `{head.name}` | ربط هوية `@container.app` بعناصر التصميم — [field-head-ring.md](field-head-ring.md) |
+| `<rin--g==>[]&{{}};>` | قائمة ← قالب (mustache `{{it}}`) — [field-head-ring.md](field-head-ring.md) |
 
 ## قيم السمات
 
