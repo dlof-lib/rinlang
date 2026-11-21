@@ -164,3 +164,10 @@ rin_indsin_preview file.rin --width 390 --png out.png --html out.html --tap 60,1
 ## عرض بيانات الـ container (جديد)
 `<ContainerView name="inv" tick={n} />` يرسم بطاقة حيّة ببيانات أي container (حقول/جدول/مستندات)، وpiano يرسمها SVG ويطبعها نصّاً
 (`pn_container_scene` / `pn_container_print`). راجع [docs/indsin_tags.md](docs/indsin_tags.md) (§ContainerView) و[docs/PIANO.md](docs/PIANO.md) والمثال `examples/indsin_container_view.rin`.
+
+---
+## Rin يُحرّك الواجهة ويستجيب للمستخدم (جديد)
+`lib/indsinlive.og.rin` (مضمَّنة): أحداث (`ilOn/ilEmit/ilThrottle/ilDebounce`)، ونماذج بتحقق ودورة إرسال (`ilForm/ilFormSubmit`)، ومحتوى يتحدّث بلا إعادة
+تحميل بفرق مفتاحي `add/remove/move/update` (`ilRegion/ilUpdate/ilLoad/ilOptimistic`)، وحركة (`ilAnim/ilPreset/ilSequence`) تكتب في خلايا `warp`.
+راجع [docs/indsin_live.md](docs/indsin_live.md) والمثال `examples/samples/indsin_live.rin`. (غير `indsin live` أداة المعاينة الحيّة.)
+
