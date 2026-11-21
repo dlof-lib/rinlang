@@ -26,3 +26,8 @@
 - `<<each xs as p, i>>` على قائمة غير حرفية (مثل نتيجة `container.api`) ⇒ في indsin2web تُترجَم إلى `@view.Each` (قالب HTML + ربط ومعالجات كدوال في `(p, i)`)
   يكرّره الـ runtime؛ مطابقة بالموضع: يُعاد بناء العنصر المتغيّر وحده ويُضاف الجديد ويُحذف الزائد، وغير المتغيّر يبقى بعقدته. `desugarWeb` في `rin_indsin_tags.h` (الافتراضي لا يتغيّر).
 - الـ runtime: التخزين المؤقت لآخر قيمة صار على الربط نفسه (`epoch`) بدل فهرس مصفوفة. مثال `indsin_live_list.rin` واختبار `browser_each.js`.
+
+## تحميل تدريجي وبث حيّ (container.api)
+- `append`/`prepend` + `dedupe` + `maxItems` + الدالة `feed.more(path, opts)`: إلحاق صفحات إضافية بـ `data` بدل استبدالها.
+- `stream`/`streamMode`: بث Server-Sent Events (`EventSource`) يحدّث `data` فور وصول الرسائل، مع إعادة اتصال تلقائية وإظهار الانقطاع في `error`؛ `listen()`/`stop()`.
+- مثال `indsin_feed_stream.rin` واختبار `browser_stream.js` (ضمن `run.sh`).
