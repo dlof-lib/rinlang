@@ -1,0 +1,9 @@
+💾 container.storage = prefs
+✅ .end/container.storage (prefs)
+💾 container.storage = short
+✅ .end/container.storage (short)
+true
+3
+4
+1
+container.storage
