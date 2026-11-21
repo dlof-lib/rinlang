@@ -9,7 +9,7 @@ OBJS=""; PIDS=""
 for s in $SRCS; do
   o="$B/$(echo "$s" | tr / _).o"; OBJS="$OBJS $o"
   stale=0; [ ! -f "$o" ] && stale=1; [ "$C/$s.cpp" -nt "$o" ] && stale=1
-  if [ "$s" = "indsin/rin_indsin_c_api rin_c_api" ] && [ -n "$(find "$C/indsin" -name '*.h' -newer "$o" 2>/dev/null | head -1)" ]; then stale=1; fi
+  if [ "$s" = "indsin/rin_indsin_c_api" ] && [ -n "$(find "$C/indsin" -name '*.h' -newer "$o" 2>/dev/null | head -1)" ]; then stale=1; fi
   if [ $stale = 1 ]; then ( "$CXX" $FLAGS -c "$C/$s.cpp" -o "$o" ) & PIDS="$PIDS $!"; fi
 done
 for p in $PIDS; do wait "$p"; done
