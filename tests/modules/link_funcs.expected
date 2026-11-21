@@ -1,0 +1,14 @@
+🏷️ link.id="cfg" -> Config
+true
+true false 1
+["own", "size", "skin"]
+dark 10
+["Ui"]
+["Other", "Ui"]
+["c_secret", "c_size", "c_theme", "o"]
+dark
+[{"name": "Config", "readonly": true, "prefix": "c_"}]
+1 false
+1 0
+["own"]
+{"cfg": "Config"} Config nil
