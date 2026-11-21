@@ -242,64 +242,16 @@ StmtPtr Parser::declaration() {
             advance(); // 'export'
             StmtPtr inner = declaration();
             inner->exported = true;
+            // `export let a, b from "p";` / `export let * from "p";` => إعادة تصدير (نفس `export { a, b } from` / `export * from`)
+            if (inner->stmtKind == StmtKind::ImportStmt) {
+                auto is = std::static_pointer_cast<ImportStmt>(inner);
+                if (!is->alias.empty())
+                    throw errRich(diag::Code::E0013_InvalidExpression, tokens[current > 0 ? current - 1 : 0], "`export let * as ns from` is not supported",
+                                  "a namespace is a local handle, not a list of names a module can re-export",
+                                  "write `export let * from \"p\";` or `export let a, b from \"p\";`", "a re-export form");
+                is->reexportAll = true;
+            }
             return inner;
-        }
-    }
-    // مفهوم `from` مع `let`: تعريف أسماء محلية مصدرها ملف آخر، بلا كلمة import:
-    //   let a, b as c from "p";      -> import { a, b as c } from "p";
-    //   let { a, b as c } from "p";  -> (الأقواس اختيارية)
-    //   let * from "p";              -> @import "p";          (دمج كل المُصدَّر في النطاق الحالي)
-    //   let * as ns from "p";        -> import * as ns from "p";
-    // تُميَّز بالنظر للأمام: let ثم قائمة أسماء/`*`/`{}` ثم IDENT("from") ثم نص، قبل أي '=' أو ';'. وإلا فهي `let` عادية
-    // (فـ `let from = 5;` و`let x = 1;` لا يتأثران). تتحوّل لنفس عقد الاستيراد الموجودة فلا يتغيّر المُفسِّر/VM/rinc.
-    if (check(TokenType::LET)) {
-        size_t k = current + 1;
-        int depth = 0;
-        bool isFrom = false;
-        for (; k + 1 < tokens.size(); ++k) {
-            const Token& t = tokens[k];
-            if (t.type == TokenType::LBRACE) depth++;
-            else if (t.type == TokenType::RBRACE) depth--;
-            else if (t.type == TokenType::EQUAL || t.type == TokenType::SEMICOLON || t.type == TokenType::END_OF_FILE) break;
-            else if (depth == 0 && t.type == TokenType::IDENT && t.lexeme == "from" && k > current + 1 &&
-                     tokens[k + 1].type == TokenType::STRING) { isFrom = true; break; }
-            else if (!(t.type == TokenType::IDENT || t.type == TokenType::COMMA || t.type == TokenType::STAR) && depth == 0) break;
-        }
-        if (isFrom) {
-            Token kw = advance(); // 'let'
-            std::vector<std::string> names, aliases;
-            std::string nsAlias; bool star = false;
-            if (match({TokenType::STAR})) {
-                star = true;
-                if (check(TokenType::IDENT) && peek().lexeme == "as") {
-                    advance();
-                    nsAlias = consume(TokenType::IDENT, "Expected a namespace name after 'as'").lexeme;
-                }
-            } else {
-                const bool braced = match({TokenType::LBRACE});
-                do {
-                    if (braced && check(TokenType::RBRACE)) break; // فاصلة أخيرة مسموحة داخل الأقواس
-                    names.push_back(consume(TokenType::IDENT, "Expected a name to import").lexeme);
-                    if (check(TokenType::IDENT) && peek().lexeme == "as") {
-                        advance();
-                        aliases.push_back(consume(TokenType::IDENT, "Expected a local name after 'as'").lexeme);
-                    } else aliases.push_back("");
-                } while (match({TokenType::COMMA}));
-                if (braced) consume(TokenType::RBRACE, "Expected '}' after import list");
-            }
-            advance(); // 'from'
-            Token pathTok = consumeStaticText("Expected a string path after 'from'");
-            consume(TokenType::SEMICOLON, "Expected ';' after let ... from statement");
-            auto pathExpr = std::make_shared<LiteralExpr>();
-            pathExpr->kind = LiteralExpr::Kind::STRING; pathExpr->str = pathTok.lexeme; pathExpr->line = pathTok.line;
-            if (star) {
-                auto st = std::make_shared<ImportStmt>();
-                st->path = pathExpr; st->alias = nsAlias; st->line = kw.line;
-                return st;
-            }
-            auto st = std::make_shared<ImportSelectedStmt>();
-            st->names = std::move(names); st->aliases = std::move(aliases); st->path = pathExpr; st->line = kw.line;
-            return st;
         }
     }
     if (match({TokenType::LET})) return letDeclaration();
@@ -900,7 +852,195 @@ StmtPtr Parser::achieveStatement() {
     return guarded(stmt, guard);
 }
 
+// ============================================================================
+// `from` مع `let` (docs/from.md) — مصدر واحد، وأسماء تُسحب منه:
+//   let a, b as c from "p";            ملف: يتحوّل إلى ImportSelectedStmt   (كما كان)
+//   let * from "p";  let * as ns from "p";   ملف: ImportStmt                  (كما كان)
+//   let name, age from user;           قيمة (قاموس/كائن): LetPatternStmt بنمط Map
+//   let name as n, age = 0, ...rest from user else { return; };
+//   let [x, y = 0, ...r] from pair;    قيمة (مصفوفة): LetPatternStmt بنمط Array
+// كلها تُحوَّل لعقد موجودة (Import/ImportSelected/LetPattern) فلا تغيير في المُفسِّر أو VM أو rinc.
+// 'from' كلمة سياقية: تُعدّ مفهوماً فقط إن جاءت على المستوى الأعلى بعد نهاية عنصر (اسم/رقم/نص/قوس مغلق/*)
+// وقبل أول ';'، فـ `let from = 5;` و`let x = from;` و`let x = f(from);` تبقى كما هي.
+// ============================================================================
+static bool atEllipsis(const std::vector<Token>& t, size_t i);
+bool Parser::atLetFrom() const {
+    int depth = 0;
+    for (size_t k = current; k < tokens.size() && k < current + 600; ++k) {
+        const Token& t = tokens[k];
+        switch (t.type) {
+            case TokenType::LBRACE: case TokenType::LBRACKET: case TokenType::LPAREN: ++depth; continue;
+            case TokenType::RBRACE: case TokenType::RBRACKET: case TokenType::RPAREN: --depth; if (depth < 0) return false; continue;
+            case TokenType::SEMICOLON: if (depth == 0) return false; continue;
+            case TokenType::END_OF_FILE: return false;
+            default: break;
+        }
+        if (depth == 0 && t.type == TokenType::IDENT && t.lexeme == "from" && k > current) {
+            const TokenType pt = tokens[k - 1].type;
+            if (pt == TokenType::IDENT || pt == TokenType::NUMBER || pt == TokenType::STRING || pt == TokenType::STAR ||
+                pt == TokenType::RBRACE || pt == TokenType::RBRACKET || pt == TokenType::RPAREN ||
+                pt == TokenType::TRUE || pt == TokenType::FALSE || pt == TokenType::NIL)
+                return true;
+        }
+    }
+    return false;
+}
+
+StmtPtr Parser::letFromStatement() {
+    const int line = peek().line;
+    struct Item { std::string key, local; bool strKey = false; bool hasSub = false; LetPattern sub; ExprPtr def; int line = 0; };
+    std::vector<Item> items;
+    bool star = false, hasRest = false; std::string restName, nsAlias;
+    LetPattern arrayPattern; bool arrayMode = false;
+    Token startTok = peek();
+    auto isFromKw = [&]() { return check(TokenType::IDENT) && peek().lexeme == "from"; };
+
+    if (match({TokenType::STAR})) {                                   // let * [as ns] from "p";
+        star = true;
+        if (check(TokenType::IDENT) && peek().lexeme == "as") { advance(); nsAlias = consume(TokenType::IDENT, "Expected a namespace name after 'as'").lexeme; }
+    } else if (check(TokenType::LBRACKET)) {                          // let [a, b = 0, ...r] from arr;
+        arrayMode = true;
+        arrayPattern = letPattern();
+    } else {
+        const bool braced = match({TokenType::LBRACE});               // الأقواس اختيارية: let { a, b } from x;  =  let a, b from x;
+        while (true) {
+            if (braced ? check(TokenType::RBRACE) : isFromKw()) break; // فاصلة أخيرة مسموحة
+            if (atEllipsis(tokens, current)) {
+                advance(); advance(); advance();
+                hasRest = true;
+                restName = consume(TokenType::IDENT, "Expected a name after '...'").lexeme;
+                if (restName == "_") restName.clear();
+                if (!(braced ? check(TokenType::RBRACE) : isFromKw()))
+                    throw errRich(diag::Code::E0013_InvalidExpression, peek(), "'...rest' must be the last item before `from`",
+                                  "the rest collects every remaining key, so nothing can come after it",
+                                  "move the `...name` item to the end of the list", "`from`");
+                break;
+            }
+            Item it; Token k = peek();
+            if (k.type != TokenType::IDENT && k.type != TokenType::STRING)
+                throw errRich(diag::Code::E0013_InvalidExpression, k, "expected a name to take `from` the source",
+                              "`let a, b from source;` lists the names (keys) to pull out",
+                              "write a name, e.g. `let name, age from user;`", "a name");
+            advance();
+            it.key = k.lexeme; it.strKey = (k.type == TokenType::STRING); it.line = k.line;
+            if (check(TokenType::IDENT) && peek().lexeme == "as") {      // key as local
+                advance();
+                it.local = consume(TokenType::IDENT, "Expected a local name after 'as'").lexeme;
+            } else if (match({TokenType::COLON})) {                       // key: {nested} | key: local
+                it.sub = letPatternPrimary(); it.hasSub = true;
+            } else if (it.strKey) {
+                throw errRich(diag::Code::E0013_InvalidExpression, k, "a quoted key needs a name to bind to",
+                              "`\"my key\"` has no variable name", "write `\"my key\" as name`", "`as`");
+            } else it.local = it.key;
+            if (match({TokenType::EQUAL})) it.def = expression();       // key = default
+            items.push_back(std::move(it));
+            if (!match({TokenType::COMMA})) break;
+        }
+        if (braced) consume(TokenType::RBRACE, "Expected '}' to close the list before `from`");
+    }
+    if (!isFromKw()) {
+        throw errRich(diag::Code::E0012_MissingToken, peek(), "expected `from` after the list of names",
+                      "`let a, b from source;` needs `from` between the names and where they come from",
+                      "add `from <path or value>` before the `;`", "`from`");
+    }
+    advance(); // 'from'
+
+    // مصدر ملف: (1) نص حرفي ثم ';' أو 'else' => استيراد وحدة بمسار ثابت، (2) `file(<تعبير>)` => مسار يُحسب وقت التشغيل
+    // (ImportSelected/Import يقيّمان path كتعبير أصلاً)، (3) أي تعبير آخر => قيمة تُفكَّك.
+    const bool litPath = check(TokenType::STRING) && current + 1 < tokens.size() &&
+        (tokens[current + 1].type == TokenType::SEMICOLON || tokens[current + 1].type == TokenType::ELSE);
+    const bool dynPath = check(TokenType::FILE_KW) && current + 1 < tokens.size() &&   // 'file' كلمة محجوزة: لا تعارض مع دوال المستخدم
+        tokens[current + 1].type == TokenType::LPAREN;
+    const bool pathSource = litPath || dynPath;
+    if (pathSource) {
+        ExprPtr pathExpr;
+        if (litPath) {
+            Token pathTok = consumeStaticText("Expected a string path after 'from'");
+            auto lit = std::make_shared<LiteralExpr>();
+            lit->kind = LiteralExpr::Kind::STRING; lit->str = pathTok.lexeme; lit->line = pathTok.line;
+            pathExpr = lit;
+        } else {
+            advance(); advance();                                       // 'file' '('
+            pathExpr = expression();
+            consume(TokenType::RPAREN, "Expected ')' after the path inside file(...)");
+        }
+        ExprPtr fallbackExpr;
+        if (check(TokenType::ELSE)) {                                   // else <قيم بديلة> (قاموس) إن غابت الوحدة
+            Token e = advance();
+            if (star)
+                throw errRich(diag::Code::E0013_InvalidExpression, e, "`else` needs a name list, not `*`",
+                              "the fallback is a map that supplies a value for each listed name",
+                              "list the names: `let a, b from \"p\" else {\"a\": 1, \"b\": 2};`", "a name list");
+            ++noElseExpr;
+            fallbackExpr = expression();
+            --noElseExpr;
+        }
+        consume(TokenType::SEMICOLON, "Expected ';' after let ... from statement");
+        auto bad = [&](const char* what) {
+            throw errRich(diag::Code::E0013_InvalidExpression, startTok, std::string(what) + " is not available when importing from a file path",
+                          "a module import only picks exported names (`let a, b as c from \"p\";`); defaults, `...rest` and nested patterns work on values",
+                          "remove it, or take the names from a value instead of a path", "a plain name list");
+        };
+        if (arrayMode) bad("an array pattern");
+        if (hasRest) bad("`...rest`");
+        if (star) {
+            auto st = std::make_shared<ImportStmt>();
+            st->path = pathExpr; st->alias = nsAlias; st->line = line;
+            return st;
+        }
+        auto st = std::make_shared<ImportSelectedStmt>();
+        for (auto& it : items) {
+            if (it.def || it.hasSub) bad(it.def ? "a default value" : "a nested pattern");
+            st->names.push_back(it.key);
+            st->aliases.push_back(it.local == it.key ? std::string() : it.local);
+        }
+        if (st->names.empty())
+            throw errRich(diag::Code::E0012_MissingToken, startTok, "expected at least one name before `from`",
+                          "`let ... from \"p\";` needs a name, `*`, or `* as ns`", "write `let a, b from \"p\";`", "a name");
+        st->path = pathExpr; st->fallback = fallbackExpr; st->line = line;
+        return st;
+    }
+    if (star)
+        throw errRich(diag::Code::E0013_InvalidExpression, startTok, "`let * from` needs a file path",
+                      "`*` imports everything a module exports, so the source must be a string path like \"./util.rin\"",
+                      "write `let * from \"./file.rin\";` or list the names to take from a value", "a string path");
+
+    auto st = std::make_shared<LetPatternStmt>();
+    st->line = line;
+    if (arrayMode) st->pattern = std::move(arrayPattern);
+    else {
+        LetPattern p; p.kind = LetPattern::Kind::Map; p.line = line;
+        for (auto& it : items) {
+            LetPattern sub;
+            if (it.hasSub) sub = std::move(it.sub);
+            else { sub.kind = (it.local == "_") ? LetPattern::Kind::Skip : LetPattern::Kind::Name; sub.name = it.local; }
+            sub.line = it.line; sub.key = it.key; sub.defaultValue = it.def;
+            p.items.push_back(std::move(sub));
+        }
+        p.hasRest = hasRest; p.restName = restName;
+        if (p.items.empty() && !hasRest)
+            throw errRich(diag::Code::E0012_MissingToken, startTok, "expected at least one name before `from`",
+                          "`let ... from value;` needs the names to pull out", "write `let name, age from user;`", "a name");
+        st->pattern = std::move(p);
+    }
+    checkPatternDuplicates(st->pattern, startTok);
+    ++noElseExpr;
+    st->initializer = expression();
+    --noElseExpr;
+    while (check(TokenType::ELSE)) {                                  // else { حارس } أو else <قيمة بديلة>
+        Token e = advance();
+        if (match({TokenType::LBRACE})) { st->elseBlock = block(); break; }
+        ++noElseExpr;
+        auto fb = pipeline();
+        --noElseExpr;
+        st->initializer = makeElseExpr(st->initializer, fb, e.line);
+    }
+    consume(TokenType::SEMICOLON, "Expected ';' after let ... from statement");
+    return st;
+}
+
 StmtPtr Parser::letDeclaration() {
+    if (atLetFrom()) return letFromStatement();   // let ... from <مصدر>;  (docs/from.md)
     // let+ (docs/let-plus.md): عنصر واحد أو أكثر مفصولة بفاصلة؛ كل عنصر اسم بسيط أو نمط تفكيك.
     // الشكل القديم `let x = 5;` يمرّ هنا بنفس رسائل الخطأ السابقة حرفيًا ويُرجع LetStmt كما كان.
     int firstLine = peek().line;
@@ -4307,6 +4447,100 @@ StmtPtr Parser::linkStatement() {
         return s;
     }
 
+    // خيارات اختيارية بأي ترتيب (كلمات سياقية): readonly | only=a,b | except=a,b | prefix=p_ | as=ns (للملفات)
+    // وفي قوائم only يمكن إعادة التسمية: only=theme as appTheme,size  (الاسم المحلي appTheme يشير إلى theme في الهدف)
+    auto parseLinkOptions = [&](const std::shared_ptr<LinkStmt>& s) {
+        while (check(TokenType::IDENT)) {
+            const std::string opt = peek().lexeme;
+            if (opt == "readonly") { advance(); s->readOnly = true; continue; }
+            if (opt == "as" && !s->filePath.empty()) {
+                advance();
+                consume(TokenType::EQUAL, "Expected '=' after 'as'");
+                s->alias = consume(TokenType::IDENT, "Expected a namespace name after 'as='").lexeme;
+                continue;
+            }
+            if (opt == "prefix") {
+                advance();
+                consume(TokenType::EQUAL, "Expected '=' after 'prefix'");
+                if (!check(TokenType::IDENT) && !check(TokenType::STRING))
+                    throw errRich(diag::Code::E0012_MissingToken, peek(), "expected a prefix after 'prefix='",
+                                  "`prefix=cfg_` makes every name of the target appear locally as `cfg_<name>`",
+                                  "e.g. `link to=Config prefix=cfg_;`", "an identifier or string literal");
+                s->prefix = advance().lexeme;
+                continue;
+            }
+            if (opt == "only" || opt == "except") {
+                advance();
+                consume(TokenType::EQUAL, "Expected '=' after '" + opt + "'");
+                auto& list = (opt == "only") ? s->only : s->except;
+                do {
+                    if (!check(TokenType::IDENT) && !check(TokenType::STRING))
+                        throw errRich(diag::Code::E0012_MissingToken, peek(), "expected a name after '" + opt + "='",
+                                      "`" + opt + "=` takes a comma-separated list of names",
+                                      "e.g. `link to=Config " + opt + "=theme,size;`", "an identifier or string literal");
+                    std::string nm = advance().lexeme;
+                    if (opt == "only" && check(TokenType::IDENT) && peek().lexeme == "as" && !checkNext(TokenType::EQUAL)) {
+                        advance(); // as
+                        std::string local = consume(TokenType::IDENT, "Expected a local name after 'as'").lexeme;
+                        s->rename.push_back({local, nm});
+                        list.push_back(local);
+                    } else list.push_back(nm);
+                } while (match({TokenType::COMMA}));
+                continue;
+            }
+            break;
+        }
+    };
+
+    // صيغة from (نفس روح `let a, b from ...`): الأسماء أولاً ثم المصدر:
+    //   link theme as appTheme, size from Config;        -> حاوية (اسم مجرّد)
+    //   link a, b from "./settings.rin" as=cfg readonly; -> ملف (نص حرفي)
+    //   link * from Config prefix=cfg_;                  -> كل الأسماء بالبادئة
+    // تُميَّز عن link to=/id=/file= بأن أول عنصر ليس يتبعه '='.
+    if (check(TokenType::STAR) || (check(TokenType::IDENT) && !checkNext(TokenType::EQUAL))) {
+        auto s = std::make_shared<LinkStmt>();
+        s->line = tok.line;
+        bool star = false;
+        std::vector<std::string> listed;
+        if (match({TokenType::STAR})) star = true;
+        else {
+            do {
+                if (!check(TokenType::IDENT) && !check(TokenType::STRING))
+                    throw errRich(diag::Code::E0012_MissingToken, peek(), "expected a name before `from`",
+                                  "`link a, b from Source;` lists the names to expose", "e.g. `link theme, size from Config;`", "a name");
+                std::string nm = advance().lexeme;
+                if (check(TokenType::IDENT) && peek().lexeme == "as") {
+                    advance();
+                    std::string local = consume(TokenType::IDENT, "Expected a local name after 'as'").lexeme;
+                    s->rename.push_back({local, nm});
+                    listed.push_back(local);
+                } else listed.push_back(nm);
+            } while (match({TokenType::COMMA}));
+        }
+        if (!(check(TokenType::IDENT) && peek().lexeme == "from"))
+            throw errRich(diag::Code::E0012_MissingToken, peek(), "expected `from` after the list of names",
+                          "`link a, b from Source;` needs `from` between the names and the container or file",
+                          "add `from <Container>` or `from \"./file.rin\"`", "`from`");
+        advance(); // from
+        if (check(TokenType::STRING)) s->filePath = consumeStaticText("Expected a text path after 'from'").lexeme;
+        else if (check(TokenType::IDENT)) s->target = advance().lexeme;
+        else throw errRich(diag::Code::E0012_MissingToken, peek(), "expected a container name or a file path after `from`",
+                           "the source of a link is a container (`from Config`) or a file (`from \"./f.rin\"`)",
+                           "e.g. `link theme from Config;`", "a name or string path");
+        s->only = listed;   // أسماء محلية (تحوي إعادة التسمية)
+        parseLinkOptions(s);
+        if (star && !s->only.empty()) s->only.clear();
+        if (!s->prefix.empty() && !s->rename.empty())
+            throw errRich(diag::Code::E0016_InvalidProperty, previous(), "`prefix` cannot be combined with `as` renames",
+                          "a prefix renames every name at once, and `as` renames chosen names one by one",
+                          "use one of them", "prefix or as");
+        if (!s->only.empty() && !s->except.empty())
+            throw errRich(diag::Code::E0016_InvalidProperty, previous(), "`only` and `except` cannot be combined",
+                          "use either an allow-list or a deny-list on one link", "remove one of them", "only or except");
+        consume(TokenType::SEMICOLON, "Expected ';' after link statement");
+        return s;
+    }
+
     Token key = check(TokenType::FILE_KW) ? advance() : consume(TokenType::IDENT, "Expected 'to', 'id' or 'file' after 'link'"); // 'file' كلمة محجوزة
     if (key.lexeme != "to" && key.lexeme != "id" && key.lexeme != "file")
         throw errRich(diag::Code::E0016_InvalidProperty, key,
@@ -4338,35 +4572,15 @@ StmtPtr Parser::linkStatement() {
                           "an identifier or string literal");
         s->target = advance().lexeme;
     }
-    // خيارات اختيارية بأي ترتيب (كلمات سياقية): readonly | only=a,b | except=a,b
-    while (check(TokenType::IDENT)) {
-        const std::string opt = peek().lexeme;
-        if (opt == "readonly") { advance(); s->readOnly = true; continue; }
-        if (opt == "as" && !s->filePath.empty()) {
-            advance();
-            consume(TokenType::EQUAL, "Expected '=' after 'as'");
-            s->alias = consume(TokenType::IDENT, "Expected a namespace name after 'as='").lexeme;
-            continue;
-        }
-        if (opt == "only" || opt == "except") {
-            advance();
-            consume(TokenType::EQUAL, "Expected '=' after '" + opt + "'");
-            auto& list = (opt == "only") ? s->only : s->except;
-            do {
-                if (!check(TokenType::IDENT) && !check(TokenType::STRING))
-                    throw errRich(diag::Code::E0012_MissingToken, peek(), "expected a name after '" + opt + "='",
-                                  "`" + opt + "=` takes a comma-separated list of names",
-                                  "e.g. `link to=Config " + opt + "=theme,size;`", "an identifier or string literal");
-                list.push_back(advance().lexeme);
-            } while (match({TokenType::COMMA}));
-            continue;
-        }
-        break;
-    }
+    parseLinkOptions(s);
     if (!s->only.empty() && !s->except.empty())
         throw errRich(diag::Code::E0016_InvalidProperty, previous(), "`only` and `except` cannot be combined",
                       "use either an allow-list (`only=`) or a deny-list (`except=`) on one link",
                       "remove one of them", "only or except");
+    if (!s->prefix.empty() && !s->rename.empty())
+        throw errRich(diag::Code::E0016_InvalidProperty, previous(), "`prefix` cannot be combined with `as` renames",
+                      "a prefix renames every name at once, and `as` renames chosen names one by one",
+                      "use one of them", "prefix or as");
     consume(TokenType::SEMICOLON, "Expected ';' after link statement");
     return s;
 }
