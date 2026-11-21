@@ -19,6 +19,29 @@ namespace fs = std::filesystem;
 
 static std::string takeStr(char* p) { std::string s = p ? p : ""; if (p) rin_free_string(p); return s; }
 static bool writeFile(const std::string& path, const std::string& data) { std::ofstream o(path, std::ios::binary); o << data; return (bool)o; }
+// يستخرج حقل نصّ/رقم من كائن JSON مسطّح (تقرير التدقيق): "key":"..." أو "key":123.
+static std::string jsonField(const std::string& obj, const char* key) {
+    std::string k = std::string("\"") + key + "\":"; size_t p = obj.find(k); if (p == std::string::npos) return "";
+    p += k.size(); std::string out;
+    if (p < obj.size() && obj[p] == '"') {
+        for (++p; p < obj.size() && obj[p] != '"'; ++p) {
+            if (obj[p] == '\\' && p + 1 < obj.size()) { ++p; out += obj[p] == 'n' ? ' ' : obj[p]; } else out += obj[p];
+        }
+    } else while (p < obj.size() && (isdigit((unsigned char)obj[p]) || obj[p] == '-')) out += obj[p++];
+    return out;
+}
+// يطبع كل ملاحظة تدقيق: file:line: severity[CODE]: message  (+ hint)
+static void printAuditIssues(const std::string& file, const std::string& audit) {
+    const std::string tag = "{\"code\":";
+    for (size_t p = audit.find(tag); p != std::string::npos;) {
+        size_t nxt = audit.find(tag, p + 1); std::string obj = audit.substr(p, nxt == std::string::npos ? std::string::npos : nxt - p);
+        std::string line = jsonField(obj, "line"), hint = jsonField(obj, "hint");
+        printf("%s:%s: %s[%s]: %s\n", file.c_str(), line.empty() ? "0" : line.c_str(), jsonField(obj, "severity").c_str(),
+               jsonField(obj, "code").c_str(), jsonField(obj, "message").c_str());
+        if (!hint.empty()) printf("    ↳ %s\n", hint.c_str());
+        p = nxt;
+    }
+}
 static std::string stemOf(const std::string& p) { std::string n = fs::path(p).stem().string(); return n.empty() ? "app" : n; }
 
 struct NativeOut { bool ok = false; std::string json, html, error; int w = 0, h = 0; };
@@ -117,6 +140,7 @@ int main(int argc, char** argv) {
         else {
             std::string audit = takeStr(rin_indsin_session_audit_json(s)), stats = takeStr(rin_indsin_session_stats_json(s));
             size_t issues = 0; for (size_t p = 0; (p = audit.find("\"severity\"", p)) != std::string::npos; ++p) ++issues;
+            printAuditIssues(in, audit);
             printf("native: %s  (%zu ملاحظة تدقيق)\n", issues ? "⚠" : "✓", issues);
             if (stats.find("\"nodes\"") != std::string::npos) { size_t n = stats.find("\"nodes\""); printf("        %s\n", stats.substr(n, 40).c_str()); }
             if (issues && strict) nat = 2;
