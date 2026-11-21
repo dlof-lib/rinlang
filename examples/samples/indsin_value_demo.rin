@@ -1,0 +1,17 @@
+<!-- indsin::Value — مقارنات، باقي القسمة، قيم منطقية، أعداد كبيرة (tests/indsin_value)
+     rin indsin check examples/samples/indsin_value_demo.rin -->
+<warp n={7} />
+<warp big={1234567} />
+<warp limit={10} />
+<Rin>
+fun bump() { n = n + 1; }
+</Rin>
+
+<Column#root padding=16 gap=12>
+  <Text#big>الرقم الكبير: {big}</Text>
+  <Text#cmp>{n} أكبر من {limit}؟ {n > limit}</Text>
+  <Text#le>الحد {limit} أكبر أو يساوي {n}؟ {limit >= n}</Text>
+  <Text#parity>{n % 2 == 0 ? "زوجي" : "فردي"}</Text>
+  <Text#eq>"7" == 7 ؟ {"7" == n}</Text>
+  <Button#add text="زِد" onTap={bump()} />
+</Column>
