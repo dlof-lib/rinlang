@@ -2382,7 +2382,26 @@ Official AGP compatibility: AGP 8.13 requires Gradle 8.13 and JDK 17.
 - `rin_indsin_validate.h`، تنقية `set_input` حسب النوع/maxlength، تحقق تلقائي، `indsin.isNumber/fieldError`.
 - أندرويد: IndsinFabricView.drawField (كلمة المرور/prefix/suffix/التحقق) وحوار الإدخال حسب النوع.
 
-## `from` — تعريف أسماء من ملف بـ `let`
-- مفهوم جديد `let a, b as c from "path";` و`let { a, b } from "path";` و`let * from "path";` و`let * as ns from "path";`. يتحوّل في المحلِّل (`rin_parser.cpp`) إلى `ImportSelectedStmt`/`ImportStmt` الموجودتين، فلا تغيير في المُفسِّر أو VM أو rinc.
-- `let` العادية لا تتأثر (`let from = 5;` و`let x = 1;` و`let [a, b] = ...`): لا تُفسَّر كمفهوم إلا بوجود `from` ثم نص قبل أي `=`.
-- التوثيق: `docs/from.md`، الاختبار: `tests/modules/from_concept.rin` + `.expected`.
+## `from` — مصدر واحد وأسماء تُسحب منه (ملف أو قيمة)
+- `let a, b as c from "p";` · `let * [as ns] from "p";` (ملفات، كما كانت) + **جديد: قيم** — `let name, age from user;` و`let name as n, age = 0, ...rest from user;` و`let profile: {lang} from data;` و`let [x, y = 0, ...r] from pair;`.
+- يدعم `else { حارس }` و`else <قيمة بديلة>` ويعمل داخل الدوال والكتل (يُعالَج داخل `letDeclaration()`).
+- كلها تتحوّل في المحلِّل إلى `ImportSelectedStmt`/`ImportStmt`/`LetPatternStmt`؛ لا تغيير في المُفسِّر أو VM أو rinc. `from` كلمة سياقية فلا تتأثر `let from = 5;` ولا `each x in xs from 1`.
+- أخطاء: E0013 (لا مصدر، أو `*` مع قيمة، أو نمط/افتراضي/`...rest` مع مسار ملف)، E0012 (نسيان `;`)، E0002 (اسم مكرر).
+- التوثيق: `docs/from.md` · الاختبارات: `tests/modules/from_concept.rin` و`from_values.rin` و`errors/from_*.rin`.
+
+## `from` — تواصل الملفات (مسار ديناميكي، استيراد اختياري، إعادة تصدير)
+- `let a, b from file(<تعبير>);` و`let * as ns from file(..);` — مسار الملف يُحسب وقت التشغيل.
+- `let a, b from "p" else {"a": 1, "b": 2};` — استيراد اختياري بقيم بديلة عند غياب الملف فقط (E0029)، ويشمل ملفات JSON (`let host, port from "cfg.json" else {..}`). حقل جديد `ImportSelectedStmt::fallback` ومعالجته في `rin_interpreter.cpp`.
+- `export let a, b as c from "p";` و`export let * from "p";` — إعادة تصدير (تكافئ `export { } from` / `export * from`).
+- اختبارات: `tests/modules/from_files.rin` + 4 اختبارات أخطاء `errors/from_else_*` و`from_export_star_ns`. التوثيق: `docs/from.md` §5.
+
+## `link` — صيغة from، إعادة التسمية، البادئة
+- `link theme as appTheme, size from Config;` · `link a, b from "./f.rin" as=cfg readonly;` · `link * from Config prefix=cfg_;` · `link to=X only=a as x,b;`.
+- `LinkFilter` صار يحمل `rename` و`prefix`، وصارت قراءة/كتابة/استدعاء/وصول مؤهَّل عبر الربط تحوّل الاسم المحلي إلى اسم الهدف (`Environment::linkMap` + `findOwner*(name, &outName)`). `links()` يعرض `rename`/`prefix`.
+- أخطاء: E0016 (prefix مع as)، E0012 (نسيان from)، E0035 (كتابة عبر readonly)، والاسم الأصلي المُعاد تسميته يُحجب (E0001).
+- اختبارات: `tests/modules/link_from.rin` + 4 في `errors/link_from_*`. التوثيق: `docs/link-and-import.md` §5.
+
+## `links.*` — دوال الربط
+- `links.add/remove/clear/has/count/by/names/ids/target` (في `rin_oop_link.cpp`): إنشاء الروابط وفكّها واستعلامها برمجياً بأسماء حاويات، بنفس قواعد `link` (فلاتر/rename/prefix/readonly، E0014/E0016).
+- `links.by(target)` استعلام عكسي جديد، و`links.names(from)` يسرد الأسماء المرئية بعد الفلترة وإعادة التسمية.
+- اختبارات: `tests/modules/link_funcs.rin` + 4 في `errors/links_add_*`. التوثيق: `docs/link-and-import.md` §6.
