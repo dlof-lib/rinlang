@@ -114,6 +114,7 @@ static void collect(const StmtPtr& stmt, std::set<std::string>& out) {
             case ContainerKind::DATALIST: out.insert("datalist"); break;
             case ContainerKind::CHATBOT: out.insert("chatbot"); break;
             case ContainerKind::APP: out.insert("app"); break;
+            case ContainerKind::STORAGE: out.insert("storage"); break;
             case ContainerKind::EVERYTHING: out.insert("make"); break;
             default: break;
         }
