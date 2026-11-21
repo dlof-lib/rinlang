@@ -657,6 +657,22 @@ const IN = (() => {
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const pickPath = (j, p) => { if (!p) return j; for (const k of String(p).split(".")) { if (j == null) return undefined; j = j[k]; } return j; };
 
+    // يضع نتيجة ناجحة في data: replace (الافتراضي) · append/prepend يدمجان المصفوفة الواردة مع الحالية (تحميل تدريجي/بث)
+    //   dedupe="id": لا تتكرر العناصر ذات نفس قيمة الحقل · maxItems=N: يُقصّ الناتج إلى N عنصراً (append يُبقي الأحدث، prepend يُبقي الأول)
+    function applyData(val, mode, o) {
+      o = o || {};
+      if (mode !== "replace") {
+        const cur = Array.isArray(raw.data) ? raw.data : [], inc = Array.isArray(val) ? val : (val == null ? [] : [val]), idk = o.dedupe || cfg.dedupe;
+        const fresh = idk ? inc.filter(x => !cur.some(y => y && x && y[idk] === x[idk])) : inc;
+        let merged = mode === "prepend" ? fresh.concat(cur) : cur.concat(fresh);
+        const mx = Number(o.maxItems != null ? o.maxItems : cfg.maxItems) || 0;
+        if (mx > 0 && merged.length > mx) merged = mode === "prepend" ? merged.slice(0, mx) : merged.slice(merged.length - mx);
+        val = merged;
+      }
+      raw.data = val; raw.error = null; raw.updated = Date.now();
+      if (st) { try { st.setItem(pkey, JSON.stringify({data: raw.data, updated: raw.updated})); } catch (x) {} }
+    }
+
     function buildUrl(path, o) {
       let p = String(path == null ? (cfg.path == null ? "" : cfg.path) : path);
       const params = o.params || {};
@@ -714,8 +730,9 @@ const IN = (() => {
         raw.loading = false; raw.status = status;
         if (ok) {
           const d = o.pick !== undefined || cfg.pick ? pickPath(j, o.pick !== undefined ? o.pick : cfg.pick) : j;
-          raw.data = d !== undefined && d !== null ? d : (j !== null ? j : (t === "" ? null : t)); raw.error = null; raw.updated = Date.now();
-          if (st) { try { st.setItem(pkey, JSON.stringify({data: raw.data, updated: raw.updated})); } catch (x) {} }
+          const val = d !== undefined && d !== null ? d : (j !== null ? j : (t === "" ? null : t));
+          const ap = o.append !== undefined ? o.append : cfg.append;
+          applyData(val, ap === true || ap === "append" ? "append" : ap === "prepend" ? "prepend" : "replace", o);
         } else { stats.failed++; raw.error = e || ("HTTP " + status + (r && r.statusText ? ": " + r.statusText : "")); }   // آخر data ناجحة تبقى ظاهرة
         kick();
         const out = {ok, status, error: ok ? null : raw.error, json: j, body: t, cached: !!cached};
@@ -745,15 +762,36 @@ const IN = (() => {
     document.addEventListener("visibilitychange", () => { const ev = dur(cfg.every); if (polling && ev && !document.hidden && Date.now() - lastRun >= ev) { clearTimeout(pollT); tick(); } });
     window.addEventListener("online", () => { if (polling) { clearTimeout(pollT); tick(); } });
 
+    // بث حيّ (Server-Sent Events): كل رسالة تُحدّث data فور وصولها بلا استطلاع. streamMode: replace (الافتراضي) | append | prepend
+    //   يعيد EventSource الاتصال تلقائياً؛ وتظهر حالة الانقطاع في error ثم تُمحى عند أول رسالة جديدة.
+    let es = null;
+    function listen() {
+      if (es || !cfg.stream) return;
+      if (typeof EventSource === "undefined") { raw.error = "EventSource unsupported"; kick(); return; }
+      let u; try { u = buildUrl(cfg.stream, {}); } catch (e) { raw.error = String((e && e.message) || e); kick(); return; }
+      es = new EventSource(u, {withCredentials: cfg.credentials === "include"});
+      es.onopen = () => { raw.status = 200; raw.error = null; kick(); };
+      es.onmessage = ev => {
+        let j; try { j = JSON.parse(ev.data); } catch (e) { j = ev.data; }
+        const v = cfg.pick ? pickPath(j, cfg.pick) : j;
+        if (v === undefined) return;
+        raw.status = 200; applyData(v, cfg.streamMode === "append" ? "append" : cfg.streamMode === "prepend" ? "prepend" : "replace", {}); kick();
+      };
+      es.onerror = () => { raw.error = "stream disconnected"; kick(); };
+    }
+    const unlisten = () => { if (es) { es.close(); es = null; } };
+
     const methods = {
-      get: (p, o) => call("GET", p, undefined, o), delete: (p, o) => call("DELETE", p, undefined, o),
+      more: (p, o) => call("GET", p, undefined, Object.assign({append: true, latest: false}, o)),   // تحميل صفحة إضافية تُلحَق بـ data
+      listen, get: (p, o) => call("GET", p, undefined, o), delete: (p, o) => call("DELETE", p, undefined, o),
       post: (p, b, o) => call("POST", p, b, o), put: (p, b, o) => call("PUT", p, b, o), patch: (p, b, o) => call("PATCH", p, b, o),
       request: (m, p, b, o) => call(m, p, b, o), refresh,
       abort: () => { if (getCtl) getCtl.abort(); clearTimeout(debT); },
-      start, stop, reset: () => { for (const f of Object.keys(defaults)) raw[f] = clone(defaults[f]); kick(); },
+      start, stop: () => { stop(); unlisten(); }, reset: () => { for (const f of Object.keys(defaults)) raw[f] = clone(defaults[f]); kick(); },
       info: () => Object.assign({name, baseUrl: cfg.baseUrl, polling, every: dur(cfg.every), lastStatus: raw.status}, stats)
     };
     const obj = makeContainer(name, raw, methods, kick);
+    if (cfg.stream && cfg.autoload !== false) setTimeout(listen, 0);
     if (cfg.autoload !== false && (cfg.path != null || dur(cfg.every))) setTimeout(() => { refresh(); start(); }, 0);
     else if (dur(cfg.every) && cfg.autoload === false) start();
     return obj;
