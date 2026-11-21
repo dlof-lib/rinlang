@@ -1,0 +1,4 @@
+@container=C
+    let a = 1;
+.end/container
+links.add("C", "Nope");
