@@ -546,5 +546,28 @@
     "body": [
       "<ExpandableList#${1:feed} title=\"${2:Title}\" items=\"${3:a;b;c;d}\" limit=${4:2} />"
     ]
+  },
+  "container.storage": {
+    "prefix": "container.storage",
+    "description": "Local storage container: values survive closing the page (indsin2web)",
+    "body": [
+      "@container.storage=${1:prefs}",
+      "\tlet ${2:dark} = ${3:false};",
+      "\t$0",
+      ".end/container.storage"
+    ]
+  },
+  "container.fetch": {
+    "prefix": "container.fetch",
+    "description": "Background fetch container (container.api + baseUrl) with polling",
+    "body": [
+      "@container.api=${1:feed}",
+      "\tlet baseUrl = \"${2:https://api.example.com}\";",
+      "\tlet path = \"${3:/items}\";",
+      "\tlet every = ${4:30s};",
+      "\tlet data = [];",
+      "\t$0",
+      ".end/container.api"
+    ]
   }
 }
