@@ -634,7 +634,8 @@ std::string g_containerJs;   // تعريفات حاويات الويب (تُكت
 // حقول الإعداد المحجوزة (لا تصير حقولاً تفاعلية بل تُمرَّر للـ runtime كإعداد).
 const std::set<std::string> kStorageCfg = {"store", "storeKey", "version", "ttl", "sync"};
 const std::set<std::string> kApiCfg = {"baseUrl", "path", "method", "headers", "token", "timeout", "retry", "backoff", "cache", "every",
-                                       "autoload", "debounce", "persist", "pauseHidden", "query", "pick", "body", "credentials", "mock"};
+                                       "autoload", "debounce", "persist", "pauseHidden", "query", "pick", "body", "credentials", "mock",
+                                       "append", "dedupe", "maxItems", "stream", "streamMode"};
 bool bodyHasLet(const std::vector<StmtPtr>& body, const char* name) {
     for (auto& st : body) if (st && st->stmtKind == StmtKind::LetStmt && static_cast<LetStmt*>(st.get())->name == name) return true;
     return false;
