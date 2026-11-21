@@ -1,0 +1,13 @@
+dark 10 hi dark
+light
+light 10
+20
+hi light
+light 20
+s
+light 20
+light
+[{"name": "Config", "readonly": false, "only": ["appTheme", "hello", "size"], "rename": {"appTheme": "theme", "hello": "greet"}}]
+[{"name": "Config", "readonly": false, "prefix": "cfg_"}]
+dark hi dark
+blue
