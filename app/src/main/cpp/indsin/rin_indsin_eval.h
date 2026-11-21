@@ -13,30 +13,133 @@
 #include <variant>
 #include <sstream>
 #include <cctype>
+#include <cmath>
+#include <cstdio>
+#include <cstdlib>
 
 namespace indsin {
 
 // A resolved attribute value: either a number or a string (RIN's two literal kinds relevant here).
+//
+// Representation is unchanged (kind/number/str stay public, so every existing consumer keeps working);
+// what is new is a single, tested home for the rules that were previously copy-pasted across the code:
+// truthiness, boolean parsing, number formatting, numeric-with-unit parsing, and comparison.
+// Booleans are still the strings "true"/"false" (Value::boolean) — no new Kind, so nothing that
+// switches on `kind` can break.
 struct Value {
     enum class Kind { NUMBER, STRING } kind = Kind::STRING;
     double number = 0.0;
     std::string str;
 
+    // "12px" / "50%" / "1.5em" → {12,"px"} ... ok=false when the text is not a number with an optional unit.
+    struct Measure { double value = 0.0; std::string unit; bool ok = false; };
+
     static Value num(double n) { Value v; v.kind = Kind::NUMBER; v.number = n; return v; }
     static Value txt(std::string s) { Value v; v.kind = Kind::STRING; v.str = std::move(s); return v; }
+    static Value boolean(bool b) { return txt(b ? "true" : "false"); }
 
-    double asNumber(double def = 0.0) const {
-        if (kind == Kind::NUMBER) return number;
-        try { size_t idx = 0; double v = std::stod(str, &idx); if (idx == str.size()) return v; } catch (...) {}
+    bool isNumber() const { return kind == Kind::NUMBER; }
+    bool isString() const { return kind == Kind::STRING; }
+    bool isEmpty()  const { return kind == Kind::STRING && str.empty(); }
+    bool isBoolText() const { return kind == Kind::STRING && (str == "true" || str == "false"); }
+
+    // Rin's own truthiness (same rule the ternary used inline): NUMBER → != 0; STRING → not "" and not "false".
+    bool isTruthy() const {
+        return kind == Kind::NUMBER ? number != 0.0 : !(str.empty() || str == "false");
+    }
+
+    // Lenient boolean for flag-like attributes (open=true, hidden=yes, enabled=0): unlike isTruthy,
+    // recognises true/false/1/0/yes/no/on/off (case-insensitive) and falls back to `def` for anything else.
+    bool asBool(bool def = false) const {
+        if (kind == Kind::NUMBER) return number != 0.0;
+        std::string t = lower(trim(str));
+        if (t == "true" || t == "1" || t == "yes" || t == "on")  return true;
+        if (t == "false" || t == "0" || t == "no" || t == "off" || t.empty()) return false;
         return def;
     }
-    std::string asString() const {
-        if (kind == Kind::STRING) return str;
-        std::ostringstream os; os << number; return os.str();
+
+    // Strict number parse: surrounding whitespace allowed; nan/inf/hex/trailing junk are rejected.
+    static bool parseNumber(const std::string& text, double& out) {
+        std::string t = trim(text);
+        if (t.empty()) return false;
+        char c0 = t[0];
+        if (!(std::isdigit(static_cast<unsigned char>(c0)) || c0 == '-' || c0 == '+' || c0 == '.')) return false;
+        if (t.find_first_of("xXnNiI") != std::string::npos) return false; // hex, nan, inf
+        try { size_t idx = 0; double v = std::stod(t, &idx);
+              if (idx == t.size() && std::isfinite(v)) { out = v; return true; } } catch (...) {}
+        return false;
     }
+    bool isNumeric() const { double d; return kind == Kind::NUMBER ? std::isfinite(number) : parseNumber(str, d); }
+
+    double asNumber(double def = 0.0) const {
+        if (kind == Kind::NUMBER) return std::isfinite(number) ? number : def;
+        double v; return parseNumber(str, v) ? v : def;
+    }
+    // Rounded to nearest, clamped to the int range (safe for sizes/counts/indices).
+    int asInt(int def = 0) const {
+        double d = asNumber(static_cast<double>(def));
+        if (d >= 2147483647.0) return 2147483647;
+        if (d <= -2147483648.0) return static_cast<int>(-2147483647.0 - 1);
+        return static_cast<int>(std::lround(d));
+    }
+    // Number with an optional CSS-like unit ("12px", "50%", "-1.5em"). A plain NUMBER has unit "".
+    Measure asMeasure() const {
+        Measure m;
+        if (kind == Kind::NUMBER) { if (std::isfinite(number)) { m.value = number; m.ok = true; } return m; }
+        std::string t = trim(str);
+        size_t i = 0;
+        if (i < t.size() && (t[i] == '-' || t[i] == '+')) i++;
+        size_t digits = 0;
+        while (i < t.size() && std::isdigit(static_cast<unsigned char>(t[i]))) { i++; digits++; }
+        if (i < t.size() && t[i] == '.') { i++; while (i < t.size() && std::isdigit(static_cast<unsigned char>(t[i]))) { i++; digits++; } }
+        if (!digits) return m;
+        double v; if (!parseNumber(t.substr(0, i), v)) return m;
+        std::string unit = trim(t.substr(i));
+        for (char ch : unit) if (!(std::isalpha(static_cast<unsigned char>(ch)) || ch == '%')) return m;
+        m.value = v; m.unit = lower(unit); m.ok = true; return m;
+    }
+
+    // Number → text without the 6-significant-digit loss of operator<< (1234567 used to print 1.23457e+06):
+    // integers print exactly, other values use the shortest form that round-trips.
+    static std::string formatNumber(double n) {
+        if (std::isnan(n)) return "nan";
+        if (std::isinf(n)) return n < 0 ? "-inf" : "inf";
+        if (n == 0.0) return "0"; // also folds -0
+        if (n == std::floor(n) && std::fabs(n) < 1e15) return std::to_string(static_cast<long long>(n));
+        char buf[40];
+        for (int prec = 15; prec <= 17; prec++) {
+            std::snprintf(buf, sizeof buf, "%.*g", prec, n);
+            if (std::strtod(buf, nullptr) == n) break;
+        }
+        return buf;
+    }
+    std::string asString() const { return kind == Kind::STRING ? str : formatNumber(number); }
+
+    // Loose equality (what `==` means in an attribute): numbers by value; a number vs. numeric text
+    // by value ("3" == 3); everything else by text.
+    bool looseEquals(const Value& o) const {
+        if (kind == Kind::NUMBER && o.kind == Kind::NUMBER) return number == o.number;
+        if (isNumeric() && o.isNumeric()) return asNumber() == o.asNumber();
+        return asString() == o.asString();
+    }
+    // Ordering for < <= > >=: numeric when both sides are numeric, otherwise lexicographic. → -1 / 0 / +1.
+    int compare(const Value& o) const {
+        if (isNumeric() && o.isNumeric()) { double a = asNumber(), b = o.asNumber(); return a < b ? -1 : (a > b ? 1 : 0); }
+        int c = asString().compare(o.asString()); return c < 0 ? -1 : (c > 0 ? 1 : 0);
+    }
+    // Strict structural equality (kind, number and text all identical) — unchanged.
     bool operator==(const Value& o) const {
         return kind == o.kind && number == o.number && str == o.str;
     }
+
+private:
+    static std::string trim(const std::string& s) {
+        size_t a = 0, b = s.size();
+        while (a < b && std::isspace(static_cast<unsigned char>(s[a]))) a++;
+        while (b > a && std::isspace(static_cast<unsigned char>(s[b - 1]))) b--;
+        return s.substr(a, b - a);
+    }
+    static std::string lower(std::string s) { for (auto& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c))); return s; }
 };
 
 // Warp scope: RIN's reactive state cells (see WarpStmt in rin_ast.h). Subscribers are tracked
@@ -100,7 +203,7 @@ inline Value evalAttrExpr(const rin::ExprPtr& e, const WarpScope& warp, std::vec
         switch (lit->kind) {
             case rin::LiteralExpr::Kind::NUMBER: return Value::num(lit->number);
             case rin::LiteralExpr::Kind::STRING: return Value::txt(lit->str);
-            case rin::LiteralExpr::Kind::BOOL:   return Value::txt(lit->boolean ? "true" : "false");
+            case rin::LiteralExpr::Kind::BOOL:   return Value::boolean(lit->boolean);
             case rin::LiteralExpr::Kind::NIL:    return Value::txt("");
         }
         return Value::txt("");
@@ -123,10 +226,20 @@ inline Value evalAttrExpr(const rin::ExprPtr& e, const WarpScope& warp, std::vec
             if (bin->op == rin::TokenType::EQUAL_EQUAL || bin->op == rin::TokenType::BANG_EQUAL) {
                 Value l = evalAttrExpr(bin->left, warp, readNames);
                 Value r = evalAttrExpr(bin->right, warp, readNames);
-                bool same = (l.kind == Value::Kind::NUMBER && r.kind == Value::Kind::NUMBER)
-                                ? l.number == r.number : l.asString() == r.asString();
+                bool same = l.looseEquals(r);
                 if (bin->op == rin::TokenType::BANG_EQUAL) same = !same;
-                return Value::txt(same ? "true" : "false");
+                return Value::boolean(same);
+            }
+        }
+        {   // بلا مضيف: المقارنات الترتيبية و% كانت تُلصَق كنصّ؛ الآن تُحسَب (رقمياً إن أمكن وإلا معجمياً)
+            using T = rin::TokenType;
+            if (bin->op == T::LESS || bin->op == T::LESS_EQUAL || bin->op == T::GREATER || bin->op == T::GREATER_EQUAL ||
+                bin->op == T::PERCENT) {
+                Value l = evalAttrExpr(bin->left, warp, readNames);
+                Value r = evalAttrExpr(bin->right, warp, readNames);
+                if (bin->op == T::PERCENT) { double d = r.asNumber(); return Value::num(d != 0 ? std::fmod(l.asNumber(), d) : 0.0); }
+                int c = l.compare(r);
+                return Value::boolean(bin->op == T::LESS ? c < 0 : bin->op == T::LESS_EQUAL ? c <= 0 : bin->op == T::GREATER ? c > 0 : c >= 0);
             }
         }
         Value l = evalAttrExpr(bin->left, warp, readNames);
@@ -149,7 +262,7 @@ inline Value evalAttrExpr(const rin::ExprPtr& e, const WarpScope& warp, std::vec
         // branch actually ran, exactly like every other case above, so a Warp update to a cell
         // used only in the untaken branch still re-subscribes correctly next time it's taken.
         Value c = evalAttrExpr(cond->condition, warp, readNames);
-        bool truthy = (c.kind == Value::Kind::NUMBER) ? (c.number != 0.0) : !(c.str.empty() || c.str == "false");
+        bool truthy = c.isTruthy();
         return truthy ? evalAttrExpr(cond->whenTrue, warp, readNames)
                       : evalAttrExpr(cond->whenFalse, warp, readNames);
     }
