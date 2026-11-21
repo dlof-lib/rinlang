@@ -4,6 +4,11 @@ export type RinAllow = string; // e.g. "dom storage" — space-separated capabil
 
 export interface RinRunOptions {
   allow?: RinAllow;
+  id?: string;
+  /** global variable names (space-separated or array) kept in localStorage; needs allow="storage" */
+  persist?: string | string[];
+  persistKey?: string;
+  persistStore?: 'local' | 'session';
   root?: Document | HTMLElement;
   src?: string; // original .rin path, required for app.reload()
 }
@@ -13,6 +18,8 @@ export declare class RinApp {
   readonly globals: Record<string, string | number | boolean | null>;
   call(fnName: string, ...args: Array<string | number | boolean>): { ok: boolean; error?: string; globals: Record<string, unknown> };
   get(name: string): string | number | boolean | null | undefined;
+  /** result of a rin-fetch whose JSON value is an object/array (scalars go to Rin globals) */
+  getData(name: string): unknown;
   set(name: string, value: string | number | boolean): void;
   mount(root?: Document | HTMLElement): void;
   unmount(): void;
