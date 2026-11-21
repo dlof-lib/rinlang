@@ -11,6 +11,9 @@
 | فلاتر | `only=a,b` · `except=a,b` |
 | ربط ملف | `link file="./f.rin" as=ns;` |
 | فكّ / استعلام | `unlink to=X;` · `links("Name")` |
+| صيغة from | `link theme as appTheme, size from Config;` · `link a, b from "./f.rin" as=cfg;` · `link * from Config prefix=cfg_;` |
+| إعادة تسمية/بادئة | `only=theme as appTheme,size` · `prefix=cfg_` |
+| دوال الربط | `links.add(from, target, opts)` · `links.remove` · `links.clear` · `links.has` · `links.count` · `links.by` · `links.names` · `links.ids` · `links.target` |
 | استيراد | `import { a as b } from "p";` · `import * as ns from "p";` |
 | إعادة تصدير | `export { a as b } from "p";` · `export * from "p";` |
 
@@ -93,7 +96,7 @@ print Probe.size;        // 500 — الوصول المؤهَّل يرى الأ�
 | `import { a, b } from "path";` | انتقائي — يشترط `export` على كل اسم |
 | `import { a as x, b } from "path";` | **جديد:** إعادة تسمية محلية لتفادي التعارض |
 | `import * as ns from "path";` | **جديد:** مكافئ `@import "path" as ns;` بصياغة وحدات |
-| `let a, b as c from "path";` | **جديد:** مفهوم `from` مع `let` (انظر `docs/from.md`) |
+| `let a, b as c from "path";` | **جديد:** مفهوم `from` مع `let` — ويعمل أيضاً مع القيم: `let name, age from user;` (انظر `docs/from.md`) |
 
 ```kotlin
 // util.rin
@@ -162,3 +165,66 @@ print cfg.theme;            // وصول مؤهَّل من أي مكان
     link to=settings;     // أسماء settings متاحة في App بلا نسخ
 .end/container
 ```
+
+## 5) صيغة `from` وإعادة التسمية والبادئة
+نفس روح `let a, b from ...` (docs/from.md): الأسماء أولاً ثم المصدر. المصدر **اسم مجرّد = حاوية**، و**نص حرفي = ملف**.
+```kotlin
+@container=Config
+    let theme = "dark";  let size = 10;  let secret = "s";
+    fun greet() { return "hi " + theme; }
+.end/container
+
+@container=Ui
+    link theme as appTheme, size, greet as hello from Config;   // مع إعادة تسمية
+    print appTheme, size, hello();     // dark 10 hi dark
+    appTheme = "light";                // الكتابة تصل إلى Config.theme (ربط حيّ)
+.end/container
+print Config.theme, Ui.appTheme;       // light light
+
+@container=Pfx
+    link * from Config prefix=cfg_;    // كل الأسماء بادئتها cfg_
+    print cfg_theme, cfg_size;
+.end/container
+
+@container=F
+    link theme as skin, greet from "./sub/settings.rin" as=cfg readonly;   // ملف
+.end/container
+```
+| الصيغة | الأثر |
+|---|---|
+| `link a as x, b from X;` | يكشف `x` (يشير إلى `a` في X) و`b` فقط. الاسم الأصلي `a` يُحجب محلياً |
+| `link only=a as x,b` (الصيغة القديمة) | نفس أثر السابق بصياغة `link to=X only=...` |
+| `link * from X prefix=p_;` | كل اسم `n` في X يظهر محلياً `p_n` (و`only`/`except` عندها بأسماء X) |
+| `readonly` / `as=ns` | تعمل مع صيغة from كما في `link to=` / `link file=` |
+
+- القراءة والكتابة والاستدعاء والوصول المؤهَّل (`Ui.appTheme`, `Ui.hello()`) كلها تمرّ عبر إعادة التسمية، وكتابة
+  رابط `readonly` عبر الاسم الجديد ترفض بـ `E0035`. `links("Ui")` يعرض `rename` و`prefix`.
+- `prefix` مع `as` في رابط واحد ← `E0016` (اختر أحدهما). `link a, b C;` بلا `from` ← `E0012`.
+- **حد معروف:** المتغيّرات الحيّة (`stone/gauge/...`) عبر اسم مُعاد تسميته تُعامَل كقيمة عادية كالاسم المجرّد.
+
+## 6) دوال الربط `links.*`
+تكافئ `link`/`unlink` لكن **برمجياً** بأسماء حاويات صريحة (من أي مكان، لا داخل جسم الحاوية فقط)، مع استعلامات لم تكن موجودة.
+```kotlin
+links.add("Ui", "Config", {"only": ["skin", "size"], "rename": {"skin": "theme"}});   // true
+links.add("Other", "Config", {"prefix": "c_", "readonly": true});
+
+print links.has("Ui", "Config"), links.count("Ui");   // true 1
+print links.names("Ui");        // ["own", "size", "skin"]  — الأسماء المرئية: المحلية + المرتبطة بعد الفلترة/التسمية
+print links.by("Config");       // ["Other", "Ui"]          — عكسي: من يرتبط بـ Config
+print links.remove("Ui", "Config");   // 1   (عدد المفكوك)
+print links.clear("Other");           // 1   (يفكّ كل روابط الحاوية)
+print links.ids(), links.target("cfg");   // {"cfg": "Config"}  Config   (معرّفات link.id=)
+```
+| الدالة | النتيجة |
+|---|---|
+| `links.add(from, target [, opts])` | ينشئ/يحدّث ربطاً حيّاً (`true`). `opts`: `readonly` · `only:[..]` · `except:[..]` · `rename:{محلي: هدف}` · `prefix` |
+| `links.remove(from, target)` / `links.clear(from)` | عدد الروابط المفكوكة |
+| `links.has(from, target)` / `links.count(from)` | `bool` / عدد الروابط |
+| `links.by(target)` | أسماء الحاويات المرتبطة بـ `target` (مرتبة) |
+| `links.names(from)` | الأسماء المرئية في `from` (مرتبة) |
+| `links.ids()` / `links.target(id)` | خريطة `link.id=` / اسم الحاوية أو `nil` |
+| `links("Name")` | (كما كانت) قائمة الروابط وفلاترها، وتعرض الآن `rename`/`prefix` |
+
+- نفس القواعد: ربط ذاتي أو دائري ← `E0014`، `only` مع `except` أو `prefix` مع `rename` ← `E0016`، خيار مجهول ← `E0016`، حاوية غير معروفة ← `E0014`.
+- `rename` **بلا** `only` يعطي اسماً بديلاً (الأصلي يبقى مرئياً)؛ **مع** `only` (بأسماء محلية) يكون إعادة تسمية خالصة كما في `link a as x from X`.
+- الهدف هنا حاوية مفردة (المجموعات `Containers.Group` غير مدعومة في هذه الدوال بعد).
