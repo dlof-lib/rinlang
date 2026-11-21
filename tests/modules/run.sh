@@ -3,7 +3,7 @@
 HERE="$(cd "$(dirname "$0")" && pwd)"; RIN="$(realpath "${1:-$HERE/../../cli/linux/build/rin}")"
 cd "$(dirname "$0")" || exit 1
 fail=0
-for t in link_live link_self link_modes link_import_alias import_rename reexport reexport_private reexport_all reexport_all_direct link_filters link_file slab_main slab_nested slab_guard json_import json_into json_extra; do
+for t in from_concept from_values from_files link_from link_funcs link_live link_self link_modes link_import_alias import_rename reexport reexport_private reexport_all reexport_all_direct link_filters link_file slab_main slab_nested slab_guard json_import json_into json_extra; do
   got="$("$RIN" "$t.rin" 2>&1 | grep -v '^📥\|^📦\|^✅\|^🧬\|^🔗\|^↺\|^🔓')"
   if [ "$got" == "$(cat "$t.expected")" ]; then echo "PASS $t"; else echo "FAIL $t"; diff <(echo "$got") "$t.expected"; fail=1; fi
 done
