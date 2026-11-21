@@ -88,6 +88,8 @@ private:
     // statements
     StmtPtr declaration();
     StmtPtr letDeclaration();
+    bool atLetFrom() const;       // `let ... from <مصدر>;` (docs/from.md)
+    StmtPtr letFromStatement();
     StmtPtr letDeclarator();      // let+: عنصر واحد من `let a = 1, [b, c] = pair;`
     LetPattern letPattern();      // let+: نمط تفكيك كامل
     LetPattern letPatternPrimary();
