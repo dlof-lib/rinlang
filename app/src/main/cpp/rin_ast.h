@@ -747,7 +747,10 @@ struct TextStmt : Stmt { TextStmt() { stmtKind = StmtKind::TextStmt; }
 
 enum class ObjectStyleFieldKind { Text, Image, File, Fonts, Background, Css3 };
 
-enum class ContainerKind { PLAIN, PIPE, DATA, API, IMPORT, TABLE, DOC, OBJECT, PORTAL, BLOCK, STICKER, AUKT, CHATBOT, EVERYTHING, SQL, DATALIST, APP };
+enum class ContainerKind { PLAIN, PIPE, DATA, API, IMPORT, TABLE, DOC, OBJECT, PORTAL, BLOCK, STICKER, AUKT, CHATBOT, EVERYTHING, SQL, DATALIST, APP, STORAGE };
+// STORAGE: @container.storage / @storage — «تخزين محلي»: حاوية بيانات نقية (let فقط) تُحفَظ قيمها في تخزين المتصفح
+// (localStorage/sessionStorage) وتُستعاد عند فتح الصفحة من جديد. تُفهَم في مترجم الويب indsin2web؛ وفي المفسّر الأصلي
+// تعمل كحاوية بيانات عادية (في الذاكرة). انظر docs/container_storage.md.
 // APP: @container.app / @container.site (والاختصار @name.app / @name.site) — «هوية» تطبيق أو موقع: الاسم، الإصدار،
 // الأيقونات، الوصف، ونصوص محركات البحث (SEO). حاوية بيانات نقية (let فقط، بلا دوال) تُقرأ بدوال app.* (info/validate/
 // head/manifest/robots/sitemap/bump/pack/open) وتُحفَظ داخل ملف .rcl في Metadata. انظر docs/container_app.md.
