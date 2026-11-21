@@ -1,0 +1,93 @@
+📦 @import: تم استيراد "lib/indsinlive.og.rin" (مكتبة مدمجة)
+== 1) الأحداث
+ok   3 معالجات تطابق click:save
+ok   ترتيب التسجيل محفوظ
+ok   click:* فقط لـ cancel
+ok   ilOff يحذف
+ok   ilOnce مرة واحدة
+ok   خطأ المعالج يُلتقط ولا يوقف
+ok   الحارس يلغي الحدث
+ok   throttle 500ms: نقرتان من ثلاث
+ok   debounce لم يُطلق بعد
+ok   debounce أُطلق بآخر قيمة
+ok   حدّ العمق يمنع الدوران اللانهائي
+== 2) خانات حيّة
+ok   ilSet يغيّر ويبلّغ
+ok   نفس القيمة لا تُبلّغ
+ok   ilUpdateSlot
+ok   ilBind يستدعي فوراً بالقيمة الحالية
+== 3) فرق القوائم
+remove#3 move#4 move#2 update#2 add#5
+ok   ilApply(diff) = الجديد
+ok   بلا تغيير ⇒ لا عمليات
+[{"op": "update", "index": 1, "item": 9, "changed": []}, {"op": "add", "index": 3, "item": 4}]
+ok   بلا مفتاح: ilApply
+ok   بلا مفتاح: حذف الذيل
+ok   60 حالة عشوائية: ilApply(ilDiff(a,b)) == b
+ok   مفتاح مكرّر يُرفض
+== 4) مناطق المحتوى
+ok   ilAdd + ilPatchItem
+ok   حدث patch لكل تغيير
+ok   ilRegionBind يرى القائمة
+ok   نفس البيانات ⇒ لا patch
+ok   ilRemove
+[{"op":"remove","index":0}]
+== 5) تحميل وتحديث متفائل
+empty
+ok   ilLoad ok
+ok   ilRefresh بلا تغيير ⇒ بلا patches
+ok   فشل التحميل ⇒ حالة error
+ok   الإخفاق يُبقي العناصر القديمة
+ok   optimistic فشل ⇒ تراجع
+ok   optimistic نجاح ⇒ يبقى
+ok   ilPoll كل ثانية
+ok   ilPollStop
+== 6) النماذج
+ok   حالة أولية idle
+ok   لا خطأ قبل اللمس
+ok   blur يُظهر الخطأ
+ok   بعد الخطأ يُعاد الفحص عند الكتابة
+ok   إرسال ناقص ⇒ invalid
+ok   أول خطأ بترتيب المخطط
+ok   equals
+ok   min
+ok   integer
+ok   أخطاء الخادم تُربط بالحقول
+ok   إرسال ناجح
+ok   pending يبقى submitting
+ok   منع الإرسال المزدوج
+ok   ilFormResolve
+ok   استثناء المعالج ⇒ failed
+ok   ilFormBind يتلقّى الحالات
+ok   snapshot
+ok   ilFormReset
+ok   رسالة عربية
+ok   هاتف صحيح/خاطئ
+ok   check مخصّص
+ok   message مخصّصة
+ok   resetOnSuccess
+== 7) الحركة
+ok   ilEase حدود
+ok   القيمة الابتدائية تُكتب فوراً
+ok   خطي: 0 → .25 → .5 → 1
+ok   انتهت الحركة
+ok   مزج الألوان
+[1, 1.5, 2, 1.5, 1]
+[0, 33, 100, "done"]
+[0, 5, 10, 5, 0]
+ok   sequence: الخطوة المتأخرة لا تقفز
+c1=0 c2=0 c1=0.5 c2=0 c1=1 c2=0.5
+ok   ilAnimStop
+ok   وصف المسبقات
+ok   مسبق مجهول يُرفض
+ok   easing مجهول يُرفض
+ok   التحويل لساعة المضيف يُعيد ضبط البدء
+== 8) أحداث ← حركة ← نموذج
+ok   النموذج غير الصالح يشغّل shake
+ok   shake ينتهي عند 0
+ok   بلا خصائص مربوطة ⇒ none مسجَّلة
+ok   ilDefineHostEffects بلا مضيف = 0
+ok   ilStart: -1 بلا مجدول أو معرّف مؤقّت
+== 9) إحصاءات
+ok   ilStats
+ok   ilLog
