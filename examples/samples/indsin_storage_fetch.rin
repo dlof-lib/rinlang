@@ -1,0 +1,55 @@
+<!-- container.storage ✕ container.api في الويب (docs/container_storage.md · docs/container_fetch.md)
+     rin indsin2web examples/samples/indsin_storage_fetch.rin -o demo.html
+     • prefs: إعدادات ومحتويات سلة تبقى في المتصفح بعد إغلاق الصفحة (localStorage)
+     • rates: أسعار العملات تُجلب في الخلفية كل 30 ثانية وتُحدِّث النص المرتبط بها فقط
+     • suggest: بحث فوري (debounce + إلغاء الطلب السابق) -->
+<Rin>
+@container.storage=prefs
+    let dark = false;
+    let name = "";
+    let visits = 0;
+    let cart = [];
+    let version = 1;
+.end/container.storage
+
+@container.api=rates
+    let baseUrl = "https://open.er-api.com/v6";
+    let path = "/latest/USD";
+    let pick = "rates";
+    let every = 30s;
+    let persist = true;
+    let data = {};
+.end/container.api
+
+@container.api=suggest
+    let baseUrl = "https://api.example.com";
+    let debounce = 250ms;
+    let cache = 1m;
+    let data = [];
+.end/container.api
+
+prefs.visits = prefs.visits + 1;
+fun find(term) { if (len(term) > 1) { suggest.get("/search", {"query": {"q": term}}); } }
+fun addItem() { push(prefs.cart, "منتج " + (len(prefs.cart) + 1)); }
+fun price(code) { return rates.updated > 0 ? str(round(rates.data[code], 3)) : "…"; }
+</Rin>
+<Column#Root padding=24 gap=12 bg={prefs.dark ? "#0F172A" : "#FFFFFF"}>
+  <Text#Title size="title" color={prefs.dark ? "#F8FAFC" : "#0F172A"} text={"مرحباً " + (prefs.name == "" ? "ضيف" : prefs.name) + " — زيارتك رقم " + prefs.visits} />
+  <Row#Settings gap=12>
+    <Switch#Dark checked={prefs.dark} />
+    <Text#DarkLbl color={prefs.dark ? "#F8FAFC" : "#0F172A"} text="الوضع الليلي" />
+  </Row>
+  <Input#Name value={prefs.name} placeholder="اسمك" />
+  <Row#Shop gap=12>
+    <Button#Add onTap={addItem()}>أضف للسلة</Button>
+    <Button#Clear onTap={prefs.reset("cart")}>أفرغ السلة</Button>
+    <Text#CartN color={prefs.dark ? "#F8FAFC" : "#0F172A"} text={"في السلة: " + len(prefs.cart)} />
+  </Row>
+  <Card#Rates padding=12>
+    <Text#Eur text={"EUR: " + price("EUR")} />
+    <Text#Gbp text={"GBP: " + price("GBP")} />
+    <Text#Stamp size="caption" text={rates.loading ? "جارٍ التحديث…" : (rates.error == nil ? "آخر تحديث: " + rates.updated : "خطأ: " + rates.error)} />
+  </Card>
+  <Input#Q placeholder="ابحث…" onInput={find(ev.target.value)} />
+  <Text#Res text={len(suggest.data) + " نتيجة: " + join(suggest.data, "، ")} />
+</Column>
