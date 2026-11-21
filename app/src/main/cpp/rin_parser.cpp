@@ -2276,8 +2276,18 @@ StmtPtr Parser::printStatement() {
     // كسمة فعلية. إسناد صريح كقيمة print ما زال ممكناً عبر أقواس: print (x = 5);
     static const std::unordered_set<std::string> printAttrs = {
         "sep", "level", "label", "repeat", "pretty", "upper", "lower", "width", "align",
-        "bold", "italic", "underline", "strike", "dim", "reverse", "blink", "color", "bg"   // تنسيق الخط (docs/print-fonts.md)
+        "bold", "italic", "underline", "strike", "dim", "reverse", "blink", "color", "bg",   // تنسيق الخط (docs/print-fonts.md)
+        // مسافات/تنسيق/تعليم/تخطيط (docs/print-layout.md) — تُفكَّك إلى نداء __pfx
+        "indent", "gap", "pad", "before", "after", "visible", "squeeze", "trim", "fmt", "case", "wrap", "cut",
+        "mark", "hl", "hlwrap", "box", "title", "cols", "colgap", "page", "place",
+        "leader", "justify", "inalign", "rule", "numbers", "beside", "table", "shadow", "cutat",
+        "tabs", "dedent", "maxlines", "ends", "ruler", "hlcase", "focus", "tree", "bars", "diff"
     };
+    static const char* layoutNames[40] = {"indent", "gap", "pad", "before", "after", "visible", "squeeze", "trim",
+        "fmt", "case", "wrap", "cut", "mark", "hl", "hlwrap", "box", "title", "cols", "colgap", "page", "place",
+        "leader", "justify", "inalign", "rule", "numbers", "beside", "table", "shadow", "cutat",
+        "tabs", "dedent", "maxlines", "ends", "ruler", "hlcase", "focus", "tree", "bars", "diff"};
+    std::unordered_map<std::string, ExprPtr> layoutArgs;
     // لهجة الاستدعاء (docs/print_dialects.md):  print(a, b, sep="-");  — بجانب اللهجة الكلاسيكية  print a, b sep="-";
     // نجرّب الاستدعاء أولاً: '(' [قيم وسمات key=value بفواصل] ')' ثم ';' أو سمة كلاسيكية. إن لم يتطابق الشكل
     // (مثل print (a + b) * 2;) نعيد المؤشّر ونقرأ بالطريقة الكلاسيكية بلا أي تغيير في السلوك القديم.
@@ -2361,7 +2371,8 @@ StmtPtr Parser::printStatement() {
         else if (attr == "lower") stmt->lower = value;
         else if (attr == "width") stmt->width = value;
         else if (attr == "align") stmt->align = value;
-        else for (int fi = 0; fi < 9; fi++) if (attr == fxNames[fi]) { fxArgs[fi] = value; anyFx = true; }
+        else { bool lay = false; for (int li = 0; li < 40; li++) if (attr == layoutNames[li]) { layoutArgs[attr] = value; lay = true; }
+               if (!lay) for (int fi = 0; fi < 9; fi++) if (attr == fxNames[fi]) { fxArgs[fi] = value; anyFx = true; } }
     }
     if (anyFx) {   // تنسيق الخط: يُجمَّع في استدعاء واحد لـ __fxcode (يُطبَّق بعد upper/width/align، فلا يُفسد الحشو)
         auto call = std::make_shared<CallExpr>();
@@ -2388,7 +2399,8 @@ StmtPtr Parser::printStatement() {
             else if (attr == "lower") stmt->lower = value;
             else if (attr == "width") stmt->width = value;
             else if (attr == "align") stmt->align = value;
-            else for (int fi = 0; fi < 9; fi++) if (attr == fxNames[fi]) { fxArgs[fi] = value; anyFx = true; }
+            else { bool lay = false; for (int li = 0; li < 40; li++) if (attr == layoutNames[li]) { layoutArgs[attr] = value; lay = true; }
+               if (!lay) for (int fi = 0; fi < 9; fi++) if (attr == fxNames[fi]) { fxArgs[fi] = value; anyFx = true; } }
         }
         if (anyFx) {
             auto call = std::make_shared<CallExpr>();
@@ -2399,6 +2411,17 @@ StmtPtr Parser::printStatement() {
             }
             stmt->fx = call;
         }
+    }
+    if (!layoutArgs.empty()) {   // مسافات/تنسيق/تعليم/تخطيط: كل القيم + السمات ← نداء __pfx واحد (المفسّر وRinVM بلا تعديل)
+        auto call = std::make_shared<CallExpr>();
+        call->callee = "__pfx"; call->line = tok.line;
+        auto nilLit = [&]() { auto nl = std::make_shared<LiteralExpr>(); nl->kind = LiteralExpr::Kind::NIL; nl->line = tok.line; return nl; };
+        call->args.push_back(stmt->sep ? stmt->sep : nilLit());
+        call->args.push_back(stmt->pretty ? stmt->pretty : nilLit());
+        for (int li = 0; li < 40; li++) { auto it = layoutArgs.find(layoutNames[li]); call->args.push_back(it != layoutArgs.end() ? it->second : nilLit()); }
+        for (auto& e : stmt->exprs) call->args.push_back(e);
+        stmt->exprs.clear(); stmt->exprs.push_back(call);
+        stmt->sep = nullptr; stmt->pretty = nullptr;
     }
     consume(TokenType::SEMICOLON, "Expected ';' after print statement");
     stmt->line = tok.line;
