@@ -1,0 +1,25 @@
+<!-- قائمة ديناميكية من جلب خلفي: <<each>> على بيانات حيّة (indsin2web) — كل إشعار بطاقة، ويُعاد رسم القائمة فقط عند تغيّر بياناتها
+     rin indsin2web examples/samples/indsin_live_list.rin -o notes.html -->
+<Rin>
+@container.api=inbox
+    let baseUrl = "https://api.example.com";
+    let path = "/notifications";
+    let every = 15s;
+    let persist = true;
+    let data = [];
+.end/container.api
+@container.storage=seen
+    let ids = [];
+.end/container.storage
+fun markSeen(id) { if (indexOf(seen.ids, id) < 0) { push(seen.ids, id); } }
+</Rin>
+<Column#Root padding=16 gap=8>
+  <Text#Head size="title" text={"الإشعارات (" + len(inbox.data) + ")"} />
+  <Text#Err size="caption" text={inbox.error == nil ? "" : "تعذّر التحديث: " + inbox.error} />
+  <<each inbox.data as n, i>>
+    <Card#note padding=10>
+      <Text#msg text={(indexOf(seen.ids, n["id"]) < 0 ? "● " : "") + n["title"]} />
+      <Button#ok onTap={markSeen(n["id"])}>تمّت القراءة</Button>
+    </Card>
+  <</each>>
+</Column>
