@@ -1,0 +1,8 @@
+<warp n={1} />
+<Column#root lang="en" padding=16 gap=8>
+  <Text#a color="#12345">bad hex</Text>
+  <Text#b color="rgb(1,2)">bad rgb</Text>
+  <Text#c color="#6C5CE7" text_duration="soon">bad duration</Text>
+  <Text#d typewriter=true type_duration="2s">unit ignored</Text>
+  <Text#e text_duration="1.5s" color="text_muted">fine</Text>
+</Column>
