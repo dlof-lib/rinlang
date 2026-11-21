@@ -1,0 +1,31 @@
+@container=Config
+    link.id="cfg";
+    let theme = "dark";
+    let size = 10;
+    let secret = "s";
+.end/container
+
+@container=Ui
+    let own = 1;
+.end/container
+
+@container=Other
+    let o = 2;
+.end/container
+
+print links.add("Ui", "Config", {"only": ["skin", "size"], "rename": {"skin": "theme"}});
+print links.has("Ui", "Config"), links.has("Other", "Config"), links.count("Ui");
+print links.names("Ui");
+print Ui.skin, Ui.size;
+print links.by("Config");
+
+links.add("Other", "Config", {"prefix": "c_", "readonly": true});
+print links.by("Config");
+print links.names("Other");
+print Other.c_theme;
+print links("Other");
+
+print links.remove("Ui", "Config"), links.has("Ui", "Config");
+print links.clear("Other"), links.count("Other");
+print links.names("Ui");
+print links.ids(), links.target("cfg"), links.target("nope");
