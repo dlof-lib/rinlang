@@ -1,0 +1,7 @@
+@container=C
+    let a = 1;
+.end/container
+@container=D
+    let b = 1;
+.end/container
+links.add("D", "C", {"bogus": 1});
