@@ -77,6 +77,14 @@ static bool jsonKeyIsIdentifier(const std::string& k) {
 }
 
 
+namespace printlayout {   // rin_print_layout.cpp: ربط Input — سؤال بنمط print (docs/print-layout.md)
+Value mergePromptStyle(const Value& arg, int line);
+std::string promptText(const Value& st);
+Value pushFormStyle(const Value& st);
+void popFormStyle(const Value& prev);
+Value styleWithText(const Value& st, const std::string& t);
+std::string renderPrompt(const Value& st, const std::string& extra, int line);
+}
 namespace imgdraw { // rin_image_draw.cpp (يُضمَّن في نهاية هذا الملف)
 bool isImagePath(const std::string& path);
 std::string logAsImageBytes(const std::vector<LogEntry>& entries, const std::string& path);
@@ -1252,6 +1260,7 @@ static std::string containerTagName(ContainerKind k) {
         case ContainerKind::SQL: return "container.sql";
         // "@app="/"@site="/"@container.app="/"@container.site=" توحَّد إلى "container.app" (هوية تطبيق/موقع).
         case ContainerKind::APP: return "container.app";
+        case ContainerKind::STORAGE: return "container.storage";
         default: return "container";
     }
 }
@@ -1273,6 +1282,7 @@ static std::string containerIcon(ContainerKind k) {
         case ContainerKind::EVERYTHING: return "🛠️";
         case ContainerKind::SQL: return "🔎";
         case ContainerKind::APP: return "🪪";
+        case ContainerKind::STORAGE: return "💾";
         default: return "📦";
     }
 }
@@ -1293,6 +1303,7 @@ static ContainerKind resolveContainerKindName(const std::string& raw) {
     if (s == "table") return ContainerKind::TABLE;
     if (s == "doc") return ContainerKind::DOC;
     if (s == "datalist" || s == "list") return ContainerKind::DATALIST;
+    if (s == "storage") return ContainerKind::STORAGE;
     if (s == "object") return ContainerKind::OBJECT;
     if (s == "portal") return ContainerKind::PORTAL;
     if (s == "block") return ContainerKind::BLOCK;
@@ -3036,6 +3047,7 @@ void Interpreter::registerNatives() {
         bool hasTarget = false;    Value target; std::string key;
         bool form = false;         // input(prompt, target): املأ كل حقول الهدف (حاوية/كائن/قاموس)
         bool hasSchema = false; Value schema;  // input(prompt, target, {حقل: مواصفة}) — يغطي حتى حقول nil
+        Value style;               // سؤال بنمط print (قاموس {text, box, mark, ...} أو inputStyle) — انظر rin_print_layout.cpp
     };
     // askRaw: نقطة واحدة تقرأ سطراً من المستخدم — عبر InputProvider (نافذة على أندرويد) أو stdin (CLI).
     // يعيد false إذا ألغى المستخدم/انتهى الإدخال بلا بيانات (EOF في stdin يُعامَل كإلغاء فقط حين
@@ -3068,7 +3080,11 @@ void Interpreter::registerNatives() {
     // parseArgs: [prompt] [validator] [target, key] — فهرس أول وسيط إضافي يحدده المستدعي.
     auto parseArgs = [this](const std::string& fn, std::vector<Value>& a, size_t firstExtra, bool allowValidator, int line) -> InArgs {
         InArgs ia;
-        if (!a.empty()) ia.prompt = a[0].type == Value::Type::STRING ? a[0].str : a[0].toDisplayString();
+        if (!a.empty()) {
+            Value st = printlayout::mergePromptStyle(a[0], line);
+            if (st.type == Value::Type::MAP) { ia.style = st; ia.prompt = printlayout::renderPrompt(st, "", line); }
+            else ia.prompt = a[0].type == Value::Type::STRING ? a[0].str : a[0].toDisplayString();
+        }
         size_t i = firstExtra;
         if (allowValidator && i < a.size() &&
             (a[i].type == Value::Type::FUNCTION || a[i].type == Value::Type::SET ||
@@ -3176,7 +3192,7 @@ void Interpreter::registerNatives() {
             }
         }
         for (const auto& k : ks) {
-            Value lbl = Value::string(ia.prompt + k + ": ");
+            Value lbl = ia.style.type == Value::Type::MAP ? printlayout::styleWithText(ia.style, printlayout::promptText(ia.style) + k + ": ") : Value::string(ia.prompt + k + ": ");
             Value kk = Value::string(k);
             auto sp = spec.find(k);
             // 1) بلا مواصفة: النوع من القيمة الحالية (nil/مركّب => يُتخطّى).
@@ -3231,7 +3247,7 @@ void Interpreter::registerNatives() {
         for (int attempt = 0; attempt < attempts; ++attempt) {
             std::string ans; bool eof = false;
             std::string base = shownPrompt(ia.prompt, cur);
-            std::string shown = attempt == 0 ? base : ("[" + why + "] " + base);
+            std::string shown = attempt == 0 ? base : ("[" + why + "]" + (base.find('\n') != std::string::npos ? "\n" : " ") + base);
             if (!askRaw(shown, ans, eof)) throw cancelErr("input", line);
             if (eof && ia.hasValidator) throw cancelErr("input", line);
             if (ans.empty() && cur.type == Value::Type::STRING && !cur.str.empty()) return cur;   // Enter = أبقِ الحالي
@@ -3250,7 +3266,7 @@ void Interpreter::registerNatives() {
             std::string ans; bool eof = false;
             std::string base = shownPrompt(ia.prompt, cur);
             std::string shown = attempt == 0 ? base
-                              : ("[" + (why.empty() ? std::string("أدخل رقماً صالحاً") : why) + "] " + base);
+                              : ("[" + (why.empty() ? std::string("أدخل رقماً صالحاً") : why) + "]" + (base.find('\n') != std::string::npos ? "\n" : " ") + base);
             if (!askRaw(shown, ans, eof) || eof) throw cancelErr("inputNumber", line);
             Value t = callNat("trim", {Value::string(ans)}, line);
             why.clear();
@@ -3282,7 +3298,8 @@ void Interpreter::registerNatives() {
         if (a.size() < 2)
             throw diagErr(diag::Code::E0007_InvalidArguments, line, "'choose' expects at least 2 argument(s) but got " + std::to_string(a.size()));
         InArgs ia = parseArgs("choose", a, 2, false, line);
-        std::string prompt = asString(a[0], "choose", line);
+        const Value choStyle = printlayout::mergePromptStyle(a[0], line);   // سؤال بنمط print: يُرندَر مع قائمة الخيارات كلها
+        std::string prompt = choStyle.type == Value::Type::MAP ? printlayout::promptText(choStyle) : asString(a[0], "choose", line);
 
         struct Item { std::string label; Value value; };
         std::vector<Item> items;
@@ -3320,8 +3337,9 @@ void Interpreter::registerNatives() {
         if (items.empty())
             throw diagErr(diag::Code::E0004_InvalidType, line, "'choose' expects a non-empty list of options as its 2nd argument");
 
-        std::string menu = prompt;
-        for (size_t i = 0; i < items.size(); ++i) menu += "\n" + std::to_string(i + 1) + ") " + items[i].label;
+        std::string menu = prompt, optLines;
+        for (size_t i = 0; i < items.size(); ++i) { std::string ol = std::to_string(i + 1) + ") " + items[i].label; menu += "\n" + ol; optLines += "\n" + ol; }
+        if (choStyle.type == Value::Type::MAP) menu = printlayout::renderPrompt(choStyle, optLines, line);
         for (int attempt = 0; attempt < 5; ++attempt) {
             std::string ans; bool eof = false;
             if (!askRaw(attempt == 0 ? menu : ("[اختر رقماً من القائمة]\n" + menu), ans, eof) || eof)
