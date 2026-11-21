@@ -646,6 +646,73 @@ static std::string render(const std::vector<Value>& vals, const Cfg& c, int line
     return res + rep("\n", c.after);
 }
 
+// ------------------------------------------------------------ سؤال بنمط print (input / choose / form)
+// النمط قاموس: {text: "السؤال", <أي خيار من خيارات layoutText: box, title, mark, pad, ...>}.
+// pushFormStyle يضبط نمطاً افتراضياً تَرِثه كل أسئلة النص العادي حتى popFormStyle.
+static Value g_formStyle;   // NIL = لا نمط نشط
+
+static Value mergeMaps(const Value& base, const Value& over) {
+    auto m = std::make_shared<MapData>();
+    if (base.type == Value::Type::MAP && base.map) for (auto& kv : *base.map) m->put(kv.first, kv.second);
+    if (over.type == Value::Type::MAP && over.map) for (auto& kv : *over.map) m->put(kv.first, kv.second);
+    return Value::makeMap(m);
+}
+
+// قاموس فيه "text" => نمط؛ نص عادي + نمط نموذج نشط => نمط مدموج؛ غير ذلك => NIL (السلوك القديم).
+Value mergePromptStyle(const Value& arg, int /*line*/) {
+    if (arg.type == Value::Type::MAP && arg.map) {
+        bool hasText = false;
+        for (auto& kv : *arg.map) if (kv.first.type == Value::Type::STRING && kv.first.str == "text") { hasText = true; break; }
+        if (!hasText) return Value::nil();
+        return g_formStyle.type == Value::Type::MAP ? mergeMaps(g_formStyle, arg) : arg;
+    }
+    if (g_formStyle.type == Value::Type::MAP && arg.type == Value::Type::STRING) {
+        auto tm = std::make_shared<MapData>();
+        tm->put(Value::string("text"), arg);
+        return mergeMaps(g_formStyle, Value::makeMap(tm));
+    }
+    return Value::nil();
+}
+
+std::string promptText(const Value& st) {
+    if (st.type != Value::Type::MAP || !st.map) return "";
+    for (auto& kv : *st.map)
+        if (kv.first.type == Value::Type::STRING && kv.first.str == "text") return kv.second.toDisplayString();
+    return "";
+}
+
+Value styleWithText(const Value& st, const std::string& t) {
+    auto m = std::make_shared<MapData>();
+    if (st.type == Value::Type::MAP && st.map) for (auto& kv : *st.map) m->put(kv.first, kv.second);
+    m->put(Value::string("text"), Value::string(t));
+    return Value::makeMap(m);
+}
+
+Value pushFormStyle(const Value& st) {
+    Value prev = g_formStyle;
+    g_formStyle = st;
+    return prev;
+}
+void popFormStyle(const Value& prev) { g_formStyle = prev; }
+
+std::string renderPrompt(const Value& st, const std::string& extra, int line) {
+    Value slots[40]; Value sep, pretty;
+    if (st.type == Value::Type::MAP && st.map) {
+        for (auto& kv : *st.map) {
+            if (kv.first.type != Value::Type::STRING) continue;
+            const std::string& k = kv.first.str;
+            if (k == "text") continue;
+            bool found = false;
+            if (k == "sep") { sep = kv.second; found = true; } else if (k == "pretty") { pretty = kv.second; found = true; }
+            for (int i = 0; i < 40 && !found; i++) if (k == kAttrs[i]) { slots[i] = kv.second; found = true; }
+            if (!found) throw diagErr(diag::Code::E0016_InvalidProperty, line, "سؤال بنمط print: خيار غير معروف \"" + k + "\"");
+        }
+    }
+    Cfg c = buildCfg(sep, pretty, slots, "'input'", line);
+    std::string text = promptText(st) + extra;
+    return render({Value::string(text)}, c, line);
+}
+
 } // namespace printlayout
 
 void Interpreter::registerNativesPrintLayout() {
