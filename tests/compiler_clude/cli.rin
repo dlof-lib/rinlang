@@ -1,0 +1,15 @@
+@import "compiler_clude";
+print cc_cli([]);
+print cc_cli(["check", "../../lib/compiler_clude.og.rin/ccludelike.txt"]);
+print cc_cli(["stats", "../../lib/compiler_clude.og.rin/ccludelike.txt"]);
+print cc_cli(["lint", "../../lib/compiler_clude.og.rin/ccludelike.txt"]);
+print cc_cli(["eval", "../../lib/compiler_clude.og.rin/ccludelike.txt", "1 + 2"]);
+print cc_cli(["bogus", "../../lib/compiler_clude.og.rin/ccludelike.txt"]);
+print cc_cli(["new-language", ".out/cl", "toy", "toy"]);
+let spec = cc_load(".out/cl/ccludelike.txt");
+print spec["errors"], spec["warnings"], spec["title"], spec["exts"];
+print cc_run_expr(spec, "(1 + 2) * 3 ^ 2", {});
+print cc_cli(["lex", ".out/cl/ccludelike.txt", ".out/cl/sample.toy"]);
+print readFile(".out/cl/README.md");
+print cc_cli(["diff", "../../lib/compiler_clude.og.rin/ccludelike.txt", ".out/cl/ccludelike.txt"]);
+print cc_main("../../lib/compiler_clude.og.rin/ccludelike.txt", "");
