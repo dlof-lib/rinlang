@@ -1,0 +1,6 @@
+// a.txt — يستورد b.txt مباشرة وc.txt بنطاق
+@import "b.txt";
+@import "c.txt" as cc;
+$token[ ( ) ]
+container.ui [ button ,
+               label ]@
