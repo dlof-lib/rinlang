@@ -1,0 +1,6 @@
+// ccludelike.txt — اختبار توجيه @inlr.compiler_clude.main[]
+@inlr.compiler_clude.main[];
+$token.keyword[ let fun if else ]
+$token[ ; : / ]
+container.inlr [ img , text ]@
+print
