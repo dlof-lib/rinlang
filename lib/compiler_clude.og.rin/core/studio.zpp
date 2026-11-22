@@ -1,0 +1,169 @@
+// compiler_clude — الجزء 6: التصدير إلى RinStudio (مشروع لغة مخصصة)
+//
+//  RinStudio يعرّف «مشروع لغة»: manifest.json + syntax.rinsyntax.json (تلوين بـ regex) + Lexer/Parser/
+//  Interpreter/CodeGen/run.rin. هذه الدوال تولّد كل ذلك من ccludelike.txt فتصير أي لغة معرَّفة به
+//  تعمل في RinStudio: تلوين ملفاتها وتشغيلها وتوليد كود Rin منها.
+//     cc_studio_syntax(spec, name, ext)   → نص JSON لـ syntax.rinsyntax.json
+//     cc_studio_manifest(spec, id, name, developer, ext) → نص JSON لـ manifest.json
+//     cc_export_studio(dir, spec, id, name, ext)  → {files}  (مشروع كامل قابل للفتح في RinStudio)
+
+fun cc_studio_words(spec) {
+    let out = [];
+    let i = 0;
+    while (i < len(spec["order"])) {
+        if (!contains(spec["order"][i], ".")) { push(out, spec["order"][i]); }
+        i = i + 1;
+    }
+    return cc_sort_by_len_desc(out);
+}
+fun cc_studio_alt(items) {
+    let esc = [];
+    let i = 0;
+    while (i < len(items)) { push(esc, cc_regex_esc(items[i])); i = i + 1; }
+    return join(esc, "|");
+}
+fun cc_studio_syntax(spec, name, ext) {
+    let words = cc_studio_words(spec);
+    let syms = spec["sym_sorted"];
+    let ci = "";
+    if (cc_opt(spec, "case", "sensitive") == "insensitive") { ci = "(?i)"; }
+    let lc = cc_opt(spec, "line_comment", "//");
+    let bc = cc_opt(spec, "block_comment", "/* */");
+    let delims = cc_opt(spec, "strings", "\"'");
+    let guardL = "(?<![\\p{L}\\p{N}_])";
+    let guardR = "(?![\\p{L}\\p{N}_])";
+    let rules = [];
+    if (lc != "") { push(rules, {"name": "comment", "pattern": cc_regex_esc(lc) + "[^\\n]*", "color": "#6A9955"}); }
+    if (bc != "") {
+        let bp = split(bc, " ");
+        if (len(bp) == 2) { push(rules, {"name": "blockComment", "pattern": cc_regex_esc(bp[0]) + "[\\s\\S]*?" + cc_regex_esc(bp[1]), "color": "#6A9955"}); }
+    }
+    let d = 0;
+    while (d < len(delims)) {
+        let q = cc_regex_esc(charAt(delims, d));
+        push(rules, {"name": "string", "pattern": q + "(?:[^" + q + "\\\\]|\\\\.)*" + q, "color": "#CE9178"});
+        d = d + 1;
+    }
+    push(rules, {"name": "number", "pattern": "\\b[0-9]+(?:\\.[0-9]+)?\\b", "color": "#B5CEA8"});
+    let cn = keys(spec["containers"]);
+    let c = 0;
+    while (c < len(cn)) {
+        push(rules, {"name": "member:" + cn[c], "pattern": ci + guardL + cc_regex_esc(cn[c]) + "\\.(?:" + cc_studio_alt(spec["containers"][cn[c]]["members"]) + ")" + guardR, "color": "#4EC9B0"});
+        c = c + 1;
+    }
+    if (len(words) > 0) { push(rules, {"name": "keyword", "pattern": ci + guardL + "(?:" + cc_studio_alt(words) + ")" + guardR, "color": "#C586C0"}); }
+    if (len(syms) > 0) { push(rules, {"name": "operator", "pattern": cc_studio_alt(syms), "color": "#D4D4D4"}); }
+    push(rules, {"name": "identifier", "pattern": "[\\p{L}_][\\p{L}\\p{N}_]*", "color": "#9CDCFE"});
+    let bcObj = {"start": "/*", "end": "*/"};
+    if (bc != "") { let b2 = split(bc, " "); if (len(b2) == 2) { bcObj = {"start": b2[0], "end": b2[1]}; } }
+    return jsonEncode({
+        "language": name, "fileExtension": ext, "lineComment": lc, "blockComment": bcObj,
+        "keywords": words, "operators": syms, "rules": rules,
+        "note": "مُولَّد من ccludelike.txt بواسطة compiler_clude " + CC_VERSION + " — لا تعدّل يدوياً، أعد التصدير."
+    });
+}
+fun cc_studio_manifest(spec, id, name, developer, ext) {
+    let desc = spec["title"];
+    if (desc == "") { desc = name; }
+    let ver = spec["version"];
+    if (ver == "") { ver = "0.1.0"; }
+    return jsonEncode({
+        "id": id, "name": name, "version": ver, "developer": developer,
+        "fileExtension": ext, "description": desc + " — لغة مبنية على compiler_clude (الكلمات المحجوزة في ccludelike.txt)",
+        "entry": {"lexer": "Lexer.rin", "parser": "Parser.rin", "interpreter": "Interpreter.rin", "codegen": "CodeGen.rin", "run": "run.rin"},
+        "syntax": "syntax.rinsyntax.json", "official": false, "createdWithRinLangVersion": "langkit-1.0",
+        "clude": {"spec": "ccludelike.txt", "generator": CC_NAME + " " + CC_VERSION}
+    });
+}
+
+// ملفات المراحل لمشروع لغة تعابير عامة (يكفي ccludelike.txt بعوامل $infix/$prefix)
+fun cc_studio_lexer_src() {
+    let L = [];
+    push(L, "// Lexer.rin — المرحلة 1: النص → رموز، بالكلمات والرموز المحجوزة في ccludelike.txt (compiler_clude)");
+    push(L, "@import \"compiler_clude\";");
+    push(L, "let LANG_SPEC_PATH = \"ccludelike.txt\";");
+    push(L, "let LANG_SPEC = nil;");
+    push(L, "fun langSpec() {");
+    push(L, "    if (LANG_SPEC == nil) { LANG_SPEC = cc_load(LANG_SPEC_PATH); }");
+    push(L, "    return LANG_SPEC;");
+    push(L, "}");
+    push(L, "// يعيد {tokens, errors}");
+    push(L, "fun lex(source) { return cc_lex(langSpec(), source); }");
+    return join(L, "\n") + "\n";
+}
+fun cc_studio_parser_src() {
+    let L = [];
+    push(L, "// Parser.rin — المرحلة 2: رموز → AST (Pratt بأولويات $infix/$prefix في ccludelike.txt)");
+    push(L, "@import \"./Lexer.rin\";");
+    push(L, "// يعيد {asts, errors}");
+    push(L, "fun parse(source) { return cc_parse_statements(langSpec(), source); }");
+    return join(L, "\n") + "\n";
+}
+fun cc_studio_interp_src() {
+    let L = [];
+    push(L, "// Interpreter.rin — المرحلة 3: تنفيذ مباشر. يعيد قائمة نصوص (قيمة كل جملة)");
+    push(L, "@import \"./Parser.rin\";");
+    push(L, "fun interpret(source) {");
+    push(L, "    let p = parse(source);");
+    push(L, "    let out = [];");
+    push(L, "    let i = 0;");
+    push(L, "    while (i < len(p[\"errors\"])) { push(out, \"خطأ \" + p[\"errors\"][i]); i = i + 1; }");
+    push(L, "    i = 0;");
+    push(L, "    while (i < len(p[\"asts\"])) { push(out, toString(cc_eval(p[\"asts\"][i], {}))); i = i + 1; }");
+    push(L, "    return join(out, \"\\n\");");
+    push(L, "}");
+    return join(L, "\n") + "\n";
+}
+fun cc_studio_codegen_src() {
+    let L = [];
+    push(L, "// CodeGen.rin — المرحلة 4: AST → كود Rin (print لكل جملة)");
+    push(L, "@import \"./Parser.rin\";");
+    push(L, "fun generate(source) {");
+    push(L, "    let p = parse(source);");
+    push(L, "    let out = [];");
+    push(L, "    let i = 0;");
+    push(L, "    while (i < len(p[\"asts\"])) { push(out, \"print \" + cc_ast_to_rin(p[\"asts\"][i]) + \";\"); i = i + 1; }");
+    push(L, "    return join(out, \"\\n\");");
+    push(L, "}");
+    return join(L, "\n") + "\n";
+}
+fun cc_studio_run_src(ext) {
+    let L = [];
+    push(L, "// run.rin — نقطة الدخول: مصدر ." + ext + " → رموز → AST → تنفيذ مباشر + كود Rin مُولَّد");
+    push(L, "@import \"./Interpreter.rin\";");
+    push(L, "@import \"./CodeGen.rin\";");
+    push(L, "// عدّل المسار عند التطوير داخل RinStudio");
+    push(L, "let SOURCE_PATH = \"examples/hello." + ext + "\";");
+    push(L, "fun runFile(path) {");
+    push(L, "    let source = readFile(path);");
+    push(L, "    let r = lex(source);");
+    push(L, "    if (len(r[\"errors\"]) > 0) { print \"أخطاء لفظية:\", r[\"errors\"]; return nil; }");
+    push(L, "    print \"── تنفيذ مباشر (Interpreter) ──\";");
+    push(L, "    print interpret(source);");
+    push(L, "    print \"── كود Rin مُولَّد (CodeGen) ──\";");
+    push(L, "    print generate(source);");
+    push(L, "    return nil;");
+    push(L, "}");
+    push(L, "runFile(SOURCE_PATH);");
+    return join(L, "\n") + "\n";
+}
+
+// مشروع RinStudio كامل. يعيد {files} أو {error}
+fun cc_export_studio(dir, spec, id, name, ext) {
+    if (!cc_is_ident(ext)) { return {"error": "امتداد غير صالح: " + ext}; }
+    if (!cc_is_ident(id)) { return {"error": "معرّف غير صالح: " + id}; }
+    if (!cc_ok(spec)) { return {"error": "ccludelike فيه أخطاء: " + join(spec["errors"], " | ")}; }
+    let files = [];
+    let put = [
+        ["ccludelike.txt", cc_format_text(spec)],
+        ["manifest.json", cc_studio_manifest(spec, id, name, "", ext)],
+        ["syntax.rinsyntax.json", cc_studio_syntax(spec, name, ext)],
+        ["Lexer.rin", cc_studio_lexer_src()], ["Parser.rin", cc_studio_parser_src()],
+        ["Interpreter.rin", cc_studio_interp_src()], ["CodeGen.rin", cc_studio_codegen_src()],
+        ["run.rin", cc_studio_run_src(ext)],
+        ["examples/hello." + ext, "// عيّنة بلغة " + name + "\n1 + 2 * 3;\n(4 - 1) ^ 2;\n-5 + 10 % 4;\n"]
+    ];
+    let i = 0;
+    while (i < len(put)) { writeFile(dir + "/" + put[i][0], put[i][1]); push(files, dir + "/" + put[i][0]); i = i + 1; }
+    return {"files": files, "id": id};
+}
