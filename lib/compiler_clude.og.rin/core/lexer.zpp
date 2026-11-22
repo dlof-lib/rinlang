@@ -1,0 +1,201 @@
+// compiler_clude — الجزء 3: محلّل مفرداتي (lexer) تقوده الكلمات المحجوزة في spec
+//
+//  token = { type, value, line, col, group, container }
+//    RESERVED   كلمة محجوزة            group = مجموعتها ($token / keyword / container:inlr ...)
+//    MEMBER     عضو حاوية مؤهَّل       inlr.img  → container="inlr" value="img"
+//    BAD_MEMBER حاوية معروفة وعضو غير معرَّف (يُضاف خطأ أيضاً)
+//    SYMBOL     رمز محجوز              ; : / ...  (الأطول أولاً)
+//    IDENT · NUMBER · STRING · PUNCT   · COMMENT (فقط في cc_lex_full) · EOF
+
+fun cc_tok(ty, value, line, col) {
+    return {"type": ty, "value": value, "line": line, "col": col, "group": "", "container": "", "pos": 0, "len": 0};
+}
+
+fun cc_lex_run(spec, src, keepComments) {
+    let tokens = [];
+    let errors = [];
+    let n = len(src);
+    let i = 0;
+    let line = 1;
+    let lineStart = 0;
+    let syms = spec["sym_sorted"];
+    let lc = cc_opt(spec, "line_comment", "//");
+    let bcs = cc_opt(spec, "block_comment", "/* */");
+    let bopen = "";
+    let bclose = "";
+    if (bcs != "") {
+        let bp = split(bcs, " ");
+        if (len(bp) == 2) { bopen = bp[0]; bclose = bp[1]; }
+    }
+    let delims = cc_opt(spec, "strings", "\"'");
+    let ci = cc_opt(spec, "case", "sensitive") == "insensitive";
+    while (i < n) {
+        let startI = i;
+        let before = len(tokens);
+        let ch = charAt(src, i);
+        let col = i - lineStart + 1;
+        if (ch == "\n") {
+            line = line + 1;
+            i = i + 1;
+            lineStart = i;
+        } else if (cc_is_space(ch)) {
+            i = i + 1;
+        } else if (lc != "" and substr(src, i, len(lc)) == lc and !has(spec["symbols"], lc)) {
+            let s = i;
+            while (i < n and charAt(src, i) != "\n") { i = i + 1; }
+            if (keepComments) { push(tokens, cc_tok("COMMENT", substr(src, s, i - s), line, col)); }
+        } else if (bopen != "" and substr(src, i, len(bopen)) == bopen and !has(spec["symbols"], bopen)) {
+            let s = i;
+            let startLine = line;
+            let closed = false;
+            i = i + len(bopen);
+            while (i < n and !closed) {
+                if (substr(src, i, len(bclose)) == bclose) { closed = true; i = i + len(bclose); }
+                else {
+                    if (charAt(src, i) == "\n") { line = line + 1; lineStart = i + 1; }
+                    i = i + 1;
+                }
+            }
+            if (!closed) { push(errors, "[" + toString(startLine) + ":" + toString(col) + "] تعليق /* غير مغلق"); }
+            if (keepComments) { push(tokens, cc_tok("COMMENT", substr(src, s, i - s), startLine, col)); }
+        } else if (contains(delims, ch)) {
+            let q = ch;
+            let s = i + 1;
+            let startLine = line;
+            let val = "";
+            let closed = false;
+            i = i + 1;
+            while (i < n and !closed) {
+                let c2 = charAt(src, i);
+                if (c2 == "\\" and i + 1 < n) {
+                    val = val + c2 + charAt(src, i + 1);
+                    i = i + 2;
+                } else if (c2 == q) {
+                    closed = true;
+                    i = i + 1;
+                } else {
+                    if (c2 == "\n") { line = line + 1; lineStart = i + 1; }
+                    val = val + c2;
+                    i = i + 1;
+                }
+            }
+            if (!closed) { push(errors, "[" + toString(startLine) + ":" + toString(col) + "] نص غير مغلق"); }
+            push(tokens, cc_tok("STRING", val, startLine, col));
+        } else if (cc_is_digit(ch)) {
+            let s = i;
+            while (i < n and cc_is_digit(charAt(src, i))) { i = i + 1; }
+            if (i + 1 < n and charAt(src, i) == "." and cc_is_digit(charAt(src, i + 1))) {
+                i = i + 1;
+                while (i < n and cc_is_digit(charAt(src, i))) { i = i + 1; }
+            }
+            push(tokens, cc_tok("NUMBER", substr(src, s, i - s), line, col));
+        } else if (cc_is_alpha(ch)) {
+            let s = i;
+            while (i < n and cc_is_alnum(charAt(src, i))) { i = i + 1; }
+            let word = substr(src, s, i - s);
+            let wkey = word;
+            if (ci) { wkey = lower(word); }
+            if (has(spec["containers"], wkey) and i + 1 < n and charAt(src, i) == "." and cc_is_alpha(charAt(src, i + 1))) {
+                let ms = i + 1;
+                let me = ms;
+                while (me < n and cc_is_alnum(charAt(src, me))) { me = me + 1; }
+                let member = substr(src, ms, me - ms);
+                if (ci) { member = lower(member); }
+                i = me;
+                word = wkey;
+                if (cc_in(spec["containers"][word]["members"], member)) {
+                    let t = cc_tok("MEMBER", member, line, col);
+                    t["container"] = word;
+                    t["group"] = "container:" + word;
+                    push(tokens, t);
+                } else {
+                    let t = cc_tok("BAD_MEMBER", member, line, col);
+                    t["container"] = word;
+                    push(tokens, t);
+                    push(errors, "[" + toString(line) + ":" + toString(col) + "] الحاوية '" + word + "' ليس فيها العضو '" + member + "'");
+                }
+            } else if (has(spec["words"], wkey)) {
+                let t = cc_tok("RESERVED", word, line, col);
+                t["group"] = spec["words"][wkey];
+                push(tokens, t);
+            } else {
+                push(tokens, cc_tok("IDENT", word, line, col));
+            }
+        } else {
+            let hit = "";
+            let k = 0;
+            while (k < len(syms) and hit == "") {
+                if (substr(src, i, len(syms[k])) == syms[k]) { hit = syms[k]; }
+                k = k + 1;
+            }
+            if (hit != "") {
+                let t = cc_tok("SYMBOL", hit, line, col);
+                t["group"] = spec["symbols"][hit];
+                push(tokens, t);
+                i = i + len(hit);
+            } else {
+                push(tokens, cc_tok("PUNCT", ch, line, col));
+                i = i + 1;
+            }
+        }
+        if (len(tokens) > before) {
+            tokens[before]["pos"] = startI;
+            tokens[before]["len"] = i - startI;
+        }
+    }
+    push(tokens, cc_tok("EOF", "", line, n - lineStart + 1));
+    return {"tokens": tokens, "errors": errors};
+}
+
+// بلا تعليقات
+fun cc_lex(spec, src) { return cc_lex_run(spec, src, false); }
+// مع رموز COMMENT
+fun cc_lex_full(spec, src) { return cc_lex_run(spec, src, true); }
+
+// عرض: سطر لكل رمز
+fun cc_format_tokens(tokens) {
+    let lines = [];
+    let i = 0;
+    while (i < len(tokens)) {
+        let t = tokens[i];
+        let extra = "";
+        if (t["group"] != "") { extra = "  <" + t["group"] + ">"; }
+        if (t["container"] != "") { extra = extra + " @" + t["container"]; }
+        push(lines, toString(t["line"]) + ":" + toString(t["col"]) + "  " + t["type"] + "  " + t["value"] + extra);
+        i = i + 1;
+    }
+    return join(lines, "\n");
+}
+// عدّ الرموز حسب النوع
+fun cc_count_types(tokens) {
+    let m = {};
+    let i = 0;
+    while (i < len(tokens)) {
+        let t = tokens[i]["type"];
+        if (has(m, t)) { m[t] = m[t] + 1; } else { m[t] = 1; }
+        i = i + 1;
+    }
+    return m;
+}
+// الكلمات المحجوزة المستعملة في مصدر (بلا تكرار)
+fun cc_used_reserved(spec, src) {
+    let r = cc_lex(spec, src);
+    let seen = [];
+    let i = 0;
+    while (i < len(r["tokens"])) {
+        let t = r["tokens"][i];
+        if (t["type"] == "RESERVED" or t["type"] == "SYMBOL") {
+            if (!cc_in(seen, t["value"])) { push(seen, t["value"]); }
+        } else if (t["type"] == "MEMBER") {
+            let q = t["container"] + "." + t["value"];
+            if (!cc_in(seen, q)) { push(seen, q); }
+        }
+        i = i + 1;
+    }
+    return seen;
+}
+
+fun cc_opt(spec, key, dflt) {
+    if (has(spec["options"], key)) { return spec["options"][key]; }
+    return dflt;
+}
