@@ -1,0 +1,18 @@
+// run.rin — نقطة الدخول للغة mini في RinStudio: مصدر .mini → رموز → AST → تنفيذ مباشر + كود Rin مُولَّد
+@import "./Interpreter.rin";
+@import "./CodeGen.rin";
+
+// عدّل المسار عند التطوير داخل RinStudio
+let SOURCE_PATH = "examples/hello.mini";
+
+fun runFile(path) {
+    let source = readFile(path);
+    let r = lex(source);
+    if (len(r["errors"]) > 0) { print "أخطاء لفظية:", r["errors"]; return nil; }
+    print "── تنفيذ مباشر (Interpreter) ──";
+    print interpret(source);
+    print "── كود Rin مُولَّد (CodeGen) ──";
+    print generate(source);
+    return nil;
+}
+runFile(SOURCE_PATH);
