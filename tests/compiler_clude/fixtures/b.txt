@@ -1,0 +1,2 @@
+$token.keyword[ switch case ]
+$op[ => :: ]
