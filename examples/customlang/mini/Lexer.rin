@@ -1,0 +1,11 @@
+// Lexer.rin — المرحلة 1 للغة mini: النص → رموز بالكلمات المحجوزة في ccludelike.txt (compiler_clude)
+@import "compiler_clude";
+
+let LANG_SPEC_PATH = "ccludelike.txt";
+let LANG_SPEC = nil;
+fun langSpec() {
+    if (LANG_SPEC == nil) { LANG_SPEC = cc_load(LANG_SPEC_PATH); }
+    return LANG_SPEC;
+}
+// يعيد {tokens, errors}
+fun lex(source) { return cc_lex(langSpec(), source); }
