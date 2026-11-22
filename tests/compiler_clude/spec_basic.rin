@@ -1,0 +1,15 @@
+// الصيغ الخمس من المواصفة
+@import "compiler_clude";
+let s = cc_parse("@inlr.compiler_clude.main[];\n$token[]\n$token[ ; : / ]\ncontainer.inlr [ img , text]@\nprint\n");
+print s["entry"]["ns"], s["entry"]["lib"], s["entry"]["main"], len(s["entry"]["args"]);
+print s["errors"], s["warnings"];
+print cc_reserved_symbols(s);
+print cc_reserved_words(s);
+print s["containers"]["inlr"]["members"];
+print cc_is_reserved(s, "print"), cc_is_reserved(s, ";"), cc_is_reserved(s, "inlr.img"), cc_is_reserved(s, "zzz");
+print cc_group_of(s, "print"), cc_group_of(s, "img"), cc_group_of(s, ":");
+print cc_check_name(s, "print"), cc_check_name(s, "foo"), cc_check_name(s, "1x");
+// '@' كنهاية جملة وعلى سطر لاحق + ';' داخل [ ] لا تُنهي الجملة
+let s2 = cc_parse("$token[ ; : / ]@ print; @inlr.x.y[a, b];");
+print s2["errors"];
+print cc_reserved_symbols(s2), s2["entry"]["args"];
