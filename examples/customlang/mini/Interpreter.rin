@@ -1,0 +1,217 @@
+// Interpreter.rin — المرحلة 3: تنفيذ مباشر لـ mini.
+//   mini_run(مصدر) → {ok, out[], error, errors[]} · interpret(مصدر) → نص الإخراج أو الأخطاء
+@import "./Parser.rin";
+
+let MINI = {"spec": nil, "err": nil, "out": [], "fns": {}, "steps": 0, "depth": 0, "global": nil};
+
+// يغيّر ملف الكلمات المحجوزة (للاختبار أو لتشغيل المشروع من مجلد آخر)
+fun mini_load(specPath) {
+    LANG_SPEC_PATH = specPath;
+    LANG_SPEC = nil;
+    return langSpec();
+}
+
+// ─────────────────────────── المفسّر ───────────────────────────
+fun mi_fail(line, msg) {
+    if (MINI["err"] == nil) { MINI["err"] = "[السطر " + toString(line) + "] " + msg; }
+    return nil;
+}
+fun mi_str(v) {
+    if (v == nil) { return "nil"; }
+    if (v == true) { return "true"; }
+    if (v == false) { return "false"; }
+    return toString(v);
+}
+fun mi_truthy(v) { return v != nil and v != false; }
+fun mi_lookup(env, name) {
+    let e = env;
+    while (e != nil) {
+        if (has(e["vars"], name)) { return {"found": true, "v": e["vars"][name]}; }
+        e = e["parent"];
+    }
+    return {"found": false, "v": nil};
+}
+fun mi_set(env, name, v) {
+    let e = env;
+    while (e != nil) {
+        if (has(e["vars"], name)) { e["vars"][name] = v; return true; }
+        e = e["parent"];
+    }
+    return false;
+}
+fun mi_isnum(v) { return type(v) == "number"; }
+fun mi_binop(op, x, y, line) {
+    if (op == "==") { return x == y; }
+    if (op == "!=") { return x != y; }
+    if (op == "+" and (type(x) == "string" or type(y) == "string")) { return mi_str(x) + mi_str(y); }
+    let cmp = (op == "<" or op == ">" or op == "<=" or op == ">=");
+    if (cmp and type(x) == "string" and type(y) == "string") {
+        if (op == "<") { return x < y; }
+        if (op == ">") { return x > y; }
+        if (op == "<=") { return x <= y; }
+        return x >= y;
+    }
+    if (!mi_isnum(x) or !mi_isnum(y)) {
+        return mi_fail(line, "العامل '" + op + "' يتطلّب رقمين لكن وُجد " + type(x) + " و" + type(y));
+    }
+    if (op == "+") { return x + y; }
+    if (op == "-") { return x - y; }
+    if (op == "*") { return x * y; }
+    if (op == "/") { if (y == 0) { return mi_fail(line, "قسمة على صفر"); } return x / y; }
+    if (op == "%") { if (y == 0) { return mi_fail(line, "قسمة على صفر"); } return x % y; }
+    if (op == "^") { return pow(x, y); }
+    if (op == "<") { return x < y; }
+    if (op == ">") { return x > y; }
+    if (op == "<=") { return x <= y; }
+    if (op == ">=") { return x >= y; }
+    return mi_fail(line, "عامل غير معروف '" + op + "'");
+}
+fun mi_builtin(name, args, line) {
+    let n = len(args);
+    if (name == "len" and n == 1) { return len(args[0]); }
+    if (name == "min" and n == 2) { return min(args[0], args[1]); }
+    if (name == "max" and n == 2) { return max(args[0], args[1]); }
+    if (name == "abs" and n == 1) { return abs(args[0]); }
+    if (name == "sqrt" and n == 1) { return sqrt(args[0]); }
+    if (name == "str" and n == 1) { return mi_str(args[0]); }
+    if (name == "upper" and n == 1) { return upper(args[0]); }
+    if (name == "lower" and n == 1) { return lower(args[0]); }
+    return mi_fail(line, "دالة غير معرَّفة أو عدد وسائط خاطئ: " + name + "/" + toString(n));
+}
+fun mi_call(a, env) {
+    let args = [];
+    let i = 0;
+    while (i < len(a["args"])) { push(args, mi_eval(a["args"][i], env)); i = i + 1; }
+    if (MINI["err"] != nil) { return nil; }
+    if (!has(MINI["fns"], a["name"])) { return mi_builtin(a["name"], args, a["line"]); }
+    let f = MINI["fns"][a["name"]];
+    if (len(args) != len(f["params"])) {
+        return mi_fail(a["line"], a["name"] + " تتوقع " + toString(len(f["params"])) + " وسائط لكن مُرِّر " + toString(len(args)));
+    }
+    if (MINI["depth"] >= 150) { return mi_fail(a["line"], "تجاوز عمق الاستدعاء"); }
+    let fenv = {"vars": {}, "parent": MINI["global"]};
+    i = 0;
+    while (i < len(args)) { fenv["vars"][f["params"][i]] = args[i]; i = i + 1; }
+    MINI["depth"] = MINI["depth"] + 1;
+    let sig = mi_exec_list(f["body"], fenv);
+    MINI["depth"] = MINI["depth"] - 1;
+    if (sig != nil) { return sig["ret"]; }
+    return nil;
+}
+fun mi_eval(a, env) {
+    if (MINI["err"] != nil) { return nil; }
+    let k = a["kind"];
+    if (k == "num" or k == "str" or k == "lit") { return a["value"]; }
+    if (k == "var") {
+        let r = mi_lookup(env, a["name"]);
+        if (!r["found"]) { return mi_fail(a["line"], "متغيّر غير معرَّف: " + a["name"]); }
+        return r["v"];
+    }
+    if (k == "member") { return a["container"] + "." + a["name"]; }
+    if (k == "un") {
+        let v = mi_eval(a["arg"], env);
+        if (a["op"] == "!") { return !mi_truthy(v); }
+        if (!mi_isnum(v)) { return mi_fail(a["line"], "العامل '" + a["op"] + "' يتطلّب رقماً"); }
+        if (a["op"] == "-") { return 0 - v; }
+        return v;
+    }
+    if (k == "bin") {
+        if (a["op"] == "and") {
+            let l = mi_eval(a["left"], env);
+            if (!mi_truthy(l)) { return l; }
+            return mi_eval(a["right"], env);
+        }
+        if (a["op"] == "or") {
+            let l2 = mi_eval(a["left"], env);
+            if (mi_truthy(l2)) { return l2; }
+            return mi_eval(a["right"], env);
+        }
+        let x = mi_eval(a["left"], env);
+        let y = mi_eval(a["right"], env);
+        if (MINI["err"] != nil) { return nil; }
+        return mi_binop(a["op"], x, y, a["line"]);
+    }
+    if (k == "call") { return mi_call(a, env); }
+    return mi_fail(a["line"], "تعبير غير صالح");
+}
+fun mi_exec_list(stmts, env) {
+    let i = 0;
+    while (i < len(stmts)) {
+        let sig = mi_exec(stmts[i], env);
+        if (sig != nil or MINI["err"] != nil) { return sig; }
+        i = i + 1;
+    }
+    return nil;
+}
+fun mi_exec(s, env) {
+    MINI["steps"] = MINI["steps"] + 1;
+    if (MINI["steps"] > 300000) { return mi_fail(s["line"], "تجاوز حدّ التنفيذ (حلقة لا نهائية؟)"); }
+    let k = s["k"];
+    if (k == "let") { env["vars"][s["name"]] = mi_eval(s["e"], env); return nil; }
+    if (k == "assign") {
+        let v = mi_eval(s["e"], env);
+        if (MINI["err"] != nil) { return nil; }
+        if (!mi_set(env, s["name"], v)) { return mi_fail(s["line"], "إسناد إلى متغيّر غير معرَّف: " + s["name"]); }
+        return nil;
+    }
+    if (k == "print") {
+        let parts = [];
+        let i = 0;
+        while (i < len(s["items"])) { push(parts, mi_str(mi_eval(s["items"][i], env))); i = i + 1; }
+        if (MINI["err"] == nil) { push(MINI["out"], join(parts, " ")); }
+        return nil;
+    }
+    if (k == "if") {
+        let c = mi_eval(s["cond"], env);
+        if (MINI["err"] != nil) { return nil; }
+        if (mi_truthy(c)) { return mi_exec_list(s["then"], env); }
+        return mi_exec_list(s["else"], env);
+    }
+    if (k == "while") {
+        while (MINI["err"] == nil and mi_truthy(mi_eval(s["cond"], env))) {
+            let sig = mi_exec_list(s["body"], env);
+            if (sig != nil) { return sig; }
+            MINI["steps"] = MINI["steps"] + 1;
+            if (MINI["steps"] > 300000) { return mi_fail(s["line"], "تجاوز حدّ التنفيذ (حلقة لا نهائية؟)"); }
+        }
+        return nil;
+    }
+    if (k == "fun") { MINI["fns"][s["name"]] = {"params": s["params"], "body": s["body"]}; return nil; }
+    if (k == "return") {
+        let rv = nil;
+        if (s["e"] != nil) { rv = mi_eval(s["e"], env); }
+        return {"ret": rv, "line": s["line"]};
+    }
+    if (k == "expr") { mi_eval(s["e"], env); return nil; }
+    return mi_fail(s["line"], "جملة غير معروفة");
+}
+
+// تشغيل مصدر كامل. يعيد {ok, out, error, errors}
+fun mini_run(src) {
+    let p = mini_parse(src);
+    MINI["err"] = nil;
+    MINI["out"] = [];
+    MINI["fns"] = {};
+    MINI["steps"] = 0;
+    MINI["depth"] = 0;
+    if (!p["ok"]) { return {"ok": false, "out": [], "error": nil, "errors": p["errors"]}; }
+    let genv = {"vars": {}, "parent": nil};
+    MINI["global"] = genv;
+    let top = mi_exec_list(p["program"], genv);
+    if (top != nil) { mi_fail(top["line"], "'return' خارج دالة"); }
+    return {"ok": MINI["err"] == nil, "out": MINI["out"], "error": MINI["err"], "errors": []};
+}
+// نصائح "هل تقصد؟" وتنبيهات المهجور للمصدر
+fun mini_check(src) { return cc_check_source(langSpec(), src); }
+fun mini_highlight(src) { return cc_highlight_ansi(langSpec(), src); }
+
+fun interpret(source) {
+    let r = mini_run(source);
+    let out = [];
+    let i = 0;
+    while (i < len(r["errors"])) { push(out, "خطأ " + r["errors"][i]); i = i + 1; }
+    if (r["error"] != nil) { push(out, "خطأ " + r["error"]); }
+    i = 0;
+    while (i < len(r["out"])) { push(out, r["out"][i]); i = i + 1; }
+    return join(out, "\n");
+}
