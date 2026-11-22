@@ -1,0 +1,107 @@
+// ============================================================================
+//  compiler_clude — مكتبة إنشاء لغات البرمجة والقوالب والمكتبات            (الجزء الأساسي)
+//
+//  الكلمات المحجوزة تُعرَّف في ملف نصي اسمه  ccludelike.txt  بهذه الصيغة:
+//
+//      @inlr.compiler_clude.main[];          // ترويسة: @<نطاق>.<مكتبة>.<دخول>[وسائط];
+//      @import "other.txt";                  // استيراد ملف أو مكتبة (… as ns اختياري)
+//      $token[]                              // مجموعة token (فارغة)
+//      $token[ ; : / ]                       // رموز محجوزة
+//      $token.keyword[ let fun if else ]     // مجموعة مسمّاة
+//      container.inlr [ img , text ]@        // حاوية inlr: أعضاؤها محجوزة، وتُكتب inlr.img
+//      print                                 // كلمة محجوزة مفردة
+//
+//  الاستعمال:
+//      @import "compiler_clude";
+//      let spec = cc_load("ccludelike.txt");          // أو cc_parse(نص)
+//      let r = cc_lex(spec, "print inlr.img 12 ; x"); // r["tokens"] · r["errors"]
+//      print cc_format_tokens(r["tokens"]);
+//
+//  إنشاء مشاريع:  cc_new_language(dir, name, ext)  ·  cc_new_template(dir, name)
+//                 cc_new_library(dir, name)         — كلها تكتب ccludelike.txt جاهزاً.
+// ============================================================================
+
+let CC_VERSION = "1.1.0";
+let CC_NAME = "compiler_clude";
+let CC_SPEC_FILE = "ccludelike.txt";
+
+// ---------------------------------------------------------------------------
+//  أدوات صغيرة (بايتية: كل بايت ≥ 128 يُعامل كحرف معرّف، فتعمل العربية)
+// ---------------------------------------------------------------------------
+fun cc_is_digit(ch) {
+    if (ch == "") { return false; }
+    let c = ord(ch);
+    return c >= 48 and c <= 57;
+}
+fun cc_is_alpha(ch) {
+    if (ch == "") { return false; }
+    let c = ord(ch);
+    if (c >= 65 and c <= 90) { return true; }
+    if (c >= 97 and c <= 122) { return true; }
+    if (c == 95) { return true; }
+    return c >= 128;
+}
+fun cc_is_alnum(ch) { return cc_is_alpha(ch) or cc_is_digit(ch); }
+fun cc_is_space(ch) { return ch == " " or ch == "\t" or ch == "\r" or ch == "\n"; }
+
+// عنصر رمزي بحت: كل محارفه ASCII وليست حرفاً ولا رقماً ولا _ ولا فراغاً
+fun cc_is_symbol_item(s) {
+    if (len(s) == 0) { return false; }
+    let i = 0;
+    while (i < len(s)) {
+        let ch = charAt(s, i);
+        if (cc_is_alnum(ch) or cc_is_space(ch)) { return false; }
+        i = i + 1;
+    }
+    return true;
+}
+// معرّف صالح: يبدأ بحرف/_ ثم حروف/أرقام
+fun cc_is_ident(s) {
+    if (len(s) == 0) { return false; }
+    if (!cc_is_alpha(charAt(s, 0))) { return false; }
+    let i = 1;
+    while (i < len(s)) {
+        if (!cc_is_alnum(charAt(s, i))) { return false; }
+        i = i + 1;
+    }
+    return true;
+}
+fun cc_dirname(path) {
+    let i = len(path) - 1;
+    while (i >= 0) {
+        if (charAt(path, i) == "/") { return substr(path, 0, i); }
+        i = i - 1;
+    }
+    return "";
+}
+fun cc_join_path(dir, name) {
+    if (dir == "") { return name; }
+    return dir + "/" + name;
+}
+fun cc_has_text(s, part) { return contains(s, part); }
+fun cc_in(list, v) {
+    let i = 0;
+    while (i < len(list)) {
+        if (list[i] == v) { return true; }
+        i = i + 1;
+    }
+    return false;
+}
+// فرز نصوص تنازلياً بالطول (للمطابقة الأطول أولاً)
+fun cc_sort_by_len_desc(list) {
+    let out = [];
+    let i = 0;
+    while (i < len(list)) { push(out, list[i]); i = i + 1; }
+    let a = 1;
+    while (a < len(out)) {
+        let cur = out[a];
+        let b = a - 1;
+        while (b >= 0 and len(out[b]) < len(cur)) {
+            out[b + 1] = out[b];
+            b = b - 1;
+        }
+        out[b + 1] = cur;
+        a = a + 1;
+    }
+    return out;
+}
