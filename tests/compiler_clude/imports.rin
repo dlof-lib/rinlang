@@ -1,0 +1,13 @@
+@import "compiler_clude";
+let s = cc_load("fixtures/a.txt");
+print s["errors"], s["warnings"];
+print cc_format_spec(s);
+print cc_is_reserved(s, "switch"), cc_is_reserved(s, "alpha"), cc_is_reserved(s, "cc.alpha");
+let r = cc_lex(s, "switch alpha cc.alpha cc.zzz ui.button => ::");
+print cc_format_tokens(r["tokens"]);
+print r["errors"];
+let c = cc_load("fixtures/cycle1.txt");
+print c["errors"];
+let m = cc_parse("@import \"nope.txt\";\n@import \"compiler_clude\" as base;");
+print m["errors"];
+print cc_is_reserved(m, "base.print"), cc_is_reserved(m, "print");
