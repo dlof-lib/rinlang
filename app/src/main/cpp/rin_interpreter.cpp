@@ -8033,6 +8033,8 @@ for(auto& kv:maskParents) if(maskResolve4(kv.second)==parent && !maskResolve4(kv
     registerNativesOop(); // Rin 1.0: oop.* — استبطان الأصناف والكائنات + أدوات OOP (rin_oop_natives.cpp)
     registerNativesInput(); // Rin 1.0: نماذج الإدخال (معاملة/تداخل/مُدقِّق النموذج) فوق input() — بعد oop.* لأنها تستدعيها (rin_input.cpp)
     registerNativesConditions(); // متغيّرات الشروط الموسّعة (rin_conditions.cpp)
+    registerNativesMagic(); // خُطّافات الأعضاء الغائبة: has/drop عبر container.has/deleteField (rin_container_magic.cpp)
+    registerNativesExtra13(); // bytes.*/dur.*/firstOf/lastOf/findKeyIf/utf8Trim… (rin_extra_natives13.cpp، docs/EXTRA13.md)
     registerNativesImageDraw(); // imgNew/imgLine/imgText/imgSave/imgFromLog… (rin_image_draw.cpp)
     registerNativesImage(); // printImage/imageAnsi/imageInfo (rin_image_ansi.cpp)
     registerNativesIntentNav();   // Intent.* و Navigation.* (rin_intent_nav.cpp)
@@ -10395,6 +10397,12 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
         else if (s->hook == "update") hooks.update = v;
         else if (s->hook == "destroy") hooks.destroy = v;
         else if (s->hook == "error") hooks.error = v;
+        else if (s->hook == "get") { hooks.get = v; magicActive_ = true; }
+        else if (s->hook == "set") { hooks.set = v; magicActive_ = true; }
+        else if (s->hook == "has") { hooks.has = v; magicActive_ = true; }
+        else if (s->hook == "drop") { hooks.drop = v; magicActive_ = true; }
+        else if (s->hook == "call") { hooks.call = v; magicActive_ = true; }
+        else if (s->hook == "invoke") { hooks.invoke = v; magicActive_ = true; }
         return Flow::None;
     }
 
@@ -10408,7 +10416,11 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
         Value v = Value::nil();
         if (s->initializer) v = evaluate(s->initializer, env);
         env->define(s->name, v);
-        if (!containerStack.empty()) containerStateNames[containerStack.back()].insert(s->name);
+        if (!containerStack.empty()) {
+            containerStateNames[containerStack.back()].insert(s->name);
+            if (s->fixed) containerFixedStates[containerStack.back()].insert(s->name);
+            else containerFixedStates[containerStack.back()].erase(s->name);   // إعادة تعريف الحاوية تبدأ من جديد
+        }
         return Flow::None;
     }
 
@@ -12065,6 +12077,15 @@ void Interpreter::assignStateAware(Environment* owner, const std::string& name, 
         return;
     }
 
+    {   // state fixed: الكتابة بعد التهيئة مرفوضة (التهيئة نفسها تمرّ عبر define لا عبر هذه الدالة)
+        auto fx = containerFixedStates.find(containerKey);
+        if (fx != containerFixedStates.end() && fx->second.count(name)) {
+            auto d = diagErr(diag::Code::E0003_InvalidAssignment, line, "cannot assign to 'state fixed " + name + "' of container '" + containerKey + "'");
+            d.diagnostic->withReason("fixed state is set once at its declaration and never changes after")
+             .withHint("declare it with plain `state " + name + " = ...;` if it must change");
+            throw d;
+        }
+    }
     auto hooksIt = containerLifecycle.find(containerKey);
     bool hasUpdateHook = hooksIt != containerLifecycle.end() &&
                           hooksIt->second.update.type == Value::Type::FUNCTION && hooksIt->second.update.function;
@@ -12195,7 +12216,10 @@ Value Interpreter::nsGet(const std::shared_ptr<NsNode>& n, const std::string& me
     if (auto c = n->child(member)) return nsSnapshot(c); // a bare namespace reads as a snapshot map of its fields
     std::string rn;
     Environment* own = n->env->findReadOwnerLinked(member, &rn); // الاسم المحلي أو المرتبط عبر link (rn = اسمه عند المالك)
-    if (!own) throw nsNoMemberErr(n, member, line, sourceFile, "member");
+    if (!own) {
+        Value hv; if (magicActive_ && magicHook(n, &LifecycleHooks::get, "get", member, {Value::string(member)}, line, hv)) return hv; // on get(name)
+        throw nsNoMemberErr(n, member, line, sourceFile, "member");
+    }
     if (depTracker_) valTrack(own, rn);
     if (liveActive_ && !own->live.empty()) {
         auto lit = own->live.find(rn);
@@ -12221,7 +12245,10 @@ Value Interpreter::nsSet(const std::shared_ptr<NsNode>& n, const std::string& me
                             "cannot write `" + n->path() + "." + member + "`: it comes from a read-only link",
                             "link it without `readonly` to allow writes");
     }
-    if (!own) throw nsNoMemberErr(n, member, line, sourceFile, "variable");
+    if (!own) {
+        Value hv; if (magicActive_ && magicHook(n, &LifecycleHooks::set, "set", member, {Value::string(member), v}, line, hv)) return v; // on set(name, value)
+        throw nsNoMemberErr(n, member, line, sourceFile, "variable");
+    }
     Value stored = copyForBinding(v);
     if (liveActive_) return liveAssign(own, rn, stored, line);
     assignStateAware(own, rn, stored, line); // fires `on update(prev)` for `state` fields of containers
@@ -12236,7 +12263,10 @@ Value Interpreter::nsCall(const std::shared_ptr<NsNode>& n, const std::string& m
     }
     std::string rn;
     Environment* own = n->env->findReadOwnerLinked(member, &rn);
-    if (!own) throw nsNoMemberErr(n, member, line, sourceFile, "function");
+    if (!own) {
+        Value hv; if (magicActive_ && magicHook(n, &LifecycleHooks::call, "call", member, {Value::string(member), Value::makeArray(std::make_shared<ArrayData>(args))}, line, hv)) return hv; // on call(name, args)
+        throw nsNoMemberErr(n, member, line, sourceFile, "function");
+    }
     auto it = own->values.find(rn);
     if (it->second.type != Value::Type::FUNCTION) {
         throw diagErr(diag::Code::E0006_UnknownFunction, line, "`" + n->path() + "." + member + "` is not a function");
@@ -12269,6 +12299,7 @@ bool Interpreter::nsTryCallDotted(const std::string& callee, std::vector<Value>&
     Environment* ownEnv = n->env->findReadOwnerLinked(member, &rn);
     if (!ownEnv) {
         if (natives.count(callee)) return false; // e.g. a namespace that happens to be named like a built-in family
+        if (magicActive_ && magicHook(n, &LifecycleHooks::call, "call", member, {Value::string(member), Value::makeArray(std::make_shared<ArrayData>(args))}, line, out)) return true; // on call(name, args)
         throw nsNoMemberErr(n, member, line, sourceFile, "function");
     }
     auto it = ownEnv->values.find(rn);
@@ -12778,6 +12809,12 @@ Value Interpreter::invokeCallee(const std::string& callee, std::vector<Value>& a
         if (callee == "Addition") return Value::num(a.number + b.number);
         if (callee == "Subtraction") return Value::num(a.number - b.number);
         if (callee == "Multiplication") return Value::num(a.number * b.number);
+    }
+
+    // on invoke(args): `Shop(1, 2)` على اسم حاوية (لا متغيّر ولا native ولا صنف بنفس الاسم) — docs/container_magic.md
+    if (magicActive_ && callee.find('.') == std::string::npos && !natives.count(callee) && !classes.count(callee) && !env->lookup(callee)) {
+        auto nsn = nsResolveHead(callee, env);
+        Value hv; if (nsn && magicHook(nsn, &LifecycleHooks::invoke, "invoke", callee, {Value::makeArray(std::make_shared<ArrayData>(args))}, line, hv)) return hv;
     }
 
     // library.import(path) وحدها بين natives CLC تحتاج env (لتنفّذ كل ملف .rin مُستخرَج من الحاوية
@@ -15441,6 +15478,8 @@ void Interpreter::dialogAction(const std::shared_ptr<LiveActionStmt>& s, const E
 #include "rin_rintwist.cpp" // RINTWIST: سياق التنفيذ (docs/rintwist.md)
 #include "rin_table.cpp" // توسعة الجدول: دوال اللغة الموجودة تفهم الجدول (انظر رأس الملف)
 #include "rin_conditions.cpp" // متغيّرات الشروط الموسّعة (docs/key_terms_and_builtins.md)
+#include "rin_container_magic.cpp" // on get/set/has/drop/call/invoke (docs/container_magic.md)
+#include "rin_extra_natives13.cpp" // bytes/dur/firstOf/utf8Trim (docs/EXTRA13.md)
 #include "rin_image_ansi.cpp" // صور داخل الـ terminal كنص (docs/image-terminal.md)
 #include "rin_image_draw.cpp" // إنشاء الصور والرسم والحفظ PNG وlog كصورة (docs/image-draw.md)
 #include "rin_intent_nav.cpp"   // Intent.core / Navigation.re (docs/intent_navigation.md)
