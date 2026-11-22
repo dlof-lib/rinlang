@@ -1,0 +1,38 @@
+// لغة mini الكاملة المبنية على compiler_clude
+@import "../../examples/customlang/mini/Interpreter.rin";
+@import "../../examples/customlang/mini/CodeGen.rin";
+mini_load("../../examples/customlang/mini/ccludelike.txt");
+fun show_run(src) {
+    let r = mini_run(src);
+    print r["ok"], r["out"], r["error"], r["errors"];
+}
+show_run(readFile("../../examples/customlang/mini/examples/hello.mini"));
+show_run("let a = 10; fun twice(x) { return x * 2; } print twice(a) + 1, twice(twice(1));");
+show_run("let x = 1; if x == 1 { print \"one\"; } else if x == 2 { print \"two\"; } else { print \"many\"; }");
+show_run("let i = 0; while i < 3 { print i; i = i + 1; }");
+show_run("print y;");
+show_run("print 1 / 0;");
+show_run("z = 5;");
+show_run("print \"a\" - 1;");
+show_run("fun f(a) { return a; } print f(1, 2);");
+show_run("fun r(n) { return r(n + 1); } print r(0);");
+show_run("while true { }");
+show_run("let = 5;");
+show_run("print (1 + ;");
+show_run("print \"open;");
+show_run("print 1");
+show_run("print -2 ^ 2, !nil, nil == false, true and 3, false or \"d\";");
+let d = mini_check("pritn 5; fun f() { return 1; } whlie true { }");
+let i = 0;
+while (i < len(d)) { print d[i]["level"], d[i]["msg"]; i = i + 1; }
+show_run("return 1;");
+// CodeGen: AST → Rin
+print generate("let a = 2 ^ 3; if a > 5 { print str(a); } else { print \"small\"; } fun f(x, y) { return min(x, y); }");
+print generate("print (;") == "";
+// تكافؤ: التنفيذ المباشر مقابل تشغيل كود Rin المُولَّد (يجب أن يتطابق الإخراج)
+let hello = readFile("../../examples/customlang/mini/examples/hello.mini");
+print "--- direct ---";
+print interpret(hello);
+print "--- generated ---";
+writeFile(".out/hello_gen.rin", generate(hello));
+Autoload.include(".out/hello_gen.rin");
