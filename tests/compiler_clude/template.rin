@@ -1,0 +1,11 @@
+@import "compiler_clude";
+print cc_render("Hello {{name}}! {{name|upper}} {{name|lower}} [{{ missing }}] [{{missing|default:none}}] {{n|len}}", {"name": "Rin", "n": "abcd"});
+print cc_render("{{#if on}}YES{{else}}NO{{/if}} {{#unless on}}off{{/unless}}", {"on": true});
+print cc_render("{{#if on}}YES{{else}}NO{{/if}} {{#unless on}}off{{/unless}}", {"on": 0});
+print cc_render("{{#each xs}}[{{@n}}:{{.}}]{{/each}}", {"xs": ["a", "b", "c"]});
+print cc_render("{{#each people}}{{name}}={{age}};{{/each}}", {"people": [{"name": "A", "age": 1}, {"name": "B", "age": 2}]});
+print cc_render("{{#each rows}}{{#if ok}}+{{.}}{{else}}-{{@index}}{{/if}} {{/each}}", {"rows": [1, 2], "ok": true});
+print cc_render("{{user.name}} {{user.tags}}", {"user": {"name": "Z", "tags": [1, 2]}});
+print cc_render("{{#if empty}}x{{else}}empty list{{/if}}", {"empty": []});
+print cc_render("{{#bogus a}}z{{/bogus}} tail", {});
+print cc_render_template("old {{a}}", {"a": 1});
