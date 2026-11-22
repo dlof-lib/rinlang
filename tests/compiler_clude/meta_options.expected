@@ -1,0 +1,20 @@
+[] []
+Demo 2.0 ["dm", "demo"] {"case": "insensitive", "line_comment": "#", "block_comment": "", "strings": "'"}
+1:1  RESERVED  SELECT  <kw>
+1:8  IDENT  x
+1:10  RESERVED  FROM  <kw>
+1:15  MEMBER  table  <container:db> @db
+2:1  PUNCT  "
+2:2  IDENT  not
+2:6  IDENT  a
+2:8  IDENT  string
+2:14  PUNCT  "
+2:16  STRING  str
+2:22  PUNCT  /
+2:23  PUNCT  *
+2:25  IDENT  x
+2:27  PUNCT  *
+2:28  PUNCT  /
+2:29  EOF  
+[]
+["[<text>:1] case يقبل sensitive أو insensitive", "[<text>:2] @option المطلوب مفتاح=قيمة"] ["[<text>:3] خيار غير معروف: color"]
