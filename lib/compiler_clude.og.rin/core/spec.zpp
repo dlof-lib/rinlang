@@ -1,0 +1,608 @@
+// compiler_clude — الجزء 2: قارئ ccludelike.txt (الكلمات المحجوزة)
+//
+//  الجمل (تنتهي بسطر جديد أو ';' خارج [ ] أو '@' بعد ']'):
+//    @ns.lib.entry[args];             ترويسة/نقطة دخول          → spec.entry
+//    @import "path" [as alias];       استيراد ملف أو مكتبة      → spec.imports
+//    $token[ ... ]                    مجموعة token (أو $token.group[...] أو $group[...])
+//    container.name [ a , b ]@        حاوية: name و a و b محجوزة، وتُكتب name.a
+//    print  /  a b c                  كلمات محجوزة مفردة
+//  التعليقات: // سطر · /* كتلة */   (لإدراج // كرمز اكتبه بين علامتي اقتباس "//")
+//
+//  spec = { name, fname, entry, words{كلمة:مجموعة}, symbols{رمز:مجموعة}, groups{مجموعة:[عناصر]},
+//           containers{اسم:{members[],line}}, members{عضو:حاوية}, order[], imports[], files[], errors[], warnings[] }
+
+fun cc_new_spec(name) {
+    return {
+        "name": name, "file": "", "entry": nil,
+        "words": {}, "symbols": {}, "groups": {},
+        "containers": {}, "members": {}, "order": [],
+        "ops": {"infix": {}, "prefix": {}}, "options": {}, "exts": [], "version": "", "title": "",
+        "imports": [], "files": [], "errors": [], "warnings": []
+    };
+}
+fun cc_err(spec, line, msg) {
+    push(spec["errors"], "[" + spec["file"] + ":" + toString(line) + "] " + msg);
+}
+fun cc_warn(spec, line, msg) {
+    push(spec["warnings"], "[" + spec["file"] + ":" + toString(line) + "] " + msg);
+}
+
+// ---------------------------------------------------------------------------
+//  1) تقسيم النص إلى جُمل (يراعي النصوص والتعليقات وعمق الأقواس)
+// ---------------------------------------------------------------------------
+fun cc_split_statements(src, spec) {
+    let out = [];
+    let n = len(src);
+    let i = 0;
+    let line = 1;
+    let depth = 0;
+    let buf = "";
+    let start = 1;
+    let quote = "";
+    let openLine = 1;
+    while (i < n) {
+        let ch = charAt(src, i);
+        let two = substr(src, i, 2);
+        if (quote != "") {
+            buf = buf + ch;
+            if (ch == "\\" and i + 1 < n) {
+                buf = buf + charAt(src, i + 1);
+                i = i + 1;
+            } else if (ch == quote) {
+                quote = "";
+            } else if (ch == "\n") {
+                quote = "";
+                line = line + 1;
+            }
+            i = i + 1;
+        } else if (two == "//") {
+            while (i < n and charAt(src, i) != "\n") { i = i + 1; }
+        } else if (two == "/*") {
+            let closed = false;
+            i = i + 2;
+            while (i < n and !closed) {
+                if (substr(src, i, 2) == "*/") { closed = true; i = i + 2; }
+                else {
+                    if (charAt(src, i) == "\n") { line = line + 1; }
+                    i = i + 1;
+                }
+            }
+            if (!closed) { cc_err(spec, line, "تعليق /* غير مغلق"); }
+        } else if (ch == "\"" or ch == "'") {
+            if (trim(buf) == "") { start = line; }
+            quote = ch;
+            buf = buf + ch;
+            i = i + 1;
+        } else if (ch == "[") {
+            if (trim(buf) == "") { start = line; }
+            if (depth == 0) { openLine = line; }
+            depth = depth + 1;
+            buf = buf + ch;
+            i = i + 1;
+        } else if (ch == "]") {
+            if (depth > 0) { depth = depth - 1; }
+            else { cc_err(spec, line, "']' زائدة"); }
+            buf = buf + ch;
+            i = i + 1;
+            if (depth == 0) {
+                // '@' مباشرة بعد ']' (تتخطى الفراغ الأفقي) تُنهي الجملة
+                let j = i;
+                while (j < n and (charAt(src, j) == " " or charAt(src, j) == "\t")) { j = j + 1; }
+                if (j < n and charAt(src, j) == "@") {
+                    push(out, {"text": trim(buf), "line": start});
+                    buf = "";
+                    i = j + 1;
+                }
+            }
+        } else if (ch == ";" and depth == 0) {
+            if (trim(buf) != "") { push(out, {"text": trim(buf), "line": start}); }
+            buf = "";
+            i = i + 1;
+        } else if (ch == "\n") {
+            line = line + 1;
+            if (depth == 0) {
+                if (trim(buf) != "") { push(out, {"text": trim(buf), "line": start}); }
+                buf = "";
+            } else {
+                buf = buf + " ";
+            }
+            i = i + 1;
+        } else {
+            if (trim(buf) == "" and !cc_is_space(ch)) { start = line; }
+            buf = buf + ch;
+            i = i + 1;
+        }
+    }
+    if (depth > 0) { cc_err(spec, openLine, "'[' غير مغلقة"); }
+    if (quote != "") { cc_err(spec, line, "نص غير مغلق"); }
+    if (trim(buf) != "") { push(out, {"text": trim(buf), "line": start}); }
+    return out;
+}
+
+// ---------------------------------------------------------------------------
+//  2) عناصر القوائم: مفصولة بفاصلة أو فراغ، ويمكن اقتباسها
+// ---------------------------------------------------------------------------
+fun cc_items(inner) {
+    let out = [];
+    let n = len(inner);
+    let i = 0;
+    let cur = "";
+    let any = false;
+    while (i < n) {
+        let ch = charAt(inner, i);
+        if (ch == "\"" or ch == "'") {
+            let q = ch;
+            i = i + 1;
+            cur = "";
+            while (i < n and charAt(inner, i) != q) {
+                if (charAt(inner, i) == "\\" and i + 1 < n) { i = i + 1; }
+                cur = cur + charAt(inner, i);
+                i = i + 1;
+            }
+            i = i + 1;
+            push(out, cur);
+            cur = "";
+            any = false;
+        } else if (ch == "," or cc_is_space(ch) or ch == "،") {
+            if (any) { push(out, cur); cur = ""; any = false; }
+            i = i + 1;
+        } else {
+            cur = cur + ch;
+            any = true;
+            i = i + 1;
+        }
+    }
+    if (any) { push(out, cur); }
+    return out;
+}
+
+// تسجيل عنصر في مجموعة (كلمة أو رمز)
+fun cc_add_item(spec, item, group, line) {
+    if (!has(spec["groups"], group)) { spec["groups"][group] = []; }
+    if (!cc_in(spec["groups"][group], item)) { push(spec["groups"][group], item); }
+    if (cc_is_symbol_item(item)) {
+        if (has(spec["symbols"], item)) {
+            let sp = spec["symbols"][item];
+            let sopg = ["infix", "infixr", "prefix"];
+            if (sp != group and !(cc_in(sopg, sp) and cc_in(sopg, group))) {
+                cc_warn(spec, line, "الرمز '" + item + "' معرَّف مسبقاً في المجموعة " + sp);
+            }
+        } else {
+            spec["symbols"][item] = group;
+        }
+    } else {
+        if (has(spec["words"], item)) {
+            let prev = spec["words"][item];
+            let opg = ["infix", "infixr", "prefix"];
+            let benign = (prev == "namespace" and group == "container") or (prev == "container" and group == "namespace") or (cc_in(opg, prev) and cc_in(opg, group));
+            if (prev != group and !benign) {
+                cc_warn(spec, line, "الكلمة '" + item + "' معرَّفة مسبقاً في المجموعة " + prev);
+            }
+        } else {
+            spec["words"][item] = group;
+            push(spec["order"], item);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+//  3) تحليل جملة واحدة
+// ---------------------------------------------------------------------------
+// يعيد {head, items, hasBracket} : head = ما قبل '[' ، items = ما بداخلها
+fun cc_bracket_parts(st) {
+    let a = indexOf(st, "[");
+    if (a < 0) { return {"head": trim(st), "items": [], "hasBracket": false, "tail": ""}; }
+    let depth = 0;
+    let i = a;
+    let cend = -1;
+    while (i < len(st) and cend < 0) {
+        let ch = charAt(st, i);
+        if (ch == "[") { depth = depth + 1; }
+        else if (ch == "]") {
+            depth = depth - 1;
+            if (depth == 0) { cend = i; }
+        }
+        i = i + 1;
+    }
+    if (cend < 0) { cend = len(st); }
+    return {
+        "head": trim(substr(st, 0, a)),
+        "items": cc_items(substr(st, a + 1, cend - a - 1)),
+        "hasBracket": true,
+        "tail": trim(substr(st, cend + 1, len(st) - cend - 1))
+    };
+}
+
+fun cc_read_name(s, pos) {
+    let i = pos;
+    while (i < len(s) and (cc_is_alnum(charAt(s, i)) or charAt(s, i) == ".")) { i = i + 1; }
+    return substr(s, pos, i - pos);
+}
+
+fun cc_parse_directive(spec, st, line, ctx) {
+    let rest = trim(substr(st, 1, len(st) - 1));
+    if (rest == "") { cc_err(spec, line, "'@' بلا اسم"); return nil; }
+    if (substr(rest, 0, 6) == "import" and (len(rest) == 6 or cc_is_space(charAt(rest, 6)) or charAt(rest, 6) == "\"" or charAt(rest, 6) == "'")) {
+        cc_parse_import(spec, trim(substr(rest, 6, len(rest) - 6)), line, ctx);
+        return nil;
+    }
+    let kw = cc_read_name(rest, 0);
+    if (kw == "option" or kw == "version" or kw == "title" or kw == "ext") {
+        cc_parse_meta(spec, kw, trim(substr(rest, len(kw), len(rest) - len(kw))), line);
+        return nil;
+    }
+    let name = cc_read_name(rest, 0);
+    let parts = split(name, ".");
+    if (len(parts) != 3 or parts[0] == "" or parts[1] == "" or parts[2] == "") {
+        cc_err(spec, line, "ترويسة غير صالحة '@" + name + "' — المطلوب @نطاق.مكتبة.دخول[وسائط];");
+        return nil;
+    }
+    let bp = cc_bracket_parts(rest);
+    spec["entry"] = {"ns": parts[0], "lib": parts[1], "main": parts[2], "args": bp["items"], "line": line};
+    // النطاق كلمة محجوزة أيضاً
+    cc_add_item(spec, parts[0], "namespace", line);
+    return nil;
+}
+
+// @option مفتاح=قيمة · @version 1.2 · @title نص · @ext[ ml , mlang ]
+//   خيارات: case=insensitive · line_comment="#" · block_comment="/* */" (فارغ يعطّل) · strings="\"'"
+fun cc_parse_meta(spec, kw, rest, line) {
+    if (kw == "version") { spec["version"] = cc_unquote(rest); return nil; }
+    if (kw == "title") { spec["title"] = cc_unquote(rest); return nil; }
+    if (kw == "ext") {
+        let bp = cc_bracket_parts("x" + rest);
+        let k = 0;
+        while (k < len(bp["items"])) {
+            if (!cc_in(spec["exts"], bp["items"][k])) { push(spec["exts"], bp["items"][k]); }
+            k = k + 1;
+        }
+        return nil;
+    }
+    let eq = indexOf(rest, "=");
+    if (eq < 1) { cc_err(spec, line, "@option المطلوب مفتاح=قيمة"); return nil; }
+    let key = trim(substr(rest, 0, eq));
+    let val = cc_unquote(trim(substr(rest, eq + 1, len(rest) - eq - 1)));
+    let known = ["case", "line_comment", "block_comment", "strings"];
+    if (!cc_in(known, key)) { cc_warn(spec, line, "خيار غير معروف: " + key); }
+    if (key == "case" and val != "sensitive" and val != "insensitive") {
+        cc_err(spec, line, "case يقبل sensitive أو insensitive");
+        return nil;
+    }
+    spec["options"][key] = val;
+    return nil;
+}
+fun cc_unquote(s) {
+    let t = trim(s);
+    if (len(t) >= 2) {
+        let a = charAt(t, 0);
+        if ((a == "\"" or a == "'") and charAt(t, len(t) - 1) == a) { return substr(t, 1, len(t) - 2); }
+    }
+    return t;
+}
+
+fun cc_parse_import(spec, rest, line, ctx) {
+    let path = "";
+    let tail = "";
+    if (rest == "") { cc_err(spec, line, "@import بلا مسار"); return nil; }
+    let q = charAt(rest, 0);
+    if (q == "\"" or q == "'") {
+        let e = indexOf(substr(rest, 1, len(rest) - 1), q);
+        if (e < 0) { cc_err(spec, line, "نص غير مغلق في @import"); return nil; }
+        path = substr(rest, 1, e);
+        tail = trim(substr(rest, e + 2, len(rest) - e - 2));
+    } else {
+        let i = 0;
+        while (i < len(rest) and !cc_is_space(charAt(rest, i))) { i = i + 1; }
+        path = substr(rest, 0, i);
+        tail = trim(substr(rest, i, len(rest) - i));
+    }
+    let alias = "";
+    if (tail != "") {
+        let tp = split(tail, " ");
+        if (len(tp) == 2 and tp[0] == "as" and cc_is_ident(tp[1])) { alias = tp[1]; }
+        else { cc_err(spec, line, "بعد مسار @import يُتوقَّع: as اسم"); return nil; }
+    }
+    let found = cc_resolve_import(path, ctx["base"]);
+    if (found == nil) {
+        cc_err(spec, line, "تعذّر العثور على المستورَد '" + path + "'");
+        return nil;
+    }
+    if (cc_in(ctx["stack"], found)) {
+        cc_err(spec, line, "استيراد دائري: " + found);
+        return nil;
+    }
+    let src = "";
+    if (found == "builtin:compiler_clude") { src = cc_default_spec(); }
+    else { src = readFile(found); }
+    let sub = cc_parse_with(src, found, cc_dirname_or(found, ctx["base"]), ctx["stack"]);
+    cc_merge(spec, sub, alias, line);
+    push(spec["imports"], {"path": path, "resolved": found, "alias": alias, "line": line});
+    push(spec["files"], found);
+    return nil;
+}
+fun cc_dirname_or(path, fallback) {
+    if (substr(path, 0, 8) == "builtin:") { return fallback; }
+    return cc_dirname(path);
+}
+
+// مسارات البحث: ملف صريح ← مجلد بجوار الملف ← lib/ ← indsin/piano/
+fun cc_resolve_import(path, bdir) {
+    if (path == "compiler_clude") { return "builtin:compiler_clude"; }
+    let cands = [];
+    let isFile = contains(path, "/") or contains(path, ".txt");
+    if (isFile) {
+        push(cands, cc_join_path(bdir, path));
+        push(cands, path);
+        if (!contains(path, ".txt")) {
+            push(cands, cc_join_path(bdir, path + "/" + CC_SPEC_FILE));
+            push(cands, path + "/" + CC_SPEC_FILE);
+        }
+    } else {
+        let roots = [bdir, cc_join_path(bdir, "lib"), "lib", "indsin/piano", "."];
+        let r = 0;
+        while (r < len(roots)) {
+            push(cands, cc_join_path(roots[r], path + ".og.rin/" + CC_SPEC_FILE));
+            push(cands, cc_join_path(roots[r], path + "/" + CC_SPEC_FILE));
+            push(cands, cc_join_path(roots[r], path + ".txt"));
+            r = r + 1;
+        }
+    }
+    let i = 0;
+    while (i < len(cands)) {
+        if (fileExists(cands[i])) { return cands[i]; }
+        i = i + 1;
+    }
+    return nil;
+}
+
+// دمج spec مستورَد: بلا alias → مباشرة؛ مع alias → أعضاء حاوية باسم alias
+fun cc_merge(dst, src, alias, line) {
+    let e = 0;
+    while (e < len(src["errors"])) { push(dst["errors"], src["errors"][e]); e = e + 1; }
+    let w = 0;
+    while (w < len(src["warnings"])) { push(dst["warnings"], src["warnings"][w]); w = w + 1; }
+    let ks = keys(src["groups"]);
+    let g = 0;
+    while (g < len(ks)) {
+        let items = src["groups"][ks[g]];
+        let k = 0;
+        while (k < len(items)) {
+            if (alias == "") { cc_add_item(dst, items[k], ks[g], line); }
+            else { cc_add_member(dst, alias, items[k], line); }
+            k = k + 1;
+        }
+        g = g + 1;
+    }
+    let cs = keys(src["containers"]);
+    let c = 0;
+    if (alias != "") { c = len(cs); }   // مع alias كل شيء صار أعضاء الحاوية أعلاه
+    while (c < len(cs)) {
+        let mem = src["containers"][cs[c]]["members"];
+        let m = 0;
+        while (m < len(mem)) { cc_add_member(dst, cs[c], mem[m], line); m = m + 1; }
+        c = c + 1;
+    }
+    if (dst["entry"] == nil and src["entry"] != nil and alias == "") { dst["entry"] = src["entry"]; }
+    if (alias == "") {
+        let os = ["infix", "prefix"];
+        let oi = 0;
+        while (oi < len(os)) {
+            let ok = keys(src["ops"][os[oi]]);
+            let oj = 0;
+            while (oj < len(ok)) { dst["ops"][os[oi]][ok[oj]] = src["ops"][os[oi]][ok[oj]]; oj = oj + 1; }
+            oi = oi + 1;
+        }
+        let opk = keys(src["options"]);
+        let op = 0;
+        while (op < len(opk)) {
+            if (!has(dst["options"], opk[op])) { dst["options"][opk[op]] = src["options"][opk[op]]; }
+            op = op + 1;
+        }
+        let ex = 0;
+        while (ex < len(src["exts"])) {
+            if (!cc_in(dst["exts"], src["exts"][ex])) { push(dst["exts"], src["exts"][ex]); }
+            ex = ex + 1;
+        }
+    }
+}
+
+fun cc_add_member(spec, cname, member, line) {
+    if (!has(spec["containers"], cname)) {
+        spec["containers"][cname] = {"members": [], "line": line};
+        cc_add_item(spec, "container", "container", line);
+        cc_add_item(spec, cname, "container", line);
+    }
+    if (!cc_in(spec["containers"][cname]["members"], member)) {
+        push(spec["containers"][cname]["members"], member);
+    }
+    if (!has(spec["members"], member)) { spec["members"][member] = cname; }
+    let key = cname + "." + member;
+    if (!has(spec["words"], key)) {
+        spec["words"][key] = "container:" + cname;
+        push(spec["order"], key);
+    }
+}
+
+fun cc_parse_statement(spec, st, line, ctx) {
+    let first = charAt(st, 0);
+    if (first == "@") { cc_parse_directive(spec, st, line, ctx); return nil; }
+    if (first == "$") {
+        let bp = cc_bracket_parts(st);
+        if (!bp["hasBracket"]) { cc_err(spec, line, "بعد " + bp["head"] + " يُتوقَّع [ ... ]"); return nil; }
+        let head = substr(bp["head"], 1, len(bp["head"]) - 1);
+        let kind = head;
+        let group = "";
+        let dot = indexOf(head, ".");
+        if (dot >= 0) { kind = substr(head, 0, dot); group = substr(head, dot + 1, len(head) - dot - 1); }
+        if (kind == "") { cc_err(spec, line, "'$' بلا اسم"); return nil; }
+        let isOp = (kind == "infix" or kind == "infixr" or kind == "prefix");
+        let prec = 0;
+        if (isOp) {
+            if (group != "" and group != kind) { prec = toNumber(group); }
+            else if (kind == "prefix") { prec = 100; }
+            else { cc_err(spec, line, "$" + kind + " يحتاج أولوية: $" + kind + ".10[ + - ]"); return nil; }
+            if (prec != prec) { cc_err(spec, line, "أولوية غير رقمية في $" + head); return nil; }
+            group = kind;
+        }
+        if (group == "") { group = kind; }
+        if (!has(spec["groups"], group)) { spec["groups"][group] = []; }
+        let k = 0;
+        while (k < len(bp["items"])) {
+            cc_add_item(spec, bp["items"][k], group, line);
+            if (isOp) {
+                let slot = "infix";
+                if (kind == "prefix") { slot = "prefix"; }
+                spec["ops"][slot][bp["items"][k]] = {"prec": prec, "right": kind == "infixr"};
+            }
+            k = k + 1;
+        }
+        if (bp["tail"] != "") { cc_warn(spec, line, "نص بعد ] تم تجاهله: " + bp["tail"]); }
+        return nil;
+    }
+    if (substr(st, 0, 9) == "container" and (len(st) == 9 or charAt(st, 9) == "." or cc_is_space(charAt(st, 9)) or charAt(st, 9) == "[")) {
+        let bp = cc_bracket_parts(st);
+        let head = bp["head"];
+        let cname = "";
+        if (len(head) > 10 and charAt(head, 9) == ".") { cname = trim(substr(head, 10, len(head) - 10)); }
+        if (!cc_is_ident(cname)) { cc_err(spec, line, "المطلوب container.اسم [ أعضاء ]"); return nil; }
+        if (!bp["hasBracket"]) { cc_err(spec, line, "container." + cname + " بلا [ أعضاء ]"); return nil; }
+        if (!has(spec["containers"], cname)) {
+            spec["containers"][cname] = {"members": [], "line": line};
+            cc_add_item(spec, "container", "container", line);
+            cc_add_item(spec, cname, "container", line);
+        }
+        let k = 0;
+        while (k < len(bp["items"])) {
+            if (!cc_is_ident(bp["items"][k])) { cc_err(spec, line, "عضو غير صالح '" + bp["items"][k] + "' في " + cname); }
+            else { cc_add_member(spec, cname, bp["items"][k], line); cc_add_item(spec, bp["items"][k], "container:" + cname, line); }
+            k = k + 1;
+        }
+        return nil;
+    }
+    // كلمات مفردة
+    let items = cc_items(st);
+    let k = 0;
+    while (k < len(items)) { cc_add_item(spec, items[k], "word", line); k = k + 1; }
+    return nil;
+}
+
+// ---------------------------------------------------------------------------
+//  4) الواجهة العامة
+// ---------------------------------------------------------------------------
+fun cc_parse_with(src, fname, bdir, stack) {
+    let spec = cc_new_spec(fname);
+    spec["file"] = fname;
+    let st = [];
+    let i = 0;
+    while (i < len(stack)) { push(st, stack[i]); i = i + 1; }
+    push(st, fname);
+    let ctx = {"base": bdir, "stack": st};
+    let stmts = cc_split_statements(src, spec);
+    let k = 0;
+    while (k < len(stmts)) {
+        cc_parse_statement(spec, stmts[k]["text"], stmts[k]["line"], ctx);
+        k = k + 1;
+    }
+    cc_finish(spec);
+    return spec;
+}
+
+// قائمة الرموز مرتبة بالطول (لمطابقة الأطول أولاً في المحلل المفرداتي)
+fun cc_finish(spec) {
+    spec["sym_sorted"] = cc_sort_by_len_desc(keys(spec["symbols"]));
+    return spec;
+}
+
+// نص → spec  (الاستيراد النسبي يُحَلّ من مجلد العمل)
+fun cc_parse(src) { return cc_parse_with(src, "<text>", ".", []); }
+// ملف → spec
+fun cc_load(path) {
+    if (!fileExists(path)) {
+        let s = cc_new_spec(path);
+        s["file"] = path;
+        push(s["errors"], "[" + path + ":0] الملف غير موجود");
+        return cc_finish(s);
+    }
+    let spec = cc_parse_with(readFile(path), path, cc_dirname(path), []);
+    push(spec["files"], path);
+    return spec;
+}
+// ccludelike.txt الافتراضي (المضمَّن)
+fun cc_load_default() { return cc_parse_with(cc_default_spec(), "builtin:compiler_clude", ".", []); }
+
+fun cc_ok(spec) { return len(spec["errors"]) == 0; }
+fun cc_is_reserved(spec, name) { return has(spec["words"], name) or has(spec["symbols"], name); }
+fun cc_group_of(spec, name) {
+    if (has(spec["words"], name)) { return spec["words"][name]; }
+    if (has(spec["symbols"], name)) { return spec["symbols"][name]; }
+    return nil;
+}
+// كل الكلمات المحجوزة (بترتيب التعريف)
+fun cc_reserved_words(spec) { return spec["order"]; }
+// كل الرموز المحجوزة (الأطول أولاً)
+fun cc_reserved_symbols(spec) { return spec["sym_sorted"]; }
+// فحص اسم يريد المستخدم استعماله معرّفاً: nil إن صلح وإلا رسالة خطأ
+fun cc_check_name(spec, name) {
+    if (!cc_is_ident(name)) { return "'" + name + "' ليس معرّفاً صالحاً"; }
+    if (has(spec["words"], name)) { return "'" + name + "' كلمة محجوزة (" + spec["words"][name] + ")"; }
+    return nil;
+}
+
+// عرض مقروء
+fun cc_format_spec(spec) {
+    let out = [];
+    push(out, "ملف: " + spec["file"]);
+    if (spec["entry"] != nil) {
+        let e = spec["entry"];
+        push(out, "دخول: @" + e["ns"] + "." + e["lib"] + "." + e["main"] + "[" + join(e["args"], ", ") + "]");
+    }
+    let gs = keys(spec["groups"]);
+    let g = 0;
+    while (g < len(gs)) {
+        push(out, "$" + gs[g] + "[ " + join(spec["groups"][gs[g]], " ") + " ]");
+        g = g + 1;
+    }
+    let cs = keys(spec["containers"]);
+    let c = 0;
+    while (c < len(cs)) {
+        push(out, "container." + cs[c] + " [ " + join(spec["containers"][cs[c]]["members"], " , ") + " ]@");
+        c = c + 1;
+    }
+    let im = 0;
+    while (im < len(spec["imports"])) {
+        let x = spec["imports"][im];
+        let a = "";
+        if (x["alias"] != "") { a = " as " + x["alias"]; }
+        push(out, "@import \"" + x["path"] + "\"" + a + "   → " + x["resolved"]);
+        im = im + 1;
+    }
+    push(out, "كلمات: " + toString(len(spec["order"])) + " · رموز: " + toString(len(spec["sym_sorted"])));
+    let e2 = 0;
+    while (e2 < len(spec["errors"])) { push(out, "خطأ " + spec["errors"][e2]); e2 = e2 + 1; }
+    let w2 = 0;
+    while (w2 < len(spec["warnings"])) { push(out, "تنبيه " + spec["warnings"][w2]); w2 = w2 + 1; }
+    return join(out, "\n");
+}
+
+// ccludelike.txt الافتراضي — مطابق حرفياً لملف المكتبة ccludelike.txt
+fun cc_default_spec() {
+    let L = [];
+    push(L, "// ccludelike.txt — الكلمات المحجوزة الافتراضية لمكتبة compiler_clude");
+    push(L, "//   $token[]  ·  $token[ ; : / ]  ·  container.inlr [ img , text ]@  ·  print  ·  @import");
+    push(L, "");
+    push(L, "@inlr.compiler_clude.main[];");
+    push(L, "");
+    push(L, "// @import \"other.txt\";            // استيراد ملف");
+    push(L, "// @import \"mylib\" as my;           // استيراد مكتبة (كلماتها تُكتب my.كلمة)");
+    push(L, "");
+    push(L, "// @title \"MyLang\";  @version \"1.0\";  @ext[ my ];");
+    push(L, "// @option case=insensitive;  @option line_comment=\"#\";  @option strings=\"'\";");
+    push(L, "// $infix.10[ + - ]   $infix.20[ * / ]   $infixr.30[ ^ ]   $prefix.40[ - ! ]   (أولويات للمحلّل)");
+    push(L, "");
+    push(L, "$token[]");
+    push(L, "$token[ ; : / ]");
+    push(L, "$token.keyword[ let fun if else while for return break continue true false nil and or import export ]");
+    push(L, "container.inlr [ img , text ]@");
+    push(L, "print");
+    return join(L, "\n") + "\n";
+}
