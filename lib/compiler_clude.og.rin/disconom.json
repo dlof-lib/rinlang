@@ -1,0 +1,31 @@
+{
+  "disconom": 1,
+  "name": "compiler_clude",
+  "version": "1.1.0",
+  "description": "compiler_clude — مكتبة لإنشاء لغات البرمجة والقوالب والمكتبات بـ Rin. الكلمات المحجوزة تُعرَّف في ملف ccludelike.txt: $token[] · $token[ ; : / ] · container.inlr [ img , text ]@ · print · @import · @inlr.compiler_clude.main[];",
+  "rin": ">=1.0.0",
+  "authors": [
+    "Rin"
+  ],
+  "license": "MIT",
+  "keywords": [
+    "compiler",
+    "lexer",
+    "language",
+    "template",
+    "library",
+    "reserved-words",
+    "ccludelike"
+  ],
+  "main": "main.zpp",
+  "parts": [
+    "main.zpp",
+    "core/spec.zpp",
+    "core/lexer.zpp",
+    "core/tools.zpp",
+    "core/parser.zpp",
+    "core/scaffold.zpp",
+    "core/studio.zpp",
+    "core/cli.zpp"
+  ]
+}
