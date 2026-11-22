@@ -1,0 +1,237 @@
+// compiler_clude — الجزء 5: لبنات المحلّل النحوي — مؤشّر رموز + Pratt للتعابير + مقيِّم
+//
+//  الأولويات تأتي من ccludelike.txt:
+//      $infix.10[ + - ]     يسار-الترابط، الأولوية 10
+//      $infix.20[ * / % ]
+//      $infixr.30[ ^ ]      يمين-الترابط
+//      $prefix.40[ - ! ]    أحادي
+//      $infix.2[ and ]      الكلمات المحجوزة تصلح عوامل أيضاً
+//  AST: {kind: num|str|var|lit|member|bin|un|call|error, ...}
+
+fun cc_cursor(tokens) { return {"tokens": tokens, "pos": 0, "errors": []}; }
+fun cc_peek(c) { return c["tokens"][c["pos"]]; }
+fun cc_peek_at(c, k) {
+    let p = c["pos"] + k;
+    if (p >= len(c["tokens"])) { p = len(c["tokens"]) - 1; }
+    return c["tokens"][p];
+}
+fun cc_next(c) {
+    let t = cc_peek(c);
+    if (t["type"] != "EOF") { c["pos"] = c["pos"] + 1; }
+    return t;
+}
+// الرمز الحالي قيمته v وليس نصاً؟
+fun cc_at(c, v) {
+    let t = cc_peek(c);
+    return t["value"] == v and t["type"] != "STRING";
+}
+fun cc_accept(c, v) {
+    if (cc_at(c, v)) { cc_next(c); return true; }
+    return false;
+}
+fun cc_perr(c, msg) {
+    let t = cc_peek(c);
+    push(c["errors"], "[" + toString(t["line"]) + ":" + toString(t["col"]) + "] " + msg);
+}
+fun cc_expect(c, v) {
+    if (cc_accept(c, v)) { return true; }
+    cc_perr(c, "المتوقَّع '" + v + "' ووُجد '" + cc_peek(c)["value"] + "'");
+    return false;
+}
+fun cc_is_op_tok(t) { return t["type"] == "SYMBOL" or t["type"] == "RESERVED"; }
+
+fun cc_expr(spec, c, minp) {
+    let left = cc_primary(spec, c);
+    let go = true;
+    while (go) {
+        let t = cc_peek(c);
+        if (cc_is_op_tok(t) and has(spec["ops"]["infix"], t["value"])) {
+            let info = spec["ops"]["infix"][t["value"]];
+            if (info["prec"] < minp) { go = false; }
+            else {
+                cc_next(c);
+                let nextMin = info["prec"] + 1;
+                if (info["right"]) { nextMin = info["prec"]; }
+                let right = cc_expr(spec, c, nextMin);
+                left = {"kind": "bin", "op": t["value"], "left": left, "right": right, "line": t["line"]};
+            }
+        } else { go = false; }
+    }
+    return left;
+}
+fun cc_primary(spec, c) {
+    let t = cc_next(c);
+    let ty = t["type"];
+    if (ty == "NUMBER") { return {"kind": "num", "value": toNumber(t["value"]), "line": t["line"]}; }
+    if (ty == "STRING") { return {"kind": "str", "value": t["value"], "line": t["line"]}; }
+    if (ty == "MEMBER") { return {"kind": "member", "container": t["container"], "name": t["value"], "line": t["line"]}; }
+    if (ty == "RESERVED" and (t["value"] == "true" or t["value"] == "false" or t["value"] == "nil")) {
+        let v = nil;
+        if (t["value"] == "true") { v = true; } else if (t["value"] == "false") { v = false; }
+        return {"kind": "lit", "value": v, "line": t["line"]};
+    }
+    if (cc_is_op_tok(t) and has(spec["ops"]["prefix"], t["value"])) {
+        let arg = cc_expr(spec, c, spec["ops"]["prefix"][t["value"]]["prec"]);
+        return {"kind": "un", "op": t["value"], "arg": arg, "line": t["line"]};
+    }
+    if (ty == "IDENT") {
+        if (cc_at(c, "(")) {
+            cc_next(c);
+            let args = [];
+            if (!cc_at(c, ")")) {
+                push(args, cc_expr(spec, c, 0));
+                while (cc_accept(c, ",")) { push(args, cc_expr(spec, c, 0)); }
+            }
+            cc_expect(c, ")");
+            return {"kind": "call", "name": t["value"], "args": args, "line": t["line"]};
+        }
+        return {"kind": "var", "name": t["value"], "line": t["line"]};
+    }
+    if (ty != "STRING" and t["value"] == "(") {
+        let inner = cc_expr(spec, c, 0);
+        cc_expect(c, ")");
+        return inner;
+    }
+    push(c["errors"], "[" + toString(t["line"]) + ":" + toString(t["col"]) + "] تعبير غير متوقع عند '" + t["value"] + "'");
+    return {"kind": "error", "line": t["line"]};
+}
+
+// رموز → {ast, errors}
+fun cc_parse_expr(spec, tokens) {
+    let c = cc_cursor(tokens);
+    let ast = cc_expr(spec, c, 0);
+    if (cc_peek(c)["type"] != "EOF") { cc_perr(c, "رمز زائد '" + cc_peek(c)["value"] + "'"); }
+    return {"ast": ast, "errors": c["errors"]};
+}
+// مصدر فيه جمل مفصولة بـ ';' → {asts, errors}
+fun cc_parse_statements(spec, src) {
+    let r = cc_lex(spec, src);
+    let asts = [];
+    let errors = [];
+    let e = 0;
+    while (e < len(r["errors"])) { push(errors, r["errors"][e]); e = e + 1; }
+    let cur = [];
+    let i = 0;
+    while (i < len(r["tokens"])) {
+        let t = r["tokens"][i];
+        if ((t["value"] == ";" and t["type"] != "STRING") or t["type"] == "EOF") {
+            if (len(cur) > 0) {
+                push(cur, cc_tok("EOF", "", t["line"], t["col"]));
+                let p = cc_parse_expr(spec, cur);
+                push(asts, p["ast"]);
+                let k = 0;
+                while (k < len(p["errors"])) { push(errors, p["errors"][k]); k = k + 1; }
+            }
+            cur = [];
+        } else { push(cur, t); }
+        i = i + 1;
+    }
+    return {"asts": asts, "errors": errors};
+}
+
+fun cc_ast_format(a) {
+    let k = a["kind"];
+    if (k == "num") { return toString(a["value"]); }
+    if (k == "str") { return "\"" + a["value"] + "\""; }
+    if (k == "var") { return a["name"]; }
+    if (k == "lit") { return toString(a["value"]); }
+    if (k == "member") { return a["container"] + "." + a["name"]; }
+    if (k == "bin") { return "(" + a["op"] + " " + cc_ast_format(a["left"]) + " " + cc_ast_format(a["right"]) + ")"; }
+    if (k == "un") { return "(" + a["op"] + " " + cc_ast_format(a["arg"]) + ")"; }
+    if (k == "call") {
+        let parts = [];
+        let i = 0;
+        while (i < len(a["args"])) { push(parts, cc_ast_format(a["args"][i])); i = i + 1; }
+        return "(call " + a["name"] + " " + join(parts, " ") + ")";
+    }
+    return "<error>";
+}
+
+// مقيِّم: env قاموس متغيرات. القسمة على صفر ⇒ nil
+fun cc_eval(a, env) {
+    let k = a["kind"];
+    if (k == "num" or k == "str" or k == "lit") { return a["value"]; }
+    if (k == "var") {
+        if (has(env, a["name"])) { return env[a["name"]]; }
+        return nil;
+    }
+    if (k == "member") { return a["container"] + "." + a["name"]; }
+    if (k == "un") {
+        let v = cc_eval(a["arg"], env);
+        if (a["op"] == "-") { return 0 - v; }
+        if (a["op"] == "+") { return v; }
+        if (a["op"] == "!" or a["op"] == "not") { return !v; }
+        return nil;
+    }
+    if (k == "call") {
+        let args = [];
+        let i = 0;
+        while (i < len(a["args"])) { push(args, cc_eval(a["args"][i], env)); i = i + 1; }
+        let f = a["name"];
+        if (f == "min" and len(args) == 2) { return min(args[0], args[1]); }
+        if (f == "max" and len(args) == 2) { return max(args[0], args[1]); }
+        if (f == "abs" and len(args) == 1) { return abs(args[0]); }
+        if (f == "sqrt" and len(args) == 1) { return sqrt(args[0]); }
+        if (f == "len" and len(args) == 1) { return len(args[0]); }
+        return nil;
+    }
+    if (k == "bin") {
+        let op = a["op"];
+        if (op == "and" or op == "&&") {
+            let l = cc_eval(a["left"], env);
+            if (!l) { return l; }
+            return cc_eval(a["right"], env);
+        }
+        if (op == "or" or op == "||") {
+            let l2 = cc_eval(a["left"], env);
+            if (l2) { return l2; }
+            return cc_eval(a["right"], env);
+        }
+        let x = cc_eval(a["left"], env);
+        let y = cc_eval(a["right"], env);
+        if (op == "+") { return x + y; }
+        if (op == "-") { return x - y; }
+        if (op == "*") { return x * y; }
+        if (op == "/") { if (y == 0) { return nil; } return x / y; }
+        if (op == "%") { if (y == 0) { return nil; } return x % y; }
+        if (op == "^") { return pow(x, y); }
+        if (op == "==") { return x == y; }
+        if (op == "!=") { return x != y; }
+        if (op == "<") { return x < y; }
+        if (op == ">") { return x > y; }
+        if (op == "<=") { return x <= y; }
+        if (op == ">=") { return x >= y; }
+        return nil;
+    }
+    return nil;
+}
+// مصدر → قيمة آخر جملة   (أخطاء ⇒ nil؛ راجع cc_parse_statements للتفاصيل)
+fun cc_run_expr(spec, src, env) {
+    let p = cc_parse_statements(spec, src);
+    if (len(p["errors"]) > 0 or len(p["asts"]) == 0) { return nil; }
+    return cc_eval(p["asts"][len(p["asts"]) - 1], env);
+}
+
+// AST تعبير → كود Rin مكافئ (^→pow · str→toString · الباقي كما هو)
+fun cc_ast_to_rin(a) {
+    let k = a["kind"];
+    if (k == "num") { return toString(a["value"]); }
+    if (k == "str") { return "\"" + replace(replace(replace(a["value"], "\\", "\\\\"), "\"", "\\\""), "\n", "\\n") + "\""; }
+    if (k == "var") { return a["name"]; }
+    if (k == "lit") { if (a["value"] == nil) { return "nil"; } return toString(a["value"]); }
+    if (k == "member") { return "\"" + a["container"] + "." + a["name"] + "\""; }
+    if (k == "un") { return "(" + a["op"] + cc_ast_to_rin(a["arg"]) + ")"; }
+    if (k == "bin") {
+        if (a["op"] == "^") { return "pow(" + cc_ast_to_rin(a["left"]) + ", " + cc_ast_to_rin(a["right"]) + ")"; }
+        return "(" + cc_ast_to_rin(a["left"]) + " " + a["op"] + " " + cc_ast_to_rin(a["right"]) + ")";
+    }
+    if (k == "call") {
+        let parts = [];
+        let i = 0;
+        while (i < len(a["args"])) { push(parts, cc_ast_to_rin(a["args"][i])); i = i + 1; }
+        let name = a["name"];
+        if (name == "str") { name = "toString"; }
+        return name + "(" + join(parts, ", ") + ")";
+    }
+    return "nil";
+}
