@@ -1,0 +1,59 @@
+// Autoload: تحميل كسول للحاويات والمكتبات عند أول إشارة لاسم غير معرَّف — docs/autoload.md
+Autoload.clear();
+let T = "_autoload_tmp/";
+writeFile(T + "Shop.rin", "print \"Shop loaded\";\n@container=Shop\n    let items = 3;\n    fun total() { return items * 10; }\n.end/container\n");
+writeFile(T + "cfg.rin", "let cfg = {mode: \"dev\", port: 80};\n");
+writeFile(T + "plugin_file.rin", "@container=Plugin\n    let name = \"p1\";\n.end/container\n");
+writeFile(T + "users.rin", "let app_users = [1, 2, 3];\n");
+writeFile(T + "util/strings.rin", "let stringsLoaded = \"yes\";\n");
+writeFile(T + "Broken.rin", "let x = ;\n");
+
+// 1) بلا محمِّلات: الاسم الغائب يبقى خطأً عادياً
+try { print Shop.items; } catch (e) { print "غير معرَّف"; }
+print Autoload.loaders(), Autoload.loaded();
+
+// 2) محمِّل مجلد: قراءة/نداء/كتابة عبر فضاء الأسماء تُحمِّل الحاوية عند أول لمسة
+print Autoload.dir(T);
+print Autoload.isLoaded("Shop");
+print Shop.items;
+print Shop.total();
+Shop.items = 5;
+print Shop.items, Shop.total();
+print Autoload.loaded(), Autoload.isLoaded("Shop");
+
+// 3) متغيّر عادي (غير حاوية) يُحمَّل بالقراءة وبمسار الخاصية
+print cfg["mode"];
+print cfg.port;
+
+// 4) مسار متداخل صريح + Autoload.load
+print Autoload.load("util.strings"), stringsLoaded;
+print Autoload.load("Shop"), Autoload.load("nothing_here");
+print Autoload.load("../Shop"), Autoload.load("a/b"), Autoload.load("");
+
+// 5) محمِّل دالة (أولاً بـ prepend) مع include مرة واحدة
+let seen = [];
+let ld = fun(name) { push(seen, name); if (name == "Plugin") { Autoload.include(T + "plugin_file.rin"); } };
+print Autoload.register(ld, true), Autoload.loaders();
+print Plugin.name;
+print seen;
+print Autoload.include(T + "plugin_file.rin"), Autoload.include(T + "missing.rin");
+try { print Nope.x; } catch (e) { print "Nope غير معرَّف"; }
+print seen;
+
+// 6) prefix: الاسم app_users ← users.rin
+Autoload.dir(T, {prefix: "app_", ext: [".rin"]});
+print len(app_users);
+
+// 7) أخطاء: ملف تالف يُنسَب إلى اسمه، وحماية إعادة الدخول
+try { Autoload.load("Broken"); } catch (e) { print "ملف تالف"; }
+Autoload.register(fun(name) { if (name == "Loop") { print Loop; } });
+try { Loop; } catch (e) { print "لا دوران لانهائي"; }
+
+// 8) unregister / clear
+print Autoload.unregister(ld), Autoload.unregister(ld), Autoload.loaders();
+print Autoload.clear(), Autoload.loaders(), Autoload.loaded();
+try { print Brand.x; } catch (e) { print "بعد clear: لا تحميل"; }
+try { Autoload.register(5); } catch (e) { print "المحمِّل دالة"; }
+try { Autoload.dir(T, {bogus: 1}); } catch (e) { print "خيار مجهول"; }
+try { Autoload.dir(T, {ext: [".exe"]}); } catch (e) { print "امتداد مرفوض"; }
+for (let f in ["Shop.rin", "cfg.rin", "plugin_file.rin", "users.rin", "util/strings.rin", "Broken.rin"]) { deleteFile(T + f); }
