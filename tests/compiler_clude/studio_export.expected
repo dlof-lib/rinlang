@@ -1,0 +1,29 @@
+10
+[] Toy ["toy"]
+toy toy run.rin syntax.rinsyntax.json
+Toy toy // 9
+["container", "return", "while", "false", "print", "inlr", "else", "true", "text", "let", "fun", "nil", "and", "img", "if", "or"]
+["==", "!=", "<=", ">=", "(", ")", "{", "}", ",", ";", ":", "=", "<", ">", "+", "-", "*", "/", "%", "^", "!"]
+comment #6A9955
+blockComment #6A9955
+string #CE9178
+string #CE9178
+number #B5CEA8
+member:inlr #4EC9B0
+keyword #C586C0
+operator #D4D4D4
+identifier #9CDCFE
+// عيّنة بلغة Toy
+1 + 2 * 3;
+(4 - 1) ^ 2;
+-5 + 10 % 4;
+
+comment #[^\n]*
+string '(?:[^'\\]|\\.)*'
+number \b[0-9]+(?:\.[0-9]+)?\b
+member:db (?i)(?<![\p{L}\p{N}_])db\.(?:table)(?![\p{L}\p{N}_])
+keyword (?i)(?<![\p{L}\p{N}_])(?:container|select|table|db)(?![\p{L}\p{N}_])
+identifier [\p{L}_][\p{L}\p{N}_]*
+معرّف غير صالح: 1x
+ccludelike فيه أخطاء: [<text>:1] '[' غير مغلقة
+{"id":"q","name":"Q","version":"0.1.0","developer":"me","fileExtension":"q","description":"Q — لغة مبنية على compiler_clude (الكلمات المحجوزة في ccludelike.txt)","entry":{"lexer":"Lexer.rin","parser":"Parser.rin","interpreter":"Interpreter.rin","codegen":"CodeGen.rin","run":"run.rin"},"syntax":"syntax.rinsyntax.json","official":false,"createdWithRinLangVersion":"langkit-1.0","clude":{"spec":"ccludelike.txt","generator":"compiler_clude 1.1.0"}}
