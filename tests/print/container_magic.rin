@@ -1,0 +1,49 @@
+// خُطّافات الأعضاء الغائبة: on get/set/has/drop/call/invoke (docs/container_magic.md)
+
+@container=Bag
+    state fixed kind = "bag";
+    state items = {};
+    let real = 10;
+    fun hello() { return "hello"; }
+    on get(name) { return "get:" + name; }
+    on set(name, value) { items[name] = value; }
+    on has(name) { return name == "ghost"; }
+    on drop(name) { items[name] = nil; }
+    on call(name, args) { return name + "/" + len(args); }
+    on invoke(args) { return "invoked:" + len(args); }
+.end/container
+
+// الأعضاء الموجودة تغلب الخُطّاف
+print Bag.real;
+print Bag.hello();
+// غائب: get / call / invoke
+print Bag.nothing;
+print Bag.dynamic(1, 2, 3);
+print Bag(7, 8);
+// غائب: set
+Bag.color = "red";
+print container.get("Bag", "items")["color"];
+// has / drop
+print container.has("Bag", "real");
+print container.has("Bag", "ghost");
+print container.has("Bag", "other");
+container.deleteField("Bag", "color");
+print container.get("Bag", "items")["color"];
+
+// state fixed
+@container=Cfg
+    state fixed version = 2;
+    state hits = 0;
+    fun bump() { hits = hits + 1; }
+    fun tryChange() { version = 3; }
+.end/container
+Cfg.bump();
+print Cfg.version, Cfg.hits;
+try { Cfg.tryChange(); } catch (e) { print "fixed blocked"; }
+print Cfg.version;
+
+// حاوية بلا خُطّافات: السلوك القديم (خطأ عضو غير موجود)
+@container=Plain
+    let a = 1;
+.end/container
+try { print Plain.zzz; } catch (e) { print "plain still errors"; }
