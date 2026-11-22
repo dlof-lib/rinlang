@@ -481,6 +481,7 @@ Interpreter::Flow Interpreter::vmLoop(vm::RunState& rs, Value& ret) {
                 }
             }
             Value* slot = findVarSlot(env.get(), name);
+            if (!slot && autoloadActive_ && autoloadMiss(name, env, in.b)) slot = findVarSlot(env.get(), name); // Autoload
             if (!slot) throw undefinedVariableErr(name, in.b, env);
             stack.push_back(*slot);
             break;
@@ -707,6 +708,7 @@ Interpreter::Flow Interpreter::vmLoop(vm::RunState& rs, Value& ret) {
                 }
                 if (!got) {
                     Value* slot = findVarSlot(env.get(), vname);
+                    if (!slot && autoloadActive_ && autoloadMiss(vname, env, vline)) slot = findVarSlot(env.get(), vname); // Autoload
                     if (!slot) throw undefinedVariableErr(vname, vline, env);
                     obj = *slot;
                 }
@@ -728,7 +730,7 @@ Interpreter::Flow Interpreter::vmLoop(vm::RunState& rs, Value& ret) {
         }
         // ---- Namespaces (container / group / Volume) ----
         case Op::NsGet: {
-            if (!nsRoots.empty()) {
+            if (!nsRoots.empty() || autoloadActive_) {
                 auto ge = std::static_pointer_cast<GetExpr>(P->exprs[static_cast<size_t>(in.a)]);
                 if (auto ns = nsResolveExpr(ge->object, envs.back())) {
                     f->pc = pc;
@@ -740,7 +742,7 @@ Interpreter::Flow Interpreter::vmLoop(vm::RunState& rs, Value& ret) {
         }
         case Op::NsSetTest: {
             bool isNs = false;
-            if (!nsRoots.empty()) {
+            if (!nsRoots.empty() || autoloadActive_) {
                 auto se = std::static_pointer_cast<SetExpr>(P->exprs[static_cast<size_t>(in.a)]);
                 isNs = nsResolveExpr(se->object, envs.back()) != nullptr;
             }
