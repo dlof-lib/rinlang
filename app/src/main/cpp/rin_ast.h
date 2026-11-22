@@ -876,6 +876,7 @@ struct LifecycleHookStmt : Stmt { LifecycleHookStmt() { stmtKind = StmtKind::Lif
 struct StateDeclStmt : Stmt { StateDeclStmt() { stmtKind = StmtKind::StateDeclStmt; }
     std::string name;
     ExprPtr initializer;
+    bool fixed = false; // state fixed x = v;  -> يُهيَّأ مرة واحدة فقط؛ أي إسناد لاحق يُرفض بخطأ واضح (docs/EXTRA13.md)
 };
 
 // ---- Tree (RCS-1.0 §3.5, Phase 2) ----
