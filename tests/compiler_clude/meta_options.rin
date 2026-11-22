@@ -1,0 +1,9 @@
+@import "compiler_clude";
+let s = cc_parse("@title \"Demo\"\n@version 2.0\n@ext[ dm , demo ]\n@option case=insensitive\n@option line_comment=\"#\"\n@option block_comment=\"\"\n@option strings=\"'\"\n$kw[ select from ]\ncontainer.db [ table ]@");
+print s["errors"], s["warnings"];
+print s["title"], s["version"], s["exts"], s["options"];
+let r = cc_lex(s, "SELECT x FROM DB.Table # note\n\"not a string\" 'str' /* x */");
+print cc_format_tokens(r["tokens"]);
+print r["errors"];
+let b = cc_parse("@option case=weird\n@option nokey\n@option color=red");
+print b["errors"], b["warnings"];
