@@ -1,0 +1,389 @@
+// compiler_clude — الجزء 4: أدوات (JSON · تصدير · فرق · فحص · اقتراح · تلوين · إحصاء)
+
+// ---------------------------------------------------------------------------
+//  مسافة التحرير (Levenshtein) واقتراح "هل تقصد؟"
+// ---------------------------------------------------------------------------
+fun cc_distance(a, b) {
+    let la = len(a);
+    let lb = len(b);
+    let prev = [];
+    let j = 0;
+    while (j <= lb) { push(prev, j); j = j + 1; }
+    let i = 1;
+    while (i <= la) {
+        let cur = [i];
+        j = 1;
+        while (j <= lb) {
+            let cost = 1;
+            if (charAt(a, i - 1) == charAt(b, j - 1)) { cost = 0; }
+            push(cur, min(min(prev[j] + 1, cur[j - 1] + 1), prev[j - 1] + cost));
+            j = j + 1;
+        }
+        prev = cur;
+        i = i + 1;
+    }
+    return prev[lb];
+}
+// أقرب مرشّح ضمن مسافة معقولة، وإلا nil
+fun cc_suggest(candidates, word) {
+    let best = nil;
+    let bestD = 1000;
+    let limit = 1;
+    if (len(word) >= 5) { limit = 2; }
+    let i = 0;
+    while (i < len(candidates)) {
+        if (candidates[i] != word) {
+            let d = cc_distance(candidates[i], word);
+            if (d < bestD) { bestD = d; best = candidates[i]; }
+        }
+        i = i + 1;
+    }
+    if (best != nil and bestD <= limit) { return best; }
+    return nil;
+}
+// إكمال تلقائي: كل الكلمات التي تبدأ بـ prefix
+fun cc_search(spec, prefix) {
+    let out = [];
+    let i = 0;
+    while (i < len(spec["order"])) {
+        let w = spec["order"][i];
+        if (substr(w, 0, len(prefix)) == prefix) { push(out, w); }
+        i = i + 1;
+    }
+    return out;
+}
+
+// ---------------------------------------------------------------------------
+//  إحصاء
+// ---------------------------------------------------------------------------
+fun cc_stats(spec) {
+    let members = 0;
+    let cs = keys(spec["containers"]);
+    let i = 0;
+    while (i < len(cs)) { members = members + len(spec["containers"][cs[i]]["members"]); i = i + 1; }
+    return {
+        "words": len(spec["order"]), "symbols": len(spec["sym_sorted"]),
+        "groups": len(keys(spec["groups"])), "containers": len(cs), "members": members,
+        "imports": len(spec["imports"]), "infix": len(keys(spec["ops"]["infix"])),
+        "prefix": len(keys(spec["ops"]["prefix"])), "errors": len(spec["errors"]), "warnings": len(spec["warnings"])
+    };
+}
+
+// ---------------------------------------------------------------------------
+//  JSON ذهاباً وإياباً
+// ---------------------------------------------------------------------------
+fun cc_to_data(spec) {
+    let cont = {};
+    let cs = keys(spec["containers"]);
+    let i = 0;
+    while (i < len(cs)) { cont[cs[i]] = spec["containers"][cs[i]]["members"]; i = i + 1; }
+    return {
+        "compiler_clude": CC_VERSION, "name": spec["name"], "version": spec["version"], "title": spec["title"],
+        "exts": spec["exts"], "options": spec["options"], "entry": spec["entry"],
+        "groups": spec["groups"], "containers": cont, "ops": spec["ops"]
+    };
+}
+fun cc_to_json(spec) { return jsonEncode(cc_to_data(spec)); }
+fun cc_from_data(d) {
+    let spec = cc_new_spec(d["name"]);
+    spec["file"] = "<json>";
+    if (has(d, "version") and d["version"] != nil) { spec["version"] = d["version"]; }
+    if (has(d, "title") and d["title"] != nil) { spec["title"] = d["title"]; }
+    if (has(d, "exts")) { spec["exts"] = d["exts"]; }
+    if (has(d, "options")) { spec["options"] = d["options"]; }
+    if (has(d, "ops")) { spec["ops"] = d["ops"]; }
+    let gs = keys(d["groups"]);
+    let g = 0;
+    while (g < len(gs)) {
+        let name = gs[g];
+        if (name != "container" and name != "namespace" and substr(name, 0, 10) != "container:") {
+            let items = d["groups"][name];
+            let k = 0;
+            while (k < len(items)) { cc_add_item(spec, items[k], name, 0); k = k + 1; }
+        }
+        g = g + 1;
+    }
+    if (has(d, "entry") and d["entry"] != nil) {
+        spec["entry"] = d["entry"];
+        cc_add_item(spec, d["entry"]["ns"], "namespace", 0);
+    }
+    let cs = keys(d["containers"]);
+    let c = 0;
+    while (c < len(cs)) {
+        let mem = d["containers"][cs[c]];
+        if (len(mem) == 0) {
+            spec["containers"][cs[c]] = {"members": [], "line": 0};
+            cc_add_item(spec, "container", "container", 0);
+            cc_add_item(spec, cs[c], "container", 0);
+        }
+        let m = 0;
+        while (m < len(mem)) {
+            cc_add_member(spec, cs[c], mem[m], 0);
+            cc_add_item(spec, mem[m], "container:" + cs[c], 0);
+            m = m + 1;
+        }
+        c = c + 1;
+    }
+    return cc_finish(spec);
+}
+fun cc_from_json(js) { return cc_from_data(jsonDecode(js)); }
+
+// ---------------------------------------------------------------------------
+//  تصدير ccludelike.txt مرتّب (parse(export(s)) يعطي spec مكافئاً)
+// ---------------------------------------------------------------------------
+fun cc_quote_item(it) {
+    let need = false;
+    if (substr(it, 0, 2) == "//" or substr(it, 0, 2) == "/*") { need = true; }
+    let i = 0;
+    while (i < len(it)) {
+        let ch = charAt(it, i);
+        if (cc_is_space(ch) or ch == "," or ch == "[" or ch == "]" or ch == "\"" or ch == "'") { need = true; }
+        i = i + 1;
+    }
+    if (!need) { return it; }
+    if (contains(it, "\"")) { return "'" + it + "'"; }
+    return "\"" + it + "\"";
+}
+fun cc_quote_all(items) {
+    let out = [];
+    let i = 0;
+    while (i < len(items)) { push(out, cc_quote_item(items[i])); i = i + 1; }
+    return join(out, " ");
+}
+fun cc_format_text(spec) {
+    let L = [];
+    push(L, "// ccludelike.txt — مُولَّد بواسطة compiler_clude " + CC_VERSION);
+    if (spec["title"] != "") { push(L, "@title \"" + spec["title"] + "\""); }
+    if (spec["version"] != "") { push(L, "@version \"" + spec["version"] + "\""); }
+    if (len(spec["exts"]) > 0) { push(L, "@ext[ " + join(spec["exts"], " , ") + " ]"); }
+    let ok = keys(spec["options"]);
+    let o = 0;
+    while (o < len(ok)) { push(L, "@option " + ok[o] + "=\"" + spec["options"][ok[o]] + "\""); o = o + 1; }
+    if (spec["entry"] != nil) {
+        let e = spec["entry"];
+        push(L, "@" + e["ns"] + "." + e["lib"] + "." + e["main"] + "[" + join(e["args"], ", ") + "];");
+    }
+    let gs = keys(spec["groups"]);
+    let g = 0;
+    while (g < len(gs)) {
+        let name = gs[g];
+        if (name != "container" and name != "namespace" and substr(name, 0, 10) != "container:" and name != "infix" and name != "infixr" and name != "prefix") {
+            push(L, "$" + name + "[ " + cc_quote_all(spec["groups"][name]) + " ]");
+        }
+        g = g + 1;
+    }
+    let slots = ["infix", "prefix"];
+    let sl = 0;
+    while (sl < len(slots)) {
+        let ops = spec["ops"][slots[sl]];
+        let on = keys(ops);
+        let buckets = {};
+        let border = [];
+        let k = 0;
+        while (k < len(on)) {
+            let kind = slots[sl];
+            if (kind == "infix" and ops[on[k]]["right"]) { kind = "infixr"; }
+            let key = kind + "." + toString(ops[on[k]]["prec"]);
+            if (!has(buckets, key)) { buckets[key] = []; push(border, key); }
+            push(buckets[key], on[k]);
+            k = k + 1;
+        }
+        let b = 0;
+        while (b < len(border)) { push(L, "$" + border[b] + "[ " + cc_quote_all(buckets[border[b]]) + " ]"); b = b + 1; }
+        sl = sl + 1;
+    }
+    let cs = keys(spec["containers"]);
+    let c = 0;
+    while (c < len(cs)) {
+        push(L, "container." + cs[c] + " [ " + join(spec["containers"][cs[c]]["members"], " , ") + " ]@");
+        c = c + 1;
+    }
+    return join(L, "\n") + "\n";
+}
+fun cc_save(spec, path) { writeFile(path, cc_format_text(spec)); return path; }
+
+// ---------------------------------------------------------------------------
+//  فرق بين spec و spec
+// ---------------------------------------------------------------------------
+fun cc_diff(a, b) {
+    let added = [];
+    let removed = [];
+    let moved = [];
+    let tabs = ["words", "symbols"];
+    let t = 0;
+    while (t < len(tabs)) {
+        let ka = keys(a[tabs[t]]);
+        let kb = keys(b[tabs[t]]);
+        let i = 0;
+        while (i < len(kb)) {
+            if (!has(a[tabs[t]], kb[i])) { push(added, kb[i]); }
+            else if (a[tabs[t]][kb[i]] != b[tabs[t]][kb[i]]) {
+                push(moved, kb[i] + ": " + a[tabs[t]][kb[i]] + " → " + b[tabs[t]][kb[i]]);
+            }
+            i = i + 1;
+        }
+        i = 0;
+        while (i < len(ka)) {
+            if (!has(b[tabs[t]], ka[i])) { push(removed, ka[i]); }
+            i = i + 1;
+        }
+        t = t + 1;
+    }
+    return {"added": added, "removed": removed, "moved": moved,
+            "same": len(added) == 0 and len(removed) == 0 and len(moved) == 0};
+}
+
+// ---------------------------------------------------------------------------
+//  فحص (lint) للتعريفات ولمصدر
+// ---------------------------------------------------------------------------
+fun cc_rin_words() {
+    return ["and", "break", "container", "continue", "else", "end", "false", "file", "for", "fun", "if", "let", "link",
+            "merge", "nil", "or", "pipe", "print", "return", "rinopen", "save", "show", "text", "true", "tying", "while"];
+}
+fun cc_lint(spec) {
+    let out = [];
+    if (spec["entry"] == nil) { push(out, "info: لا توجد ترويسة @ns.lib.main[]"); }
+    let cs = keys(spec["containers"]);
+    let c = 0;
+    while (c < len(cs)) {
+        if (len(spec["containers"][cs[c]]["members"]) == 0) { push(out, "warn: الحاوية '" + cs[c] + "' بلا أعضاء"); }
+        c = c + 1;
+    }
+    let rw = cc_rin_words();
+    let i = 0;
+    while (i < len(spec["order"])) {
+        let w = spec["order"][i];
+        if (cc_in(rw, w) and spec["words"][w] != "keyword" and spec["words"][w] != "container") {
+            push(out, "info: '" + w + "' تطابق كلمة Rin محجوزة");
+        }
+        if (has(spec["options"], "case") and spec["options"]["case"] == "insensitive" and lower(w) != w) {
+            push(out, "warn: '" + w + "' بأحرف كبيرة لكن case=insensitive (اكتبها بأحرف صغيرة)");
+        }
+        i = i + 1;
+    }
+    if (has(spec["symbols"], "//") or has(spec["symbols"], "/*")) {
+        push(out, "info: '//' أو '/*' رمز محجوز فيعطّل التعليق الموافق");
+    }
+    let ks = keys(spec["ops"]["infix"]);
+    let k = 0;
+    while (k < len(ks)) {
+        if (has(spec["ops"]["prefix"], ks[k]) and ks[k] != "-" and ks[k] != "+") {
+            push(out, "info: '" + ks[k] + "' مُعرَّف infix وprefix معاً");
+        }
+        k = k + 1;
+    }
+    let w2 = 0;
+    while (w2 < len(spec["warnings"])) { push(out, "warn: " + spec["warnings"][w2]); w2 = w2 + 1; }
+    return out;
+}
+// فحص مصدر: [{line, col, level, msg}] مع اقتراحات وتنبيه للمهجور (المجموعة deprecated)
+fun cc_check_source(spec, src) {
+    let r = cc_lex(spec, src);
+    let out = [];
+    let i = 0;
+    while (i < len(r["tokens"])) {
+        let t = r["tokens"][i];
+        if (t["type"] == "BAD_MEMBER") {
+            let msg = "العضو '" + t["value"] + "' غير معرَّف في " + t["container"];
+            let sg = cc_suggest(spec["containers"][t["container"]]["members"], t["value"]);
+            if (sg != nil) { msg = msg + " — هل تقصد '" + sg + "'؟"; }
+            push(out, {"line": t["line"], "col": t["col"], "level": "error", "msg": msg});
+        } else if (t["type"] == "IDENT" and len(t["value"]) >= 4) {
+            let sg2 = cc_suggest(spec["order"], t["value"]);
+            if (sg2 != nil and !contains(sg2, ".")) {
+                push(out, {"line": t["line"], "col": t["col"], "level": "hint",
+                           "msg": "'" + t["value"] + "' قريبة من الكلمة المحجوزة '" + sg2 + "'"});
+            }
+        } else if (t["type"] == "RESERVED" and t["group"] == "deprecated") {
+            push(out, {"line": t["line"], "col": t["col"], "level": "warn", "msg": "'" + t["value"] + "' مهجورة"});
+        }
+        i = i + 1;
+    }
+    let e = 0;
+    while (e < len(r["errors"])) {
+        if (!contains(r["errors"][e], "ليس فيها العضو")) {
+            push(out, {"line": 0, "col": 0, "level": "error", "msg": r["errors"][e]});
+        }
+        e = e + 1;
+    }
+    return out;
+}
+
+// ---------------------------------------------------------------------------
+//  تلوين وقواعد محرّر
+// ---------------------------------------------------------------------------
+fun cc_html_esc(s) {
+    return replace(replace(replace(s, "&", "&amp;"), "<", "&lt;"), ">", "&gt;");
+}
+// mode: "html" أو "ansi"
+fun cc_paint(spec, src, mode) {
+    let r = cc_lex_full(spec, src);
+    let out = "";
+    let prev = 0;
+    let esc = chr(27);
+    let i = 0;
+    while (i < len(r["tokens"])) {
+        let t = r["tokens"][i];
+        if (t["type"] != "EOF") {
+            let gap = substr(src, prev, t["pos"] - prev);
+            let raw = substr(src, t["pos"], t["len"]);
+            if (mode == "html") {
+                out = out + cc_html_esc(gap) + "<span class=\"cc-" + lower(t["type"]) + "\">" + cc_html_esc(raw) + "</span>";
+            } else {
+                let code = "0";
+                if (t["type"] == "RESERVED") { code = "35"; }
+                else if (t["type"] == "SYMBOL") { code = "36"; }
+                else if (t["type"] == "MEMBER" or t["type"] == "BAD_MEMBER") { code = "33"; }
+                else if (t["type"] == "STRING") { code = "32"; }
+                else if (t["type"] == "NUMBER") { code = "34"; }
+                else if (t["type"] == "COMMENT") { code = "90"; }
+                if (t["type"] == "BAD_MEMBER") { code = "31"; }
+                out = out + gap + esc + "[" + code + "m" + raw + esc + "[0m";
+            }
+            prev = t["pos"] + t["len"];
+        }
+        i = i + 1;
+    }
+    return out + substr(src, prev, len(src) - prev);
+}
+fun cc_highlight_html(spec, src) { return "<pre class=\"cc\">" + cc_paint(spec, src, "html") + "</pre>"; }
+fun cc_highlight_ansi(spec, src) { return cc_paint(spec, src, "ansi"); }
+
+fun cc_regex_esc(s) {
+    let out = "";
+    let i = 0;
+    while (i < len(s)) {
+        let ch = charAt(s, i);
+        if (contains("\\^$.|?*+()[]{}/-", ch)) { out = out + "\\" + ch; } else { out = out + ch; }
+        i = i + 1;
+    }
+    return out;
+}
+// قواعد TextMate (JSON) من الكلمات والرموز المحجوزة
+fun cc_tmlanguage(spec, langName) {
+    let words = [];
+    let i = 0;
+    while (i < len(spec["order"])) {
+        if (!contains(spec["order"][i], ".")) { push(words, spec["order"][i]); }
+        i = i + 1;
+    }
+    let syms = [];
+    i = 0;
+    while (i < len(spec["sym_sorted"])) { push(syms, cc_regex_esc(spec["sym_sorted"][i])); i = i + 1; }
+    let pats = [];
+    if (len(words) > 0) {
+        push(pats, {"name": "keyword.control." + langName, "match": "\\b(" + join(words, "|") + ")\\b"});
+    }
+    let cn = keys(spec["containers"]);
+    let c = 0;
+    while (c < len(cn)) {
+        push(pats, {"name": "entity.name.type." + langName,
+                    "match": "\\b" + cn[c] + "\\.(" + join(spec["containers"][cn[c]]["members"], "|") + ")\\b"});
+        c = c + 1;
+    }
+    if (len(syms) > 0) { push(pats, {"name": "keyword.operator." + langName, "match": join(syms, "|")}); }
+    push(pats, {"name": "string.quoted." + langName, "match": "\"(?:[^\"\\\\]|\\\\.)*\"|'(?:[^'\\\\]|\\\\.)*'"});
+    push(pats, {"name": "constant.numeric." + langName, "match": "\\b[0-9]+(\\.[0-9]+)?\\b"});
+    push(pats, {"name": "comment.line." + langName, "match": "//.*$"});
+    return jsonEncode({"name": langName, "scopeName": "source." + langName, "patterns": pats});
+}
