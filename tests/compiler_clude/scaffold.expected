@@ -1,0 +1,10 @@
+[".out/mylang/ccludelike.txt", ".out/mylang/manifest.json", ".out/mylang/syntax.rinsyntax.json", ".out/mylang/Lexer.rin", ".out/mylang/Parser.rin", ".out/mylang/Interpreter.rin", ".out/mylang/CodeGen.rin", ".out/mylang/run.rin", ".out/mylang/examples/hello.ml", ".out/mylang/README.md"]
+[] true true
+[".out/tpl/ccludelike.txt", ".out/tpl/template.txt"]
+// card — Hello
+print "Hello";
+
+[".out/mylib.og.rin/disconom.json", ".out/mylib.og.rin/main.zpp", ".out/mylib.og.rin/ccludelike.txt"]
+[]
+اسم اللغة غير صالح: 1bad
+true
