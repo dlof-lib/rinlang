@@ -8020,6 +8020,8 @@ for(auto& kv:maskParents) if(maskResolve4(kv.second)==parent && !maskResolve4(kv
     registerNativesContainerZip();
     registerNativesContainerApp(); // container.appInfo/Validate/Head/Manifest/Robots/Sitemap/Bump/Export/Pack/Open (rin_container_app.cpp)
     registerNativesContainerBlend(); // container.blend/recipe/cook (rin_container_blend.cpp، docs/container_blend.md) // container.zip/unzip/pack + zip.* (rin_container_zip.cpp، docs/container_zip.md)
+    registerNativesAutoload(); // Autoload.register/dir/load/... (rin_autoload.cpp، docs/autoload.md)
+    registerNativesServices(); // Services.bind/singleton/instance/alias/get/make/call/extend/tag... (rin_container_services.cpp، docs/container_services.md)
     registerNativesExtra12(); // fileSync/fileLock/fileRename/fileSize/findByRange (rin_extra_natives12.cpp، docs/FILEDB.md)
     registerNativesExtra11(); // مفهوم algo: algo* (rin_extra_natives11.cpp، docs/ALGO.md)
     registerNativesPrintLayout(); // __pfx/layoutText/fmtNumber/showSpaces (rin_print_layout.cpp، docs/print-layout.md)
@@ -12130,11 +12132,13 @@ std::shared_ptr<NsNode> Interpreter::nsResolveHead(const std::string& name, cons
 }
 
 std::shared_ptr<NsNode> Interpreter::nsResolveExpr(const ExprPtr& obj, const EnvPtr& env) const {
-    if (nsRoots.empty() || !obj) return nullptr;
+    if ((nsRoots.empty() && !autoloadActive_) || !obj) return nullptr;
     if (obj->exprKind == ExprKind::Variable) {
         auto ve = std::static_pointer_cast<VariableExpr>(obj);
         if (env->lookup(ve->name)) return nullptr; // a real variable always shadows a namespace of the same name
-        return nsResolveHead(ve->name, env);
+        auto head = nsResolveHead(ve->name, env);
+        if (!head && autoloadActive_ && !classes.count(ve->name) && const_cast<Interpreter*>(this)->autoloadMiss(ve->name, env, ve->line, true)) head = nsResolveHead(ve->name, env); // Autoload
+        return head;
     }
     if (obj->exprKind == ExprKind::Get) {
         auto ge = std::static_pointer_cast<GetExpr>(obj);
@@ -12788,6 +12792,10 @@ Value Interpreter::invokeCallee(const std::string& callee, std::vector<Value>& a
         return doLibraryImportUrl(args, line, env);
     }
 
+    if (autoloadActive_ && callee.find('.') != std::string::npos && !natives.count(callee)) { // Autoload: رأس المسار غير معرَّف؟
+        std::string head = callee.substr(0, callee.find('.'));
+        if (!env->lookup(head) && !nsResolveHead(head, env) && !classes.count(head)) autoloadMiss(head, env, line);
+    }
     if (!nsRoots.empty() && callee.find('.') != std::string::npos) { // namespaces: shop.users.add(x)
         Value nsOut;
         if (nsTryCallDotted(callee, args, line, env, nsOut)) return nsOut;
@@ -13043,6 +13051,7 @@ Value Interpreter::evaluateTree(const ExprPtr& expr, const EnvPtr& env) {
         // lookup بلا نسخة وسيطة: نسخة واحدة فقط من القيمة (كانت get() تنسخ إلى out ثم تُعاد).
         if (const Value* found = env->lookup(e->name)) return *found;
         if (e->name == "RINTWIST") return rintwistValue();   // متغيّر مضمَّن حيّ (قراءة فقط)
+        if (autoloadActive_ && autoloadMiss(e->name, env, e->line)) { if (const Value* f2 = env->lookup(e->name)) return *f2; } // Autoload
         throw undefinedVariableErr(e->name, e->line, env);
     }
     case ExprKind::Assign: { auto e = std::static_pointer_cast<AssignExpr>(expr);
@@ -13397,7 +13406,7 @@ Value Interpreter::evaluateTree(const ExprPtr& expr, const EnvPtr& env) {
                 }
             }
         }
-        if (!nsRoots.empty()) { // namespaces: shop.users.count  (container / group / Volume, any nesting)
+        if (!nsRoots.empty() || autoloadActive_) { // namespaces: shop.users.count  (container / group / Volume, any nesting)
             if (auto ns = nsResolveExpr(e->object, env)) return nsGet(ns, e->name, e->line);
         }
         Value obj = evaluate(e->object, env);
@@ -13426,7 +13435,7 @@ Value Interpreter::evaluateTree(const ExprPtr& expr, const EnvPtr& env) {
                 }
             }
         }
-        if (!nsRoots.empty()) { // namespaces: shop.users.count = 3;
+        if (!nsRoots.empty() || autoloadActive_) { // namespaces: shop.users.count = 3;
             if (auto ns = nsResolveExpr(e->object, env)) {
                 Value nval = evaluate(e->value, env);
                 return nsSet(ns, e->name, nval, e->line);
@@ -13467,7 +13476,7 @@ Value Interpreter::evaluateTree(const ExprPtr& expr, const EnvPtr& env) {
                 return callFunction(bound.function, superArgs, e->line);
             }
         }
-        if (!nsRoots.empty()) {
+        if (!nsRoots.empty() || autoloadActive_) {
             if (auto ns = nsResolveExpr(e->object, env)) {
                 std::vector<Value> nargs;
                 nargs.reserve(e->args.size());
@@ -15424,6 +15433,8 @@ void Interpreter::dialogAction(const std::shared_ptr<LiveActionStmt>& s, const E
 #include "rin_container_zip.cpp"
 #include "rin_container_app.cpp" // هوية التطبيق/الموقع: اسم/إصدار/أيقونات/وصف/SEO (docs/container_app.md)
 #include "rin_container_blend.cpp" // دمج الحاويات + الوصفات (docs/container_blend.md) // ضغط/فكّ ضغط الحاويات + zip.* (docs/container_zip.md)
+#include "rin_autoload.cpp" // Autoload.*: تحميل كسول للحاويات والمكتبات (docs/autoload.md)
+#include "rin_container_services.cpp" // Services.*: حاوية الخدمات (docs/container_services.md)
 #include "rin_libdir.cpp" // مكتبات Rin المقسَّمة (docs/split-libraries.md)
 #include "rin_print_layout.cpp" // سمات print: مسافات/تنسيق/تعليم/تخطيط (docs/print-layout.md)
 #include "rin_lock.cpp" // main.lock: خزنة الأسرار المشفّرة (docs/main-lock.md)
