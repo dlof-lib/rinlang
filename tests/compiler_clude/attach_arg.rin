@@ -1,0 +1,2 @@
+   @inlr.compiler_clude.main[ "ccludelike.txt" ];   
+print len(cc_spec["order"]);
