@@ -1,0 +1,57 @@
+// bytes.* · dur.* · firstOf/lastOf/findKeyIf · utf8Trim… · state fixed  (docs/EXTRA13.md)
+// كل سطر "OK/FAIL" يطبع نتيجة فحص واحد؛ الاختبار ناجح حين لا يظهر أي FAIL.
+fun check(name, got, want) {
+    if (got == want) { print "OK   " + name; } else { print "FAIL " + name + " got=" + got + " want=" + want; }
+}
+
+// ---- bytes ----
+let b = bytes.encode("magic:str4 ver:u16le size:u32be ratio:f32 pad2 sign:i16be", "RIN1", 3, 258, 1.5, -2);
+check("bytes.len", len(b), 4 + 2 + 4 + 4 + 2 + 2);
+check("bytes.size", bytes.size("magic:str4 ver:u16le size:u32be ratio:f32 pad2 sign:i16be"), 18);
+let d = bytes.decode("magic:str4 ver:u16le size:u32be ratio:f32 pad2 sign:i16be", b);
+check("bytes.magic", d["magic"], "RIN1");
+check("bytes.ver", d["ver"], 3);
+check("bytes.size_be", d["size"], 258);
+check("bytes.f32", d["ratio"], 1.5);
+check("bytes.neg", d["sign"], -2);
+check("bytes.endian", sec.hexEncode(bytes.encode("a:u16be", 1)), "0001");
+check("bytes.endian_le", sec.hexEncode(bytes.encode("a:u16le", 1)), "0100");
+let m = bytes.decode("n:u8*3 rest:str*", bytes.encode("n:u8*3 rest:str*", {n: [1, 2, 3], rest: "tail"}));
+check("bytes.repeat", m["n"][2], 3);
+check("bytes.rest", m["rest"], "tail");
+
+// ---- dur ----
+check("dur.parse", dur.parse("1h30m"), 5400000);
+check("dur.iso", dur.parse("PT1H30M"), 5400000);
+check("dur.bare", dur.parse("250"), 250);
+check("dur.text", dur.text(90061250), "1d 1h 1m 1s 250ms");
+check("dur.fmt", dur.fmt(3723000, "{hh}:{mm}:{ss}"), "01:02:03");
+check("dur.add", dur.add("1h", "30m", 1000), 5401000);
+check("dur.cmp", dur.cmp("1h", "59m"), 1);
+check("dur.valid", dur.valid("abc"), false);
+check("dur.of", dur.of({h: 1, m: 1}), 3660000);
+
+// ---- firstOf / lastOf ----
+check("firstOf", firstOf([7, 8, 9]), 7);
+check("lastOf", lastOf([7, 8, 9]), 9);
+check("firstOf.default", firstOf([], "none"), "none");
+check("lastKey", lastKey({a: 1, b: 2}), "b");
+check("findKeyIf", findKeyIf([5, 6, 7], fun(x) { return x > 5; }), 1);
+
+// ---- utf8 ----
+check("utf8Trim", utf8Trim("   مرحبا ‏"), "مرحبا");
+check("utf8TrimStart", utf8TrimStart("  x "), "x ");
+check("utf8CapFirst", utf8CapFirst("élan"), "Élan");
+check("utf8LowFirst", utf8LowFirst("ÉLAN"), "éLAN");
+check("utf8Pad", utf8Pad("مرحبا", 8, "*", "both"), "*مرحبا**");
+
+// ---- state fixed ----
+@container=Cfg
+    state fixed version = 2;
+    state hits = 0;
+    fun bump() { hits = hits + 1; }
+    fun tryChange() { version = 3; }
+.end/container
+Cfg.bump();
+check("fixed.plain_state_still_works", getField("Cfg", "hits"), 1);
+check("fixed.init", getField("Cfg", "version"), 2);
