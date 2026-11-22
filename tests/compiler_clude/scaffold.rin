@@ -1,0 +1,13 @@
+@import "compiler_clude";
+let r = cc_new_language(".out/mylang", "mylang", "ml");
+print r["files"];
+let s = cc_load(".out/mylang/ccludelike.txt");
+print s["errors"], cc_is_reserved(s, "fun"), cc_is_reserved(s, "inlr.img");
+let t = cc_new_template(".out/tpl", "card");
+print t["files"];
+print cc_render_template(readFile(".out/tpl/template.txt"), {"name": "card", "title": "Hello"});
+let l = cc_new_library(".out", "mylib");
+print l["files"];
+print cc_load(".out/mylib.og.rin/ccludelike.txt")["errors"];
+print cc_new_language(".out/bad", "1bad", "x")["error"];
+print readFile("../../lib/compiler_clude.og.rin/ccludelike.txt") == cc_default_spec();
