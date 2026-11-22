@@ -1,0 +1,30 @@
+@import "compiler_clude";
+let s = cc_parse("@title \"T\"\n@ext[ t ]\n@option case=sensitive\n@inlr.compiler_clude.main[a, b];\n$token[ ; : / \"//\" \"a b\" ]\n$token.keyword[ let fun ]\n$infix.10[ + - ]\n$infixr.30[ ^ ]\n$prefix.40[ - ]\ncontainer.inlr [ img , text ]@\ncontainer.empty [ ]@\nprint");
+print s["errors"], s["warnings"];
+// تصدير ثم إعادة قراءة = نفس المحتوى
+let t1 = cc_format_text(s);
+let s2 = cc_parse(t1);
+print s2["errors"], cc_diff(s, s2)["same"], cc_format_text(s2) == t1;
+// JSON ذهاباً وإياباً
+let j = cc_to_json(s);
+let s3 = cc_from_json(j);
+print cc_diff(s, s3)["same"], cc_format_text(s3) == t1, s3["entry"]["args"];
+print cc_stats(s);
+// فرق
+let a = cc_parse("$token[ a b c ]\n$x[ q ]");
+let b = cc_parse("$token[ b c d ]\n$y[ q ]");
+let d = cc_diff(a, b);
+print d["added"], d["removed"], d["moved"], d["same"];
+// فحص
+print cc_lint(s);
+// اقتراح وإكمال
+print cc_suggest(["print", "return", "while"], "pritn"), cc_suggest(["print"], "zzzzzz"), cc_distance("kitten", "sitting");
+print cc_search(s, "i"), cc_search(s, "inlr.");
+let c = cc_parse("$keyword[ function return ]\n$deprecated[ goto ]\ncontainer.ui [ button , label ]@");
+let diag = cc_check_source(c, "functoin x = ui.buton; goto y; retrun");
+let i = 0;
+while (i < len(diag)) { print diag[i]["line"], diag[i]["col"], diag[i]["level"], diag[i]["msg"]; i = i + 1; }
+// تلوين
+print cc_highlight_html(c, "return <a> // c\nui.button \"s\" 5");
+print replace(cc_highlight_ansi(c, "return x"), chr(27), "ESC");
+print cc_tmlanguage(c, "demo");
