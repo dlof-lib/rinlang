@@ -1293,6 +1293,9 @@ private:
     // container.doc تصبح فعلياً "قاعدة بيانات" (database) كاملة من عدّة مجموعات مستندات مرتّبة.
     std::unordered_map<std::string, std::vector<std::pair<std::string, Value>>> docStore;
     std::unordered_map<std::string, Value> blendRecipes; // container.recipe — وصفات دمج الحاويات (rin_container_blend.cpp)
+    bool autoloadActive_ = false;          // Autoload.* — true فقط حين يوجد محمِّل (بدونه لا كلفة على أي مسار)
+    std::shared_ptr<void> autoloadState_;  // Autoload.* — حالة المحمِّلات لهذا المفسّر (rin_autoload.cpp)
+    std::shared_ptr<void> servicesState_; // Services.* — سجلّ الخدمات لهذا المفسّر (rin_container_services.cpp)
 
     // ---- RIN CONTAINER SQL (RCSQL) — انظر rin_container_sql.h للصياغة الكاملة ----
     // اسم حاوية @sql/@container.sql (ContainerKind::SQL) -> نص استعلام RCSQL الخام المخزَّن في
@@ -1517,6 +1520,10 @@ private:
     void registerNativesExtra8(); // rin_extra_natives8.cpp — مفهوم token: tokenList/tokenStats/tokenAt/... (docs/TOKEN.md)
     void registerNativesExtra10(); // rin_extra_natives10.cpp — مفهوم linalg: mat*/vec* للجبر الخطي (docs/LINALG.md)
     void registerNativesContainerBlend(); // rin_container_blend.cpp — container.blend/recipe/cook (docs/container_blend.md)
+    void registerNativesAutoload(); // rin_autoload.cpp — Autoload.*: تحميل كسول للحاويات والمكتبات (docs/autoload.md)
+    bool autoloadInclude(const std::string& cand, int line, const std::string& label); // ينفّذ ملفاً مرة واحدة (rin_autoload.cpp)
+    bool autoloadMiss(const std::string& name, const EnvPtr& env, int line, bool fromNs = false); // يشغّل المحمِّلات لاسم غائب؛ true إن صار معرَّفاً
+    void registerNativesServices(); // rin_container_services.cpp — Services.*: حاوية الخدمات: bind/singleton/get/make/call/extend/tag (docs/container_services.md)
     void registerNativesContainerApp(); // rin_container_app.cpp — container.app* / app.* : هوية التطبيق/الموقع (docs/container_app.md)
     void registerNativesContainerZip(); // rin_container_zip.cpp — container.zip/unzip/pack/... و zip.* (docs/container_zip.md)
     void registerNativesExtra12(); // rin_extra_natives12.cpp — fileSync/fileLock/fileRename/fileSize/findByRange (docs/FILEDB.md)
