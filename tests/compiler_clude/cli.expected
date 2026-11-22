@@ -1,0 +1,25 @@
+الأوامر: check lex lint export json stats diff highlight eval new-language new-template new-library
+ملف: ../../lib/compiler_clude.og.rin/ccludelike.txt
+دخول: @inlr.compiler_clude.main[]
+$namespace[ inlr ]
+$token[ ; : / ]
+$keyword[ let fun if else while for return break continue true false nil and or import export ]
+$container[ container inlr ]
+$container:inlr[ img text ]
+$word[ print ]
+container.inlr [ img , text ]@
+كلمات: 23 · رموز: 3
+{"words":23,"symbols":3,"groups":6,"containers":1,"members":2,"imports":0,"infix":0,"prefix":0,"errors":0,"warnings":0}
+info: 'text' تطابق كلمة Rin محجوزة
+info: 'print' تطابق كلمة Rin محجوزة
+nil
+أمر غير معروف: bogus
+{"files":[".out/cl/ccludelike.txt",".out/cl/manifest.json",".out/cl/syntax.rinsyntax.json",".out/cl/Lexer.rin",".out/cl/Parser.rin",".out/cl/Interpreter.rin",".out/cl/CodeGen.rin",".out/cl/run.rin",".out/cl/examples/hello.toy",".out/cl/README.md"],"name":"toy"}
+[] [] toy ["toy"]
+27
+
+error[E0036]: readFile: تعذّر فتح الملف '.out/cl/sample.toy' للقراءة (غير موجود؟)
+  --> cli.rin:1986:1
+
+ 1986 | 
+      | ^
