@@ -1,0 +1,9 @@
+// compiler_clude — مثال: تعريف كلمات اللغة في ccludelike.txt ثم استعمالها
+//   ./rin examples/compiler_clude_demo.rin   (من مجلد examples)
+@inlr.compiler_clude.main["compiler_clude_demo.txt"];
+
+print cc_format_spec(cc_spec);
+let code = "let x = 3 + 4 * 2;\nprint x;\ninlr.img \"a.png\";";
+print cc_format_tokens(cc_lex(cc_spec, code)["tokens"]);
+print cc_run_expr(cc_spec, "(3 + 4) * 2 ^ 2", {});
+print cc_highlight_ansi(cc_spec, code);
