@@ -67,6 +67,8 @@
 - [`container_blend.md`](./container_blend.md) — دمج الحاويات وتكوين ميزة جديدة منها: `container.blend` (حقول + مستندات + صفوف + ستايل) والوصفات `container.recipe/cook`.
 - [`container_services.md`](./container_services.md) — حاوية الخدمات: `Services.bind/singleton/instance/alias/get/make/call/extend/tag` مع حقن تلقائي وكشف الدوران.
 - [`autoload.md`](./autoload.md) — تحميل كسول للحاويات والمكتبات: `Autoload.dir/register/include/load` — يُحمَّل ملف الاسم عند أول إشارة إليه فقط (`.rin` و`.rcl`).
+- [`container_magic.md`](./container_magic.md) — خُطّافات الأعضاء الغائبة للحاوية: `on get/set/has/drop/call/invoke` (حقول وأوامر ديناميكية، `C(args)`).
+- [`EXTRA13.md`](./EXTRA13.md) — خمس إضافات بنمط Rin: `bytes.encode/decode` (بايتات مسمّاة)، `dur.*` (مدد زمنية)، `firstOf/lastOf/findKeyIf`، `utf8Trim/CapFirst/Pad`، و`state fixed`.
 - [`loops.md`](./loops.md) · [`key_terms_and_builtins.md`](./key_terms_and_builtins.md) · [`number_builtins.md`](./number_builtins.md) — الحلقات، الشروط المبنية، دوال الأرقام.
 - [`native-additions.md`](./native-additions.md) — الدوال الأصلية الجديدة (Rin 1.0).
 - [`packages-and-interop.md`](./packages-and-interop.md) — المكتبات والحزم وجسر C++ وJSON واختبارات rintest.
