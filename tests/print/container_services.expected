@@ -1,0 +1,36 @@
+T1 T2 T3
+true false
+building config
+prod true true
+true
+1.2.0 true alias ver
+false
+main 1 ["db up in prod"]
+hi Ali v1.2.0
+hi Sara v9
+main@1.2.0
+main!
+205
+true 1
+2 2
+["smtp", "log"] [] ["mailers"]
+["mailers"]
+📦 container = settings
+✅ .end/container (settings)
+dark 12 container settings
+light
+دوران
+بعد الدوران: المكدّس نظيف
+غير مسجّلة
+المصنع يجب أن يكون دالة
+بديل ذاتي
+بديل دائري
+تعذّر الحقن
+اسم فارغ
+true false false
+building config
+true false false
+true ["smtp"]
+16 true
+["a", "b", "c", "config", "db", "ghost", "greeter", "logger", "mailer.smtp", "price", "repo", "settings", "ui", "v", "ver", "version"]
+16 0 [] []
