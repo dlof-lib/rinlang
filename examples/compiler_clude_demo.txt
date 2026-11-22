@@ -1,0 +1,11 @@
+// الكلمات المحجوزة لمثال compiler_clude_demo.rin
+@inlr.compiler_clude.main[];
+@title "Demo";
+@ext[ dm ];
+$token[]
+$token[ ( ) ; : ]
+$token.keyword[ let print ]
+$infix.10[ + - ]
+$infix.20[ * / ]
+$infixr.30[ ^ ]
+container.inlr [ img , text ]@
