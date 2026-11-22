@@ -122,7 +122,20 @@ class RinCodeEditorView @JvmOverloads constructor(
     private val colorComment = ContextCompat.getColor(context, R.color.syntax_comment)       // أبيض/محايد
     private val colorType = ContextCompat.getColor(context, R.color.syntax_container_keyword) // بنفسجي
     private val colorPreprocessor = ContextCompat.getColor(context, R.color.syntax_make_directive) // بنفسجي
-    private val colorDefault = ContextCompat.getColor(context, R.color.rin_editor_text)
+    private var colorDefault = ContextCompat.getColor(context, R.color.rin_editor_text)
+
+    // --- ثيم التصميم (EditorTheme/EditorDesign) وخط الصفحة -----------------------------
+    // مُعلَنة قبل كتلة init عمداً: init تستدعي refreshTheme() فيجب أن تكون الحقول مُهيّأة.
+    private val baseTextColor = colorDefault
+    private val baseLineColor = ContextCompat.getColor(context, R.color.rin_current_line_bg)
+    private val baseSelectionColor = 0x553D7EFF.toInt()
+    private val defaultBackground = background
+    /** مصفوفة بحث: الفهرس = HighlightKind، القيمة = لون الثيم أو 0 (لا تجاوز). */
+    private var themeKindColors = IntArray(0)
+    private var pageGuideColumn = 0
+    private val guidePaint = Paint().apply { color = 0x33808080; strokeWidth = resources.displayMetrics.density }
+    /** يُستدعى بعد كل [refreshTheme] بلون خلفية التصميم (أو null = الأصلية) كي تتبعه عناصر مجاورة (عمود الأرقام). */
+    var onSurfaceChanged: ((Int?) -> Unit)? = null
     // مفاهيم Rin الدلالية (HighlightKind 20..26)
     private val colorControl = ContextCompat.getColor(context, R.color.syntax_control)
     private val colorConstant = ContextCompat.getColor(context, R.color.syntax_constant)
@@ -515,12 +528,18 @@ class RinCodeEditorView @JvmOverloads constructor(
      *  من المستدعي إن كان محفوظاً أصلاً (afterEngineMutation) لتفادي استدعاء JNI مكرِّر لجلب نص
      *  المستند كاملاً؛ عند غيابه (مثال: setLanguage) يُجلَب هنا مرّة واحدة فقط. */
     private fun rebuildHighlightAndDiagnosticCaches(text: String = engine.getText()) {
-        val highlights = engine.getHighlights()
+        // محرك C++ يلوّن كل ما ليس passkit بقواعد Rin؛ للغات الأخرى (kt/cpp/py/html/css/json…) نستعمل
+        // PolyglotSyntax (ألوان + رموز + أقواس متدرّجة صحيحة) ونعطّل تشخيص Rin الحي كي لا يظهر خطأ زائف.
+        // fenceLang قد يكون null أثناء init (يُعلَن لاحقاً في الصف)، لذلك نقرؤه كـ String?.
+        val lang: String? = fenceLang
+        val polyExt = if (lang != null && lang != "rin" && lang != "indsin" && lang != "passkit" && PolyglotSyntax.supports(lang)) lang else null
+        val highlights: List<RinNativeEditor.Highlight> =
+            if (polyExt != null) polyglotHighlights(text, polyExt) else engine.getHighlights()
         val byLine = HashMap<Int, MutableList<RinNativeEditor.Highlight>>()
         for (h in highlights) byLine.getOrPut(h.line) { mutableListOf() }.add(h)
         cachedHighlightsByLine = byLine
 
-        if (AppSettings.isLiveDiagnostics(context)) {
+        if (polyExt == null && AppSettings.isLiveDiagnostics(context)) {
             val diagByLine = HashMap<Int, MutableList<RinNativeEditor.Diagnostic>>()
             for (d in engine.getDiagnostics()) diagByLine.getOrPut(d.line) { mutableListOf() }.add(d)
             cachedDiagnosticsByLine = diagByLine
@@ -566,11 +585,24 @@ class RinCodeEditorView @JvmOverloads constructor(
      * مكتمل أو أقواس/وسوم غير مغلقة: كلا المصدرين يتجاهلان بصمت أي فتح بلا إغلاق مطابق حتى نهاية
      * المستند (لا استثناء، لا تخمين) — فلا تُصدَر له أي كتلة طيّ إطلاقاً.
      */
+    /** تلوين اللغات غير Rin عبر [PolyglotSyntax]. الملفات الضخمة جداً تُترك بلا تلوين لحماية الأداء. */
+    private fun polyglotHighlights(text: String, ext: String): List<RinNativeEditor.Highlight> {
+        if (text.length > 1_500_000) return emptyList()
+        val spans = PolyglotSyntax.tokenize(text.split('\n'), ext)
+        val out = ArrayList<RinNativeEditor.Highlight>(spans.size)
+        for (sp in spans) out.add(RinNativeEditor.Highlight(sp.line, sp.startCol, sp.endCol, sp.kind))
+        return out
+    }
+
+    private fun isBraceKind(kind: Int) =
+        kind == HighlightKind.BRACKET || kind == HighlightKind.BRACKET0 ||
+            kind == HighlightKind.BRACKET1 || kind == HighlightKind.BRACKET2
+
     private fun recomputeFoldRegions(highlights: List<RinNativeEditor.Highlight>, text: String) {
         val stack = ArrayDeque<Pair<Int, Int>>() // (line, col) لكل '{' غير مُطابَق بعد
         val regions = HashMap<Int, FoldRegion>()
         for (h in highlights) {
-            if (h.kind != HighlightKind.BRACKET) continue
+            if (!isBraceKind(h.kind)) continue
             val lineText = engine.getLine(h.line)
             val col = h.startCol
             if (col !in lineText.indices) continue
@@ -1025,6 +1057,7 @@ class RinCodeEditorView @JvmOverloads constructor(
         rebuildHighlightAndDiagnosticCaches(lastKnownText)
         cachedBracketInfo = computeBracketMatchForDraw()
         recomputeContentSize()
+        refreshTheme()
     }
 
     // --- القياس والرسم ----------------------------------------------------
@@ -1049,6 +1082,12 @@ class RinCodeEditorView @JvmOverloads constructor(
         val showWhitespace = AppSettings.isShowWhitespace(context)
         val clip = canvas.clipBounds
         val containerStyleOn = AppSettings.isContainerStyle(context)
+
+        // دليل حجم الصفحة: خط رأسي عند العمود المختار (72/80/100/120) تحت النص
+        if (pageGuideColumn > 0) {
+            val gx = paddingLeft + charWidth * pageGuideColumn
+            canvas.drawLine(gx, clip.top.toFloat(), gx, clip.bottom.toFloat(), guidePaint)
+        }
 
         var y = paddingTop.toFloat()
         for (line in visibleLines) {
@@ -1292,7 +1331,42 @@ class RinCodeEditorView @JvmOverloads constructor(
         textPaint.textSkewX = 0f
     }
 
-    private fun colorForKind(kind: Int): Int = when (kind) {
+    /** لون النوع: تجاوز الثيم إن وُجد، وإلا اللون الأصلي من colors.xml. */
+    private fun colorForKind(kind: Int): Int {
+        val o = themeKindColors
+        if (kind >= 0 && kind < o.size) {
+            val c = o[kind]
+            if (c != 0) return c
+        }
+        return baseColorForKind(kind)
+    }
+
+    /** اللون الأصلي (بلا ثيم) لأول نوع في مجموعة تصميم — يستعمله المصمّم لعرض "الحالي". */
+    fun defaultColorForGroup(key: String): Int {
+        val g = EditorTheme.GROUPS.firstOrNull { it.key == key } ?: return baseTextColor
+        return baseColorForKind(g.kinds[0])
+    }
+
+    /**
+     * يعيد قراءة ثيم التصميم وخط الصفحة من [EditorDesign] ويطبّقهما: ألوان الأنواع، النص، السطر الحالي،
+     * التحديد، الخلفية، ودليل الصفحة. يُستدعى من init ومن MainActivity.onResume ومن المصمّم.
+     */
+    fun refreshTheme() {
+        val colors = EditorDesign.colors(context)
+        themeKindColors = EditorTheme.kindColors(colors)
+        colorDefault = colors[EditorTheme.SURFACE_TEXT] ?: baseTextColor
+        cursorPaint.color = colorDefault
+        currentLinePaint.color = colors[EditorTheme.SURFACE_LINE] ?: baseLineColor
+        selectionPaint.color = colors[EditorTheme.SURFACE_SELECTION] ?: baseSelectionColor
+        guidePaint.color = colors[EditorTheme.SURFACE_GUIDE] ?: 0x33808080
+        pageGuideColumn = EditorDesign.guideColumn(context)
+        val bg = colors[EditorTheme.SURFACE_BG]
+        if (bg != null) setBackgroundColor(bg) else if (background !== defaultBackground) background = defaultBackground
+        onSurfaceChanged?.invoke(bg)
+        invalidate()
+    }
+
+    private fun baseColorForKind(kind: Int): Int = when (kind) {
         HighlightKind.KEYWORD -> colorKeyword
         HighlightKind.STRING -> colorString
         HighlightKind.NUMBER -> colorNumber
@@ -2259,6 +2333,19 @@ class RinCodeEditorView @JvmOverloads constructor(
 
     /** إعادة محاذاة المستند كاملاً (Format Document). true إن تغيّر النص. */
     fun formatDocument(indentWidth: Int = 4): Boolean {
+        // لغات غير Rin: المنسّق الآمن CodeFormatter (إزاحة بالأقواس/الوسوم، JSON منسّق، تنظيف مسافات)
+        val lang: String? = fenceLang
+        if (lang != null && lang != "rin" && lang != "indsin" && lang != "passkit" && CodeFormatter.supports(lang)) {
+            val opts = EditorDesign.formatOptions(context)
+            val cur = engine.getCursor()
+            val changed = applyDocumentTransform { CodeFormatter.format(it, lang, opts) ?: it }
+            if (changed) {
+                val line = cur.line.coerceIn(0, engine.lineCount() - 1)
+                engine.setCursor(line, cur.col.coerceIn(0, engine.getLine(line).length), false)
+                afterEngineMutation()
+            }
+            return changed
+        }
         val changed = engine.reindentDocument(indentWidth)
         if (changed) afterEngineMutation()
         return changed
