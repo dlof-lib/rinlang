@@ -1,0 +1,16 @@
+[] []
+[] true true
+true true ["a", "b"]
+{"words": 11, "symbols": 7, "groups": 9, "containers": 2, "members": 2, "imports": 0, "infix": 3, "prefix": 1, "errors": 0, "warnings": 0}
+["d"] ["a"] ["q: x → y"] false
+["warn: الحاوية 'empty' بلا أعضاء", "info: 'text' تطابق كلمة Rin محجوزة", "info: 'print' تطابق كلمة Rin محجوزة", "info: '//' أو '/*' رمز محجوز فيعطّل التعليق الموافق"]
+print nil 3
+["inlr", "inlr.img", "img", "inlr.text"] ["inlr.img", "inlr.text"]
+1 1 hint 'functoin' قريبة من الكلمة المحجوزة 'function'
+1 14 error العضو 'buton' غير معرَّف في ui — هل تقصد 'button'؟
+1 24 warn 'goto' مهجورة
+1 32 hint 'retrun' قريبة من الكلمة المحجوزة 'return'
+<pre class="cc"><span class="cc-reserved">return</span> <span class="cc-punct">&lt;</span><span class="cc-ident">a</span><span class="cc-punct">&gt;</span> <span class="cc-comment">// c</span>
+<span class="cc-member">ui.button</span> <span class="cc-string">"s"</span> <span class="cc-number">5</span></pre>
+ESC[35mreturnESC[0m ESC[0mxESC[0m
+{"name":"demo","scopeName":"source.demo","patterns":[{"name":"keyword.control.demo","match":"\\b(function|return|goto|container|ui|button|label)\\b"},{"name":"entity.name.type.demo","match":"\\bui\\.(button|label)\\b"},{"name":"string.quoted.demo","match":"\"(?:[^\"\\\\]|\\\\.)*\"|'(?:[^'\\\\]|\\\\.)*'"},{"name":"constant.numeric.demo","match":"\\b[0-9]+(\\.[0-9]+)?\\b"},{"name":"comment.line.demo","match":"//.*$"}]}
