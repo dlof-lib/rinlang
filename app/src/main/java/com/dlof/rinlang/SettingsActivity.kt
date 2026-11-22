@@ -86,6 +86,32 @@ class SettingsActivity : RinBaseActivity() {
             Row.Toggle(key.CONTAINER_STYLE, R.string.settings_container_style, R.string.settings_container_style_hint),
             Row.Toggle(key.SMOOTH_CURSOR, R.string.settings_smooth_cursor, R.string.settings_smooth_cursor_hint),
 
+            // تصميم المحرر + حجم الصفحة + التنسيق (انظر EditorDesign / EditorThemeDesigner / CodeFormatter)
+            Row.Section(R.string.settings_design_section_title),
+            Row.Link("🎨", R.string.settings_design_title, R.string.settings_design_hint) {
+                EditorThemeDesigner.show(this)
+            },
+            Row.Choice(
+                R.string.settings_page_guide, R.string.settings_page_guide_hint,
+                options = EditorDesign.GUIDE_COLUMNS.map {
+                    if (it == 0) Option(it.toString(), R.string.settings_page_guide_off) else Option(it.toString(), labelText = it.toString())
+                },
+                read = { EditorDesign.guideColumn(this).toString() },
+                write = { EditorDesign.setGuideColumn(this, it.toInt()) }
+            ),
+            Row.Choice(
+                R.string.settings_format_indent, R.string.settings_format_indent_hint,
+                options = listOf(Option("spaces", R.string.settings_format_spaces), Option("tabs", R.string.settings_format_tabs)),
+                read = { if (EditorDesign.isIndentWithTabs(this)) "tabs" else "spaces" },
+                write = { EditorDesign.setIndentWithTabs(this, it == "tabs") }
+            ),
+            Row.Choice(
+                R.string.settings_format_imports, R.string.settings_format_imports_hint,
+                options = listOf(Option("off", R.string.settings_page_guide_off), Option("on", R.string.settings_format_imports_on)),
+                read = { if (EditorDesign.isSortImports(this)) "on" else "off" },
+                write = { EditorDesign.setSortImports(this, it == "on") }
+            ),
+
             Row.Section(R.string.settings_assist_section_title),
             Row.Toggle(key.SYNTAX, R.string.settings_syntax, R.string.settings_syntax_hint),
             Row.Toggle(key.BRACKETS, R.string.settings_brackets, R.string.settings_brackets_hint),
