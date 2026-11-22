@@ -1,0 +1,11 @@
+@import "compiler_clude";
+let s = cc_load_default();
+let r = cc_lex(s, "print inlr.img 12 3.5 ; x: a/b inlr.zz // c\nlet مرحبا = \"s\\\"q\";\n/* m\nl */ text");
+print cc_format_tokens(r["tokens"]);
+print r["errors"];
+print cc_count_types(r["tokens"]);
+print cc_used_reserved(s, "print print inlr.text ; ; img");
+let f = cc_lex_full(s, "x // hi\n/* b */ y");
+print cc_format_tokens(f["tokens"]);
+let u = cc_lex(s, "\"open");
+print u["errors"];
