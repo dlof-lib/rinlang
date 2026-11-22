@@ -1,0 +1,116 @@
+// Parser.rin — المرحلة 2: رموز → AST. التعابير بمحلّل Pratt من أولويات $infix/$prefix في ccludelike.txt،
+// والجمل (let/print/if/while/fun/return) بمحلّل نزولي فوق مؤشّر الرموز.
+@import "./Lexer.rin";
+
+// ─────────────────────────── المحلّل النحوي (فوق مؤشّر الرموز) ───────────────────────────
+fun mp_skip_to_sync(c) {   // استرداد بعد خطأ: تخطَّ حتى ';' أو '}'
+    while (cc_peek(c)["type"] != "EOF" and !cc_at(c, ";") and !cc_at(c, "}")) { cc_next(c); }
+    cc_accept(c, ";");
+}
+fun mp_block(spec, c) {
+    let stmts = [];
+    if (!cc_expect(c, "{")) { return stmts; }
+    while (!cc_at(c, "}") and cc_peek(c)["type"] != "EOF") {
+        let before = c["pos"];
+        let s = mp_stmt(spec, c);
+        if (s != nil) { push(stmts, s); }
+        if (c["pos"] == before) { cc_next(c); }   // ضمان التقدّم
+    }
+    cc_expect(c, "}");
+    return stmts;
+}
+fun mp_name(c, what) {
+    let t = cc_peek(c);
+    if (t["type"] == "IDENT") { cc_next(c); return t["value"]; }
+    cc_perr(c, "المتوقَّع " + what + " ووُجد '" + t["value"] + "'");
+    return "";
+}
+fun mp_stmt(spec, c) {
+    let t = cc_peek(c);
+    let v = t["value"];
+    let line = t["line"];
+    let kw = t["type"] == "RESERVED";
+    if (kw and v == "let") {
+        cc_next(c);
+        let name = mp_name(c, "اسم متغيّر");
+        cc_expect(c, "=");
+        let e = cc_expr(spec, c, 0);
+        if (!cc_expect(c, ";")) { mp_skip_to_sync(c); }
+        return {"k": "let", "name": name, "e": e, "line": line};
+    }
+    if (kw and v == "print") {
+        cc_next(c);
+        let items = [cc_expr(spec, c, 0)];
+        while (cc_accept(c, ",")) { push(items, cc_expr(spec, c, 0)); }
+        if (!cc_expect(c, ";")) { mp_skip_to_sync(c); }
+        return {"k": "print", "items": items, "line": line};
+    }
+    if (kw and v == "if") {
+        cc_next(c);
+        let cond = cc_expr(spec, c, 0);
+        let thenB = mp_block(spec, c);
+        let elseB = [];
+        if (cc_accept(c, "else")) {
+            if (cc_at(c, "if")) { elseB = [mp_stmt(spec, c)]; }
+            else { elseB = mp_block(spec, c); }
+        }
+        return {"k": "if", "cond": cond, "then": thenB, "else": elseB, "line": line};
+    }
+    if (kw and v == "while") {
+        cc_next(c);
+        let cond2 = cc_expr(spec, c, 0);
+        return {"k": "while", "cond": cond2, "body": mp_block(spec, c), "line": line};
+    }
+    if (kw and v == "fun") {
+        cc_next(c);
+        let fname = mp_name(c, "اسم دالة");
+        let params = [];
+        cc_expect(c, "(");
+        if (!cc_at(c, ")")) {
+            push(params, mp_name(c, "معامل"));
+            while (cc_accept(c, ",")) { push(params, mp_name(c, "معامل")); }
+        }
+        cc_expect(c, ")");
+        return {"k": "fun", "name": fname, "params": params, "body": mp_block(spec, c), "line": line};
+    }
+    if (kw and v == "return") {
+        cc_next(c);
+        let e2 = nil;
+        if (!cc_at(c, ";")) { e2 = cc_expr(spec, c, 0); }
+        if (!cc_expect(c, ";")) { mp_skip_to_sync(c); }
+        return {"k": "return", "e": e2, "line": line};
+    }
+    if (t["type"] == "IDENT" and cc_peek_at(c, 1)["value"] == "=" and cc_peek_at(c, 1)["type"] == "SYMBOL") {
+        cc_next(c);
+        cc_next(c);
+        let e3 = cc_expr(spec, c, 0);
+        if (!cc_expect(c, ";")) { mp_skip_to_sync(c); }
+        return {"k": "assign", "name": v, "e": e3, "line": line};
+    }
+    let e4 = cc_expr(spec, c, 0);
+    if (!cc_expect(c, ";")) { mp_skip_to_sync(c); }
+    return {"k": "expr", "e": e4, "line": line};
+}
+// مصدر → {ok, program, errors}
+fun mini_parse(src) {
+    let spec = langSpec();
+    let r = cc_lex(spec, src);
+    let errors = [];
+    let i = 0;
+    while (i < len(r["errors"])) { push(errors, r["errors"][i]); i = i + 1; }
+    let c = cc_cursor(r["tokens"]);
+    let prog = [];
+    while (cc_peek(c)["type"] != "EOF") {
+        let before = c["pos"];
+        let s = mp_stmt(spec, c);
+        if (s != nil) { push(prog, s); }
+        if (c["pos"] == before) { cc_next(c); }
+    }
+    i = 0;
+    while (i < len(c["errors"])) { push(errors, c["errors"][i]); i = i + 1; }
+    return {"ok": len(errors) == 0, "program": prog, "errors": errors};
+}
+
+
+// اسم موحّد مع بقية لغات RinStudio: يعيد {ok, program, errors}
+fun parse(source) { return mini_parse(source); }
