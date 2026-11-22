@@ -1,0 +1,6 @@
+// الربط بالمحلّل المفرداتي: السطر التالي يُحوَّل إلى @import + cc_attach
+@inlr.compiler_clude.main[];
+print cc_ok(cc_spec), cc_is_reserved(cc_spec, "else"), cc_is_reserved(cc_spec, "inlr.img"), cc_spec["file"];
+print cc_check_decls(cc_parse("$kw[ let fun class ]"), "let class = 1; fun let() {} let ok = 2;");
+let s2 = cc_lex(cc_spec, "let x = inlr.img;");
+print len(s2["tokens"]), s2["errors"];
