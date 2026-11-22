@@ -240,7 +240,62 @@ std::string expandPianoBlocks(const std::string& s, const std::string& filename)
 }
 }  // namespace
 
-Lexer::Lexer(std::string source, std::string filename) : src(expandPianoBlocks(source, filename)), file(std::move(filename)) {
+// ---------------------------------------------------------------------------
+//  compiler_clude: السطر  @inlr.compiler_clude.main[ "spec.txt" ];  (في بداية سطر) يصير في السطر نفسه:
+//      @import "compiler_clude"; let cc_spec = cc_attach("spec.txt", "<الملف>", <سطر>);
+//  والوسيط اختياري (الافتراضي ccludelike.txt). عدد الأسطر محفوظ.
+// ---------------------------------------------------------------------------
+namespace {
+std::string cludeEsc(const std::string& v) {
+    std::string o;
+    for (char ch : v) { if (ch == '\\' || ch == '"') o += '\\'; if (ch != '\n' && ch != '\r') o += ch; }
+    return o;
+}
+std::string expandCludeDirective(const std::string& s, const std::string& filename) {
+    static const char* kTag = "@inlr.compiler_clude.main[";
+    if (s.find(kTag) == std::string::npos) return s;
+    const size_t tl = std::char_traits<char>::length(kTag);
+    std::string out;
+    out.reserve(s.size() + 96);
+    size_t i = 0, n = s.size(), line = 1;
+    while (i < n) {
+        size_t ls = i;                       // بداية السطر
+        size_t k = ls;
+        while (k < n && (s[k] == ' ' || s[k] == '\t')) ++k;
+        size_t le = s.find('\n', ls);
+        if (le == std::string::npos) le = n;
+        bool done = false;
+        if (s.compare(k, tl, kTag) == 0) {
+            size_t close = s.find(']', k + tl);
+            if (close != std::string::npos && close <= le) {
+                std::string arg = s.substr(k + tl, close - (k + tl));
+                std::string spec;
+                size_t a = arg.find_first_not_of(" \t");
+                if (a != std::string::npos && (arg[a] == '"' || arg[a] == '\'')) {
+                    size_t b = arg.find(arg[a], a + 1);
+                    if (b != std::string::npos) spec = arg.substr(a + 1, b - a - 1);
+                }
+                if (spec.empty()) spec = "ccludelike.txt";
+                size_t tail = close + 1;
+                while (tail < le && (s[tail] == ' ' || s[tail] == '\t')) ++tail;
+                if (tail < le && s[tail] == ';') ++tail;
+                out.append(s, ls, k - ls);
+                out += "@import \"compiler_clude\"; let cc_spec = cc_attach(\"" + cludeEsc(spec) + "\", \"" + cludeEsc(filename) +
+                       "\", " + std::to_string(line) + ");";
+                out.append(s, tail, le - tail);
+                done = true;
+            }
+        }
+        if (!done) out.append(s, ls, le - ls);
+        if (le < n) { out += '\n'; ++line; }
+        i = le + 1;
+        if (le >= n) break;
+    }
+    return out;
+}
+}  // namespace
+
+Lexer::Lexer(std::string source, std::string filename) : src(expandCludeDirective(expandPianoBlocks(source, filename), filename)), file(std::move(filename)) {
     diag::globalSourceManager().addFile(file, src);
 }
 
