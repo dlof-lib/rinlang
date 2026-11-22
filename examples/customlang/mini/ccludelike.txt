@@ -1,0 +1,19 @@
+// ccludelike.txt — الكلمات المحجوزة للغة mini (مثال لغة كاملة بـ compiler_clude)
+@inlr.compiler_clude.main[];
+@title "mini";
+@version "1.0";
+@ext[ mini ];
+
+$token[ ( ) { } ; "," = ]
+$token.keyword[ let print if else while fun return true false nil ]
+
+// عوامل بأولويات (الأقل أولوية أولاً)
+$infix.1[ or ]
+$infix.2[ and ]
+$infix.5[ == != < > <= >= ]
+$infix.10[ + - ]
+$infix.20[ * / % ]
+$infixr.30[ ^ ]
+$prefix.40[ - ! ]
+
+container.inlr [ img , text ]@
