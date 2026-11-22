@@ -1,0 +1,10 @@
+inlr compiler_clude main 0
+[] []
+[";", ":", "/"]
+["inlr", "container", "inlr.img", "img", "inlr.text", "text", "print"]
+["img", "text"]
+true true true false
+word container:inlr token
+'print' كلمة محجوزة (word) nil '1x' ليس معرّفاً صالحاً
+[]
+[";", ":", "/"] ["a", "b"]
