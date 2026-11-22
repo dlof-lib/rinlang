@@ -1588,12 +1588,14 @@ StmtPtr Parser::liveActionStatement() {
 StmtPtr Parser::lifecycleHookDeclaration() {
     Token hookTok = consume(TokenType::IDENT,
         "Expected a lifecycle hook name after 'on' (init/mount/update/destroy/error)");
-    static const std::unordered_set<std::string> validHooks = {"init", "mount", "update", "destroy", "error"};
+    static const std::unordered_set<std::string> validHooks = {"init", "mount", "update", "destroy", "error",
+                                                                "get", "set", "has", "drop", "call", "invoke"}; // الستة الأخيرة: docs/container_magic.md
     if (!validHooks.count(hookTok.lexeme)) {
         auto d = err(diag::Code::E0012_MissingToken, hookTok,
                      "unknown lifecycle hook 'on " + hookTok.lexeme + "'");
-        d.diagnostic->withReason("RCS-1.0 §3.2 Lifecycle defines exactly five hooks")
-         .withHint("expected one of: on init(), on mount(), on update(prevState), on destroy(), on error(err)");
+        d.diagnostic->withReason("RCS-1.0 §3.2 Lifecycle hooks + the six member hooks (get/set/has/drop/call/invoke) are the only `on <name>` forms")
+         .withHint("expected one of: on init(), on mount(), on update(prevState), on destroy(), on error(err), "
+                   "on get(name), on set(name, value), on has(name), on drop(name), on call(name, args), on invoke(args)");
         throw d;
     }
     consume(TokenType::LPAREN, "Expected '(' after lifecycle hook name 'on " + hookTok.lexeme + "'");
@@ -1632,6 +1634,9 @@ StmtPtr Parser::lifecycleHookDeclaration() {
 // RCS-1.0 §3.3 State: state IDENT = expr;  (يُستدعى بعد استهلاك 'state' من declaration()).
 // التهيئة إلزامية دائماً (مطابقة تماماً للـ EBNF: state_stmt ::= "state" IDENT "=" expr ";").
 StmtPtr Parser::stateDeclaration() {
+    // `state fixed x = v;` — 'fixed' كلمة سياقية: تُعامَل معدِّلاً فقط إن تبعها اسم (IDENT)، فيبقى `state fixed = 1;` اسماً عادياً.
+    bool isFixed = false;
+    if (check(TokenType::IDENT) && peek().lexeme == "fixed" && current + 1 < tokens.size() && tokens[current + 1].type == TokenType::IDENT) { advance(); isFixed = true; }
     auto name = consume(TokenType::IDENT, "Expected state field name after 'state'");
     consume(TokenType::EQUAL, "Expected '=' after state field name ('state' fields must be initialized)");
     ExprPtr initializer = expression();
@@ -1639,6 +1644,7 @@ StmtPtr Parser::stateDeclaration() {
     auto stmt = std::make_shared<StateDeclStmt>();
     stmt->name = name.lexeme;
     stmt->initializer = initializer;
+    stmt->fixed = isFixed;
     stmt->line = name.line;
     return stmt;
 }
