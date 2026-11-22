@@ -1,0 +1,23 @@
+// تصدير RinStudio: مشروع لغة كامل من ccludelike.txt
+@import "compiler_clude";
+let r = cc_new_language(".out/studio/toy", "Toy", "toy");
+print len(r["files"]);
+let spec = cc_load(".out/studio/toy/ccludelike.txt");
+print spec["errors"], spec["title"], spec["exts"];
+let man = jsonDecode(readFile(".out/studio/toy/manifest.json"));
+print man["id"], man["fileExtension"], man["entry"]["run"], man["syntax"];
+let syn = jsonDecode(readFile(".out/studio/toy/syntax.rinsyntax.json"));
+print syn["language"], syn["fileExtension"], syn["lineComment"], len(syn["rules"]);
+print syn["keywords"];
+print syn["operators"];
+let i = 0;
+while (i < len(syn["rules"])) { print syn["rules"][i]["name"], syn["rules"][i]["color"]; i = i + 1; }
+print readFile(".out/studio/toy/examples/hello.toy");
+// خيارات: حساسية الأحرف وتعليق مخصّص ونصوص
+let s2 = cc_parse("@option case=insensitive\n@option line_comment=\"#\"\n@option block_comment=\"\"\n@option strings=\"'\"\n$kw[ select ]\ncontainer.db [ table ]@");
+let sy2 = jsonDecode(cc_studio_syntax(s2, "q", "q"));
+let j = 0;
+while (j < len(sy2["rules"])) { print sy2["rules"][j]["name"], sy2["rules"][j]["pattern"]; j = j + 1; }
+print cc_export_studio(".out/studio/bad", s2, "1x", "Q", "q")["error"];
+print cc_export_studio(".out/studio/bad", cc_parse("$token[ a"), "ok", "Q", "q")["error"];
+print cc_studio_manifest(s2, "q", "Q", "me", "q");
