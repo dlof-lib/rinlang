@@ -72,11 +72,11 @@ let repo = Services.get("repo");      // يبني config ثم db ثم repo (كس
 
 ## خارطة الطريق
 1. ✅ **Services** — حاوية الخدمات (هذا الملف)
-2. `Autoload` — تحميل كسول للحاويات/المكتبات `.rcl` عند أول إشارة لاسم مجهول
-3. خُطّافات سحرية — `__get/__set/__isset/__unset/__call/__invoke` كـ `on missing/get/set` على الحاوية
+2. ✅ `Autoload` — تحميل كسول للحاويات/المكتبات `.rcl`
+3. ✅ **خُطّافات سحرية** — `on get/set/has/drop/call/invoke` (docs/container_magic.md)
 4. `ArrayAccess` / `Countable` / `IteratorAggregate` — الحاوية تُفهرَس وتُعَدّ وتُكرَّر
 5. Traits وعقود (interfaces) للحاويات — `container.use` / `container.implements`
-6. حقول `readonly` وتعدادات (enum) — حماية حقول الحاوية
+6. حقول `readonly` وتعدادات (enum) — حماية حقول الحاوية (✅ الجزء الأول: `state fixed` · docs/EXTRA13.md)
 7. `filter_var` — تحقّق وتنقية قيم الحقول (email/int/url/ip/regex)
 8. `serialize` / `var_export` / `__sleep` / `__wakeup` / `__clone`
 9. هياكل SPL — `SplStack/Queue/Heap/PriorityQueue/ObjectStorage/WeakMap`
