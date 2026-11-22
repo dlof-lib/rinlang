@@ -1,0 +1,46 @@
+// CodeGen.rin — المرحلة 4: AST لـ mini → كود Rin مكافئ (تشغَّل مخرجاته بأي مفسّر Rin).
+@import "./Parser.rin";
+
+fun cg_pad(n) {
+    let s = "";
+    let i = 0;
+    while (i < n) { s = s + "    "; i = i + 1; }
+    return s;
+}
+fun cg_block(stmts, ind) {
+    let out = [];
+    let i = 0;
+    while (i < len(stmts)) { push(out, cg_stmt(stmts[i], ind)); i = i + 1; }
+    return join(out, "\n");
+}
+fun cg_stmt(s, ind) {
+    let p = cg_pad(ind);
+    let k = s["k"];
+    if (k == "let") { return p + "let " + s["name"] + " = " + cc_ast_to_rin(s["e"]) + ";"; }
+    if (k == "assign") { return p + s["name"] + " = " + cc_ast_to_rin(s["e"]) + ";"; }
+    if (k == "print") {
+        let parts = [];
+        let i = 0;
+        while (i < len(s["items"])) { push(parts, cc_ast_to_rin(s["items"][i])); i = i + 1; }
+        return p + "print " + join(parts, ", ") + ";";
+    }
+    if (k == "expr") { return p + cc_ast_to_rin(s["e"]) + ";"; }
+    if (k == "return") {
+        if (s["e"] == nil) { return p + "return nil;"; }
+        return p + "return " + cc_ast_to_rin(s["e"]) + ";";
+    }
+    if (k == "while") { return p + "while (" + cc_ast_to_rin(s["cond"]) + ") {\n" + cg_block(s["body"], ind + 1) + "\n" + p + "}"; }
+    if (k == "fun") { return p + "fun " + s["name"] + "(" + join(s["params"], ", ") + ") {\n" + cg_block(s["body"], ind + 1) + "\n" + p + "}"; }
+    if (k == "if") {
+        let t = p + "if (" + cc_ast_to_rin(s["cond"]) + ") {\n" + cg_block(s["then"], ind + 1) + "\n" + p + "}";
+        if (len(s["else"]) > 0) { t = t + " else {\n" + cg_block(s["else"], ind + 1) + "\n" + p + "}"; }
+        return t;
+    }
+    return p + "// جملة غير معروفة";
+}
+// مصدر mini → نص Rin ("" عند أخطاء نحوية؛ راجع parse)
+fun generate(source) {
+    let p = parse(source);
+    if (!p["ok"]) { return ""; }
+    return cg_block(p["program"], 0);
+}
