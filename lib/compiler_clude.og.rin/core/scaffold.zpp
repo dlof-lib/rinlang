@@ -1,0 +1,232 @@
+// compiler_clude — الجزء 4: إنشاء لغات وقوالب ومكتبات
+fun cc_spec_header(ns, lib) {
+    return "@" + ns + "." + lib + ".main[];";
+}
+// نص ccludelike.txt لمشروع جديد
+fun cc_spec_text(name, words) {
+    let L = [];
+    push(L, "// ccludelike.txt — الكلمات المحجوزة لـ " + name);
+    push(L, "");
+    push(L, cc_spec_header("inlr", CC_NAME));
+    push(L, "// @import \"compiler_clude\";        // يستورد الكلمات الافتراضية");
+    push(L, "");
+    push(L, "$token[]");
+    push(L, "$token[ ; : / ]");
+    push(L, "$token.keyword[ " + join(words, " ") + " ]");
+    push(L, "container.inlr [ img , text ]@");
+    push(L, "print");
+    return join(L, "\n") + "\n";
+}
+fun cc_default_words() { return ["let", "fun", "if", "else", "while", "return", "true", "false", "nil"]; }
+
+// ccludelike.txt للغة كاملة: خيارات + امتداد + عوامل بأولويات
+fun cc_lang_spec(name, ext, words) {
+    let L = [];
+    push(L, "// ccludelike.txt — الكلمات المحجوزة للغة " + name);
+    push(L, "@title \"" + name + "\"");
+    push(L, "@version \"0.1.0\"");
+    push(L, "@ext[ " + ext + " ]");
+    push(L, "@option line_comment=\"//\"");
+    push(L, cc_spec_header("inlr", CC_NAME));
+    push(L, "// @import \"compiler_clude\";        // يستورد الكلمات الافتراضية");
+    push(L, "");
+    push(L, "$token[]");
+    push(L, "$token[ ( ) { } \",\" ; : = ]");
+    push(L, "$token.keyword[ " + join(words, " ") + " ]");
+    push(L, "$infix.2[ or ]");
+    push(L, "$infix.3[ and ]");
+    push(L, "$infix.5[ == != < > <= >= ]");
+    push(L, "$infix.10[ + - ]");
+    push(L, "$infix.20[ * / % ]");
+    push(L, "$infixr.30[ ^ ]");
+    push(L, "$prefix.40[ - ! ]");
+    push(L, "container.inlr [ img , text ]@");
+    push(L, "print");
+    return join(L, "\n") + "\n";
+}
+
+// لغة كمشروع RinStudio كامل: dir/{ccludelike.txt, manifest.json, syntax.rinsyntax.json, Lexer/Parser/Interpreter/CodeGen/run.rin,
+// examples/hello.ext, README.md}. ترجع {files, name} أو {error}
+fun cc_new_language(dir, name, ext) {
+    if (!cc_is_ident(name)) { return {"error": "اسم اللغة غير صالح: " + name}; }
+    if (!cc_is_ident(ext)) { return {"error": "امتداد غير صالح: " + ext}; }
+    let spec = cc_parse(cc_lang_spec(name, ext, cc_default_words()));
+    let r = cc_export_studio(dir, spec, lower(name), name, ext);
+    if (has(r, "error")) { return r; }
+    let rd = cc_render("# {{name|upper}}\n\nلغة بامتداد `.{{ext}}` مولّدة بـ compiler_clude، جاهزة لـ RinStudio (افتح المجلد كمشروع).\n\n{{#each words}}- `{{.}}`\n{{/each}}", {"name": name, "ext": ext, "words": cc_default_words()});
+    writeFile(dir + "/README.md", rd);
+    push(r["files"], dir + "/README.md");
+    return {"files": r["files"], "name": name};
+}
+
+// قالب: dir/ccludelike.txt · template.txt بمتغيرات {{اسم}}
+fun cc_new_template(dir, name) {
+    if (!cc_is_ident(name)) { return {"error": "اسم القالب غير صالح: " + name}; }
+    let files = [];
+    writeFile(dir + "/ccludelike.txt", cc_spec_text(name, ["template", "slot", "include", "end"]));
+    push(files, dir + "/ccludelike.txt");
+    writeFile(dir + "/template.txt", "// {{name}} — {{title}}\nprint \"{{title}}\";\n");
+    push(files, dir + "/template.txt");
+    return {"files": files, "name": name};
+}
+// ---------------------------------------------------------------------------
+//  محرّك قوالب:  {{x}} · {{a.b}} · {{x|upper|lower|trim|len|default:قيمة}}
+//     {{#if x}}…{{else}}…{{/if}} · {{#unless x}}…{{/unless}} · {{#each xs}}{{.}} {{@index}}{{/each}}
+// ---------------------------------------------------------------------------
+fun cc_find(s, sub, pos) {
+    if (pos > len(s)) { return -1; }
+    let r = indexOf(substr(s, pos, len(s) - pos), sub);
+    if (r < 0) { return -1; }
+    return r + pos;
+}
+fun cc_truthy(v) {
+    if (v == nil or v == false or v == "" or v == 0) { return false; }
+    if (type(v) == "array" and len(v) == 0) { return false; }
+    return true;
+}
+fun cc_lookup(vars, path) {
+    let parts = split(path, ".");
+    let cur = vars;
+    let i = 0;
+    while (i < len(parts)) {
+        if (type(cur) != "map" or !has(cur, parts[i])) { return nil; }
+        cur = cur[parts[i]];
+        i = i + 1;
+    }
+    return cur;
+}
+fun cc_copy_map(m) {
+    let out = {};
+    let ks = keys(m);
+    let i = 0;
+    while (i < len(ks)) { out[ks[i]] = m[ks[i]]; i = i + 1; }
+    return out;
+}
+// موضع الإغلاق المطابق لوسم كتلة (يراعي التداخل)؛ يعيد {at, len} أو nil
+fun cc_block_close(s, kind, pos) {
+    let openTag = "{{#" + kind + " ";
+    let closeTag = "{{/" + kind + "}}";
+    let depth = 1;
+    let p = pos;
+    while (depth > 0) {
+        let o = cc_find(s, openTag, p);
+        let c = cc_find(s, closeTag, p);
+        if (c < 0) { return nil; }
+        if (o >= 0 and o < c) { depth = depth + 1; p = o + len(openTag); }
+        else { depth = depth - 1; p = c + len(closeTag); if (depth == 0) { return {"at": c, "len": len(closeTag)}; } }
+    }
+    return nil;
+}
+fun cc_render_blocks(src, vars) {
+    let out = "";
+    let pos = 0;
+    let go = true;
+    while (go) {
+        let a = cc_find(src, "{{#", pos);
+        if (a < 0) { go = false; }
+        else {
+            let b = cc_find(src, "}}", a);
+            if (b < 0) { go = false; }
+            else {
+                let tag = trim(substr(src, a + 3, b - a - 3));
+                let sp = indexOf(tag, " ");
+                let kind = tag;
+                let arg = "";
+                if (sp > 0) { kind = substr(tag, 0, sp); arg = trim(substr(tag, sp + 1, len(tag) - sp - 1)); }
+                let cl = cc_block_close(src, kind, b + 2);
+                if (cl == nil or (kind != "if" and kind != "unless" and kind != "each")) {
+                    out = out + substr(src, pos, b + 2 - pos);
+                    pos = b + 2;
+                } else {
+                    out = out + substr(src, pos, a - pos);
+                    let body = substr(src, b + 2, cl["at"] - b - 2);
+                    let val = cc_lookup(vars, arg);
+                    if (kind == "each") {
+                        if (type(val) == "array") {
+                            let i = 0;
+                            while (i < len(val)) {
+                                let v2 = cc_copy_map(vars);
+                                if (type(val[i]) == "map") {
+                                    let ks = keys(val[i]);
+                                    let k = 0;
+                                    while (k < len(ks)) { v2[ks[k]] = val[i][ks[k]]; k = k + 1; }
+                                }
+                                v2["."] = val[i];
+                                v2["@index"] = i;
+                                v2["@n"] = i + 1;
+                                out = out + cc_render(body, v2);
+                                i = i + 1;
+                            }
+                        }
+                    } else {
+                        let yes = cc_truthy(val);
+                        if (kind == "unless") { yes = !yes; }
+                        let el = cc_find(body, "{{else}}", 0);
+                        let thenPart = body;
+                        let elsePart = "";
+                        if (el >= 0) { thenPart = substr(body, 0, el); elsePart = substr(body, el + 8, len(body) - el - 8); }
+                        if (yes) { out = out + cc_render(thenPart, vars); }
+                        else { out = out + cc_render(elsePart, vars); }
+                    }
+                    pos = cl["at"] + cl["len"];
+                }
+            }
+        }
+    }
+    return out + substr(src, pos, len(src) - pos);
+}
+fun cc_apply_filter(v, f) {
+    let s = "";
+    if (v != nil) { s = toString(v); }
+    if (f == "upper") { return upper(s); }
+    if (f == "lower") { return lower(s); }
+    if (f == "trim") { return trim(s); }
+    if (f == "len") { return len(s); }
+    if (substr(f, 0, 8) == "default:") { if (cc_truthy(v)) { return s; } return substr(f, 8, len(f) - 8); }
+    return s;
+}
+fun cc_render_vars(src, vars) {
+    let out = "";
+    let pos = 0;
+    let go = true;
+    while (go) {
+        let a = cc_find(src, "{{", pos);
+        if (a < 0) { go = false; }
+        else {
+            let b = cc_find(src, "}}", a);
+            if (b < 0) { go = false; }
+            else {
+                out = out + substr(src, pos, a - pos);
+                let expr = trim(substr(src, a + 2, b - a - 2));
+                let parts = split(expr, "|");
+                let name = trim(parts[0]);
+                let v = nil;
+                if (has(vars, name)) { v = vars[name]; } else { v = cc_lookup(vars, name); }
+                let res = v;
+                if (len(parts) == 1) { if (v == nil) { res = ""; } else { res = toString(v); } }
+                let f = 1;
+                while (f < len(parts)) { res = cc_apply_filter(res, trim(parts[f])); f = f + 1; }
+                out = out + toString(res);
+                pos = b + 2;
+            }
+        }
+    }
+    return out + substr(src, pos, len(src) - pos);
+}
+fun cc_render(src, vars) { return cc_render_vars(cc_render_blocks(src, vars), vars); }
+// اسم قديم متوافق
+fun cc_render_template(src, vars) { return cc_render(src, vars); }
+
+// مكتبة: dir/name.og.rin/{disconom.json, main.zpp, ccludelike.txt}
+fun cc_new_library(dir, name) {
+    if (!cc_is_ident(name)) { return {"error": "اسم المكتبة غير صالح: " + name}; }
+    let bdir = dir + "/" + name + ".og.rin";
+    let files = [];
+    let dj = "{\n  \"disconom\": 1,\n  \"name\": \"" + name + "\",\n  \"version\": \"0.1.0\",\n  \"description\": \"" + name + "\",\n  \"rin\": \">=1.0.0\",\n  \"main\": \"main.zpp\",\n  \"parts\": [\"main.zpp\"]\n}\n";
+    writeFile(bdir + "/disconom.json", dj); push(files, bdir + "/disconom.json");
+    writeFile(bdir + "/main.zpp", "// " + name + " — الجزء الأساسي\nfun " + name + "_hello() { return \"" + name + "\"; }\n");
+    push(files, bdir + "/main.zpp");
+    writeFile(bdir + "/ccludelike.txt", cc_spec_text(name, cc_default_words()));
+    push(files, bdir + "/ccludelike.txt");
+    return {"files": files, "name": name};
+}
