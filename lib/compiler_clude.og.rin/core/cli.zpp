@@ -1,0 +1,71 @@
+// compiler_clude — الجزء 5: نقطة الدخول  (@inlr.compiler_clude.main[])
+// cc_main(specPath, srcPath): يحمّل ccludelike ويحلّل المصدر ويطبع تقريراً. يعيد true عند عدم وجود أخطاء.
+fun cc_main(specPath, srcPath) {
+    let spec = cc_load(specPath);
+    print cc_format_spec(spec);
+    if (!cc_ok(spec)) { return false; }
+    if (srcPath == "") { return true; }
+    if (!fileExists(srcPath)) { print "المصدر غير موجود: " + srcPath; return false; }
+    let r = cc_lex(spec, readFile(srcPath));
+    print cc_format_tokens(r["tokens"]);
+    let e = 0;
+    while (e < len(r["errors"])) { print "خطأ " + r["errors"][e]; e = e + 1; }
+    return len(r["errors"]) == 0;
+}
+
+// واجهة أوامر: cc_cli(["check", spec]) · ["lex", spec, src] · ["lint", spec] · ["export", spec] · ["json", spec]
+//   ["stats", spec] · ["diff", a, b] · ["highlight", spec, src] · ["eval", spec, "1+2"]
+//   ["new-language", dir, name, ext] · ["new-template", dir, name] · ["new-library", dir, name]
+// تعيد نصاً (أو nil إن كانت الأوامر غير معروفة).
+fun cc_cli(args) {
+    if (len(args) == 0) { return "الأوامر: check lex lint export json stats diff highlight eval new-language new-template new-library"; }
+    let cmd = args[0];
+    if (cmd == "new-language" and len(args) == 4) { return jsonEncode(cc_new_language(args[1], args[2], args[3])); }
+    if (cmd == "new-template" and len(args) == 3) { return jsonEncode(cc_new_template(args[1], args[2])); }
+    if (cmd == "new-library" and len(args) == 3) { return jsonEncode(cc_new_library(args[1], args[2])); }
+    if (len(args) < 2) { return "ينقص وسيط: " + cmd; }
+    let spec = cc_load(args[1]);
+    if (cmd == "check") { return cc_format_spec(spec); }
+    if (cmd == "lint") { return join(cc_lint(spec), "\n"); }
+    if (cmd == "export") { return cc_format_text(spec); }
+    if (cmd == "json") { return cc_to_json(spec); }
+    if (cmd == "stats") { return jsonEncode(cc_stats(spec)); }
+    if (cmd == "diff" and len(args) == 3) { return jsonEncode(cc_diff(spec, cc_load(args[2]))); }
+    if (cmd == "lex" and len(args) == 3) { return cc_format_tokens(cc_lex(spec, readFile(args[2]))["tokens"]); }
+    if (cmd == "highlight" and len(args) == 3) { return cc_highlight_ansi(spec, readFile(args[2])); }
+    if (cmd == "eval" and len(args) == 3) { return toString(cc_run_expr(spec, args[2], {})); }
+    return "أمر غير معروف: " + cmd;
+}
+
+// ---------------------------------------------------------------------------
+//  ربط Rin: السطر  @inlr.compiler_clude.main[];  في أي ملف .rin يُحوَّل (في المحلّل المفرداتي) إلى
+//      @import "compiler_clude"; let cc_spec = cc_attach("ccludelike.txt", "<الملف>", <سطر>);
+//  وسيط أول اختياري: مسار ملف آخر  @inlr.compiler_clude.main["my.txt"];
+// ---------------------------------------------------------------------------
+// أسماء مُعرَّفة (بعد let/fun/…) تصطدم بكلمة محجوزة في spec
+fun cc_check_decls(spec, src) {
+    let r = cc_lex(spec, src);
+    let decl = ["let", "fun", "warp", "stone", "gauge", "text", "make"];
+    let out = [];
+    let i = 1;
+    while (i < len(r["tokens"])) {
+        let t = r["tokens"][i];
+        let p = r["tokens"][i - 1];
+        if ((t["type"] == "RESERVED" or t["type"] == "MEMBER") and p["type"] != "STRING" and cc_in(decl, p["value"]) and !cc_in(decl, t["value"])) {
+            push(out, "[" + toString(t["line"]) + ":" + toString(t["col"]) + "] '" + t["value"] + "' كلمة محجوزة في ccludelike.txt فلا تصلح اسماً");
+        }
+        i = i + 1;
+    }
+    return out;
+}
+fun cc_attach(specPath, scriptPath, line) {
+    let spec = cc_load(specPath);
+    let e = 0;
+    while (e < len(spec["errors"])) { print "تنبيه compiler_clude " + spec["errors"][e]; e = e + 1; }
+    if (cc_ok(spec) and fileExists(scriptPath)) {
+        let d = cc_check_decls(spec, readFile(scriptPath));
+        let k = 0;
+        while (k < len(d)) { print "تنبيه compiler_clude " + scriptPath + d[k]; k = k + 1; }
+    }
+    return spec;
+}
