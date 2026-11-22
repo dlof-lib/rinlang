@@ -517,6 +517,7 @@ class MainActivity : RinBaseActivity() {
         super.onResume()
         // الإعدادات تتغيّر من شاشة الإعدادات والمحرر ما زال حيًا في المكدّس (singleTop)؛ نعيد تطبيقها هنا.
         applyStoredEditorSettings()
+        applyEditorDesign()
         editCode.invalidate()
         // عودة من الشاشة الكاملة (أو من الخلفية): أعِد ربط اللوحة بالجلسة الحيّة — الإطار الأخير يُرسم فوراً.
         livePanel.resume()
@@ -871,8 +872,12 @@ class MainActivity : RinBaseActivity() {
         popup.menu.add(0, 24, 23, R.string.action_cut_line)
         popup.menu.add(0, 25, 24, R.string.action_select_line)
         popup.menu.add(0, 26, 25, R.string.action_copy_markdown)
+        popup.menu.add(0, 27, 26, R.string.menu_edit_format_document)
+        popup.menu.add(0, 28, 27, R.string.menu_edit_editor_design)
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
+                27 -> toastChanged(editCode.formatDocument(AppSettings.getTabSize(this)), R.string.document_formatted_toast)
+                28 -> EditorThemeDesigner.show(this) { applyEditorDesign() }
                 1 -> editorController.undo()
                 2 -> editorController.redo()
                 3 -> toggleFindBar()
@@ -1404,6 +1409,17 @@ class MainActivity : RinBaseActivity() {
         txtLineNumbers.visibility = if (lineNumbersVisible) android.view.View.VISIBLE else android.view.View.GONE
 
         applyInterfaceSettings()
+    }
+
+    private var gutterDefaultBackground: android.graphics.drawable.Drawable? = null
+
+    /** يطبّق ثيم التصميم (ألوان الكود/الخلفية/دليل الصفحة) على المحرر وعمود أرقام الأسطر المجاور. */
+    private fun applyEditorDesign() {
+        if (gutterDefaultBackground == null) gutterDefaultBackground = txtLineNumbers.background
+        editCode.onSurfaceChanged = { bg ->
+            if (bg != null) txtLineNumbers.setBackgroundColor(bg) else txtLineNumbers.background = gutterDefaultBackground
+        }
+        editCode.refreshTheme()
     }
 
     /** شريط الأدوات، الكونسول، تخطيط المحرر، وإبقاء الشاشة مضاءة — كلها من شاشة الإعدادات. */
