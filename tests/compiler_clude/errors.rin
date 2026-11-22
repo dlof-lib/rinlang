@@ -1,0 +1,15 @@
+@import "compiler_clude";
+let e1 = cc_parse("$token[ a b\nprint");
+print e1["errors"];
+let e2 = cc_parse("@onlytwo.parts[];");
+print e2["errors"];
+let e3 = cc_parse("container.[ a ]@\ncontainer.x\n$tok");
+print e3["errors"];
+let e4 = cc_parse("$token[ a ] ]");
+print e4["errors"];
+let e5 = cc_parse("$token[ \"x y\" , 'z' ] // c\n/* never closed");
+print e5["errors"], cc_reserved_words(e5);
+let e6 = cc_load("fixtures/missing.txt");
+print e6["errors"], cc_ok(e6);
+let w = cc_parse("$a[ x ]\n$b[ x ]");
+print w["warnings"];
