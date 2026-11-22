@@ -1,0 +1,33 @@
+غير معرَّف
+0 []
+1
+false
+Shop loaded
+📦 container = Shop
+✅ .end/container (Shop)
+3
+30
+5 50
+["Shop"] true
+dev
+80
+true yes
+true false
+false false false
+2 2
+📦 container = Plugin
+✅ .end/container (Plugin)
+p1
+["Plugin"]
+false false
+Nope غير معرَّف
+["Plugin", "Nope"]
+3
+ملف تالف
+لا دوران لانهائي
+true false 3
+3 0 []
+بعد clear: لا تحميل
+المحمِّل دالة
+خيار مجهول
+امتداد مرفوض
