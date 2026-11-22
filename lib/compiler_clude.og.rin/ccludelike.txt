@@ -1,0 +1,17 @@
+// ccludelike.txt — الكلمات المحجوزة الافتراضية لمكتبة compiler_clude
+//   $token[]  ·  $token[ ; : / ]  ·  container.inlr [ img , text ]@  ·  print  ·  @import
+
+@inlr.compiler_clude.main[];
+
+// @import "other.txt";            // استيراد ملف
+// @import "mylib" as my;           // استيراد مكتبة (كلماتها تُكتب my.كلمة)
+
+// @title "MyLang";  @version "1.0";  @ext[ my ];
+// @option case=insensitive;  @option line_comment="#";  @option strings="'";
+// $infix.10[ + - ]   $infix.20[ * / ]   $infixr.30[ ^ ]   $prefix.40[ - ! ]   (أولويات للمحلّل)
+
+$token[]
+$token[ ; : / ]
+$token.keyword[ let fun if else while for return break continue true false nil and or import export ]
+container.inlr [ img , text ]@
+print
