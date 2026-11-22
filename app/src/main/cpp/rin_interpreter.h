@@ -1431,11 +1431,19 @@ private:
     // استثناء RinError يقع أثناء استدعاء أي خُطّاف آخر لنفس الحاوية).
     struct LifecycleHooks {
         Value init, mount, update, destroy, error;
+        Value get, set, has, drop, call, invoke; // خُطّافات الأعضاء الغائبة (rin_container_magic.cpp، docs/container_magic.md)
     };
+    // يستدعي خُطّاف العضو الغائب `slot` للحاوية n إن كانت حاوية وعرّفته؛ true + out = نتيجته. محمي من إعادة الدخول لنفس (حاوية، خُطّاف، اسم).
+    bool magicHook(const std::shared_ptr<NsNode>& n, Value LifecycleHooks::*slot, const char* kind, const std::string& member,
+                   std::vector<Value> args, int line, Value& out);
+    bool magicActive_ = false;                         // true بعد تسجيل أول خُطّاف عضو (يبقي النداء العادي بلا كلفة قبله)
+    std::unordered_set<std::string> magicBusy_;
+    void registerNativesMagic();
     std::unordered_map<std::string, LifecycleHooks> containerLifecycle;
     // اسم الحاوية -> أسماء حقولها المُعلَنة عبر `state` (لا `let` العادية). يُستخدَم فقط لتمييز
     // إسناد يستحق إطلاق on update(prevState) تلقائياً من إسناد عادي لا علاقة له بأي خُطّاف.
     std::unordered_map<std::string, std::unordered_set<std::string>> containerStateNames;
+    std::unordered_map<std::string, std::unordered_set<std::string>> containerFixedStates; // state fixed: حقول تُهيَّأ مرة واحدة فقط
     // يستدعي دالة خُطّاف واحدة (إن كانت مُعرَّفة فعلاً) بأمان: أي RinError يقع أثناء تنفيذها يُوجَّه
     // تلقائياً إلى خُطّاف on error(err) الخاص بنفس الحاوية إن وُجد (err = {message: "..."})، وإلا
     // يُعاد رميه كما هو (نفس سلوك أي خطأ Rin عادي بلا أي كتم صامت). لا تفعل شيئاً إن كانت hookFn
@@ -1534,6 +1542,7 @@ private:
     void registerNativesTimer();  // rin_timer.cpp — time.freeze/advance + timers.* + timerXxx(c, name) + containerTime (docs/TIMER.md)
     void registerNativesIntentNav(); // rin_intent_nav.cpp — Intent.core/send/... و Navigation.re/back/... (docs/intent_navigation.md)
     void registerNativesEnv();   // rin_env.cpp — Env.load/get/require/... لربط Rin بملف .env (docs/env.md)
+    void registerNativesExtra13(); // rin_extra_natives13.cpp — bytes.*/dur.*/firstOf/lastOf/findKeyIf/utf8Trim… (docs/EXTRA13.md)
     void registerNativesConditions(); // rin_conditions.cpp — متغيّرات الشروط الموسّعة (notNil/present/oneOf/inRange/matches/...) (docs/key_terms_and_builtins.md)
     void registerNativesSet();    // rin_set.cpp — نوع Set الأساسي: Set(...) و Set.* + جعل len/contains/has/remove/sum/... تفهمه (docs/set.md)
     // s.method(args...) على قيمة SET (طريقة نقطية). تُرجع true وتملأ out إن كان method من عمليات Set المعروفة.
