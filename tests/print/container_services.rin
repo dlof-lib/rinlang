@@ -1,0 +1,93 @@
+// حاوية الخدمات (Services): bind/singleton/instance/alias/get/make/call/extend/tag — docs/container_services.md
+Services.flush();
+
+// 1) bind = خدمة عابرة: مصنع جديد عند كل get
+let n = 0;
+Services.bind("ticket", fun() { n = n + 1; return "T" + n; });
+print Services.get("ticket"), Services.get("ticket"), Services.get("ticket");
+
+// 2) singleton = كسول ويُبنى مرة واحدة فقط
+Services.singleton("config", fun() { print "building config"; return {env: "prod", debug: false}; });
+print Services.has("config"), Services.info("config")["resolved"];
+let c1 = Services.get("config");
+let c2 = Services.get("config");
+print c1["env"], Services.info("config")["resolved"], c1 == c2;
+c1["debug"] = true;
+print Services.get("config")["debug"];
+
+// 3) instance + alias (وسلاسل البدائل)
+Services.instance("version", "1.2.0");
+Services.alias("ver", "version");
+Services.alias("v", "ver");
+print Services.get("v"), Services.has("v"), Services.info("v")["kind"], Services.info("v")["target"];
+Services.alias("ghost", "nothing");
+print Services.has("ghost");
+
+// 4) الحقن التلقائي بأسماء المعاملات
+Services.singleton("logger", fun() { return {lines: []}; });
+Services.singleton("db", fun(config, logger) {
+    push(logger["lines"], "db up in " + config["env"]);
+    return {name: "main", env: config["env"]};
+});
+Services.bind("repo", fun(db, logger) { return {db: db["name"], log: len(logger["lines"])}; });
+let r = Services.get("repo");
+print r["db"], r["log"], Services.get("logger")["lines"];
+
+// 5) make مع params صريحة تغلب الحقن
+Services.bind("greeter", fun(name, version) { return "hi " + name + " v" + version; });
+print Services.make("greeter", {name: "Ali"});
+print Services.make("greeter", {name: "Sara", version: "9"});
+
+// 6) call: نداء أي دالة مع حقن معاملاتها
+print Services.call(fun(db, version) { return db["name"] + "@" + version; });
+print Services.call(fun(db, x) { return db["name"] + x; }, {x: "!"});
+
+// 7) extend: مُزخرِف (قيمة جديدة أو nil = تعديل بالمرجع)
+Services.bind("price", fun() { return 100; });
+Services.extend("price", fun(p) { return p * 2; });
+Services.extend("price", fun(p, version) { return p + len(version); });
+print Services.get("price");
+Services.extend("config", fun(cfg) { cfg["extended"] = true; });   // مُنفَّذة فعلاً: يُطبَّق فوراً
+print Services.get("config")["extended"], Services.info("config")["extenders"];
+
+// 8) tag / tagged
+Services.bind("mailer.smtp", fun() { return "smtp"; });
+Services.bind("mailer.log", fun() { return "log"; });
+print Services.tag("mailers", ["mailer.smtp", "mailer.log"]), Services.tag("mailers", "mailer.log");
+print Services.tagged("mailers"), Services.tagged("nothing"), Services.tags();
+print Services.info("mailer.log")["tags"];
+
+// 9) خدمة = لقطة حيّة من @container
+@container=settings
+    let theme = "dark";
+    let size = 12;
+.end/container
+Services.fromContainer("settings");
+Services.fromContainer("ui", "settings");
+print Services.get("settings")["theme"], Services.get("ui")["size"], Services.info("ui")["kind"], Services.info("ui")["target"];
+container.set("settings", "theme", "light");
+print Services.get("settings")["theme"];
+
+// 10) الدوران يُكشف بالسلسلة الكاملة
+Services.bind("a", fun(b) { return 1; });
+Services.bind("b", fun(c) { return 2; });
+Services.bind("c", fun(a) { return 3; });
+try { Services.get("a"); } catch (e) { print "دوران"; }
+print Services.call(fun() { return "بعد الدوران: المكدّس نظيف"; });
+
+// 11) أخطاء واضحة
+try { Services.get("confg"); } catch (e) { print "غير مسجّلة"; }
+try { Services.bind("x", 5); } catch (e) { print "المصنع يجب أن يكون دالة"; }
+try { Services.alias("q", "q"); } catch (e) { print "بديل ذاتي"; }
+try { Services.alias("version", "v"); } catch (e) { print "بديل دائري"; }
+try { Services.call(fun(zzz) { return zzz; }); } catch (e) { print "تعذّر الحقن"; }
+try { Services.get(""); } catch (e) { print "اسم فارغ"; }
+
+// 12) forget / reset / names / count / flush
+print Services.reset("config"), Services.info("config")["resolved"], Services.reset("ticket");
+Services.get("config");
+print Services.forget("ticket"), Services.forget("ticket"), Services.has("ticket");
+print Services.forget("mailer.log"), Services.tagged("mailers");
+print Services.count(), len(Services.names()) == Services.count();
+print Services.names();
+print Services.flush(), Services.count(), Services.names(), Services.tags();
