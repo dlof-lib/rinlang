@@ -1,0 +1,25 @@
+[] []
+ملف: fixtures/a.txt
+$keyword[ switch case ]
+$op[ => :: ]
+$container[ container cc ui ]
+$token[ ( ) ]
+$container:ui[ button label ]
+container.cc [ alpha , beta ]@
+container.ui [ button , label ]@
+@import "b.txt"   → fixtures/b.txt
+@import "c.txt" as cc   → fixtures/c.txt
+كلمات: 11 · رموز: 4
+true false true
+1:1  RESERVED  switch  <keyword>
+1:8  IDENT  alpha
+1:14  MEMBER  alpha  <container:cc> @cc
+1:23  BAD_MEMBER  zzz @cc
+1:30  MEMBER  button  <container:ui> @ui
+1:40  SYMBOL  =>  <op>
+1:43  SYMBOL  ::  <op>
+1:45  EOF  
+["[1:23] الحاوية 'cc' ليس فيها العضو 'zzz'"]
+["[fixtures/cycle2.txt:1] استيراد دائري: fixtures/cycle1.txt"]
+["[<text>:1] تعذّر العثور على المستورَد 'nope.txt'"]
+true false
