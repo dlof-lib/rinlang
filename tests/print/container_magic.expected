@@ -1,0 +1,20 @@
+📦 container = Bag
+✅ .end/container (Bag)
+10
+hello
+get:nothing
+dynamic/3
+invoked:2
+red
+true
+true
+false
+nil
+📦 container = Cfg
+✅ .end/container (Cfg)
+2 1
+fixed blocked
+2
+📦 container = Plain
+✅ .end/container (Plain)
+plain still errors
