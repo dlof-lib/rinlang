@@ -145,7 +145,7 @@
     <string name="move_root_option">(جذر المشروع)</string>
     <string name="move_no_folders">لا توجد مجلدات أخرى لنقل الملف إليها بعد</string>
     <string name="file_moved_toast">تم النقل إلى: %1$s</string>
-    <string name="search_files_hint">🔍 ابحث في ملفات المشروع...</string>
+    <string name="search_files_hint">ابحث في ملفات المشروع...</string>
     <string name="search_no_results">لا توجد نتائج مطابقة</string>
     <string name="search_result_meta_format">%1$s</string>
 
