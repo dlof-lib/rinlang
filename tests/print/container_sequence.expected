@@ -1,0 +1,25 @@
+📦 container = Shelf
+✅ .end/container (Shelf)
+Dune Emma
+2
+book: Dune
+book: Emma
+true false
+Dune II
+📦 container = Cfg
+✅ .end/container (Cfg)
+key: name
+key: ver
+name = rin
+ver = 3
+rin 2
+["Dune II", "Emma"]
+12
+6 3
+📦 container = Plain
+✅ .end/container (Plain)
+plain not indexable
+plain not iterable
+📦 container = Mix
+✅ .end/container (Mix)
+42 dyn:anything
