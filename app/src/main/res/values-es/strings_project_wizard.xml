@@ -73,4 +73,19 @@
     <string name="wiz_layout_manifest">Manifiesto rin.project.json</string>
     <string name="wiz_preview_tree">Estructura resultante</string>
     <string name="wiz_error_generic">No se pudo crear el proyecto</string>
+    <string name="wiz_save_section">Guardar en el teléfono</string>
+    <string name="wiz_save_phone">Guardar una copia del proyecto en una carpeta del teléfono</string>
+    <string name="wiz_save_choose">Elegir carpeta</string>
+    <string name="wiz_save_change">Cambiar carpeta</string>
+    <string name="wiz_save_auto">Sincronizar al salir del editor</string>
+    <string name="wiz_save_zip">Añadir también copia comprimida (.rinpak)</string>
+    <string name="wiz_save_path_fmt">Se guardará en: %1$s</string>
+    <string name="wiz_save_need_folder">Elige primero una carpeta</string>
+    <string name="wiz_save_not_writable">No se puede escribir en esta carpeta, elige otra</string>
+    <string name="wiz_save_done">Guardado en %1$s (%2$d archivos)</string>
+    <string name="wiz_save_failed">Proyecto creado pero no se pudo guardar en el teléfono: %1$s</string>
+    <string name="proj_sync_phone">Sincronizar con carpeta del teléfono</string>
+    <string name="proj_sync_done">Sincronizado (%1$d archivos)</string>
+    <string name="proj_sync_none">Todo está actualizado</string>
+    <string name="proj_sync_failed">Error de sincronización: %1$s</string>
 </resources>
