@@ -1,6 +1,38 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="terminal_help_banner">banner — شعار Rin\nlibs — قائمة المكتبات\nlib &lt;اسم&gt; — لافتة مكتبة</string>
     <string name="terminal_lib_usage">الاستخدام: lib &lt;اسم المكتبة&gt; (اكتب libs لرؤية القائمة)</string>
     <string name="terminal_lib_unknown">مكتبة غير معروفة: %1$s — اكتب libs</string>
+    <string name="terminal_font_usage">الاستخدام: font +|-|reset|رقم (الحالي: %1$s sp)</string>
+    <string name="terminal_font_set">حجم الخط: %1$s sp</string>
+    <string name="terminal_help_rows">#التشغيل\nrun::تشغيل الملف المفتوح\nstop::إيقاف البرنامج الجاري (^C)\nclear::مسح الشاشة\n#الجلسة\nhistory::الأوامر السابقة (!! الأخير، !N رقم N)\nsession::الأسماء المعرّفة في الجلسة\nreset::نسيان تعريفات الجلسة\n#البحث والمشاركة\ngrep &lt;t&gt;::بحث في الشاشة\ngoto &lt;n&gt;::الانتقال إلى السطر n في المحرر\nocr &lt;img&gt;::طباعة النص داخل صورة\ncopy · share::نسخ الشاشة أو مشاركتها\n#الملفات\npwd::مسار مجلد المشروع\nls [-a] [dir]::عرض الملفات\ntree [dir]::شجرة المجلد\ncat &lt;file&gt;::عرض ملف مع أرقام الأسطر\nalias n=cmd::تعريف اختصار (alias للعرض)\nunalias &lt;n&gt;::حذف اختصار\n#معلومات\nbanner::عرض شعار Rin\nabout::الإصدارات ومعلومات النظام\nversion::إصدار المحرّك\nlibs::قائمة المكتبات المدمجة\nlib &lt;name&gt;::بطاقة مكتبة\ncolors::عيّنة ألوان ANSI\n#العرض\nbackground::صورة أو فضاء (space · stop · play · clear · dim N)\ntheme [name]::سمة الألوان (theme للعرض)\nsize &lt;preset&gt;::حجم جاهز xs…xxl\nspacing &lt;mode&gt;::تباعد الأسطر tight/normal/relaxed\nstyle::إعدادات المظهر الحالية\nfullscreen · ⛶::الطرفية بملء الشاشة\nfont +/-/N::حجم الخط\necho &lt;text&gt;::طباعة نص (يدعم \\e[..m)</string>
+    <string name="terminal_help_footer">أي نص آخر يُنفَّذ كشيفرة Rin، مثل let x = 5; ثم x * 2.\nTab للإكمال، ↑/↓ للتاريخ، القرص للتكبير، ^C لإلغاء الإدخال.</string>
+    <string name="terminal_fs_outside">خارج مجلد المشروع: %1$s</string>
+    <string name="terminal_fs_not_dir">ليس مجلداً: %1$s</string>
+    <string name="terminal_fs_not_file">ليس ملفاً: %1$s</string>
+    <string name="terminal_fs_binary">ملف ثنائي، لا يُعرض: %1$s</string>
+    <string name="terminal_fs_not_found">لا يوجد ملف أو مجلد بهذا الاسم: %1$s</string>
+    <string name="terminal_fs_empty">(فارغ)</string>
+    <string name="terminal_fs_truncated">… %1$s سطراً آخر غير معروض</string>
+    <string name="terminal_cat_usage">الاستخدام: cat &lt;ملف&gt;</string>
+    <string name="terminal_alias_none">لا توجد اختصارات. مثال: alias r=run</string>
+    <string name="terminal_alias_usage">الاستخدام: alias اسم=أمر</string>
+    <string name="terminal_alias_set">alias %1$s ← %2$s</string>
+    <string name="terminal_alias_removed">حُذف الاختصار %1$s</string>
+    <string name="terminal_alias_missing">لا يوجد اختصار بهذا الاسم: %1$s</string>
+    <string name="terminal_theme_usage">الاستخدام: theme &lt;الاسم&gt;</string>
+    <string name="terminal_theme_unknown">سمة غير معروفة: %1$s — اكتب theme</string>
+    <string name="terminal_theme_set">السمة: %1$s</string>
+    <string name="terminal_size_usage">الاستخدام: size %1$s</string>
+    <string name="terminal_spacing_set">تباعد الأسطر: %1$s</string>
+    <string name="terminal_spacing_usage">الاستخدام: spacing %1$s</string>
+    <string name="terminal_bg_failed">تعذّرت قراءة الصورة</string>
+    <string name="terminal_bg_set">تم تعيين الخلفية (التعتيم %1$s%%). للضبط: background dim 0-90</string>
+    <string name="terminal_bg_cleared">أُزيلت الخلفية</string>
+    <string name="terminal_bg_dim">تعتيم الخلفية: %1$s%%</string>
+    <string name="terminal_bg_usage">الاستخدام: background [space | stop | play | clear | dim 0-90]</string>
+    <string name="terminal_bg_unavailable">منتقي الصور غير متاح</string>
+    <string name="terminal_bg_space_on">خلفية الفضاء مفعّلة — background stop للإيقاف، background clear للإزالة</string>
+    <string name="terminal_bg_anim_on">النجوم تتحرك</string>
+    <string name="terminal_bg_anim_off">توقفت الحركة — background play للاستئناف</string>
+    <string name="terminal_bg_anim_need_space">فعّل خلفية الفضاء أولاً: background space</string>
 </resources>
