@@ -140,6 +140,15 @@ class RinTerminalView @JvmOverloads constructor(
         }
     })
 
+    // مهم: يجب تعريفهما قبل كتلة init لأن init تستدعي refresh() ← decorate() التي تستخدمهما.
+    // (كانا بعد init فكانا null وقت البناء → NullPointerException عند فتح التطبيق.)
+    /** خط يحوي كل رموز الصناديق والكتل بعرض موحّد 0.6em — لا يعتمد على خطوط احتياطية متفاوتة العرض. */
+    private val artTypeface: Typeface by lazy {
+        try { context.resources.getFont(R.font.rin_code_regular) } catch (t: Throwable) { Typeface.MONOSPACE }
+    }
+
+    private val artPaint by lazy { TextPaint(TextPaint.ANTI_ALIAS_FLAG).apply { typeface = artTypeface } }
+
     init {
         orientation = VERTICAL
         layoutDirection = LAYOUT_DIRECTION_LTR   // الموجّه والأزرار ثابتة؛ اتجاه كل سطر نصي يُحدَّد بحسب لغته
@@ -1211,13 +1220,6 @@ class RinTerminalView @JvmOverloads constructor(
 
 
     // ---------------------------------------------------------------- الرسومات (إطارات/شعار)
-
-    /** خط يحوي كل رموز الصناديق والكتل بعرض موحّد 0.6em — لا يعتمد على خطوط احتياطية متفاوتة العرض. */
-    private val artTypeface: Typeface by lazy {
-        try { context.resources.getFont(R.font.rin_code_regular) } catch (t: Throwable) { Typeface.MONOSPACE }
-    }
-
-    private val artPaint by lazy { TextPaint(TextPaint.ANTI_ALIAS_FLAG).apply { typeface = artTypeface } }
 
     private fun isArtLine(t: CharSequence, from: Int, to: Int): Boolean {
         for (i in from until to) { val c = t[i]; if (c in '\u2500'..'\u259F') return true }
