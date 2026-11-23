@@ -66,9 +66,8 @@
                 android:layout_width="34dp"
                 android:layout_height="34dp"
                 android:gravity="center"
-                android:text="‹"
+                android:drawableStart="@drawable/rs_ic_chevron_left_22" android:drawableTint="@color/out_dim"
                 android:textColor="@color/out_dim"
-                android:textSize="22sp"
                 android:background="@drawable/bg_icon_btn"
                 android:contentDescription="@string/output_prev_run" />
 
@@ -77,9 +76,8 @@
                 android:layout_width="34dp"
                 android:layout_height="34dp"
                 android:gravity="center"
-                android:text="›"
+                android:drawableStart="@drawable/rs_ic_chevron_right_22" android:drawableTint="@color/out_dim"
                 android:textColor="@color/out_dim"
-                android:textSize="22sp"
                 android:background="@drawable/bg_icon_btn"
                 android:contentDescription="@string/output_next_run" />
 
