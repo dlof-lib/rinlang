@@ -4,6 +4,7 @@ import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.net.Uri
 import android.os.Bundle
 import android.text.Editable
 import android.text.InputType
@@ -22,6 +23,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 
 /**
@@ -80,6 +82,29 @@ class NewProjectActivity : RinBaseActivity() {
     private var freeTemplate = "greeting"
     private var indsinTemplate: String? = null
 
+    // ---- الحفظ على الهاتف ----
+    private var savePhone = false
+    private var saveTree: Uri? = null
+    private var saveLabel = ""
+    private var saveAuto = true
+    private var saveZip = false
+    @Volatile private var saveNote: String? = null
+
+    private val pickFolder = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) {
+            ExternalProjectSaver.persist(this, uri)
+            if (ExternalProjectSaver.check(this, uri) == ExternalProjectSaver.Check.OK) {
+                saveTree = uri; savePhone = true
+                saveLabel = ExternalProjectSaver.folderLabel(this, uri)
+                ExternalProjectSaver.setDefaultTree(this, uri)
+            } else {
+                Toast.makeText(this, R.string.wiz_save_not_writable, Toast.LENGTH_LONG).show()
+                if (saveTree == null) savePhone = false
+            }
+        } else if (saveTree == null) savePhone = false
+        render()
+    }
+
     private val selectedLibs = LinkedHashSet<String>()
     private var libsTouched = false
     private var libQuery = ""
@@ -112,6 +137,10 @@ class NewProjectActivity : RinBaseActivity() {
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         author = getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_AUTHOR, "") ?: ""
         applyRecommendedLibs()
+        saveTree = ExternalProjectSaver.defaultTree(this)?.takeIf { ExternalProjectSaver.hasPermission(this, it) }
+        saveLabel = saveTree?.let { ExternalProjectSaver.folderLabel(this, it) }.orEmpty()
+        savePhone = saveTree != null && ExternalProjectSaver.defaultEnabled(this)
+        saveAuto = ExternalProjectSaver.autoDefault(this); saveZip = ExternalProjectSaver.zipDefault(this)
         setContentView(buildFrame())
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() { if (stepIndex > 0) go(stepIndex - 1) else finish() }
@@ -499,9 +528,45 @@ class NewProjectActivity : RinBaseActivity() {
         toggle(getString(R.string.wiz_layout_assets), layout.assets) { layout = layout.copy(assets = it) }
         toggle(getString(R.string.wiz_layout_manifest), layout.manifest) { layout = layout.copy(manifest = it) }
 
+        renderSaveSection()
+
         addHeading(getString(R.string.wiz_preview_tree))
         page.addView(tree)
         refreshTree()
+    }
+
+    // ------------------------------------------------------------------ الحفظ على الهاتف
+
+    private fun smallButton(text: String, onClick: () -> Unit) = TextView(this).apply {
+        this.text = text; textSize = 13.5f; setTextColor(cText)
+        setPadding(dp(14), dp(8), dp(14), dp(8)); background = roundBg(Color.TRANSPARENT, cAccent, 10)
+        setOnClickListener { onClick() }
+    }
+
+    private fun renderSaveSection() {
+        addHeading(getString(R.string.wiz_save_section))
+        page.addView(CheckBox(this).apply {
+            text = getString(R.string.wiz_save_phone); isChecked = savePhone; setTextColor(cText); textSize = 14.5f
+            setOnCheckedChangeListener { _, v ->
+                savePhone = v
+                if (v && saveTree == null) pickFolder.launch(null) else render()
+            }
+        })
+        if (!savePhone) return
+        val wrap = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(6) }
+        page.addView(TextView(this).apply {
+            textSize = 13.5f; setTextColor(cDim); textDirection = View.TEXT_DIRECTION_LTR
+            text = "\uD83D\uDCC1 " + getString(R.string.wiz_save_path_fmt, "$saveLabel/${name.trim().ifEmpty { "…" }}")
+        })
+        page.addView(smallButton(getString(if (saveTree == null) R.string.wiz_save_choose else R.string.wiz_save_change)) { pickFolder.launch(saveTree) }, wrap)
+        page.addView(CheckBox(this).apply {
+            text = getString(R.string.wiz_save_auto); isChecked = saveAuto; setTextColor(cText); textSize = 14.5f
+            setOnCheckedChangeListener { _, v -> saveAuto = v }
+        })
+        page.addView(CheckBox(this).apply {
+            text = getString(R.string.wiz_save_zip); isChecked = saveZip; setTextColor(cText); textSize = 14.5f
+            setOnCheckedChangeListener { _, v -> saveZip = v }
+        })
     }
 
     // ------------------------------------------------------------------ الإنشاء
@@ -510,6 +575,18 @@ class NewProjectActivity : RinBaseActivity() {
         if (!validateName()) { go(steps.indexOf(Step.DETAILS)); return }
         val bp = blueprint()
         val projectName = name.trim()
+        var phoneTree: Uri? = null
+        if (savePhone) {
+            val t = saveTree
+            if (t == null) { Toast.makeText(this, R.string.wiz_save_need_folder, Toast.LENGTH_LONG).show(); return }
+            if (ExternalProjectSaver.check(this, t) != ExternalProjectSaver.Check.OK) {
+                Toast.makeText(this, R.string.wiz_save_not_writable, Toast.LENGTH_LONG).show()
+                saveTree = null; savePhone = false; render(); return
+            }
+            phoneTree = t
+        }
+        ExternalProjectSaver.rememberChoices(this, savePhone, saveAuto, saveZip)
+        val autoFlag = saveAuto; val zipFlag = saveZip
         getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(KEY_AUTHOR, author.trim()).apply()
         val ui = ProjectManager.UiDesignOptions(
             topBar = uiTopBar, sidebar = uiSidebar, bottomNav = uiBottomNav,
@@ -529,10 +606,18 @@ class NewProjectActivity : RinBaseActivity() {
                         com.dlof.rinlang.store.languages.CustomLanguageProjectScaffolder.installBundledIllust(this, project.dir)
                     }
                     ProjectManager.applyBlueprint(project, bp)
+                    ExternalProjectSaver.unlink(this, project.name)   // لا تبقَ روابط قديمة لاسم مُعاد استخدامه
+                    val target = phoneTree
+                    if (target != null) {
+                        val r = ExternalProjectSaver.saveNew(this, project, target, zipFlag, autoFlag)
+                        saveNote = if (r.ok) getString(R.string.wiz_save_done, r.folderName, r.files)
+                        else getString(R.string.wiz_save_failed, r.error ?: "?")
+                    }
                     project
                 },
                 onDone = { project, errorMessage ->
                     if (project != null) {
+                        saveNote?.let { Toast.makeText(this, it, Toast.LENGTH_LONG).show() }
                         setResult(RESULT_OK, Intent().putExtra(EXTRA_CREATED, project.name))
                         finish()
                     } else {
