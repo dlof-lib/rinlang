@@ -1,0 +1,80 @@
+package com.dlof.rinlang
+
+/**
+ * سمات الطرفية (كلها داكنة لتبقى ألوان ANSI المضمّنة مقروءة) + مقاييس الحجم/التباعد.
+ * منطق خالص بلا أندرويد؛ [RinTerminalView] يطبّق السمة على متغيّراته ويحفظ المعرّف في SharedPreferences.
+ */
+data class RinTheme(
+    val id: String,
+    val title: String,
+    val bg: Int, val inputBg: Int, val chipBg: Int, val border: Int, val headerBg: Int, val cmdBg: Int,
+    val fg: Int, val white: Int, val dim: Int,
+    val accent: Int, val blue: Int, val promptGreen: Int, val ok: Int, val error: Int, val warn: Int
+) {
+    /** تدرّج الشعار واللافتات (من، إلى) المناسب لهذه السمة. */
+    val gradient: Pair<Int, Int>
+        get() = when (id) {
+            "midnight" -> 0x7AA2FF to 0x8FD3FF
+            "dracula" -> 0xBD93F9 to 0x8BE9FD
+            "nord" -> 0x88C0D0 to 0xA3BE8C
+            "solarized" -> 0x268BD2 to 0x2AA198
+            "amoled" -> 0xA78BFA to 0x7DD3FC
+            "matrix" -> 0x1FBF50 to 0x9DFFB8
+            "amber" -> 0xFFB000 to 0xFFE08A
+            else -> 0x0FA34F to 0x7BF5A8
+        }
+
+    companion object {
+        private fun c(rgb: Int) = 0xFF000000.toInt() or rgb
+
+        val RIN = RinTheme("rin", "Rin", c(0x0D1117), c(0x161B22), c(0x21262D), c(0x30363D), c(0x010409), c(0x151B23),
+            c(0xC9D1D9), c(0xF0F6FC), c(0x6E7681), c(0x8A7CFF), c(0x79C0FF), c(0x56D364), c(0x3FB950), c(0xF85149), c(0xD29922))
+        val MIDNIGHT = RinTheme("midnight", "Midnight", c(0x0B1020), c(0x121A30), c(0x1B2542), c(0x2A3760), c(0x060912), c(0x101830),
+            c(0xCBD5F5), c(0xF2F5FF), c(0x7482AD), c(0x7AA2FF), c(0x8FD3FF), c(0x6EE7A8), c(0x4ADE80), c(0xFF6B7A), c(0xFBBF24))
+        val DRACULA = RinTheme("dracula", "Dracula", c(0x282A36), c(0x2F3243), c(0x3A3D50), c(0x44475A), c(0x1E1F29), c(0x2C2E3C),
+            c(0xF8F8F2), c(0xFFFFFF), c(0x8791BC), c(0xBD93F9), c(0x8BE9FD), c(0x50FA7B), c(0x50FA7B), c(0xFF5555), c(0xF1FA8C))
+        val NORD = RinTheme("nord", "Nord", c(0x2E3440), c(0x353C4A), c(0x3B4252), c(0x4C566A), c(0x242933), c(0x333A47),
+            c(0xD8DEE9), c(0xECEFF4), c(0x8A94A8), c(0x88C0D0), c(0x81A1C1), c(0xA3BE8C), c(0xA3BE8C), c(0xE5848C), c(0xEBCB8B))
+        val SOLARIZED = RinTheme("solarized", "Solarized Dark", c(0x002B36), c(0x073642), c(0x0B3F4C), c(0x155664), c(0x00212B), c(0x053541),
+            c(0xB6C4C5), c(0xEEE8D5), c(0x6E8A91), c(0x4BA3E3), c(0x2AA198), c(0x859900), c(0x859900), c(0xF0625F), c(0xB58900))
+        val AMOLED = RinTheme("amoled", "AMOLED", c(0x000000), c(0x0C0C0C), c(0x181818), c(0x2A2A2A), c(0x000000), c(0x0A0A0A),
+            c(0xD0D0D0), c(0xFFFFFF), c(0x7A7A7A), c(0xA78BFA), c(0x7DD3FC), c(0x4ADE80), c(0x4ADE80), c(0xF87171), c(0xFACC15))
+        val MATRIX = RinTheme("matrix", "Matrix", c(0x020A04), c(0x06140A), c(0x0C2414), c(0x174A28), c(0x010603), c(0x05100A),
+            c(0x9DF2B0), c(0xD6FFE0), c(0x4F8F62), c(0x2BFF6A), c(0x6BFFB0), c(0x39FF7A), c(0x39FF7A), c(0xFF5C5C), c(0xE0F26B))
+        val AMBER = RinTheme("amber", "Amber", c(0x120C02), c(0x1C1305), c(0x2A1D08), c(0x4A340F), c(0x0A0601), c(0x181004),
+            c(0xFFD28A), c(0xFFF0D0), c(0xA37A3C), c(0xFFB000), c(0xFFCB6B), c(0xB8E060), c(0xB8E060), c(0xFF6B4A), c(0xFFD84A))
+
+        val ALL = listOf(RIN, MIDNIGHT, DRACULA, NORD, SOLARIZED, AMOLED, MATRIX, AMBER)
+
+        fun byId(id: String?): RinTheme {
+            val k = id?.trim()?.lowercase().orEmpty()
+            return ALL.firstOrNull { it.id == k } ?: RIN
+        }
+
+        /** تطابق دقيق أو بادئة وحيدة (`mid` → midnight)؛ null إن لم يوجد/التبس. */
+        fun find(query: String): RinTheme? {
+            val q = query.trim().lowercase()
+            if (q.isEmpty()) return null
+            ALL.firstOrNull { it.id == q }?.let { return it }
+            return ALL.filter { it.id.startsWith(q) }.singleOrNull()
+        }
+
+        fun luminance(argb: Int): Double {
+            fun ch(v: Int): Double { val s = v / 255.0; return if (s <= 0.03928) s / 12.92 else Math.pow((s + 0.055) / 1.055, 2.4) }
+            return 0.2126 * ch((argb shr 16) and 255) + 0.7152 * ch((argb shr 8) and 255) + 0.0722 * ch(argb and 255)
+        }
+
+        fun contrast(a: Int, b: Int): Double {
+            val la = luminance(a); val lb = luminance(b)
+            return (maxOf(la, lb) + 0.05) / (minOf(la, lb) + 0.05)
+        }
+    }
+}
+
+/** أحجام جاهزة للخط وتباعد الأسطر. */
+object RinSizes {
+    val FONT_PRESETS = linkedMapOf("xs" to 10f, "small" to 11.5f, "medium" to 12.5f, "large" to 15f, "xl" to 18f, "xxl" to 21f)
+    val SPACING = linkedMapOf("tight" to 0.0f, "normal" to 0.15f, "relaxed" to 0.30f)
+    const val DEFAULT_FONT = 12.5f
+    const val DEFAULT_SPACING = "normal"
+}
