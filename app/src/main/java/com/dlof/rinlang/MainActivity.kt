@@ -874,10 +874,12 @@ class MainActivity : RinBaseActivity() {
         popup.menu.add(0, 26, 25, R.string.action_copy_markdown)
         popup.menu.add(0, 27, 26, R.string.menu_edit_format_document)
         popup.menu.add(0, 28, 27, R.string.menu_edit_editor_design)
+        popup.menu.add(0, 29, 28, R.string.menu_edit_smart)
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 27 -> toastChanged(editCode.formatDocument(AppSettings.getTabSize(this)), R.string.document_formatted_toast)
                 28 -> EditorThemeDesigner.show(this) { applyEditorDesign() }
+                29 -> SmartEditMenu.show(this, editCode)
                 1 -> editorController.undo()
                 2 -> editorController.redo()
                 3 -> toggleFindBar()
