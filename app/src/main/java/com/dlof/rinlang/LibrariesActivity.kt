@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.text.Editable
 import android.text.InputType
 import android.text.TextWatcher
+import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -63,6 +64,10 @@ class LibrariesActivity : RinBaseActivity() {
 
     /** نص البحث الحالي وفئة الفلترة (null = الكل) — يطبَّقان على "مكتباتي" و"الجاهزة" معاً. */
     private var query = ""
+    /** ترتيب "مكتباتي": true = الأحدث تعديلاً أولاً، false = بالاسم. */
+    private var sortByRecent = false
+    private lateinit var tvMineCount: TextView
+    private lateinit var btnSortLibs: TextView
     private var selectedCategory: LibCategory? = null
     private val chips = mutableListOf<Pair<TextView, LibCategory?>>()
     private var userLibraries: List<RinLibrary> = emptyList()
@@ -149,6 +154,9 @@ class LibrariesActivity : RinBaseActivity() {
         tvNoResults = findViewById(R.id.tvLibrariesNoResults)
         llChips = findViewById(R.id.llLibraryChips)
         btnClearSearch = findViewById(R.id.btnClearLibrarySearch)
+        tvMineCount = findViewById(R.id.tvMineCount)
+        btnSortLibs = findViewById(R.id.btnSortLibs)
+        btnSortLibs.setOnClickListener { sortByRecent = !sortByRecent; applyFilter() }
         setupSearch()
         buildChips()
         setupFeaturedCard()
@@ -180,6 +188,35 @@ class LibrariesActivity : RinBaseActivity() {
     override fun onResume() {
         super.onResume()
         refresh()
+    }
+
+    // ---- اختصارات لوحة المفاتيح بأسلوب الكمبيوتر ----
+    //   Ctrl+F بحث · Ctrl+N مكتبة جديدة · Ctrl+O رفع مكتبة · Ctrl+Shift+S المتجر · Esc مسح البحث ثم رجوع
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+            val ctrl = event.isCtrlPressed
+            val search = findViewById<EditText>(R.id.etLibrarySearch)
+            when {
+                ctrl && !event.isShiftPressed && event.keyCode == KeyEvent.KEYCODE_F -> {
+                    search.requestFocus(); search.selectAll(); return true
+                }
+                ctrl && !event.isShiftPressed && event.keyCode == KeyEvent.KEYCODE_N -> {
+                    showCreateLibraryDialog(); return true
+                }
+                ctrl && !event.isShiftPressed && event.keyCode == KeyEvent.KEYCODE_O -> {
+                    importLibraryLauncher.launch(arrayOf("text/plain", "application/octet-stream", "*/*")); return true
+                }
+                ctrl && event.isShiftPressed && event.keyCode == KeyEvent.KEYCODE_S -> {
+                    findViewById<View>(R.id.btnBrowseStore).performClick(); return true
+                }
+                event.keyCode == KeyEvent.KEYCODE_ESCAPE -> {
+                    if (query.isNotEmpty()) search.setText("") else finish()
+                    return true
+                }
+            }
+        }
+        return super.dispatchKeyEvent(event)
     }
 
     private fun refresh() {
@@ -252,7 +289,10 @@ class LibrariesActivity : RinBaseActivity() {
         val cat = selectedCategory
 
         // مكتباتي: بحث بالاسم فقط (الفئات خاصة بالمدمجة)
-        val mine = if (q.isEmpty()) userLibraries else userLibraries.filter { it.name.lowercase().contains(q) }
+        val filtered = if (q.isEmpty()) userLibraries else userLibraries.filter { it.name.lowercase().contains(q) }
+        val mine = if (sortByRecent) filtered.sortedByDescending { it.lastModified } else filtered.sortedBy { it.name.lowercase() }
+        btnSortLibs.text = getString(if (sortByRecent) R.string.libs_sort_recent else R.string.libs_sort_name)
+        tvMineCount.text = if (q.isEmpty()) userLibraries.size.toString() else "${mine.size}/${userLibraries.size}"
         userAdapter.submit(mine)
         txtEmpty.visibility = if (userLibraries.isEmpty() && q.isEmpty()) View.VISIBLE else View.GONE
 
