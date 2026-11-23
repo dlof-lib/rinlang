@@ -4,7 +4,7 @@
     <string name="terminal_lib_unknown">Biblioteca desconocida: %1$s — escribe libs</string>
     <string name="terminal_font_usage">Uso: font +|-|reset|N (actual: %1$s sp)</string>
     <string name="terminal_font_set">Tamaño de fuente: %1$s sp</string>
-    <string name="terminal_help_rows">#Ejecución\nrun::Ejecuta el archivo abierto\nstop::Detiene el programa en curso (^C)\nclear::Limpia la pantalla\n#Sesión\nhistory::Comandos anteriores (!! último, !N número N)\nsession::Nombres declarados en la sesión\nreset::Olvida las declaraciones de la sesión\n#Búsqueda y compartir\ngrep &lt;t&gt;::Busca en la pantalla\ngoto &lt;n&gt;::Salta a la línea n del editor\nocr &lt;img&gt;::Imprime el texto de una imagen\ncopy · share::Copia o comparte la pantalla\n#Archivos\npwd::Ruta de la carpeta del proyecto\nls [-a] [dir]::Lista archivos\ntree [dir]::Árbol de carpetas\ncat &lt;file&gt;::Muestra un archivo con números de línea\nalias n=cmd::Define un atajo (alias para listar)\nunalias &lt;n&gt;::Elimina un atajo\n#Información\nbanner::Muestra el logo de Rin\nabout::Versiones e info del sistema\nversion::Versión del motor\nlibs::Lista las bibliotecas integradas\nlib &lt;name&gt;::Ficha de biblioteca\ncolors::Muestra de colores ANSI\n#Pantalla\nbackground::Imagen o espacio (space · stop · play · clear · dim N)\ntheme [name]::Tema de color (theme para listar)\nsize &lt;preset&gt;::Tamaño preset xs…xxl\nspacing &lt;mode&gt;::Interlineado tight/normal/relaxed\nstyle::Estilo actual\nfullscreen · ⛶::Terminal a pantalla completa\nfont +/-/N::Tamaño de fuente\necho &lt;text&gt;::Imprime texto (admite \\e[..m)</string>
+    <string name="terminal_help_rows">#Ejecución\nrun::Ejecuta el archivo abierto\nstop::Detiene el programa en curso (^C)\nclear::Limpia la pantalla\n#Sesión\nhistory::Comandos anteriores (!! último, !N número N)\nsession::Nombres declarados en la sesión\nreset::Olvida las declaraciones de la sesión\nhistory clear::Borra el historial guardado\nhelp &lt;cmd&gt;::Detalles de un comando\n#Búsqueda y compartir\ngrep &lt;t&gt;::Busca en la pantalla\ngoto &lt;n&gt;::Salta a la línea n del editor\nocr &lt;img&gt;::Imprime el texto de una imagen\ncopy · share::Copia o comparte la pantalla\nlog::Guarda la pantalla en logs/ del proyecto\n#Archivos\npwd::Ruta de la carpeta del proyecto\nls [-a] [dir]::Lista archivos\ntree [dir]::Árbol de carpetas\nfind &lt;t&gt;::Busca archivos y carpetas por nombre\nhead &lt;file&gt; [n]::Primeras n líneas (10 por defecto)\ntail &lt;file&gt; [n]::Últimas n líneas (10 por defecto)\nwc &lt;file&gt;::Cuenta líneas, palabras y tamaño\ncat &lt;file&gt;::Muestra un archivo con números de línea\nalias n=cmd::Define un atajo (alias para listar)\nunalias &lt;n&gt;::Elimina un atajo\n#Información\nbanner::Muestra el logo de Rin\nabout::Versiones e info del sistema\nversion::Versión del motor\nlibs::Lista las bibliotecas integradas\nlib &lt;name&gt;::Ficha de biblioteca\ncolors::Muestra de colores ANSI\n#Pantalla\nbackground::Imagen o espacio (space · stop · play · clear · dim N)\ntheme [name]::Tema de color (theme para listar)\nsize &lt;preset&gt;::Tamaño preset xs…xxl\nspacing &lt;mode&gt;::Interlineado tight/normal/relaxed\nstyle::Estilo actual\nfullscreen · ⛶::Terminal a pantalla completa\nfont +/-/N::Tamaño de fuente\necho &lt;text&gt;::Imprime texto (admite \\e[..m)</string>
     <string name="terminal_help_footer">Cualquier otro texto se ejecuta como código Rin, p. ej. let x = 5; y luego x * 2.\nTab completa, ↑/↓ historial, pellizca para zoom. ^C cancela la entrada.</string>
     <string name="terminal_fs_outside">Fuera de la carpeta del proyecto: %1$s</string>
     <string name="terminal_fs_not_dir">No es una carpeta: %1$s</string>
@@ -19,7 +19,7 @@
     <string name="terminal_alias_set">alias %1$s → %2$s</string>
     <string name="terminal_alias_removed">Alias %1$s eliminado</string>
     <string name="terminal_alias_missing">No existe el alias: %1$s</string>
-    <string name="terminal_theme_usage">Uso: theme &lt;nombre&gt;</string>
+    <string name="terminal_theme_usage">Uso: theme &lt;nombre | light | dark | auto&gt;</string>
     <string name="terminal_theme_unknown">Tema desconocido: %1$s — escribe theme</string>
     <string name="terminal_theme_set">Tema: %1$s</string>
     <string name="terminal_size_usage">Uso: size %1$s</string>
@@ -34,5 +34,13 @@
     <string name="terminal_bg_space_on">Fondo espacial activado — background stop para pausar, background clear para quitar</string>
     <string name="terminal_bg_anim_on">Las estrellas se mueven</string>
     <string name="terminal_bg_anim_off">Estrellas detenidas — background play para reanudar</string>
-    <string name="terminal_bg_anim_need_space">Activa primero el fondo espacial: background space</string>
+    <string name="terminal_bg_anim_need_space">Activa primero un fondo animado: background space, o elige un GIF/WebP animado</string>
+    <string name="terminal_bg_anim_set">Fondo animado aplicado (atenuación %1$s%%) — background stop para pausar, background play para reanudar</string>
+    <string name="terminal_bg_too_big">Archivo demasiado grande (máx. 20MB)</string>
+    <string name="terminal_usage_fmt">Uso: %1$s</string>
+    <string name="terminal_log_saved">Guardado: %1$s</string>
+    <string name="terminal_log_failed">No se pudo guardar el registro</string>
+    <string name="terminal_log_empty">Aún no hay nada que guardar</string>
+    <string name="terminal_history_cleared">Historial borrado</string>
+    <string name="terminal_help_none">Sin ayuda para: %1$s</string>
 </resources>
