@@ -15,6 +15,8 @@ object EditorDesign {
     private const val K_GUIDE = "page_guide_col"
     private const val K_SORT_IMPORTS = "format_sort_imports"
     private const val K_INDENT_TABS = "format_indent_tabs"
+    private const val K_COLOR_PREVIEW = "color_preview_mode"
+    private const val K_SURROUND = "surround_on_type"
 
     /** الأعمدة المسموحة لدليل الصفحة؛ 0 = بلا دليل. */
     val GUIDE_COLUMNS = listOf(0, 72, 80, 100, 120)
@@ -70,6 +72,16 @@ object EditorDesign {
 
     fun isIndentWithTabs(context: Context) = prefs(context).getBoolean(K_INDENT_TABS, false)
     fun setIndentWithTabs(context: Context, value: Boolean) = prefs(context).edit().putBoolean(K_INDENT_TABS, value).apply()
+
+    // ---- معاينة الألوان والكتابة الذكية ---------------------------------------------------------
+
+    /** وضع معاينة الألوان: 0 إيقاف، 1 مربع لون بجانب الكود (الافتراضي)، 2 تظليل الكود بلونه. */
+    fun colorPreviewMode(context: Context): Int = prefs(context).getInt(K_COLOR_PREVIEW, 1).coerceIn(0, 2)
+    fun setColorPreviewMode(context: Context, mode: Int) = prefs(context).edit().putInt(K_COLOR_PREVIEW, mode.coerceIn(0, 2)).apply()
+
+    /** كتابة قوس/اقتباس فوق تحديد يحيط التحديد به بدل استبداله. */
+    fun isSurroundOnType(context: Context) = prefs(context).getBoolean(K_SURROUND, true)
+    fun setSurroundOnType(context: Context, value: Boolean) = prefs(context).edit().putBoolean(K_SURROUND, value).apply()
 
     /** خيارات [CodeFormatter] من الإعدادات الحالية (عرض الإزاحة من إعداد حجم التبويب). */
     fun formatOptions(context: Context) = CodeFormatter.Options(
