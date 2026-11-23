@@ -443,9 +443,26 @@ class RinTerminalView @JvmOverloads constructor(
         else h.getOrNull((ref.toIntOrNull() ?: 0) - 1).orEmpty()
     }
 
+    private fun engineVersionOrNull(): String? = try { RinBanner.parseVersion(RinEngine.engineVersion()) } catch (t: Throwable) { null }
+
+    private fun appVersionOrNull(): String? = try {
+        context.packageManager.getPackageInfo(context.packageName, 0).versionName
+    } catch (t: Throwable) { null }
+
+    /** صفوف معلومات الشعار: اللغة، المحرّك، التطبيق، المكتبات. */
+    private fun bannerInfo(): List<Pair<String, String>> = buildList {
+        val lang = engineVersionOrNull()
+        add("Language" to "Rin ${lang ?: "—"}")
+        add("Engine" to "C++17 · ${if (RinNativeTerminal.nativeMode) "native" else "REPL"}")
+        add("App" to "RinStudio ${appVersionOrNull() ?: "—"}")
+        add("Libraries" to "${BuiltinLibraries.all.size} built-in")
+    }
+
+    private fun bannerText(): String = RinBanner.logoText(engineVersionOrNull(), info = bannerInfo())
+
     private fun runBuiltin(cmd: String, arg: String) {
         when (cmd) {
-            "help", "?" -> RinTerminal.system(context.getString(R.string.terminal_help) + "\n" + context.getString(R.string.terminal_help_native))
+            "help", "?" -> RinTerminal.system(context.getString(R.string.terminal_help) + "\n" + context.getString(R.string.terminal_help_banner) + "\n" + context.getString(R.string.terminal_help_native))
             "clear", "cls" -> RinTerminal.clear()
             "run" -> onRunRequested?.invoke()
             "history" -> {
@@ -455,9 +472,31 @@ class RinTerminalView @JvmOverloads constructor(
                     else h.mapIndexed { i, s -> "${(i + 1).toString().padStart(3)}  $s" }.joinToString("\n")
                 )
             }
-            "version" -> RinTerminal.system(
-                try { RinEngine.engineVersion() } catch (t: Throwable) { "engine unavailable" }
-            )
+            "version" -> {
+                RinTerminal.output(bannerText())
+                RinTerminal.system(try { RinEngine.engineVersion() } catch (t: Throwable) { "engine unavailable" })
+            }
+            "banner" -> RinTerminal.output(bannerText())
+            "libs" -> {
+                val groups = LibCategory.values().map { cat ->
+                    context.getString(cat.labelRes) to BuiltinLibraries.all.filter { it.category == cat }.map { it.displayName }
+                }
+                RinTerminal.output(RinBanner.libraryIndex(groups).joinToString("\n"))
+            }
+            "lib" -> {
+                val q = arg.trim().removePrefix("lib/").removeSuffix(".og.rin").lowercase()
+                val info = BuiltinLibraries.all.firstOrNull { it.displayName.lowercase() == q }
+                    ?: BuiltinLibraries.all.filter { it.displayName.lowercase().startsWith(q) }.takeIf { q.isNotEmpty() && it.size == 1 }?.first()
+                if (info == null) {
+                    RinTerminal.system(context.getString(if (q.isEmpty()) R.string.terminal_lib_usage else R.string.terminal_lib_unknown, q), TermRole.ERROR)
+                } else {
+                    RinTerminal.output(RinBanner.library(
+                        info.displayName, context.getString(info.category.labelRes), info.description,
+                        info.sampleFunctions, info.importPath,
+                        listOf("Language" to "Rin ${engineVersionOrNull() ?: "—"}", "Source" to "built-in")
+                    ).joinToString("\n"))
+                }
+            }
             "reset" -> {
                 RinTerminal.repl.reset()
                 RinNativeTerminal.reset()
@@ -733,9 +772,7 @@ class RinTerminalView @JvmOverloads constructor(
     private fun render(snap: TermSnapshot): CharSequence {
         val sb = SpannableStringBuilder()
         if (snap.lines.isEmpty() && snap.partial.isEmpty()) {
-            sb.span("Rin", ACCENT, bold = true)
-            sb.span(" Shell\n", WHITE, bold = true)
-            sb.span("─────────────────────\n", BORDER)
+            sb.ansi(bannerText() + "\n\n", FG)
             sb.span(context.getString(R.string.terminal_welcome), DIM, italic = true)
             return sb
         }
@@ -869,9 +906,9 @@ class RinTerminalView @JvmOverloads constructor(
         /** الأوامر الأساسية تُقترح بالإكمال؛ البدائل (cls/vars/cancel/?) تُقبل عند الكتابة فقط. */
         val SHELL_COMMANDS = listOf(
             "help", "run", "stop", "clear", "history", "version", "reset", "session", "grep", "goto", "ocr", "share", "copy",
-            "native", "cls", "vars", "cancel", "?"
+            "banner", "libs", "lib", "native", "cls", "vars", "cancel", "?"
         )
-        val COMMANDS_WITH_ARG = setOf("grep", "goto", "ocr", "native")
+        val COMMANDS_WITH_ARG = setOf("grep", "goto", "ocr", "native", "lib")
         val ALIAS_ONLY = setOf("cls", "vars", "cancel")
 
         // الterminal داكن دائماً (مثل أي terminal) بغضّ النظر عن سمة التطبيق.
