@@ -332,5 +332,8 @@ object RinTerminal {
     fun echo(text: String, role: TermRole = TermRole.COMMAND) { buffer.echo(text, role); notifyChanged() }
     fun remember(text: String) { buffer.remember(text) }
     fun system(text: String, role: TermRole = TermRole.SYSTEM) { buffer.system(text, role); notifyChanged() }
+
+    /** مخرجات بدور OUTPUT فتمرّ عبر مفسّر ANSI في العرض (شعار/لافتات ملوّنة). */
+    fun output(text: String) { buffer.write(text, TermRole.OUTPUT); notifyChanged() }
     fun clear() { buffer.clear(); notifyChanged() }
 }
