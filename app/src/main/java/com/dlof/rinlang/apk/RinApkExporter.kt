@@ -79,18 +79,18 @@ object RinApkExporter {
             try {
                 fun log(text: String) = onProgress(Progress.Log(text, ok = true))
 
-                log("▶ بدء تصدير APK للمشروع \"${project.name}\"")
+                log("بدء تصدير APK للمشروع \"${project.name}\"")
                 work.mkdirs()
 
                 // 1) موقع حزمة RinStudio المضيفة نفسها على القرص
                 val hostApkPath = context.applicationInfo.sourceDir
                     ?: throw IllegalStateException("تعذّر تحديد مسار الحزمة المضيفة (sourceDir)")
                 val hostApk = File(hostApkPath)
-                log("✓ الحزمة المضيفة: ${hostApk.name} (${hostApk.length() / 1024} كِلوبايت)")
+                log("الحزمة المضيفة: ${hostApk.name} (${hostApk.length() / 1024} كِلوبايت)")
 
                 // 2) معرّف تطبيق فريد + استخراج وتعديل AndroidManifest.xml الثنائي
                 val applicationId = buildApplicationId(context.packageName, project.name)
-                log("✓ معرّف الحزمة الجديد: $applicationId")
+                log("معرّف الحزمة الجديد: $applicationId")
 
                 if (minSdkVersion > targetSdkVersion) {
                     throw IllegalArgumentException("الحد الأدنى لإصدار أندرويد ($minSdkVersion) أكبر من الهدف ($targetSdkVersion)")
@@ -127,7 +127,7 @@ object RinApkExporter {
                     )
                 )
                 val sdkNote = if (patched.intAppliedCount > 0) "minSdk=$minSdkVersion targetSdk=$targetSdkVersion✓" else "uses-sdk غير موجود، أُبقيت قيم RinStudio الافتراضية"
-                log("✓ تم تعديل البيان: package✓ label✓ providers✓ ($sdkNote) — ${patched.appliedCount} سمة إجمالاً")
+                log("تم تعديل البيان: package✓ label✓ providers✓ ($sdkNote) — ${patched.appliedCount} سمة إجمالاً")
 
                 // 3) تجهيز أصول المشروع للحقن
                 log("… تجهيز ملفات المشروع للحقن كأصول (assets/rin_export_project)")
@@ -145,16 +145,16 @@ object RinApkExporter {
                     when (res) {
                         is RinDexCompiler.Result.Ok -> {
                             dexBytes = res.dex
-                            log("✓ تم توليد DEX: ${res.dex.size / 1024} كِلوبايت، ${res.functions} دالة")
+                            log("تم توليد DEX: ${res.dex.size / 1024} كِلوبايت، ${res.functions} دالة")
                         }
                         is RinDexCompiler.Result.Unsupported -> {
                             val why = res.reason + (if (res.line > 0) " (سطر ${res.line})" else "")
                             if (dexMode == DexMode.REQUIRED) throw IllegalStateException("تعذّر التحويل إلى DEX: $why")
-                            onProgress(Progress.Log("⚠ المصدر خارج مجموعة DEX المدعومة: $why — تراجع لوضع المفسِّر", ok = true))
+                            onProgress(Progress.Log("المصدر خارج مجموعة DEX المدعومة: $why — تراجع لوضع المفسِّر", ok = true))
                         }
                         null -> {
                             if (dexMode == DexMode.REQUIRED) throw IllegalStateException("ملف الدخول غير موجود: $entryFile")
-                            onProgress(Progress.Log("⚠ ملف الدخول غير موجود كملف مستقل — وضع المفسِّر", ok = true))
+                            onProgress(Progress.Log("ملف الدخول غير موجود كملف مستقل — وضع المفسِّر", ok = true))
                         }
                     }
                 }
@@ -162,7 +162,7 @@ object RinApkExporter {
                     val n = nextDexIndex(hostApk)
                     val name = if (n <= 1) "classes.dex" else "classes$n.dex"
                     extraEntries.add(ApkRepackager.ExtraEntry(name, dexBytes))
-                    log("✓ أُضيف $name إلى الحزمة")
+                    log("أُضيف $name إلى الحزمة")
                 }
 
                 var fileCount = 0
@@ -192,20 +192,20 @@ object RinApkExporter {
                     put("splash_duration_ms", splash.durationMs)
                 }.toString(2)
                 extraEntries.add(ApkRepackager.ExtraEntry("assets/rin_export_manifest.json", manifestJson.toByteArray(Charsets.UTF_8)))
-                log("✓ $fileCount ملف مُجهَّز (${totalBytes / 1024} كِلوبايت) + بيان تشغيل JSON")
+                log("$fileCount ملف مُجهَّز (${totalBytes / 1024} كِلوبايت) + بيان تشغيل JSON")
 
                 // 4) إعادة تجميع الحزمة + محاذاة zipalign (+ استبدال أيقونة الإطلاق إن زُوِّدت)
                 log("… إعادة تجميع الحزمة (نسخ classes.dex والمكتبات الأصلية وresources.arsc كما هي)")
                 if (customIcon != null) log("… استبدال أيقونة الإطلاق في كل الكثافات (مسطّحة + adaptive) من الصورة المختارة")
                 val unsignedApk = File(work, "unsigned.apk")
                 ApkRepackager.build(hostApk, patched.bytes, extraEntries, unsignedApk, customIcon)
-                log("✓ تم البناء ومحاذاة مُدخلات zip (zipalign: 4096 بايت لمكتبات .so، 4 بايت للباقي)")
+                log("تم البناء ومحاذاة مُدخلات zip (zipalign: 4096 بايت لمكتبات .so، 4 بايت للباقي)")
 
                 // 5) هوية التوقيع الحقيقية + التوقيع الفعلي (مكتبة apksig الرسمية أولاً)
                 log("… توليد/جلب هوية توقيع RSA-2048 من AndroidKeyStore")
                 val identity = RinSigningIdentity.getOrCreate(context, commonName = "RinLang Export — ${project.name}")
                 val fingerprint = RinSigningIdentity.sha256Hex(identity.certificate.encoded)
-                log("✓ شهادة التوقيع (SHA-256): ${fingerprint.take(32)}…")
+                log("شهادة التوقيع (SHA-256): ${fingerprint.take(32)}…")
 
                 log("… توقيع الحزمة عبر مكتبة Google الرسمية apksig (v1 + v2 + v3 معاً، نفس شيفرة apksigner)")
                 val signedApk = File(work, "signed.apk")
@@ -213,16 +213,16 @@ object RinApkExporter {
                 try {
                     RealApkSigner.sign(unsignedApk, signedApk, identity.privateKey, identity.certificate, minSdkVersion)
                     signedWithRealSigner = true
-                    log("✓ تم التوقيع فعلياً عبر apksig الرسمية (v1+v2+v3) — أقصى ثقة تثبيت ممكنة")
+                    log("تم التوقيع فعلياً عبر apksig الرسمية (v1+v2+v3) — أقصى ثقة تثبيت ممكنة")
                 } catch (e: Exception) {
                     signedWithRealSigner = false
-                    log("⚠ تعذّر التوقيع عبر apksig الرسمية (${e.message ?: e.toString()}) — تراجع لتوقيع v1 اليدوي كحل أخير")
+                    log("تعذّر التوقيع عبر apksig الرسمية (${e.message ?: e.toString()}) — تراجع لتوقيع v1 اليدوي كحل أخير")
                     ApkV1Signer.sign(unsignedApk, signedApk, identity.privateKey, identity.certificate)
-                    log("✓ تم توقيع v1 (احتياطي)")
+                    log("تم توقيع v1 (احتياطي)")
                 }
 
                 val finalHash = MessageDigest.getInstance("SHA-256").digest(signedApk.readBytes())
-                log("✓ بصمة الحزمة النهائية (SHA-256): ${finalHash.joinToString("") { "%02x".format(it) }.take(24)}…")
+                log("بصمة الحزمة النهائية (SHA-256): ${finalHash.joinToString("") { "%02x".format(it) }.take(24)}…")
 
                 // نقل الناتج إلى تخزين دائم (filesDir/rin_apps/ عبر RinAppsRegistry) بدل
                 // cacheDir الذي قد يُطهَّر تلقائياً — يبقى متاحاً لاحقاً في شاشة "تطبيقات Rin".
@@ -246,7 +246,7 @@ object RinApkExporter {
                     )
                 )
 
-                log("✓ الحزمة النهائية: ${out.name} (${out.length() / 1024} كِلوبايت)")
+                log("الحزمة النهائية: ${out.name} (${out.length() / 1024} كِلوبايت)")
                 onProgress(Progress.Done(ExportResult(out, applicationId, signedWithRealSigner)))
             } catch (t: Throwable) {
                 onProgress(Progress.Failed(t.message ?: t.toString()))
