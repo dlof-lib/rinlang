@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_search_hint">ابحث في الإعدادات…</string>
+    <string name="settings_all_categories">الكل</string>
+    <string name="settings_no_results">لا توجد إعدادات مطابقة لبحثك.</string>
+</resources>
