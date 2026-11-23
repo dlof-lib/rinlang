@@ -327,6 +327,38 @@
                     android:textColor="@color/rin_on_toolbar"
                     android:textStyle="bold"
                     android:textSize="15sp" />
+
+                <TextView
+                    android:id="@+id/tvMineCount"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:background="@drawable/bg_chip_meta"
+                    android:paddingHorizontal="9dp"
+                    android:paddingVertical="2dp"
+                    android:textColor="@color/rin_editor_hint"
+                    android:textSize="11sp"
+                    tools:text="3" />
+
+                <View
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:layout_weight="1" />
+
+                <!-- ترتيب "مكتباتي": يتبدّل بين الاسم والأحدث بنقرة (كعمود Name/Modified في مستكشفات الكمبيوتر) -->
+                <TextView
+                    android:id="@+id/btnSortLibs"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="8dp"
+                    android:background="@drawable/bg_chip_meta"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:paddingHorizontal="10dp"
+                    android:paddingVertical="4dp"
+                    android:textColor="@color/rin_on_toolbar"
+                    android:textSize="11.5sp"
+                    tools:text="⇅ الاسم" />
             </LinearLayout>
 
             <androidx.recyclerview.widget.RecyclerView
