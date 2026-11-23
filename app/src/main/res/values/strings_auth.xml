@@ -27,7 +27,7 @@
     <string name="hint_verification_code">أدخل الكود المكوّن من 5 أرقام</string>
     <string name="action_verify">تأكيد</string>
     <string name="action_resend_code">إعادة إرسال الكود</string>
-    <string name="verify_success">تم إنشاء الحساب بنجاح ✓</string>
+    <string name="verify_success">تم إنشاء الحساب بنجاح</string>
     <string name="code_resent">تم إرسال كود جديد إلى بريدك</string>
 
     <!-- أخطاء عامة -->
