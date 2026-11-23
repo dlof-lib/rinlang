@@ -4,7 +4,7 @@
     <string name="terminal_lib_unknown">مكتبة غير معروفة: %1$s — اكتب libs</string>
     <string name="terminal_font_usage">الاستخدام: font +|-|reset|رقم (الحالي: %1$s sp)</string>
     <string name="terminal_font_set">حجم الخط: %1$s sp</string>
-    <string name="terminal_help_rows">#التشغيل\nrun::تشغيل الملف المفتوح\nstop::إيقاف البرنامج الجاري (^C)\nclear::مسح الشاشة\n#الجلسة\nhistory::الأوامر السابقة (!! الأخير، !N رقم N)\nsession::الأسماء المعرّفة في الجلسة\nreset::نسيان تعريفات الجلسة\n#البحث والمشاركة\ngrep &lt;t&gt;::بحث في الشاشة\ngoto &lt;n&gt;::الانتقال إلى السطر n في المحرر\nocr &lt;img&gt;::طباعة النص داخل صورة\ncopy · share::نسخ الشاشة أو مشاركتها\n#الملفات\npwd::مسار مجلد المشروع\nls [-a] [dir]::عرض الملفات\ntree [dir]::شجرة المجلد\ncat &lt;file&gt;::عرض ملف مع أرقام الأسطر\nalias n=cmd::تعريف اختصار (alias للعرض)\nunalias &lt;n&gt;::حذف اختصار\n#معلومات\nbanner::عرض شعار Rin\nabout::الإصدارات ومعلومات النظام\nversion::إصدار المحرّك\nlibs::قائمة المكتبات المدمجة\nlib &lt;name&gt;::بطاقة مكتبة\ncolors::عيّنة ألوان ANSI\n#العرض\nbackground::صورة أو فضاء (space · stop · play · clear · dim N)\ntheme [name]::سمة الألوان (theme للعرض)\nsize &lt;preset&gt;::حجم جاهز xs…xxl\nspacing &lt;mode&gt;::تباعد الأسطر tight/normal/relaxed\nstyle::إعدادات المظهر الحالية\nfullscreen · ⛶::الطرفية بملء الشاشة\nfont +/-/N::حجم الخط\necho &lt;text&gt;::طباعة نص (يدعم \\e[..m)</string>
+    <string name="terminal_help_rows">#التشغيل\nrun::تشغيل الملف المفتوح\nstop::إيقاف البرنامج الجاري (^C)\nclear::مسح الشاشة\n#الجلسة\nhistory::الأوامر السابقة (!! الأخير، !N رقم N)\nsession::الأسماء المعرّفة في الجلسة\nreset::نسيان تعريفات الجلسة\nhistory clear::مسح تاريخ الأوامر المحفوظ\nhelp &lt;cmd&gt;::تفاصيل أمر واحد\n#البحث والمشاركة\ngrep &lt;t&gt;::بحث في الشاشة\ngoto &lt;n&gt;::الانتقال إلى السطر n في المحرر\nocr &lt;img&gt;::طباعة النص داخل صورة\ncopy · share::نسخ الشاشة أو مشاركتها\nlog::حفظ الشاشة في logs/ داخل المشروع\n#الملفات\npwd::مسار مجلد المشروع\nls [-a] [dir]::عرض الملفات\ntree [dir]::شجرة المجلد\nfind &lt;t&gt;::بحث عن ملفات ومجلدات بالاسم\nhead &lt;file&gt; [n]::أول n سطراً (الافتراضي 10)\ntail &lt;file&gt; [n]::آخر n سطراً (الافتراضي 10)\nwc &lt;file&gt;::عدد الأسطر والكلمات والحجم\ncat &lt;file&gt;::عرض ملف مع أرقام الأسطر\nalias n=cmd::تعريف اختصار (alias للعرض)\nunalias &lt;n&gt;::حذف اختصار\n#معلومات\nbanner::عرض شعار Rin\nabout::الإصدارات ومعلومات النظام\nversion::إصدار المحرّك\nlibs::قائمة المكتبات المدمجة\nlib &lt;name&gt;::بطاقة مكتبة\ncolors::عيّنة ألوان ANSI\n#العرض\nbackground::صورة أو فضاء (space · stop · play · clear · dim N)\ntheme [name]::سمة الألوان (theme للعرض)\nsize &lt;preset&gt;::حجم جاهز xs…xxl\nspacing &lt;mode&gt;::تباعد الأسطر tight/normal/relaxed\nstyle::إعدادات المظهر الحالية\nfullscreen · ⛶::الطرفية بملء الشاشة\nfont +/-/N::حجم الخط\necho &lt;text&gt;::طباعة نص (يدعم \\e[..m)</string>
     <string name="terminal_help_footer">أي نص آخر يُنفَّذ كشيفرة Rin، مثل let x = 5; ثم x * 2.\nTab للإكمال، ↑/↓ للتاريخ، القرص للتكبير، ^C لإلغاء الإدخال.</string>
     <string name="terminal_fs_outside">خارج مجلد المشروع: %1$s</string>
     <string name="terminal_fs_not_dir">ليس مجلداً: %1$s</string>
@@ -19,7 +19,7 @@
     <string name="terminal_alias_set">alias %1$s ← %2$s</string>
     <string name="terminal_alias_removed">حُذف الاختصار %1$s</string>
     <string name="terminal_alias_missing">لا يوجد اختصار بهذا الاسم: %1$s</string>
-    <string name="terminal_theme_usage">الاستخدام: theme &lt;الاسم&gt;</string>
+    <string name="terminal_theme_usage">الاستخدام: theme &lt;الاسم | light | dark | auto&gt;</string>
     <string name="terminal_theme_unknown">سمة غير معروفة: %1$s — اكتب theme</string>
     <string name="terminal_theme_set">السمة: %1$s</string>
     <string name="terminal_size_usage">الاستخدام: size %1$s</string>
@@ -34,5 +34,13 @@
     <string name="terminal_bg_space_on">خلفية الفضاء مفعّلة — background stop للإيقاف، background clear للإزالة</string>
     <string name="terminal_bg_anim_on">النجوم تتحرك</string>
     <string name="terminal_bg_anim_off">توقفت الحركة — background play للاستئناف</string>
-    <string name="terminal_bg_anim_need_space">فعّل خلفية الفضاء أولاً: background space</string>
+    <string name="terminal_bg_anim_need_space">فعّل خلفية متحركة أولاً: background space أو اختر GIF/WebP متحرك</string>
+    <string name="terminal_bg_anim_set">تم تعيين الخلفية المتحركة (التعتيم %1$s%%) — background stop للإيقاف، background play للاستئناف</string>
+    <string name="terminal_bg_too_big">الملف كبير جداً (الحد 20MB)</string>
+    <string name="terminal_usage_fmt">الاستخدام: %1$s</string>
+    <string name="terminal_log_saved">تم الحفظ: %1$s</string>
+    <string name="terminal_log_failed">تعذّر حفظ السجل</string>
+    <string name="terminal_log_empty">لا يوجد ما يُحفظ بعد</string>
+    <string name="terminal_history_cleared">تم مسح تاريخ الأوامر</string>
+    <string name="terminal_help_none">لا توجد مساعدة لـ: %1$s</string>
 </resources>
