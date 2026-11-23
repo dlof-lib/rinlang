@@ -540,6 +540,8 @@ class MainActivity : RinBaseActivity() {
         autoSaveTask?.let { uiHandler.removeCallbacks(it) }
         autoRunTask?.let { uiHandler.removeCallbacks(it) }
         if (AppSettings.isSaveOnPause(this) && hasSaveTarget() && hasUnsavedChanges()) saveSilently()
+        // نسخة مرآة في مجلد الهاتف (إن رُبط المشروع بمزامنة تلقائية): رفع المعدَّل فقط وفي الخلفية.
+        currentProject?.let { ExternalProjectSaver.syncAsync(this, it) }
     }
 
     // ---- تتبّع التعديل والحفظ/التشغيل التلقائيان --------------------------------------------
