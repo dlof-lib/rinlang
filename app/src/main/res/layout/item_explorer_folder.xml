@@ -22,11 +22,11 @@
         android:contentDescription="@null" />
 
     <ImageView
-        android:layout_width="18dp"
-        android:layout_height="18dp"
+        android:id="@+id/imgExplorerFolderIcon"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
         android:layout_marginEnd="8dp"
-        android:src="@drawable/ic_folder_solid"
-        android:tint="@color/rin_accent"
+        android:src="@drawable/rs_folder"
         android:contentDescription="@null" />
 
     <TextView
