@@ -1431,11 +1431,13 @@ private:
     // استثناء RinError يقع أثناء استدعاء أي خُطّاف آخر لنفس الحاوية).
     struct LifecycleHooks {
         Value init, mount, update, destroy, error;
-        Value get, set, has, drop, call, invoke; // خُطّافات الأعضاء الغائبة (rin_container_magic.cpp، docs/container_magic.md)
+        Value get, set, has, drop, call, invoke;
+        Value index, store, count, each; // الحاوية نفسها تُفهرَس/تُعَدّ/تُكرَّر: C[k] · C[k] = v · len(C) · for x in C (docs/container_sequence.md) // خُطّافات الأعضاء الغائبة (rin_container_magic.cpp، docs/container_magic.md)
     };
     // يستدعي خُطّاف العضو الغائب `slot` للحاوية n إن كانت حاوية وعرّفته؛ true + out = نتيجته. محمي من إعادة الدخول لنفس (حاوية، خُطّاف، اسم).
     bool magicHook(const std::shared_ptr<NsNode>& n, Value LifecycleHooks::*slot, const char* kind, const std::string& member,
                    std::vector<Value> args, int line, Value& out);
+    bool magicHas(const std::shared_ptr<NsNode>& n, Value LifecycleHooks::*slot) const; // هل عرّفت الحاوية n هذا الخُطّاف؟
     bool magicActive_ = false;                         // true بعد تسجيل أول خُطّاف عضو (يبقي النداء العادي بلا كلفة قبله)
     std::unordered_set<std::string> magicBusy_;
     void registerNativesMagic();
