@@ -51,6 +51,38 @@ class ProjectsActivity : RinBaseActivity() {
         importProject(uri)
     }
 
+    // ---- مزامنة مشروع مع مجلد على الهاتف ----
+    private var pendingLink: Project? = null
+    private val linkFolderLauncher = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri: Uri? ->
+        val p = pendingLink; pendingLink = null
+        if (uri == null || p == null) return@registerForActivityResult
+        ExternalProjectSaver.persist(this, uri)
+        if (ExternalProjectSaver.check(this, uri) != ExternalProjectSaver.Check.OK) {
+            Toast.makeText(this, R.string.wiz_save_not_writable, Toast.LENGTH_LONG).show(); return@registerForActivityResult
+        }
+        ExternalProjectSaver.setDefaultTree(this, uri)
+        runSave { ExternalProjectSaver.saveNew(applicationContext, p, uri, false, true) }
+    }
+
+    private fun syncProject(project: Project) {
+        if (ExternalProjectSaver.linkOf(this, project.name) == null) { pendingLink = project; linkFolderLauncher.launch(null); return }
+        runSave { ExternalProjectSaver.sync(applicationContext, project) }
+    }
+
+    private fun runSave(job: () -> ExternalProjectSaver.Result) {
+        Thread {
+            val r = job()
+            runOnUiThread {
+                val msg = when {
+                    !r.ok -> getString(R.string.proj_sync_failed, r.error ?: "?")
+                    r.files == 0 -> getString(R.string.proj_sync_none)
+                    else -> getString(R.string.proj_sync_done, r.files)
+                }
+                Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+            }
+        }.start()
+    }
+
     /** معالج «مشروع جديد» (NewProjectActivity): عند النجاح يعيد اسم المشروع فنفتحه مباشرة. */
     private val newProjectLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -83,7 +115,8 @@ class ProjectsActivity : RinBaseActivity() {
             onRename = { project -> showRenameDialog(project) },
             onDelete = { project -> showDeleteConfirm(project) },
             onMove = { project -> showMoveDialog(project) },
-            onExport = { project -> exportProject(project) }
+            onExport = { project -> exportProject(project) },
+            onSync = { project -> syncProject(project) }
         )
         // شبكة عمودين بمظهر "غلاف ألبوم" (انظر item_project.xml) بدل قائمة مسطّحة أحادية
         // العمود — يوحّد مظهر شاشة "مشاريعي" مع شاشة "الألبومات" بدل أن تبدو شاشتين من
@@ -814,12 +847,15 @@ class ProjectsActivity : RinBaseActivity() {
     }
 }
 
+private const val MENU_SYNC_PHONE = 9001
+
 private class ProjectsAdapter(
     val onOpen: (Project) -> Unit,
     val onRename: (Project) -> Unit,
     val onDelete: (Project) -> Unit,
     val onMove: (Project) -> Unit,
-    val onExport: (Project) -> Unit
+    val onExport: (Project) -> Unit,
+    val onSync: (Project) -> Unit
 ) : RecyclerView.Adapter<ProjectsAdapter.VH>() {
 
     private var items: List<Project> = emptyList()
@@ -887,8 +923,10 @@ private class ProjectsAdapter(
     private fun showActionsMenu(anchor: View, project: Project) {
         val popup = PopupMenu(anchor.context, anchor)
         popup.menuInflater.inflate(R.menu.menu_project_actions, popup.menu)
+        popup.menu.add(0, MENU_SYNC_PHONE, 90, anchor.context.getString(R.string.proj_sync_phone))
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
+                MENU_SYNC_PHONE -> onSync(project)
                 R.id.actionRenameProject -> onRename(project)
                 R.id.actionMoveProject -> onMove(project)
                 R.id.actionExportProject -> onExport(project)
