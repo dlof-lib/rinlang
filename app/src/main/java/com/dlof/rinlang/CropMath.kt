@@ -25,4 +25,11 @@ object CropMath {
         while (m / 2 >= maxSide) { s *= 2; m /= 2 }
         return s
     }
+
+    /** تحجيم «تغطية» لصورة iw×ih داخل w×h: [scale, dx, dy] بحيث تملأ الهدف وتتمركز. */
+    fun coverTransform(iw: Int, ih: Int, w: Int, h: Int): FloatArray {
+        if (iw <= 0 || ih <= 0 || w <= 0 || h <= 0) return floatArrayOf(1f, 0f, 0f)
+        val sc = maxOf(w.toFloat() / iw, h.toFloat() / ih)
+        return floatArrayOf(sc, (w - iw * sc) / 2f, (h - ih * sc) / 2f)
+    }
 }
