@@ -91,10 +91,10 @@ class RinTerminalView @JvmOverloads constructor(
     private val promptLabel = TextView(context)
     private val field = EditText(context)
     private val btnCtrlC = chip("^C")
-    private val btnTab = chip("⇥")
-    private val btnUp = chip("↑")
-    private val btnDown = chip("↓")
-    private val btnSend = chip("⏎")
+    private val btnTab = chipIcon(R.drawable.rs_ic_tab, 16)
+    private val btnUp = chipIcon(R.drawable.rs_ic_arrow_up, 16)
+    private val btnDown = chipIcon(R.drawable.rs_ic_arrow_down, 16)
+    private val btnSend = chipIcon(R.drawable.rs_ic_enter, 16)
     private val inputBox = LinearLayout(context)
     private val header = LinearLayout(context)
     private val activity = TextView(context)   // سطر التنفيذ الحيّ (مؤشر دوّار + الزمن) فوق سطر الأوامر
@@ -1120,15 +1120,15 @@ class RinTerminalView @JvmOverloads constructor(
         header.addView(statusLabel, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT))
         header.addView(statusInfo, LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f))
         // أزرار سريعة: ↓ للأسفل · ⎘ نسخ الكل · ⇪ مشاركة · ⌫ مسح الشاشة · ⛶ ملء الشاشة
-        for ((glyph, action) in listOf<Pair<String, () -> Unit>>(
-            "↓" to { stickToBottom = true; scroll.post { scroll.fullScroll(View.FOCUS_DOWN) }; Unit },
-            "⎘" to { copyTranscript() },
-            "⇪" to { shareTranscript() },
-            "⌫" to { RinTerminal.clear() },
-            "✦" to { toggleBackgroundAnimation() },
-            "⛶" to { toggleFullscreen() }
+        for ((icon, action) in listOf<Pair<Int, () -> Unit>>(
+            R.drawable.rs_ic_arrow_down to { stickToBottom = true; scroll.post { scroll.fullScroll(View.FOCUS_DOWN) }; Unit },
+            R.drawable.rs_ic_copy to { copyTranscript() },
+            R.drawable.rs_ic_share to { shareTranscript() },
+            R.drawable.rs_ic_backspace to { RinTerminal.clear() },
+            R.drawable.rs_ic_sparkle to { toggleBackgroundAnimation() },
+            R.drawable.rs_ic_fullscreen to { toggleFullscreen() }
         )) {
-            val b = chip(glyph)
+            val b = chipIcon(icon, 14)
             b.minWidth = dp(28)
             b.setPadding(dp(6), 0, dp(6), 0)
             b.setOnClickListener { action() }
@@ -1352,6 +1352,10 @@ class RinTerminalView @JvmOverloads constructor(
             }
         }, start, length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
     }
+
+    /** زر أيقونة (vector) بدل رمز نصي. */
+    private fun chipIcon(@androidx.annotation.DrawableRes res: Int, sizeDp: Int): TextView =
+        chip("").also { RsIcons.only(it, res, sizeDp, DIM) }
 
     private fun chip(label: String): TextView = TextView(context).apply {
         chips.add(this)
