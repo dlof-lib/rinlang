@@ -51,6 +51,17 @@ class ProjectsActivity : RinBaseActivity() {
         importProject(uri)
     }
 
+    /** معالج «مشروع جديد» (NewProjectActivity): عند النجاح يعيد اسم المشروع فنفتحه مباشرة. */
+    private val newProjectLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK) {
+            val created = result.data?.getStringExtra(NewProjectActivity.EXTRA_CREATED) ?: return@registerForActivityResult
+            refresh()
+            ProjectManager.listProjects(this).firstOrNull { it.name == created }?.let { openProject(it) }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_projects)
@@ -80,7 +91,7 @@ class ProjectsActivity : RinBaseActivity() {
         rvProjects.layoutManager = GridLayoutManager(this, 2)
         rvProjects.adapter = adapter
 
-        fabNewProject.setOnClickListener { showCreateDialog() }
+        fabNewProject.setOnClickListener { newProjectLauncher.launch(Intent(this, NewProjectActivity::class.java)) }
         handleIncomingPackage(intent)
         findViewById<View>(R.id.btnProjectAlbums).setOnClickListener { startActivity(Intent(this, AlbumsActivity::class.java)) }
         findViewById<View>(R.id.btnProjectImport).setOnClickListener {
