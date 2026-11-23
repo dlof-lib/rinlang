@@ -1,0 +1,54 @@
+// الحاوية تُفهرَس وتُعَدّ وتُكرَّر: on index / store / count / each / has (docs/container_sequence.md)
+
+@container=Shelf
+    state books = [];
+    on index(key) { return books[key]; }
+    on store(key, value) { books[key] = value; }
+    on count() { return len(books); }
+    on each() { return books; }
+    on has(title) { return contains(books, title); }
+.end/container
+
+Shelf[0] = "Dune";
+Shelf[1] = "Emma";
+print Shelf[0], Shelf[1];
+print len(Shelf);
+for (let b in Shelf) { print "book:", b; }
+print contains(Shelf, "Emma"), contains(Shelf, "Nope");
+Shelf[0] = "Dune II";
+print Shelf[0];
+
+// each() يعيد قاموساً: for (let [k, v] in C) و for (let k in C)
+@container=Cfg
+    state data = {name: "rin", ver: 3};
+    on each() { return data; }
+    on index(key) { return data[key]; }
+    on count() { return len(data); }
+.end/container
+for (let k in Cfg) { print "key:", k; }
+for (let [k, v] in Cfg) { print k, "=", v; }
+print Cfg["name"], len(Cfg);
+
+// الفهرس داخل دالة/تعبير مركّب
+fun firstTwo() { return [Shelf[0], Shelf[1]]; }
+print firstTwo();
+print len(Shelf) + 10;
+
+// متغيّر حقيقي بنفس الاسم يغلب الحاوية؛ وحاوية بلا خُطّافات تبقى كما كانت
+let nums = [5, 6, 7];
+print nums[1], len(nums);
+@container=Plain
+    let a = 1;
+.end/container
+try { print Plain[0]; } catch (e) { print "plain not indexable"; }
+try { for (let x in Plain) { print x; } } catch (e) { print "plain not iterable"; }
+
+// الخُطّافات تعمل مع بقية خُطّافات الأعضاء (get/call) معاً
+@container=Mix
+    state items = {};
+    on index(key) { return items[key]; }
+    on store(key, value) { items[key] = value; }
+    on get(name) { return "dyn:" + name; }
+.end/container
+Mix["k"] = 42;
+print Mix["k"], Mix.anything;
