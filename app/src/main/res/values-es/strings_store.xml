@@ -13,7 +13,7 @@
     <string name="action_install">Instalar/Insertar</string>
     <string name="store_item_meta_format">%1$s • %2$s • %3$d descargas</string>
     <string name="package_installed_toast">Paquete instalado y añadido a las bibliotecas de este proyecto</string>
-    <string name="package_installed_import_toast">%1$s paquete(s) instalado(s) y líneas @import insertadas directamente en el código ✓</string>
+    <string name="package_installed_import_toast">%1$s paquete(s) instalado(s) y líneas @import insertadas directamente en el código</string>
 
     <!-- Búsqueda, orden y filtro por categoría dentro de la tienda -->
     <string name="store_search_hint">Buscar por nombre o descripción del paquete…</string>
@@ -28,13 +28,13 @@
     <string name="rate_package_title">%1$s</string>
     <string name="rate_package_subtitle">¿Cómo valorarías este paquete? Elige un número de estrellas</string>
     <string name="rate_package_login_required">Inicia sesión primero para valorar este paquete</string>
-    <string name="rate_package_submitted">Gracias por tu valoración ✓</string>
+    <string name="rate_package_submitted">Gracias por tu valoración</string>
     <string-array name="rate_quality_labels">
-        <item>⭐ Deficiente</item>
-        <item>⭐⭐ Aceptable</item>
-        <item>⭐⭐⭐ Bueno</item>
-        <item>⭐⭐⭐⭐ Muy bueno</item>
-        <item>⭐⭐⭐⭐⭐ Excelente</item>
+        <item>Deficiente</item>
+        <item>Aceptable</item>
+        <item>Bueno</item>
+        <item>Muy bueno</item>
+        <item>Excelente</item>
     </string-array>
     <string name="store_dependencies_format">Requiere: %1$s</string>
     <plurals name="store_results_count">
@@ -65,14 +65,14 @@
     <string name="hint_package_assets_multi">Puedes seleccionar más de un archivo de cualquier tipo a la vez (imágenes, código, datos...)</string>
     <string name="action_pick_readme">Subir mi propio README.md</string>
     <string name="action_pick_license">Subir mi propio archivo de licencia</string>
-    <string name="file_selected_generic">Archivo seleccionado ✓</string>
+    <string name="file_selected_generic">Archivo seleccionado</string>
     <string name="assets_selected_format">%1$d archivo(s) seleccionado(s)</string>
     <string name="label_package_visual_identity">Identidad visual del paquete (opcional)</string>
     <string name="label_package_icon">Icono del paquete</string>
     <string name="label_package_thumbnail">Miniatura del paquete</string>
     <string name="error_image_decode_failed">No se pudo abrir esta imagen, prueba con otra</string>
     <string name="action_publish_submit">Publicar paquete</string>
-    <string name="publish_success">Paquete publicado en la Tienda Rin ✓</string>
+    <string name="publish_success">Paquete publicado en la Tienda Rin</string>
     <string name="publish_requires_login">Inicia sesión primero para poder publicar</string>
     <string name="error_package_name_taken">Este nombre (o uno similar) ya lo usa otro paquete en la Tienda Rin, elige un nombre diferente</string>
 
@@ -85,7 +85,7 @@
     <string name="report_package_title">Reportar %1$s</string>
     <string name="report_package_message">Elige un motivo para reportar este paquete:</string>
     <string name="report_package_login_required">Inicia sesión primero para poder reportar</string>
-    <string name="report_package_submitted">Tu reporte fue enviado, gracias por ayudar a mantener la tienda segura ✓</string>
+    <string name="report_package_submitted">Tu reporte fue enviado, gracias por ayudar a mantener la tienda segura</string>
     <string-array name="report_reasons">
         <item>Contenido ofensivo o inapropiado</item>
         <item>Código malicioso o dañino</item>
@@ -139,8 +139,8 @@
     <string name="edit_profile_title">Editar perfil</string>
     <string name="edit_profile_name_hint">Nombre visible</string>
     <string name="edit_profile_bio_hint">Una breve biografía sobre ti (opcional)</string>
-    <string name="profile_updated">Perfil actualizado ✓</string>
-    <string name="avatar_updated">Foto de perfil actualizada ✓</string>
+    <string name="profile_updated">Perfil actualizado</string>
+    <string name="avatar_updated">Foto de perfil actualizada</string>
     <string name="avatar_update_failed">No se pudo actualizar la foto, inténtalo de nuevo</string>
 
     <!-- Perfil público: ver el perfil de cualquier otro usuario (no solo el tuyo), con contadores
@@ -174,6 +174,6 @@
     <string name="action_delete_package">Eliminar</string>
     <string name="delete_package_confirm_title">Eliminar paquete</string>
     <string name="delete_package_confirm_message">¿Eliminar permanentemente el paquete \"%1$s\" de la Tienda Rin? Esta acción no se puede deshacer.</string>
-    <string name="package_deleted_toast">Paquete eliminado ✓</string>
+    <string name="package_deleted_toast">Paquete eliminado</string>
     <string name="package_delete_failed">No se pudo eliminar el paquete, inténtalo de nuevo</string>
 </resources>
