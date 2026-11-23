@@ -107,6 +107,7 @@ inline const std::unordered_set<std::string>& knownTags() {
 inline bool isDirectiveTag(const std::string& name) {
     static const std::unordered_set<std::string> s = {
         "Define", "Slot", "Repeat", "If", "Else", "Fun", "Rin", "Import", "Loop", "Container",
+        "Match", "Case", "Default", "Unless", "Prop", "Fill", // docs/indsin_template_concepts.md
         "Element", "Palette", "Theme", "Tokens", "Style"};
     size_t dot = name.find('.');
     return s.count(dot == std::string::npos ? name : name.substr(0, dot)) != 0;
