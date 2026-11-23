@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="menu_file_exit">Close editor</string>
+    <string name="menu_view_explorer">Project explorer</string>
+    <string name="menu_group_clipboard">More clipboard</string>
+    <string name="menu_group_lines">Lines</string>
+    <string name="menu_group_code">Code</string>
+    <string name="menu_group_cleanup">Clean up</string>
+    <string name="menu_group_fold">Fold</string>
+    <string name="menu_group_check">Check</string>
+    <string name="menu_view_command_palette">Command palette…</string>
+    <string name="palette_hint">Type a command…</string>
+    <string name="palette_title">Command palette</string>
+</resources>
