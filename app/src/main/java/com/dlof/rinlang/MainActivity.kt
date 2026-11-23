@@ -139,6 +139,11 @@ class MainActivity : RinBaseActivity() {
             if (uri != null) openFile(uri)
         }
 
+    private val terminalBackgroundLauncher =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri != null) rinTerminal.setBackgroundFromUri(uri)
+        }
+
     private val createDocumentLauncher =
         registerForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
             if (uri != null) writeToUri(uri)
@@ -1270,6 +1275,7 @@ class MainActivity : RinBaseActivity() {
     /** يربط الـ terminal بالمحرر: أمر run، تنفيذ شيفرة Rin من سطر الأوامر، والتبويبان. */
     private fun setupTerminal() {
         rinTerminal.onRunRequested = { runProgram() }
+        rinTerminal.onPickBackground = { terminalBackgroundLauncher.launch(arrayOf("image/*")) }
         // أوامر سطر الـ terminal تُنفَّذ كتشغيل REPL: بلا ترويسة run#N، وتُحفَظ تصريحاتها في الجلسة عند النجاح فقط.
         rinTerminal.onExecuteRequested = { source, onSuccess ->
             RinJobScheduler.submit(source, repl = true) { status ->
