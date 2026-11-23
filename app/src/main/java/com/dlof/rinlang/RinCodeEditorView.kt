@@ -156,6 +156,191 @@ class RinCodeEditorView @JvmOverloads constructor(
     private val colorBracket0 = ContextCompat.getColor(context, R.color.syntax_bracket0)
     private val colorBracket1 = ContextCompat.getColor(context, R.color.syntax_bracket1)
     private val colorBracket2 = ContextCompat.getColor(context, R.color.syntax_bracket2)
+    // ---- معاينة الألوان: مربع لون بجانب كل كود لون (#hex / rgb() / hsl() / "tomato") ----------------
+    // الأوضاع: 0 = إيقاف، 1 = مربع بجانب الكود (يُرسَم في الفراغ التالي له، وإلا في نهاية السطر فلا يغطّي كوداً أبداً)،
+    // 2 = تظليل الكود نفسه بلونه مع نص متباين. الضغط على المربع يفتح منتقي اللون ويستبدل الكود بقيمة جديدة.
+    private val swatchFill = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val swatchBorder = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE; color = 0x99808080.toInt(); strokeWidth = resources.displayMetrics.density
+    }
+    private val checkerLight = Paint().apply { color = 0xFFFFFFFF.toInt() }
+    private val checkerDark = Paint().apply { color = 0xFFC8C8C8.toInt() }
+    private class ColorHit(val line: Int, val match: ColorLiterals.Match, val rect: android.graphics.RectF)
+    private val colorHits = ArrayList<ColorHit>()
+    private val colorScanCache = android.util.LruCache<String, List<ColorLiterals.Match>>(512)
+    private var colorPreviewMode: Int = EditorDesign.colorPreviewMode(context)
+
+    /** وضع معاينة الألوان الحالي: 0 إيقاف، 1 مربع، 2 تظليل. */
+    fun getColorPreviewMode(): Int = colorPreviewMode
+    fun setColorPreviewMode(mode: Int) {
+        colorPreviewMode = mode.coerceIn(0, 2)
+        EditorDesign.setColorPreviewMode(context, colorPreviewMode)
+        invalidate()
+    }
+
+    private fun colorsOf(lineText: String): List<ColorLiterals.Match> {
+        if (lineText.length < 4) return emptyList()
+        colorScanCache.get(lineText)?.let { return it }
+        val found = ColorLiterals.scan(lineText)
+        colorScanCache.put(lineText, found)
+        return found
+    }
+
+    private fun drawColorPreview(canvas: Canvas, line: Int, lineText: String, y: Float, baseline: Float) {
+        val ms = colorsOf(lineText)
+        if (ms.isEmpty()) return
+        val d = resources.displayMetrics.density
+        if (colorPreviewMode == 2) {
+            val editorBg = ContextCompat.getColor(context, R.color.rin_editor_bg)
+            for (m in ms) {
+                val x1 = paddingLeft + textPaint.measureText(lineText, 0, m.start)
+                val x2 = paddingLeft + textPaint.measureText(lineText, 0, m.end)
+                val rect = android.graphics.RectF(x1 - d, y + lineHeight * 0.10f, x2 + d, y + lineHeight * 0.90f)
+                val solid = ColorLiterals.compositeOver(m.argb, editorBg)
+                swatchFill.color = solid
+                canvas.drawRoundRect(rect, 3f * d, 3f * d, swatchFill)
+                val keep = textPaint.color
+                textPaint.color = ColorLiterals.onColor(solid)
+                canvas.drawText(lineText, m.start, m.end, x1, baseline, textPaint)
+                textPaint.color = keep
+            }
+            return
+        }
+        val side = min(lineHeight * 0.64f, charWidth * 1.9f).coerceAtLeast(8f * d)
+        val gap = charWidth * 0.35f
+        val needCells = kotlin.math.ceil(((side + gap) / charWidth).toDouble()).toInt()
+        var eolX = -1f
+        for (m in ms) {
+            var e = m.end
+            if (e < lineText.length && (lineText[e] == '"' || lineText[e] == '\'')) e++
+            var spaces = 0
+            while (e + spaces < lineText.length && lineText[e + spaces] == ' ') spaces++
+            val x: Float
+            if (e + spaces >= lineText.length || spaces >= needCells) {
+                x = paddingLeft + textPaint.measureText(lineText, 0, e) + gap
+            } else {
+                if (eolX < 0f) eolX = paddingLeft + textPaint.measureText(lineText) + charWidth * 2f
+                x = eolX
+                eolX += side + charWidth * 0.5f
+            }
+            val rect = android.graphics.RectF(x, y + (lineHeight - side) / 2f, x + side, y + (lineHeight + side) / 2f)
+            if (m.hasAlpha) {
+                val half = side / 2f
+                canvas.drawRect(rect.left, rect.top, rect.right, rect.bottom, checkerLight)
+                canvas.drawRect(rect.left, rect.top, rect.left + half, rect.top + half, checkerDark)
+                canvas.drawRect(rect.left + half, rect.top + half, rect.right, rect.bottom, checkerDark)
+            }
+            swatchFill.color = m.argb
+            canvas.drawRoundRect(rect, 2.5f * d, 2.5f * d, swatchFill)
+            canvas.drawRoundRect(rect, 2.5f * d, 2.5f * d, swatchBorder)
+            colorHits.add(ColorHit(line, m, rect))
+        }
+    }
+
+    private fun hitColorAt(x: Float, y: Float): ColorHit? {
+        if (colorPreviewMode != 1) return null
+        val slop = 6f * resources.displayMetrics.density
+        for (h in colorHits) {
+            val r = h.rect
+            if (x >= r.left - slop && x <= r.right + slop && y >= r.top - slop && y <= r.bottom + slop) return h
+        }
+        return null
+    }
+
+    /** اللون الذي يلاصق المؤشر (أو null). */
+    fun colorAtCursor(): ColorLiterals.Match? {
+        val cur = engine.getCursor()
+        return ColorLiterals.matchAt(engine.getLine(cur.line), cur.col)
+    }
+
+    /** يفتح منتقي اللون للكود الذي عند المؤشر؛ false إن لم يوجد لون هناك. */
+    fun pickColorAtCursor(): Boolean {
+        val m = colorAtCursor() ?: return false
+        openColorPicker(engine.getCursor().line, m)
+        return true
+    }
+
+    private fun openColorPicker(line: Int, m: ColorLiterals.Match) {
+        ColorPickerDialog.show(context, m.argb) { picked ->
+            val cur = ColorLiterals.matchAt(engine.getLine(line), m.start) ?: return@show
+            val rep = ColorLiterals.replacementFor(cur, picked)
+            engine.replaceRange(line, cur.start, line, cur.end, rep)
+            engine.setCursor(line, cur.start + rep.length, false)
+            afterEngineMutation()
+        }
+    }
+
+    // ---- الكتابة الذكية (انظر SmartEdit) ----------------------------------------------------------
+
+    private fun selectionFlat(text: String): Pair<Int, Int> {
+        val sel = engine.getSelection()
+        if (sel.hasSelection) return flatOffsetOf(text, sel.start.line, sel.start.col) to flatOffsetOf(text, sel.end.line, sel.end.col)
+        val c = engine.getCursor()
+        val o = flatOffsetOf(text, c.line, c.col)
+        return o to o
+    }
+
+    /** يطبّق [edit] باستبدال واحد قابل للتراجع ثم يضبط التحديد الناتج؛ false إن كان null. */
+    private fun applySmartEdit(edit: SmartEdit.Edit?): Boolean {
+        if (edit == null) return false
+        val text = engine.getText()
+        val (sl, sc) = flatOffsetToPos(text, edit.start)
+        val (el, ec) = flatOffsetToPos(text, edit.end)
+        engine.replaceRange(sl, sc, el, ec, edit.text)
+        val newText = engine.getText()
+        val (al, ac) = flatOffsetToPos(newText, edit.selStart)
+        val (bl, bc) = flatOffsetToPos(newText, edit.selEnd)
+        if (edit.selStart == edit.selEnd) engine.setCursor(al, ac, false) else engine.setSelection(al, ac, bl, bc)
+        afterEngineMutation()
+        return true
+    }
+
+    fun smartChangeCase(mode: SmartEdit.CaseMode): Boolean {
+        val t = engine.getText(); val (s, e) = selectionFlat(t)
+        return applySmartEdit(SmartEdit.changeCase(t, s, e, mode))
+    }
+    fun smartStepNumber(delta: Int): Boolean {
+        val t = engine.getText(); val (s, _) = selectionFlat(t)
+        return applySmartEdit(SmartEdit.stepNumber(t, s, delta))
+    }
+    fun smartFlipWord(): Boolean {
+        val t = engine.getText(); val (s, _) = selectionFlat(t)
+        return applySmartEdit(SmartEdit.flipWord(t, s))
+    }
+    fun smartSurround(open: Char): Boolean {
+        val t = engine.getText(); val (s, e) = selectionFlat(t)
+        return applySmartEdit(SmartEdit.surround(t, s, e, open))
+    }
+    fun smartUnsurround(): Boolean {
+        val t = engine.getText(); val (s, e) = selectionFlat(t)
+        return applySmartEdit(SmartEdit.unsurround(t, s, e))
+    }
+    fun smartExpandSelection(): Boolean {
+        val t = engine.getText(); val (s, e) = selectionFlat(t)
+        val r = SmartEdit.expandSelection(t, s, e) ?: return false
+        val (al, ac) = flatOffsetToPos(t, r.first)
+        val (bl, bc) = flatOffsetToPos(t, r.last + 1)
+        engine.setSelection(al, ac, bl, bc)
+        afterEngineMutation()
+        return true
+    }
+    fun smartInsertLineBelow(): Boolean {
+        val t = engine.getText(); val (s, _) = selectionFlat(t)
+        return applySmartEdit(SmartEdit.insertLineBelow(t, s, " ".repeat(AppSettings.getTabSize(context))))
+    }
+    fun smartInsertLineAbove(): Boolean {
+        val t = engine.getText(); val (s, _) = selectionFlat(t)
+        return applySmartEdit(SmartEdit.insertLineAbove(t, s))
+    }
+    fun smartLineOp(op: SmartEdit.LineOp): Boolean {
+        val t = engine.getText(); val (s, e) = selectionFlat(t)
+        return applySmartEdit(SmartEdit.transformLines(t, s, e, op))
+    }
+    fun smartCycleColor(): Boolean {
+        val t = engine.getText(); val (s, _) = selectionFlat(t)
+        return applySmartEdit(SmartEdit.cycleColorFormat(t, s))
+    }
+
     // ---- عائلة خطوط الكود: JetBrains Mono NL (OFL، بلا ligatures، عرض الحرف 0.6em لكل الأوزان) ----
     // كل مفهوم دلالي له وزنه ونمطه الحقيقي (لا تشويه اصطناعي). العرض ثابت في كل الأوزان فتبقى الخلايا
     // والمؤشر والتحديد وعلامات الأخطاء مضبوطة. إن تعذّر تحميل الخطوط يعود الرسم للنمط الاصطناعي السابق.
@@ -961,6 +1146,13 @@ class RinCodeEditorView @JvmOverloads constructor(
         } else if (before == 1 && count == 0 && start == cursorFlatBefore) {
             // حذف حرف واحد بعد المؤشر مباشرة: Delete للأمام
             engine.deleteForward()
+        } else if (before > 0 && count == 1 && insertedPiece[0] != '<' && insertedPiece[0] != '\u00AB' &&
+            EditorDesign.isSurroundOnType(context) &&
+            SmartEdit.surround(oldText, start, start + before, insertedPiece[0]) != null
+        ) {
+            // كتابة قوس/اقتباس فوق تحديد: يُحيط التحديد به بدل أن يستبدله (مثل المحررات الاحترافية)
+            applySmartEdit(SmartEdit.surround(oldText, start, start + before, insertedPiece[0]))
+            return
         } else {
             // حالة عامة: لصق، إكمال تلقائي/تصحيح تلقائي من IME، أو استبدال تحديد
             val (l1, c1) = flatOffsetToPos(oldText, start)
@@ -1089,6 +1281,7 @@ class RinCodeEditorView @JvmOverloads constructor(
             canvas.drawLine(gx, clip.top.toFloat(), gx, clip.bottom.toFloat(), guidePaint)
         }
 
+        colorHits.clear()
         var y = paddingTop.toFloat()
         for (line in visibleLines) {
             val lineText = engine.getLine(line)
@@ -1148,6 +1341,7 @@ class RinCodeEditorView @JvmOverloads constructor(
 
             // النص الملوَّن نحويًا
             drawHighlightedLine(canvas, lineText, if (AppSettings.isSyntaxHighlighting(context)) highlightsByLine[line] else null, paddingLeft.toFloat(), baseline)
+            if (colorPreviewMode != 0 && y + lineHeight >= clip.top && y <= clip.bottom) drawColorPreview(canvas, line, lineText, y, baseline)
             if (containerStyleOn && !(sel.hasSelection && line in sel.start.line..sel.end.line)) {
                 val onCur = line == cur.line && !sel.hasSelection
                 drawContainerBadge(canvas, line, lineText, y, baseline, onCur)
@@ -1543,6 +1737,8 @@ class RinCodeEditorView @JvmOverloads constructor(
         override fun onSingleTapUp(e: MotionEvent): Boolean {
             if (AppSettings.isHapticFeedback(context)) performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
             requestFocus()
+            // الضغط على مربع لون يفتح المنتقي بدل تحريك المؤشر/إظهار الكيبورد
+            hitColorAt(e.x, e.y)?.let { openColorPicker(it.line, it.match); return true }
             showKeyboard()
             dismissHoverDoc()
             val p = offsetForTouch(e.x, e.y)
@@ -2131,6 +2327,10 @@ class RinCodeEditorView @JvmOverloads constructor(
             menu.add(0, ACTION_SELECT_LINE, 9, R.string.action_select_line)
             menu.add(0, ACTION_COPY_MD, 10, R.string.action_copy_markdown)
             menu.add(0, ACTION_RENAME, 11, R.string.action_rename_symbol)
+            menu.add(0, ACTION_EXPAND, 12, R.string.action_expand_selection)
+            menu.add(0, ACTION_EDIT_COLOR, 13, R.string.action_edit_color)
+            menu.add(0, ACTION_CYCLE_COLOR, 14, R.string.action_cycle_color_format)
+            menu.add(0, ACTION_FLIP, 15, R.string.action_flip_word)
             return true
         }
 
@@ -2146,6 +2346,10 @@ class RinCodeEditorView @JvmOverloads constructor(
             menu.findItem(ACTION_HISTORY)?.isVisible = ClipboardHistory.snapshot().isNotEmpty() || hasClip
             menu.findItem(ACTION_COPY_MD)?.isVisible = hasSelection
             menu.findItem(ACTION_RENAME)?.isVisible = selectedIdentifierName() != null
+            val onColor = colorAtCursor() != null
+            menu.findItem(ACTION_EDIT_COLOR)?.isVisible = onColor
+            menu.findItem(ACTION_CYCLE_COLOR)?.isVisible = onColor
+            menu.findItem(ACTION_FLIP)?.isVisible = !hasSelection
             return true
         }
 
@@ -2162,6 +2366,10 @@ class RinCodeEditorView @JvmOverloads constructor(
                 ACTION_HISTORY -> { mode.finish(); showClipboardHistory() }
                 ACTION_DUPLICATE -> { duplicateSelectionOrLine(); mode.finish() }
                 ACTION_COPY_MD -> { copyAsMarkdown(); mode.finish() }
+                ACTION_EXPAND -> { smartExpandSelection(); mode.invalidate(); mode.invalidateContentRect(); return true }
+                ACTION_EDIT_COLOR -> { mode.finish(); pickColorAtCursor() }
+                ACTION_CYCLE_COLOR -> { smartCycleColor(); mode.finish() }
+                ACTION_FLIP -> { smartFlipWord(); mode.finish() }
                 ACTION_RENAME -> {
                     val name = selectedIdentifierName()
                     mode.finish()
@@ -2222,6 +2430,10 @@ class RinCodeEditorView @JvmOverloads constructor(
         private const val ACTION_DUPLICATE = 10
         private const val ACTION_SELECT_LINE = 11
         private const val ACTION_COPY_MD = 12
+        private const val ACTION_EXPAND = 13
+        private const val ACTION_EDIT_COLOR = 14
+        private const val ACTION_CYCLE_COLOR = 15
+        private const val ACTION_FLIP = 16
         private const val CLIP_LABEL_TEXT = "rin_code"
         /** وسم ClipData يدلّ على أن النسخ كان لأسطر كاملة (بلا تحديد) فيُلصق فوق السطر الحالي. */
         private const val CLIP_LABEL_LINES = "rin_lines"
