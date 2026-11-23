@@ -1,0 +1,31 @@
+warp tab = 1;
+warp ready = false;
+
+<Define#Panel>
+  <Prop name=title required />
+  <Prop name=tone enum="info,warn,error" default=info />
+  <Card#p padding=12 radius=12 ...attrs>
+    <Text#t size=title>{title} ({tone})</Text>
+    <Slot />
+    <Row#f><Slot name="footer"><Text#fd size=small>no footer</Text></Slot></Row>
+  </Card>
+</Define>
+
+<Screen#app size=phone>
+  <Column#root gap=12 padding=16>
+    <Panel title="Settings" tone="warn" width=300>
+      <Text#body>Body text</Text>
+      <Fill name="footer"><Button#save onTap={tab = 2}>Save</Button></Fill>
+    </Panel>
+    <Panel title="Plain" />
+
+    <Match on={tab}>
+      <Case is=0><Text#m0>Zero</Text></Case>
+      <Case in="1,2"><Text#m12>One or two</Text></Case>
+      <Default><Text#mx>Other</Text></Default>
+    </Match>
+
+    <Unless cond={ready}><Text#loading>Loading…</Text></Unless>
+    <Else><Text#done>All ready</Text></Else>
+  </Column>
+</Screen>
