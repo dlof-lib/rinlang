@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="libs_sort_name">⇅ Nombre</string>
-    <string name="libs_sort_recent">⇅ Reciente</string>
+    <string name="libs_sort_name">Nombre</string>
+    <string name="libs_sort_recent">Reciente</string>
 </resources>
