@@ -1,7 +1,8 @@
 package com.dlof.rinlang
 
 /**
- * سمات الطرفية (كلها داكنة لتبقى ألوان ANSI المضمّنة مقروءة) + مقاييس الحجم/التباعد.
+ * سمات الطرفية: داكنة وفاتحة. ألوان ANSI المضمّنة مصمَّمة للخلفيات الداكنة، فتُعالَج في السمات الفاتحة
+ * عبر [readable] (تعتيم اللون مع الحفاظ على درجته حتى يبلغ التباين الكافي). + مقاييس الحجم/التباعد.
  * منطق خالص بلا أندرويد؛ [RinTerminalView] يطبّق السمة على متغيّراته ويحفظ المعرّف في SharedPreferences.
  */
 data class RinTheme(
@@ -11,6 +12,9 @@ data class RinTheme(
     val fg: Int, val white: Int, val dim: Int,
     val accent: Int, val blue: Int, val promptGreen: Int, val ok: Int, val error: Int, val warn: Int
 ) {
+    /** سمة فاتحة (خلفيتها ساطعة)؛ تغيّر معالجة ألوان ANSI وطبقات التعتيم. */
+    val isLight: Boolean get() = luminance(bg) > LIGHT_THRESHOLD
+
     /** تدرّج الشعار واللافتات (من، إلى) المناسب لهذه السمة. */
     val gradient: Pair<Int, Int>
         get() = when (id) {
@@ -21,6 +25,10 @@ data class RinTheme(
             "amoled" -> 0xA78BFA to 0x7DD3FC
             "matrix" -> 0x1FBF50 to 0x9DFFB8
             "amber" -> 0xFFB000 to 0xFFE08A
+            "paper" -> 0x5B3FD1 to 0x0B5FB0
+            "daylight" -> 0x6639BA to 0x0550AE
+            "solarlight" -> 0x4F54B0 to 0x1F6FB0
+            "dawn" -> 0x7A5C9C to 0x286983
             else -> 0x0FA34F to 0x7BF5A8
         }
 
@@ -44,7 +52,41 @@ data class RinTheme(
         val AMBER = RinTheme("amber", "Amber", c(0x120C02), c(0x1C1305), c(0x2A1D08), c(0x4A340F), c(0x0A0601), c(0x181004),
             c(0xFFD28A), c(0xFFF0D0), c(0xA37A3C), c(0xFFB000), c(0xFFCB6B), c(0xB8E060), c(0xB8E060), c(0xFF6B4A), c(0xFFD84A))
 
-        val ALL = listOf(RIN, MIDNIGHT, DRACULA, NORD, SOLARIZED, AMOLED, MATRIX, AMBER)
+        // ---- السمات الفاتحة: `white` هنا = أقوى لون للنص (شبه أسود) ----
+        val PAPER = RinTheme("paper", "Paper", c(0xF7F3EA), c(0xFFFDF7), c(0xEAE4D6), c(0xD6CDB8), c(0xEFE9DB), c(0xF0EADC),
+            c(0x2B2A27), c(0x111111), c(0x6B6558), c(0x5B3FD1), c(0x0B5FB0), c(0x1E7A34), c(0x1B7F37), c(0xC62828), c(0x8A5A00))
+        val DAYLIGHT = RinTheme("daylight", "Daylight", c(0xFFFFFF), c(0xF6F8FA), c(0xEAEEF2), c(0xD0D7DE), c(0xF6F8FA), c(0xF3F5F8),
+            c(0x24292F), c(0x0A0C10), c(0x59636E), c(0x6639BA), c(0x0550AE), c(0x116329), c(0x1A7F37), c(0xCF222E), c(0x7D4E00))
+        val SOLARLIGHT = RinTheme("solarlight", "Solarized Light", c(0xFDF6E3), c(0xEEE8D5), c(0xE6DFC8), c(0xCFC8AE), c(0xF5EEDA), c(0xF2EBD6),
+            c(0x3A4A50), c(0x002B36), c(0x5F757C), c(0x4F54B0), c(0x1F6FB0), c(0x5F7000), c(0x5F7000), c(0xC0322F), c(0x8A6500))
+        val DAWN = RinTheme("dawn", "Dawn", c(0xFAF4ED), c(0xFFFAF3), c(0xF2E9E1), c(0xDFD6D2), c(0xF2E9E1), c(0xF4EBE2),
+            c(0x463F66), c(0x26233A), c(0x75718F), c(0x7A5C9C), c(0x286983), c(0x3A7655), c(0x3A7655), c(0xB4415F), c(0x9A5A12))
+
+        val ALL = listOf(RIN, MIDNIGHT, DRACULA, NORD, SOLARIZED, AMOLED, MATRIX, AMBER, PAPER, DAYLIGHT, SOLARLIGHT, DAWN)
+        val DARK: List<RinTheme> get() = ALL.filter { !it.isLight }
+        val LIGHT: List<RinTheme> get() = ALL.filter { it.isLight }
+
+        /** عتبة سطوع الخلفية (luminance نسبي) التي تعدّ السمة فاتحة. */
+        const val LIGHT_THRESHOLD = 0.4
+
+        /**
+         * يجعل [fg] مقروءاً على [bg]: في الخلفيات الفاتحة فقط، إن قلّ التباين عن [min] يُعتَّم اللون
+         * تدريجياً نحو الأسود مع بقاء درجته (hue). الخلفيات الداكنة تُرجَع كما هي. ألفا اللون محفوظة.
+         */
+        fun readable(fg: Int, bg: Int, min: Double = 4.0): Int {
+            if (luminance(bg) <= LIGHT_THRESHOLD || contrast(fg, bg) >= min) return fg
+            val a = fg ushr 24
+            val r = (fg shr 16) and 255; val g = (fg shr 8) and 255; val b = fg and 255
+            var k = 1.0
+            var out = fg
+            while (k > 0.0) {
+                k -= 0.05
+                val kk = k.coerceAtLeast(0.0)
+                out = (a shl 24) or ((r * kk).toInt() shl 16) or ((g * kk).toInt() shl 8) or (b * kk).toInt()
+                if (contrast(out, bg) >= min) break
+            }
+            return out
+        }
 
         fun byId(id: String?): RinTheme {
             val k = id?.trim()?.lowercase().orEmpty()
