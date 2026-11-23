@@ -65,10 +65,8 @@
         android:layout_height="wrap_content"
         android:layout_marginStart="6dp"
         android:gravity="center"
-        android:text="✓"
+        android:drawableStart="@drawable/rs_ic_check_22" android:drawableTint="@color/rin_accent"
         android:textColor="@color/rin_accent"
-        android:textSize="20sp"
-        android:textStyle="bold"
         android:visibility="invisible"
         android:importantForAccessibility="no" />
 </LinearLayout>
