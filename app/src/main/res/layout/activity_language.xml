@@ -25,8 +25,7 @@
                 android:layout_width="44dp"
                 android:layout_height="44dp"
                 android:gravity="center"
-                android:text="‹"
-                android:textSize="32sp"
+                android:drawableStart="@drawable/rs_ic_chevron_left_22" android:drawableTint="#FFFFFF"
                 android:textColor="#FFFFFF"
                 android:clickable="true"
                 android:focusable="true" />
@@ -137,9 +136,8 @@
                 android:layout_width="40dp"
                 android:layout_height="40dp"
                 android:gravity="center"
-                android:text="✕"
+                android:drawableStart="@drawable/rs_ic_close_18" android:drawableTint="@color/rin_on_toolbar_dim"
                 android:textColor="@color/rin_on_toolbar_dim"
-                android:textSize="15sp"
                 android:visibility="gone"
                 android:clickable="true"
                 android:focusable="true" />
@@ -196,8 +194,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="🌐"
-                android:textSize="44sp"
+                android:drawableStart="@drawable/rs_ic_globe_44" android:drawableTint="@color/rin_on_toolbar_dim"
                 android:importantForAccessibility="no" />
 
             <TextView
