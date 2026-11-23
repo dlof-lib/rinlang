@@ -74,7 +74,7 @@ let repo = Services.get("repo");      // يبني config ثم db ثم repo (كس
 1. ✅ **Services** — حاوية الخدمات (هذا الملف)
 2. ✅ `Autoload` — تحميل كسول للحاويات/المكتبات `.rcl`
 3. ✅ **خُطّافات سحرية** — `on get/set/has/drop/call/invoke` (docs/container_magic.md)
-4. `ArrayAccess` / `Countable` / `IteratorAggregate` — الحاوية تُفهرَس وتُعَدّ وتُكرَّر
+4. ✅ **حاوية تُفهرَس وتُعَدّ وتُكرَّر** — `on index/store/count/each` (docs/container_sequence.md)
 5. Traits وعقود (interfaces) للحاويات — `container.use` / `container.implements`
 6. حقول `readonly` وتعدادات (enum) — حماية حقول الحاوية (✅ الجزء الأول: `state fixed` · docs/EXTRA13.md)
 7. `filter_var` — تحقّق وتنقية قيم الحقول (email/int/url/ip/regex)
