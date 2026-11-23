@@ -40,6 +40,17 @@
             android:textColorHint="@color/rin_editor_hint"
             android:textSize="13.5sp" />
 
+        <ImageButton
+            android:id="@+id/btnStoreClearSearch"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:layout_marginEnd="6dp"
+            android:background="@null"
+            android:contentDescription="@string/libs_clear_search"
+            android:src="@android:drawable/ic_menu_close_clear_cancel"
+            android:visibility="gone"
+            app:tint="@color/rin_editor_hint" />
+
         <!-- زر فرز نصّي (أيقونة + تسمية الوضع الحالي) بدل أيقونة مجرّدة، ليكون واضحاً دون حاجة
              لفتح القائمة لمعرفة الفرز الحالي — النص يتحدّث فوراً مع كل اختيار (انظر
              RinStoreActivity.showSortMenu). -->
@@ -83,17 +94,40 @@
 
     <!-- عدّاد النتائج: يظهر فقط بعد انتهاء التحميل (يبقى فارغاً أثناء عرض الهيكل التغبيشي)،
          يمنح إحساساً أوضح بحجم القائمة قبل التمرير فيها. -->
-    <TextView
-        android:id="@+id/txtStoreResultsCount"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
         android:paddingStart="14dp"
         android:paddingEnd="14dp"
-        android:paddingBottom="4dp"
-        android:textSize="11.5sp"
-        android:textColor="@color/rin_editor_hint"
-        android:visibility="invisible"
-        tools:text="24 حزمة متاحة" />
+        android:paddingBottom="4dp">
+
+        <TextView
+            android:id="@+id/txtStoreResultsCount"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textSize="11.5sp"
+            android:textColor="@color/rin_editor_hint"
+            android:visibility="invisible"
+            tools:text="24 حزمة متاحة" />
+
+        <!-- يظهر فقط عند وجود بحث/تصنيف فعّال: يعيد كل الفلاتر لوضعها الافتراضي بنقرة -->
+        <TextView
+            android:id="@+id/btnStoreResetFilters"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_chip_meta"
+            android:clickable="true"
+            android:focusable="true"
+            android:paddingHorizontal="10dp"
+            android:paddingVertical="4dp"
+            android:text="@string/store_reset_filters"
+            android:textColor="@color/rin_accent"
+            android:textSize="11.5sp"
+            android:visibility="gone" />
+    </LinearLayout>
 
     <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
         android:id="@+id/swipeRefreshStore"
