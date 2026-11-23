@@ -4831,6 +4831,14 @@ void Interpreter::registerNatives() {
         return callValue(a[1], none, line);
     };
 
+    // __optchain(a, fun(t) { … }) — سلسلة اختيارية `a?.b`: nil إن كانت a هي nil، وإلا نتيجة fun(a). انظر docs/null_safe.md
+    natives["__optchain"] = [this](std::vector<Value>& a, int line) -> Value {
+        if (a.size() != 2) throw diagErr(diag::Code::E0007_InvalidArguments, line, "'__optchain' expects 2 argument(s) but got " + std::to_string(a.size()));
+        if (a[0].type == Value::Type::NIL) return Value::nil();
+        std::vector<Value> args{a[0]};
+        return callValue(a[1], args, line);
+    };
+
     natives["__tap"] = [this](std::vector<Value>& a, int line) -> Value {
         if (a.empty() || a.size() > 2) throw diagErr(diag::Code::E0007_InvalidArguments, line, "'__tap' expects 1 or 2 argument(s) but got " + std::to_string(a.size()));
         if (a.size() == 2 && (a[1].type == Value::Type::FUNCTION || a[1].type == Value::Type::INSTANCE)) {
