@@ -562,6 +562,7 @@ private class FilesAdapter(
     }
 
     class FolderVH(view: View) : RecyclerView.ViewHolder(view) {
+        val imgIcon: android.widget.ImageView = view.findViewById(R.id.imgFolderIcon)
         val txtName: TextView = view.findViewById(R.id.txtFolderNameItem)
         val txtMeta: TextView = view.findViewById(R.id.txtFolderMeta)
         val btnRename: View = view.findViewById(R.id.btnRenameFolder)
@@ -598,6 +599,7 @@ private class FilesAdapter(
                 val folder = row.folder
                 holder as FolderVH
                 holder.txtName.text = folder.name
+                holder.imgIcon.setImageResource(RsFolderIcons.forName(folder.name))
                 holder.txtMeta.text = holder.itemView.context.getString(
                     R.string.folder_meta_format,
                     dateFormat.format(Date(folder.lastModified))
