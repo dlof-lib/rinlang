@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_search_hint">Buscar ajustes…</string>
+    <string name="settings_all_categories">Todos</string>
+    <string name="settings_no_results">Ningún ajuste coincide con tu búsqueda.</string>
+</resources>
