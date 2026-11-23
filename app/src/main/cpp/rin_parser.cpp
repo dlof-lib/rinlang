@@ -1589,13 +1589,15 @@ StmtPtr Parser::lifecycleHookDeclaration() {
     Token hookTok = consume(TokenType::IDENT,
         "Expected a lifecycle hook name after 'on' (init/mount/update/destroy/error)");
     static const std::unordered_set<std::string> validHooks = {"init", "mount", "update", "destroy", "error",
-                                                                "get", "set", "has", "drop", "call", "invoke"}; // الستة الأخيرة: docs/container_magic.md
+                                                                "get", "set", "has", "drop", "call", "invoke",
+                                                                "index", "store", "count", "each"}; // الستة الأخيرة: docs/container_magic.md
     if (!validHooks.count(hookTok.lexeme)) {
         auto d = err(diag::Code::E0012_MissingToken, hookTok,
                      "unknown lifecycle hook 'on " + hookTok.lexeme + "'");
         d.diagnostic->withReason("RCS-1.0 §3.2 Lifecycle hooks + the six member hooks (get/set/has/drop/call/invoke) are the only `on <name>` forms")
          .withHint("expected one of: on init(), on mount(), on update(prevState), on destroy(), on error(err), "
-                   "on get(name), on set(name, value), on has(name), on drop(name), on call(name, args), on invoke(args)");
+                   "on get(name), on set(name, value), on has(name), on drop(name), on call(name, args), on invoke(args), "
+                   "on index(key), on store(key, value), on count(), on each()");
         throw d;
     }
     consume(TokenType::LPAREN, "Expected '(' after lifecycle hook name 'on " + hookTok.lexeme + "'");
