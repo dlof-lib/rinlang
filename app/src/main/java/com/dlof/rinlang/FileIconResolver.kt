@@ -103,18 +103,18 @@ object FileIconResolver {
         "dart" to R.drawable.ic_lang_dart, "lua" to R.drawable.ic_lang_lua,
         "scss" to R.drawable.ic_lang_scss, "sass" to R.drawable.ic_lang_scss, "vue" to R.drawable.ic_lang_vue,
         "svg" to R.drawable.ic_lang_svg,
-        "json" to R.drawable.ic_lang_json, "xml" to R.drawable.ic_lang_xml,
-        "yml" to R.drawable.ic_lang_yaml, "yaml" to R.drawable.ic_lang_yaml,
-        "toml" to R.drawable.ic_lang_toml,
-        "ini" to R.drawable.ic_lang_ini, "cfg" to R.drawable.ic_lang_ini, "conf" to R.drawable.ic_lang_ini,
-        "md" to R.drawable.ic_lang_markdown, "markdown" to R.drawable.ic_lang_markdown,
-        "txt" to R.drawable.ic_lang_txt, "log" to R.drawable.ic_lang_log,
-        "csv" to R.drawable.ic_lang_csv, "tsv" to R.drawable.ic_lang_csv,
-        "sql" to R.drawable.ic_lang_sql, "sh" to R.drawable.ic_lang_shell, "bash" to R.drawable.ic_lang_shell,
-        "zip" to R.drawable.ic_lang_archive, "rar" to R.drawable.ic_lang_archive, "7z" to R.drawable.ic_lang_archive,
-        "tar" to R.drawable.ic_lang_archive, "gz" to R.drawable.ic_lang_archive, "tgz" to R.drawable.ic_lang_archive,
-        "bz2" to R.drawable.ic_lang_archive, "xz" to R.drawable.ic_lang_archive, "rinproj" to R.drawable.ic_lang_archive, "rinpak" to R.drawable.ic_rinpak_file,
-        "pdf" to R.drawable.ic_lang_pdf,
+        "json" to R.drawable.rs_file_json, "xml" to R.drawable.rs_file_xml,
+        "yml" to R.drawable.rs_file_yaml, "yaml" to R.drawable.rs_file_yaml,
+        "toml" to R.drawable.rs_file_config,
+        "ini" to R.drawable.rs_file_config, "cfg" to R.drawable.rs_file_config, "conf" to R.drawable.rs_file_config,
+        "md" to R.drawable.rs_file_markdown, "markdown" to R.drawable.rs_file_markdown,
+        "txt" to R.drawable.rs_file_text, "log" to R.drawable.rs_file_log,
+        "csv" to R.drawable.rs_file_csv, "tsv" to R.drawable.rs_file_csv,
+        "sql" to R.drawable.ic_lang_sql, "sh" to R.drawable.rs_file_shell, "bash" to R.drawable.rs_file_shell,
+        "zip" to R.drawable.rs_file_archive, "rar" to R.drawable.rs_file_archive, "7z" to R.drawable.rs_file_archive,
+        "tar" to R.drawable.rs_file_archive, "gz" to R.drawable.rs_file_archive, "tgz" to R.drawable.rs_file_archive,
+        "bz2" to R.drawable.rs_file_archive, "xz" to R.drawable.rs_file_archive, "rinproj" to R.drawable.rs_file_archive, "rinpak" to R.drawable.rs_file_rinpak,
+        "pdf" to R.drawable.rs_file_pdf,
         "doc" to R.drawable.ic_lang_word, "docx" to R.drawable.ic_lang_word,
         "xls" to R.drawable.ic_lang_excel, "xlsx" to R.drawable.ic_lang_excel,
         "ppt" to R.drawable.ic_lang_ppt, "pptx" to R.drawable.ic_lang_ppt,
@@ -160,10 +160,10 @@ object FileIconResolver {
         "odp" to R.drawable.ic_lang_libreoffice, "odg" to R.drawable.ic_lang_libreoffice, "ps1" to R.drawable.ic_lang_powershell,
         "psm1" to R.drawable.ic_lang_powershell, "psd1" to R.drawable.ic_lang_powershell, "bat" to R.drawable.ic_lang_batch,
         "cmd" to R.drawable.ic_lang_batch, "epub" to R.drawable.ic_lang_ebook, "mobi" to R.drawable.ic_lang_ebook,
-        "azw3" to R.drawable.ic_lang_ebook, "rtf" to R.drawable.ic_lang_doc_generic, "exe" to R.drawable.ic_lang_binary,
-        "dll" to R.drawable.ic_lang_binary, "msi" to R.drawable.ic_lang_binary, "bin" to R.drawable.ic_lang_binary,
-        "so" to R.drawable.ic_lang_binary, "o" to R.drawable.ic_lang_binary, "a" to R.drawable.ic_lang_binary,
-        "dylib" to R.drawable.ic_lang_binary, "iso" to R.drawable.ic_lang_disc, "img" to R.drawable.ic_lang_disc,
+        "azw3" to R.drawable.ic_lang_ebook, "rtf" to R.drawable.ic_lang_doc_generic, "exe" to R.drawable.rs_file_binary,
+        "dll" to R.drawable.rs_file_binary, "msi" to R.drawable.ic_lang_binary, "bin" to R.drawable.rs_file_binary,
+        "so" to R.drawable.rs_file_binary, "o" to R.drawable.rs_file_binary, "a" to R.drawable.rs_file_binary,
+        "dylib" to R.drawable.rs_file_binary, "iso" to R.drawable.ic_lang_disc, "img" to R.drawable.ic_lang_disc,
         "dmg" to R.drawable.ic_lang_disc, "deb" to R.drawable.ic_lang_package, "rpm" to R.drawable.ic_lang_package,
         "pkg" to R.drawable.ic_lang_package, "whl" to R.drawable.ic_lang_package, "gem" to R.drawable.ic_lang_package,
         "aab" to R.drawable.ic_lang_package, "pem" to R.drawable.ic_lang_certificate, "crt" to R.drawable.ic_lang_certificate,
@@ -174,8 +174,8 @@ object FileIconResolver {
         "glb" to R.drawable.ic_lang_3d, "gltf" to R.drawable.ic_lang_3d, "3ds" to R.drawable.ic_lang_3d,
         "dwg" to R.drawable.ic_lang_cad, "dxf" to R.drawable.ic_lang_cad, "lock" to R.drawable.ic_lang_lock,
         "eml" to R.drawable.ic_lang_email, "msg" to R.drawable.ic_lang_email,
-        "mp3" to R.drawable.ic_lang_audio, "wav" to R.drawable.ic_lang_audio, "ogg" to R.drawable.ic_lang_audio,
-        "m4a" to R.drawable.ic_lang_audio, "flac" to R.drawable.ic_lang_audio
+        "mp3" to R.drawable.rs_file_audio, "wav" to R.drawable.rs_file_audio, "ogg" to R.drawable.rs_file_audio,
+        "m4a" to R.drawable.rs_file_audio, "flac" to R.drawable.rs_file_audio
     )
 
     /** أسماء ملفات كاملة (بلا امتداد معروف أو يتقدّم اسمها على امتدادها) → أيقونتها. */
@@ -233,21 +233,21 @@ object FileIconResolver {
             return
         }
         if (ext == "html" || ext == "htm") {
-            imageView.setImageResource(R.drawable.ic_html_file)
+            imageView.setImageResource(R.drawable.rs_file_html)
             return
         }
         if (ext == "css") {
-            imageView.setImageResource(R.drawable.ic_css_file)
+            imageView.setImageResource(R.drawable.rs_file_css)
             return
         }
         if (ext == "js" || ext == "mjs") {
-            imageView.setImageResource(R.drawable.ic_js_file)
+            imageView.setImageResource(R.drawable.rs_file_js)
             return
         }
 
         // 1) .rin -> الأيقونة المضمَّنة كما كانت دائماً، بلا أي عمل إضافي.
         if (ext == "rin" || ext.isEmpty()) {
-            imageView.setImageResource(R.drawable.ic_rin_file)
+            imageView.setImageResource(R.drawable.rs_file_rin)
             return
         }
 
@@ -262,7 +262,7 @@ object FileIconResolver {
         //      نفس فلسفة .rin/.illust أعلاه؛ indsin نظام واجهات رسمي داخل Rin (سابقاً Loom)
         //      لا امتداد ملفات عام يُطلَب من Iconify.
         if (ext == "indsin") {
-            imageView.setImageResource(R.drawable.ic_indsin_file)
+            imageView.setImageResource(R.drawable.rs_file_indsin)
             return
         }
 
@@ -282,7 +282,7 @@ object FileIconResolver {
         // نضع أيقونة افتراضية فوراً (بلا وميض فراغ) بينما يُحضَّر أي شيء أدق بالخلفية.
         // الشعار الرسمي المحلي إن وُجد: يُعرض فوراً وينتهي الأمر (بلا شبكة).
         extensionToLocalIcon[ext]?.let { imageView.setImageResource(it); return }
-        imageView.setImageResource(R.drawable.ic_rin_stack)
+        imageView.setImageResource(R.drawable.rs_file_file)
         // نربط الطلب بالـ ImageView نفسه لتفادي "تسرّب" نتيجة متأخرة لعنصر أعيد تدويره لملف آخر.
         val requestTag = file.absolutePath
         imageView.tag = requestTag
