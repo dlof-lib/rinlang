@@ -13,5 +13,10 @@ fun main() {
     check(a.time > 60f)
     val c = StarfieldModel(2L, 30); val xs = c.stars.map { it.x }; c.step(1f)
     check(c.stars.map { it.x } != xs)   // تتحرك
+    // نيزكان كحدٍّ أقصى، وكلها ضمن النطاق
+    val d = StarfieldModel(3L); var maxM = 0
+    repeat(60 * 120) { d.step(1 / 60f); maxM = maxOf(maxM, d.meteors.size); check(d.meteors.size <= StarfieldModel.MAX_METEORS) }
+    check(maxM >= 1)
+    val ox = d.nebulaDx(); check(kotlin.math.abs(ox) <= 0.0301f && kotlin.math.abs(d.nebulaDy()) <= 0.0201f)
     println("OK")
 }
