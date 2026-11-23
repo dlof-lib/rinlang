@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="terminal_help_banner">banner — شعار Rin\nlibs — قائمة المكتبات\nlib &lt;اسم&gt; — لافتة مكتبة</string>
+    <string name="terminal_lib_usage">الاستخدام: lib &lt;اسم المكتبة&gt; (اكتب libs لرؤية القائمة)</string>
+    <string name="terminal_lib_unknown">مكتبة غير معروفة: %1$s — اكتب libs</string>
+</resources>
