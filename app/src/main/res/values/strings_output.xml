@@ -7,10 +7,10 @@
     <string name="output_queued">Waiting in the queue…</string>
     <string name="output_running">Running</string>
     <string name="output_no_output">The program printed nothing.</string>
-    <string name="output_status_ok_fmt">✔ Finished successfully — %1$d ms</string>
-    <string name="output_status_error_fmt">✖ Run failed — %1$d ms</string>
-    <string name="output_status_timeout">⏱ Stopped: time limit exceeded</string>
-    <string name="output_status_cancelled">⏹ Run stopped</string>
+    <string name="output_status_ok_fmt">Finished successfully — %1$d ms</string>
+    <string name="output_status_error_fmt">Run failed — %1$d ms</string>
+    <string name="output_status_timeout">Stopped: time limit exceeded</string>
+    <string name="output_status_cancelled">Run stopped</string>
     <string name="output_summary_fmt">%1$d lines · %2$d errors · %3$d warnings</string>
     <string name="output_search_hint">Search the output</string>
     <string name="output_speed_fmt">Typing %1$s</string>
