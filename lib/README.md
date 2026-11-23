@@ -54,6 +54,7 @@
 | `math` | مكتبة رياضية احترافية متكاملة فوق stdlib الأساسية | 47.7 KB |
 | `matrix` | Rin Matrix Pro — small dense matrix operations. | 1.3 KB |
 | `movingmask` | Moving Mask: أقنعة متحركة فوق الحاويات والحلقات | 150.1 KB |
+| `nite.moje` | نايت موجي: ما كانت تنقصه اللغة (enumerate، tryGet، deepEqual، snakeCase، transpose، windowed، once …) | 11.5 KB |
 | `nlpkit` | معالجة نصوص متقدمة: NLP بدائي + تحليل ملفات/لغات | 13.3 KB |
 | `numbers` | Rin Numbers Pro — integer and numeric helpers. | 1.1 KB |
 | `objectkit` | Rin ObjectKit Pro — dynamic map helpers. | 0.8 KB |
