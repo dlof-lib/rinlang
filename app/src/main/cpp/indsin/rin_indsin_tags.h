@@ -49,6 +49,8 @@
 #include <algorithm>
 #include <cctype>
 #include <map>
+#include <cstring>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -101,9 +103,17 @@ struct Frame {
     std::string cname;   // اسم الحاوية إن كان الإطار <Container#X> (لـ <field[]> بلا اسم)
 };
 
+struct PropRule {            // <Prop name=… required type=… enum="a,b" /> داخل <Define> (docs/indsin_template_concepts.md)
+    std::string name;
+    bool required = false;
+    std::string type;                   // int | number | bool | string | color | "" (بلا فحص)
+    std::vector<std::string> enumVals;  // قيم مسموحة (فارغ = بلا قيد)
+};
 struct Macro {
     std::vector<std::pair<std::string, std::string>> props; // الخصائص وقيمها الافتراضية (نص Rin)
     std::string body;                                       // مصدر الجسم الخام (بصيغة الوسوم)
+    std::vector<PropRule> rules;                            // خصائص مطلوبة/منوَّعة
+    bool forwards = false;                                  // الجسم يحوي ...attrs: السمات غير المعلنة تُمرَّر بدل الخطأ
 };
 
 // ── مسح ساكن للحاويات (field ==> body · head.X · rin--g): أسماء الحاويات وحقولها (let/state/const) بلا تشغيل ──
@@ -269,6 +279,7 @@ inline std::vector<ContainerInfo> scanContainers(const std::string& s) {
 }
 
 struct Ctx { // حالة مشتركة بين التشغيل الرئيسي وتشغيلات التوسعة (Define/Repeat)
+    std::vector<Attr>* propSink = nullptr;    // يُضبَط أثناء قراءة <Prop> داخل <Define> فقط
     std::map<std::string, Macro> macros;
     std::map<std::string, std::vector<Attr>> styles; // <Style#name …> — أنماط قابلة لإعادة الاستعمال عبر class="…"
     int autoId = 0;
@@ -323,6 +334,7 @@ private:
     bool flat;                               // وضع التوسعة: بلا تعليقات، والأسطر تُسطَّح
     std::string baseCond;                    // شرط موروث من <If> المحيط بالقالب/التكرار
     std::map<int, std::string> lastIf;       // آخر شرط <If> أُغلق عند كل عمق (لـ <Else>)
+    std::vector<Attr> fwd;                   // السمات الزائدة الممرَّرة من استعمال قالب (تُحقَن عند ...attrs)
     const std::string& s;
     size_t n;
     size_t i = 0;
@@ -642,13 +654,282 @@ private:
         throw TagError{std::string(what) + " must be an integer literal", line};
     }
 
+    // ═════════ مفاهيم القوالب (Match / Slot مسمّاة / Prop / ...attrs) — docs/indsin_template_concepts.md ═════════
+    // نهاية وسم يبدأ عند from: موضع '>' مع تجاهل ما داخل "…" و'…' و{…}.
+    static size_t tagEnd(const std::string& t, size_t from) {
+        int brace = 0; char q = 0;
+        for (size_t k = from; k < t.size(); ++k) {
+            char c = t[k];
+            if (q) { if (c == '\\' && k + 1 < t.size()) ++k; else if (c == q) q = 0; continue; }
+            if (c == '"' || c == '\'') { q = c; continue; }
+            if (c == '{') ++brace; else if (c == '}') { if (brace > 0) --brace; }
+            else if (c == '>' && brace == 0) return k;
+        }
+        return std::string::npos;
+    }
+    static bool tagWordAt(const std::string& t, size_t p, const char* word) { // "<Word" متبوعة بفاصل
+        size_t L = std::strlen(word);
+        if (t.compare(p, L, word) != 0) return false;
+        if (p + L >= t.size()) return false;
+        char d = t[p + L];
+        return std::isspace((unsigned char)d) || d == '/' || d == '>';
+    }
+    // يطابق </Name> مع التداخل ابتداءً من from (بعد الوسم المفتوح)؛ npos إن غاب.
+    static size_t closeIn(const std::string& t, const char* name, size_t from) {
+        std::string open = std::string("<") + name, close = std::string("</") + name;
+        int depth = 1;
+        for (size_t k = from; k < t.size(); ++k) {
+            if (t[k] != '<') continue;
+            if (t.compare(k, close.size(), close) == 0 && k + close.size() < t.size() && (t[k + close.size()] == '>' || std::isspace((unsigned char)t[k + close.size()]))) {
+                if (--depth == 0) return k;
+            } else if (tagWordAt(t, k, open.c_str())) {
+                size_t e = tagEnd(t, k);
+                if (e != std::string::npos && t[e - 1] != '/') ++depth;
+            }
+        }
+        return std::string::npos;
+    }
+    // قيم السمات الخام لنص وسم: key → النص كما كُتب (مع علامات الاقتباس/الأقواس)؛ سمة بلا قيمة = "true".
+    static std::vector<std::pair<std::string, std::string>> rawAttrs(const std::string& tag) {
+        std::vector<std::pair<std::string, std::string>> r;
+        size_t k = 1;
+        while (k < tag.size() && (isIdChar(tag[k]) || tag[k] == '.' || tag[k] == '#')) ++k; // اسم الوسم (+#id)
+        while (k < tag.size()) {
+            while (k < tag.size() && std::isspace((unsigned char)tag[k])) ++k;
+            if (k >= tag.size() || tag[k] == '>' || tag[k] == '/') break;
+            size_t kb = k;
+            while (k < tag.size() && (isIdChar(tag[k]) || tag[k] == '-')) ++k;
+            if (k == kb) { ++k; continue; }
+            std::string key = tag.substr(kb, k - kb);
+            for (auto& ch : key) if (ch == '-') ch = '_';
+            size_t sv = k;
+            while (sv < tag.size() && std::isspace((unsigned char)tag[sv])) ++sv;
+            if (sv < tag.size() && tag[sv] == '=') {
+                ++sv; while (sv < tag.size() && std::isspace((unsigned char)tag[sv])) ++sv;
+                size_t vb = sv;
+                if (sv < tag.size() && (tag[sv] == '"' || tag[sv] == '\'')) { char q = tag[sv++]; while (sv < tag.size() && tag[sv] != q) { if (tag[sv] == '\\') ++sv; ++sv; } if (sv < tag.size()) ++sv; }
+                else if (sv < tag.size() && tag[sv] == '{') { int d = 0; char q = 0; for (; sv < tag.size(); ++sv) { char c = tag[sv]; if (q) { if (c == '\\') ++sv; else if (c == q) q = 0; continue; } if (c == '"' || c == '\'') q = c; else if (c == '{') ++d; else if (c == '}' && --d == 0) { ++sv; break; } } }
+                else while (sv < tag.size() && !std::isspace((unsigned char)tag[sv]) && tag[sv] != '>' && !(tag[sv] == '/' && sv + 1 < tag.size() && tag[sv + 1] == '>')) ++sv;
+                r.push_back({key, tag.substr(vb, sv - vb)});
+                k = sv;
+            } else r.push_back({key, "true"});
+        }
+        return r;
+    }
+    static std::string unq(std::string v) { if (v.size() >= 2 && (v.front() == '"' || v.front() == '\'') && v.back() == v.front()) return v.substr(1, v.size() - 2); return v; }
+    static std::string rawGet(const std::vector<std::pair<std::string, std::string>>& a, const char* k) { for (auto& x : a) if (x.first == k) return x.second; return ""; }
+    // قيمة خام → تعبير Rin: {e} → (e) · "نص" → "نص" · 12 → 12 · كلمة → "كلمة" (true/false/null تبقى)
+    static std::string rawToExpr(const std::string& v) {
+        if (v.size() >= 2 && v.front() == '{' && v.back() == '}') return "(" + trimWs(v.substr(1, v.size() - 2)) + ")";
+        if (v.size() >= 2 && v.front() == '\'' && v.back() == '\'') return "\"" + v.substr(1, v.size() - 2) + "\"";
+        if (v.size() >= 2 && v.front() == '"') return v;
+        if (v == "true" || v == "false" || v == "null") return v;
+        char* e = nullptr; std::strtod(v.c_str(), &e); if (!v.empty() && e && *e == 0) return v;
+        return "\"" + v + "\"";
+    }
+    static std::string literalOf(const std::string& tok) { // عنصر من in="a,b,1" → حرفية Rin
+        std::string t = trimWs(tok);
+        char* e = nullptr; std::strtod(t.c_str(), &e);
+        if (!t.empty() && e && *e == 0) return t;
+        if (t == "true" || t == "false" || t == "null") return t;
+        return "\"" + t + "\"";
+    }
+    static size_t editDist(const std::string& a, const std::string& b) {
+        std::vector<size_t> prev(b.size() + 1), cur(b.size() + 1);
+        for (size_t j = 0; j <= b.size(); ++j) prev[j] = j;
+        for (size_t i2 = 1; i2 <= a.size(); ++i2) {
+            cur[0] = i2;
+            for (size_t j = 1; j <= b.size(); ++j) cur[j] = std::min({prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i2 - 1] == b[j - 1] ? 0 : 1)});
+            std::swap(prev, cur);
+        }
+        return prev[b.size()];
+    }
+    static std::string nearest(const std::string& w, const std::vector<std::string>& cands) { // أقرب مرشّح (مسافة ≤ 2) أو ""
+        std::string best; size_t bd = 3;
+        for (auto& c : cands) { size_t d = editDist(w, c); if (d < bd) { bd = d; best = c; } }
+        return best;
+    }
+    static std::string joinList(const std::vector<std::string>& v) { std::string r; for (size_t k = 0; k < v.size(); ++k) r += (k ? ", " : "") + v[k]; return r; }
+
+    // <Prop name=… required type=int|number|bool|string|color enum="a,b" default=… /> داخل جسم <Define>: يُستخرج ويُحذف من الجسم.
+    void extractProps(Macro& m, int ln) {
+        std::string& b = m.body;
+        size_t p = 0;
+        while ((p = b.find("<Prop", p)) != std::string::npos) {
+            if (!tagWordAt(b, p, "<Prop")) { p += 5; continue; }
+            size_t e = tagEnd(b, p);
+            if (e == std::string::npos) fail("unterminated <Prop>", ln);
+            std::string tag = b.substr(p, e - p + 1);
+            std::vector<Attr> sink;
+            ctx.propSink = &sink;
+            try { Desugarer pd(tag, ctx, {}, "", true); pd.run(); }
+            catch (TagError& er) { ctx.propSink = nullptr; throw TagError{"in <Prop>: " + er.message, ln}; }
+            ctx.propSink = nullptr;
+            PropRule r; std::string def; bool hasDef = false;
+            for (auto& a : sink) {
+                if (a.key == "name") r.name = unq(a.value);
+                else if (a.key == "required") r.required = (a.value == "true");
+                else if (a.key == "type") r.type = unq(a.value);
+                else if (a.key == "enum") { std::string l = unq(a.value); for (size_t q = 0; q <= l.size();) { size_t c = l.find(',', q); if (c == std::string::npos) c = l.size(); std::string t = trimWs(l.substr(q, c - q)); if (!t.empty()) r.enumVals.push_back(t); q = c + 1; } }
+                else if (a.key == "default") { def = a.value; hasDef = true; }
+                else fail("<Prop> has no attribute '" + a.key + "' (use name, required, type, enum, default)", ln);
+            }
+            if (r.name.empty()) fail("<Prop> needs name=…", ln);
+            static const char* okTypes[] = {"", "int", "number", "bool", "string", "color"};
+            bool okT = false; for (auto t : okTypes) if (r.type == t) okT = true;
+            if (!okT) fail("<Prop name=" + r.name + "> type must be int, number, bool, string or color (got '" + r.type + "')", ln);
+            if (r.required && hasDef) fail("<Prop name=" + r.name + "> cannot be both required and have a default", ln);
+            bool known = false;
+            for (auto& pr : m.props) if (pr.first == r.name) { known = true; if (hasDef) pr.second = def; }
+            if (!known) m.props.push_back({r.name, hasDef ? def : "\"\""});
+            m.rules.push_back(std::move(r));
+            b.erase(p, e - p + 1);
+        }
+    }
+    // فحص قيمة خاصية حرفية بحسب قاعدتها؛ التعابير ( … ) لا تُفحَص وقت الترجمة.
+    void checkPropValue(const std::string& comp, const PropRule& r, const std::string& val, int ln) {
+        std::string plain = unq(val);
+        auto isNum = [&](const std::string& x, bool intOnly) { if (x.empty()) return false; char* e = nullptr; std::strtod(x.c_str(), &e); if (!e || *e) return false; return !intOnly || x.find_first_of(".eE") == std::string::npos; };
+        // لا يُفحَص إلا ما هو حرفي (نص بين "" أو رقم أو true/false/null)؛ التعابير {…} تُقيَّم وقت التشغيل.
+        if (!(val.front() == '"' || isNum(val, false) || val == "true" || val == "false" || val == "null")) return;
+        bool ok = true; std::string want;
+        if (r.type == "int") { ok = isNum(val, true); want = "an integer"; }
+        else if (r.type == "number") { ok = isNum(val, false); want = "a number"; }
+        else if (r.type == "bool") { ok = val == "true" || val == "false"; want = "true or false"; }
+        else if (r.type == "string") { ok = val.front() == '"'; want = "a string"; }
+        else if (r.type == "color") { ok = val.front() == '"' && plain.size() >= 4 && plain[0] == '#'; want = "a color like #6C5CE7"; }
+        if (!ok) fail("<" + comp + "> property '" + r.name + "' must be " + want + " (got " + val + ")", ln);
+        if (!r.enumVals.empty()) {
+            bool in = false; for (auto& e : r.enumVals) if (e == plain) in = true;
+            if (!in) {
+                std::string sg = nearest(plain, r.enumVals);
+                fail("<" + comp + "> property '" + r.name + "' must be one of: " + joinList(r.enumVals) + " (got '" + plain + "')" + (sg.empty() ? "" : " — did you mean '" + sg + "'?"), ln);
+            }
+        }
+    }
+
+    // أبناء الاستعمال → { اسم الفتحة → محتواها } + الباقي (الفتحة الافتراضية). <Fill name="x">…</Fill>
+    void splitFills(const std::string& children, std::map<std::string, std::string>& fills, std::string& rest, const std::string& comp, int ln) {
+        size_t k = 0;
+        while (k < children.size()) {
+            size_t p = children.find("<Fill", k);
+            while (p != std::string::npos && !tagWordAt(children, p, "<Fill")) p = children.find("<Fill", p + 5);
+            if (p == std::string::npos) { rest += children.substr(k); break; }
+            rest += children.substr(k, p - k);
+            size_t e = tagEnd(children, p);
+            if (e == std::string::npos) fail("unterminated <Fill> in <" + comp + ">", ln);
+            std::string tag = children.substr(p, e - p + 1);
+            std::string nm = unq(rawGet(rawAttrs(tag), "name"));
+            if (nm.empty()) fail("<Fill> needs name=\"slot\" (inside <" + comp + ">)", ln);
+            if (fills.count(nm)) fail("<" + comp + "> has two <Fill name=\"" + nm + "\">", ln);
+            std::string inner;
+            if (children[e - 1] == '/') k = e + 1;
+            else {
+                size_t c = closeIn(children, "Fill", e + 1);
+                if (c == std::string::npos) fail("<Fill name=\"" + nm + "\"> is not closed with </Fill>", ln);
+                inner = children.substr(e + 1, c - e - 1);
+                size_t ce = children.find('>', c);
+                k = ce == std::string::npos ? children.size() : ce + 1;
+            }
+            fills[nm] = inner;
+        }
+    }
+    // يستبدل كل <Slot [name="x"] /> أو <Slot name="x">احتياطي</Slot> في جسم القالب.
+    std::string fillSlots(const std::string& body, const std::string& defChildren, std::map<std::string, std::string>& fills,
+                          const std::string& comp, int ln, std::vector<std::string>& slotNames) {
+        std::string out2; size_t k = 0;
+        while (k < body.size()) {
+            size_t p = body.find("<Slot", k);
+            while (p != std::string::npos && !tagWordAt(body, p, "<Slot")) p = body.find("<Slot", p + 5);
+            if (p == std::string::npos) { out2 += body.substr(k); break; }
+            out2 += body.substr(k, p - k);
+            size_t e = tagEnd(body, p);
+            if (e == std::string::npos) fail("unterminated <Slot> in <" + comp + ">", ln);
+            std::string nm = unq(rawGet(rawAttrs(body.substr(p, e - p + 1)), "name"));
+            std::string fallback;
+            if (body[e - 1] == '/') k = e + 1;
+            else {
+                size_t c = body.find("</Slot", e + 1);
+                if (c == std::string::npos) fail("<Slot> with fallback content must end with </Slot> (or be self-closing: <Slot />)", ln);
+                fallback = body.substr(e + 1, c - e - 1);
+                size_t ce = body.find('>', c);
+                k = ce == std::string::npos ? body.size() : ce + 1;
+            }
+            slotNames.push_back(nm);
+            if (nm.empty()) out2 += trimWs(defChildren).empty() ? fallback : defChildren;
+            else { auto f = fills.find(nm); out2 += f != fills.end() ? f->second : fallback; }
+        }
+        return out2;
+    }
+
+    // <Match on={x}> <Case is=0>…</Case> <Case in="a,b">…</Case> <Case when={x > 5}>…</Case> <Default>…</Default> </Match>
+    // → سلسلة <If>/<Else> (تُترجَم بالآلية الموجودة، فتعمل في كل المضيفين).
+    std::string buildMatch(const std::string& matchTag, const std::string& body, int ln) {
+        auto ma = rawAttrs(matchTag);
+        std::string onRaw = rawGet(ma, "on"); if (onRaw.empty()) onRaw = rawGet(ma, "value");
+        std::string on;
+        if (!onRaw.empty()) {
+            if (onRaw.front() != '{') fail("<Match on=…> must be a Rin expression in braces: on={tab}", ln);
+            on = "(" + trimWs(onRaw.substr(1, onRaw.size() - 2)) + ")";
+        }
+        std::string text; bool first = true, sawDefault = false; size_t k = 0;
+        while (k < body.size()) {
+            while (k < body.size() && std::isspace((unsigned char)body[k])) ++k;
+            if (k >= body.size()) break;
+            if (body.compare(k, 4, "<!--") == 0) { size_t ce = body.find("-->", k); if (ce == std::string::npos) fail("unterminated comment in <Match>", ln); k = ce + 3; continue; }
+            bool isCase = tagWordAt(body, k, "<Case"), isDef = tagWordAt(body, k, "<Default");
+            if (!isCase && !isDef) fail("<Match> may only contain <Case …> and <Default> (found '" + body.substr(k, std::min<size_t>(20, body.size() - k)) + "')", ln);
+            if (sawDefault) fail("<Default> must be the last branch of <Match>", ln);
+            size_t e = tagEnd(body, k);
+            if (e == std::string::npos) fail(std::string("unterminated <") + (isCase ? "Case" : "Default") + ">", ln);
+            std::string tag = body.substr(k, e - k + 1), inner;
+            if (body[e - 1] == '/') k = e + 1;
+            else {
+                const char* nm = isCase ? "Case" : "Default";
+                size_t c = closeIn(body, nm, e + 1);
+                if (c == std::string::npos) fail(std::string("<") + nm + "> is not closed with </" + nm + ">", ln);
+                inner = body.substr(e + 1, c - e - 1);
+                size_t ce = body.find('>', c);
+                k = ce == std::string::npos ? body.size() : ce + 1;
+            }
+            std::string cond;
+            if (isCase) {
+                auto ca = rawAttrs(tag);
+                std::string vIs = rawGet(ca, "is"), vIn = rawGet(ca, "in"), vWhen = rawGet(ca, "when");
+                if (!vWhen.empty()) { if (vWhen.front() != '{') fail("<Case when=…> must be a Rin expression in braces: when={x > 5}", ln); cond = "(" + trimWs(vWhen.substr(1, vWhen.size() - 2)) + ")"; }
+                else if (!vIs.empty() || !vIn.empty()) {
+                    if (on.empty()) fail("<Case is=…/in=…> needs <Match on={expression}> (or use <Case when={…}>)", ln);
+                    if (!vIs.empty()) cond = "(" + on + " == " + rawToExpr(vIs) + ")";
+                    else {
+                        std::string l = unq(vIn); std::vector<std::string> toks;
+                        for (size_t q = 0; q <= l.size();) { size_t c2 = l.find(',', q); if (c2 == std::string::npos) c2 = l.size(); if (!trimWs(l.substr(q, c2 - q)).empty()) toks.push_back(literalOf(l.substr(q, c2 - q))); q = c2 + 1; }
+                        if (toks.empty()) fail("<Case in=\"…\"> needs at least one value", ln);
+                        cond = "(";
+                        for (size_t t = 0; t < toks.size(); ++t) cond += (t ? " or " : "") + on + " == " + toks[t];
+                        cond += ")";
+                    }
+                } else fail("<Case> needs is=value, in=\"a,b\" or when={condition}", ln);
+            } else sawDefault = true;
+            if (isCase) text += std::string(first ? "<If" : "<Else") + " cond={" + cond + "}>" + inner + (first ? "</If>" : "</Else>");
+            else {
+                if (first) fail("<Default> must be the last branch of <Match> (put at least one <Case> before it)", ln);
+                text += "<Else>" + inner + "</Else>";
+            }
+            first = false;
+        }
+        if (first) fail("<Match> needs at least one <Case>", ln);
+        return text;
+    }
+
     std::string expandBody(const std::string& body, std::map<std::string, std::string> v, const std::string& suffix,
-                           const std::string& what, int startLine, const std::string& base = "") {
+                           const std::string& what, int startLine, const std::string& base = "",
+                           const std::vector<Attr>* fwdAttrs = nullptr) {
         if (ctx.depth >= 24) fail("template nesting too deep (recursive <" + what + ">?)", startLine);
         ++ctx.depth;
         std::string r;
         try {
             Desugarer sub(body, ctx, std::move(v), suffix, true, base);
+            if (fwdAttrs) sub.fwd = *fwdAttrs;
             r = sub.run();
         } catch (TagError& e) {
             --ctx.depth;
@@ -1519,7 +1800,7 @@ private:
             if (nm.empty() && !f.tagName.empty())
                 fail("'</>' closes a fragment, but <" + f.tagName + "> is open (line " + std::to_string(f.line) + ")", startLine);
             stack.pop_back();
-            if (lower(f.tagName) == "if" || lower(f.tagName) == "else") lastIf[(int)stack.size()] = f.chain;
+            if (lower(f.tagName) == "if" || lower(f.tagName) == "else" || lower(f.tagName) == "unless") lastIf[(int)stack.size()] = f.chain;
             if (!f.closer.empty()) put(f.closer);
             return;
         }
@@ -1532,6 +1813,7 @@ private:
             if (s.compare(i, 7, "<rin--g") == 0 && (delim(i + 7) || s[i + 7] == '=') && !ctx.macros.count("rin--g")) { handleRing(); return; }
         }
         // افتتاح
+        const size_t tagBegin = i; // بداية '<' (لنص الوسم الخام في <Match>)
         ++i; // <
         size_t b = i;
         while (i < n && (isIdChar(s[i]) || s[i] == '.')) ++i;
@@ -1545,6 +1827,7 @@ private:
         }
 
         std::vector<Attr> attrs;
+        std::set<std::string> fwdKeys;
         bool selfClose = false;
         int nlInside = 0;
         for (;;) {
@@ -1552,6 +1835,14 @@ private:
             if (i >= n) fail("unterminated tag <" + tagName + ">", startLine);
             if (s[i] == '>') { ++i; break; }
             if (s[i] == '/' && i + 1 < n && s[i + 1] == '>') { i += 2; selfClose = true; break; }
+            if (s.compare(i, 3, "...") == 0) { // ...attrs: يحقن السمات الزائدة الممرَّرة من استعمال القالب (الأحدث يغلب)
+                i += 3; size_t ib = i;
+                while (i < n && isIdChar(s[i])) ++i;
+                if (s.substr(ib, i - ib) != "attrs") fail("in a tag, '...' must be written '...attrs' (forwards the extra attributes of a <Define> use)");
+                if (!flat) fail("'...attrs' is only valid inside a <Define> body");
+                for (auto& f : fwd) { for (size_t q = 0; q < attrs.size();) { if (attrs[q].key == f.key) attrs.erase(attrs.begin() + q); else ++q; } attrs.push_back(f); fwdKeys.insert(f.key); }
+                continue;
+            }
             if (!isIdStart(s[i])) fail(std::string("unexpected '") + s[i] + "' in tag <" + tagName + ">");
             size_t kb = i;
             // kebab-case مسموح في أسماء الخصائص (min-width / row-gap / flex-direction) ويُحوَّل إلى snake_case.
@@ -1566,6 +1857,7 @@ private:
                 a.value = readValue();
                 nlInside += (line - before);
             } else { i = save; line = saveLine; nlInside += 0; a.value = "true"; }
+            if (fwdKeys.count(a.key)) { for (size_t q = 0; q < attrs.size();) { if (attrs[q].key == a.key) attrs.erase(attrs.begin() + q); else ++q; } fwdKeys.erase(a.key); }
             attrs.push_back(std::move(a));
         }
         // الأسطر المستهلكة داخل الوسم (قبل أي محتوى نصي)
@@ -1618,7 +1910,7 @@ private:
                 return;
             }
             // class="card pill": يدمج سمات الأنماط (اللاحق يغلب السابق) تحت سمات العنصر الصريحة، ثم تُحذف class.
-            if (tl != "define" && tl != "repeat" && tl != "if" && tl != "else" && tl != "fun" && tl != "rin" && !ctx.macros.count(tagName)) {
+            if (tl != "define" && tl != "repeat" && tl != "if" && tl != "else" && tl != "unless" && tl != "fun" && tl != "rin" && !ctx.macros.count(tagName)) {
                 for (size_t ai = 0; ai < attrs.size(); ai++) {
                     if (attrs[ai].key != "class") continue;
                     std::string cv = attrs[ai].value;
@@ -1651,6 +1943,8 @@ private:
                 Macro m;
                 for (auto& a : attrs) m.props.push_back({a.key, a.value});
                 m.body = captureBody("Define", true, startLine);
+                extractProps(m, startLine);
+                m.forwards = m.body.find("...attrs") != std::string::npos;
                 ctx.macros[id] = std::move(m);
                 finish("");
                 return;
@@ -1676,11 +1970,29 @@ private:
                 finish(text);
                 return;
             }
-            if (tl == "if" || tl == "else") {
+            if (tl == "match") {
+                if (selfClose) fail("<Match on={expr}> needs a body with <Case>/<Default>", startLine);
+                std::string rawTag = s.substr(tagBegin, i - tagBegin);
+                std::string body = captureBody(tagName, true, startLine);
+                std::string text = buildMatch(rawTag, body, startLine);
+                finish(expandBody(text, vars, idSuffix, "Match", startLine, activeCond()) + " ");
+                return;
+            }
+            if (tl == "prop") {
+                if (!selfClose) fail("<Prop> must be self-closing: <Prop name=tone enum=\"info,warn\" />", startLine);
+                if (!ctx.propSink) fail("<Prop> is only valid inside a <Define> body", startLine);
+                for (auto& a : attrs) ctx.propSink->push_back(a);
+                finish("");
+                return;
+            }
+            if (tl == "fill") fail("<Fill name=\"slot\"> is only valid directly inside the use of a <Define>d component", startLine);
+            if (tl == "default" || tl == "case") fail("<" + tagName + "> is only valid inside <Match>", startLine);
+            if (tl == "if" || tl == "else" || tl == "unless") {
                 if (selfClose) fail("<" + tagName + "> needs a body", startLine);
                 std::string c = attrVal({"cond", "when", "test"});
-                if (tl == "if" && c.empty()) fail("<If> needs cond={expression}", startLine);
+                if ((tl == "if" || tl == "unless") && c.empty()) fail("<" + tagName + "> needs cond={expression}", startLine);
                 if (!c.empty() && c.front() == '"' && c.back() == '"') c = c.substr(1, c.size() - 2);
+                if (tl == "unless") c = "!(" + c + ")"; // <Unless cond={x}> ≡ <If cond={!(x)}>؛ و<Else> بعده يعمل كالمعتاد
                 openCond(tl == "else", c, startLine, tagName, false);
                 finish("");
                 return;
@@ -1707,25 +2019,45 @@ private:
             if (tl == "slot") fail("<Slot /> is only valid inside <Define>", startLine);
             auto mit = ctx.macros.find(tagName);
             if (mit != ctx.macros.end()) {
-                std::string body = mit->second.body;
+                const Macro& mac = mit->second;
+                std::string body = mac.body;
                 std::string children;
                 if (!selfClose) children = captureBody(tagName, true, startLine);
-                // <Slot /> → أبناء الاستعمال
-                for (size_t sp; (sp = body.find("<Slot")) != std::string::npos;) {
-                    size_t e = body.find("/>", sp);
-                    if (e == std::string::npos) fail("<Slot> must be self-closing: <Slot />", startLine);
-                    body.replace(sp, e + 2 - sp, children);
+                // فتحات: <Slot /> الافتراضية و<Slot name="x">احتياطي</Slot> ← <Fill name="x">…</Fill> من الاستعمال
+                std::map<std::string, std::string> fills; std::string defChildren;
+                splitFills(children, fills, defChildren, tagName, startLine);
+                std::vector<std::string> slotNames;
+                body = fillSlots(body, defChildren, fills, tagName, startLine, slotNames);
+                for (auto& f : fills) {
+                    bool ok = false; for (auto& sn : slotNames) if (sn == f.first) ok = true;
+                    if (!ok) {
+                        std::vector<std::string> named; for (auto& sn : slotNames) if (!sn.empty()) named.push_back(sn);
+                        std::string sg = nearest(f.first, named);
+                        fail("<" + tagName + "> has no slot '" + f.first + "'" + (named.empty() ? " (its <Define> declares no named <Slot name=…>)" : " (slots: " + joinList(named) + ")") + (sg.empty() ? "" : " — did you mean '" + sg + "'?"), startLine);
+                    }
                 }
                 std::map<std::string, std::string> v = vars;
-                for (auto& pr : mit->second.props) v[pr.first] = pr.second;
+                for (auto& pr : mac.props) v[pr.first] = pr.second;
+                std::vector<Attr> extra;
+                std::vector<std::string> declared; for (auto& pr : mac.props) declared.push_back(pr.first);
                 for (auto& a : attrs) {
                     bool known = false;
-                    for (auto& pr : mit->second.props) if (pr.first == a.key) known = true;
-                    if (!known) fail("<" + tagName + "> has no property '" + a.key + "' (declare it on <Define#" + tagName + ">)", startLine);
+                    for (auto& pr : mac.props) if (pr.first == a.key) known = true;
+                    if (!known) {
+                        if (mac.forwards) { extra.push_back(a); continue; }  // ...attrs: تُمرَّر إلى عنصر الجسم
+                        std::string sg = nearest(a.key, declared);
+                        fail("<" + tagName + "> has no property '" + a.key + "' (declare it on <Define#" + tagName + ">)" + (sg.empty() ? "" : " — did you mean '" + sg + "'?"), startLine);
+                    }
                     v[a.key] = a.value;
                 }
+                for (auto& r : mac.rules) {
+                    const Attr* given = nullptr;
+                    for (auto& a : attrs) if (a.key == r.name) given = &a;
+                    if (!given) { if (r.required) fail("<" + tagName + "> requires property '" + r.name + "'", startLine); continue; }
+                    checkPropValue(tagName, r, given->value, startLine);
+                }
                 std::string suffix = idSuffix + "_" + (id.empty() ? std::to_string(++ctx.autoId) : id);
-                std::string text = expandBody(body, v, suffix, tagName, startLine, activeCond());
+                std::string text = expandBody(body, v, suffix, tagName, startLine, activeCond(), &extra);
                 finish(text + " ");
                 return;
             }
