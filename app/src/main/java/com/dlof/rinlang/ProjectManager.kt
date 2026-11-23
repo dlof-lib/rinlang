@@ -575,7 +575,7 @@ object ProjectManager {
             "    @view.Text=lbl3 text=\"زر مُعطَّل (Disabled)\"; size=12; .end/view\n" +
             "    @view.Button=btnDisabled label=\"زر معطّل\"; state=\"disabled\"; radius=12; .end/view\n\n" +
             "    @view.Text=lbl4 text=\"زر أيقونة\"; size=12; .end/view\n" +
-            "    @view.Button=btnIcon label=\"🔔 تنبيه\"; radius=20; .end/view\n\n" +
+            "    @view.Button=btnIcon label=\"تنبيه\"; radius=20; .end/view\n\n" +
             "    @view.Text=lbl5 text=\"زر عدّاد تفاعلي\"; size=12; .end/view\n" +
             "    @view.Button=btnCounter label=\"اضغط هنا\"; onTap=bump(); radius=12; .end/view\n" +
             "    @view.Text=counterOut text=\"تم الضغط \" + tapCount + \" مرة\"; size=14; .end/view\n" +
@@ -669,7 +669,7 @@ object ProjectManager {
       <button rin-click="addBy(5)">+5</button>
       <button class="secondary" rin-click="reset()">تصفير</button>
     </div>
-    <p class="note" rin-if="isHigh">وصل العدّاد إلى 10 أو أكثر 🎉</p>
+    <p class="note" rin-if="isHigh">وصل العدّاد إلى 10 أو أكثر</p>
 
     <hr>
 
@@ -713,7 +713,7 @@ object ProjectManager {
       <button data-add="5">+5</button>
       <button class="secondary" id="reset">تصفير</button>
     </div>
-    <p class="note" id="note" hidden>وصل العدّاد إلى 10 أو أكثر 🎉</p>
+    <p class="note" id="note" hidden>وصل العدّاد إلى 10 أو أكثر</p>
 
     <hr>
 
