@@ -18,6 +18,23 @@ static void eq(const char* name, const std::string& src, const std::string& want
         else if (lines(got) != lines(src)) { ++fails; std::cerr << "FAIL " << name << " (line count changed)\n"; }
     } catch (indsin::tags::TagError& e) { ++fails; std::cerr << "FAIL " << name << " threw: " << e.message << "\n"; }
 }
+
+// يتحقق أن ناتج الترجمة يحوي كل الأجزاء في part (مفصولة بـ ‖) ولا يحوي أياً من الأجزاء بعد ⊘ — لاختبار القوالب بلا التصاق بتفاصيل المسافات.
+static void has(const char* name, const std::string& src, const std::string& parts) {
+    ++runs;
+    try {
+        std::string got = indsin::tags::desugar(src);
+        size_t neg = parts.find("⊘"); std::string pos = parts.substr(0, neg), no = neg == std::string::npos ? "" : parts.substr(neg + std::string("⊘").size());
+        auto each = [&](const std::string& list, bool want) {
+            for (size_t p = 0; p <= list.size();) {
+                size_t e = list.find("‖", p); std::string piece = list.substr(p, e == std::string::npos ? std::string::npos : e - p);
+                if (!piece.empty() && ((got.find(piece) != std::string::npos) != want)) { ++fails; std::cerr << "FAIL " << name << (want ? " missing: " : " unexpected: ") << piece << "\n  got: " << got << "\n"; return; }
+                if (e == std::string::npos) break; p = e + std::string("‖").size();
+            }
+        };
+        each(pos, true); each(no, false);
+    } catch (indsin::tags::TagError& e) { ++fails; std::cerr << "FAIL " << name << " threw: " << e.message << "\n"; }
+}
 static void err(const char* name, const std::string& src, int line, const char* part) {
     ++runs;
     try { indsin::tags::desugar(src); ++fails; std::cerr << "FAIL " << name << " (no error)\n"; }
@@ -137,6 +154,47 @@ int main(int argc, char** argv) {
     err("recursive", "<Define#R><R /></Define><R />", 1, "too deep");
     err("define unnamed", "<Define><Text/></Define>", 1, "needs a name");
     err("slot outside", "<Slot />", 1, "only valid inside");
+
+    // ── مفاهيم القوالب المستلهَمة من PHP: Match · Unless · فتحات مسمّاة · Prop · ...attrs (docs/indsin_template_concepts.md) ──
+    has("match arms", "<Match on={tab}><Case is=0><Text#a>A</Text></Case><Case in=\"1,2\"><Text#b>B</Text></Case><Case when={tab > 5}><Text#c>C</Text></Case><Default><Text#d>D</Text></Default></Match>",
+        "@view.Text=a visible=(((tab) == 0))‖(tab) == 1 or (tab) == 2‖(tab > 5)‖@view.Text=d visible=(!(");
+    has("match string is", "<Match on={mode}><Case is=\"dark\"><Text#a/></Case><Default><Text#b/></Default></Match>", "(mode) == \"dark\"‖@view.Text=b");
+    has("match nested", "<Match on={a}><Case is=1><Match on={b}><Case is=2><Text#x/></Case></Match></Case></Match>", "(b) == 2‖(a) == 1‖@view.Text=x");
+    has("match in define uses props", "<Define#V k=1><Match on={k}><Case is=1><Text#one/></Case><Default><Text#other/></Default></Match></Define><V k=1 /><V k=2 />",
+        "@view.Text=one_");
+    has("unless", "<Unless cond={ready}><Text#w/></Unless><Else><Text#r/></Else>", "visible=(!(ready))‖visible=(!(!(ready)))");
+    has("named slot + fill", "<Define#Card><Column#c><Slot /><Row#f><Slot name=\"footer\"><Text#fd>def</Text></Slot></Row></Column></Define><Card><Text#b/><Fill name=\"footer\"><Button#ok>OK</Button></Fill></Card>",
+        "@view.Button=ok_‖@view.Text=b_⊘@view.Text=fd_");
+    has("slot fallback used", "<Define#Card><Slot name=\"footer\"><Text#fd>def</Text></Slot></Define><Card />", "@view.Text=fd_");
+    has("default slot fallback", "<Define#Card><Slot><Text#empty/></Slot></Define><Card />", "@view.Text=empty_");
+    has("default slot wins over fallback", "<Define#Card><Slot><Text#empty/></Slot></Define><Card><Text#real/></Card>", "@view.Text=real_⊘@view.Text=empty_");
+    has("prop required ok+type+enum", "<Define#A><Prop name=title required /><Prop name=tone enum=\"info,warn\" default=info /><Prop name=n type=int default=1 /><Text#t>{title}{tone}{n}</Text></Define><A title=\"x\" tone=\"warn\" n=3 />",
+        "(\"x\")‖(\"warn\")‖(3)");
+    has("prop default applies", "<Define#A><Prop name=tone enum=\"info,warn\" default=info /><Text#t>{tone}</Text></Define><A />", "(\"info\")");
+    has("prop expression skips literal check", "<Define#A><Prop name=n type=int default=1 /><Text#t>{n}</Text></Define><A n={count + 1} />", "(count + 1)");
+    has("attrs forward + later wins", "<Define#Chip label=\"x\"><Card#c padding=8 ...attrs><Text#t>{label}</Text></Card></Define><Chip label=\"Hi\" width=120 padding=20 />",
+        "width=120;‖padding=20;⊘padding=8");
+    has("attrs forward none", "<Define#Chip><Card#c padding=8 ...attrs /></Define><Chip />", "padding=8;");
+    err("prop required missing", "<Define#A><Prop name=title required /><Text/></Define>\n<A />", 2, "requires property 'title'");
+    err("prop enum bad", "<Define#A><Prop name=tone enum=\"info,warn\" default=info /><Text/></Define>\n<A tone=\"inf\" />", 2, "did you mean 'info'");
+    err("prop type int", "<Define#A><Prop name=n type=int default=1 /><Text/></Define>\n<A n=\"x\" />", 2, "must be an integer");
+    err("prop type unknown", "<Define#A><Prop name=n type=money /><Text/></Define>", 1, "type must be");
+    err("prop required+default", "<Define#A><Prop name=n required default=1 /><Text/></Define>", 1, "cannot be both");
+    err("prop outside define", "<Prop name=x />", 1, "only valid inside a <Define>");
+    err("prop unknown attribute", "<Define#A><Prop name=n colour=red /><Text/></Define>", 1, "has no attribute 'colour'");
+    err("unknown prop suggests", "<Define#P title=1><Text/></Define>\n<P titel=1 />", 2, "did you mean 'title'");
+    err("fill unknown slot", "<Define#C><Slot name=\"footer\" /></Define>\n<C><Fill name=\"fotter\">x</Fill></C>", 2, "did you mean 'footer'");
+    err("fill duplicate", "<Define#C><Slot name=\"a\" /></Define>\n<C><Fill name=\"a\">x</Fill><Fill name=\"a\">y</Fill></C>", 2, "two <Fill");
+    err("fill outside", "<Fill name=\"a\">x</Fill>", 1, "only valid directly inside");
+    err("match no case", "<Match on={x}></Match>", 1, "at least one <Case>");
+    err("match stray text", "<Match on={x}>hello<Case is=1><Text/></Case></Match>", 1, "may only contain");
+    err("match default not last", "<Match on={x}><Default><Text/></Default><Case is=1><Text/></Case></Match>", 1, "must be the last");
+    err("match is without on", "<Match><Case is=1><Text/></Case></Match>", 1, "needs <Match on=");
+    err("match on needs braces", "<Match on=tab><Case is=1><Text/></Case></Match>", 1, "in braces");
+    err("case needs condition", "<Match on={x}><Case><Text/></Case></Match>", 1, "needs is=value");
+    err("case outside match", "<Case is=1><Text/></Case>", 1, "only valid inside <Match>");
+    err("attrs outside define", "<Card ...attrs />", 1, "only valid inside a <Define>");
+    err("spread other", "<Define#D><Card ...props /></Define><D />", 1, "...attrs");
 
     for (int k = 1; k < argc; ++k) {
         std::ifstream f(argv[k]); std::stringstream ss; ss << f.rdbuf(); std::string src = ss.str();
