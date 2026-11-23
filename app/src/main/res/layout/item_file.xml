@@ -68,12 +68,11 @@
                  أثناء التحرير، لا حالة وهمية)، لا تظهر إلا لملف فيه تغيير فعلي لم يُحفَظ بعد. -->
             <TextView
                 android:id="@+id/txtDirtyDot"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
+                android:layout_width="8dp"
+                android:layout_height="8dp"
                 android:layout_marginStart="6dp"
-                android:text="●"
+                android:background="@drawable/rs_dot_accent"
                 android:textColor="@color/rin_accent"
-                android:textSize="10sp"
                 android:visibility="gone" />
         </LinearLayout>
 
