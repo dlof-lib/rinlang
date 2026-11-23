@@ -7,10 +7,10 @@
     <string name="output_queued">Esperando en la cola…</string>
     <string name="output_running">Ejecutando</string>
     <string name="output_no_output">El programa no imprimió nada.</string>
-    <string name="output_status_ok_fmt">✔ Terminó correctamente — %1$d ms</string>
-    <string name="output_status_error_fmt">✖ La ejecución falló — %1$d ms</string>
-    <string name="output_status_timeout">⏱ Detenido: se superó el tiempo límite</string>
-    <string name="output_status_cancelled">⏹ Ejecución detenida</string>
+    <string name="output_status_ok_fmt">Terminó correctamente — %1$d ms</string>
+    <string name="output_status_error_fmt">La ejecución falló — %1$d ms</string>
+    <string name="output_status_timeout">Detenido: se superó el tiempo límite</string>
+    <string name="output_status_cancelled">Ejecución detenida</string>
     <string name="output_summary_fmt">%1$d líneas · %2$d errores · %3$d avisos</string>
     <string name="output_search_hint">Buscar en la salida</string>
     <string name="output_speed_fmt">Escritura %1$s</string>
