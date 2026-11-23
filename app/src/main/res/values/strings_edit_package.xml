@@ -18,7 +18,7 @@
     <string name="edit_package_redo">إعادة</string>
     <string name="action_edit_package">تعديل الحزمة</string>
     <string name="edit_package_load_failed">تعذّر تحميل الحزمة للتعديل</string>
-    <string name="edit_package_saved">تم حفظ التعديلات ونشرها ✓</string>
+    <string name="edit_package_saved">تم حفظ التعديلات ونشرها</string>
     <string name="edit_package_save_failed">فشل حفظ التعديلات</string>
     <string name="edit_package_discard_title">تجاهل التعديلات؟</string>
     <string name="edit_package_discard_message">لديك تعديلات لم تُنشر بعد وستضيع إن خرجت الآن.</string>
