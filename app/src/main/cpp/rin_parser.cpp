@@ -35,6 +35,32 @@ static int rinCompoundAhead(const std::vector<Token>& t, size_t i) {
     return 0;
 }
 
+// Rin null-safe: `??` (قيمة افتراضية) و`??=` و`?.` (سلسلة اختيارية). كلها رموز ملتصقة بلا مسافات، فلا تتعارض مع الشرط الثلاثي `c ? a : b`.
+// هل عند الموضع i الرمزان `??` ملتصقان؟
+static bool rinNullishAhead(const std::vector<Token>& t, size_t i) {
+    if (i + 1 >= t.size()) return false;
+    const Token& a = t[i]; const Token& b = t[i + 1];
+    return a.type == TokenType::QUESTION && b.type == TokenType::QUESTION && a.line == b.line && a.endCol == b.col;
+}
+// هل عند الموضع i الرموز `??=` ملتصقة (وليست `??==`)؟
+static bool rinNullishAssignAhead(const std::vector<Token>& t, size_t i) {
+    if (!rinNullishAhead(t, i) || i + 2 >= t.size()) return false;
+    const Token& b = t[i + 1]; const Token& c = t[i + 2];
+    return c.type == TokenType::EQUAL && c.line == b.line && b.endCol == c.col;
+}
+// هل عند الموضع i الرمزان `?.` ملتصقان ويتبعهما اسم أو `[` أو `(` ملتصق؟  kind: 1 = اسم، 2 = `[`، 3 = `(`
+static int rinOptChainAhead(const std::vector<Token>& t, size_t i) {
+    if (i + 2 >= t.size()) return 0;
+    const Token& q = t[i]; const Token& d = t[i + 1]; const Token& n = t[i + 2];
+    if (q.type != TokenType::QUESTION || d.type != TokenType::DOT) return 0;
+    if (q.line != d.line || q.endCol != d.col || d.line != n.line || d.endCol != n.col) return 0;
+    if (n.type == TokenType::LBRACKET) return 2;
+    if (n.type == TokenType::LPAREN) return 3;
+    if (n.type == TokenType::IDENT || n.type == TokenType::TEXT || n.type == TokenType::FILE_KW) return 1;
+    return 0;
+}
+static int g_optChainSeq = 0;
+
 bool Parser::checkNext(TokenType type) const {
     if (isAtEnd()) return false;
     if (current + 1 >= tokens.size()) return false;
@@ -4997,7 +5023,7 @@ ExprPtr Parser::assignment() {
         auto rhs = pipeline();
         expr = makeElseExpr(expr, rhs, e.line);
     }
-    if (match({TokenType::QUESTION})) {
+    if (!rinNullishAssignAhead(tokens, current) && match({TokenType::QUESTION})) {
         Token q = previous();
         auto whenTrue = expression();
         consume(TokenType::COLON, "Expected ':' in conditional expression");
@@ -5005,6 +5031,25 @@ ExprPtr Parser::assignment() {
         auto c = std::make_shared<ConditionalExpr>();
         c->condition = expr; c->whenTrue = whenTrue; c->whenFalse = whenFalse; c->line = q.line;
         expr = c;
+    }
+    // Rin null-safe: x ??= e  ≡  x = x ?? e  (يُسنَد فقط إن كانت x هي nil؛ e كسولة). الهدف بسيط كما في `+=`.
+    if (rinNullishAssignAhead(tokens, current) &&
+        (std::dynamic_pointer_cast<VariableExpr>(expr) || std::dynamic_pointer_cast<IndexExpr>(expr) || std::dynamic_pointer_cast<GetExpr>(expr))) {
+        Token opTok = advance(); advance(); advance();   // ? ? =
+        if (!isSimpleTarget(expr))
+            throw errRich(diag::Code::E0003_InvalidAssignment, opTok, "`??=` needs a simple target",
+                          "`a ??= b` reads and writes the target, so the target must have no side effects (it is evaluated twice)",
+                          "use a variable, `arr[i]`, or `obj.field` with plain names/numbers; otherwise write `t = f(); t ??= b;`");
+        auto rhs = assignment();
+        ExprPtr value = makeElseExpr(expr, rhs, opTok.line);
+        if (auto var = std::dynamic_pointer_cast<VariableExpr>(expr)) {
+            auto as = std::make_shared<AssignExpr>(); as->name = var->name; as->value = value; as->line = opTok.line; return as;
+        }
+        if (auto idx = std::dynamic_pointer_cast<IndexExpr>(expr)) {
+            auto set = std::make_shared<IndexSetExpr>(); set->object = idx->object; set->index = idx->index; set->value = value; set->line = opTok.line; return set;
+        }
+        auto get = std::dynamic_pointer_cast<GetExpr>(expr);
+        auto set = std::make_shared<SetExpr>(); set->object = get->object; set->name = get->name; set->value = value; set->line = opTok.line; return set;
     }
     // Rin For+: x += e  -= *= /= %=  و x++ / x--  (حلّ في المحلل إلى  x = x op e  — يعمل على المفسّر وRinVM)
     TokenType cOp = TokenType::EQUAL; bool isCompound = false, isIncDec = false;
@@ -5114,8 +5159,19 @@ ExprPtr Parser::assignment() {
 //   input |> step1() |> step2(arg)   يُكافئ   step2(step1(input), arg)
 // القيمة الموجودة على يسار |> تُمرَّر دائماً كأول وسيط للنداء الموجود على اليمين.
 // يمكن كتابة اسم دالة بدون أقواس على يمين |> فتُعامل كنداء بلا وسائط إضافية: data |> mean
-ExprPtr Parser::pipeline() {
+// a ?? b  ⇒  a إن لم تكن nil وإلا b (كسولة؛ نفس دلالة `a else b`). أدنى من `or` وأعلى من `|>`. تتسلسل من اليسار.
+ExprPtr Parser::nullish() {
     auto expr = logicOr();
+    while (rinNullishAhead(tokens, current) && !rinNullishAssignAhead(tokens, current)) {
+        Token q = advance(); advance();                 // ? ?
+        auto rhs = logicOr();
+        expr = makeElseExpr(expr, rhs, q.line);
+    }
+    return expr;
+}
+
+ExprPtr Parser::pipeline() {
+    auto expr = nullish();
     int stageCount = 0; // عدد مراحل |> في هذه السلسلة (لأجل RinFlow -- انظر CallExpr::pipelineStageCount)
     while (match({TokenType::PIPE})) {
         Token opTok = previous();
@@ -5281,7 +5337,33 @@ ExprPtr Parser::unary() {
 
 ExprPtr Parser::call() {
     auto expr = primary();
+    // سلسلة اختيارية `a?.b` `a?.[i]` `a?.(x)`: كل `?.` يقسم السلسلة؛ إن كان ما قبله nil تنتهي السلسلة كلها بـ nil
+    // (يُختصر ما بعدها). تنفيذاً: __optchain(a, fun(__ocN) { return __ocN.b...; }) — a تُقيَّم مرة واحدة.
+    std::vector<std::pair<ExprPtr, std::string>> optLinks;
+    auto wrapOpt = [&](ExprPtr e) -> ExprPtr {
+        for (size_t i = optLinks.size(); i-- > 0;) {
+            int ln = optLinks[i].first ? optLinks[i].first->line : 0;
+            auto ret = std::make_shared<ReturnStmt>(); ret->value = e; ret->line = ln;
+            auto body = std::make_shared<BlockStmt>(); body->statements.push_back(ret); body->line = ln;
+            auto fn = std::make_shared<FunctionStmt>(); fn->name = ""; fn->params = {optLinks[i].second}; fn->paramTypes = {""}; fn->body = body; fn->line = ln;
+            auto lam = std::make_shared<LambdaExpr>(); lam->decl = fn; lam->line = ln;
+            auto c = std::make_shared<CallExpr>(); c->callee = "__optchain"; c->line = ln;
+            c->args.push_back(optLinks[i].first); c->args.push_back(lam);
+            e = c;
+        }
+        optLinks.clear();
+        return e;
+    };
     for (;;) {
+        if (int ok = rinOptChainAhead(tokens, current)) {
+            Token q = advance();                                  // ?
+            if (ok != 1) advance();                               // `.` قبل `[` أو `(` ؛ وللاسم تُترك لفرع DOT أدناه
+            std::string tmp = "__oc" + std::to_string(++g_optChainSeq);
+            optLinks.push_back({expr, tmp});
+            auto v = std::make_shared<VariableExpr>(); v->name = tmp; v->line = q.line;
+            expr = v;
+            continue;
+        }
         if (match({TokenType::LPAREN})) {
             auto var = std::dynamic_pointer_cast<VariableExpr>(expr);
             if (!var) {
@@ -5387,7 +5469,7 @@ ExprPtr Parser::call() {
             break;
         }
     }
-    return expr;
+    return optLinks.empty() ? expr : wrapOpt(expr);
 }
 
 static bool startsLiteralItem(TokenType t); // تعريفها أدناه (فاصلة اختيارية في القوائم)
