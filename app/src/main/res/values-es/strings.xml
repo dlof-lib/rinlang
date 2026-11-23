@@ -25,7 +25,7 @@
 
     <!-- Nuevo diseño de RinFlow: flujo horizontal + barra de leyenda, al estilo de paneles CI/CD profesionales -->
     <string name="pipeline_flow_label">rinflow — pipeline.trace</string>
-    <string name="pipeline_terminal_legend">✓ correcto   ✗ error</string>
+    <string name="pipeline_terminal_legend">correcto error</string>
     <string name="pipeline_legend_success">Correcto</string>
     <string name="pipeline_legend_failed">Fallido</string>
     <string name="pipeline_legend_node">Nodo RinFlow</string>
@@ -157,7 +157,7 @@
     <string name="go_to_line_action">Ir</string>
     <string name="go_to_line_cancel">Cancelar</string>
     <string name="go_to_line_invalid_toast">Introduce un número de línea válido</string>
-    <string name="brackets_balanced_toast">Los paréntesis están balanceados ✓</string>
+    <string name="brackets_balanced_toast">Los paréntesis están balanceados</string>
     <string name="brackets_unbalanced_toast">Paréntesis desbalanceados cerca de la línea %1$d</string>
     <string name="line_deleted_toast">Línea eliminada</string>
 
@@ -199,7 +199,7 @@
     <string name="download_button_fmt">%1$s · %2$s</string>
     <string name="download_dialog_title">Descargando al dispositivo…</string>
     <string name="download_status_copying">Copiando datos…</string>
-    <string name="download_status_done">Descarga completada ✓</string>
+    <string name="download_status_done">Descarga completada</string>
     <string name="download_done_toast">%1$s guardado en la carpeta Descargas</string>
     <string name="download_error_toast">No se pudo descargar: %1$s</string>
     <string name="download_no_app_toast">No hay una aplicación adecuada para abrir este tipo de archivo</string>
