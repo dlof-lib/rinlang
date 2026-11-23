@@ -1,0 +1,23 @@
+let r = ring.new(3);
+print ring.size(r); print ring.full(r); print ring.last(r);
+print ring.add(r, "a");
+print ring.add(r, "b");
+print ring.add(r, "c");
+print ring.full(r);
+print ring.items(r);
+print ring.add(r, "d");
+print ring.add(r, "e");
+print ring.items(r);
+print ring.first(r); print ring.last(r);
+print ring.at(r, 0); print ring.at(r, -2); print ring.at(r, 9);
+ring.addAll(r, [1, 2, 3, 4]);
+print ring.items(r);
+print ring.cap(r);
+let hist = ring.new(2);
+fun note(x) { ring.add(hist, x); }
+note(1); note(2); note(3);
+print ring.items(hist);
+ring.reset(r);
+print ring.items(r); print ring.size(r);
+try { ring.new(0); } catch (e) { print "bad cap"; }
+try { ring.add({}, 1); } catch (e) { print "bad ring"; }
