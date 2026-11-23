@@ -247,7 +247,7 @@ class ApkExportActivity : RinBaseActivity() {
                 resultActionsRow.visibility = View.VISIBLE
             }
             is RinApkExporter.Progress.Failed -> {
-                appendLogLine("✗ ${p.message}", ok = false)
+                appendLogLine("${p.message}", ok = false)
                 btnBuild.isEnabled = true
                 progress.visibility = View.GONE
                 txtStatus.text = getString(R.string.apk_export_status_failed)
