@@ -25,6 +25,7 @@ import com.dlof.rinlang.BottomNavTab
 import com.dlof.rinlang.Project
 import com.dlof.rinlang.ProjectManager
 import com.dlof.rinlang.R
+import com.dlof.rinlang.RsIcons
 import com.dlof.rinlang.auth.AuthRepository
 import com.dlof.rinlang.network.BaseConnectivityActivity
 import com.dlof.rinlang.widgets.ShimmerLayout
@@ -513,7 +514,8 @@ private class PackageAdapter(
         holder.chipVersion.text = "v${pkg.version.removePrefix("v")}"
         holder.chipLicense.text = pkg.license
         holder.chipLicense.visibility = if (pkg.license.isBlank()) View.GONE else View.VISIBLE
-        holder.chipDownloads.text = "⬇ ${pkg.downloadCount}"
+        holder.chipDownloads.text = "${pkg.downloadCount}"
+        RsIcons.start(holder.chipDownloads, R.drawable.rs_ic_download, 12, 4)
         holder.txtCategory.text = pkg.category
         holder.txtDescription.text = pkg.description.ifBlank { "" }
         holder.txtDescription.visibility = if (pkg.description.isBlank()) View.GONE else View.VISIBLE
