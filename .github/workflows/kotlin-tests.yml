@@ -1,0 +1,28 @@
+name: Kotlin logic tests
+
+# يشغّل اختبارات المنطق الخالص (النجوم، القصّ، حفظ المشاريع، السمات…) على كل push/PR
+# بلا حاجة لبناء أندرويد كامل. محلياً: tools/run-kotlin-tests.sh
+
+on:
+  push:
+    paths: [ 'app/src/main/java/**', 'tools/kotlin-tests/**', 'tools/run-kotlin-tests.sh' ]
+  pull_request:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  kotlin-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17' }
+      - name: Cache kotlinc
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/rin-kotlinc
+          key: kotlinc-2.1.20
+      - name: Run tests
+        run: tools/run-kotlin-tests.sh
