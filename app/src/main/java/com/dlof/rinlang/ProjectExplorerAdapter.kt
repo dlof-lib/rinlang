@@ -73,6 +73,7 @@ class ProjectExplorerAdapter(
                 holder.name.text = node.folder.name
                 // سهم يدور 90° عند التوسيع بدل أيقونتين منفصلتين (مفتوح/مغلق).
                 holder.chevron.rotation = if (node.expanded) 90f else 0f
+                holder.folderIcon.setImageResource(RsFolderIcons.forName(node.folder.name, open = node.expanded))
                 holder.itemView.setOnClickListener { onFolderToggled(node.folder) }
             }
             is Node.FileNode -> {
@@ -98,6 +99,7 @@ class ProjectExplorerAdapter(
 
     class FolderVH(view: View) : RecyclerView.ViewHolder(view) {
         val chevron: ImageView = view.findViewById(R.id.imgExplorerChevron)
+        val folderIcon: ImageView = view.findViewById(R.id.imgExplorerFolderIcon)
         val name: TextView = view.findViewById(R.id.txtExplorerFolderName)
         val basePaddingStart: Int = view.paddingStart
     }
