@@ -4839,6 +4839,170 @@ void Interpreter::registerNatives() {
         return callValue(a[1], args, line);
     };
 
+    // __slice(x, lo|nil, hi|nil) — `x[lo:hi]` على مصفوفة أو نص: [lo, hi) ، السالب من النهاية، والخارج عن المدى يُقصّ بلا خطأ. docs/slicing.md
+    natives["__slice"] = [this](std::vector<Value>& a, int line) -> Value {
+        if (a.size() != 3) throw diagErr(diag::Code::E0007_InvalidArguments, line, "'__slice' expects 3 argument(s) but got " + std::to_string(a.size()));
+        auto bound = [&](const Value& v, long long n, long long dflt) -> long long {
+            if (v.type == Value::Type::NIL) return dflt;
+            if (v.type != Value::Type::NUMBER) throw diagErr(diag::Code::E0004_InvalidType, line, "slice bounds must be numbers");
+            long long i = (long long)v.number;
+            if (i < 0) i += n;
+            return i < 0 ? 0 : (i > n ? n : i);
+        };
+        if (a[0].type == Value::Type::ARRAY) {
+            long long n = (long long)a[0].array->size();
+            long long lo = bound(a[1], n, 0), hi = bound(a[2], n, n);
+            Value r; r.type = Value::Type::ARRAY; r.array = std::make_shared<std::vector<Value>>();
+            for (long long i = lo; i < hi; i++) r.array->push_back((*a[0].array)[(size_t)i]);
+            return r;
+        }
+        if (a[0].type == Value::Type::STRING) {
+            const std::string& s = a[0].str;
+            // بالأحرف (UTF-8) لا بالبايتات
+            std::vector<size_t> starts;
+            for (size_t i = 0; i < s.size(); i++) if ((static_cast<unsigned char>(s[i]) & 0xC0) != 0x80) starts.push_back(i);
+            long long n = (long long)starts.size();
+            long long lo = bound(a[1], n, 0), hi = bound(a[2], n, n);
+            Value r; r.type = Value::Type::STRING;
+            if (lo < hi) {
+                size_t b = starts[(size_t)lo], e = hi >= n ? s.size() : starts[(size_t)hi];
+                r.str = s.substr(b, e - b);
+            }
+            return r;
+        }
+        throw diagErr(diag::Code::E0004_InvalidType, line, "cannot slice a value of type `" + a[0].typeName() + "` (expected array or string)");
+    };
+
+    // ---- رنّة Rin: ring.on/once/fire/off/count/topics/clear — docs/ring.md ----
+    {
+        struct RingEntry { std::string topic; Value fn; bool once; };
+        auto rings = std::make_shared<std::vector<RingEntry>>();
+        auto depth = std::make_shared<int>(0);
+        auto matches = [](const std::string& pat, const std::string& topic) {
+            if (pat == topic || pat == "*") return true;
+            if (pat.size() >= 2 && pat.compare(pat.size() - 2, 2, ".*") == 0)
+                return topic.compare(0, pat.size() - 1, pat, 0, pat.size() - 1) == 0;   // "user.*" يطابق user.login و user.a.b
+            return false;
+        };
+        auto addEntry = [this, rings](std::vector<Value>& a, int line, bool once, const char* nm) -> Value {
+            if (a.size() != 2 || a[0].type != Value::Type::STRING || a[1].type != Value::Type::FUNCTION)
+                throw diagErr(diag::Code::E0007_InvalidArguments, line, std::string("'") + nm + "' expects (topic: string, listener: function)");
+            rings->push_back({a[0].str, a[1], once});
+            return Value::num((double)rings->size());
+        };
+        natives["ring.on"]   = [addEntry](std::vector<Value>& a, int line) -> Value { return addEntry(a, line, false, "ring.on"); };
+        natives["ring.once"] = [addEntry](std::vector<Value>& a, int line) -> Value { return addEntry(a, line, true, "ring.once"); };
+        natives["ring.fire"] = [this, rings, depth, matches](std::vector<Value>& a, int line) -> Value {
+            if (a.empty() || a.size() > 2 || a[0].type != Value::Type::STRING)
+                throw diagErr(diag::Code::E0007_InvalidArguments, line, "'ring.fire' expects (topic: string[, value])");
+            if (*depth >= 16)
+                throw diagErr(diag::Code::E0007_InvalidArguments, line, "ring \"" + a[0].str + "\": listeners ring each other deeper than 16 levels (endless loop?)");
+            const std::string topic = a[0].str;
+            Value val = a.size() == 2 ? a[1] : Value::nil();
+            std::vector<RingEntry> heard;                                  // لقطة: المستمع قد يضيف/يحذف أثناء الرنين
+            for (auto& e : *rings) if (matches(e.topic, topic)) heard.push_back(e);
+            rings->erase(std::remove_if(rings->begin(), rings->end(), [&](const RingEntry& e) { return e.once && matches(e.topic, topic); }), rings->end());
+            ++*depth;
+            try {
+                for (auto& e : heard) {
+                    std::vector<Value> args;
+                    size_t n = (e.fn.function && e.fn.function->declaration) ? e.fn.function->declaration->params.size() : 1;
+                    if (n >= 1) args.push_back(val);
+                    if (n >= 2) args.push_back(Value::string(topic));
+                    callValue(e.fn, args, line);
+                }
+            } catch (...) { --*depth; throw; }
+            --*depth;
+            return Value::num((double)heard.size());
+        };
+        natives["ring.off"] = [rings](std::vector<Value>& a, int line) -> Value {
+            if (a.size() != 1 || a[0].type != Value::Type::STRING) throw std::runtime_error("'ring.off' expects (topic: string)");
+            size_t before = rings->size();
+            rings->erase(std::remove_if(rings->begin(), rings->end(), [&](const RingEntry& e) { return e.topic == a[0].str; }), rings->end());
+            (void)line;
+            return Value::num((double)(before - rings->size()));
+        };
+        natives["ring.count"] = [rings, matches](std::vector<Value>& a, int line) -> Value {
+            if (a.size() != 1 || a[0].type != Value::Type::STRING) throw std::runtime_error("'ring.count' expects (topic: string)");
+            (void)line; double n = 0;
+            for (auto& e : *rings) if (matches(e.topic, a[0].str)) n++;
+            return Value::num(n);
+        };
+        natives["ring.topics"] = [rings](std::vector<Value>&, int) -> Value {
+            auto arr = std::make_shared<ArrayData>();
+            std::vector<std::string> seen;
+            for (auto& e : *rings) if (std::find(seen.begin(), seen.end(), e.topic) == seen.end()) { seen.push_back(e.topic); arr->push_back(Value::string(e.topic)); }
+            return Value::makeArray(arr);
+        };
+        natives["ring.clear"] = [rings](std::vector<Value>&, int) -> Value { rings->clear(); return Value::nil(); };
+
+        // ---- حلقة Rin (ring buffer): سعة ثابتة، والأحدث يُزيح الأقدم — ring.new/add/addAll/items/size/cap/full/first/last/at/reset. docs/ring_buffer.md ----
+        // الحلقة قاموس عادي (يُمرَّر بالمرجع): {kind: "ring", cap, head, size, buf}. الإضافة O(1).
+        auto K = [](const char* k) { return Value::string(k); };
+        auto getRing = [this, K](std::vector<Value>& a, size_t want, int line, const char* nm) -> MapPtr {
+            if (a.size() != want || a[0].type != Value::Type::MAP)
+                throw diagErr(diag::Code::E0007_InvalidArguments, line, std::string("'") + nm + "' expects a ring (from ring.new) as its first argument and " + std::to_string(want) + " argument(s) in total");
+            const Value* kd = a[0].map->findValue(K("kind"));
+            if (!kd || kd->type != Value::Type::STRING || kd->str != "ring")
+                throw diagErr(diag::Code::E0004_InvalidType, line, std::string("'") + nm + "' expects a ring made by ring.new(capacity)");
+            return a[0].map;
+        };
+        auto num = [K](MapPtr m, const char* k) -> long long { return (long long)m->findValue(K(k))->number; };
+        natives["ring.new"] = [this, K](std::vector<Value>& a, int line) -> Value {
+            if (a.size() != 1 || a[0].type != Value::Type::NUMBER || a[0].number < 1 || a[0].number != (double)(long long)a[0].number)
+                throw diagErr(diag::Code::E0007_InvalidArguments, line, "'ring.new' expects a capacity: a whole number >= 1");
+            auto m = std::make_shared<MapData>();
+            auto buf = std::make_shared<ArrayData>((size_t)a[0].number);
+            m->put(K("kind"), Value::string("ring")); m->put(K("cap"), a[0]);
+            m->put(K("head"), Value::num(0)); m->put(K("size"), Value::num(0));
+            m->put(K("buf"), Value::makeArray(buf));
+            return Value::makeMap(m);
+        };
+        auto addOne = [K, num](MapPtr m, const Value& v) -> Value {
+            long long cap = num(m, "cap"), head = num(m, "head"), size = num(m, "size");
+            auto& buf = *m->findValue(K("buf"))->array;
+            if (size < cap) { buf[(size_t)((head + size) % cap)] = v; m->put(K("size"), Value::num((double)(size + 1))); return Value::nil(); }
+            Value old = buf[(size_t)head]; buf[(size_t)head] = v;
+            m->put(K("head"), Value::num((double)((head + 1) % cap)));
+            return old;                                                  // المُزاح (الأقدم)
+        };
+        natives["ring.add"] = [getRing, addOne](std::vector<Value>& a, int line) -> Value { auto m = getRing(a, 2, line, "ring.add"); return addOne(m, a[1]); };
+        natives["ring.addAll"] = [getRing, addOne](std::vector<Value>& a, int line) -> Value {
+            auto m = getRing(a, 2, line, "ring.addAll");
+            if (a[1].type != Value::Type::ARRAY) throw std::runtime_error("'ring.addAll' expects an array as its second argument");
+            for (auto& v : *a[1].array) addOne(m, v);
+            return a[0];
+        };
+        auto at = [K, num](MapPtr m, long long i) -> Value {              // i من الأقدم؛ السالب من الأحدث؛ خارج المدى nil
+            long long cap = num(m, "cap"), head = num(m, "head"), size = num(m, "size");
+            if (i < 0) i += size;
+            if (i < 0 || i >= size) return Value::nil();
+            return (*m->findValue(K("buf"))->array)[(size_t)((head + i) % cap)];
+        };
+        natives["ring.items"] = [getRing, at, num](std::vector<Value>& a, int line) -> Value {
+            auto m = getRing(a, 1, line, "ring.items");
+            auto out = std::make_shared<ArrayData>();
+            for (long long i = 0, n = num(m, "size"); i < n; i++) out->push_back(at(m, i));
+            return Value::makeArray(out);
+        };
+        natives["ring.size"]  = [getRing, num](std::vector<Value>& a, int line) -> Value { return Value::num((double)num(getRing(a, 1, line, "ring.size"), "size")); };
+        natives["ring.cap"]   = [getRing, num](std::vector<Value>& a, int line) -> Value { return Value::num((double)num(getRing(a, 1, line, "ring.cap"), "cap")); };
+        natives["ring.full"]  = [getRing, num](std::vector<Value>& a, int line) -> Value { auto m = getRing(a, 1, line, "ring.full"); return Value::boolean_(num(m, "size") == num(m, "cap")); };
+        natives["ring.first"] = [getRing, at](std::vector<Value>& a, int line) -> Value { return at(getRing(a, 1, line, "ring.first"), 0); };
+        natives["ring.last"]  = [getRing, at](std::vector<Value>& a, int line) -> Value { return at(getRing(a, 1, line, "ring.last"), -1); };
+        natives["ring.at"]    = [getRing, at](std::vector<Value>& a, int line) -> Value {
+            auto m = getRing(a, 2, line, "ring.at");
+            if (a[1].type != Value::Type::NUMBER) throw std::runtime_error("'ring.at' expects a number index");
+            return at(m, (long long)a[1].number);
+        };
+        natives["ring.reset"] = [getRing, K](std::vector<Value>& a, int line) -> Value {
+            auto m = getRing(a, 1, line, "ring.reset");
+            m->put(K("head"), Value::num(0)); m->put(K("size"), Value::num(0));
+            for (auto& v : *m->findValue(K("buf"))->array) v = Value::nil();
+            return a[0];
+        };
+    }
+
     natives["__tap"] = [this](std::vector<Value>& a, int line) -> Value {
         if (a.empty() || a.size() > 2) throw diagErr(diag::Code::E0007_InvalidArguments, line, "'__tap' expects 1 or 2 argument(s) but got " + std::to_string(a.size()));
         if (a.size() == 2 && (a[1].type == Value::Type::FUNCTION || a[1].type == Value::Type::INSTANCE)) {
