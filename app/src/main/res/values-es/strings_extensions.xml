@@ -31,7 +31,7 @@
     <string name="ext_sort_rating">Mejor valoradas</string>
 
     <!-- Insignia "Destacada" mostrada en las extensiones más descargadas o mejor valoradas -->
-    <string name="ext_badge_featured">⭐ Destacada</string>
+    <string name="ext_badge_featured">Destacada</string>
 
     <!-- Botón para publicar una nueva extensión, disponible para cualquier usuario con sesión iniciada -->
     <string name="ext_entry_publish_button">Publica tu extensión</string>
@@ -58,8 +58,8 @@
     <string name="ext_install_progress_updating">Actualizando %1$s…</string>
 
     <!-- Mensajes de éxito/fallo -->
-    <string name="ext_installed_toast">%1$s instalada correctamente ✓</string>
-    <string name="ext_updated_toast">%1$s actualizada correctamente ✓</string>
+    <string name="ext_installed_toast">%1$s instalada correctamente</string>
+    <string name="ext_updated_toast">%1$s actualizada correctamente</string>
     <string name="ext_install_failed_toast">Operación fallida: %1$s</string>
     <string name="ext_enabled_toast">%1$s habilitada</string>
     <string name="ext_disabled_toast">%1$s deshabilitada</string>
@@ -73,9 +73,9 @@
     <string name="ext_security_developer_label">Desarrollador</string>
     <string name="ext_security_signature_label">Firma digital (huella de integridad del contenido)</string>
     <string name="ext_security_signature_missing">No se declaró ninguna firma para esta extensión</string>
-    <string name="ext_security_signature_missing_state">⚠ Sin firmar</string>
-    <string name="ext_security_signature_valid">✓ La firma coincide con el contenido de la extensión</string>
-    <string name="ext_security_signature_invalid">✗ La firma no coincide — el contenido podría estar dañado</string>
+    <string name="ext_security_signature_missing_state">Sin firmar</string>
+    <string name="ext_security_signature_valid">La firma coincide con el contenido de la extensión</string>
+    <string name="ext_security_signature_invalid">La firma no coincide — el contenido podría estar dañado</string>
     <string name="ext_security_signature_invalid_toast">No se puede continuar: la firma digital no coincide con el contenido de la extensión</string>
     <string name="ext_security_permissions_label">Permisos requeridos</string>
     <string name="ext_security_no_permissions">Esta extensión no solicita ningún permiso especial.</string>
@@ -101,23 +101,23 @@
     <string name="ext_publish_screenshots_selected_format">%1$d captura(s) seleccionada(s)</string>
     <string name="ext_publish_action_submit">Publicar extensión</string>
     <string name="ext_publish_content_required">Elige al menos un archivo para el contenido de la extensión</string>
-    <string name="ext_publish_success">Tu extensión se publicó en el Mercado de Extensiones Rin ✓</string>
+    <string name="ext_publish_success">Tu extensión se publicó en el Mercado de Extensiones Rin</string>
     <string name="ext_publish_failed">No se pudo publicar la extensión</string>
 
     <!-- Exportar/importar como .rinex para Rin Extensions (archivo independiente, sin necesidad de internet) -->
     <string name="ext_action_export_rinex">Exportar como .rinex</string>
-    <string name="ext_export_rinex_success">%1$s guardado como archivo .rinex en la carpeta Descargas ✓</string>
+    <string name="ext_export_rinex_success">%1$s guardado como archivo .rinex en la carpeta Descargas</string>
     <string name="ext_export_rinex_failed">No se pudo exportar: %1$s</string>
     <string name="ext_action_import_rinex">Importar archivo .rinex</string>
     <string name="ext_import_rinex_invalid">Este archivo no es un archivo Rin Extensions (.rinex) válido</string>
-    <string name="ext_import_rinex_success">%1$s importada e instalada desde el archivo local ✓</string>
+    <string name="ext_import_rinex_success">%1$s importada e instalada desde el archivo local</string>
     <string name="ext_import_rinex_failed">No se pudo importar el archivo: %1$s</string>
 
     <!-- Eliminar una extensión permanentemente de la tienda — solo disponible para su propio desarrollador -->
     <string name="ext_action_delete">Eliminar extensión</string>
     <string name="ext_delete_confirm_title">Eliminar extensión permanentemente</string>
     <string name="ext_delete_confirm_message">¿Eliminar \"%1$s\" permanentemente del Mercado de Extensiones Rin? Ya no será visible para nuevos usuarios y esta acción no se puede deshacer.\nNota: quienes ya la instalaron conservarán su copia instalada funcionando.</string>
-    <string name="ext_deleted_toast">Extensión eliminada permanentemente del mercado ✓</string>
+    <string name="ext_deleted_toast">Extensión eliminada permanentemente del mercado</string>
     <string name="ext_delete_failed">No se pudo eliminar la extensión, inténtalo de nuevo</string>
     <string name="ext_delete_requires_connection">Se requiere conexión a internet para eliminar una extensión del mercado</string>
 
