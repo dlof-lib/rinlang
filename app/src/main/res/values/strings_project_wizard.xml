@@ -73,4 +73,19 @@
     <string name="wiz_layout_manifest">ملف rin.project.json</string>
     <string name="wiz_preview_tree">الهيكل الناتج</string>
     <string name="wiz_error_generic">تعذّر إنشاء المشروع</string>
+    <string name="wiz_save_section">الحفظ على الهاتف</string>
+    <string name="wiz_save_phone">حفظ نسخة من المشروع في مجلد على الهاتف</string>
+    <string name="wiz_save_choose">اختيار المجلد</string>
+    <string name="wiz_save_change">تغيير المجلد</string>
+    <string name="wiz_save_auto">مزامنة تلقائية عند الخروج من المحرر</string>
+    <string name="wiz_save_zip">إضافة نسخة مضغوطة (.rinpak)</string>
+    <string name="wiz_save_path_fmt">سيُحفظ في: %1$s</string>
+    <string name="wiz_save_need_folder">اختر مجلد الحفظ أولاً</string>
+    <string name="wiz_save_not_writable">لا يمكن الكتابة في هذا المجلد، اختر مجلداً آخر</string>
+    <string name="wiz_save_done">حُفظ في «%1$s» (%2$d ملفاً)</string>
+    <string name="wiz_save_failed">أُنشئ المشروع لكن تعذّر الحفظ على الهاتف: %1$s</string>
+    <string name="proj_sync_phone">مزامنة مع مجلد الهاتف</string>
+    <string name="proj_sync_done">تمت المزامنة (%1$d ملفاً)</string>
+    <string name="proj_sync_none">كل شيء محدَّث</string>
+    <string name="proj_sync_failed">تعذّرت المزامنة: %1$s</string>
 </resources>
