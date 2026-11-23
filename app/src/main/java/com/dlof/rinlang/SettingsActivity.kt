@@ -3,7 +3,10 @@ package com.dlof.rinlang
 import android.content.Intent
 import android.os.Bundle
 import android.view.Gravity
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.View
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.Switch
@@ -48,7 +51,30 @@ class SettingsActivity : RinBaseActivity() {
     }
 
     private lateinit var container: LinearLayout
+    private lateinit var categoriesBar: LinearLayout
+    private lateinit var searchField: EditText
+    private lateinit var emptyView: View
+    /** -1 = كل الأقسام، وإلا فهرس القسم المختار في [groups]. */
+    private var selectedCategory = -1
+    private var query = ""
     private val schema: List<Row> by lazy { buildSchema() }
+
+    /** المخطط مقسوماً إلى أقسام (عنوان + صفوفه) لبناء شريط الأقسام والتصفية. */
+    private class Group(val section: Row.Section, val rows: List<Row>)
+
+    private val groups: List<Group> by lazy {
+        val out = ArrayList<Group>()
+        var title: Row.Section? = null
+        var rows = ArrayList<Row>()
+        for (row in schema) {
+            if (row is Row.Section) {
+                title?.let { out.add(Group(it, rows)) }
+                title = row; rows = ArrayList()
+            } else rows.add(row)
+        }
+        title?.let { out.add(Group(it, rows)) }
+        out
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -58,6 +84,17 @@ class SettingsActivity : RinBaseActivity() {
         findViewById<View>(R.id.btnToolbarBack).setOnClickListener { finish() }
 
         container = findViewById(R.id.settingsContainer)
+        categoriesBar = findViewById(R.id.settingsCategories)
+        searchField = findViewById(R.id.settingsSearch)
+        emptyView = findViewById(R.id.settingsEmpty)
+        searchField.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, st: Int, c: Int, a: Int) {}
+            override fun onTextChanged(s: CharSequence?, st: Int, b: Int, c: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                query = s?.toString()?.trim().orEmpty()
+                render()
+            }
+        })
         findViewById<View>(R.id.btnResetDefaults).setOnClickListener {
             AppSettings.resetToDefaults(this)
             Toast.makeText(this, R.string.settings_reset_toast, Toast.LENGTH_SHORT).show()
@@ -193,18 +230,70 @@ class SettingsActivity : RinBaseActivity() {
     // ---- البناء من المخطط -------------------------------------------------------------------
 
     private fun render() {
+        renderCategories()
         container.removeAllViews()
-        for (row in schema) {
-            container.addView(
-                when (row) {
-                    is Row.Section -> bindSection(row)
-                    is Row.Toggle -> bindToggle(row)
-                    is Row.Choice -> bindChoice(row)
-                    is Row.FontSize -> bindFontSize()
-                    is Row.Link -> bindLink(row)
-                }
-            )
+        val q = query.lowercase()
+        var shown = 0
+        groups.forEachIndexed { index, group ->
+            // أثناء البحث يشمل كل الأقسام؛ بدونه يُعرض القسم المختار فقط (أو الكل).
+            if (q.isEmpty() && selectedCategory != -1 && selectedCategory != index) return@forEachIndexed
+            val rows = if (q.isEmpty()) group.rows else group.rows.filter { searchText(it).lowercase().contains(q) }
+            if (rows.isEmpty()) return@forEachIndexed
+            container.addView(bindSection(group.section))
+            for (row in rows) {
+                container.addView(
+                    when (row) {
+                        is Row.Section -> bindSection(row)
+                        is Row.Toggle -> bindToggle(row)
+                        is Row.Choice -> bindChoice(row)
+                        is Row.FontSize -> bindFontSize()
+                        is Row.Link -> bindLink(row)
+                    }
+                )
+                shown++
+            }
         }
+        emptyView.visibility = if (shown == 0) View.VISIBLE else View.GONE
+    }
+
+    /** شريط الأقسام الأفقي (الكل · المحرر · ...): نفس مظهر الـ segmented control للحالة المختارة. */
+    private fun renderCategories() {
+        categoriesBar.removeAllViews()
+        val labels = listOf(getString(R.string.settings_all_categories)) + groups.map { getString(it.section.title) }
+        labels.forEachIndexed { i, label ->
+            val selected = (i - 1) == selectedCategory
+            val chip = TextView(this).apply {
+                text = label
+                gravity = Gravity.CENTER
+                textSize = 12.5f
+                setPadding(dp(14), 0, dp(14), 0)
+                setBackgroundResource(if (selected) R.drawable.bg_segment_selected else R.drawable.bg_segment_unselected)
+                setTextColor(
+                    ContextCompat.getColor(
+                        this@SettingsActivity,
+                        if (selected) R.color.rin_segment_selected_text else R.color.rin_segment_unselected_text
+                    )
+                )
+                setTypeface(typeface, if (selected) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
+                setOnClickListener {
+                    selectedCategory = i - 1
+                    if (query.isNotEmpty()) searchField.setText("") else render()
+                }
+            }
+            val lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(36))
+            if (i > 0) lp.marginStart = dp(6)
+            categoriesBar.addView(chip, lp)
+        }
+    }
+
+    /** النص القابل للبحث لكل صف: العنوان + الشرح + خيارات الاختيار. */
+    private fun searchText(row: Row): String = when (row) {
+        is Row.Section -> getString(row.title)
+        is Row.Toggle -> getString(row.title) + " " + getString(row.hint)
+        is Row.Choice -> getString(row.title) + " " + (row.hint?.let { getString(it) } ?: "") + " " +
+            row.options.joinToString(" ") { it.labelText ?: getString(it.labelRes) }
+        is Row.FontSize -> getString(R.string.settings_font_size_label, AppSettings.getEditorFontSizeSp(this))
+        is Row.Link -> getString(row.title) + " " + getString(row.hint)
     }
 
     private fun inflateRow(layout: Int): View = layoutInflater.inflate(layout, container, false)
