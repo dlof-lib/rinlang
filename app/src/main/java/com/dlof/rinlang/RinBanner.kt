@@ -14,8 +14,14 @@ object RinBanner {
     private const val ESC = "\u001b"
     private const val RESET = "$ESC[0m"
 
-    private val FROM = intArrayOf(0x0F, 0xA3, 0x4F)   // أخضر Rin
-    private val TO = intArrayOf(0x7B, 0xF5, 0xA8)     // أخضر نعناعي فاتح
+    private var FROM = intArrayOf(0x0F, 0xA3, 0x4F)   // أخضر Rin
+    private var TO = intArrayOf(0x7B, 0xF5, 0xA8)     // أخضر نعناعي فاتح
+
+    /** يغيّر تدرّج الشعار واللافتات (RGB بلا ألفا) — تستدعيه الطرفية عند تغيير السمة. */
+    fun setGradient(from: Int, to: Int) {
+        FROM = intArrayOf((from shr 16) and 255, (from shr 8) and 255, from and 255)
+        TO = intArrayOf((to shr 16) and 255, (to shr 8) and 255, to and 255)
+    }
     const val INNER = 40
     private const val DIM = "$ESC[38;2;139;148;158m"
     private const val SOFT = "$ESC[38;2;201;209;217m"
@@ -165,6 +171,60 @@ object RinBanner {
         return out
     }
 
+
+    /**
+     * شاشة مساعدة منسّقة. [rows]: أسطر `#عنوان القسم` و`الأمر::الوصف`؛ [footer]: ملاحظات أسفلها (سطر لكل ملاحظة).
+     * أسماء الأوامر بعمود ثابت ملوّن والوصف ملفوف تحته بمحاذاة العمود.
+     */
+    fun help(rows: String, footer: String, title: String = "RIN ▸ HELP"): List<String> {
+        val out = ArrayList<String>()
+        out.add("${grad(0.0)}$ESC[1m$title$RESET")
+        val rule = StringBuilder()
+        for (i in 0 until 36) rule.append(grad(i / 35.0, 0.7)).append('━')
+        out.add(rule.append(RESET).toString())
+        val col = 14
+        val descW = 32
+        val sections = rows.lines().map { it.trim() }.filter { it.isNotEmpty() }
+        val titles = sections.count { it.startsWith("#") }.coerceAtLeast(1)
+        var si = 0
+        for (line in sections) {
+            if (line.startsWith("#")) {
+                out.add("")
+                out.add("${grad(si / maxOf(1, titles - 1).toDouble())}▍${line.drop(1).trim()}$RESET")
+                si++
+                continue
+            }
+            val parts = line.split("::", limit = 2)
+            val name = parts[0].trim()
+            val desc = parts.getOrElse(1) { "" }.trim()
+            val wrapped = wrap(desc, descW).ifEmpty { listOf("") }
+            val head = if (name.length >= col) name + " " else name.padEnd(col)
+            out.add("  ${grad(0.45)}$head$RESET$SOFT${wrapped[0]}$RESET")
+            for (w in wrapped.drop(1)) out.add("  ${" ".repeat(maxOf(col, head.length))}$SOFT$w$RESET")
+        }
+        val notes = footer.lines().map { it.trim() }.filter { it.isNotEmpty() }
+        if (notes.isNotEmpty()) {
+            out.add("")
+            for (n in notes) for (w in wrap(n, 46)) out.add("$DIM$w$RESET")
+        }
+        return out
+    }
+
+    /** عيّنة ألوان وأنماط ANSI لاختبار دعم الطرفية (أمر `colors`). */
+    fun palette(): List<String> {
+        val out = ArrayList<String>()
+        out.add("${DIM}16 colors$RESET")
+        out.add((30..37).joinToString("") { "$ESC[${it}m██$RESET" } + " " + (90..97).joinToString("") { "$ESC[${it}m██$RESET" })
+        out.add("${DIM}256 colors$RESET")
+        out.add((16..51).joinToString("") { "$ESC[38;5;${it}m█$RESET" })
+        out.add((52..87).joinToString("") { "$ESC[38;5;${it}m█$RESET" })
+        out.add("${DIM}truecolor$RESET")
+        val w = 36
+        out.add((0 until w).joinToString("") { grad(it.toDouble() / (w - 1)) + "█" } + RESET)
+        out.add("${DIM}styles$RESET")
+        out.add("$ESC[1mbold$RESET  $ESC[3mitalic$RESET  $ESC[4munderline$RESET  $ESC[7mreverse$RESET".replace("$ESC[7mreverse$RESET", "${grad(0.5)}accent$RESET"))
+        return out
+    }
 
     /** قائمة المكتبات مجمّعة: كل فئة بعنوان ملوّن ثم أسماؤها بأعمدة تُلفّ على [width]. */
     fun libraryIndex(groups: List<Pair<String, List<String>>>, width: Int = 40): List<String> {
