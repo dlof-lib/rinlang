@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="libs_sort_name">⇅ Name</string>
+    <string name="libs_sort_recent">⇅ Recent</string>
+</resources>
