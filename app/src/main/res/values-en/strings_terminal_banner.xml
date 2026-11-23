@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="terminal_help_banner">banner — Rin logo\nlibs — list libraries\nlib &lt;name&gt; — library card</string>
+    <string name="terminal_lib_usage">Usage: lib &lt;name&gt; (type libs for the list)</string>
+    <string name="terminal_lib_unknown">Unknown library: %1$s — type libs</string>
+</resources>
