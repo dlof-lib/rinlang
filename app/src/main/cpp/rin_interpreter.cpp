@@ -10253,7 +10253,13 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
     // per-iteration closures في ForStmt أعلاه)، فأي closure تُنشأ داخل الجسم تلتقط قيمة تلك
     // التكرارة بشكل صحيح بدل قيمة مشتركة تتغيّر.
     case StmtKind::ForInStmt: { auto s = std::static_pointer_cast<ForInStmt>(stmt);
-        Value iterableVal = evaluate(s->iterable, env);
+        Value iterableVal;
+        bool viaEach = false;
+        if (magicActive_) { // on each(): for x in C — نتيجته (مصفوفة/قاموس/Set) تُكرَّر بنفس قواعد for العادية
+            auto cn = nsResolveExpr(s->iterable, env);
+            if (cn && magicHas(cn, &LifecycleHooks::each)) viaEach = magicHook(cn, &LifecycleHooks::each, "each", "for", {}, s->line, iterableVal);
+        }
+        if (!viaEach) iterableVal = evaluate(s->iterable, env);
         std::vector<Value> items;
         if (iterableVal.type == Value::Type::ARRAY) {
             items = *iterableVal.array;
@@ -10403,6 +10409,10 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
         else if (s->hook == "drop") { hooks.drop = v; magicActive_ = true; }
         else if (s->hook == "call") { hooks.call = v; magicActive_ = true; }
         else if (s->hook == "invoke") { hooks.invoke = v; magicActive_ = true; }
+        else if (s->hook == "index") { hooks.index = v; magicActive_ = true; }
+        else if (s->hook == "store") { hooks.store = v; magicActive_ = true; }
+        else if (s->hook == "count") { hooks.count = v; magicActive_ = true; }
+        else if (s->hook == "each") { hooks.each = v; magicActive_ = true; }
         return Flow::None;
     }
 
@@ -13296,6 +13306,17 @@ Value Interpreter::evaluateTree(const ExprPtr& expr, const EnvPtr& env) {
             return evaluatePipelineFlow(e, env);
         }
 
+        if (magicActive_ && !e->args.empty() && (e->callee == "len" || e->callee == "contains") && !env->lookup(e->callee)) {
+            // len(C) → on count() · contains(C, key) → on has(key)  (docs/container_sequence.md)
+            auto cn = nsResolveExpr(e->args[0], env);
+            const bool isLen = e->callee == "len";
+            if (cn && e->args.size() == (isLen ? 1u : 2u) && magicHas(cn, isLen ? &LifecycleHooks::count : &LifecycleHooks::has)) {
+                std::vector<Value> hargs; if (!isLen) hargs.push_back(evaluate(e->args[1], env));
+                Value hv;
+                if (magicHook(cn, isLen ? &LifecycleHooks::count : &LifecycleHooks::has, isLen ? "count" : "has", isLen ? "len" : "contains", hargs, e->line, hv))
+                    return isLen ? hv : Value::boolean_(hv.isTruthy());
+            }
+        }
         std::vector<Value> args;
         for (auto& a : e->args) args.push_back(evaluate(a, env));
         return invokeCallee(e->callee, args, e->line, env);
@@ -13333,6 +13354,13 @@ Value Interpreter::evaluateTree(const ExprPtr& expr, const EnvPtr& env) {
         return Value::makeMap(m);
     }
     case ExprKind::Index: { auto e = std::static_pointer_cast<IndexExpr>(expr);
+        if (magicActive_) { // on index(key): C[key] على حاوية (docs/container_sequence.md)
+            auto cn = nsResolveExpr(e->object, env);
+            if (cn && magicHas(cn, &LifecycleHooks::index)) {
+                Value k = evaluate(e->index, env), hv;
+                if (magicHook(cn, &LifecycleHooks::index, "index", "[]", {k}, e->line, hv)) return hv;
+            }
+        }
         Value obj = evaluate(e->object, env);
         Value idx = evaluate(e->index, env);
         if (obj.type == Value::Type::ARRAY) {
@@ -13378,6 +13406,13 @@ Value Interpreter::evaluateTree(const ExprPtr& expr, const EnvPtr& env) {
         throw diagErr(diag::Code::E0004_InvalidType, e->line, "cannot index a value of type `" + obj.typeName() + "`");
     }
     case ExprKind::IndexSet: { auto e = std::static_pointer_cast<IndexSetExpr>(expr);
+        if (magicActive_) { // on store(key, value): C[key] = value على حاوية
+            auto cn = nsResolveExpr(e->object, env);
+            if (cn && magicHas(cn, &LifecycleHooks::store)) {
+                Value k = evaluate(e->index, env), v = evaluate(e->value, env), hv;
+                if (magicHook(cn, &LifecycleHooks::store, "store", "[]=", {k, v}, e->line, hv)) return v;
+            }
+        }
         if (liveActive_) liveGuardWrite(env, e->object, e->line);
         Value obj = evaluate(e->object, env);
         Value idx = evaluate(e->index, env);
