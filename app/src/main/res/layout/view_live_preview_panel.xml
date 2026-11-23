@@ -155,10 +155,8 @@
                 android:background="@drawable/bg_toolbar_btn_ghost"
                 android:clickable="true"
                 android:focusable="false"
-                android:text="−"
+                android:drawableStart="@drawable/rs_ic_minus_18" android:drawableTint="@color/rin_on_toolbar"
                 android:textColor="@color/rin_on_toolbar"
-                android:textSize="12sp"
-                android:textStyle="bold"
                 android:contentDescription="@string/live_pro_zoom_out" />
             <TextView
                 android:id="@+id/livePanelZoomLabel"
@@ -206,10 +204,8 @@
                 android:background="@drawable/bg_toolbar_btn_ghost"
                 android:clickable="true"
                 android:focusable="false"
-                android:text="⤢"
+                android:drawableStart="@drawable/rs_ic_fullscreen_18" android:drawableTint="@color/rin_on_toolbar"
                 android:textColor="@color/rin_on_toolbar"
-                android:textSize="12sp"
-                android:textStyle="bold"
                 android:contentDescription="@string/live_pro_zoom_fit" />
             <View
                 android:layout_width="1dp"
@@ -230,10 +226,8 @@
                 android:background="@drawable/bg_toolbar_btn_ghost"
                 android:clickable="true"
                 android:focusable="false"
-                android:text="▦"
+                android:drawableStart="@drawable/rs_ic_grid_18" android:drawableTint="@color/rin_on_toolbar"
                 android:textColor="@color/rin_on_toolbar"
-                android:textSize="12sp"
-                android:textStyle="bold"
                 android:contentDescription="@string/live_pro_grid" />
             <TextView
                 android:id="@+id/livePanelFreeze"
@@ -247,10 +241,8 @@
                 android:background="@drawable/bg_toolbar_btn_ghost"
                 android:clickable="true"
                 android:focusable="false"
-                android:text="❚❚"
+                android:drawableStart="@drawable/rs_ic_pause_18" android:drawableTint="@color/rin_on_toolbar"
                 android:textColor="@color/rin_on_toolbar"
-                android:textSize="12sp"
-                android:textStyle="bold"
                 android:contentDescription="@string/live_pro_freeze" />
             <View
                 android:layout_width="1dp"
@@ -271,10 +263,8 @@
                 android:background="@drawable/bg_toolbar_btn_ghost"
                 android:clickable="true"
                 android:focusable="false"
-                android:text="⤓"
+                android:drawableStart="@drawable/rs_ic_download_18" android:drawableTint="@color/rin_on_toolbar"
                 android:textColor="@color/rin_on_toolbar"
-                android:textSize="12sp"
-                android:textStyle="bold"
                 android:contentDescription="@string/live_pro_shot" />
             <TextView
                 android:id="@+id/livePanelSize"
@@ -305,10 +295,8 @@
                 android:background="@drawable/bg_toolbar_btn_ghost"
                 android:clickable="true"
                 android:focusable="false"
-                android:text="⋮"
+                android:drawableStart="@drawable/rs_ic_more_vert_22" android:drawableTint="@color/rin_on_toolbar"
                 android:textColor="@color/rin_on_toolbar"
-                android:textSize="12sp"
-                android:textStyle="bold"
                 android:contentDescription="@string/live_pro_more" />
         </LinearLayout>
     </HorizontalScrollView>
