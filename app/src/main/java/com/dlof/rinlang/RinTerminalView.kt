@@ -81,9 +81,9 @@ class RinTerminalView @JvmOverloads constructor(
     private val lineRatio: Float get() = RinSizes.SPACING[spacingName] ?: 0.15f
     private val chips = ArrayList<TextView>()
     private var bgBitmap: Bitmap? = null
-    private var bgMode: String = prefs.getString(KEY_BG_MODE, "none") ?: "none"   // none | image | space
+    private var bgMode: String = prefs.getString(KEY_BG_MODE, "none") ?: "none"   // none | image | space | anim
     private var bgAnimated: Boolean = prefs.getBoolean(KEY_BG_ANIM, true)
-    private var space: StarfieldDrawable? = null
+    private var live: LiveBackground? = null
     private var bgDim: Int = prefs.getInt(KEY_BG_DIM, 55).coerceIn(0, 90)
     private val divider = View(context)
     private val scroll = ScrollView(context)
@@ -245,15 +245,21 @@ class RinTerminalView @JvmOverloads constructor(
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         RinTerminal.onChanged = changeListener
-        space?.start()
+        live?.start()
         RinTerminal.buffer.restoreHistory(loadHistory())
         updateMode()
         refresh(force = true)
     }
 
+    /** إيقاف الحركة عند إخفاء النافذة (قفل الشاشة/الخروج) توفيراً للبطارية، واستئنافها عند الرجوع. */
+    override fun onWindowVisibilityChanged(visibility: Int) {
+        super.onWindowVisibilityChanged(visibility)
+        if (visibility == View.VISIBLE) live?.start() else live?.stop()
+    }
+
     override fun onDetachedFromWindow() {
         if (RinTerminal.onChanged === changeListener) RinTerminal.onChanged = null
-        space?.stop()
+        live?.stop()
         // السؤال المعلّق لا يُلغى هنا: [RinInputBridge] يعيد عرضه على الواجهة التالية.
         if (fsDialog != null) fsKeep = deliver   // إغلاق نافذة ملء الشاشة يفصل العرض مؤقتاً؛ نحفظ السؤال المعلّق
         deliver = null
@@ -273,15 +279,27 @@ class RinTerminalView @JvmOverloads constructor(
 
     /** خلفية الطرفية: لون السمة، أو صورة المستخدم بقصّ مركزي وتعتيم قابل للضبط. */
     private fun applyBackground() {
-        space?.stop(); space = null
+        live?.stop(); live = null
         val bmp = bgBitmap
         background = when {
-            bgMode == "space" -> StarfieldDrawable(context, (bgDim * 0.6f).toInt()).also {
-                space = it; it.setAnimated(bgAnimated); if (isAttachedToWindow) it.start()
+            bgMode == "space" -> {
+                // السمة الفاتحة: طبقة تغطية بلون السمة (≥80%) كي يبقى النص الداكن مقروءاً فوق الفضاء
+                val light = RinTheme.luminance(BG) > RinTheme.LIGHT_THRESHOLD
+                StarfieldDrawable(context, if (light) maxOf(80, bgDim) else (bgDim * 0.6f).toInt(), if (light) BG else android.graphics.Color.BLACK)
+                    .also { attachLive(it) }
+            }
+            bgMode == "anim" -> {
+                val anim = TerminalBackground.loadAnimated(context)
+                if (anim != null) AnimatedCropDrawable(context, anim, BG, bgDim).also { attachLive(it) }
+                else android.graphics.drawable.ColorDrawable(BG)
             }
             bgMode == "image" && bmp != null -> CropDimDrawable(bmp, BG, bgDim)
             else -> android.graphics.drawable.ColorDrawable(BG)
         }
+    }
+
+    private fun attachLive(d: LiveBackground) {
+        live = d; d.setAnimated(bgAnimated); if (isAttachedToWindow) d.start()
     }
 
     private fun setBgMode(mode: String) {
@@ -297,17 +315,29 @@ class RinTerminalView @JvmOverloads constructor(
     fun setBackgroundAnimated(on: Boolean) {
         bgAnimated = on
         prefs.edit().putBoolean(KEY_BG_ANIM, on).apply()
-        space?.setAnimated(on); if (on && isAttachedToWindow) space?.start()
+        live?.setAnimated(on); if (on && isAttachedToWindow && windowVisibility == View.VISIBLE) live?.start()
     }
 
     fun toggleBackgroundAnimation() {
-        if (bgMode != "space") { RinTerminal.system(context.getString(R.string.terminal_bg_anim_need_space), TermRole.ERROR); return }
+        if (live == null) { RinTerminal.system(context.getString(R.string.terminal_bg_anim_need_space), TermRole.ERROR); return }
         setBackgroundAnimated(!bgAnimated)
         RinTerminal.system(context.getString(if (bgAnimated) R.string.terminal_bg_anim_on else R.string.terminal_bg_anim_off))
     }
 
     /** يستورد الصورة المختارة ويفعّلها. يُرجع false عند الفشل. */
     fun setBackgroundFromUri(uri: android.net.Uri): Boolean {
+        // أولاً: هل الملف متحرك (GIF / WebP متحرك / APNG)؟ وإلا يُعامَل كصورة ثابتة.
+        when (TerminalBackground.importAnimated(context, uri)) {
+            TerminalBackground.AnimResult.OK -> {
+                setBgMode("anim")
+                RinTerminal.system(context.getString(R.string.terminal_bg_anim_set, bgDim.toString()))
+                return true
+            }
+            TerminalBackground.AnimResult.TOO_BIG -> {
+                RinTerminal.system(context.getString(R.string.terminal_bg_too_big), TermRole.ERROR); return false
+            }
+            else -> {}
+        }
         if (!TerminalBackground.importFrom(context, uri)) {
             RinTerminal.system(context.getString(R.string.terminal_bg_failed), TermRole.ERROR); return false
         }
@@ -378,7 +408,7 @@ class RinTerminalView @JvmOverloads constructor(
         return RinTheme.ALL.joinToString("\n") { t ->
             val mark = if (t.id == themeId) "\u001b[38;2;63;185;80m●\u001b[0m" else " "
             val sw = bgc(t.bg) + fg(t.fg) + " Aa " + fg(t.accent) + "██" + fg(t.promptGreen) + "██" + fg(t.error) + "██" + fg(t.warn) + "██" + "\u001b[0m"
-            "$mark ${t.id.padEnd(10)} $sw  \u001b[38;2;139;148;158m${t.title}\u001b[0m"
+            "$mark ${t.id.padEnd(10)} $sw  \u001b[38;2;139;148;158m${t.title}\u001b[0m${if (t.isLight) " ☀" else ""}"
         }
     }
 
@@ -387,7 +417,7 @@ class RinTerminalView @JvmOverloads constructor(
             "\u001b[38;2;139;148;158mtheme\u001b[0m    $themeId\n" +
             "\u001b[38;2;139;148;158mfont\u001b[0m     ${fontSp}sp\n" +
             "\u001b[38;2;139;148;158mspacing\u001b[0m  $spacingName\n" +
-            "\u001b[38;2;139;148;158mbackground\u001b[0m  ${if (bgMode == "image" && bgBitmap != null) "image · dim $bgDim%" else if (bgMode == "space") "space · ${if (bgAnimated) "animated" else "still"}" else "none"}"
+            "\u001b[38;2;139;148;158mbackground\u001b[0m  ${if (bgMode == "image" && bgBitmap != null) "image · dim $bgDim%" else if (bgMode == "anim") "animated image · dim $bgDim% · ${if (bgAnimated) "playing" else "paused"}" else if (bgMode == "space") "space · ${if (bgAnimated) "animated" else "still"}" else "none"}"
         )
     }
 
@@ -566,7 +596,8 @@ class RinTerminalView @JvmOverloads constructor(
             val parts = line.trim().split(Regex("\\s+"), limit = 2)
             val cmd = parts[0].lowercase()
             val arg = parts.getOrNull(1)?.trim().orEmpty()
-            if (cmd in SHELL_COMMANDS && (arg.isEmpty() || cmd in COMMANDS_WITH_ARG)) {
+            val codeLike = cmd in FILE_TOOLS && (arg.startsWith("=") || arg.startsWith("("))   // head = 5 / find(x) شيفرة لا أمر
+            if (cmd in SHELL_COMMANDS && !codeLike && (arg.isEmpty() || cmd in COMMANDS_WITH_ARG)) {
                 RinTerminal.command(line.trim())
                 saveHistory()
                 runBuiltin(cmd, arg)
@@ -706,15 +737,35 @@ class RinTerminalView @JvmOverloads constructor(
         RinTerminal.output(o.lines.joinToString("\n"))
     }
 
+    /** تفاصيل أمر واحد من جدول المساعدة نفسه (name::desc)؛ null إن لم يوجد. */
+    private fun helpFor(cmd: String): String? {
+        for (line in context.getString(R.string.terminal_help_rows).lines()) {
+            val p = line.trim()
+            if (p.isEmpty() || p.startsWith("#")) continue
+            val parts = p.split("::", limit = 2)
+            if (parts.size < 2) continue
+            val names = parts[0].split(Regex("[\\s·]+")).filter { it.isNotEmpty() }
+            if (names.any { it.equals(cmd, ignoreCase = true) })
+                return "\u001b[1m${parts[0].trim()}\u001b[0m\n${parts[1].trim()}"
+        }
+        return null
+    }
+
     private fun runBuiltin(cmd: String, arg: String) {
         when (cmd) {
-            "help", "?" -> {
+            "help", "?" -> if (arg.isNotBlank()) {
+                val h = helpFor(arg.trim())
+                if (h == null) RinTerminal.system(context.getString(R.string.terminal_help_none, arg.trim()), TermRole.ERROR) else RinTerminal.output(h)
+            } else {
                 RinTerminal.output(RinBanner.help(context.getString(R.string.terminal_help_rows), context.getString(R.string.terminal_help_footer)).joinToString("\n"))
                 RinTerminal.system(context.getString(R.string.terminal_help_native))
             }
             "clear", "cls" -> RinTerminal.clear()
             "run" -> onRunRequested?.invoke()
-            "history" -> {
+            "history" -> if (arg.trim().lowercase() == "clear") {
+                RinTerminal.buffer.clearHistory(); saveHistory()
+                RinTerminal.system(context.getString(R.string.terminal_history_cleared))
+            } else {
                 val h = RinTerminal.buffer.history()
                 RinTerminal.system(
                     if (h.isEmpty()) context.getString(R.string.terminal_empty)
@@ -732,6 +783,28 @@ class RinTerminalView @JvmOverloads constructor(
                 showFs(RinFs.ls(fsBase(), path, all), path)
             }
             "tree" -> showFs(RinFs.tree(fsBase(), arg), arg)
+            "find" -> if (arg.isEmpty()) RinTerminal.system(context.getString(R.string.terminal_usage_fmt, "find <text>"), TermRole.ERROR)
+                else showFs(RinFs.find(fsBase(), arg), arg)
+            "head", "tail" -> {
+                val (path, n) = RinFs.parseCountArg(arg)
+                if (path.isEmpty()) RinTerminal.system(context.getString(R.string.terminal_usage_fmt, "$cmd <file> [n]"), TermRole.ERROR)
+                else {
+                    val o = if (cmd == "head") RinFs.head(fsBase(), path, n) else RinFs.tail(fsBase(), path, n)
+                    showFs(o, path)
+                    if (o.error == null && o.extra > 0) RinTerminal.system(context.getString(R.string.terminal_fs_truncated, o.extra.toString()))
+                }
+            }
+            "wc" -> if (arg.isEmpty()) RinTerminal.system(context.getString(R.string.terminal_usage_fmt, "wc <file>"), TermRole.ERROR)
+                else showFs(RinFs.wc(fsBase(), arg), arg)
+            "log" -> {
+                val text = RinTerminal.buffer.toPlainText()
+                if (text.isEmpty()) RinTerminal.system(context.getString(R.string.terminal_log_empty), TermRole.ERROR)
+                else {
+                    val saved = RinFs.saveLog(fsBase(), text, System.currentTimeMillis())
+                    if (saved == null) RinTerminal.system(context.getString(R.string.terminal_log_failed), TermRole.ERROR)
+                    else RinTerminal.system(context.getString(R.string.terminal_log_saved, saved))
+                }
+            }
             "cat" -> {
                 if (arg.isEmpty()) RinTerminal.system(context.getString(R.string.terminal_cat_usage), TermRole.ERROR)
                 else {
@@ -767,7 +840,14 @@ class RinTerminalView @JvmOverloads constructor(
                     RinTerminal.output(themeListText())
                     RinTerminal.system(context.getString(R.string.terminal_theme_usage))
                 } else {
-                    val t = RinTheme.find(a)
+                    val night = (context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+                        android.content.res.Configuration.UI_MODE_NIGHT_YES
+                    val t = when (a.lowercase()) {   // اختصارات: light / dark / auto (يتبع وضع النظام)
+                        "light" -> RinTheme.PAPER
+                        "dark" -> RinTheme.RIN
+                        "auto" -> if (night) RinTheme.MIDNIGHT else RinTheme.DAYLIGHT
+                        else -> RinTheme.find(a)
+                    }
                     if (t == null) RinTerminal.system(context.getString(R.string.terminal_theme_unknown, a), TermRole.ERROR)
                     else { applyTheme(t); RinTerminal.system(context.getString(R.string.terminal_theme_set, t.title)) }
                 }
@@ -1237,7 +1317,7 @@ class RinTerminalView @JvmOverloads constructor(
         if (text.isEmpty()) return
         val start = length
         append(text)
-        setSpan(ForegroundColorSpan(color), start, length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        setSpan(ForegroundColorSpan(RinTheme.readable(color, BG)), start, length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)   // ألوان ANSI الداكنة-الأصل تُعتَّم على السمات الفاتحة
         if (bold) setSpan(StyleSpan(Typeface.BOLD), start, length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         if (italic) setSpan(StyleSpan(Typeface.ITALIC), start, length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
     }
@@ -1320,9 +1400,11 @@ class RinTerminalView @JvmOverloads constructor(
         /** الأوامر الأساسية تُقترح بالإكمال؛ البدائل (cls/vars/cancel/?) تُقبل عند الكتابة فقط. */
         val SHELL_COMMANDS = listOf(
             "help", "run", "stop", "clear", "history", "version", "reset", "session", "grep", "goto", "ocr", "share", "copy",
-            "pwd", "ls", "tree", "cat", "alias", "unalias", "fullscreen", "theme", "size", "spacing", "style", "background", "banner", "libs", "lib", "about", "colors", "font", "echo", "native", "cls", "vars", "cancel", "?"
+            "pwd", "ls", "tree", "cat", "alias", "unalias", "fullscreen", "theme", "size", "spacing", "style", "background", "banner", "libs", "lib", "about", "colors", "font", "echo", "native", "find", "head", "tail", "wc", "log", "cls", "vars", "cancel", "?"
         )
-        val COMMANDS_WITH_ARG = setOf("grep", "goto", "ocr", "native", "lib", "font", "echo", "ls", "tree", "cat", "alias", "unalias", "theme", "size", "spacing", "background")
+        /** أوامر ملفات أسماؤها شائعة كمتغيرات؛ تُعامَل كشيفرة إن تلاها `=` أو `(`. */
+        val FILE_TOOLS = setOf("find", "head", "tail", "wc", "log")
+        val COMMANDS_WITH_ARG = setOf("grep", "goto", "ocr", "native", "lib", "font", "echo", "ls", "tree", "cat", "alias", "unalias", "theme", "size", "spacing", "background", "find", "head", "tail", "wc", "help", "history")
         val ALIAS_ONLY = setOf("cls", "vars", "cancel")
 
         // الterminal داكن دائماً (مثل أي terminal) بغضّ النظر عن سمة التطبيق.
