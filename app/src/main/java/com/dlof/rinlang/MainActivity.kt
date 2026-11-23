@@ -816,11 +816,13 @@ class MainActivity : RinBaseActivity() {
 
     private fun showFileMenu(anchor: android.view.View) {
         val popup = darkPopupMenu(anchor)
-        popup.menu.add(0, 1, 0, R.string.menu_file_new)
-        popup.menu.add(0, 2, 1, R.string.menu_file_open)
-        popup.menu.add(0, 3, 2, R.string.menu_file_save)
-        popup.menu.add(0, 4, 3, R.string.menu_file_projects)
-        popup.menu.add(0, 5, 4, R.string.menu_file_libraries)
+        // ترتيب تطبيقات الكمبيوتر: New · Open · Save | Projects · Libraries | Exit  (مجموعات متتالية بالأرقام order)
+        popup.menu.add(0, 1, 10, R.string.menu_file_new)
+        popup.menu.add(0, 2, 20, R.string.menu_file_open)
+        popup.menu.add(0, 3, 30, R.string.menu_file_save)
+        popup.menu.add(1, 4, 40, R.string.menu_file_projects)
+        popup.menu.add(1, 5, 50, R.string.menu_file_libraries)
+        popup.menu.add(2, 6, 60, R.string.menu_file_exit)
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 1 -> newFile()
@@ -828,6 +830,7 @@ class MainActivity : RinBaseActivity() {
                 3 -> saveFile()
                 4 -> startActivity(android.content.Intent(this, ProjectsActivity::class.java))
                 5 -> openLibrariesScreen()
+                6 -> leaveEditor()
             }
             true
         }
@@ -853,35 +856,45 @@ class MainActivity : RinBaseActivity() {
 
     private fun showEditMenu(anchor: android.view.View) {
         val popup = darkPopupMenu(anchor)
-        popup.menu.add(0, 1, 0, R.string.menu_edit_undo)
-        popup.menu.add(0, 2, 1, R.string.menu_edit_redo)
-        popup.menu.add(0, 3, 2, R.string.menu_edit_find)
-        popup.menu.add(0, 4, 3, R.string.menu_edit_select_all)
-        popup.menu.add(0, 5, 4, R.string.menu_edit_clear_all)
-        popup.menu.add(0, 6, 5, R.string.menu_edit_toggle_comment)
-        popup.menu.add(0, 7, 6, R.string.menu_edit_duplicate_line)
-        popup.menu.add(0, 8, 7, R.string.menu_edit_delete_line)
-        popup.menu.add(0, 9, 8, R.string.menu_edit_move_line_up)
-        popup.menu.add(0, 10, 9, R.string.menu_edit_move_line_down)
-        popup.menu.add(0, 11, 10, R.string.menu_edit_indent)
-        popup.menu.add(0, 12, 11, R.string.menu_edit_unindent)
-        popup.menu.add(0, 13, 12, R.string.menu_edit_insert_snippet)
-        popup.menu.add(0, 14, 13, R.string.menu_edit_sort_lines)
-        popup.menu.add(0, 15, 14, R.string.menu_edit_join_line)
-        popup.menu.add(0, 16, 15, R.string.menu_edit_trim_now)
-        popup.menu.add(0, 17, 16, R.string.menu_edit_convert_tabs_now)
-        popup.menu.add(0, 18, 17, android.R.string.cut)
-        popup.menu.add(0, 19, 18, android.R.string.copy)
-        popup.menu.add(0, 20, 19, android.R.string.paste)
-        popup.menu.add(0, 21, 20, R.string.action_paste_plain)
-        popup.menu.add(0, 22, 21, R.string.action_clip_history)
-        popup.menu.add(0, 23, 22, R.string.action_copy_line)
-        popup.menu.add(0, 24, 23, R.string.action_cut_line)
-        popup.menu.add(0, 25, 24, R.string.action_select_line)
-        popup.menu.add(0, 26, 25, R.string.action_copy_markdown)
-        popup.menu.add(0, 27, 26, R.string.menu_edit_format_document)
-        popup.menu.add(0, 28, 27, R.string.menu_edit_editor_design)
-        popup.menu.add(0, 29, 28, R.string.menu_edit_smart)
+        // ترتيب تطبيقات الكمبيوتر: Undo/Redo | Cut/Copy/Paste | Select | Find | قوائم فرعية مجمّعة | أدوات | Clear
+        val m = popup.menu
+        m.add(0, 1, 10, R.string.menu_edit_undo)
+        m.add(0, 2, 20, R.string.menu_edit_redo)
+        m.add(1, 18, 30, android.R.string.cut)
+        m.add(1, 19, 40, android.R.string.copy)
+        m.add(1, 20, 50, android.R.string.paste)
+        m.addSubMenu(1, 100, 60, R.string.menu_group_clipboard).apply {
+            add(0, 21, 10, R.string.action_paste_plain)
+            add(0, 22, 20, R.string.action_clip_history)
+            add(0, 26, 30, R.string.action_copy_markdown)
+        }
+        m.add(2, 4, 70, R.string.menu_edit_select_all)
+        m.add(2, 25, 80, R.string.action_select_line)
+        m.add(2, 3, 90, R.string.menu_edit_find)
+        m.addSubMenu(3, 101, 100, R.string.menu_group_lines).apply {
+            add(0, 7, 10, R.string.menu_edit_duplicate_line)
+            add(0, 8, 20, R.string.menu_edit_delete_line)
+            add(0, 9, 30, R.string.menu_edit_move_line_up)
+            add(0, 10, 40, R.string.menu_edit_move_line_down)
+            add(0, 15, 50, R.string.menu_edit_join_line)
+            add(0, 14, 60, R.string.menu_edit_sort_lines)
+            add(0, 23, 70, R.string.action_copy_line)
+            add(0, 24, 80, R.string.action_cut_line)
+        }
+        m.addSubMenu(3, 102, 110, R.string.menu_group_code).apply {
+            add(0, 6, 10, R.string.menu_edit_toggle_comment)
+            add(0, 11, 20, R.string.menu_edit_indent)
+            add(0, 12, 30, R.string.menu_edit_unindent)
+            add(0, 27, 40, R.string.menu_edit_format_document)
+            add(0, 13, 50, R.string.menu_edit_insert_snippet)
+        }
+        m.addSubMenu(3, 103, 120, R.string.menu_group_cleanup).apply {
+            add(0, 16, 10, R.string.menu_edit_trim_now)
+            add(0, 17, 20, R.string.menu_edit_convert_tabs_now)
+        }
+        m.add(4, 29, 130, R.string.menu_edit_smart)
+        m.add(4, 28, 140, R.string.menu_edit_editor_design)
+        m.add(5, 5, 150, R.string.menu_edit_clear_all)
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 27 -> toastChanged(editCode.formatDocument(AppSettings.getTabSize(this)), R.string.document_formatted_toast)
@@ -948,17 +961,23 @@ class MainActivity : RinBaseActivity() {
 
     private fun showViewMenu(anchor: android.view.View) {
         val popup = darkPopupMenu(anchor)
-        popup.menu.add(0, 1, 0, R.string.menu_view_zoom_in)
-        popup.menu.add(0, 2, 1, R.string.menu_view_zoom_out)
-        popup.menu.add(0, 3, 2, R.string.menu_view_toggle_lines)
-        popup.menu.add(0, 4, 3, R.string.menu_view_clear_console)
-        popup.menu.add(0, 5, 4, R.string.menu_view_go_to_line)
-        popup.menu.add(0, 6, 5, R.string.menu_view_outline)
-        popup.menu.add(0, 7, 6, R.string.menu_view_fold_current)
-        popup.menu.add(0, 8, 7, R.string.menu_view_fold_all)
-        popup.menu.add(0, 9, 8, R.string.menu_view_unfold_all)
-        popup.menu.add(0, 10, 9, R.string.menu_view_toggle_whitespace)
-        popup.menu.add(0, 11, 10, R.string.menu_view_settings)
+        // ترتيب تطبيقات الكمبيوتر: اللوحات | التنقّل | التكبير | العرض | الطيّ | السجلّ | الإعدادات
+        val m = popup.menu
+        m.add(0, 13, 5, R.string.menu_view_command_palette)
+        m.add(0, 12, 10, R.string.menu_view_explorer)
+        m.add(0, 6, 20, R.string.menu_view_outline)
+        m.add(1, 5, 30, R.string.menu_view_go_to_line)
+        m.add(2, 1, 40, R.string.menu_view_zoom_in)
+        m.add(2, 2, 50, R.string.menu_view_zoom_out)
+        m.add(3, 3, 60, R.string.menu_view_toggle_lines)
+        m.add(3, 10, 70, R.string.menu_view_toggle_whitespace)
+        m.addSubMenu(4, 100, 80, R.string.menu_group_fold).apply {
+            add(0, 7, 10, R.string.menu_view_fold_current)
+            add(0, 8, 20, R.string.menu_view_fold_all)
+            add(0, 9, 30, R.string.menu_view_unfold_all)
+        }
+        m.add(5, 4, 90, R.string.menu_view_clear_console)
+        m.add(6, 11, 100, R.string.menu_view_settings)
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 1 -> changeEditorFontSize(1f)
@@ -972,6 +991,8 @@ class MainActivity : RinBaseActivity() {
                 9 -> editCode.unfoldAll()
                 10 -> toggleWhitespace()
                 11 -> startActivity(android.content.Intent(this, SettingsActivity::class.java))
+                12 -> openExplorerDrawer(preferOutlineTab = false)
+                13 -> showCommandPalette()
             }
             true
         }
@@ -993,16 +1014,20 @@ class MainActivity : RinBaseActivity() {
 
     private fun showRunMenu(anchor: android.view.View) {
         val popup = darkPopupMenu(anchor)
-        popup.menu.add(0, 1, 0, R.string.menu_run_run)
-        popup.menu.add(0, 2, 1, R.string.menu_run_check_brackets)
-        popup.menu.add(0, 3, 2, R.string.menu_run_live_panel)
-        popup.menu.add(0, 7, 2, R.string.menu_run_live_fullscreen)
-        popup.menu.add(0, 4, 3, R.string.menu_run_check_tags)
+        // ترتيب تطبيقات الكمبيوتر: Run | المعاينة | الفحص
+        val m = popup.menu
+        m.add(0, 1, 10, R.string.menu_run_run)
         if (currentProject?.let { HtmlRunActivity.isHtmlProject(it) } == true) {
-            popup.menu.add(0, 5, 4, R.string.menu_run_html_page)
+            m.add(0, 5, 20, R.string.menu_run_html_page)
         }
+        m.add(1, 3, 30, R.string.menu_run_live_panel)
+        m.add(1, 7, 40, R.string.menu_run_live_fullscreen)
         // معاينة المشروع (HTML أو Rin) في متصفح الجهاز على http://localhost:7700/
-        if (currentProject != null) popup.menu.add(0, 6, 5, R.string.menu_run_open_localhost)
+        if (currentProject != null) m.add(1, 6, 50, R.string.menu_run_open_localhost)
+        m.addSubMenu(2, 100, 60, R.string.menu_group_check).apply {
+            add(0, 2, 10, R.string.menu_run_check_brackets)
+            add(0, 4, 20, R.string.menu_run_check_tags)
+        }
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 1 -> runProgram()
@@ -1498,7 +1523,15 @@ class MainActivity : RinBaseActivity() {
         } else {
             getString(R.string.status_cursor_position, info.line, info.col)
         }
-        txtDocumentInfo.text = getString(R.string.status_line_count, info.totalLines)
+        // شريط حالة بأسلوب الكمبيوتر: النوع · الترميز · المسافات/التبويبات · عدد الأسطر. النقر على أي جزء ينتقل لسطر.
+        val ext = (currentProjectFile?.name ?: "").substringAfterLast('.', "rin").uppercase().ifEmpty { "RIN" }
+        val indent = if (EditorDesign.isIndentWithTabs(this)) "Tabs" else "Spaces"
+        txtDocumentInfo.text = "$ext  ·  UTF-8  ·  $indent: ${AppSettings.getTabSize(this)}  ·  " +
+            getString(R.string.status_line_count, info.totalLines)
+        if (!txtCursorPosition.hasOnClickListeners()) {
+            txtCursorPosition.setOnClickListener { showGoToLineDialog() }
+            txtDocumentInfo.setOnClickListener { showCommandPalette() }
+        }
     }
 
     private fun toggleLineNumbers() {
@@ -1635,5 +1668,145 @@ class MainActivity : RinBaseActivity() {
         livePanel.release()
         uiHandler.removeCallbacksAndMessages(null)
         super.onDestroy()
+    }
+
+    // ---- اختصارات لوحة المفاتيح بأسلوب تطبيقات الكمبيوتر (لوحة بلوتوث/USB أو Chromebook/DeX) ----
+    // لا تتعارض مع اختصارات المحرر نفسه (نسخ/قص/لصق/تحديد الكل/تكرار السطر/إكمال)، فتلك يعالجها RinCodeEditorView.
+    //   Ctrl+S حفظ · Ctrl+N جديد · Ctrl+O فتح · Ctrl+F بحث · Ctrl+B المستكشف · Ctrl+` الـ terminal
+    //   Ctrl+Shift+P لوحة الأوامر · Ctrl+Shift+O المشاريع · Ctrl+G انتقال لسطر · F5 / Ctrl+Enter تشغيل · Esc إغلاق البحث/الدرج
+
+    // ---- لوحة الأوامر (Command Palette) بأسلوب VS Code: ابحث بالاسم ونفّذ أي أمر من أي قائمة ----
+
+    private class PaletteCommand(val title: String, val shortcut: String, val action: () -> Unit)
+
+    private fun paletteCommands(): List<PaletteCommand> {
+        fun c(res: Int, shortcut: String = "", action: () -> Unit) = PaletteCommand(getString(res), shortcut, action)
+        val list = mutableListOf(
+            // File
+            c(R.string.menu_file_new, "Ctrl+N") { newFile() },
+            c(R.string.menu_file_open, "Ctrl+O") { openDocumentLauncher.launch(arrayOf("text/plain", "application/octet-stream", "*/*")) },
+            c(R.string.menu_file_save, "Ctrl+S") { saveFile() },
+            c(R.string.menu_file_projects, "Ctrl+Shift+O") { startActivity(android.content.Intent(this, ProjectsActivity::class.java)) },
+            c(R.string.menu_file_libraries) { openLibrariesScreen() },
+            c(R.string.menu_file_exit) { leaveEditor() },
+            // Edit
+            c(R.string.menu_edit_undo, "Ctrl+Z") { editorController.undo() },
+            c(R.string.menu_edit_redo, "Ctrl+Y") { editorController.redo() },
+            c(R.string.menu_edit_find, "Ctrl+F") { if (findBar.visibility != View.VISIBLE) toggleFindBar() },
+            c(R.string.menu_edit_select_all, "Ctrl+A") { editCode.selectAll() },
+            c(R.string.menu_edit_toggle_comment) { editorController.toggleLineComment() },
+            c(R.string.menu_edit_duplicate_line, "Ctrl+D") { editorController.duplicateCurrentLine() },
+            c(R.string.menu_edit_delete_line) { editorController.deleteCurrentLine() },
+            c(R.string.menu_edit_move_line_up) { editorController.moveLineUp() },
+            c(R.string.menu_edit_move_line_down) { editorController.moveLineDown() },
+            c(R.string.menu_edit_indent) { editorController.indentSelection() },
+            c(R.string.menu_edit_unindent) { editorController.unindentSelection() },
+            c(R.string.menu_edit_format_document) { toastChanged(editCode.formatDocument(AppSettings.getTabSize(this)), R.string.document_formatted_toast) },
+            c(R.string.menu_edit_sort_lines) { toastChanged(editorController.sortLines(), R.string.lines_sorted_toast) },
+            c(R.string.menu_edit_insert_snippet) { showSnippetsDialog() },
+            c(R.string.menu_edit_trim_now) { toastChanged(editorController.trimTrailingWhitespaceNow(), R.string.trailing_trimmed_toast) },
+            c(R.string.menu_edit_convert_tabs_now) { toastChanged(editorController.convertTabsToSpacesNow(AppSettings.getTabSize(this)), R.string.tabs_converted_toast) },
+            c(R.string.menu_edit_editor_design) { EditorThemeDesigner.show(this) { applyEditorDesign() } },
+            // View
+            c(R.string.menu_view_explorer, "Ctrl+B") { openExplorerDrawer(preferOutlineTab = false) },
+            c(R.string.menu_view_outline) { showOutlineDialog() },
+            c(R.string.menu_view_go_to_line, "Ctrl+G") { showGoToLineDialog() },
+            c(R.string.menu_view_zoom_in) { changeEditorFontSize(1f) },
+            c(R.string.menu_view_zoom_out) { changeEditorFontSize(-1f) },
+            c(R.string.menu_view_toggle_lines) { toggleLineNumbers() },
+            c(R.string.menu_view_toggle_whitespace) { toggleWhitespace() },
+            c(R.string.menu_view_fold_current) { editCode.foldCurrentLevel() },
+            c(R.string.menu_view_fold_all) { editCode.foldAll() },
+            c(R.string.menu_view_unfold_all) { editCode.unfoldAll() },
+            c(R.string.menu_view_clear_console) { RinJobScheduler.clear() },
+            c(R.string.menu_view_settings) { startActivity(android.content.Intent(this, SettingsActivity::class.java)) },
+            // Run
+            c(R.string.menu_run_run, "F5") { runProgram() },
+            c(R.string.menu_run_live_panel) { openLivePreviewManually() },
+            c(R.string.menu_run_live_fullscreen) { openLivePreviewFullscreenManually() },
+            c(R.string.menu_run_check_brackets) { checkBrackets() },
+            c(R.string.menu_run_check_tags) { checkContainerTags() }
+        )
+        if (currentProject != null) list.add(c(R.string.menu_run_open_localhost) { openOnLocalhost() })
+        return list
+    }
+
+    private fun showCommandPalette() {
+        val all = paletteCommands()
+        var shown: List<PaletteCommand> = all
+        val themedContext = ContextThemeWrapper(this, MaterialR.style.ThemeOverlay_MaterialComponents_Dark)
+        val density = resources.displayMetrics.density
+        val pad = (16 * density).toInt()
+        val search = EditText(themedContext).apply {
+            hint = getString(R.string.palette_hint)
+            setSingleLine(true)
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_GO
+        }
+        val list = android.widget.ListView(themedContext)
+        fun label(c: PaletteCommand) = if (c.shortcut.isEmpty()) c.title else "${c.title}    ·    ${c.shortcut}"
+        val adapter = android.widget.ArrayAdapter(themedContext, android.R.layout.simple_list_item_1, all.map(::label).toMutableList())
+        list.adapter = adapter
+        val root = LinearLayout(themedContext).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(pad, pad / 2, pad, 0)
+            addView(search, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+            addView(list, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, (360 * density).toInt()))
+        }
+        val dialog = AlertDialog.Builder(themedContext).setTitle(R.string.palette_title).setView(root).create()
+        fun run(index: Int) {
+            val cmd = shown.getOrNull(index) ?: return
+            dialog.dismiss()
+            cmd.action()
+        }
+        search.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun afterTextChanged(s: android.text.Editable?) {
+                val q = s?.toString()?.trim()?.lowercase().orEmpty()
+                shown = if (q.isEmpty()) all else all.filter { (it.title + " " + it.shortcut).lowercase().contains(q) }
+                adapter.clear(); adapter.addAll(shown.map(::label))
+            }
+        })
+        search.setOnEditorActionListener { _, _, _ -> run(0); true }
+        list.setOnItemClickListener { _, _, position, _ -> run(position) }
+        dialog.window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE)
+        dialog.show()
+        search.requestFocus()
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0 && handleDesktopShortcut(event)) return true
+        return super.dispatchKeyEvent(event)
+    }
+
+    private fun handleDesktopShortcut(event: KeyEvent): Boolean {
+        val ctrl = event.isCtrlPressed
+        val shift = event.isShiftPressed
+        when {
+            ctrl && !shift && event.keyCode == KeyEvent.KEYCODE_S -> saveFile()
+            ctrl && !shift && event.keyCode == KeyEvent.KEYCODE_N -> newFile()
+            ctrl && !shift && event.keyCode == KeyEvent.KEYCODE_O ->
+                openDocumentLauncher.launch(arrayOf("text/plain", "application/octet-stream", "*/*"))
+            ctrl && !shift && event.keyCode == KeyEvent.KEYCODE_F -> {
+                if (findBar.visibility != View.VISIBLE) toggleFindBar()
+                findViewById<View>(R.id.txtFind).requestFocus()
+            }
+            ctrl && !shift && event.keyCode == KeyEvent.KEYCODE_B -> {
+                if (drawerLayout.isDrawerOpen(GravityCompat.START)) drawerLayout.closeDrawer(GravityCompat.START)
+                else openExplorerDrawer(preferOutlineTab = false)
+            }
+            ctrl && !shift && event.keyCode == KeyEvent.KEYCODE_GRAVE -> showConsoleTab(terminal = true)
+            ctrl && shift && event.keyCode == KeyEvent.KEYCODE_P -> showCommandPalette()
+            ctrl && shift && event.keyCode == KeyEvent.KEYCODE_O ->
+                startActivity(android.content.Intent(this, ProjectsActivity::class.java))
+            ctrl && !shift && event.keyCode == KeyEvent.KEYCODE_G -> showGoToLineDialog()
+            event.keyCode == KeyEvent.KEYCODE_F5 ||
+                (ctrl && (event.keyCode == KeyEvent.KEYCODE_ENTER || event.keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER)) -> runProgram()
+            event.keyCode == KeyEvent.KEYCODE_ESCAPE && drawerLayout.isDrawerOpen(GravityCompat.START) ->
+                drawerLayout.closeDrawer(GravityCompat.START)
+            event.keyCode == KeyEvent.KEYCODE_ESCAPE && findBar.visibility == View.VISIBLE -> toggleFindBar()
+            else -> return false
+        }
+        return true
     }
 }
