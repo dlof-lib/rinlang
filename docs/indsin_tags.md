@@ -41,6 +41,11 @@
 | `<> … </>` | تجميع شفاف (Fragment): لا يُنتج عنصراً |
 | `<Define#N p=v>` … `<N p=x />` | قالب مكوّن بخصائص و`<Slot />` (انظر «مفاهيم متقدمة») |
 | `<Repeat times=3 as=k>` | تكرار وقت الترجمة |
+| `<Match on={x}>` · `<Case is=…/in="a,b"/when={…}>` · `<Default>` | اختيار فرع واحد — انظر [indsin_template_concepts.md](indsin_template_concepts.md) |
+| `<Unless cond={c}>` | عكس `<If>` ويقبل `<Else>` بعده |
+| `<Slot name="x">احتياطي</Slot>` · `<Fill name="x">` | فتحات مسمّاة مع محتوى احتياطي داخل `<Define>` |
+| `<Prop name=… required type=… enum="a,b" default=… />` | خصائص مطلوبة/منوَّعة لقالب `<Define>` مع أخطاء واضحة |
+| `...attrs` | داخل جسم `<Define>`: تمرير السمات غير المعلنة إلى العنصر |
 | `<If cond={c}>` … `<Else>` | شروط تفاعلية عبر `visible=` |
 | `<Fun#f params="a,b">` | `fun f(a, b) { … }` |
 | `<Screen#app size=phone bg=#0B1020>` … `</Screen>` | جذر شاشة بحجم وخلفية حرّين (انظر [indsin_design_freedom.md](indsin_design_freedom.md)) |
