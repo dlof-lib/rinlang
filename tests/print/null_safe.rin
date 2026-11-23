@@ -1,0 +1,43 @@
+let o = {a: 1, user: {name: "Rin", tags: ["x", "y"]}};
+let n = nil;
+print o?.a;
+print o?.zz;
+print o?.zz?.c;
+print o.user?.name;
+print n?.x;
+print n?.x.y.z;
+print o?.user?.tags?.[1];
+print n?.[0];
+print o.user?.tags?.[5 - 4];
+print n ?? "d";
+print 0 ?? 9;
+print false ?? 9;
+print "" ?? 9;
+print o.zz ?? o.user.name;
+print n ?? n ?? "c";
+let m = n ?? "x"; print m;
+let c = nil; c ??= 5; print c; c ??= 7; print c;
+let d = {}; d.k ??= "set"; d.k ??= "again"; print d.k;
+let arr = [nil, 2]; arr[0] ??= 10; arr[1] ??= 20; print arr;
+fun f() { print "evaluated"; return 1; }
+print 5 ?? f();
+let t = true ? 1 : 2; print t;
+let q = nil; print (q == nil ? "nil" : "no");
+fun hello(x) { return "hi " + x; }
+let fn = hello; print fn?.("a");
+let nf = nil; print nf?.("a");
+print "len " + len(o?.user?.tags ?? []);
+print `v=${n ?? "tpl"}`;
+class Box {
+  fun init(v) { self.v = v; self.next = nil; }
+  fun get() { return self.v; }
+  fun tail() { return self.next?.get() ?? "none"; }
+}
+let b = Box(1);
+print b.tail();
+b.next = Box(2);
+print b.tail();
+let e = nil;
+print e?.get();
+print b?.next?.get();
+print b?.next?.next?.get();
