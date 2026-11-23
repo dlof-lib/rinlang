@@ -33,8 +33,7 @@
             android:clipToPadding="false" android:padding="10dp" />
         <LinearLayout android:id="@+id/albumEmptyState" android:layout_width="match_parent" android:layout_height="wrap_content"
             android:layout_gravity="center" android:gravity="center" android:orientation="vertical" android:padding="32dp">
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="✦"
-                android:textSize="42sp" android:textColor="@color/rin_accent" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:drawableStart="@drawable/rs_ic_sparkle_44" android:drawableTint="@color/rin_accent" android:textColor="@color/rin_accent" />
             <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp"
                 android:text="لا توجد ألبومات بعد" android:textColor="@color/rin_on_toolbar" android:textSize="17sp" android:textStyle="bold" />
             <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="5dp"
