@@ -716,16 +716,16 @@
                 <Button android:id="@+id/btnKeyDot" style="@style/RinEditorKeyButton" android:text="." android:contentDescription="." />
                 <Button android:id="@+id/btnKeyComma" style="@style/RinEditorKeyButton" android:text="," android:contentDescription="," />
                 <View style="@style/RinEditorKeyDivider" />
-                <Button android:id="@+id/btnKeyUndo" style="@style/RinEditorKeyButton" android:text="↶" android:contentDescription="@string/action_undo" />
-                <Button android:id="@+id/btnKeyRedo" style="@style/RinEditorKeyButton" android:text="↷" android:contentDescription="@string/action_redo" />
+                <Button android:id="@+id/btnKeyUndo" style="@style/RinEditorKeyButton" android:drawableStart="@drawable/rs_ic_undo_18" android:drawableTint="@color/rin_on_toolbar" android:contentDescription="@string/action_undo" />
+                <Button android:id="@+id/btnKeyRedo" style="@style/RinEditorKeyButton" android:drawableStart="@drawable/rs_ic_redo_18" android:drawableTint="@color/rin_on_toolbar" android:contentDescription="@string/action_redo" />
                 <View style="@style/RinEditorKeyDivider" />
                 <Button android:id="@+id/btnKeyHome" style="@style/RinEditorKeyButton" android:minWidth="44dp" android:text="@string/key_home" android:contentDescription="@string/key_home" />
-                <Button android:id="@+id/btnKeyLeft" style="@style/RinEditorKeyButton" android:text="←" android:contentDescription="@string/key_left" />
-                <Button android:id="@+id/btnKeyUp" style="@style/RinEditorKeyButton" android:text="↑" android:contentDescription="@string/key_up" />
-                <Button android:id="@+id/btnKeyDown" style="@style/RinEditorKeyButton" android:text="↓" android:contentDescription="@string/key_down" />
-                <Button android:id="@+id/btnKeyRight" style="@style/RinEditorKeyButton" android:text="→" android:contentDescription="@string/key_right" />
+                <Button android:id="@+id/btnKeyLeft" style="@style/RinEditorKeyButton" android:drawableStart="@drawable/rs_ic_arrow_left_18" android:drawableTint="@color/rin_on_toolbar" android:contentDescription="@string/key_left" />
+                <Button android:id="@+id/btnKeyUp" style="@style/RinEditorKeyButton" android:drawableStart="@drawable/rs_ic_arrow_up_18" android:drawableTint="@color/rin_on_toolbar" android:contentDescription="@string/key_up" />
+                <Button android:id="@+id/btnKeyDown" style="@style/RinEditorKeyButton" android:drawableStart="@drawable/rs_ic_arrow_down_18" android:drawableTint="@color/rin_on_toolbar" android:contentDescription="@string/key_down" />
+                <Button android:id="@+id/btnKeyRight" style="@style/RinEditorKeyButton" android:drawableStart="@drawable/rs_ic_arrow_right_18" android:drawableTint="@color/rin_on_toolbar" android:contentDescription="@string/key_right" />
                 <Button android:id="@+id/btnKeyEnd" style="@style/RinEditorKeyButton" android:minWidth="40dp" android:text="@string/key_end" android:contentDescription="@string/key_end" />
-                <Button android:id="@+id/btnKeyBackspace" style="@style/RinEditorKeyButton" android:layout_marginEnd="0dp" android:text="⌫" android:contentDescription="@string/key_backspace" />
+                <Button android:id="@+id/btnKeyBackspace" style="@style/RinEditorKeyButton" android:layout_marginEnd="0dp" android:drawableStart="@drawable/rs_ic_backspace_18" android:drawableTint="@color/rin_on_toolbar" android:contentDescription="@string/key_backspace" />
 
             </LinearLayout>
         </HorizontalScrollView>
