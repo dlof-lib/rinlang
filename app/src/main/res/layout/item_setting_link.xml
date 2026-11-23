@@ -47,8 +47,6 @@
         android:layout_height="32dp"
         android:gravity="center"
         android:importantForAccessibility="no"
-        android:text="›"
-        android:textColor="@color/rin_accent"
-        android:textSize="24sp"
-        android:textStyle="bold" />
+        android:drawableStart="@drawable/rs_ic_chevron_right_22" android:drawableTint="@color/rin_accent"
+        android:textColor="@color/rin_accent" />
 </LinearLayout>
