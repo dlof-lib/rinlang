@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
+import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -61,6 +62,8 @@ class RinStoreActivity : BaseConnectivityActivity() {
     private lateinit var edtSearch: EditText
     private lateinit var chipGroupCategory: ChipGroup
     private lateinit var btnSort: Button
+    private lateinit var btnClearSearch: View
+    private lateinit var btnResetFilters: View
 
     private var allPackages: List<RinPackage> = emptyList()
     /** ناشرون مؤهَّلون لشارة التوثيق (يُعاد حسابها بعد كل تحميل لقائمة المتجر، دون طلب شبكة إضافي). */
@@ -91,6 +94,15 @@ class RinStoreActivity : BaseConnectivityActivity() {
         chipGroupCategory = findViewById(R.id.chipGroupStoreCategory)
         btnSort = findViewById(R.id.btnStoreSort)
         btnSort.text = getString(sortMode.labelRes)
+        btnClearSearch = findViewById(R.id.btnStoreClearSearch)
+        btnResetFilters = findViewById(R.id.btnStoreResetFilters)
+        btnClearSearch.setOnClickListener { edtSearch.setText("") }
+        btnResetFilters.setOnClickListener {
+            selectedCategory = CATEGORY_ALL
+            edtSearch.setText("")          // يستدعي applyFilters عبر TextWatcher
+            rebuildCategoryChips()
+            applyFilters()
+        }
 
         adapter = PackageAdapter(
             isVerified = { pkg -> pkg.publisherUid in verifiedPublisherUids },
@@ -123,6 +135,33 @@ class RinStoreActivity : BaseConnectivityActivity() {
         }
 
         runIfOnline { loadPackages() }
+    }
+
+    // ---- اختصارات لوحة المفاتيح بأسلوب الكمبيوتر ----
+    //   Ctrl+F بحث · F5 / Ctrl+R تحديث · Ctrl+Shift+O قائمة الفرز · Esc مسح البحث ثم رجوع
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+            val ctrl = event.isCtrlPressed
+            when {
+                ctrl && !event.isShiftPressed && event.keyCode == KeyEvent.KEYCODE_F -> {
+                    edtSearch.requestFocus(); edtSearch.selectAll(); return true
+                }
+                event.keyCode == KeyEvent.KEYCODE_F5 || (ctrl && event.keyCode == KeyEvent.KEYCODE_R) -> {
+                    if (isOnline()) {
+                        swipeRefresh.isRefreshing = true
+                        loadPackages(showSkeletonOnLoad = false)
+                    } else showOfflineOverlay()
+                    return true
+                }
+                ctrl && event.isShiftPressed && event.keyCode == KeyEvent.KEYCODE_O -> { showSortMenu(); return true }
+                event.keyCode == KeyEvent.KEYCODE_ESCAPE -> {
+                    if (edtSearch.text.isNotEmpty()) edtSearch.setText("") else finish()
+                    return true
+                }
+            }
+        }
+        return super.dispatchKeyEvent(event)
     }
 
     /** يُستدعى تلقائياً عند عودة الاتصال بعد انقطاعه أثناء وجود المستخدم في شاشة المتجر. */
@@ -184,7 +223,9 @@ class RinStoreActivity : BaseConnectivityActivity() {
         val categories = listOf(CATEGORY_ALL) + allPackages.map { it.category }.distinct().sorted()
         categories.forEach { category ->
             val chip = Chip(this).apply {
-                text = if (category == CATEGORY_ALL) getString(R.string.store_category_all) else category
+                // عدد الحزم بجانب كل تصنيف (facet) كما في مستكشفات الكمبيوتر: "UI (5)"
+                val n = if (category == CATEGORY_ALL) allPackages.size else allPackages.count { it.category == category }
+                text = (if (category == CATEGORY_ALL) getString(R.string.store_category_all) else category) + " ($n)"
                 isCheckable = true
                 isChecked = category == selectedCategory
                 setOnClickListener {
@@ -227,6 +268,8 @@ class RinStoreActivity : BaseConnectivityActivity() {
             SortMode.DOWNLOADS -> result.sortedByDescending { it.downloadCount }
             SortMode.NAME -> result.sortedBy { it.name.lowercase() }
         }
+        btnClearSearch.visibility = if (query.isEmpty()) View.GONE else View.VISIBLE
+        btnResetFilters.visibility = if (query.isEmpty() && selectedCategory == CATEGORY_ALL) View.GONE else View.VISIBLE
         adapter.submit(result)
         txtEmpty.visibility = if (result.isEmpty()) View.VISIBLE else View.GONE
         // العدّاد يبقى مخفياً أثناء الهيكل التغبيشي (راجع showSkeleton)، ويظهر فقط بعد وصول
@@ -430,6 +473,9 @@ private class PackageAdapter(
         val txtName: TextView = view.findViewById(R.id.txtPackageName)
         val imgVerifiedBadge: View = view.findViewById(R.id.imgPackageVerifiedBadge)
         val txtMeta: TextView = view.findViewById(R.id.txtPackageMeta)
+        val chipVersion: TextView = view.findViewById(R.id.chipPackageVersion)
+        val chipLicense: TextView = view.findViewById(R.id.chipPackageLicense)
+        val chipDownloads: TextView = view.findViewById(R.id.chipPackageDownloads)
         val txtCategory: TextView = view.findViewById(R.id.txtPackageCategory)
         val txtDescription: TextView = view.findViewById(R.id.txtPackageDescription)
         val txtDependencies: TextView = view.findViewById(R.id.txtPackageDependencies)
@@ -460,11 +506,14 @@ private class PackageAdapter(
             holder.imgIcon.visibility = View.GONE
             holder.txtInitial.visibility = View.VISIBLE
         }
-        holder.txtName.text = "${pkg.name} — ${pkg.publisherName}"
+        holder.txtName.text = pkg.name
         holder.imgVerifiedBadge.visibility = if (isVerified(pkg)) View.VISIBLE else View.GONE
-        holder.txtMeta.text = context.getString(
-            R.string.store_item_meta_format, pkg.version, pkg.license, pkg.downloadCount
-        )
+        // الاسم في سطره، والناشر تحته؛ الإصدار/الرخصة/التحميلات صارت شرائح مستقلة أسفل الوصف.
+        holder.txtMeta.text = pkg.publisherName
+        holder.chipVersion.text = "v${pkg.version.removePrefix("v")}"
+        holder.chipLicense.text = pkg.license
+        holder.chipLicense.visibility = if (pkg.license.isBlank()) View.GONE else View.VISIBLE
+        holder.chipDownloads.text = "⬇ ${pkg.downloadCount}"
         holder.txtCategory.text = pkg.category
         holder.txtDescription.text = pkg.description.ifBlank { "" }
         holder.txtDescription.visibility = if (pkg.description.isBlank()) View.GONE else View.VISIBLE
