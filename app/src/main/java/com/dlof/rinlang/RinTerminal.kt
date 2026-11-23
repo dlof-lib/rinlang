@@ -200,6 +200,10 @@ class RinTerminalBuffer(
         touch()
     }
 
+    /** يمسح تاريخ الأوامر (أمر `history clear`). */
+    @Synchronized
+    fun clearHistory() { history.clear() }
+
     /** يستعيد تاريخاً محفوظاً (من التخزين) إن كان تاريخ الجلسة فارغاً. */
     @Synchronized
     fun restoreHistory(saved: List<String>) {
