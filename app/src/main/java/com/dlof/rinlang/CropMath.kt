@@ -1,0 +1,28 @@
+package com.dlof.rinlang
+
+/** حسابات القصّ (center-crop) الخالصة — تُختبر بلا أندرويد. */
+object CropMath {
+    /** مستطيل المصدر (l,t,r,b) داخل صورة bw×bh ليملأ هدفاً w×h بنفس النسبة. */
+    fun centerCrop(bw: Int, bh: Int, w: Int, h: Int): IntArray {
+        if (bw <= 0 || bh <= 0 || w <= 0 || h <= 0) return intArrayOf(0, 0, maxOf(bw, 0), maxOf(bh, 0))
+        val srcRatio = bw.toFloat() / bh
+        val dstRatio = w.toFloat() / h
+        return if (srcRatio > dstRatio) {
+            val sw = (bh * dstRatio).toInt().coerceIn(1, bw)
+            val l = (bw - sw) / 2
+            intArrayOf(l, 0, l + sw, bh)
+        } else {
+            val sh = (bw / dstRatio).toInt().coerceIn(1, bh)
+            val t = (bh - sh) / 2
+            intArrayOf(0, t, bw, t + sh)
+        }
+    }
+
+    /** أصغر inSampleSize (قوة 2) يجعل أطول ضلع ≤ [maxSide]. */
+    fun sampleSize(w: Int, h: Int, maxSide: Int): Int {
+        var s = 1
+        var m = maxOf(w, h)
+        while (m / 2 >= maxSide) { s *= 2; m /= 2 }
+        return s
+    }
+}
