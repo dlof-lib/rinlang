@@ -43,7 +43,7 @@ class SettingsActivity : RinBaseActivity() {
         ) : Row()
         object FontSize : Row()
         class Link(
-            val icon: String,
+            @androidx.annotation.DrawableRes val icon: Int,
             @StringRes val title: Int,
             @StringRes val hint: Int,
             val onClick: () -> Unit
@@ -125,7 +125,7 @@ class SettingsActivity : RinBaseActivity() {
 
             // تصميم المحرر + حجم الصفحة + التنسيق (انظر EditorDesign / EditorThemeDesigner / CodeFormatter)
             Row.Section(R.string.settings_design_section_title),
-            Row.Link("🎨", R.string.settings_design_title, R.string.settings_design_hint) {
+            Row.Link(R.drawable.rs_ic_palette, R.string.settings_design_title, R.string.settings_design_hint) {
                 EditorThemeDesigner.show(this)
             },
             Row.Choice(
@@ -218,10 +218,10 @@ class SettingsActivity : RinBaseActivity() {
             ),
 
             Row.Section(R.string.settings_language_section_title),
-            Row.Link("🌐", R.string.settings_language_current, R.string.settings_language_hint) {
+            Row.Link(R.drawable.rs_ic_globe, R.string.settings_language_current, R.string.settings_language_hint) {
                 startActivity(Intent(this, LanguageActivity::class.java))
             },
-            Row.Link("📦", R.string.settings_packs_title, R.string.settings_packs_hint) {
+            Row.Link(R.drawable.rs_ic_package, R.string.settings_packs_title, R.string.settings_packs_hint) {
                 startActivity(Intent(this, ContentPacksActivity::class.java))
             }
         )
@@ -384,7 +384,7 @@ class SettingsActivity : RinBaseActivity() {
 
     private fun bindLink(row: Row.Link): View {
         val view = inflateRow(R.layout.item_setting_link)
-        view.findViewById<TextView>(R.id.settingIcon).text = row.icon
+        RsIcons.only(view.findViewById<TextView>(R.id.settingIcon), row.icon, 24, androidx.core.content.ContextCompat.getColor(this, R.color.rin_on_toolbar))
         view.findViewById<TextView>(R.id.settingTitle).setText(row.title)
         view.findViewById<TextView>(R.id.settingHint).setText(row.hint)
         view.setOnClickListener { row.onClick() }
