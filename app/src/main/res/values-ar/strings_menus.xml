@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="menu_file_exit">إغلاق المحرر</string>
+    <string name="menu_view_explorer">مستكشف المشروع</string>
+    <string name="menu_group_clipboard">خيارات الحافظة</string>
+    <string name="menu_group_lines">الأسطر</string>
+    <string name="menu_group_code">الشيفرة</string>
+    <string name="menu_group_cleanup">تنظيف</string>
+    <string name="menu_group_fold">الطيّ</string>
+    <string name="menu_group_check">فحص</string>
+    <string name="menu_view_command_palette">لوحة الأوامر…</string>
+    <string name="palette_hint">اكتب اسم أمر…</string>
+    <string name="palette_title">لوحة الأوامر</string>
+</resources>
