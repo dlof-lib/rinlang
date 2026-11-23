@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="terminal_help_banner">banner — logo de Rin\nlibs — lista de bibliotecas\nlib &lt;nombre&gt; — ficha de biblioteca</string>
+    <string name="terminal_lib_usage">Uso: lib &lt;nombre&gt; (escribe libs para la lista)</string>
+    <string name="terminal_lib_unknown">Biblioteca desconocida: %1$s — escribe libs</string>
+</resources>
