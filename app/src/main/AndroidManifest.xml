@@ -163,6 +163,11 @@
             android:exported="false"
             android:launchMode="singleTop" />
 
+        <activity
+            android:name=".NewProjectActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
         <!-- RinPak file association. Tapping a .rinpak in any file manager / mail / chat app opens Rin's package
              preview (identity, signature + publisher trust, security analysis, icon) and imports it after
              confirmation. ProjectsActivity itself stays unexported; these aliases are the only public entry points.
