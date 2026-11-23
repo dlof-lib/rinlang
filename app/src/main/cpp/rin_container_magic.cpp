@@ -24,6 +24,14 @@ bool Interpreter::magicHook(const std::shared_ptr<NsNode>& n, Value LifecycleHoo
     return true;
 }
 
+bool Interpreter::magicHas(const std::shared_ptr<NsNode>& n, Value LifecycleHooks::*slot) const {
+    if (!n || n->kind != NsNode::Kind::Container) return false;
+    auto it = containerLifecycle.find(n->key);
+    if (it == containerLifecycle.end()) return false;
+    const Value& fn = it->second.*slot;
+    return fn.type == Value::Type::FUNCTION && fn.function;
+}
+
 void Interpreter::registerNativesMagic() {
     // container.has(c, field) / hasField: العضو الغائب يسأل on has(name)؛ النتيجة تُحوَّل إلى منطقي.
     {
