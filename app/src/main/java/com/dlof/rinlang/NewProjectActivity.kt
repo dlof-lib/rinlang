@@ -158,7 +158,7 @@ class NewProjectActivity : RinBaseActivity() {
             setPadding(dp(16), dp(14), dp(16), dp(6))
         }
         val close = TextView(this).apply {
-            text = "✕"; textSize = 20f; setTextColor(cText); setPadding(dp(4), dp(4), dp(14), dp(4))
+            setTextColor(cText); RsIcons.only(this, R.drawable.rs_ic_close, 22); setPadding(dp(4), dp(4), dp(14), dp(4))
             setOnClickListener { finish() }
         }
         bar.addView(close)
@@ -329,7 +329,7 @@ class NewProjectActivity : RinBaseActivity() {
         texts.addView(TextView(this).apply { text = getString(m.title); textSize = 16f; setTextColor(cText); typeface = Typeface.DEFAULT_BOLD })
         texts.addView(TextView(this).apply { text = getString(m.desc); textSize = 13f; setTextColor(cDim) })
         card.addView(texts, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        if (on) card.addView(TextView(this).apply { text = "✓"; textSize = 20f; setTextColor(accent); typeface = Typeface.DEFAULT_BOLD })
+        if (on) card.addView(TextView(this).apply { setTextColor(accent); RsIcons.only(this, R.drawable.rs_ic_check, 22) })
         page.addView(card, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(10) })
     }
 
