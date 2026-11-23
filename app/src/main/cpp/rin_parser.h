@@ -290,6 +290,7 @@ private:
     // expressions (precedence climbing)
     ExprPtr expression();
     ExprPtr assignment();
+    ExprPtr nullish();
     ExprPtr pipeline();   // a |> f(b, c)  =>  f(a, b, c)  (خط الأنابيب: للتحويل/التجميع الإحصائي)
     ExprPtr logicOr();
     ExprPtr logicAnd();
