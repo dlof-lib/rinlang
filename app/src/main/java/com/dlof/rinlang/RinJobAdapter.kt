@@ -171,10 +171,8 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
 
         /** Built once per recycled row and toggled visible only while the job is QUEUED. */
         private val cancelBtn: TextView = TextView(context).apply {
-            text = "✕"
-            textSize = 13f
-            setTypeface(typeface, Typeface.BOLD)
             setTextColor(ContextCompat.getColor(context, R.color.rin_editor_hint))
+            RsIcons.only(this, R.drawable.rs_ic_close, 14)
             setPadding((8 * dp).toInt(), 0, (2 * dp).toInt(), 0)
             contentDescription = context.getString(R.string.job_cancel_cta)
             isClickable = true
@@ -248,7 +246,8 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
 
             // شريط إجراءات سفلي مكتشَف (بديل صريح عن الضغط المطوَّل أعلاه): نسخ / مشاركة /
             // إعادة تشغيل — يظهر فقط لتشغيل مكتمل (انظر bind()).
-            footerCopy.text = "📋  " + context.getString(R.string.job_copy_cta)
+            footerCopy.text = context.getString(R.string.job_copy_cta)
+            RsIcons.start(footerCopy, R.drawable.rs_ic_copy, 16)
             footerCopy.setOnClickListener {
                 val job = boundJob ?: return@setOnClickListener
                 copyToClipboard(
@@ -257,12 +256,14 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
                     toastRes = R.string.job_copied_toast
                 )
             }
-            footerShare.text = "📤  " + context.getString(R.string.job_share_cta)
+            footerShare.text = context.getString(R.string.job_share_cta)
+            RsIcons.start(footerShare, R.drawable.rs_ic_share, 16)
             footerShare.setOnClickListener {
                 val job = boundJob ?: return@setOnClickListener
                 shareText("Rin Run #${job.number}", job.output)
             }
-            footerRerun.text = "↻  " + context.getString(R.string.job_rerun_cta)
+            footerRerun.text = context.getString(R.string.job_rerun_cta)
+            RsIcons.start(footerRerun, R.drawable.rs_ic_refresh, 16)
             footerRerun.setOnClickListener {
                 val job = boundJob ?: return@setOnClickListener
                 onRerunRequested?.invoke(job.source)
@@ -273,12 +274,12 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
         fun bind(job: RinJob) {
             boundJob = job
             title.text = if (job.pinned) {
-                context.getString(R.string.job_title_fmt, job.number) + " 📌"
+                context.getString(R.string.job_title_fmt, job.number)
             } else {
                 context.getString(R.string.job_title_fmt, job.number)
             }
 
-            pinBtn.text = if (job.pinned) "📌" else "📍"
+            RsIcons.only(pinBtn, R.drawable.rs_ic_pin, 18)
             pinBtn.alpha = if (job.pinned) 1f else 0.45f
             pinBtn.contentDescription = context.getString(
                 if (job.pinned) R.string.job_unpin_cta else R.string.job_pin_cta
@@ -695,9 +696,10 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
             }
             if (!block.isClosed) {
                 root.addView(TextView(context).apply {
-                    text = "⚠ لم تُغلق هذه الحاوية — توقّف التنفيذ قبل نهايتها"
+                    text = "لم تُغلق هذه الحاوية — توقّف التنفيذ قبل نهايتها"
                     textSize = 11f
                     setTextColor(ContextCompat.getColor(context, R.color.log_kind_warning))
+                    RsIcons.start(this, R.drawable.rs_ic_warning, 13, 5)
                     setPadding(0, (2 * dp).toInt(), 0, 0)
                 })
             }
@@ -711,7 +713,7 @@ class RinJobAdapter(private val context: Context) : RecyclerView.Adapter<RinJobA
 
             var expanded = count <= 40
             fun refresh() {
-                chevron.text = if (expanded) "▾" else "▸"
+                RsIcons.only(chevron, if (expanded) R.drawable.rs_ic_chevron_down else R.drawable.rs_ic_chevron_right, 14)
                 body.visibility = if (expanded && block.children.isNotEmpty()) View.VISIBLE else View.GONE
             }
             refresh()
