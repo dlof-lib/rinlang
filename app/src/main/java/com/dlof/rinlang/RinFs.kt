@@ -102,4 +102,94 @@ object RinFs {
         val lines = shown.mapIndexed { i, l -> "$DIM${(i + 1).toString().padStart(w)} │ $RESET${l.trimEnd('\r').replace("\u001b", "␛")}" }
         return Out(lines, null, (all.size - shown.size).toLong() + if (f.length() > maxBytes) 1 else 0)
     }
+
+    // ------------------------------------------------------------------ find / head / tail / wc
+
+    /** `head f 5` / `tail -n 5 f` / `head f`: يُرجع (المسار، العدد). العدد الافتراضي [def]، ويُقيَّد 1..10000. */
+    fun parseCountArg(arg: String, def: Int = 10): Pair<String, Int> {
+        val t = arg.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }.toMutableList()
+        var n = def
+        val i = t.indexOf("-n")
+        if (i >= 0 && i + 1 < t.size && t[i + 1].toIntOrNull() != null) {
+            n = t[i + 1].toInt(); t.removeAt(i + 1); t.removeAt(i)
+        } else if (t.size >= 2 && t.last().toIntOrNull() != null) {
+            n = t.removeAt(t.lastIndex).toInt()
+        }
+        return t.joinToString(" ") to n.coerceIn(1, 10000)
+    }
+
+    private class Text(val name: String, val lines: List<String>, val total: Int, val bytes: Long, val error: String?)
+
+    private fun load(base: File, rel: String, maxBytes: Int = 1024 * 1024): Text {
+        val f = resolve(base, rel) ?: return Text("", emptyList(), 0, 0, OUTSIDE)
+        if (!f.exists()) return Text("", emptyList(), 0, 0, NOT_FOUND)
+        if (!f.isFile) return Text("", emptyList(), 0, 0, NOT_FILE)
+        val bytes = f.inputStream().use { it.readNBytes(maxBytes) }
+        if (bytes.any { it == 0.toByte() }) return Text("", emptyList(), 0, 0, BINARY)
+        val all = String(bytes, Charsets.UTF_8).split('\n').let { if (it.isNotEmpty() && it.last().isEmpty()) it.dropLast(1) else it }
+        return Text(f.name, all.map { it.trimEnd('\r').replace("\u001b", "␛") }, all.size, f.length(), null)
+    }
+
+    private fun numbered(lines: List<String>, first: Int): List<String> {
+        val w = (first + lines.size - 1).toString().length
+        return lines.mapIndexed { i, l -> "$DIM${(first + i).toString().padStart(w)} │ $RESET$l" }
+    }
+
+    /** أول [n] سطراً بأرقامها؛ extra = عدد الأسطر غير المعروضة. */
+    fun head(base: File, rel: String, n: Int = 10): Out {
+        val t = load(base, rel); if (t.error != null) return Out(emptyList(), t.error)
+        val shown = t.lines.take(n.coerceAtLeast(1))
+        return Out(numbered(shown, 1), null, (t.total - shown.size).toLong())
+    }
+
+    /** آخر [n] سطراً بأرقامها الحقيقية في الملف. */
+    fun tail(base: File, rel: String, n: Int = 10): Out {
+        val t = load(base, rel); if (t.error != null) return Out(emptyList(), t.error)
+        val shown = t.lines.takeLast(n.coerceAtLeast(1))
+        return Out(numbered(shown, t.total - shown.size + 1), null, (t.total - shown.size).toLong())
+    }
+
+    /** عدد الأسطر والكلمات والحجم. */
+    fun wc(base: File, rel: String): Out {
+        val t = load(base, rel); if (t.error != null) return Out(emptyList(), t.error)
+        val words = t.lines.sumOf { l -> l.trim().split(Regex("\\s+")).count { it.isNotEmpty() } }
+        return Out(listOf("$SOFT${t.total}$RESET${DIM} lines · $RESET$SOFT$words$RESET${DIM} words · $RESET$SOFT${humanSize(t.bytes)}$RESET  $GREEN${t.name}$RESET"), null, t.total.toLong())
+    }
+
+    /** بحث بالاسم (بلا حساسية للحالة) داخل المشروع، يتخطى المخفي؛ حتى [maxResults] نتيجة وعمق [maxDepth]. */
+    fun find(base: File, query: String, maxResults: Int = 100, maxDepth: Int = 8): Out {
+        val q = query.trim().lowercase()
+        if (q.isEmpty()) return Out(emptyList(), NOT_FOUND)
+        val root = base.canonicalFile
+        val out = ArrayList<String>()
+        var count = 0
+        fun walk(dir: File, depth: Int) {
+            for (f in kids(dir, false)) {
+                if (count >= maxResults) return
+                if (f.name.lowercase().contains(q)) {
+                    count++
+                    val rel = f.relativeTo(root).path.replace(File.separatorChar, '/')
+                    out.add(if (f.isDirectory) "$BLUE$rel/$RESET" else "${colorName(f).replace(f.name, rel)}")
+                }
+                if (f.isDirectory && depth < maxDepth) walk(f, depth + 1)
+            }
+        }
+        walk(root, 1)
+        return Out(out, null, count.toLong())
+    }
+
+    /** اسم ملف سجل الطرفية: terminal-yyyyMMdd-HHmmss.txt (الوقت بالمللي يُمرَّر لتبقى الدالة خالصة). */
+    fun logFileName(epochMs: Long): String {
+        val c = java.util.Calendar.getInstance(); c.timeInMillis = epochMs
+        return String.format(java.util.Locale.US, "terminal-%04d%02d%02d-%02d%02d%02d.txt",
+            c.get(java.util.Calendar.YEAR), c.get(java.util.Calendar.MONTH) + 1, c.get(java.util.Calendar.DAY_OF_MONTH),
+            c.get(java.util.Calendar.HOUR_OF_DAY), c.get(java.util.Calendar.MINUTE), c.get(java.util.Calendar.SECOND))
+    }
+
+    /** يحفظ [text] في <base>/logs/ ويُرجع المسار النسبي (أو null عند الفشل). */
+    fun saveLog(base: File, text: String, epochMs: Long): String? = try {
+        val dir = File(base.canonicalFile, "logs"); dir.mkdirs()
+        val f = File(dir, logFileName(epochMs)); f.writeText(text)
+        "logs/" + f.name
+    } catch (t: Throwable) { null }
 }
