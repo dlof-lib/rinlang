@@ -349,7 +349,7 @@ object RinLocalServer {
   <p class="sub">مشروع Rin — اختر ملفاً ثم اضغط تشغيل</p>
   <div class="row">
     <select id="file">${options.ifEmpty { "<option>main.rin</option>" }}</select>
-    <button id="run">▶ تشغيل</button>
+    <button id="run">تشغيل</button>
   </div>
   <div id="status" class="status"></div>
   <pre id="out" dir="auto">لم يُشغَّل بعد.</pre>
