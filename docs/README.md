@@ -70,6 +70,9 @@
 - [`container_magic.md`](./container_magic.md) — خُطّافات الأعضاء الغائبة للحاوية: `on get/set/has/drop/call/invoke` (حقول وأوامر ديناميكية، `C(args)`).
 - [`container_sequence.md`](./container_sequence.md) — الحاوية تُفهرَس وتُعَدّ وتُكرَّر: `C[k]` · `C[k] = v` · `len(C)` · `contains(C, k)` · `for x in C` عبر `on index/store/count/each`.
 - [`null_safe.md`](./null_safe.md) — السلامة من nil: `a?.b` · `a?.[i]` · `a?.(x)` (سلسلة اختيارية) · `a ?? b` (قيمة افتراضية كسولة) · `a ??= b`.
+- [`slicing.md`](./slicing.md) — التقطيع: `a[i:j]` · `a[:j]` · `a[i:]` · `a[-2:]` للمصفوفات والنصوص.
+- [`ring.md`](./ring.md) — رنّة `ring` (من اسم اللغة): `on ring "t" (v) { }` يستمع · `ring "t", v;` يرنّ · أنماط `"a.*"` · `once`.
+- [`ring_buffer.md`](./ring_buffer.md) — حلقة Rin: مخزن دائري بسعة ثابتة `ring.new(n)` · `ring.add` · `ring.items` · `ring.last` · `ring.at(r, -1)`.
 - [`nite_moje.md`](./nite_moje.md) — مكتبة `nite.moje`: ما كانت تنقصه اللغة (`enumerate` · `tryGet` · `deepEqual` · `snakeCase` · `transpose` · `windowed` · `once` …) في ملف استيراد واحد.
 - [`EXTRA13.md`](./EXTRA13.md) — خمس إضافات بنمط Rin: `bytes.encode/decode` (بايتات مسمّاة)، `dur.*` (مدد زمنية)، `firstOf/lastOf/findKeyIf`، `utf8Trim/CapFirst/Pad`، و`state fixed`.
 - [`indsin_template_concepts.md`](./indsin_template_concepts.md) — مفاهيم قوالب indsin: `<Match>/<Case>/<Default>` · `<Unless>` · فتحات مسمّاة `<Slot name>`+`<Fill>` · `<Prop>` (مطلوب/نوع/enum) · `...attrs`.
