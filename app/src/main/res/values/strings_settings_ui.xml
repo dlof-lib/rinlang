@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_search_hint">Search settings…</string>
+    <string name="settings_all_categories">All</string>
+    <string name="settings_no_results">No settings match your search.</string>
+</resources>
