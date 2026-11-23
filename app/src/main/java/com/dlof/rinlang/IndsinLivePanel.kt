@@ -317,7 +317,8 @@ class IndsinLivePanel(
         val statsText = if (measured >= 0) {
             activity.getString(R.string.indsin_stats_format, measured, elapsedMs, cache)
         } else activity.getString(R.string.indsin_stats_idle)
-        txtStats.text = if (isFrozen) "❚❚ $statsText" else statsText
+        txtStats.text = statsText
+        if (isFrozen) RsIcons.start(txtStats, R.drawable.rs_ic_pause, 12, 4) else RsIcons.clear(txtStats)
 
         // pickMedia()/uploadMedia() وحقول الإدخال: المضيف وحده يفتح المنتقي/الحوار.
         result.optJSONObject("media")?.let { try { mediaHost.handle(it) } catch (_: Throwable) {} }
@@ -469,7 +470,8 @@ class IndsinLivePanel(
     }
 
     private fun updateDeviceLabel() {
-        btnDevice.text = if (fixedWidth == null) "⇔ $deviceWidth" else "$deviceWidth"
+        btnDevice.text = "$deviceWidth"
+        if (fixedWidth == null) RsIcons.start(btnDevice, R.drawable.rs_ic_swap, 14, 4) else RsIcons.clear(btnDevice)
     }
 
     /** قائمة الجهاز: ملء اللوحة، أعراض عمودية، ثم أفقية. الخلفية وبقية الخيارات في قائمة «المزيد». */
