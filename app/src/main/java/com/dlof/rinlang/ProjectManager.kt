@@ -1512,6 +1512,31 @@ fun removeTodo(id) {
     }
 
     /** هل يوجد مشروع بهذا الاسم (بعد التنظيف)؟ — لعرض خيار «استبدال» في معاينة الاستيراد. */
+    /**
+     * يطبّق [ProjectBlueprint] فوق مشروع أُنشئ للتو: يكتب ملفات البنية (README/src/tests/docs/…) دون أن يمسّ
+     * أي ملف موجود، ويضيف كتلة استيراد المكتبات المختارة أعلى main.rin (لا تُكرَّر إن وُجدت).
+     * يرمي IOException عند فشل الكتابة؛ المستدعي (المعالج) يعرضها كرسالة خطأ.
+     */
+    fun applyBlueprint(project: Project, blueprint: ProjectBlueprint) {
+        val stamp = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US)
+            .apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }.format(java.util.Date())
+        for (entry in blueprint.plan(stamp)) {
+            val target = File(project.dir, entry.path)
+            // حماية من أي مسار يخرج عن مجلد المشروع
+            if (!target.canonicalPath.startsWith(project.dir.canonicalPath + File.separator)) continue
+            if (entry.dir) { target.mkdirs(); continue }
+            if (target.exists()) continue
+            target.parentFile?.mkdirs()
+            target.writeText(entry.content)
+        }
+        if (!blueprint.isWeb) {
+            val main = File(project.dir, "main.rin")
+            val original = if (main.exists()) main.readText() else ""
+            val patched = blueprint.patchMain(original)
+            if (patched != original) main.writeText(patched)
+        }
+    }
+
     fun projectExists(context: Context, name: String): Boolean =
         File(projectsRoot(context), sanitizeProjectName(name)).isDirectory
 
