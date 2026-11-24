@@ -20,6 +20,8 @@
          POST_NOTIFICATIONS اختياري: بدونه تعمل الخدمة لكن إشعارها (فتح/إيقاف) مخفي. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <!-- يُبقي التنزيل/تشغيل البرامج حيّاً بعد مغادرة التطبيق (notify/RinTransferService). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
@@ -50,6 +52,11 @@
         <receiver
             android:name=".notify.RinNotificationReceiver"
             android:exported="false" />
+
+        <service
+            android:name=".notify.RinTransferService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
 
         <service
             android:name=".IndsinLiveService"
