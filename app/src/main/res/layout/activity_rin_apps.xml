@@ -32,6 +32,10 @@
         android:layout_height="0dp"
         android:layout_weight="1">
 
+        <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+            android:id="@+id/swipeRinApps"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/rvRinApps"
             android:layout_width="match_parent"
@@ -41,6 +45,7 @@
             android:paddingEnd="12dp"
             android:paddingTop="4dp"
             android:paddingBottom="92dp" />
+        </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
         <LinearLayout
             android:id="@+id/txtEmptyRinApps"
