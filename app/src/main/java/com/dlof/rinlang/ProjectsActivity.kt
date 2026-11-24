@@ -131,6 +131,7 @@ class ProjectsActivity : RinBaseActivity() {
             onDelete = { project -> showDeleteConfirm(project) },
             onMove = { project -> showMoveDialog(project) },
             onExport = { project -> exportProject(project) },
+            onDownload = { project -> DownloadExporter.saveProject(this, project) },
             onSync = { project -> syncProject(project) },
             selection = selection,
             onSelectionChanged = { onSelectionChanged() }
@@ -287,6 +288,9 @@ class ProjectsActivity : RinBaseActivity() {
             onSelectionChanged()
         }
         findViewById<View>(R.id.btnProjSelMove).setOnClickListener { showBatchMoveDialog(selectedProjects()) }
+        findViewById<View>(R.id.btnProjSelDownload).setOnClickListener {
+            DownloadExporter.saveProjects(this, selectedProjects())
+        }
         findViewById<View>(R.id.btnProjSelDelete).setOnClickListener { confirmDeleteProjects(selectedProjects()) }
     }
 
@@ -1046,6 +1050,7 @@ private class ProjectsAdapter(
     val onDelete: (Project) -> Unit,
     val onMove: (Project) -> Unit,
     val onExport: (Project) -> Unit,
+    val onDownload: (Project) -> Unit,
     val onSync: (Project) -> Unit,
     private val selection: SelectionModel,
     private val onSelectionChanged: () -> Unit
@@ -1158,6 +1163,7 @@ private class ProjectsAdapter(
                 R.id.actionRenameProject -> onRename(project)
                 R.id.actionMoveProject -> onMove(project)
                 R.id.actionExportProject -> onExport(project)
+                R.id.actionDownloadProject -> onDownload(project)
                 R.id.actionDeleteProject -> onDelete(project)
             }
             true
