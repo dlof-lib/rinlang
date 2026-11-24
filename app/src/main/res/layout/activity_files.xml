@@ -174,6 +174,24 @@
         android:textSize="11.5sp"
         android:textStyle="bold" />
 
+    <!-- شرائح تصفية سريعة: الكل / فيها أخطاء / غير محفوظة / مثبّتة (تُبنى في FilesActivity.renderStatusChips) -->
+    <HorizontalScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="10dp"
+        android:layout_marginEnd="10dp"
+        android:layout_marginTop="2dp"
+        android:scrollbars="none"
+        android:overScrollMode="never">
+
+        <LinearLayout
+            android:id="@+id/layoutStatusChips"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical" />
+    </HorizontalScrollView>
+
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
@@ -260,7 +278,7 @@
                 app:tint="@android:color/white"
                 app:rippleColor="@color/rin_ghost_ripple"
                 app:fabSize="mini"
-                app:srcCompat="@drawable/ic_log_archive" />
+                app:srcCompat="@drawable/fx_zip" />
 
             <com.google.android.material.floatingactionbutton.FloatingActionButton
                 android:id="@+id/fabUploadMedia"
@@ -272,7 +290,7 @@
                 app:tint="@android:color/white"
                 app:rippleColor="@color/rin_ghost_ripple"
                 app:fabSize="mini"
-                app:srcCompat="@drawable/ic_camera" />
+                app:srcCompat="@drawable/fx_media_upload" />
 
             <com.google.android.material.floatingactionbutton.FloatingActionButton
                 android:id="@+id/fabUploadFile"
@@ -284,7 +302,7 @@
                 app:tint="@android:color/white"
                 app:rippleColor="@color/rin_ghost_ripple"
                 app:fabSize="mini"
-                app:srcCompat="@android:drawable/ic_menu_upload" />
+                app:srcCompat="@drawable/fx_upload" />
 
             <com.google.android.material.floatingactionbutton.FloatingActionButton
                 android:id="@+id/fabNewFolder"
