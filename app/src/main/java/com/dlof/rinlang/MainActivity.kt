@@ -524,6 +524,7 @@ class MainActivity : RinBaseActivity() {
 
         setupMarkdownBar()
         setupJsonBar()
+        setupKeyboardAwareChrome()
 
         // اللوحة تظهر فقط أثناء تركيز المحرر (أي أثناء ظهور لوحة مفاتيح النظام أو التركيز
         // البرمجي)، بدل شغل مساحة دائمة على شاشة هاتف صغيرة. بفضل windowSoftInputMode=
@@ -890,8 +891,33 @@ class MainActivity : RinBaseActivity() {
         editorKeyboardPanel.addView(scroll, 1)
         markdownBar = scroll
 
-        editorController.onLanguageChanged = { updateMarkdownBarVisibility(); updateJsonBarVisibility() }
+        editorController.onLanguageChanged = {
+            updateMarkdownBarVisibility(); updateJsonBarVisibility(); updateKeywordsRowVisibility()
+        }
         updateMarkdownBarVisibility()
+        updateKeywordsRowVisibility()
+    }
+
+    /** كلمات Rin المحجوزة لا معنى لها في Markdown/JSON: نخفي صفّها لتقليل ازدحام لوحة المفاتيح. */
+    private fun updateKeywordsRowVisibility() {
+        val show = !(editorController.isMarkdown || editorController.isJson)
+        (findViewById<View>(R.id.editorKeyboardKeywordsRow).parent as? View)?.visibility =
+            if (show) View.VISIBLE else View.GONE
+    }
+
+    /**
+     * يخفي الشريط السفلي العائم أثناء ظهور لوحة مفاتيح النظام، فتلتصق لوحة الرموز مباشرة بالمفاتيح
+     * ويكسب المحرر ~64dp إضافية؛ ويعود الشريط فور إغلاق اللوحة (يعمل مع Back أيضاً).
+     */
+    private fun setupKeyboardAwareChrome() {
+        val root = window.decorView
+        val nav = findViewById<View?>(R.id.bottomNavBar) ?: return
+        root.viewTreeObserver.addOnGlobalLayoutListener {
+            val imeVisible = androidx.core.view.ViewCompat.getRootWindowInsets(root)
+                ?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) == true
+            val want = if (imeVisible) View.GONE else View.VISIBLE
+            if (nav.visibility != want) nav.visibility = want
+        }
     }
 
     private fun updateMarkdownBarVisibility() {
@@ -1873,16 +1899,26 @@ class MainActivity : RinBaseActivity() {
         }
         // النقر على سطر [Error line N] في الـ terminal (أو أمر goto N) ينقل المحرر إلى ذلك السطر.
         rinTerminal.onGoToLine = { line -> editorController.goToLine(line) }
-        tabTerminal.setOnClickListener { showConsoleTab(terminal = true) }
-        tabRuns.setOnClickListener { showConsoleTab(terminal = false) }
+        tabTerminal.setOnClickListener { consoleCollapsed = false; showConsoleTab(terminal = true) }
+        tabRuns.setOnClickListener { consoleCollapsed = false; showConsoleTab(terminal = false) }
+        findViewById<View>(R.id.btnCollapseConsole).setOnClickListener { setConsoleCollapsed(!consoleCollapsed) }
         btnCopyTerminal.setOnClickListener { rinTerminal.copyTranscript() }
         showConsoleTab(RinTerminal.terminalTabSelected)
     }
 
     /** يبدّل ذيل المحرر بين Terminal وقائمة Runs ويحدّث شكل التبويبين وزرّي النسخ/المسح. */
+    /** الكونسول مطويّ بزر السهم في رأسه: يبقى الرأس ظاهراً وتختفي المخرجات ليأخذ المحرر المساحة كلها. */
+    private var consoleCollapsed = false
+
+    private fun setConsoleCollapsed(collapsed: Boolean) {
+        consoleCollapsed = collapsed
+        findViewById<View>(R.id.btnCollapseConsole).animate().rotation(if (collapsed) 180f else 0f).setDuration(160).start()
+        showConsoleTab(RinTerminal.terminalTabSelected)
+    }
+
     private fun showConsoleTab(terminal: Boolean) {
         RinTerminal.terminalTabSelected = terminal
-        val console = isConsoleVisible()
+        val console = isConsoleVisible() && !consoleCollapsed
         rinTerminal.visibility = if (console && terminal) View.VISIBLE else View.GONE
         rvJobs.visibility = if (console && !terminal) View.VISIBLE else View.GONE
         btnCopyTerminal.visibility = if (terminal) View.VISIBLE else View.GONE
