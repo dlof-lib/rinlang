@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Selección múltiple de archivos + gestos de fila (español). Ver FileSelection.kt -->
+<resources>
+    <string name="selection_count_format">%1$d seleccionados</string>
+    <string name="selection_select_all">Seleccionar todo</string>
+    <string name="selection_invert">Invertir selección</string>
+    <string name="selection_clear">Quitar selección</string>
+    <string name="selection_delete_title">Eliminar elementos seleccionados</string>
+    <string name="selection_delete_confirm">Se eliminarán %1$d elemento(s) de forma permanente, incluido todo el contenido de las carpetas seleccionadas.</string>
+    <string name="selection_move_title">Mover %1$d elemento(s) a una carpeta</string>
+    <string name="selection_done_toast">Hecho para %1$d elemento(s)</string>
+    <string name="selection_skipped_toast">Se omitieron %1$d elemento(s) (abiertos, con cambios sin guardar o con nombre existente en el destino)</string>
+    <string name="selection_failed_toast">Falló para %1$d elemento(s)</string>
+    <string name="selection_paths_copied_toast">Rutas copiadas de %1$d elemento(s)</string>
+    <string name="swipe_rename_label">Renombrar</string>
+    <string name="swipe_delete_label">Eliminar</string>
+</resources>
