@@ -31,6 +31,8 @@ object RinNotifications {
     const val CHANNEL_ALERTS = "rin_alerts"
     /** نتائج تشغيل البرامج عندما يكون التطبيق في الخلفية. */
     const val CHANNEL_JOBS = "rin_jobs"
+    /** إشعار «RinStudio يعمل في الخلفية» أثناء تنزيل/تشغيل بعد مغادرة التطبيق — صامت بلا شارة. */
+    const val CHANNEL_BACKGROUND = "rin_background"
     /** إشعار خدمة «فتح في المتصفح» الدائم (المعرّف قديم ومحفوظ كي لا تضيع تفضيلات المستخدم). */
     const val CHANNEL_LIVE = "indsin_live_server"
     const val CHANNEL_GENERAL = "rin_general"
@@ -85,6 +87,11 @@ object RinNotifications {
                         R.string.notif_channel_jobs_desc,
                         NotificationManager.IMPORTANCE_DEFAULT, GROUP_SYSTEM
                     ) { setShowBadge(false) },
+                    channel(
+                        CHANNEL_BACKGROUND, R.string.notif_channel_background,
+                        R.string.notif_channel_background_desc,
+                        NotificationManager.IMPORTANCE_LOW, GROUP_SYSTEM
+                    ) { setShowBadge(false); setSound(null, null); enableVibration(false) },
                     channel(
                         CHANNEL_LIVE, R.string.notif_channel_live,
                         R.string.notif_channel_live_desc,
