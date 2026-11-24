@@ -46,6 +46,10 @@ import java.util.concurrent.atomic.AtomicInteger
  * كل الدوال آمنة من أي خيط، ولا تفعل شيئاً (دون استثناء) إن لم يُمنح إذن الإشعارات.
  */
 object RinNotifier {
+    /** مدة متبقية بصيغة "ساعة:دقيقة:ثانية" أو "دقيقة:ثانية" (DateUtils.formatElapsedTime عامة، بخلاف formatShortElapsedTime المخفية). */
+    private fun shortElapsed(seconds: Long): String =
+        android.text.format.DateUtils.formatElapsedTime(seconds.coerceAtLeast(0))
+
 
     const val ACTION_CANCEL = "com.dlof.rinlang.notify.ACTION_CANCEL"
     const val EXTRA_ID = "com.dlof.rinlang.notify.EXTRA_ID"
@@ -182,7 +186,7 @@ object RinNotifier {
                 val remaining = if (determinate && done < total) ((total - done) / speedBps).toLong() else -1L
                 b.setSubText(
                     if (remaining >= 0) ctx.getString(
-                        R.string.notif_dl_speed_eta, speedStr, Formatter.formatShortElapsedTime(ctx, remaining * 1000)
+                        R.string.notif_dl_speed_eta, speedStr, shortElapsed(remaining)
                     ) else ctx.getString(R.string.notif_dl_speed, speedStr)
                 )
             } else if (!phase.isNullOrBlank()) {
