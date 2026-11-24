@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- استرداد المستودعات — RepoRestore.kt -->
+<resources>
+    <string name="repo_title_new">Restore repository as new project</string>
+    <string name="repo_title_into">Restore repository into this folder</string>
+    <string name="repo_title_update">Update from source</string>
+    <string name="repo_menu_restore">Restore from repository (GitHub etc.)</string>
+    <string name="repo_menu_update">Update from saved source</string>
+    <string name="repo_import_from_file">From file (RinPak / ZIP)</string>
+    <string name="repo_import_from_repo">From repository (GitHub etc.)</string>
+    <string name="repo_url_hint">Repository URL or owner/repo</string>
+    <string name="repo_ref_hint">Branch / tag / commit (optional)</string>
+    <string name="repo_ref_pick">Pick</string>
+    <string name="repo_token_hint">Access token for private repos (optional, never saved)</string>
+    <string name="repo_name_hint">Project name (optional)</string>
+    <string name="repo_mode_title">Merge mode</string>
+    <string name="repo_mode_add">Add new files only</string>
+    <string name="repo_mode_overwrite">Replace changed files (with backup)</string>
+    <string name="repo_mode_mirror">Exact mirror (extra files moved to backup)</string>
+    <string name="repo_mirror_confirm">Exact mirror moves every file that is not in the repository to .rin_backup instead of leaving it in the folder. Continue?</string>
+    <string name="repo_start">Restore</string>
+    <string name="repo_invalid">Unsupported or invalid repository link</string>
+    <string name="repo_invalid_ref">Invalid branch or tag name</string>
+    <string name="repo_progress_title">Restoring repository…</string>
+    <string name="repo_progress_status">Downloading and extracting archive…</string>
+    <string name="repo_progress_install">Installing…</string>
+    <string name="repo_refs_loading">Loading branches and tags…</string>
+    <string name="repo_refs_none">No branches or tags found</string>
+    <string name="repo_refs_unsupported">Listing branches is not available for direct ZIP links</string>
+    <string name="repo_kind_branch">Branch</string>
+    <string name="repo_kind_tag">Tag</string>
+    <string name="repo_err_404">Repository or branch not found, or it is private (enter an access token)</string>
+    <string name="repo_err_404_token">Repository or branch not found, or the token has no access to it</string>
+    <string name="repo_err_auth">Access denied: check the token, or wait for the rate limit to reset</string>
+    <string name="repo_err_rate">Rate limit exceeded, try again later</string>
+    <string name="repo_err_http">Connection failed (HTTP %1$d)</string>
+    <string name="repo_err_too_big">Repository exceeds the limit (256 MB or 20000 files)</string>
+    <string name="repo_err_subpath">Sub-folder “%1$s” was not found in the repository</string>
+    <string name="repo_err_empty">The archive contains no files</string>
+    <string name="repo_done_new">Restored “%1$s” as a new project (%2$d files)</string>
+    <string name="repo_done_merge">Added %1$d · updated %2$d · unchanged %3$d · skipped %4$d · removed %5$d</string>
+    <string name="repo_no_source">No saved repository source for this folder. Use “Restore from repository” first</string>
+</resources>
