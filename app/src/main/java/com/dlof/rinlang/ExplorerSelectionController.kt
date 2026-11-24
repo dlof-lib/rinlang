@@ -80,6 +80,17 @@ class ExplorerSelectionController(
             val p = project() ?: return@setOnClickListener
             FileBatchOps.showMoveDialog(activity, p, selected(), protectedPaths()) { clear(); refreshTree() }
         }
+        // زر "مجلد جديد" في رأس الدرج: داخل مجلد الملف المفتوح حالياً، وإلا في الجذر.
+        activity.findViewById<View>(R.id.btnExplorerNewFolder).setOnClickListener {
+            val p = project() ?: return@setOnClickListener
+            val parent = currentFileRelPath()?.substringBeforeLast('/', "") ?: ""
+            FolderCreator.show(activity, p, parent) { refreshTree() }
+        }
+        activity.findViewById<View>(R.id.btnExplorerSelNewFolder).setOnClickListener {
+            val p = project() ?: return@setOnClickListener
+            val parent = currentFileRelPath()?.substringBeforeLast('/', "") ?: ""
+            FolderCreator.show(activity, p, parent, selected(), protectedPaths()) { clear(); refreshTree() }
+        }
         activity.findViewById<View>(R.id.btnExplorerSelCopyPath).setOnClickListener {
             FileBatchOps.copyPaths(activity, selected())
         }
