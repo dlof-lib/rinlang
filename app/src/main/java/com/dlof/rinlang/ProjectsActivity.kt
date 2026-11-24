@@ -22,7 +22,13 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import android.view.GestureDetector
+import android.view.MotionEvent
+import android.view.ScaleGestureDetector
+import androidx.core.view.isVisible
 import androidx.recyclerview.widget.GridLayoutManager
+import androidx.recyclerview.widget.ItemTouchHelper
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import androidx.recyclerview.widget.RecyclerView
 
 /**
@@ -38,6 +44,15 @@ class ProjectsActivity : RinBaseActivity() {
     private lateinit var txtEmptyHint: TextView
     private lateinit var txtProjectCount: TextView
     private lateinit var adapter: ProjectsAdapter
+
+    // --- التحديد المتعدد + الإيماءات (FileSelection.kt) ---
+    private val selection = SelectionModel()
+    private lateinit var selBar: View
+    private lateinit var txtSelCount: TextView
+    private lateinit var fabNewProjectView: View
+    private val selBackCallback = object : androidx.activity.OnBackPressedCallback(false) {
+        override fun handleOnBackPressed() { clearSelection() }
+    }
 
     /** كل المشاريع بعد الفرز، قبل تطبيق فلتر البحث — المصدر الذي يُعاد فلترته عند كل كتابة. */
     private var sortedProjects: List<Project> = emptyList()
@@ -116,13 +131,16 @@ class ProjectsActivity : RinBaseActivity() {
             onDelete = { project -> showDeleteConfirm(project) },
             onMove = { project -> showMoveDialog(project) },
             onExport = { project -> exportProject(project) },
-            onSync = { project -> syncProject(project) }
+            onSync = { project -> syncProject(project) },
+            selection = selection,
+            onSelectionChanged = { onSelectionChanged() }
         )
         // شبكة عمودين بمظهر "غلاف ألبوم" (انظر item_project.xml) بدل قائمة مسطّحة أحادية
         // العمود — يوحّد مظهر شاشة "مشاريعي" مع شاشة "الألبومات" بدل أن تبدو شاشتين من
         // تطبيقين مختلفين.
-        rvProjects.layoutManager = GridLayoutManager(this, 2)
+        rvProjects.layoutManager = GridLayoutManager(this, savedColumns())
         rvProjects.adapter = adapter
+        setupGestures()
 
         fabNewProject.setOnClickListener { newProjectLauncher.launch(Intent(this, NewProjectActivity::class.java)) }
         handleIncomingPackage(intent)
@@ -177,6 +195,175 @@ class ProjectsActivity : RinBaseActivity() {
 
     /** قائمة "ترتيب المشاريع" المنبثقة من رأس الشاشة: تكرار سريع لخيارات AppSettings.setProjectSort
      * المتاحة أصلاً في الإعدادات، لكن مباشرة فوق شاشة المشاريع نفسها. */
+    // ---- التحديد المتعدد والإيماءات ----
+
+    private fun savedColumns(): Int =
+        getSharedPreferences("rin_projects_view", MODE_PRIVATE).getInt("cols", 2).coerceIn(1, 3)
+
+    private fun setColumns(n: Int) {
+        val c = n.coerceIn(1, 3)
+        getSharedPreferences("rin_projects_view", MODE_PRIVATE).edit().putInt("cols", c).apply()
+        (rvProjects.layoutManager as GridLayoutManager).spanCount = c
+        adapter.notifyDataSetChanged()
+    }
+
+    private fun setupGestures() {
+        selBar = findViewById(R.id.layoutProjSelBar)
+        txtSelCount = findViewById(R.id.txtProjSelCount)
+        fabNewProjectView = findViewById(R.id.fabNewProject)
+        onBackPressedDispatcher.addCallback(this, selBackCallback)
+
+        // 1) ضغطة مستمرة على بطاقة = بدء التحديد، ثم سحب ↑↓←→ = تحديد نطاق (بترتيب الشبكة).
+        rvProjects.addOnItemTouchListener(
+            DragSelectTouchListener(
+                rv = rvProjects, model = selection,
+                keyAt = { adapter.keyAt(it) },
+                onChanged = { onSelectionChanged() },
+                handleViewIds = intArrayOf(R.id.frameProjectTypeIcon)
+            )
+        )
+
+        // 2) سحب البطاقة أفقياً: يمين = إعادة تسمية، يسار = حذف (مع تأكيد وتراجع).
+        val swipe = RowSwipeCallback(
+            ctx = this, model = selection,
+            rightAction = RowSwipeCallback.Action(
+                R.drawable.ic_edit_pencil, ContextCompat.getColor(this, R.color.rin_accent), getString(R.string.swipe_rename_label)
+            ) { pos -> adapter.projectAt(pos)?.let { showRenameDialog(it) } },
+            leftAction = RowSwipeCallback.Action(
+                R.drawable.ic_trash_red, 0xFFE5484D.toInt(), getString(R.string.swipe_delete_label)
+            ) { pos -> adapter.projectAt(pos)?.let { confirmDeleteProjects(listOf(it)) } },
+            cornerDp = 18f
+        )
+        ItemTouchHelper(swipe).attachToRecyclerView(rvProjects)
+
+        // 3) سحب لأسفل من أعلى القائمة = تحديث.
+        findViewById<SwipeRefreshLayout>(R.id.swipeProjects).apply {
+            setColorSchemeColors(ContextCompat.getColor(this@ProjectsActivity, R.color.rin_accent))
+            setOnRefreshListener { refresh(); isRefreshing = false }
+        }
+
+        // 4) حركة القرص: تصغير = أعمدة أكثر (بطاقات أصغر)، تكبير = أعمدة أقل (بطاقات أكبر).
+        val pinch = object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+            private var acc = 1f
+            override fun onScaleBegin(d: ScaleGestureDetector): Boolean { acc = 1f; return true }
+            override fun onScale(d: ScaleGestureDetector): Boolean { acc *= d.scaleFactor; return true }
+            override fun onScaleEnd(d: ScaleGestureDetector) {
+                val cur = (rvProjects.layoutManager as GridLayoutManager).spanCount
+                when {
+                    acc < 0.85f && cur < 3 -> setColumns(cur + 1)
+                    acc > 1.15f && cur > 1 -> setColumns(cur - 1)
+                }
+            }
+        }
+        val pinchDetector = ScaleGestureDetector(this, pinch)
+        rvProjects.addOnItemTouchListener(object : RecyclerView.SimpleOnItemTouchListener() {
+            override fun onInterceptTouchEvent(rv: RecyclerView, e: MotionEvent): Boolean {
+                pinchDetector.onTouchEvent(e)
+                return false
+            }
+        })
+
+        // 5) عنوان الشاشة: نقرتان = أول القائمة، ضغطة مستمرة = آخرها.
+        val titleGestures = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onDoubleTap(e: MotionEvent): Boolean {
+                if (adapter.itemCount > 0) rvProjects.smoothScrollToPosition(0); return true
+            }
+            override fun onLongPress(e: MotionEvent) {
+                if (adapter.itemCount > 0) rvProjects.smoothScrollToPosition(adapter.itemCount - 1)
+            }
+        })
+        findViewById<View>(R.id.txtToolbarTitle).setOnTouchListener { _, ev -> titleGestures.onTouchEvent(ev); true }
+
+        // 6) ضغطة مستمرة على عدّاد المشاريع = تبديل عدد الأعمدة بالتدوير (1 ← 2 ← 3).
+        findViewById<View>(R.id.btnProjectSort).setOnLongClickListener {
+            val cur = (rvProjects.layoutManager as GridLayoutManager).spanCount
+            setColumns(if (cur >= 3) 1 else cur + 1); true
+        }
+
+        findViewById<View>(R.id.btnProjSelClose).setOnClickListener { clearSelection() }
+        findViewById<View>(R.id.btnProjSelAll).setOnClickListener {
+            val all = adapter.allKeys()
+            if (all.isNotEmpty() && all.all { it in selection }) selection.clear() else all.forEach { selection.add(it) }
+            onSelectionChanged()
+        }
+        findViewById<View>(R.id.btnProjSelMove).setOnClickListener { showBatchMoveDialog(selectedProjects()) }
+        findViewById<View>(R.id.btnProjSelDelete).setOnClickListener { confirmDeleteProjects(selectedProjects()) }
+    }
+
+    private fun selectedProjects(): List<Project> = adapter.allProjects().filter { it.dir.absolutePath in selection }
+
+    private fun onSelectionChanged() {
+        adapter.refreshSelection()
+        updateSelectionBar()
+    }
+
+    private fun updateSelectionBar() {
+        val active = selection.active
+        selBar.isVisible = active
+        fabNewProjectView.isVisible = !active
+        selBackCallback.isEnabled = active
+        if (active) txtSelCount.text = getString(R.string.selection_count_format, selection.count)
+    }
+
+    private fun clearSelection() {
+        if (!selection.active) return
+        selection.clear()
+        onSelectionChanged()
+    }
+
+    /** حذف مشروع أو أكثر إلى سلة مؤقتة مع زر "تراجع" فوري. */
+    private fun confirmDeleteProjects(projects: List<Project>) {
+        if (projects.isEmpty()) return
+        AlertDialog.Builder(this)
+            .setTitle(R.string.delete_project_title)
+            .setMessage(
+                if (projects.size == 1) getString(R.string.delete_project_confirm, projects[0].name)
+                else getString(R.string.proj_delete_many_confirm, projects.size)
+            )
+            .setPositiveButton(R.string.delete) { _, _ ->
+                val batch = FileTrash.trash(this, "__projects__", projects.map { it.dir })
+                selection.clear()
+                refresh()
+                if (batch != null) {
+                    com.google.android.material.snackbar.Snackbar
+                        .make(findViewById(android.R.id.content), getString(R.string.selection_done_toast, batch.moves.size),
+                            com.google.android.material.snackbar.Snackbar.LENGTH_LONG)
+                        .setAction(R.string.undo_action) { FileTrash.restore(batch); refresh() }
+                        .show()
+                }
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    /** نقل عدة مشاريع إلى ألبوم دفعة واحدة. */
+    private fun showBatchMoveDialog(projects: List<Project>) {
+        if (projects.isEmpty()) return
+        val albums = ProjectAlbumManager.listAlbums(this)
+        if (albums.isEmpty()) {
+            Toast.makeText(this, R.string.move_no_folders, Toast.LENGTH_SHORT).show()
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.album_move_title)
+            .setItems(albums.toTypedArray()) { _, which ->
+                var ok = 0; var failed = 0
+                for (p in projects) {
+                    try { ProjectAlbumManager.moveProjectToAlbum(this, p, albums[which]); ok++ }
+                    catch (_: Throwable) { failed++ }
+                }
+                val msg = listOfNotNull(
+                    if (ok > 0) getString(R.string.selection_done_toast, ok) else null,
+                    if (failed > 0) getString(R.string.selection_skipped_toast, failed) else null
+                ).joinToString("\n")
+                Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+                selection.clear()
+                refresh()
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
     private fun showSortMenu(anchor: View) {
         val popup = PopupMenu(this, anchor)
         popup.menuInflater.inflate(R.menu.menu_project_sort, popup.menu)
@@ -225,6 +412,10 @@ class ProjectsActivity : RinBaseActivity() {
             sortedProjects.filter { it.name.contains(query, ignoreCase = true) }
         }
         adapter.submit(filtered)
+        if (::selBar.isInitialized) {
+            selection.retainOnly(filtered.map { it.dir.absolutePath }.toSet())
+            updateSelectionBar()
+        }
 
         if (filtered.isEmpty()) {
             txtEmpty.visibility = View.VISIBLE
@@ -855,10 +1046,38 @@ private class ProjectsAdapter(
     val onDelete: (Project) -> Unit,
     val onMove: (Project) -> Unit,
     val onExport: (Project) -> Unit,
-    val onSync: (Project) -> Unit
+    val onSync: (Project) -> Unit,
+    private val selection: SelectionModel,
+    private val onSelectionChanged: () -> Unit
 ) : RecyclerView.Adapter<ProjectsAdapter.VH>() {
 
     private var items: List<Project> = emptyList()
+
+    private companion object { const val PAYLOAD_SELECTION = "selection" }
+
+    fun keyAt(position: Int): String? = items.getOrNull(position)?.dir?.absolutePath
+    fun projectAt(position: Int): Project? = items.getOrNull(position)
+    fun allKeys(): List<String> = items.map { it.dir.absolutePath }
+    fun allProjects(): List<Project> = items
+
+    fun refreshSelection() {
+        if (items.isNotEmpty()) notifyItemRangeChanged(0, items.size, PAYLOAD_SELECTION)
+    }
+
+    private fun bindSelection(holder: VH, position: Int) {
+        val key = keyAt(position) ?: return
+        val selected = key in selection
+        holder.cover.setBackgroundResource(if (selected) R.drawable.bg_project_card_selected else R.drawable.bg_project_card)
+        holder.check.visibility = if (selected) View.VISIBLE else View.GONE
+        val vis = if (selection.active) View.GONE else View.VISIBLE
+        holder.btnMore.visibility = vis
+        holder.btnOpen.visibility = vis
+    }
+
+    override fun onBindViewHolder(holder: VH, position: Int, payloads: MutableList<Any>) {
+        if (payloads.contains(PAYLOAD_SELECTION)) bindSelection(holder, position)
+        else super.onBindViewHolder(holder, position, payloads)
+    }
 
     fun submit(newItems: List<Project>) {
         items = newItems
@@ -873,6 +1092,8 @@ private class ProjectsAdapter(
         val imgTypeIcon: android.widget.ImageView = view.findViewById(R.id.imgProjectTypeIcon)
         val btnMore: View = view.findViewById(R.id.btnProjectMore)
         val btnOpen: View = view.findViewById(R.id.btnOpenProject)
+        val cover: View = view.findViewById(R.id.projectCover)
+        val check: View = view.findViewById(R.id.imgProjectSelectCheck)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
@@ -912,9 +1133,16 @@ private class ProjectsAdapter(
         )
         holder.txtMeta.text = context.getString(R.string.project_meta_with_time_format, fileCount, relativeTime)
 
-        holder.itemView.setOnClickListener { onOpen(project) }
+        holder.itemView.setOnClickListener {
+            if (selection.active) { selection.toggle(project.dir.absolutePath); onSelectionChanged() } else onOpen(project)
+        }
+        // projectCover قابل للنقر بذاته (clickable) فيبتلع النقرة قبل itemView؛ نوجّهها لنفس المنطق.
+        holder.cover.setOnClickListener {
+            if (selection.active) { selection.toggle(project.dir.absolutePath); onSelectionChanged() } else onOpen(project)
+        }
         holder.btnOpen.setOnClickListener { onOpen(project) }
         holder.btnMore.setOnClickListener { anchor -> showActionsMenu(anchor, project) }
+        bindSelection(holder, position)
     }
 
     override fun getItemCount(): Int = items.size
