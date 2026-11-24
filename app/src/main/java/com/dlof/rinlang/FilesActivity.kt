@@ -141,6 +141,13 @@ class FilesActivity : RinBaseActivity() {
             }
         }
         findViewById<View>(R.id.btnToolbarBack).setOnClickListener { handleBack() }
+        // ضغطة مستمرة على «رجوع» = الخروج مباشرة من المشروع إلى قائمة المشاريع.
+        findViewById<View>(R.id.btnToolbarBack).setOnLongClickListener { finish(); true }
+        // ضغطة مستمرة على مسار المجلد = صعود مستوى واحد (النقر العادي يعود للجذر).
+        findViewById<View>(R.id.txtToolbarSubtitle).setOnLongClickListener {
+            if (currentRelDir.isNotBlank()) { currentRelDir = currentRelDir.substringBeforeLast('/', ""); refresh() }
+            true
+        }
 
         rvFiles = findViewById(R.id.rvFiles)
         txtEmpty = findViewById(R.id.txtEmptyFiles)
@@ -176,6 +183,8 @@ class FilesActivity : RinBaseActivity() {
             }
         })
 
+        // ضغطة مستمرة على زر «إضافة» = مجلد جديد مباشرة.
+        fabAddFile.setOnLongClickListener { FolderCreator.show(this, project, currentRelDir) { refresh() }; true }
         fabAddFile.setOnClickListener {
             FileCreator.show(this, project, currentRelDir, onSingle = { showCreateFileDialog() }) { refresh() }
         }
