@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- شريط تنسيق Markdown في المحرر (md) -->
+    <string name="md_preview">Vista previa de Markdown</string>
+    <string name="md_preview_needs_project">Abre el archivo desde un proyecto para previsualizarlo</string>
+    <string name="md_h1">Título 1</string>
+    <string name="md_h2">Título 2</string>
+    <string name="md_h3">Título 3</string>
+    <string name="md_bold">Negrita</string>
+    <string name="md_italic">Cursiva</string>
+    <string name="md_strike">Tachado</string>
+    <string name="md_inline_code">Código en línea</string>
+    <string name="md_code_block">Bloque de código</string>
+    <string name="md_quote">Cita</string>
+    <string name="md_bullet_list">Lista con viñetas</string>
+    <string name="md_numbered_list">Lista numerada</string>
+    <string name="md_task_list">Lista de tareas</string>
+    <string name="md_toggle_checkbox">Marcar casilla</string>
+    <string name="md_link">Enlace</string>
+    <string name="md_image">Imagen</string>
+    <string name="md_table">Tabla</string>
+    <string name="md_hr">Línea horizontal</string>
+    <string name="md_placeholder_text">texto</string>
+    <string name="md_placeholder_url">https://</string>
+    <string name="md_table_col">col</string>
+    <string name="md_indent">Aumentar sangría</string>
+    <string name="md_outdent">Reducir sangría</string>
+    <string name="md_headings">Títulos</string>
+    <string name="md_more">Más</string>
+    <string name="md_menu_format_table">Dar formato a la tabla</string>
+    <string name="md_menu_toc">Insertar tabla de contenidos</string>
+    <string name="md_menu_stats">Estadísticas del documento</string>
+    <string name="md_no_headings">No hay títulos en el archivo</string>
+    <string name="md_not_in_table">Coloca el cursor dentro de una tabla</string>
+    <string name="md_headings_title">Ir al título</string>
+    <string name="md_stats_title">Estadísticas del documento</string>
+    <string name="md_stats_message">Palabras: %1$d\nCaracteres: %2$d (sin espacios: %3$d)\nLíneas: %4$d\nTítulos: %5$d\nTiempo de lectura: ~%6$d min</string>
+    <string name="md_ok">Aceptar</string>
+</resources>
