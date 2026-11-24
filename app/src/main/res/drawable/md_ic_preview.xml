@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- أيقونة شريط Markdown في المحرر (مرسومة من الصفر، تُلوَّن عند الاستخدام) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z" />
+</vector>
