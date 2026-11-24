@@ -8,12 +8,15 @@
             <TextView android:id="@+id/txtAlbumDetailCount" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="@color/rin_editor_hint" android:textSize="11sp" />
         </LinearLayout>
     </LinearLayout>
-    <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
+    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout android:id="@+id/swipeAlbumDetail"
+        android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
+    <FrameLayout android:layout_width="match_parent" android:layout_height="match_parent">
         <androidx.recyclerview.widget.RecyclerView android:id="@+id/rvAlbumProjects" android:layout_width="match_parent" android:layout_height="match_parent" android:padding="10dp" android:clipToPadding="false" />
         <LinearLayout android:id="@+id/albumDetailEmpty" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_gravity="center" android:gravity="center" android:orientation="vertical" android:padding="30dp">
             <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="هذا الألبوم فارغ" android:textColor="@color/rin_on_toolbar" android:textSize="17sp" android:textStyle="bold" />
             <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="5dp" android:text="انقل مشروعاً إليه من شاشة المشاريع." android:textColor="@color/rin_editor_hint" android:textSize="12sp" />
         </LinearLayout>
     </FrameLayout>
+    </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
     <include layout="@layout/bottom_nav_bar" />
 </LinearLayout>
