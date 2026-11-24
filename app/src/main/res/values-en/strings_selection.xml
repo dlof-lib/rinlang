@@ -14,4 +14,11 @@
     <string name="selection_paths_copied_toast">Copied paths of %1$d item(s)</string>
     <string name="swipe_rename_label">Rename</string>
     <string name="swipe_delete_label">Delete</string>
+    <string name="mkdir_single">Single folder (nested path supported)</string>
+    <string name="mkdir_multi">Several folders at once</string>
+    <string name="mkdir_template">From a template</string>
+    <string name="mkdir_group_selected">Group %1$d selected into a new folder</string>
+    <string name="mkdir_single_hint">Folder name or path like ui/screens</string>
+    <string name="mkdir_multi_hint">One name per line or comma-separated</string>
+    <string name="mkdir_created_toast">%1$d folder(s) created</string>
 </resources>
