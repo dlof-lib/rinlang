@@ -13,6 +13,7 @@
     <string name="selection_failed_toast">فشلت العملية على %1$d عنصر</string>
     <string name="selection_paths_copied_toast">نُسخت مسارات %1$d عنصر</string>
     <string name="swipe_rename_label">إعادة تسمية</string>
+    <string name="swipe_open_label">فتح</string>
     <string name="swipe_delete_label">حذف</string>
     <string name="mkdir_single">مجلد واحد (يدعم مساراً متداخلاً)</string>
     <string name="mkdir_multi">عدة مجلدات دفعة واحدة</string>
