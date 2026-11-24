@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- رفع/وسائط/zip — FilesExtras3.kt -->
+<resources>
+    <string name="hub_upload_title">Upload files</string>
+    <string name="up_single">Single file</string>
+    <string name="up_multi">Multiple files at once</string>
+    <string name="up_folder">Whole folder with contents</string>
+    <string name="zip_browse_device">Browse an archive from device (selective extract)</string>
+    <string name="hub_media_title">Upload media</string>
+    <string name="media_single">One photo or video</string>
+    <string name="media_multi">Multiple photos and videos</string>
+    <string name="media_audio">Audio files</string>
+    <string name="media_shrink_on">Shrink large images on upload: ON (tap to disable)</string>
+    <string name="media_shrink_off">Shrink large images on upload: OFF (tap to enable)</string>
+    <string name="conflict_title">%1$d files with the same name already exist</string>
+    <string name="conflict_keep">Keep both (number the new one)</string>
+    <string name="conflict_skip">Skip existing</string>
+    <string name="conflict_replace">Replace existing</string>
+    <string name="upload_collecting">Preparing…</string>
+    <string name="upload_nothing">Nothing to upload</string>
+    <string name="upload_progress">Uploading… %1$d / %2$d</string>
+    <string name="upload_cancelled">Upload cancelled</string>
+    <string name="upload_result">Done: %1$d · skipped: %2$d · failed: %3$d · %4$s</string>
+    <string name="zip_browse_title">%1$s — %2$d files · %3$s</string>
+    <string name="zip_extract_selected">Extract selected</string>
+    <string name="zip_toggle_all">All / none (long-press: pattern)</string>
+    <string name="zip_none_selected">Nothing selected</string>
+    <string name="zip_extract_result">Extracted %1$d files (skipped %2$d)</string>
+    <string name="zip_truncated">Showing only the first %1$d entries</string>
+    <string name="zip_bad">Could not read archive: %1$s</string>
+    <string name="row_zip_browse">Browse archive</string>
+    <string name="row_zip_named">Extract to folder named after archive</string>
+    <string name="row_zip_test">Test archive integrity</string>
+    <string name="zip_test_ok">Archive is fine: %1$d files, no errors</string>
+    <string name="zip_test_bad">Corrupt: %1$d of %2$d\n%3$s</string>
+    <string name="zip_share">Zip &amp; share</string>
+    <string name="row_media_info">Media info</string>
+    <string name="row_shrink">Shrunken copy</string>
+    <string name="shrink_1024">Max dimension 1024 px</string>
+    <string name="shrink_2048">Max dimension 2048 px</string>
+    <string name="shrink_half">50% of size</string>
+    <string name="shrink_done">Created %1$s</string>
+    <string name="shrink_nothing">No shrink needed, or it failed</string>
+    <string name="shrink_unsupported">Shrinking supports JPG and PNG only</string>
+    <string name="info_size">Size</string>
+    <string name="info_dims">Dimensions</string>
+    <string name="info_type">Type</string>
+    <string name="info_duration">Duration</string>
+    <string name="info_bitrate">Bitrate</string>
+</resources>
