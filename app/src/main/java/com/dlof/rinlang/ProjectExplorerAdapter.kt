@@ -56,6 +56,16 @@ class ProjectExplorerAdapter(
 
     fun isEmpty(): Boolean = nodes.isEmpty()
 
+    private var pinned: Set<String> = emptySet()
+
+    /** المثبّتات (FilePins): نجمة قبل الاسم. تُستدعى قبل [submit]. */
+    fun setPinned(paths: Set<String>) { pinned = paths }
+
+    private fun applyPin(tv: TextView, key: String) {
+        if (key in pinned) RsIcons.start(tv, R.drawable.rs_ic_star, 12, 4, androidx.core.content.ContextCompat.getColor(tv.context, R.color.rin_accent))
+        else RsIcons.clear(tv)
+    }
+
     /** مفتاح التحديد (المسار النسبي) للصف عند [position]. */
     fun keyAt(position: Int): String? = when (val n = nodes.getOrNull(position)) {
         is Node.FolderNode -> n.folder.relPath
@@ -150,6 +160,7 @@ class ProjectExplorerAdapter(
                 holder as FolderVH
                 applyIndent(holder.itemView, holder.basePaddingStart, node.depth, density)
                 holder.name.text = node.folder.name
+                applyPin(holder.name, node.folder.relPath)
                 // سهم يدور 90° عند التوسيع بدل أيقونتين منفصلتين (مفتوح/مغلق).
                 holder.chevron.rotation = if (node.expanded) 90f else 0f
                 holder.folderIcon.setImageResource(RsFolderIcons.forName(node.folder.name, open = node.expanded))
@@ -162,6 +173,7 @@ class ProjectExplorerAdapter(
                 holder as FileVH
                 applyIndent(holder.itemView, holder.basePaddingStart, node.depth, density)
                 holder.name.text = node.file.name
+                applyPin(holder.name, node.file.relPath)
                 FileIconResolver.load(holder.icon, node.file.file)
                 val isSelected = node.file.relPath == selectedRelPath
                 holder.itemView.setBackgroundResource(
@@ -206,9 +218,9 @@ class ProjectExplorerAdapter(
  */
 object ProjectExplorerTree {
 
-    fun build(project: Project, expandedRelPaths: Set<String>): List<ProjectExplorerAdapter.Node> {
+    fun build(project: Project, expandedRelPaths: Set<String>, ctx: android.content.Context? = null): List<ProjectExplorerAdapter.Node> {
         val out = mutableListOf<ProjectExplorerAdapter.Node>()
-        collect(project, "", 0, expandedRelPaths, out)
+        collect(project, "", 0, expandedRelPaths, out, ctx)
         return out
     }
 
@@ -217,15 +229,19 @@ object ProjectExplorerTree {
         relDir: String,
         depth: Int,
         expandedRelPaths: Set<String>,
-        out: MutableList<ProjectExplorerAdapter.Node>
+        out: MutableList<ProjectExplorerAdapter.Node>,
+        ctx: android.content.Context?
     ) {
         val (folders, files) = ProjectManager.listEntries(project, relDir)
-        for (folder in folders.sortedBy { it.name.lowercase() }) {
+        val pins = if (ctx != null) FilePins.get(ctx, project.name) else emptySet()
+        val sortedFolders = if (ctx != null) FileSort.folders(ctx, folders, pins) else folders.sortedBy { it.name.lowercase() }
+        val sortedFiles = if (ctx != null) FileSort.files(ctx, files, pins) else files.sortedBy { it.name.lowercase() }
+        for (folder in sortedFolders) {
             val expanded = expandedRelPaths.contains(folder.relPath)
             out += ProjectExplorerAdapter.Node.FolderNode(folder, depth, expanded)
-            if (expanded) collect(project, folder.relPath, depth + 1, expandedRelPaths, out)
+            if (expanded) collect(project, folder.relPath, depth + 1, expandedRelPaths, out, ctx)
         }
-        for (file in files.sortedBy { it.name.lowercase() }) {
+        for (file in sortedFiles) {
             out += ProjectExplorerAdapter.Node.FileNode(file, depth)
         }
     }
