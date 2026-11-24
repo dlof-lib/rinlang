@@ -183,7 +183,30 @@
         android:focusable="true"
         android:textColor="@color/rin_accent"
         android:textSize="11.5sp"
-        android:textStyle="bold" />
+        android:textStyle="bold"
+        android:visibility="gone" />
+
+    <!-- خيارات البحث المتقدم (تُبنى في FilesActivity.renderSearchOptions): نطاق الأسماء/المحتوى،
+         حالة الأحرف، كلمة كاملة، Regex، نطاق المجلد، السجل، المرشّحات، الاستبدال.
+         تظهر عند التركيز على مربع البحث أو وجود نص فيه. -->
+    <HorizontalScrollView
+        android:id="@+id/scrollSearchOptions"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="10dp"
+        android:layout_marginEnd="10dp"
+        android:layout_marginTop="6dp"
+        android:scrollbars="none"
+        android:overScrollMode="never"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:id="@+id/layoutSearchOptions"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical" />
+    </HorizontalScrollView>
 
     <!-- شرائح تصفية سريعة: الكل / فيها أخطاء / غير محفوظة / مثبّتة (تُبنى في FilesActivity.renderStatusChips) -->
     <HorizontalScrollView
