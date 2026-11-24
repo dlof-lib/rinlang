@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- الإشعارات — notify/RinNotifier.kt / permissions/RinNotifications.kt / IndsinLiveService.kt -->
+<resources>
+    <string name="notif_group_files">Files &amp; downloads</string>
+    <string name="notif_group_system">Tasks &amp; services</string>
+    <string name="notif_channel_download_progress">Download progress</string>
+    <string name="notif_channel_download_progress_desc">A progress bar while downloading or compressing — silent, no alerts.</string>
+    <string name="notif_channel_download_done">Download complete</string>
+    <string name="notif_channel_download_done_desc">Lets you know when a file is saved to Downloads, with Open and Share actions.</string>
+    <string name="notif_channel_alerts">Errors &amp; alerts</string>
+    <string name="notif_channel_alerts_desc">Urgent notices such as a failed download or save.</string>
+    <string name="notif_channel_jobs">Run results</string>
+    <string name="notif_channel_jobs_desc">The result of your program run when it finishes while the app is in the background.</string>
+    <string name="notif_channel_live">Indsin preview server</string>
+    <string name="notif_channel_live_desc">Ongoing notice while the local \'Open in browser\' preview server is running.</string>
+    <string name="notif_channel_general">General</string>
+    <string name="notif_channel_general_desc">Miscellaneous RinStudio notices.</string>
+    <string name="notif_dl_folder_root">Downloads</string>
+    <string name="notif_dl_saved_in">Saved in %1$s</string>
+    <string name="notif_dl_progress_text">%1$s · %2$s of %3$s</string>
+    <string name="notif_dl_progress_unknown">%1$s downloaded</string>
+    <string name="notif_dl_preparing">Preparing…</string>
+    <string name="notif_dl_failed_title">Download failed</string>
+    <string name="notif_dl_failed_hint">Tap to open RinStudio and try again.</string>
+    <string name="notif_project_saved_title">Downloaded into the project</string>
+    <string name="notif_project_saved_hint">Tap to open RinStudio.</string>
+    <string name="notif_job_success_title">Run #%1$d finished</string>
+    <string name="notif_job_error_title">Run #%1$d failed</string>
+    <string name="notif_job_timeout_title">Run #%1$d timed out</string>
+    <string name="notif_job_duration">Took %1$s</string>
+    <string name="notif_job_no_output">No output</string>
+    <string name="notif_duration_ms">%1$d ms</string>
+    <string name="notif_duration_s">%1$.1f s</string>
+    <string name="notif_live_hint">Tap Open to view the preview in your browser, or Stop to shut the server down.</string>
+    <plurals name="notif_downloads_done">
+        <item quantity="one">%d download complete</item>
+        <item quantity="other">%d downloads complete</item>
+    </plurals>
+</resources>
