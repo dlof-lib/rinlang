@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- الإشعارات — notify/RinNotifier.kt / permissions/RinNotifications.kt / IndsinLiveService.kt -->
+<resources>
+    <string name="notif_group_files">Archivos y descargas</string>
+    <string name="notif_group_system">Tareas y servicios</string>
+    <string name="notif_channel_download_progress">Progreso de descargas</string>
+    <string name="notif_channel_download_progress_desc">Barra de progreso al descargar o comprimir, sin sonido ni avisos.</string>
+    <string name="notif_channel_download_done">Descarga completada</string>
+    <string name="notif_channel_download_done_desc">Te avisa cuando un archivo se guarda en Descargas, con acciones Abrir y Compartir.</string>
+    <string name="notif_channel_alerts">Errores y alertas</string>
+    <string name="notif_channel_alerts_desc">Avisos urgentes, como una descarga o un guardado fallido.</string>
+    <string name="notif_channel_jobs">Resultados de ejecución</string>
+    <string name="notif_channel_jobs_desc">El resultado de la ejecución de tu programa cuando termina con la app en segundo plano.</string>
+    <string name="notif_channel_live">Servidor de vista previa Indsin</string>
+    <string name="notif_channel_live_desc">Aviso permanente mientras el servidor local de vista previa («Abrir en el navegador») está activo.</string>
+    <string name="notif_channel_general">General</string>
+    <string name="notif_channel_general_desc">Avisos varios de RinStudio.</string>
+    <string name="notif_dl_folder_root">Descargas</string>
+    <string name="notif_dl_saved_in">Guardado en %1$s</string>
+    <string name="notif_dl_progress_text">%1$s · %2$s de %3$s</string>
+    <string name="notif_dl_progress_unknown">%1$s descargados</string>
+    <string name="notif_dl_preparing">Preparando…</string>
+    <string name="notif_dl_failed_title">Error en la descarga</string>
+    <string name="notif_dl_failed_hint">Toca para abrir RinStudio e intentarlo de nuevo.</string>
+    <string name="notif_project_saved_title">Descargado en el proyecto</string>
+    <string name="notif_project_saved_hint">Toca para abrir RinStudio.</string>
+    <string name="notif_job_success_title">Ejecución #%1$d finalizada</string>
+    <string name="notif_job_error_title">Falló la ejecución #%1$d</string>
+    <string name="notif_job_timeout_title">Se agotó el tiempo de la ejecución #%1$d</string>
+    <string name="notif_job_duration">Duración: %1$s</string>
+    <string name="notif_job_no_output">Sin salida</string>
+    <string name="notif_duration_ms">%1$d ms</string>
+    <string name="notif_duration_s">%1$.1f s</string>
+    <string name="notif_live_hint">Toca Abrir para ver la vista previa en el navegador, o Detener para apagar el servidor.</string>
+    <plurals name="notif_downloads_done">
+        <item quantity="one">%d descarga completada</item>
+        <item quantity="many">%d descargas completadas</item>
+        <item quantity="other">%d descargas completadas</item>
+    </plurals>
+</resources>
