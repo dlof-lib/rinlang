@@ -20,7 +20,11 @@ import androidx.recyclerview.widget.RecyclerView
  */
 class ProjectExplorerAdapter(
     private val onFolderToggled: (RinFolder) -> Unit,
-    private val onFileClicked: (RinFile) -> Unit
+    private val onFileClicked: (RinFile) -> Unit,
+    /** حالة التحديد المتعدد المشتركة مع [ExplorerSelectionController]. */
+    private val selection: SelectionModel = SelectionModel(),
+    /** يُستدعى بعد تبديل تحديد صف بالنقر (أثناء وضع التحديد) لتحديث الشريط. */
+    private val onSelectionChanged: () -> Unit = {}
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     sealed class Node {
@@ -37,6 +41,8 @@ class ProjectExplorerAdapter(
         private const val TYPE_FILE = 1
         /** إزاحة بكسل مستقلة (dp) لكل مستوى تعشيش إضافي داخل الشجرة. */
         private const val INDENT_DP = 16
+        /** حمولة تحديث جزئي: حالة التحديد فقط. */
+        private const val PAYLOAD_SELECTION = "selection"
     }
 
     /** يستبدل محتوى القائمة بالكامل: عُقد جديدة، الملف المفتوح حالياً (لتظليل صفه)، والملفات
@@ -49,6 +55,71 @@ class ProjectExplorerAdapter(
     }
 
     fun isEmpty(): Boolean = nodes.isEmpty()
+
+    /** مفتاح التحديد (المسار النسبي) للصف عند [position]. */
+    fun keyAt(position: Int): String? = when (val n = nodes.getOrNull(position)) {
+        is Node.FolderNode -> n.folder.relPath
+        is Node.FileNode -> n.file.relPath
+        null -> null
+    }
+
+    fun entryAt(position: Int): FsEntry? = when (val n = nodes.getOrNull(position)) {
+        is Node.FolderNode -> FsEntry.FolderEntry(n.folder)
+        is Node.FileNode -> FsEntry.FileEntry(n.file)
+        null -> null
+    }
+
+    /** كل الصفوف الظاهرة حالياً (المجلدات المطوية لا تظهر أبناءها). */
+    fun entries(): List<FsEntry> = nodes.map {
+        when (it) {
+            is Node.FolderNode -> FsEntry.FolderEntry(it.folder)
+            is Node.FileNode -> FsEntry.FileEntry(it.file)
+        }
+    }
+
+    fun refreshSelection() {
+        if (nodes.isNotEmpty()) notifyItemRangeChanged(0, nodes.size, PAYLOAD_SELECTION)
+    }
+
+    private fun bindSelectionState(holder: RecyclerView.ViewHolder, position: Int) {
+        val key = keyAt(position) ?: return
+        val checked = key in selection
+        // setBackgroundResource قد يعيد ضبط الحشوة؛ نحفظ إزاحة التعشيش (paddingStart) ونعيدها.
+        val v = holder.itemView
+        val ps = v.paddingStart; val pt = v.paddingTop; val pe = v.paddingEnd; val pb = v.paddingBottom
+        try {
+            applySelectionBackground(holder, key, checked)
+        } finally {
+            v.setPaddingRelative(ps, pt, pe, pb)
+        }
+    }
+
+    private fun applySelectionBackground(holder: RecyclerView.ViewHolder, key: String, checked: Boolean) {
+        when (holder) {
+            is FolderVH -> {
+                holder.check.isVisible = checked
+                holder.itemView.setBackgroundResource(
+                    if (checked) R.drawable.bg_explorer_row_checked else R.drawable.bg_icon_btn
+                )
+            }
+            is FileVH -> {
+                holder.check.isVisible = checked
+                val opened = key == selectedRelPath
+                holder.itemView.setBackgroundResource(
+                    when {
+                        checked -> R.drawable.bg_explorer_row_checked
+                        opened -> R.drawable.bg_explorer_row_selected
+                        else -> R.drawable.bg_icon_btn
+                    }
+                )
+            }
+        }
+    }
+
+    private fun toggleSelected(key: String) {
+        selection.toggle(key)
+        onSelectionChanged()
+    }
 
     override fun getItemViewType(position: Int): Int =
         if (nodes[position] is Node.FolderNode) TYPE_FOLDER else TYPE_FILE
@@ -64,6 +135,14 @@ class ProjectExplorerAdapter(
         }
     }
 
+    override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int, payloads: MutableList<Any>) {
+        if (payloads.contains(PAYLOAD_SELECTION)) {
+            bindSelectionState(holder, position)
+        } else {
+            super.onBindViewHolder(holder, position, payloads)
+        }
+    }
+
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
         val density = holder.itemView.resources.displayMetrics.density
         when (val node = nodes[position]) {
@@ -74,7 +153,10 @@ class ProjectExplorerAdapter(
                 // سهم يدور 90° عند التوسيع بدل أيقونتين منفصلتين (مفتوح/مغلق).
                 holder.chevron.rotation = if (node.expanded) 90f else 0f
                 holder.folderIcon.setImageResource(RsFolderIcons.forName(node.folder.name, open = node.expanded))
-                holder.itemView.setOnClickListener { onFolderToggled(node.folder) }
+                holder.itemView.setOnClickListener {
+                    if (selection.active) toggleSelected(node.folder.relPath) else onFolderToggled(node.folder)
+                }
+                bindSelectionState(holder, position)
             }
             is Node.FileNode -> {
                 holder as FileVH
@@ -87,7 +169,10 @@ class ProjectExplorerAdapter(
                 )
                 holder.name.setTypeface(holder.name.typeface, if (isSelected) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
                 holder.dirtyDot.isVisible = dirtyPaths.contains(node.file.relPath)
-                holder.itemView.setOnClickListener { onFileClicked(node.file) }
+                holder.itemView.setOnClickListener {
+                    if (selection.active) toggleSelected(node.file.relPath) else onFileClicked(node.file)
+                }
+                bindSelectionState(holder, position)
             }
         }
     }
@@ -101,6 +186,7 @@ class ProjectExplorerAdapter(
         val chevron: ImageView = view.findViewById(R.id.imgExplorerChevron)
         val folderIcon: ImageView = view.findViewById(R.id.imgExplorerFolderIcon)
         val name: TextView = view.findViewById(R.id.txtExplorerFolderName)
+        val check: View = view.findViewById(R.id.imgExplorerCheck)
         val basePaddingStart: Int = view.paddingStart
     }
 
@@ -108,6 +194,7 @@ class ProjectExplorerAdapter(
         val icon: ImageView = view.findViewById(R.id.imgExplorerFileIcon)
         val name: TextView = view.findViewById(R.id.txtExplorerFileName)
         val dirtyDot: TextView = view.findViewById(R.id.txtExplorerDirtyDot)
+        val check: View = view.findViewById(R.id.imgExplorerCheck)
         val basePaddingStart: Int = view.paddingStart
     }
 }
