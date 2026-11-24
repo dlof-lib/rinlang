@@ -310,13 +310,14 @@ object FileCreator {
     )
 
     fun show(ctx: Context, project: Project, relDir: String, onSingle: () -> Unit, onDone: () -> Unit) {
-        val labels = arrayOf(ctx.getString(R.string.mkfile_single), ctx.getString(R.string.mkfile_multi), ctx.getString(R.string.mkfile_template))
+        val labels = arrayOf(ctx.getString(R.string.mkfile_single), ctx.getString(R.string.mkfile_multi), ctx.getString(R.string.mkfile_template), ctx.getString(R.string.mkfile_clipboard))
         AlertDialog.Builder(ctx)
             .setTitle(R.string.new_file_title)
             .setItems(labels) { _, which ->
                 when (which) {
                     0 -> onSingle()
                     1 -> multi(ctx, project, relDir, onDone)
+                    3 -> ClipboardFile.show(ctx, project, relDir, onDone)
                     else -> template(ctx, project, relDir, onDone)
                 }
             }
@@ -408,6 +409,12 @@ object SelectionMenu {
         if (entries.size == 1 && entries[0] is FsEntry.FileEntry && !ProjectManager.isBinaryFile(entries[0].name)) {
             m.add(0, 15, 14, R.string.tool_preview)
         }
+        val twoText = entries.size == 2 && entries.all { it is FsEntry.FileEntry && !ProjectManager.isBinaryFile(it.name) }
+        if (twoText) m.add(0, 16, 15, R.string.tool_compare)
+        m.add(0, 17, 16, R.string.zip_share)
+        m.add(0, 18, 17, R.string.zc_menu)
+        val zips = entries.filter { it is FsEntry.FileEntry && it.name.endsWith(".zip", true) }
+        if (zips.size == 1 && entries.size > 1) m.add(0, 19, 18, R.string.zadd_menu)
         pm.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 1 -> { FileClipboard.set(entries, cut = false); toast(ctx, entries.size); onChanged() }
@@ -425,6 +432,17 @@ object SelectionMenu {
                 13 -> onSelectPattern?.invoke()
                 14 -> FileShare.share(ctx, entries)
                 15 -> (entries[0] as? FsEntry.FileEntry)?.let { FilePreview.show(ctx, it.file.file) }
+                17 -> ZipTools.shareAsZip(ctx, entries)
+                18 -> ZipCompress.show(ctx, project, entries, parentRelDir, onChanged)
+                19 -> {
+                    val z = entries.first { it is FsEntry.FileEntry && it.name.endsWith(".zip", true) } as FsEntry.FileEntry
+                    ZipAdd.add(ctx, z.file.file, entries.filter { it !== z }, onChanged)
+                }
+                16 -> {
+                    val a = (entries[0] as FsEntry.FileEntry).file.file
+                    val b = (entries[1] as FsEntry.FileEntry).file.file
+                    FileDiff.show(ctx, a, b)
+                }
                 else -> return@setOnMenuItemClickListener false
             }
             true
