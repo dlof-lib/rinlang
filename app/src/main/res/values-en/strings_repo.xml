@@ -40,4 +40,11 @@
     <string name="repo_done_new">Restored “%1$s” as a new project (%2$d files)</string>
     <string name="repo_done_merge">Added %1$d · updated %2$d · unchanged %3$d · skipped %4$d · removed %5$d</string>
     <string name="repo_no_source">No saved repository source for this folder. Use “Restore from repository” first</string>
+    <string name="repo_recent">Recent</string>
+    <string name="repo_recent_none">No recent repositories</string>
+    <string name="repo_preview_title">Preview before applying</string>
+    <string name="repo_preview_msg">Will add %1$d · update %2$d · unchanged %3$d · skip %4$d · remove %5$d\n\nAnything replaced or removed is copied to .rin_backup first.</string>
+    <string name="repo_preview_run">Apply</string>
+    <string name="repo_checking">Checking for updates…</string>
+    <string name="repo_uptodate_msg">No changes in the repository since the last restore (%1$s). Restore anyway?</string>
 </resources>
