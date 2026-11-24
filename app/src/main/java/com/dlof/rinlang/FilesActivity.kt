@@ -51,6 +51,11 @@ class FilesActivity : RinBaseActivity() {
 
     companion object {
         const val EXTRA_PROJECT_NAME = "extra_project_name"
+        /** بحث مبدئي قادم من شريط البحث في المحرر (يُنفَّذ كبحث محتوى في المشروع). */
+        const val EXTRA_SEARCH_QUERY = "extra_search_query"
+        const val EXTRA_SEARCH_CASE = "extra_search_case"
+        const val EXTRA_SEARCH_WORD = "extra_search_word"
+        const val EXTRA_SEARCH_REGEX = "extra_search_regex"
     }
 
     private lateinit var project: Project
@@ -65,9 +70,11 @@ class FilesActivity : RinBaseActivity() {
     private lateinit var txtSelectionCount: TextView
     private lateinit var fabContainer: View
 
-    // --- بحث المحتوى (يُحسب في خيط خلفي مع تأخير بسيط أثناء الكتابة) ---
-    private var contentSearch = false
-    private var searchToken = 0
+    // --- البحث المتقدم (FileSearch.kt): يُحسب في خيط خلفي مع تأخير بسيط أثناء الكتابة ---
+    private var searchOpts = SearchOptions(query = "")
+    private var folderScope = false
+    private var lastSearch: SearchResult? = null
+    @Volatile private var searchToken = 0
     private val searchHandler = Handler(Looper.getMainLooper())
     private var pendingSearch: Runnable? = null
 
@@ -179,9 +186,21 @@ class FilesActivity : RinBaseActivity() {
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
             override fun afterTextChanged(s: Editable?) {
                 searchQuery = s?.toString().orEmpty()
-                refresh()
+                updateSearchChrome()
+                if (searchQuery.isBlank()) refresh() else runSearch(250L)
             }
         })
+
+        intent.getStringExtra(EXTRA_SEARCH_QUERY)?.lineSequence()?.firstOrNull()?.takeIf { it.isNotBlank() }?.let { q ->
+            searchOpts = searchOpts.copy(
+                mode = SearchMode.CONTENT,
+                caseSensitive = intent.getBooleanExtra(EXTRA_SEARCH_CASE, searchOpts.caseSensitive),
+                wholeWord = intent.getBooleanExtra(EXTRA_SEARCH_WORD, searchOpts.wholeWord),
+                regex = intent.getBooleanExtra(EXTRA_SEARCH_REGEX, searchOpts.regex)
+            )
+            renderSearchOptions()
+            findViewById<EditText>(R.id.inputSearchFiles).setText(q)
+        }
 
         // ضغطة مستمرة على زر «إضافة» = مجلد جديد مباشرة.
         fabAddFile.setOnLongClickListener { FolderCreator.show(this, project, currentRelDir) { refresh() }; true }
@@ -293,16 +312,19 @@ class FilesActivity : RinBaseActivity() {
 
     private fun setupProChrome() {
         findViewById<View>(R.id.btnRecentFiles).setOnClickListener { showRecentDialog() }
-        val toggle = findViewById<TextView>(R.id.btnSearchContent)
-        fun render() {
-            toggle.setText(if (contentSearch) R.string.search_mode_content else R.string.search_mode_name)
+        searchOpts = SearchPrefs.load(this)
+        folderScope = SearchPrefs.folderScope(this)
+        val input = findViewById<EditText>(R.id.inputSearchFiles)
+        input.setOnFocusChangeListener { _, _ -> updateSearchChrome() }
+        input.setOnEditorActionListener { v, _, _ ->
+            if (searchQuery.isNotBlank()) SearchHistory.add(this, project.name, searchQuery)
+            (getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager)
+                .hideSoftInputFromWindow(v.windowToken, 0)
+            true
         }
-        render()
-        toggle.setOnClickListener {
-            contentSearch = !contentSearch
-            render()
-            if (searchQuery.isNotBlank()) refresh()
-        }
+        renderSearchOptions()
+        updateSearchChrome()
+        adapter.onOpenHit = { hit -> openSearchHit(hit) }
         adapter.onVisibleChanged = {
             pruneSelection()
             updateEmptyState()
@@ -434,28 +456,237 @@ class FilesActivity : RinBaseActivity() {
     private fun renderSummary(folders: Int, files: Int, bytes: Long) {
         findViewById<TextView>(R.id.txtFilesSummary).apply {
             visibility = View.VISIBLE
+            setTextColor(androidx.core.content.ContextCompat.getColor(this@FilesActivity, R.color.rin_editor_hint))
             text = getString(R.string.files_summary_format, files, folders, android.text.format.Formatter.formatFileSize(this@FilesActivity, bytes))
         }
     }
 
-    private fun scheduleContentSearch(q: String) {
+    // ---- البحث المتقدم: التشغيل، الملخص، الخيارات، السجل، الاستبدال ----
+
+    private fun currentSearchOptions(): SearchOptions =
+        searchOpts.copy(query = searchQuery, scopeRel = if (folderScope) currentRelDir else "")
+
+    /** يلغي أي بحث جارٍ (نتيجته المتأخرة تُتجاهل عبر [searchToken]). */
+    private fun cancelSearch() {
+        pendingSearch?.let { searchHandler.removeCallbacks(it) }
+        pendingSearch = null
+        searchToken++
+        lastSearch = null
+    }
+
+    private fun runSearch(delayMs: Long) {
         pendingSearch?.let { searchHandler.removeCallbacks(it) }
         val token = ++searchToken
+        val opts = currentSearchOptions()
+        findViewById<TextView>(R.id.txtFilesSummary).apply {
+            visibility = View.VISIBLE
+            setTextColor(androidx.core.content.ContextCompat.getColor(this@FilesActivity, R.color.rin_editor_hint))
+            setText(R.string.sr_searching)
+        }
         val run = Runnable {
             Thread {
-                val (found, hits) = FileContentSearch.search(project, q)
-                searchHandler.post {
-                    if (token != searchToken || searchQuery != q || !contentSearch) return@post
-                    adapter.setHits(hits)
-                    adapter.submit(emptyList(), found, searchMode = true)
-                    adapter.setDirtyPaths(EditorDirtyState.dirtyPaths(project.name))
-                    pruneSelection()
-                    updateEmptyState()
-                }
+                val res = FileSearch.search(project.dir, opts, { token != searchToken }) { ProjectManager.isBinaryFile(it) }
+                searchHandler.post { if (token == searchToken) applySearchResult(res) }
             }.start()
         }
         pendingSearch = run
-        searchHandler.postDelayed(run, 300)
+        if (delayMs <= 0L) run.run() else searchHandler.postDelayed(run, delayMs)
+    }
+
+    private fun applySearchResult(res: SearchResult) {
+        lastSearch = res
+        val rows = res.hits.map { it.file }
+        adapter.setPinned(FilePins.get(this, project.name))
+        adapter.setSearchHits(res.hits.associateBy { it.file.relPath })
+        adapter.submit(emptyList(), rows, searchMode = true)
+        adapter.setDirtyPaths(EditorDirtyState.dirtyPaths(project.name))
+        pruneSelection()
+        updateEmptyState()
+        scanForErrors(rows.take(60))
+        renderSearchSummary(res)
+        renderSearchOptions()
+    }
+
+    private fun renderSearchSummary(res: SearchResult) {
+        val tv = findViewById<TextView>(R.id.txtFilesSummary)
+        tv.visibility = View.VISIBLE
+        if (res.error != null) {
+            tv.setTextColor(0xFFE5484D.toInt())
+            tv.text = getString(R.string.sr_regex_error, res.error)
+            return
+        }
+        tv.setTextColor(androidx.core.content.ContextCompat.getColor(this, R.color.rin_editor_hint))
+        val base = if (res.totalMatches > 0)
+            getString(R.string.sr_summary_format, res.totalMatches, res.hits.size, res.elapsedMs.toInt())
+        else getString(R.string.sr_summary_names, res.hits.size, res.elapsedMs.toInt())
+        tv.text = if (res.truncated) base + getString(R.string.sr_truncated) else base
+    }
+
+    private fun updateSearchChrome() {
+        val input = findViewById<EditText>(R.id.inputSearchFiles)
+        findViewById<View>(R.id.scrollSearchOptions).visibility =
+            if (input.hasFocus() || searchQuery.isNotEmpty()) View.VISIBLE else View.GONE
+    }
+
+    private fun renderSearchOptions() {
+        val box = findViewById<android.widget.LinearLayout>(R.id.layoutSearchOptions)
+        box.removeAllViews()
+        val d = resources.displayMetrics.density
+        fun chip(label: String, on: Boolean, action: () -> Unit) {
+            box.addView(TextView(this).apply {
+                text = label
+                textSize = 12f
+                maxLines = 1
+                setTextColor(androidx.core.content.ContextCompat.getColor(
+                    context, if (on) R.color.rin_accent else R.color.rin_on_toolbar))
+                if (on) setTypeface(typeface, android.graphics.Typeface.BOLD)
+                setPadding((12 * d).toInt(), (6 * d).toInt(), (12 * d).toInt(), (6 * d).toInt())
+                setBackgroundResource(if (on) R.drawable.bg_list_card_selected else R.drawable.bg_icon_btn)
+                isClickable = true
+                setOnClickListener { action() }
+                layoutParams = android.widget.LinearLayout.LayoutParams(
+                    android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+                    android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply { marginEnd = (6 * d).toInt() }
+            })
+        }
+        fun change(o: SearchOptions) {
+            searchOpts = o
+            SearchPrefs.save(this, o)
+            renderSearchOptions()
+            if (searchQuery.isNotBlank()) runSearch(0L)
+        }
+        chip(getString(when (searchOpts.mode) {
+            SearchMode.NAMES -> R.string.sr_mode_names
+            SearchMode.CONTENT -> R.string.sr_mode_content
+            SearchMode.BOTH -> R.string.sr_mode_both
+        }), true) { change(searchOpts.copy(mode = searchOpts.mode.next())) }
+        chip(getString(R.string.sr_chip_case), searchOpts.caseSensitive) { change(searchOpts.copy(caseSensitive = !searchOpts.caseSensitive)) }
+        chip(getString(R.string.sr_chip_word), searchOpts.wholeWord) { change(searchOpts.copy(wholeWord = !searchOpts.wholeWord)) }
+        chip(getString(R.string.sr_chip_regex), searchOpts.regex) { change(searchOpts.copy(regex = !searchOpts.regex)) }
+        chip(getString(if (folderScope) R.string.sr_scope_folder else R.string.sr_scope_project), folderScope) {
+            folderScope = !folderScope
+            SearchPrefs.setFolderScope(this, folderScope)
+            renderSearchOptions()
+            if (searchQuery.isNotBlank()) runSearch(0L)
+        }
+        chip(getString(R.string.sr_filters), false) { showSearchFiltersHelp() }
+        chip(getString(R.string.sr_history), false) { showSearchHistory() }
+        val canReplace = (lastSearch?.hits?.any { it.totalMatches > 0 } == true) && searchOpts.mode != SearchMode.NAMES
+        if (canReplace) chip(getString(R.string.sr_replace), false) { showReplaceDialog() }
+    }
+
+    private fun showSearchFiltersHelp() {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.sr_filters_title)
+            .setMessage(R.string.sr_filters_help)
+            .setPositiveButton(android.R.string.ok, null)
+            .show()
+    }
+
+    private fun showSearchHistory() {
+        val items = SearchHistory.list(this, project.name)
+        if (items.isEmpty()) {
+            Toast.makeText(this, R.string.sr_history_empty, Toast.LENGTH_SHORT).show()
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.sr_history_title)
+            .setItems(items.toTypedArray()) { _, i ->
+                val input = findViewById<EditText>(R.id.inputSearchFiles)
+                input.setText(items[i])
+                input.setSelection(input.text.length)
+            }
+            .setNeutralButton(R.string.sr_history_clear) { _, _ -> SearchHistory.clear(this, project.name) }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    /** نقر على نتيجة محتوى: مطابقة واحدة تُفتح مباشرة عند سطرها، وعدّة مطابقات تُعرض في قائمة. */
+    private fun openSearchHit(hit: SearchHit) {
+        if (searchQuery.isNotBlank()) SearchHistory.add(this, project.name, searchQuery)
+        if (hit.matches.size <= 1) handleOpen(hit.file, hit.firstLine, hit.matches.firstOrNull()) else showMatchesDialog(hit)
+    }
+
+    private fun showMatchesDialog(hit: SearchHit) {
+        val items = hit.matches.map { m -> SearchHighlight.line(this, "${m.line}:  ", m) }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.sr_matches_title, hit.file.name, hit.totalMatches))
+            .setItems(items) { _, i -> handleOpen(hit.file, hit.matches[i].line, hit.matches[i]) }
+            .setNeutralButton(R.string.sr_open_file) { _, _ -> handleOpen(hit.file, hit.firstLine, hit.matches.firstOrNull()) }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun showReplaceDialog() {
+        val res = lastSearch ?: return
+        val opts = currentSearchOptions()
+        val content = res.hits.filter { it.totalMatches > 0 }
+        if (content.isEmpty()) {
+            Toast.makeText(this, R.string.sr_replace_none, Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (res.truncated) {
+            Toast.makeText(this, R.string.sr_replace_blocked_truncated, Toast.LENGTH_LONG).show()
+            return
+        }
+        val err = FileReplace.validate(opts)
+        if (err != null) {
+            Toast.makeText(
+                this,
+                if (err == "empty-match") getString(R.string.sr_replace_empty_match) else getString(R.string.sr_regex_error, err),
+                Toast.LENGTH_LONG
+            ).show()
+            return
+        }
+        val d = resources.displayMetrics.density
+        val input = EditText(this).apply {
+            hint = getString(R.string.sr_replace_hint)
+            setSingleLine(true)
+        }
+        val wrap = android.widget.LinearLayout(this).apply {
+            setPadding((20 * d).toInt(), (8 * d).toInt(), (20 * d).toInt(), 0)
+            addView(input, android.widget.LinearLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+            ))
+        }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.sr_replace_title)
+            .setMessage(getString(R.string.sr_replace_confirm, content.sumOf { it.totalMatches }, content.size))
+            .setView(wrap)
+            .setPositiveButton(R.string.sr_replace_apply) { _, _ -> performReplace(content, opts, input.text.toString()) }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun performReplace(hits: List<SearchHit>, opts: SearchOptions, replacement: String) {
+        val skip = protectedPaths()
+        Thread {
+            val out = try { FileReplace.apply(hits, opts, replacement, skip) } catch (t: Throwable) { null }
+            runOnUiThread {
+                if (out == null) {
+                    Toast.makeText(this, R.string.file_save_error, Toast.LENGTH_LONG).show()
+                    return@runOnUiThread
+                }
+                refresh()
+                showReplaceResult(out)
+            }
+        }.start()
+    }
+
+    private fun showReplaceResult(out: FileReplace.Outcome) {
+        val msg = StringBuilder(getString(R.string.sr_replace_done, out.replacements, out.files))
+        if (out.skipped.isNotEmpty()) msg.append('\n').append(getString(R.string.sr_replace_skipped, out.skipped.size))
+        val b = AlertDialog.Builder(this).setMessage(msg.toString()).setPositiveButton(android.R.string.ok, null)
+        if (out.backups.isNotEmpty()) {
+            b.setNegativeButton(R.string.sr_replace_undo) { _, _ ->
+                val n = FileReplace.undo(out.backups)
+                refresh()
+                Toast.makeText(this, getString(R.string.sr_replace_undone, n), Toast.LENGTH_SHORT).show()
+            }
+        }
+        b.show()
     }
 
     private fun selectedEntries(): List<FsEntry> = adapter.entries().filter { it.relPath in selection }
@@ -534,7 +765,7 @@ class FilesActivity : RinBaseActivity() {
         refresh()
     }
 
-    private fun handleOpen(file: RinFile) {
+    private fun handleOpen(file: RinFile, line: Int = 0, m: SearchMatch? = null) {
         FileRecents.record(this, project.name, file.relPath)
         when {
             ProjectManager.isImageFile(file.name) || ProjectManager.isVideoFile(file.name) ->
@@ -543,7 +774,7 @@ class FilesActivity : RinBaseActivity() {
             file.name.endsWith(RinPak.EXTENSION, ignoreCase = true) || file.name.endsWith(".rinproj", ignoreCase = true) ->
                 openRinPak(file)
             ProjectManager.isBinaryFile(file.name) -> openExternally(file)
-            else -> openInEditor(file)
+            else -> openInEditor(file, line, m)
         }
     }
 
@@ -697,25 +928,19 @@ class FilesActivity : RinBaseActivity() {
     private fun refresh() {
         renderBreadcrumb()
         if (searchQuery.isNotBlank()) {
-            val results = ProjectManager.searchFiles(project, searchQuery)
-            adapter.setPinned(FilePins.get(this, project.name))
-            adapter.setHits(emptyMap())
-            findViewById<View>(R.id.txtFilesSummary).visibility = View.GONE
-            adapter.submit(emptyList(), results, searchMode = true)
-            pruneSelection()
-            adapter.setDirtyPaths(EditorDirtyState.dirtyPaths(project.name))
-            updateEmptyState()
-            scanForErrors(results)
-            if (contentSearch) scheduleContentSearch(searchQuery) else searchToken++
+            findViewById<View>(R.id.txtFilesSummary).visibility = View.VISIBLE
+            runSearch(0L)
             return
         }
+        cancelSearch()
+        renderSearchOptions()
         txtEmptyMessage.setText(R.string.no_files_yet)
         val (rawFolders, rawFiles) = ProjectManager.listEntries(project, currentRelDir)
         val pins = FilePins.get(this, project.name)
         val folders = FileFilter.applyFolders(this, FileSort.folders(this, rawFolders, pins))
         val files = FileFilter.apply(this, FileSort.files(this, rawFiles, pins))
         adapter.setPinned(pins)
-        adapter.setHits(emptyMap())
+        adapter.setSearchHits(emptyMap())
         renderSummary(rawFolders.size, rawFiles.size, rawFiles.sumOf { it.sizeBytes })
         adapter.submit(folders, files)
         pruneSelection()
@@ -922,8 +1147,13 @@ class FilesActivity : RinBaseActivity() {
 
     private fun showDeleteFolderConfirm(folder: RinFolder) = deleteEntries(listOf(FsEntry.FolderEntry(folder)))
 
-    private fun openInEditor(file: RinFile) {
+    private fun openInEditor(file: RinFile, line: Int = 0, m: SearchMatch? = null) {
         val intent = Intent(this, MainActivity::class.java)
+        if (line > 0) intent.putExtra(MainActivity.EXTRA_GOTO_LINE, line)
+        if (m != null) {
+            intent.putExtra(MainActivity.EXTRA_GOTO_COL, m.col)
+            intent.putExtra(MainActivity.EXTRA_GOTO_END_COL, m.endCol)
+        }
         intent.putExtra(MainActivity.EXTRA_PROJECT_NAME, project.name)
         // نمرّر المسار النسبي الكامل (relPath) لا الاسم المجرّد وحده، وإلا فشل فتح أي ملف
         // داخل مجلد فرعي (أو فُتح ملف آخر بالخطأ بنفس الاسم في الجذر).
@@ -1058,10 +1288,12 @@ private class FilesAdapter(
 
     private var pinned: Set<String> = emptySet()
     private var compact: Boolean = false
-    /** نتائج بحث المحتوى: relPath ← (رقم السطر, مقتطف) — تُعرض مكان المسار أثناء البحث. */
-    private var hits: Map<String, Pair<Int, String>> = emptyMap()
+    /** نتائج البحث المتقدم: relPath ← الاسم/المطابقات (تمييز + مقتطف السطر) — انظر FileSearch.kt. */
+    private var searchHits: Map<String, SearchHit> = emptyMap()
+    /** نقر على نتيجة فيها مطابقات محتوى (يفتح عند السطر أو قائمة المطابقات). */
+    var onOpenHit: ((SearchHit) -> Unit)? = null
 
-    fun setHits(h: Map<String, Pair<Int, String>>) { hits = h }
+    fun setSearchHits(h: Map<String, SearchHit>) { searchHits = h }
 
     fun setCompact(value: Boolean) {
         compact = value
@@ -1074,7 +1306,7 @@ private class FilesAdapter(
         val ph = (12 * d).toInt()
         val pv = ((if (compact) 5 else 12) * d).toInt()
         holder.itemView.setPadding(ph, pv, ph, pv)
-        val vis = if (compact) View.GONE else View.VISIBLE
+        val vis = if (compact && !searchMode) View.GONE else View.VISIBLE
         when (holder) {
             is FolderVH -> holder.txtMeta.visibility = vis
             is FileVH -> holder.txtMeta.visibility = vis
@@ -1170,11 +1402,17 @@ private class FilesAdapter(
             is FileRow.FileRowItem -> {
                 val file = row.file
                 holder as FileVH
-                holder.txtName.text = file.name
+                val hit = searchHits[file.relPath]
+                val sctx = holder.itemView.context
+                holder.txtName.text =
+                    if (searchMode && hit != null) SearchHighlight.name(sctx, file.name, hit.nameRanges) else file.name
                 applyPin(holder.txtName, file.relPath)
-                val hit = hits[file.relPath]
-                holder.txtMeta.text = if (searchMode && hit != null) {
-                    holder.itemView.context.getString(R.string.search_content_line, hit.first, hit.second)
+                holder.txtMeta.text = if (searchMode && hit != null && hit.matches.isNotEmpty()) {
+                    val dir = file.relPath.substringBeforeLast('/', "")
+                    val head = (if (dir.isEmpty()) "" else "$dir/  ") + sctx.getString(R.string.sr_line_prefix, hit.firstLine, "")
+                    val extra = hit.totalMatches - 1
+                    SearchHighlight.line(sctx, head, hit.matches[0],
+                        if (extra > 0) "   " + sctx.getString(R.string.sr_more_matches, extra) else "")
                 } else if (searchMode) {
                     holder.itemView.context.getString(R.string.search_result_meta_format, file.relPath)
                 } else {
@@ -1188,7 +1426,9 @@ private class FilesAdapter(
                 holder.txtErrorBadge.visibility = if (file.relPath in errorPaths) View.VISIBLE else View.GONE
                 holder.txtDirtyDot.visibility = if (file.relPath in dirtyPaths) View.VISIBLE else View.GONE
                 holder.itemView.setOnClickListener {
-                    if (selection.active) toggle(file.relPath) else onOpenFile(file)
+                    if (selection.active) toggle(file.relPath)
+                    else if (searchMode && hit != null && hit.totalMatches > 0) onOpenHit?.invoke(hit)
+                    else onOpenFile(file)
                 }
                 holder.btnMore.setOnClickListener { onMore(FsEntry.FileEntry(file), holder.btnMore) }
                 holder.btnRename.setOnClickListener { onRenameFile(file) }
@@ -1204,5 +1444,33 @@ private class FilesAdapter(
         bytes < 1024 -> "$bytes B"
         bytes < 1024 * 1024 -> "${bytes / 1024} KB"
         else -> "${bytes / (1024 * 1024)} MB"
+    }
+}
+
+/** تمييز مواضع المطابقة (خلفية + خط عريض) في اسم الملف ومقتطف السطر. */
+internal object SearchHighlight {
+    private fun bg(ctx: android.content.Context): Int {
+        val c = androidx.core.content.ContextCompat.getColor(ctx, R.color.rin_accent)
+        return (c and 0x00FFFFFF) or (0x55 shl 24)
+    }
+
+    private fun mark(ctx: android.content.Context, sp: android.text.Spannable, s: Int, e: Int) {
+        if (s < 0 || e > sp.length || s >= e) return
+        sp.setSpan(android.text.style.BackgroundColorSpan(bg(ctx)), s, e, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        sp.setSpan(android.text.style.StyleSpan(android.graphics.Typeface.BOLD), s, e, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+    }
+
+    fun name(ctx: android.content.Context, text: String, ranges: List<IntRange>): CharSequence {
+        if (ranges.isEmpty()) return text
+        val sp = android.text.SpannableString(text)
+        for (r in ranges) mark(ctx, sp, r.first, r.last + 1)
+        return sp
+    }
+
+    fun line(ctx: android.content.Context, prefix: String, m: SearchMatch, suffix: String = ""): CharSequence {
+        val sb = android.text.SpannableStringBuilder(prefix).append(m.preview)
+        mark(ctx, sb, prefix.length + m.hlStart, prefix.length + m.hlEnd)
+        if (suffix.isNotEmpty()) sb.append(suffix)
+        return sb
     }
 }
