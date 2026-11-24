@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- استرداد المستودعات — RepoRestore.kt -->
+<resources>
+    <string name="repo_title_new">Restaurar repositorio como proyecto nuevo</string>
+    <string name="repo_title_into">Restaurar repositorio en esta carpeta</string>
+    <string name="repo_title_update">Actualizar desde el origen</string>
+    <string name="repo_menu_restore">Restaurar desde repositorio (GitHub, etc.)</string>
+    <string name="repo_menu_update">Actualizar desde el origen guardado</string>
+    <string name="repo_import_from_file">Desde archivo (RinPak / ZIP)</string>
+    <string name="repo_import_from_repo">Desde repositorio (GitHub, etc.)</string>
+    <string name="repo_url_hint">URL del repositorio u owner/repo</string>
+    <string name="repo_ref_hint">Rama / etiqueta / commit (opcional)</string>
+    <string name="repo_ref_pick">Elegir</string>
+    <string name="repo_token_hint">Token para repos privados (opcional, no se guarda)</string>
+    <string name="repo_name_hint">Nombre del proyecto (opcional)</string>
+    <string name="repo_mode_title">Modo de combinación</string>
+    <string name="repo_mode_add">Solo añadir archivos nuevos</string>
+    <string name="repo_mode_overwrite">Reemplazar los distintos (con copia de seguridad)</string>
+    <string name="repo_mode_mirror">Espejo exacto (lo sobrante va a la copia)</string>
+    <string name="repo_mirror_confirm">El espejo exacto mueve a .rin_backup todo archivo que no esté en el repositorio. ¿Continuar?</string>
+    <string name="repo_start">Restaurar</string>
+    <string name="repo_invalid">Enlace de repositorio no admitido o no válido</string>
+    <string name="repo_invalid_ref">Nombre de rama o etiqueta no válido</string>
+    <string name="repo_progress_title">Restaurando repositorio…</string>
+    <string name="repo_progress_status">Descargando y extrayendo el archivo…</string>
+    <string name="repo_progress_install">Instalando…</string>
+    <string name="repo_refs_loading">Cargando ramas y etiquetas…</string>
+    <string name="repo_refs_none">No se encontraron ramas ni etiquetas</string>
+    <string name="repo_refs_unsupported">No se pueden listar ramas en enlaces ZIP directos</string>
+    <string name="repo_kind_branch">Rama</string>
+    <string name="repo_kind_tag">Etiqueta</string>
+    <string name="repo_err_404">Repositorio o rama no encontrados, o es privado (introduce un token)</string>
+    <string name="repo_err_404_token">Repositorio o rama no encontrados, o el token no tiene acceso</string>
+    <string name="repo_err_auth">Acceso denegado: revisa el token o espera a que se restablezca el límite</string>
+    <string name="repo_err_rate">Límite de solicitudes superado, inténtalo más tarde</string>
+    <string name="repo_err_http">Falló la conexión (HTTP %1$d)</string>
+    <string name="repo_err_too_big">El repositorio supera el límite (256 MB o 20000 archivos)</string>
+    <string name="repo_err_subpath">La subcarpeta «%1$s» no existe en el repositorio</string>
+    <string name="repo_err_empty">El archivo no contiene ficheros</string>
+    <string name="repo_done_new">«%1$s» restaurado como proyecto nuevo (%2$d archivos)</string>
+    <string name="repo_done_merge">Añadidos %1$d · actualizados %2$d · sin cambios %3$d · omitidos %4$d · retirados %5$d</string>
+    <string name="repo_no_source">No hay origen de repositorio guardado para esta carpeta. Usa primero «Restaurar desde repositorio»</string>
+</resources>
