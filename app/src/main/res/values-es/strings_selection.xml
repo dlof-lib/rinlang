@@ -14,4 +14,11 @@
     <string name="selection_paths_copied_toast">Rutas copiadas de %1$d elemento(s)</string>
     <string name="swipe_rename_label">Renombrar</string>
     <string name="swipe_delete_label">Eliminar</string>
+    <string name="mkdir_single">Una carpeta (admite ruta anidada)</string>
+    <string name="mkdir_multi">Varias carpetas a la vez</string>
+    <string name="mkdir_template">Desde una plantilla</string>
+    <string name="mkdir_group_selected">Agrupar %1$d seleccionados en una carpeta nueva</string>
+    <string name="mkdir_single_hint">Nombre o ruta como ui/screens</string>
+    <string name="mkdir_multi_hint">Un nombre por línea o separados por comas</string>
+    <string name="mkdir_created_toast">%1$d carpeta(s) creada(s)</string>
 </resources>
