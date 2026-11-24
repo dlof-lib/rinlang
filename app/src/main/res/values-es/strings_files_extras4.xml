@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- رفع zip المتقدم — FilesExtras4.kt -->
+<resources>
+    <string name="zipimp_title">Subir archivo ZIP</string>
+    <string name="zipimp_summary">%1$d archivos · descomprimido %2$s · comprimido %3$s</string>
+    <string name="zipimp_summary_many">%1$d archivos ZIP · %2$d archivos</string>
+    <string name="zipimp_dest">Destino</string>
+    <string name="zipimp_dest_here">Carpeta actual</string>
+    <string name="zipimp_dest_named">Carpeta nueva con el nombre del archivo</string>
+    <string name="zipimp_flatten">Quitar la carpeta raíz común (%1$s)</string>
+    <string name="zipimp_flatten_generic">Quitar la carpeta raíz común si existe</string>
+    <string name="zipimp_junk">Ignorar archivos basura (__MACOSX, DS_Store, Thumbs.db): %1$d</string>
+    <string name="zipimp_keep">Conservar una copia del ZIP en el proyecto</string>
+    <string name="zipimp_policy">Si ya existe un archivo con el mismo nombre</string>
+    <string name="zipimp_browse">Explorar y elegir</string>
+    <string name="zipimp_extract">Extraer</string>
+    <string name="zipimp_progress">%1$s — %2$d / %3$d</string>
+    <string name="zipimp_result">Extraídos: %1$d · omitidos: %2$d · fallidos: %3$d · %4$s</string>
+    <string name="zipimp_undo">Deshacer</string>
+    <string name="zipimp_undone">Extracción deshecha (borrados %1$d, restaurados %2$d)</string>
+    <string name="zipimp_cancelled">Extracción cancelada antes de terminar</string>
+    <string name="zipimp_notes_more">…y %1$d notas más</string>
+    <string name="zipimp_note_unsafe">Ruta no segura: %1$s</string>
+    <string name="zipimp_note_protected">Protegido (cambios sin guardar): %1$s</string>
+    <string name="zipimp_note_failed">Falló: %1$s</string>
+    <string name="row_zip_advanced">Extracción avanzada…</string>
+    <string name="zadd_menu">Añadir selección al archivo ZIP</string>
+    <string name="zadd_done">Se añadieron %1$d archivos a %2$s</string>
+    <string name="zc_menu">ZIP avanzado…</string>
+    <string name="zc_title">Compresión avanzada</string>
+    <string name="zc_level">Nivel de compresión</string>
+    <string name="zc_level0">Almacenar sin comprimir (más rápido)</string>
+    <string name="zc_level1">Rápido</string>
+    <string name="zc_level2">Normal</string>
+    <string name="zc_level3">Máximo</string>
+    <string name="zc_junk">Excluir archivos basura</string>
+    <string name="zc_done">Creado %1$s — %2$d archivos · %3$s (%4$d%% del original)</string>
+</resources>
