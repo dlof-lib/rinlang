@@ -23,19 +23,29 @@ class AlbumDetailActivity : RinBaseActivity() {
 
         findViewById<TextView>(R.id.txtAlbumDetailTitle).text = album
         findViewById<View>(R.id.btnAlbumDetailBack).setOnClickListener { finish() }
-        adapter = AlbumProjectsAdapter { project ->
-            startActivity(android.content.Intent(this, FilesActivity::class.java).apply {
-                putExtra(FilesActivity.EXTRA_PROJECT_NAME, project.name)
-            })
-        }
-        findViewById<RecyclerView>(R.id.rvAlbumProjects).apply {
+        adapter = AlbumProjectsAdapter { project -> openProject(project) }
+        val rv = findViewById<RecyclerView>(R.id.rvAlbumProjects).apply {
             layoutManager = GridLayoutManager(this@AlbumDetailActivity, 2)
             adapter = this@AlbumDetailActivity.adapter
         }
+        // سحب البطاقة لليمين = فتح المشروع؛ نقرتان/ضغطة على العنوان = أول/آخر القائمة.
+        ListGestures.attachOpenSwipe(this, rv, onOpen = { pos -> adapter.projectAt(pos)?.let { openProject(it) } })
+        ListGestures.attachTitleScroll(this, findViewById(R.id.txtAlbumDetailTitle), rv)
+        ListGestures.attachPullRefresh(this, findViewById(R.id.swipeAlbumDetail)) { refreshList() }
+    }
+
+    private fun openProject(project: Project) {
+        startActivity(android.content.Intent(this, FilesActivity::class.java).apply {
+            putExtra(FilesActivity.EXTRA_PROJECT_NAME, project.name)
+        })
     }
 
     override fun onResume() {
         super.onResume()
+        refreshList()
+    }
+
+    private fun refreshList() {
         val projects = ProjectAlbumManager.projectsInAlbum(this, album)
         adapter.submit(projects)
         findViewById<TextView>(R.id.txtAlbumDetailCount).text = getString(R.string.album_projects_count_format, projects.size)
@@ -46,6 +56,7 @@ class AlbumDetailActivity : RinBaseActivity() {
 private class AlbumProjectsAdapter(private val onOpen: (Project) -> Unit) : RecyclerView.Adapter<AlbumProjectsAdapter.VH>() {
     private var items: List<Project> = emptyList()
     fun submit(value: List<Project>) { items = value; notifyDataSetChanged() }
+    fun projectAt(position: Int): Project? = items.getOrNull(position)
     class VH(v: View) : RecyclerView.ViewHolder(v) {
         val name: TextView = v.findViewById(R.id.txtAlbumProjectName)
         val type: TextView = v.findViewById(R.id.txtAlbumProjectType)
