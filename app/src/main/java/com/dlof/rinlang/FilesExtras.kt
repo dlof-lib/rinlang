@@ -64,6 +64,10 @@ object RowMenu {
         add(R.drawable.fx_zip_add, R.string.zc_menu) { ZipCompress.show(ctx, project, list, parentRelDir, onChanged) }
         add(R.drawable.fx_zip, R.string.zip_compress) { FileArchive.compress(ctx, project, list, parentRelDir, onChanged) }
         add(R.drawable.fx_zip_share, R.string.zip_share) { ZipTools.shareAsZip(ctx, list) }
+        add(R.drawable.rs_ic_download, R.string.dl_action) { DownloadExporter.saveEntries(ctx, project, list) }
+        if (file != null) {
+            add(R.drawable.rs_ic_download, R.string.dl_action_zip) { DownloadExporter.saveEntries(ctx, project, list, forceZip = true) }
+        }
         if (isZip && file != null) {
             add(R.drawable.fx_zip_list, R.string.row_zip_browse) {
                 ZipTools.browseFile(ctx, project, parentRelDir, file, protectedPaths, false, onChanged)
