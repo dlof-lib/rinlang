@@ -22,10 +22,8 @@
     <string name="mkdir_multi_hint">One name per line or comma-separated</string>
     <string name="mkdir_created_toast">%1$d folder(s) created</string>
     <string name="sort_title">Sort files</string>
-    <string name="sort_name">Name</string>
     <string name="sort_date">Date modified</string>
     <string name="sort_size">Size</string>
-    <string name="sort_type">Type</string>
     <string name="tool_copy">Copy</string>
     <string name="tool_cut">Cut</string>
     <string name="tool_paste">Paste here</string>
