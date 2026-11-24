@@ -13,6 +13,7 @@ import android.provider.MediaStore
 import android.widget.Toast
 import java.io.File
 import java.io.FileInputStream
+import com.dlof.rinlang.notify.RinNotifier
 import java.io.IOException
 
 /**
@@ -31,6 +32,8 @@ object RinDownloadManager {
         onDone: (uri: Uri?, error: Throwable?) -> Unit
     ) {
         val mainHandler = Handler(Looper.getMainLooper())
+        val appCtx = activity.applicationContext
+        val ticket = RinNotifier.beginDownload(appCtx, artifact.displayName)
         Thread {
             try {
                 val total = artifact.sizeBytes
@@ -47,7 +50,7 @@ object RinDownloadManager {
                         ?: throw IOException("تعذّر إنشاء الملف داخل Downloads")
 
                     resolver.openOutputStream(destUri)?.use { output ->
-                        copyWithProgress(artifact.absoluteFile, output, total, mainHandler, onProgress)
+                        copyWithProgress(artifact.absoluteFile, output, total, mainHandler, onProgress, ticket)
                     } ?: throw IOException("تعذّر فتح مجرى الكتابة")
 
                     val doneValues = ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }
@@ -58,7 +61,7 @@ object RinDownloadManager {
                     if (!downloadsDir.exists()) downloadsDir.mkdirs()
                     val destFile = uniqueFile(downloadsDir, artifact.displayName)
                     destFile.outputStream().use { output ->
-                        copyWithProgress(artifact.absoluteFile, output, total, mainHandler, onProgress)
+                        copyWithProgress(artifact.absoluteFile, output, total, mainHandler, onProgress, ticket)
                     }
                     // content:// عبر FileProvider بدل file:// مباشرة، لتفادي FileUriExposedException
                     // عند تمرير الرابط لاحقاً إلى ACTION_VIEW على أندرويد 9 وأقدم.
@@ -70,8 +73,10 @@ object RinDownloadManager {
                     activity.sendBroadcast(Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE, Uri.fromFile(destFile)))
                 }
 
+                destUri?.let { RinNotifier.downloadDone(appCtx, ticket, it, artifact.displayName, artifact.kind.mime, total) }
                 mainHandler.post { onDone(destUri, null) }
             } catch (t: Throwable) {
+                RinNotifier.downloadFailed(appCtx, ticket, artifact.displayName, t.message)
                 mainHandler.post { onDone(null, t) }
             }
         }.start()
@@ -82,7 +87,8 @@ object RinDownloadManager {
         output: java.io.OutputStream,
         total: Long,
         mainHandler: Handler,
-        onProgress: (Long, Long) -> Unit
+        onProgress: (Long, Long) -> Unit,
+        ticket: RinNotifier.DownloadTicket
     ) {
         FileInputStream(source).use { input ->
             val buffer = ByteArray(CHUNK_BYTES)
@@ -94,6 +100,7 @@ object RinDownloadManager {
                 copied += read
                 val snapshot = copied
                 mainHandler.post { onProgress(snapshot, total) }
+                ticket.update(snapshot, total)
             }
             output.flush()
         }
