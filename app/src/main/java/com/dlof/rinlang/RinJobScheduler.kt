@@ -281,6 +281,8 @@ object RinJobScheduler {
             job.liveLines = emptyList()
         }
         RinTerminal.onJobFinish(job.status, job.output, job.durationMs())
+        // إشعار بالنتيجة إن انتهى التشغيل والتطبيق في الخلفية (لا يفعل شيئاً والواجهة ظاهرة).
+        runCatching { com.dlof.rinlang.notify.RinNotifier.jobFinished(job) }
         val status = job.status
         finishCallbacks.remove(job.number)?.let { cb -> mainHandler.post { cb(status) } }
         notifyChanged()
