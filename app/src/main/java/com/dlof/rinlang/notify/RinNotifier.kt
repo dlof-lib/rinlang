@@ -49,6 +49,7 @@ object RinNotifier {
     private const val GROUP_DOWNLOADS = "com.dlof.rinlang.group.DOWNLOADS"
     private const val SUMMARY_ID_DOWNLOADS = 0x5100
     private const val JOB_ID_BASE = 0x7000
+    private const val JOB_INPUT_ID_BASE = 0x8000
     private const val PROGRESS_INTERVAL_MS = 450L
     private const val PROGRESS_GRACE_MS = 700L
     private const val JOB_TIMEOUT_MS = 15 * 60 * 1000L
@@ -64,6 +65,8 @@ object RinNotifier {
 
     private val startedActivities = AtomicInteger(0)
     @Volatile private var lastBackgroundAt = 0L
+
+    internal fun appContextOrNull(): Context? = appContext
 
     /** يُستدعى مرة من [com.dlof.rinlang.RinApplication.onCreate]. */
     fun install(app: Application) {
@@ -98,6 +101,7 @@ object RinNotifier {
         val app = ctx.applicationContext
         val id = nextId.getAndIncrement()
         if (onCancel != null) cancelHooks[id] = onCancel
+        RinKeepAlive.downloadStarted(app) // يُبقي العملية حيّة إن غادر المستخدم التطبيق
         return DownloadTicket(app, id, name, phase, onCancel != null)
     }
 
@@ -112,6 +116,7 @@ object RinNotifier {
         private val startedElapsed = SystemClock.elapsedRealtime()
         private var lastPostElapsed = 0L
         private var finished = false
+        private var released = false
 
         /** تحديث التقدّم (آمن من أي خيط؛ يُخنق داخلياً فيمكن استدعاؤه لكل مقطع بيانات). */
         fun update(done: Long, total: Long) {
@@ -164,7 +169,8 @@ object RinNotifier {
         }
 
         internal fun finish() {
-            synchronized(this) { finished = true }
+            val release = synchronized(this) { finished = true; val r = !released; released = true; r }
+            if (release) RinKeepAlive.downloadFinished(ctx)
             cancelHooks.remove(id)
             dismiss(ctx, id)
         }
@@ -348,6 +354,50 @@ object RinNotifier {
         post(app, JOB_ID_BASE + job.number, n)
     }
 
+    /** البرنامج ينتظر إجابة المستخدم (input/confirm…) والتطبيق في الخلفية: إشعار عاجل للعودة. */
+    fun jobNeedsInput(jobNumber: Int, prompt: String) {
+        val app = appContext ?: return
+        if (isForeground() || !canPost(app)) return
+        val title = app.getString(R.string.notif_job_input_title, jobNumber)
+        val q = prompt.trim().ifEmpty { app.getString(R.string.notif_job_input_hint) }
+        val n = base(app, RinNotifications.CHANNEL_ALERTS, R.drawable.ic_notif_job)
+            .setContentTitle(title)
+            .setContentText(q.take(140))
+            .setStyle(
+                NotificationCompat.BigTextStyle()
+                    .setBigContentTitle(title)
+                    .bigText(q.take(500) + "\n" + app.getString(R.string.notif_job_input_hint))
+            )
+            .setContentIntent(appIntent(app, JOB_INPUT_ID_BASE + jobNumber))
+            .setAutoCancel(true)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setOnlyAlertOnce(true)
+            .setTimeoutAfter(JOB_TIMEOUT_MS)
+            .setPublicVersion(publicVersion(app, RinNotifications.CHANNEL_ALERTS, R.drawable.ic_notif_job, title))
+            .build()
+        post(app, JOB_INPUT_ID_BASE + jobNumber, n)
+    }
+
+    /** يُزيل إشعار الإدخال بعد إجابة المستخدم (أو إلغاء التشغيل). */
+    fun clearJobInput(jobNumber: Int) {
+        appContext?.let { dismiss(it, JOB_INPUT_ID_BASE + jobNumber) }
+    }
+
+    /** إشعار الخدمة الأمامية: «RinStudio يعمل في الخلفية» مع عدد التنزيلات والبرامج الجارية. */
+    internal fun backgroundNotification(ctx: Context, downloads: Int, jobs: Int): Notification =
+        base(ctx, RinNotifications.CHANNEL_BACKGROUND, R.drawable.ic_notif_download)
+            .setContentTitle(ctx.getString(R.string.notif_bg_title))
+            .setContentText(ctx.getString(R.string.notif_bg_text, downloads, jobs))
+            .setContentIntent(appIntent(ctx, 0x5761))
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setShowWhen(false)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_DEFERRED)
+            .build()
+
     private fun formatDuration(ctx: Context, ms: Long): String =
         if (ms < 1000) ctx.getString(R.string.notif_duration_ms, ms.coerceAtLeast(0))
         else ctx.getString(R.string.notif_duration_s, ms / 1000.0)
@@ -442,7 +492,8 @@ object RinNotifier {
             "indsin" -> R.drawable.ic_indsin_file
             else -> R.drawable.ic_lang_doc_generic
         }
-        fileTiles[res]?.let { return it }
+        val cached = fileTiles[res]
+        if (cached != null) return cached
         return runCatching {
             val d = ContextCompat.getDrawable(ctx, res)
             if (d == null) {
