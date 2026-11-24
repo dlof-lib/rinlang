@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ميزات شاشة الملفات الإضافية: FilesExtras.kt -->
+<resources>
+    <string name="status_all">الكل</string>
+    <string name="status_errors">فيها أخطاء</string>
+    <string name="status_unsaved">غير محفوظة</string>
+    <string name="status_pinned">مثبّتة</string>
+    <string name="filter_no_match">لا توجد عناصر تطابق هذه التصفية</string>
+    <string name="mkfile_clipboard">من الحافظة</string>
+    <string name="clipboard_empty">الحافظة فارغة (لا نص لإنشاء ملف منه)</string>
+    <string name="clipboard_chars_format">سيُنشأ ملف من نص الحافظة (%1$d حرف)</string>
+    <string name="tool_compare">مقارنة الملفين</string>
+    <string name="compare_title">%1$s ⇄ %2$s</string>
+    <string name="compare_identical">الملفان متطابقان</string>
+    <string name="compare_too_large">الملفان كبيران جداً للمقارنة</string>
+    <string name="compare_summary">+%1$d مضاف · −%2$d محذوف</string>
+    <string name="row_copy_name">نسخ الاسم</string>
+    <string name="name_copied_toast">نُسخ الاسم</string>
+    <string name="row_pin">تثبيت</string>
+    <string name="row_unpin">إلغاء التثبيت</string>
+    <string name="tool_jump">الانتقال إلى مجلد</string>
+    <string name="tool_findreplace">بحث واستبدال في المشروع</string>
+    <string name="fr_find">النص المراد البحث عنه</string>
+    <string name="fr_with">يُستبدل بـ (اتركه فارغاً للحذف)</string>
+    <string name="fr_case">مطابقة حالة الأحرف</string>
+    <string name="fr_preview">معاينة</string>
+    <string name="fr_none">لا توجد نتائج</string>
+    <string name="fr_confirm">سيُستبدل %1$d تطابق في %2$d ملف. لا يمكن التراجع عن هذه العملية.</string>
+    <string name="fr_apply">استبدال</string>
+    <string name="empty_none">لا توجد ملفات فارغة</string>
+    <string name="empty_title">ملفات فارغة (%1$d)</string>
+    <string name="empty_delete">حذف الكل</string>
+    <string name="tool_empty">الملفات الفارغة</string>
+    <string name="row_copy_content">نسخ المحتوى</string>
+    <string name="row_stats">إحصاءات النص</string>
+    <string name="content_copied_toast">نُسخ محتوى الملف</string>
+    <string name="stats_body">الأسطر: %1$d (الفارغة: %2$d)\nالكلمات: %3$d\nالأحرف: %4$d\nالحجم: %5$d بايت</string>
+</resources>
