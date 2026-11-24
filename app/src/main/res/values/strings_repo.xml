@@ -40,4 +40,11 @@
     <string name="repo_done_new">تم استرداد «%1$s» كمشروع جديد (%2$d ملف)</string>
     <string name="repo_done_merge">أُضيف %1$d · حُدّث %2$d · دون تغيير %3$d · تخطّي %4$d · أُزيل %5$d</string>
     <string name="repo_no_source">لا يوجد مصدر مستودع محفوظ لهذا المجلد. استخدم «استرداد من مستودع» أولاً</string>
+    <string name="repo_recent">الأخيرة</string>
+    <string name="repo_recent_none">لا توجد مستودعات سابقة</string>
+    <string name="repo_preview_title">معاينة قبل التنفيذ</string>
+    <string name="repo_preview_msg">سيُضاف %1$d · يُحدَّث %2$d · دون تغيير %3$d · يُتخطّى %4$d · يُزال %5$d\n\nكل ما يُستبدل أو يُزال يُنسخ أولاً إلى .rin_backup.</string>
+    <string name="repo_preview_run">تنفيذ</string>
+    <string name="repo_checking">جارٍ التحقق من وجود تحديث…</string>
+    <string name="repo_uptodate_msg">لا تغييرات في المستودع منذ آخر استرداد (%1$s). استرداد على أي حال؟</string>
 </resources>
