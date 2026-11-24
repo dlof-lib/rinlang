@@ -1137,6 +1137,13 @@ class RinCodeEditorView @JvmOverloads constructor(
         val count = insertedPiece.length
         val cursorFlatBefore = flatOffsetOf(oldText, engine.getCursor().line, engine.getCursor().col)
 
+        if (isMarkdown && before == 0 && insertedPiece == "\n" && start == cursorFlatBefore &&
+            !engine.getSelection().hasSelection &&
+            applySmartEdit(MarkdownEdit.continueList(oldText, start))
+        ) {
+            // Enter في Markdown عند نهاية عنصر قائمة/اقتباس: يتابع القائمة (أو يُنهيها إن كان العنصر فارغاً).
+            return
+        }
         if (before == 0 && count == 1 && start == cursorFlatBefore) {
             // كتابة حرف واحد عند المؤشر مباشرة: مرّرها عبر المسار "الذكي" (إغلاق أقواس/مسافة تلقائية)
             engine.insertText(insertedPiece, smart = AppSettings.isAutoCloseBrackets(context) || AppSettings.isAutoIndent(context))
@@ -1929,6 +1936,23 @@ class RinCodeEditorView @JvmOverloads constructor(
     /** لغة سياج Markdown عند «نسخ كـ Markdown» (تتبع امتداد الملف الحالي). */
     private var fenceLang: String = "rin"
 
+    /** امتداد اللغة الحالية (بلا نقطة، بحروف صغيرة) كما ضُبط في [setLanguage]. */
+    val languageExtension: String get() = fenceLang
+
+    /** true عند تحرير ملف Markdown (md/markdown/mdown). */
+    val isMarkdown: Boolean get() = fenceLang == "md" || fenceLang == "markdown" || fenceLang == "mdown"
+
+    /**
+     * يطبّق عملية تحرير Markdown ([MarkdownEdit]) على التحديد/المؤشر الحاليين باستبدال واحد قابل للتراجع؛
+     * false إن لم يكن هناك ما يتغيّر.
+     */
+    fun markdownEdit(op: (doc: String, selStart: Int, selEnd: Int) -> SmartEdit.Edit?): Boolean {
+        if (!hasFocus()) requestFocus()
+        val t = engine.getText()
+        val (s, e) = selectionFlat(t)
+        return applySmartEdit(op(t, s, e))
+    }
+
     // --- مراقبة حافظة النظام: كل ما يُنسخ (من هنا أو من تطبيق آخر) يدخل سجلّ الحافظة الداخلي -----
 
     private val systemClipListener = ClipboardManager.OnPrimaryClipChangedListener { captureSystemClip() }
@@ -2482,6 +2506,12 @@ class RinCodeEditorView @JvmOverloads constructor(
                 engine.setCursor(cur.line, len, event.isShiftPressed); afterEngineMutation(); return true
             }
             KeyEvent.KEYCODE_TAB -> {
+                if (isMarkdown && !engine.getSelection().hasSelection) {
+                    // Tab على عنصر قائمة في Markdown: إزاحة العنصر مستوى للداخل بدل إدراج مسافات.
+                    val t = engine.getText()
+                    val (pos, _) = selectionFlat(t)
+                    if (applySmartEdit(MarkdownEdit.indentListItem(t, pos))) return true
+                }
                 if (engine.getSelection().hasSelection) engine.indentSelection() else engine.insertText(" ".repeat(AppSettings.getTabSize(context)), smart = false)
                 afterEngineMutation(); return true
             }
@@ -2494,6 +2524,11 @@ class RinCodeEditorView @JvmOverloads constructor(
             // نمرّره عبر نفس مسار "الذكي" الذي يستخدمه IME عند إدراج حرف واحد فعليًا، حتى يستفيد
             // من المسافة البادئة التلقائية بعد '{'/':' ونحوها إن كانت مفعّلة.
             KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> {
+                if (isMarkdown && !engine.getSelection().hasSelection) {
+                    val t = engine.getText()
+                    val (pos, _) = selectionFlat(t)
+                    if (applySmartEdit(MarkdownEdit.continueList(t, pos))) return true
+                }
                 engine.insertText("\n", smart = AppSettings.isAutoIndent(context))
                 afterEngineMutation(); return true
             }
