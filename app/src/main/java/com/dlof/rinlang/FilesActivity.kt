@@ -15,6 +15,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.MimeTypeMap
+import android.view.ScaleGestureDetector
 import android.widget.EditText
 import android.widget.PopupMenu
 import android.widget.TextView
@@ -63,6 +64,12 @@ class FilesActivity : RinBaseActivity() {
     private lateinit var selectionBar: View
     private lateinit var txtSelectionCount: TextView
     private lateinit var fabContainer: View
+
+    // --- بحث المحتوى (يُحسب في خيط خلفي مع تأخير بسيط أثناء الكتابة) ---
+    private var contentSearch = false
+    private var searchToken = 0
+    private val searchHandler = Handler(Looper.getMainLooper())
+    private var pendingSearch: Runnable? = null
 
     /** المسار النسبي الحالي من جذر المشروع (فواصل "/")، فارغ يعني أننا في جذر المشروع. */
     private var currentRelDir: String = ""
@@ -136,6 +143,7 @@ class FilesActivity : RinBaseActivity() {
         rvFiles.layoutManager = LinearLayoutManager(this)
         rvFiles.adapter = adapter
         setupSelectionAndGestures()
+        setupProChrome()
 
         findViewById<EditText>(R.id.inputSearchFiles).addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
@@ -146,7 +154,13 @@ class FilesActivity : RinBaseActivity() {
             }
         })
 
-        fabAddFile.setOnClickListener { showCreateFileDialog() }
+        fabAddFile.setOnClickListener {
+            FileCreator.show(this, project, currentRelDir, onSingle = { showCreateFileDialog() }) { refresh() }
+        }
+        findViewById<View>(R.id.fabSort).setOnClickListener { FileSort.showDialog(this) { refresh() } }
+        findViewById<View>(R.id.fabPaste).setOnClickListener {
+            FileClipboard.paste(this, project, currentRelDir, protectedPaths()) { refresh() }
+        }
         fabNewFolder.setOnClickListener {
             FolderCreator.show(this, project, currentRelDir) { refresh() }
         }
@@ -199,26 +213,168 @@ class FilesActivity : RinBaseActivity() {
         )
         ItemTouchHelper(swipe).attachToRecyclerView(rvFiles)
 
+        // حركة القرص (pinch) على القائمة: تصغير = عرض مضغوط، تكبير = عرض مريح.
+        adapter.setCompact(FileDensity.compact(this))
+        val pinch = object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+            private var acc = 1f
+            override fun onScaleBegin(d: ScaleGestureDetector): Boolean { acc = 1f; return true }
+            override fun onScale(d: ScaleGestureDetector): Boolean { acc *= d.scaleFactor; return true }
+            override fun onScaleEnd(d: ScaleGestureDetector) {
+                val want = when { acc < 0.85f -> true; acc > 1.15f -> false; else -> return }
+                if (want != FileDensity.compact(this@FilesActivity)) {
+                    FileDensity.save(this@FilesActivity, want)
+                    adapter.setCompact(want)
+                }
+            }
+        }
+        val pinchDetector = ScaleGestureDetector(this, pinch)
+        rvFiles.addOnItemTouchListener(object : RecyclerView.SimpleOnItemTouchListener() {
+            override fun onInterceptTouchEvent(rv: RecyclerView, e: android.view.MotionEvent): Boolean {
+                pinchDetector.onTouchEvent(e)
+                return false
+            }
+        })
+
+        // عنوان الشاشة: نقرتان = إلى أول القائمة، ضغطة مستمرة = إلى آخرها.
+        val titleGestures = android.view.GestureDetector(this, object : android.view.GestureDetector.SimpleOnGestureListener() {
+            override fun onDoubleTap(e: android.view.MotionEvent): Boolean {
+                if (adapter.itemCount > 0) rvFiles.smoothScrollToPosition(0)
+                return true
+            }
+            override fun onLongPress(e: android.view.MotionEvent) {
+                if (adapter.itemCount > 0) rvFiles.smoothScrollToPosition(adapter.itemCount - 1)
+            }
+        })
+        findViewById<View>(R.id.txtToolbarTitle).setOnTouchListener { _, ev -> titleGestures.onTouchEvent(ev); true }
+
         findViewById<View>(R.id.btnSelectionClose).setOnClickListener { clearSelection() }
         findViewById<View>(R.id.btnSelectionAll).setOnClickListener { selectAllVisible() }
-        findViewById<View>(R.id.btnSelectionInvert).setOnClickListener { invertSelection() }
-        findViewById<View>(R.id.btnSelectionDuplicate).setOnClickListener {
-            FileBatchOps.duplicate(this, selectedEntries()) { clearSelection(); refresh() }
+        findViewById<View>(R.id.btnSelectionMore).setOnClickListener { anchor ->
+            SelectionMenu.show(
+                ctx = this, anchor = anchor, project = project, entries = selectedEntries(),
+                parentRelDir = currentRelDir, protectedPaths = protectedPaths(),
+                onInvert = { invertSelection() },
+                onChanged = {
+                    selection.clear()
+                    refresh()
+                },
+                onSelectPattern = { selectByPattern() }
+            )
         }
-        findViewById<View>(R.id.btnSelectionMove).setOnClickListener {
-            FileBatchOps.showMoveDialog(this, project, selectedEntries(), protectedPaths()) {
-                clearSelection(); refresh()
-            }
-        }
-        findViewById<View>(R.id.btnSelectionNewFolder).setOnClickListener {
-            FolderCreator.show(this, project, currentRelDir, selectedEntries(), protectedPaths()) {
-                clearSelection(); refresh()
-            }
-        }
-        findViewById<View>(R.id.btnSelectionCopyPath).setOnClickListener {
-            FileBatchOps.copyPaths(this, selectedEntries())
-        }
+        // ضغطة مستمرة على "تحديد الكل" = تحديد بنمط (*.rin ...).
+        findViewById<View>(R.id.btnSelectionAll).setOnLongClickListener { selectByPattern(); true }
         findViewById<View>(R.id.btnSelectionDelete).setOnClickListener { deleteEntries(selectedEntries()) }
+    }
+
+    // ---- ميزات احترافية: مسار تفاعلي، الأخيرة، نطاق البحث، ملخص المجلد ----
+
+    private fun setupProChrome() {
+        findViewById<View>(R.id.btnRecentFiles).setOnClickListener { showRecentDialog() }
+        val toggle = findViewById<TextView>(R.id.btnSearchContent)
+        fun render() {
+            toggle.setText(if (contentSearch) R.string.search_mode_content else R.string.search_mode_name)
+        }
+        render()
+        toggle.setOnClickListener {
+            contentSearch = !contentSearch
+            render()
+            if (searchQuery.isNotBlank()) refresh()
+        }
+    }
+
+    private fun showRecentDialog() {
+        val rels = FileRecents.list(this, project)
+        if (rels.isEmpty()) {
+            Toast.makeText(this, R.string.recent_empty, Toast.LENGTH_SHORT).show()
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.recent_title)
+            .setItems(rels.toTypedArray()) { _, which ->
+                val rel = rels[which]
+                val f = java.io.File(project.dir, rel)
+                handleOpen(RinFile(f.name, f, f.length(), f.lastModified(), rel))
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    /** يبني شريط المسار: [المشروع] › [مجلد] › [مجلد فرعي]. آخر مستوى (الحالي) بلون الهوية. */
+    private fun renderBreadcrumb() {
+        val box = findViewById<android.widget.LinearLayout>(R.id.layoutBreadcrumb)
+        box.removeAllViews()
+        val rtl = resources.configuration.layoutDirection == View.LAYOUT_DIRECTION_RTL
+        val d = resources.displayMetrics.density
+        val parts = currentRelDir.split('/').filter { it.isNotBlank() }
+        fun chip(label: String, rel: String, current: Boolean) {
+            val tv = TextView(this).apply {
+                text = label
+                textSize = 13f
+                maxLines = 1
+                setTextColor(androidx.core.content.ContextCompat.getColor(context, if (current) R.color.rin_accent else R.color.rin_on_toolbar))
+                if (current) setTypeface(typeface, android.graphics.Typeface.BOLD)
+                setPadding((8 * d).toInt(), (6 * d).toInt(), (8 * d).toInt(), (6 * d).toInt())
+                setBackgroundResource(R.drawable.bg_icon_btn)
+                setOnClickListener {
+                    if (!current) {
+                        currentRelDir = rel
+                        val search = this@FilesActivity.findViewById<EditText>(R.id.inputSearchFiles)
+                        if (search.text.isNotEmpty()) search.setText("") else refresh()
+                    }
+                }
+                setOnLongClickListener {
+                    val cm = this@FilesActivity.getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+                    cm.setPrimaryClip(ClipData.newPlainText("path", rel))
+                    Toast.makeText(context, R.string.path_copied_toast, Toast.LENGTH_SHORT).show()
+                    true
+                }
+            }
+            box.addView(tv)
+        }
+        fun sep() {
+            box.addView(TextView(this).apply {
+                text = if (rtl) "‹" else "›"
+                textSize = 15f
+                setTextColor(androidx.core.content.ContextCompat.getColor(context, R.color.rin_editor_hint))
+            })
+        }
+        chip(project.name, "", parts.isEmpty())
+        var acc = ""
+        parts.forEachIndexed { i, seg ->
+            acc = if (acc.isEmpty()) seg else "$acc/$seg"
+            sep()
+            chip(seg, acc, i == parts.lastIndex)
+        }
+        val sv = findViewById<android.widget.HorizontalScrollView>(R.id.scrollBreadcrumb)
+        sv.post { sv.fullScroll(if (rtl) View.FOCUS_LEFT else View.FOCUS_RIGHT) }
+    }
+
+    private fun renderSummary(folders: Int, files: Int, bytes: Long) {
+        findViewById<TextView>(R.id.txtFilesSummary).apply {
+            visibility = View.VISIBLE
+            text = getString(R.string.files_summary_format, files, folders, android.text.format.Formatter.formatFileSize(this@FilesActivity, bytes))
+        }
+    }
+
+    private fun scheduleContentSearch(q: String) {
+        pendingSearch?.let { searchHandler.removeCallbacks(it) }
+        val token = ++searchToken
+        val run = Runnable {
+            Thread {
+                val (found, hits) = FileContentSearch.search(project, q)
+                searchHandler.post {
+                    if (token != searchToken || searchQuery != q || !contentSearch) return@post
+                    adapter.setHits(hits)
+                    adapter.submit(emptyList(), found, searchMode = true)
+                    adapter.setDirtyPaths(EditorDirtyState.dirtyPaths(project.name))
+                    pruneSelection()
+                    txtEmptyMessage.setText(R.string.search_no_results)
+                    txtEmpty.visibility = if (found.isEmpty()) View.VISIBLE else View.GONE
+                }
+            }.start()
+        }
+        pendingSearch = run
+        searchHandler.postDelayed(run, 300)
     }
 
     private fun selectedEntries(): List<FsEntry> = adapter.entries().filter { it.relPath in selection }
@@ -235,6 +391,7 @@ class FilesActivity : RinBaseActivity() {
         val active = selection.active
         selectionBar.isVisible = active
         fabContainer.isVisible = !active
+        findViewById<View>(R.id.fabPaste).isVisible = FileClipboard.hasContent
         if (active) txtSelectionCount.text = getString(R.string.selection_count_format, selection.count)
     }
 
@@ -249,6 +406,13 @@ class FilesActivity : RinBaseActivity() {
         onSelectionChanged()
     }
 
+    private fun selectByPattern() {
+        PatternSelect.ask(this) { rx ->
+            adapter.entries().filter { rx.matches(it.name) }.forEach { selection.add(it.relPath) }
+            onSelectionChanged()
+        }
+    }
+
     private fun invertSelection() {
         adapter.entries().forEach { selection.toggle(it.relPath) }
         onSelectionChanged()
@@ -260,7 +424,7 @@ class FilesActivity : RinBaseActivity() {
     }
 
     private fun deleteEntries(entries: List<FsEntry>) {
-        FileBatchOps.confirmDelete(this, entries, protectedPaths()) {
+        FileBatchOps.confirmDelete(this, entries, protectedPaths(), project.name) {
             selection.clear()
             refresh()
         }
@@ -290,6 +454,7 @@ class FilesActivity : RinBaseActivity() {
     }
 
     private fun handleOpen(file: RinFile) {
+        FileRecents.record(this, project.name, file.relPath)
         when {
             ProjectManager.isImageFile(file.name) || ProjectManager.isVideoFile(file.name) ->
                 openInMediaPreview(file)
@@ -344,16 +509,24 @@ class FilesActivity : RinBaseActivity() {
     private fun showZipToolsDialog() {
         val options = arrayOf(
             getString(R.string.zip_upload_extract),
-            getString(R.string.export_project_action)
+            getString(R.string.export_project_action),
+            getString(R.string.tool_storage),
+            getString(R.string.tool_dups),
+            getString(R.string.tool_copy_tree),
+            getString(if (FileFilter.showHidden(this)) R.string.tool_hidden_hide else R.string.tool_hidden_show)
         )
         AlertDialog.Builder(this)
-            .setTitle(R.string.zip_tools_title)
+            .setTitle(R.string.project_tools_title)
             .setItems(options) { _, which ->
                 when (which) {
                     0 -> importZipLauncher.launch(
                         arrayOf("application/zip", "application/x-zip-compressed", "*/*")
                     )
                     1 -> downloadProjectAsZip()
+                    2 -> StorageAnalyzer.show(this, project)
+                    3 -> DuplicateFinder.show(this, project, protectedPaths()) { refresh() }
+                    4 -> TreeExport.copy(this, project)
+                    5 -> { FileFilter.setShowHidden(this, !FileFilter.showHidden(this)); refresh() }
                 }
             }
             .setNegativeButton(R.string.cancel, null)
@@ -383,18 +556,29 @@ class FilesActivity : RinBaseActivity() {
     private var scanToken: Int = 0
 
     private fun refresh() {
+        renderBreadcrumb()
         if (searchQuery.isNotBlank()) {
             val results = ProjectManager.searchFiles(project, searchQuery)
+            adapter.setPinned(FilePins.get(this, project.name))
+            adapter.setHits(emptyMap())
+            findViewById<View>(R.id.txtFilesSummary).visibility = View.GONE
             adapter.submit(emptyList(), results, searchMode = true)
             pruneSelection()
             adapter.setDirtyPaths(EditorDirtyState.dirtyPaths(project.name))
             txtEmptyMessage.setText(R.string.search_no_results)
             txtEmpty.visibility = if (results.isEmpty()) View.VISIBLE else View.GONE
             scanForErrors(results)
+            if (contentSearch) scheduleContentSearch(searchQuery) else searchToken++
             return
         }
         txtEmptyMessage.setText(R.string.no_files_yet)
-        val (folders, files) = ProjectManager.listEntries(project, currentRelDir)
+        val (rawFolders, rawFiles) = ProjectManager.listEntries(project, currentRelDir)
+        val pins = FilePins.get(this, project.name)
+        val folders = FileFilter.applyFolders(this, FileSort.folders(this, rawFolders, pins))
+        val files = FileFilter.apply(this, FileSort.files(this, rawFiles, pins))
+        adapter.setPinned(pins)
+        adapter.setHits(emptyMap())
+        renderSummary(rawFolders.size, rawFiles.size, rawFiles.sumOf { it.sizeBytes })
         adapter.submit(folders, files)
         pruneSelection()
         adapter.setDirtyPaths(EditorDirtyState.dirtyPaths(project.name))
@@ -608,29 +792,9 @@ class FilesActivity : RinBaseActivity() {
             .show()
     }
 
-    private fun showDeleteFileConfirm(file: RinFile) {
-        AlertDialog.Builder(this)
-            .setTitle(R.string.delete_file_title)
-            .setMessage(getString(R.string.delete_file_confirm, file.name))
-            .setPositiveButton(R.string.delete) { _, _ ->
-                ProjectManager.deleteFile(file)
-                refresh()
-            }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
-    }
+    private fun showDeleteFileConfirm(file: RinFile) = deleteEntries(listOf(FsEntry.FileEntry(file)))
 
-    private fun showDeleteFolderConfirm(folder: RinFolder) {
-        AlertDialog.Builder(this)
-            .setTitle(R.string.delete_folder_title)
-            .setMessage(getString(R.string.delete_folder_confirm, folder.name))
-            .setPositiveButton(R.string.delete) { _, _ ->
-                ProjectManager.deleteFolder(folder)
-                refresh()
-            }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
-    }
+    private fun showDeleteFolderConfirm(folder: RinFolder) = deleteEntries(listOf(FsEntry.FolderEntry(folder)))
 
     private fun openInEditor(file: RinFile) {
         val intent = Intent(this, MainActivity::class.java)
@@ -712,6 +876,7 @@ private class FilesAdapter(
         val key = keyAt(position) ?: return
         val selected = key in selection
         val selecting = selection.active
+        applyDensity(holder)
         val actionVis = if (selecting) View.GONE else View.VISIBLE
         holder.itemView.setBackgroundResource(
             if (selected) R.drawable.bg_list_card_selected else R.drawable.bg_list_card
@@ -734,6 +899,39 @@ private class FilesAdapter(
     private fun toggle(key: String) {
         selection.toggle(key)
         onSelectionChanged()
+    }
+
+    private var pinned: Set<String> = emptySet()
+    private var compact: Boolean = false
+    /** نتائج بحث المحتوى: relPath ← (رقم السطر, مقتطف) — تُعرض مكان المسار أثناء البحث. */
+    private var hits: Map<String, Pair<Int, String>> = emptyMap()
+
+    fun setHits(h: Map<String, Pair<Int, String>>) { hits = h }
+
+    fun setCompact(value: Boolean) {
+        compact = value
+        notifyDataSetChanged()
+    }
+
+    /** العرض المضغوط: حشوة رأسية أصغر وإخفاء سطر المعلومات (الحجم/التاريخ). */
+    private fun applyDensity(holder: RecyclerView.ViewHolder) {
+        val d = holder.itemView.resources.displayMetrics.density
+        val ph = (12 * d).toInt()
+        val pv = ((if (compact) 5 else 12) * d).toInt()
+        holder.itemView.setPadding(ph, pv, ph, pv)
+        val vis = if (compact) View.GONE else View.VISIBLE
+        when (holder) {
+            is FolderVH -> holder.txtMeta.visibility = vis
+            is FileVH -> holder.txtMeta.visibility = vis
+        }
+    }
+
+    /** المثبّتات (FilePins): تُعرض نجمة قبل الاسم. تُستدعى قبل [submit] فلا حاجة لإشعار. */
+    fun setPinned(paths: Set<String>) { pinned = paths }
+
+    private fun applyPin(tv: TextView, key: String) {
+        if (key in pinned) RsIcons.start(tv, R.drawable.rs_ic_star, 14, 4, androidx.core.content.ContextCompat.getColor(tv.context, R.color.rin_accent))
+        else RsIcons.clear(tv)
     }
 
     fun setErrorPaths(paths: Set<String>) {
@@ -794,9 +992,11 @@ private class FilesAdapter(
                 val folder = row.folder
                 holder as FolderVH
                 holder.txtName.text = folder.name
+                applyPin(holder.txtName, folder.relPath)
                 holder.imgIcon.setImageResource(RsFolderIcons.forName(folder.name))
                 holder.txtMeta.text = holder.itemView.context.getString(
-                    R.string.folder_meta_format,
+                    R.string.folder_meta_count_format,
+                    folder.dir.list()?.size ?: 0,
                     dateFormat.format(Date(folder.lastModified))
                 )
                 holder.itemView.setOnClickListener {
@@ -810,7 +1010,11 @@ private class FilesAdapter(
                 val file = row.file
                 holder as FileVH
                 holder.txtName.text = file.name
-                holder.txtMeta.text = if (searchMode) {
+                applyPin(holder.txtName, file.relPath)
+                val hit = hits[file.relPath]
+                holder.txtMeta.text = if (searchMode && hit != null) {
+                    holder.itemView.context.getString(R.string.search_content_line, hit.first, hit.second)
+                } else if (searchMode) {
                     holder.itemView.context.getString(R.string.search_result_meta_format, file.relPath)
                 } else {
                     holder.itemView.context.getString(
