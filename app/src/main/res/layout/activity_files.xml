@@ -91,6 +91,15 @@
             android:contentDescription="@string/action_move" />
 
         <ImageButton
+            android:id="@+id/btnSelectionNewFolder"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:padding="10dp"
+            android:src="@drawable/rs_folder_new"
+            android:background="@drawable/bg_icon_btn"
+            android:contentDescription="@string/new_folder_title" />
+
+        <ImageButton
             android:id="@+id/btnSelectionCopyPath"
             android:layout_width="40dp"
             android:layout_height="40dp"
