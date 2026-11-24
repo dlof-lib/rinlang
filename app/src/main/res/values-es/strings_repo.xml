@@ -40,4 +40,11 @@
     <string name="repo_done_new">«%1$s» restaurado como proyecto nuevo (%2$d archivos)</string>
     <string name="repo_done_merge">Añadidos %1$d · actualizados %2$d · sin cambios %3$d · omitidos %4$d · retirados %5$d</string>
     <string name="repo_no_source">No hay origen de repositorio guardado para esta carpeta. Usa primero «Restaurar desde repositorio»</string>
+    <string name="repo_recent">Recientes</string>
+    <string name="repo_recent_none">No hay repositorios recientes</string>
+    <string name="repo_preview_title">Vista previa</string>
+    <string name="repo_preview_msg">Se añadirán %1$d · actualizarán %2$d · sin cambios %3$d · omitirán %4$d · retirarán %5$d\n\nTodo lo reemplazado o retirado se copia antes a .rin_backup.</string>
+    <string name="repo_preview_run">Aplicar</string>
+    <string name="repo_checking">Buscando actualizaciones…</string>
+    <string name="repo_uptodate_msg">Sin cambios en el repositorio desde la última restauración (%1$s). ¿Restaurar de todos modos?</string>
 </resources>
