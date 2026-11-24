@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- شريط تنسيق Markdown في المحرر (md) -->
+    <string name="md_preview">Markdown preview</string>
+    <string name="md_preview_needs_project">Open the file from a project to preview it</string>
+    <string name="md_h1">Heading 1</string>
+    <string name="md_h2">Heading 2</string>
+    <string name="md_h3">Heading 3</string>
+    <string name="md_bold">Bold</string>
+    <string name="md_italic">Italic</string>
+    <string name="md_strike">Strikethrough</string>
+    <string name="md_inline_code">Inline code</string>
+    <string name="md_code_block">Code block</string>
+    <string name="md_quote">Quote</string>
+    <string name="md_bullet_list">Bulleted list</string>
+    <string name="md_numbered_list">Numbered list</string>
+    <string name="md_task_list">Task list</string>
+    <string name="md_toggle_checkbox">Toggle checkbox</string>
+    <string name="md_link">Link</string>
+    <string name="md_image">Image</string>
+    <string name="md_table">Table</string>
+    <string name="md_hr">Horizontal rule</string>
+    <string name="md_placeholder_text">text</string>
+    <string name="md_placeholder_url">https://</string>
+    <string name="md_table_col">col</string>
+    <string name="md_indent">Indent</string>
+    <string name="md_outdent">Outdent</string>
+    <string name="md_headings">Headings</string>
+    <string name="md_more">More</string>
+    <string name="md_menu_format_table">Format table</string>
+    <string name="md_menu_toc">Insert table of contents</string>
+    <string name="md_menu_stats">Document statistics</string>
+    <string name="md_no_headings">No headings in this file</string>
+    <string name="md_not_in_table">Place the cursor inside a table first</string>
+    <string name="md_headings_title">Go to heading</string>
+    <string name="md_stats_title">Document statistics</string>
+    <string name="md_stats_message">Words: %1$d\nCharacters: %2$d (no spaces: %3$d)\nLines: %4$d\nHeadings: %5$d\nReading time: ~%6$d min</string>
+    <string name="md_ok">OK</string>
+</resources>
