@@ -10,6 +10,53 @@
 
     <include layout="@layout/toolbar_app" />
 
+    <!-- شريط مسار تفاعلي (breadcrumb): الضغط على أي مستوى ينتقل إليه، والضغط المستمر ينسخ مساره.
+         زر "الأخيرة" يعرض آخر الملفات المفتوحة في هذا المشروع. -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="10dp"
+        android:layout_marginEnd="6dp"
+        android:layout_marginTop="8dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <HorizontalScrollView
+            android:id="@+id/scrollBreadcrumb"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:scrollbars="none"
+            android:overScrollMode="never">
+
+            <LinearLayout
+                android:id="@+id/layoutBreadcrumb"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical" />
+        </HorizontalScrollView>
+
+        <ImageButton
+            android:id="@+id/btnRecentFiles"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:padding="8dp"
+            android:src="@drawable/rs_ic_timer"
+            android:tint="@color/rin_on_toolbar"
+            android:background="@drawable/bg_icon_btn"
+            android:contentDescription="@string/recent_title" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/txtFilesSummary"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="2dp"
+        android:textColor="@color/rin_editor_hint"
+        android:textSize="11.5sp" />
+
     <!-- شريط إجراءات التحديد المتعدد: يظهر فقط أثناء وضع التحديد (FilesActivity.updateSelectionBar).
          الإيماءات: ضغطة مستمرة على صف تبدأ التحديد، والسحب ↑↓ بعدها يحدّد نطاقاً. -->
     <LinearLayout
@@ -60,54 +107,10 @@
             android:background="@drawable/bg_icon_btn"
             android:contentDescription="@string/selection_select_all" />
 
-        <ImageButton
-            android:id="@+id/btnSelectionInvert"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:padding="10dp"
-            android:src="@drawable/rs_ic_swap"
-            android:tint="@color/rin_on_toolbar"
-            android:background="@drawable/bg_icon_btn"
-            android:contentDescription="@string/selection_invert" />
 
-        <ImageButton
-            android:id="@+id/btnSelectionDuplicate"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:padding="10dp"
-            android:src="@drawable/rs_ic_copy"
-            android:tint="@color/rin_on_toolbar"
-            android:background="@drawable/bg_icon_btn"
-            android:contentDescription="@string/action_duplicate" />
 
-        <ImageButton
-            android:id="@+id/btnSelectionMove"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:padding="10dp"
-            android:src="@drawable/rs_ic_folder"
-            android:tint="@color/rin_on_toolbar"
-            android:background="@drawable/bg_icon_btn"
-            android:contentDescription="@string/action_move" />
 
-        <ImageButton
-            android:id="@+id/btnSelectionNewFolder"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:padding="10dp"
-            android:src="@drawable/rs_folder_new"
-            android:background="@drawable/bg_icon_btn"
-            android:contentDescription="@string/new_folder_title" />
 
-        <ImageButton
-            android:id="@+id/btnSelectionCopyPath"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:padding="10dp"
-            android:src="@drawable/rs_ic_link"
-            android:tint="@color/rin_on_toolbar"
-            android:background="@drawable/bg_icon_btn"
-            android:contentDescription="@string/action_copy_path" />
 
         <ImageButton
             android:id="@+id/btnSelectionDelete"
@@ -117,6 +120,16 @@
             android:src="@drawable/ic_trash_red"
             android:background="@drawable/bg_icon_btn"
             android:contentDescription="@string/delete" />
+
+        <ImageButton
+            android:id="@+id/btnSelectionMore"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:padding="10dp"
+            android:src="@drawable/rs_ic_more_vert"
+            android:tint="@color/rin_on_toolbar"
+            android:background="@drawable/bg_icon_btn"
+            android:contentDescription="@string/more_actions" />
 
     </LinearLayout>
 
@@ -142,6 +155,24 @@
         android:singleLine="true"
         android:inputType="text"
         android:imeOptions="actionDone" />
+
+    <!-- تبديل نطاق البحث: الأسماء فقط ↔ الأسماء + محتوى الملفات -->
+    <TextView
+        android:id="@+id/btnSearchContent"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="14dp"
+        android:layout_marginTop="4dp"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        android:paddingTop="4dp"
+        android:paddingBottom="4dp"
+        android:background="@drawable/bg_icon_btn"
+        android:clickable="true"
+        android:focusable="true"
+        android:textColor="@color/rin_accent"
+        android:textSize="11.5sp"
+        android:textStyle="bold" />
 
     <FrameLayout
         android:layout_width="match_parent"
@@ -193,6 +224,31 @@
             android:layout_gravity="bottom|end"
             android:layout_margin="18dp"
             android:orientation="vertical">
+
+            <com.google.android.material.floatingactionbutton.FloatingActionButton
+                android:id="@+id/fabPaste"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:contentDescription="@string/tool_paste"
+                android:visibility="gone"
+                app:backgroundTint="@color/rin_accent"
+                app:tint="@android:color/white"
+                app:rippleColor="@color/rin_accent_pressed"
+                app:fabSize="mini"
+                app:srcCompat="@drawable/rs_ic_download" />
+
+            <com.google.android.material.floatingactionbutton.FloatingActionButton
+                android:id="@+id/fabSort"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:contentDescription="@string/sort_title"
+                app:backgroundTint="@color/rin_toolbar_bottom"
+                app:tint="@android:color/white"
+                app:rippleColor="@color/rin_ghost_ripple"
+                app:fabSize="mini"
+                app:srcCompat="@drawable/rs_ic_sort" />
 
             <com.google.android.material.floatingactionbutton.FloatingActionButton
                 android:id="@+id/fabZipTools"
