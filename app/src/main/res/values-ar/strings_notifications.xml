@@ -32,6 +32,12 @@
     <string name="notif_duration_ms">%1$d مللي ثانية</string>
     <string name="notif_duration_s">%1$.1f ثانية</string>
     <string name="notif_live_hint">اضغط «فتح» لعرض المعاينة في المتصفح، أو «إيقاف» لإنهاء الخادم.</string>
+    <string name="notif_channel_background">العمل في الخلفية</string>
+    <string name="notif_channel_background_desc">إشعار صامت يبقي التنزيل وتشغيل البرامج جارياً بعد مغادرتك التطبيق.</string>
+    <string name="notif_bg_title">RinStudio يعمل في الخلفية</string>
+    <string name="notif_bg_text">تنزيلات جارية: %1$d · برامج قيد التشغيل: %2$d</string>
+    <string name="notif_job_input_title">البرنامج #%1$d ينتظر إجابتك</string>
+    <string name="notif_job_input_hint">اضغط للعودة إلى RinStudio والإجابة.</string>
     <plurals name="notif_downloads_done">
         <item quantity="zero">لا تنزيلات مكتملة</item>
         <item quantity="one">تنزيل واحد مكتمل</item>
