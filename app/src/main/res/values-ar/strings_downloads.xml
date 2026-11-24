@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- التنزيل والأذونات — FilesDownload.kt / RinPermissions.kt -->
+<resources>
+    <string name="dl_action">تنزيل إلى الجهاز</string>
+    <string name="dl_action_zip">تنزيل كـ ZIP</string>
+    <string name="dl_folder_zip">تنزيل المجلد الحالي (ZIP)</string>
+    <string name="dl_project_zip">تنزيل المشروع كاملاً (ZIP)</string>
+    <string name="dl_projects_zip">تنزيل المشاريع المحددة (ZIP)</string>
+    <string name="dl_from_url">تنزيل من رابط</string>
+    <string name="dl_empty">لا توجد ملفات للتنزيل</string>
+    <string name="dl_zip_progress_title">جارٍ تجهيز الأرشيف…</string>
+    <string name="dl_zip_progress_status">جارٍ ضغط الملفات وحفظها…</string>
+    <string name="dl_create_failed">تعذّر إنشاء الملف في مجلد التنزيلات</string>
+    <string name="dl_open_stream_failed">تعذّر فتح مجرى الكتابة</string>
+    <string name="dl_saved_title">تم الحفظ على الجهاز</string>
+    <string name="dl_saved_message">%1$s\n\nالمسار: %2$s</string>
+    <string name="dl_open">فتح</string>
+    <string name="dl_share">مشاركة</string>
+    <string name="dl_close">إغلاق</string>
+    <string name="dl_notif_title">اكتمل التنزيل</string>
+    <string name="dl_notif_text">%1$s — محفوظ في التنزيلات</string>
+    <string name="dl_url_title">تنزيل من رابط</string>
+    <string name="dl_url_hint">الرابط (https://…)</string>
+    <string name="dl_url_name_hint">اسم الملف (اختياري)</string>
+    <string name="dl_url_start">تنزيل</string>
+    <string name="dl_url_invalid">الرابط غير صالح — يُقبل https فقط</string>
+    <string name="dl_url_offline">لا يوجد اتصال بالإنترنت</string>
+    <string name="dl_url_progress_title">جارٍ التنزيل إلى المشروع…</string>
+    <string name="dl_url_progress_status">جارٍ تنزيل الملف…</string>
+    <string name="dl_url_done">تم تنزيل %1$s إلى المشروع</string>
+    <string name="dl_url_too_many_redirects">تحويلات كثيرة جداً للرابط</string>
+    <string name="perm_center_title">الأذونات</string>
+    <string name="perm_center_hint">RinStudio يطلب أقل عدد ممكن من الأذونات. التخزين لا يحتاج إذناً: التنزيلات تُحفظ في Downloads/RinStudio، والرفع يتم عبر منتقي الملفات الخاص بالنظام.</string>
+    <string name="perm_notifications">الإشعارات</string>
+    <string name="perm_notifications_desc">إشعار اكتمال التنزيل وتشغيل المعاينة الحية في الخلفية. اختياري.</string>
+    <string name="perm_install">تثبيت التطبيقات</string>
+    <string name="perm_install_desc">لزر «تثبيت» عند تصدير مشروع كتطبيق APK. اختياري.</string>
+    <string name="perm_storage">التخزين والتنزيلات</string>
+    <string name="perm_storage_desc">لا يحتاج إذناً — يُستخدم مجلد Downloads/RinStudio وأدوات النظام.</string>
+    <string name="perm_network">الإنترنت</string>
+    <string name="perm_network_desc">لتسجيل الدخول والمتجر والتنزيل من رابط.</string>
+    <string name="perm_granted">مسموح</string>
+    <string name="perm_not_granted">غير مسموح</string>
+    <string name="perm_allow">السماح</string>
+    <string name="perm_not_now">ليس الآن</string>
+    <string name="perm_app_settings">إعدادات التطبيق</string>
+    <string name="perm_rationale_title">تفعيل الإشعارات؟</string>
+    <string name="perm_rationale_msg">لنُعلمك فور اكتمال التنزيل ونتيح لك فتح الملف بنقرة واحدة. يمكنك تغيير ذلك لاحقاً من الإعدادات ← الأذونات.</string>
+    <string name="settings_permissions_title">الأذونات</string>
+    <string name="settings_permissions_hint">الإشعارات، تثبيت التطبيقات، وما يحتاجه التطبيق فعلاً</string>
+</resources>
