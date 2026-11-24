@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- التنزيل والأذونات — FilesDownload.kt / RinPermissions.kt -->
+<resources>
+    <string name="dl_action">Descargar al dispositivo</string>
+    <string name="dl_action_zip">Descargar como ZIP</string>
+    <string name="dl_folder_zip">Descargar carpeta actual (ZIP)</string>
+    <string name="dl_project_zip">Descargar proyecto completo (ZIP)</string>
+    <string name="dl_projects_zip">Descargar proyectos seleccionados (ZIP)</string>
+    <string name="dl_from_url">Descargar desde un enlace</string>
+    <string name="dl_empty">No hay nada que descargar</string>
+    <string name="dl_zip_progress_title">Preparando archivo…</string>
+    <string name="dl_zip_progress_status">Comprimiendo y guardando archivos…</string>
+    <string name="dl_create_failed">No se pudo crear el archivo en Descargas</string>
+    <string name="dl_open_stream_failed">No se pudo abrir el flujo de escritura</string>
+    <string name="dl_saved_title">Guardado en el dispositivo</string>
+    <string name="dl_saved_message">%1$s\n\nUbicación: %2$s</string>
+    <string name="dl_open">Abrir</string>
+    <string name="dl_share">Compartir</string>
+    <string name="dl_close">Cerrar</string>
+    <string name="dl_notif_title">Descarga completada</string>
+    <string name="dl_notif_text">%1$s — guardado en Descargas</string>
+    <string name="dl_url_title">Descargar desde un enlace</string>
+    <string name="dl_url_hint">Enlace (https://…)</string>
+    <string name="dl_url_name_hint">Nombre del archivo (opcional)</string>
+    <string name="dl_url_start">Descargar</string>
+    <string name="dl_url_invalid">Enlace no válido: solo se acepta https</string>
+    <string name="dl_url_offline">Sin conexión a Internet</string>
+    <string name="dl_url_progress_title">Descargando al proyecto…</string>
+    <string name="dl_url_progress_status">Descargando archivo…</string>
+    <string name="dl_url_done">%1$s se descargó en el proyecto</string>
+    <string name="dl_url_too_many_redirects">Demasiadas redirecciones</string>
+    <string name="perm_center_title">Permisos</string>
+    <string name="perm_center_hint">RinStudio pide la menor cantidad posible de permisos. El almacenamiento no necesita ninguno: las descargas van a Descargas/RinStudio y la subida usa el selector del sistema.</string>
+    <string name="perm_notifications">Notificaciones</string>
+    <string name="perm_notifications_desc">Aviso de descarga completada y vista previa en vivo en segundo plano. Opcional.</string>
+    <string name="perm_install">Instalar aplicaciones</string>
+    <string name="perm_install_desc">Para el botón Instalar al exportar un proyecto como APK. Opcional.</string>
+    <string name="perm_storage">Almacenamiento y descargas</string>
+    <string name="perm_storage_desc">No requiere permiso: usa Descargas/RinStudio y los selectores del sistema.</string>
+    <string name="perm_network">Internet</string>
+    <string name="perm_network_desc">Para iniciar sesión, la tienda y descargar desde un enlace.</string>
+    <string name="perm_granted">Permitido</string>
+    <string name="perm_not_granted">No permitido</string>
+    <string name="perm_allow">Permitir</string>
+    <string name="perm_not_now">Ahora no</string>
+    <string name="perm_app_settings">Ajustes de la app</string>
+    <string name="perm_rationale_title">¿Activar notificaciones?</string>
+    <string name="perm_rationale_msg">Para avisarte cuando termine una descarga y abrir el archivo con un toque. Puedes cambiarlo luego en Ajustes → Permisos.</string>
+    <string name="settings_permissions_title">Permisos</string>
+    <string name="settings_permissions_hint">Notificaciones, instalar apps y lo que la app realmente necesita</string>
+</resources>
