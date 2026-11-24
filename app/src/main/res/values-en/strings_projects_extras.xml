@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="proj_pin">Pin to top</string>
+    <string name="proj_unpin">Unpin</string>
+    <string name="proj_duplicate">Duplicate project</string>
+    <string name="proj_duplicate_done">Copy “%1$s” created</string>
+    <string name="proj_duplicate_failed">Could not duplicate the project: %1$s</string>
+    <string name="proj_info">Project info</string>
+    <string name="proj_info_body">Type: %1$s\nFiles: %2$d\nFolders: %3$d\nSize: %4$s\nLast modified: %5$s</string>
+    <string name="proj_info_version">Version: %1$s</string>
+    <string name="proj_filter_type">Filter by type</string>
+    <string name="proj_filter_all">All types</string>
+    <string name="proj_count_filtered">%1$d of %2$d projects</string>
+</resources>
