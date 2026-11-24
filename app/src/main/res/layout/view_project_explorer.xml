@@ -59,6 +59,16 @@
         </LinearLayout>
 
         <ImageButton
+            android:id="@+id/btnExplorerNewFolder"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:layout_marginEnd="4dp"
+            android:padding="6dp"
+            android:src="@drawable/rs_folder_new"
+            android:background="@drawable/bg_icon_btn"
+            android:contentDescription="@string/new_folder_title" />
+
+        <ImageButton
             android:id="@+id/btnExplorerClose"
             android:layout_width="30dp"
             android:layout_height="30dp"
@@ -179,6 +189,15 @@
             android:tint="@color/rin_on_toolbar"
             android:background="@drawable/bg_icon_btn"
             android:contentDescription="@string/action_move" />
+
+        <ImageButton
+            android:id="@+id/btnExplorerSelNewFolder"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:padding="8dp"
+            android:src="@drawable/rs_folder_new"
+            android:background="@drawable/bg_icon_btn"
+            android:contentDescription="@string/new_folder_title" />
 
         <ImageButton
             android:id="@+id/btnExplorerSelCopyPath"
