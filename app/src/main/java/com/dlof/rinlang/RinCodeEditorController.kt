@@ -146,6 +146,21 @@ class RinCodeEditorController(
     /** عملية تحرير Markdown على التحديد الحالي (انظر [MarkdownEdit]). */
     fun markdownEdit(op: (doc: String, selStart: Int, selEnd: Int) -> SmartEdit.Edit?): Boolean = editorView.markdownEdit(op)
 
+    val isJson: Boolean get() = editorView.isJson
+    val jsonAllowsComments: Boolean get() = editorView.jsonAllowsComments
+
+    /** التحديد الحالي كإزاحتين مسطّحتين (start, end) — انظر [JsonEdit]. */
+    fun selectionOffsets(): Pair<Int, Int> = editorView.selectionOffsets()
+
+    /** عملية تحرير نصية عامة على التحديد (تُستعمل لـ[JsonEdit] أيضاً): استبدال واحد قابل للتراجع. */
+    fun textEdit(op: (doc: String, selStart: Int, selEnd: Int) -> SmartEdit.Edit?): Boolean = editorView.markdownEdit(op)
+
+    /** ينقل المؤشر إلى الإزاحة المسطّحة [offset] ويمرّر إليه. */
+    fun jumpToOffset(offset: Int) {
+        val y = editorView.jumpToOffset(offset)
+        scrollToY(y)
+    }
+
     fun goToLine(lineNumberOneBased: Int) {
         val y = editorView.goToLine(lineNumberOneBased)
         scrollToY(y)
