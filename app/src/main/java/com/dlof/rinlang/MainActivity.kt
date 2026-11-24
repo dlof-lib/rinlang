@@ -57,6 +57,12 @@ class MainActivity : RinBaseActivity() {
         const val EXTRA_PROJECT_NAME = "extra_project_name"
         /** اسم ملف .rin (اختياري) داخل ذلك المشروع، يُفتَح تلقائياً في المحرر. */
         const val EXTRA_FILE_NAME = "extra_file_name"
+        /** رقم سطر (1-based، اختياري) يُنتقل إليه بعد فتح الملف — من نتائج البحث في شاشة الملفات. */
+        const val EXTRA_GOTO_LINE = "extra_goto_line"
+        private const val FIND_HISTORY_KEY = "__editor_find__"
+        /** عمودا بداية/نهاية المطابقة (اختياري) على ذلك السطر لتحديدها في المحرر. */
+        const val EXTRA_GOTO_COL = "extra_goto_col"
+        const val EXTRA_GOTO_END_COL = "extra_goto_end_col"
         /** اسم مكتبة .og.rin (اختياري) داخل lib/ الخاصة بذلك المشروع، تُفتَح للتعديل في نفس المحرر. */
         const val EXTRA_LIBRARY_NAME = "extra_library_name"
 
@@ -274,6 +280,13 @@ class MainActivity : RinBaseActivity() {
         // + تلوين نحوي حقيقي (Kotlin خالص عبر RinSyntax، بلا أي C++/JNI) يتبدّل تلقائيًا حسب امتداد الملف.
         editorController = RinCodeEditorController(this, editCode, txtLineNumbers, scrollEditor)
         editorController.setLanguage(initialLanguageExtension)
+        val gotoLine = intent.getIntExtra(EXTRA_GOTO_LINE, 0)
+        if (savedInstanceState == null && gotoLine > 0 && currentProjectFile != null) {
+            // بعد اكتمال القياس/الرسم الأول حتى يُحسب إحداثي السطر فعلاً.
+            val gotoCol = intent.getIntExtra(EXTRA_GOTO_COL, -1)
+            val gotoEnd = intent.getIntExtra(EXTRA_GOTO_END_COL, -1)
+            editCode.postDelayed({ editorController.goToMatch(gotoLine, gotoCol, gotoEnd) }, 150)
+        }
         editorController.addCursorStateChangeListener { updateStatusBar() }
         updateStatusBar()
         // حركة القرص (pinch-to-zoom) داخل المحرر تُغيّر حجم خطه مباشرة؛ نُزامن هنا عمود أرقام
@@ -412,6 +425,8 @@ class MainActivity : RinBaseActivity() {
                 updateFindCount()
             }
         })
+
+        setupFindExtras(btnFindNext, btnFindCase)
 
         // ----- شريط القوائم المصغّر: File / Edit / View / Run -----
         // كل زر صغير جداً يفتح PopupMenu بأسلوب قوائم الكمبيوتر (File/Edit/View/Run)،
@@ -1709,9 +1724,114 @@ class MainActivity : RinBaseActivity() {
         }
     }
 
+    /** خيارات إضافية لشريط البحث: Enter = التالي، والنقر على عدّاد «N/M» يفتح قائمة (كلمة كاملة، كل النتائج، بحث في المشروع، السجل). */
+    private fun setupFindExtras(btnNext: Button, btnCase: ImageButton) {
+        txtFind.imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
+        txtFind.setOnEditorActionListener { _, _, _ ->
+            SearchHistory.add(this, FIND_HISTORY_KEY, txtFind.text.toString())
+            btnNext.performClick()
+            true
+        }
+        txtFindCount.isClickable = true
+        txtFindCount.setOnClickListener { showFindOptionsMenu(it, btnCase) }
+    }
+
+    private fun showFindOptionsMenu(anchor: View, btnCase: ImageButton) {
+        val c = editorController
+        val pm = android.widget.PopupMenu(this, anchor)
+        pm.menu.add(0, 1, 0, R.string.find_opt_case).apply { isCheckable = true; isChecked = c.caseSensitiveSearch }
+        pm.menu.add(0, 2, 1, R.string.find_opt_word).apply { isCheckable = true; isChecked = c.wholeWordSearch }
+        pm.menu.add(0, 3, 2, R.string.find_opt_regex).apply { isCheckable = true; isChecked = c.regexSearch }
+        pm.menu.add(0, 4, 3, R.string.find_opt_list)
+        pm.menu.add(0, 5, 4, R.string.find_opt_project)
+        pm.menu.add(0, 6, 5, R.string.find_opt_history)
+        pm.setOnMenuItemClickListener { item ->
+            when (item.itemId) {
+                1 -> c.caseSensitiveSearch = !c.caseSensitiveSearch
+                2 -> c.wholeWordSearch = !c.wholeWordSearch
+                3 -> c.regexSearch = !c.regexSearch
+                4 -> showFindAllDialog()
+                5 -> searchQueryInProject()
+                6 -> showFindHistory()
+            }
+            if (item.itemId in 1..3) {
+                refreshFindModeIndicator(btnCase)
+                c.highlightMatches(txtFind.text.toString())
+                updateFindCount()
+            }
+            true
+        }
+        pm.show()
+    }
+
+    /** قائمة بكل مطابقات حقل البحث (سطر + مقتطف مميَّز)؛ النقر ينتقل ويحدّد المطابقة. */
+    private fun showFindAllDialog() {
+        val q = txtFind.text.toString()
+        val list = editorController.matchList(q)
+        if (list.isEmpty()) {
+            Toast.makeText(this, getString(R.string.find_not_found_toast, q), Toast.LENGTH_SHORT).show()
+            return
+        }
+        val items = list.map { SearchHighlight.line(this, "${it.line}:  ", it) }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.find_list_title, list.size))
+            .setItems(items) { _, i -> list[i].let { editorController.goToMatch(it.line, it.col, it.endCol) } }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun showFindHistory() {
+        val items = SearchHistory.list(this, FIND_HISTORY_KEY)
+        if (items.isEmpty()) {
+            Toast.makeText(this, R.string.sr_history_empty, Toast.LENGTH_SHORT).show()
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.sr_history_title)
+            .setItems(items.toTypedArray()) { _, i ->
+                txtFind.setText(items[i])
+                txtFind.setSelection(txtFind.text.length)
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    /** يفتح شاشة الملفات على بحث المحتوى في المشروع كله بنفس نص الحقل وخياراته. */
+    private fun searchQueryInProject() {
+        val proj = currentProject
+        val q = txtFind.text.toString()
+        if (proj == null) {
+            Toast.makeText(this, R.string.find_project_none, Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (q.isNotBlank()) SearchHistory.add(this, FIND_HISTORY_KEY, q)
+        startActivity(
+            android.content.Intent(this, FilesActivity::class.java)
+                .putExtra(FilesActivity.EXTRA_PROJECT_NAME, proj.name)
+                .putExtra(FilesActivity.EXTRA_SEARCH_QUERY, q)
+                .putExtra(FilesActivity.EXTRA_SEARCH_CASE, editorController.caseSensitiveSearch)
+                .putExtra(FilesActivity.EXTRA_SEARCH_WORD, editorController.wholeWordSearch)
+                .putExtra(FilesActivity.EXTRA_SEARCH_REGEX, editorController.regexSearch)
+        )
+    }
+
     private fun toggleFindBar() {
         val showing = findBar.visibility != android.view.View.VISIBLE
         findBar.visibility = if (showing) android.view.View.VISIBLE else android.view.View.GONE
+        if (showing) {
+            // تحديد قصير على سطر واحد يصبح نص البحث مباشرة (كما في محررات الكمبيوتر).
+            val (s0, e0) = editorController.selectionOffsets()
+            val a = minOf(s0, e0)
+            val b = maxOf(s0, e0)
+            val doc = editCode.text.toString()
+            if (b > a && b - a <= 100 && b <= doc.length) {
+                val sel = doc.substring(a, b)
+                if (!sel.contains('\n')) {
+                    txtFind.setText(sel)
+                    txtFind.selectAll()
+                }
+            }
+        }
         if (!showing) editorController.clearMatchHighlights()
     }
 
@@ -1953,7 +2073,7 @@ class MainActivity : RinBaseActivity() {
     /** يلوّن زر "حساسية الأحرف/regex" بخلفية بارزة عندما يكون أي من الوضعين مفعَّلًا، ليكون
      *  للمستخدم مؤشر بصري دائم على حالة البحث الحالية، لا مجرد Toast يختفي. */
     private fun refreshFindModeIndicator(button: ImageButton) {
-        val active = editorController.caseSensitiveSearch || editorController.regexSearch
+        val active = editorController.caseSensitiveSearch || editorController.regexSearch || editorController.wholeWordSearch
         button.setBackgroundResource(if (active) R.drawable.bg_icon_btn_accent else R.drawable.bg_toolbar_btn_ghost)
     }
 
