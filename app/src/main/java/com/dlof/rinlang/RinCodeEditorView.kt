@@ -2717,14 +2717,31 @@ class RinCodeEditorView @JvmOverloads constructor(
     }
 
     /**
+     * ينتقل إلى [oneBasedLine] ويحدّد المدى [startCol, endCol) فيه (من نتيجة بحث الملفات)؛ إن كان المدى
+     * خارج حدود السطر (تغيّر الملف) يكتفي بوضع المؤشر عند بداية السطر. يعيد y بالبكسل.
+     */
+    fun selectRangeOnLine(oneBasedLine: Int, startCol: Int, endCol: Int): Int {
+        val pos = engine.lineStartPosition(oneBasedLine)
+        val len = engine.getLine(pos.line).length
+        requestFocus()
+        if (startCol in 0 until endCol && endCol <= len) {
+            engine.setSelection(pos.line, startCol, pos.line, endCol)
+        } else {
+            engine.setCursor(pos.line, pos.col, false)
+        }
+        afterEngineMutation()
+        return yOfLine(pos.line)
+    }
+
+    /**
      * كل مطابقة نص للبحث: إمّا مباشرة عبر محرك C++ (بحث حرفي)، أو محسوبة هنا بـ[Regex] كوتلن على
      * كل سطر — لا حاجة لتعديل المحرك الأصلي لدعم التعابير النمطية. نمط غير صالح يُعيد قائمة فارغة
      * بدل رمي استثناء يُسقط المحرر (انظر [isValidPattern] لتمييز "غير صالح" عن "لا تطابقات").
      */
     private fun computeMatches(query: String, caseSensitive: Boolean, regex: Boolean): List<RinNativeEditor.FindMatch> {
         if (query.isEmpty()) return emptyList()
-        if (!regex) return engine.findAll(query, caseSensitive)
-        val pattern = compileRegex(query, caseSensitive) ?: return emptyList()
+        if (!regex && !findWholeWord) return engine.findAll(query, caseSensitive)
+        val pattern = buildFindRegex(query, caseSensitive, regex) ?: return emptyList()
         val out = ArrayList<RinNativeEditor.FindMatch>()
         for (line in 0 until engine.lineCount()) {
             val lineText = engine.getLine(line)
@@ -2735,6 +2752,23 @@ class RinCodeEditorView @JvmOverloads constructor(
         }
         return out
     }
+
+    /** «كلمة كاملة» في بحث المحرر (شريط البحث): تُحاط المطابقة بحدود كلمة (حروف/أرقام/_). */
+    var findWholeWord: Boolean = false
+
+    private fun buildFindRegex(query: String, caseSensitive: Boolean, regex: Boolean): Regex? = try {
+        val core = if (regex) query else Regex.escape(query)
+        val body = if (findWholeWord) "(?<![\\p{L}\\p{N}_])(?:$core)(?![\\p{L}\\p{N}_])" else core
+        Regex(body, if (caseSensitive) emptySet() else setOf(RegexOption.IGNORE_CASE))
+    } catch (e: java.util.regex.PatternSyntaxException) {
+        null
+    }
+
+    /** كل المطابقات (حتى 500) كمقتطفات أسطر لعرضها في قائمة «كل النتائج»؛ الأرقام 1-based. */
+    fun allMatchPreviews(query: String, caseSensitive: Boolean, regex: Boolean): List<SearchMatch> =
+        computeMatches(query, caseSensitive, regex).take(500).map {
+            FileSearch.makeMatch(it.line + 1, engine.getLine(it.line), it.startCol, it.endCol)
+        }
 
     private fun compileRegex(query: String, caseSensitive: Boolean): Regex? = try {
         Regex(query, if (caseSensitive) emptySet() else setOf(RegexOption.IGNORE_CASE))
