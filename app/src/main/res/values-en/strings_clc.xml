@@ -14,8 +14,8 @@
     <string name="action_browse_folder">Browse</string>
     <string name="action_export_now">Export now</string>
     <string name="clc_export_src_required_toast">Pick a subfolder as the export source first</string>
-    <string name="clc_export_success_format">✅ Exported: %1$s (%2$s)</string>
-    <string name="clc_export_error_format">⚠️ Export failed: %1$s</string>
+    <string name="clc_export_success_format">Exported: %1$s (%2$s)</string>
+    <string name="clc_export_error_format">Export failed: %1$s</string>
 
     <!-- Containers found inside the project -->
     <string name="clc_section_containers">Project .rcl containers</string>
@@ -46,6 +46,6 @@
     <string name="clc_run_dialog_title_format">Import &amp; run: %1$s</string>
     <string name="clc_run_code_hint">Optional extra Rin code to run after the import — e.g. call a function from the imported library</string>
     <string name="clc_run_code_field_hint">print greet(\"Rin\");</string>
-    <string name="clc_run_success_prefix">✅ Run completed. Output:</string>
-    <string name="clc_run_error_prefix">⚠️ Run failed:</string>
+    <string name="clc_run_success_prefix">Run completed. Output:</string>
+    <string name="clc_run_error_prefix">Run failed:</string>
 </resources>
