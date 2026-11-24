@@ -13,13 +13,31 @@
     android:layout_marginBottom="5dp"
     android:padding="12dp">
 
-    <ImageView
-        android:id="@+id/imgFolderIcon"
+    <FrameLayout
+        android:id="@+id/frameFolderIcon"
         android:layout_width="42dp"
-        android:layout_height="42dp"
-        android:scaleType="fitCenter"
-        android:src="@drawable/rs_folder"
-        android:contentDescription="@null" />
+        android:layout_height="42dp">
+
+        <ImageView
+            android:id="@+id/imgFolderIcon"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/rs_folder"
+            android:contentDescription="@null" />
+
+        <!-- شارة ✓ تظهر عند تحديد الصف (انظر FileSelection.kt) -->
+        <ImageView
+            android:id="@+id/imgFolderSelectCheck"
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:layout_gravity="top|end"
+            android:background="@drawable/bg_select_badge"
+            android:padding="2dp"
+            android:src="@drawable/rs_ic_check"
+            android:contentDescription="@null"
+            android:visibility="gone" />
+    </FrameLayout>
 
     <LinearLayout
         android:layout_width="0dp"
