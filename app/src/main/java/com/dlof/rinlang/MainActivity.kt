@@ -13,6 +13,7 @@ import android.view.KeyEvent
 import android.view.View
 import android.view.WindowManager
 import android.widget.Button
+import android.widget.HorizontalScrollView
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.LinearLayout
@@ -25,6 +26,7 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.TooltipCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.GravityCompat
 import androidx.core.view.isVisible
@@ -73,6 +75,8 @@ class MainActivity : RinBaseActivity() {
     private lateinit var editCode: RinCodeEditorView
     /** شريط رموز البرمجة/الأسهم أسفل المحرر (activity_main.xml)؛ يظهر فقط عند تركيز [editCode]. */
     private lateinit var editorKeyboardPanel: LinearLayout
+    /** شريط تنسيق Markdown (يُبنى برمجياً داخل [editorKeyboardPanel] ويظهر فقط لملفات md). */
+    private var markdownBar: View? = null
     private lateinit var txtLineNumbers: TextView
     private lateinit var txtEngineVersion: TextView
     private lateinit var txtFileName: TextView
@@ -499,6 +503,8 @@ class MainActivity : RinBaseActivity() {
             keywordsRow.addView(chip)
         }
 
+        setupMarkdownBar()
+
         // اللوحة تظهر فقط أثناء تركيز المحرر (أي أثناء ظهور لوحة مفاتيح النظام أو التركيز
         // البرمجي)، بدل شغل مساحة دائمة على شاشة هاتف صغيرة. بفضل windowSoftInputMode=
         // "adjustResize" لهذا الـActivity وكونها آخر عنصر في العمود الرأسي الجذر، تطفو تلقائياً
@@ -512,6 +518,153 @@ class MainActivity : RinBaseActivity() {
     private fun insertEditorSymbol(symbol: String) {
         if (!editCode.hasFocus()) editCode.requestFocus()
         editCode.insertAtCursor(symbol)
+    }
+
+    // ---- شريط Markdown: تنسيق سريع + معاينة، يظهر فقط عند تحرير ملف .md ---------------------------
+
+    /**
+     * يبني صفاً أفقياً فوق صف الرموز داخل [editorKeyboardPanel]: عناوين H1–H3، عريض/مائل/مشطوب/كود،
+     * كتلة كود، اقتباس، قوائم (نقطية/مرقّمة/مهام) وقلب مربّع المهمة، رابط وصورة وجدول وخط فاصل،
+     * وزر معاينة حيّة. كل زر يستدعي [MarkdownEdit] عبر [RinCodeEditorController.markdownEdit] (استبدال واحد قابل للتراجع).
+     * يتبع [RinCodeEditorController.onLanguageChanged] فيظهر/يختفي تلقائياً مع امتداد الملف المفتوح.
+     */
+    private fun setupMarkdownBar() {
+        val scroll = HorizontalScrollView(this).apply {
+            layoutDirection = View.LAYOUT_DIRECTION_LTR
+            isHorizontalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+            setBackgroundColor(ContextCompat.getColor(this@MainActivity, R.color.rin_console_header))
+            visibility = View.GONE
+        }
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            val h = (6 * resources.displayMetrics.density).roundToInt()
+            val v = (4 * resources.displayMetrics.density).roundToInt()
+            setPadding(h, v, h, v)
+        }
+        scroll.addView(row)
+
+        val heightPx = (34 * resources.displayMetrics.density).roundToInt()
+        val endPx = (3 * resources.displayMetrics.density).roundToInt()
+        // أزرار أيقونية (ImageButton) بدل نصوص/إيموجي: الأيقونات متجهات مرسومة داخل التطبيق وتُلوَّن بلون شريط الأدوات.
+        val iconPx = (36 * resources.displayMetrics.density).roundToInt()
+        val padPx = (7 * resources.displayMetrics.density).roundToInt()
+        fun key(iconRes: Int, descRes: Int, accent: Boolean = false, action: (View) -> Unit) {
+            val b = ImageButton(this)
+            b.setImageResource(iconRes)
+            b.contentDescription = getString(descRes)
+            b.setBackgroundResource(R.drawable.bg_toolbar_btn_ghost)
+            b.scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+            b.setPadding(padPx, padPx, padPx, padPx)
+            b.isFocusable = false
+            b.imageTintList = android.content.res.ColorStateList.valueOf(
+                ContextCompat.getColor(this, if (accent) R.color.rin_accent else R.color.rin_on_toolbar))
+            b.layoutParams = LinearLayout.LayoutParams(iconPx, heightPx).apply { marginEnd = endPx }
+            b.setOnClickListener { if (!editCode.hasFocus()) editCode.requestFocus(); action(b) }
+            TooltipCompat.setTooltipText(b, b.contentDescription)
+            row.addView(b)
+        }
+        fun divider() {
+            val d = View(this)
+            d.setBackgroundColor(ContextCompat.getColor(this, R.color.rin_divider))
+            d.layoutParams = LinearLayout.LayoutParams((1 * resources.displayMetrics.density).roundToInt().coerceAtLeast(1), (20 * resources.displayMetrics.density).roundToInt())
+                .apply { marginStart = endPx * 2; marginEnd = endPx * 3 }
+            row.addView(d)
+        }
+
+        val ph = getString(R.string.md_placeholder_text)
+        val urlPh = getString(R.string.md_placeholder_url)
+
+        key(R.drawable.md_ic_preview, R.string.md_preview, accent = true) { openMarkdownPreview() }
+        divider()
+        key(R.drawable.md_ic_h1, R.string.md_h1) { editorController.markdownEdit { d, s, e -> MarkdownEdit.heading(d, s, e, 1) } }
+        key(R.drawable.md_ic_h2, R.string.md_h2) { editorController.markdownEdit { d, s, e -> MarkdownEdit.heading(d, s, e, 2) } }
+        key(R.drawable.md_ic_h3, R.string.md_h3) { editorController.markdownEdit { d, s, e -> MarkdownEdit.heading(d, s, e, 3) } }
+        divider()
+        key(R.drawable.md_ic_bold, R.string.md_bold) { editorController.markdownEdit { d, s, e -> MarkdownEdit.toggleInline(d, s, e, "**", ph) } }
+        key(R.drawable.md_ic_italic, R.string.md_italic) { editorController.markdownEdit { d, s, e -> MarkdownEdit.toggleInline(d, s, e, "_", ph) } }
+        key(R.drawable.md_ic_strike, R.string.md_strike) { editorController.markdownEdit { d, s, e -> MarkdownEdit.toggleInline(d, s, e, "~~", ph) } }
+        key(R.drawable.md_ic_code, R.string.md_inline_code) { editorController.markdownEdit { d, s, e -> MarkdownEdit.toggleInline(d, s, e, "`", ph) } }
+        key(R.drawable.md_ic_codeblock, R.string.md_code_block) { editorController.markdownEdit { d, s, e -> MarkdownEdit.codeBlock(d, s, e) } }
+        divider()
+        key(R.drawable.md_ic_quote, R.string.md_quote) { editorController.markdownEdit { d, s, e -> MarkdownEdit.toggleLineKind(d, s, e, MarkdownEdit.LineKind.QUOTE) } }
+        key(R.drawable.md_ic_bullet, R.string.md_bullet_list) { editorController.markdownEdit { d, s, e -> MarkdownEdit.toggleLineKind(d, s, e, MarkdownEdit.LineKind.BULLET) } }
+        key(R.drawable.md_ic_numbered, R.string.md_numbered_list) { editorController.markdownEdit { d, s, e -> MarkdownEdit.toggleLineKind(d, s, e, MarkdownEdit.LineKind.NUMBER) } }
+        key(R.drawable.md_ic_task, R.string.md_task_list) { editorController.markdownEdit { d, s, e -> MarkdownEdit.toggleLineKind(d, s, e, MarkdownEdit.LineKind.TASK) } }
+        key(R.drawable.md_ic_check, R.string.md_toggle_checkbox) { editorController.markdownEdit { d, s, _ -> MarkdownEdit.toggleCheckbox(d, s) } }
+        divider()
+        key(R.drawable.md_ic_link, R.string.md_link) { editorController.markdownEdit { d, s, e -> MarkdownEdit.link(d, s, e, false, ph, urlPh) } }
+        key(R.drawable.md_ic_image, R.string.md_image) { editorController.markdownEdit { d, s, e -> MarkdownEdit.link(d, s, e, true, ph, urlPh) } }
+        key(R.drawable.md_ic_table, R.string.md_table) { editorController.markdownEdit { d, s, _ -> MarkdownEdit.table(d, s, 3, getString(R.string.md_table_col)) } }
+        key(R.drawable.md_ic_hr, R.string.md_hr) { editorController.markdownEdit { d, s, _ -> MarkdownEdit.horizontalRule(d, s) } }
+        divider()
+        key(R.drawable.md_ic_outdent, R.string.md_outdent) { editorController.markdownEdit { d, s, e -> MarkdownEdit.shiftIndent(d, s, e, -1) } }
+        key(R.drawable.md_ic_indent, R.string.md_indent) { editorController.markdownEdit { d, s, e -> MarkdownEdit.shiftIndent(d, s, e, 1) } }
+        divider()
+        key(R.drawable.md_ic_headings, R.string.md_headings) { showMarkdownHeadings() }
+        key(R.drawable.md_ic_more, R.string.md_more) { anchor -> showMarkdownMoreMenu(anchor) }
+
+        // يُدرَج بعد الفاصل العلوي (index 0) مباشرةً، أي فوق صف الرموز وصف الكلمات المحجوزة.
+        editorKeyboardPanel.addView(scroll, 1)
+        markdownBar = scroll
+
+        editorController.onLanguageChanged = { updateMarkdownBarVisibility() }
+        updateMarkdownBarVisibility()
+    }
+
+    private fun updateMarkdownBarVisibility() {
+        markdownBar?.visibility = if (editorController.isMarkdown) View.VISIBLE else View.GONE
+    }
+
+    /** حوار «الانتقال إلى عنوان»: قائمة عناوين الملف بإزاحة حسب المستوى، والنقر ينقل المؤشر إلى سطر العنوان. */
+    private fun showMarkdownHeadings() {
+        val hs = MarkdownEdit.headings(editCode.text.toString())
+        if (hs.isEmpty()) {
+            Toast.makeText(this, getString(R.string.md_no_headings), Toast.LENGTH_SHORT).show()
+            return
+        }
+        val labels = hs.map { "    ".repeat(it.level - 1) + it.text }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle(R.string.md_headings_title)
+            .setItems(labels) { _, which -> editorController.goToLine(hs[which].line + 1) }
+            .setNegativeButton(R.string.md_ok, null)
+            .show()
+    }
+
+    /** قائمة «المزيد»: تنسيق الجدول، إدراج جدول محتويات، وإحصاءات المستند. */
+    private fun showMarkdownMoreMenu(anchor: View) {
+        val popup = darkPopupMenu(anchor)
+        popup.menu.add(0, 1, 0, R.string.md_menu_format_table)
+        popup.menu.add(0, 2, 1, R.string.md_menu_toc)
+        popup.menu.add(0, 3, 2, R.string.md_menu_stats)
+        popup.setOnMenuItemClickListener { item ->
+            when (item.itemId) {
+                1 -> if (!editorController.markdownEdit { d, s, _ -> MarkdownEdit.formatTable(d, s) })
+                    Toast.makeText(this, getString(R.string.md_not_in_table), Toast.LENGTH_SHORT).show()
+                2 -> if (!editorController.markdownEdit { d, s, _ -> MarkdownEdit.insertToc(d, s) })
+                    Toast.makeText(this, getString(R.string.md_no_headings), Toast.LENGTH_SHORT).show()
+                3 -> showMarkdownStats()
+            }
+            true
+        }
+        popup.show()
+    }
+
+    private fun showMarkdownStats() {
+        val st = MarkdownEdit.stats(editCode.text.toString())
+        AlertDialog.Builder(this)
+            .setTitle(R.string.md_stats_title)
+            .setMessage(getString(R.string.md_stats_message, st.words, st.chars, st.charsNoSpaces, st.lines, st.headings, st.readingMinutes))
+            .setPositiveButton(R.string.md_ok, null)
+            .show()
+    }
+
+    /** زر 👁: يحفظ الملف ثم يفتح المعاينة الحيّة؛ للملف غير المحفوظ في مشروع يُنبَّه المستخدم. */
+    private fun openMarkdownPreview() {
+        if (!openFilePreviewIfApplicable()) {
+            Toast.makeText(this, getString(R.string.md_preview_needs_project), Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun sendEditorKey(keyCode: Int) {
