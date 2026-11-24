@@ -594,6 +594,9 @@ class FilesActivity : RinBaseActivity() {
             },
             item(R.drawable.rs_ic_download, R.string.dl_from_url) {
                 UrlDownloader.show(this, project, currentRelDir) { refresh() }
+            },
+            item(R.drawable.fx_repo, R.string.repo_menu_restore) {
+                RepoRestore.showIntoProject(this, project, currentRelDir) { refresh() }
             }
         ))
     }
@@ -631,6 +634,12 @@ class FilesActivity : RinBaseActivity() {
             item(R.drawable.rs_ic_download, getString(R.string.dl_folder_zip)) { DownloadExporter.saveFolder(this, project, currentRelDir) },
             item(R.drawable.rs_ic_download, getString(R.string.dl_from_url)) {
                 UrlDownloader.show(this, project, currentRelDir) { refresh() }
+            },
+            item(R.drawable.fx_repo, getString(R.string.repo_menu_restore)) {
+                RepoRestore.showIntoProject(this, project, currentRelDir) { refresh() }
+            },
+            item(R.drawable.fx_repo, getString(R.string.repo_menu_update)) {
+                RepoRestore.updateFromSource(this, project, currentRelDir) { refresh() }
             },
             item(R.drawable.fx_storage, getString(R.string.tool_storage)) { StorageAnalyzer.show(this, project) },
             item(R.drawable.fx_dups, getString(R.string.tool_dups)) { DuplicateFinder.show(this, project, protectedPaths()) { refresh() } },
