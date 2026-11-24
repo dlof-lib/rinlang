@@ -77,6 +77,10 @@ class MainActivity : RinBaseActivity() {
     private lateinit var editorKeyboardPanel: LinearLayout
     /** شريط تنسيق Markdown (يُبنى برمجياً داخل [editorKeyboardPanel] ويظهر فقط لملفات md). */
     private var markdownBar: View? = null
+    /** شريط JSON (يُبنى برمجياً داخل [editorKeyboardPanel] ويظهر فقط لملفات json/jsonc). */
+    private var jsonBar: View? = null
+    /** مسافة تنسيق JSON المختارة (null = مستخرجة من المستند، وإلا 2/4 مسافات أو Tab). */
+    private var jsonIndentChoice: String? = null
     private lateinit var txtLineNumbers: TextView
     private lateinit var txtEngineVersion: TextView
     private lateinit var txtFileName: TextView
@@ -504,6 +508,7 @@ class MainActivity : RinBaseActivity() {
         }
 
         setupMarkdownBar()
+        setupJsonBar()
 
         // اللوحة تظهر فقط أثناء تركيز المحرر (أي أثناء ظهور لوحة مفاتيح النظام أو التركيز
         // البرمجي)، بدل شغل مساحة دائمة على شاشة هاتف صغيرة. بفضل windowSoftInputMode=
@@ -518,6 +523,267 @@ class MainActivity : RinBaseActivity() {
     private fun insertEditorSymbol(symbol: String) {
         if (!editCode.hasFocus()) editCode.requestFocus()
         editCode.insertAtCursor(symbol)
+    }
+
+    // ---- شريط JSON: تحقق/تنسيق/ترتيب/إصلاح/مسارات، يظهر فقط عند تحرير ملف json/jsonc ------------------
+
+    /**
+     * يبني صفاً أفقياً داخل [editorKeyboardPanel] (مثل شريط Markdown): تحقق، تنسيق، تصغير، ترتيب المفاتيح،
+     * إصلاح تلقائي، مخطط هيكلي، نسخ مسار JSON تحت المؤشر، انتقال إلى مسار، تبديل سلسلة JSON (escape/unescape)،
+     * إدراج مفتاح/كائن/مصفوفة بفاصلة تلقائية، وقائمة «المزيد». كل العمليات من [JsonEdit] وتُطبَّق باستبدال
+     * واحد قابل للتراجع. يتبع [RinCodeEditorController.onLanguageChanged] فيظهر مع امتداد الملف المفتوح.
+     */
+    private fun setupJsonBar() {
+        val scroll = HorizontalScrollView(this).apply {
+            layoutDirection = View.LAYOUT_DIRECTION_LTR
+            isHorizontalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+            setBackgroundColor(ContextCompat.getColor(this@MainActivity, R.color.rin_console_header))
+            visibility = View.GONE
+        }
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            val h = (6 * resources.displayMetrics.density).roundToInt()
+            val v = (4 * resources.displayMetrics.density).roundToInt()
+            setPadding(h, v, h, v)
+        }
+        scroll.addView(row)
+
+        val heightPx = (34 * resources.displayMetrics.density).roundToInt()
+        val endPx = (3 * resources.displayMetrics.density).roundToInt()
+        val iconPx = (36 * resources.displayMetrics.density).roundToInt()
+        val padPx = (7 * resources.displayMetrics.density).roundToInt()
+        fun key(iconRes: Int, descRes: Int, accent: Boolean = false, action: (View) -> Unit) {
+            val b = ImageButton(this)
+            b.setImageResource(iconRes)
+            b.contentDescription = getString(descRes)
+            b.setBackgroundResource(R.drawable.bg_toolbar_btn_ghost)
+            b.scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+            b.setPadding(padPx, padPx, padPx, padPx)
+            b.isFocusable = false
+            b.imageTintList = android.content.res.ColorStateList.valueOf(
+                ContextCompat.getColor(this, if (accent) R.color.rin_accent else R.color.rin_on_toolbar))
+            b.layoutParams = LinearLayout.LayoutParams(iconPx, heightPx).apply { marginEnd = endPx }
+            b.setOnClickListener { if (!editCode.hasFocus()) editCode.requestFocus(); action(b) }
+            TooltipCompat.setTooltipText(b, b.contentDescription)
+            row.addView(b)
+        }
+        fun divider() {
+            val d = View(this)
+            d.setBackgroundColor(ContextCompat.getColor(this, R.color.rin_divider))
+            d.layoutParams = LinearLayout.LayoutParams((1 * resources.displayMetrics.density).roundToInt().coerceAtLeast(1), (20 * resources.displayMetrics.density).roundToInt())
+                .apply { marginStart = endPx * 2; marginEnd = endPx * 3 }
+            row.addView(d)
+        }
+
+        key(R.drawable.json_ic_validate, R.string.json_validate, accent = true) { jsonValidate() }
+        key(R.drawable.json_ic_format, R.string.json_format) { jsonRun(R.string.json_formatted) { d, s, e, c ->
+            JsonEdit.pretty(d, s, e, indent = jsonIndentChoice, comments = c) } }
+        key(R.drawable.json_ic_minify, R.string.json_minify) { jsonRun(R.string.json_minified) { d, s, e, c ->
+            JsonEdit.minify(d, s, e, comments = c) } }
+        key(R.drawable.json_ic_sort, R.string.json_sort) { jsonRun(R.string.json_sorted) { d, s, e, c ->
+            JsonEdit.sortKeys(d, s, e, JsonEdit.SortMode(), comments = c, fallback = jsonIndentChoice ?: "  ") } }
+        key(R.drawable.json_ic_repair, R.string.json_repair) { jsonRun(R.string.json_repaired) { d, _, _, _ ->
+            JsonEdit.repair(d, fallback = jsonIndentChoice ?: "  ") } }
+        divider()
+        key(R.drawable.json_ic_outline, R.string.json_outline) { jsonShowOutline() }
+        key(R.drawable.json_ic_path, R.string.json_copy_path) { jsonCopyPath() }
+        key(R.drawable.json_ic_goto, R.string.json_goto_path) { jsonGotoPath() }
+        divider()
+        key(R.drawable.json_ic_quote, R.string.json_string_toggle) {
+            if (!editorController.textEdit { d, s, e -> JsonEdit.toggleStringLiteral(d, s, e) })
+                Toast.makeText(this, getString(R.string.json_select_text), Toast.LENGTH_SHORT).show()
+        }
+        key(R.drawable.json_ic_pair, R.string.json_insert_pair) {
+            editorController.textEdit { d, s, e -> JsonEdit.insertPair(d, s, e, getString(R.string.json_key_placeholder)) }
+        }
+        key(R.drawable.json_ic_object, R.string.json_insert_object) {
+            editorController.textEdit { d, s, e -> JsonEdit.insertContainer(d, s, e, true) }
+        }
+        key(R.drawable.json_ic_array, R.string.json_insert_array) {
+            editorController.textEdit { d, s, e -> JsonEdit.insertContainer(d, s, e, false) }
+        }
+        divider()
+        key(R.drawable.json_ic_more, R.string.json_more) { anchor -> showJsonMoreMenu(anchor) }
+
+        editorKeyboardPanel.addView(scroll, 1)
+        jsonBar = scroll
+        updateJsonBarVisibility()
+    }
+
+    private fun updateJsonBarVisibility() {
+        jsonBar?.visibility = if (editorController.isJson) View.VISIBLE else View.GONE
+    }
+
+    /** نص خطأ مقروء: السبب + السطر والعمود. */
+    private fun jsonErrorMessage(e: JsonEdit.JsonError): String {
+        val reason = when (e.kind) {
+            JsonEdit.ErrKind.EMPTY -> getString(R.string.json_err_empty)
+            JsonEdit.ErrKind.UNEXPECTED_CHAR -> getString(R.string.json_err_unexpected_char, e.ch?.toString() ?: "")
+            JsonEdit.ErrKind.UNEXPECTED_END -> getString(R.string.json_err_unexpected_end)
+            JsonEdit.ErrKind.EXPECTED_KEY -> getString(R.string.json_err_expected_key)
+            JsonEdit.ErrKind.EXPECTED_COLON -> getString(R.string.json_err_expected_colon)
+            JsonEdit.ErrKind.EXPECTED_COMMA_OR_END -> getString(R.string.json_err_expected_comma)
+            JsonEdit.ErrKind.TRAILING_COMMA -> getString(R.string.json_err_trailing_comma)
+            JsonEdit.ErrKind.COMMENT -> getString(R.string.json_err_comment)
+            JsonEdit.ErrKind.SINGLE_QUOTE -> getString(R.string.json_err_single_quote)
+            JsonEdit.ErrKind.EXTRA_DATA -> getString(R.string.json_err_extra_data)
+            JsonEdit.ErrKind.CONTROL_CHAR -> getString(R.string.json_err_control_char)
+            JsonEdit.ErrKind.BAD_ESCAPE -> getString(R.string.json_err_bad_escape)
+            JsonEdit.ErrKind.UNTERMINATED_STRING -> getString(R.string.json_err_unterminated)
+            JsonEdit.ErrKind.BAD_NUMBER -> getString(R.string.json_err_bad_number)
+            JsonEdit.ErrKind.TOO_DEEP -> getString(R.string.json_err_too_deep)
+        }
+        return getString(R.string.json_error_at, reason, e.line, e.col)
+    }
+
+    /** حوار الخطأ مع زر «اذهب إلى الخطأ» الذي ينقل المؤشر إلى موضعه. */
+    private fun showJsonError(e: JsonEdit.JsonError) {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.json_invalid_title)
+            .setMessage(jsonErrorMessage(e))
+            .setPositiveButton(R.string.json_goto_error) { _, _ -> editorController.jumpToOffset(e.offset) }
+            .setNegativeButton(R.string.json_ok, null)
+            .show()
+    }
+
+    private fun jsonValidate() {
+        val doc = editCode.text.toString()
+        val err = JsonEdit.validate(doc, editorController.jsonAllowsComments)
+        if (err != null) { showJsonError(err); return }
+        val st = JsonEdit.stats(doc, editorController.jsonAllowsComments)
+        val msg = if (st != null) getString(R.string.json_valid_detail, st.keys, st.maxDepth) else getString(R.string.json_valid)
+        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+    }
+
+    /** ينفّذ عملية [JsonEdit] على المستند/التحديد الحاليين ويعرض نتيجتها (خطأ/تعليقات/لا تغيير/نجاح). */
+    private fun jsonRun(okMsg: Int, op: (doc: String, s: Int, e: Int, comments: Boolean) -> JsonEdit.Result) {
+        val doc = editCode.text.toString()
+        val (s, e) = editorController.selectionOffsets()
+        val r = op(doc, s, e, editorController.jsonAllowsComments)
+        val edit = r.edit
+        when {
+            r.error != null -> showJsonError(r.error)
+            r.hasComments -> Toast.makeText(this, getString(R.string.json_has_comments), Toast.LENGTH_LONG).show()
+            edit == null || r.noChange -> Toast.makeText(this, getString(R.string.json_no_change), Toast.LENGTH_SHORT).show()
+            else -> {
+                editorController.textEdit { _, _, _ -> edit }
+                Toast.makeText(this, getString(okMsg), Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    /** مسار JSON تحت المؤشر؛ null (مع عرض الخطأ) إن كان المستند غير صالح. */
+    private fun jsonCurrentPath(): String? {
+        val doc = editCode.text.toString()
+        val comments = editorController.jsonAllowsComments
+        val (s, _) = editorController.selectionOffsets()
+        val path = JsonEdit.pathAt(doc, s, comments)
+        if (path == null) JsonEdit.validate(doc, comments)?.let { showJsonError(it) }
+        return path
+    }
+
+    private fun jsonCopyPath() {
+        val path = jsonCurrentPath() ?: return
+        val cm = getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        cm.setPrimaryClip(android.content.ClipData.newPlainText("JSON path", path))
+        Toast.makeText(this, getString(R.string.json_path_copied, path), Toast.LENGTH_SHORT).show()
+    }
+
+    private fun jsonGotoPath() {
+        val current = jsonCurrentPath() ?: return
+        val input = EditText(this).apply {
+            setText(current)
+            setSingleLine()
+            hint = getString(R.string.json_goto_hint)
+            layoutDirection = View.LAYOUT_DIRECTION_LTR
+            textDirection = View.TEXT_DIRECTION_LTR
+            setSelection(text.length)
+        }
+        val pad = (20 * resources.displayMetrics.density).roundToInt()
+        val box = android.widget.FrameLayout(this).apply { setPadding(pad, pad / 2, pad, 0); addView(input) }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.json_goto_title)
+            .setView(box)
+            .setPositiveButton(R.string.json_goto) { _, _ ->
+                val off = JsonEdit.offsetOfPath(editCode.text.toString(), input.text.toString(), editorController.jsonAllowsComments)
+                if (off == null) Toast.makeText(this, getString(R.string.json_path_not_found), Toast.LENGTH_SHORT).show()
+                else editorController.jumpToOffset(off)
+            }
+            .setNegativeButton(R.string.json_ok, null)
+            .show()
+    }
+
+    private fun jsonShowOutline() {
+        val doc = editCode.text.toString()
+        val comments = editorController.jsonAllowsComments
+        val items = JsonEdit.outline(doc, comments)
+        if (items == null) {
+            JsonEdit.validate(doc, comments)?.let { showJsonError(it) }
+            return
+        }
+        if (items.isEmpty()) {
+            Toast.makeText(this, getString(R.string.json_outline_empty), Toast.LENGTH_SHORT).show()
+            return
+        }
+        val labels = items.map { "    ".repeat(it.depth) + it.label }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle(R.string.json_outline_title)
+            .setItems(labels) { _, which -> editorController.jumpToOffset(items[which].offset) }
+            .setNegativeButton(R.string.json_ok, null)
+            .show()
+    }
+
+    /** قائمة «المزيد»: إحصاءات، ترتيب سطحي/تنازلي، وحجم المسافة البادئة للتنسيق. */
+    private fun showJsonMoreMenu(anchor: View) {
+        val popup = darkPopupMenu(anchor)
+        popup.menu.add(0, 1, 0, R.string.json_menu_stats)
+        popup.menu.add(0, 2, 1, R.string.json_menu_sort_shallow)
+        popup.menu.add(0, 3, 2, R.string.json_menu_sort_desc)
+        popup.menu.add(0, 4, 3, R.string.json_menu_indent)
+        popup.setOnMenuItemClickListener { item ->
+            when (item.itemId) {
+                1 -> jsonShowStats()
+                2 -> jsonRun(R.string.json_sorted) { d, s, e, c ->
+                    JsonEdit.sortKeys(d, s, e, JsonEdit.SortMode(deep = false), comments = c, fallback = jsonIndentChoice ?: "  ") }
+                3 -> jsonRun(R.string.json_sorted) { d, s, e, c ->
+                    JsonEdit.sortKeys(d, s, e, JsonEdit.SortMode(descending = true), comments = c, fallback = jsonIndentChoice ?: "  ") }
+                4 -> jsonChooseIndent()
+            }
+            true
+        }
+        popup.show()
+    }
+
+    private fun jsonShowStats() {
+        val doc = editCode.text.toString()
+        val comments = editorController.jsonAllowsComments
+        val st = JsonEdit.stats(doc, comments)
+        if (st == null) { JsonEdit.validate(doc, comments)?.let { showJsonError(it) }; return }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.json_stats_title)
+            .setMessage(getString(R.string.json_stats_message, st.objects, st.arrays, st.keys, st.strings, st.numbers,
+                st.bools, st.nulls, st.maxDepth, st.lines, st.bytes, st.minifiedBytes))
+            .setPositiveButton(R.string.json_ok, null)
+            .show()
+    }
+
+    /** اختيار مسافة التنسيق: تلقائي (من المستند) أو 2 / 4 مسافات أو Tab. يبقى الاختيار طوال الجلسة. */
+    private fun jsonChooseIndent() {
+        val values = arrayOf<String?>(null, "  ", "    ", "\t")
+        val labels = arrayOf(
+            getString(R.string.json_indent_auto), getString(R.string.json_indent_2),
+            getString(R.string.json_indent_4), getString(R.string.json_indent_tab)
+        )
+        AlertDialog.Builder(this)
+            .setTitle(R.string.json_menu_indent)
+            .setSingleChoiceItems(labels, values.indexOf(jsonIndentChoice).coerceAtLeast(0)) { dlg, which ->
+                jsonIndentChoice = values[which]
+                dlg.dismiss()
+            }
+            .setNegativeButton(R.string.json_ok, null)
+            .show()
     }
 
     // ---- شريط Markdown: تنسيق سريع + معاينة، يظهر فقط عند تحرير ملف .md ---------------------------
@@ -609,7 +875,7 @@ class MainActivity : RinBaseActivity() {
         editorKeyboardPanel.addView(scroll, 1)
         markdownBar = scroll
 
-        editorController.onLanguageChanged = { updateMarkdownBarVisibility() }
+        editorController.onLanguageChanged = { updateMarkdownBarVisibility(); updateJsonBarVisibility() }
         updateMarkdownBarVisibility()
     }
 
