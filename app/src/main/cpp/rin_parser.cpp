@@ -5037,9 +5037,9 @@ ExprPtr Parser::assignment() {
         (std::dynamic_pointer_cast<VariableExpr>(expr) || std::dynamic_pointer_cast<IndexExpr>(expr) || std::dynamic_pointer_cast<GetExpr>(expr))) {
         Token opTok = advance(); advance(); advance();   // ? ? =
         if (!isSimpleTarget(expr))
-            throw errRich(diag::Code::E0003_InvalidAssignment, opTok, "`??=` needs a simple target",
-                          "`a ??= b` reads and writes the target, so the target must have no side effects (it is evaluated twice)",
-                          "use a variable, `arr[i]`, or `obj.field` with plain names/numbers; otherwise write `t = f(); t ??= b;`");
+            throw errRich(diag::Code::E0003_InvalidAssignment, opTok, "`?\?=` needs a simple target",
+                          "`a ?\?= b` reads and writes the target, so the target must have no side effects (it is evaluated twice)",
+                          "use a variable, `arr[i]`, or `obj.field` with plain names/numbers; otherwise write `t = f(); t ?\?= b;`");
         auto rhs = assignment();
         ExprPtr value = makeElseExpr(expr, rhs, opTok.line);
         if (auto var = std::dynamic_pointer_cast<VariableExpr>(expr)) {
