@@ -7,10 +7,10 @@
     <string name="output_queued">في انتظار الدور…</string>
     <string name="output_running">قيد التشغيل</string>
     <string name="output_no_output">لم يطبع البرنامج شيئاً.</string>
-    <string name="output_status_ok_fmt">✔ اكتمل التشغيل بنجاح — %1$d ms</string>
-    <string name="output_status_error_fmt">✖ فشل التشغيل — %1$d ms</string>
-    <string name="output_status_timeout">⏱ توقّف التشغيل: تجاوز المهلة المسموحة</string>
-    <string name="output_status_cancelled">⏹ أُوقف التشغيل</string>
+    <string name="output_status_ok_fmt">اكتمل التشغيل بنجاح — %1$d ms</string>
+    <string name="output_status_error_fmt">فشل التشغيل — %1$d ms</string>
+    <string name="output_status_timeout">توقّف التشغيل: تجاوز المهلة المسموحة</string>
+    <string name="output_status_cancelled">أُوقف التشغيل</string>
     <string name="output_summary_fmt">%1$d سطر · %2$d أخطاء · %3$d تحذيرات</string>
     <string name="output_search_hint">ابحث في المخرجات</string>
     <string name="output_speed_fmt">الكتابة %1$s</string>
