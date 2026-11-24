@@ -13,6 +13,7 @@
     <string name="selection_failed_toast">Failed for %1$d item(s)</string>
     <string name="selection_paths_copied_toast">Copied paths of %1$d item(s)</string>
     <string name="swipe_rename_label">Rename</string>
+    <string name="swipe_open_label">Open</string>
     <string name="swipe_delete_label">Delete</string>
     <string name="mkdir_single">Single folder (nested path supported)</string>
     <string name="mkdir_multi">Several folders at once</string>
