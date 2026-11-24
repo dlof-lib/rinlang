@@ -38,6 +38,17 @@
     <string name="notif_bg_text">Descargas activas: %1$d · Programas en ejecución: %2$d</string>
     <string name="notif_job_input_title">El programa #%1$d espera tu respuesta</string>
     <string name="notif_job_input_hint">Toca para volver a RinStudio y responder.</string>
+    <string name="notif_dl_speed">Velocidad %1$s/s</string>
+    <string name="notif_dl_speed_eta">%1$s/s · quedan %2$s</string>
+    <string name="notif_job_rerun">Ejecutar de nuevo</string>
+    <string name="notif_job_copy">Copiar salida</string>
+    <string name="notif_job_input_reply">Responder</string>
+    <string name="notif_job_input_label">Escribe tu respuesta</string>
+    <string name="notif_test_title">Las notificaciones funcionan ✓</string>
+    <string name="notif_test_text">Así se verán las notificaciones de RinStudio en tu dispositivo: descargas, resultados y trabajo en segundo plano.</string>
+    <string name="perm_notif_channels">Personalizar canales de notificación</string>
+    <string name="perm_notif_test">Enviar notificación de prueba</string>
+    <string name="perm_notif_test_denied">Primero permite las notificaciones con el botón Permitir de arriba.</string>
     <plurals name="notif_downloads_done">
         <item quantity="one">%d descarga completada</item>
         <item quantity="many">%d descargas completadas</item>
