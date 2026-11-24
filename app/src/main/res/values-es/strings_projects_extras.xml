@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="proj_pin">Fijar arriba</string>
+    <string name="proj_unpin">Quitar fijado</string>
+    <string name="proj_duplicate">Duplicar proyecto</string>
+    <string name="proj_duplicate_done">Copia «%1$s» creada</string>
+    <string name="proj_duplicate_failed">No se pudo duplicar el proyecto: %1$s</string>
+    <string name="proj_info">Información del proyecto</string>
+    <string name="proj_info_body">Tipo: %1$s\nArchivos: %2$d\nCarpetas: %3$d\nTamaño: %4$s\nÚltima modificación: %5$s</string>
+    <string name="proj_info_version">Versión: %1$s</string>
+    <string name="proj_filter_type">Filtrar por tipo</string>
+    <string name="proj_filter_all">Todos los tipos</string>
+    <string name="proj_count_filtered">%1$d de %2$d proyectos</string>
+</resources>
