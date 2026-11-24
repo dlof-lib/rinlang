@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="proj_pin">تثبيت في الأعلى</string>
+    <string name="proj_unpin">إلغاء التثبيت</string>
+    <string name="proj_duplicate">نسخ المشروع</string>
+    <string name="proj_duplicate_done">تم إنشاء النسخة «%1$s»</string>
+    <string name="proj_duplicate_failed">تعذّر نسخ المشروع: %1$s</string>
+    <string name="proj_info">معلومات المشروع</string>
+    <string name="proj_info_body">النوع: %1$s\nالملفات: %2$d\nالمجلدات: %3$d\nالحجم: %4$s\nآخر تعديل: %5$s</string>
+    <string name="proj_info_version">الإصدار: %1$s</string>
+    <string name="proj_filter_type">تصفية حسب النوع</string>
+    <string name="proj_filter_all">كل الأنواع</string>
+    <string name="proj_count_filtered">%1$d من %2$d مشاريع</string>
+</resources>
