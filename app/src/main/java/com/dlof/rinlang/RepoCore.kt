@@ -112,10 +112,12 @@ object RepoParser {
                 .map { URLDecoder.decode(it.replace("+", "%2B"), "UTF-8") }
         } catch (e: Exception) { return null }
 
-        // رابط أرشيف ZIP مباشر (من أي مضيف https)
-        if (rawPath.lowercase().endsWith(".zip") && segs.isNotEmpty()) {
+        // رابط أرشيف مباشر ZIP أو TAR.GZ/TGZ (من أي مضيف https)
+        val lowPath = rawPath.lowercase()
+        val archiveExt = listOf(".tar.gz", ".tgz", ".zip").firstOrNull { lowPath.endsWith(it) }
+        if (archiveExt != null && segs.isNotEmpty()) {
             val direct = URL("https", url.host, url.port, url.file).toString()
-            val name = segs.last().substring(0, segs.last().length - 4).ifBlank { "download" }
+            val name = segs.last().substring(0, segs.last().length - archiveExt.length).ifBlank { "download" }
             return RepoSpec(RepoProvider.DIRECT, host, name, directUrl = direct)
         }
 
@@ -265,6 +267,32 @@ object RepoLinks {
         RepoProvider.DIRECT -> null
     }
 
+    /** kind: 0 = نص SHA خام، 1 = JSON {"id"}، 2 = JSON مصفوفة [{"sha"}]، 3 = JSON {"values":[{"hash"}]}. */
+    class CommitApi(val url: String, val accept: String, val kind: Int)
+
+    /** رابط آخر commit للفرع (أو الافتراضي) للتحقق من وجود تحديث؛ null لروابط ZIP المباشرة. */
+    fun commitApi(spec: RepoSpec): CommitApi? = when (spec.provider) {
+        RepoProvider.GITHUB -> CommitApi(
+            "https://api.github.com/repos/${spec.path}/commits/" + encodePath(spec.ref.ifEmpty { "HEAD" }),
+            "application/vnd.github.sha", 0
+        )
+        RepoProvider.GITLAB -> CommitApi(
+            "https://${spec.host}/api/v4/projects/${encodeOne(spec.path)}/repository/commits/" + encodeOne(spec.ref.ifEmpty { "HEAD" }),
+            "application/json", 1
+        )
+        RepoProvider.BITBUCKET -> CommitApi(
+            "https://api.bitbucket.org/2.0/repositories/${spec.path}/commits" +
+                (if (spec.ref.isEmpty()) "" else "/" + encodePath(spec.ref)) + "?pagelen=1",
+            "application/json", 3
+        )
+        RepoProvider.GITEA -> CommitApi(
+            "https://${spec.host}/api/v1/repos/${spec.path}/commits?limit=1&stat=false" +
+                (if (spec.ref.isEmpty()) "" else "&sha=" + encodeOne(spec.ref)),
+            "application/json", 2
+        )
+        RepoProvider.DIRECT -> null
+    }
+
     fun giteaRepoInfoUrl(spec: RepoSpec): String = "https://${spec.host}/api/v1/repos/${spec.path}"
 }
 
@@ -363,6 +391,160 @@ object RepoArchive {
         return Extracted(files, total)
     }
 
+    /** يكتشف نوع الأرشيف من أول بايتين: gzip (1f 8b) ← tar.gz، وإلا ← zip. */
+    fun extractAuto(
+        input: InputStream,
+        dest: File,
+        limits: RepoLimits = RepoLimits(),
+        isCancelled: () -> Boolean = { false }
+    ): Extracted {
+        val bin = java.io.BufferedInputStream(input, 64 * 1024)
+        bin.mark(4)
+        val b0 = bin.read()
+        val b1 = bin.read()
+        bin.reset()
+        return if (b0 == 0x1f && b1 == 0x8b) extractTarGz(bin, dest, limits, isCancelled)
+        else extractZip(bin, dest, limits, isCancelled)
+    }
+
+    private fun skipFully(s: InputStream, n: Long) {
+        var left = n
+        while (left > 0) {
+            val k = s.skip(left)
+            if (k > 0) { left -= k; continue }
+            if (s.read() < 0) throw IOException("truncated archive")
+            left--
+        }
+    }
+
+    private fun readBlock(s: InputStream, buf: ByteArray): Boolean {
+        var off = 0
+        while (off < buf.size) {
+            val n = s.read(buf, off, buf.size - off)
+            if (n < 0) { if (off == 0) return false; throw IOException("truncated archive") }
+            off += n
+        }
+        return true
+    }
+
+    private fun cstr(b: ByteArray, off: Int, len: Int): String {
+        var end = off
+        while (end < off + len && b[end].toInt() != 0) end++
+        return String(b, off, end - off, Charsets.UTF_8)
+    }
+
+    private fun octal(b: ByteArray, off: Int, len: Int): Long {
+        if ((b[off].toInt() and 0x80) != 0) { // base-256 (ملفات ضخمة)
+            var v = (b[off].toInt() and 0x7f).toLong()
+            for (i in 1 until len) v = (v shl 8) or (b[off + i].toLong() and 0xff)
+            return v
+        }
+        val t = cstr(b, off, len).trim()
+        return if (t.isEmpty()) 0L else t.toLongOrNull(8) ?: throw IOException("bad tar header")
+    }
+
+    private fun padded(size: Long): Long = (size + 511L) / 512L * 512L
+
+    private fun readSmall(s: InputStream, size: Long): ByteArray {
+        if (size < 0 || size > 65536) throw RepoTooBig()
+        val data = ByteArray(size.toInt())
+        var off = 0
+        while (off < data.size) {
+            val n = s.read(data, off, data.size - off)
+            if (n < 0) throw IOException("truncated archive")
+            off += n
+        }
+        skipFully(s, padded(size) - size)
+        return data
+    }
+
+    /** يستخرج مسار `path=` من سجلات pax ("<len> key=value\n"). */
+    private fun paxPath(data: ByteArray): String? {
+        var pos = 0
+        while (pos < data.size) {
+            var sp = pos
+            while (sp < data.size && data[sp] != ' '.code.toByte()) sp++
+            if (sp >= data.size) return null
+            val len = String(data, pos, sp - pos, Charsets.US_ASCII).toIntOrNull() ?: return null
+            if (len <= 0 || pos + len > data.size) return null
+            val rec = String(data, sp + 1, pos + len - sp - 2, Charsets.UTF_8)
+            if (rec.startsWith("path=")) return rec.substring(5)
+            pos += len
+        }
+        return null
+    }
+
+    /** فكّ tar.gz بالتدفق (ustar + GNU long names + pax path). الروابط الرمزية والملفات الخاصة تُتجاهل. */
+    fun extractTarGz(
+        input: InputStream,
+        dest: File,
+        limits: RepoLimits = RepoLimits(),
+        isCancelled: () -> Boolean = { false }
+    ): Extracted {
+        dest.mkdirs()
+        val root = dest.canonicalFile
+        val tar = java.util.zip.GZIPInputStream(input)
+        val hdr = ByteArray(512)
+        val buf = ByteArray(32 * 1024)
+        var files = 0
+        var total = 0L
+        var entries = 0
+        var longName: String? = null
+        var pax: String? = null
+        while (true) {
+            if (isCancelled()) throw RepoCancelled()
+            if (!readBlock(tar, hdr)) break
+            if (hdr.all { it.toInt() == 0 }) break
+            val size = octal(hdr, 124, 12)
+            val type = hdr[156].toInt().toChar()
+            if (type == 'L') { longName = cstr(readSmall(tar, size), 0, size.toInt()); continue }
+            if (type == 'x') { pax = paxPath(readSmall(tar, size)); continue }
+            if (type == 'g') { skipFully(tar, padded(size)); continue }
+
+            entries++
+            if (entries > limits.maxEntries) throw RepoTooBig()
+            val base = cstr(hdr, 0, 100)
+            val ustar = cstr(hdr, 257, 5) == "ustar"
+            val prefix = if (ustar) cstr(hdr, 345, 155) else ""
+            val name = pax ?: longName ?: (if (prefix.isNotEmpty()) "$prefix/$base" else base)
+            pax = null
+            longName = null
+
+            val isFile = type == '0' || type == '\u0000'
+            val isDir = type == '5'
+            val rel = if (isFile || isDir) safeRelPath(name) else null
+            if (rel == null || rel.split('/').any { it.equals(".git", ignoreCase = true) }) {
+                skipFully(tar, padded(size))
+                continue
+            }
+            val out = File(root, rel).canonicalFile
+            if (out.path != root.path && !out.path.startsWith(root.path + File.separator)) {
+                throw RepoMessage("unsafe path in archive: $name")
+            }
+            if (isDir) {
+                out.mkdirs()
+                skipFully(tar, padded(size))
+                continue
+            }
+            if (size > limits.maxFileBytes || total + size > limits.maxTotalBytes) throw RepoTooBig()
+            out.parentFile?.mkdirs()
+            var left = size
+            out.outputStream().buffered().use { o ->
+                while (left > 0) {
+                    if (isCancelled()) throw RepoCancelled()
+                    val n = tar.read(buf, 0, minOf(buf.size.toLong(), left).toInt())
+                    if (n < 0) throw IOException("truncated archive")
+                    o.write(buf, 0, n)
+                    left -= n
+                }
+            }
+            total += size
+            files++
+            skipFully(tar, padded(size) - size)
+        }
+        return Extracted(files, total)
+    }
+
     /**
      * أرشيفات المستودعات تلفّ كل شيء بمجلد واحد (repo-main/). إن كان في [dir] مجلد وحيد فقط يُرفع محتواه
      * مستوى واحداً ويُعاد اسمه، وإلا لا يُغيَّر شيء (يعيد null).
@@ -428,9 +610,11 @@ object RepoMerge {
         dest: File,
         mode: MergeMode,
         backupRoot: File,
-        isProtected: (String) -> Boolean
+        isProtected: (String) -> Boolean,
+        /** true: يحسب التقرير فقط دون أي كتابة أو حذف (معاينة قبل التنفيذ). */
+        dryRun: Boolean = false
     ): MergeReport {
-        dest.mkdirs()
+        if (!dryRun) dest.mkdirs()
         val d = dest.canonicalFile
         var added = 0
         var updated = 0
@@ -447,18 +631,22 @@ object RepoMerge {
             val target = File(d, rel).canonicalFile
             if (!target.path.startsWith(d.path + File.separator)) { skipped++; continue }
             if (!target.exists()) {
-                target.parentFile?.mkdirs()
-                f.copyTo(target)
+                if (!dryRun) {
+                    target.parentFile?.mkdirs()
+                    f.copyTo(target)
+                }
                 added++
                 continue
             }
             if (target.isDirectory) { skipped++; continue }
             if (sameContent(f, target)) { same++; continue }
             if (mode == MergeMode.ADD_ONLY) { skipped++; continue }
-            val bak = File(backupRoot, rel)
-            bak.parentFile?.mkdirs()
-            target.copyTo(bak, overwrite = true)
-            f.copyTo(target, overwrite = true)
+            if (!dryRun) {
+                val bak = File(backupRoot, rel)
+                bak.parentFile?.mkdirs()
+                target.copyTo(bak, overwrite = true)
+                f.copyTo(target, overwrite = true)
+            }
             updated++
         }
 
@@ -467,14 +655,16 @@ object RepoMerge {
                 if (!f.isFile) continue
                 val rel = f.relativeTo(d).path.replace(File.separatorChar, '/')
                 if (rel in srcRel || isProtected(rel)) continue
-                val bak = File(backupRoot, rel)
-                bak.parentFile?.mkdirs()
-                f.copyTo(bak, overwrite = true)
-                if (!f.delete()) throw IOException("cannot remove ${f.name}")
+                if (!dryRun) {
+                    val bak = File(backupRoot, rel)
+                    bak.parentFile?.mkdirs()
+                    f.copyTo(bak, overwrite = true)
+                    if (!f.delete()) throw IOException("cannot remove ${f.name}")
+                }
                 removed++
             }
             // تنظيف المجلدات التي فرغت (دون مجلدات .rin_*)
-            for (dir in d.walkBottomUp().toList()) {
+            if (!dryRun) for (dir in d.walkBottomUp().toList()) {
                 if (dir == d || !dir.isDirectory) continue
                 val rel = dir.relativeTo(d).path.replace(File.separatorChar, '/')
                 if (rel.startsWith(".rin_")) continue
