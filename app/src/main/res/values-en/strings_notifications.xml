@@ -38,6 +38,17 @@
     <string name="notif_bg_text">Active downloads: %1$d · Programs running: %2$d</string>
     <string name="notif_job_input_title">Program #%1$d is waiting for your answer</string>
     <string name="notif_job_input_hint">Tap to return to RinStudio and answer.</string>
+    <string name="notif_dl_speed">Speed %1$s/s</string>
+    <string name="notif_dl_speed_eta">%1$s/s · %2$s left</string>
+    <string name="notif_job_rerun">Run again</string>
+    <string name="notif_job_copy">Copy output</string>
+    <string name="notif_job_input_reply">Answer</string>
+    <string name="notif_job_input_label">Type your answer</string>
+    <string name="notif_test_title">Notifications are working ✓</string>
+    <string name="notif_test_text">This is how RinStudio notifications will look on your device: downloads, run results and background work.</string>
+    <string name="perm_notif_channels">Customize notification channels</string>
+    <string name="perm_notif_test">Send a test notification</string>
+    <string name="perm_notif_test_denied">Allow notifications first using the Allow button above.</string>
     <plurals name="notif_downloads_done">
         <item quantity="one">%d download complete</item>
         <item quantity="other">%d downloads complete</item>
