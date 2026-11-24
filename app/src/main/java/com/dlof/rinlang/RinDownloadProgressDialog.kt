@@ -9,7 +9,12 @@ import android.widget.TextView
 import androidx.core.content.ContextCompat
 
 /** Determinate progress dialog driven by real bytes-copied / bytes-total from [RinDownloadManager]. */
-class RinDownloadProgressDialog(activity: Activity, fileName: String) {
+class RinDownloadProgressDialog(
+    activity: Activity,
+    fileName: String,
+    titleText: String? = null,
+    statusText: String? = null
+) {
 
     private val dp = activity.resources.displayMetrics.density
     private val txtStatus: TextView
@@ -24,7 +29,7 @@ class RinDownloadProgressDialog(activity: Activity, fileName: String) {
         }
 
         val title = TextView(activity).apply {
-            text = activity.getString(R.string.download_dialog_title)
+            text = titleText ?: activity.getString(R.string.download_dialog_title)
             textSize = 16f
             setTypeface(typeface, Typeface.BOLD)
             setTextColor(ContextCompat.getColor(context, R.color.rin_on_toolbar))
@@ -50,7 +55,7 @@ class RinDownloadProgressDialog(activity: Activity, fileName: String) {
             setPadding(0, (10 * dp).toInt(), 0, 0)
         }
         txtStatus = TextView(activity).apply {
-            text = activity.getString(R.string.download_status_copying)
+            text = statusText ?: activity.getString(R.string.download_status_copying)
             textSize = 12.5f
             setTextColor(ContextCompat.getColor(context, R.color.rin_on_toolbar_dim))
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
@@ -72,8 +77,18 @@ class RinDownloadProgressDialog(activity: Activity, fileName: String) {
             .create()
     }
 
+    /** زر إلغاء اختياري (يُستدعى قبل [show]) — للتنزيلات الطويلة أو من الشبكة. */
+    fun setCancelAction(label: String, onCancel: () -> Unit) {
+        dialog.setButton(AlertDialog.BUTTON_NEGATIVE, label) { _, _ -> onCancel() }
+    }
+
     fun show() {
         dialog.show()
+    }
+
+    /** تحديث نص الحالة أثناء التقدّم (مثلاً: «جارٍ ضغط الملفات…»). */
+    fun setStatus(message: String) {
+        txtStatus.text = message
     }
 
     /** Updates the bar from real bytes copied so far vs. the artifact's true on-disk size. */
