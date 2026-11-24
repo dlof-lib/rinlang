@@ -22,6 +22,15 @@ class RinCodeEditorController(
     var caseSensitiveSearch: Boolean = false
     /** بحث بتعبير نمطي (regex) بدل نص حرفي؛ محسوب في Kotlin بلا أي تعديل للمحرك C++. */
     var regexSearch: Boolean = false
+    /** كلمة كاملة (تُخزَّن في الـView لأن مطابقة الأسطر تُحسب هناك). */
+    var wholeWordSearch: Boolean
+        get() = editorView.findWholeWord
+        set(v) { editorView.findWholeWord = v }
+
+    /** كل مطابقات [query] كمقتطفات أسطر (قائمة «كل النتائج»). */
+    fun matchList(query: String): List<SearchMatch> =
+        if (query.isEmpty() || !isValidQuery(query)) emptyList()
+        else editorView.allMatchPreviews(query, caseSensitiveSearch, regexSearch)
 
     init {
         updateLineNumbers()
@@ -164,6 +173,11 @@ class RinCodeEditorController(
     fun goToLine(lineNumberOneBased: Int) {
         val y = editorView.goToLine(lineNumberOneBased)
         scrollToY(y)
+    }
+
+    /** ينتقل إلى سطر ويحدّد مطابقة نتيجة البحث فيه (أعمدة حرفية)؛ بلا أعمدة صالحة = الانتقال للسطر فقط. */
+    fun goToMatch(lineNumberOneBased: Int, startCol: Int, endCol: Int) {
+        scrollToY(editorView.selectRangeOnLine(lineNumberOneBased, startCol, endCol))
     }
 
     // --- بحث/استبدال ---
