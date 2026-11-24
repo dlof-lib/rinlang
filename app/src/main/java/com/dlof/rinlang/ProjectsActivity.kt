@@ -144,6 +144,8 @@ class ProjectsActivity : RinBaseActivity() {
         setupGestures()
 
         fabNewProject.setOnClickListener { newProjectLauncher.launch(Intent(this, NewProjectActivity::class.java)) }
+        // ضغطة مستمرة على زر «مشروع جديد» = قائمة الاستيراد (ملف/مستودع) مباشرة.
+        fabNewProject.setOnLongClickListener { showImportChoices(); true }
         handleIncomingPackage(intent)
         findViewById<View>(R.id.btnProjectAlbums).setOnClickListener { startActivity(Intent(this, AlbumsActivity::class.java)) }
         findViewById<View>(R.id.btnProjectImport).setOnClickListener {
@@ -1159,6 +1161,8 @@ private class ProjectsAdapter(
             if (selection.active) { selection.toggle(project.dir.absolutePath); onSelectionChanged() } else onOpen(project)
         }
         holder.btnOpen.setOnClickListener { onOpen(project) }
+        // ضغطة مستمرة على زر «فتح» = قائمة إجراءات المشروع (إعادة تسمية/نقل/تصدير/مزامنة/حذف).
+        holder.btnOpen.setOnLongClickListener { showActionsMenu(it, project); true }
         holder.btnMore.setOnClickListener { anchor -> showActionsMenu(anchor, project) }
         bindSelection(holder, position)
     }
