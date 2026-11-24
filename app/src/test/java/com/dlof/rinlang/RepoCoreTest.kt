@@ -188,4 +188,77 @@ class RepoCoreTest {
         assertEquals(1, rep.skipped)
         assertEquals("mine", File(dest, "project.og.urin").readText())
     }
+
+    @Test fun dryRunReportsButWritesNothing() {
+        val src = tree(tmp(), "a.txt" to "new", "n.txt" to "n")
+        val dest = tree(tmp(), "a.txt" to "old", "x.txt" to "x")
+        val bak = File(tmp(), "bak")
+        val rep = RepoMerge.merge(src, dest, MergeMode.MIRROR, bak, noProtect, dryRun = true)
+        assertEquals(1, rep.added); assertEquals(1, rep.updated); assertEquals(1, rep.removed)
+        assertEquals("old", File(dest, "a.txt").readText())
+        assertFalse(File(dest, "n.txt").exists())
+        assertTrue(File(dest, "x.txt").exists())
+        assertFalse(bak.exists())
+    }
+
+    @Test fun commitApiUrls() {
+        val gh = RepoSpec(RepoProvider.GITHUB, "github.com", "o/r")
+        assertEquals("https://api.github.com/repos/o/r/commits/HEAD", RepoLinks.commitApi(gh)!!.url)
+        assertEquals(0, RepoLinks.commitApi(gh.copy(ref = "dev"))!!.kind)
+        val ge = RepoSpec(RepoProvider.GITEA, "codeberg.org", "o/r", ref = "dev")
+        assertEquals("https://codeberg.org/api/v1/repos/o/r/commits?limit=1&stat=false&sha=dev", RepoLinks.commitApi(ge)!!.url)
+        assertNull(RepoLinks.commitApi(RepoSpec(RepoProvider.DIRECT, "x.com", "p", directUrl = "https://x.com/p.zip")))
+    }
+
+    // ---- tar.gz ----
+
+    private fun tarEntry(out: ByteArrayOutputStream, name: String, content: String?, type: Char = '0') {
+        val h = ByteArray(512)
+        val nb = name.toByteArray()
+        System.arraycopy(nb, 0, h, 0, minOf(nb.size, 100))
+        val data = content?.toByteArray() ?: ByteArray(0)
+        val sz = String.format("%011o", data.size).toByteArray()
+        System.arraycopy(sz, 0, h, 124, sz.size)
+        h[156] = type.code.toByte()
+        out.write(h)
+        out.write(data)
+        val pad = (512 - data.size % 512) % 512
+        out.write(ByteArray(pad))
+    }
+
+    private fun tgz(build: (ByteArrayOutputStream) -> Unit): ByteArray {
+        val tar = ByteArrayOutputStream()
+        build(tar)
+        tar.write(ByteArray(1024))
+        val bos = ByteArrayOutputStream()
+        java.util.zip.GZIPOutputStream(bos).use { it.write(tar.toByteArray()) }
+        return bos.toByteArray()
+    }
+
+    @Test fun tarGzExtractsFilesAndAutoDetects() {
+        val data = tgz {
+            tarEntry(it, "repo-1/", null, '5')
+            tarEntry(it, "repo-1/a.txt", "hello")
+            tarEntry(it, "repo-1/src/b.txt", "x".repeat(700))
+            tarEntry(it, "repo-1/.git/config", "no")
+            tarEntry(it, "repo-1/link", null, '2')
+        }
+        val out = File(tmp(), "tree")
+        val r = RepoArchive.extractAuto(ByteArrayInputStream(data), out)
+        assertEquals(2, r.files)
+        assertEquals("repo-1", RepoArchive.stripSingleTopFolder(out))
+        assertEquals("hello", File(out, "a.txt").readText())
+        assertEquals(700, File(out, "src/b.txt").length().toInt())
+        assertFalse(File(out, ".git").exists())
+        assertFalse(File(out, "link").exists())
+    }
+
+    @Test fun tarGzRejectsTraversalAndDirectLinkParses() {
+        val out = File(tmp(), "tree")
+        RepoArchive.extractTarGz(ByteArrayInputStream(tgz { tarEntry(it, "../evil.txt", "x") }), out)
+        assertFalse(File(out.parentFile, "evil.txt").exists())
+        val d = RepoParser.parse("https://example.com/dl/pkg-1.0.tar.gz")!!
+        assertEquals(RepoProvider.DIRECT, d.provider); assertEquals("pkg-1.0", d.repoName)
+        assertEquals("pkg", RepoParser.parse("https://example.com/pkg.tgz")!!.repoName)
+    }
 }
