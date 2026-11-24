@@ -311,6 +311,11 @@ jobs:
           packages: ""   # command-line tools وقبول التراخيص فقط؛ الحزم تُثبَّت بدقة أدناه.
 
       # NDK (~1 GB) و CMake يُحمَّلان مرة واحدة ثم يُستعادان من الكاش في ثوانٍ.
+      # tar (في actions/cache) يفشل بـ "Cannot utime / Cannot change mode" على مجلدات SDK المملوكة لـ root،
+      # فيُلغى استعادة الكاش ويُعاد تنزيل NDK كل مرة. نمنح المستخدم الحالي الملكية أولاً.
+      - name: Fix Android SDK ownership (for cache restore)
+        run: sudo chown -R "$(id -u):$(id -g)" "$ANDROID_HOME"
+
       - name: Cache NDK & CMake
         uses: actions/cache@v4
         with:
