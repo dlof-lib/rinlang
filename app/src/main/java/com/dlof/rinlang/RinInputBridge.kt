@@ -69,6 +69,18 @@ object RinInputBridge {
     }
 
     /**
+     * يجيب أقدم سؤال معلّق من خارج الواجهة (الرد المباشر من الإشعار). [value] = null يعني إلغاء الإدخال.
+     * يعيد false إن لم يكن هناك سؤال ينتظر.
+     */
+    fun answerFromNotification(value: String?): Boolean {
+        val p = pending.firstOrNull { !it.done } ?: return false
+        p.answer = value
+        p.done = true
+        p.latch.countDown()
+        return true
+    }
+
+    /**
      * يُستدعى من ترد التشغيل. يعيد ما كتبه المستخدم، أو null عند الإلغاء/انتهاء المهلة.
      * تُحجَب هذه الدالة عمداً — لا تستدعها من الترد الرئيسي.
      */
