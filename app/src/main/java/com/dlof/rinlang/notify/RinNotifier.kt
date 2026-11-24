@@ -7,6 +7,7 @@ import android.app.Notification
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -18,11 +19,14 @@ import android.text.format.Formatter
 import androidx.annotation.DrawableRes
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.app.RemoteInput
 import androidx.core.content.ContextCompat
 import androidx.core.text.BidiFormatter
 import com.dlof.rinlang.JobStatus
 import com.dlof.rinlang.R
+import com.dlof.rinlang.RinInputBridge
 import com.dlof.rinlang.RinJob
+import com.dlof.rinlang.RinJobScheduler
 import com.dlof.rinlang.permissions.RinNotifications
 import com.dlof.rinlang.permissions.RinPermissions
 import java.text.NumberFormat
@@ -45,6 +49,11 @@ object RinNotifier {
 
     const val ACTION_CANCEL = "com.dlof.rinlang.notify.ACTION_CANCEL"
     const val EXTRA_ID = "com.dlof.rinlang.notify.EXTRA_ID"
+    const val ACTION_JOB_RERUN = "com.dlof.rinlang.notify.ACTION_JOB_RERUN"
+    const val ACTION_JOB_COPY = "com.dlof.rinlang.notify.ACTION_JOB_COPY"
+    const val ACTION_INPUT_REPLY = "com.dlof.rinlang.notify.ACTION_INPUT_REPLY"
+    const val ACTION_INPUT_CANCEL = "com.dlof.rinlang.notify.ACTION_INPUT_CANCEL"
+    const val KEY_REPLY = "com.dlof.rinlang.notify.KEY_REPLY"
 
     private const val GROUP_DOWNLOADS = "com.dlof.rinlang.group.DOWNLOADS"
     private const val SUMMARY_ID_DOWNLOADS = 0x5100
@@ -115,6 +124,8 @@ object RinNotifier {
         private val startedWall = System.currentTimeMillis()
         private val startedElapsed = SystemClock.elapsedRealtime()
         private var lastPostElapsed = 0L
+        private var lastDone = 0L
+        private var speedBps = 0.0 // متوسط متحرّك أسّي لسرعة التنزيل (بايت/ث)
         private var finished = false
         private var released = false
 
@@ -126,6 +137,11 @@ object RinNotifier {
             if (!complete && now - lastPostElapsed < PROGRESS_INTERVAL_MS) return
             synchronized(this) {
                 if (finished) return
+                if (lastPostElapsed > 0 && now > lastPostElapsed && done >= lastDone) {
+                    val inst = (done - lastDone) * 1000.0 / (now - lastPostElapsed)
+                    speedBps = if (speedBps == 0.0) inst else speedBps * 0.7 + inst * 0.3
+                }
+                lastDone = done
                 lastPostElapsed = now
                 val n = buildProgress(done, total)
                 post(ctx, id, n)
@@ -161,7 +177,17 @@ object RinNotifier {
                 .setShowWhen(true)
                 .setUsesChronometer(true)
                 .setContentIntent(appIntent(ctx, id))
-            if (!phase.isNullOrBlank()) b.setSubText(phase)
+            if (speedBps >= 1024.0) {
+                val speedStr = Formatter.formatShortFileSize(ctx, speedBps.toLong())
+                val remaining = if (determinate && done < total) ((total - done) / speedBps).toLong() else -1L
+                b.setSubText(
+                    if (remaining >= 0) ctx.getString(
+                        R.string.notif_dl_speed_eta, speedStr, Formatter.formatShortElapsedTime(ctx, remaining * 1000)
+                    ) else ctx.getString(R.string.notif_dl_speed, speedStr)
+                )
+            } else if (!phase.isNullOrBlank()) {
+                b.setSubText(phase)
+            }
             if (cancelable) {
                 b.addAction(R.drawable.ic_notif_cancel, ctx.getString(R.string.cancel), cancelIntent(ctx, id))
             }
@@ -334,7 +360,13 @@ object RinNotifier {
         val firstLine = output.lineSequence().map { it.trim() }.firstOrNull { it.isNotEmpty() }
         val preview = firstLine?.take(140) ?: app.getString(R.string.notif_job_no_output)
         val n = base(app, RinNotifications.CHANNEL_JOBS, icon)
-            .apply { if (failed) setColor(ContextCompat.getColor(app, R.color.rin_btn_danger)) }
+            .apply {
+                if (failed) setColor(ContextCompat.getColor(app, R.color.rin_btn_danger))
+                addAction(R.drawable.ic_notif_refresh, app.getString(R.string.notif_job_rerun), receiverIntent(app, ACTION_JOB_RERUN, job.number))
+                if (output.isNotEmpty()) {
+                    addAction(R.drawable.ic_notif_copy, app.getString(R.string.notif_job_copy), receiverIntent(app, ACTION_JOB_COPY, job.number))
+                }
+            }
             .setContentTitle(title)
             .setContentText(preview)
             .setSubText(took)
@@ -369,6 +401,20 @@ object RinNotifier {
                     .bigText(q.take(500) + "\n" + app.getString(R.string.notif_job_input_hint))
             )
             .setContentIntent(appIntent(app, JOB_INPUT_ID_BASE + jobNumber))
+            .addAction(
+                NotificationCompat.Action.Builder(
+                    R.drawable.ic_notif_send, app.getString(R.string.notif_job_input_reply),
+                    PendingIntent.getBroadcast(
+                        app, JOB_INPUT_ID_BASE + jobNumber,
+                        Intent(app, RinNotificationReceiver::class.java).setAction(ACTION_INPUT_REPLY).putExtra(EXTRA_ID, jobNumber),
+                        PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT // RemoteInput يحتاج PendingIntent قابلاً للتعديل
+                    )
+                )
+                    .addRemoteInput(RemoteInput.Builder(KEY_REPLY).setLabel(app.getString(R.string.notif_job_input_label)).build())
+                    .setAllowGeneratedReplies(false)
+                    .build()
+            )
+            .addAction(R.drawable.ic_notif_cancel, app.getString(R.string.cancel), receiverIntent(app, ACTION_INPUT_CANCEL, jobNumber))
             .setAutoCancel(true)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -409,6 +455,60 @@ object RinNotifier {
         if (id == -1) return
         cancelHooks.remove(id)?.invoke()
         dismiss(ctx.applicationContext, id)
+    }
+
+    /** «إعادة التشغيل» من إشعار نتيجة: يضيف نفس البرنامج إلى طابور التشغيل من جديد. */
+    internal fun handleRerun(ctx: Context, jobNumber: Int) {
+        val app = ctx.applicationContext
+        val job = RinJobScheduler.snapshot().firstOrNull { it.number == jobNumber }
+        dismiss(app, JOB_ID_BASE + jobNumber)
+        if (job != null) runCatching { RinJobScheduler.submit(job.source) }
+    }
+
+    /** «نسخ المخرجات» من إشعار نتيجة. */
+    internal fun handleCopy(ctx: Context, jobNumber: Int) {
+        val app = ctx.applicationContext
+        val job = RinJobScheduler.snapshot().firstOrNull { it.number == jobNumber } ?: return
+        runCatching {
+            app.getSystemService(ClipboardManager::class.java)
+                ?.setPrimaryClip(ClipData.newPlainText("RinStudio #$jobNumber", job.output))
+        }
+    }
+
+    /** الرد المباشر على سؤال برنامج من الإشعار ([text] = null لإلغاء الإدخال). */
+    internal fun handleInput(ctx: Context, jobNumber: Int, text: String?) {
+        RinInputBridge.answerFromNotification(text)
+        dismiss(ctx.applicationContext, JOB_INPUT_ID_BASE + jobNumber)
+    }
+
+    /** إشعار تجريبي من «مركز الأذونات» ليرى المستخدم الشكل ويختبر الأذونات والقنوات. يعيد false إن لم يُسمح بالإشعارات. */
+    fun sendTest(ctx: Context): Boolean {
+        val app = ctx.applicationContext
+        if (!canPost(app)) return false
+        val title = app.getString(R.string.notif_test_title)
+        val settings = PendingIntent.getActivity(
+            app, 0x5762,
+            Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, app.packageName)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        val n = base(app, RinNotifications.CHANNEL_GENERAL, R.drawable.ic_notif_done)
+            .setContentTitle(title)
+            .setContentText(app.getString(R.string.notif_test_text))
+            .setStyle(NotificationCompat.BigTextStyle().bigText(app.getString(R.string.notif_test_text)))
+            .setContentIntent(appIntent(app, 0x5762))
+            .addAction(R.drawable.ic_notif_settings, app.getString(R.string.perm_notif_channels), settings)
+            .setAutoCancel(true)
+            .setTimeoutAfter(60_000L)
+            .build()
+        return post(app, 0x5762, n)
+    }
+
+    private fun receiverIntent(ctx: Context, action: String, id: Int): PendingIntent {
+        val i = Intent(ctx, RinNotificationReceiver::class.java).setAction(action).putExtra(EXTRA_ID, id)
+        // requestCode يجمع الإجراء والمعرّف كي لا تتصادم أزرار إشعارات مختلفة.
+        return PendingIntent.getBroadcast(ctx, action.hashCode() xor id, i, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
     }
 
     // ---------------------------------------------------------------- أدوات مشتركة
