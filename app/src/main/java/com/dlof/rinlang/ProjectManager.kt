@@ -1503,6 +1503,35 @@ fun removeTodo(id) {
         }
     }
 
+    // ---- استرداد مستودع (GitHub وغيره): انظر RepoRestore ----
+
+    /**
+     * مجلد مؤقت مخفي (.import_*) داخل جذر المشاريع نفسه، كي يكون نقله لاحقاً إلى مجلد المشروع النهائي
+     * عملية rename ذرّية على نفس نظام الملفات. يُنظَّف تلقائياً إن انقطعت العملية ([sweepStaleTemp]).
+     */
+    fun newImportTempDir(context: Context): File {
+        val root = projectsRoot(context)
+        sweepStaleTemp(root)
+        val temp = File(root, ".import_${System.currentTimeMillis()}_${(1000..9999).random()}")
+        require(temp.mkdirs()) { "تعذّر إنشاء مساحة استيراد مؤقتة" }
+        return temp
+    }
+
+    /**
+     * يثبّت شجرة ملفات جاهزة ([tree]، يجب أن تكون داخل مجلد مؤقت من [newImportTempDir]) كمشروع جديد
+     * باسم فريد، ويكتب بيانات المشروع الوصفية بالنوع [type]. لا يشترط وجود main.rin (المستودعات العامة
+     * لا تحويه دائماً).
+     */
+    fun installImportedTree(context: Context, tree: File, requestedName: String, type: ProjectType): Project {
+        val root = projectsRoot(context)
+        val finalName = uniqueProjectName(context, sanitizeProjectName(requestedName))
+        val finalDir = File(root, finalName)
+        require(!finalDir.exists()) { "يوجد مشروع بهذا الاسم بالفعل" }
+        if (!tree.renameTo(finalDir)) throw IllegalStateException("تعذّر تثبيت المشروع المستورد")
+        writeProjectMeta(finalDir, type, null, finalName)
+        return Project(finalName, finalDir, finalDir.lastModified(), type)
+    }
+
     /** يحذف بقايا استيراد/استبدال انقطع (انهيار أو قتل التطبيق) أقدم من ساعة. */
     private fun sweepStaleTemp(root: File) {
         val cutoff = System.currentTimeMillis() - 60L * 60L * 1000L
