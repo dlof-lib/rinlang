@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Multi-select for files + row gestures (English). See FileSelection.kt -->
+<resources>
+    <string name="selection_count_format">%1$d selected</string>
+    <string name="selection_select_all">Select all</string>
+    <string name="selection_invert">Invert selection</string>
+    <string name="selection_clear">Clear selection</string>
+    <string name="selection_delete_title">Delete selected items</string>
+    <string name="selection_delete_confirm">%1$d item(s) will be permanently deleted, including everything inside selected folders.</string>
+    <string name="selection_move_title">Move %1$d item(s) to folder</string>
+    <string name="selection_done_toast">Done for %1$d item(s)</string>
+    <string name="selection_skipped_toast">Skipped %1$d item(s) (currently open, has unsaved changes, or the name already exists in the destination)</string>
+    <string name="selection_failed_toast">Failed for %1$d item(s)</string>
+    <string name="selection_paths_copied_toast">Copied paths of %1$d item(s)</string>
+    <string name="swipe_rename_label">Rename</string>
+    <string name="swipe_delete_label">Delete</string>
+</resources>
