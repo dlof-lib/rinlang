@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- رفع/وسائط/zip — FilesExtras3.kt -->
+<resources>
+    <string name="hub_upload_title">Subir archivos</string>
+    <string name="up_single">Un archivo</string>
+    <string name="up_multi">Varios archivos a la vez</string>
+    <string name="up_folder">Carpeta completa con su contenido</string>
+    <string name="zip_browse_device">Explorar un archivo comprimido del dispositivo (extracción selectiva)</string>
+    <string name="hub_media_title">Subir multimedia</string>
+    <string name="media_single">Una foto o video</string>
+    <string name="media_multi">Varias fotos y videos</string>
+    <string name="media_audio">Archivos de audio</string>
+    <string name="media_shrink_on">Reducir imágenes grandes al subir: SÍ (toca para desactivar)</string>
+    <string name="media_shrink_off">Reducir imágenes grandes al subir: NO (toca para activar)</string>
+    <string name="conflict_title">Ya existen %1$d archivos con el mismo nombre</string>
+    <string name="conflict_keep">Conservar ambos (numerar el nuevo)</string>
+    <string name="conflict_skip">Omitir los existentes</string>
+    <string name="conflict_replace">Reemplazar los existentes</string>
+    <string name="upload_collecting">Preparando…</string>
+    <string name="upload_nothing">No hay nada que subir</string>
+    <string name="upload_progress">Subiendo… %1$d / %2$d</string>
+    <string name="upload_cancelled">Subida cancelada</string>
+    <string name="upload_result">Hecho: %1$d · omitidos: %2$d · fallidos: %3$d · %4$s</string>
+    <string name="zip_browse_title">%1$s — %2$d archivos · %3$s</string>
+    <string name="zip_extract_selected">Extraer selección</string>
+    <string name="zip_toggle_all">Todo / nada (pulsación larga: patrón)</string>
+    <string name="zip_none_selected">Nada seleccionado</string>
+    <string name="zip_extract_result">Extraídos %1$d archivos (omitidos %2$d)</string>
+    <string name="zip_truncated">Se muestran solo los primeros %1$d elementos</string>
+    <string name="zip_bad">No se pudo leer el archivo: %1$s</string>
+    <string name="row_zip_browse">Explorar archivo comprimido</string>
+    <string name="row_zip_named">Extraer a carpeta con el nombre del archivo</string>
+    <string name="row_zip_test">Probar integridad del archivo</string>
+    <string name="zip_test_ok">El archivo está bien: %1$d archivos sin errores</string>
+    <string name="zip_test_bad">Dañado: %1$d de %2$d\n%3$s</string>
+    <string name="zip_share">Comprimir y compartir</string>
+    <string name="row_media_info">Información multimedia</string>
+    <string name="row_shrink">Copia reducida</string>
+    <string name="shrink_1024">Dimensión máx. 1024 px</string>
+    <string name="shrink_2048">Dimensión máx. 2048 px</string>
+    <string name="shrink_half">50% del tamaño</string>
+    <string name="shrink_done">Se creó %1$s</string>
+    <string name="shrink_nothing">No hizo falta reducir, o falló</string>
+    <string name="shrink_unsupported">Solo se pueden reducir JPG y PNG</string>
+    <string name="info_size">Tamaño</string>
+    <string name="info_dims">Dimensiones</string>
+    <string name="info_type">Tipo</string>
+    <string name="info_duration">Duración</string>
+    <string name="info_bitrate">Tasa de bits</string>
+</resources>
