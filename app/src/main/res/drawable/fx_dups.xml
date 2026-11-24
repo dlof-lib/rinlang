@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- أيقونة مرسومة من الصفر لشاشة الملفات (تُلوَّن عند الاستخدام) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M8 3h12v14H8z M10.5 5.5h7v9h-7z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M4 7h2v13h11v2H4z" />
+</vector>
