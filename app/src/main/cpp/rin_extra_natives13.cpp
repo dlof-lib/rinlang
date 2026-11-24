@@ -355,7 +355,7 @@ void Interpreter::registerNativesExtra13() {
     natives["lastOf"]  = [=](Args& a, int line) -> Value { range("lastOf", a, 1, 2, line); auto it = items(a[0], "lastOf", line); return it.empty() ? (a.size() == 2 ? a[1] : Value::nil()) : it.back().second; };
     natives["firstKey"] = [=](Args& a, int line) -> Value { range("firstKey", a, 1, 1, line); auto it = items(a[0], "firstKey", line); return it.empty() ? Value::nil() : it.front().first; };
     natives["lastKey"]  = [=](Args& a, int line) -> Value { range("lastKey", a, 1, 1, line); auto it = items(a[0], "lastKey", line); return it.empty() ? Value::nil() : it.back().first; };
-    natives["findKeyIf"] = [=](Args& a, int line) -> Value {
+    natives["findKeyIf"] = [=, this](Args& a, int line) -> Value {
         range("findKeyIf", a, 2, 2, line);
         if (a[1].type != Value::Type::FUNCTION || !a[1].function) throw diagErr(diag::Code::E0004_InvalidType, line, "'findKeyIf' يتطلب دالة كوسيط ثانٍ");
         const bool two = a[1].function->declaration && a[1].function->declaration->params.size() >= 2;   // fun(قيمة, مفتاح) اختيارياً
