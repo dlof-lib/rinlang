@@ -38,6 +38,17 @@
     <string name="notif_bg_text">تنزيلات جارية: %1$d · برامج قيد التشغيل: %2$d</string>
     <string name="notif_job_input_title">البرنامج #%1$d ينتظر إجابتك</string>
     <string name="notif_job_input_hint">اضغط للعودة إلى RinStudio والإجابة.</string>
+    <string name="notif_dl_speed">السرعة %1$s/ث</string>
+    <string name="notif_dl_speed_eta">%1$s/ث · المتبقي %2$s</string>
+    <string name="notif_job_rerun">إعادة التشغيل</string>
+    <string name="notif_job_copy">نسخ المخرجات</string>
+    <string name="notif_job_input_reply">إجابة</string>
+    <string name="notif_job_input_label">اكتب إجابتك</string>
+    <string name="notif_test_title">الإشعارات تعمل ✓</string>
+    <string name="notif_test_text">هكذا ستظهر إشعارات RinStudio على جهازك: التنزيلات، نتائج التشغيل، والعمل في الخلفية.</string>
+    <string name="perm_notif_channels">تخصيص قنوات الإشعارات</string>
+    <string name="perm_notif_test">إرسال إشعار تجريبي</string>
+    <string name="perm_notif_test_denied">فعّل الإشعارات أولاً من الزر «السماح» أعلاه.</string>
     <plurals name="notif_downloads_done">
         <item quantity="zero">لا تنزيلات مكتملة</item>
         <item quantity="one">تنزيل واحد مكتمل</item>
