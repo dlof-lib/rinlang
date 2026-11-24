@@ -153,7 +153,7 @@
     <string name="move_root_option">(project root)</string>
     <string name="move_no_folders">No other folders yet to move this file to</string>
     <string name="file_moved_toast">Moved to: %1$s</string>
-    <string name="search_files_hint">🔍 Search project files...</string>
+    <string name="search_files_hint">Search project files...</string>
     <string name="search_no_results">No matching results</string>
     <string name="search_result_meta_format">%1$s</string>
 
