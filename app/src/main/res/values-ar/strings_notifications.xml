@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- الإشعارات — notify/RinNotifier.kt / permissions/RinNotifications.kt / IndsinLiveService.kt -->
+<resources>
+    <string name="notif_group_files">الملفات والتنزيلات</string>
+    <string name="notif_group_system">المهام والخدمات</string>
+    <string name="notif_channel_download_progress">تقدّم التنزيل</string>
+    <string name="notif_channel_download_progress_desc">شريط تقدّم أثناء التنزيل والضغط، بصمت ودون تنبيه.</string>
+    <string name="notif_channel_download_done">اكتمال التنزيل</string>
+    <string name="notif_channel_download_done_desc">تنبيه عند حفظ ملف في التنزيلات مع زرّي فتح ومشاركة.</string>
+    <string name="notif_channel_alerts">الأخطاء والتنبيهات</string>
+    <string name="notif_channel_alerts_desc">تنبيهات عاجلة مثل فشل تنزيل أو حفظ ملف.</string>
+    <string name="notif_channel_jobs">نتائج التشغيل</string>
+    <string name="notif_channel_jobs_desc">نتيجة تشغيل برنامجك حين ينتهي والتطبيق في الخلفية.</string>
+    <string name="notif_channel_live">خادم معاينة Indsin</string>
+    <string name="notif_channel_live_desc">إشعار دائم أثناء عمل خادم المعاينة المحلي («فتح في المتصفح»).</string>
+    <string name="notif_channel_general">إشعارات عامة</string>
+    <string name="notif_channel_general_desc">إشعارات متفرقة من RinStudio.</string>
+    <string name="notif_dl_folder_root">التنزيلات</string>
+    <string name="notif_dl_saved_in">محفوظ في %1$s</string>
+    <string name="notif_dl_progress_text">%1$s · %2$s من %3$s</string>
+    <string name="notif_dl_progress_unknown">تم تنزيل %1$s</string>
+    <string name="notif_dl_preparing">جارٍ التحضير…</string>
+    <string name="notif_dl_failed_title">تعذّر التنزيل</string>
+    <string name="notif_dl_failed_hint">اضغط لفتح RinStudio والمحاولة مرة أخرى.</string>
+    <string name="notif_project_saved_title">تم التنزيل إلى المشروع</string>
+    <string name="notif_project_saved_hint">اضغط لفتح RinStudio.</string>
+    <string name="notif_job_success_title">اكتمل التشغيل #%1$d</string>
+    <string name="notif_job_error_title">فشل التشغيل #%1$d</string>
+    <string name="notif_job_timeout_title">انتهت مهلة التشغيل #%1$d</string>
+    <string name="notif_job_duration">المدة: %1$s</string>
+    <string name="notif_job_no_output">لا مخرجات</string>
+    <string name="notif_duration_ms">%1$d مللي ثانية</string>
+    <string name="notif_duration_s">%1$.1f ثانية</string>
+    <string name="notif_live_hint">اضغط «فتح» لعرض المعاينة في المتصفح، أو «إيقاف» لإنهاء الخادم.</string>
+    <plurals name="notif_downloads_done">
+        <item quantity="zero">لا تنزيلات مكتملة</item>
+        <item quantity="one">تنزيل واحد مكتمل</item>
+        <item quantity="two">تنزيلان مكتملان</item>
+        <item quantity="few">%d تنزيلات مكتملة</item>
+        <item quantity="many">%d تنزيلًا مكتملًا</item>
+        <item quantity="other">%d تنزيل مكتمل</item>
+    </plurals>
+</resources>
