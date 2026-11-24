@@ -179,6 +179,20 @@ object RinPermissions {
             box.addView(row)
         }
 
+        // أدوات الإشعارات: تخصيص القنوات (صوت/أهمية كل نوع) وإشعار تجريبي.
+        box.addView(Button(activity).apply {
+            setText(R.string.perm_notif_channels)
+            setOnClickListener { openNotificationSettings(activity) }
+        })
+        box.addView(Button(activity).apply {
+            setText(R.string.perm_notif_test)
+            setOnClickListener {
+                if (!com.dlof.rinlang.notify.RinNotifier.sendTest(activity)) {
+                    android.widget.Toast.makeText(activity, R.string.perm_notif_test_denied, android.widget.Toast.LENGTH_LONG).show()
+                }
+            }
+        })
+
         dlg = AlertDialog.Builder(activity)
             .setTitle(R.string.perm_center_title)
             .setView(ScrollView(activity).apply { addView(box) })
