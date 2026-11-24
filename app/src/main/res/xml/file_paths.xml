@@ -19,4 +19,6 @@
     <cache-path name="indsin_capture" path="indsin_capture/" />
     <!-- لقطات شاشة المعاينة الحية (IndsinLivePanel.captureAndShare). -->
     <cache-path name="indsin_shots" path="indsin_shots/" />
+    <!-- ضغط ومشاركة ([ZipTools.shareAsZip]): أرشيفات مؤقتة في cacheDir/share_zips/ -->
+    <cache-path name="share_zips" path="share_zips/" />
 </paths>
