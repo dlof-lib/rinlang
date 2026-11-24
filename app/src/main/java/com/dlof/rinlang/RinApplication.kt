@@ -15,6 +15,8 @@ class RinApplication : Application() {
         RinSystemBars.install(this)
         // قنوات الإشعارات يجب أن توجد قبل أول إشعار (أندرويد 8+)؛ الإنشاء المتكرر آمن.
         com.dlof.rinlang.permissions.RinNotifications.createChannels(this)
+        // منظّم الإشعارات: يتتبّع ظهور الواجهة (لإشعارات نتائج التشغيل في الخلفية فقط).
+        com.dlof.rinlang.notify.RinNotifier.install(this)
         // ينظّف بقايا تنزيلات/تثبيتات حزم انقطعت سابقاً — في خيط خلفي كي لا يؤخر الإقلاع.
         Thread { runCatching { com.dlof.rinlang.packs.PackStore.cleanupLeftovers(this) } }.start()
         RinMediaBridge.init(this) // جسر الوسائط لـ make.video/audio/image/ocr (docs/MAKE_MEDIA.md)
