@@ -9,7 +9,7 @@
 | GitLab (gitlab.com وأي مضيف يبدأ بـ `gitlab.`) | `https://gitlab.com/group/sub/proj/-/tree/main/docs` |
 | Bitbucket | `https://bitbucket.org/o/r/src/main/app` |
 | Codeberg / Gitea / Forgejo | `https://codeberg.org/o/r/src/branch/dev` |
-| أي رابط ZIP مباشر (https) | `https://example.com/pack.zip` |
+| أي رابط أرشيف مباشر (https): ZIP أو TAR.GZ/TGZ | `https://example.com/pack.zip`، `https://example.com/pkg-1.0.tar.gz` |
 
 حقل «فرع / وسم / commit» يتقدّم على ما في الرابط. زر «اختيار» يسرد أول 100 فرع ووسم (ما عدا روابط ZIP المباشرة).
 اسم فرع يحوي `/` اكتبه في حقل الفرع مباشرة (الرابط يلتقط المقطع الأول فقط).
@@ -38,10 +38,16 @@
 - GitHub بدون رمز يستعمل رابط الأرشيف العام (لا يستهلك حدّ طلبات API)؛ مع الرمز يستعمل API.
 
 ## غير مدعوم حالياً (بصراحة)
-- أرشيفات tar.gz، وGists، وGitHub Enterprise، ومضيفات GitLab/Gitea ذات أسماء لا تبدأ بـ `gitlab.`/`gitea.` أو لا تحوي `forgejo` (استعمل رابط ZIP المباشر لها).
+- Gists، وGitHub Enterprise، ومضيفات GitLab/Gitea ذات أسماء لا تبدأ بـ `gitlab.`/`gitea.` أو لا تحوي `forgejo` (استعمل رابط الأرشيف المباشر لها).
 - لا يُجلب سجلّ git (التاريخ)؛ الاسترداد لقطة من الملفات.
 - لم يُجرَّب البناء/الاختبار على جهاز أو Gradle في بيئة التطوير هذه (انظر ملف CHANGELOG).
 
 ## الملفات
 جديد: `RepoCore.kt` (منطق خالص قابل للاختبار)، `RepoRestore.kt` (الواجهة والشبكة)، `strings_repo.xml` ×4، `fx_repo.xml`، `RepoCoreTest.kt`.
 معدّل: `ProjectManager.kt` (دالتان: `newImportTempDir`، `installImportedTree`)، `FilesActivity.kt` (3 عناصر قائمة)، `ProjectsActivity.kt` (قائمة اختيار الاستيراد).
+
+## إضافات
+- **معاينة قبل التنفيذ** عند الدمج داخل مشروع موجود: تُعرض أعداد (يُضاف/يُحدَّث/دون تغيير/يُتخطّى/يُزال) ولا يُكتب شيء قبل تأكيدك.
+- **الأخيرة**: آخر 8 روابط مستودعات (الرابط فقط، بلا رموز).
+- **التحقق من التحديث**: يُسجَّل آخر commit عند كل استرداد (GitHub/GitLab/Bitbucket/Gitea). «تحديث من المصدر المحفوظ» يفحصه أولاً، وإن لم يتغيّر شيء يخبرك ويسألك هل تستردّ على أي حال. للمستودعات الخاصة يتخطّى الفحص بصمت ويفتح الحوار.
+- **tar.gz**: الروابط المباشرة `.tar.gz`/`.tgz` تُكتشف من محتواها (gzip أو zip) وتُفكّ بالتدفق بنفس حدود الأمان؛ الروابط الرمزية والملفات الخاصة تُتجاهل.
