@@ -75,6 +75,8 @@ class FilesActivity : RinBaseActivity() {
     private var currentRelDir: String = ""
     /** نص البحث الحالي في شريط "🔍 بحث في ملفات المشروع"؛ فارغ = تصفّح عادي مستوى بمستوى. */
     private var searchQuery: String = ""
+    /** شريحة التصفية السريعة الحالية (الكل / أخطاء / غير محفوظة / مثبّتة). */
+    private var statusMode: StatusMode = StatusMode.ALL
 
     private val importFileLauncher =
         registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -82,13 +84,33 @@ class FilesActivity : RinBaseActivity() {
         }
 
     private val importZipLauncher =
-        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-            if (uri != null) importZip(uri)
+        registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+            if (uris.isNotEmpty()) ZipImport.fromUris(this, project, currentRelDir, uris, protectedPaths()) { refresh() }
         }
 
     private val importMediaLauncher =
         registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
             if (uri != null) importFile(uri)
+        }
+
+    private val importMultiLauncher =
+        registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+            if (uris.isNotEmpty()) Uploader.files(this, project, currentRelDir, uris, protectedPaths()) { refresh() }
+        }
+
+    private val importTreeLauncher =
+        registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+            if (uri != null) Uploader.tree(this, project, currentRelDir, uri, protectedPaths()) { refresh() }
+        }
+
+    private val browseZipLauncher =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri != null) ZipTools.browseUri(this, project, currentRelDir, uri, protectedPaths()) { refresh() }
+        }
+
+    private val importMultiMediaLauncher =
+        registerForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { uris ->
+            if (uris.isNotEmpty()) Uploader.files(this, project, currentRelDir, uris, protectedPaths()) { refresh() }
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -136,7 +158,7 @@ class FilesActivity : RinBaseActivity() {
             onRenameFolder = { folder -> showRenameFolderDialog(folder) },
             onDeleteFile = { file -> showDeleteFileConfirm(file) },
             onDeleteFolder = { folder -> showDeleteFolderConfirm(folder) },
-            onMoreFile = { file, anchor -> showMoreFileActions(file, anchor) },
+            onMore = { entry, anchor -> showRowMenu(entry, anchor) },
             selection = selection,
             onSelectionChanged = { onSelectionChanged() }
         )
@@ -164,20 +186,8 @@ class FilesActivity : RinBaseActivity() {
         fabNewFolder.setOnClickListener {
             FolderCreator.show(this, project, currentRelDir) { refresh() }
         }
-        fabUploadFile.setOnClickListener {
-            importFileLauncher.launch(
-                arrayOf(
-                    "text/plain", "application/octet-stream",
-                    "image/*", "video/*", "audio/*", "font/*", "application/pdf",
-                    "*/*"
-                )
-            )
-        }
-        fabUploadMedia.setOnClickListener {
-            importMediaLauncher.launch(
-                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
-            )
-        }
+        fabUploadFile.setOnClickListener { showUploadHub() }
+        fabUploadMedia.setOnClickListener { showMediaHub() }
         fabZipTools.setOnClickListener { showZipToolsDialog() }
     }
 
@@ -280,6 +290,65 @@ class FilesActivity : RinBaseActivity() {
             render()
             if (searchQuery.isNotBlank()) refresh()
         }
+        adapter.onVisibleChanged = {
+            pruneSelection()
+            updateEmptyState()
+        }
+        renderStatusChips()
+    }
+
+    /** شرائح التصفية السريعة: تُبدَّل على القائمة الحالية دون إعادة قراءة القرص. */
+    private fun renderStatusChips() {
+        val box = findViewById<android.widget.LinearLayout>(R.id.layoutStatusChips)
+        box.removeAllViews()
+        val d = resources.displayMetrics.density
+        val modes = listOf(
+            StatusMode.ALL to R.string.status_all,
+            StatusMode.ERRORS to R.string.status_errors,
+            StatusMode.UNSAVED to R.string.status_unsaved,
+            StatusMode.PINNED to R.string.status_pinned
+        )
+        for ((mode, label) in modes) {
+            val on = mode == statusMode
+            box.addView(TextView(this).apply {
+                setText(label)
+                textSize = 12f
+                maxLines = 1
+                setTextColor(androidx.core.content.ContextCompat.getColor(
+                    context, if (on) R.color.rin_accent else R.color.rin_on_toolbar))
+                if (on) setTypeface(typeface, android.graphics.Typeface.BOLD)
+                setPadding((12 * d).toInt(), (6 * d).toInt(), (12 * d).toInt(), (6 * d).toInt())
+                setBackgroundResource(if (on) R.drawable.bg_list_card_selected else R.drawable.bg_icon_btn)
+                isClickable = true
+                isFocusable = true
+                setOnClickListener {
+                    if (statusMode != mode) {
+                        statusMode = mode
+                        adapter.setStatusMode(mode)
+                        renderStatusChips()
+                    }
+                }
+                layoutParams = android.widget.LinearLayout.LayoutParams(
+                    android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+                    android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply { marginEnd = (6 * d).toInt() }
+            })
+        }
+    }
+
+    /** يحدّد ظهور حالة "فارغ" ورسالتها حسب العناصر الظاهرة فعلاً (بعد التصفية). */
+    private fun updateEmptyState() {
+        val empty = adapter.itemCount == 0
+        if (empty) {
+            txtEmptyMessage.setText(
+                when {
+                    statusMode != StatusMode.ALL -> R.string.filter_no_match
+                    searchQuery.isNotBlank() -> R.string.search_no_results
+                    else -> R.string.no_files_yet
+                }
+            )
+        }
+        txtEmpty.visibility = if (empty) View.VISIBLE else View.GONE
     }
 
     private fun showRecentDialog() {
@@ -368,8 +437,7 @@ class FilesActivity : RinBaseActivity() {
                     adapter.submit(emptyList(), found, searchMode = true)
                     adapter.setDirtyPaths(EditorDirtyState.dirtyPaths(project.name))
                     pruneSelection()
-                    txtEmptyMessage.setText(R.string.search_no_results)
-                    txtEmpty.visibility = if (found.isEmpty()) View.VISIBLE else View.GONE
+                    updateEmptyState()
                 }
             }.start()
         }
@@ -506,31 +574,72 @@ class FilesActivity : RinBaseActivity() {
         }
     }
 
-    private fun showZipToolsDialog() {
-        val options = arrayOf(
-            getString(R.string.zip_upload_extract),
-            getString(R.string.export_project_action),
-            getString(R.string.tool_storage),
-            getString(R.string.tool_dups),
-            getString(R.string.tool_copy_tree),
-            getString(if (FileFilter.showHidden(this)) R.string.tool_hidden_hide else R.string.tool_hidden_show)
-        )
-        AlertDialog.Builder(this)
-            .setTitle(R.string.project_tools_title)
-            .setItems(options) { _, which ->
-                when (which) {
-                    0 -> importZipLauncher.launch(
-                        arrayOf("application/zip", "application/x-zip-compressed", "*/*")
-                    )
-                    1 -> downloadProjectAsZip()
-                    2 -> StorageAnalyzer.show(this, project)
-                    3 -> DuplicateFinder.show(this, project, protectedPaths()) { refresh() }
-                    4 -> TreeExport.copy(this, project)
-                    5 -> { FileFilter.setShowHidden(this, !FileFilter.showHidden(this)); refresh() }
-                }
+    private val anyMime = arrayOf("*/*")
+
+    private fun showUploadHub() {
+        fun item(icon: Int, label: Int, action: () -> Unit) = IconMenu.Item(icon, getString(label), action)
+        IconMenu.show(this, getString(R.string.hub_upload_title), listOf(
+            item(R.drawable.fx_upload, R.string.up_single) { importFileLauncher.launch(anyMime) },
+            item(R.drawable.fx_upload_multi, R.string.up_multi) { importMultiLauncher.launch(anyMime) },
+            item(R.drawable.fx_upload_folder, R.string.up_folder) { importTreeLauncher.launch(null) },
+            item(R.drawable.fx_zip, R.string.zip_upload_extract) {
+                importZipLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "*/*"))
+            },
+            item(R.drawable.fx_zip_list, R.string.zip_browse_device) {
+                browseZipLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "*/*"))
             }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
+        ))
+    }
+
+    private fun showMediaHub() {
+        val on = Uploader.shrinkEnabled(this)
+        IconMenu.show(this, getString(R.string.hub_media_title), listOf(
+            IconMenu.Item(R.drawable.fx_media_upload, getString(R.string.media_single)) {
+                importMediaLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+            },
+            IconMenu.Item(R.drawable.fx_media_multi, getString(R.string.media_multi)) {
+                importMultiMediaLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+            },
+            IconMenu.Item(R.drawable.fx_audio, getString(R.string.media_audio)) {
+                importMultiLauncher.launch(arrayOf("audio/*"))
+            },
+            IconMenu.Item(R.drawable.fx_resize, getString(if (on) R.string.media_shrink_on else R.string.media_shrink_off)) {
+                Uploader.setShrink(this, !on)
+                Toast.makeText(this, if (!on) R.string.media_shrink_on else R.string.media_shrink_off, Toast.LENGTH_SHORT).show()
+            }
+        ))
+    }
+
+    private fun showZipToolsDialog() {
+        fun item(icon: Int, label: String, action: () -> Unit) = IconMenu.Item(icon, label, action)
+        IconMenu.show(this, getString(R.string.project_tools_title), listOf(
+            item(R.drawable.fx_zip, getString(R.string.zip_upload_extract)) {
+                importZipLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "*/*"))
+            },
+            item(R.drawable.fx_zip_list, getString(R.string.zip_browse_device)) {
+                browseZipLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "*/*"))
+            },
+            item(R.drawable.fx_share, getString(R.string.export_project_action)) { downloadProjectAsZip() },
+            item(R.drawable.fx_storage, getString(R.string.tool_storage)) { StorageAnalyzer.show(this, project) },
+            item(R.drawable.fx_dups, getString(R.string.tool_dups)) { DuplicateFinder.show(this, project, protectedPaths()) { refresh() } },
+            item(R.drawable.fx_tree, getString(R.string.tool_copy_tree)) { TreeExport.copy(this, project) },
+            item(R.drawable.fx_eye, getString(if (FileFilter.showHidden(this)) R.string.tool_hidden_hide else R.string.tool_hidden_show)) {
+                FileFilter.setShowHidden(this, !FileFilter.showHidden(this)); refresh()
+            },
+            item(R.drawable.fx_jump, getString(R.string.tool_jump)) {
+                FolderJump.show(this, project) { rel ->
+                    currentRelDir = rel
+                    val search = findViewById<EditText>(R.id.inputSearchFiles)
+                    if (search.text.isNotEmpty()) search.setText("") else refresh()
+                }
+            },
+            item(R.drawable.fx_findreplace, getString(R.string.tool_findreplace)) {
+                FindReplace.show(this, project, protectedPaths()) { refresh() }
+            },
+            item(R.drawable.fx_empty, getString(R.string.tool_empty)) {
+                EmptyFiles.show(this, project, protectedPaths()) { refresh() }
+            }
+        ))
     }
 
     private fun importZip(uri: Uri) {
@@ -565,8 +674,7 @@ class FilesActivity : RinBaseActivity() {
             adapter.submit(emptyList(), results, searchMode = true)
             pruneSelection()
             adapter.setDirtyPaths(EditorDirtyState.dirtyPaths(project.name))
-            txtEmptyMessage.setText(R.string.search_no_results)
-            txtEmpty.visibility = if (results.isEmpty()) View.VISIBLE else View.GONE
+            updateEmptyState()
             scanForErrors(results)
             if (contentSearch) scheduleContentSearch(searchQuery) else searchToken++
             return
@@ -582,7 +690,7 @@ class FilesActivity : RinBaseActivity() {
         adapter.submit(folders, files)
         pruneSelection()
         adapter.setDirtyPaths(EditorDirtyState.dirtyPaths(project.name))
-        txtEmpty.visibility = if (folders.isEmpty() && files.isEmpty()) View.VISIBLE else View.GONE
+        updateEmptyState()
         scanForErrors(files)
 
         findViewById<TextView>(R.id.txtToolbarSubtitle).text =
@@ -632,20 +740,8 @@ class FilesActivity : RinBaseActivity() {
         }.start()
     }
 
-    private fun showMoreFileActions(file: RinFile, anchor: View) {
-        val popup = PopupMenu(this, anchor)
-        popup.menu.add(0, 1, 0, R.string.action_duplicate)
-        popup.menu.add(0, 2, 1, R.string.action_move)
-        popup.menu.add(0, 3, 2, R.string.action_copy_path)
-        popup.setOnMenuItemClickListener { item ->
-            when (item.itemId) {
-                1 -> { duplicateFile(file); true }
-                2 -> { showMoveFileDialog(file); true }
-                3 -> { copyFilePath(file); true }
-                else -> false
-            }
-        }
-        popup.show()
+    private fun showRowMenu(entry: FsEntry, anchor: View) {
+        RowMenu.show(this, anchor, project, entry, currentRelDir, protectedPaths()) { refresh() }
     }
 
     private fun duplicateFile(file: RinFile) {
@@ -818,7 +914,7 @@ private class FilesAdapter(
     val onRenameFolder: (RinFolder) -> Unit,
     val onDeleteFile: (RinFile) -> Unit,
     val onDeleteFolder: (RinFolder) -> Unit,
-    val onMoreFile: (RinFile, View) -> Unit,
+    val onMore: (FsEntry, View) -> Unit,
     private val selection: SelectionModel,
     private val onSelectionChanged: () -> Unit
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
@@ -841,9 +937,37 @@ private class FilesAdapter(
     private var dirtyPaths: Set<String> = emptySet()
     private val dateFormat = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
 
+    private var allItems: List<FileRow> = emptyList()
+    private var statusMode: StatusMode = StatusMode.ALL
+    /** يُستدعى بعد تغيّر العناصر الظاهرة بسبب التصفية/نتيجة فحص الأخطاء (لتحديث حالة "فارغ"). */
+    var onVisibleChanged: (() -> Unit)? = null
+
+    private fun keyOf(r: FileRow): String = when (r) {
+        is FileRow.FolderRow -> r.folder.relPath
+        is FileRow.FileRowItem -> r.file.relPath
+    }
+
+    /** يبني القائمة الظاهرة من الكاملة حسب شريحة التصفية الحالية. */
+    private fun rebuild() {
+        items = when (statusMode) {
+            StatusMode.ALL -> allItems
+            StatusMode.ERRORS -> allItems.filter { it is FileRow.FileRowItem && it.file.relPath in errorPaths }
+            StatusMode.UNSAVED -> allItems.filter { it is FileRow.FileRowItem && it.file.relPath in dirtyPaths }
+            StatusMode.PINNED -> allItems.filter { keyOf(it) in pinned }
+        }
+    }
+
+    fun setStatusMode(mode: StatusMode) {
+        statusMode = mode
+        rebuild()
+        notifyDataSetChanged()
+        onVisibleChanged?.invoke()
+    }
+
     fun submit(folders: List<RinFolder>, files: List<RinFile>, searchMode: Boolean = false) {
         this.searchMode = searchMode
-        items = folders.map { FileRow.FolderRow(it) } + files.map { FileRow.FileRowItem(it) }
+        allItems = folders.map { FileRow.FolderRow(it) } + files.map { FileRow.FileRowItem(it) }
+        rebuild()
         notifyDataSetChanged()
     }
 
@@ -884,6 +1008,7 @@ private class FilesAdapter(
         when (holder) {
             is FolderVH -> {
                 holder.imgCheck.visibility = if (selected) View.VISIBLE else View.GONE
+                holder.btnMore.visibility = actionVis
                 holder.btnRename.visibility = actionVis
                 holder.btnDelete.visibility = actionVis
             }
@@ -936,12 +1061,16 @@ private class FilesAdapter(
 
     fun setErrorPaths(paths: Set<String>) {
         errorPaths = paths
+        if (statusMode == StatusMode.ERRORS) rebuild()
         notifyDataSetChanged()
+        if (statusMode == StatusMode.ERRORS) onVisibleChanged?.invoke()
     }
 
     fun setDirtyPaths(paths: Set<String>) {
         dirtyPaths = paths
+        if (statusMode == StatusMode.UNSAVED) rebuild()
         notifyDataSetChanged()
+        if (statusMode == StatusMode.UNSAVED) onVisibleChanged?.invoke()
     }
 
     class FolderVH(view: View) : RecyclerView.ViewHolder(view) {
@@ -949,6 +1078,7 @@ private class FilesAdapter(
         val imgCheck: View = view.findViewById(R.id.imgFolderSelectCheck)
         val txtName: TextView = view.findViewById(R.id.txtFolderNameItem)
         val txtMeta: TextView = view.findViewById(R.id.txtFolderMeta)
+        val btnMore: View = view.findViewById(R.id.btnMoreFolder)
         val btnRename: View = view.findViewById(R.id.btnRenameFolder)
         val btnDelete: View = view.findViewById(R.id.btnDeleteFolder)
     }
@@ -1002,6 +1132,7 @@ private class FilesAdapter(
                 holder.itemView.setOnClickListener {
                     if (selection.active) toggle(folder.relPath) else onOpenFolder(folder)
                 }
+                holder.btnMore.setOnClickListener { onMore(FsEntry.FolderEntry(folder), holder.btnMore) }
                 holder.btnRename.setOnClickListener { onRenameFolder(folder) }
                 holder.btnDelete.setOnClickListener { onDeleteFolder(folder) }
                 bindSelectionState(holder, position)
@@ -1029,7 +1160,7 @@ private class FilesAdapter(
                 holder.itemView.setOnClickListener {
                     if (selection.active) toggle(file.relPath) else onOpenFile(file)
                 }
-                holder.btnMore.setOnClickListener { onMoreFile(file, holder.btnMore) }
+                holder.btnMore.setOnClickListener { onMore(FsEntry.FileEntry(file), holder.btnMore) }
                 holder.btnRename.setOnClickListener { onRenameFile(file) }
                 holder.btnDelete.setOnClickListener { onDeleteFile(file) }
                 bindSelectionState(holder, position)
