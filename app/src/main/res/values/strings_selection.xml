@@ -22,10 +22,8 @@
     <string name="mkdir_multi_hint">اسم في كل سطر أو مفصولة بفاصلة</string>
     <string name="mkdir_created_toast">أُنشئ %1$d مجلد</string>
     <string name="sort_title">ترتيب الملفات</string>
-    <string name="sort_name">الاسم</string>
     <string name="sort_date">تاريخ التعديل</string>
     <string name="sort_size">الحجم</string>
-    <string name="sort_type">النوع</string>
     <string name="tool_copy">نسخ</string>
     <string name="tool_cut">قص</string>
     <string name="tool_paste">لصق هنا</string>
