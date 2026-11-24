@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- شريط JSON في المحرر (json/jsonc) -->
+    <string name="json_validate">Validar JSON</string>
+    <string name="json_format">Formatear</string>
+    <string name="json_minify">Minificar</string>
+    <string name="json_sort">Ordenar claves</string>
+    <string name="json_repair">Corregir automáticamente</string>
+    <string name="json_outline">Esquema de estructura</string>
+    <string name="json_copy_path">Copiar ruta JSON</string>
+    <string name="json_goto_path">Ir a ruta</string>
+    <string name="json_string_toggle">Texto ↔ cadena JSON</string>
+    <string name="json_insert_pair">Insertar clave/valor</string>
+    <string name="json_insert_object">Insertar objeto {}</string>
+    <string name="json_insert_array">Insertar matriz []</string>
+    <string name="json_more">Más</string>
+    <string name="json_key_placeholder">clave</string>
+    <string name="json_ok">Aceptar</string>
+    <string name="json_valid">JSON válido</string>
+    <string name="json_valid_detail">JSON válido ✓ — %1$d claves, profundidad %2$d</string>
+    <string name="json_invalid_title">JSON no válido</string>
+    <string name="json_error_at">%1$s
+Línea %2$d, columna %3$d</string>
+    <string name="json_goto_error">Ir al error</string>
+    <string name="json_formatted">Formateado</string>
+    <string name="json_minified">Minificado</string>
+    <string name="json_sorted">Claves ordenadas</string>
+    <string name="json_repaired">Corregido</string>
+    <string name="json_no_change">Sin cambios</string>
+    <string name="json_has_comments">El archivo contiene comentarios — usa «Corregir automáticamente» para quitarlos primero</string>
+    <string name="json_select_text">Selecciona texto o coloca el cursor dentro de una cadena JSON</string>
+    <string name="json_path_copied">Ruta copiada: %1$s</string>
+    <string name="json_goto_title">Ir a ruta</string>
+    <string name="json_goto_hint">$.users[0].name</string>
+    <string name="json_goto">Ir</string>
+    <string name="json_path_not_found">Ruta no encontrada</string>
+    <string name="json_outline_title">Esquema JSON</string>
+    <string name="json_outline_empty">Sin elementos</string>
+    <string name="json_stats_title">Estadísticas JSON</string>
+    <string name="json_stats_message">Objetos: %1$d
+Matrices: %2$d
+Claves: %3$d
+Cadenas: %4$d
+Números: %5$d
+Booleanos: %6$d
+Nulos: %7$d
+Profundidad máx.: %8$d
+Líneas: %9$d
+Tamaño: %10$d bytes (minificado %11$d)</string>
+    <string name="json_menu_stats">Estadísticas</string>
+    <string name="json_menu_sort_shallow">Ordenar solo el primer nivel</string>
+    <string name="json_menu_sort_desc">Orden descendente</string>
+    <string name="json_menu_indent">Tamaño de sangría</string>
+    <string name="json_indent_auto">Automática (del archivo)</string>
+    <string name="json_indent_2">2 espacios</string>
+    <string name="json_indent_4">4 espacios</string>
+    <string name="json_indent_tab">Tab</string>
+    <string name="json_err_empty">El documento está vacío</string>
+    <string name="json_err_unexpected_char">Carácter inesperado «%1$s»</string>
+    <string name="json_err_unexpected_end">El documento terminó antes de completar el valor</string>
+    <string name="json_err_expected_key">Se esperaba un nombre de clave entre comillas</string>
+    <string name="json_err_expected_colon">Se esperaba «:» tras la clave</string>
+    <string name="json_err_expected_comma">Se esperaba «,» o un cierre</string>
+    <string name="json_err_trailing_comma">Coma sobrante antes del cierre</string>
+    <string name="json_err_comment">Los comentarios no están permitidos en JSON</string>
+    <string name="json_err_single_quote">Comillas simples: usa comillas dobles</string>
+    <string name="json_err_extra_data">Texto sobrante tras el final del JSON</string>
+    <string name="json_err_control_char">Carácter de control dentro de una cadena (usa \\n)</string>
+    <string name="json_err_bad_escape">Secuencia de escape no válida</string>
+    <string name="json_err_unterminated">Cadena sin cerrar</string>
+    <string name="json_err_bad_number">Número no válido</string>
+    <string name="json_err_too_deep">Anidamiento demasiado profundo</string>
+</resources>
