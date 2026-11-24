@@ -726,7 +726,8 @@ class MainActivity : RinBaseActivity() {
             btnExplorerOpenProjects.isVisible = true
             return
         }
-        val nodes = ProjectExplorerTree.build(project, expandedExplorerFolders)
+        val nodes = ProjectExplorerTree.build(project, expandedExplorerFolders, this)
+        explorerFilesAdapter.setPinned(FilePins.get(this, project.name))
         explorerFilesAdapter.submit(nodes, currentProjectFile?.relPath, EditorDirtyState.dirtyPaths(project.name))
         explorerSelectionController.onTreeRebuilt()
         if (nodes.isEmpty()) {
