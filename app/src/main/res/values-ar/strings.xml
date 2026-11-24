@@ -29,7 +29,7 @@
 
     <!-- تصميم RinFlow الجديد: تدفق أفقي + شريط legend، بأسلوب لوحات CI/CD الاحترافية -->
     <string name="pipeline_flow_label">rinflow — pipeline.trace</string>
-    <string name="pipeline_terminal_legend">✓ نجاح   ✗ فشل</string>
+    <string name="pipeline_terminal_legend">نجاح فشل</string>
     <string name="pipeline_legend_success">نجح</string>
     <string name="pipeline_legend_failed">فشل</string>
     <string name="pipeline_legend_node">RinFlow node</string>
@@ -132,7 +132,7 @@
     <string name="explorer_current_file_badge">مفتوح</string>
     <string name="outline_line_range_format">الأسطر %1$d–%2$d</string>
     <string name="outline_child_count_format">%1$d فرعي</string>
-    <string name="tags_balanced_toast">وسوم الحاويات متوازنة ✓</string>
+    <string name="tags_balanced_toast">وسوم الحاويات متوازنة</string>
     <string name="tags_unbalanced_toast">وسم حاوية غير متوازن قرب السطر %1$d</string>
     <string name="new_file_name">untitled.rin</string>
     <string name="new_file_toast">New file</string>
@@ -183,7 +183,7 @@
     <string name="go_to_line_action">Go</string>
     <string name="go_to_line_cancel">Cancel</string>
     <string name="go_to_line_invalid_toast">Enter a valid line number</string>
-    <string name="brackets_balanced_toast">Brackets are balanced ✓</string>
+    <string name="brackets_balanced_toast">Brackets are balanced</string>
     <string name="brackets_unbalanced_toast">Unbalanced brackets near line %1$d</string>
     <string name="line_deleted_toast">Line deleted</string>
 
@@ -225,7 +225,7 @@
     <string name="download_button_fmt">%1$s · %2$s</string>
     <string name="download_dialog_title">جارٍ التنزيل إلى الجهاز…</string>
     <string name="download_status_copying">جارٍ نسخ البيانات فعلياً…</string>
-    <string name="download_status_done">تم التنزيل بنجاح ✓</string>
+    <string name="download_status_done">تم التنزيل بنجاح</string>
     <string name="download_done_toast">تم حفظ %1$s في مجلد Downloads</string>
     <string name="download_error_toast">تعذّر التنزيل: %1$s</string>
     <string name="download_no_app_toast">لا يوجد تطبيق مناسب لفتح هذا النوع من الملفات</string>
@@ -272,7 +272,7 @@ print \"Hello, \" + name + \"!\";
     <string name="apk_export_section_identity">الهوية</string>
     <string name="apk_export_section_icon">الأيقونة</string>
     <string name="apk_export_field_icon_hint">أيقونة مخصصة لتطبيقك على الشاشة الرئيسية (اختياري)</string>
-    <string name="apk_export_field_icon_from_sticker">🏷️ استُخدمت أيقونة من حاوية sticker في مشروعك تلقائياً — اضغط \"اختيار\" لاستبدالها</string>
+    <string name="apk_export_field_icon_from_sticker">استُخدمت أيقونة من حاوية sticker في مشروعك تلقائياً — اضغط \"اختيار\" لاستبدالها</string>
     <string name="apk_export_action_pick_icon">اختيار</string>
     <string name="apk_export_section_splash">شاشة البداية</string>
     <string name="apk_export_field_splash_hint">نص يظهر أسفل الشعار عند تشغيل التطبيق (اختياري)</string>
