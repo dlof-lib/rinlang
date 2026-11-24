@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- أيقونة مرسومة من الصفر لشاشة الملفات (تُلوَّن عند الاستخدام) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z M16 7.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z M5 18l4.5-6 3 4 2-2.5L19 18z" />
+</vector>
