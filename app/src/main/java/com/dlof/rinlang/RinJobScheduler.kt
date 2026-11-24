@@ -227,10 +227,13 @@ object RinJobScheduler {
             // السؤال يُكتب في سجل الـ terminal أولاً (المحرك أفرغ كل مخرجاته قبل أن يسأل)، ثم يُعرض
             // الإدخال في سطر الـ terminal عبر RinInputBridge، وأخيراً يُسجَّل الجواب (أو ^C) بعد السؤال.
             RinTerminal.onPrompt(prompt)
+            // التطبيق في الخلفية؟ نُنبّه المستخدم أن البرنامج ينتظر إجابته.
+            runCatching { com.dlof.rinlang.notify.RinNotifier.jobNeedsInput(job.number, prompt) }
             val answer: String? = try {
                 RinInputBridge.request(prompt)
             } finally {
                 job.waitingForInput = false
+                runCatching { com.dlof.rinlang.notify.RinNotifier.clearJobInput(job.number) }
             }
             RinTerminal.onAnswer(answer)
             answer
@@ -328,6 +331,11 @@ object RinJobScheduler {
 
     private fun notifyChanged() {
         val snap = snapshot()
+        // عدد البرامج المنتظرة/الجارية يحدّد بقاء خدمة الخلفية (تبدأ من الواجهة، وتنتهي عند الصفر).
+        com.dlof.rinlang.notify.RinNotifier.appContextOrNull()?.let { ctx ->
+            val pending = snap.count { it.status == JobStatus.QUEUED || it.status == JobStatus.RUNNING }
+            runCatching { com.dlof.rinlang.notify.RinKeepAlive.setJobs(ctx, pending) }
+        }
         mainHandler.post { onJobsChanged?.invoke(snap) }
     }
 
