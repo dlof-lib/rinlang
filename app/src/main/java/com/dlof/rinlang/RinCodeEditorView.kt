@@ -1144,6 +1144,13 @@ class RinCodeEditorView @JvmOverloads constructor(
             // Enter في Markdown عند نهاية عنصر قائمة/اقتباس: يتابع القائمة (أو يُنهيها إن كان العنصر فارغاً).
             return
         }
+        if (isJson && before == 0 && insertedPiece == "\n" && start == cursorFlatBefore &&
+            !engine.getSelection().hasSelection &&
+            applySmartEdit(JsonEdit.continueComma(oldText, start))
+        ) {
+            // Enter في JSON عند نهاية قيمة يليها عنصر شقيق: تُضاف الفاصلة الناقصة تلقائياً.
+            return
+        }
         if (before == 0 && count == 1 && start == cursorFlatBefore) {
             // كتابة حرف واحد عند المؤشر مباشرة: مرّرها عبر المسار "الذكي" (إغلاق أقواس/مسافة تلقائية)
             engine.insertText(insertedPiece, smart = AppSettings.isAutoCloseBrackets(context) || AppSettings.isAutoIndent(context))
@@ -1942,6 +1949,25 @@ class RinCodeEditorView @JvmOverloads constructor(
     /** true عند تحرير ملف Markdown (md/markdown/mdown). */
     val isMarkdown: Boolean get() = fenceLang == "md" || fenceLang == "markdown" || fenceLang == "mdown"
 
+    /** true عند تحرير ملف JSON (json/jsonc/geojson/webmanifest/har). */
+    val isJson: Boolean get() = JsonEdit.isJsonExtension(fenceLang)
+
+    /** true إن كان الملف JSONC (يقبل التعليقات). */
+    val jsonAllowsComments: Boolean get() = JsonEdit.allowsComments(fenceLang)
+
+    /** التحديد الحالي كإزاحتين مسطّحتين (start, end)؛ متساويتان بلا تحديد. */
+    fun selectionOffsets(): Pair<Int, Int> = selectionFlat(engine.getText())
+
+    /** المؤشر عند الإزاحة المسطّحة [offset] ويعيد y بالبكسل لأجل التمرير. */
+    fun jumpToOffset(offset: Int): Int {
+        val t = engine.getText()
+        val (l, c) = flatOffsetToPos(t, offset.coerceIn(0, t.length))
+        requestFocus()
+        engine.setCursor(l, c, false)
+        afterEngineMutation()
+        return yOfLine(l)
+    }
+
     /**
      * يطبّق عملية تحرير Markdown ([MarkdownEdit]) على التحديد/المؤشر الحاليين باستبدال واحد قابل للتراجع؛
      * false إن لم يكن هناك ما يتغيّر.
@@ -2528,6 +2554,11 @@ class RinCodeEditorView @JvmOverloads constructor(
                     val t = engine.getText()
                     val (pos, _) = selectionFlat(t)
                     if (applySmartEdit(MarkdownEdit.continueList(t, pos))) return true
+                }
+                if (isJson && !engine.getSelection().hasSelection) {
+                    val t = engine.getText()
+                    val (pos, _) = selectionFlat(t)
+                    if (applySmartEdit(JsonEdit.continueComma(t, pos))) return true
                 }
                 engine.insertText("\n", smart = AppSettings.isAutoIndent(context))
                 afterEngineMutation(); return true
