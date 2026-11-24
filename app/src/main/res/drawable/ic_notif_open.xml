@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- زر: فتح — أيقونة إشعار أحادية اللون (شريط الحالة/الأزرار تتطلب قناة ألفا فقط). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M14,3h7v7h-2V6.4l-8.3,8.3 -1.4,-1.4L17.6,5H14z M5,5h6v2H5v10h10v-6h2v6a2,2 0 0,1 -2,2H5a2,2 0 0,1 -2,-2V7a2,2 0 0,1 2,-2z" />
+</vector>
