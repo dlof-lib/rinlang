@@ -237,7 +237,7 @@ class DragSelectTouchListener(
 
     private fun updateRange() {
         if (!dragging) return
-        val child = rv.findChildViewUnder(rv.width / 2f, lastY.coerceIn(0f, (rv.height - 1).toFloat()))
+        val child = rv.findChildViewUnder(lastX.coerceIn(0f, (rv.width - 1).toFloat()), lastY.coerceIn(0f, (rv.height - 1).toFloat()))
         val pos = child?.let { rv.getChildAdapterPosition(it) } ?: RecyclerView.NO_POSITION
         if (pos == RecyclerView.NO_POSITION || pos == lastPos) return
         lastPos = pos
@@ -412,7 +412,8 @@ object FileBatchOps {
     // ---- حذف ----
 
     fun confirmDelete(
-        ctx: Context, entries: List<FsEntry>, protectedPaths: Set<String>, onDone: () -> Unit
+        ctx: Context, entries: List<FsEntry>, protectedPaths: Set<String>, projectName: String? = null,
+        onDone: () -> Unit
     ) {
         val list = normalize(entries)
         if (list.isEmpty()) return
@@ -421,16 +422,30 @@ object FileBatchOps {
             .setMessage(ctx.getString(R.string.selection_delete_confirm, list.size))
             .setPositiveButton(R.string.delete) { _, _ ->
                 val t = Tally()
+                val toTrash = mutableListOf<File>()
                 for (e in list) {
                     if (isProtected(e, protectedPaths)) { t.skipped++; continue }
-                    val ok = when (e) {
-                        is FsEntry.FileEntry -> ProjectManager.deleteFile(e.file)
-                        is FsEntry.FolderEntry -> ProjectManager.deleteFolder(e.folder)
+                    toTrash += when (e) {
+                        is FsEntry.FileEntry -> e.file.file
+                        is FsEntry.FolderEntry -> e.folder.dir
                     }
-                    if (ok) t.ok++ else t.failed++
                 }
+                // الحذف إلى سلة مؤقتة يتيح "تراجع" فورياً بدل حذف نهائي.
+                val batch = if (toTrash.isEmpty()) null else FileTrash.trash(ctx, projectName ?: "project", toTrash)
+                t.ok = batch?.moves?.size ?: 0
+                t.failed = toTrash.size - t.ok
                 report(ctx, t)
                 onDone()
+                val host = (ctx as? android.app.Activity)?.findViewById<View>(android.R.id.content)
+                if (batch != null && host != null) {
+                    com.google.android.material.snackbar.Snackbar
+                        .make(host, ctx.getString(R.string.selection_done_toast, t.ok), com.google.android.material.snackbar.Snackbar.LENGTH_LONG)
+                        .setAction(R.string.undo_action) {
+                            FileTrash.restore(batch)
+                            onDone()
+                        }
+                        .show()
+                }
             }
             .setNegativeButton(R.string.cancel, null)
             .show()
@@ -501,6 +516,7 @@ object FileBatchOps {
                 val destDir = ProjectManager.resolveDir(project, destRel)
                 destDir.mkdirs()
                 val t = Tally()
+                val moved = mutableListOf<Pair<File, File>>() // (الأصل, الوجهة) للتراجع
                 for (e in list) {
                     if (isProtected(e, protectedPaths)) { t.skipped++; continue }
                     val src: File = when (e) {
@@ -511,12 +527,23 @@ object FileBatchOps {
                     when {
                         target.canonicalPath == src.canonicalPath -> t.skipped++
                         target.exists() -> t.skipped++
-                        src.renameTo(target) -> t.ok++
+                        src.renameTo(target) -> { t.ok++; moved += src to target }
                         else -> t.failed++
                     }
                 }
                 report(ctx, t)
                 onDone()
+                val host = (ctx as? android.app.Activity)?.findViewById<View>(android.R.id.content)
+                if (moved.isNotEmpty() && host != null) {
+                    com.google.android.material.snackbar.Snackbar
+                        .make(host, ctx.getString(R.string.selection_done_toast, moved.size),
+                            com.google.android.material.snackbar.Snackbar.LENGTH_LONG)
+                        .setAction(R.string.undo_action) {
+                            moved.forEach { (orig, now) -> if (!orig.exists() && now.exists()) now.renameTo(orig) }
+                            onDone()
+                        }
+                        .show()
+                }
             }
             .setNegativeButton(R.string.cancel, null)
             .show()
