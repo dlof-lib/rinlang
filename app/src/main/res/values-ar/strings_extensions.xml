@@ -36,7 +36,7 @@
     <string name="ext_sort_rating">الأعلى تقييماً</string>
 
     <!-- شارة "مميزة" تُعرَض على الإضافات الأكثر تنزيلاً أو الأعلى تقييماً -->
-    <string name="ext_badge_featured">⭐ مميزة</string>
+    <string name="ext_badge_featured">مميزة</string>
 
     <!-- زر نشر إضافة جديدة، متاح لأي مستخدم مسجَّل دخوله -->
     <string name="ext_entry_publish_button">انشر إضافتك</string>
@@ -63,8 +63,8 @@
     <string name="ext_install_progress_updating">جارٍ تحديث %1$s…</string>
 
     <!-- رسائل النجاح/الفشل -->
-    <string name="ext_installed_toast">تم تثبيت %1$s بنجاح ✓</string>
-    <string name="ext_updated_toast">تم تحديث %1$s بنجاح ✓</string>
+    <string name="ext_installed_toast">تم تثبيت %1$s بنجاح</string>
+    <string name="ext_updated_toast">تم تحديث %1$s بنجاح</string>
     <string name="ext_install_failed_toast">فشلت العملية: %1$s</string>
     <string name="ext_enabled_toast">تم تمكين %1$s</string>
     <string name="ext_disabled_toast">تم تعطيل %1$s</string>
@@ -78,9 +78,9 @@
     <string name="ext_security_developer_label">المطوّر</string>
     <string name="ext_security_signature_label">التوقيع الرقمي (بصمة سلامة المحتوى)</string>
     <string name="ext_security_signature_missing">لا يوجد توقيع مُعلَن لهذه الإضافة</string>
-    <string name="ext_security_signature_missing_state">⚠ غير موقَّعة</string>
-    <string name="ext_security_signature_valid">✓ التوقيع مطابق لمحتوى الإضافة</string>
-    <string name="ext_security_signature_invalid">✗ التوقيع غير مطابق — قد يكون المحتوى تالفاً</string>
+    <string name="ext_security_signature_missing_state">غير موقَّعة</string>
+    <string name="ext_security_signature_valid">التوقيع مطابق لمحتوى الإضافة</string>
+    <string name="ext_security_signature_invalid">التوقيع غير مطابق — قد يكون المحتوى تالفاً</string>
     <string name="ext_security_signature_invalid_toast">تعذّر المتابعة: التوقيع الرقمي لا يطابق محتوى الإضافة</string>
     <string name="ext_security_permissions_label">الأذونات المطلوبة</string>
     <string name="ext_security_no_permissions">لا تطلب هذه الإضافة أي أذونات خاصة.</string>
@@ -106,23 +106,23 @@
     <string name="ext_publish_screenshots_selected_format">%1$d لقطة مُختارة</string>
     <string name="ext_publish_action_submit">نشر الإضافة</string>
     <string name="ext_publish_content_required">اختر ملف واحداً على الأقل لمحتوى الإضافة</string>
-    <string name="ext_publish_success">تم نشر إضافتك في Rin Extensions Marketplace ✓</string>
+    <string name="ext_publish_success">تم نشر إضافتك في Rin Extensions Marketplace</string>
     <string name="ext_publish_failed">فشل نشر الإضافة</string>
 
     <!-- تصدير/استيراد بصيغة .rinex الخاصة بـ Rin Extensions (ملف مستقل بلا حاجة لاتصال إنترنت) -->
     <string name="ext_action_export_rinex">تصدير كملف .rinex</string>
-    <string name="ext_export_rinex_success">تم حفظ %1$s كملف .rinex في مجلد Downloads ✓</string>
+    <string name="ext_export_rinex_success">تم حفظ %1$s كملف .rinex في مجلد Downloads</string>
     <string name="ext_export_rinex_failed">تعذّر التصدير: %1$s</string>
     <string name="ext_action_import_rinex">استيراد ملف .rinex</string>
     <string name="ext_import_rinex_invalid">هذا الملف ليس بصيغة Rin Extensions (.rinex) صالحة</string>
-    <string name="ext_import_rinex_success">تم استيراد وتثبيت %1$s من الملف المحلي ✓</string>
+    <string name="ext_import_rinex_success">تم استيراد وتثبيت %1$s من الملف المحلي</string>
     <string name="ext_import_rinex_failed">تعذّر استيراد الملف: %1$s</string>
 
     <!-- حذف إضافة نهائياً من المتجر — متاح فقط لمطوّرها صاحب الإضافة -->
     <string name="ext_action_delete">حذف الإضافة</string>
     <string name="ext_delete_confirm_title">حذف الإضافة نهائياً</string>
     <string name="ext_delete_confirm_message">هل تريد حذف \"%1$s\" نهائياً من Rin Extensions Marketplace؟ لن تظهر بعدها لأي مستخدم جديد، ولا يمكن التراجع عن هذا الإجراء.\nملاحظة: من ثبّتها من قبل ستبقى نسخته المثبَّتة تعمل على جهازه.</string>
-    <string name="ext_deleted_toast">تم حذف الإضافة نهائياً من المتجر ✓</string>
+    <string name="ext_deleted_toast">تم حذف الإضافة نهائياً من المتجر</string>
     <string name="ext_delete_failed">تعذّر حذف الإضافة، حاول مرة أخرى</string>
     <string name="ext_delete_requires_connection">يلزم اتصال بالإنترنت لحذف الإضافة من المتجر</string>
 
