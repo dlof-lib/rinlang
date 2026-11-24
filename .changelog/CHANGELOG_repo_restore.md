@@ -5,3 +5,13 @@
 - ثلاث طرق دمج مع نسخة احتياطية في `.rin_backup/`، وحفظ المصدر في `.rin_repo.json` لـ «تحديث من المصدر».
 - ProjectManager: `newImportTempDir`, `installImportedTree`. شاشة المشاريع: «استيراد» صار قائمة (ملف / مستودع).
 - ملاحظة: كُتب الكود دون مترجم Kotlin ولا Gradle في بيئة التطوير؛ لم يُبنَ ولم تُشغَّل الاختبارات (RepoCoreTest). شغّل `./gradlew testDebugUnitTest` أولاً.
+
+## v2
+- معاينة قبل التنفيذ عند الدمج داخل مشروع (RepoMerge.merge(..., dryRun = true)) — لا كتابة قبل التأكيد.
+- زر «الأخيرة»: آخر 8 روابط مستودعات.
+
+## v3
+- تسجيل آخر commit في `.rin_repo.json` والتحقق من التحديث قبل «تحديث من المصدر» (RepoLinks.commitApi، RepoNet.latestCommit).
+
+## v4
+- دعم أرشيفات tar.gz/tgz المباشرة (RepoArchive.extractTarGz/extractAuto) مع اكتشاف النوع من أول بايتين، واختبارات.
