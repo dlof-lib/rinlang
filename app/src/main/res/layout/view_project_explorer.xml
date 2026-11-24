@@ -110,6 +110,97 @@
             android:background="@drawable/bg_menubar_btn" />
     </LinearLayout>
 
+    <!-- شريط إجراءات التحديد المتعدد داخل الدرج (ExplorerSelectionController): يظهر فقط أثناء
+         وضع التحديد. ضغطة مستمرة على صف = بدء التحديد، ثم سحب ↑↓ = تحديد نطاق. -->
+    <LinearLayout
+        android:id="@+id/layoutExplorerSelectionBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
+        android:layout_marginEnd="8dp"
+        android:layout_marginBottom="6dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="@drawable/bg_explorer_row_checked"
+        android:paddingStart="2dp"
+        android:paddingEnd="2dp"
+        android:paddingTop="2dp"
+        android:paddingBottom="2dp"
+        android:visibility="gone">
+
+        <ImageButton
+            android:id="@+id/btnExplorerSelClose"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:padding="8dp"
+            android:src="@drawable/ic_close"
+            android:tint="@color/rin_on_toolbar"
+            android:background="@drawable/bg_icon_btn"
+            android:contentDescription="@string/selection_clear" />
+
+        <TextView
+            android:id="@+id/txtExplorerSelCount"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="2dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="@color/rin_on_toolbar"
+            android:textSize="12.5sp"
+            android:textStyle="bold" />
+
+        <ImageButton
+            android:id="@+id/btnExplorerSelAll"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:padding="8dp"
+            android:src="@drawable/ic_select_all"
+            android:tint="@color/rin_on_toolbar"
+            android:background="@drawable/bg_icon_btn"
+            android:contentDescription="@string/selection_select_all" />
+
+        <ImageButton
+            android:id="@+id/btnExplorerSelDuplicate"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:padding="8dp"
+            android:src="@drawable/rs_ic_copy"
+            android:tint="@color/rin_on_toolbar"
+            android:background="@drawable/bg_icon_btn"
+            android:contentDescription="@string/action_duplicate" />
+
+        <ImageButton
+            android:id="@+id/btnExplorerSelMove"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:padding="8dp"
+            android:src="@drawable/rs_ic_folder"
+            android:tint="@color/rin_on_toolbar"
+            android:background="@drawable/bg_icon_btn"
+            android:contentDescription="@string/action_move" />
+
+        <ImageButton
+            android:id="@+id/btnExplorerSelCopyPath"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:padding="8dp"
+            android:src="@drawable/rs_ic_link"
+            android:tint="@color/rin_on_toolbar"
+            android:background="@drawable/bg_icon_btn"
+            android:contentDescription="@string/action_copy_path" />
+
+        <ImageButton
+            android:id="@+id/btnExplorerSelDelete"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:padding="8dp"
+            android:src="@drawable/ic_trash_red"
+            android:background="@drawable/bg_icon_btn"
+            android:contentDescription="@string/delete" />
+
+    </LinearLayout>
+
     <View
         android:layout_width="match_parent"
         android:layout_height="1dp"
