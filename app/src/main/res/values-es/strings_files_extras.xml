@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ميزات شاشة الملفات الإضافية: FilesExtras.kt -->
+<resources>
+    <string name="status_all">Todo</string>
+    <string name="status_errors">Con errores</string>
+    <string name="status_unsaved">Sin guardar</string>
+    <string name="status_pinned">Fijados</string>
+    <string name="filter_no_match">Ningún elemento coincide con este filtro</string>
+    <string name="mkfile_clipboard">Desde el portapapeles</string>
+    <string name="clipboard_empty">El portapapeles está vacío (no hay texto para crear un archivo)</string>
+    <string name="clipboard_chars_format">Se creará un archivo con el texto del portapapeles (%1$d caracteres)</string>
+    <string name="tool_compare">Comparar los dos archivos</string>
+    <string name="compare_title">%1$s ⇄ %2$s</string>
+    <string name="compare_identical">Los dos archivos son idénticos</string>
+    <string name="compare_too_large">Los archivos son demasiado grandes para comparar</string>
+    <string name="compare_summary">+%1$d añadidas · −%2$d eliminadas</string>
+    <string name="row_copy_name">Copiar nombre</string>
+    <string name="name_copied_toast">Nombre copiado</string>
+    <string name="row_pin">Fijar</string>
+    <string name="row_unpin">Desmarcar</string>
+    <string name="tool_jump">Ir a carpeta</string>
+    <string name="tool_findreplace">Buscar y reemplazar en el proyecto</string>
+    <string name="fr_find">Texto a buscar</string>
+    <string name="fr_with">Reemplazar por (vacío = borrar)</string>
+    <string name="fr_case">Distinguir mayúsculas</string>
+    <string name="fr_preview">Vista previa</string>
+    <string name="fr_none">Sin coincidencias</string>
+    <string name="fr_confirm">Se reemplazarán %1$d coincidencias en %2$d archivos. No se puede deshacer.</string>
+    <string name="fr_apply">Reemplazar</string>
+    <string name="empty_none">No hay archivos vacíos</string>
+    <string name="empty_title">Archivos vacíos (%1$d)</string>
+    <string name="empty_delete">Eliminar todos</string>
+    <string name="tool_empty">Archivos vacíos</string>
+    <string name="row_copy_content">Copiar contenido</string>
+    <string name="row_stats">Estadísticas del texto</string>
+    <string name="content_copied_toast">Contenido copiado</string>
+    <string name="stats_body">Líneas: %1$d (vacías: %2$d)\nPalabras: %3$d\nCaracteres: %4$d\nTamaño: %5$d bytes</string>
+</resources>
