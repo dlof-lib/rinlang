@@ -223,6 +223,10 @@ class SettingsActivity : RinBaseActivity() {
             },
             Row.Link(R.drawable.rs_ic_package, R.string.settings_packs_title, R.string.settings_packs_hint) {
                 startActivity(Intent(this, ContentPacksActivity::class.java))
+            },
+            // مركز الأذونات: حالة الإشعارات وتثبيت التطبيقات وشرح سبب عدم الحاجة لإذن التخزين
+            Row.Link(R.drawable.rs_ic_shield_check, R.string.settings_permissions_title, R.string.settings_permissions_hint) {
+                com.dlof.rinlang.permissions.RinPermissions.showCenter(this)
             }
         )
     }
