@@ -2,7 +2,6 @@ package com.dlof.rinlang
 
 import android.app.Activity
 import android.app.AlertDialog
-import android.app.PendingIntent
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
@@ -18,10 +17,7 @@ import android.webkit.MimeTypeMap
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.Toast
-import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
-import androidx.core.content.ContextCompat
-import com.dlof.rinlang.permissions.RinNotifications
+import com.dlof.rinlang.notify.RinNotifier
 import com.dlof.rinlang.permissions.RinPermissions
 import java.io.BufferedOutputStream
 import java.io.File
@@ -193,8 +189,13 @@ object DownloadExporter {
         writer: (OutputStream, (Long) -> Unit) -> Unit
     ) {
         val main = Handler(Looper.getMainLooper())
+        val appCtx = activity.applicationContext
+        val cancelled = AtomicBoolean(false)
         val progress = RinDownloadProgressDialog(activity, displayName, title, status)
+        progress.setCancelAction(activity.getString(R.string.cancel)) { cancelled.set(true) }
         progress.show()
+        // إشعار تقدّم حقيقي (يظهر للعمليات الطويلة فقط) بزر إلغاء؛ يتشارك علم الإلغاء مع زر الحوار.
+        val ticket = RinNotifier.beginDownload(appCtx, displayName, status) { cancelled.set(true) }
         val resolver = activity.contentResolver
 
         Thread {
@@ -211,6 +212,8 @@ object DownloadExporter {
 
                 var lastPost = 0L
                 val report: (Long) -> Unit = { copied ->
+                    if (cancelled.get()) throw ExportCancelled()
+                    ticket.update(copied, total)
                     val now = System.currentTimeMillis()
                     if (now - lastPost >= PROGRESS_INTERVAL_MS) {
                         lastPost = now
@@ -224,17 +227,23 @@ object DownloadExporter {
 
                 resolver.update(uri, ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }, null, null)
                 val finalName = queryName(activity, uri) ?: displayName
+                val finalSize = querySize(activity, uri)
                 val finalUri: Uri = uri
                 main.post {
                     progress.updateProgress(total, total)
                     progress.finishSuccess(activity.getString(R.string.download_status_done))
                     main.postDelayed({
                         progress.dismiss()
-                        onSaved(activity, finalUri, finalName, mime)
+                        onSaved(activity, finalUri, finalName, mime, finalSize, ticket)
                     }, 450)
                 }
+            } catch (c: ExportCancelled) {
+                uri?.let { runCatching { resolver.delete(it, null, null) } }
+                ticket.cancel()
+                main.post { progress.dismiss() }
             } catch (t: Throwable) {
                 uri?.let { runCatching { resolver.delete(it, null, null) } }
+                RinNotifier.downloadFailed(appCtx, ticket, displayName, t.message)
                 main.post {
                     progress.finishError(activity.getString(R.string.download_error_toast, t.message ?: "?"))
                     main.postDelayed({ progress.dismiss() }, 1600)
@@ -244,12 +253,11 @@ object DownloadExporter {
     }
 
     /** بعد النجاح: حوار فتح/مشاركة + إشعار اكتمال، ثم طلب إذن الإشعارات مرة واحدة إن لم يُمنح. */
-    private fun onSaved(activity: Activity, uri: Uri, name: String, mime: String) {
-        if (activity.isFinishing || activity.isDestroyed) {
-            notifyDone(activity.applicationContext, uri, name, mime)
-            return
-        }
-        notifyDone(activity, uri, name, mime)
+    private fun onSaved(
+        activity: Activity, uri: Uri, name: String, mime: String, size: Long, ticket: RinNotifier.DownloadTicket
+    ) {
+        notifyDone(activity.applicationContext, ticket, uri, name, mime, size)
+        if (activity.isFinishing || activity.isDestroyed) return
         AlertDialog.Builder(activity)
             .setTitle(R.string.dl_saved_title)
             .setMessage(activity.getString(R.string.dl_saved_message, name, "${Environment.DIRECTORY_DOWNLOADS}/$SUB_DIR"))
@@ -287,27 +295,9 @@ object DownloadExporter {
         }
     }
 
-    private fun notifyDone(ctx: Context, uri: Uri, name: String, mime: String) {
-        runCatching {
-            if (!RinPermissions.notificationsGranted(ctx)) return
-            val open = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(uri, mime)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            val pi = PendingIntent.getActivity(
-                ctx, uri.hashCode(), open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-            )
-            val n = NotificationCompat.Builder(ctx, RinNotifications.CHANNEL_DOWNLOADS)
-                .setSmallIcon(R.drawable.rs_ic_download)
-                .setContentTitle(ctx.getString(R.string.dl_notif_title))
-                .setContentText(ctx.getString(R.string.dl_notif_text, name))
-                .setContentIntent(pi)
-                .setAutoCancel(true)
-                .setColor(ContextCompat.getColor(ctx, R.color.rin_accent))
-                .build()
-            NotificationManagerCompat.from(ctx).notify(uri.hashCode(), n)
-        }
-    }
+    private fun notifyDone(
+        ctx: Context, ticket: RinNotifier.DownloadTicket, uri: Uri, name: String, mime: String, size: Long
+    ) = RinNotifier.downloadDone(ctx, ticket, uri, name, mime, size, SUB_DIR)
 
     // ------------------------------------------------------------------ أدوات مساعدة
 
@@ -342,6 +332,14 @@ object DownloadExporter {
             i++
         }
     }
+
+    private class ExportCancelled : RuntimeException()
+
+    private fun querySize(ctx: Context, uri: Uri): Long = runCatching {
+        ctx.contentResolver.query(uri, arrayOf(MediaStore.Downloads.SIZE), null, null, null)?.use { c ->
+            if (c.moveToFirst()) c.getLong(0) else 0L
+        } ?: 0L
+    }.getOrDefault(0L)
 
     private fun queryName(ctx: Context, uri: Uri): String? = runCatching {
         ctx.contentResolver.query(uri, arrayOf(MediaStore.Downloads.DISPLAY_NAME), null, null, null)?.use { c ->
@@ -425,6 +423,10 @@ object UrlDownloader {
         )
         progress.setCancelAction(activity.getString(R.string.cancel)) { cancelled.set(true) }
         progress.show()
+        val appCtx = activity.applicationContext
+        val ticket = RinNotifier.beginDownload(appCtx, name, activity.getString(R.string.dl_url_progress_status)) {
+            cancelled.set(true)
+        }
 
         Thread {
             var part: File? = null
@@ -462,12 +464,14 @@ object UrlDownloader {
                                 val c = copied
                                 main.post { progress.updateProgress(c, if (total > 0) total else c) }
                             }
+                            ticket.update(copied, total)
                         }
                     }
                 }
                 conn.disconnect()
                 if (!part.renameTo(target)) throw IOException(activity.getString(R.string.dl_create_failed))
                 val finalName = target.name
+                RinNotifier.fileSavedToProject(appCtx, ticket, finalName)
                 main.post {
                     progress.updateProgress(copied, copied)
                     progress.finishSuccess(activity.getString(R.string.download_status_done))
@@ -476,9 +480,11 @@ object UrlDownloader {
                 }
             } catch (c: CancelledException) {
                 part?.delete()
+                ticket.cancel()
                 main.post { progress.dismiss() }
             } catch (t: Throwable) {
                 part?.delete()
+                RinNotifier.downloadFailed(appCtx, ticket, name, t.message)
                 main.post {
                     progress.finishError(activity.getString(R.string.download_error_toast, t.message ?: "?"))
                     main.postDelayed({ progress.dismiss() }, 1600)
