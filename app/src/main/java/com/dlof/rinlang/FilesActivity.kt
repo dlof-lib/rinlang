@@ -274,6 +274,10 @@ class FilesActivity : RinBaseActivity() {
         // ضغطة مستمرة على "تحديد الكل" = تحديد بنمط (*.rin ...).
         findViewById<View>(R.id.btnSelectionAll).setOnLongClickListener { selectByPattern(); true }
         findViewById<View>(R.id.btnSelectionDelete).setOnClickListener { deleteEntries(selectedEntries()) }
+        // تنزيل المحدّد إلى الجهاز: عنصر ملف واحد = ملف خام، وإلا ZIP.
+        findViewById<View>(R.id.btnSelectionDownload).setOnClickListener {
+            DownloadExporter.saveEntries(this, project, selectedEntries())
+        }
     }
 
     // ---- ميزات احترافية: مسار تفاعلي، الأخيرة، نطاق البحث، ملخص المجلد ----
@@ -587,6 +591,9 @@ class FilesActivity : RinBaseActivity() {
             },
             item(R.drawable.fx_zip_list, R.string.zip_browse_device) {
                 browseZipLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "*/*"))
+            },
+            item(R.drawable.rs_ic_download, R.string.dl_from_url) {
+                UrlDownloader.show(this, project, currentRelDir) { refresh() }
             }
         ))
     }
@@ -620,6 +627,11 @@ class FilesActivity : RinBaseActivity() {
                 browseZipLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "*/*"))
             },
             item(R.drawable.fx_share, getString(R.string.export_project_action)) { downloadProjectAsZip() },
+            item(R.drawable.rs_ic_download, getString(R.string.dl_project_zip)) { DownloadExporter.saveProject(this, project) },
+            item(R.drawable.rs_ic_download, getString(R.string.dl_folder_zip)) { DownloadExporter.saveFolder(this, project, currentRelDir) },
+            item(R.drawable.rs_ic_download, getString(R.string.dl_from_url)) {
+                UrlDownloader.show(this, project, currentRelDir) { refresh() }
+            },
             item(R.drawable.fx_storage, getString(R.string.tool_storage)) { StorageAnalyzer.show(this, project) },
             item(R.drawable.fx_dups, getString(R.string.tool_dups)) { DuplicateFinder.show(this, project, protectedPaths()) { refresh() } },
             item(R.drawable.fx_tree, getString(R.string.tool_copy_tree)) { TreeExport.copy(this, project) },
