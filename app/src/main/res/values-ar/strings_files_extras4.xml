@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- رفع zip المتقدم — FilesExtras4.kt -->
+<resources>
+    <string name="zipimp_title">رفع أرشيف ZIP</string>
+    <string name="zipimp_summary">%1$d ملف · بعد الفك %2$s · مضغوط %3$s</string>
+    <string name="zipimp_summary_many">%1$d أرشيف · %2$d ملف</string>
+    <string name="zipimp_dest">الوجهة</string>
+    <string name="zipimp_dest_here">المجلد الحالي</string>
+    <string name="zipimp_dest_named">مجلد جديد باسم الأرشيف</string>
+    <string name="zipimp_flatten">إزالة المجلد الجذري المشترك (%1$s)</string>
+    <string name="zipimp_flatten_generic">إزالة المجلد الجذري المشترك إن وُجد</string>
+    <string name="zipimp_junk">تجاهل الملفات المهملة (‎__MACOSX وDS_Store وThumbs.db): %1$d</string>
+    <string name="zipimp_keep">الاحتفاظ بنسخة الأرشيف داخل المشروع</string>
+    <string name="zipimp_policy">عند وجود ملف بنفس الاسم</string>
+    <string name="zipimp_browse">استعراض وانتقاء</string>
+    <string name="zipimp_extract">فك</string>
+    <string name="zipimp_progress">%1$s — %2$d / %3$d</string>
+    <string name="zipimp_result">فُكّ: %1$d · تخطّي: %2$d · فشل: %3$d · %4$s</string>
+    <string name="zipimp_undo">تراجع</string>
+    <string name="zipimp_undone">أُلغي الفك (حُذف %1$d، استُعيد %2$d)</string>
+    <string name="zipimp_cancelled">أُلغي الفك قبل اكتماله</string>
+    <string name="zipimp_notes_more">…و%1$d ملاحظة أخرى</string>
+    <string name="zipimp_note_unsafe">مسار غير آمن: %1$s</string>
+    <string name="zipimp_note_protected">محمي (تعديلات غير محفوظة): %1$s</string>
+    <string name="zipimp_note_failed">فشل: %1$s</string>
+    <string name="row_zip_advanced">فك متقدم…</string>
+    <string name="zadd_menu">إضافة المحدد إلى الأرشيف</string>
+    <string name="zadd_done">أُضيف %1$d ملف إلى %2$s</string>
+    <string name="zc_menu">ضغط متقدم…</string>
+    <string name="zc_title">ضغط متقدم</string>
+    <string name="zc_level">مستوى الضغط</string>
+    <string name="zc_level0">تخزين بلا ضغط (الأسرع)</string>
+    <string name="zc_level1">سريع</string>
+    <string name="zc_level2">قياسي</string>
+    <string name="zc_level3">أقصى ضغط</string>
+    <string name="zc_junk">استثناء الملفات المهملة</string>
+    <string name="zc_done">أُنشئ %1$s — %2$d ملف · %3$s (%4$d%% من الأصل)</string>
+</resources>
