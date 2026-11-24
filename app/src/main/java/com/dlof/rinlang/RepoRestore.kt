@@ -72,10 +72,31 @@ object RepoRestore {
             Toast.makeText(activity, R.string.repo_no_source, Toast.LENGTH_LONG).show()
             return
         }
-        showDialog(
+        fun open() = showDialog(
             activity, activity.getString(R.string.repo_title_update),
             project = project, relDir = found.relDir, prefill = found, onNew = null, onMerged = onDone
         )
+        if (found.commit.isBlank() || found.spec.provider == RepoProvider.DIRECT || !isOnline(activity)) {
+            open()
+            return
+        }
+        // فحص سريع: هل تغيّر المصدر منذ آخر استرداد؟ (يفشل بصمت للمستودعات الخاصة فنفتح الحوار)
+        val main = Handler(Looper.getMainLooper())
+        Toast.makeText(activity, R.string.repo_checking, Toast.LENGTH_SHORT).show()
+        Thread {
+            val latest = RepoNet.latestCommit(found.spec, "")
+            main.post {
+                if (latest.isNotBlank() && latest == found.commit) {
+                    AlertDialog.Builder(activity)
+                        .setMessage(activity.getString(R.string.repo_uptodate_msg, latest.take(7)))
+                        .setPositiveButton(R.string.repo_start) { _, _ -> open() }
+                        .setNegativeButton(R.string.cancel, null)
+                        .show()
+                } else {
+                    open()
+                }
+            }
+        }.start()
     }
 
     // =============================================================================================
@@ -89,7 +110,8 @@ object RepoRestore {
         val pickRef: Button,
         val token: EditText,
         val name: EditText?,
-        val modes: RadioGroup?
+        val modes: RadioGroup?,
+        val recent: Button
     )
 
     private fun buildForm(activity: Activity, withName: Boolean, withModes: Boolean, prefill: Source?): Form {
@@ -124,10 +146,12 @@ object RepoRestore {
             addView(pick, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         }
 
+        val recent = Button(activity).apply { text = activity.getString(R.string.repo_recent) }
         val box = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(px(22), px(12), px(22), px(4))
             addView(url)
+            addView(recent)
             addView(refRow)
             addView(token)
             if (name != null) addView(name)
@@ -159,7 +183,7 @@ object RepoRestore {
         }
 
         val scroll = ScrollView(activity).apply { addView(box) }
-        return Form(scroll, url, ref, pick, token, name, group)
+        return Form(scroll, url, ref, pick, token, name, group, recent)
     }
 
     private fun selectedMode(form: Form): MergeMode {
@@ -175,6 +199,18 @@ object RepoRestore {
     ) {
         val form = buildForm(activity, withName = project == null, withModes = project != null, prefill = prefill)
         form.pickRef.setOnClickListener { pickRef(activity, form) }
+        form.recent.setOnClickListener {
+            val list = recentList(activity)
+            if (list.isEmpty()) {
+                Toast.makeText(activity, R.string.repo_recent_none, Toast.LENGTH_SHORT).show()
+            } else {
+                AlertDialog.Builder(activity)
+                    .setTitle(R.string.repo_recent)
+                    .setItems(list.toTypedArray()) { _, i -> form.url.setText(list[i]) }
+                    .setNegativeButton(R.string.cancel, null)
+                    .show()
+            }
+        }
 
         val dlg = AlertDialog.Builder(activity)
             .setTitle(title)
@@ -206,6 +242,7 @@ object RepoRestore {
                     project = project, relDir = relDir, mode = mode, onNew = onNew, onMerged = onMerged
                 )
                 dlg.dismiss()
+                addRecent(activity, form.url.text.toString().trim())
                 if (project != null && mode == MergeMode.MIRROR) {
                     AlertDialog.Builder(activity)
                         .setMessage(R.string.repo_mirror_confirm)
@@ -218,6 +255,21 @@ object RepoRestore {
             }
         }
         dlg.show()
+    }
+
+    private const val RECENT_PREFS = "rin_repo_recent"
+
+    private fun recentList(ctx: Context): List<String> = try {
+        val a = JSONArray(ctx.getSharedPreferences(RECENT_PREFS, Context.MODE_PRIVATE).getString("list", "[]"))
+        (0 until a.length()).map { a.getString(it) }
+    } catch (_: Throwable) { emptyList() }
+
+    /** آخر 8 مستودعات (الرابط فقط — لا رموز سرّية). */
+    private fun addRecent(ctx: Context, url: String) {
+        if (url.isBlank() || url.length > 300) return
+        val list = (listOf(url) + recentList(ctx).filter { it != url }).take(8)
+        ctx.getSharedPreferences(RECENT_PREFS, Context.MODE_PRIVATE).edit()
+            .putString("list", JSONArray(list).toString()).apply()
     }
 
     /** يقترح الرابط من الحافظة إن كان مستودعاً مدعوماً. */
@@ -312,6 +364,7 @@ object RepoRestore {
                 }
                 temp = tmp
                 val tree = File(tmp, "tree")
+                val commit = RepoNet.latestCommit(spec, req.token)
 
                 val extracted = RepoNet.download(spec, req.token, tree, cancelled) { read, total ->
                     main.post { progress.updateProgress(read, total) }
@@ -328,31 +381,58 @@ object RepoRestore {
                 if (req.project == null) {
                     val wanted = req.newName.ifBlank { spec.repoName }
                     val project = ProjectManager.installImportedTree(ctx, content, wanted, guessType(content))
-                    writeSource(project.dir, spec, MergeMode.OVERWRITE)
+                    writeSource(project.dir, spec, MergeMode.OVERWRITE, commit)
                     main.post {
                         progress.finishSuccess(activity.getString(R.string.download_status_done))
                         Toast.makeText(activity, activity.getString(R.string.repo_done_new, project.name, fileCount), Toast.LENGTH_LONG).show()
                         main.postDelayed({ progress.dismiss(); req.onNew?.invoke(project) }, 450)
                     }
                 } else {
-                    val dest = ProjectManager.resolveDir(req.project, req.relDir)
+                    val project: Project = req.project
+                    val dest = ProjectManager.resolveDir(project, req.relDir)
                     val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-                    val backupRoot = File(req.project.dir, "$BACKUP_DIR/restore_$stamp")
-                    val report = RepoMerge.merge(content, dest, req.mode, backupRoot) { rel ->
+                    val backupRoot = File(project.dir, "$BACKUP_DIR/restore_$stamp")
+                    val protect: (String) -> Boolean = { rel ->
                         rel.startsWith(".rin_") || (req.relDir.isBlank() && rel == RinProjectMeta.FILE_NAME)
                     }
-                    writeSource(dest, spec, req.mode)
+                    val preview = RepoMerge.merge(content, dest, req.mode, backupRoot, protect, dryRun = true)
+                    val keepTemp = tmp
+                    temp = null // يُنظَّف بعد قرار المستخدم أدناه
+                    val specFinal = spec
                     main.post {
-                        progress.finishSuccess(activity.getString(R.string.download_status_done))
-                        Toast.makeText(
-                            activity,
-                            activity.getString(
-                                R.string.repo_done_merge,
-                                report.added, report.updated, report.unchanged, report.skipped, report.removed
-                            ),
-                            Toast.LENGTH_LONG
-                        ).show()
-                        main.postDelayed({ progress.dismiss(); req.onMerged?.invoke() }, 450)
+                        progress.dismiss()
+                        AlertDialog.Builder(activity)
+                            .setTitle(R.string.repo_preview_title)
+                            .setMessage(activity.getString(
+                                R.string.repo_preview_msg,
+                                preview.added, preview.updated, preview.unchanged, preview.skipped, preview.removed
+                            ))
+                            .setCancelable(false)
+                            .setPositiveButton(R.string.repo_preview_run) { _, _ ->
+                                Thread {
+                                    try {
+                                        val report = RepoMerge.merge(content, dest, req.mode, backupRoot, protect)
+                                        writeSource(dest, specFinal, req.mode, commit)
+                                        main.post {
+                                            Toast.makeText(
+                                                activity,
+                                                activity.getString(
+                                                    R.string.repo_done_merge,
+                                                    report.added, report.updated, report.unchanged, report.skipped, report.removed
+                                                ),
+                                                Toast.LENGTH_LONG
+                                            ).show()
+                                            req.onMerged?.invoke()
+                                        }
+                                    } catch (t: Throwable) {
+                                        main.post { Toast.makeText(activity, describe(activity, t, false), Toast.LENGTH_LONG).show() }
+                                    } finally {
+                                        keepTemp.deleteRecursively()
+                                    }
+                                }.start()
+                            }
+                            .setNegativeButton(R.string.cancel) { _, _ -> Thread { keepTemp.deleteRecursively() }.start() }
+                            .show()
                     }
                 }
             } catch (c: RepoCancelled) {
@@ -398,9 +478,9 @@ object RepoRestore {
     // سجلّ المصدر (.rin_repo.json) — بلا أي رمز سرّي
     // =============================================================================================
 
-    private class Source(val spec: RepoSpec, val mode: MergeMode, val relDir: String, val display: String)
+    private class Source(val spec: RepoSpec, val mode: MergeMode, val relDir: String, val display: String, val commit: String)
 
-    private fun writeSource(dir: File, spec: RepoSpec, mode: MergeMode) {
+    private fun writeSource(dir: File, spec: RepoSpec, mode: MergeMode, commit: String) {
         try {
             val o = JSONObject()
             o.put("v", 1)
@@ -411,6 +491,7 @@ object RepoRestore {
             o.put("subPath", spec.subPath)
             o.put("directUrl", spec.directUrl)
             o.put("mode", mode.name)
+            o.put("commit", commit)
             o.put("fetchedAt", SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
                 .apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }.format(Date()))
             File(dir, SOURCE_FILE).writeText(o.toString(2), Charsets.UTF_8)
@@ -431,7 +512,7 @@ object RepoRestore {
             )
             val mode = try { MergeMode.valueOf(o.optString("mode", "OVERWRITE")) } catch (_: Throwable) { MergeMode.OVERWRITE }
             val shown = if (provider == RepoProvider.DIRECT) spec.directUrl else "https://" + spec.host + "/" + spec.path
-            Source(spec, mode, relDir, shown)
+            Source(spec, mode, relDir, shown, o.optString("commit"))
         } catch (_: Throwable) { null }
     }
 
@@ -507,14 +588,29 @@ object RepoRestore {
                         onProgress(n, if (total > 0) total else n)
                     }
                 }
-                return RepoArchive.extractZip(input, dest, limits) { cancelled.get() }
+                return RepoArchive.extractAuto(input, dest, limits) { cancelled.get() }
             } finally {
                 conn.disconnect()
             }
         }
 
-        private fun httpText(url: String, headers: Map<String, String>): String {
-            val conn = connect(url, headers, "application/json")
+        /** آخر commit (best-effort): يعيد "" عند أي فشل ولا يُفشل الاسترداد. */
+        fun latestCommit(spec: RepoSpec, token: String): String {
+            val api = RepoLinks.commitApi(spec) ?: return ""
+            return try {
+                val text = httpText(api.url, RepoLinks.authHeaders(spec, token), api.accept).trim()
+                val sha = when (api.kind) {
+                    0 -> text
+                    1 -> JSONObject(text).optString("id")
+                    2 -> JSONArray(text).optJSONObject(0)?.optString("sha").orEmpty()
+                    else -> JSONObject(text).optJSONArray("values")?.optJSONObject(0)?.optString("hash").orEmpty()
+                }
+                if (sha.matches(Regex("^[0-9a-fA-F]{7,64}$"))) sha.lowercase() else ""
+            } catch (_: Throwable) { "" }
+        }
+
+        private fun httpText(url: String, headers: Map<String, String>, accept: String = "application/json"): String {
+            val conn = connect(url, headers, accept)
             try {
                 if (conn.responseCode !in 200..299) throw RepoHttpException(conn.responseCode)
                 val bytes = conn.inputStream.use { it.readBytes() }
