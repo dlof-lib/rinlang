@@ -15,6 +15,7 @@
          مع علامة "!" حقيقية (خطأ صياغة فعلي عبر rin::Lexer/Parser، لا مؤشر وهمي — انظر
          FilesActivity.scanForErrors) تظهر فوق زاويتها السفلية عند الحاجة فقط. -->
     <FrameLayout
+        android:id="@+id/frameFileIcon"
         android:layout_width="42dp"
         android:layout_height="42dp">
 
@@ -37,6 +38,18 @@
             android:textColor="@android:color/white"
             android:textSize="10sp"
             android:textStyle="bold"
+            android:visibility="gone" />
+
+        <!-- شارة ✓ تظهر عند تحديد الصف (انظر FileSelection.kt) -->
+        <ImageView
+            android:id="@+id/imgFileSelectCheck"
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:layout_gravity="top|end"
+            android:background="@drawable/bg_select_badge"
+            android:padding="2dp"
+            android:src="@drawable/rs_ic_check"
+            android:contentDescription="@null"
             android:visibility="gone" />
     </FrameLayout>
 
