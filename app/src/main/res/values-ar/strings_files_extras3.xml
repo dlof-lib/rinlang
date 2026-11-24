@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- رفع/وسائط/zip — FilesExtras3.kt -->
+<resources>
+    <string name="hub_upload_title">رفع ملفات</string>
+    <string name="up_single">ملف واحد</string>
+    <string name="up_multi">عدة ملفات دفعة واحدة</string>
+    <string name="up_folder">مجلد كامل بكل محتوياته</string>
+    <string name="zip_browse_device">استعراض أرشيف من الجهاز (فك انتقائي)</string>
+    <string name="hub_media_title">رفع وسائط</string>
+    <string name="media_single">صورة أو فيديو واحد</string>
+    <string name="media_multi">عدة صور وفيديوهات</string>
+    <string name="media_audio">ملفات صوتية</string>
+    <string name="media_shrink_on">تصغير الصور الكبيرة عند الرفع: مفعّل (اضغط للتعطيل)</string>
+    <string name="media_shrink_off">تصغير الصور الكبيرة عند الرفع: معطّل (اضغط للتفعيل)</string>
+    <string name="conflict_title">%1$d ملف بنفس الاسم موجود</string>
+    <string name="conflict_keep">الاحتفاظ بالاثنين (ترقيم الجديد)</string>
+    <string name="conflict_skip">تخطّي الموجود</string>
+    <string name="conflict_replace">استبدال الموجود</string>
+    <string name="upload_collecting">جارٍ التحضير…</string>
+    <string name="upload_nothing">لا توجد ملفات للرفع</string>
+    <string name="upload_progress">جارٍ الرفع… %1$d / %2$d</string>
+    <string name="upload_cancelled">أُلغي الرفع</string>
+    <string name="upload_result">تم: %1$d · تخطّي: %2$d · فشل: %3$d · %4$s</string>
+    <string name="zip_browse_title">%1$s — %2$d ملف · %3$s</string>
+    <string name="zip_extract_selected">فك المحدد</string>
+    <string name="zip_toggle_all">الكل / لا شيء (مطوّلة: بنمط)</string>
+    <string name="zip_none_selected">لم يُحدَّد شيء</string>
+    <string name="zip_extract_result">فُكّ %1$d ملف (تخطّي %2$d)</string>
+    <string name="zip_truncated">عُرض أول %1$d عنصر فقط</string>
+    <string name="zip_bad">تعذّرت قراءة الأرشيف: %1$s</string>
+    <string name="row_zip_browse">استعراض الأرشيف</string>
+    <string name="row_zip_named">فك إلى مجلد باسم الأرشيف</string>
+    <string name="row_zip_test">اختبار سلامة الأرشيف</string>
+    <string name="zip_test_ok">الأرشيف سليم: %1$d ملف بلا أخطاء</string>
+    <string name="zip_test_bad">تالف: %1$d من %2$d\n%3$s</string>
+    <string name="zip_share">ضغط ومشاركة</string>
+    <string name="row_media_info">معلومات الوسائط</string>
+    <string name="row_shrink">نسخة مصغّرة</string>
+    <string name="shrink_1024">أقصى بُعد 1024 بكسل</string>
+    <string name="shrink_2048">أقصى بُعد 2048 بكسل</string>
+    <string name="shrink_half">50% من الأبعاد</string>
+    <string name="shrink_done">أُنشئت %1$s</string>
+    <string name="shrink_nothing">لم يلزم التصغير أو فشل</string>
+    <string name="shrink_unsupported">التصغير يدعم JPG وPNG فقط</string>
+    <string name="info_size">الحجم</string>
+    <string name="info_dims">الأبعاد</string>
+    <string name="info_type">النوع</string>
+    <string name="info_duration">المدة</string>
+    <string name="info_bitrate">معدل البت</string>
+</resources>
