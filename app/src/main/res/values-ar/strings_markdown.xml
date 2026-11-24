@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- شريط تنسيق Markdown في المحرر (md) -->
+    <string name="md_preview">معاينة Markdown</string>
+    <string name="md_preview_needs_project">افتح الملف من مشروع لمعاينته</string>
+    <string name="md_h1">عنوان 1</string>
+    <string name="md_h2">عنوان 2</string>
+    <string name="md_h3">عنوان 3</string>
+    <string name="md_bold">عريض</string>
+    <string name="md_italic">مائل</string>
+    <string name="md_strike">مشطوب</string>
+    <string name="md_inline_code">كود مضمَّن</string>
+    <string name="md_code_block">كتلة كود</string>
+    <string name="md_quote">اقتباس</string>
+    <string name="md_bullet_list">قائمة نقطية</string>
+    <string name="md_numbered_list">قائمة مرقّمة</string>
+    <string name="md_task_list">قائمة مهام</string>
+    <string name="md_toggle_checkbox">قلب مربّع المهمة</string>
+    <string name="md_link">رابط</string>
+    <string name="md_image">صورة</string>
+    <string name="md_table">جدول</string>
+    <string name="md_hr">خط فاصل</string>
+    <string name="md_placeholder_text">نص</string>
+    <string name="md_placeholder_url">https://</string>
+    <string name="md_table_col">عمود</string>
+    <string name="md_indent">إزاحة للداخل</string>
+    <string name="md_outdent">إزاحة للخارج</string>
+    <string name="md_headings">العناوين</string>
+    <string name="md_more">المزيد</string>
+    <string name="md_menu_format_table">تنسيق الجدول</string>
+    <string name="md_menu_toc">إدراج جدول محتويات</string>
+    <string name="md_menu_stats">إحصاءات المستند</string>
+    <string name="md_no_headings">لا توجد عناوين في الملف</string>
+    <string name="md_not_in_table">ضع المؤشر داخل جدول أولاً</string>
+    <string name="md_headings_title">الانتقال إلى عنوان</string>
+    <string name="md_stats_title">إحصاءات المستند</string>
+    <string name="md_stats_message">الكلمات: %1$d\nالأحرف: %2$d (بلا مسافات: %3$d)\nالأسطر: %4$d\nالعناوين: %5$d\nوقت القراءة: ~%6$d دقيقة</string>
+    <string name="md_ok">حسناً</string>
+</resources>
