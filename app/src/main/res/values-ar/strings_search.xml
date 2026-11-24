@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- البحث المتقدم في الملفات (العربية). انظر FileSearch.kt / FilesActivity -->
+<resources>
+    <string name="sr_mode_names">الأسماء</string>
+    <string name="sr_mode_content">المحتوى</string>
+    <string name="sr_mode_both">الأسماء + المحتوى</string>
+    <string name="sr_chip_case">Aa</string>
+    <string name="sr_chip_word">كلمة كاملة</string>
+    <string name="sr_chip_regex">.*  Regex</string>
+    <string name="sr_scope_project">المشروع كله</string>
+    <string name="sr_scope_folder">هذا المجلد فقط</string>
+    <string name="sr_history">السجل</string>
+    <string name="sr_replace">استبدال</string>
+    <string name="sr_filters">مرشّحات</string>
+    <string name="sr_summary_format">%1$d مطابقة في %2$d ملف · %3$d م.ث</string>
+    <string name="sr_summary_names">%1$d ملف · %2$d م.ث</string>
+    <string name="sr_truncated"> · النتائج مبتورة، ضيّق البحث</string>
+    <string name="sr_searching">جارٍ البحث…</string>
+    <string name="sr_regex_error">تعبير Regex غير صالح: %1$s</string>
+    <string name="sr_more_matches">+%1$d مطابقة أخرى</string>
+    <string name="sr_line_prefix">السطر %1$d: %2$s</string>
+    <string name="sr_matches_title">%1$s — %2$d مطابقة</string>
+    <string name="sr_open_file">فتح الملف</string>
+    <string name="sr_history_title">عمليات البحث الأخيرة</string>
+    <string name="sr_history_empty">لا يوجد سجل بعد</string>
+    <string name="sr_history_clear">مسح السجل</string>
+    <string name="sr_filters_title">مرشّحات البحث</string>
+    <string name="sr_filters_help">اكتبها داخل مربع البحث مع النص:\n\n• ext:rin,kt  ← امتدادات محددة فقط\n• -ext:png  ← استبعاد امتداد\n• in:src  ← داخل مجلد (بداية اسم المجلد)\n• -in:build  ← استبعاد مجلد\n\nمثال:  count ext:rin -in:lib\nمرشّح بلا نص يسرد الملفات المطابقة فقط (مثل ext:indsin).\n\nالبحث التقريبي في الأسماء: mnact ← MainActivity.kt</string>
+    <string name="sr_replace_title">استبدال في الملفات</string>
+    <string name="sr_replace_hint">نص الاستبدال (في وضع Regex يمكن استخدام $1)</string>
+    <string name="sr_replace_confirm">سيُستبدل %1$d مطابقة في %2$d ملف. الملفات ذات التعديلات غير المحفوظة تُتخطّى، ويمكنك التراجع بعد التنفيذ.</string>
+    <string name="sr_replace_apply">استبدال الكل</string>
+    <string name="sr_replace_done">تم استبدال %1$d مطابقة في %2$d ملف</string>
+    <string name="sr_replace_skipped">تم تخطي %1$d ملف (غير محفوظ أو غير UTF-8)</string>
+    <string name="sr_replace_undo">تراجع</string>
+    <string name="sr_replace_undone">أُعيد %1$d ملف</string>
+    <string name="sr_replace_blocked_truncated">النتائج مبتورة — ضيّق البحث قبل الاستبدال</string>
+    <string name="sr_replace_empty_match">النمط يطابق نصاً فارغاً، غيّره قبل الاستبدال</string>
+    <string name="sr_replace_none">لا توجد مطابقات في محتوى الملفات للاستبدال</string>
+    <string name="find_opt_word">كلمة كاملة</string>
+    <string name="find_opt_case">حساسية الأحرف</string>
+    <string name="find_opt_regex">تعبير نمطي (Regex)</string>
+    <string name="find_opt_list">كل النتائج…</string>
+    <string name="find_opt_project">بحث في المشروع كله</string>
+    <string name="find_opt_history">سجل البحث</string>
+    <string name="find_list_title">كل النتائج (%1$d)</string>
+    <string name="find_project_none">لا يوجد مشروع مفتوح للبحث فيه</string>
+</resources>
