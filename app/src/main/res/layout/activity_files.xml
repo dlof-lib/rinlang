@@ -112,6 +112,17 @@
 
 
 
+        <!-- تنزيل العناصر المحدّدة إلى الجهاز (ملف خام أو ZIP) — DownloadExporter -->
+        <ImageButton
+            android:id="@+id/btnSelectionDownload"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:padding="10dp"
+            android:src="@drawable/rs_ic_download"
+            android:tint="@color/rin_on_toolbar"
+            android:background="@drawable/bg_icon_btn"
+            android:contentDescription="@string/dl_action" />
+
         <ImageButton
             android:id="@+id/btnSelectionDelete"
             android:layout_width="40dp"
