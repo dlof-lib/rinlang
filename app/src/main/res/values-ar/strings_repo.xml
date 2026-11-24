@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- استرداد المستودعات — RepoRestore.kt -->
+<resources>
+    <string name="repo_title_new">استرداد مستودع كمشروع جديد</string>
+    <string name="repo_title_into">استرداد مستودع إلى هذا المجلد</string>
+    <string name="repo_title_update">تحديث من المصدر</string>
+    <string name="repo_menu_restore">استرداد من مستودع (GitHub وغيره)</string>
+    <string name="repo_menu_update">تحديث من المصدر المحفوظ</string>
+    <string name="repo_import_from_file">من ملف (RinPak / ZIP)</string>
+    <string name="repo_import_from_repo">من مستودع (GitHub وغيره)</string>
+    <string name="repo_url_hint">رابط المستودع أو owner/repo</string>
+    <string name="repo_ref_hint">فرع / وسم / commit (اختياري)</string>
+    <string name="repo_ref_pick">اختيار</string>
+    <string name="repo_token_hint">رمز وصول للمستودعات الخاصة (اختياري، لا يُحفظ)</string>
+    <string name="repo_name_hint">اسم المشروع (اختياري)</string>
+    <string name="repo_mode_title">طريقة الدمج</string>
+    <string name="repo_mode_add">إضافة الملفات الجديدة فقط</string>
+    <string name="repo_mode_overwrite">استبدال المختلف (مع نسخة احتياطية)</string>
+    <string name="repo_mode_mirror">مطابقة تامة (الزائد يُنقل للنسخة الاحتياطية)</string>
+    <string name="repo_mirror_confirm">المطابقة التامة تنقل كل ملف غير موجود في المستودع إلى .rin_backup بدل بقائه في المجلد. المتابعة؟</string>
+    <string name="repo_start">استرداد</string>
+    <string name="repo_invalid">رابط المستودع غير مدعوم أو غير صالح</string>
+    <string name="repo_invalid_ref">اسم الفرع أو الوسم غير صالح</string>
+    <string name="repo_progress_title">جارٍ استرداد المستودع…</string>
+    <string name="repo_progress_status">جارٍ تنزيل وفك الأرشيف…</string>
+    <string name="repo_progress_install">جارٍ التثبيت…</string>
+    <string name="repo_refs_loading">جارٍ جلب الفروع والوسوم…</string>
+    <string name="repo_refs_none">لم يُعثر على فروع أو وسوم</string>
+    <string name="repo_refs_unsupported">سرد الفروع غير متاح لروابط ZIP المباشرة</string>
+    <string name="repo_kind_branch">فرع</string>
+    <string name="repo_kind_tag">وسم</string>
+    <string name="repo_err_404">المستودع أو الفرع غير موجود، أو أنه خاص (أدخل رمز وصول)</string>
+    <string name="repo_err_404_token">المستودع أو الفرع غير موجود، أو أن الرمز لا يملك صلاحية عليه</string>
+    <string name="repo_err_auth">رُفض الوصول: تحقق من الرمز، أو انتظر انتهاء حدّ الطلبات</string>
+    <string name="repo_err_rate">تجاوزت حدّ الطلبات، حاول لاحقاً</string>
+    <string name="repo_err_http">فشل الاتصال (HTTP %1$d)</string>
+    <string name="repo_err_too_big">المستودع أكبر من الحد المسموح (256 ميغابايت أو 20000 ملف)</string>
+    <string name="repo_err_subpath">المجلد الفرعي «%1$s» غير موجود في المستودع</string>
+    <string name="repo_err_empty">الأرشيف لا يحوي ملفات</string>
+    <string name="repo_done_new">تم استرداد «%1$s» كمشروع جديد (%2$d ملف)</string>
+    <string name="repo_done_merge">أُضيف %1$d · حُدّث %2$d · دون تغيير %3$d · تخطّي %4$d · أُزيل %5$d</string>
+    <string name="repo_no_source">لا يوجد مصدر مستودع محفوظ لهذا المجلد. استخدم «استرداد من مستودع» أولاً</string>
+</resources>
