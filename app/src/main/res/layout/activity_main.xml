@@ -69,7 +69,7 @@
                     android:layout_width="14dp"
                     android:layout_height="14dp"
                     android:layout_marginEnd="5dp"
-                    android:src="@drawable/ic_folder_solid"
+                    android:src="@drawable/ic_file_solid"
                     android:tint="@color/rin_accent"
                     android:contentDescription="@null" />
 
@@ -140,9 +140,17 @@
 
         <!-- الصف الثاني: شريط قوائم مصغّر (File / Edit / View / Run / المكتبات) — كل زر صغير
              بأيقونة + نص، ويفتح قائمة منسدلة فيها خيارات إضافية، تماماً كقوائم تطبيقات الكمبيوتر. -->
+        <!-- شريط القوائم قابل للتمرير أفقياً: لا يتجاوز العرض مهما طالت تسميات اللغة أو صغرت الشاشة. -->
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:scrollbars="none"
+            android:overScrollMode="never"
+            android:fillViewport="true">
+
         <LinearLayout
             android:id="@+id/editorMenuRow"
-            android:layout_width="match_parent"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:paddingBottom="6dp"
@@ -246,18 +254,8 @@
                 android:background="@drawable/bg_menubar_btn"
                 android:textColor="@color/rin_on_toolbar" />
 
-            <View
-                android:layout_width="0dp"
-                android:layout_height="1dp"
-                android:layout_weight="1" />
-
-            <TextView
-                android:id="@+id/txtEngineVersion"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textColor="@color/rin_editor_hint"
-                android:textSize="10sp" />
         </LinearLayout>
+        </HorizontalScrollView>
 
         <!-- شريط البحث والاستبدال، مخفي افتراضياً، يُفتح من قائمة Edit -->
         <LinearLayout
@@ -504,6 +502,18 @@
                 android:textColor="@color/rin_editor_hint"
                 android:textSize="10sp"
                 tools:text="12 lines" />
+
+            <!-- نسخة المحرك: نص طويل أحياناً، فيُقصّ بعلامة … ولا يزاحم موضع المؤشر. -->
+            <TextView
+                android:id="@+id/txtEngineVersion"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="10dp"
+                android:maxWidth="120dp"
+                android:singleLine="true"
+                android:ellipsize="end"
+                android:textColor="@color/rin_editor_hint"
+                android:textSize="10sp" />
         </LinearLayout>
     </LinearLayout>
 
@@ -578,6 +588,17 @@
                 android:textColor="@color/rin_editor_hint" />
         </LinearLayout>
 
+        <!-- طيّ/فتح الكونسول: يمنح المحرر كامل الارتفاع عند الحاجة -->
+        <ImageButton
+            android:id="@+id/btnCollapseConsole"
+            android:layout_width="32dp"
+            android:layout_height="28dp"
+            android:padding="7dp"
+            android:src="@drawable/ic_dropdown"
+            app:tint="@color/rin_editor_hint"
+            android:background="@drawable/bg_toolbar_btn_ghost"
+            android:contentDescription="@string/console_collapse" />
+
         <!-- فتح شاشة Output المستقلة (كتابة حرفية حيّة لآخر تشغيل) -->
         <ImageButton
             android:id="@+id/btnOpenOutput"
@@ -643,7 +664,6 @@
         android:paddingTop="4dp"
         android:paddingBottom="10dp" />
 
-    <include layout="@layout/bottom_nav_bar" />
 
     <!-- ===== لوحة مفاتيح المحرر: صف رموز برمجة شائعة + أسهم تنقل، تظهر فقط عند تركيز المحرر =====
          آخر عنصر في العمود الرأسي الجذر عمداً: بفضل windowSoftInputMode="adjustResize" لهذا
@@ -759,6 +779,9 @@
                 android:paddingBottom="6dp" />
         </HorizontalScrollView>
     </LinearLayout>
+    <!-- الشريط السفلي في القاع دائماً؛ يُخفى أثناء ظهور لوحة مفاتيح النظام (MainActivity.setupKeyboardAwareChrome)
+         حتى تلتصق لوحة الرموز مباشرة بلوحة المفاتيح بدل أن يفصل بينهما شريط عائم. -->
+    <include layout="@layout/bottom_nav_bar" />
 </LinearLayout>
 
     <!-- لوحة "مستكشف المشروع" (ملفات/مجلدات + بنية الحاويات) كدرج جانبي مدمج في المحرر نفسه. -->
