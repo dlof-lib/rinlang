@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- التنزيل والأذونات — FilesDownload.kt / RinPermissions.kt -->
+<resources>
+    <string name="dl_action">Download to device</string>
+    <string name="dl_action_zip">Download as ZIP</string>
+    <string name="dl_folder_zip">Download current folder (ZIP)</string>
+    <string name="dl_project_zip">Download whole project (ZIP)</string>
+    <string name="dl_projects_zip">Download selected projects (ZIP)</string>
+    <string name="dl_from_url">Download from link</string>
+    <string name="dl_empty">Nothing to download</string>
+    <string name="dl_zip_progress_title">Preparing archive…</string>
+    <string name="dl_zip_progress_status">Compressing and saving files…</string>
+    <string name="dl_create_failed">Could not create the file in Downloads</string>
+    <string name="dl_open_stream_failed">Could not open the output stream</string>
+    <string name="dl_saved_title">Saved to device</string>
+    <string name="dl_saved_message">%1$s\n\nLocation: %2$s</string>
+    <string name="dl_open">Open</string>
+    <string name="dl_share">Share</string>
+    <string name="dl_close">Close</string>
+    <string name="dl_notif_title">Download complete</string>
+    <string name="dl_notif_text">%1$s — saved in Downloads</string>
+    <string name="dl_url_title">Download from link</string>
+    <string name="dl_url_hint">Link (https://…)</string>
+    <string name="dl_url_name_hint">File name (optional)</string>
+    <string name="dl_url_start">Download</string>
+    <string name="dl_url_invalid">Invalid link — only https is accepted</string>
+    <string name="dl_url_offline">No internet connection</string>
+    <string name="dl_url_progress_title">Downloading into the project…</string>
+    <string name="dl_url_progress_status">Downloading file…</string>
+    <string name="dl_url_done">%1$s was downloaded into the project</string>
+    <string name="dl_url_too_many_redirects">Too many redirects</string>
+    <string name="perm_center_title">Permissions</string>
+    <string name="perm_center_hint">RinStudio asks for as few permissions as possible. Storage needs none: downloads go to Downloads/RinStudio and uploads use the system file picker.</string>
+    <string name="perm_notifications">Notifications</string>
+    <string name="perm_notifications_desc">Download-complete alerts and the live preview running in the background. Optional.</string>
+    <string name="perm_install">Install apps</string>
+    <string name="perm_install_desc">For the Install button when exporting a project as an APK. Optional.</string>
+    <string name="perm_storage">Storage &amp; downloads</string>
+    <string name="perm_storage_desc">No permission needed — uses Downloads/RinStudio and system pickers.</string>
+    <string name="perm_network">Internet</string>
+    <string name="perm_network_desc">For sign-in, the store and downloading from a link.</string>
+    <string name="perm_granted">Allowed</string>
+    <string name="perm_not_granted">Not allowed</string>
+    <string name="perm_allow">Allow</string>
+    <string name="perm_not_now">Not now</string>
+    <string name="perm_app_settings">App settings</string>
+    <string name="perm_rationale_title">Turn on notifications?</string>
+    <string name="perm_rationale_msg">So we can tell you when a download finishes and let you open the file in one tap. You can change this later in Settings → Permissions.</string>
+    <string name="settings_permissions_title">Permissions</string>
+    <string name="settings_permissions_hint">Notifications, installing apps, and what the app really needs</string>
+</resources>
