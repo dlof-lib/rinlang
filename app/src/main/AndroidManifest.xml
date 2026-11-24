@@ -46,6 +46,11 @@
                 android:value="true" />
         </service>
 
+        <!-- زر «إلغاء» في إشعار تقدّم التنزيل (انظر notify/RinNotifier). -->
+        <receiver
+            android:name=".notify.RinNotificationReceiver"
+            android:exported="false" />
+
         <service
             android:name=".IndsinLiveService"
             android:exported="false"
