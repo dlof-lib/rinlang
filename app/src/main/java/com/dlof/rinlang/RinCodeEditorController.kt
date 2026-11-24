@@ -132,7 +132,19 @@ class RinCodeEditorController(
     }
 
     /** يبدّل لغة التلوين النحوي الحالية حسب امتداد الملف المفتوح (مثال: "kt"، "cpp"، "rin"). */
-    fun setLanguage(extension: String) = editorView.setLanguage(extension)
+    fun setLanguage(extension: String) {
+        editorView.setLanguage(extension)
+        onLanguageChanged?.invoke(editorView.languageExtension)
+    }
+
+    /** يُستدعى بعد كل تبديل للغة (فتح ملف بامتداد آخر) — يستعمله المحرر لإظهار شريط Markdown. */
+    var onLanguageChanged: ((String) -> Unit)? = null
+
+    val languageExtension: String get() = editorView.languageExtension
+    val isMarkdown: Boolean get() = editorView.isMarkdown
+
+    /** عملية تحرير Markdown على التحديد الحالي (انظر [MarkdownEdit]). */
+    fun markdownEdit(op: (doc: String, selStart: Int, selEnd: Int) -> SmartEdit.Edit?): Boolean = editorView.markdownEdit(op)
 
     fun goToLine(lineNumberOneBased: Int) {
         val y = editorView.goToLine(lineNumberOneBased)
