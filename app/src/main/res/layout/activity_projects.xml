@@ -175,6 +175,17 @@
             android:background="@drawable/bg_icon_btn"
             android:contentDescription="@string/action_move" />
 
+        <!-- تنزيل المشاريع المحدّدة إلى الجهاز كأرشيف ZIP — DownloadExporter.saveProjects -->
+        <ImageButton
+            android:id="@+id/btnProjSelDownload"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:padding="10dp"
+            android:src="@drawable/rs_ic_download"
+            android:tint="@color/rin_on_toolbar"
+            android:background="@drawable/bg_icon_btn"
+            android:contentDescription="@string/dl_projects_zip" />
+
         <ImageButton
             android:id="@+id/btnProjSelDelete"
             android:layout_width="40dp"
