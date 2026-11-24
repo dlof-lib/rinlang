@@ -119,20 +119,95 @@
             android:imeOptions="actionDone" />
     </LinearLayout>
 
+    <!-- شريط التحديد المتعدد للمشاريع: ضغطة مستمرة على بطاقة تبدأه، والسحب بعدها يحدّد نطاقاً. -->
+    <LinearLayout
+        android:id="@+id/layoutProjSelBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="6dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="@drawable/bg_list_card"
+        android:padding="4dp"
+        android:visibility="gone">
+
+        <ImageButton
+            android:id="@+id/btnProjSelClose"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:padding="10dp"
+            android:src="@drawable/ic_close"
+            android:tint="@color/rin_on_toolbar"
+            android:background="@drawable/bg_icon_btn"
+            android:contentDescription="@string/selection_clear" />
+
+        <TextView
+            android:id="@+id/txtProjSelCount"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="4dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="@color/rin_on_toolbar"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <ImageButton
+            android:id="@+id/btnProjSelAll"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:padding="10dp"
+            android:src="@drawable/ic_select_all"
+            android:tint="@color/rin_on_toolbar"
+            android:background="@drawable/bg_icon_btn"
+            android:contentDescription="@string/selection_select_all" />
+
+        <ImageButton
+            android:id="@+id/btnProjSelMove"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:padding="10dp"
+            android:src="@drawable/rs_ic_folder"
+            android:tint="@color/rin_on_toolbar"
+            android:background="@drawable/bg_icon_btn"
+            android:contentDescription="@string/action_move" />
+
+        <ImageButton
+            android:id="@+id/btnProjSelDelete"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:padding="10dp"
+            android:src="@drawable/ic_trash_red"
+            android:background="@drawable/bg_icon_btn"
+            android:contentDescription="@string/delete" />
+
+    </LinearLayout>
+
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1">
 
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/rvProjects"
+        <!-- سحب لأسفل من أعلى القائمة = تحديث -->
+        <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+            android:id="@+id/swipeProjects"
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:clipToPadding="false"
-            android:paddingStart="12dp"
-            android:paddingEnd="12dp"
-            android:paddingTop="4dp"
-            android:paddingBottom="92dp" />
+            android:layout_height="match_parent">
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rvProjects"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="92dp" />
+
+        </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
         <LinearLayout
             android:id="@+id/txtEmptyProjects"
