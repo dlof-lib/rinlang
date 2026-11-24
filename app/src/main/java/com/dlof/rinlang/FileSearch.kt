@@ -5,6 +5,7 @@ import java.io.File
 import java.nio.ByteBuffer
 import java.nio.charset.CharacterCodingException
 import java.nio.charset.CodingErrorAction
+import java.util.regex.Pattern
 import java.util.regex.PatternSyntaxException
 
 /*
@@ -156,8 +157,9 @@ object FileSearch {
     fun compile(text: String, o: SearchOptions): Regex {
         val core = if (o.regex) text else Regex.escape(text)
         val body = if (o.wholeWord) "(?<![\\p{L}\\p{N}_])(?:$core)(?![\\p{L}\\p{N}_])" else core
-        val flags = if (o.caseSensitive) emptySet() else setOf(RegexOption.IGNORE_CASE, RegexOption.UNICODE_CASE)
-        return Regex(body, flags)
+        // RegexOption.UNICODE_CASE غير موجود في Kotlin، لذا نستخدم أعلام java.util.regex.Pattern مباشرة.
+        val flags = if (o.caseSensitive) 0 else (Pattern.CASE_INSENSITIVE or Pattern.UNICODE_CASE)
+        return Pattern.compile(body, flags).toRegex()
     }
 
     /** درجة صلة الاسم (الأصغر أفضل) ومواضع التمييز، أو null إن لم يطابق. */
