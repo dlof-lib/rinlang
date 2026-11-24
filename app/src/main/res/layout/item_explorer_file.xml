@@ -42,4 +42,15 @@
         android:textColor="@color/rin_accent"
         android:visibility="gone" />
 
+    <!-- علامة ✓ عند تحديد الصف (FileSelection.kt) -->
+    <ImageView
+        android:id="@+id/imgExplorerCheck"
+        android:layout_width="16dp"
+        android:layout_height="16dp"
+        android:layout_marginStart="8dp"
+        android:src="@drawable/rs_ic_check"
+        android:tint="@color/rin_accent"
+        android:contentDescription="@null"
+        android:visibility="gone" />
+
 </LinearLayout>
