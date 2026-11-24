@@ -58,6 +58,12 @@ class ProjectsActivity : RinBaseActivity() {
     private var sortedProjects: List<Project> = emptyList()
     private var searchQuery: String = ""
 
+    /** فلتر نوع المشروع (null = كل الأنواع) — يُضبط من «تصفية حسب النوع» في قائمة الفرز. */
+    private var typeFilter: ProjectType? = null
+
+    /** أسماء المشاريع المثبّتة (تُحدَّث في refresh) — تُقرأ من البطاقات لإظهار شارة التثبيت. */
+    private var pinnedNames: Set<String> = emptySet()
+
     /** مستورد حزمة مشروع Rin الرسمية RinPak (*.rinpak) — ويقبل .rinproj القديمة. */
     private val importProjectLauncher = registerForActivityResult(
         ActivityResultContracts.OpenDocument()
@@ -133,6 +139,10 @@ class ProjectsActivity : RinBaseActivity() {
             onExport = { project -> exportProject(project) },
             onDownload = { project -> DownloadExporter.saveProject(this, project) },
             onSync = { project -> syncProject(project) },
+            onPin = { project -> togglePin(project) },
+            onDuplicate = { project -> duplicateProject(project) },
+            onInfo = { project -> showProjectInfo(project) },
+            isPinned = { project -> project.name in pinnedNames },
             selection = selection,
             onSelectionChanged = { onSelectionChanged() }
         )
@@ -386,7 +396,12 @@ class ProjectsActivity : RinBaseActivity() {
     private fun showSortMenu(anchor: View) {
         val popup = PopupMenu(this, anchor)
         popup.menuInflater.inflate(R.menu.menu_project_sort, popup.menu)
+        popup.menu.add(0, MENU_FILTER_TYPE, 90, getString(R.string.proj_filter_type))
         popup.setOnMenuItemClickListener { item ->
+            if (item.itemId == MENU_FILTER_TYPE) {
+                showTypeFilterDialog()
+                return@setOnMenuItemClickListener true
+            }
             val value = when (item.itemId) {
                 R.id.sortProjectsName -> "name"
                 R.id.sortProjectsType -> "type"
@@ -412,6 +427,10 @@ class ProjectsActivity : RinBaseActivity() {
                 else -> list
             }
         }
+        // المشاريع المثبّتة أولاً (الفرز مستقر فيبقى الترتيب المختار داخل كل مجموعة).
+        ProjectPins.prune(this, sortedProjects.map { it.name }.toSet())
+        pinnedNames = ProjectPins.all(this)
+        sortedProjects = sortedProjects.sortedByDescending { it.name in pinnedNames }
         // عدّاد المشاريع كان نصاً ثابتاً على "لا توجد مشاريع" دوماً بغضّ النظر عن العدد
         // الفعلي — لم يكن مربوطاً بأي منطق. الآن يعرض العدد الحقيقي.
         txtProjectCount.text = if (sortedProjects.isEmpty()) {
@@ -425,10 +444,16 @@ class ProjectsActivity : RinBaseActivity() {
     /** يطبّق فلتر البحث الحالي فوق [sortedProjects] ويُحدّث الشبكة وحالة "لا توجد نتائج/مشاريع". */
     private fun applyFilter() {
         val query = searchQuery.trim()
+        val byType = typeFilter?.let { t -> sortedProjects.filter { it.type == t } } ?: sortedProjects
         val filtered = if (query.isEmpty()) {
-            sortedProjects
+            byType
         } else {
-            sortedProjects.filter { it.name.contains(query, ignoreCase = true) }
+            byType.filter { it.name.contains(query, ignoreCase = true) }
+        }
+        txtProjectCount.text = when {
+            sortedProjects.isEmpty() -> getString(R.string.projects_count_zero)
+            filtered.size != sortedProjects.size -> getString(R.string.proj_count_filtered, filtered.size, sortedProjects.size)
+            else -> getString(R.string.projects_count_format, sortedProjects.size)
         }
         adapter.submit(filtered)
         if (::selBar.isInitialized) {
@@ -1026,6 +1051,79 @@ class ProjectsActivity : RinBaseActivity() {
             .show()
     }
 
+    private fun typeName(type: ProjectType): String = getString(when (type) {
+        ProjectType.CONTAINER -> R.string.project_type_container
+        ProjectType.TABLE -> R.string.project_type_table
+        ProjectType.UI -> R.string.project_type_ui
+        ProjectType.FREE -> R.string.project_type_free
+        ProjectType.ILLUST -> R.string.project_type_illust
+        ProjectType.HTML -> R.string.project_type_html
+        ProjectType.HTML_JS -> R.string.project_type_html_js
+    })
+
+    /** تثبيت/إلغاء تثبيت مشروع: المثبّت يظهر أولاً بشارة دبوس على بطاقته. */
+    private fun togglePin(project: Project) {
+        ProjectPins.toggle(this, project.name)
+        refresh()
+    }
+
+    /** «تصفية حسب النوع»: يعرض المشاريع من نوع واحد فقط، والعدّاد يصير «س من ص». */
+    private fun showTypeFilterDialog() {
+        val types = ProjectType.values().toList()
+        val labels = (listOf(getString(R.string.proj_filter_all)) + types.map { typeName(it) }).toTypedArray()
+        val checked = typeFilter?.let { types.indexOf(it) + 1 } ?: 0
+        AlertDialog.Builder(this)
+            .setTitle(R.string.proj_filter_type)
+            .setSingleChoiceItems(labels, checked) { dialog, which ->
+                typeFilter = if (which == 0) null else types[which - 1]
+                dialog.dismiss()
+                applyFilter()
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    /** نسخ مشروع كامل (خيط خلفي) ثم تحديث القائمة. */
+    private fun duplicateProject(project: Project) {
+        Thread {
+            val result = runCatching { ProjectOps.duplicate(project) }
+            runOnUiThread {
+                if (isFinishing) return@runOnUiThread
+                result.fold(
+                    { copy ->
+                        refresh()
+                        Toast.makeText(this, getString(R.string.proj_duplicate_done, copy.name), Toast.LENGTH_LONG).show()
+                    },
+                    { e ->
+                        Toast.makeText(this, getString(R.string.proj_duplicate_failed, e.message ?: "?"), Toast.LENGTH_LONG).show()
+                    }
+                )
+            }
+        }.start()
+    }
+
+    /** معلومات المشروع: النوع، عدد الملفات والمجلدات، الحجم الكلي، آخر تعديل، الإصدار والوصف إن وُجدا. */
+    private fun showProjectInfo(project: Project) {
+        Thread {
+            val stats = ProjectOps.stats(project.dir)
+            val meta = runCatching { ProjectManager.readProjectMeta(project) }.getOrNull()
+            runOnUiThread {
+                if (isFinishing) return@runOnUiThread
+                val date = java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT)
+                    .format(java.util.Date(stats.lastModified))
+                val msg = buildString {
+                    append(getString(R.string.proj_info_body, typeName(project.type), stats.files, stats.folders, ProjectOps.formatSize(stats.bytes), date))
+                    if (meta != null) {
+                        if (meta.version.isNotBlank()) append("\n").append(getString(R.string.proj_info_version, meta.version))
+                        if (meta.description.isNotBlank()) append("\n\n").append(meta.description)
+                    }
+                }
+                AlertDialog.Builder(this).setTitle(project.name).setMessage(msg)
+                    .setPositiveButton(android.R.string.ok, null).show()
+            }
+        }.start()
+    }
+
     private fun showRenameDialog(project: Project) {
         val input = EditText(this)
         input.setText(project.name)
@@ -1034,7 +1132,8 @@ class ProjectsActivity : RinBaseActivity() {
             .setView(input)
             .setPositiveButton(R.string.rename) { _, _ ->
                 try {
-                    ProjectManager.renameProject(project, input.text.toString())
+                    val renamed = ProjectManager.renameProject(project, input.text.toString())
+                    ProjectPins.rename(this, project.name, renamed.name)
                     refresh()
                 } catch (e: IllegalArgumentException) {
                     Toast.makeText(this, e.message, Toast.LENGTH_SHORT).show()
@@ -1058,6 +1157,10 @@ class ProjectsActivity : RinBaseActivity() {
 }
 
 private const val MENU_SYNC_PHONE = 9001
+private const val MENU_FILTER_TYPE = 9101
+private const val MENU_PIN = 9102
+private const val MENU_DUPLICATE = 9103
+private const val MENU_INFO = 9104
 
 private class ProjectsAdapter(
     val onOpen: (Project) -> Unit,
@@ -1067,6 +1170,10 @@ private class ProjectsAdapter(
     val onExport: (Project) -> Unit,
     val onDownload: (Project) -> Unit,
     val onSync: (Project) -> Unit,
+    val onPin: (Project) -> Unit,
+    val onDuplicate: (Project) -> Unit,
+    val onInfo: (Project) -> Unit,
+    val isPinned: (Project) -> Boolean,
     private val selection: SelectionModel,
     private val onSelectionChanged: () -> Unit
 ) : RecyclerView.Adapter<ProjectsAdapter.VH>() {
@@ -1114,6 +1221,7 @@ private class ProjectsAdapter(
         val btnOpen: View = view.findViewById(R.id.btnOpenProject)
         val cover: View = view.findViewById(R.id.projectCover)
         val check: View = view.findViewById(R.id.imgProjectSelectCheck)
+        val imgPin: android.widget.ImageView = view.findViewById(R.id.imgProjectPin)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
@@ -1142,6 +1250,9 @@ private class ProjectsAdapter(
         holder.imgTypeIcon.setImageDrawable(icon)
 
         holder.txtName.text = project.name
+        // شارة الدبوس للمشاريع المثبّتة.
+        holder.imgPin.visibility = if (isPinned(project)) View.VISIBLE else View.GONE
+        holder.imgPin.setColorFilter(ContextCompat.getColor(context, R.color.rin_accent))
         holder.txtType.text = typeLabel(context, project.type).uppercase()
         holder.txtType.setTextColor(color)
         // البطاقة كانت تعرض عدد الملفات فقط — لا شيء يوحي متى آخر مرة عُدِّل فيها المشروع
@@ -1174,8 +1285,15 @@ private class ProjectsAdapter(
         val popup = PopupMenu(anchor.context, anchor)
         popup.menuInflater.inflate(R.menu.menu_project_actions, popup.menu)
         popup.menu.add(0, MENU_SYNC_PHONE, 90, anchor.context.getString(R.string.proj_sync_phone))
+        popup.menu.add(0, MENU_PIN, 1,
+            anchor.context.getString(if (isPinned(project)) R.string.proj_unpin else R.string.proj_pin))
+        popup.menu.add(0, MENU_DUPLICATE, 91, anchor.context.getString(R.string.proj_duplicate))
+        popup.menu.add(0, MENU_INFO, 92, anchor.context.getString(R.string.proj_info))
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
+                MENU_PIN -> onPin(project)
+                MENU_DUPLICATE -> onDuplicate(project)
+                MENU_INFO -> onInfo(project)
                 MENU_SYNC_PHONE -> onSync(project)
                 R.id.actionRenameProject -> onRename(project)
                 R.id.actionMoveProject -> onMove(project)
