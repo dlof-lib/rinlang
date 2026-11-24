@@ -147,7 +147,7 @@ class ProjectsActivity : RinBaseActivity() {
         handleIncomingPackage(intent)
         findViewById<View>(R.id.btnProjectAlbums).setOnClickListener { startActivity(Intent(this, AlbumsActivity::class.java)) }
         findViewById<View>(R.id.btnProjectImport).setOnClickListener {
-            pickPackage()
+            showImportChoices()
         }
         // فُتح التطبيق من أيقونة RinPak في قائمة التطبيقات (alias RinPakLauncher): اعرض منتقي الحزم مباشرة.
         if (savedInstanceState == null) handleLauncherIntent(intent)
@@ -170,6 +170,19 @@ class ProjectsActivity : RinBaseActivity() {
         setIntent(intent)
         handleIncomingPackage(intent)
         handleLauncherIntent(intent)
+    }
+
+    /** «استيراد»: من ملف (RinPak/ZIP) أو من مستودع (GitHub وغيره). */
+    private fun showImportChoices() {
+        IconMenu.show(this, getString(R.string.import_project_action), listOf(
+            IconMenu.Item(R.drawable.fx_zip, getString(R.string.repo_import_from_file)) { pickPackage() },
+            IconMenu.Item(R.drawable.fx_repo, getString(R.string.repo_import_from_repo)) {
+                RepoRestore.showImportDialog(this) { project ->
+                    refresh()
+                    openProject(project)
+                }
+            }
+        ))
     }
 
     private fun pickPackage() {
