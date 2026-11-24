@@ -32,6 +32,12 @@
     <string name="notif_duration_ms">%1$d ms</string>
     <string name="notif_duration_s">%1$.1f s</string>
     <string name="notif_live_hint">Tap Open to view the preview in your browser, or Stop to shut the server down.</string>
+    <string name="notif_channel_background">Background work</string>
+    <string name="notif_channel_background_desc">A silent notice that keeps downloads and program runs going after you leave the app.</string>
+    <string name="notif_bg_title">RinStudio is working in the background</string>
+    <string name="notif_bg_text">Active downloads: %1$d · Programs running: %2$d</string>
+    <string name="notif_job_input_title">Program #%1$d is waiting for your answer</string>
+    <string name="notif_job_input_hint">Tap to return to RinStudio and answer.</string>
     <plurals name="notif_downloads_done">
         <item quantity="one">%d download complete</item>
         <item quantity="other">%d downloads complete</item>
