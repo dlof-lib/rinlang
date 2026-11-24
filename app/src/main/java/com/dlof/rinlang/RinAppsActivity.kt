@@ -46,6 +46,19 @@ class RinAppsActivity : RinBaseActivity() {
         rv.layoutManager = LinearLayoutManager(this)
         rv.adapter = adapter
 
+        // إيماءات: سحب يمين = تثبيت، سحب يسار = حذف (بتأكيد)، نقرتان/ضغطة على العنوان = أول/آخر القائمة،
+        // سحب لأسفل = تحديث.
+        ListGestures.attachOpenSwipe(
+            this, rv,
+            onOpen = { pos -> adapter.recordAt(pos)?.let { ApkInstallActions.install(this, it.apkFile(this)) } },
+            onSecondary = { pos -> adapter.recordAt(pos)?.let { confirmDelete(it) } },
+            primaryIcon = R.drawable.ic_apk_export,
+            primaryLabel = getString(R.string.apk_export_action_install),
+            cornerDp = 14f
+        )
+        findViewById<View>(R.id.txtToolbarTitle)?.let { ListGestures.attachTitleScroll(this, it, rv) }
+        ListGestures.attachPullRefresh(this, findViewById(R.id.swipeRinApps)) { reload() }
+
         findViewById<View>(R.id.fabRinAppsNewExport).setOnClickListener { showProjectPicker() }
     }
 
@@ -126,6 +139,8 @@ class RinAppsActivity : RinBaseActivity() {
 
         private val items = ArrayList<RinAppRecord>()
 
+        fun recordAt(position: Int): RinAppRecord? = items.getOrNull(position)
+
         fun submit(records: List<RinAppRecord>) {
             items.clear()
             items.addAll(records)
@@ -156,6 +171,9 @@ class RinAppsActivity : RinBaseActivity() {
             holder.btnInstall.setOnClickListener { onInstall(record) }
             holder.btnDetails.setOnClickListener { onDetails(record) }
             holder.btnMore.setOnClickListener { onMore(record, it) }
+            // نقرة على البطاقة = التفاصيل، ضغطة مستمرة = قائمة «المزيد».
+            holder.itemView.setOnClickListener { onDetails(record) }
+            holder.itemView.setOnLongClickListener { onMore(record, holder.btnMore); true }
         }
 
         override fun getItemCount(): Int = items.size
