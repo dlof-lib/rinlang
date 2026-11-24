@@ -415,6 +415,9 @@ object SelectionMenu {
         m.add(0, 18, 17, R.string.zc_menu)
         val zips = entries.filter { it is FsEntry.FileEntry && it.name.endsWith(".zip", true) }
         if (zips.size == 1 && entries.size > 1) m.add(0, 19, 18, R.string.zadd_menu)
+        // تنزيل إلى الجهاز (Downloads/RinStudio): كما هو لملف واحد، أو ZIP لغير ذلك.
+        m.add(0, 20, 19, R.string.dl_action)
+        if (entries.size > 1 || entries.firstOrNull() is FsEntry.FileEntry) m.add(0, 21, 20, R.string.dl_action_zip)
         pm.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 1 -> { FileClipboard.set(entries, cut = false); toast(ctx, entries.size); onChanged() }
@@ -433,6 +436,8 @@ object SelectionMenu {
                 14 -> FileShare.share(ctx, entries)
                 15 -> (entries[0] as? FsEntry.FileEntry)?.let { FilePreview.show(ctx, it.file.file) }
                 17 -> ZipTools.shareAsZip(ctx, entries)
+                20 -> DownloadExporter.saveEntries(ctx, project, entries)
+                21 -> DownloadExporter.saveEntries(ctx, project, entries, forceZip = true)
                 18 -> ZipCompress.show(ctx, project, entries, parentRelDir, onChanged)
                 19 -> {
                     val z = entries.first { it is FsEntry.FileEntry && it.name.endsWith(".zip", true) } as FsEntry.FileEntry
