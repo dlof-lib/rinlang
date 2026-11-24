@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ميزات شاشة الملفات الإضافية: FilesExtras.kt -->
+<resources>
+    <string name="status_all">All</string>
+    <string name="status_errors">With errors</string>
+    <string name="status_unsaved">Unsaved</string>
+    <string name="status_pinned">Pinned</string>
+    <string name="filter_no_match">No items match this filter</string>
+    <string name="mkfile_clipboard">From clipboard</string>
+    <string name="clipboard_empty">Clipboard is empty (no text to create a file from)</string>
+    <string name="clipboard_chars_format">A file will be created from the clipboard text (%1$d characters)</string>
+    <string name="tool_compare">Compare the two files</string>
+    <string name="compare_title">%1$s ⇄ %2$s</string>
+    <string name="compare_identical">The two files are identical</string>
+    <string name="compare_too_large">The files are too large to compare</string>
+    <string name="compare_summary">+%1$d added · −%2$d removed</string>
+    <string name="row_copy_name">Copy name</string>
+    <string name="name_copied_toast">Name copied</string>
+    <string name="row_pin">Pin</string>
+    <string name="row_unpin">Unpin</string>
+    <string name="tool_jump">Jump to folder</string>
+    <string name="tool_findreplace">Find &amp; replace in project</string>
+    <string name="fr_find">Text to find</string>
+    <string name="fr_with">Replace with (empty = delete)</string>
+    <string name="fr_case">Match case</string>
+    <string name="fr_preview">Preview</string>
+    <string name="fr_none">No matches</string>
+    <string name="fr_confirm">%1$d matches in %2$d files will be replaced. This cannot be undone.</string>
+    <string name="fr_apply">Replace</string>
+    <string name="empty_none">No empty files</string>
+    <string name="empty_title">Empty files (%1$d)</string>
+    <string name="empty_delete">Delete all</string>
+    <string name="tool_empty">Empty files</string>
+    <string name="row_copy_content">Copy content</string>
+    <string name="row_stats">Text statistics</string>
+    <string name="content_copied_toast">File content copied</string>
+    <string name="stats_body">Lines: %1$d (blank: %2$d)\nWords: %3$d\nCharacters: %4$d\nSize: %5$d bytes</string>
+</resources>
