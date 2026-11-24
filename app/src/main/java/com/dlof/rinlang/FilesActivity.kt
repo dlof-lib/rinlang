@@ -147,7 +147,9 @@ class FilesActivity : RinBaseActivity() {
         })
 
         fabAddFile.setOnClickListener { showCreateFileDialog() }
-        fabNewFolder.setOnClickListener { showCreateFolderDialog() }
+        fabNewFolder.setOnClickListener {
+            FolderCreator.show(this, project, currentRelDir) { refresh() }
+        }
         fabUploadFile.setOnClickListener {
             importFileLauncher.launch(
                 arrayOf(
@@ -205,6 +207,11 @@ class FilesActivity : RinBaseActivity() {
         }
         findViewById<View>(R.id.btnSelectionMove).setOnClickListener {
             FileBatchOps.showMoveDialog(this, project, selectedEntries(), protectedPaths()) {
+                clearSelection(); refresh()
+            }
+        }
+        findViewById<View>(R.id.btnSelectionNewFolder).setOnClickListener {
+            FolderCreator.show(this, project, currentRelDir, selectedEntries(), protectedPaths()) {
                 clearSelection(); refresh()
             }
         }
