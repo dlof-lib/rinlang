@@ -1,0 +1,97 @@
+diff -ruN a/app/src/main/java/com/dlof/rinlang/FilesActivity.kt b/app/src/main/java/com/dlof/rinlang/FilesActivity.kt
+--- a/app/src/main/java/com/dlof/rinlang/FilesActivity.kt	2026-11-24 11:08:23.605438104 +0000
++++ b/app/src/main/java/com/dlof/rinlang/FilesActivity.kt	2026-11-24 11:08:18.289839624 +0000
+@@ -594,6 +594,9 @@
+             },
+             item(R.drawable.rs_ic_download, R.string.dl_from_url) {
+                 UrlDownloader.show(this, project, currentRelDir) { refresh() }
++            },
++            item(R.drawable.fx_repo, R.string.repo_menu_restore) {
++                RepoRestore.showIntoProject(this, project, currentRelDir) { refresh() }
+             }
+         ))
+     }
+@@ -632,6 +635,12 @@
+             item(R.drawable.rs_ic_download, getString(R.string.dl_from_url)) {
+                 UrlDownloader.show(this, project, currentRelDir) { refresh() }
+             },
++            item(R.drawable.fx_repo, getString(R.string.repo_menu_restore)) {
++                RepoRestore.showIntoProject(this, project, currentRelDir) { refresh() }
++            },
++            item(R.drawable.fx_repo, getString(R.string.repo_menu_update)) {
++                RepoRestore.updateFromSource(this, project, currentRelDir) { refresh() }
++            },
+             item(R.drawable.fx_storage, getString(R.string.tool_storage)) { StorageAnalyzer.show(this, project) },
+             item(R.drawable.fx_dups, getString(R.string.tool_dups)) { DuplicateFinder.show(this, project, protectedPaths()) { refresh() } },
+             item(R.drawable.fx_tree, getString(R.string.tool_copy_tree)) { TreeExport.copy(this, project) },
+diff -ruN a/app/src/main/java/com/dlof/rinlang/ProjectManager.kt b/app/src/main/java/com/dlof/rinlang/ProjectManager.kt
+--- a/app/src/main/java/com/dlof/rinlang/ProjectManager.kt	2026-11-24 11:08:18.286478048 +0000
++++ b/app/src/main/java/com/dlof/rinlang/ProjectManager.kt	2026-11-24 11:08:18.288705155 +0000
+@@ -1503,6 +1503,35 @@
+         }
+     }
+ 
++    // ---- استرداد مستودع (GitHub وغيره): انظر RepoRestore ----
++
++    /**
++     * مجلد مؤقت مخفي (.import_*) داخل جذر المشاريع نفسه، كي يكون نقله لاحقاً إلى مجلد المشروع النهائي
++     * عملية rename ذرّية على نفس نظام الملفات. يُنظَّف تلقائياً إن انقطعت العملية ([sweepStaleTemp]).
++     */
++    fun newImportTempDir(context: Context): File {
++        val root = projectsRoot(context)
++        sweepStaleTemp(root)
++        val temp = File(root, ".import_${System.currentTimeMillis()}_${(1000..9999).random()}")
++        require(temp.mkdirs()) { "تعذّر إنشاء مساحة استيراد مؤقتة" }
++        return temp
++    }
++
++    /**
++     * يثبّت شجرة ملفات جاهزة ([tree]، يجب أن تكون داخل مجلد مؤقت من [newImportTempDir]) كمشروع جديد
++     * باسم فريد، ويكتب بيانات المشروع الوصفية بالنوع [type]. لا يشترط وجود main.rin (المستودعات العامة
++     * لا تحويه دائماً).
++     */
++    fun installImportedTree(context: Context, tree: File, requestedName: String, type: ProjectType): Project {
++        val root = projectsRoot(context)
++        val finalName = uniqueProjectName(context, sanitizeProjectName(requestedName))
++        val finalDir = File(root, finalName)
++        require(!finalDir.exists()) { "يوجد مشروع بهذا الاسم بالفعل" }
++        if (!tree.renameTo(finalDir)) throw IllegalStateException("تعذّر تثبيت المشروع المستورد")
++        writeProjectMeta(finalDir, type, null, finalName)
++        return Project(finalName, finalDir, finalDir.lastModified(), type)
++    }
++
+     /** يحذف بقايا استيراد/استبدال انقطع (انهيار أو قتل التطبيق) أقدم من ساعة. */
+     private fun sweepStaleTemp(root: File) {
+         val cutoff = System.currentTimeMillis() - 60L * 60L * 1000L
+diff -ruN a/app/src/main/java/com/dlof/rinlang/ProjectsActivity.kt b/app/src/main/java/com/dlof/rinlang/ProjectsActivity.kt
+--- a/app/src/main/java/com/dlof/rinlang/ProjectsActivity.kt	2026-11-24 11:08:23.606811502 +0000
++++ b/app/src/main/java/com/dlof/rinlang/ProjectsActivity.kt	2026-11-24 11:08:18.290903551 +0000
+@@ -147,7 +147,7 @@
+         handleIncomingPackage(intent)
+         findViewById<View>(R.id.btnProjectAlbums).setOnClickListener { startActivity(Intent(this, AlbumsActivity::class.java)) }
+         findViewById<View>(R.id.btnProjectImport).setOnClickListener {
+-            pickPackage()
++            showImportChoices()
+         }
+         // فُتح التطبيق من أيقونة RinPak في قائمة التطبيقات (alias RinPakLauncher): اعرض منتقي الحزم مباشرة.
+         if (savedInstanceState == null) handleLauncherIntent(intent)
+@@ -172,6 +172,19 @@
+         handleLauncherIntent(intent)
+     }
+ 
++    /** «استيراد»: من ملف (RinPak/ZIP) أو من مستودع (GitHub وغيره). */
++    private fun showImportChoices() {
++        IconMenu.show(this, getString(R.string.import_project_action), listOf(
++            IconMenu.Item(R.drawable.fx_zip, getString(R.string.repo_import_from_file)) { pickPackage() },
++            IconMenu.Item(R.drawable.fx_repo, getString(R.string.repo_import_from_repo)) {
++                RepoRestore.showImportDialog(this) { project ->
++                    refresh()
++                    openProject(project)
++                }
++            }
++        ))
++    }
++
+     private fun pickPackage() {
+         importProjectLauncher.launch(arrayOf(ProjectManager.OFFICIAL_PROJECT_MIME, ProjectManager.LEGACY_PROJECT_MIME, "application/zip", "application/octet-stream", "*/*"))
+     }
