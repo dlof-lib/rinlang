@@ -13,6 +13,7 @@
     <string name="selection_failed_toast">Falló para %1$d elemento(s)</string>
     <string name="selection_paths_copied_toast">Rutas copiadas de %1$d elemento(s)</string>
     <string name="swipe_rename_label">Renombrar</string>
+    <string name="swipe_open_label">Abrir</string>
     <string name="swipe_delete_label">Eliminar</string>
     <string name="mkdir_single">Una carpeta (admite ruta anidada)</string>
     <string name="mkdir_multi">Varias carpetas a la vez</string>
