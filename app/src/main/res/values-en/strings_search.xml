@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- البحث المتقدم في الملفات (English). انظر FileSearch.kt / FilesActivity -->
+<resources>
+    <string name="sr_mode_names">Names</string>
+    <string name="sr_mode_content">Content</string>
+    <string name="sr_mode_both">Names + content</string>
+    <string name="sr_chip_case">Aa</string>
+    <string name="sr_chip_word">Whole word</string>
+    <string name="sr_chip_regex">.*  Regex</string>
+    <string name="sr_scope_project">Whole project</string>
+    <string name="sr_scope_folder">This folder only</string>
+    <string name="sr_history">History</string>
+    <string name="sr_replace">Replace</string>
+    <string name="sr_filters">Filters</string>
+    <string name="sr_summary_format">%1$d matches in %2$d files · %3$d ms</string>
+    <string name="sr_summary_names">%1$d files · %2$d ms</string>
+    <string name="sr_truncated"> · results truncated, narrow the search</string>
+    <string name="sr_searching">Searching…</string>
+    <string name="sr_regex_error">Invalid regex: %1$s</string>
+    <string name="sr_more_matches">+%1$d more matches</string>
+    <string name="sr_line_prefix">Line %1$d: %2$s</string>
+    <string name="sr_matches_title">%1$s — %2$d matches</string>
+    <string name="sr_open_file">Open file</string>
+    <string name="sr_history_title">Recent searches</string>
+    <string name="sr_history_empty">No history yet</string>
+    <string name="sr_history_clear">Clear history</string>
+    <string name="sr_filters_title">Search filters</string>
+    <string name="sr_filters_help">Type them in the search box together with your text:\n\n• ext:rin,kt  ← only these extensions\n• -ext:png  ← exclude an extension\n• in:src  ← inside a folder (name prefix)\n• -in:build  ← exclude a folder\n\nExample:  count ext:rin -in:lib\nA filter with no text just lists matching files (e.g. ext:indsin).\n\nFuzzy name search: mnact → MainActivity.kt</string>
+    <string name="sr_replace_title">Replace in files</string>
+    <string name="sr_replace_hint">Replacement text (use $1 in Regex mode)</string>
+    <string name="sr_replace_confirm">%1$d matches in %2$d files will be replaced. Files with unsaved edits are skipped, and you can undo right after.</string>
+    <string name="sr_replace_apply">Replace all</string>
+    <string name="sr_replace_done">Replaced %1$d matches in %2$d files</string>
+    <string name="sr_replace_skipped">Skipped %1$d files (unsaved or not UTF-8)</string>
+    <string name="sr_replace_undo">Undo</string>
+    <string name="sr_replace_undone">Restored %1$d files</string>
+    <string name="sr_replace_blocked_truncated">Results are truncated — narrow the search before replacing</string>
+    <string name="sr_replace_empty_match">The pattern matches empty text; change it before replacing</string>
+    <string name="sr_replace_none">No content matches to replace</string>
+    <string name="find_opt_word">Whole word</string>
+    <string name="find_opt_case">Match case</string>
+    <string name="find_opt_regex">Regex</string>
+    <string name="find_opt_list">All results…</string>
+    <string name="find_opt_project">Search in project</string>
+    <string name="find_opt_history">Search history</string>
+    <string name="find_list_title">All results (%1$d)</string>
+    <string name="find_project_none">No open project to search in</string>
+</resources>
