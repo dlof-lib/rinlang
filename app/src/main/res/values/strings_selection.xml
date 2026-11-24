@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- تحديد الملفات المتعدد + إيماءات صفوف الملفات (العربية — الافتراضية). انظر FileSelection.kt -->
+<resources>
+    <string name="selection_count_format">%1$d محدد</string>
+    <string name="selection_select_all">تحديد الكل</string>
+    <string name="selection_invert">عكس التحديد</string>
+    <string name="selection_clear">إلغاء التحديد</string>
+    <string name="selection_delete_title">حذف العناصر المحددة</string>
+    <string name="selection_delete_confirm">سيتم حذف %1$d عنصر نهائياً، بما فيها كل محتويات المجلدات المحددة.</string>
+    <string name="selection_move_title">نقل %1$d عنصر إلى مجلد</string>
+    <string name="selection_done_toast">تمت العملية على %1$d عنصر</string>
+    <string name="selection_skipped_toast">تم تخطّي %1$d عنصر (مفتوح حالياً، أو فيه تعديلات غير محفوظة، أو الاسم موجود في الوجهة)</string>
+    <string name="selection_failed_toast">فشلت العملية على %1$d عنصر</string>
+    <string name="selection_paths_copied_toast">نُسخت مسارات %1$d عنصر</string>
+    <string name="swipe_rename_label">إعادة تسمية</string>
+    <string name="swipe_delete_label">حذف</string>
+</resources>
