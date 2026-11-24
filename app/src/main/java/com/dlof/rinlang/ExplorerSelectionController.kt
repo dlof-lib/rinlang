@@ -73,29 +73,35 @@ class ExplorerSelectionController(
             else all.forEach { selection.add(it) }
             onSelectionChanged()
         }
-        activity.findViewById<View>(R.id.btnExplorerSelDuplicate).setOnClickListener {
-            FileBatchOps.duplicate(activity, selected()) { clear(); refreshTree() }
-        }
-        activity.findViewById<View>(R.id.btnExplorerSelMove).setOnClickListener {
-            val p = project() ?: return@setOnClickListener
-            FileBatchOps.showMoveDialog(activity, p, selected(), protectedPaths()) { clear(); refreshTree() }
-        }
         // زر "مجلد جديد" في رأس الدرج: داخل مجلد الملف المفتوح حالياً، وإلا في الجذر.
         activity.findViewById<View>(R.id.btnExplorerNewFolder).setOnClickListener {
             val p = project() ?: return@setOnClickListener
             val parent = currentFileRelPath()?.substringBeforeLast('/', "") ?: ""
             FolderCreator.show(activity, p, parent) { refreshTree() }
         }
-        activity.findViewById<View>(R.id.btnExplorerSelNewFolder).setOnClickListener {
+        activity.findViewById<View>(R.id.btnExplorerSelMore).setOnClickListener { anchor ->
             val p = project() ?: return@setOnClickListener
             val parent = currentFileRelPath()?.substringBeforeLast('/', "") ?: ""
-            FolderCreator.show(activity, p, parent, selected(), protectedPaths()) { clear(); refreshTree() }
+            SelectionMenu.show(
+                ctx = activity, anchor = anchor, project = p, entries = selected(), parentRelDir = parent,
+                protectedPaths = protectedPaths(), onInvert = null,
+                onChanged = { clear(); refreshTree(); updatePaste() },
+                onSelectPattern = {
+                    PatternSelect.ask(activity) { rx ->
+                        adapter.entries().filter { rx.matches(it.name) }.forEach { selection.add(it.relPath) }
+                        onSelectionChanged()
+                    }
+                }
+            )
         }
-        activity.findViewById<View>(R.id.btnExplorerSelCopyPath).setOnClickListener {
-            FileBatchOps.copyPaths(activity, selected())
+        activity.findViewById<View>(R.id.btnExplorerPaste).setOnClickListener {
+            val p = project() ?: return@setOnClickListener
+            val parent = currentFileRelPath()?.substringBeforeLast('/', "") ?: ""
+            FileClipboard.paste(activity, p, parent, protectedPaths()) { refreshTree(); updatePaste() }
         }
+        updatePaste()
         activity.findViewById<View>(R.id.btnExplorerSelDelete).setOnClickListener {
-            FileBatchOps.confirmDelete(activity, selected(), protectedPaths()) { clear(); refreshTree() }
+            FileBatchOps.confirmDelete(activity, selected(), protectedPaths(), project()?.name) { clear(); refreshTree() }
         }
     }
 
@@ -120,7 +126,12 @@ class ExplorerSelectionController(
 
     private fun updateBar() {
         bar.isVisible = selection.active
+        updatePaste()
         if (selection.active) txtCount.text = activity.getString(R.string.selection_count_format, selection.count)
+    }
+
+    private fun updatePaste() {
+        activity.findViewById<View>(R.id.btnExplorerPaste).isVisible = FileClipboard.hasContent
     }
 
     fun clear() {
