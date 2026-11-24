@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- شريط JSON في المحرر (json/jsonc) -->
+    <string name="json_validate">تحقق من JSON</string>
+    <string name="json_format">تنسيق</string>
+    <string name="json_minify">تصغير</string>
+    <string name="json_sort">ترتيب المفاتيح</string>
+    <string name="json_repair">إصلاح تلقائي</string>
+    <string name="json_outline">مخطط الهيكل</string>
+    <string name="json_copy_path">نسخ مسار JSON</string>
+    <string name="json_goto_path">انتقال إلى مسار</string>
+    <string name="json_string_toggle">تحويل نص ↔ سلسلة JSON</string>
+    <string name="json_insert_pair">إدراج مفتاح وقيمة</string>
+    <string name="json_insert_object">إدراج كائن {}</string>
+    <string name="json_insert_array">إدراج مصفوفة []</string>
+    <string name="json_more">المزيد</string>
+    <string name="json_key_placeholder">key</string>
+    <string name="json_ok">حسناً</string>
+    <string name="json_valid">JSON صالح</string>
+    <string name="json_valid_detail">JSON صالح ✓ — %1$d مفتاح، عمق %2$d</string>
+    <string name="json_invalid_title">JSON غير صالح</string>
+    <string name="json_error_at">%1$s
+السطر %2$d، العمود %3$d</string>
+    <string name="json_goto_error">اذهب إلى الخطأ</string>
+    <string name="json_formatted">تم التنسيق</string>
+    <string name="json_minified">تم التصغير</string>
+    <string name="json_sorted">تم ترتيب المفاتيح</string>
+    <string name="json_repaired">تم الإصلاح</string>
+    <string name="json_no_change">لا تغيير</string>
+    <string name="json_has_comments">يحتوي الملف على تعليقات — استخدم «إصلاح تلقائي» لإزالتها أولاً</string>
+    <string name="json_select_text">حدّد نصاً أو ضع المؤشر داخل سلسلة JSON</string>
+    <string name="json_path_copied">تم نسخ المسار: %1$s</string>
+    <string name="json_goto_title">الانتقال إلى مسار</string>
+    <string name="json_goto_hint">$.users[0].name</string>
+    <string name="json_goto">انتقال</string>
+    <string name="json_path_not_found">المسار غير موجود</string>
+    <string name="json_outline_title">مخطط JSON</string>
+    <string name="json_outline_empty">لا توجد عناصر</string>
+    <string name="json_stats_title">إحصاءات JSON</string>
+    <string name="json_stats_message">كائنات: %1$d
+مصفوفات: %2$d
+مفاتيح: %3$d
+نصوص: %4$d
+أرقام: %5$d
+منطقية: %6$d
+قيم null: %7$d
+أقصى عمق: %8$d
+الأسطر: %9$d
+الحجم: %10$d بايت (مصغَّراً %11$d)</string>
+    <string name="json_menu_stats">إحصاءات</string>
+    <string name="json_menu_sort_shallow">ترتيب المستوى الأول فقط</string>
+    <string name="json_menu_sort_desc">ترتيب تنازلي</string>
+    <string name="json_menu_indent">مسافة التنسيق</string>
+    <string name="json_indent_auto">تلقائي (من الملف)</string>
+    <string name="json_indent_2">مسافتان</string>
+    <string name="json_indent_4">4 مسافات</string>
+    <string name="json_indent_tab">Tab</string>
+    <string name="json_err_empty">المستند فارغ</string>
+    <string name="json_err_unexpected_char">حرف غير متوقع «%1$s»</string>
+    <string name="json_err_unexpected_end">انتهى المستند قبل اكتمال القيمة</string>
+    <string name="json_err_expected_key">متوقع اسم مفتاح بين علامتي اقتباس</string>
+    <string name="json_err_expected_colon">متوقع «:» بعد المفتاح</string>
+    <string name="json_err_expected_comma">متوقع «,» أو إغلاق القوس</string>
+    <string name="json_err_trailing_comma">فاصلة زائدة قبل الإغلاق</string>
+    <string name="json_err_comment">التعليقات غير مسموحة في JSON</string>
+    <string name="json_err_single_quote">علامة اقتباس مفردة — استخدم علامتي اقتباس مزدوجتين</string>
+    <string name="json_err_extra_data">نص زائد بعد نهاية JSON</string>
+    <string name="json_err_control_char">محرف تحكم داخل نص (استخدم \\n)</string>
+    <string name="json_err_bad_escape">تسلسل هروب غير صالح</string>
+    <string name="json_err_unterminated">نص غير مغلق</string>
+    <string name="json_err_bad_number">رقم غير صالح</string>
+    <string name="json_err_too_deep">تداخل أعمق من المسموح</string>
+</resources>
