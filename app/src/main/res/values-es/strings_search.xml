@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- البحث المتقدم في الملفات (Español). انظر FileSearch.kt / FilesActivity -->
+<resources>
+    <string name="sr_mode_names">Nombres</string>
+    <string name="sr_mode_content">Contenido</string>
+    <string name="sr_mode_both">Nombres + contenido</string>
+    <string name="sr_chip_case">Aa</string>
+    <string name="sr_chip_word">Palabra completa</string>
+    <string name="sr_chip_regex">.*  Regex</string>
+    <string name="sr_scope_project">Todo el proyecto</string>
+    <string name="sr_scope_folder">Solo esta carpeta</string>
+    <string name="sr_history">Historial</string>
+    <string name="sr_replace">Reemplazar</string>
+    <string name="sr_filters">Filtros</string>
+    <string name="sr_summary_format">%1$d coincidencias en %2$d archivos · %3$d ms</string>
+    <string name="sr_summary_names">%1$d archivos · %2$d ms</string>
+    <string name="sr_truncated"> · resultados truncados, acota la búsqueda</string>
+    <string name="sr_searching">Buscando…</string>
+    <string name="sr_regex_error">Regex no válida: %1$s</string>
+    <string name="sr_more_matches">+%1$d coincidencias más</string>
+    <string name="sr_line_prefix">Línea %1$d: %2$s</string>
+    <string name="sr_matches_title">%1$s — %2$d coincidencias</string>
+    <string name="sr_open_file">Abrir archivo</string>
+    <string name="sr_history_title">Búsquedas recientes</string>
+    <string name="sr_history_empty">Aún no hay historial</string>
+    <string name="sr_history_clear">Borrar historial</string>
+    <string name="sr_filters_title">Filtros de búsqueda</string>
+    <string name="sr_filters_help">Escríbelos en el cuadro de búsqueda junto al texto:\n\n• ext:rin,kt  ← solo esas extensiones\n• -ext:png  ← excluir una extensión\n• in:src  ← dentro de una carpeta (prefijo del nombre)\n• -in:build  ← excluir una carpeta\n\nEjemplo:  count ext:rin -in:lib\nUn filtro sin texto solo lista los archivos (p. ej. ext:indsin).\n\nBúsqueda aproximada de nombres: mnact → MainActivity.kt</string>
+    <string name="sr_replace_title">Reemplazar en archivos</string>
+    <string name="sr_replace_hint">Texto de reemplazo (usa $1 en modo Regex)</string>
+    <string name="sr_replace_confirm">Se reemplazarán %1$d coincidencias en %2$d archivos. Se omiten los archivos con cambios sin guardar y podrás deshacer justo después.</string>
+    <string name="sr_replace_apply">Reemplazar todo</string>
+    <string name="sr_replace_done">Se reemplazaron %1$d coincidencias en %2$d archivos</string>
+    <string name="sr_replace_skipped">Se omitieron %1$d archivos (sin guardar o no UTF-8)</string>
+    <string name="sr_replace_undo">Deshacer</string>
+    <string name="sr_replace_undone">Se restauraron %1$d archivos</string>
+    <string name="sr_replace_blocked_truncated">Resultados truncados: acota la búsqueda antes de reemplazar</string>
+    <string name="sr_replace_empty_match">El patrón coincide con texto vacío; cámbialo antes de reemplazar</string>
+    <string name="sr_replace_none">No hay coincidencias de contenido para reemplazar</string>
+    <string name="find_opt_word">Palabra completa</string>
+    <string name="find_opt_case">Distinguir mayúsculas</string>
+    <string name="find_opt_regex">Regex</string>
+    <string name="find_opt_list">Todos los resultados…</string>
+    <string name="find_opt_project">Buscar en el proyecto</string>
+    <string name="find_opt_history">Historial de búsqueda</string>
+    <string name="find_list_title">Todos los resultados (%1$d)</string>
+    <string name="find_project_none">No hay proyecto abierto donde buscar</string>
+</resources>
