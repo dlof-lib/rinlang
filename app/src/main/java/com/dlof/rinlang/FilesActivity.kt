@@ -23,6 +23,8 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
+import androidx.core.view.isVisible
+import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import java.text.DateFormat
@@ -40,6 +42,9 @@ import java.util.Date
  *  - إعادة تسمية أي ملف أو مجلد (زر قلم على كل صف).
  *  - فتح ملف، أو الدخول إلى مجلد فرعي.
  *  - حذف ملف أو مجلد (مع كل محتوياته).
+ *  - تحديد متعدد: ضغطة مستمرة على صف تبدأ وضع التحديد، والسحب ↑↓ بعدها يحدّد نطاقاً، ثم شريط
+ *    إجراءات (تحديد الكل/عكس/تكرار/نقل/نسخ المسار/حذف). انظر FileSelection.kt.
+ *  - إيماءات الصف: سحب لليمين = إعادة تسمية، سحب لليسار = حذف (مع تأكيد).
  */
 class FilesActivity : RinBaseActivity() {
 
@@ -52,6 +57,12 @@ class FilesActivity : RinBaseActivity() {
     private lateinit var txtEmpty: View
     private lateinit var txtEmptyMessage: TextView
     private lateinit var adapter: FilesAdapter
+
+    // --- التحديد المتعدد ---
+    private val selection = SelectionModel()
+    private lateinit var selectionBar: View
+    private lateinit var txtSelectionCount: TextView
+    private lateinit var fabContainer: View
 
     /** المسار النسبي الحالي من جذر المشروع (فواصل "/")، فارغ يعني أننا في جذر المشروع. */
     private var currentRelDir: String = ""
@@ -118,10 +129,13 @@ class FilesActivity : RinBaseActivity() {
             onRenameFolder = { folder -> showRenameFolderDialog(folder) },
             onDeleteFile = { file -> showDeleteFileConfirm(file) },
             onDeleteFolder = { folder -> showDeleteFolderConfirm(folder) },
-            onMoreFile = { file, anchor -> showMoreFileActions(file, anchor) }
+            onMoreFile = { file, anchor -> showMoreFileActions(file, anchor) },
+            selection = selection,
+            onSelectionChanged = { onSelectionChanged() }
         )
         rvFiles.layoutManager = LinearLayoutManager(this)
         rvFiles.adapter = adapter
+        setupSelectionAndGestures()
 
         findViewById<EditText>(R.id.inputSearchFiles).addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
@@ -151,7 +165,105 @@ class FilesActivity : RinBaseActivity() {
         fabZipTools.setOnClickListener { showZipToolsDialog() }
     }
 
+    // ---- التحديد المتعدد والإيماءات ----
+
+    private fun setupSelectionAndGestures() {
+        selectionBar = findViewById(R.id.layoutSelectionBar)
+        txtSelectionCount = findViewById(R.id.txtSelectionCount)
+        fabContainer = findViewById(R.id.fabContainer)
+
+        // ضغطة مستمرة + سحب رأسي = تحديد نطاق (أو من أيقونة الصف مباشرة أثناء وضع التحديد).
+        rvFiles.addOnItemTouchListener(
+            DragSelectTouchListener(
+                rv = rvFiles,
+                model = selection,
+                keyAt = { pos -> adapter.keyAt(pos) },
+                onChanged = { onSelectionChanged() },
+                handleViewIds = intArrayOf(R.id.frameFileIcon, R.id.frameFolderIcon)
+            )
+        )
+
+        // سحب أفقي على الصف: يمين = إعادة تسمية، يسار = حذف بتأكيد.
+        val accent = androidx.core.content.ContextCompat.getColor(this, R.color.rin_accent)
+        val swipe = RowSwipeCallback(
+            ctx = this,
+            model = selection,
+            rightAction = RowSwipeCallback.Action(
+                R.drawable.ic_edit_pencil, accent, getString(R.string.swipe_rename_label)
+            ) { pos -> adapter.entryAt(pos)?.let { renameEntry(it) } },
+            leftAction = RowSwipeCallback.Action(
+                R.drawable.ic_trash_red, 0xFFE5484D.toInt(), getString(R.string.swipe_delete_label)
+            ) { pos -> adapter.entryAt(pos)?.let { deleteEntries(listOf(it)) } }
+        )
+        ItemTouchHelper(swipe).attachToRecyclerView(rvFiles)
+
+        findViewById<View>(R.id.btnSelectionClose).setOnClickListener { clearSelection() }
+        findViewById<View>(R.id.btnSelectionAll).setOnClickListener { selectAllVisible() }
+        findViewById<View>(R.id.btnSelectionInvert).setOnClickListener { invertSelection() }
+        findViewById<View>(R.id.btnSelectionDuplicate).setOnClickListener {
+            FileBatchOps.duplicate(this, selectedEntries()) { clearSelection(); refresh() }
+        }
+        findViewById<View>(R.id.btnSelectionMove).setOnClickListener {
+            FileBatchOps.showMoveDialog(this, project, selectedEntries(), protectedPaths()) {
+                clearSelection(); refresh()
+            }
+        }
+        findViewById<View>(R.id.btnSelectionCopyPath).setOnClickListener {
+            FileBatchOps.copyPaths(this, selectedEntries())
+        }
+        findViewById<View>(R.id.btnSelectionDelete).setOnClickListener { deleteEntries(selectedEntries()) }
+    }
+
+    private fun selectedEntries(): List<FsEntry> = adapter.entries().filter { it.relPath in selection }
+
+    /** ملفات مفتوحة بتعديلات غير محفوظة في المحرر: لا تُحذف/تُنقل ضمن عملية دُفعة. */
+    private fun protectedPaths(): Set<String> = EditorDirtyState.dirtyPaths(project.name)
+
+    private fun onSelectionChanged() {
+        adapter.refreshSelection()
+        updateSelectionBar()
+    }
+
+    private fun updateSelectionBar() {
+        val active = selection.active
+        selectionBar.isVisible = active
+        fabContainer.isVisible = !active
+        if (active) txtSelectionCount.text = getString(R.string.selection_count_format, selection.count)
+    }
+
+    private fun clearSelection() {
+        if (!selection.active) return
+        selection.clear()
+        onSelectionChanged()
+    }
+
+    private fun selectAllVisible() {
+        adapter.entries().forEach { selection.add(it.relPath) }
+        onSelectionChanged()
+    }
+
+    private fun invertSelection() {
+        adapter.entries().forEach { selection.toggle(it.relPath) }
+        onSelectionChanged()
+    }
+
+    private fun renameEntry(entry: FsEntry) = when (entry) {
+        is FsEntry.FileEntry -> showRenameFileDialog(entry.file)
+        is FsEntry.FolderEntry -> showRenameFolderDialog(entry.folder)
+    }
+
+    private fun deleteEntries(entries: List<FsEntry>) {
+        FileBatchOps.confirmDelete(this, entries, protectedPaths()) {
+            selection.clear()
+            refresh()
+        }
+    }
+
     private fun handleBack() {
+        if (selection.active) {
+            clearSelection()
+            return
+        }
         if (currentRelDir.isBlank()) {
             finish()
         } else {
@@ -267,6 +379,7 @@ class FilesActivity : RinBaseActivity() {
         if (searchQuery.isNotBlank()) {
             val results = ProjectManager.searchFiles(project, searchQuery)
             adapter.submit(emptyList(), results, searchMode = true)
+            pruneSelection()
             adapter.setDirtyPaths(EditorDirtyState.dirtyPaths(project.name))
             txtEmptyMessage.setText(R.string.search_no_results)
             txtEmpty.visibility = if (results.isEmpty()) View.VISIBLE else View.GONE
@@ -276,12 +389,20 @@ class FilesActivity : RinBaseActivity() {
         txtEmptyMessage.setText(R.string.no_files_yet)
         val (folders, files) = ProjectManager.listEntries(project, currentRelDir)
         adapter.submit(folders, files)
+        pruneSelection()
         adapter.setDirtyPaths(EditorDirtyState.dirtyPaths(project.name))
         txtEmpty.visibility = if (folders.isEmpty() && files.isEmpty()) View.VISIBLE else View.GONE
         scanForErrors(files)
 
         findViewById<TextView>(R.id.txtToolbarSubtitle).text =
             if (currentRelDir.isBlank()) project.name else "${project.name} / $currentRelDir"
+    }
+
+    /** يزيل من التحديد أي عنصر لم يعد ظاهراً (تغيير مجلد/بحث/حذف) ويحدّث الشريط. */
+    private fun pruneSelection() {
+        if (!::selectionBar.isInitialized) return
+        selection.retainOnly(adapter.entries().map { it.relPath }.toSet())
+        updateSelectionBar()
     }
 
     /**
@@ -526,12 +647,16 @@ private class FilesAdapter(
     val onRenameFolder: (RinFolder) -> Unit,
     val onDeleteFile: (RinFile) -> Unit,
     val onDeleteFolder: (RinFolder) -> Unit,
-    val onMoreFile: (RinFile, View) -> Unit
+    val onMoreFile: (RinFile, View) -> Unit,
+    private val selection: SelectionModel,
+    private val onSelectionChanged: () -> Unit
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     private companion object {
         const val TYPE_FOLDER = 0
         const val TYPE_FILE = 1
+        /** حمولة تحديث جزئي: إعادة رسم حالة التحديد فقط دون إعادة ربط الصف كاملاً. */
+        const val PAYLOAD_SELECTION = "selection"
     }
 
     private var items: List<FileRow> = emptyList()
@@ -551,6 +676,59 @@ private class FilesAdapter(
         notifyDataSetChanged()
     }
 
+    /** مفتاح التحديد (المسار النسبي) للصف عند [position]. */
+    fun keyAt(position: Int): String? = when (val r = items.getOrNull(position)) {
+        is FileRow.FolderRow -> r.folder.relPath
+        is FileRow.FileRowItem -> r.file.relPath
+        null -> null
+    }
+
+    fun entryAt(position: Int): FsEntry? = when (val r = items.getOrNull(position)) {
+        is FileRow.FolderRow -> FsEntry.FolderEntry(r.folder)
+        is FileRow.FileRowItem -> FsEntry.FileEntry(r.file)
+        null -> null
+    }
+
+    fun entries(): List<FsEntry> = items.map {
+        when (it) {
+            is FileRow.FolderRow -> FsEntry.FolderEntry(it.folder)
+            is FileRow.FileRowItem -> FsEntry.FileEntry(it.file)
+        }
+    }
+
+    /** يعيد رسم حالة التحديد (خلفية + شارة ✓ + إخفاء أزرار الصف) لكل الصفوف بلا إعادة ربط كاملة. */
+    fun refreshSelection() {
+        if (items.isNotEmpty()) notifyItemRangeChanged(0, items.size, PAYLOAD_SELECTION)
+    }
+
+    private fun bindSelectionState(holder: RecyclerView.ViewHolder, position: Int) {
+        val key = keyAt(position) ?: return
+        val selected = key in selection
+        val selecting = selection.active
+        val actionVis = if (selecting) View.GONE else View.VISIBLE
+        holder.itemView.setBackgroundResource(
+            if (selected) R.drawable.bg_list_card_selected else R.drawable.bg_list_card
+        )
+        when (holder) {
+            is FolderVH -> {
+                holder.imgCheck.visibility = if (selected) View.VISIBLE else View.GONE
+                holder.btnRename.visibility = actionVis
+                holder.btnDelete.visibility = actionVis
+            }
+            is FileVH -> {
+                holder.imgCheck.visibility = if (selected) View.VISIBLE else View.GONE
+                holder.btnMore.visibility = actionVis
+                holder.btnRename.visibility = actionVis
+                holder.btnDelete.visibility = actionVis
+            }
+        }
+    }
+
+    private fun toggle(key: String) {
+        selection.toggle(key)
+        onSelectionChanged()
+    }
+
     fun setErrorPaths(paths: Set<String>) {
         errorPaths = paths
         notifyDataSetChanged()
@@ -563,6 +741,7 @@ private class FilesAdapter(
 
     class FolderVH(view: View) : RecyclerView.ViewHolder(view) {
         val imgIcon: android.widget.ImageView = view.findViewById(R.id.imgFolderIcon)
+        val imgCheck: View = view.findViewById(R.id.imgFolderSelectCheck)
         val txtName: TextView = view.findViewById(R.id.txtFolderNameItem)
         val txtMeta: TextView = view.findViewById(R.id.txtFolderMeta)
         val btnRename: View = view.findViewById(R.id.btnRenameFolder)
@@ -571,6 +750,7 @@ private class FilesAdapter(
 
     class FileVH(view: View) : RecyclerView.ViewHolder(view) {
         val imgIcon: android.widget.ImageView = view.findViewById(R.id.imgFileIcon)
+        val imgCheck: View = view.findViewById(R.id.imgFileSelectCheck)
         val txtErrorBadge: View = view.findViewById(R.id.txtErrorBadge)
         val txtName: TextView = view.findViewById(R.id.txtFileNameItem)
         val txtDirtyDot: View = view.findViewById(R.id.txtDirtyDot)
@@ -593,6 +773,14 @@ private class FilesAdapter(
         }
     }
 
+    override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int, payloads: MutableList<Any>) {
+        if (payloads.contains(PAYLOAD_SELECTION)) {
+            bindSelectionState(holder, position)
+        } else {
+            super.onBindViewHolder(holder, position, payloads)
+        }
+    }
+
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
         when (val row = items[position]) {
             is FileRow.FolderRow -> {
@@ -604,9 +792,12 @@ private class FilesAdapter(
                     R.string.folder_meta_format,
                     dateFormat.format(Date(folder.lastModified))
                 )
-                holder.itemView.setOnClickListener { onOpenFolder(folder) }
+                holder.itemView.setOnClickListener {
+                    if (selection.active) toggle(folder.relPath) else onOpenFolder(folder)
+                }
                 holder.btnRename.setOnClickListener { onRenameFolder(folder) }
                 holder.btnDelete.setOnClickListener { onDeleteFolder(folder) }
+                bindSelectionState(holder, position)
             }
             is FileRow.FileRowItem -> {
                 val file = row.file
@@ -624,10 +815,13 @@ private class FilesAdapter(
                 FileIconResolver.load(holder.imgIcon, file.file)
                 holder.txtErrorBadge.visibility = if (file.relPath in errorPaths) View.VISIBLE else View.GONE
                 holder.txtDirtyDot.visibility = if (file.relPath in dirtyPaths) View.VISIBLE else View.GONE
-                holder.itemView.setOnClickListener { onOpenFile(file) }
+                holder.itemView.setOnClickListener {
+                    if (selection.active) toggle(file.relPath) else onOpenFile(file)
+                }
                 holder.btnMore.setOnClickListener { onMoreFile(file, holder.btnMore) }
                 holder.btnRename.setOnClickListener { onRenameFile(file) }
                 holder.btnDelete.setOnClickListener { onDeleteFile(file) }
+                bindSelectionState(holder, position)
             }
         }
     }
