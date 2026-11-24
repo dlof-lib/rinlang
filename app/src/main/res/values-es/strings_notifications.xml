@@ -32,6 +32,12 @@
     <string name="notif_duration_ms">%1$d ms</string>
     <string name="notif_duration_s">%1$.1f s</string>
     <string name="notif_live_hint">Toca Abrir para ver la vista previa en el navegador, o Detener para apagar el servidor.</string>
+    <string name="notif_channel_background">Trabajo en segundo plano</string>
+    <string name="notif_channel_background_desc">Aviso silencioso que mantiene las descargas y ejecuciones en marcha al salir de la app.</string>
+    <string name="notif_bg_title">RinStudio trabaja en segundo plano</string>
+    <string name="notif_bg_text">Descargas activas: %1$d · Programas en ejecución: %2$d</string>
+    <string name="notif_job_input_title">El programa #%1$d espera tu respuesta</string>
+    <string name="notif_job_input_hint">Toca para volver a RinStudio y responder.</string>
     <plurals name="notif_downloads_done">
         <item quantity="one">%d descarga completada</item>
         <item quantity="many">%d descargas completadas</item>
