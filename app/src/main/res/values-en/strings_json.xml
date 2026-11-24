@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- شريط JSON في المحرر (json/jsonc) -->
+    <string name="json_validate">Validate JSON</string>
+    <string name="json_format">Format</string>
+    <string name="json_minify">Minify</string>
+    <string name="json_sort">Sort keys</string>
+    <string name="json_repair">Auto-fix</string>
+    <string name="json_outline">Structure outline</string>
+    <string name="json_copy_path">Copy JSON path</string>
+    <string name="json_goto_path">Go to path</string>
+    <string name="json_string_toggle">Text ↔ JSON string</string>
+    <string name="json_insert_pair">Insert key/value</string>
+    <string name="json_insert_object">Insert object {}</string>
+    <string name="json_insert_array">Insert array []</string>
+    <string name="json_more">More</string>
+    <string name="json_key_placeholder">key</string>
+    <string name="json_ok">OK</string>
+    <string name="json_valid">Valid JSON</string>
+    <string name="json_valid_detail">Valid JSON ✓ — %1$d keys, depth %2$d</string>
+    <string name="json_invalid_title">Invalid JSON</string>
+    <string name="json_error_at">%1$s
+Line %2$d, column %3$d</string>
+    <string name="json_goto_error">Go to error</string>
+    <string name="json_formatted">Formatted</string>
+    <string name="json_minified">Minified</string>
+    <string name="json_sorted">Keys sorted</string>
+    <string name="json_repaired">Fixed</string>
+    <string name="json_no_change">No changes</string>
+    <string name="json_has_comments">The file contains comments — use “Auto-fix” to remove them first</string>
+    <string name="json_select_text">Select text, or place the caret inside a JSON string</string>
+    <string name="json_path_copied">Path copied: %1$s</string>
+    <string name="json_goto_title">Go to path</string>
+    <string name="json_goto_hint">$.users[0].name</string>
+    <string name="json_goto">Go</string>
+    <string name="json_path_not_found">Path not found</string>
+    <string name="json_outline_title">JSON outline</string>
+    <string name="json_outline_empty">No items</string>
+    <string name="json_stats_title">JSON statistics</string>
+    <string name="json_stats_message">Objects: %1$d
+Arrays: %2$d
+Keys: %3$d
+Strings: %4$d
+Numbers: %5$d
+Booleans: %6$d
+Nulls: %7$d
+Max depth: %8$d
+Lines: %9$d
+Size: %10$d bytes (minified %11$d)</string>
+    <string name="json_menu_stats">Statistics</string>
+    <string name="json_menu_sort_shallow">Sort top level only</string>
+    <string name="json_menu_sort_desc">Sort descending</string>
+    <string name="json_menu_indent">Indent size</string>
+    <string name="json_indent_auto">Auto (from file)</string>
+    <string name="json_indent_2">2 spaces</string>
+    <string name="json_indent_4">4 spaces</string>
+    <string name="json_indent_tab">Tab</string>
+    <string name="json_err_empty">The document is empty</string>
+    <string name="json_err_unexpected_char">Unexpected character “%1$s”</string>
+    <string name="json_err_unexpected_end">Document ended before the value was complete</string>
+    <string name="json_err_expected_key">Expected a quoted key name</string>
+    <string name="json_err_expected_colon">Expected “:” after the key</string>
+    <string name="json_err_expected_comma">Expected “,” or a closing bracket</string>
+    <string name="json_err_trailing_comma">Trailing comma before the closing bracket</string>
+    <string name="json_err_comment">Comments are not allowed in JSON</string>
+    <string name="json_err_single_quote">Single quotes — use double quotes</string>
+    <string name="json_err_extra_data">Extra text after the end of the JSON</string>
+    <string name="json_err_control_char">Control character inside a string (use \\n)</string>
+    <string name="json_err_bad_escape">Invalid escape sequence</string>
+    <string name="json_err_unterminated">Unterminated string</string>
+    <string name="json_err_bad_number">Invalid number</string>
+    <string name="json_err_too_deep">Nesting is too deep</string>
+</resources>
