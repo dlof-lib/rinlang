@@ -107,6 +107,9 @@ class MainActivity : RinBaseActivity() {
     private lateinit var txtExplorerEmpty: TextView
     private lateinit var btnExplorerOpenProjects: TextView
     private lateinit var explorerFilesAdapter: ProjectExplorerAdapter
+    /** تحديد متعدد + إيماءات صفوف الدرج (ضغطة مستمرة/سحب ↑↓/سحب أفقي) — انظر FileSelection.kt. */
+    private val explorerSelection = SelectionModel()
+    private lateinit var explorerSelectionController: ExplorerSelectionController
     /** مسارات المجلدات (relPath) الموسَّعة حالياً في شجرة المستكشف؛ تُصفَّر بإعادة إنشاء الشاشة. */
     private val expandedExplorerFolders = mutableSetOf<String>()
     /** true = تبويب "الملفات" ظاهر حالياً في الدرج، false = تبويب "البنية" (الحاويات). */
@@ -651,10 +654,21 @@ class MainActivity : RinBaseActivity() {
                 if (!expandedExplorerFolders.add(folder.relPath)) expandedExplorerFolders.remove(folder.relPath)
                 refreshExplorerFiles()
             },
-            onFileClicked = { file -> openProjectFileFromExplorer(file) }
+            onFileClicked = { file -> openProjectFileFromExplorer(file) },
+            selection = explorerSelection,
+            onSelectionChanged = { explorerSelectionController.onSelectionChanged() }
         )
         rvExplorerFiles.layoutManager = LinearLayoutManager(this)
         rvExplorerFiles.adapter = explorerFilesAdapter
+        explorerSelectionController = ExplorerSelectionController(
+            activity = this,
+            rv = rvExplorerFiles,
+            adapter = explorerFilesAdapter,
+            selection = explorerSelection,
+            project = { currentProject },
+            currentFileRelPath = { currentProjectFile?.relPath },
+            refreshTree = { refreshExplorerFiles() }
+        )
         rvExplorerOutline.layoutManager = LinearLayoutManager(this)
 
         btnExplorer.setOnClickListener { openExplorerDrawer(preferOutlineTab = false) }
@@ -672,6 +686,10 @@ class MainActivity : RinBaseActivity() {
             override fun onDrawerOpened(drawerView: View) {
                 if (explorerShowingFiles) refreshExplorerFiles() else refreshExplorerOutline()
             }
+
+            override fun onDrawerClosed(drawerView: View) {
+                explorerSelectionController.clear()
+            }
         })
     }
 
@@ -681,6 +699,7 @@ class MainActivity : RinBaseActivity() {
     }
 
     private fun switchExplorerTab(showFiles: Boolean) {
+        if (!showFiles) explorerSelectionController.clear()
         explorerShowingFiles = showFiles
         rvExplorerFiles.isVisible = showFiles
         rvExplorerOutline.isVisible = !showFiles
@@ -709,6 +728,7 @@ class MainActivity : RinBaseActivity() {
         }
         val nodes = ProjectExplorerTree.build(project, expandedExplorerFolders)
         explorerFilesAdapter.submit(nodes, currentProjectFile?.relPath, EditorDirtyState.dirtyPaths(project.name))
+        explorerSelectionController.onTreeRebuilt()
         if (nodes.isEmpty()) {
             rvExplorerFiles.isVisible = false
             txtExplorerEmpty.text = getString(R.string.explorer_empty_folder)
@@ -785,6 +805,8 @@ class MainActivity : RinBaseActivity() {
     }
 
     private fun onBackRequested() {
+        // الرجوع أثناء وضع التحديد في الدرج يُلغي التحديد فقط، ثم الرجوع التالي يغلق الدرج.
+        if (drawerLayout.isDrawerOpen(GravityCompat.START) && explorerSelectionController.handleBack()) return
         if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
             drawerLayout.closeDrawer(GravityCompat.START)
             return
