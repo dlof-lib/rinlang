@@ -25,7 +25,7 @@
 
     <!-- New RinFlow design: horizontal flow + legend bar, styled like professional CI/CD dashboards -->
     <string name="pipeline_flow_label">rinflow — pipeline.trace</string>
-    <string name="pipeline_terminal_legend">✓ passed   ✗ failed</string>
+    <string name="pipeline_terminal_legend">passed failed</string>
     <string name="pipeline_legend_success">Passed</string>
     <string name="pipeline_legend_failed">Failed</string>
     <string name="pipeline_legend_node">RinFlow node</string>
@@ -128,7 +128,7 @@
     <string name="explorer_current_file_badge">open</string>
     <string name="outline_line_range_format">lines %1$d–%2$d</string>
     <string name="outline_child_count_format">%1$d nested</string>
-    <string name="tags_balanced_toast">Container tags are balanced ✓</string>
+    <string name="tags_balanced_toast">Container tags are balanced</string>
     <string name="tags_unbalanced_toast">Unbalanced container tag near line %1$d</string>
     <string name="new_file_name">untitled.rin</string>
     <string name="new_file_toast">New file</string>
@@ -179,7 +179,7 @@
     <string name="go_to_line_action">Go</string>
     <string name="go_to_line_cancel">Cancel</string>
     <string name="go_to_line_invalid_toast">Enter a valid line number</string>
-    <string name="brackets_balanced_toast">Brackets are balanced ✓</string>
+    <string name="brackets_balanced_toast">Brackets are balanced</string>
     <string name="brackets_unbalanced_toast">Unbalanced brackets near line %1$d</string>
     <string name="line_deleted_toast">Line deleted</string>
 
@@ -221,7 +221,7 @@
     <string name="download_button_fmt">%1$s · %2$s</string>
     <string name="download_dialog_title">Downloading to device…</string>
     <string name="download_status_copying">Copying data…</string>
-    <string name="download_status_done">Downloaded successfully ✓</string>
+    <string name="download_status_done">Downloaded successfully</string>
     <string name="download_done_toast">%1$s saved to the Downloads folder</string>
     <string name="download_error_toast">Download failed: %1$s</string>
     <string name="download_no_app_toast">No suitable app found to open this file type</string>
@@ -268,7 +268,7 @@ print \"Hello, \" + name + \"!\";
     <string name="apk_export_section_identity">Identity</string>
     <string name="apk_export_section_icon">Icon</string>
     <string name="apk_export_field_icon_hint">Custom home-screen icon for your app (optional)</string>
-    <string name="apk_export_field_icon_from_sticker">🏷️ An icon from the sticker container in your project was used automatically — tap \"Choose\" to replace it</string>
+    <string name="apk_export_field_icon_from_sticker">An icon from the sticker container in your project was used automatically — tap \"Choose\" to replace it</string>
     <string name="apk_export_action_pick_icon">Choose</string>
     <string name="apk_export_section_splash">Splash Screen</string>
     <string name="apk_export_field_splash_hint">Text shown under the logo on launch (optional)</string>
