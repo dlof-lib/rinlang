@@ -35,11 +35,19 @@ class AlbumsActivity : RinBaseActivity() {
             onOpen = { openAlbum(it) },
             onDelete = { deleteAlbum(it) }
         )
-        findViewById<RecyclerView>(R.id.rvAlbums).apply {
+        val rvAlbums = findViewById<RecyclerView>(R.id.rvAlbums).apply {
             layoutManager = GridLayoutManager(this@AlbumsActivity, 2)
             adapter = this@AlbumsActivity.adapter
             setHasFixedSize(false)
         }
+        // إيماءات: سحب يمين = فتح الألبوم، سحب يسار = حذفه (بتأكيد)، نقرتان/ضغطة على العنوان = أول/آخر القائمة.
+        ListGestures.attachOpenSwipe(
+            this, rvAlbums,
+            onOpen = { pos -> adapter.nameAt(pos)?.let { openAlbum(it) } },
+            onSecondary = { pos -> adapter.nameAt(pos)?.let { deleteAlbum(it) } }
+        )
+        ListGestures.attachTitleScroll(this, findViewById(R.id.txtAlbumToolbarTitle), rvAlbums)
+        ListGestures.attachPullRefresh(this, findViewById(R.id.swipeAlbums)) { refresh() }
     }
 
     override fun onResume() {
@@ -112,6 +120,8 @@ private class AlbumsAdapter(
     private val onDelete: (String) -> Unit
 ) : RecyclerView.Adapter<AlbumsAdapter.VH>() {
     private var items: List<String> = emptyList()
+
+    fun nameAt(position: Int): String? = items.getOrNull(position)
 
     fun submit(value: List<String>) {
         items = value
