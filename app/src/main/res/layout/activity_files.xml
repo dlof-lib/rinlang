@@ -6,7 +6,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/rin_background">
+    android:background="@color/rin_files_bg">
 
     <include layout="@layout/toolbar_app" />
 
@@ -39,12 +39,12 @@
 
         <ImageButton
             android:id="@+id/btnRecentFiles"
-            android:layout_width="36dp"
-            android:layout_height="36dp"
-            android:padding="8dp"
+            android:layout_width="38dp"
+            android:layout_height="38dp"
+            android:padding="9dp"
             android:src="@drawable/rs_ic_timer"
-            android:tint="@color/rin_on_toolbar"
-            android:background="@drawable/bg_icon_btn"
+            android:tint="@color/rin_files_accent"
+            android:background="@drawable/bg_file_action"
             android:contentDescription="@string/recent_title" />
     </LinearLayout>
 
@@ -53,9 +53,9 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginStart="16dp"
-        android:layout_marginTop="2dp"
-        android:textColor="@color/rin_editor_hint"
-        android:textSize="11.5sp" />
+        android:layout_marginTop="4dp"
+        android:textColor="@color/rin_files_dim"
+        android:textSize="12.5sp" />
 
     <!-- شريط إجراءات التحديد المتعدد: يظهر فقط أثناء وضع التحديد (FilesActivity.updateSelectionBar).
          الإيماءات: ضغطة مستمرة على صف تبدأ التحديد، والسحب ↑↓ بعدها يحدّد نطاقاً. -->
@@ -68,7 +68,7 @@
         android:layout_marginTop="10dp"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:background="@drawable/bg_list_card"
+        android:background="@drawable/bg_file_card"
         android:paddingStart="4dp"
         android:paddingEnd="4dp"
         android:paddingTop="4dp"
@@ -81,7 +81,7 @@
             android:layout_height="40dp"
             android:padding="10dp"
             android:src="@drawable/ic_close"
-            android:tint="@color/rin_on_toolbar"
+            android:tint="@color/rin_files_text"
             android:background="@drawable/bg_icon_btn"
             android:contentDescription="@string/selection_clear" />
 
@@ -93,7 +93,7 @@
             android:layout_marginStart="4dp"
             android:ellipsize="end"
             android:maxLines="1"
-            android:textColor="@color/rin_on_toolbar"
+            android:textColor="@color/rin_files_text"
             android:textSize="14sp"
             android:textStyle="bold" />
 
@@ -103,7 +103,7 @@
             android:layout_height="40dp"
             android:padding="10dp"
             android:src="@drawable/ic_select_all"
-            android:tint="@color/rin_on_toolbar"
+            android:tint="@color/rin_files_text"
             android:background="@drawable/bg_icon_btn"
             android:contentDescription="@string/selection_select_all" />
 
@@ -119,7 +119,7 @@
             android:layout_height="40dp"
             android:padding="10dp"
             android:src="@drawable/rs_ic_download"
-            android:tint="@color/rin_on_toolbar"
+            android:tint="@color/rin_files_text"
             android:background="@drawable/bg_icon_btn"
             android:contentDescription="@string/dl_action" />
 
@@ -138,7 +138,7 @@
             android:layout_height="40dp"
             android:padding="10dp"
             android:src="@drawable/rs_ic_more_vert"
-            android:tint="@color/rin_on_toolbar"
+            android:tint="@color/rin_files_text"
             android:background="@drawable/bg_icon_btn"
             android:contentDescription="@string/more_actions" />
 
@@ -150,19 +150,20 @@
     <EditText
         android:id="@+id/inputSearchFiles"
         android:layout_width="match_parent"
-        android:layout_height="46dp"
-        android:layout_marginStart="10dp"
-        android:layout_marginEnd="10dp"
+        android:layout_height="50dp"
+        android:layout_marginStart="12dp"
+        android:layout_marginEnd="12dp"
         android:layout_marginTop="10dp"
-        android:background="@drawable/bg_projects_search"
-        android:drawableStart="@android:drawable/ic_menu_search"
-        android:drawableTint="@color/rin_editor_hint"
+        android:background="@drawable/bg_file_search"
+        android:drawableStart="@drawable/rs_ic_search"
+        android:drawablePadding="10dp"
+        android:drawableTint="@color/rin_files_accent"
         android:hint="@string/search_files_hint"
-        android:paddingStart="14dp"
-        android:paddingEnd="14dp"
-        android:textColor="@color/rin_on_toolbar"
-        android:textColorHint="@color/rin_editor_hint"
-        android:textSize="13sp"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:textColor="@color/rin_files_text"
+        android:textColorHint="@color/rin_files_dim"
+        android:textSize="14sp"
         android:singleLine="true"
         android:inputType="text"
         android:imeOptions="actionDone" />
@@ -178,10 +179,10 @@
         android:paddingEnd="8dp"
         android:paddingTop="4dp"
         android:paddingBottom="4dp"
-        android:background="@drawable/bg_icon_btn"
+        android:background="@drawable/bg_file_chip"
         android:clickable="true"
         android:focusable="true"
-        android:textColor="@color/rin_accent"
+        android:textColor="@color/rin_files_accent"
         android:textSize="11.5sp"
         android:textStyle="bold"
         android:visibility="gone" />
@@ -212,9 +213,9 @@
     <HorizontalScrollView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginStart="10dp"
-        android:layout_marginEnd="10dp"
-        android:layout_marginTop="2dp"
+        android:layout_marginStart="12dp"
+        android:layout_marginEnd="12dp"
+        android:layout_marginTop="10dp"
         android:scrollbars="none"
         android:overScrollMode="never">
 
@@ -236,10 +237,10 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:clipToPadding="false"
-            android:paddingStart="10dp"
-            android:paddingEnd="10dp"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
             android:paddingTop="10dp"
-            android:paddingBottom="88dp" />
+            android:paddingBottom="96dp" />
 
         <LinearLayout
             android:id="@+id/txtEmptyFiles"
@@ -265,7 +266,7 @@
                 android:layout_marginEnd="32dp"
                 android:gravity="center"
                 android:text="@string/no_files_yet"
-                android:textColor="@color/rin_editor_hint"
+                android:textColor="@color/rin_files_dim"
                 android:textSize="14sp" />
         </LinearLayout>
 
@@ -284,9 +285,10 @@
                 android:layout_marginBottom="12dp"
                 android:contentDescription="@string/tool_paste"
                 android:visibility="gone"
-                app:backgroundTint="@color/rin_accent"
-                app:tint="@android:color/white"
-                app:rippleColor="@color/rin_accent_pressed"
+                app:backgroundTint="@color/rin_files_accent_fill"
+                app:tint="@color/rin_files_on_accent"
+                app:rippleColor="#33000000"
+                app:elevation="4dp"
                 app:fabSize="mini"
                 app:srcCompat="@drawable/rs_ic_download" />
 
@@ -296,9 +298,10 @@
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="12dp"
                 android:contentDescription="@string/sort_title"
-                app:backgroundTint="@color/rin_toolbar_bottom"
-                app:tint="@android:color/white"
-                app:rippleColor="@color/rin_ghost_ripple"
+                app:backgroundTint="@color/rin_files_card"
+                app:tint="@color/rin_files_accent"
+                app:rippleColor="@color/rin_files_pressed"
+                app:elevation="3dp"
                 app:fabSize="mini"
                 app:srcCompat="@drawable/rs_ic_sort" />
 
@@ -308,9 +311,10 @@
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="12dp"
                 android:contentDescription="@string/zip_tools_title"
-                app:backgroundTint="@color/rin_toolbar_bottom"
-                app:tint="@android:color/white"
-                app:rippleColor="@color/rin_ghost_ripple"
+                app:backgroundTint="@color/rin_files_card"
+                app:tint="@color/rin_files_accent"
+                app:rippleColor="@color/rin_files_pressed"
+                app:elevation="3dp"
                 app:fabSize="mini"
                 app:srcCompat="@drawable/fx_zip" />
 
@@ -320,9 +324,10 @@
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="12dp"
                 android:contentDescription="@string/upload_media"
-                app:backgroundTint="@color/rin_toolbar_bottom"
-                app:tint="@android:color/white"
-                app:rippleColor="@color/rin_ghost_ripple"
+                app:backgroundTint="@color/rin_files_card"
+                app:tint="@color/rin_files_accent"
+                app:rippleColor="@color/rin_files_pressed"
+                app:elevation="3dp"
                 app:fabSize="mini"
                 app:srcCompat="@drawable/fx_media_upload" />
 
@@ -332,9 +337,10 @@
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="12dp"
                 android:contentDescription="@string/upload_file"
-                app:backgroundTint="@color/rin_toolbar_bottom"
-                app:tint="@android:color/white"
-                app:rippleColor="@color/rin_ghost_ripple"
+                app:backgroundTint="@color/rin_files_card"
+                app:tint="@color/rin_files_accent"
+                app:rippleColor="@color/rin_files_pressed"
+                app:elevation="3dp"
                 app:fabSize="mini"
                 app:srcCompat="@drawable/fx_upload" />
 
@@ -344,9 +350,10 @@
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="12dp"
                 android:contentDescription="@string/new_folder_title"
-                app:backgroundTint="@color/rin_toolbar_bottom"
-                app:tint="@android:color/white"
-                app:rippleColor="@color/rin_ghost_ripple"
+                app:backgroundTint="@color/rin_files_card"
+                app:tint="@color/rin_files_accent"
+                app:rippleColor="@color/rin_files_pressed"
+                app:elevation="3dp"
                 app:fabSize="mini"
                 app:srcCompat="@drawable/ic_rin_folder" />
 
@@ -355,9 +362,10 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:contentDescription="@string/new_file_title"
-                app:backgroundTint="@color/rin_accent"
-                app:tint="@android:color/white"
-                app:rippleColor="@color/rin_accent_pressed"
+                app:backgroundTint="@color/rin_files_accent_fill"
+                app:tint="@color/rin_files_on_accent"
+                app:rippleColor="#33000000"
+                app:elevation="4dp"
                 app:srcCompat="@android:drawable/ic_input_add" />
 
         </LinearLayout>
