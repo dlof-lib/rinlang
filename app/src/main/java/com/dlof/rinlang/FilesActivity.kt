@@ -238,7 +238,7 @@ class FilesActivity : RinBaseActivity() {
         )
 
         // سحب أفقي على الصف: يمين = إعادة تسمية، يسار = حذف بتأكيد.
-        val accent = androidx.core.content.ContextCompat.getColor(this, R.color.rin_accent)
+        val accent = androidx.core.content.ContextCompat.getColor(this, R.color.rin_files_accent)
         val swipe = RowSwipeCallback(
             ctx = this,
             model = selection,
@@ -347,13 +347,14 @@ class FilesActivity : RinBaseActivity() {
             val on = mode == statusMode
             box.addView(TextView(this).apply {
                 setText(label)
-                textSize = 12f
+                textSize = 13f
                 maxLines = 1
+                gravity = android.view.Gravity.CENTER
                 setTextColor(androidx.core.content.ContextCompat.getColor(
-                    context, if (on) R.color.rin_accent else R.color.rin_on_toolbar))
+                    context, if (on) R.color.rin_files_on_accent else R.color.rin_files_chip_text))
                 if (on) setTypeface(typeface, android.graphics.Typeface.BOLD)
-                setPadding((12 * d).toInt(), (6 * d).toInt(), (12 * d).toInt(), (6 * d).toInt())
-                setBackgroundResource(if (on) R.drawable.bg_list_card_selected else R.drawable.bg_icon_btn)
+                setPadding((16 * d).toInt(), (8 * d).toInt(), (16 * d).toInt(), (8 * d).toInt())
+                setBackgroundResource(if (on) R.drawable.bg_file_chip_on else R.drawable.bg_file_chip)
                 isClickable = true
                 isFocusable = true
                 setOnClickListener {
@@ -366,7 +367,7 @@ class FilesActivity : RinBaseActivity() {
                 layoutParams = android.widget.LinearLayout.LayoutParams(
                     android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
                     android.view.ViewGroup.LayoutParams.WRAP_CONTENT
-                ).apply { marginEnd = (6 * d).toInt() }
+                ).apply { marginEnd = (8 * d).toInt() }
             })
         }
     }
@@ -415,7 +416,7 @@ class FilesActivity : RinBaseActivity() {
                 text = label
                 textSize = 13f
                 maxLines = 1
-                setTextColor(androidx.core.content.ContextCompat.getColor(context, if (current) R.color.rin_accent else R.color.rin_on_toolbar))
+                setTextColor(androidx.core.content.ContextCompat.getColor(context, if (current) R.color.rin_files_accent else R.color.rin_files_text))
                 if (current) setTypeface(typeface, android.graphics.Typeface.BOLD)
                 setPadding((8 * d).toInt(), (6 * d).toInt(), (8 * d).toInt(), (6 * d).toInt())
                 setBackgroundResource(R.drawable.bg_icon_btn)
@@ -439,7 +440,7 @@ class FilesActivity : RinBaseActivity() {
             box.addView(TextView(this).apply {
                 text = if (rtl) "‹" else "›"
                 textSize = 15f
-                setTextColor(androidx.core.content.ContextCompat.getColor(context, R.color.rin_editor_hint))
+                setTextColor(androidx.core.content.ContextCompat.getColor(context, R.color.rin_files_dim))
             })
         }
         chip(project.name, "", parts.isEmpty())
@@ -456,7 +457,7 @@ class FilesActivity : RinBaseActivity() {
     private fun renderSummary(folders: Int, files: Int, bytes: Long) {
         findViewById<TextView>(R.id.txtFilesSummary).apply {
             visibility = View.VISIBLE
-            setTextColor(androidx.core.content.ContextCompat.getColor(this@FilesActivity, R.color.rin_editor_hint))
+            setTextColor(androidx.core.content.ContextCompat.getColor(this@FilesActivity, R.color.rin_files_dim))
             text = getString(R.string.files_summary_format, files, folders, android.text.format.Formatter.formatFileSize(this@FilesActivity, bytes))
         }
     }
@@ -480,7 +481,7 @@ class FilesActivity : RinBaseActivity() {
         val opts = currentSearchOptions()
         findViewById<TextView>(R.id.txtFilesSummary).apply {
             visibility = View.VISIBLE
-            setTextColor(androidx.core.content.ContextCompat.getColor(this@FilesActivity, R.color.rin_editor_hint))
+            setTextColor(androidx.core.content.ContextCompat.getColor(this@FilesActivity, R.color.rin_files_dim))
             setText(R.string.sr_searching)
         }
         val run = Runnable {
@@ -515,7 +516,7 @@ class FilesActivity : RinBaseActivity() {
             tv.text = getString(R.string.sr_regex_error, res.error)
             return
         }
-        tv.setTextColor(androidx.core.content.ContextCompat.getColor(this, R.color.rin_editor_hint))
+        tv.setTextColor(androidx.core.content.ContextCompat.getColor(this, R.color.rin_files_dim))
         val base = if (res.totalMatches > 0)
             getString(R.string.sr_summary_format, res.totalMatches, res.hits.size, res.elapsedMs.toInt())
         else getString(R.string.sr_summary_names, res.hits.size, res.elapsedMs.toInt())
@@ -535,13 +536,14 @@ class FilesActivity : RinBaseActivity() {
         fun chip(label: String, on: Boolean, action: () -> Unit) {
             box.addView(TextView(this).apply {
                 text = label
-                textSize = 12f
+                textSize = 12.5f
                 maxLines = 1
+                gravity = android.view.Gravity.CENTER
                 setTextColor(androidx.core.content.ContextCompat.getColor(
-                    context, if (on) R.color.rin_accent else R.color.rin_on_toolbar))
+                    context, if (on) R.color.rin_files_on_accent else R.color.rin_files_chip_text))
                 if (on) setTypeface(typeface, android.graphics.Typeface.BOLD)
-                setPadding((12 * d).toInt(), (6 * d).toInt(), (12 * d).toInt(), (6 * d).toInt())
-                setBackgroundResource(if (on) R.drawable.bg_list_card_selected else R.drawable.bg_icon_btn)
+                setPadding((14 * d).toInt(), (7 * d).toInt(), (14 * d).toInt(), (7 * d).toInt())
+                setBackgroundResource(if (on) R.drawable.bg_file_chip_on else R.drawable.bg_file_chip)
                 isClickable = true
                 setOnClickListener { action() }
                 layoutParams = android.widget.LinearLayout.LayoutParams(
@@ -1263,7 +1265,7 @@ private class FilesAdapter(
         applyDensity(holder)
         val actionVis = if (selecting) View.GONE else View.VISIBLE
         holder.itemView.setBackgroundResource(
-            if (selected) R.drawable.bg_list_card_selected else R.drawable.bg_list_card
+            if (selected) R.drawable.bg_file_card_selected else R.drawable.bg_file_card
         )
         when (holder) {
             is FolderVH -> {
@@ -1317,7 +1319,7 @@ private class FilesAdapter(
     fun setPinned(paths: Set<String>) { pinned = paths }
 
     private fun applyPin(tv: TextView, key: String) {
-        if (key in pinned) RsIcons.start(tv, R.drawable.rs_ic_star, 14, 4, androidx.core.content.ContextCompat.getColor(tv.context, R.color.rin_accent))
+        if (key in pinned) RsIcons.start(tv, R.drawable.rs_ic_star, 14, 4, androidx.core.content.ContextCompat.getColor(tv.context, R.color.rin_files_accent))
         else RsIcons.clear(tv)
     }
 
@@ -1349,6 +1351,8 @@ private class FilesAdapter(
         val imgIcon: android.widget.ImageView = view.findViewById(R.id.imgFileIcon)
         val imgCheck: View = view.findViewById(R.id.imgFileSelectCheck)
         val txtErrorBadge: View = view.findViewById(R.id.txtErrorBadge)
+        val txtTypeBadge: TextView = view.findViewById(R.id.txtFileTypeBadge)
+        val imgPlay: View = view.findViewById(R.id.imgFilePlay)
         val txtName: TextView = view.findViewById(R.id.txtFileNameItem)
         val txtDirtyDot: View = view.findViewById(R.id.txtDirtyDot)
         val txtMeta: TextView = view.findViewById(R.id.txtFileMeta)
@@ -1422,7 +1426,15 @@ private class FilesAdapter(
                         dateFormat.format(Date(file.lastModified))
                     )
                 }
-                FileIconResolver.load(holder.imgIcon, file.file)
+                // مصغّرة الصور/الفيديو + لصيقة النوع؛ الأبعاد أو المدة تُضاف أمام الحجم والتاريخ فور جاهزيتها.
+                val baseMeta = holder.txtMeta.text
+                val metaOwner = file.file.absolutePath
+                holder.txtMeta.tag = metaOwner
+                val infoCallback: (String) -> Unit = { info ->
+                    if (holder.txtMeta.tag == metaOwner) holder.txtMeta.text = "$info • $baseMeta"
+                }
+                FileRowStyle.bind(holder.imgIcon, holder.txtTypeBadge, holder.imgPlay, file.file,
+                    if (searchMode) null else infoCallback)
                 holder.txtErrorBadge.visibility = if (file.relPath in errorPaths) View.VISIBLE else View.GONE
                 holder.txtDirtyDot.visibility = if (file.relPath in dirtyPaths) View.VISIBLE else View.GONE
                 holder.itemView.setOnClickListener {
@@ -1450,8 +1462,8 @@ private class FilesAdapter(
 /** تمييز مواضع المطابقة (خلفية + خط عريض) في اسم الملف ومقتطف السطر. */
 internal object SearchHighlight {
     private fun bg(ctx: android.content.Context): Int {
-        val c = androidx.core.content.ContextCompat.getColor(ctx, R.color.rin_accent)
-        return (c and 0x00FFFFFF) or (0x55 shl 24)
+        val c = androidx.core.content.ContextCompat.getColor(ctx, R.color.rin_files_accent_fill)
+        return (c and 0x00FFFFFF) or (0x66 shl 24)
     }
 
     private fun mark(ctx: android.content.Context, sp: android.text.Spannable, s: Int, e: Int) {
