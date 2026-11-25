@@ -3,16 +3,16 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginBottom="10dp"
-    android:background="@drawable/bg_setting_row"
+    android:layout_marginBottom="12dp"
+    android:background="@drawable/bg_pg_card"
     android:orientation="vertical"
-    android:padding="15dp">
+    android:padding="16dp">
 
     <TextView
         android:id="@+id/settingTitle"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:textColor="@color/rin_on_toolbar"
+        android:textColor="@color/rin_pg_text"
         android:textSize="14sp"
         android:textStyle="bold" />
 
@@ -21,6 +21,6 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
-        android:progressTint="@color/rin_accent"
-        android:thumbTint="@color/rin_accent" />
+        android:progressTint="@color/rin_pg_accent_fill"
+        android:thumbTint="@color/rin_pg_accent_fill" />
 </LinearLayout>
