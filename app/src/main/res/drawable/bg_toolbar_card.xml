@@ -1,17 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- خلفية الشريط العلوي الجديدة: نفس التدرّج السابق (bg_toolbar_gradient) لكن بزوايا سفلية
-     دائرية بدل حواف مستطيلة حادة، ليقرأ كبطاقة عائمة منفصلة عن محتوى الشاشة أسفلها — نفس
-     لغة التصميم الجديدة لشريط التنقل السفلي العائم (bg_bottom_nav_floating). -->
-<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-    <gradient
-        android:angle="90"
-        android:startColor="@color/rin_toolbar_gradient_top"
-        android:endColor="@color/rin_toolbar_gradient_bottom" />
-    <corners
-        android:bottomLeftRadius="20dp"
-        android:bottomRightRadius="20dp" />
-    <!-- حدّ زجاجي رفيع شبه شفاف — يمنح البطاقة العائمة تعريفاً أدق لحوافها بدل الاعتماد
-         فقط على ظل elevation، ويطابق نفس لمسة "الحافة الزجاجية" المستخدمة الآن في
-         bg_bottom_nav_floating لتوحيد الهوية بين الشريطين العلوي والسفلي. -->
-    <stroke android:width="1dp" android:color="@color/rin_app_icon_border" />
-</shape>
+<!-- خلفية الشريط العلوي الموحّد (الشاشات الفرعية + شريط المحرر): سطح صلب أبيض/أسود مخضرّ بزوايا سفلية
+     دائرية 24dp، وخط أخضر رفيع مرتفع قليلاً عن الحافة السفلية كتوقيع للعلامة. يتبع ألوان rin_nav_bar_*. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/rin_nav_bar_bg" />
+            <corners android:bottomLeftRadius="24dp" android:bottomRightRadius="24dp" />
+            <stroke android:width="1dp" android:color="@color/rin_nav_bar_border" />
+        </shape>
+    </item>
+    <item android:gravity="bottom" android:height="2dp" android:left="48dp" android:right="48dp">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/rin_pg_accent_fill" />
+            <corners android:radius="2dp" />
+        </shape>
+    </item>
+</layer-list>
