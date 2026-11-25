@@ -7,7 +7,7 @@ import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.FrameLayout
 
-/** Central editor loading overlay. Any editor operation can reuse the same RIN logo redraw UI. */
+/** Central editor loading overlay: the RinStudio jellyfish redraws itself as the progress bar (black · white · green). */
 object RinLogoLoadingOverlay {
     private var host: FrameLayout? = null
     private var view: RinLogoLoadingView? = null
@@ -16,7 +16,7 @@ object RinLogoLoadingOverlay {
         hide()
         val decor = activity.window.decorView as? ViewGroup ?: return
         val container = FrameLayout(activity).apply {
-            setBackgroundColor(Color.argb(235, 4, 8, 10))
+            setBackgroundColor(Color.argb(245, 0, 0, 0))
             foreground = ColorDrawable(Color.TRANSPARENT)
             elevation = 50f
         }
