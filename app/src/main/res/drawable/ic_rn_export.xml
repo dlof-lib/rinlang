@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- تصدير APK: أيقونة ثنائية النغمة (حد + تعبئة شفافة 20%) بلون أبيض ليُلوَّن بـ android:tint / RsIcons. عائلة ic_rn_*. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#33FFFFFF"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M4,10H20V19A1.5,1.5 0 0 1 18.5,20.5H5.5A1.5,1.5 0 0 1 4,19Z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M12,15.5V3.5M8.5,7L12,3.5L15.5,7" />
+</vector>
