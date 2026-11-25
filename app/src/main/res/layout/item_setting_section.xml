@@ -4,12 +4,12 @@
 <TextView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginTop="26dp"
-    android:layout_marginBottom="10dp"
-    android:background="@drawable/bg_setting_section_divider"
+    android:layout_marginTop="24dp"
+    android:layout_marginBottom="12dp"
+    android:background="@drawable/bg_pg_divider"
     android:paddingBottom="8dp"
     android:letterSpacing="0.08"
     android:textAllCaps="true"
-    android:textColor="@color/rin_accent"
+    android:textColor="@color/rin_pg_accent"
     android:textStyle="bold"
-    android:textSize="12.5sp" />
+    android:textSize="12sp" />
