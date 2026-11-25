@@ -5,25 +5,25 @@
      BottomNavHelper.kt (animateIndicatorTo) بعد أول تخطيط للشريط، لأن كل تبويب weight="1"
      وعرضه الحقيقي غير معروف إلا بعد القياس.
 
-     تطوير إضافي: الشريط نفسه أصبح بطاقة "عائمة" (island) بهامش من حواف الشاشة الثلاثة
+     هوية جديدة: أسود/أبيض مع حبّة خضراء مصمتة وأيقونات ic_rn_* ثنائية النغمة. تطوير إضافي: الشريط نفسه أصبح بطاقة "عائمة" (island) بهامش من حواف الشاشة الثلاثة
      بدل شريط مستطيل ملاصق للحواف — بزوايا دائرية كاملة (bg_bottom_nav_floating) وظل أعمق
      (elevation 14dp)، بنفس لغة "البطاقة العائمة" المستخدمة الآن في الشريط العلوي
      (bg_toolbar_card). الحبّة المُحدَّدة أصبحت تدرّجاً كامل التشبّع بدل تلميح شفاف باهت. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/bottomNavBar"
     android:layout_width="match_parent"
-    android:layout_height="64dp"
-    android:layout_marginStart="14dp"
-    android:layout_marginEnd="14dp"
+    android:layout_height="68dp"
+    android:layout_marginStart="16dp"
+    android:layout_marginEnd="16dp"
     android:layout_marginBottom="14dp"
     android:background="@drawable/bg_bottom_nav_floating"
-    android:elevation="14dp">
+    android:elevation="12dp">
 
     <!-- الحبّة المتحرّكة: تبدأ بعرض/موقع صفريَين وتُضبَط فعلياً من الكود عند أول تخطيط -->
     <View
         android:id="@+id/bottomNavIndicator"
         android:layout_width="0dp"
-        android:layout_height="40dp"
+        android:layout_height="48dp"
         android:layout_gravity="center_vertical|start"
         android:layout_marginStart="8dp"
         android:elevation="3dp"
@@ -50,7 +50,7 @@
                 android:id="@+id/navEditorIcon"
                 android:layout_width="24dp"
                 android:layout_height="24dp"
-                android:src="@drawable/ic_nav_editor"
+                android:src="@drawable/ic_rn_nav_editor"
                 android:contentDescription="@string/nav_editor" />
 
             <TextView
@@ -59,7 +59,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
                 android:text="@string/nav_editor"
-                android:textSize="10sp" />
+                android:textSize="10.5sp" />
         </LinearLayout>
 
         <LinearLayout
@@ -78,7 +78,7 @@
                 android:id="@+id/navProjectsIcon"
                 android:layout_width="24dp"
                 android:layout_height="24dp"
-                android:src="@drawable/ic_projects"
+                android:src="@drawable/ic_rn_nav_projects"
                 android:contentDescription="@string/nav_projects" />
 
             <TextView
@@ -87,7 +87,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
                 android:text="@string/nav_projects"
-                android:textSize="10sp" />
+                android:textSize="10.5sp" />
         </LinearLayout>
 
         <LinearLayout
@@ -106,7 +106,7 @@
                 android:id="@+id/navStoreIcon"
                 android:layout_width="24dp"
                 android:layout_height="24dp"
-                android:src="@drawable/ic_nav_store"
+                android:src="@drawable/ic_rn_nav_store"
                 android:contentDescription="@string/nav_store" />
 
             <TextView
@@ -115,7 +115,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
                 android:text="@string/nav_store"
-                android:textSize="10sp" />
+                android:textSize="10.5sp" />
         </LinearLayout>
 
         <LinearLayout
@@ -134,7 +134,7 @@
                 android:id="@+id/navProfileIcon"
                 android:layout_width="24dp"
                 android:layout_height="24dp"
-                android:src="@drawable/ic_nav_profile"
+                android:src="@drawable/ic_rn_nav_profile"
                 android:contentDescription="@string/nav_profile" />
 
             <TextView
@@ -143,7 +143,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
                 android:text="@string/nav_profile"
-                android:textSize="10sp" />
+                android:textSize="10.5sp" />
         </LinearLayout>
 
         <LinearLayout
@@ -162,7 +162,7 @@
                 android:id="@+id/navMoreIcon"
                 android:layout_width="24dp"
                 android:layout_height="24dp"
-                android:src="@drawable/ic_nav_more"
+                android:src="@drawable/ic_rn_nav_more"
                 android:contentDescription="@string/nav_more" />
 
             <TextView
@@ -171,7 +171,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
                 android:text="@string/nav_more"
-                android:textSize="10sp" />
+                android:textSize="10.5sp" />
         </LinearLayout>
 
     </LinearLayout>
