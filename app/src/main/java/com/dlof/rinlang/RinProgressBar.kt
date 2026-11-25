@@ -42,12 +42,12 @@ class RinProgressBar @JvmOverloads constructor(
     private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val shimmerPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = ContextCompat.getColor(context, R.color.rin_accent)
+        color = RinBrand.GREEN
         alpha = 46
     }
 
-    private val gradientStart = ContextCompat.getColor(context, R.color.rin_run_gradient_start)
-    private val gradientEnd = ContextCompat.getColor(context, R.color.rin_run_gradient_end)
+    private val gradientStart = RinBrand.GREEN_DEEP
+    private val gradientEnd = RinBrand.GREEN
 
     /** 0f..1f، أو -1f قبل أول [setProgress] فعلي (لا شيء يُرسم كتعبئة إلا في وضع اللانهائي). */
     private var displayedFraction = 0f
@@ -62,6 +62,12 @@ class RinProgressBar @JvmOverloads constructor(
 
     private val trackRect = RectF()
     private val fillRect = RectF()
+
+    /** لون مسار الشريط (الفارغ). مفيد على الخلفيات السوداء حيث يكون اللون الافتراضي فاتحاً. */
+    fun setTrackColor(color: Int) {
+        trackPaint.color = color
+        invalidate()
+    }
 
     init {
         // البريق يبدأ فوراً ويستمر طوال عمر الـView (رخيص الثمن: مجرد تحريك RectF/Shader وInvalidate،
