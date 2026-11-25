@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- الشريط العلوي الموحّد لكل الشاشات الفرعية (هوية RinStudio: أسود · أبيض · أخضر). نفس معرّفات الإصدار السابق فلا يتغيّر الكود:
+     زر رجوع دائري أخضر خافت + أيقونة التطبيق + العنوان، فوق بطاقة بزوايا سفلية دائرية وخط أخضر سفلي. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_toolbar_card"
+    android:elevation="4dp"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingStart="8dp"
+    android:paddingTop="10dp"
+    android:paddingEnd="16dp"
+    android:paddingBottom="16dp">
+
+    <ImageButton
+        android:id="@+id/btnToolbarBack"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:background="@drawable/bg_pg_icon_btn"
+        android:contentDescription="@string/action_back"
+        android:padding="11dp"
+        android:src="@drawable/ic_back"
+        android:tint="@color/rin_pg_accent" />
+
+    <ImageView
+        android:id="@+id/imgToolbarAppIcon"
+        android:layout_width="34dp"
+        android:layout_height="34dp"
+        android:layout_marginStart="10dp"
+        android:contentDescription="@string/app_name"
+        android:src="@mipmap/ic_launcher_round" />
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="10dp"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/txtToolbarTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:singleLine="true"
+            android:textColor="@color/rin_pg_text"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            tools:text="الإعدادات" />
+
+        <TextView
+            android:id="@+id/txtToolbarSubtitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:singleLine="true"
+            android:textColor="@color/rin_pg_text_dim"
+            android:textSize="11.5sp"
+            android:visibility="gone"
+            tools:text="RinStudio" />
+    </LinearLayout>
+</LinearLayout>
