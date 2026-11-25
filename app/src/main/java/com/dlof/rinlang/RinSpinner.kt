@@ -20,7 +20,7 @@ import kotlin.math.min
  * تحتاج إشارة "جارٍ العمل" فورية بلا تغطية الشاشة.
  *
  * مبني بالكامل بـCanvas (بلا مكتبة خارجية كـLottie) حفاظاً على حجم APK وضمان تطابق الهوية اللونية
- * تماماً مع بقية مكوّنات التحميل (تدرّج rin_run_gradient نفسه المستخدم في [RinProgressBar]):
+ * تماماً مع بقية مكوّنات التحميل (تدرّج الأخضر الرسمي RinBrand.GREEN ← GREEN_DEEP نفسه المستخدم في [RinProgressBar]):
  *   • قوس دوّار بتدرّج لوني (SweepGradient) بدل الدائرة الرمادية المسطّحة القياسية.
  *   • "تنفّس" في طول القوس (يتمدّد وينكمش بلا توقف) بدل قوس ثابت الطول يدور فقط — تفصيل صغير
  *     يمنح إحساساً حيّاً مشابهاً لمؤشرات التحميل في التطبيقات الاحترافية الحديثة.
@@ -65,9 +65,9 @@ class RinSpinner @JvmOverloads constructor(
         a.recycle()
 
         gradientStart = if (customColor != 0) customColor else
-            ContextCompat.getColor(context, R.color.rin_run_gradient_start)
+            RinBrand.GREEN
         gradientEnd = if (customColor != 0) customColor else
-            ContextCompat.getColor(context, R.color.rin_run_gradient_end)
+            RinBrand.GREEN_DEEP
 
         arcPaint.strokeWidth = strokeWidthPx
         glowPaint.color = gradientStart
