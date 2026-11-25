@@ -2,142 +2,94 @@ package com.dlof.rinlang
 
 import android.animation.ValueAnimator
 import android.content.Context
-import android.graphics.BlurMaskFilter
 import android.graphics.Canvas
-import android.graphics.Color
-import android.graphics.Paint
-import android.graphics.Path
-import android.graphics.PathMeasure
-import android.graphics.PointF
-import android.graphics.RectF
+import android.os.SystemClock
+import android.provider.Settings
 import android.util.AttributeSet
 import android.view.View
 import android.view.animation.LinearInterpolator
-import androidx.core.content.ContextCompat
+import kotlin.math.cos
 import kotlin.math.min
 
 /**
- * مؤشر تحميل يرسم علامة RIN الهندسية تدريجياً كأنها تُخَط بقلم — نفس فكرة [RinLogoLoadingView]
- * المستخدم داخل المحرر، لكن كمكوّن View عام قابل لإعادة الاستخدام في أي شاشة (وليس مرتبطاً بتراكب
- * كامل الشاشة أو بألوان/نصوص المحرر الثابتة). مناسب كبديل مميّز بصرياً لـ[RinSpinner] حين يُراد طابع
- * "هوية العلامة التجارية" بدل قوس مجرّد.
+ * مؤشر تحميل مدمج بهوية RinStudio: يرسم قنديل البحر تدريجياً (محيط ← تعبئة خضراء ← </> ← مجسّات
+ * بيضاء)، يسبح لحظة، ثم يعيد الرسم في حلقة. بديل مميّز لـ[RinSpinner] حيث يُراد طابع العلامة.
+ * بلا هالة (أخفّ وأوضح في الأحجام الصغيرة). على خلفية فاتحة اضبط [inkColor] على لون داكن.
  *
- * XML: <com.dlof.rinlang.RinIconDrawLoadingView
- *          android:layout_width="72dp" android:layout_height="72dp" />
- * برمجياً: يبدأ تلقائياً مع attach، أو يدوياً عبر [start]/[stop].
+ * XML: <com.dlof.rinlang.RinIconDrawLoadingView android:layout_width="72dp" android:layout_height="80dp" />
+ * الواجهة كما كانت: [setProgress] [start] [stop]؛ يبدأ تلقائياً مع attach.
  */
 class RinIconDrawLoadingView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null
 ) : View(context, attrs) {
 
-    private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeCap = Paint.Cap.SQUARE
-        strokeJoin = Paint.Join.MITER
-    }
-    private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeCap = Paint.Cap.ROUND
-        strokeJoin = Paint.Join.ROUND
-        maskFilter = BlurMaskFilter(14f, BlurMaskFilter.Blur.NORMAL)
-    }
-    private val headPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.FILL
-    }
-    private val trackPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = 2f
-    }
+    private val jelly = RinJellyfish().apply { showGlow = false }
+    private val reducedMotion = Settings.Global.getFloat(
+        context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f
+    ) == 0f
 
-    private val logoPath = Path()
     private var progress = 0f
-    private var animator: ValueAnimator? = null
+    private var loopAnimator: ValueAnimator? = null
+    private var startUptime = 0L
+    private var elapsedMs = 0L
+    private var manual = false
 
-    private val accentColor = ContextCompat.getColor(context, R.color.rin_accent)
-    private val gradientEnd = ContextCompat.getColor(context, R.color.rin_run_gradient_end)
+    var inkColor: Int
+        get() = jelly.inkColor
+        set(value) { jelly.inkColor = value; invalidate() }
 
-    init {
-        setLayerType(LAYER_TYPE_SOFTWARE, null)
-        isClickable = false
-        strokePaint.color = accentColor
-        glowPaint.color = accentColor
-        headPaint.color = gradientEnd
-        trackPaint.color = Color.argb(50, Color.red(accentColor), Color.green(accentColor), Color.blue(accentColor))
-    }
-
+    /** يضبط اكتمال الرسم يدوياً (0..1) ويوقف الحلقة التلقائية. */
     fun setProgress(value: Float) {
+        manual = true
         progress = value.coerceIn(0f, 1f)
         invalidate()
     }
 
-    fun start(durationMs: Long = 1300L) {
-        animator?.cancel()
-        animator = ValueAnimator.ofFloat(0f, 1f).apply {
+    /** يبدأ حلقة الرسم؛ [durationMs] = مدة دورة كاملة (رسم + سباحة قصيرة). */
+    fun start(durationMs: Long = 1900L) {
+        manual = false
+        if (reducedMotion) { progress = 1f; invalidate(); return }
+        loopAnimator?.cancel()
+        startUptime = SystemClock.uptimeMillis()
+        loopAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
             duration = durationMs
             repeatCount = ValueAnimator.INFINITE
             interpolator = LinearInterpolator()
-            addUpdateListener { setProgress(it.animatedValue as Float) }
+            addUpdateListener {
+                val f = it.animatedValue as Float
+                progress = RinEase.clamp01(f / 0.62f)   // 62% رسم، 38% سباحة بالقنديل المكتمل
+                elapsedMs = SystemClock.uptimeMillis() - startUptime
+                invalidate()
+            }
             start()
         }
     }
 
-    /** يوقف الحلقة اللانهائية ويثبّت الشعار مكتملاً (للاستخدام كمؤشر نجاح لحظي قبل الإخفاء). */
+    /** يوقف الحلقة ويثبّت الشعار مكتملاً (مؤشر نجاح لحظي قبل الإخفاء). */
     fun stop() {
-        animator?.cancel()
-        animator = null
-        setProgress(1f)
+        loopAnimator?.cancel()
+        loopAnimator = null
+        manual = true
+        progress = 1f
+        invalidate()
     }
 
-    override fun onAttachedToWindow() {
-        super.onAttachedToWindow()
-        start()
-    }
-
-    override fun onDetachedFromWindow() {
-        animator?.cancel()
-        animator = null
-        super.onDetachedFromWindow()
-    }
+    override fun onAttachedToWindow() { super.onAttachedToWindow(); if (!manual) start() }
+    override fun onDetachedFromWindow() { loopAnimator?.cancel(); loopAnimator = null; super.onDetachedFromWindow() }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        val cx = width / 2f
-        val cy = height / 2f
-        val size = min(width, height) * 0.42f
-        val scale = size / 160f
-
-        strokePaint.strokeWidth = 7f * scale
-        glowPaint.strokeWidth = 11f * scale
-
-        fun p(x: Float, y: Float) = PointF(cx + x * scale, cy + y * scale)
-        // نفس هندسة علامة RIN (معين خارجي مكسور + معين داخلي)، بمقياس نسبي لحجم الـView.
-        val pts = listOf(
-            p(-160f, -20f), p(-80f, -100f), p(80f, -100f), p(160f, -20f),
-            p(80f, -20f), p(0f, -100f), p(-80f, -20f),
-            p(-160f, 20f), p(-80f, 100f), p(80f, 100f), p(160f, 20f),
-            p(80f, 20f), p(0f, 100f), p(-80f, 20f),
-            p(0f, -58f), p(58f, 0f), p(0f, 58f), p(-58f, 0f), p(0f, -58f)
-        )
-        logoPath.reset()
-        logoPath.moveTo(pts[0].x, pts[0].y)
-        for (i in 1 until pts.size) logoPath.lineTo(pts[i].x, pts[i].y)
-
-        val trackBounds = RectF(cx - 185f * scale, cy - 125f * scale, cx + 185f * scale, cy + 125f * scale)
-        canvas.drawRoundRect(trackBounds, 18f * scale, 18f * scale, trackPaint)
-
-        val measure = PathMeasure(logoPath, false)
-        val total = measure.length
-        val visible = total * progress
-        val reveal = Path()
-        measure.getSegment(0f, visible, reveal, true)
-        canvas.drawPath(reveal, glowPaint)
-        canvas.drawPath(reveal, strokePaint)
-
-        if (progress < 1f && total > 0f) {
-            val pos = FloatArray(2)
-            measure.getPosTan(visible.coerceAtMost(total - 0.1f), pos, null)
-            canvas.drawCircle(pos[0], pos[1], 6f * scale, headPaint)
-        }
+        val w = width.toFloat(); val h = height.toFloat()
+        if (w <= 0f || h <= 0f) return
+        val cycle = elapsedMs / 1150f
+        val swimming = progress >= 1f && !reducedMotion
+        jelly.reveal = progress
+        jelly.pulse = if (swimming) RinEase.swimPulse(cycle) else 0f
+        jelly.swayPhase = if (reducedMotion) 0f else elapsedMs * 0.0052f
+        val unit = min(w / (RinJellyfish.WIDTH_UNITS * 1.25f), h / (RinJellyfish.HEIGHT_UNITS * 1.12f))
+        val lift = if (swimming) unit * 1.6f * (0.5f - 0.5f * cos(cycle * RinJellyfish.TWO_PI)) else 0f
+        val top = (h - RinJellyfish.HEIGHT_UNITS * unit) / 2f + unit * 0.8f - lift
+        jelly.draw(canvas, w / 2f, top, unit)
     }
 }
