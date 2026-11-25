@@ -1,32 +1,27 @@
 package com.dlof.rinlang
 
-import android.animation.ValueAnimator
 import android.content.Context
-import android.graphics.*
+import android.graphics.Color
+import android.view.Gravity
 import android.view.View
 import android.view.animation.DecelerateInterpolator
 import android.widget.FrameLayout
-import android.widget.ImageView
 import android.widget.TextView
-import androidx.core.content.ContextCompat
-import kotlin.math.min
 
 /**
- * Rin's native loading surface.
+ * مؤشر التحميل الرسمي لكامل الشاشة في RinStudio.
  *
- * One reusable component for startup, project operations, package loading,
- * editor tasks, native execution and any other long-running operation.
- * The logo animation is deliberately drawn/animated here instead of relying
- * on a platform ProgressBar so the loading language stays visually identical
- * throughout Rin.
+ * سطح واحد قابل لإعادة الاستخدام للإقلاع، عمليات المشاريع، تحميل الحزم، مهام المحرر، والتنفيذ
+ * الأصلي. يعرض [RinJellyLoaderView] (قنديل البحر يسبح مع هالة خضراء) فوق خلفية سوداء، ثم عنوان
+ * أبيض، المرحلة الحالية، وشريط تقدّم أخضر ([RinProgressBar]) مع النسبة. الألوان: أسود · أبيض · أخضر.
+ * الواجهة العامة (start / setStage / setProgress / stop) كما كانت، فلا يلزم تعديل المستدعين.
  */
 class RinLoadingView @JvmOverloads constructor(
     context: Context,
     attrs: android.util.AttributeSet? = null
 ) : FrameLayout(context, attrs) {
 
-    private val logo = ImageView(context)
-    private val animation = RinLoadingAnimationView(context)
+    private val jelly = RinJellyLoaderView(context)
     private val title = TextView(context)
     private val stage = TextView(context)
     private val progressText = TextView(context)
@@ -35,75 +30,56 @@ class RinLoadingView @JvmOverloads constructor(
 
     private var progress = -1
     private var running = false
-    private var pulseAnimator: ValueAnimator? = null
 
     init {
         isClickable = true
         isFocusable = true
-        setBackgroundColor(ContextCompat.getColor(context, R.color.rin_background))
-        alpha = 1f
+        setBackgroundColor(RinBrand.BLACK)
 
         val content = FrameLayout(context)
         content.layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
         addView(content)
 
-        animation.layoutParams = LayoutParams(dp(156), dp(156), android.view.Gravity.CENTER).apply {
-            bottomMargin = dp(112)
-        }
-        content.addView(animation)
-
-        logo.setImageResource(R.drawable.rin_logo_loading)
-        logo.scaleType = ImageView.ScaleType.CENTER_INSIDE
-        logo.layoutParams = LayoutParams(dp(112), dp(148), android.view.Gravity.CENTER).apply {
-            bottomMargin = dp(112)
-        }
-        content.addView(logo)
+        jelly.layoutParams = LayoutParams(dp(176), dp(196), Gravity.CENTER).apply { bottomMargin = dp(120) }
+        content.addView(jelly)
 
         title.textSize = 22f
         title.setTypeface(null, android.graphics.Typeface.BOLD)
-        title.gravity = android.view.Gravity.CENTER
-        title.setTextColor(ContextCompat.getColor(context, R.color.rin_editor_text))
-        title.layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dp(34), android.view.Gravity.CENTER_HORIZONTAL).apply {
-            topMargin = dp(108)
-            marginStart = dp(28)
-            marginEnd = dp(28)
+        title.gravity = Gravity.CENTER
+        title.letterSpacing = 0.12f
+        title.setTextColor(RinBrand.GREEN)
+        title.layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dp(34), Gravity.CENTER_HORIZONTAL).apply {
+            topMargin = dp(112); marginStart = dp(28); marginEnd = dp(28)
         }
         content.addView(title)
 
         stage.textSize = 13f
-        stage.gravity = android.view.Gravity.CENTER
-        stage.setTextColor(ContextCompat.getColor(context, R.color.rin_editor_hint))
-        stage.layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dp(28), android.view.Gravity.CENTER_HORIZONTAL).apply {
-            topMargin = dp(146)
-            marginStart = dp(28)
-            marginEnd = dp(28)
+        stage.gravity = Gravity.CENTER
+        stage.setTextColor(RinBrand.WHITE)
+        stage.layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dp(28), Gravity.CENTER_HORIZONTAL).apply {
+            topMargin = dp(150); marginStart = dp(28); marginEnd = dp(28)
         }
         content.addView(stage)
 
-        progressBar.layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dp(8), android.view.Gravity.CENTER_HORIZONTAL).apply {
-            topMargin = dp(188)
-            marginStart = dp(46)
-            marginEnd = dp(46)
+        progressBar.setTrackColor(Color.argb(46, 255, 255, 255))
+        progressBar.layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dp(6), Gravity.CENTER_HORIZONTAL).apply {
+            topMargin = dp(192); marginStart = dp(56); marginEnd = dp(56)
         }
         content.addView(progressBar)
 
         progressText.textSize = 12f
-        progressText.gravity = android.view.Gravity.CENTER
-        progressText.setTextColor(ContextCompat.getColor(context, R.color.rin_editor_hint))
-        progressText.layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dp(24), android.view.Gravity.CENTER_HORIZONTAL).apply {
-            topMargin = dp(200)
-            marginStart = dp(46)
-            marginEnd = dp(46)
+        progressText.gravity = Gravity.CENTER
+        progressText.setTextColor(RinBrand.GREEN)
+        progressText.layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dp(24), Gravity.CENTER_HORIZONTAL).apply {
+            topMargin = dp(204); marginStart = dp(46); marginEnd = dp(46)
         }
         content.addView(progressText)
 
         detail.textSize = 11.5f
-        detail.gravity = android.view.Gravity.CENTER
-        detail.setTextColor(ContextCompat.getColor(context, R.color.rin_editor_hint))
-        detail.layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dp(28), android.view.Gravity.CENTER_HORIZONTAL).apply {
-            topMargin = dp(226)
-            marginStart = dp(32)
-            marginEnd = dp(32)
+        detail.gravity = Gravity.CENTER
+        detail.setTextColor(Color.argb(140, 255, 255, 255))
+        detail.layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dp(28), Gravity.CENTER_HORIZONTAL).apply {
+            topMargin = dp(230); marginStart = dp(32); marginEnd = dp(32)
         }
         content.addView(detail)
 
@@ -119,8 +95,7 @@ class RinLoadingView @JvmOverloads constructor(
         running = true
         alpha = 0f
         animate().alpha(1f).setDuration(180L).setInterpolator(DecelerateInterpolator()).start()
-        animation.start()
-        startPulse()
+        jelly.start()
     }
 
     fun setStage(stageText: CharSequence, detailText: CharSequence = "") {
@@ -143,85 +118,18 @@ class RinLoadingView @JvmOverloads constructor(
     fun stop(immediate: Boolean = false) {
         if (!running) return
         running = false
-        pulseAnimator?.cancel()
-        animation.stop()
         if (immediate) {
+            jelly.stop()
             visibility = View.GONE
             alpha = 1f
             return
         }
         animate().alpha(0f).setDuration(160L).withEndAction {
+            jelly.stop()
             visibility = View.GONE
             alpha = 1f
         }.start()
     }
 
-    private fun startPulse() {
-        pulseAnimator?.cancel()
-        pulseAnimator = ValueAnimator.ofFloat(0.92f, 1.04f).apply {
-            duration = 900L
-            repeatMode = ValueAnimator.REVERSE
-            repeatCount = ValueAnimator.INFINITE
-            addUpdateListener {
-                val s = it.animatedValue as Float
-                logo.scaleX = s
-                logo.scaleY = s
-            }
-            start()
-        }
-    }
-
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
-}
-
-/** Draws the animated Rin loading ring and soft logo aura. */
-private class RinLoadingAnimationView(context: Context) : View(context) {
-    private val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = dp(4f)
-        strokeCap = Paint.Cap.ROUND
-        color = ContextCompat.getColor(context, R.color.rin_accent_green)
-    }
-    private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = dp(1.5f)
-        color = ContextCompat.getColor(context, R.color.rin_accent_green_dim)
-    }
-    private var animator: ValueAnimator? = null
-    private var sweep = 0f
-    private var rotation = 0f
-
-    fun start() {
-        animator?.cancel()
-        animator = ValueAnimator.ofFloat(0f, 360f).apply {
-            duration = 1300L
-            repeatCount = ValueAnimator.INFINITE
-            interpolator = android.view.animation.LinearInterpolator()
-            addUpdateListener {
-                rotation = it.animatedValue as Float
-                sweep = (rotation * 1.8f) % 360f
-                invalidate()
-            }
-            start()
-        }
-    }
-
-    fun stop() {
-        animator?.cancel()
-        animator = null
-        rotation = 0f
-        invalidate()
-    }
-
-    override fun onDraw(canvas: Canvas) {
-        super.onDraw(canvas)
-        val cx = width / 2f
-        val cy = height / 2f
-        val radius = min(width, height) * 0.42f
-        val oval = RectF(cx - radius, cy - radius, cx + radius, cy + radius)
-        canvas.drawArc(oval, rotation - 65f, 250f, false, glowPaint)
-        canvas.drawArc(oval, rotation, 105f, false, ringPaint)
-    }
-
-    private fun dp(v: Float) = v * resources.displayMetrics.density
 }
