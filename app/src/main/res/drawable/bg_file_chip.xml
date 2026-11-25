@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- شريحة تصفية غير مفعّلة: حبّة بخلفية رمادية مخضرّة خافتة. -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android" android:color="@color/rin_files_pressed">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/rin_files_chip_bg" />
+            <corners android:radius="18dp" />
+        </shape>
+    </item>
+</ripple>
