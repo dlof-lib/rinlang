@@ -29,6 +29,13 @@ data class RinTheme(
             "daylight" -> 0x6639BA to 0x0550AE
             "solarlight" -> 0x4F54B0 to 0x1F6FB0
             "dawn" -> 0x7A5C9C to 0x286983
+            "rinstudio" -> 0x0FA968 to 0x3DF59A
+            "jellyfish" -> 0x00F0B4 to 0x7DF9FF
+            "tokyo" -> 0xBB9AF7 to 0x7AA2F7
+            "mocha" -> 0xCBA6F7 to 0x89B4FA
+            "gruvbox" -> 0xFE8019 to 0xFABD2F
+            "rinlight" -> 0x087F4C to 0x3DF59A
+            "latte" -> 0x8839EF to 0x1E66F5
             else -> 0x0FA34F to 0x7BF5A8
         }
 
@@ -62,7 +69,26 @@ data class RinTheme(
         val DAWN = RinTheme("dawn", "Dawn", c(0xFAF4ED), c(0xFFFAF3), c(0xF2E9E1), c(0xDFD6D2), c(0xF2E9E1), c(0xF4EBE2),
             c(0x463F66), c(0x26233A), c(0x75718F), c(0x7A5C9C), c(0x286983), c(0x3A7655), c(0x3A7655), c(0xB4415F), c(0x9A5A12))
 
-        val ALL = listOf(RIN, MIDNIGHT, DRACULA, NORD, SOLARIZED, AMOLED, MATRIX, AMBER, PAPER, DAYLIGHT, SOLARLIGHT, DAWN)
+        // ---- سمات إضافية: هوية RinStudio + سمات شهيرة ----
+        val RINBLACK = RinTheme("rinstudio", "RinStudio Black", c(0x000000), c(0x0A0F0C), c(0x131B16), c(0x1D2A23), c(0x000000), c(0x060A08),
+            c(0xE8F4EC), c(0xFFFFFF), c(0x6E8478), c(0x3DF59A), c(0x7FD9FF), c(0x3DF59A), c(0x3DF59A), c(0xFF5C6C), c(0xF5E960))
+        val JELLY = RinTheme("jellyfish", "Jellyfish Glow", c(0x04100C), c(0x081C15), c(0x0E2B22), c(0x15473A), c(0x020A07), c(0x061510),
+            c(0xD9F5EA), c(0xF2FFF9), c(0x4E7A6C), c(0x00F0B4), c(0x7DF9FF), c(0x00F0B4), c(0x00F0B4), c(0xFF5C7A), c(0xFFE066))
+        val TOKYO = RinTheme("tokyo", "Tokyo Night", c(0x1A1B26), c(0x1F2335), c(0x292E42), c(0x3B4261), c(0x16161E), c(0x1E2030),
+            c(0xC0CAF5), c(0xE0E6FF), c(0x6C76A6), c(0xBB9AF7), c(0x7AA2F7), c(0x9ECE6A), c(0x9ECE6A), c(0xF7768E), c(0xE0AF68))
+        val MOCHA = RinTheme("mocha", "Catppuccin Mocha", c(0x1E1E2E), c(0x252536), c(0x313244), c(0x45475A), c(0x181825), c(0x232334),
+            c(0xCDD6F4), c(0xF5F7FF), c(0x8A8FA8), c(0xCBA6F7), c(0x89B4FA), c(0xA6E3A1), c(0xA6E3A1), c(0xF38BA8), c(0xF9E2AF))
+        val GRUVBOX = RinTheme("gruvbox", "Gruvbox Dark", c(0x282828), c(0x32302F), c(0x3C3836), c(0x504945), c(0x1D2021), c(0x2E2C2B),
+            c(0xEBDBB2), c(0xFBF1C7), c(0x928374), c(0xFE8019), c(0x83A598), c(0xB8BB26), c(0xB8BB26), c(0xFB4934), c(0xFABD2F))
+        val RINLIGHT = RinTheme("rinlight", "RinStudio Light", c(0xFFFFFF), c(0xF3F7F5), c(0xE6EEE9), c(0xCFDBD4), c(0xF1F6F3), c(0xF4F8F6),
+            c(0x1B2620), c(0x0A0F0C), c(0x5C6B63), c(0x087F4C), c(0x0B63B5), c(0x1B7A3D), c(0x1B7A3D), c(0xC62828), c(0x8A5A00))
+        val LATTE = RinTheme("latte", "Catppuccin Latte", c(0xEFF1F5), c(0xE6E9EF), c(0xDCE0E8), c(0xBCC0CC), c(0xE6E9EF), c(0xE9ECF1),
+            c(0x4C4F69), c(0x1E2030), c(0x6C6F85), c(0x8839EF), c(0x1E66F5), c(0x2F8A1F), c(0x2F8A1F), c(0xD20F39), c(0x8A5A00))
+
+        val ALL = listOf(
+            RIN, RINBLACK, JELLY, MIDNIGHT, DRACULA, NORD, SOLARIZED, AMOLED, MATRIX, AMBER, TOKYO, MOCHA, GRUVBOX,
+            PAPER, DAYLIGHT, SOLARLIGHT, DAWN, RINLIGHT, LATTE
+        )
         val DARK: List<RinTheme> get() = ALL.filter { !it.isLight }
         val LIGHT: List<RinTheme> get() = ALL.filter { it.isLight }
 
