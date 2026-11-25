@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- نظام ألوان صفحتَي «الإعدادات» و«المزيد» — هوية RinStudio: أسود · أبيض · أخضر.
+     معزول عن بقية التطبيق (أسماؤه rin_pg_*) فلا يغيّر ألوان الشاشات الأخرى. النهاري هنا، والليلي في values-night. -->
+<resources>
+    <color name="rin_pg_bg">#F3F6F4</color>
+    <color name="rin_pg_card">#FFFFFF</color>
+    <color name="rin_pg_card_border">#E1E8E3</color>
+    <color name="rin_pg_card_pressed">#E6F9EF</color>
+    <color name="rin_pg_text">#0A0F0C</color>
+    <color name="rin_pg_text_dim">#5C6B63</color>
+    <!-- أخضر للنص والأيقونات (تباين كافٍ على الأبيض) -->
+    <color name="rin_pg_accent">#087F4C</color>
+    <!-- أخضر للتعبئة (مفتاح/مقطع محدد/شريط) — النص فوقه أسود -->
+    <color name="rin_pg_accent_fill">#3DF59A</color>
+    <color name="rin_pg_on_accent_fill">#00140B</color>
+    <color name="rin_pg_accent_soft">#DDF8EA</color>
+    <color name="rin_pg_divider">#CFEBDC</color>
+    <color name="rin_pg_field_bg">#FFFFFF</color>
+    <color name="rin_pg_segment_bg">#E9EFEB</color>
+    <color name="rin_pg_segment_text">#4A5A52</color>
+    <color name="rin_pg_switch_track_off">#CBD5CF</color>
+    <color name="rin_pg_switch_thumb_off">#FFFFFF</color>
+    <color name="rin_pg_hero_bg">#0A0F0C</color>
+    <color name="rin_pg_hero_text">#FFFFFF</color>
+    <color name="rin_pg_hero_dim">#9FB0A7</color>
+    <!-- شريط التنقل السفلي الموحّد -->
+    <color name="rin_nav_bar_bg">#FFFFFF</color>
+    <color name="rin_nav_bar_border">#DCE6DF</color>
+    <color name="rin_nav_unselected">#6B7A72</color>
+    <color name="rin_nav_pill">#3DF59A</color>
+    <color name="rin_nav_on_pill">#00140B</color>
+</resources>
