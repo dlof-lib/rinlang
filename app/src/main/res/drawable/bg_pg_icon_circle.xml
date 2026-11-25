@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- مربّع دائري الزوايا بخلفية خضراء خافتة خلف أيقونة الصف. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/rin_pg_accent_soft" />
+    <corners android:radius="13dp" />
+</shape>
