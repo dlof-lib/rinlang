@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- زر الحذف: دائرة حمراء خافتة لتمييزه عن بقية الإجراءات دون صراخ. -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android" android:color="#33D92D3A">
+    <item>
+        <shape android:shape="oval">
+            <solid android:color="@color/rin_files_danger_soft" />
+        </shape>
+    </item>
+</ripple>
