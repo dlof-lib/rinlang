@@ -2,61 +2,58 @@ package com.dlof.rinlang
 
 import android.animation.ValueAnimator
 import android.content.Context
-import android.graphics.*
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Typeface
+import android.os.SystemClock
+import android.util.AttributeSet
 import android.view.View
 import android.view.animation.LinearInterpolator
+import kotlin.math.cos
 import kotlin.math.min
 
 /**
- * RIN logo-as-progress renderer.
- * The progress indicator is not a bitmap: the official geometric mark is rebuilt from paths
- * and revealed segment-by-segment, so the logo itself becomes the loading bar.
+ * مؤشر تقدّم المحرر: **القنديل نفسه هو شريط التقدّم**. كلما زادت النسبة اكتمل رسمه
+ * (محيط الجرس ← تعبئة خضراء ← رمز </> ← نمو المجسّات البيضاء)، وعند الاكتمال يستمر بالسباحة.
+ * تحته: RIN أبيض، النسبة بالأخضر، وشريط رفيع أخضر. (أسود · أبيض · أخضر).
+ *
+ * الواجهة كما كانت: [setProgress] [start] [stop]، فيعمل [RinLogoLoadingOverlay] دون تعديل.
  */
-class RinLogoLoadingView(context: Context) : View(context) {
-    private val logoPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeCap = Paint.Cap.SQUARE
-        strokeJoin = Paint.Join.MITER
-        color = Color.WHITE
-        strokeWidth = 7f
-    }
-    private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeCap = Paint.Cap.ROUND
-        strokeJoin = Paint.Join.ROUND
-        color = Color.rgb(100, 220, 120)
-        strokeWidth = 12f
-        maskFilter = BlurMaskFilter(16f, BlurMaskFilter.Blur.NORMAL)
-    }
-    private val accentPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeCap = Paint.Cap.ROUND
-        strokeJoin = Paint.Join.ROUND
-        color = Color.rgb(112, 230, 130)
-        strokeWidth = 4f
-    }
+class RinLogoLoadingView @JvmOverloads constructor(
+    context: Context,
+    attrs: AttributeSet? = null
+) : View(context, attrs) {
+
+    private val jelly = RinJellyfish()
+    private val density = resources.displayMetrics.density
+
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         textAlign = Paint.Align.CENTER
-        color = Color.WHITE
-        textSize = 18f
-        letterSpacing = 0.08f
+        color = RinBrand.WHITE
+        letterSpacing = 0.22f
     }
     private val percentPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         textAlign = Paint.Align.CENTER
-        color = Color.rgb(112, 230, 130)
-        textSize = 28f
+        color = RinBrand.GREEN
+    }
+    private val trackPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND
+        color = RinBrand.WHITE; alpha = 46
+    }
+    private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND
+        color = RinBrand.GREEN
     }
 
     private var progress = 0f
-    private var animator: ValueAnimator? = null
-    private val logoPath = Path()
+    private var progressAnimator: ValueAnimator? = null
+    private var clock: ValueAnimator? = null
+    private var clockStart = 0L
+    private var elapsedMs = 0L
 
-    init {
-        setLayerType(View.LAYER_TYPE_SOFTWARE, null)
-        isClickable = false
-    }
+    init { isClickable = false }
 
     fun setProgress(value: Float) {
         progress = value.coerceIn(0f, 1f)
@@ -64,92 +61,73 @@ class RinLogoLoadingView(context: Context) : View(context) {
     }
 
     fun start(durationMs: Long = 1200L) {
-        animator?.cancel()
-        animator = ValueAnimator.ofFloat(0f, 1f).apply {
+        progressAnimator?.cancel()
+        progressAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
             duration = durationMs
             interpolator = LinearInterpolator()
             addUpdateListener { setProgress(it.animatedValue as Float) }
             start()
         }
+        startClock()
     }
 
+    /** يثبّت التقدّم عند 100% (الجرس مكتمل) ويترك القنديل يسبح حتى يُزال الـView. */
     fun stop() {
-        animator?.cancel()
-        animator = null
+        progressAnimator?.cancel()
+        progressAnimator = null
         setProgress(1f)
     }
 
+    private fun startClock() {
+        if (clock?.isRunning == true) return
+        clockStart = SystemClock.uptimeMillis() - elapsedMs
+        clock = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 1000L
+            repeatCount = ValueAnimator.INFINITE
+            interpolator = LinearInterpolator()
+            addUpdateListener { elapsedMs = SystemClock.uptimeMillis() - clockStart; invalidate() }
+            start()
+        }
+    }
+
+    override fun onAttachedToWindow() { super.onAttachedToWindow(); startClock() }
+
     override fun onDetachedFromWindow() {
-        animator?.cancel()
-        animator = null
+        progressAnimator?.cancel(); progressAnimator = null
+        clock?.cancel(); clock = null
         super.onDetachedFromWindow()
     }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        val cx = width / 2f
-        val cy = height * 0.42f
-        val size = min(width, height) * 0.25f
-        val scale = size / 260f
+        val w = width.toFloat(); val h = height.toFloat()
+        if (w <= 0f || h <= 0f) return
 
-        // Logo coordinates follow the supplied RIN mark: broken outer diamond/hexagon + inner diamond.
-        logoPath.reset()
-        fun p(x: Float, y: Float) = PointF(cx + x * scale, cy + y * scale)
-        val pts = listOf(
-            p(-160f, -20f), p(-80f, -100f), p(80f, -100f), p(160f, -20f),
-            p(80f, -20f), p(0f, -100f), p(-80f, -20f),
-            p(-160f, 20f), p(-80f, 100f), p(80f, 100f), p(160f, 20f),
-            p(80f, 20f), p(0f, 100f), p(-80f, 20f),
-            p(0f, -58f), p(58f, 0f), p(0f, 58f), p(-58f, 0f), p(0f, -58f)
-        )
-        logoPath.moveTo(pts[0].x, pts[0].y)
-        for (i in 1 until pts.size) logoPath.lineTo(pts[i].x, pts[i].y)
+        val done = progress >= 1f
+        val cycle = elapsedMs / 1150f
+        val pulse = if (done) RinEase.swimPulse(cycle) else 0f
 
-        // Subtle track: the logo is the loading bar; no static bitmap is required.
-        val bounds = RectF(cx - 185f * scale, cy - 125f * scale, cx + 185f * scale, cy + 125f * scale)
-        val track = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.STROKE
-            strokeWidth = 2f
-            color = Color.argb(65, 255, 255, 255)
-        }
-        canvas.drawRoundRect(bounds, 18f, 18f, track)
+        jelly.reveal = progress
+        jelly.pulse = pulse
+        jelly.swayPhase = elapsedMs * 0.0052f
+        jelly.glow = 0.4f + 0.6f * RinEase.clamp01(progress) * (if (done) 0.5f + 0.5f * pulse else 0.6f)
 
-        val measure = PathMeasure(logoPath, false)
-        val total = measure.length
-        val visible = total * progress
-        val reveal = Path()
-        measure.getSegment(0f, visible, reveal, true)
-        canvas.drawPath(reveal, glowPaint)
-        canvas.drawPath(reveal, logoPaint)
+        val unit = min(w * 0.46f / RinJellyfish.WIDTH_UNITS, h * 0.34f / RinJellyfish.HEIGHT_UNITS)
+        val jellyH = RinJellyfish.HEIGHT_UNITS * unit
+        val lift = if (done) unit * 2.4f * (0.5f - 0.5f * cos(cycle * RinJellyfish.TWO_PI)) else 0f
+        val top = h * 0.40f - jellyH / 2f - lift
+        jelly.draw(canvas, w / 2f, top, unit)
 
-        // A moving light point marks the current redraw head.
-        if (progress < 1f && total > 0f) {
-            val pos = FloatArray(2)
-            measure.getPosTan(visible.coerceAtMost(total - 0.1f), pos, null)
-            canvas.drawCircle(pos[0], pos[1], 7f, accentPaint)
-        }
+        val textBase = h * 0.40f + jellyH / 2f + unit * 6f
+        textPaint.textSize = 18f * density
+        canvas.drawText("RIN", w / 2f, textBase, textPaint)
+        percentPaint.textSize = 26f * density
+        canvas.drawText("${(progress * 100f).toInt()}%", w / 2f, textBase + 34f * density, percentPaint)
 
-        canvas.drawText("RIN", cx, cy + size * 0.78f, textPaint)
-        canvas.drawText("${(progress * 100f).toInt()}%", cx, cy + size * 1.02f, percentPaint)
-
-        // The percentage is also represented as a slim horizontal fill, keeping the same identity
-        // when the editor is in a compact loading state.
-        val barY = cy + size * 1.20f
-        val left = cx - size * 1.65f
-        val right = cx + size * 1.65f
-        val bar = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.STROKE
-            strokeWidth = 4f
-            strokeCap = Paint.Cap.ROUND
-            color = Color.argb(80, 255, 255, 255)
-        }
-        val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.STROKE
-            strokeWidth = 4f
-            strokeCap = Paint.Cap.ROUND
-            color = Color.rgb(112, 230, 130)
-        }
-        canvas.drawLine(left, barY, right, barY, bar)
-        canvas.drawLine(left, barY, left + (right - left) * progress, barY, fill)
+        val barY = textBase + 54f * density
+        val half = min(w * 0.30f, 110f * density)
+        trackPaint.strokeWidth = 4f * density; fillPaint.strokeWidth = 4f * density
+        canvas.drawLine(w / 2f - half, barY, w / 2f + half, barY, trackPaint)
+        if (progress > 0f) canvas.drawLine(w / 2f - half, barY, w / 2f - half + 2f * half * progress, barY, fillPaint)
     }
 }
