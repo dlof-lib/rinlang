@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- الوضع الليلي لصفحتَي الإعدادات والمزيد: أسود نقي، بطاقات داكنة بحدود خضراء خفيفة، أخضر نيون للتمييز. -->
+<resources>
+    <color name="rin_pg_bg">#000000</color>
+    <color name="rin_pg_card">#0B100D</color>
+    <color name="rin_pg_card_border">#1B2620</color>
+    <color name="rin_pg_card_pressed">#12251B</color>
+    <color name="rin_pg_text">#FFFFFF</color>
+    <color name="rin_pg_text_dim">#8FA097</color>
+    <color name="rin_pg_accent">#3DF59A</color>
+    <color name="rin_pg_accent_fill">#3DF59A</color>
+    <color name="rin_pg_on_accent_fill">#00140B</color>
+    <color name="rin_pg_accent_soft">#0F2A1C</color>
+    <color name="rin_pg_divider">#16382A</color>
+    <color name="rin_pg_field_bg">#0B100D</color>
+    <color name="rin_pg_segment_bg">#121A15</color>
+    <color name="rin_pg_segment_text">#9FB0A7</color>
+    <color name="rin_pg_switch_track_off">#26302B</color>
+    <color name="rin_pg_switch_thumb_off">#8FA097</color>
+    <color name="rin_pg_hero_bg">#0B100D</color>
+    <color name="rin_pg_hero_text">#FFFFFF</color>
+    <color name="rin_pg_hero_dim">#8FA097</color>
+    <!-- شريط التنقل السفلي الموحّد -->
+    <color name="rin_nav_bar_bg">#0B100D</color>
+    <color name="rin_nav_bar_border">#1D2A23</color>
+    <color name="rin_nav_unselected">#8FA097</color>
+    <color name="rin_nav_pill">#3DF59A</color>
+    <color name="rin_nav_on_pill">#00140B</color>
+</resources>
