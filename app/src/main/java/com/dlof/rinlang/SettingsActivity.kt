@@ -125,7 +125,7 @@ class SettingsActivity : RinBaseActivity() {
 
             // تصميم المحرر + حجم الصفحة + التنسيق (انظر EditorDesign / EditorThemeDesigner / CodeFormatter)
             Row.Section(R.string.settings_design_section_title),
-            Row.Link(R.drawable.rs_ic_palette, R.string.settings_design_title, R.string.settings_design_hint) {
+            Row.Link(R.drawable.ic_rn_palette, R.string.settings_design_title, R.string.settings_design_hint) {
                 EditorThemeDesigner.show(this)
             },
             Row.Choice(
@@ -218,14 +218,14 @@ class SettingsActivity : RinBaseActivity() {
             ),
 
             Row.Section(R.string.settings_language_section_title),
-            Row.Link(R.drawable.rs_ic_globe, R.string.settings_language_current, R.string.settings_language_hint) {
+            Row.Link(R.drawable.ic_rn_globe, R.string.settings_language_current, R.string.settings_language_hint) {
                 startActivity(Intent(this, LanguageActivity::class.java))
             },
-            Row.Link(R.drawable.rs_ic_package, R.string.settings_packs_title, R.string.settings_packs_hint) {
+            Row.Link(R.drawable.ic_rn_package, R.string.settings_packs_title, R.string.settings_packs_hint) {
                 startActivity(Intent(this, ContentPacksActivity::class.java))
             },
             // مركز الأذونات: حالة الإشعارات وتثبيت التطبيقات وشرح سبب عدم الحاجة لإذن التخزين
-            Row.Link(R.drawable.rs_ic_shield_check, R.string.settings_permissions_title, R.string.settings_permissions_hint) {
+            Row.Link(R.drawable.ic_rn_shield, R.string.settings_permissions_title, R.string.settings_permissions_hint) {
                 com.dlof.rinlang.permissions.RinPermissions.showCenter(this)
             }
         )
@@ -271,11 +271,11 @@ class SettingsActivity : RinBaseActivity() {
                 gravity = Gravity.CENTER
                 textSize = 12.5f
                 setPadding(dp(14), 0, dp(14), 0)
-                setBackgroundResource(if (selected) R.drawable.bg_segment_selected else R.drawable.bg_segment_unselected)
+                setBackgroundResource(if (selected) R.drawable.bg_pg_segment_selected else R.drawable.bg_pg_segment_unselected)
                 setTextColor(
                     ContextCompat.getColor(
                         this@SettingsActivity,
-                        if (selected) R.color.rin_segment_selected_text else R.color.rin_segment_unselected_text
+                        if (selected) R.color.rin_pg_on_accent_fill else R.color.rin_pg_segment_text
                     )
                 )
                 setTypeface(typeface, if (selected) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
@@ -341,11 +341,11 @@ class SettingsActivity : RinBaseActivity() {
             val current = row.read()
             buttons.forEachIndexed { index, button ->
                 val selected = row.options[index].value == current
-                button.setBackgroundResource(if (selected) R.drawable.bg_segment_selected else R.drawable.bg_segment_unselected)
+                button.setBackgroundResource(if (selected) R.drawable.bg_pg_segment_selected else R.drawable.bg_pg_segment_unselected)
                 button.setTextColor(
                     ContextCompat.getColor(
                         this@SettingsActivity,
-                        if (selected) R.color.rin_segment_selected_text else R.color.rin_segment_unselected_text
+                        if (selected) R.color.rin_pg_on_accent_fill else R.color.rin_pg_segment_text
                     )
                 )
                 button.setTypeface(button.typeface, if (selected) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
@@ -388,7 +388,7 @@ class SettingsActivity : RinBaseActivity() {
 
     private fun bindLink(row: Row.Link): View {
         val view = inflateRow(R.layout.item_setting_link)
-        RsIcons.only(view.findViewById<TextView>(R.id.settingIcon), row.icon, 24, androidx.core.content.ContextCompat.getColor(this, R.color.rin_on_toolbar))
+        RsIcons.only(view.findViewById<TextView>(R.id.settingIcon), row.icon, 24, androidx.core.content.ContextCompat.getColor(this, R.color.rin_pg_accent))
         view.findViewById<TextView>(R.id.settingTitle).setText(row.title)
         view.findViewById<TextView>(R.id.settingHint).setText(row.hint)
         view.setOnClickListener { row.onClick() }
