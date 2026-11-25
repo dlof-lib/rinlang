@@ -1,10 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- خلفية عنصر التبويب في الشريط السفلي: تأثير ضغط خفيف بلا حدود -->
 <ripple xmlns:android="http://schemas.android.com/apk/res/android"
-    android:color="@color/rin_ghost_ripple">
+    android:color="@color/rin_pg_card_pressed">
     <item>
         <shape android:shape="rectangle">
-            <corners android:radius="12dp" />
+            <corners android:radius="23dp" />
             <solid android:color="@android:color/transparent" />
         </shape>
     </item>
