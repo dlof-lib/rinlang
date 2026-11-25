@@ -2,12 +2,13 @@
 <!-- شاشة "المزيد": تجمع باقي أقسام التطبيق التي لا تظهر في الشريط السفلي الرئيسي،
      مرتّبة بالترتيب: الملفات، المكتبات، CLC (حاويات .rcl)، منفّذ الأنابيب (RinFlow)، متجر الإضافات، الإعدادات. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/rin_background">
+    android:background="@color/rin_pg_bg">
 
-    <include layout="@layout/toolbar_app" />
+    <include layout="@layout/toolbar_pg" />
 
     <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
@@ -23,6 +24,65 @@
             android:paddingTop="14dp"
             android:paddingBottom="14dp">
 
+            <!-- ترويسة العلامة: أيقونة التطبيق + RIN (أخضر) STUDIO (أبيض) + وصف قصير -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="18dp"
+                android:background="@drawable/bg_pg_hero"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:padding="18dp">
+
+                <ImageView
+                    android:layout_width="56dp"
+                    android:layout_height="56dp"
+                    android:contentDescription="@string/app_name"
+                    android:src="@mipmap/ic_launcher_round" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="14dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layoutDirection="ltr"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:letterSpacing="0.14"
+                            android:text="RIN"
+                            android:textColor="#3DF59A"
+                            android:textSize="20sp"
+                            android:textStyle="bold"
+                            tools:ignore="HardcodedText" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:letterSpacing="0.14"
+                            android:text="STUDIO"
+                            android:textColor="@color/rin_pg_hero_text"
+                            android:textSize="20sp"
+                            tools:ignore="HardcodedText" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="3dp"
+                        android:text="@string/splash_tagline"
+                        android:textColor="@color/rin_pg_hero_dim"
+                        android:textSize="12sp" />
+                </LinearLayout>
+            </LinearLayout>
+
             <!-- 1. الملفات -->
             <LinearLayout
                 android:id="@+id/rowFiles"
@@ -30,22 +90,22 @@
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:background="@drawable/bg_list_card"
+                android:background="@drawable/bg_pg_card"
                 android:clickable="true"
                 android:focusable="true"
-                android:padding="14dp"
-                android:layout_marginBottom="10dp">
+                android:padding="16dp"
+                android:layout_marginBottom="12dp">
 
                 <FrameLayout
-                    android:layout_width="38dp"
-                    android:layout_height="38dp"
-                    android:background="@drawable/bg_section_icon_circle">
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:background="@drawable/bg_pg_icon_circle">
                     <ImageView
-                        android:layout_width="18dp"
-                        android:layout_height="18dp"
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
                         android:layout_gravity="center"
-                        android:src="@drawable/ic_files_stack"
-                        android:tint="@color/rin_accent"
+                        android:src="@drawable/ic_rn_files"
+                        android:tint="@color/rin_pg_accent"
                         android:contentDescription="@null" />
                 </FrameLayout>
 
@@ -60,7 +120,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="@string/files_screen_title"
-                        android:textColor="@color/rin_on_toolbar"
+                        android:textColor="@color/rin_pg_text"
                         android:textSize="15sp"
                         android:textStyle="bold" />
 
@@ -69,7 +129,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
                         android:text="@string/more_row_files_subtitle"
-                        android:textColor="@color/rin_on_toolbar_dim"
+                        android:textColor="@color/rin_pg_text_dim"
                         android:textSize="12sp" />
                 </LinearLayout>
 
@@ -77,7 +137,7 @@
                     android:layout_width="14dp"
                     android:layout_height="14dp"
                     android:src="@drawable/ic_chevron_end"
-                    android:tint="@color/rin_on_toolbar_dim"
+                    android:tint="@color/rin_pg_text_dim"
                     android:contentDescription="@null" />
             </LinearLayout>
 
@@ -88,22 +148,22 @@
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:background="@drawable/bg_list_card"
+                android:background="@drawable/bg_pg_card"
                 android:clickable="true"
                 android:focusable="true"
-                android:padding="14dp"
-                android:layout_marginBottom="10dp">
+                android:padding="16dp"
+                android:layout_marginBottom="12dp">
 
                 <FrameLayout
-                    android:layout_width="38dp"
-                    android:layout_height="38dp"
-                    android:background="@drawable/bg_section_icon_circle">
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:background="@drawable/bg_pg_icon_circle">
                     <ImageView
-                        android:layout_width="18dp"
-                        android:layout_height="18dp"
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
                         android:layout_gravity="center"
-                        android:src="@drawable/ic_menu_libraries"
-                        android:tint="@color/rin_accent"
+                        android:src="@drawable/ic_rn_libraries"
+                        android:tint="@color/rin_pg_accent"
                         android:contentDescription="@null" />
                 </FrameLayout>
 
@@ -118,7 +178,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="@string/libraries_screen_title"
-                        android:textColor="@color/rin_on_toolbar"
+                        android:textColor="@color/rin_pg_text"
                         android:textSize="15sp"
                         android:textStyle="bold" />
 
@@ -127,7 +187,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
                         android:text="@string/more_row_libraries_subtitle"
-                        android:textColor="@color/rin_on_toolbar_dim"
+                        android:textColor="@color/rin_pg_text_dim"
                         android:textSize="12sp" />
                 </LinearLayout>
 
@@ -135,7 +195,7 @@
                     android:layout_width="14dp"
                     android:layout_height="14dp"
                     android:src="@drawable/ic_chevron_end"
-                    android:tint="@color/rin_on_toolbar_dim"
+                    android:tint="@color/rin_pg_text_dim"
                     android:contentDescription="@null" />
             </LinearLayout>
 
@@ -146,22 +206,22 @@
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:background="@drawable/bg_list_card"
+                android:background="@drawable/bg_pg_card"
                 android:clickable="true"
                 android:focusable="true"
-                android:padding="14dp"
-                android:layout_marginBottom="10dp">
+                android:padding="16dp"
+                android:layout_marginBottom="12dp">
 
                 <FrameLayout
-                    android:layout_width="38dp"
-                    android:layout_height="38dp"
-                    android:background="@drawable/bg_section_icon_circle">
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:background="@drawable/bg_pg_icon_circle">
                     <ImageView
-                        android:layout_width="18dp"
-                        android:layout_height="18dp"
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
                         android:layout_gravity="center"
-                        android:src="@drawable/ic_log_container"
-                        android:tint="@color/rin_accent"
+                        android:src="@drawable/ic_rn_container"
+                        android:tint="@color/rin_pg_accent"
                         android:contentDescription="@null" />
                 </FrameLayout>
 
@@ -176,7 +236,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="@string/clc_screen_title"
-                        android:textColor="@color/rin_on_toolbar"
+                        android:textColor="@color/rin_pg_text"
                         android:textSize="15sp"
                         android:textStyle="bold" />
 
@@ -185,7 +245,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
                         android:text="@string/more_row_clc_subtitle"
-                        android:textColor="@color/rin_on_toolbar_dim"
+                        android:textColor="@color/rin_pg_text_dim"
                         android:textSize="12sp" />
                 </LinearLayout>
 
@@ -193,7 +253,7 @@
                     android:layout_width="14dp"
                     android:layout_height="14dp"
                     android:src="@drawable/ic_chevron_end"
-                    android:tint="@color/rin_on_toolbar_dim"
+                    android:tint="@color/rin_pg_text_dim"
                     android:contentDescription="@null" />
             </LinearLayout>
 
@@ -204,22 +264,22 @@
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:background="@drawable/bg_list_card"
+                android:background="@drawable/bg_pg_card"
                 android:clickable="true"
                 android:focusable="true"
-                android:padding="14dp"
-                android:layout_marginBottom="10dp">
+                android:padding="16dp"
+                android:layout_marginBottom="12dp">
 
                 <FrameLayout
-                    android:layout_width="38dp"
-                    android:layout_height="38dp"
-                    android:background="@drawable/bg_section_icon_circle">
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:background="@drawable/bg_pg_icon_circle">
                     <ImageView
-                        android:layout_width="18dp"
-                        android:layout_height="18dp"
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
                         android:layout_gravity="center"
-                        android:src="@drawable/ic_pipeline"
-                        android:tint="@color/rin_accent"
+                        android:src="@drawable/ic_rn_pipeline"
+                        android:tint="@color/rin_pg_accent"
                         android:contentDescription="@null" />
                 </FrameLayout>
 
@@ -234,7 +294,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="@string/pipeline_runner_title"
-                        android:textColor="@color/rin_on_toolbar"
+                        android:textColor="@color/rin_pg_text"
                         android:textSize="15sp"
                         android:textStyle="bold" />
 
@@ -243,7 +303,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
                         android:text="@string/more_row_pipeline_subtitle"
-                        android:textColor="@color/rin_on_toolbar_dim"
+                        android:textColor="@color/rin_pg_text_dim"
                         android:textSize="12sp" />
                 </LinearLayout>
 
@@ -251,7 +311,7 @@
                     android:layout_width="14dp"
                     android:layout_height="14dp"
                     android:src="@drawable/ic_chevron_end"
-                    android:tint="@color/rin_on_toolbar_dim"
+                    android:tint="@color/rin_pg_text_dim"
                     android:contentDescription="@null" />
             </LinearLayout>
 
@@ -262,22 +322,22 @@
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:background="@drawable/bg_list_card"
+                android:background="@drawable/bg_pg_card"
                 android:clickable="true"
                 android:focusable="true"
-                android:padding="14dp"
-                android:layout_marginBottom="10dp">
+                android:padding="16dp"
+                android:layout_marginBottom="12dp">
 
                 <FrameLayout
-                    android:layout_width="38dp"
-                    android:layout_height="38dp"
-                    android:background="@drawable/bg_section_icon_circle">
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:background="@drawable/bg_pg_icon_circle">
                     <ImageView
-                        android:layout_width="18dp"
-                        android:layout_height="18dp"
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
                         android:layout_gravity="center"
-                        android:src="@drawable/ic_log_export"
-                        android:tint="@color/rin_accent"
+                        android:src="@drawable/ic_rn_export"
+                        android:tint="@color/rin_pg_accent"
                         android:contentDescription="@null" />
                 </FrameLayout>
 
@@ -292,7 +352,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="@string/apk_export_screen_title"
-                        android:textColor="@color/rin_on_toolbar"
+                        android:textColor="@color/rin_pg_text"
                         android:textSize="15sp"
                         android:textStyle="bold" />
 
@@ -301,7 +361,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
                         android:text="@string/more_row_apk_export_subtitle"
-                        android:textColor="@color/rin_on_toolbar_dim"
+                        android:textColor="@color/rin_pg_text_dim"
                         android:textSize="12sp" />
                 </LinearLayout>
 
@@ -309,7 +369,7 @@
                     android:layout_width="14dp"
                     android:layout_height="14dp"
                     android:src="@drawable/ic_chevron_end"
-                    android:tint="@color/rin_on_toolbar_dim"
+                    android:tint="@color/rin_pg_text_dim"
                     android:contentDescription="@null" />
             </LinearLayout>
 
@@ -320,22 +380,22 @@
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:background="@drawable/bg_list_card"
+                android:background="@drawable/bg_pg_card"
                 android:clickable="true"
                 android:focusable="true"
-                android:padding="14dp"
-                android:layout_marginBottom="10dp">
+                android:padding="16dp"
+                android:layout_marginBottom="12dp">
 
                 <FrameLayout
-                    android:layout_width="38dp"
-                    android:layout_height="38dp"
-                    android:background="@drawable/bg_section_icon_circle">
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:background="@drawable/bg_pg_icon_circle">
                     <ImageView
-                        android:layout_width="18dp"
-                        android:layout_height="18dp"
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
                         android:layout_gravity="center"
-                        android:src="@drawable/ic_log_grid"
-                        android:tint="@color/rin_accent"
+                        android:src="@drawable/ic_rn_apps"
+                        android:tint="@color/rin_pg_accent"
                         android:contentDescription="@null" />
                 </FrameLayout>
 
@@ -350,7 +410,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="@string/rin_apps_screen_title"
-                        android:textColor="@color/rin_on_toolbar"
+                        android:textColor="@color/rin_pg_text"
                         android:textSize="15sp"
                         android:textStyle="bold" />
 
@@ -359,7 +419,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
                         android:text="@string/more_row_rin_apps_subtitle"
-                        android:textColor="@color/rin_on_toolbar_dim"
+                        android:textColor="@color/rin_pg_text_dim"
                         android:textSize="12sp" />
                 </LinearLayout>
 
@@ -367,7 +427,7 @@
                     android:layout_width="14dp"
                     android:layout_height="14dp"
                     android:src="@drawable/ic_chevron_end"
-                    android:tint="@color/rin_on_toolbar_dim"
+                    android:tint="@color/rin_pg_text_dim"
                     android:contentDescription="@null" />
             </LinearLayout>
 
@@ -378,22 +438,22 @@
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:background="@drawable/bg_list_card"
+                android:background="@drawable/bg_pg_card"
                 android:clickable="true"
                 android:focusable="true"
-                android:padding="14dp"
-                android:layout_marginBottom="10dp">
+                android:padding="16dp"
+                android:layout_marginBottom="12dp">
 
                 <FrameLayout
-                    android:layout_width="38dp"
-                    android:layout_height="38dp"
-                    android:background="@drawable/bg_section_icon_circle">
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:background="@drawable/bg_pg_icon_circle">
                     <ImageView
-                        android:layout_width="18dp"
-                        android:layout_height="18dp"
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
                         android:layout_gravity="center"
-                        android:src="@drawable/ic_nav_extensions"
-                        android:tint="@color/rin_accent"
+                        android:src="@drawable/ic_rn_extensions"
+                        android:tint="@color/rin_pg_accent"
                         android:contentDescription="@null" />
                 </FrameLayout>
 
@@ -408,7 +468,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="@string/ext_marketplace_title"
-                        android:textColor="@color/rin_on_toolbar"
+                        android:textColor="@color/rin_pg_text"
                         android:textSize="15sp"
                         android:textStyle="bold" />
 
@@ -417,7 +477,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
                         android:text="@string/more_row_extensions_subtitle"
-                        android:textColor="@color/rin_on_toolbar_dim"
+                        android:textColor="@color/rin_pg_text_dim"
                         android:textSize="12sp" />
                 </LinearLayout>
 
@@ -425,7 +485,7 @@
                     android:layout_width="14dp"
                     android:layout_height="14dp"
                     android:src="@drawable/ic_chevron_end"
-                    android:tint="@color/rin_on_toolbar_dim"
+                    android:tint="@color/rin_pg_text_dim"
                     android:contentDescription="@null" />
             </LinearLayout>
 
@@ -436,22 +496,22 @@
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:background="@drawable/bg_list_card"
+                android:background="@drawable/bg_pg_card"
                 android:clickable="true"
                 android:focusable="true"
-                android:padding="14dp"
-                android:layout_marginBottom="10dp">
+                android:padding="16dp"
+                android:layout_marginBottom="12dp">
 
                 <FrameLayout
-                    android:layout_width="38dp"
-                    android:layout_height="38dp"
-                    android:background="@drawable/bg_section_icon_circle">
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:background="@drawable/bg_pg_icon_circle">
                     <ImageView
-                        android:layout_width="18dp"
-                        android:layout_height="18dp"
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
                         android:layout_gravity="center"
-                        android:src="@drawable/ic_nav_settings"
-                        android:tint="@color/rin_accent"
+                        android:src="@drawable/ic_rn_settings"
+                        android:tint="@color/rin_pg_accent"
                         android:contentDescription="@null" />
                 </FrameLayout>
 
@@ -466,7 +526,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="@string/settings_title"
-                        android:textColor="@color/rin_on_toolbar"
+                        android:textColor="@color/rin_pg_text"
                         android:textSize="15sp"
                         android:textStyle="bold" />
 
@@ -475,7 +535,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
                         android:text="@string/more_row_settings_subtitle"
-                        android:textColor="@color/rin_on_toolbar_dim"
+                        android:textColor="@color/rin_pg_text_dim"
                         android:textSize="12sp" />
                 </LinearLayout>
 
@@ -483,7 +543,7 @@
                     android:layout_width="14dp"
                     android:layout_height="14dp"
                     android:src="@drawable/ic_chevron_end"
-                    android:tint="@color/rin_on_toolbar_dim"
+                    android:tint="@color/rin_pg_text_dim"
                     android:contentDescription="@null" />
             </LinearLayout>
 
