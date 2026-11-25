@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- الإعدادات: ترس بثماني أسنان وثقب مركزي، ثنائي النغمة (حد + تعبئة شفافة 20%) بلون أبيض ليُلوَّن بـ android:tint. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#33FFFFFF"
+        android:fillType="evenOdd"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M9.62,5.10L10.17,2.58L13.83,2.58L14.38,5.10A7.3,7.3 0 0 1 15.20,5.44L17.37,4.04L19.96,6.63L18.56,8.80A7.3,7.3 0 0 1 18.90,9.62L21.42,10.17L21.42,13.83L18.90,14.38A7.3,7.3 0 0 1 18.56,15.20L19.96,17.37L17.37,19.96L15.20,18.56A7.3,7.3 0 0 1 14.38,18.90L13.83,21.42L10.17,21.42L9.62,18.90A7.3,7.3 0 0 1 8.80,18.56L6.63,19.96L4.04,17.37L5.44,15.20A7.3,7.3 0 0 1 5.10,14.38L2.58,13.83L2.58,10.17L5.10,9.62A7.3,7.3 0 0 1 5.44,8.80L4.04,6.63L6.63,4.04L8.80,5.44A7.3,7.3 0 0 1 9.62,5.10ZM8.8,12a3.2,3.2 0 1,0 6.4,0a3.2,3.2 0 1,0 -6.4,0Z" />
+</vector>
