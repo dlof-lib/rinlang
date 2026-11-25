@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- لصيقة نوع الملف (JPG / PNG / MP4) فوق زاوية المصغّرة: حبّة داكنة شبه شفافة تبقى مقروءة فوق أي صورة. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/rin_files_scrim" />
+    <corners android:radius="6dp" />
+</shape>
