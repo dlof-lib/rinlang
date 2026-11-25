@@ -54,8 +54,8 @@ class RinSnakeLoadingView @JvmOverloads constructor(
         )
         a.recycle()
 
-        headColor = ContextCompat.getColor(context, R.color.rin_accent_green)
-        tailColor = ContextCompat.getColor(context, R.color.rin_run_gradient_start)
+        headColor = RinBrand.GREEN
+        tailColor = RinBrand.GREEN_DEEP
     }
 
     fun start() {
