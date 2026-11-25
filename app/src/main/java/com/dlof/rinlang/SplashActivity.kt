@@ -4,16 +4,13 @@ import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.view.animation.AlphaAnimation
-import android.view.animation.AnimationSet
-import android.view.animation.DecelerateInterpolator
-import android.view.animation.ScaleAnimation
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.WindowInsetsControllerCompat
 
 /**
  * شاشة البداية (Splash Screen): أول شاشة تظهر عند فتح التطبيق (نقطة الدخول في
- * AndroidManifest بدلاً من MainActivity). تعرض شعار التطبيق واسمه للحظات قصيرة
- * بحركة دخول احترافية (تكبير خفيف + تلاشي) ثم تنتقل تلقائياً إلى المحرر الرئيسي.
+ * AndroidManifest بدلاً من MainActivity). يرسم [RinSplashView] قنديل RinStudio تدريجياً على
+ * خلفية سوداء (أسود · أبيض · أخضر) ثم تنتقل تلقائياً إلى المحرر الرئيسي.
  */
 class SplashActivity : RinBaseActivity() {
 
@@ -36,47 +33,27 @@ class SplashActivity : RinBaseActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_splash)
 
+        // أيقونات شريطَي الحالة/التنقّل بيضاء فوق الخلفية السوداء.
+        WindowInsetsControllerCompat(window, window.decorView).apply {
+            isAppearanceLightStatusBars = false
+            isAppearanceLightNavigationBars = false
+        }
+
+        val splash = findViewById<RinSplashView>(R.id.splashView)
+        splash.appName = getString(R.string.app_name)
+        splash.tagline = getString(R.string.splash_tagline)
+
         // إن كانت هذه حزمة مُصدَّرة (assets/rin_export_manifest.json)، نُخصِّص عنوان/تعليق/مدة
-        // شاشة البداية من بيانات التصدير بدل ترك "RinStudio" الثابتة تظهر داخل تطبيق المستخدم
-        // نفسه بعد فتحه — الأيقونة تُخصَّص تلقائياً بالفعل عبر @mipmap/ic_launcher_round نفسها
-        // (تُستبدَل بايتاتها وقت التصدير إن اختار المستخدم صورة، بلا حاجة لأي تعديل هنا).
+        // شاشة البداية من بيانات التصدير بدل ترك "RinStudio" الثابتة تظهر داخل تطبيق المستخدم.
         var splashDurationMs = SPLASH_DURATION_MS
         ExportedRunActivity.readManifestOrNull(this)?.let { manifest ->
-            manifest.optString("display_name").takeIf { it.isNotBlank() }?.let { name ->
-                findViewById<android.widget.TextView>(R.id.splashAppName).text = name
-            }
-            val tagline = manifest.optString("splash_tagline")
-            val taglineView = findViewById<android.widget.TextView>(R.id.splashTagline)
-            if (tagline.isNotBlank()) {
-                taglineView.text = tagline
-            } else {
-                taglineView.visibility = android.view.View.GONE
-            }
+            manifest.optString("display_name").takeIf { it.isNotBlank() }?.let { splash.appName = it }
+            splash.tagline = manifest.optString("splash_tagline").takeIf { it.isNotBlank() }
             val customDuration = manifest.optLong("splash_duration_ms", 0L)
             if (customDuration in 300L..5000L) splashDurationMs = customDuration
         }
 
-        val card = findViewById<android.view.View>(R.id.splashIconFrame).parent as android.view.View
-
-        // حركة دخول البطاقة: تكبير خفيف من 92% إلى 100% + تلاشي، بمنحنى تباطؤ ناعم
-        val scale = ScaleAnimation(
-            0.92f, 1f, 0.92f, 1f,
-            android.view.animation.Animation.RELATIVE_TO_SELF, 0.5f,
-            android.view.animation.Animation.RELATIVE_TO_SELF, 0.5f
-        )
-        val fade = AlphaAnimation(0f, 1f)
-        val entrance = AnimationSet(true).apply {
-            addAnimation(scale)
-            addAnimation(fade)
-            duration = 480
-            interpolator = DecelerateInterpolator()
-        }
-        card.startAnimation(entrance)
-
-        // تلاشي خلفية الصفحة كاملة بحركة أهدأ قليلاً لإحساس أكثر احترافية من ظهور مفاجئ
-        val bgFade = AlphaAnimation(0f, 1f).apply { duration = 550 }
-        findViewById<android.view.View>(android.R.id.content).startAnimation(bgFade)
-
+        splash.durationMs = splashDurationMs
         handler.postDelayed(goToEditor, splashDurationMs)
     }
 
@@ -86,6 +63,7 @@ class SplashActivity : RinBaseActivity() {
     }
 
     companion object {
-        private const val SPLASH_DURATION_MS = 1300L
+        /** أطول قليلاً من القديمة (1300ms) كي يكتمل رسم القنديل ونبضته الأولى قبل الانتقال. */
+        private const val SPLASH_DURATION_MS = 2200L
     }
 }
