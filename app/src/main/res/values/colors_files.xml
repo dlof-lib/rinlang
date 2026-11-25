@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ألوان شاشة «الملفات» — هوية RinStudio (أسود · أبيض · أخضر). معزولة بأسماء rin_files_* فلا تؤثر على بقية الشاشات
+     ولا تعتمد على colors_pages.xml. الليلي في values-night. -->
+<resources>
+    <color name="rin_files_bg">#F3F6F4</color>
+    <color name="rin_files_card">#FFFFFF</color>
+    <color name="rin_files_border">#E1E8E3</color>
+    <color name="rin_files_pressed">#E6F9EF</color>
+    <color name="rin_files_text">#0A0F0C</color>
+    <color name="rin_files_dim">#5C6B63</color>
+    <color name="rin_files_accent">#087F4C</color>
+    <color name="rin_files_accent_fill">#3DF59A</color>
+    <color name="rin_files_on_accent">#00140B</color>
+    <color name="rin_files_accent_soft">#DDF8EA</color>
+    <color name="rin_files_tile">#EEF3F0</color>
+    <color name="rin_files_chip_bg">#E9EFEB</color>
+    <color name="rin_files_chip_text">#4A5A52</color>
+    <color name="rin_files_danger">#D92D3A</color>
+    <color name="rin_files_danger_soft">#FDECEE</color>
+    <color name="rin_files_scrim">#B3000000</color>
+</resources>
