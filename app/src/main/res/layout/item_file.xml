@@ -1,38 +1,72 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- صف ملف في شاشة الملفات (هوية RinStudio: أسود · أبيض · أخضر).
+     البلاطة imgFileIcon تعرض أيقونة النوع داخل مربّع مدوّر، وللصور والفيديو تتحوّل إلى مصغّرة حقيقية تملأ البلاطة بزوايا مقصوصة
+     (انظر FileRowStyle.kt) مع لصيقة نوع (JPG/PNG/MP4) وزر تشغيل للفيديو. علامة "!" = خطأ صياغة حقيقي (FilesActivity.scanForErrors). -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="horizontal"
     android:gravity="center_vertical"
-    android:background="@drawable/bg_list_card"
+    android:background="@drawable/bg_file_card"
     android:layout_marginStart="4dp"
     android:layout_marginEnd="4dp"
-    android:layout_marginTop="5dp"
-    android:layout_marginBottom="5dp"
-    android:padding="12dp">
+    android:layout_marginTop="4dp"
+    android:layout_marginBottom="4dp"
+    android:padding="10dp">
 
-    <!-- أيقونة الملف: rin/الصورة/الفيديو/شعار اللغة الحقيقي حسب النوع (انظر FileIconResolver)،
-         مع علامة "!" حقيقية (خطأ صياغة فعلي عبر rin::Lexer/Parser، لا مؤشر وهمي — انظر
-         FilesActivity.scanForErrors) تظهر فوق زاويتها السفلية عند الحاجة فقط. -->
     <FrameLayout
         android:id="@+id/frameFileIcon"
-        android:layout_width="42dp"
-        android:layout_height="42dp">
+        android:layout_width="56dp"
+        android:layout_height="56dp">
 
         <ImageView
             android:id="@+id/imgFileIcon"
-            android:layout_width="42dp"
-            android:layout_height="42dp"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:background="@drawable/bg_file_tile"
+            android:clipToOutline="true"
+            android:padding="10dp"
             android:scaleType="fitCenter"
             android:src="@drawable/ic_rin_file"
             android:contentDescription="@null" />
 
+        <!-- لصيقة نوع الملف: تظهر فقط في وضع المصغّرة -->
+        <TextView
+            android:id="@+id/txtFileTypeBadge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|start"
+            android:layout_marginStart="4dp"
+            android:layout_marginBottom="4dp"
+            android:background="@drawable/bg_file_type_badge"
+            android:paddingStart="5dp"
+            android:paddingEnd="5dp"
+            android:paddingTop="1dp"
+            android:paddingBottom="1dp"
+            android:singleLine="true"
+            android:textColor="@android:color/white"
+            android:textSize="9sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
+
+        <!-- زر تشغيل فوق مصغّرة الفيديو -->
+        <ImageView
+            android:id="@+id/imgFilePlay"
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:layout_gravity="center"
+            android:background="@drawable/bg_file_play_circle"
+            android:padding="5dp"
+            android:src="@drawable/rs_ic_play"
+            android:contentDescription="@null"
+            android:visibility="gone" />
+
         <TextView
             android:id="@+id/txtErrorBadge"
-            android:layout_width="16dp"
-            android:layout_height="16dp"
+            android:layout_width="17dp"
+            android:layout_height="17dp"
             android:layout_gravity="bottom|end"
-            android:background="@drawable/bg_error_badge"
+            android:background="@drawable/bg_file_error_badge"
             android:gravity="center"
             android:text="!"
             android:textColor="@android:color/white"
@@ -43,12 +77,13 @@
         <!-- شارة ✓ تظهر عند تحديد الصف (انظر FileSelection.kt) -->
         <ImageView
             android:id="@+id/imgFileSelectCheck"
-            android:layout_width="18dp"
-            android:layout_height="18dp"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
             android:layout_gravity="top|end"
-            android:background="@drawable/bg_select_badge"
-            android:padding="2dp"
+            android:background="@drawable/bg_file_check_badge"
+            android:padding="3dp"
             android:src="@drawable/rs_ic_check"
+            android:tint="@color/rin_files_on_accent"
             android:contentDescription="@null"
             android:visibility="gone" />
     </FrameLayout>
@@ -58,6 +93,7 @@
         android:layout_height="wrap_content"
         android:layout_weight="1"
         android:layout_marginStart="12dp"
+        android:layout_marginEnd="4dp"
         android:orientation="vertical">
 
         <LinearLayout
@@ -70,22 +106,21 @@
                 android:id="@+id/txtFileNameItem"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textSize="15.5sp"
+                android:textSize="15sp"
                 android:textStyle="bold"
                 android:fontFamily="monospace"
-                android:textColor="@color/rin_on_toolbar"
-                android:ellipsize="end"
+                android:textColor="@color/rin_files_text"
+                android:ellipsize="middle"
                 android:maxLines="1" />
 
-            <!-- نقطة "تعديل غير محفوظ" حقيقية (EditorDirtyState — مصدرها MainActivity الفعلي
-                 أثناء التحرير، لا حالة وهمية)، لا تظهر إلا لملف فيه تغيير فعلي لم يُحفَظ بعد. -->
+            <!-- نقطة "تعديل غير محفوظ" حقيقية (EditorDirtyState) -->
             <TextView
                 android:id="@+id/txtDirtyDot"
                 android:layout_width="8dp"
                 android:layout_height="8dp"
                 android:layout_marginStart="6dp"
                 android:background="@drawable/rs_dot_accent"
-                android:textColor="@color/rin_accent"
+                android:textColor="@color/rin_files_accent"
                 android:visibility="gone" />
         </LinearLayout>
 
@@ -93,38 +128,40 @@
             android:id="@+id/txtFileMeta"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
+            android:layout_marginTop="3dp"
             android:textSize="12.5sp"
-            android:textColor="@color/rin_editor_hint" />
+            android:textColor="@color/rin_files_dim" />
     </LinearLayout>
 
     <ImageButton
         android:id="@+id/btnMoreFile"
-        android:layout_width="38dp"
-        android:layout_height="38dp"
-        android:padding="10dp"
+        android:layout_width="34dp"
+        android:layout_height="34dp"
+        android:padding="9dp"
         android:layout_marginEnd="4dp"
-        android:background="@drawable/bg_icon_btn"
+        android:background="@drawable/bg_file_action"
         android:contentDescription="@string/more_actions"
-        android:src="@drawable/ic_kebab_vertical" />
+        android:src="@drawable/ic_kebab_vertical"
+        android:tint="@color/rin_files_dim" />
 
     <ImageButton
         android:id="@+id/btnRenameFile"
-        android:layout_width="38dp"
-        android:layout_height="38dp"
-        android:padding="10dp"
+        android:layout_width="34dp"
+        android:layout_height="34dp"
+        android:padding="9dp"
         android:layout_marginEnd="4dp"
-        android:background="@drawable/bg_icon_btn"
+        android:background="@drawable/bg_file_action"
         android:contentDescription="@string/rename"
-        android:src="@drawable/ic_edit_pencil" />
+        android:src="@drawable/ic_edit_pencil"
+        android:tint="@color/rin_files_accent" />
 
     <ImageButton
         android:id="@+id/btnDeleteFile"
-        android:layout_width="38dp"
-        android:layout_height="38dp"
-        android:padding="10dp"
-        android:background="@drawable/bg_icon_btn"
+        android:layout_width="34dp"
+        android:layout_height="34dp"
+        android:padding="8dp"
+        android:background="@drawable/bg_file_action_danger"
         android:contentDescription="@string/delete_file_title"
-        android:src="@drawable/ic_trash_red" />
+        android:src="@drawable/ic_file_trash" />
 
 </LinearLayout>
