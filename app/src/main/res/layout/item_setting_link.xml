@@ -3,8 +3,8 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginBottom="10dp"
-    android:background="@drawable/bg_setting_row"
+    android:layout_marginBottom="12dp"
+    android:background="@drawable/bg_pg_card"
     android:clickable="true"
     android:focusable="true"
     android:gravity="center_vertical"
@@ -14,7 +14,7 @@
         android:id="@+id/settingIcon"
         android:layout_width="46dp"
         android:layout_height="46dp"
-        android:background="@drawable/bg_setting_icon_avatar"
+        android:background="@drawable/bg_pg_icon_circle"
         android:gravity="center"
         android:textSize="22sp" />
 
@@ -29,7 +29,7 @@
             android:id="@+id/settingTitle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="@color/rin_on_toolbar"
+            android:textColor="@color/rin_pg_text"
             android:textSize="14.5sp"
             android:textStyle="bold" />
 
@@ -38,7 +38,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="3dp"
-            android:textColor="@color/rin_editor_hint"
+            android:textColor="@color/rin_pg_text_dim"
             android:textSize="11.5sp" />
     </LinearLayout>
 
@@ -47,6 +47,6 @@
         android:layout_height="32dp"
         android:gravity="center"
         android:importantForAccessibility="no"
-        android:drawableStart="@drawable/rs_ic_chevron_right_22" android:drawableTint="@color/rin_accent"
-        android:textColor="@color/rin_accent" />
+        android:drawableStart="@drawable/rs_ic_chevron_right_22" android:drawableTint="@color/rin_pg_accent"
+        android:textColor="@color/rin_pg_accent" />
 </LinearLayout>
