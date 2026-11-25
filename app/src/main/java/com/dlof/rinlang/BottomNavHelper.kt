@@ -162,13 +162,17 @@ object BottomNavHelper {
         val text = activity.findViewById<TextView?>(textId)
 
         // الحبّة المُحدَّدة أصبحت تدرّجاً كامل التشبّع (بدل تلميح شفاف باهت)، لذا يتحوّل لون
-        // الأيقونة/النص المُحدَّد للأبيض لضمان تباين ممتاز فوقها؛ غير المُحدَّد يبقى رمادياً كالسابق.
+        // الأيقونة/النص المُحدَّد لأسود مخضرّ داكن (rin_nav_on_pill) لضمان تباين ممتاز فوقها؛ غير المُحدَّد يبقى رمادياً كالسابق.
         val color = ContextCompat.getColor(
             activity,
-            if (selected) android.R.color.white else R.color.rin_bottom_nav_unselected
+            if (selected) R.color.rin_nav_on_pill else R.color.rin_nav_unselected
         )
         icon?.setColorFilter(color)
         text?.setTextColor(color)
+        // التبويب المُحدَّد: نص عريض وأيقونة أكبر قليلاً فوق الحبّة الخضراء.
+        text?.setTypeface(null, if (selected) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
+        icon?.scaleX = if (selected) 1.1f else 1f
+        icon?.scaleY = if (selected) 1.1f else 1f
 
         tab.setOnClickListener {
             if (selected) return@setOnClickListener
