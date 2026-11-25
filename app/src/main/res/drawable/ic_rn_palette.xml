@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- التصميم: أيقونة ثنائية النغمة (حد + تعبئة شفافة 20%) بلون أبيض ليُلوَّن بـ android:tint / RsIcons. عائلة ic_rn_*. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#33FFFFFF"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M12,3C7,3 3,7 3,12C3,17 7,21 11,21C12.5,21 13,20 13,19C13,18 12.3,17.5 12.3,16.5C12.3,15.5 13,15 14,15H16.5C19,15 21,13.5 21,11.5C21,6.5 17,3 12,3Z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2.6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M7.5,11H7.51M10,7.5H10.01M15,7.5H15.01" />
+</vector>
