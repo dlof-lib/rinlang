@@ -5,7 +5,11 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:minHeight="42dp"
+    android:layout_marginStart="2dp"
+    android:layout_marginTop="1dp"
+    android:layout_marginEnd="2dp"
+    android:layout_marginBottom="1dp"
+    android:minHeight="44dp"
     android:orientation="horizontal"
     android:gravity="center_vertical"
     android:background="@drawable/bg_icon_btn"
@@ -23,8 +27,8 @@
 
     <ImageView
         android:id="@+id/imgExplorerFolderIcon"
-        android:layout_width="20dp"
-        android:layout_height="20dp"
+        android:layout_width="22dp"
+        android:layout_height="22dp"
         android:layout_marginEnd="8dp"
         android:src="@drawable/rs_folder"
         android:contentDescription="@null" />
@@ -40,6 +44,23 @@
         android:textStyle="bold"
         android:textColor="@color/rin_on_toolbar" />
 
+    <!-- عدد العناصر داخل المجلد -->
+    <TextView
+        android:id="@+id/txtExplorerCount"
+        android:layout_width="wrap_content"
+        android:layout_height="18dp"
+        android:minWidth="18dp"
+        android:layout_marginStart="8dp"
+        android:background="@drawable/bg_explorer_count"
+        android:gravity="center"
+        android:paddingStart="6dp"
+        android:paddingEnd="6dp"
+        android:textColor="@color/rin_menu_accent"
+        android:textSize="10.5sp"
+        android:textStyle="bold"
+        android:includeFontPadding="false"
+        android:visibility="gone" />
+
     <!-- علامة ✓ عند تحديد الصف (FileSelection.kt) -->
     <ImageView
         android:id="@+id/imgExplorerCheck"
@@ -47,7 +68,7 @@
         android:layout_height="16dp"
         android:layout_marginStart="8dp"
         android:src="@drawable/rs_ic_check"
-        android:tint="@color/rin_accent"
+        android:tint="@color/rin_menu_accent"
         android:contentDescription="@null"
         android:visibility="gone" />
 
