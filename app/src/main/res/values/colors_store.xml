@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ألوان المتجر والحساب وإنشاء الحساب — هوية RinStudio (أسود · أبيض · أخضر)، أسماؤها rin_st_* معزولة.
+     الليلي في values-night. ألوان hero_* وauth_* ثابتة (داكنة) في النهاري والليلي. -->
+<resources>
+    <color name="rin_st_bg">#F3F6F4</color>
+    <color name="rin_st_card">#FFFFFF</color>
+    <color name="rin_st_border">#E1E8E3</color>
+    <color name="rin_st_text">#0A0F0C</color>
+    <color name="rin_st_dim">#5C6B63</color>
+    <color name="rin_st_accent">#087F4C</color>
+    <color name="rin_st_accent_fill">#3DF59A</color>
+    <color name="rin_st_on_accent">#00140B</color>
+    <color name="rin_st_soft">#DDF8EA</color>
+    <color name="rin_st_ripple">#1F087F4C</color>
+    <color name="rin_st_divider">#E7EEE9</color>
+    <color name="rin_st_danger">#D92D3A</color>
+
+    <color name="rin_st_hero_top">#0C1712</color>
+    <color name="rin_st_hero_bottom">#030705</color>
+    <color name="rin_st_hero_glow">#333DF59A</color>
+    <color name="rin_st_hero_text">#FFFFFF</color>
+    <color name="rin_st_hero_dim">#93A89C</color>
+    <color name="rin_st_hero_accent">#3DF59A</color>
+    <color name="rin_st_hero_glass">#14FFFFFF</color>
+    <color name="rin_st_hero_stroke">#26FFFFFF</color>
+    <color name="rin_st_hero_ripple">#2E3DF59A</color>
+    <color name="rin_st_danger_dark">#FF6B76</color>
+</resources>
