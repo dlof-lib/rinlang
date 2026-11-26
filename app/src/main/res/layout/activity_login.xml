@@ -1,11 +1,44 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- شاشة تسجيل الدخول — خلفية غامرة داكنة بتوهّج نيون (ثابتة نهاري/ليلي)، حقول زجاجية بأيقونات، وزر أخضر لامع.
+     كل المعرّفات وأنواع العناصر كما كانت فلا يتغيّر منطق الشاشة. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:background="@color/rin_background">
+    android:background="@drawable/bg_st_auth_bg"
+    android:orientation="vertical">
 
-    <include layout="@layout/toolbar_app" />
+    <!-- شريط علوي شفاف فوق الخلفية الغامرة: رجوع زجاجي + عنوان الشاشة (المعرّفان btnToolbarBack وtxtToolbarTitle كما هما). -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="14dp"
+        android:paddingTop="12dp"
+        android:paddingEnd="14dp">
+
+        <ImageButton
+            android:id="@+id/btnToolbarBack"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:background="@drawable/bg_st_hero_btn"
+            android:contentDescription="@string/action_back"
+            android:padding="11dp"
+            android:src="@drawable/ic_back"
+            android:tint="@color/rin_st_hero_accent" />
+
+        <TextView
+            android:id="@+id/txtToolbarTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:singleLine="true"
+            android:textColor="@color/rin_st_hero_text"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+    </LinearLayout>
 
     <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
@@ -17,94 +50,126 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="24dp"
+            android:paddingStart="24dp"
+            android:paddingTop="8dp"
+            android:paddingEnd="24dp"
+            android:paddingBottom="32dp"
             android:gravity="center_horizontal">
+            <FrameLayout
+                android:layout_width="120dp"
+                android:layout_height="120dp"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_st_auth_halo">
 
-            <ImageView
-                android:layout_width="64dp"
-                android:layout_height="64dp"
-                android:layout_marginTop="24dp"
-                android:src="@mipmap/ic_launcher_round"
-                android:contentDescription="@string/app_name" />
+                <FrameLayout
+                    android:layout_width="84dp"
+                    android:layout_height="84dp"
+                    android:layout_gravity="center"
+                    android:background="@drawable/bg_st_auth_logo">
+
+                    <ImageView
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:contentDescription="@string/app_name"
+                        android:padding="9dp"
+                        android:src="@mipmap/ic_launcher_round" />
+                </FrameLayout>
+            </FrameLayout>
 
             <TextView
                 android:id="@+id/txtLoginTitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
+                android:layout_marginTop="14dp"
+                android:gravity="center"
                 android:text="@string/login_title"
-                android:textColor="@color/rin_on_toolbar"
-                android:textSize="22sp"
+                android:textColor="@color/rin_st_hero_text"
+                android:textSize="26sp"
                 android:textStyle="bold" />
 
             <TextView
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
+                android:layout_marginStart="8dp"
+                android:layout_marginTop="8dp"
+                android:layout_marginEnd="8dp"
                 android:gravity="center"
+                android:lineSpacingExtra="3dp"
                 android:text="@string/login_subtitle"
-                android:textColor="@color/rin_editor_hint"
-                android:textSize="13sp" />
+                android:textColor="@color/rin_st_hero_dim"
+                android:textSize="13.5sp" />
 
             <EditText
                 android:id="@+id/edtEmail"
                 android:layout_width="match_parent"
-                android:layout_height="52dp"
-                android:layout_marginTop="28dp"
-                android:background="@drawable/bg_input_field"
+                android:layout_height="54dp"
+                android:layout_marginTop="30dp"
+                android:background="@drawable/bg_st_auth_field"
+                android:drawablePadding="12dp"
+                android:drawableStart="@drawable/ic_st_mail"
+                android:drawableTint="@color/rin_st_hero_accent"
                 android:hint="@string/hint_email"
                 android:inputType="textEmailAddress"
-                android:paddingHorizontal="16dp"
-                android:textColor="@color/rin_editor_text"
-                android:textColorHint="@color/rin_editor_hint"
-                android:textSize="14sp"
-                android:singleLine="true" />
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:singleLine="true"
+                android:textColor="@color/rin_st_hero_text"
+                android:textColorHint="@color/rin_st_hero_dim"
+                android:textSize="14.5sp" />
 
             <EditText
                 android:id="@+id/edtPassword"
                 android:layout_width="match_parent"
-                android:layout_height="52dp"
+                android:layout_height="54dp"
                 android:layout_marginTop="12dp"
-                android:background="@drawable/bg_input_field"
+                android:background="@drawable/bg_st_auth_field"
+                android:drawablePadding="12dp"
+                android:drawableStart="@drawable/ic_st_lock"
+                android:drawableTint="@color/rin_st_hero_accent"
                 android:hint="@string/hint_password"
                 android:inputType="textPassword"
-                android:paddingHorizontal="16dp"
-                android:textColor="@color/rin_editor_text"
-                android:textColorHint="@color/rin_editor_hint"
-                android:textSize="14sp"
-                android:singleLine="true" />
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:singleLine="true"
+                android:textColor="@color/rin_st_hero_text"
+                android:textColorHint="@color/rin_st_hero_dim"
+                android:textSize="14.5sp" />
 
             <Button
                 android:id="@+id/btnLogin"
                 android:layout_width="match_parent"
-                android:layout_height="52dp"
-                android:layout_marginTop="20dp"
-                android:background="@drawable/bg_run_button_premium"
+                android:layout_height="54dp"
+                android:layout_marginTop="24dp"
+                android:background="@drawable/bg_st_auth_btn"
+                android:elevation="0dp"
+                android:insetBottom="0dp"
+                android:insetTop="0dp"
                 android:text="@string/action_login"
                 android:textAllCaps="false"
-                android:textColor="@android:color/white"
-                android:textStyle="bold"
-                android:elevation="0dp" />
+                android:textColor="@color/rin_st_on_accent"
+                android:textSize="15sp"
+                android:textStyle="bold" />
 
             <ProgressBar
                 android:id="@+id/progressLogin"
-                android:layout_width="24dp"
-                android:layout_height="24dp"
+                android:layout_width="26dp"
+                android:layout_height="26dp"
                 android:layout_marginTop="16dp"
+                android:indeterminateTint="@color/rin_st_hero_accent"
                 android:visibility="gone" />
 
             <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="20dp"
-                android:orientation="horizontal"
-                android:gravity="center">
+                android:layout_marginTop="22dp"
+                android:gravity="center"
+                android:orientation="horizontal">
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="@string/login_no_account"
-                    android:textColor="@color/rin_editor_hint"
+                    android:textColor="@color/rin_st_hero_dim"
                     android:textSize="13sp" />
 
                 <TextView
@@ -114,8 +179,8 @@
                     android:layout_marginStart="6dp"
                     android:padding="4dp"
                     android:text="@string/action_create_account"
-                    android:textColor="@color/rin_accent"
-                    android:textSize="13sp"
+                    android:textColor="@color/rin_st_hero_accent"
+                    android:textSize="13.5sp"
                     android:textStyle="bold" />
             </LinearLayout>
         </LinearLayout>
