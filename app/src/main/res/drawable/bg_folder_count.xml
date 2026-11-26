@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- شارة عدد العناصر داخل المجلد: كبسولة خضراء بحدّ بلون البطاقة لتبرز فوق البلاطة. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/rin_files_accent_fill" />
+    <stroke android:width="2dp" android:color="@color/rin_fd_card_bottom" />
+    <corners android:radius="10dp" />
+</shape>
