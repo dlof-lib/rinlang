@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- عنصر في شريط المسار داخل الترويسة: شفاف مع موجة خضراء عند اللمس. -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android" android:color="@color/rin_files_hero_ripple">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@android:color/transparent" />
+            <corners android:radius="10dp" />
+        </shape>
+    </item>
+</ripple>
