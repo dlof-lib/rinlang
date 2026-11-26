@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ألوان ستايل المجلدات (rin_fd_*): بلاطة الأيقونة وبطاقة صف المجلد. -->
+<resources>
+    <color name="rin_fd_tile_top">#14291F</color>
+    <color name="rin_fd_tile_bottom">#0A130E</color>
+    <color name="rin_fd_tile_stroke">#1E3A2B</color>
+    <color name="rin_fd_card_top">#0F1B15</color>
+    <color name="rin_fd_card_bottom">#0A0F0C</color>
+    <color name="rin_fd_card_stroke">#1B2D23</color>
+    <color name="rin_fd_selected_stroke">#3DF59A</color>
+</resources>
