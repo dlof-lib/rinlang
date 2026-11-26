@@ -253,7 +253,7 @@ class ProjectsActivity : RinBaseActivity() {
         val swipe = RowSwipeCallback(
             ctx = this, model = selection,
             rightAction = RowSwipeCallback.Action(
-                R.drawable.ic_edit_pencil, ContextCompat.getColor(this, R.color.rin_accent), getString(R.string.swipe_rename_label)
+                R.drawable.ic_edit_pencil, ContextCompat.getColor(this, R.color.rin_proj_accent), getString(R.string.swipe_rename_label)
             ) { pos -> adapter.projectAt(pos)?.let { showRenameDialog(it) } },
             leftAction = RowSwipeCallback.Action(
                 R.drawable.ic_trash_red, 0xFFE5484D.toInt(), getString(R.string.swipe_delete_label)
@@ -264,7 +264,7 @@ class ProjectsActivity : RinBaseActivity() {
 
         // 3) سحب لأسفل من أعلى القائمة = تحديث.
         findViewById<SwipeRefreshLayout>(R.id.swipeProjects).apply {
-            setColorSchemeColors(ContextCompat.getColor(this@ProjectsActivity, R.color.rin_accent))
+            setColorSchemeColors(ContextCompat.getColor(this@ProjectsActivity, R.color.rin_proj_accent))
             setOnRefreshListener { refresh(); isRefreshing = false }
         }
 
@@ -1194,7 +1194,7 @@ private class ProjectsAdapter(
     private fun bindSelection(holder: VH, position: Int) {
         val key = keyAt(position) ?: return
         val selected = key in selection
-        holder.cover.setBackgroundResource(if (selected) R.drawable.bg_project_card_selected else R.drawable.bg_project_card)
+        holder.cover.setBackgroundResource(if (selected) R.drawable.bg_proj_card_selected else R.drawable.bg_proj_card)
         holder.check.visibility = if (selected) View.VISIBLE else View.GONE
         val vis = if (selection.active) View.GONE else View.VISIBLE
         holder.btnMore.visibility = vis
@@ -1222,6 +1222,7 @@ private class ProjectsAdapter(
         val cover: View = view.findViewById(R.id.projectCover)
         val check: View = view.findViewById(R.id.imgProjectSelectCheck)
         val imgPin: android.widget.ImageView = view.findViewById(R.id.imgProjectPin)
+        val accentLine: View = view.findViewById(R.id.viewProjectAccent)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
@@ -1242,17 +1243,19 @@ private class ProjectsAdapter(
         val color = ContextCompat.getColor(context, colorRes)
         holder.frameTypeIcon.background = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
-            cornerRadius = 9f * density
-            setColor(withAlpha(color, 0.16f))
+            cornerRadius = 12f * density
+            setColor(withAlpha(color, 0.18f))
+            setStroke((1 * density).toInt().coerceAtLeast(1), withAlpha(color, 0.35f))
         }
         val icon = ContextCompat.getDrawable(context, iconRes)?.mutate()
         icon?.setTint(color)
         holder.imgTypeIcon.setImageDrawable(icon)
 
+        holder.accentLine.backgroundTintList = android.content.res.ColorStateList.valueOf(color)
         holder.txtName.text = project.name
         // شارة الدبوس للمشاريع المثبّتة.
         holder.imgPin.visibility = if (isPinned(project)) View.VISIBLE else View.GONE
-        holder.imgPin.setColorFilter(ContextCompat.getColor(context, R.color.rin_accent))
+        holder.imgPin.setColorFilter(ContextCompat.getColor(context, R.color.rin_proj_accent))
         holder.txtType.text = typeLabel(context, project.type).uppercase()
         holder.txtType.setTextColor(color)
         // البطاقة كانت تعرض عدد الملفات فقط — لا شيء يوحي متى آخر مرة عُدِّل فيها المشروع
