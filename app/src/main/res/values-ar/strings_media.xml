@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="media_prev">السابق</string>
+    <string name="media_next">التالي</string>
+    <string name="media_rotate">تدوير</string>
+    <string name="media_share">مشاركة</string>
+    <string name="media_counter">%1$d / %2$d</string>
+    <string name="media_decode_error">تعذّر عرض الصورة</string>
+    <string name="media_edit">تعديل الكود</string>
+    <string name="media_play_pause">تشغيل / إيقاف</string>
+</resources>
