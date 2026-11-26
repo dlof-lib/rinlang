@@ -8,4 +8,11 @@
     <string name="media_decode_error">Could not display the image</string>
     <string name="media_edit">Edit code</string>
     <string name="media_play_pause">Play / Pause</string>
+    <string name="media_search">Search in file</string>
+    <string name="media_wrap">Wrap lines</string>
+    <string name="media_find_hint">Search in file…</string>
+    <string name="media_lines">%1$d lines</string>
+    <string name="media_truncated">Partially shown (first 1.5 MB)</string>
+    <string name="media_no_match">No results</string>
+    <string name="media_binary">Binary file: cannot show as text</string>
 </resources>
