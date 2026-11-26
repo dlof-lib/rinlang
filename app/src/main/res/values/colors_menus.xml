@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ألوان الحوارات والقوائم المنبثقة والدرج الجانبي — هوية RinStudio (أسود · أبيض · أخضر).
+     أسماؤها rin_menu_* معزولة فلا تؤثر على بقية الشاشات. الليلي في values-night. -->
+<resources>
+    <color name="rin_menu_card">#FFFFFF</color>
+    <color name="rin_menu_border">#DDE6E0</color>
+    <color name="rin_menu_text">#0A0F0C</color>
+    <color name="rin_menu_dim">#5C6B63</color>
+    <color name="rin_menu_accent">#087F4C</color>
+    <color name="rin_menu_accent_fill">#3DF59A</color>
+    <color name="rin_menu_on_accent">#00140B</color>
+    <color name="rin_menu_accent_soft">#DDF8EA</color>
+    <color name="rin_menu_ripple">#1F087F4C</color>
+    <color name="rin_menu_divider">#E7EEE9</color>
+    <color name="rin_menu_glow">#1A3DF59A</color>
+    <color name="rin_menu_danger">#D92D3A</color>
+
+    <!-- رأس الدرج الجانبي: داكن ثابت في النهاري والليلي -->
+    <color name="rin_menu_hero_top">#0C1712</color>
+    <color name="rin_menu_hero_bottom">#030705</color>
+    <color name="rin_menu_hero_text">#FFFFFF</color>
+    <color name="rin_menu_hero_dim">#93A89C</color>
+    <color name="rin_menu_hero_glass">#14FFFFFF</color>
+    <color name="rin_menu_hero_stroke">#26FFFFFF</color>
+    <color name="rin_menu_hero_ripple">#2E3DF59A</color>
+</resources>
