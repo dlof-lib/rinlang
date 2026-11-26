@@ -125,7 +125,7 @@ class RinStoreActivity : BaseConnectivityActivity() {
 
         // سحب-للتحديث: يعيد جلب القائمة من الصفر دون إظهار الهيكل التغبيشي الكامل مجدداً (القائمة
         // الحالية تبقى ظاهرة تحت مؤشّر السحب أثناء الانتظار) — انظر loadPackages(showSkeletonOnLoad).
-        swipeRefresh.setColorSchemeResources(R.color.rin_accent)
+        swipeRefresh.setColorSchemeResources(R.color.rin_st_accent)
         swipeRefresh.setOnRefreshListener {
             if (!isOnline()) {
                 swipeRefresh.isRefreshing = false
@@ -229,6 +229,7 @@ class RinStoreActivity : BaseConnectivityActivity() {
                 text = (if (category == CATEGORY_ALL) getString(R.string.store_category_all) else category) + " ($n)"
                 isCheckable = true
                 isChecked = category == selectedCategory
+                styleStoreChip(this)
                 setOnClickListener {
                     selectedCategory = category
                     for (i in 0 until chipGroupCategory.childCount) {
@@ -240,6 +241,32 @@ class RinStoreActivity : BaseConnectivityActivity() {
             }
             chipGroupCategory.addView(chip)
         }
+    }
+
+    /** شريحة تصنيف بهوية RinStudio: غير محدّدة = بطاقة بحدّ رفيع، محدّدة = حبّة خضراء نيون بنص داكن. */
+    private fun styleStoreChip(chip: Chip) {
+        fun c(res: Int) = androidx.core.content.ContextCompat.getColor(this, res)
+        val checked = intArrayOf(android.R.attr.state_checked)
+        val none = intArrayOf()
+        val d = resources.displayMetrics.density
+        chip.chipBackgroundColor = android.content.res.ColorStateList(
+            arrayOf(checked, none), intArrayOf(c(R.color.rin_st_accent_fill), c(R.color.rin_st_card))
+        )
+        chip.chipStrokeColor = android.content.res.ColorStateList(
+            arrayOf(checked, none), intArrayOf(c(R.color.rin_st_accent_fill), c(R.color.rin_st_border))
+        )
+        chip.chipStrokeWidth = 1f * d
+        chip.setTextColor(
+            android.content.res.ColorStateList(
+                arrayOf(checked, none), intArrayOf(c(R.color.rin_st_on_accent), c(R.color.rin_st_text))
+            )
+        )
+        chip.rippleColor = android.content.res.ColorStateList.valueOf(c(R.color.rin_st_ripple))
+        chip.isCheckedIconVisible = false
+        chip.chipCornerRadius = 20f * d
+        chip.textSize = 12.5f
+        chip.chipMinHeight = 38f * d
+        chip.setTypeface(chip.typeface, android.graphics.Typeface.BOLD)
     }
 
     private fun showSortMenu() {
