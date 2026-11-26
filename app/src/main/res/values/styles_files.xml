@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- أشكال الأزرار العائمة في شاشة «الملفات»: الزر الرئيسي مربّع بزوايا ناعمة (squircle) بدل الدائرة. -->
+<resources>
+    <style name="RinFilesFabMain">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">20dp</item>
+    </style>
+    <style name="RinFilesFabMini">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">50%</item>
+    </style>
+</resources>
