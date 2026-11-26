@@ -1,24 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- خلفية موحّدة لكل حوارات AlertDialog في التطبيق (ألبوم جديد / مشروع جديد / تأكيد حذف / إلخ):
-     بطاقة عائمة داكنة بزوايا دائرية كاملة وحدّ زجاجي رفيع بدل مستطيل النظام المسطّح حاد الحواف،
-     مع شريط تمييز رفيع بتدرّج هوية العلامة (بنفسجي إلى أخضر) عبر الحافة العلوية — نفس فكرة
-     bg_toolbar_accent_bar لكن أفقياً، ليقرأ كل حوار كـ"بطاقة مميّزة" بدل نافذة نظام عامة. -->
+<!-- خلفية موحّدة لكل حوارات AlertDialog (ألبوم/مشروع جديد/تأكيد/قوائم الأيقونات...): بطاقة بزوايا 26dp وحدّ رفيع،
+     توهّج أخضر خافت من الأعلى، وخط نيون رفيع عند الحافة العلوية. تتبع النهاري/الليلي عبر rin_menu_*. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item>
         <shape android:shape="rectangle">
-            <solid android:color="@color/rin_toolbar" />
-            <corners android:radius="20dp" />
-            <stroke android:width="1dp" android:color="@color/rin_app_icon_border" />
+            <solid android:color="@color/rin_menu_card" />
+            <stroke android:width="1dp" android:color="@color/rin_menu_border" />
+            <corners android:radius="26dp" />
         </shape>
     </item>
-    <item android:height="4dp" android:gravity="top">
+    <item>
         <shape android:shape="rectangle">
-            <gradient
-                android:type="linear"
-                android:angle="0"
-                android:startColor="@color/rin_run_gradient_start"
-                android:endColor="@color/rin_accent_green" />
-            <corners android:radius="20dp" />
+            <gradient android:type="radial" android:centerX="0.5" android:centerY="0.0" android:gradientRadius="260dp"
+                android:startColor="@color/rin_menu_glow" android:endColor="@android:color/transparent" />
+            <corners android:radius="26dp" />
+        </shape>
+    </item>
+    <item android:left="40dp" android:right="40dp" android:height="2dp" android:gravity="top">
+        <shape android:shape="rectangle">
+            <gradient android:angle="0" android:startColor="@android:color/transparent"
+                android:centerColor="@color/rin_menu_accent_fill" android:endColor="@android:color/transparent" />
         </shape>
     </item>
 </layer-list>
