@@ -1,12 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- خلفية صف محدَّد داخل درج المستكشف (وضع التحديد المتعدد). -->
-<ripple xmlns:android="http://schemas.android.com/apk/res/android"
-    android:color="@color/rin_ghost_ripple">
+<!-- صف/شريط محدَّد في وضع التحديد المتعدد داخل الدرج. -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android" android:color="@color/rin_menu_ripple">
     <item>
         <shape android:shape="rectangle">
-            <solid android:color="@color/rin_accent_border_subtle" />
-            <stroke android:width="1dp" android:color="@color/rin_accent" />
-            <corners android:radius="8dp" />
+            <solid android:color="@color/rin_menu_accent_soft" />
+            <stroke android:width="1dp" android:color="@color/rin_menu_accent" />
+            <corners android:radius="12dp" />
         </shape>
     </item>
 </ripple>
