@@ -18,32 +18,66 @@
              تلقائياً هذا الثيم الموحّد بدل حوار النظام المسطّح الافتراضي — انظر
              Theme.RinLang.AlertDialog أسفله. تغيير واحد هنا يُحدِّث كل الحوارات دفعة واحدة. -->
         <item name="android:alertDialogTheme">@style/Theme.RinLang.AlertDialog</item>
+        <!-- قوائم PopupMenu في كل الشاشات (المشاريع/الملفات/الصفوف...) بنفس البطاقة الموحّدة -->
+        <item name="android:popupMenuStyle">@style/Widget.RinLang.PopupMenu</item>
+        <item name="popupMenuStyle">@style/Widget.RinLang.PopupMenu</item>
+        <item name="android:textAppearanceLargePopupMenu">@style/RinLang.TextAppearance.PopupItem</item>
+        <item name="android:textAppearanceSmallPopupMenu">@style/RinLang.TextAppearance.PopupItem</item>
     </style>
 
-    <!-- ثيم موحَّد لكل حوارات AlertDialog: بطاقة عائمة داكنة بزوايا دائرية كاملة + شريط تمييز
-         علوي بتدرّج هوية العلامة (bg_dialog_card) بدل مستطيل النظام المسطّح حاد الحواف، مع
-         عرض أوسع (88%) وألوان نص/تمييز متطابقة مع بقية التطبيق. -->
+    <!-- ثيم موحَّد لكل حوارات AlertDialog (هوية RinStudio): بطاقة 26dp بحدّ رفيع وتوهّج أخضر وخط نيون علوي
+         (bg_dialog_card)، عنوان بارز، أزرار بنص أخضر بلا حروف كبيرة، وحركة ظهور بتكبير ناعم (anim/rin_dialog_*).
+         يتبع النهاري/الليلي عبر rin_menu_*. تغيير واحد هنا يُحدِّث كل الحوارات دفعة واحدة. -->
     <style name="Theme.RinLang.AlertDialog" parent="@android:style/Theme.Material.Dialog.Alert">
         <item name="android:windowBackground">@drawable/bg_dialog_card</item>
         <item name="android:windowMinWidthMajor">88%</item>
         <item name="android:windowMinWidthMinor">88%</item>
-        <item name="android:colorAccent">@color/rin_accent</item>
-        <item name="android:textColorPrimary">@color/rin_on_toolbar</item>
-        <item name="android:textColorSecondary">@color/rin_on_toolbar_dim</item>
+        <item name="android:windowAnimationStyle">@style/Animation.RinLang.Dialog</item>
+        <item name="android:backgroundDimAmount">0.62</item>
+        <item name="android:colorAccent">@color/rin_menu_accent</item>
+        <item name="android:textColorPrimary">@color/rin_menu_text</item>
+        <item name="android:textColorSecondary">@color/rin_menu_dim</item>
+        <item name="android:textColorHint">@color/rin_menu_dim</item>
+        <item name="android:colorControlActivated">@color/rin_menu_accent</item>
+        <item name="android:colorControlHighlight">@color/rin_menu_ripple</item>
+        <item name="android:windowTitleStyle">@style/RinLang.DialogTitle</item>
+        <item name="android:buttonBarButtonStyle">@style/Widget.RinLang.DialogButton</item>
+        <item name="android:buttonBarPositiveButtonStyle">@style/Widget.RinLang.DialogButton.Positive</item>
+        <item name="android:buttonBarNegativeButtonStyle">@style/Widget.RinLang.DialogButton</item>
+        <item name="android:buttonBarNeutralButtonStyle">@style/Widget.RinLang.DialogButton</item>
     </style>
 
-    <!-- ثيم موحَّد لقوائم PopupMenu المنسدلة (File/Edit/View/Run في الشريط العلوي): بطاقة
-         داكنة بزوايا دائرية وظل واضح (bg_popup_menu) بدل مستطيل أسود مسطّح بلا أي هوية بصرية،
-         يحلّ محل ThemeOverlay.MaterialComponents.Dark الافتراضي في MainActivity.darkPopupMenu(). -->
+    <style name="Animation.RinLang.Dialog" parent="@android:style/Animation.Dialog">
+        <item name="android:windowEnterAnimation">@anim/rin_dialog_enter</item>
+        <item name="android:windowExitAnimation">@anim/rin_dialog_exit</item>
+    </style>
+
+    <style name="Animation.RinLang.Popup" parent="@android:style/Animation.Dialog">
+        <item name="android:windowEnterAnimation">@anim/rin_popup_enter</item>
+        <item name="android:windowExitAnimation">@anim/rin_popup_exit</item>
+    </style>
+
+    <!-- ثيم القوائم المنبثقة PopupMenu (File/Edit/View/Run في MainActivity.darkPopupMenu()): بطاقة 18dp بحدّ رفيع،
+         عناصر أطول (46dp) بخط أوضح وحشوة أوسع، وحركة ظهور ناعمة. -->
     <style name="ThemeOverlay.RinLang.PopupMenu" parent="ThemeOverlay.MaterialComponents.Dark">
         <item name="android:popupMenuStyle">@style/Widget.RinLang.PopupMenu</item>
-        <item name="android:textColorPrimary">@color/rin_on_toolbar</item>
-        <item name="colorAccent">@color/rin_accent</item>
+        <item name="popupMenuStyle">@style/Widget.RinLang.PopupMenu</item>
+        <item name="android:textColorPrimary">@color/rin_menu_text</item>
+        <item name="android:textColorSecondary">@color/rin_menu_dim</item>
+        <item name="android:textAppearanceLargePopupMenu">@style/RinLang.TextAppearance.PopupItem</item>
+        <item name="android:textAppearanceSmallPopupMenu">@style/RinLang.TextAppearance.PopupItem</item>
+        <item name="android:listPreferredItemHeightSmall">46dp</item>
+        <item name="android:listPreferredItemPaddingStart">18dp</item>
+        <item name="android:listPreferredItemPaddingEnd">18dp</item>
+        <item name="android:colorControlHighlight">@color/rin_menu_ripple</item>
+        <item name="colorAccent">@color/rin_menu_accent</item>
     </style>
 
     <style name="Widget.RinLang.PopupMenu" parent="@android:style/Widget.Material.PopupMenu">
         <item name="android:popupBackground">@drawable/bg_popup_menu</item>
-        <item name="android:popupElevation">10dp</item>
+        <item name="android:popupElevation">12dp</item>
+        <item name="android:popupAnimationStyle">@style/Animation.RinLang.Popup</item>
+        <item name="android:overlapAnchor">false</item>
     </style>
 
     <!-- شاشة البداية (Splash): بلا شريط أدوات، خلفية سوداء بهوية RinStudio (أسود · أبيض · أخضر)، تختفي تلقائياً
