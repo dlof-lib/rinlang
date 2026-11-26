@@ -6,7 +6,7 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:background="@drawable/bg_library_card_mine"
+    android:background="@drawable/bg_st_card"
     android:layout_marginBottom="8dp"
     android:paddingStart="14dp"
     android:paddingTop="12dp"
@@ -24,9 +24,9 @@
             android:layout_width="36dp"
             android:layout_height="36dp"
             android:layout_marginEnd="10dp"
-            android:background="@drawable/bg_package_icon_gradient"
+            android:background="@drawable/bg_st_initial"
             android:gravity="center"
-            android:textColor="@android:color/white"
+            android:textColor="@color/rin_st_on_accent"
             android:textStyle="bold"
             android:textSize="14sp" />
 
@@ -42,7 +42,7 @@
                 android:layout_height="wrap_content"
                 android:textSize="15sp"
                 android:textStyle="bold"
-                android:textColor="@color/rin_on_toolbar" />
+                android:textColor="@color/rin_st_text" />
 
             <TextView
                 android:id="@+id/txtMyPackageMeta"
@@ -50,7 +50,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
                 android:textSize="12sp"
-                android:textColor="@color/rin_editor_hint" />
+                android:textColor="@color/rin_st_dim" />
         </LinearLayout>
 
         <ImageButton
@@ -58,7 +58,7 @@
             android:layout_width="40dp"
             android:layout_height="40dp"
             android:layout_marginStart="8dp"
-            android:background="@drawable/bg_toolbar_btn_ghost"
+            android:background="@drawable/bg_st_icon_btn"
             android:src="@drawable/ic_edit_pencil"
             android:scaleType="center"
             android:padding="8dp"
@@ -69,7 +69,7 @@
             android:layout_width="40dp"
             android:layout_height="40dp"
             android:layout_marginStart="8dp"
-            android:background="@drawable/bg_toolbar_btn_ghost"
+            android:background="@drawable/bg_st_icon_btn"
             android:src="@drawable/ic_trash_red"
             android:scaleType="center"
             android:padding="8dp"
@@ -86,7 +86,7 @@
         android:paddingHorizontal="10dp"
         android:paddingVertical="3dp"
         android:text="@string/package_published_badge"
-        android:textColor="@color/rin_accent_green"
+        android:textColor="@color/rin_st_accent"
         android:textStyle="bold"
         android:textSize="10.5sp" />
 
