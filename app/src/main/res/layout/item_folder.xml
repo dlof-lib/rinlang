@@ -6,7 +6,7 @@
     android:layout_height="wrap_content"
     android:orientation="horizontal"
     android:gravity="center_vertical"
-    android:background="@drawable/bg_file_card"
+    android:background="@drawable/bg_folder_card"
     android:layout_marginStart="4dp"
     android:layout_marginEnd="4dp"
     android:layout_marginTop="4dp"
@@ -16,18 +16,38 @@
     <FrameLayout
         android:id="@+id/frameFolderIcon"
         android:layout_width="56dp"
-        android:layout_height="56dp">
+        android:layout_height="56dp"
+        android:clipChildren="false">
 
         <ImageView
             android:id="@+id/imgFolderIcon"
             android:layout_width="56dp"
             android:layout_height="56dp"
-            android:background="@drawable/bg_file_tile"
+            android:background="@drawable/bg_folder_tile"
             android:clipToOutline="true"
-            android:padding="9dp"
+            android:padding="8dp"
             android:scaleType="fitCenter"
             android:src="@drawable/rs_folder"
             android:contentDescription="@null" />
+
+        <!-- عدد العناصر داخل المجلد (يُخفى إن كان فارغاً) -->
+        <TextView
+            android:id="@+id/txtFolderCount"
+            android:layout_width="wrap_content"
+            android:layout_height="18dp"
+            android:layout_gravity="bottom|end"
+            android:layout_marginEnd="-6dp"
+            android:layout_marginBottom="-5dp"
+            android:minWidth="18dp"
+            android:background="@drawable/bg_folder_count"
+            android:gravity="center"
+            android:paddingStart="5dp"
+            android:paddingEnd="5dp"
+            android:textColor="@color/rin_files_on_accent"
+            android:textSize="10.5sp"
+            android:textStyle="bold"
+            android:includeFontPadding="false"
+            android:visibility="gone" />
 
         <!-- شارة ✓ تظهر عند تحديد الصف (انظر FileSelection.kt) -->
         <ImageView
@@ -58,6 +78,7 @@
             android:textSize="15sp"
             android:textStyle="bold"
             android:fontFamily="monospace"
+            android:letterSpacing="0.01"
             android:textColor="@color/rin_files_text"
             android:ellipsize="end"
             android:maxLines="1" />
