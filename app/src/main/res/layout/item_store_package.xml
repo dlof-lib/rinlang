@@ -13,11 +13,11 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:background="@drawable/bg_store_package_card"
-    android:layout_margin="5dp"
+    android:background="@drawable/bg_st_card"
+    android:layout_margin="6dp"
     android:paddingStart="16dp"
-    android:paddingEnd="14dp"
-    android:paddingTop="14dp"
+    android:paddingEnd="16dp"
+    android:paddingTop="18dp"
     android:paddingBottom="14dp"
     android:clickable="true"
     android:focusable="true">
@@ -31,24 +31,24 @@
         <!-- شارة بأول حرف من اسم الحزمة (خلفية متدرّجة)، تُستبدَل بأيقونة الحزمة الحقيقية إن
              رفعها الناشر عند النشر (raw.iconBase64) — راجع PackageAdapter.onBindViewHolder. -->
         <FrameLayout
-            android:layout_width="40dp"
-            android:layout_height="40dp"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
             android:layout_marginEnd="12dp">
 
             <TextView
                 android:id="@+id/txtPackageInitial"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:background="@drawable/bg_package_icon_gradient"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:background="@drawable/bg_st_initial"
                 android:gravity="center"
-                android:textColor="@android:color/white"
+                android:textColor="@color/rin_st_on_accent"
                 android:textStyle="bold"
-                android:textSize="16sp" />
+                android:textSize="18sp" />
 
             <ImageView
                 android:id="@+id/imgPackageIcon"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
                 android:scaleType="fitCenter"
                 android:visibility="gone"
                 android:contentDescription="@null" />
@@ -73,9 +73,9 @@
                     android:layout_height="wrap_content"
                     android:ellipsize="end"
                     android:singleLine="true"
-                    android:textSize="15.5sp"
+                    android:textSize="16sp"
                     android:textStyle="bold"
-                    android:textColor="@color/rin_on_toolbar" />
+                    android:textColor="@color/rin_st_text" />
 
                 <ImageView
                     android:id="@+id/imgPackageVerifiedBadge"
@@ -93,7 +93,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="3dp"
                 android:textSize="12sp"
-                android:textColor="@color/rin_editor_hint" />
+                android:textColor="@color/rin_st_dim" />
         </LinearLayout>
 
         <TextView
@@ -101,12 +101,12 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="8dp"
-            android:background="@drawable/bg_category_chip"
+            android:background="@drawable/bg_st_cat_chip"
             android:paddingHorizontal="10dp"
             android:paddingVertical="4dp"
             android:textSize="10.5sp"
             android:textStyle="bold"
-            android:textColor="@color/rin_accent" />
+            android:textColor="@color/rin_st_accent" />
     </LinearLayout>
 
     <TextView
@@ -116,7 +116,7 @@
         android:layout_marginTop="10dp"
         android:textSize="12.5sp"
         android:lineSpacingExtra="2dp"
-        android:textColor="@color/rin_editor_text"
+        android:textColor="@color/rin_st_text"
         android:maxLines="3"
         android:ellipsize="end" />
 
@@ -132,11 +132,11 @@
             android:id="@+id/chipPackageVersion"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:background="@drawable/bg_chip_meta"
+            android:background="@drawable/bg_st_meta_chip"
             android:fontFamily="monospace"
             android:paddingHorizontal="9dp"
             android:paddingVertical="3dp"
-            android:textColor="@color/rin_on_toolbar"
+            android:textColor="@color/rin_st_text"
             android:textSize="10.5sp"
             android:textStyle="bold" />
 
@@ -145,10 +145,10 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="6dp"
-            android:background="@drawable/bg_chip_meta"
+            android:background="@drawable/bg_st_meta_chip"
             android:paddingHorizontal="9dp"
             android:paddingVertical="3dp"
-            android:textColor="@color/rin_editor_hint"
+            android:textColor="@color/rin_st_dim"
             android:textSize="10.5sp" />
 
         <TextView
@@ -156,10 +156,10 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="6dp"
-            android:background="@drawable/bg_chip_meta"
+            android:background="@drawable/bg_st_meta_chip"
             android:paddingHorizontal="9dp"
             android:paddingVertical="3dp"
-            android:textColor="@color/rin_editor_hint"
+            android:textColor="@color/rin_st_dim"
             android:textSize="10.5sp" />
     </LinearLayout>
 
@@ -180,7 +180,7 @@
         android:layout_width="match_parent"
         android:layout_height="1dp"
         android:layout_marginTop="12dp"
-        android:background="@color/rin_divider" />
+        android:background="@color/rin_st_divider" />
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -195,7 +195,7 @@
             android:layout_weight="1"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:background="@drawable/bg_rating_pill"
+            android:background="@drawable/bg_st_rating_pill"
             android:paddingHorizontal="10dp"
             android:paddingVertical="6dp">
 
@@ -244,7 +244,7 @@
             android:layout_width="34dp"
             android:layout_height="34dp"
             android:layout_marginStart="6dp"
-            android:background="@drawable/bg_toolbar_btn_ghost"
+            android:background="@drawable/bg_st_icon_btn"
             android:src="@drawable/ic_report_flag"
             android:scaleType="center"
             android:padding="0dp"
@@ -254,19 +254,20 @@
     <Button
         android:id="@+id/btnInstallPackage"
         android:layout_width="match_parent"
-        android:layout_height="40dp"
-        android:layout_marginTop="10dp"
+        android:layout_height="46dp"
+        android:layout_marginTop="12dp"
         android:minWidth="0dp"
         android:minHeight="0dp"
         android:insetTop="0dp"
         android:insetBottom="0dp"
         android:drawableStart="@drawable/ic_log_download"
+        android:drawableTint="@color/rin_st_on_accent"
         android:drawablePadding="8dp"
         android:text="@string/action_install"
         android:textAllCaps="false"
-        android:textSize="13sp"
+        android:textSize="14sp"
         android:textStyle="bold"
-        android:background="@drawable/bg_install_button_premium"
-        android:textColor="@android:color/white" />
+        android:background="@drawable/bg_st_install_btn"
+        android:textColor="@color/rin_st_on_accent" />
 
 </LinearLayout>
