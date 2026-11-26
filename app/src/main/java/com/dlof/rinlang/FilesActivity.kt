@@ -170,6 +170,7 @@ class FilesActivity : RinBaseActivity() {
             selection = selection,
             onSelectionChanged = { onSelectionChanged() }
         )
+        adapter.colorOf = { rel -> FolderColors.get(this, project.name, rel) }
         rvFiles.layoutManager = LinearLayoutManager(this)
         rvFiles.adapter = adapter
         setupSelectionAndGestures()
@@ -840,7 +841,8 @@ class FilesActivity : RinBaseActivity() {
     private fun handleOpen(file: RinFile, line: Int = 0, m: SearchMatch? = null) {
         FileRecents.record(this, project.name, file.relPath)
         when {
-            ProjectManager.isImageFile(file.name) || ProjectManager.isVideoFile(file.name) ->
+            ProjectManager.isImageFile(file.name) || ProjectManager.isVideoFile(file.name) ||
+                MediaPreviewActivity.isSvg(file.name) ->
                 openInMediaPreview(file)
             // حزمة RinPak داخل المشروع: معاينة/استيراد داخل التطبيق (لا نص خام ولا تطبيق خارجي).
             file.name.endsWith(RinPak.EXTENSION, ignoreCase = true) || file.name.endsWith(".rinproj", ignoreCase = true) ->
@@ -870,6 +872,19 @@ class FilesActivity : RinBaseActivity() {
         val intent = Intent(this, MediaPreviewActivity::class.java)
         intent.putExtra(MediaPreviewActivity.EXTRA_FILE_PATH, file.file.absolutePath)
         intent.putExtra(MediaPreviewActivity.EXTRA_FILE_NAME, file.name)
+        // صور (و SVG) المجلد الحالي للتنقل بينها داخل العارض، ومعها المسارات النسبية لزر "تعديل الكود"
+        intent.putExtra(MediaPreviewActivity.EXTRA_PROJECT, project.name)
+        intent.putExtra(MediaPreviewActivity.EXTRA_REL_PATHS, arrayOf(file.relPath))
+        if (!ProjectManager.isVideoFile(file.name)) {
+            val images = adapter.entries().filterIsInstance<FsEntry.FileEntry>()
+                .map { it.file }.filter { ProjectManager.isImageFile(it.name) || MediaPreviewActivity.isSvg(it.name) }
+            val idx = images.indexOfFirst { it.file.absolutePath == file.file.absolutePath }
+            if (images.size > 1 && idx >= 0) {
+                intent.putExtra(MediaPreviewActivity.EXTRA_SIBLINGS, images.map { it.file.absolutePath }.toTypedArray())
+                intent.putExtra(MediaPreviewActivity.EXTRA_REL_PATHS, images.map { it.relPath }.toTypedArray())
+                intent.putExtra(MediaPreviewActivity.EXTRA_INDEX, idx)
+            }
+        }
         startActivity(intent)
     }
 
@@ -1068,7 +1083,12 @@ class FilesActivity : RinBaseActivity() {
     }
 
     private fun showRowMenu(entry: FsEntry, anchor: View) {
-        RowMenu.show(this, anchor, project, entry, currentRelDir, protectedPaths()) { refresh() }
+        val all = { RowMenu.show(this, anchor, project, entry, currentRelDir, protectedPaths()) { refresh() } }
+        if (entry is FsEntry.FolderEntry) {
+            FolderMenu.show(this, project, entry, currentRelDir, { refresh() }, all)
+        } else {
+            all()
+        }
     }
 
     private fun duplicateFile(file: RinFile) {
@@ -1132,24 +1152,12 @@ class FilesActivity : RinBaseActivity() {
     }
 
     private fun showCreateFileDialog() {
-        val input = EditText(this)
-        input.hint = getString(R.string.file_name_hint)
-        AlertDialog.Builder(this)
-            .setTitle(R.string.new_file_title)
-            .setView(input)
-            .setPositiveButton(R.string.create) { _, _ ->
-                val name = input.text.toString().trim()
-                if (name.isEmpty()) return@setPositiveButton
-                try {
-                    val file = ProjectManager.writeFile(project, currentRelDir, name, "")
-                    refresh()
-                    openInEditor(file)
-                } catch (t: Throwable) {
-                    Toast.makeText(this, "${getString(R.string.file_save_error)}: ${t.message}", Toast.LENGTH_LONG).show()
-                }
-            }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
+        NewFileDialog.show(this, project, currentRelDir, onBatch = {
+            BatchCreateDialog.show(this, project, currentRelDir) { refresh() }
+        }) { file ->
+            refresh()
+            openInEditor(file)
+        }
     }
 
     private fun showCreateFolderDialog() {
@@ -1328,6 +1336,33 @@ private class FilesAdapter(
         if (items.isNotEmpty()) notifyItemRangeChanged(0, items.size, PAYLOAD_SELECTION)
     }
 
+    /** معاينة سريعة لمحتوى المجلد (أول 10 عناصر: المجلدات أولاً) عند الضغط على شارة العدد. */
+    private fun peekFolder(anchor: View, dir: java.io.File) {
+        val ctx = anchor.context
+        anchor.performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK)
+        val kids = dir.listFiles()
+            ?.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() })) ?: emptyList()
+        val pm = PopupMenu(ctx, anchor)
+        if (kids.isEmpty()) pm.menu.add(ctx.getString(R.string.folder_peek_empty)).isEnabled = false
+        kids.take(10).forEach { pm.menu.add(if (it.isDirectory) it.name + "/" else it.name).isEnabled = false }
+        if (kids.size > 10) pm.menu.add(ctx.getString(R.string.folder_peek_more, kids.size - 10)).isEnabled = false
+        pm.show()
+    }
+
+    /** إيماءة لمس: ينضغط الصف قليلاً عند اللمس ويرتد عند الرفع (لا يستهلك الحدث). */
+    private fun attachPressFeedback(v: View) {
+        v.setOnTouchListener { view, e ->
+            when (e.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN ->
+                    view.animate().scaleX(0.98f).scaleY(0.98f).setDuration(90L).start()
+                android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL ->
+                    view.animate().scaleX(1f).scaleY(1f).setDuration(160L)
+                        .setInterpolator(android.view.animation.OvershootInterpolator(2f)).start()
+            }
+            false
+        }
+    }
+
     private fun bindSelectionState(holder: RecyclerView.ViewHolder, position: Int) {
         val key = keyAt(position) ?: return
         val selected = key in selection
@@ -1391,6 +1426,9 @@ private class FilesAdapter(
 
     /** المثبّتات (FilePins): تُعرض نجمة قبل الاسم. تُستدعى قبل [submit] فلا حاجة لإشعار. */
     fun setPinned(paths: Set<String>) { pinned = paths }
+
+    /** لون مخصّص للمجلد (FolderColors) أو null للافتراضي. */
+    var colorOf: (String) -> Int? = { null }
 
     private fun applyPin(tv: TextView, key: String) {
         if (key in pinned) RsIcons.start(tv, R.drawable.rs_ic_star, 14, 4, androidx.core.content.ContextCompat.getColor(tv.context, R.color.rin_files_accent))
@@ -1465,16 +1503,40 @@ private class FilesAdapter(
                 holder.txtName.text = folder.name
                 applyPin(holder.txtName, folder.relPath)
                 holder.imgIcon.setImageResource(RsFolderIcons.forName(folder.name))
-                val childCount = folder.dir.list()?.size ?: 0
+                val kids = folder.dir.listFiles() ?: emptyArray()
+                val childCount = kids.size
+                val subDirs = kids.count { it.isDirectory }
+                val customColor = colorOf(folder.relPath)
+                if (customColor != null) {
+                    holder.imgIcon.background = FolderColors.tileBackground(holder.itemView.context, customColor)
+                    holder.txtCount.backgroundTintList = android.content.res.ColorStateList.valueOf(customColor)
+                } else {
+                    holder.imgIcon.setBackgroundResource(R.drawable.bg_folder_tile)
+                    holder.txtCount.backgroundTintList = null
+                }
                 holder.txtCount.text = if (childCount > 99) "99+" else childCount.toString()
                 holder.txtCount.visibility = if (childCount > 0) View.VISIBLE else View.GONE
-                holder.txtMeta.text = holder.itemView.context.getString(
-                    R.string.folder_meta_count_format,
-                    childCount,
-                    dateFormat.format(Date(folder.lastModified))
-                )
+                holder.txtMeta.text = if (subDirs > 0 && childCount - subDirs > 0) {
+                    holder.itemView.context.getString(
+                        R.string.folder_meta_split_format,
+                        subDirs, childCount - subDirs,
+                        dateFormat.format(Date(folder.lastModified))
+                    )
+                } else {
+                    holder.itemView.context.getString(
+                        R.string.folder_meta_count_format,
+                        childCount,
+                        dateFormat.format(Date(folder.lastModified))
+                    )
+                }
+                attachPressFeedback(holder.itemView)
                 holder.itemView.setOnClickListener {
+                    it.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
                     if (selection.active) toggle(folder.relPath) else onOpenFolder(folder)
+                }
+                holder.txtCount.contentDescription = holder.itemView.context.getString(R.string.folder_peek_cd)
+                holder.txtCount.setOnClickListener {
+                    if (selection.active) toggle(folder.relPath) else peekFolder(holder.txtCount, folder.dir)
                 }
                 holder.btnMore.setOnClickListener { onMore(FsEntry.FolderEntry(folder), holder.btnMore) }
                 holder.btnRename.setOnClickListener { onRenameFolder(folder) }
