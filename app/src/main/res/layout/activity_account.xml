@@ -1,12 +1,63 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- شاشة «الحساب» — بطاقة ملف شخصي داكنة متوهّجة (هوية RinStudio): صورة بحلقة نيون فوق خلفية سداسية خافتة،
+     بطاقتا عدّاد زجاجيتان، وأقسام «حزمي/إضافاتي» بعناوين بشريط أخضر. المعرّفات وأنواع العناصر كما كانت. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:background="@color/rin_background">
+    android:background="@color/rin_st_bg"
+    android:orientation="vertical">
 
-    <include layout="@layout/toolbar_app" />
+    <!-- ترويسة صغيرة: رجوع + شعار + عنوان -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_st_hero"
+        android:elevation="8dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="14dp"
+        android:paddingTop="12dp"
+        android:paddingEnd="14dp"
+        android:paddingBottom="18dp">
+
+        <ImageButton
+            android:id="@+id/btnToolbarBack"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:background="@drawable/bg_st_hero_btn"
+            android:contentDescription="@string/action_back"
+            android:padding="11dp"
+            android:src="@drawable/ic_back"
+            android:tint="@color/rin_st_hero_accent" />
+
+        <FrameLayout
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:layout_marginStart="10dp"
+            android:background="@drawable/bg_st_hero_logo">
+
+            <ImageView
+                android:id="@+id/imgToolbarAppIcon"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@string/app_name"
+                android:padding="4dp"
+                android:src="@mipmap/ic_launcher_round" />
+        </FrameLayout>
+
+        <TextView
+            android:id="@+id/txtToolbarTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:singleLine="true"
+            android:textColor="@color/rin_st_hero_text"
+            android:textSize="22sp"
+            android:textStyle="bold" />
+    </LinearLayout>
 
     <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
@@ -18,9 +69,9 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="20dp">
+            android:padding="16dp">
 
-            <!-- حالة مسجّل الدخول: بطاقة ملف شخصي احترافية -->
+            <!-- حالة مسجّل الدخول -->
             <LinearLayout
                 android:id="@+id/groupLoggedIn"
                 android:layout_width="match_parent"
@@ -28,211 +79,200 @@
                 android:orientation="vertical"
                 android:visibility="gone">
 
-                <!-- رأس الملف الشخصي: بطاقة بها بانر خلفية علوي (خلايا سداسية/أرقام ثنائية) + صورة
-                     دائرية تتداخل مع حافته السفلية + زر تغيير الصورة + الاسم + اسم المستخدم -->
                 <FrameLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:background="@drawable/bg_profile_card_frame"
-                    android:clipToOutline="true">
+                    android:background="@drawable/bg_st_profile_hero"
+                    android:clipToOutline="true"
+                    android:elevation="2dp">
+
+                    <ImageView
+                        android:layout_width="match_parent"
+                        android:layout_height="200dp"
+                        android:layout_gravity="top"
+                        android:alpha="0.22"
+                        android:contentDescription="@null"
+                        android:scaleType="centerCrop"
+                        android:src="@drawable/img_hex_banner" />
 
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:gravity="center_horizontal"
                         android:orientation="vertical"
-                        android:gravity="center_horizontal">
+                        android:paddingStart="20dp"
+                        android:paddingTop="30dp"
+                        android:paddingEnd="20dp"
+                        android:paddingBottom="22dp">
 
-                        <!-- بانر الخلفية: يمتد الآن ليغطي الصورة الرمزية والاسم واسم المستخدم أيضاً،
-                             وليس فقط الشريط العلوي، عبر جعله خلفية للحاوية بأكملها بدل شريط ثابت الارتفاع -->
                         <FrameLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content">
-
-                            <ImageView
-                                android:layout_width="match_parent"
-                                android:layout_height="230dp"
-                                android:layout_gravity="top"
-                                android:scaleType="centerCrop"
-                                android:src="@drawable/img_hex_banner"
-                                android:contentDescription="@null" />
-
-                            <View
-                                android:layout_width="match_parent"
-                                android:layout_height="230dp"
-                                android:layout_gravity="top"
-                                android:background="@drawable/bg_banner_scrim" />
-
-                        <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="vertical"
-                            android:gravity="center_horizontal"
-                            android:paddingHorizontal="24dp"
-                            android:paddingTop="60dp"
-                            android:paddingBottom="24dp">
+                            android:layout_width="110dp"
+                            android:layout_height="110dp">
 
                             <FrameLayout
-                                android:layout_width="96dp"
-                                android:layout_height="96dp"
-                                android:layout_marginTop="-40dp"
-                                android:elevation="6dp"
-                                android:translationZ="6dp">
+                                android:layout_width="104dp"
+                                android:layout_height="104dp"
+                                android:background="@drawable/bg_st_avatar_halo"
+                                android:padding="4dp">
 
                                 <ImageView
                                     android:id="@+id/imgAvatar"
-                                    android:layout_width="96dp"
-                                    android:layout_height="96dp"
-                                    android:background="@drawable/bg_avatar_ring"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="match_parent"
+                                    android:background="@drawable/bg_st_avatar_ring"
+                                    android:contentDescription="@string/account_title"
                                     android:padding="3dp"
-                                    android:scaleType="centerCrop"
-                                    android:contentDescription="@string/account_title" />
+                                    android:scaleType="centerCrop" />
 
                                 <TextView
                                     android:id="@+id/txtAvatarInitial"
-                                    android:layout_width="96dp"
-                                    android:layout_height="96dp"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="match_parent"
                                     android:gravity="center"
-                                    android:textColor="@android:color/white"
-                                    android:textSize="34sp"
+                                    android:textColor="@color/rin_st_on_accent"
+                                    android:textSize="36sp"
                                     android:textStyle="bold" />
-
-                                <ImageButton
-                                    android:id="@+id/btnChangeAvatar"
-                                    android:layout_width="30dp"
-                                    android:layout_height="30dp"
-                                    android:layout_gravity="bottom|end"
-                                    android:background="@drawable/bg_avatar_edit_badge"
-                                    android:src="@drawable/ic_camera"
-                                    android:scaleType="center"
-                                    android:padding="0dp"
-                                    android:contentDescription="@string/action_change_avatar" />
                             </FrameLayout>
 
-                            <LinearLayout
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="14dp"
-                                android:orientation="horizontal"
-                                android:gravity="center_vertical">
+                            <ImageButton
+                                android:id="@+id/btnChangeAvatar"
+                                android:layout_width="34dp"
+                                android:layout_height="34dp"
+                                android:layout_gravity="bottom|end"
+                                android:background="@drawable/bg_st_avatar_badge"
+                                android:contentDescription="@string/action_change_avatar"
+                                android:padding="0dp"
+                                android:scaleType="center"
+                                android:src="@drawable/ic_camera" />
+                        </FrameLayout>
 
-                                <TextView
-                                    android:id="@+id/txtAccountName"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:textColor="@color/rin_on_toolbar"
-                                    android:textSize="19sp"
-                                    android:textStyle="bold" />
-
-                                <ImageView
-                                    android:id="@+id/imgAccountVerifiedBadge"
-                                    android:layout_width="17dp"
-                                    android:layout_height="17dp"
-                                    android:layout_marginStart="6dp"
-                                    android:src="@drawable/ic_verified_badge"
-                                    android:visibility="gone"
-                                    android:contentDescription="@string/verified_publisher_badge_description" />
-                            </LinearLayout>
+                        <LinearLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="16dp"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
 
                             <TextView
-                                android:id="@+id/txtAccountUsername"
+                                android:id="@+id/txtAccountName"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:layout_marginTop="3dp"
-                                android:letterSpacing="0.02"
-                                android:textColor="@color/rin_accent"
-                                android:textSize="13.5sp" />
+                                android:textColor="@color/rin_st_hero_text"
+                                android:textSize="22sp"
+                                android:textStyle="bold" />
 
-                            <TextView
-                                android:id="@+id/txtAccountBio"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="14dp"
-                                android:paddingHorizontal="6dp"
-                                android:gravity="center"
-                                android:textColor="@color/rin_editor_hint"
-                                android:textSize="13sp"
-                                android:lineSpacingExtra="4dp" />
+                            <ImageView
+                                android:id="@+id/imgAccountVerifiedBadge"
+                                android:layout_width="19dp"
+                                android:layout_height="19dp"
+                                android:layout_marginStart="6dp"
+                                android:contentDescription="@string/verified_publisher_badge_description"
+                                android:src="@drawable/ic_verified_badge"
+                                android:visibility="gone" />
+                        </LinearLayout>
 
-                            <!-- صفّ العدّادات: عدد المنتسبين + عدد الانتسابات لحسابي، كل منهما
-                                 قابل للضغط لفتح قائمة أصحابه (UserListActivity) — يجعل الملف
-                                 الشخصي "مرئياً" لبقية المستخدمين عبر متابعة من ينتسب إليّ ومن أتابع -->
-                            <LinearLayout
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="16dp"
-                                android:orientation="horizontal"
-                                android:gravity="center_vertical">
+                        <TextView
+                            android:id="@+id/txtAccountUsername"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="3dp"
+                            android:fontFamily="monospace"
+                            android:textColor="@color/rin_st_hero_accent"
+                            android:textSize="13.5sp" />
+
+                        <TextView
+                            android:id="@+id/txtAccountBio"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="14dp"
+                            android:gravity="center"
+                            android:lineSpacingExtra="4dp"
+                            android:paddingHorizontal="6dp"
+                            android:textColor="@color/rin_st_hero_dim"
+                            android:textSize="13.5sp" />
+
+                        <!-- عدّادان قابلان للضغط: المنتسبون إليّ / انتساباتي (UserListActivity) -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="18dp"
+                            android:orientation="horizontal">
 
                                 <LinearLayout
                                     android:id="@+id/rowAccountSubscribers"
-                                    android:layout_width="wrap_content"
+                                    android:layout_width="0dp"
                                     android:layout_height="wrap_content"
-                                    android:orientation="vertical"
-                                    android:gravity="center_horizontal"
+                                    android:layout_marginStart="0dp"
+                                    android:layout_weight="1"
+                                    android:background="@drawable/bg_st_stat_tile"
                                     android:clickable="true"
                                     android:focusable="true"
-                                    android:background="@drawable/bg_icon_btn"
-                                    android:paddingHorizontal="18dp"
-                                    android:paddingVertical="6dp">
+                                    android:gravity="center_horizontal"
+                                    android:orientation="vertical"
+                                    android:paddingVertical="12dp">
 
                                     <TextView
                                         android:id="@+id/txtAccountSubscriberCount"
                                         android:layout_width="wrap_content"
                                         android:layout_height="wrap_content"
-                                        android:textColor="@color/rin_on_toolbar"
-                                        android:textSize="15sp"
+                                        android:textColor="@color/rin_st_hero_text"
+                                        android:textSize="20sp"
                                         android:textStyle="bold"
                                         tools:text="0" />
 
                                     <TextView
                                         android:layout_width="wrap_content"
                                         android:layout_height="wrap_content"
+                                        android:layout_marginTop="1dp"
                                         android:text="@string/subscriber_count_label"
-                                        android:textColor="@color/rin_editor_hint"
+                                        android:textColor="@color/rin_st_hero_dim"
                                         android:textSize="11.5sp" />
                                 </LinearLayout>
 
                                 <LinearLayout
                                     android:id="@+id/rowAccountSubscriptions"
-                                    android:layout_width="wrap_content"
+                                    android:layout_width="0dp"
                                     android:layout_height="wrap_content"
-                                    android:orientation="vertical"
-                                    android:gravity="center_horizontal"
+                                    android:layout_marginStart="10dp"
+                                    android:layout_weight="1"
+                                    android:background="@drawable/bg_st_stat_tile"
                                     android:clickable="true"
                                     android:focusable="true"
-                                    android:background="@drawable/bg_icon_btn"
-                                    android:paddingHorizontal="18dp"
-                                    android:paddingVertical="6dp">
+                                    android:gravity="center_horizontal"
+                                    android:orientation="vertical"
+                                    android:paddingVertical="12dp">
 
                                     <TextView
                                         android:id="@+id/txtAccountSubscriptionsCount"
                                         android:layout_width="wrap_content"
                                         android:layout_height="wrap_content"
-                                        android:textColor="@color/rin_on_toolbar"
-                                        android:textSize="15sp"
+                                        android:textColor="@color/rin_st_hero_text"
+                                        android:textSize="20sp"
                                         android:textStyle="bold" />
 
                                     <TextView
                                         android:layout_width="wrap_content"
                                         android:layout_height="wrap_content"
+                                        android:layout_marginTop="1dp"
                                         android:text="@string/subscriptions_count_label"
-                                        android:textColor="@color/rin_editor_hint"
+                                        android:textColor="@color/rin_st_hero_dim"
                                         android:textSize="11.5sp" />
                                 </LinearLayout>
-                            </LinearLayout>
-
-                            <Button
-                                android:id="@+id/btnEditProfile"
-                                android:layout_width="match_parent"
-                                android:layout_height="42dp"
-                                android:layout_marginTop="16dp"
-                                android:background="@drawable/bg_toolbar_btn_ghost"
-                                android:text="@string/action_edit_profile"
-                                android:textAllCaps="false"
-                                android:textColor="@color/rin_on_toolbar"
-                                android:textSize="13sp" />
                         </LinearLayout>
-                        </FrameLayout>
+
+                        <Button
+                            android:id="@+id/btnEditProfile"
+                            android:layout_width="match_parent"
+                            android:layout_height="46dp"
+                            android:layout_marginTop="14dp"
+                            android:background="@drawable/bg_st_outline_btn"
+                            android:insetBottom="0dp"
+                            android:insetTop="0dp"
+                            android:text="@string/action_edit_profile"
+                            android:textAllCaps="false"
+                            android:textColor="@color/rin_st_hero_accent"
+                            android:textSize="13.5sp"
+                            android:textStyle="bold" />
                     </LinearLayout>
                 </FrameLayout>
 
@@ -240,50 +280,84 @@
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical"
                     android:layout_marginTop="14dp"
-                    android:background="@drawable/bg_list_card"
+                    android:background="@drawable/bg_st_card_plain"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
                     android:padding="16dp">
 
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/account_field_email"
-                        android:textColor="@color/rin_editor_hint"
-                        android:textSize="11sp" />
+                    <ImageView
+                        android:layout_width="38dp"
+                        android:layout_height="38dp"
+                        android:background="@drawable/bg_st_cat_chip"
+                        android:contentDescription="@null"
+                        android:padding="9dp"
+                        android:src="@drawable/ic_st_mail"
+                        android:tint="@color/rin_st_accent" />
 
-                    <TextView
-                        android:id="@+id/txtAccountEmail"
-                        android:layout_width="match_parent"
+                    <LinearLayout
+                        android:layout_width="0dp"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="2dp"
-                        android:textColor="@color/rin_on_toolbar"
-                        android:textSize="14sp" />
+                        android:layout_marginStart="12dp"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/account_field_email"
+                            android:textColor="@color/rin_st_dim"
+                            android:textSize="11.5sp" />
+
+                        <TextView
+                            android:id="@+id/txtAccountEmail"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:textColor="@color/rin_st_text"
+                            android:textSize="14.5sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
                 </LinearLayout>
 
-                <!-- قسم "حزمي المنشورة": قائمة حزم المستخدم في متجر Rin مع زر حذف لكل حزمة -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:layout_marginTop="14dp">
+                    android:layout_marginTop="20dp"
+                    android:orientation="vertical">
 
-                    <TextView
+                    <LinearLayout
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginBottom="8dp"
-                        android:text="@string/account_my_packages_title"
-                        android:textColor="@color/rin_on_toolbar"
-                        android:textSize="14sp"
-                        android:textStyle="bold" />
+                        android:layout_marginBottom="10dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <View
+                            android:layout_width="4dp"
+                            android:layout_height="16dp"
+                            android:layout_marginEnd="8dp"
+                            android:background="@drawable/bg_st_section_bar" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/account_my_packages_title"
+                            android:textColor="@color/rin_st_text"
+                            android:textSize="15sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
 
                     <TextView
                         android:id="@+id/txtMyPackagesEmpty"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginBottom="8dp"
+                        android:background="@drawable/bg_st_card_plain"
+                        android:gravity="center"
+                        android:padding="18dp"
                         android:text="@string/account_my_packages_empty"
-                        android:textColor="@color/rin_editor_hint"
+                        android:textColor="@color/rin_st_dim"
                         android:textSize="13sp"
                         android:visibility="gone" />
 
@@ -294,29 +368,44 @@
                         android:orientation="vertical" />
                 </LinearLayout>
 
-                <!-- قسم "إضافاتي المنشورة": قائمة إضافات المستخدم في Rin Extensions Marketplace مع زر حذف لكل إضافة -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:layout_marginTop="14dp">
+                    android:layout_marginTop="20dp"
+                    android:orientation="vertical">
 
-                    <TextView
+                    <LinearLayout
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginBottom="8dp"
-                        android:text="@string/account_my_extensions_title"
-                        android:textColor="@color/rin_on_toolbar"
-                        android:textSize="14sp"
-                        android:textStyle="bold" />
+                        android:layout_marginBottom="10dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <View
+                            android:layout_width="4dp"
+                            android:layout_height="16dp"
+                            android:layout_marginEnd="8dp"
+                            android:background="@drawable/bg_st_section_bar" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/account_my_extensions_title"
+                            android:textColor="@color/rin_st_text"
+                            android:textSize="15sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
 
                     <TextView
                         android:id="@+id/txtMyExtensionsEmpty"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginBottom="8dp"
+                        android:background="@drawable/bg_st_card_plain"
+                        android:gravity="center"
+                        android:padding="18dp"
                         android:text="@string/account_my_extensions_empty"
-                        android:textColor="@color/rin_editor_hint"
+                        android:textColor="@color/rin_st_dim"
                         android:textSize="13sp"
                         android:visibility="gone" />
 
@@ -330,12 +419,16 @@
                 <Button
                     android:id="@+id/btnLogout"
                     android:layout_width="match_parent"
-                    android:layout_height="46dp"
-                    android:layout_marginTop="14dp"
-                    android:background="@drawable/bg_toolbar_btn_ghost"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="22dp"
+                    android:background="@drawable/bg_st_logout_btn"
+                    android:insetBottom="0dp"
+                    android:insetTop="0dp"
                     android:text="@string/action_logout"
                     android:textAllCaps="false"
-                    android:textColor="@color/status_error" />
+                    android:textColor="@color/rin_st_danger"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
             </LinearLayout>
 
             <!-- حالة غير مسجّل الدخول -->
@@ -343,39 +436,56 @@
                 android:id="@+id/groupLoggedOut"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/bg_st_profile_hero"
                 android:gravity="center_horizontal"
-                android:padding="24dp"
+                android:orientation="vertical"
+                android:padding="28dp"
                 android:visibility="gone">
+
+                <ImageView
+                    android:layout_width="76dp"
+                    android:layout_height="76dp"
+                    android:background="@drawable/bg_st_auth_logo"
+                    android:contentDescription="@null"
+                    android:padding="20dp"
+                    android:src="@drawable/ic_st_user"
+                    android:tint="@color/rin_st_hero_accent" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:layout_marginTop="18dp"
+                    android:layout_marginBottom="6dp"
+                    android:gravity="center"
                     android:text="@string/account_not_logged_in"
-                    android:textColor="@color/rin_on_toolbar"
-                    android:textSize="16sp"
-                    android:textStyle="bold"
-                    android:layout_marginBottom="6dp" />
+                    android:textColor="@color/rin_st_hero_text"
+                    android:textSize="18sp"
+                    android:textStyle="bold" />
 
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="@string/account_not_logged_in_hint"
-                    android:textColor="@color/rin_editor_hint"
-                    android:textSize="13sp"
+                    android:layout_marginBottom="24dp"
                     android:gravity="center"
-                    android:layout_marginBottom="20dp" />
+                    android:lineSpacingExtra="3dp"
+                    android:text="@string/account_not_logged_in_hint"
+                    android:textColor="@color/rin_st_hero_dim"
+                    android:textSize="13.5sp" />
 
                 <Button
                     android:id="@+id/btnGoLogin"
                     android:layout_width="match_parent"
-                    android:layout_height="48dp"
-                    android:background="@drawable/bg_run_button_premium"
+                    android:layout_height="52dp"
+                    android:background="@drawable/bg_st_auth_btn"
+                    android:elevation="0dp"
+                    android:insetBottom="0dp"
+                    android:insetTop="0dp"
                     android:text="@string/action_login"
                     android:textAllCaps="false"
-                    android:textColor="@android:color/white"
-                    android:textStyle="bold"
-                    android:elevation="0dp" />
+                    android:textColor="@color/rin_st_on_accent"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
             </LinearLayout>
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
