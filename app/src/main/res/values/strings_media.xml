@@ -8,4 +8,11 @@
     <string name="media_decode_error">تعذّر عرض الصورة</string>
     <string name="media_edit">تعديل الكود</string>
     <string name="media_play_pause">تشغيل / إيقاف</string>
+    <string name="media_search">بحث في الملف</string>
+    <string name="media_wrap">التفاف الأسطر</string>
+    <string name="media_find_hint">بحث في الملف…</string>
+    <string name="media_lines">%1$d سطر</string>
+    <string name="media_truncated">معروض جزئياً (أول 1.5 ميغابايت)</string>
+    <string name="media_no_match">لا نتائج</string>
+    <string name="media_binary">ملف ثنائي: لا يمكن عرضه كنص</string>
 </resources>
