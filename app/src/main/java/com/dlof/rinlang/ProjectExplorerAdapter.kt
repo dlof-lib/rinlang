@@ -164,6 +164,9 @@ class ProjectExplorerAdapter(
                 // سهم يدور 90° عند التوسيع بدل أيقونتين منفصلتين (مفتوح/مغلق).
                 holder.chevron.rotation = if (node.expanded) 90f else 0f
                 holder.folderIcon.setImageResource(RsFolderIcons.forName(node.folder.name, open = node.expanded))
+                val childCount = node.folder.dir.list()?.size ?: 0
+                holder.count.text = if (childCount > 99) "99+" else childCount.toString()
+                holder.count.visibility = if (childCount > 0) View.VISIBLE else View.GONE
                 holder.itemView.setOnClickListener {
                     if (selection.active) toggleSelected(node.folder.relPath) else onFolderToggled(node.folder)
                 }
@@ -198,6 +201,7 @@ class ProjectExplorerAdapter(
         val chevron: ImageView = view.findViewById(R.id.imgExplorerChevron)
         val folderIcon: ImageView = view.findViewById(R.id.imgExplorerFolderIcon)
         val name: TextView = view.findViewById(R.id.txtExplorerFolderName)
+        val count: TextView = view.findViewById(R.id.txtExplorerCount)
         val check: View = view.findViewById(R.id.imgExplorerCheck)
         val basePaddingStart: Int = view.paddingStart
     }
