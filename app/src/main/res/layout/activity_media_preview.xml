@@ -27,6 +27,134 @@
         android:layout_gravity="center"
         android:visibility="gone" />
 
+    <FrameLayout
+        android:id="@+id/layoutTextHost"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#0A0F0C"
+        android:paddingTop="78dp"
+        android:visibility="gone">
+
+        <ScrollView
+            android:id="@+id/scrollText"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:fillViewport="true"
+            android:paddingBottom="96dp">
+
+            <HorizontalScrollView
+                android:id="@+id/hscrollText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:fillViewport="true"
+                android:scrollbars="none">
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="16dp"
+                    android:paddingTop="8dp">
+
+                    <TextView
+                        android:id="@+id/txtLineNums"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:gravity="end"
+                        android:paddingEnd="12dp"
+                        android:textColor="#4F6157"
+                        android:textDirection="ltr"
+                        android:fontFamily="monospace"
+                        android:textSize="13sp"
+                        android:visibility="gone" />
+
+                    <TextView
+                        android:id="@+id/txtBodyText"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="monospace"
+                        android:textColor="#E6EFE9"
+                        android:textColorHighlight="#553DF59A"
+                        android:textDirection="anyRtl"
+                        android:textIsSelectable="true"
+                        android:textSize="13sp" />
+                </LinearLayout>
+            </HorizontalScrollView>
+        </ScrollView>
+
+        <LinearLayout
+            android:id="@+id/layoutFind"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom"
+            android:layout_marginStart="12dp"
+            android:layout_marginEnd="12dp"
+            android:layout_marginBottom="12dp"
+            android:background="@drawable/bg_media_pill"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="14dp"
+            android:paddingEnd="6dp"
+            android:visibility="gone">
+
+            <EditText
+                android:id="@+id/edtFind"
+                android:layout_width="0dp"
+                android:layout_height="46dp"
+                android:layout_weight="1"
+                android:background="@null"
+                android:hint="@string/media_find_hint"
+                android:imeOptions="actionSearch"
+                android:inputType="text"
+                android:maxLines="1"
+                android:textColor="#FFFFFF"
+                android:textColorHint="#6F8277"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/txtFindCount"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="4dp"
+                android:textColor="#3DF59A"
+                android:textSize="12.5sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/btnFindPrev"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="@drawable/bg_media_glass"
+                android:gravity="center"
+                android:text="▲"
+                android:textColor="#FFFFFF"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/btnFindNext"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_marginStart="6dp"
+                android:background="@drawable/bg_media_glass"
+                android:gravity="center"
+                android:text="▼"
+                android:textColor="#FFFFFF"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/btnFindClose"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_marginStart="6dp"
+                android:gravity="center"
+                android:text="✕"
+                android:textColor="#93A89C"
+                android:textSize="16sp" />
+        </LinearLayout>
+    </FrameLayout>
+
     <ProgressBar
         android:id="@+id/progressMedia"
         style="?android:attr/progressBarStyleSmall"
@@ -142,6 +270,30 @@
                 android:textColor="#B8C7BE"
                 android:textSize="12sp" />
         </LinearLayout>
+
+        <ImageButton
+            android:id="@+id/btnMediaSearch"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:layout_marginEnd="8dp"
+            android:padding="11dp"
+            android:background="@drawable/bg_media_glass"
+            android:src="@drawable/ic_media_search"
+            android:tint="#FFFFFF"
+            android:contentDescription="@string/media_search"
+            android:visibility="gone" />
+
+        <ImageButton
+            android:id="@+id/btnMediaWrap"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:layout_marginEnd="8dp"
+            android:padding="11dp"
+            android:background="@drawable/bg_media_glass"
+            android:src="@drawable/ic_media_wrap"
+            android:tint="#FFFFFF"
+            android:contentDescription="@string/media_wrap"
+            android:visibility="gone" />
 
         <ImageButton
             android:id="@+id/btnMediaPlay"
