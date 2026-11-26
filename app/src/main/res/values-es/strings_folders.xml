@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="folder_peek_empty">La carpeta está vacía</string>
+    <string name="folder_peek_more">y %1$d más…</string>
+    <string name="folder_peek_cd">Vista rápida</string>
+    <string name="fm_color">Color de carpeta</string>
+    <string name="fm_pin">Fijar / Desfijar</string>
+    <string name="fm_copy_path">Copiar ruta</string>
+    <string name="fm_props">Propiedades</string>
+    <string name="fm_zip">Comprimir carpeta</string>
+    <string name="fm_all">Todas las acciones…</string>
+    <string name="fm_color_default">Predeterminado</string>
+    <string name="folder_meta_split_format">%1$d carpetas · %2$d archivos · %3$s</string>
+    <string name="nfd_hint">Nombre del archivo</string>
+    <string name="nfd_names">Nombres rápidos</string>
+    <string name="nfd_ext">Extensiones y separador</string>
+    <string name="nfd_will_create">Se creará: %1$s</string>
+    <string name="nfd_exists">Ya existe: %1$s</string>
+    <string name="nfd_invalid">Nombre no válido</string>
+    <string name="bt_title">Plantilla por lotes</string>
+    <string name="bt_hint">Escribe una plantilla: un elemento por línea</string>
+    <string name="bt_preset_starter">Básico</string>
+    <string name="bt_preset_tree">Árbol</string>
+    <string name="bt_indent">Sangría</string>
+    <string name="bt_help">un elemento por línea · , para separar · 2 espacios = dentro de carpeta · name/ carpeta · name. sin extensión · main.{rin,ti} · :: contenido</string>
+    <string name="bt_summary">%1$d archivos · %2$d carpetas · %3$d existentes (se omiten)</string>
+    <string name="bt_invalid">%1$d no válidos</string>
+    <string name="bt_done">Creados %1$d archivos y %2$d carpetas (omitidos %3$d)</string>
+    <string name="nfd_skip">omitido</string>
+    <string name="bt_neutral">Plantilla por lotes</string>
+</resources>
