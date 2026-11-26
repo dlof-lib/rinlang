@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ترويسة «المشاريع»: تدرّج أخضر-أسود + توهّج نيون علوي + خط مضيء رفيع أسفلها، زوايا سفلية 28dp. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <gradient android:angle="270" android:startColor="@color/rin_proj_hero_bottom" android:endColor="@color/rin_proj_hero_top" />
+            <corners android:bottomLeftRadius="28dp" android:bottomRightRadius="28dp" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <gradient android:type="radial" android:centerX="0.5" android:centerY="0.0" android:gradientRadius="300dp"
+                android:startColor="@color/rin_proj_hero_glow" android:endColor="@android:color/transparent" />
+            <corners android:bottomLeftRadius="28dp" android:bottomRightRadius="28dp" />
+        </shape>
+    </item>
+    <item android:left="36dp" android:right="36dp" android:height="2dp" android:gravity="bottom">
+        <shape android:shape="rectangle">
+            <gradient android:angle="0" android:startColor="@android:color/transparent"
+                android:centerColor="@color/rin_proj_hero_accent" android:endColor="@android:color/transparent" />
+        </shape>
+    </item>
+</layer-list>
