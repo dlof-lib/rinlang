@@ -41,6 +41,10 @@ class MediaPreviewActivity : RinBaseActivity() {
         const val EXTRA_REL_PATHS = "extra_rel_paths"
 
         fun isSvg(name: String) = name.endsWith(".svg", ignoreCase = true)
+
+        /** نصوص عادية تُعرض في العارض (قراءة + بحث)؛ بقية الأكواد تبقى في المحرر. */
+        private val TEXT_EXT = setOf("txt", "md", "markdown", "log", "csv", "tsv")
+        fun isViewerText(name: String) = name.substringAfterLast('.', "").lowercase() in TEXT_EXT
     }
 
     private lateinit var root: View
@@ -57,6 +61,9 @@ class MediaPreviewActivity : RinBaseActivity() {
     private lateinit var btnRotate: View
     private lateinit var btnEdit: View
     private lateinit var btnPlay: android.widget.ImageButton
+    private lateinit var btnSearch: View
+    private lateinit var btnWrap: View
+    private lateinit var textViewer: TextViewerController
     private var animated: android.graphics.drawable.AnimatedImageDrawable? = null
     private var wasRunning = false
     private lateinit var web: android.webkit.WebView
@@ -90,6 +97,11 @@ class MediaPreviewActivity : RinBaseActivity() {
         btnRotate = findViewById(R.id.btnMediaRotate)
         btnEdit = findViewById(R.id.btnMediaEdit)
         btnPlay = findViewById(R.id.btnMediaPlay)
+        btnSearch = findViewById(R.id.btnMediaSearch)
+        btnWrap = findViewById(R.id.btnMediaWrap)
+        textViewer = TextViewerController(this)
+        btnSearch.setOnClickListener { textViewer.toggleFind() }
+        btnWrap.setOnClickListener { textViewer.toggleWrap() }
         btnPlay.setOnClickListener { toggleAnimation() }
         web = findViewById(R.id.webMediaSvg)
         setupSvgWeb()
@@ -113,6 +125,8 @@ class MediaPreviewActivity : RinBaseActivity() {
         ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             top.updatePadding(top = topPad + bars.top)
+            val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+            textViewer.applyInsets(bars.top, maxOf(bars.bottom, ime.bottom))
             insets
         }
         WindowCompat.getInsetsController(window, window.decorView).apply {
@@ -158,6 +172,27 @@ class MediaPreviewActivity : RinBaseActivity() {
         txtError.visibility = View.GONE
         if (!file.exists()) { fail(); return }
 
+        textViewer.hide()
+        btnSearch.visibility = View.GONE
+        btnWrap.visibility = View.GONE
+        if (isViewerText(file.name)) {
+            img.visibility = View.GONE
+            video.visibility = View.GONE
+            web.visibility = View.GONE
+            btnRotate.visibility = View.GONE
+            btnPlay.visibility = View.GONE
+            progress.visibility = View.GONE
+            val info = textViewer.load(file)
+            if (info == null) { fail(); txtError.text = getString(R.string.media_binary); return }
+            btnSearch.visibility = View.VISIBLE
+            btnWrap.visibility = View.VISIBLE
+            btnEdit.visibility = if (projectName != null && rels.getOrNull(index) != null) View.VISIBLE else View.GONE
+            val parts = mutableListOf(file.extension.uppercase().ifEmpty { "TXT" }, getString(R.string.media_lines, info.lines),
+                Formatter.formatFileSize(this, file.length()))
+            if (info.truncated) parts += getString(R.string.media_truncated)
+            txtSub.text = parts.joinToString("  \u00B7  ")
+            return
+        }
         if (isSvg(file.name)) {
             img.visibility = View.GONE
             video.visibility = View.GONE
@@ -393,6 +428,16 @@ class MediaPreviewActivity : RinBaseActivity() {
         txtZoom.visibility = View.VISIBLE
         txtZoom.animate().alpha(1f).setDuration(80L).start()
         handler.postDelayed(hideZoom, 900L)
+    }
+
+    override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
+        if (textViewer.dispatch(ev)) return true
+        return super.dispatchTouchEvent(ev)
+    }
+
+    @Suppress("DEPRECATION")
+    override fun onBackPressed() {
+        if (textViewer.active && textViewer.findVisible) textViewer.toggleFind() else super.onBackPressed()
     }
 
     override fun onPause() {
