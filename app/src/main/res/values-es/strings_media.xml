@@ -8,4 +8,11 @@
     <string name="media_decode_error">No se pudo mostrar la imagen</string>
     <string name="media_edit">Editar código</string>
     <string name="media_play_pause">Reproducir / Pausar</string>
+    <string name="media_search">Buscar en el archivo</string>
+    <string name="media_wrap">Ajustar líneas</string>
+    <string name="media_find_hint">Buscar en el archivo…</string>
+    <string name="media_lines">%1$d líneas</string>
+    <string name="media_truncated">Mostrado parcialmente (primeros 1,5 MB)</string>
+    <string name="media_no_match">Sin resultados</string>
+    <string name="media_binary">Archivo binario: no se puede mostrar como texto</string>
 </resources>
