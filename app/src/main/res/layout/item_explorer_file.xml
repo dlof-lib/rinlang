@@ -6,7 +6,11 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:minHeight="42dp"
+    android:layout_marginStart="2dp"
+    android:layout_marginTop="1dp"
+    android:layout_marginEnd="2dp"
+    android:layout_marginBottom="1dp"
+    android:minHeight="44dp"
     android:orientation="horizontal"
     android:gravity="center_vertical"
     android:background="@drawable/bg_icon_btn"
@@ -39,7 +43,7 @@
         android:layout_height="8dp"
         android:layout_marginStart="6dp"
         android:background="@drawable/rs_dot_accent"
-        android:textColor="@color/rin_accent"
+        android:textColor="@color/rin_menu_accent"
         android:visibility="gone" />
 
     <!-- علامة ✓ عند تحديد الصف (FileSelection.kt) -->
@@ -49,7 +53,7 @@
         android:layout_height="16dp"
         android:layout_marginStart="8dp"
         android:src="@drawable/rs_ic_check"
-        android:tint="@color/rin_accent"
+        android:tint="@color/rin_menu_accent"
         android:contentDescription="@null"
         android:visibility="gone" />
 
