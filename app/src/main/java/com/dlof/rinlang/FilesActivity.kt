@@ -159,12 +159,6 @@ class FilesActivity : RinBaseActivity() {
         rvFiles = findViewById(R.id.rvFiles)
         txtEmpty = findViewById(R.id.txtEmptyFiles)
         txtEmptyMessage = findViewById(R.id.txtEmptyFilesMessage)
-        val fabAddFile: View = findViewById(R.id.fabAddFile)
-        val fabNewFolder: View = findViewById(R.id.fabNewFolder)
-        val fabUploadFile: View = findViewById(R.id.fabUploadFile)
-        val fabUploadMedia: View = findViewById(R.id.fabUploadMedia)
-        val fabZipTools: View = findViewById(R.id.fabZipTools)
-
         adapter = FilesAdapter(
             onOpenFile = { file -> handleOpen(file) },
             onOpenFolder = { folder -> enterFolder(folder) },
@@ -202,21 +196,92 @@ class FilesActivity : RinBaseActivity() {
             findViewById<EditText>(R.id.inputSearchFiles).setText(q)
         }
 
-        // ضغطة مستمرة على زر «إضافة» = مجلد جديد مباشرة.
-        fabAddFile.setOnLongClickListener { FolderCreator.show(this, project, currentRelDir) { refresh() }; true }
-        fabAddFile.setOnClickListener {
+        setupFabMenu()
+    }
+
+    // ---- القائمة العائمة السريعة (speed-dial) ----
+
+    private var fabOpen = false
+
+    /** الزر الرئيسي يفتح/يغلق قائمة الإجراءات؛ ضغطة مستمرة عليه = مجلد جديد مباشرة (كما كان). */
+    private fun setupFabMenu() {
+        val main: View = findViewById(R.id.fabAddFile)
+        main.setOnClickListener { setFabOpen(!fabOpen) }
+        main.setOnLongClickListener {
+            setFabOpen(false)
+            FolderCreator.show(this, project, currentRelDir) { refresh() }
+            true
+        }
+        findViewById<View>(R.id.fabScrim).setOnClickListener { setFabOpen(false) }
+
+        fun item(rowId: Int, fabId: Int, action: () -> Unit) {
+            val go = View.OnClickListener { setFabOpen(false); action() }
+            findViewById<View>(rowId).setOnClickListener(go)
+            findViewById<View>(fabId).setOnClickListener(go)
+        }
+        item(R.id.rowFabFile, R.id.fabNewFile) {
             FileCreator.show(this, project, currentRelDir, onSingle = { showCreateFileDialog() }) { refresh() }
         }
-        findViewById<View>(R.id.fabSort).setOnClickListener { FileSort.showDialog(this) { refresh() } }
-        findViewById<View>(R.id.fabPaste).setOnClickListener {
+        item(R.id.rowFabFolder, R.id.fabNewFolder) { FolderCreator.show(this, project, currentRelDir) { refresh() } }
+        item(R.id.rowFabUpload, R.id.fabUploadFile) { showUploadHub() }
+        item(R.id.rowFabMedia, R.id.fabUploadMedia) { showMediaHub() }
+        item(R.id.rowFabZip, R.id.fabZipTools) { showZipToolsDialog() }
+        item(R.id.rowFabPaste, R.id.fabPaste) {
             FileClipboard.paste(this, project, currentRelDir, protectedPaths()) { refresh() }
         }
-        fabNewFolder.setOnClickListener {
-            FolderCreator.show(this, project, currentRelDir) { refresh() }
+        item(R.id.rowFabSort, R.id.fabSort) { FileSort.showDialog(this) { refresh() } }
+    }
+
+    /** يفتح/يغلق القائمة بحركة متتابعة: العناصر تصعد من الزر الرئيسي، والزر يدور + ويعتّم الخلفية. */
+    private fun setFabOpen(open: Boolean, animate: Boolean = true) {
+        val menu = findViewById<ViewGroup>(R.id.fabMenu)
+        val scrim = findViewById<View>(R.id.fabScrim)
+        val main = findViewById<com.google.android.material.floatingactionbutton.FloatingActionButton>(R.id.fabAddFile)
+        if (open == fabOpen && (open == menu.isVisible)) return
+        fabOpen = open
+        val d = resources.displayMetrics.density
+        val dur = if (animate) 1L else 0L
+        main.animate().cancel()
+        scrim.animate().cancel()
+        // العناصر الظاهرة فقط (اللصق يظهر عند وجود محتوى في الحافظة)، الأقرب للزر الرئيسي أولاً.
+        findViewById<View>(R.id.rowFabPaste).isVisible = FileClipboard.hasContent
+        val rows = (0 until menu.childCount).map { menu.getChildAt(it) }
+            .filter { it.isVisible }.reversed()
+        rows.forEach { it.animate().cancel() }
+
+        if (open) {
+            menu.visibility = View.VISIBLE
+            scrim.visibility = View.VISIBLE
+            scrim.animate().alpha(1f).setDuration(180L * dur).start()
+            // الأيقونة تتبدّل «+» ← «×» مع دوران ربع دورة (الشكل مربّع فيبقى متوازياً مع المحاور في النهاية).
+            main.setImageResource(R.drawable.ic_close)
+            main.rotation = -90f
+            main.animate().rotation(0f).setDuration(240L * dur)
+                .setInterpolator(android.view.animation.OvershootInterpolator(1.1f)).start()
+            rows.forEachIndexed { i, v ->
+                v.alpha = 0f
+                v.translationY = 28 * d
+                v.scaleX = 0.92f; v.scaleY = 0.92f
+                v.animate().alpha(1f).translationY(0f).scaleX(1f).scaleY(1f)
+                    .setStartDelay(i * 26L * dur).setDuration(230L * dur)
+                    .setInterpolator(android.view.animation.OvershootInterpolator(0.9f)).start()
+            }
+        } else {
+            main.setImageResource(android.R.drawable.ic_input_add)
+            main.rotation = 90f
+            main.animate().rotation(0f).setDuration(200L * dur).start()
+            scrim.animate().alpha(0f).setDuration(160L * dur).withEndAction {
+                if (!fabOpen) scrim.visibility = View.GONE
+            }.start()
+            if (rows.isEmpty()) { menu.visibility = View.GONE; return }
+            rows.forEachIndexed { i, v ->
+                val last = i == rows.lastIndex
+                v.animate().alpha(0f).translationY(16 * d).setStartDelay(0L).setDuration(130L * dur)
+                    .setInterpolator(android.view.animation.AccelerateInterpolator())
+                    .withEndAction { if (last && !fabOpen) menu.visibility = View.GONE }
+                    .start()
+            }
         }
-        fabUploadFile.setOnClickListener { showUploadHub() }
-        fabUploadMedia.setOnClickListener { showMediaHub() }
-        fabZipTools.setOnClickListener { showZipToolsDialog() }
     }
 
     // ---- التحديد المتعدد والإيماءات ----
@@ -416,10 +481,10 @@ class FilesActivity : RinBaseActivity() {
                 text = label
                 textSize = 13f
                 maxLines = 1
-                setTextColor(androidx.core.content.ContextCompat.getColor(context, if (current) R.color.rin_files_accent else R.color.rin_files_text))
+                setTextColor(androidx.core.content.ContextCompat.getColor(context, if (current) R.color.rin_files_hero_accent else R.color.rin_files_hero_text))
                 if (current) setTypeface(typeface, android.graphics.Typeface.BOLD)
                 setPadding((8 * d).toInt(), (6 * d).toInt(), (8 * d).toInt(), (6 * d).toInt())
-                setBackgroundResource(R.drawable.bg_icon_btn)
+                setBackgroundResource(R.drawable.bg_files_crumb)
                 setOnClickListener {
                     if (!current) {
                         currentRelDir = rel
@@ -440,7 +505,7 @@ class FilesActivity : RinBaseActivity() {
             box.addView(TextView(this).apply {
                 text = if (rtl) "‹" else "›"
                 textSize = 15f
-                setTextColor(androidx.core.content.ContextCompat.getColor(context, R.color.rin_files_dim))
+                setTextColor(androidx.core.content.ContextCompat.getColor(context, R.color.rin_files_hero_dim))
             })
         }
         chip(project.name, "", parts.isEmpty())
@@ -457,7 +522,7 @@ class FilesActivity : RinBaseActivity() {
     private fun renderSummary(folders: Int, files: Int, bytes: Long) {
         findViewById<TextView>(R.id.txtFilesSummary).apply {
             visibility = View.VISIBLE
-            setTextColor(androidx.core.content.ContextCompat.getColor(this@FilesActivity, R.color.rin_files_dim))
+            setTextColor(androidx.core.content.ContextCompat.getColor(this@FilesActivity, R.color.rin_files_hero_dim))
             text = getString(R.string.files_summary_format, files, folders, android.text.format.Formatter.formatFileSize(this@FilesActivity, bytes))
         }
     }
@@ -481,7 +546,7 @@ class FilesActivity : RinBaseActivity() {
         val opts = currentSearchOptions()
         findViewById<TextView>(R.id.txtFilesSummary).apply {
             visibility = View.VISIBLE
-            setTextColor(androidx.core.content.ContextCompat.getColor(this@FilesActivity, R.color.rin_files_dim))
+            setTextColor(androidx.core.content.ContextCompat.getColor(this@FilesActivity, R.color.rin_files_hero_dim))
             setText(R.string.sr_searching)
         }
         val run = Runnable {
@@ -512,11 +577,11 @@ class FilesActivity : RinBaseActivity() {
         val tv = findViewById<TextView>(R.id.txtFilesSummary)
         tv.visibility = View.VISIBLE
         if (res.error != null) {
-            tv.setTextColor(0xFFE5484D.toInt())
+            tv.setTextColor(0xFFFF6B76.toInt())
             tv.text = getString(R.string.sr_regex_error, res.error)
             return
         }
-        tv.setTextColor(androidx.core.content.ContextCompat.getColor(this, R.color.rin_files_dim))
+        tv.setTextColor(androidx.core.content.ContextCompat.getColor(this, R.color.rin_files_hero_dim))
         val base = if (res.totalMatches > 0)
             getString(R.string.sr_summary_format, res.totalMatches, res.hits.size, res.elapsedMs.toInt())
         else getString(R.string.sr_summary_names, res.hits.size, res.elapsedMs.toInt())
@@ -704,8 +769,9 @@ class FilesActivity : RinBaseActivity() {
     private fun updateSelectionBar() {
         val active = selection.active
         selectionBar.isVisible = active
+        if (active) setFabOpen(false, animate = false)
         fabContainer.isVisible = !active
-        findViewById<View>(R.id.fabPaste).isVisible = FileClipboard.hasContent
+        findViewById<View>(R.id.rowFabPaste).isVisible = FileClipboard.hasContent
         if (active) txtSelectionCount.text = getString(R.string.selection_count_format, selection.count)
     }
 
@@ -745,6 +811,10 @@ class FilesActivity : RinBaseActivity() {
     }
 
     private fun handleBack() {
+        if (fabOpen) {
+            setFabOpen(false)
+            return
+        }
         if (selection.active) {
             clearSelection()
             return
@@ -1265,7 +1335,11 @@ private class FilesAdapter(
         applyDensity(holder)
         val actionVis = if (selecting) View.GONE else View.VISIBLE
         holder.itemView.setBackgroundResource(
-            if (selected) R.drawable.bg_file_card_selected else R.drawable.bg_file_card
+            if (holder is FolderVH) {
+                if (selected) R.drawable.bg_folder_card_selected else R.drawable.bg_folder_card
+            } else {
+                if (selected) R.drawable.bg_file_card_selected else R.drawable.bg_file_card
+            }
         )
         when (holder) {
             is FolderVH -> {
@@ -1342,6 +1416,7 @@ private class FilesAdapter(
         val imgCheck: View = view.findViewById(R.id.imgFolderSelectCheck)
         val txtName: TextView = view.findViewById(R.id.txtFolderNameItem)
         val txtMeta: TextView = view.findViewById(R.id.txtFolderMeta)
+        val txtCount: TextView = view.findViewById(R.id.txtFolderCount)
         val btnMore: View = view.findViewById(R.id.btnMoreFolder)
         val btnRename: View = view.findViewById(R.id.btnRenameFolder)
         val btnDelete: View = view.findViewById(R.id.btnDeleteFolder)
@@ -1390,9 +1465,12 @@ private class FilesAdapter(
                 holder.txtName.text = folder.name
                 applyPin(holder.txtName, folder.relPath)
                 holder.imgIcon.setImageResource(RsFolderIcons.forName(folder.name))
+                val childCount = folder.dir.list()?.size ?: 0
+                holder.txtCount.text = if (childCount > 99) "99+" else childCount.toString()
+                holder.txtCount.visibility = if (childCount > 0) View.VISIBLE else View.GONE
                 holder.txtMeta.text = holder.itemView.context.getString(
                     R.string.folder_meta_count_format,
-                    folder.dir.list()?.size ?: 0,
+                    childCount,
                     dateFormat.format(Date(folder.lastModified))
                 )
                 holder.itemView.setOnClickListener {
