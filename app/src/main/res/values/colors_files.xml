@@ -18,4 +18,15 @@
     <color name="rin_files_danger">#D92D3A</color>
     <color name="rin_files_danger_soft">#FDECEE</color>
     <color name="rin_files_scrim">#B3000000</color>
+
+    <!-- الترويسة الداكنة (Hero): ثابتة في النهاري والليلي لتبقى هوية الشاشة واحدة -->
+    <color name="rin_files_hero_top">#0C1712</color>
+    <color name="rin_files_hero_bottom">#030705</color>
+    <color name="rin_files_hero_glow">#333DF59A</color>
+    <color name="rin_files_hero_text">#FFFFFF</color>
+    <color name="rin_files_hero_dim">#93A89C</color>
+    <color name="rin_files_hero_accent">#3DF59A</color>
+    <color name="rin_files_hero_glass">#14FFFFFF</color>
+    <color name="rin_files_hero_stroke">#26FFFFFF</color>
+    <color name="rin_files_hero_ripple">#2E3DF59A</color>
 </resources>
