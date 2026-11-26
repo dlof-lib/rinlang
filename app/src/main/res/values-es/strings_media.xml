@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="media_prev">Anterior</string>
+    <string name="media_next">Siguiente</string>
+    <string name="media_rotate">Girar</string>
+    <string name="media_share">Compartir</string>
+    <string name="media_counter">%1$d / %2$d</string>
+    <string name="media_decode_error">No se pudo mostrar la imagen</string>
+    <string name="media_edit">Editar código</string>
+    <string name="media_play_pause">Reproducir / Pausar</string>
+</resources>
