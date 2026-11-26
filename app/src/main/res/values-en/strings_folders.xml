@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="folder_peek_empty">Folder is empty</string>
+    <string name="folder_peek_more">and %1$d more…</string>
+    <string name="folder_peek_cd">Quick peek</string>
+    <string name="fm_color">Folder color</string>
+    <string name="fm_pin">Pin / Unpin</string>
+    <string name="fm_copy_path">Copy path</string>
+    <string name="fm_props">Properties</string>
+    <string name="fm_zip">Compress folder</string>
+    <string name="fm_all">All actions…</string>
+    <string name="fm_color_default">Default</string>
+    <string name="folder_meta_split_format">%1$d folders · %2$d files · %3$s</string>
+    <string name="nfd_hint">File name</string>
+    <string name="nfd_names">Quick names</string>
+    <string name="nfd_ext">Extensions &amp; separator</string>
+    <string name="nfd_will_create">Will create: %1$s</string>
+    <string name="nfd_exists">Already exists: %1$s</string>
+    <string name="nfd_invalid">Invalid name</string>
+    <string name="bt_title">Batch template</string>
+    <string name="bt_hint">Write a template: one item per line</string>
+    <string name="bt_preset_starter">Basic</string>
+    <string name="bt_preset_tree">Tree</string>
+    <string name="bt_indent">Indent</string>
+    <string name="bt_help">one item per line · , to separate · 2 spaces = inside folder · name/ folder · name. no extension · main.{rin,ti} · :: content</string>
+    <string name="bt_summary">%1$d files · %2$d folders · %3$d existing (skipped)</string>
+    <string name="bt_invalid">%1$d invalid</string>
+    <string name="bt_done">Created %1$d files and %2$d folders (skipped %3$d)</string>
+    <string name="nfd_skip">skipped</string>
+    <string name="bt_neutral">Batch template</string>
+</resources>
