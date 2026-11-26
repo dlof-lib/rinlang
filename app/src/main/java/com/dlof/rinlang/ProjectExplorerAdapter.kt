@@ -162,12 +162,16 @@ class ProjectExplorerAdapter(
                 holder.name.text = node.folder.name
                 applyPin(holder.name, node.folder.relPath)
                 // سهم يدور 90° عند التوسيع بدل أيقونتين منفصلتين (مفتوح/مغلق).
-                holder.chevron.rotation = if (node.expanded) 90f else 0f
+                val chevronTarget = if (node.expanded) 90f else 0f
+                if (holder.chevron.rotation != chevronTarget) {
+                    holder.chevron.animate().rotation(chevronTarget).setDuration(160L).start()
+                }
                 holder.folderIcon.setImageResource(RsFolderIcons.forName(node.folder.name, open = node.expanded))
                 val childCount = node.folder.dir.list()?.size ?: 0
                 holder.count.text = if (childCount > 99) "99+" else childCount.toString()
                 holder.count.visibility = if (childCount > 0) View.VISIBLE else View.GONE
                 holder.itemView.setOnClickListener {
+                    it.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
                     if (selection.active) toggleSelected(node.folder.relPath) else onFolderToggled(node.folder)
                 }
                 bindSelectionState(holder, position)
