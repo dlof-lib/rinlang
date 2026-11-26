@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="folder_peek_empty">المجلد فارغ</string>
+    <string name="folder_peek_more">و%1$d عناصر أخرى…</string>
+    <string name="folder_peek_cd">معاينة سريعة</string>
+    <string name="fm_color">لون المجلد</string>
+    <string name="fm_pin">تثبيت / إلغاء التثبيت</string>
+    <string name="fm_copy_path">نسخ المسار</string>
+    <string name="fm_props">الخصائص</string>
+    <string name="fm_zip">ضغط المجلد</string>
+    <string name="fm_all">كل الإجراءات…</string>
+    <string name="fm_color_default">الافتراضي</string>
+    <string name="folder_meta_split_format">%1$d مجلد · %2$d ملف · %3$s</string>
+    <string name="nfd_hint">اسم الملف</string>
+    <string name="nfd_names">أسماء سريعة</string>
+    <string name="nfd_ext">امتدادات وفاصل</string>
+    <string name="nfd_will_create">سيُنشأ: %1$s</string>
+    <string name="nfd_exists">موجود مسبقاً: %1$s</string>
+    <string name="nfd_invalid">اسم غير صالح</string>
+    <string name="bt_title">قالب دفعة</string>
+    <string name="bt_hint">اكتب قالباً: سطر لكل عنصر</string>
+    <string name="bt_preset_starter">أساسي</string>
+    <string name="bt_preset_tree">شجرة</string>
+    <string name="bt_indent">إزاحة</string>
+    <string name="bt_help">سطر لكل عنصر · , للفصل · مسافتان = داخل المجلد · name/ مجلد · name. بلا امتداد · main.{rin,ti} · :: محتوى</string>
+    <string name="bt_summary">%1$d ملف · %2$d مجلد · %3$d موجود (يُتخطّى)</string>
+    <string name="bt_invalid">%1$d غير صالح</string>
+    <string name="bt_done">أُنشئ %1$d ملف و%2$d مجلد (تخطّي %3$d)</string>
+    <string name="nfd_skip">يُتخطّى</string>
+    <string name="bt_neutral">قالب دفعة</string>
+</resources>
