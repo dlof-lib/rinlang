@@ -1,11 +1,44 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- شاشة كود التحقق — خلفية غامرة داكنة بتوهّج نيون (ثابتة نهاري/ليلي)، حقول زجاجية بأيقونات، وزر أخضر لامع.
+     كل المعرّفات وأنواع العناصر كما كانت فلا يتغيّر منطق الشاشة. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:background="@color/rin_background">
+    android:background="@drawable/bg_st_auth_bg"
+    android:orientation="vertical">
 
-    <include layout="@layout/toolbar_app" />
+    <!-- شريط علوي شفاف فوق الخلفية الغامرة: رجوع زجاجي + عنوان الشاشة (المعرّفان btnToolbarBack وtxtToolbarTitle كما هما). -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="14dp"
+        android:paddingTop="12dp"
+        android:paddingEnd="14dp">
+
+        <ImageButton
+            android:id="@+id/btnToolbarBack"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:background="@drawable/bg_st_hero_btn"
+            android:contentDescription="@string/action_back"
+            android:padding="11dp"
+            android:src="@drawable/ic_back"
+            android:tint="@color/rin_st_hero_accent" />
+
+        <TextView
+            android:id="@+id/txtToolbarTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:singleLine="true"
+            android:textColor="@color/rin_st_hero_text"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+    </LinearLayout>
 
     <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
@@ -17,62 +50,90 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="24dp"
+            android:paddingStart="24dp"
+            android:paddingTop="8dp"
+            android:paddingEnd="24dp"
+            android:paddingBottom="32dp"
             android:gravity="center_horizontal">
+            <FrameLayout
+                android:layout_width="120dp"
+                android:layout_height="120dp"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_st_auth_halo">
+
+                <ImageView
+                    android:layout_width="56dp"
+                    android:layout_height="56dp"
+                    android:layout_gravity="center"
+                    android:background="@drawable/bg_st_auth_logo"
+                    android:contentDescription="@null"
+                    android:padding="14dp"
+                    android:src="@drawable/ic_st_shield"
+                    android:tint="@color/rin_st_hero_accent" />
+            </FrameLayout>
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="24dp"
+                android:layout_marginTop="14dp"
                 android:text="@string/verify_title"
-                android:textColor="@color/rin_on_toolbar"
-                android:textSize="22sp"
+                android:textColor="@color/rin_st_hero_text"
+                android:textSize="26sp"
                 android:textStyle="bold" />
 
             <TextView
                 android:id="@+id/txtVerifySubtitle"
+                xmlns:tools="http://schemas.android.com/tools"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
                 android:layout_marginTop="8dp"
+                android:layout_marginEnd="8dp"
                 android:gravity="center"
-                android:textColor="@color/rin_editor_hint"
-                android:textSize="13sp"
-                tools:text="أرسلنا كود تحقق من 5 أرقام إلى test@mail.com"
-                xmlns:tools="http://schemas.android.com/tools" />
+                android:lineSpacingExtra="3dp"
+                android:textColor="@color/rin_st_hero_dim"
+                android:textSize="13.5sp"
+                tools:text="أرسلنا كود تحقق من 5 أرقام إلى test@mail.com" />
 
             <EditText
                 android:id="@+id/edtCode"
-                android:layout_width="220dp"
-                android:layout_height="56dp"
-                android:layout_marginTop="28dp"
-                android:background="@drawable/bg_input_field"
+                android:layout_width="240dp"
+                android:layout_height="62dp"
+                android:layout_marginTop="30dp"
+                android:background="@drawable/bg_st_auth_field"
                 android:gravity="center"
                 android:hint="@string/hint_verification_code"
                 android:inputType="number"
-                android:maxLength="5"
                 android:letterSpacing="0.4"
-                android:textColor="@color/rin_editor_text"
-                android:textColorHint="@color/rin_editor_hint"
-                android:textSize="20sp"
-                android:singleLine="true" />
+                android:maxLength="5"
+                android:singleLine="true"
+                android:textColor="@color/rin_st_hero_accent"
+                android:textColorHint="@color/rin_st_hero_dim"
+                android:textSize="24sp"
+                android:textStyle="bold" />
 
             <Button
                 android:id="@+id/btnVerify"
                 android:layout_width="match_parent"
-                android:layout_height="52dp"
-                android:layout_marginTop="24dp"
-                android:background="@drawable/bg_run_button_premium"
+                android:layout_height="54dp"
+                android:layout_marginTop="26dp"
+                android:background="@drawable/bg_st_auth_btn"
+                android:elevation="0dp"
+                android:insetBottom="0dp"
+                android:insetTop="0dp"
                 android:text="@string/action_verify"
                 android:textAllCaps="false"
-                android:textColor="@android:color/white"
-                android:textStyle="bold"
-                android:elevation="0dp" />
+                android:textColor="@color/rin_st_on_accent"
+                android:textSize="15sp"
+                android:textStyle="bold" />
 
             <ProgressBar
                 android:id="@+id/progressVerify"
-                android:layout_width="24dp"
-                android:layout_height="24dp"
+                android:layout_width="26dp"
+                android:layout_height="26dp"
                 android:layout_marginTop="16dp"
+                android:layout_gravity="center"
+                android:indeterminateTint="@color/rin_st_hero_accent"
                 android:visibility="gone" />
 
             <TextView
@@ -80,10 +141,10 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="20dp"
-                android:padding="6dp"
+                android:padding="8dp"
                 android:text="@string/action_resend_code"
-                android:textColor="@color/rin_accent"
-                android:textSize="13sp"
+                android:textColor="@color/rin_st_hero_accent"
+                android:textSize="13.5sp"
                 android:textStyle="bold" />
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
