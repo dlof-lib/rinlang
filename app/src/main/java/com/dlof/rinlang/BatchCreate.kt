@@ -246,11 +246,59 @@ object BatchCreateDialog {
             },
             chip("\u2605 " + activity.getString(R.string.bt_save)) {
                 if (input.text.isBlank()) return@chip
-                val nameInput = EditText(activity).apply { setSingleLine(); setText("${tplPrefs.all.keys.count { it.startsWith("tpl:") } + 1}") ; setPadding(dp(24), dp(16), dp(24), dp(12)) }
-                val dialog = AlertDialog.Builder(activity)
+                val nameInput = EditText(activity).apply {
+                    setSingleLine()
+                    setText("${tplPrefs.all.keys.count { it.startsWith("tpl:") } + 1}")
+                    setPadding(dp(24), dp(16), dp(24), dp(12))
+                }
+                AlertDialog.Builder(activity)
                     .setTitle(R.string.bt_save_title)
                     .setView(nameInput)
                     .setPositiveButton(R.string.create) { _, _ ->
+                        val nm = nameInput.text.toString().trim()
+                        if (nm.isNotEmpty()) {
+                            tplPrefs.edit().putString("tpl:$nm", input.text.toString()).apply()
+                            refreshSaved()
+                            Toast.makeText(activity, R.string.bt_saved_toast, Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    .setNegativeButton(R.string.cancel, null)
+                    .show()
+            })
+        root.addView(HorizontalScrollView(activity).apply {
+            isHorizontalScrollBarEnabled = false; addView(savedRow)
+            setPadding(0, dp(8), 0, 0)
+        })
+        refreshSaved()
+
+        root.addView(TextView(activity).apply {
+            text = activity.getString(R.string.bt_help); textSize = 11.5f
+            setTextColor(c(R.color.rin_files_dim)); setPadding(0, dp(10), 0, 0)
+        })
+        val summary = TextView(activity).apply {
+            textSize = 12.5f; typeface = Typeface.MONOSPACE
+            setTextColor(c(R.color.rin_files_accent)); setPadding(0, dp(8), 0, dp(4))
+        }
+        root.addView(summary)
+
+        fun refresh() {
+            val ops = BatchTemplate.parse(input.text.toString())
+            if (ops.isEmpty()) { summary.text = ""; return }
+            val r = BatchTemplate.apply(baseDir, ops, dryRun = true)
+            var s = activity.getString(R.string.bt_summary, r.files, r.dirs, r.skipped)
+            if (r.invalid > 0) s += " \u00B7 " + activity.getString(R.string.bt_invalid, r.invalid)
+            summary.text = s
+        }
+        input.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) { refresh() }
+        })
+
+        val dialog = AlertDialog.Builder(activity)
+            .setTitle(R.string.bt_title)
+            .setView(ScrollView(activity).apply { addView(root) })
+            .setPositiveButton(R.string.create) { _, _ ->
                 fun run() {
                     try {
                         val res = BatchTemplate.apply(baseDir, BatchTemplate.parse(input.text.toString()))
@@ -271,7 +319,7 @@ object BatchCreateDialog {
             }
             .setNegativeButton(R.string.cancel, null)
             .create()
-        dialog.setOnShowListener { refreshSaved() }
+        dialog.setOnShowListener { refresh() }
         dialog.show()
     }
 }
