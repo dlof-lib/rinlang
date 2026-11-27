@@ -141,12 +141,15 @@ object NewFileDialog {
             .setView(root)
             .setPositiveButton(R.string.create) { _, _ ->
                 val p = split(input.text.toString())
-                try {
-                    val file = ProjectManager.writeFile(project, relDir, p.dir + p.finalLast, "")
-                    onCreated(file)
-                } catch (t: Throwable) {
-                    Toast.makeText(activity, "${activity.getString(R.string.file_save_error)}: ${t.message}", Toast.LENGTH_LONG).show()
+                fun attempt() {
+                    try {
+                        val file = ProjectManager.writeFile(project, relDir, p.dir + p.finalLast, "")
+                        onCreated(file)
+                    } catch (t: Throwable) {
+                        FileErrors.showSingle(activity, activity.getString(R.string.file_save_error), p.dir + p.finalLast, t) { attempt() }
+                    }
                 }
+                attempt()
             }
             .setNegativeButton(R.string.cancel, null)
             .apply { if (onBatch != null) setNeutralButton(R.string.bt_neutral) { _, _ -> onBatch() } }
