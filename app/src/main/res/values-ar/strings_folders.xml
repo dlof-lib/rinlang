@@ -28,4 +28,13 @@
     <string name="bt_done">أُنشئ %1$d ملف و%2$d مجلد (تخطّي %3$d)</string>
     <string name="nfd_skip">يُتخطّى</string>
     <string name="bt_neutral">قالب دفعة</string>
+    <string name="bt_paste">لصق</string>
+    <string name="bt_save">حفظ كقالب</string>
+    <string name="bt_save_title">اسم القالب</string>
+    <string name="bt_saved_toast">تم حفظ القالب</string>
+    <string name="bt_delete_q">حذف القالب «%1$s»؟</string>
+    <string name="bt_delete">حذف</string>
+    <string name="bt_clip_empty">الحافظة فارغة</string>
+    <string name="fm_tree">نسخ كشجرة (قالب)</string>
+    <string name="fm_tree_done">نُسخت الشجرة (%1$d سطر) — الصقها في «قالب دفعة»</string>
 </resources>
