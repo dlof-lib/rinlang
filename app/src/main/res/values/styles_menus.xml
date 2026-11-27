@@ -1,14 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- أنماط الحوارات والقوائم المنبثقة (هوية RinStudio). -->
 <resources>
-    <style name="RinLang.DialogTitle" parent="@android:style/DialogWindowTitle.Material">
+    <style name="RinLang.DialogTitle">
+        <item name="android:maxLines">2</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:textAlignment">viewStart</item>
         <item name="android:textSize">19sp</item>
         <item name="android:textStyle">bold</item>
         <item name="android:textColor">@color/rin_menu_text</item>
         <item name="android:paddingTop">4dp</item>
     </style>
 
-    <style name="Widget.RinLang.DialogButton" parent="@android:style/Widget.Material.Button.ButtonBar.AlertDialog">
+    <style name="Widget.RinLang.DialogButton" parent="@android:style/Widget.Material.Button.Borderless.Colored">
         <item name="android:textColor">@color/rin_menu_dim</item>
         <item name="android:textSize">14sp</item>
         <item name="android:textStyle">bold</item>
