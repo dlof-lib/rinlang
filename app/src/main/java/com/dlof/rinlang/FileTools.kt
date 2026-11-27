@@ -131,8 +131,9 @@ object FileClipboard {
         val destDir = ProjectManager.resolveDir(project, destRelDir).also { it.mkdirs() }
         val root = project.dir.canonicalPath
         var ok = 0; var skipped = 0; var failed = 0
+        val fails = ArrayList<FileFailure>()
         for (src in sources) {
-            if (!src.exists()) { failed++; continue }
+            if (!src.exists()) { failed++; fails.add(FileFailure(src.name, ctx.getString(R.string.err_not_found))); continue }
             val rel = src.canonicalPath.removePrefix(root).trim(File.separatorChar).replace(File.separatorChar, '/')
             val isProtected = cut && protectedPaths.any { p -> p == rel || p.startsWith("$rel/") }
             val intoSelf = src.isDirectory &&
@@ -145,21 +146,25 @@ object FileClipboard {
                         t.canonicalPath == src.canonicalPath -> skipped++
                         t.exists() -> skipped++
                         src.renameTo(t) -> ok++
-                        else -> failed++
+                        else -> { failed++; fails.add(FileFailure(src.name, ctx.getString(R.string.err_move_failed))) }
                     }
                 } else {
                     val t = uniqueTarget(destDir, src.name, src.isDirectory)
                     val good = if (src.isDirectory) src.copyRecursively(t, overwrite = false) else { src.copyTo(t); true }
-                    if (good) ok++ else failed++
+                    if (good) ok++ else { failed++; fails.add(FileFailure(src.name, ctx.getString(R.string.err_copy_partial))) }
                 }
-            } catch (_: Throwable) { failed++ }
+            } catch (t: Throwable) { failed++; fails.add(FileErrors.failure(ctx, src.name, t)) }
         }
         if (cut && ok > 0) clear()
         val parts = mutableListOf<String>()
         if (ok > 0) parts += ctx.getString(R.string.selection_done_toast, ok)
         if (skipped > 0) parts += ctx.getString(R.string.selection_skipped_toast, skipped)
         if (failed > 0) parts += ctx.getString(R.string.selection_failed_toast, failed)
-        if (parts.isNotEmpty()) Toast.makeText(ctx, parts.joinToString("\n"), Toast.LENGTH_LONG).show()
+        if (fails.isEmpty()) {
+            if (parts.isNotEmpty()) Toast.makeText(ctx, parts.joinToString("\n"), Toast.LENGTH_LONG).show()
+        } else {
+            FileErrors.showReport(ctx, ctx.getString(R.string.err_paste_title), ok, fails)
+        }
         onDone()
     }
 }
@@ -251,17 +256,29 @@ object BatchRename {
         newName: (Int, FsEntry) -> String
     ) {
         var ok = 0; var skipped = 0
+        val fails = ArrayList<FileFailure>()
         list.forEachIndexed { i, e ->
             val src = when (e) { is FsEntry.FileEntry -> e.file.file; is FsEntry.FolderEntry -> e.folder.dir }
             val name = newName(i, e).trim()
             val blocked = prot.any { p -> p == e.relPath || (e.isFolder && p.startsWith(e.relPath + "/")) }
             val target = File(src.parentFile, name)
-            if (blocked || name == e.name || !ProjectManager.isValidPathSegment(name) || target.exists() || !src.renameTo(target)) skipped++ else ok++
+            when {
+                name == e.name -> skipped++
+                blocked -> fails.add(FileFailure(e.name, ctx.getString(R.string.err_protected)))
+                !ProjectManager.isValidPathSegment(name) -> fails.add(FileFailure("${e.name} → $name", ctx.getString(R.string.err_invalid_name)))
+                target.exists() -> fails.add(FileFailure("${e.name} → $name", ctx.getString(R.string.err_exists)))
+                !src.renameTo(target) -> fails.add(FileFailure(e.name, ctx.getString(R.string.err_rename_failed)))
+                else -> ok++
+            }
         }
-        val parts = mutableListOf<String>()
-        if (ok > 0) parts += ctx.getString(R.string.selection_done_toast, ok)
-        if (skipped > 0) parts += ctx.getString(R.string.selection_skipped_toast, skipped)
-        Toast.makeText(ctx, parts.joinToString("\n"), Toast.LENGTH_LONG).show()
+        if (fails.isNotEmpty()) {
+            FileErrors.showReport(ctx, ctx.getString(R.string.err_rename_title), ok, fails)
+        } else {
+            val parts = mutableListOf<String>()
+            if (ok > 0) parts += ctx.getString(R.string.selection_done_toast, ok)
+            if (skipped > 0) parts += ctx.getString(R.string.selection_skipped_toast, skipped)
+            if (parts.isNotEmpty()) Toast.makeText(ctx, parts.joinToString("\n"), Toast.LENGTH_LONG).show()
+        }
         onDone()
     }
 }
@@ -358,21 +375,28 @@ object FileCreator {
     /** ينشئ ملفات (يدعم "a/b/file.ext"). لا يستبدل ملفاً موجوداً؛ اسم بلا امتداد يأخذ .rin. */
     private fun create(ctx: Context, project: Project, relDir: String, items: List<Pair<String, String>>, onDone: () -> Unit) {
         var ok = 0; var skipped = 0
+        val fails = ArrayList<FileFailure>()
         for ((rawName, content) in items) {
             try {
                 val segs = rawName.trim().trim('/').split('/').map { it.trim() }.filter { it.isNotEmpty() }
-                require(segs.isNotEmpty() && segs.all { it != "." && it != ".." && ProjectManager.isValidPathSegment(it) })
+                if (!(segs.isNotEmpty() && segs.all { it != "." && it != ".." && ProjectManager.isValidPathSegment(it) })) {
+                    fails.add(FileFailure(rawName.trim(), ctx.getString(R.string.err_invalid_name))); continue
+                }
                 var name = segs.last()
                 if ('.' !in name) name += ".rin"
                 val dir = File(ProjectManager.resolveDir(project, relDir), segs.dropLast(1).joinToString("/")).also { it.mkdirs() }
                 val f = File(dir, name)
                 if (f.exists()) skipped++ else { f.writeText(content); ok++ }
-            } catch (_: Throwable) { skipped++ }
+            } catch (t: Throwable) { fails.add(FileErrors.failure(ctx, rawName.trim(), t)) }
         }
         val parts = mutableListOf<String>()
         if (ok > 0) parts += ctx.getString(R.string.selection_done_toast, ok)
         if (skipped > 0) parts += ctx.getString(R.string.selection_skipped_toast, skipped)
-        if (parts.isNotEmpty()) Toast.makeText(ctx, parts.joinToString("\n"), Toast.LENGTH_LONG).show()
+        if (fails.isEmpty()) {
+            if (parts.isNotEmpty()) Toast.makeText(ctx, parts.joinToString("\n"), Toast.LENGTH_LONG).show()
+        } else {
+            FileErrors.showReport(ctx, ctx.getString(R.string.err_create_title), ok, fails)
+        }
         onDone()
     }
 }
@@ -594,6 +618,7 @@ object FileArchive {
     /** يفك كل ملفات .zip في [entries] إلى مجلد بجوارها باسم الأرشيف (مع حماية من مسارات الخروج). */
     fun extractHere(ctx: Context, entries: List<FsEntry>, onDone: () -> Unit) {
         var files = 0; var failed = 0
+        val fails = ArrayList<FileFailure>()
         for (e in entries.filterIsInstance<FsEntry.FileEntry>().filter { it.name.endsWith(".zip", true) }) {
             try {
                 val zipFile = e.file.file
@@ -606,18 +631,21 @@ object FileArchive {
                     var ze = zin.nextEntry
                     while (ze != null) {
                         val target = File(dest, ze.name)
-                        require(target.canonicalPath.startsWith(destPath)) { "bad zip entry" }
+                        if (!target.canonicalPath.startsWith(destPath)) throw java.util.zip.ZipException("bad zip entry: ${ze.name}")
                         if (ze.isDirectory) target.mkdirs()
                         else { target.parentFile?.mkdirs(); target.outputStream().use { zin.copyTo(it) }; files++ }
                         ze = zin.nextEntry
                     }
                 }
-            } catch (_: Throwable) { failed++ }
+            } catch (t: Throwable) { failed++; fails.add(FileErrors.failure(ctx, e.name, t)) }
         }
         val parts = mutableListOf<String>()
         if (files > 0) parts += ctx.getString(R.string.zip_extracted_toast, files)
-        if (failed > 0) parts += ctx.getString(R.string.selection_failed_toast, failed)
-        if (parts.isNotEmpty()) Toast.makeText(ctx, parts.joinToString("\n"), Toast.LENGTH_LONG).show()
+        if (fails.isEmpty()) {
+            if (parts.isNotEmpty()) Toast.makeText(ctx, parts.joinToString("\n"), Toast.LENGTH_LONG).show()
+        } else {
+            FileErrors.showReport(ctx, ctx.getString(R.string.err_extract_title), files, fails)
+        }
         onDone()
     }
 }
