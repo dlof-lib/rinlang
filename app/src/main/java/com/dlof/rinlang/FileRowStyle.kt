@@ -32,6 +32,8 @@ object FileRowStyle {
     private val imageExtensions = setOf("jpg", "jpeg", "png", "webp", "gif", "bmp", "heic", "heif", "avif")
     private val videoExtensions = setOf("mp4", "mkv", "webm", "3gp", "mov", "avi")
 
+    private val badgeOnlyExtensions = setOf("svg", "txt", "md", "log", "csv", "tsv", "bin", "dat", "rom")
+
     private val main = Handler(Looper.getMainLooper())
     private val pool = Executors.newFixedThreadPool(2)
 
@@ -57,6 +59,11 @@ object FileRowStyle {
         if (!image && !video) {
             showIconMode(icon, typeBadge, play, d)
             FileIconResolver.load(icon, file)
+            // الأنواع التي يعرضها العارض (SVG/نص/ثنائي) تحمل لصيقة امتداد صغيرة لتمييزها بنظرة سريعة.
+            if (ext in badgeOnlyExtensions) {
+                typeBadge.text = ext.uppercase(Locale.ROOT)
+                typeBadge.visibility = View.VISIBLE
+            }
             return
         }
 
