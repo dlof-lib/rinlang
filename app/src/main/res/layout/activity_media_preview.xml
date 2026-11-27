@@ -155,6 +155,41 @@
         </LinearLayout>
     </FrameLayout>
 
+    <FrameLayout
+        android:id="@+id/layoutHexHost"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#0A0F0C"
+        android:paddingTop="78dp"
+        android:visibility="gone">
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvHex"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:paddingBottom="32dp"
+            android:scrollbars="vertical" />
+
+        <TextView
+            android:id="@+id/txtHexPos"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|center_horizontal"
+            android:layout_marginBottom="20dp"
+            android:background="@drawable/bg_media_pill"
+            android:fontFamily="monospace"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp"
+            android:textColor="#3DF59A"
+            android:textSize="12.5sp"
+            android:textStyle="bold"
+            android:alpha="0"
+            android:visibility="gone" />
+    </FrameLayout>
+
     <ProgressBar
         android:id="@+id/progressMedia"
         style="?android:attr/progressBarStyleSmall"
@@ -339,6 +374,17 @@
         android:src="@drawable/rs_ic_share"
         android:tint="#FFFFFF"
         android:contentDescription="@string/media_share" />
+        <ImageButton
+            android:id="@+id/btnMediaMore"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:layout_marginStart="8dp"
+            android:padding="11dp"
+            android:background="@drawable/bg_media_glass"
+            android:src="@drawable/ic_media_more"
+            android:tint="#FFFFFF"
+            android:contentDescription="@string/media_more" />
+
     </LinearLayout>
 
 </FrameLayout>
