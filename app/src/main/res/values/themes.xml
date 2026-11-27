@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Compatibility alias: older manifests/layout variants may still reference @style/RinLang.
+         Keep it mapped to the current application theme so Android resource linking succeeds. -->
+    <style name="RinLang" parent="Theme.RinLang" />
     <style name="Theme.RinLang" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <item name="colorPrimary">@color/rin_accent</item>
         <item name="colorPrimaryDark">@color/rin_toolbar</item>
