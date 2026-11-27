@@ -28,4 +28,13 @@
     <string name="bt_done">Created %1$d files and %2$d folders (skipped %3$d)</string>
     <string name="nfd_skip">skipped</string>
     <string name="bt_neutral">Batch template</string>
+    <string name="bt_paste">Paste</string>
+    <string name="bt_save">Save</string>
+    <string name="bt_save_title">Template name</string>
+    <string name="bt_saved_toast">Template saved</string>
+    <string name="bt_delete_q">Delete template “%1$s”?</string>
+    <string name="bt_delete">Delete</string>
+    <string name="bt_clip_empty">Clipboard is empty</string>
+    <string name="fm_tree">Copy as tree (template)</string>
+    <string name="fm_tree_done">Tree copied (%1$d lines) — paste it in “Batch template”</string>
 </resources>
