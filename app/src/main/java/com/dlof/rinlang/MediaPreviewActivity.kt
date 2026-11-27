@@ -484,7 +484,7 @@ class MediaPreviewActivity : RinBaseActivity() {
                 line(R.string.media_i_exposure, if (e in 0.0001..0.9999) "1/" + Math.round(1.0 / e) + " s" else "$e s")
             }
             line(R.string.media_i_aperture, ex.getAttribute(android.media.ExifInterface.TAG_F_NUMBER)?.let { "\u0192/$it" })
-            line(R.string.media_i_iso, ex.getAttribute(android.media.ExifInterface.TAG_ISO_SPEED_RATINGS))
+            line(R.string.media_i_iso, ex.getAttribute("PhotographicSensitivity") ?: ex.getAttribute("ISOSpeedRatings"))
             line(R.string.media_i_focal, ex.getAttribute(android.media.ExifInterface.TAG_FOCAL_LENGTH)?.toDoubleOrNull()?.let { "%.1f mm".format(it) })
             val ll = FloatArray(2)
             if (ex.getLatLong(ll)) line(R.string.media_i_gps, "%.5f, %.5f".format(ll[0], ll[1]))
