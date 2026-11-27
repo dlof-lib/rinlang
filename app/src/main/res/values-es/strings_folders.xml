@@ -28,4 +28,13 @@
     <string name="bt_done">Creados %1$d archivos y %2$d carpetas (omitidos %3$d)</string>
     <string name="nfd_skip">omitido</string>
     <string name="bt_neutral">Plantilla por lotes</string>
+    <string name="bt_paste">Pegar</string>
+    <string name="bt_save">Guardar</string>
+    <string name="bt_save_title">Nombre de plantilla</string>
+    <string name="bt_saved_toast">Plantilla guardada</string>
+    <string name="bt_delete_q">¿Eliminar la plantilla “%1$s”?</string>
+    <string name="bt_delete">Eliminar</string>
+    <string name="bt_clip_empty">El portapapeles está vacío</string>
+    <string name="fm_tree">Copiar como árbol (plantilla)</string>
+    <string name="fm_tree_done">Árbol copiado (%1$d líneas): pégalo en «Plantilla por lotes»</string>
 </resources>
