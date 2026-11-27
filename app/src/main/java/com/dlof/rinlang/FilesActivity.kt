@@ -842,7 +842,8 @@ class FilesActivity : RinBaseActivity() {
         FileRecents.record(this, project.name, file.relPath)
         when {
             ProjectManager.isImageFile(file.name) || ProjectManager.isVideoFile(file.name) ||
-                MediaPreviewActivity.isSvg(file.name) || MediaPreviewActivity.isViewerText(file.name) ->
+                MediaPreviewActivity.isSvg(file.name) || MediaPreviewActivity.isViewerText(file.name) ||
+                MediaPreviewActivity.isViewerBin(file.name) ->
                 openInMediaPreview(file)
             // حزمة RinPak داخل المشروع: معاينة/استيراد داخل التطبيق (لا نص خام ولا تطبيق خارجي).
             file.name.endsWith(RinPak.EXTENSION, ignoreCase = true) || file.name.endsWith(".rinproj", ignoreCase = true) ->
