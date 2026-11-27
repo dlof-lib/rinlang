@@ -66,6 +66,7 @@ object FolderMenu {
             activity.getString(R.string.fm_copy_path),
             activity.getString(R.string.fm_props),
             activity.getString(R.string.fm_zip),
+            activity.getString(R.string.fm_tree),
             activity.getString(R.string.fm_all)
         )
         AlertDialog.Builder(activity)
@@ -81,7 +82,13 @@ object FolderMenu {
                     }
                     3 -> FileProps.show(activity, listOf(entry))
                     4 -> FileArchive.compress(activity, project, listOf(entry), parentRelDir, onChanged)
-                    5 -> showAll()
+                    5 -> {
+                        val tree = BatchTemplate.fromDir(entry.folder.dir)
+                        val cm = activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        cm.setPrimaryClip(ClipData.newPlainText("tree", tree))
+                        Toast.makeText(activity, activity.getString(R.string.fm_tree_done, if (tree.isEmpty()) 0 else tree.lines().size), Toast.LENGTH_LONG).show()
+                    }
+                    6 -> showAll()
                 }
             }
             .setNegativeButton(R.string.cancel, null)
