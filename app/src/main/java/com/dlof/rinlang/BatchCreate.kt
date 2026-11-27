@@ -247,7 +247,7 @@ object BatchCreateDialog {
             chip("\u2605 " + activity.getString(R.string.bt_save)) {
                 if (input.text.isBlank()) return@chip
                 val nameInput = EditText(activity).apply { setSingleLine(); setText("${tplPrefs.all.keys.count { it.startsWith("tpl:") } + 1}") ; setPadding(dp(24), dp(16), dp(24), dp(12)) }
-                AlertDialog.Builder(activity)
+                val dialog = AlertDialog.Builder(activity)
                     .setTitle(R.string.bt_save_title)
                     .setView(nameInput)
                     .setPositiveButton(R.string.create) { _, _ ->
@@ -271,7 +271,7 @@ object BatchCreateDialog {
             }
             .setNegativeButton(R.string.cancel, null)
             .create()
-        dialog.setOnShowListener { refresh() }
+        dialog.setOnShowListener { refreshSaved() }
         dialog.show()
     }
 }
