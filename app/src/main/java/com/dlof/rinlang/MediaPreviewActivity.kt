@@ -44,6 +44,9 @@ class MediaPreviewActivity : RinBaseActivity() {
 
         /** نصوص عادية تُعرض في العارض (قراءة + بحث)؛ بقية الأكواد تبقى في المحرر. */
         private val TEXT_EXT = setOf("txt", "md", "markdown", "log", "csv", "tsv")
+        private val BIN_EXT = setOf("bin", "dat", "rom", "o", "obj", "hex")
+        fun isViewerBin(name: String) = name.substringAfterLast('.', "").lowercase() in BIN_EXT
+
         fun isViewerText(name: String) = name.substringAfterLast('.', "").lowercase() in TEXT_EXT
     }
 
@@ -64,6 +67,19 @@ class MediaPreviewActivity : RinBaseActivity() {
     private lateinit var btnSearch: View
     private lateinit var btnWrap: View
     private lateinit var textViewer: TextViewerController
+    private lateinit var hexViewer: HexViewController
+    private lateinit var btnMore: View
+    private var curDims: IntArray? = null
+    private var slideshow = false
+    private val mediaPrefs by lazy { getSharedPreferences("rin_media", MODE_PRIVATE) }
+    private val slideRunnable = object : Runnable {
+        override fun run() {
+            if (!slideshow || paths.size < 2) return
+            index = (index + 1) % paths.size
+            showCurrent(1)
+            handler.postDelayed(this, 3000L)
+        }
+    }
     private var animated: android.graphics.drawable.AnimatedImageDrawable? = null
     private var wasRunning = false
     private lateinit var web: android.webkit.WebView
@@ -97,11 +113,17 @@ class MediaPreviewActivity : RinBaseActivity() {
         btnRotate = findViewById(R.id.btnMediaRotate)
         btnEdit = findViewById(R.id.btnMediaEdit)
         btnPlay = findViewById(R.id.btnMediaPlay)
+        btnMore = findViewById(R.id.btnMediaMore)
+        btnMore.setOnClickListener { showMore() }
+        applyBackground()
         btnSearch = findViewById(R.id.btnMediaSearch)
         btnWrap = findViewById(R.id.btnMediaWrap)
         textViewer = TextViewerController(this)
-        btnSearch.setOnClickListener { textViewer.toggleFind() }
-        btnWrap.setOnClickListener { textViewer.toggleWrap() }
+        hexViewer = HexViewController(this)
+        btnSearch.setOnClickListener { if (hexViewer.active) hexViewer.showSearchDialog() else textViewer.toggleFind() }
+        btnWrap.setOnClickListener {
+            if (hexViewer.active) { hexViewer.toggleMode(); updateHexSub() } else textViewer.toggleWrap()
+        }
         btnPlay.setOnClickListener { toggleAnimation() }
         web = findViewById(R.id.webMediaSvg)
         setupSvgWeb()
@@ -127,6 +149,7 @@ class MediaPreviewActivity : RinBaseActivity() {
             top.updatePadding(top = topPad + bars.top)
             val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
             textViewer.applyInsets(bars.top, maxOf(bars.bottom, ime.bottom))
+            hexViewer.applyInsets(bars.top)
             insets
         }
         WindowCompat.getInsetsController(window, window.decorView).apply {
@@ -142,7 +165,7 @@ class MediaPreviewActivity : RinBaseActivity() {
         btnPrev.setOnClickListener { go(-1) }
         btnNext.setOnClickListener { go(1) }
 
-        img.onTap = { setChrome(!chrome) }
+        img.onTap = { stopSlideshow(); setChrome(!chrome) }
         img.onSwipe = { dir -> go(dir) }
         img.onDismiss = { finish() }
         img.onZoom = { pct -> showZoom(pct) }
@@ -152,6 +175,7 @@ class MediaPreviewActivity : RinBaseActivity() {
     }
 
     private fun go(delta: Int) {
+        stopSlideshow()
         val n = index + delta
         if (n !in paths.indices) {
             // ارتداد خفيف عند الحافة
@@ -173,8 +197,32 @@ class MediaPreviewActivity : RinBaseActivity() {
         if (!file.exists()) { fail(); return }
 
         textViewer.hide()
+        hexViewer.hide()
         btnSearch.visibility = View.GONE
         btnWrap.visibility = View.GONE
+        (btnWrap as android.widget.ImageButton).setImageResource(R.drawable.ic_media_wrap)
+        // أوقف أي صورة متحركة سابقة وأخفِ زر تشغيلها قبل عرض أي نوع جديد (SVG/نص/ثنائي/فيديو...)
+        animated?.stop(); animated = null
+        btnPlay.visibility = View.GONE
+        if (video.isPlaying) video.stopPlayback()
+        if (isViewerBin(file.name)) {
+            img.visibility = View.GONE
+            video.visibility = View.GONE
+            web.visibility = View.GONE
+            btnRotate.visibility = View.GONE
+            btnPlay.visibility = View.GONE
+            progress.visibility = View.GONE
+            val kind = hexViewer.load(file)
+            if (kind == null) { fail(); return }
+            hexKind = kind
+            hexFile = file
+            btnSearch.visibility = View.VISIBLE
+            btnWrap.visibility = View.VISIBLE
+            (btnWrap as android.widget.ImageButton).setImageResource(R.drawable.ic_media_bin)
+            btnEdit.visibility = View.GONE
+            updateHexSub()
+            return
+        }
         if (isViewerText(file.name)) {
             img.visibility = View.GONE
             video.visibility = View.GONE
@@ -310,6 +358,7 @@ class MediaPreviewActivity : RinBaseActivity() {
     }
 
     private fun subtitle(file: File, dims: IntArray?, tag: String? = null) {
+        curDims = dims
         val parts = mutableListOf<String>()
         if (paths.size > 1) parts += getString(R.string.media_counter, index + 1, paths.size)
         if (tag != null) parts += tag
@@ -317,6 +366,134 @@ class MediaPreviewActivity : RinBaseActivity() {
         parts += Formatter.formatFileSize(this, file.length())
         parts += DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(file.lastModified()))
         txtSub.text = parts.joinToString("  \u00B7  ")
+    }
+
+    private var hexKind = ""
+    private var hexFile: File? = null
+
+    private fun updateHexSub() {
+        val f = hexFile ?: return
+        val parts = mutableListOf(hexViewer.modeLabel, Formatter.formatFileSize(this, f.length()))
+        if (hexKind.isNotEmpty()) parts += hexKind
+        parts += "${f.length()} B"
+        txtSub.text = parts.filter { it.isNotEmpty() }.joinToString("  \u00B7  ")
+    }
+
+    // ---------- قائمة "المزيد": معلومات، فتح بتطبيق آخر، نسخ المسار، عرض تلقائي، خلفية ----------
+
+    private fun showMore() {
+        val file = File(paths.getOrNull(index) ?: return)
+        val pm = android.widget.PopupMenu(this, btnMore)
+        val imageMode = img.visibility == View.VISIBLE
+        pm.menu.add(0, 1, 0, R.string.media_info)
+        pm.menu.add(0, 2, 1, R.string.media_open_with)
+        pm.menu.add(0, 3, 2, R.string.media_copy_path)
+        if (imageMode && paths.size > 1)
+            pm.menu.add(0, 4, 3, if (slideshow) R.string.media_slideshow_stop else R.string.media_slideshow_start)
+        if (imageMode) pm.menu.add(0, 5, 4, R.string.media_bg)
+        pm.setOnMenuItemClickListener { m ->
+            when (m.itemId) {
+                1 -> showInfo(file)
+                2 -> openWith(file)
+                3 -> copyPath(file)
+                4 -> if (slideshow) stopSlideshow() else startSlideshow()
+                5 -> { mediaPrefs.edit().putInt("bg", (mediaPrefs.getInt("bg", 0) + 1) % 3).apply(); applyBackground(true) }
+            }
+            true
+        }
+        pm.show()
+    }
+
+    private fun applyBackground(toast: Boolean = false) {
+        val mode = mediaPrefs.getInt("bg", 0)
+        img.background = when (mode) {
+            1 -> android.graphics.drawable.ColorDrawable(android.graphics.Color.WHITE)
+            2 -> {
+                val s = (12 * resources.displayMetrics.density).toInt()
+                val bm = Bitmap.createBitmap(s * 2, s * 2, Bitmap.Config.ARGB_8888)
+                val c = android.graphics.Canvas(bm)
+                val p = android.graphics.Paint()
+                p.color = 0xFF2A2F2C.toInt(); c.drawRect(0f, 0f, s * 2f, s * 2f, p)
+                p.color = 0xFF3A403C.toInt(); c.drawRect(0f, 0f, s.toFloat(), s.toFloat(), p); c.drawRect(s.toFloat(), s.toFloat(), s * 2f, s * 2f, p)
+                android.graphics.drawable.BitmapDrawable(resources, bm).apply {
+                    tileModeX = android.graphics.Shader.TileMode.REPEAT
+                    tileModeY = android.graphics.Shader.TileMode.REPEAT
+                }
+            }
+            else -> null
+        }
+        if (toast) android.widget.Toast.makeText(this,
+            when (mode) { 1 -> R.string.media_bg_white; 2 -> R.string.media_bg_checker; else -> R.string.media_bg_black },
+            android.widget.Toast.LENGTH_SHORT).show()
+    }
+
+    private fun startSlideshow() {
+        if (paths.size < 2) return
+        slideshow = true
+        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        setChrome(false)
+        handler.postDelayed(slideRunnable, 3000L)
+    }
+
+    private fun stopSlideshow() {
+        if (!slideshow) return
+        slideshow = false
+        handler.removeCallbacks(slideRunnable)
+        window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    }
+
+    private fun copyPath(file: File) {
+        val text = rels.getOrNull(index) ?: file.absolutePath
+        val cm = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        cm.setPrimaryClip(android.content.ClipData.newPlainText("path", text))
+        android.widget.Toast.makeText(this, R.string.media_copied, android.widget.Toast.LENGTH_SHORT).show()
+    }
+
+    private fun openWith(file: File) {
+        try {
+            val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+            val ext = file.extension.lowercase()
+            val mime = android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext) ?: "*/*"
+            startActivity(Intent.createChooser(
+                Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(uri, mime)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }, file.name))
+        } catch (t: Throwable) {
+            android.widget.Toast.makeText(this, "${t.message}", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun showInfo(file: File) {
+        val sb = StringBuilder()
+        fun line(label: Int, value: String?) {
+            if (!value.isNullOrBlank()) sb.append(getString(label)).append(": ").append(value).append("\n")
+        }
+        line(R.string.media_i_name, file.name)
+        line(R.string.media_i_path, rels.getOrNull(index) ?: file.absolutePath)
+        line(R.string.media_i_size, Formatter.formatFileSize(this, file.length()) + " (" + file.length() + " B)")
+        line(R.string.media_i_date, DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(file.lastModified())))
+        curDims?.let { line(R.string.media_i_dims, "${it[0]}\u00D7${it[1]}") }
+        try {
+            val ex = android.media.ExifInterface(file.absolutePath)
+            val make = ex.getAttribute(android.media.ExifInterface.TAG_MAKE)
+            val model = ex.getAttribute(android.media.ExifInterface.TAG_MODEL)
+            line(R.string.media_i_camera, listOfNotNull(make, model).joinToString(" ").trim())
+            line(R.string.media_i_taken, ex.getAttribute(android.media.ExifInterface.TAG_DATETIME))
+            ex.getAttribute(android.media.ExifInterface.TAG_EXPOSURE_TIME)?.toDoubleOrNull()?.let { e ->
+                line(R.string.media_i_exposure, if (e in 0.0001..0.9999) "1/" + Math.round(1.0 / e) + " s" else "$e s")
+            }
+            line(R.string.media_i_aperture, ex.getAttribute(android.media.ExifInterface.TAG_F_NUMBER)?.let { "\u0192/$it" })
+            line(R.string.media_i_iso, ex.getAttribute(android.media.ExifInterface.TAG_PHOTOGRAPHIC_SENSITIVITY))
+            line(R.string.media_i_focal, ex.getAttribute(android.media.ExifInterface.TAG_FOCAL_LENGTH)?.toDoubleOrNull()?.let { "%.1f mm".format(it) })
+            val ll = FloatArray(2)
+            if (ex.getLatLong(ll)) line(R.string.media_i_gps, "%.5f, %.5f".format(ll[0], ll[1]))
+        } catch (_: Throwable) {}
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(R.string.media_info)
+            .setMessage(sb.toString().trim())
+            .setPositiveButton(android.R.string.ok, null)
+            .show()
     }
 
     private fun fail() {
@@ -431,7 +608,7 @@ class MediaPreviewActivity : RinBaseActivity() {
     }
 
     override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
-        if (textViewer.dispatch(ev)) return true
+        if (textViewer.dispatch(ev) || hexViewer.dispatch(ev)) return true
         return super.dispatchTouchEvent(ev)
     }
 
@@ -454,7 +631,9 @@ class MediaPreviewActivity : RinBaseActivity() {
 
     override fun onDestroy() {
         handler.removeCallbacks(hideZoom)
+        handler.removeCallbacks(slideRunnable)
         web.destroy()
+        hexViewer.close()
         token++
         super.onDestroy()
     }
