@@ -130,11 +130,12 @@ object BatchTemplate {
         return segs.isNotEmpty() && segs.all { it.isNotBlank() && it != "." && it != ".." && ProjectManager.isValidPathSegment(it) }
     }
 
-    class Result(val files: Int, val dirs: Int, val skipped: Int, val invalid: Int)
+    class Result(val files: Int, val dirs: Int, val skipped: Int, val invalid: Int, val failed: List<Pair<String, Throwable>> = emptyList())
 
     /** يطبّق العمليات تحت [baseDir]؛ [dryRun] يحسب النتيجة بلا كتابة. */
     fun apply(baseDir: File, ops: List<Op>, dryRun: Boolean = false): Result {
         var files = 0; var dirs = 0; var skipped = 0; var invalid = 0
+        val failed = ArrayList<Pair<String, Throwable>>()
         val seen = HashSet<String>()
         for (op in ops) {
             val rel = op.finalPath
@@ -142,16 +143,21 @@ object BatchTemplate {
             if (!seen.add(rel)) { skipped++; continue }
             val target = File(baseDir, rel)
             if (!target.canonicalPath.startsWith(baseDir.canonicalPath)) { invalid++; continue }
-            if (op.isDir) {
-                if (target.exists()) { skipped++; continue }
-                if (!dryRun) target.mkdirs(); dirs++
-            } else {
-                if (target.exists()) { skipped++; continue }
-                if (!dryRun) { target.parentFile?.mkdirs(); target.writeText(op.content) }
-                files++
+            try {
+                if (op.isDir) {
+                    if (target.exists()) { skipped++; continue }
+                    if (!dryRun && !target.mkdirs()) throw java.io.IOException("mkdirs failed")
+                    dirs++
+                } else {
+                    if (target.exists()) { skipped++; continue }
+                    if (!dryRun) { target.parentFile?.mkdirs(); target.writeText(op.content) }
+                    files++
+                }
+            } catch (t: Throwable) {
+                failed.add(rel to t)
             }
         }
-        return Result(files, dirs, skipped, invalid)
+        return Result(files, dirs, skipped, invalid, failed)
     }
 }
 
@@ -245,71 +251,23 @@ object BatchCreateDialog {
                     .setTitle(R.string.bt_save_title)
                     .setView(nameInput)
                     .setPositiveButton(R.string.create) { _, _ ->
-                        val n = nameInput.text.toString().trim()
-                        if (n.isNotEmpty()) {
-                            tplPrefs.edit().putString("tpl:$n", input.text.toString()).apply()
-                            Toast.makeText(activity, R.string.bt_saved_toast, Toast.LENGTH_SHORT).show()
-                            refreshSaved()
+                fun run() {
+                    try {
+                        val res = BatchTemplate.apply(baseDir, BatchTemplate.parse(input.text.toString()))
+                        if (res.failed.isEmpty() && res.invalid == 0) {
+                            Toast.makeText(activity, activity.getString(R.string.bt_done, res.files, res.dirs, res.skipped), Toast.LENGTH_LONG).show()
+                        } else {
+                            val fl = res.failed.map { FileErrors.failure(activity, it.first, it.second) }.toMutableList()
+                            if (res.invalid > 0) fl.add(FileFailure(activity.getString(R.string.err_invalid_names_format, res.invalid), activity.getString(R.string.err_invalid_name)))
+                            FileErrors.showReport(activity, activity.getString(R.string.err_batch_title), res.files + res.dirs, fl,
+                                onRetry = if (res.failed.isNotEmpty()) ({ run() }) else null)
                         }
+                        onDone()
+                    } catch (t: Throwable) {
+                        FileErrors.showSingle(activity, activity.getString(R.string.err_batch_title), activity.getString(R.string.bt_title), t) { run() }
                     }
-                    .setNegativeButton(R.string.cancel, null)
-                    .show()
-            })
-        root.addView(HorizontalScrollView(activity).apply {
-            isHorizontalScrollBarEnabled = false; addView(savedRow); setPadding(0, dp(8), 0, 0)
-        })
-        refreshSaved()
-
-        val help = TextView(activity).apply {
-            text = activity.getString(R.string.bt_help); textSize = 11.5f
-            setTextColor(c(R.color.rin_files_dim)); setPadding(0, dp(10), 0, dp(6))
-        }
-        root.addView(help)
-        val preview = TextView(activity).apply {
-            typeface = Typeface.MONOSPACE; textSize = 12.5f; textDirection = View.TEXT_DIRECTION_LTR
-            setTextColor(c(R.color.rin_files_text))
-        }
-        root.addView(ScrollView(activity).apply {
-            layoutParams = LinearLayout.LayoutParams(-1, dp(110)); addView(preview)
-        })
-        val summary = TextView(activity).apply { textSize = 12.5f; setPadding(0, dp(6), 0, 0) }
-        root.addView(summary)
-
-        var dialog: AlertDialog? = null
-        fun refresh() {
-            val ops = BatchTemplate.parse(input.text.toString())
-            val res = BatchTemplate.apply(baseDir, ops, dryRun = true)
-            preview.text = ops.take(60).joinToString("\n") { op ->
-                val rel = op.finalPath
-                val ex = File(baseDir, rel).exists()
-                (if (op.isDir) "\u25B8 " else "\u2022 ") + rel + (if (op.isDir) "/" else "") + (if (ex) "  \u2014 " + activity.getString(R.string.nfd_skip) else "")
-            }
-            val total = res.files + res.dirs
-            if (ops.isEmpty()) { summary.text = " "; summary.setTextColor(c(R.color.rin_files_dim)) }
-            else {
-                summary.text = activity.getString(R.string.bt_summary, res.files, res.dirs, res.skipped) +
-                    (if (res.invalid > 0) " \u00B7 " + activity.getString(R.string.bt_invalid, res.invalid) else "")
-                summary.setTextColor(c(if (res.invalid > 0) R.color.rin_files_danger else R.color.rin_files_accent))
-            }
-            dialog?.getButton(AlertDialog.BUTTON_POSITIVE)?.isEnabled = total > 0
-        }
-        input.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, cc: Int) {}
-            override fun onTextChanged(s: CharSequence?, a: Int, b: Int, cc: Int) {}
-            override fun afterTextChanged(s: Editable?) { refresh() }
-        })
-
-        dialog = AlertDialog.Builder(activity)
-            .setTitle(R.string.bt_title)
-            .setView(root)
-            .setPositiveButton(R.string.create) { _, _ ->
-                try {
-                    val res = BatchTemplate.apply(baseDir, BatchTemplate.parse(input.text.toString()))
-                    Toast.makeText(activity, activity.getString(R.string.bt_done, res.files, res.dirs, res.skipped), Toast.LENGTH_LONG).show()
-                    onDone()
-                } catch (t: Throwable) {
-                    Toast.makeText(activity, "${t.message}", Toast.LENGTH_LONG).show()
                 }
+                run()
             }
             .setNegativeButton(R.string.cancel, null)
             .create()
