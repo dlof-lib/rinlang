@@ -97,6 +97,34 @@ object BatchTemplate {
         return ops
     }
 
+    /**
+     * يولّد قالباً نصّياً من شجرة مجلد قائم (مجلدات أولاً، إزاحة مسافتين لكل مستوى، "name." للملف بلا امتداد).
+     * يتخطى الأسماء التي تتعارض مع صيغة القالب (فواصل , ; { } :: أو تبدأ بـ #). حدّ أقصى للعمق والعدد.
+     */
+    fun fromDir(root: File, maxDepth: Int = 6, maxEntries: Int = 500): String {
+        val sb = StringBuilder()
+        var count = 0
+        val unsafe = Regex("[,;{}\\u060C]|::|^#|^\\s|\\s$")
+        fun walk(d: File, depth: Int) {
+            val kids = d.listFiles()?.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() })) ?: return
+            for (k in kids) {
+                if (count >= maxEntries) return
+                if (unsafe.containsMatchIn(k.name)) continue
+                count++
+                val indent = "  ".repeat(depth)
+                if (k.isDirectory) {
+                    sb.append(indent).append(k.name).append("/\n")
+                    if (depth < maxDepth) walk(k, depth + 1)
+                } else {
+                    val hasExt = k.name.lastIndexOf('.').let { it > 0 && it < k.name.length - 1 }
+                    sb.append(indent).append(k.name).append(if (hasExt) "" else ".").append("\n")
+                }
+            }
+        }
+        walk(root, 0)
+        return sb.toString().trimEnd()
+    }
+
     private fun validPath(p: String): Boolean {
         val segs = p.split('/')
         return segs.isNotEmpty() && segs.all { it.isNotBlank() && it != "." && it != ".." && ProjectManager.isValidPathSegment(it) }
@@ -182,6 +210,55 @@ object BatchCreateDialog {
         row(chip(activity.getString(R.string.bt_preset_starter)) { input.setText(STARTER); input.setSelection(input.text.length) },
             chip(activity.getString(R.string.bt_preset_tree)) { input.setText(TREE); input.setSelection(input.text.length) },
             chip("\u21B9 " + activity.getString(R.string.bt_indent)) { insert("  ") })
+
+        // قوالب محفوظة: لصق من الحافظة، حفظ الحالي باسم، وشرائح للقوالب المحفوظة (نقرة تحمّل، ضغطة مطوّلة تحذف)
+        val tplPrefs = activity.getSharedPreferences("rin_batch_templates", android.content.Context.MODE_PRIVATE)
+        val savedRow = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
+        fun refreshSaved() {
+            savedRow.removeAllViews()
+            tplPrefs.all.keys.filter { it.startsWith("tpl:") }.sorted().forEach { key ->
+                val name = key.removePrefix("tpl:")
+                val ch = chip("\u2605 $name") {
+                    input.setText(tplPrefs.getString(key, "") ?: ""); input.setSelection(input.text.length)
+                }
+                ch.setOnLongClickListener {
+                    AlertDialog.Builder(activity)
+                        .setMessage(activity.getString(R.string.bt_delete_q, name))
+                        .setPositiveButton(R.string.bt_delete) { _, _ -> tplPrefs.edit().remove(key).apply(); refreshSaved() }
+                        .setNegativeButton(R.string.cancel, null)
+                        .show()
+                    true
+                }
+                savedRow.addView(ch)
+            }
+        }
+        row(chip("\u29C9 " + activity.getString(R.string.bt_paste)) {
+                val cm = activity.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                val txt = cm.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(activity)?.toString().orEmpty()
+                if (txt.isBlank()) Toast.makeText(activity, R.string.bt_clip_empty, Toast.LENGTH_SHORT).show()
+                else { input.setText(txt); input.setSelection(input.text.length) }
+            },
+            chip("\u2605 " + activity.getString(R.string.bt_save)) {
+                if (input.text.isBlank()) return@chip
+                val nameInput = EditText(activity).apply { setSingleLine(); setText("${tplPrefs.all.keys.count { it.startsWith("tpl:") } + 1}") ; setPadding(dp(24), dp(16), dp(24), dp(12)) }
+                AlertDialog.Builder(activity)
+                    .setTitle(R.string.bt_save_title)
+                    .setView(nameInput)
+                    .setPositiveButton(R.string.create) { _, _ ->
+                        val n = nameInput.text.toString().trim()
+                        if (n.isNotEmpty()) {
+                            tplPrefs.edit().putString("tpl:$n", input.text.toString()).apply()
+                            Toast.makeText(activity, R.string.bt_saved_toast, Toast.LENGTH_SHORT).show()
+                            refreshSaved()
+                        }
+                    }
+                    .setNegativeButton(R.string.cancel, null)
+                    .show()
+            })
+        root.addView(HorizontalScrollView(activity).apply {
+            isHorizontalScrollBarEnabled = false; addView(savedRow); setPadding(0, dp(8), 0, 0)
+        })
+        refreshSaved()
 
         val help = TextView(activity).apply {
             text = activity.getString(R.string.bt_help); textSize = 11.5f
