@@ -255,6 +255,7 @@ private:
     StmtPtr textDeclaration();
     StmtPtr objectStyleFieldDeclaration(ObjectStyleFieldKind kind); // txt/img/object.file/Fonts/background/css3 name=...; (حصراً داخل @Object)
     StmtPtr atBlock();                 // @container / @container.pipe / @container.data / @container.api / @container.import / @Containers.Group / @Volume
+    StmtPtr containerTBBlock();       // @Container.TB( ... ) — منشئ الأدوات والقوالب (docs/CONTAINER_TB.md)
     StmtPtr makeUnitBlock();          // @make.(name) ... .end/make[=name]
     StmtPtr importStatement();         // @import "path"; / @import "path" as alias;   (يُستدعى بعد استهلاك '@' و'import')
     // Modules: import { a, b, c } from "path";  (يُستدعى بعد استهلاك 'import' فقط -- بلا '@' --
