@@ -61,6 +61,41 @@ static int rinOptChainAhead(const std::vector<Token>& t, size_t i) {
 }
 static int g_optChainSeq = 0;
 
+// عناصر لغوية إضافية: السهم `=>` (رمزان ملتصقان = >)، وتطبيق القيم الافتراضية للمعاملات.
+static bool rinFatArrowAt(const std::vector<Token>& t, size_t i) {
+    if (i + 1 >= t.size()) return false;
+    const Token& a = t[i]; const Token& b = t[i + 1];
+    return a.type == TokenType::EQUAL && b.type == TokenType::GREATER && a.line == b.line && a.endCol == b.col;
+}
+// `**` رمزان STAR ملتصقان ولا يتبعهما `=`
+static bool rinStarStarAt(const std::vector<Token>& t, size_t i) {
+    if (i + 1 >= t.size()) return false;
+    const Token& a = t[i]; const Token& b = t[i + 1];
+    if (a.type != TokenType::STAR || b.type != TokenType::STAR || a.line != b.line || a.endCol != b.col) return false;
+    if (i + 2 < t.size() && t[i + 2].type == TokenType::EQUAL && t[i + 2].line == b.line && t[i + 2].col == b.endCol) return false;
+    return true;
+}
+// fun f(a, b = 2): يُحقن في أول الجسم  if (b == nil) { b = 2; }  ويُسجَّل أدنى عدد وسائط.
+static void rinApplyParamDefaults(FunctionStmt& fn, const std::vector<ExprPtr>& defs, int line) {
+    int first = -1;
+    std::vector<StmtPtr> pro;
+    for (size_t i = 0; i < defs.size() && i < fn.params.size(); ++i) {
+        if (!defs[i]) continue;
+        if (first < 0) first = static_cast<int>(i);
+        auto var = std::make_shared<VariableExpr>(); var->name = fn.params[i]; var->line = line;
+        auto nilLit = std::make_shared<LiteralExpr>(); nilLit->kind = LiteralExpr::Kind::NIL; nilLit->line = line;
+        auto cmp = std::make_shared<BinaryExpr>(); cmp->left = var; cmp->op = TokenType::EQUAL_EQUAL; cmp->right = nilLit; cmp->line = line;
+        auto asg = std::make_shared<AssignExpr>(); asg->name = fn.params[i]; asg->value = defs[i]; asg->line = line;
+        auto es = std::make_shared<ExpressionStmt>(); es->expr = asg; es->line = line;
+        auto blk = std::make_shared<BlockStmt>(); blk->statements.push_back(es); blk->line = line;
+        auto ifs = std::make_shared<IfStmt>(); ifs->condition = cmp; ifs->thenBranch = blk; ifs->line = line;
+        pro.push_back(ifs);
+    }
+    if (first < 0) return;
+    fn.minArgs = first;
+    fn.body->statements.insert(fn.body->statements.begin(), pro.begin(), pro.end());
+}
+
 bool Parser::checkNext(TokenType type) const {
     if (isAtEnd()) return false;
     if (current + 1 >= tokens.size()) return false;
@@ -1834,6 +1869,7 @@ StmtPtr Parser::functionDeclaration() {
     consume(TokenType::LPAREN, "Expected '(' after function name");
     std::vector<std::string> params;
     std::vector<std::string> paramTypes;
+    std::vector<ExprPtr> paramDefaults;
     if (!check(TokenType::RPAREN)) {
         do {
             params.push_back(consume(TokenType::IDENT, "Expected parameter name").lexeme);
@@ -1844,6 +1880,7 @@ StmtPtr Parser::functionDeclaration() {
                 paramType = consume(TokenType::IDENT, "Expected a type name after ':'").lexeme;
             }
             paramTypes.push_back(paramType);
+            { ExprPtr dv; if (match({TokenType::EQUAL})) dv = assignment(); paramDefaults.push_back(dv); }
         } while (match({TokenType::COMMA}));
     }
     consume(TokenType::RPAREN, "Expected ')' after parameters");
@@ -1871,6 +1908,7 @@ StmtPtr Parser::functionDeclaration() {
     fn->returnType = returnType;
     fn->body = body;
     fn->line = name.line;
+    rinApplyParamDefaults(*fn, paramDefaults, name.line);
     return fn;
 }
 
@@ -5279,6 +5317,15 @@ ExprPtr Parser::comparison() {
             expr = b;
             continue;
         }
+        // `a in b` -> contains(b, a)  (عضوية في مصفوفة/نص)؛ كلمة سياقية لا تتعارض مع for ... in
+        if (noInOp == 0 && check(TokenType::IDENT) && peek().lexeme == "in" && !check(TokenType::END_OF_FILE)) {
+            Token kw = advance();
+            auto rhs = term();
+            auto c = std::make_shared<CallExpr>(); c->callee = "contains"; c->line = kw.line;
+            c->args.push_back(rhs); c->args.push_back(expr);
+            expr = c;
+            continue;
+        }
         // Rin 1.0: `value instanceof ClassName` -> oop.isInstance(value, "ClassName")
         // كلمة سياقية (IDENT) يتبعها اسم نوع، فلا تتعارض مع أي متغيّر يحمل الاسم نفسه.
         if (check(TokenType::IDENT) && peek().lexeme == "instanceof" && checkNext(TokenType::IDENT)) {
@@ -5332,7 +5379,15 @@ ExprPtr Parser::unary() {
         u->op = op; u->right = right;
         return u;
     }
-    return call();
+    auto base = call();
+    if (rinStarStarAt(tokens, current)) {            // a ** b  (يمين الترابط، أقوى من الضرب): pow(a, b)
+        Token st = advance(); advance();
+        auto exponent = unary();
+        auto pw = std::make_shared<CallExpr>(); pw->callee = "pow"; pw->line = st.line;
+        pw->args.push_back(base); pw->args.push_back(exponent);
+        return pw;
+    }
+    return base;
 }
 
 ExprPtr Parser::call() {
@@ -5396,6 +5451,30 @@ ExprPtr Parser::call() {
                    !(g_litItemDepth > 0 && (peek().line != previous().line || peek().col > previous().endCol)) &&
                    match({TokenType::LBRACKET})) {
             Token bracket = previous();
+            if (check(TokenType::COLON) || true) {
+                ExprPtr lo, hi;
+                bool isSlice = false;
+                if (check(TokenType::COLON)) { isSlice = true; }
+                else {
+                    lo = expression();
+                    if (check(TokenType::COLON)) isSlice = true;
+                }
+                if (isSlice) {                                      // a[i:j] / a[:j] / a[i:]  ->  slice(a, i, j)
+                    advance(); // ':'
+                    if (!check(TokenType::RBRACKET)) hi = expression();
+                    consume(TokenType::RBRACKET, "Expected ']' after slice");
+                    auto sc = std::make_shared<CallExpr>(); sc->callee = "__sliceRange"; sc->line = bracket.line;
+                    auto nilLit = [&](){ auto n = std::make_shared<LiteralExpr>(); n->kind = LiteralExpr::Kind::NIL; n->line = bracket.line; return n; };
+                    sc->args.push_back(expr); sc->args.push_back(lo ? lo : nilLit()); sc->args.push_back(hi ? hi : nilLit());
+                    expr = sc;
+                    continue;
+                }
+                consume(TokenType::RBRACKET, "Expected ']' after index");
+                auto ie2 = std::make_shared<IndexExpr>();
+                ie2->object = expr; ie2->index = lo; ie2->line = bracket.line;
+                expr = ie2;
+                continue;
+            }
             auto index = expression();
             consume(TokenType::RBRACKET, "Expected ']' after index");
             auto ie = std::make_shared<IndexExpr>();
@@ -5531,6 +5610,52 @@ ExprPtr Parser::primary() {
         auto e = std::make_shared<LiteralExpr>();
         e->kind = LiteralExpr::Kind::STRING; e->str = previous().lexeme; return e;
     }
+    // دوال السهم:  x => expr   (a, b) => expr   () => expr   x => { ... }   — تُحوَّل إلى LambdaExpr عادية.
+    {
+        std::vector<std::string> aparams;
+        bool isArrow = false;
+        size_t after = current;
+        if (check(TokenType::IDENT) && rinFatArrowAt(tokens, current + 1)) {
+            aparams.push_back(peek().lexeme); isArrow = true; after = current + 3;
+        } else if (check(TokenType::LPAREN)) {
+            size_t j = current + 1; bool okList = true;
+            if (j < tokens.size() && tokens[j].type == TokenType::RPAREN) { /* () */ }
+            else {
+                for (;;) {
+                    if (j >= tokens.size() || tokens[j].type != TokenType::IDENT) { okList = false; break; }
+                    aparams.push_back(tokens[j].lexeme); ++j;
+                    if (j < tokens.size() && tokens[j].type == TokenType::COMMA) { ++j; continue; }
+                    break;
+                }
+            }
+            if (okList && j < tokens.size() && tokens[j].type == TokenType::RPAREN && rinFatArrowAt(tokens, j + 1)) {
+                isArrow = true; after = j + 3;
+            } else aparams.clear();
+        }
+        if (isArrow) {
+            Token startTok = peek();
+            current = after;                                   // نتجاوز المعاملات و `=>`
+            auto fn = std::make_shared<FunctionStmt>();
+            fn->name = ""; fn->params = aparams; fn->paramTypes.assign(aparams.size(), std::string()); fn->line = startTok.line;
+            if (check(TokenType::LBRACE)) {
+                advance();
+                int savedLoopDepth = loopDepth;
+                auto savedLS_ = std::move(loopStack); auto savedLB_ = std::move(labels); loopStack.clear(); labels.clear();
+                int savedGoalDepth = goalDepth; loopDepth = 0; goalDepth = 0;
+                fn->body = block();
+                loopDepth = savedLoopDepth; loopStack = std::move(savedLS_); labels = std::move(savedLB_); goalDepth = savedGoalDepth;
+            } else {
+                const int savedElse = noElseExpr; noElseExpr = 0;
+                auto bodyExpr = assignment();
+                noElseExpr = savedElse;
+                auto ret = std::make_shared<ReturnStmt>(); ret->value = bodyExpr; ret->line = startTok.line;
+                auto body = std::make_shared<BlockStmt>(); body->statements.push_back(ret); body->line = startTok.line;
+                fn->body = body;
+            }
+            auto lam = std::make_shared<LambdaExpr>(); lam->decl = fn; lam->line = startTok.line;
+            return lam;
+        }
+    }
     // fun(params) { body } as an EXPRESSION -> anonymous function literal (see LambdaExpr in
     // rin_ast.h). primary() only runs where an expression is expected, so this can never fire for
     // a statement-starting `fun name(...) { ... }` (that is consumed by Parser::declaration()/
@@ -5541,6 +5666,7 @@ ExprPtr Parser::primary() {
         consume(TokenType::LPAREN, "Expected '(' after 'fun'");
         std::vector<std::string> params;
         std::vector<std::string> paramTypes;
+        std::vector<ExprPtr> paramDefaults;
         if (!check(TokenType::RPAREN)) {
             do {
                 params.push_back(consume(TokenType::IDENT, "Expected parameter name").lexeme);
@@ -5549,6 +5675,7 @@ ExprPtr Parser::primary() {
                     paramType = consume(TokenType::IDENT, "Expected a type name after ':'").lexeme;
                 }
                 paramTypes.push_back(paramType);
+                { ExprPtr dv; if (match({TokenType::EQUAL})) dv = assignment(); paramDefaults.push_back(dv); }
             } while (match({TokenType::COMMA}));
         }
         consume(TokenType::RPAREN, "Expected ')' after parameters");
@@ -5572,6 +5699,7 @@ ExprPtr Parser::primary() {
         fn->returnType = returnType;
         fn->body = body;
         fn->line = funTok.line;
+        rinApplyParamDefaults(*fn, paramDefaults, funTok.line);
         auto lambda = std::make_shared<LambdaExpr>();
         lambda->decl = fn;
         lambda->line = funTok.line;
