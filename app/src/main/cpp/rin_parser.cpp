@@ -4213,6 +4213,7 @@ StmtPtr Parser::containerTBBlock() {
     std::vector<std::string> tokenNames, libKeys, rinFiles, nativeFiles;
     std::string toolName, easyKey, mask;
     int makeLine = atTok.line;
+    bool userCallHook = false;
 
     auto addFile = [&](const std::string& path, int line) {
         if (isNativeSrc(path)) { nativeFiles.push_back(path); return; }
@@ -4293,6 +4294,7 @@ StmtPtr Parser::containerTBBlock() {
             match({TokenType::SEMICOLON});
             continue;
         }
+        if (check(TokenType::IDENT) && peek().lexeme == "on" && current + 1 < tokens.size() && tokens[current + 1].lexeme == "call") userCallHook = true;
         auto st = declaration();
         if (auto m = std::dynamic_pointer_cast<MaskStmt>(st); m && m->easyKey) {
             auto lit = std::dynamic_pointer_cast<LiteralExpr>(m->value);
@@ -4324,7 +4326,11 @@ StmtPtr Parser::containerTBBlock() {
         return o + "]";
     };
     std::string metaSrc = "let __tb = {\"name\": " + q(toolName) + ", \"tokens\": " + arr(tokenNames) + ", \"libs\": " + arr(libKeys) +
-                          ", \"imports\": " + arr(rinFiles) + ", \"native\": " + arr(nativeFiles) + "};";
+                          ", \"imports\": " + arr(rinFiles) + ", \"native\": " + arr(nativeFiles) + "};\n";
+    // ملفات C++ فعّالة: تحميل (اكتشاف الدوال) + خُطّاف on call يحوّل Tool.fn(...) غير المعرَّفة إلى C++ (ما لم يعرّف المستخدم on call بنفسه)
+    for (auto& nf : nativeFiles) metaSrc += "__tbCppLoad(" + q(toolName) + ", " + q(nf) + ");\n";
+    if (!nativeFiles.empty() && !userCallHook)
+        metaSrc += "on call(name, args) { return __tbCppCall(" + q(toolName) + ", name, args); }\n";
     std::vector<StmtPtr> metaStmts;
     {
         auto sStart = g_startStmts; auto sFns = g_endFns; auto sRegs = g_endRegs; // التحليل الفرعي يمسح هذه المتغيّرات العامة
