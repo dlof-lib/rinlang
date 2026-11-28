@@ -523,6 +523,7 @@ struct FunctionStmt : Stmt { FunctionStmt() { stmtKind = StmtKind::FunctionStmt;
     // نوع إرجاع معلَن. انظر checkDeclaredType في rin_interpreter.cpp.
     std::vector<std::string> paramTypes;
     std::string returnType;
+    int minArgs = -1;          // قيم افتراضية للمعاملات: أقل عدد وسائط مقبول (-1 = كل المعاملات إلزامية). fun f(a, b = 2)
     // ---- OOP modifiers (Rin 1.0 — كلها اختيارية وافتراضيتها "لا شيء" فلا تغيّر أي كود قديم) ----
     // تُملأ فقط عند تحليل دالة داخل جسم class/struct/interface/trait. انظر Parser::classDeclaration.
     std::string access;        // "" (= public) | "private" | "protected"
