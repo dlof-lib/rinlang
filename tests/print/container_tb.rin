@@ -24,3 +24,12 @@ check("meta tokens", join(Greeter.__tb["tokens"], ","), "title,count");
 check("meta libs", join(Greeter.__tb["libs"], ","), "cfgkey");
 check("meta imports", len(Greeter.__tb["imports"]), 2);
 check("meta native", join(Greeter.__tb["native"], ","), "./tb_lib/logic.cpp");
+
+// C++ فعّال: يحتاج RIN_ALLOW_NATIVE=1 ومترجم g++/clang++؛ بدونهما يُتخطّى هذا القسم
+if (cpp.enabled() and cpp.info().compiler != nil) {
+    check("cpp double", Greeter.tb_add(2, 3.5), 5.5);
+    check("cpp int64", Greeter.tb_answer(), 42);
+    check("cpp json", Greeter.tb_sum(1, 2, 3.5), 6.5);
+} else {
+    print "SKIP cpp (set RIN_ALLOW_NATIVE=1)";
+}
