@@ -252,7 +252,7 @@ Value Interpreter::vmBinary(int opi, Value& left, Value& right, int line) {
 //  دخول إطار نداء داخل الآلة (نسخة حرفية من مقدمة callFunction)
 // ---------------------------------------------------------------------------
 void Interpreter::vmEnterCall(vm::RunState& rs, const std::shared_ptr<Callable>& fn, std::vector<Value>& args, int line) {
-    if (args.size() != fn->declaration->params.size()) {
+    if (args.size() > fn->declaration->params.size() || args.size() < (fn->declaration->minArgs >= 0 ? static_cast<size_t>(fn->declaration->minArgs) : fn->declaration->params.size())) {
         auto d = diagErr(diag::Code::E0007_InvalidArguments, line,
                      "invalid number of arguments for `" + fn->declaration->name + "`");
         d.diagnostic->expected = std::to_string(fn->declaration->params.size()) + " argument(s)";
@@ -277,6 +277,7 @@ void Interpreter::vmEnterCall(vm::RunState& rs, const std::shared_ptr<Callable>&
         }
         callEnv->define(fn->declaration->params[i], bound);
     }
+    for (size_t i = args.size(); i < fn->declaration->params.size(); i++) callEnv->define(fn->declaration->params[i], Value::nil());
     auto proto = vmFunctionProto(fn->declaration);
     callDepth++;
     vm_->stats.calls++;
