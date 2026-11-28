@@ -1366,6 +1366,9 @@ static Value compileSource(const std::string& src, const Value& opts, bool share
 }
 static std::map<int, void*>& libTable() { static std::map<int, void*> t; return t; }
 static int& libCounter() { static int c = 0; return c; }
+struct TbCppFn { std::string kind; int argc = 0; bool isInt = false; };
+struct TbCppFile { std::string path, dir, src; std::map<std::string, TbCppFn> fns; int handle = 0; };
+static std::map<std::string, std::vector<TbCppFile>>& tbCpp() { static std::map<std::string, std::vector<TbCppFile>> t; return t; }
 #endif  // RIN_NATIVE_TOOLCHAIN
 
 } // namespace extra4
@@ -2055,6 +2058,77 @@ void Interpreter::registerNativesExtra4() {
         natives["cpp.unload"](ua, line);
         return r;
     };
+    // ---- @Container.TB: ملفات C++ مستوردة بـ #import ./x.cpp (docs/CONTAINER_TB.md) ----
+    // __tbCppLoad(tool, path): يقرأ الملف ويكتشف دوالّه المصدَّرة (RIN_FN(name) = JSON ABI · extern "C" رقمية)؛ لا يُترجَم هنا.
+    // __tbCppCall(tool, name, args): يُترجَم الملف عند أول نداء (كاش بتجزئة المصدر) ثم يُنادى عبر cpp.call / cpp.callNum.
+    natives["__tbCppLoad"] = [this](Args& a, int line) -> Value {
+        need("__tbCppLoad", a, 2, 2, line);
+        std::string tool = str(a[0], "__tbCppLoad", line), raw = str(a[1], "__tbCppLoad", line);
+        std::string full = resolvePath(raw, line), src;
+        // نفس ترتيب @import: ملف نسبي (./ أو ../) يُحلّ أولاً نسبةً لمجلد الملف المُستورِد/السكربت، ثم المجلد الحالي
+        if (basePath.empty() && (raw.rfind("./", 0) == 0 || raw.rfind("../", 0) == 0)) {
+            std::string baseDir;
+            if (!importDirs_.empty()) baseDir = importDirs_.back();
+            else { size_t s2 = sourceFile.find_last_of('/'); if (s2 != std::string::npos) baseDir = sourceFile.substr(0, s2 + 1); }
+            std::string cand = baseDir + raw, probe;
+            if (!baseDir.empty() && readWholeFile(cand, probe)) full = cand;
+        }
+        if (!readWholeFile(full, src))
+            throw diagErr(diag::Code::E0035_RuntimeError, line, "@Container.TB: ملف C++ غير موجود: " + raw);
+        TbCppFile f; f.path = raw; f.src = src;
+        size_t sl = full.find_last_of('/'); f.dir = sl == std::string::npos ? "." : full.substr(0, sl);
+        const std::regex rf(R"(RIN_FN\s*\(\s*(\w+)\s*\))");
+        for (auto it = std::sregex_iterator(src.begin(), src.end(), rf); it != std::sregex_iterator(); ++it)
+            f.fns[(*it)[1]] = TbCppFn{"json", 0, false};
+        const std::regex ex(R"RX(extern\s+"C"\s+(double|float|int|long\s+long|long|int64_t|unsigned|size_t)\s+(\w+)\s*\(([^)]*)\))RX");
+        for (auto it = std::sregex_iterator(src.begin(), src.end(), ex); it != std::sregex_iterator(); ++it) {
+            std::string ty = (*it)[1], nm = (*it)[2], ps = (*it)[3];
+            size_t b = ps.find_first_not_of(" \t\r\n"), e = ps.find_last_not_of(" \t\r\n");
+            ps = b == std::string::npos ? "" : ps.substr(b, e - b + 1);
+            int argc = (ps.empty() || ps == "void") ? 0 : 1 + (int)std::count(ps.begin(), ps.end(), ',');
+            f.fns[nm] = TbCppFn{"num", argc, !(ty == "double" || ty == "float")};
+        }
+        auto& vec = tbCpp()[tool];
+        vec.erase(std::remove_if(vec.begin(), vec.end(), [&](const TbCppFile& x) { return x.path == raw; }), vec.end());
+        ArrayData names; for (auto& kv : f.fns) names.push_back(S4(kv.first));
+        vec.push_back(std::move(f));
+        return M4({{"ok", B4(true)}, {"functions", A4(std::move(names))}});
+    };
+    natives["__tbCppCall"] = [this](Args& a, int line) -> Value {
+        need("__tbCppCall", a, 3, 3, line);
+        std::string tool = str(a[0], "__tbCppCall", line), name = str(a[1], "__tbCppCall", line);
+        TbCppFile* file = nullptr; std::string have;
+        for (auto& f : tbCpp()[tool]) {
+            if (f.fns.count(name)) { file = &f; break; }
+            for (auto& kv : f.fns) have += (have.empty() ? "" : ", ") + kv.first;
+        }
+        if (!file)
+            throw diagErr(diag::Code::E0035_RuntimeError, line, "`" + tool + "." + name + "` غير معرَّفة ولا تصدّرها ملفات C++ للأداة" +
+                          (have.empty() ? std::string(" (لا دوال C++ مصدَّرة)") : " (المصدَّرة: " + have + ")"));
+        if (!nativeAllowed()) throw diagErr(diag::Code::E0035_RuntimeError, line, std::string("`") + tool + "." + name + "` دالة C++: " + kNativeOffMsg);
+        if (!file->handle) {
+            std::vector<Value> la{S4(file->src), M4({{"includes", A4({S4(file->dir)})}})};
+            Value l = natives["cpp.lib"](la, line);
+            if (!o4bool(l, "ok", false))
+                throw diagErr(diag::Code::E0035_RuntimeError, line, "فشل ترجمة " + file->path + ": " + o4str(l, "error", "") + "\n" + o4str(l, "stderr", ""));
+            file->handle = static_cast<int>(num(*o4get(l, "handle"), "__tbCppCall", line));
+        }
+        const TbCppFn& fn = file->fns[name];
+        Value args = a[2].type == Value::Type::ARRAY ? a[2] : A4({a[2]});
+        Value r;
+        if (fn.kind == "json") {
+            std::vector<Value> ca{N4(file->handle), S4(name), args};
+            r = natives["cpp.call"](ca, line);
+        } else {
+            if (static_cast<int>(arr(args, "__tbCppCall", line).size()) != fn.argc)
+                throw diagErr(diag::Code::E0007_InvalidArguments, line, tool + "." + name + " تتوقّع " + std::to_string(fn.argc) + " وسيط/وسائط رقمية");
+            std::vector<Value> ca{N4(file->handle), S4(name), args};
+            if (fn.isInt) ca.push_back(S4("int"));
+            r = natives["cpp.callNum"](ca, line);
+        }
+        if (!o4bool(r, "ok", false)) throw diagErr(diag::Code::E0035_RuntimeError, line, tool + "." + name + ": " + o4str(r, "error", "C++ call failed"));
+        return *o4get(r, "value");
+    };
 #else
     auto unsupported = [](const char* fn) {
         std::string f = fn;
@@ -2062,6 +2136,8 @@ void Interpreter::registerNativesExtra4() {
     };
     for (const char* fn : {"cpp.compile", "cpp.run", "cpp.eval", "cpp.load", "cpp.lib", "cpp.call", "cpp.callNum", "cpp.exec"})
         natives[fn] = unsupported(fn);
+    for (const char* fn : {"__tbCppLoad", "__tbCppCall"})
+        natives[fn] = [this, fn](Args&, int line) -> Value { throw diagErr(diag::Code::E0035_RuntimeError, line, std::string(fn) + ": C++ bridge is not available on this platform (no compiler/dlopen)"); };
     natives["cpp.has"] = [](Args&, int) -> Value { return B4(false); };
     natives["cpp.unload"] = [](Args&, int) -> Value { return B4(false); };
 #endif
