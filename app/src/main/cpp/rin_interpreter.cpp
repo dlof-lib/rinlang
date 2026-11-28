@@ -11689,6 +11689,7 @@ Interpreter::Flow Interpreter::exec(const StmtPtr& stmt, const EnvPtr& env, Valu
                 throw diagErr(diag::Code::E0035_RuntimeError, s->line, "لا يمكن تنفيذ link id=\"" + s->byId + "\": لا توجد حاوية مسجَّلة بهذا المعرّف عبر 'link.id='");
             target = it->second;
         }
+        if (!containers.count(target) && !groupMembers.count(target)) target = canonContainer(target); // easy_key / مسار كامل
         bool isContainer = containers.count(target) > 0;
         bool isGroup = groupMembers.count(target) > 0;
         if (!isContainer && !isGroup) {
