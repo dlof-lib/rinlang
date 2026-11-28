@@ -1537,6 +1537,7 @@ private:
     void registerNativesContainerApp(); // rin_container_app.cpp — container.app* / app.* : هوية التطبيق/الموقع (docs/container_app.md)
     void registerNativesContainerZip(); // rin_container_zip.cpp — container.zip/unzip/pack/... و zip.* (docs/container_zip.md)
     void registerNativesExtra12(); // rin_extra_natives12.cpp — fileSync/fileLock/fileRename/fileSize/findByRange (docs/FILEDB.md)
+    void registerNativesExtra14(); // rin_extra_natives14.cpp — دعم صيغ اللغة (a[i:j] ...)
     void registerNativesExtra11(); // rin_extra_natives11.cpp — مفهوم algo: algo* لتطوير الخوارزميات والحساب العددي (docs/ALGO.md)
     void registerNativesExtra9(); // rin_extra_natives9.cpp — مفهوم number: number/numberRound/numberFormat/... (docs/NUMBER.md)
     void registerNativesImageDraw(); // rin_image_draw.cpp — imgNew/imgLine/imgText/imgSave/imgFromLog…: إنشاء صور ورسمها وحفظها PNG (docs/image-draw.md)
