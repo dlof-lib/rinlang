@@ -142,6 +142,7 @@ private:
     bool atLockRef() const;
     ExprPtr lockRefName(bool& hasName, bool& eqConsumed, int& line); // يستهلك المرجع كاملاً؛ يعيد تعبير الاسم أو null
     ExprPtr positiveOperand(ExprPtr left, const Token& op); // =[×]= داخل equality: اختبار (postfix) أو مقارنة
+    int noInOp = 0;           // >0: المعامل `a in b` معطّل
     int noElseExpr = 0;       // >0: `a else b` معطّل (else تخصّ بنية أخرى: let/accept/if-expression)
     bool bareIfThen = false;  // الفرع الأول لـ if بلا أقواس: else التالية له لا لحلقة بداخله
     int tryElseSeq = 0;
