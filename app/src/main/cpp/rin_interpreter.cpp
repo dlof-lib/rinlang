@@ -8195,6 +8195,7 @@ for(auto& kv:maskParents) if(maskResolve4(kv.second)==parent && !maskResolve4(kv
     registerNativesAutoload(); // Autoload.register/dir/load/... (rin_autoload.cpp، docs/autoload.md)
     registerNativesServices(); // Services.bind/singleton/instance/alias/get/make/call/extend/tag... (rin_container_services.cpp، docs/container_services.md)
     registerNativesExtra12(); // fileSync/fileLock/fileRename/fileSize/findByRange (rin_extra_natives12.cpp، docs/FILEDB.md)
+    registerNativesExtra14(); // دعم صيغ اللغة الجديدة
     registerNativesExtra11(); // مفهوم algo: algo* (rin_extra_natives11.cpp، docs/ALGO.md)
     registerNativesPrintLayout(); // __pfx/layoutText/fmtNumber/showSpaces (rin_print_layout.cpp، docs/print-layout.md)
     registerNativesLock(); // main.lock: خزنة الأسرار المشفّرة (rin_lock.cpp، docs/main-lock.md)
@@ -12894,7 +12895,7 @@ Value Interpreter::instantiateClass(const std::string& className, std::vector<Va
 }
 
 Value Interpreter::callFunction(const std::shared_ptr<Callable>& fn, std::vector<Value>& args, int line) {
-    if (args.size() != fn->declaration->params.size()) {
+    if (args.size() > fn->declaration->params.size() || args.size() < (fn->declaration->minArgs >= 0 ? static_cast<size_t>(fn->declaration->minArgs) : fn->declaration->params.size())) {
         auto d = diagErr(diag::Code::E0007_InvalidArguments, line,
                      "invalid number of arguments for `" + fn->declaration->name + "`");
         d.diagnostic->expected = std::to_string(fn->declaration->params.size()) + " argument(s)";
@@ -12937,6 +12938,7 @@ Value Interpreter::callFunction(const std::shared_ptr<Callable>& fn, std::vector
         }
         callEnv->define(fn->declaration->params[i], std::move(bound));
     }
+    for (size_t i = args.size(); i < fn->declaration->params.size(); i++) callEnv->define(fn->declaration->params[i], Value::nil()); // معاملات افتراضية غابت
     try {
         Value fastRet;
         Flow fl = execBlockFlow(fn->declaration->body->statements, callEnv, fastRet);
@@ -15672,6 +15674,7 @@ void Interpreter::dialogAction(const std::shared_ptr<LiveActionStmt>& s, const E
 #include "rin_extra_natives8.cpp" // مفهوم token (docs/TOKEN.md)
 #include "rin_extra_natives9.cpp" // مفهوم number (docs/NUMBER.md)
 #include "rin_extra_natives10.cpp" // مفهوم linalg (docs/LINALG.md)
+#include "rin_extra_natives14.cpp" // صيغ اللغة: a[i:j]
 #include "rin_extra_natives11.cpp" // مفهوم algo (docs/ALGO.md)
 #include "rin_extra_natives12.cpp" // ملفات وقواعد بيانات: fileSync/fileLock/fileRename/fileSize/findByRange (docs/FILEDB.md)
 #include "rin_container_zip.cpp"
