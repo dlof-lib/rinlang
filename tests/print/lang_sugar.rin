@@ -1,0 +1,51 @@
+// صيغ اللغة الجديدة: ** · قيم المعاملات الافتراضية · دوال السهم => · a[i:j] · a in b  (docs/LANG_SUGAR.md)
+// الاختبار ناجح حين لا يظهر أي FAIL.
+fun check(name, got, want) {
+    if (got == want) { print "OK   " + name; } else { print "FAIL " + name + " got=" + got + " want=" + want; }
+}
+fun same(a, b) { return len(a) == len(b) and join(a, ",") == join(b, ","); }
+
+// ** (يمين الترابط، أقوى من الضرب والسالب)
+check("pow", 2 ** 10, 1024);
+check("pow right assoc", 2 ** 3 ** 2, 512);
+check("pow vs unary minus", -2 ** 2, -4);
+check("pow vs mul", 3 * 2 ** 2, 12);
+let k = 3; k *= 2;
+check("*= still works", k, 6);
+
+// قيم افتراضية
+fun f(a, b = 2, c = a + b) { return a + b + c; }
+check("default all", f(1), 6);
+check("default one given", f(1, 5), 12);
+check("default none used", f(1, 5, 0), 6);
+let g = fun(x, y = 10) { return x + y; };
+check("anon default", g(1), 11);
+
+// دوال السهم
+let dbl = x => x * 2;
+let add = (a, b) => a + b;
+let hi = () => "hi";
+let blk = (x) => { let y = x * 3; return y + 1; };
+check("arrow 1", dbl(4), 8);
+check("arrow 2", add(2, 3), 5);
+check("arrow 0", hi(), "hi");
+check("arrow block", blk(2), 7);
+
+// شرائح
+let arr = [10, 20, 30, 40, 50];
+check("slice mid", same(arr[1:3], [20, 30]), true);
+check("slice head", same(arr[:2], [10, 20]), true);
+check("slice tail", same(arr[3:], [40, 50]), true);
+check("slice neg", same(arr[-2:], [40, 50]), true);
+check("slice neg end", same(arr[1:-1], [20, 30, 40]), true);
+check("slice oob", same(arr[3:99], [40, 50]), true);
+check("slice str", "héllo wörld"[1:4], "éll");
+check("index still works", arr[2], 30);
+
+// in
+check("in array", 2 in [1, 2, 3], true);
+check("in array miss", 9 in [1, 2], false);
+check("in string", "ell" in "hello", true);
+let n = 0;
+for i in [1, 2, 3] { n += i; }
+check("for-in unaffected", n, 6);
