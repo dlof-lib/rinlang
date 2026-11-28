@@ -1,0 +1,26 @@
+// tests/print/container_tb.rin — @Container.TB( ... ) : منشئ الأدوات والقوالب (docs/CONTAINER_TB.md)
+// الاستدعاء أول عبارة في الملف (التعليقات فقط قبله). الاختبار ناجح حين لا يظهر أي FAIL.
+@Container.TB(
+    [[ #import ./tb_lib/cfg.rin;
+       #Import./tb_lib/util.rin;
+       #import ./tb_lib/logic.cpp ]];
+    @import cfgkey;
+    #token.title = "Hello";
+    #token.count = 3;
+    let total = 0;
+    for i in [1, 2, 3] { total += i; }
+    fun go() { return shout(title) + " " + count + " " + theme + " " + total; }
+    @make.Greeter
+)
+
+fun check(name, got, want) {
+    if (got == want) { print "OK   " + name; } else { print "FAIL " + name + " got=" + got + " want=" + want; }
+}
+check("tool go", Greeter.go(), "Hello! 3 dark 6");
+check("token title", Greeter.title, "Hello");
+check("token count", Greeter.count, 3);
+check("meta name", Greeter.__tb["name"], "Greeter");
+check("meta tokens", join(Greeter.__tb["tokens"], ","), "title,count");
+check("meta libs", join(Greeter.__tb["libs"], ","), "cfgkey");
+check("meta imports", len(Greeter.__tb["imports"]), 2);
+check("meta native", join(Greeter.__tb["native"], ","), "./tb_lib/logic.cpp");
