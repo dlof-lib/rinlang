@@ -1,4 +1,6 @@
+#include <cstring>
 #include "rin_parser.h"
+#include "rin_lexer.h"
 #include "diagnostics/diagnostic_engine.h"
 #include "diagnostics/source_manager.h"
 #include <algorithm>
@@ -260,6 +262,13 @@ std::vector<StmtPtr> Parser::parse() {
 static thread_local std::vector<TryCatchStmt*> g_catchStack;
 // > 0 أثناء قراءة عنصر داخل [ ] أو { } حرفية: `[` تسبقها مسافة تبدأ عنصراً جديداً لا فهرسة (فاصلة اختيارية، docs/shorthand.md)
 static thread_local int g_litItemDepth = 0;
+
+// مقارنة بلا حساسية لحالة الأحرف (ASCII) — لـ @Container.TB / @container.tb
+static bool tbIeq(const std::string& a, const char* b) {
+    size_t n = std::strlen(b); if (a.size() != n) return false;
+    for (size_t i = 0; i < n; ++i) if (std::tolower((unsigned char)a[i]) != std::tolower((unsigned char)b[i])) return false;
+    return true;
+}
 
 StmtPtr Parser::declaration() {
     DeclDepthGuard declDepthGuard_;
@@ -690,6 +699,15 @@ StmtPtr Parser::declaration() {
         advance(); // '.'
         advance(); // 'print'
         return viewPrintObjectStatement();
+    }
+    // @Container.TB( ... ) — منشئ الأدوات والقوالب الكاملة (docs/CONTAINER_TB.md). يجب أن يكون أول عبارة في الملف.
+    if (check(TokenType::AT) && current + 4 < tokens.size() &&
+        (tokens[current + 1].type == TokenType::IDENT || tokens[current + 1].type == TokenType::CONTAINER) &&
+        tbIeq(tokens[current + 1].lexeme, "container") &&
+        tokens[current + 2].type == TokenType::DOT && tokens[current + 3].type == TokenType::IDENT &&
+        tbIeq(tokens[current + 3].lexeme, "tb") &&
+        tokens[current + 4].type == TokenType::LPAREN) {
+        return containerTBBlock();
     }
     // Make Unit الحقيقي: @make.(name) ... .end/make[=name]
     // نميّزه قبل atBlock() لأن @make القديمة (بدون .(...)) تبقى ContainerKind::EVERYTHING للتوافق.
@@ -4133,6 +4151,195 @@ StmtPtr Parser::makeUnitBlock() {
     }
 
     consumeEndTag("make", atTok.line, s->name);
+    return s;
+}
+
+// ============================================================================
+//  @Container.TB( ... )  — Tool/Template Builder (docs/CONTAINER_TB.md)
+//  سكّر نحوي يُحوَّل هنا إلى بنى موجودة (حاوية make + link + import + let) فلا يتغيّر سلوك أي برنامج قديم.
+//    @import key;                 -> link to=key;           (استدعاء مكتبة بمفتاحها السهل easy_key)
+//    @import "./x.rin";           -> @import "./x.rin";     (مسار ملف)
+//    #token.name = expr;          -> let name = expr;       (رمز/ثابت قالب، يُسجَّل أيضاً في __tb.tokens)
+//    [[ #import ./a.rin; #import ./b.cpp ]];   -> استيراد ملفات rin (تُنفَّذ) / ملفات C++ (تُسجَّل في __tb.native)
+//    @make.Name                   -> اسم الأداة (= اسم الحاوية الناتجة)
+//    let / for / from / fun ...   -> كما هي
+//  القاعدة: يجب أن يكون الاستدعاء أول عبارة في الملف (لا في آخره ولا بعد الأداة ولا داخل كتلة).
+// ============================================================================
+StmtPtr Parser::containerTBBlock() {
+    const size_t startIdx = current;
+    Token atTok = consume(TokenType::AT, "Expected '@' before 'Container.TB('");
+    advance(); advance(); advance(); // Container . TB
+    if (startIdx != 0) {
+        throw errRich(diag::Code::E0015_UnknownContainer, atTok,
+                      "`@Container.TB(` must be the first statement in the file",
+                      "a Tool/Template Builder defines the whole tool, so it has to be called on the very first line "
+                      "(only comments may come before it) — not at the end, not after the tool, and not inside another block",
+                      "move `@Container.TB( ... )` to the top of the file",
+                      "`@Container.TB(` as the first statement");
+    }
+    consume(TokenType::LPAREN, "Expected '(' after '@Container.TB'");
+
+    auto lower = [](std::string s) { for (auto& c : s) c = (char)std::tolower((unsigned char)c); return s; };
+    auto endsWith = [&](const std::string& s, const std::string& suf) {
+        return s.size() >= suf.size() && lower(s.substr(s.size() - suf.size())) == suf;
+    };
+    auto isNativeSrc = [&](const std::string& p) {
+        for (const char* e : {".cpp", ".cc", ".cxx", ".c", ".hpp", ".h"}) if (endsWith(p, e)) return true;
+        return false;
+    };
+    auto isHashWord = [&](const Token& t, const char* w) {
+        return t.type == TokenType::IDENT && t.lexeme.size() == std::strlen(w) + 1 && t.lexeme[0] == '#' && lower(t.lexeme.substr(1)) == w;
+    };
+    // مسار بلا اقتباس (./a/b.rin): الرموز المتلاصقة (نفس السطر وبلا مسافات) حتى ; , ] ) — أو نص بين علامتي اقتباس
+    auto readPath = [&](const Token& kw) -> std::string {
+        if (check(TokenType::STRING)) return consumeStaticText("Expected a path string").lexeme;
+        std::string path;
+        const Token* prev = nullptr;
+        while (!isAtEnd()) {
+            const Token& t = peek();
+            if (t.type == TokenType::SEMICOLON || t.type == TokenType::COMMA || t.type == TokenType::RBRACKET || t.type == TokenType::RPAREN) break;
+            if (t.line != kw.line) break;
+            if (prev && (t.line != prev->line || t.col != prev->endCol)) break;
+            path += t.lexeme; prev = &t; advance();
+        }
+        if (path.empty())
+            throw errRich(diag::Code::E0012_MissingToken, peek(), "expected a file path after `#import`",
+                          "`#import ./file.rin;` names a Rin file (or a C++ source such as `./logic.cpp`) to bring into the tool",
+                          "write the path right after `#import`, e.g. `#import ./main.rin;`", "a file path");
+        return path;
+    };
+
+    std::vector<StmtPtr> front, rest;
+    std::vector<std::string> tokenNames, libKeys, rinFiles, nativeFiles;
+    std::string toolName, easyKey, mask;
+    int makeLine = atTok.line;
+
+    auto addFile = [&](const std::string& path, int line) {
+        if (isNativeSrc(path)) { nativeFiles.push_back(path); return; }
+        auto lit = std::make_shared<LiteralExpr>();
+        lit->kind = LiteralExpr::Kind::STRING; lit->str = path; lit->line = line;
+        auto st = std::make_shared<ImportStmt>();
+        st->path = lit; st->line = line;
+        front.push_back(st);
+        rinFiles.push_back(path);
+    };
+
+    while (!check(TokenType::RPAREN) && !isAtEnd()) {
+        // @import key[, key2];  أو  @import "path.rin";
+        if (check(TokenType::AT) && checkNext(TokenType::IDENT) && tokens[current + 1].lexeme == "import") {
+            Token kw = tokens[current + 1];
+            advance(); advance();
+            do {
+                if (check(TokenType::STRING)) {
+                    std::string v = consumeStaticText("Expected a key or path after '@import'").lexeme;
+                    if (v.find('/') != std::string::npos || endsWith(v, ".rin") || endsWith(v, ".pia") || isNativeSrc(v)) addFile(v, kw.line);
+                    else {
+                        auto ln = std::make_shared<LinkStmt>(); ln->target = v; ln->line = kw.line; front.push_back(ln); libKeys.push_back(v);
+                    }
+                } else {
+                    Token k = consume(TokenType::IDENT, "Expected an easy_key after '@import' inside @Container.TB");
+                    auto ln = std::make_shared<LinkStmt>(); ln->target = k.lexeme; ln->line = kw.line; front.push_back(ln); libKeys.push_back(k.lexeme);
+                }
+            } while (match({TokenType::COMMA}));
+            consume(TokenType::SEMICOLON, "Expected ';' after @import inside @Container.TB");
+            continue;
+        }
+        // @make.<name>
+        if (check(TokenType::AT) && checkNext(TokenType::IDENT) && tokens[current + 1].lexeme == "make" &&
+            current + 3 < tokens.size() && tokens[current + 2].type == TokenType::DOT && tokens[current + 3].type == TokenType::IDENT) {
+            Token mk = tokens[current + 1];
+            advance(); advance(); advance();
+            Token nm = advance();
+            if (!toolName.empty())
+                throw errRich(diag::Code::E0015_UnknownContainer, nm, "`@make.<name>` appears twice in @Container.TB",
+                              "one Tool/Template Builder produces exactly one tool, so it has a single `@make.<name>`",
+                              "remove the extra `@make." + nm.lexeme + "`", "a single `@make.<name>`");
+            toolName = nm.lexeme; makeLine = mk.line;
+            match({TokenType::SEMICOLON});
+            continue;
+        }
+        // #token.<name> = expr;
+        if (check(TokenType::IDENT) && isHashWord(peek(), "token") && current + 2 < tokens.size() && tokens[current + 1].type == TokenType::DOT) {
+            Token kw = advance(); advance();
+            Token nm = consume(TokenType::IDENT, "Expected a token name after '#token.'");
+            consume(TokenType::EQUAL, "Expected '=' after '#token.<name>'");
+            auto ls = std::make_shared<LetStmt>();
+            ls->name = nm.lexeme; ls->initializer = expression(); ls->line = kw.line;
+            consume(TokenType::SEMICOLON, "Expected ';' after '#token.<name> = value'");
+            rest.push_back(ls); tokenNames.push_back(nm.lexeme);
+            continue;
+        }
+        // #import ./file;   (مفرد)
+        if (check(TokenType::IDENT) && isHashWord(peek(), "import")) {
+            Token kw = advance();
+            addFile(readPath(kw), kw.line);
+            match({TokenType::SEMICOLON});
+            continue;
+        }
+        // [[ #import ./a.rin; #import ./b.cpp ]];
+        if (check(TokenType::LBRACKET) && checkNext(TokenType::LBRACKET) && current + 2 < tokens.size() && isHashWord(tokens[current + 2], "import")) {
+            advance(); advance();
+            while (!isAtEnd() && !(check(TokenType::RBRACKET) && checkNext(TokenType::RBRACKET))) {
+                if (!(check(TokenType::IDENT) && isHashWord(peek(), "import")))
+                    throw errRich(diag::Code::E0011_UnexpectedToken, peek(), "only `#import ...;` entries are allowed inside `[[ ... ]]`",
+                                  "the double-bracket list in @Container.TB holds the tool's files: Rin files (executed) and C++ sources (registered)",
+                                  "write `#import ./file.rin;` (or `./file.cpp`)", "`#import <path>`");
+                Token kw = advance();
+                addFile(readPath(kw), kw.line);
+                match({TokenType::SEMICOLON, TokenType::COMMA});
+            }
+            consume(TokenType::RBRACKET, "Expected ']]' to close the import list");
+            consume(TokenType::RBRACKET, "Expected ']]' to close the import list");
+            match({TokenType::SEMICOLON});
+            continue;
+        }
+        auto st = declaration();
+        if (auto m = std::dynamic_pointer_cast<MaskStmt>(st); m && m->easyKey) {
+            auto lit = std::dynamic_pointer_cast<LiteralExpr>(m->value);
+            if (!lit || lit->kind != LiteralExpr::Kind::STRING || lit->str.empty())
+                throw err(diag::Code::E0013_InvalidExpression, previous(), "easy_key يجب أن يكون نصاً حرفياً غير فارغ، مثال: easy_key = \"main\";");
+            easyKey = lit->str;
+        } else if (auto m = std::dynamic_pointer_cast<MaskStmt>(st)) {
+            if (auto lit = std::dynamic_pointer_cast<LiteralExpr>(m->value); lit && lit->kind == LiteralExpr::Kind::STRING) mask = lit->str;
+            else rest.push_back(st);
+        } else rest.push_back(st);
+    }
+    consume(TokenType::RPAREN, "Expected ')' to close @Container.TB(");
+    match({TokenType::SEMICOLON});
+
+    if (toolName.empty())
+        throw errRich(diag::Code::E0015_UnknownContainer, atTok, "@Container.TB has no `@make.<name>`",
+                      "the tool needs a name — it becomes the container you call, e.g. `@make.Tool` then `Tool.go()`",
+                      "add `@make.<name>` inside the parentheses", "`@make.<name>`");
+
+    // بيانات وصفية قابلة للقراءة: __tb = {name, tokens, libs, imports, native}
+    auto q = [](const std::string& s) {
+        std::string o = "\"";
+        for (char c : s) { if (c == '"' || c == '\\') { o += '\\'; o += c; } else if (c == '\n') o += "\\n"; else o += c; }
+        return o + "\"";
+    };
+    auto arr = [&](const std::vector<std::string>& v) {
+        std::string o = "[";
+        for (size_t i = 0; i < v.size(); ++i) { if (i) o += ", "; o += q(v[i]); }
+        return o + "]";
+    };
+    std::string metaSrc = "let __tb = {\"name\": " + q(toolName) + ", \"tokens\": " + arr(tokenNames) + ", \"libs\": " + arr(libKeys) +
+                          ", \"imports\": " + arr(rinFiles) + ", \"native\": " + arr(nativeFiles) + "};";
+    std::vector<StmtPtr> metaStmts;
+    {
+        auto sStart = g_startStmts; auto sFns = g_endFns; auto sRegs = g_endRegs; // التحليل الفرعي يمسح هذه المتغيّرات العامة
+        Lexer lx(metaSrc, file);
+        Parser sub(lx.scanTokens(), file);
+        metaStmts = sub.parse();
+        g_startStmts = sStart; g_endFns = sFns; g_endRegs = sRegs;
+    }
+
+    auto s = std::make_shared<ContainerStmt>();
+    s->name = toolName; s->mask = mask; s->easyKey = easyKey; s->line = makeLine;
+    s->kind = ContainerKind::EVERYTHING;
+    for (auto& x : front) s->body.push_back(x);
+    for (auto& x : metaStmts) s->body.push_back(x);
+    for (auto& x : rest) s->body.push_back(x);
     return s;
 }
 
