@@ -1,0 +1,6 @@
+// مكتبة إعدادات بمفتاح سهل cfgkey — تُستدعى من @Container.TB بـ: @import cfgkey;
+@container=Config
+    let theme = "dark";
+    let size = 10;
+    easy_key = "cfgkey";
+.end/container
